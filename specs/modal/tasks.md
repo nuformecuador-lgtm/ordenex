@@ -8,6 +8,11 @@ Checklist de implementación de la feature 13 (`Modal`). Cada task tiene criteri
 Convención de dependencias: T2 depende de T1, etc. `[P]` = paralelizable con sus
 hermanas una vez cumplida su dependencia.
 
+> Estado: **T1–T11 completadas** (2026-07-09). 34 tests en
+> `tests/components/Modal.test.tsx` verdes; suite completa 379/379; typecheck y
+> lint limpios; `./init.sh` en verde. Detalle y mapa `R<n> → test` en
+> `progress/impl_modal.md`.
+
 ---
 
 ## T1 — Andamiaje del componente y contrato de props
