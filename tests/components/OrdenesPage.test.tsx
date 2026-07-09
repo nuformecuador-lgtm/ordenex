@@ -110,7 +110,7 @@ describe("OrdenesPage", () => {
       status: "ok",
       items,
       page: 1,
-      pageSize: 20,
+      pageSize: 25,
       total: 3,
     });
 
@@ -174,7 +174,7 @@ describe("OrdenesPage", () => {
       status: "ok",
       items: [],
       page: 1,
-      pageSize: 20,
+      pageSize: 25,
       total: 0,
     });
 
@@ -228,7 +228,7 @@ describe("OrdenesPage", () => {
       status: "ok",
       items,
       page: 1,
-      pageSize: 20,
+      pageSize: 25,
       total: 2,
     });
 
@@ -240,30 +240,36 @@ describe("OrdenesPage", () => {
     expect(screen.getByText("2002")).toBeInTheDocument();
   });
 
-  it("D6: solo lectura — sin controles de paginación/orden/filtro ni acciones por fila (R23)", async () => {
+  it("D6: sin acciones por fila (solo lectura de filas); la paginación server-side sí aporta sus controles (R23, feature paginación)", async () => {
     listarOrdenesMock.mockResolvedValue({
       status: "ok",
       items: [makeOrden({ id: "o1", numGuia: 3001, destinatario: "Sol" })],
       page: 1,
-      pageSize: 20,
+      pageSize: 25,
       total: 1,
     });
 
     renderPage();
 
     await screen.findByText("Sol");
-    // Ningún botón (paginación/orden/acción por fila).
-    expect(screen.queryByRole("button")).toBeNull();
-    // Ningún enlace de acción por fila.
+    // Ahora /ordenes SÍ tiene controles de paginación (feature paginación):
+    // existe un <nav> de paginación con botones de navegación.
+    expect(
+      screen.getByRole("navigation", { name: "Paginación" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button").length).toBeGreaterThan(0);
+    // El único combobox es el selector de tamaño de página (no un filtro de datos).
+    expect(
+      screen.getByRole("combobox", { name: "Elementos por página" }),
+    ).toBeInTheDocument();
+    // Sigue sin acciones por fila: ningún enlace ni input de filtro.
     expect(screen.queryByRole("link")).toBeNull();
-    // Ningún control de filtro (input/combobox).
     expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.queryByRole("combobox")).toBeNull();
     // La tabla solo rinde la fila recibida.
     expect(bodyRows()).toHaveLength(1);
   });
 
-  it("D7: el fetcher invoca la Server Action mockeada y NO hace fetch a rutas API (R18)", async () => {
+  it("D7: el fetcher invoca la Server Action con { page, pageSize } y NO hace fetch a rutas API (R18, R20, R31)", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockRejectedValue(new Error("fetch no debe usarse"));
@@ -272,16 +278,16 @@ describe("OrdenesPage", () => {
       status: "ok",
       items: [makeOrden({ id: "o1", numGuia: 4001, tiendaNombre: "Tienda F" })],
       page: 1,
-      pageSize: 20,
+      pageSize: 25,
       total: 1,
     });
 
     renderPage();
 
     await screen.findByText("Tienda F");
-    // Usa la Server Action existente, con input vacío (defaults del backend, R23).
+    // Server-side: la vista pasa { page, pageSize } (feature paginación).
     expect(listarOrdenesMock).toHaveBeenCalled();
-    expect(listarOrdenesMock).toHaveBeenCalledWith({});
+    expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
     // No se hace fetch a rutas app/api/*.
     expect(fetchSpy).not.toHaveBeenCalled();
 
