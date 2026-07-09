@@ -96,6 +96,7 @@ model Usuario {
   loginAttempts      LoginAttempt[]
   trustedDevices     TrustedDevice[]
   otpChallenges      EmailOtpChallenge[]
+  ordenesTienda      Orden[]             @relation("OrdenTienda")
 
   @@map("usuario")
   @@index([tipoIdentificacionId])
@@ -150,4 +151,98 @@ model EmailOtpChallenge {
 
   @@map("email_otp_challenge")
   @@index([usuarioId, createdAt])
+}
+
+// Catalogo de estatus de orden (tabla, no enum Postgres; R1). Seed idempotente
+// por `value` (7 valores, ORDER_STATUS_SEED), patron rol/tipo_identificacion.
+model OrderStatus {
+  id    String @id @default(uuid())
+  value String @unique // seed (7): entregada, devuelta, devuelta_origen,
+  //   reprogramada, embalaje, en_ruta_bodega_principal, en_bodega
+
+  ordenes Orden[]
+
+  @@map("order_status")
+}
+
+// Geografia jerarquica (R4/R5). Tablas creadas vacias (sin seed).
+model Zona {
+  id     String @id @default(uuid())
+  nombre String
+
+  provincias Provincia[]
+  ordenes    Orden[]
+
+  @@map("zona")
+}
+
+model Provincia {
+  id     String @id @default(uuid())
+  nombre String
+  zonaId String @map("zona_id")
+
+  zona     Zona     @relation(fields: [zonaId], references: [id])
+  cantones Canton[]
+  ordenes  Orden[]
+
+  @@map("provincia")
+  @@index([zonaId])
+}
+
+model Canton {
+  id          String @id @default(uuid())
+  nombre      String
+  provinciaId String @map("provincia_id")
+
+  provincia Provincia  @relation(fields: [provinciaId], references: [id])
+  distritos Distrito[]
+  ordenes   Orden[]
+
+  @@map("canton")
+  @@index([provinciaId])
+}
+
+model Distrito {
+  id       String @id @default(uuid())
+  nombre   String
+  cantonId String @map("canton_id")
+
+  canton Canton @relation(fields: [cantonId], references: [id])
+  ordenes Orden[]
+
+  @@map("distrito")
+  @@index([cantonId])
+}
+
+// Orden de negocio (R7-R14a). Borrado logico via deleted_at (soft delete).
+model Orden {
+  id           String    @id @default(uuid())
+  numGuia      Int       @unique @default(autoincrement()) @map("num_guia") // R8/R14: SERIAL
+  numRemision  String    @unique @map("num_remision") // R9/R14: lo provee el usuario
+  estatusId    String    @map("estatus_id") // R10: FK not null
+  destinatario String
+  telefonoDest String    @map("telefono_dest")
+  tiendaId     String    @map("tienda_id") // R11: FK -> usuario, not null
+  zonaId       String    @map("zona_id") // R12: NOT NULL
+  provinciaId  String    @map("provincia_id") // R12: NOT NULL
+  cantonId     String    @map("canton_id") // R12: NOT NULL
+  distritoId   String?   @map("distrito_id") // R12: nullable (unico FK nullable)
+  producto     String
+  peso         Decimal   @db.Decimal(10, 3) // R13: precision fija
+  notas        String? // R14a: texto nullable
+  deletedAt    DateTime? @map("deleted_at") // soft delete
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  estatus   OrderStatus @relation(fields: [estatusId], references: [id])
+  tienda    Usuario     @relation("OrdenTienda", fields: [tiendaId], references: [id])
+  zona      Zona        @relation(fields: [zonaId], references: [id])
+  provincia Provincia   @relation(fields: [provinciaId], references: [id])
+  canton    Canton      @relation(fields: [cantonId], references: [id])
+  distrito  Distrito?   @relation(fields: [distritoId], references: [id])
+
+  @@map("orden")
+  @@index([tiendaId])
+  @@index([estatusId])
+  @@index([createdAt])
 }

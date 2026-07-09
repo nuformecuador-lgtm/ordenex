@@ -45,3 +45,113 @@
 - DEUDA (aceptada por el humano 2026-07-08): ejecución del E2E (T017) requiere
   `.env` + Supabase de prueba + seed (usuario válido, uno para OTP, uno bloqueable).
   Marcada `done` con E2E diferido de ejecución; init.sh no corre `test:e2e`.
+
+## 2026-07-09 — permissions (tabla permiso + relación N:M con rol)
+- Nueva tabla `permiso` (id, nombre, method, route, created_at, updated_at con
+  defaults) y tabla pivote `rol_permiso` (relación N:M con el catálogo `rol`).
+  Migración Prisma con `down.sql` y RLS activado en ambas tablas nuevas, siguiendo
+  el patrón de login. La tabla `permiso` queda VACÍA (sin seed), como pidió la feature.
+- Requisitos cubiertos: R1–R14, mapeados a 9 tests nuevos en `progress/impl_permissions.md`.
+  Suite: 126/126 tests verdes; typecheck y lint OK.
+- Decisiones: relación N:M (no 1:N) porque `rol` es catálogo reutilizable y un permiso
+  puede pertenecer a varios roles. Sin UI, endpoints ni seed de permisos (fuera de alcance).
+- Review APROBADO, 0 bloqueantes.
+- DEUDA (aceptada, requiere DB real, misma limitación que login): verificar RLS con
+  key `anon` y rollback de la migración contra Postgres. Escrito y testeado a nivel
+  unitario/validación; ejecución contra DB diferida.
+
+## 2026-07-09 — role seed (enum Postgres rol_value + seed de roles)
+- Los valores de rol se modelan como enum de Postgres `rol_value`
+  ('maestro','admin','mensajero','Admin Tienda'); en `db/schema.prisma` se declara
+  `enum RolValue` (miembro `adminTienda @map("Admin Tienda")`) y `Rol.value` pasa de
+  `String` a `RolValue @unique`, siguiendo el patrón de `EstadoUsuario`. Fuente única
+  de verdad en TS (`lib/types/roles.ts` / `ROLES_SEED`). El seed `seed-catalogos.ts`
+  (`pnpm db:seed`) inserta los 4 valores vía upsert idempotente y ya NO siembra `usuario`.
+- Requisitos cubiertos: R1–R14, mapeados a 18 tests nuevos en `progress/impl_role-seed.md`.
+  Suite: 144/144 tests verdes; db:generate, typecheck, lint e init.sh OK.
+- Decisiones (del humano, 2026-07-09): enum de Postgres (no solo TS), creado en la
+  migración; se EDITÓ la migración de login `20260708212416_login_usuario_rba`
+  (migration.sql: CREATE TYPE antes de crear `rol`; down.sql: DROP TYPE) porque aún
+  no se había aplicado. `usuario` retirado del catálogo; ortografía `mensajero` (con j);
+  cuarto rol literal `Admin Tienda`. Tabla `Usuario` vacía → cambio de tipo seguro,
+  sin riesgo de FK.
+- Review APROBADO, 0 bloqueantes.
+- DEUDA (aceptada, requiere DB real): aplicar la migración editada y `db:seed` contra
+  Postgres, y el exit-code end-to-end de R14. Diferido como en login/permissions.
+
+## 2026-07-09 — seed maestro user (tarea ad-hoc, fuera de feature_list)
+- Migración `db/migrations/20260709120000_seed_maestro_user/` que siembra
+  idempotentemente un usuario `maestro` (`admin@ordenex.test`, estado activo, hash
+  bcrypt coste 10 = mismo que login, `compareSync` verificado). Asegura antes rol
+  `maestro` y tipo `cedula` con `ON CONFLICT DO NOTHING`; usuario con
+  `ON CONFLICT (email) DO NOTHING`. `down.sql` borra solo el usuario.
+- Pedido directo del humano (no es feature SDD). Delegado a backend_dev.
+  db:generate/typecheck/lint/144 tests verdes.
+- DEUDA: aplicar contra Postgres real (sin DB). Credenciales entregadas al humano
+  por chat (no en claro en el repo).
+
+## 2026-07-09 — home - sidebar (menú de navegación responsive)
+- Grupo de rutas `app/(app)/` con `layout.tsx` que monta un `Sidebar` (Client
+  Component): 3 items — Configuración→/configuracion, Perfil→/perfil,
+  Órdenes→/ordenes — con item activo por `usePathname` + `aria-current`, toggle
+  hamburguesa responsive (móvil colapsado / desktop expandido), nav landmark y
+  navegación por teclado. shadcn/ui (`Button`) + Tailwind. Placeholders mínimos por
+  ruta (Server Components con título) para evitar 404.
+- Requisitos cubiertos: R1–R17, mapeados a 12 tests de componente reales (renderizan
+  los componentes reales y asertan comportamiento) en `progress/impl_home-sidebar.md`.
+  Suite: 27 archivos / 153 tests verdes; typecheck/lint/init.sh OK.
+- Decisiones (del humano, 2026-07-09): rutas raíz en español; grupo `app/(app)/` con
+  la home autenticada dentro; placeholders mínimos. Se descartó el componente
+  `sidebar` completo de shadcn por sobre-ingeniería para "simple"; nav propio + Button.
+- Review APROBADO, 0 bloqueantes. Hallazgos menores no bloqueantes: T010/T011 de
+  tasks.md sin marcar `[x]`; `.gitignore` ignora `feature_list.json` (revisar aparte).
+- Sin deuda de DB (feature de UI pura; el E2E de navegación no requiere Postgres).
+
+## 2026-07-09 — ordenes (CRUD backend de órdenes)
+- Backend completo del CRUD de órdenes con 6 tablas nuevas: catálogo `order_status`
+  (7 valores: entregada, devuelta, devuelta_origen, reprogramada, embalaje,
+  en_ruta_bodega_principal, en_bodega) con seed idempotente (patrón ROLES_SEED,
+  fuente única de verdad en TS); geografía jerárquica VACÍA `zona`→`provincia`→
+  `canton`→`distrito`; y `orden` (num_guia Int autoincrement unique; num_remision
+  String unique provisto por usuario; estatus FK→order_status NOT NULL default
+  `en_bodega`; tienda_id FK→Usuario NOT NULL; zona/provincia/canton_id FK NOT NULL;
+  distrito_id y notas nullable; peso Decimal; soft delete vía deleted_at;
+  created_at/updated_at). 2 migraciones con down.sql y RLS en las 6 tablas. CRUD por
+  capas (Server Actions/service/repository/zod): crear, listar (excluye soft-deleted,
+  paginación offset), obtener, actualizar, borrar lógico. Autorización por rol:
+  maestro/admin full; adminTienda solo sus órdenes (rechaza tienda ajena); mensajero
+  solo lectura + cambio de estatus.
+- Requisitos cubiertos: R1–R42 + R14a (notas) + R14b (dependencia geografía),
+  mapeados a 90 tests reales en `progress/impl_ordenes.md`. Suite: 243/243 verdes;
+  db:generate/typecheck/lint/init.sh OK.
+- Decisiones (del humano, 2026-07-09): order_status como tabla catálogo (no enum);
+  geografía como 4 tablas jerárquicas creadas vacías; num_guia autoincrement por DB y
+  num_remision del usuario; solo distrito_id/notas nullable → zona/provincia/canton
+  NOT NULL; default en_bodega; borrado lógico; autorización por rol desde ya;
+  complexity elevada a high. DEPENDENCIA OPERATIVA conocida: al ser geografía NOT NULL
+  con tablas vacías, NO se pueden crear órdenes hasta poblar zona/provincia/canton;
+  los tests de creación siembran geografía en fixtures.
+- Review APROBADO, 0 bloqueantes.
+- DEUDA (aceptada, requiere DB real): aplicar migraciones + seed de order_status +
+  RLS + rollback contra Postgres. Diferido como en login/permissions/role-seed.
+
+## 2026-07-09 — ordenes - list (tabla genérica + vista de órdenes)
+- Componente genérico reutilizable `DataTable<T>` en `components/shared/` con contrato
+  `Column<T> { id; value; render?: ((row:T)=>ReactNode) | keyof T | string }`
+  (render función=componente custom, string=clave, ausente→valor por `column.id`),
+  `rowKey=row.id`, estado vacío y accesibilidad (thead/th scope). Vista `/ordenes`
+  (Client Component) con SWR cuyo fetcher invoca la Server Action existente
+  `listarOrdenes` (sin API route nueva), con estados loading/error/vacío, montando 5
+  columnas: num_guia, num_remision, estatus, destinatario, tienda. Sin paginación
+  (será la feature 8) ni acciones por fila.
+- Ampliación mínima del backend de la feature 6 (decisión b del humano): el DTO del
+  listado incluye `tiendaNombre` (de la relación tienda→Usuario.nombre) vía select/join;
+  la columna tienda muestra el nombre legible, no el uuid. Sin tocar el resto del CRUD
+  ni la autorización por rol; SIN migración nueva (select sobre relación existente).
+- Requisitos cubiertos: R1–R26, mapeados a tests reales en `progress/impl_ordenes-list.md`.
+  Suite: 37 archivos / 263 tests verdes; typecheck/lint/init.sh OK.
+- Decisiones (del humano, 2026-07-09): SWR en cliente sobre la action existente; 5
+  columnas fijas; sin paginación/orden/filtros/acciones (paginación separada a la
+  feature 8); columna tienda con nombre legible (opción b, amplía el listado backend).
+- Review APROBADO, 0 bloqueantes. Sin deuda de DB (la ampliación no requiere migración;
+  la deuda de aplicar el CRUD contra Postgres sigue siendo la de la feature 6).

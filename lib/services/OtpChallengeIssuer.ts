@@ -36,6 +36,7 @@ export class OtpChallengeIssuer {
 
   async emitir(params: EmitirOtpParams): Promise<EmitirOtpResult> {
     const code = generarCodigoOtp();
+    console.log("Codigo OTP generado:", code);
     const codeHash = await bcrypt.hash(code, OTP_SALT_ROUNDS);
     const expiresAt = new Date(Date.now() + authConfig.OTP_TTL_MINUTES * 60_000);
 

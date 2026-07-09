@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { pathToFileURL } from "node:url";
 import { ROLES_SEED } from "@/lib/types/roles";
+import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
 const TIPOS_IDENTIFICACION = ["cedula", "ruc", "pasaporte"] as const;
 
@@ -34,12 +35,31 @@ export async function seedRoles(
   }
 }
 
+// Siembra idempotente de los estatus de orden (R2, R3). Itera ORDER_STATUS_SEED
+// (fuente unica de verdad en TS) con upsert por `value`: conserva la fila y su
+// `id` si ya existe, sin duplicar (patron seedRoles). La geografia NO se siembra
+// (R4). Recibe el cliente Prisma por parametro para testear sin conexion real.
+export async function seedOrderStatus(
+  prisma: Pick<PrismaClient, "orderStatus">
+): Promise<void> {
+  for (const value of ORDER_STATUS_SEED) {
+    await prisma.orderStatus.upsert({
+      where: { value },
+      update: {},
+      create: { value },
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const prisma = new PrismaClient();
   try {
     await seedTiposIdentificacion(prisma);
     await seedRoles(prisma);
-    console.log("Seed de catalogos completado (tipo_identificacion, rol).");
+    await seedOrderStatus(prisma);
+    console.log(
+      "Seed de catalogos completado (tipo_identificacion, rol, order_status)."
+    );
   } finally {
     await prisma.$disconnect();
   }
