@@ -23,12 +23,50 @@ model TipoIdentificacion {
 }
 
 model Rol {
-  id    String @id @default(uuid())
-  value String @unique // seed: "admin", "usuario"
+  id    String   @id @default(uuid())
+  value RolValue @unique // seed: "maestro", "admin", "mensajero", "Admin Tienda"
 
   usuarios Usuario[]
+  permisos RolPermiso[]
 
   @@map("rol")
+}
+
+enum RolValue {
+  maestro
+  admin
+  mensajero
+  adminTienda @map("Admin Tienda")
+
+  @@map("rol_value")
+}
+
+model Permiso {
+  id        String   @id @default(uuid())
+  nombre    String
+  method    String // verbo HTTP (texto libre, ver design.md "Alternativas descartadas")
+  route     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  roles RolPermiso[]
+
+  @@map("permiso")
+  @@unique([method, route]) // R6
+}
+
+// Tabla pivote explicita de la relacion N:M rol <-> permiso.
+model RolPermiso {
+  rolId     String   @map("rol_id")
+  permisoId String   @map("permiso_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  rol     Rol     @relation(fields: [rolId], references: [id], onDelete: Cascade)
+  permiso Permiso @relation(fields: [permisoId], references: [id], onDelete: Cascade)
+
+  @@id([rolId, permisoId]) // R8: pareja unica
+  @@map("rol_permiso")
+  @@index([permisoId])
 }
 
 enum EstadoUsuario {
