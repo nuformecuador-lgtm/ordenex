@@ -134,3 +134,24 @@
 - Review APROBADO, 0 bloqueantes.
 - DEUDA (aceptada, requiere DB real): aplicar migraciones + seed de order_status +
   RLS + rollback contra Postgres. Diferido como en login/permissions/role-seed.
+
+## 2026-07-09 — ordenes - list (tabla genérica + vista de órdenes)
+- Componente genérico reutilizable `DataTable<T>` en `components/shared/` con contrato
+  `Column<T> { id; value; render?: ((row:T)=>ReactNode) | keyof T | string }`
+  (render función=componente custom, string=clave, ausente→valor por `column.id`),
+  `rowKey=row.id`, estado vacío y accesibilidad (thead/th scope). Vista `/ordenes`
+  (Client Component) con SWR cuyo fetcher invoca la Server Action existente
+  `listarOrdenes` (sin API route nueva), con estados loading/error/vacío, montando 5
+  columnas: num_guia, num_remision, estatus, destinatario, tienda. Sin paginación
+  (será la feature 8) ni acciones por fila.
+- Ampliación mínima del backend de la feature 6 (decisión b del humano): el DTO del
+  listado incluye `tiendaNombre` (de la relación tienda→Usuario.nombre) vía select/join;
+  la columna tienda muestra el nombre legible, no el uuid. Sin tocar el resto del CRUD
+  ni la autorización por rol; SIN migración nueva (select sobre relación existente).
+- Requisitos cubiertos: R1–R26, mapeados a tests reales en `progress/impl_ordenes-list.md`.
+  Suite: 37 archivos / 263 tests verdes; typecheck/lint/init.sh OK.
+- Decisiones (del humano, 2026-07-09): SWR en cliente sobre la action existente; 5
+  columnas fijas; sin paginación/orden/filtros/acciones (paginación separada a la
+  feature 8); columna tienda con nombre legible (opción b, amplía el listado backend).
+- Review APROBADO, 0 bloqueantes. Sin deuda de DB (la ampliación no requiere migración;
+  la deuda de aplicar el CRUD contra Postgres sigue siendo la de la feature 6).

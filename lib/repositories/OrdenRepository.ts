@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type { OrdenDTO } from "@/lib/types/orden";
+import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 import {
   NumRemisionDuplicadoError,
   type CreateOrdenData,
@@ -31,6 +31,24 @@ const WITH_ESTATUS = {
   include: { estatus: { select: { value: true } } },
 } as const;
 
+// R25/R26: solo el LISTADO incluye el nombre legible de la tienda
+// (relacion Orden.tienda -> Usuario.nombre). No requiere migracion: es un include
+// sobre una relacion ya existente en el esquema.
+const WITH_ESTATUS_Y_TIENDA = {
+  include: {
+    estatus: { select: { value: true } },
+    tienda: { select: { nombre: true } },
+  },
+} as const;
+
+// Fila de orden del listado: estatus.value + tienda.nombre.
+type OrdenListRow = Prisma.OrdenGetPayload<{
+  include: {
+    estatus: { select: { value: true } };
+    tienda: { select: { nombre: true } };
+  };
+}>;
+
 // Serializa la fila de Prisma a OrdenDTO: peso Decimal -> number, nunca expone
 // deletedAt (R42/N3).
 function toDTO(row: OrdenRow): OrdenDTO {
@@ -52,6 +70,15 @@ function toDTO(row: OrdenRow): OrdenDTO {
     notas: row.notas,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+// R25/R26: serializa una fila del listado a OrdenListItemDTO, agregando el nombre
+// legible de la tienda. Solo el listado usa este mapeo; el resto del CRUD usa toDTO.
+function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
+  return {
+    ...toDTO(row),
+    tiendaNombre: row.tienda.nombre,
   };
 }
 
@@ -105,12 +132,12 @@ export class OrdenRepository implements IOrdenRepository {
         orderBy,
         skip: params.skip,
         take: params.take,
-        ...WITH_ESTATUS,
+        ...WITH_ESTATUS_Y_TIENDA, // R25: incluye estatus.value + tienda.nombre
       }),
       this.prisma.orden.count({ where }),
     ]);
 
-    return { items: items.map(toDTO), total };
+    return { items: items.map(toListItemDTO), total };
   }
 
   async update(id: string, data: UpdateOrdenData): Promise<OrdenDTO | null> {

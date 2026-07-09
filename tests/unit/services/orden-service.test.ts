@@ -6,7 +6,7 @@ import {
   type IOrdenRepository,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import type { OrdenDTO } from "@/lib/types/orden";
+import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
@@ -38,13 +38,18 @@ function dto(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
   };
 }
 
+// R25/R26: elemento del listado = OrdenDTO + tiendaNombre (nombre legible tienda).
+function listItem(overrides: Partial<OrdenListItemDTO> = {}): OrdenListItemDTO {
+  return { ...dto(), tiendaNombre: "Tienda Uno", ...overrides };
+}
+
 // Fixtures de geografia (R14b): por defecto zona->provincia->canton existen, para
 // poder ejercitar la creacion (FKs NOT NULL contra tablas creadas vacias).
 function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
   return {
     create: vi.fn().mockResolvedValue(dto()),
     findById: vi.fn().mockResolvedValue(dto()),
-    list: vi.fn().mockResolvedValue({ items: [dto()], total: 1 }),
+    list: vi.fn().mockResolvedValue({ items: [listItem()], total: 1 }),
     update: vi.fn().mockResolvedValue(dto()),
     softDelete: vi.fn().mockResolvedValue(true),
     existsEstatus: vi.fn().mockResolvedValue(true),
@@ -219,6 +224,29 @@ describe("listar", () => {
       { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" },
       TIENDA,
     );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.tiendaId).toBe("store1");
+  });
+
+  it("R25/R26: propaga tiendaNombre de los items sin re-filtrar (R22 intacto)", async () => {
+    repo = buildRepo({
+      list: vi.fn().mockResolvedValue({
+        items: [listItem({ tiendaNombre: "Tienda Uno" })],
+        total: 1,
+      }),
+    });
+    service = new OrdenService(repo);
+
+    const r = await service.listar(
+      { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" },
+      TIENDA,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.items[0].tiendaNombre).toBe("Tienda Uno");
+    }
+    // R22: la autorizacion por rol NO cambia; adminTienda sigue forzando su tiendaId.
     const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.where.tiendaId).toBe("store1");
   });

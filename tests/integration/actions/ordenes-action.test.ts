@@ -44,9 +44,13 @@ function fakeService(overrides: Partial<IOrdenService> = {}): IOrdenService {
   return {
     crear: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
     obtener: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
-    listar: vi
-      .fn()
-      .mockResolvedValue({ status: "ok", items: [dto()], page: 1, pageSize: 20, total: 1 }),
+    listar: vi.fn().mockResolvedValue({
+      status: "ok",
+      items: [{ ...dto(), tiendaNombre: "Tienda Uno" }], // R25/R26: listado con nombre tienda
+      page: 1,
+      pageSize: 20,
+      total: 1,
+    }),
     actualizar: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
     borrar: vi.fn().mockResolvedValue({ status: "ok" }),
     ...overrides,

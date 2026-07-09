@@ -91,10 +91,15 @@ export type ActionError =
   | { status: "not_found" } // R29/R36/R40
   | { status: "conflict" }; // R28
 
+// R25/R26: elemento del LISTADO. Extiende OrdenDTO con el nombre legible de la
+// tienda (`Usuario.nombre` del usuario tienda). Solo aplica al listado; crear/
+// obtener/actualizar siguen devolviendo OrdenDTO sin `tiendaNombre`.
+export type OrdenListItemDTO = OrdenDTO & { tiendaNombre: string };
+
 export type CrearOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type ObtenerOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type ListarOrdenesResult =
-  | { status: "ok"; items: OrdenDTO[]; page: number; pageSize: number; total: number }
+  | { status: "ok"; items: OrdenListItemDTO[]; page: number; pageSize: number; total: number }
   | ActionError;
 export type ActualizarOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type BorrarOrdenResult = { status: "ok" } | ActionError;

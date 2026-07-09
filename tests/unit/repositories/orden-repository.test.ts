@@ -27,6 +27,16 @@ function ordenRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// R25/R26: fila del LISTADO, que ademas del estatus trae la relacion tienda con
+// su nombre legible (Usuario.nombre). create/findById/update NO requieren tienda.
+function ordenListRow(overrides: Record<string, unknown> = {}) {
+  return {
+    ...ordenRow(),
+    tienda: { nombre: "Tienda Uno" },
+    ...overrides,
+  };
+}
+
 function baseCreateData() {
   return {
     numRemision: "REM-1",
@@ -113,7 +123,10 @@ describe("OrdenRepository.findById (R34)", () => {
 describe("OrdenRepository.list (R30/R31/R34)", () => {
   it("devuelve items y total, excluye borradas y mapea el orden de lista blanca", async () => {
     const prisma = buildPrisma();
-    prisma.orden.findMany.mockResolvedValue([ordenRow(), ordenRow({ id: "ord-2" })]);
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow(),
+      ordenListRow({ id: "ord-2" }),
+    ]);
     prisma.orden.count.mockResolvedValue(2);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
@@ -136,6 +149,32 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
 
     const countArg = prisma.orden.count.mock.calls[0][0];
     expect(countArg.where).toMatchObject({ deletedAt: null });
+  });
+
+  it("R25/R26: incluye tienda.nombre en el select y mapea tiendaNombre por item", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow(),
+      ordenListRow({ id: "ord-2", tienda: { nombre: "Tienda Dos" } }),
+    ]);
+    prisma.orden.count.mockResolvedValue(2);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.list({
+      where: {},
+      sortBy: "created_at",
+      sortDir: "desc",
+      skip: 0,
+      take: 20,
+    });
+
+    expect(res.items[0].tiendaNombre).toBe("Tienda Uno");
+    expect(res.items[1].tiendaNombre).toBe("Tienda Dos");
+
+    const arg = prisma.orden.findMany.mock.calls[0][0];
+    expect(arg.include).toMatchObject({ tienda: { select: { nombre: true } } });
+    // R25: el listado sigue trayendo el value del estatus.
+    expect(arg.include).toMatchObject({ estatus: { select: { value: true } } });
   });
 
   it("inyecta tiendaId en el where cuando se pasa (alcance adminTienda)", async () => {

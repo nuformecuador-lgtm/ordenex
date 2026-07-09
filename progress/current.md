@@ -4,14 +4,15 @@
 > Al cerrar una feature, se resume en history.md y este archivo se limpia.
 
 ## Feature en curso
-_(ninguna)_ — `permissions` (3), `role seed` (4), `home - sidebar` (5) y `ordenes`
-(6, CRUD backend) cerradas como `done` (ver history.md), más la tarea ad-hoc del
-usuario maestro.
+_(ninguna)_ — features 3–7 cerradas como `done` (ver history.md), más la tarea
+ad-hoc del usuario maestro. `DataTable<T>` genérico ya disponible en components/shared/.
 
 Cola pendiente:
-- `ordenes - list` (id 7, high): tabla reutilizable data-driven que consume el CRUD.
-- `componente carga masiva` (id 8, high): componente de subida de archivo (tipo +
-  ruta API + descargar plantilla + cargar).
+- `paginacion` (id 8, high, pending): paginación como componente SEPARADO, para
+  componer con el `DataTable<T>` de la feature 7.
+- `componente carga masiva` (id 9, high, pending): subida de archivo (tipo + ruta API +
+  descargar plantilla + cargar).
+DEPENDENCIA OPERATIVA viva (feature 6): poblar geografía antes de crear órdenes.
 DEPENDENCIA OPERATIVA viva de la feature 6: geografía NOT NULL con tablas vacías → no
 se pueden crear órdenes hasta poblar zona/provincia/canton (tests usan fixtures).
 
@@ -21,6 +22,7 @@ se pueden crear órdenes hasta poblar zona/provincia/canton (tests usan fixtures
 - [x] Feature 4 `role seed`: spec → aprobación → impl → review → done.
 - [x] Feature 5 `home - sidebar`: spec → aprobación → impl → review → done.
 - [x] Feature 6 `ordenes` (CRUD): spec → aprobación → impl → review → done.
+- [x] Feature 7 `ordenes - list` (UI tabla): spec → aprobación → impl → review → done.
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.

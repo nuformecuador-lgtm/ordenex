@@ -1,4 +1,4 @@
-import type { OrdenDTO, SortField, SortDir } from "@/lib/types/orden";
+import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
 
 // Datos listos para persistir una orden. `estatusId` y `tiendaId` ya resueltos
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
@@ -42,7 +42,7 @@ export interface ListOrdenesParams {
 }
 
 export interface ListOrdenesResult {
-  items: OrdenDTO[];
+  items: OrdenListItemDTO[];
   total: number;
 }
 

@@ -4,6 +4,7 @@ import type {
   ActualizarOrdenInput,
   ListarOrdenesInput,
   OrdenDTO,
+  OrdenListItemDTO,
 } from "@/lib/types/orden";
 
 // Actor autenticado que ejecuta la operacion. El rol se resuelve desde la sesion
@@ -27,7 +28,7 @@ export type ObtenerOrdenServiceResult =
   | { status: "not_found" };
 
 export type ListarOrdenesServiceResult =
-  | { status: "ok"; items: OrdenDTO[]; page: number; pageSize: number; total: number }
+  | { status: "ok"; items: OrdenListItemDTO[]; page: number; pageSize: number; total: number }
   | { status: "forbidden" };
 
 export type ActualizarOrdenServiceResult =
