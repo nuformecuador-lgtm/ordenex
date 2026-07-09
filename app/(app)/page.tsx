@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { SESSION_COOKIE_NAME } from "@/lib/constants/auth";
 import { SessionRepository } from "@/lib/repositories/SessionRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
-import { LogoutButton } from "./_components/LogoutButton";
+import { LogoutButton } from "@/app/_components/LogoutButton";
 
 export default async function Home() {
   // Check for valid session (R25)

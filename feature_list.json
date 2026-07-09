@@ -15,6 +15,46 @@
       "status": "done",
       "sdd": true,
       "complexity": "low"
+    },
+    {
+      "id": 3,
+      "name": "permissions",
+      "description": "Genera la tabla permisos con los campos (id, nombre, method, route, created_at, updated_at) y la relacion con los roles, no ahi lista de permisos, deja vacio",
+      "status": "done",
+      "sdd": true,
+      "complexity": "low"
+    },
+    {
+      "id": 4,
+      "name": "role seed",
+      "description": "genera un seed para la tabla rol, con los values de maestro, admin, mensagero y admin Tienda",
+      "status": "done",
+      "sdd": true,
+      "complexity": "low"
+    },
+    {
+      "id": 5,
+      "name": "home - sidebar",
+      "description": "Genera un menu responsive, simple con los items configuracion, perfil y ordenes",
+      "status": "done",
+      "sdd": true,
+      "complexity": "low"
+    },
+    {
+      "id": 6,
+      "name": "ordenes",
+      "description": "genera el crud de ordenes",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high"
+    },
+    {
+      "id": 7,
+      "name": "ordenes - list",
+      "description": "Muestra las ordenes en el item ordenes del menu (genera una tabla reutilizable que reciba como parametros, la data normalizada en una estructura especifica, id, value, render(fucnion que renderiza la informacion (compnente custom), o string))",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high"
     }
   ]
 }

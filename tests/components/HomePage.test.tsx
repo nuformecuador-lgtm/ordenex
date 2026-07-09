@@ -34,7 +34,7 @@ beforeEach(() => {
 
 describe("app/page.tsx — boton de cerrar sesion (R25)", () => {
   it("muestra el boton 'Cerrar sesión' cuando hay una sesion valida", async () => {
-    const { default: Home } = await import("@/app/page");
+    const { default: Home } = await import("@/app/(app)/page");
     cookieGetMock.mockReturnValue({ value: "session-abc" });
     findValidByIdMock.mockResolvedValue({
       id: "session-abc",
@@ -50,7 +50,7 @@ describe("app/page.tsx — boton de cerrar sesion (R25)", () => {
   });
 
   it("NO muestra el boton cuando no hay sesion valida", async () => {
-    const { default: Home } = await import("@/app/page");
+    const { default: Home } = await import("@/app/(app)/page");
     cookieGetMock.mockReturnValue(undefined);
 
     const element = await Home();
@@ -60,7 +60,7 @@ describe("app/page.tsx — boton de cerrar sesion (R25)", () => {
   });
 
   it("NO muestra el boton cuando la sesion de la cookie esta expirada/invalida", async () => {
-    const { default: Home } = await import("@/app/page");
+    const { default: Home } = await import("@/app/(app)/page");
     cookieGetMock.mockReturnValue({ value: "session-expired" });
     findValidByIdMock.mockResolvedValue(null);
 
