@@ -1,0 +1,35 @@
+// Configuracion del CRUD de ordenes. Sobreescribible por variable de entorno
+// para no hardcodear cotas de negocio (docs/architecture.md: "Sin hardcode de
+// contexto"), patron de lib/config/auth.ts.
+
+function readPositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readNonEmpty(name: string, fallback: string): string {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  return raw;
+}
+
+export interface OrdenesConfig {
+  /** Tamano de pagina por defecto del listado (N2). */
+  DEFAULT_PAGE_SIZE: number;
+  /** Cota maxima del tamano de pagina, evita consultas sin limite (R33). */
+  MAX_PAGE_SIZE: number;
+  /** Valor de estatus inicial por defecto al crear si no se especifica (N1/R10/R27). */
+  DEFAULT_ESTATUS_VALUE: string;
+}
+
+export function loadOrdenesConfig(): OrdenesConfig {
+  return {
+    DEFAULT_PAGE_SIZE: readPositiveInt("ORDENES_DEFAULT_PAGE_SIZE", 20),
+    MAX_PAGE_SIZE: readPositiveInt("ORDENES_MAX_PAGE_SIZE", 100),
+    DEFAULT_ESTATUS_VALUE: readNonEmpty("ORDENES_DEFAULT_ESTATUS_VALUE", "en_bodega"),
+  };
+}
+
+export const ordenesConfig: OrdenesConfig = loadOrdenesConfig();

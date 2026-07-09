@@ -106,3 +106,31 @@
 - Review APROBADO, 0 bloqueantes. Hallazgos menores no bloqueantes: T010/T011 de
   tasks.md sin marcar `[x]`; `.gitignore` ignora `feature_list.json` (revisar aparte).
 - Sin deuda de DB (feature de UI pura; el E2E de navegación no requiere Postgres).
+
+## 2026-07-09 — ordenes (CRUD backend de órdenes)
+- Backend completo del CRUD de órdenes con 6 tablas nuevas: catálogo `order_status`
+  (7 valores: entregada, devuelta, devuelta_origen, reprogramada, embalaje,
+  en_ruta_bodega_principal, en_bodega) con seed idempotente (patrón ROLES_SEED,
+  fuente única de verdad en TS); geografía jerárquica VACÍA `zona`→`provincia`→
+  `canton`→`distrito`; y `orden` (num_guia Int autoincrement unique; num_remision
+  String unique provisto por usuario; estatus FK→order_status NOT NULL default
+  `en_bodega`; tienda_id FK→Usuario NOT NULL; zona/provincia/canton_id FK NOT NULL;
+  distrito_id y notas nullable; peso Decimal; soft delete vía deleted_at;
+  created_at/updated_at). 2 migraciones con down.sql y RLS en las 6 tablas. CRUD por
+  capas (Server Actions/service/repository/zod): crear, listar (excluye soft-deleted,
+  paginación offset), obtener, actualizar, borrar lógico. Autorización por rol:
+  maestro/admin full; adminTienda solo sus órdenes (rechaza tienda ajena); mensajero
+  solo lectura + cambio de estatus.
+- Requisitos cubiertos: R1–R42 + R14a (notas) + R14b (dependencia geografía),
+  mapeados a 90 tests reales en `progress/impl_ordenes.md`. Suite: 243/243 verdes;
+  db:generate/typecheck/lint/init.sh OK.
+- Decisiones (del humano, 2026-07-09): order_status como tabla catálogo (no enum);
+  geografía como 4 tablas jerárquicas creadas vacías; num_guia autoincrement por DB y
+  num_remision del usuario; solo distrito_id/notas nullable → zona/provincia/canton
+  NOT NULL; default en_bodega; borrado lógico; autorización por rol desde ya;
+  complexity elevada a high. DEPENDENCIA OPERATIVA conocida: al ser geografía NOT NULL
+  con tablas vacías, NO se pueden crear órdenes hasta poblar zona/provincia/canton;
+  los tests de creación siembran geografía en fixtures.
+- Review APROBADO, 0 bloqueantes.
+- DEUDA (aceptada, requiere DB real): aplicar migraciones + seed de order_status +
+  RLS + rollback contra Postgres. Diferido como en login/permissions/role-seed.

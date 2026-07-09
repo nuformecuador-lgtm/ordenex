@@ -7,7 +7,7 @@
 
 ## Bloque 1 — Modelo de datos y migraciones
 
-- [ ] T001 Agregar a `db/schema.prisma`: modelo `OrderStatus` (id, value unique);
+- [x] T001 Agregar a `db/schema.prisma`: modelo `OrderStatus` (id, value unique);
   modelos de geografía `Zona`, `Provincia` (zona_id), `Canton` (provincia_id),
   `Distrito` (canton_id) con sus índices; modelo `Orden` (todos los campos de R7,
   `num_guia Int @unique @default(autoincrement())`, `num_remision String @unique`,
@@ -17,16 +17,16 @@
   timestamps, índices); y las relaciones inversas en `Usuario`/catálogos.
   **Hecho cuando:** `prisma validate` sin errores. Cubre: R7, R8, R9, R10, R11,
   R12, R13, R14, R14a (verificación de modelo). Depende de: aprobación del spec.
-- [ ] T002 Generar migración `ordenes_catalogos_geografia` con
+- [x] T002 Generar migración `ordenes_catalogos_geografia` con
   `pnpm run db:migrate:create`: `order_status`, `zona`, `provincia`, `canton`,
   `distrito` en orden de FK, con índices, FKs y `ENABLE ROW LEVEL SECURITY` en las
   5 tablas. **Hecho cuando:** existe `migration.sql` con las 5 tablas, FKs en
   orden correcto y RLS. Cubre: R1, R4, R5, R6, R15, R16. Depende de: T001.
-- [ ] T003 Escribir `down.sql` de T002 (drop en orden inverso: `distrito`,
+- [x] T003 Escribir `down.sql` de T002 (drop en orden inverso: `distrito`,
   `canton`, `provincia`, `zona`, `order_status`), sin tocar tablas preexistentes.
   **Hecho cuando:** `pnpm run db:rollback` + `pnpm run db:migrate` deja el esquema
   sin diff. Cubre: R6, R15, R17. Depende de: T002.
-- [ ] T004 Generar migración `ordenes` con `pnpm run db:migrate:create`: tabla
+- [x] T004 Generar migración `ordenes` con `pnpm run db:migrate:create`: tabla
   `orden` con `num_guia` SERIAL/secuencia, `zona_id`/`provincia_id`/`canton_id`
   `NOT NULL`, `distrito_id` y `notas` `NULL`, índices únicos de `num_guia` y
   `num_remision`, índices `tienda_id`/`estatus_id`/`created_at`, FKs (order_status,
@@ -34,20 +34,20 @@
   `ON DELETE SET NULL`) y `ENABLE ROW LEVEL SECURITY`. **Hecho cuando:** existe
   `migration.sql` con la tabla, la secuencia de `num_guia`, uniques, nullabilidad
   correcta, FKs y RLS. Cubre: R8, R12, R14, R14a, R15, R16. Depende de: T002.
-- [ ] T005 Escribir `down.sql` de T004 (`DROP TABLE orden;`). **Hecho cuando:**
+- [x] T005 Escribir `down.sql` de T004 (`DROP TABLE orden;`). **Hecho cuando:**
   rollback + re-migrate sin diff. Cubre: R15, R17. Depende de: T004.
-- [ ] T006 Verificar RLS: test de integración que, con cliente Supabase key
+- [x] T006 Verificar RLS: test de integración que, con cliente Supabase key
   `anon`, confirma rechazo de query directa a `orden`, `order_status` y las 4
   geografías. **Hecho cuando:** el test pasa (o DIFERIDO documentado si no hay DB
   real, como login T004/T020). Cubre: R16. Depende de: T004.
 
 ## Bloque 2 — Seed de `order_status`
 
-- [ ] T007 Crear `lib/types/order-status.ts` con `ORDER_STATUS_SEED` (los 7
+- [x] T007 Crear `lib/types/order-status.ts` con `ORDER_STATUS_SEED` (los 7
   valores incluido `en_bodega`, `as const`), fuente única de verdad (patrón
   `ROLES_SEED`). **Hecho cuando:** test unitario verifica que contiene exactamente
   los 7 valores esperados. Cubre: R2. Depende de: T001.
-- [ ] T008 Agregar `seedOrderStatus(prisma)` a `scripts/seed-catalogos.ts`
+- [x] T008 Agregar `seedOrderStatus(prisma)` a `scripts/seed-catalogos.ts`
   (upsert por `value` iterando `ORDER_STATUS_SEED`) e invocarlo en `main()`.
   **Hecho cuando:** test unitario (Prisma mockeado, como
   `tests/unit/scripts/seed-catalogos.test.ts`) verifica upsert por value e
@@ -56,11 +56,11 @@
 
 ## Bloque 3 — Tipos, config e interfaces
 
-- [ ] T009 [P] `lib/config/ordenes.ts`: `DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`,
+- [x] T009 [P] `lib/config/ordenes.ts`: `DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`,
   `DEFAULT_ESTATUS_VALUE='en_bodega'`, sobreescribibles por entorno. **Hecho
   cuando:** compila `strict`; test verifica cap de `MAX_PAGE_SIZE` y overrides por
   env. Cubre: R33 (soporte), N1. Depende de: T001.
-- [ ] T010 [P] `lib/types/orden.ts`: `crearOrdenSchema` (num_remision obligatorio
+- [x] T010 [P] `lib/types/orden.ts`: `crearOrdenSchema` (num_remision obligatorio
   no vacío, destinatario/telefono_dest/producto obligatorios, peso numérico > 0,
   `zonaId`/`provinciaId`/`cantonId` **obligatorios**, `distritoId`/`estatusId`/
   `notas` opcionales), `actualizarOrdenSchema` (todos opcionales, sin num_guia/id),
@@ -70,7 +70,7 @@
   peso negativo/no numérico, `zonaId`/`provinciaId`/`cantonId` ausentes, campos
   requeridos ausentes (R26); page/pageSize no positivos y sortBy fuera de lista
   blanca (R32). Cubre: R12, R14a, R25, R26, R31, R32. Depende de: T001, T009.
-- [ ] T011 [P] Interfaces `lib/interfaces/repositories/IOrdenRepository.ts`
+- [x] T011 [P] Interfaces `lib/interfaces/repositories/IOrdenRepository.ts`
   (create, findById excl. borradas, list con where/orden/paginación + count,
   update, softDelete, existsEstatus, existsGeo) y
   `lib/interfaces/services/IOrdenService.ts` (crear, obtener, listar, actualizar,
@@ -79,7 +79,7 @@
 
 ## Bloque 4 — Repositorio
 
-- [ ] T012 Implementar `lib/repositories/OrdenRepository.ts` (solo Prisma). Todas
+- [x] T012 Implementar `lib/repositories/OrdenRepository.ts` (solo Prisma). Todas
   las lecturas filtran `deleted_at IS NULL`; `list` acepta `where` (incl.
   `tiendaId`/`estatusId`), orden de lista blanca y offset/limit, y devuelve
   `{ items, total }`; `softDelete` fija `deleted_at`. **Hecho cuando:** tests
@@ -90,7 +90,7 @@
 
 ## Bloque 5 — Servicio de dominio (autorización por rol)
 
-- [ ] T013 Implementar `lib/services/OrdenService.ts` con la **matriz rol→
+- [x] T013 Implementar `lib/services/OrdenService.ts` con la **matriz rol→
   operación** (R19–R24) recibiendo actor `{ usuarioId, rol }`: generación de
   default de estatus (N1), validación de existencia de `estatusId`/FKs de
   geografía, traducción de unicidad a `conflict`, alcance por `tienda_id` para
@@ -118,7 +118,7 @@
 
 ## Bloque 6 — Borde (Server Actions)
 
-- [ ] T014 Implementar `lib/actions/ordenes.ts` (`crearOrden`, `obtenerOrden`,
+- [x] T014 Implementar `lib/actions/ordenes.ts` (`crearOrden`, `obtenerOrden`,
   `listarOrdenes`, `actualizarOrden`, `borrarOrden`) como Server Actions que: leen
   la sesión (cookie `session` → `SessionRepository`), rechazan sin sesión válida
   (R18), parsean input con los schemas de T010, resuelven actor `{ usuarioId, rol }`
@@ -145,11 +145,11 @@
 
 ## Bloque 7 — Verificación final
 
-- [ ] T015 Correr `pnpm run typecheck`, `pnpm run lint` y la suite (`tests/unit`,
+- [x] T015 Correr `pnpm run typecheck`, `pnpm run lint` y la suite (`tests/unit`,
   `tests/integration`) en verde. **Hecho cuando:** todos pasan y la salida + el
   mapa `R1..R42 → test` se registran en `progress/impl_ordenes.md`. Cubre:
   trazabilidad completa. Depende de: T001–T014.
-- [ ] T016 Verificar rollback de ambas migraciones (`pnpm run db:rollback` y
+- [x] T016 Verificar rollback de ambas migraciones (`pnpm run db:rollback` y
   re-migrate) sin errores ni pérdida de datos fuera de lo esperado. **Hecho
   cuando:** corre sin error y el esquema coincide con el previo (o DIFERIDO
   documentado si no hay DB real, como login T020). Cubre: R15, R17. Depende de:
