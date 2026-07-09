@@ -1,6 +1,9 @@
 -- CreateEnum
 CREATE TYPE "estado_usuario" AS ENUM ('pendiente', 'activo', 'inactivo', 'bloqueado');
 
+-- CreateEnum
+CREATE TYPE "rol_value" AS ENUM ('maestro', 'admin', 'mensajero', 'Admin Tienda');
+
 -- NOTE: la tabla "Session" ya existe en la base de datos destino (modelo
 -- preexistente en db/schema.prisma); esta migracion NO la recrea.
 
@@ -15,7 +18,7 @@ CREATE TABLE "tipo_identificacion" (
 -- CreateTable
 CREATE TABLE "rol" (
     "id" TEXT NOT NULL,
-    "value" TEXT NOT NULL,
+    "value" "rol_value" NOT NULL,
 
     CONSTRAINT "rol_pkey" PRIMARY KEY ("id")
 );

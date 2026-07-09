@@ -13,3 +13,4 @@ DROP TABLE IF EXISTS "rol";
 DROP TABLE IF EXISTS "tipo_identificacion";
 
 DROP TYPE IF EXISTS "estado_usuario";
+DROP TYPE IF EXISTS "rol_value";
