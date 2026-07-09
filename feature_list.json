@@ -1,0 +1,20 @@
+{
+  "features": [
+    {
+      "id": 1,
+      "name": "login",
+      "description": "Genera el flujo de login RBA, la db debe llevar los campos (nombre, email, telefono, contraseña, estado, cedula, tipo_identificacion_id, rol_id, created_at, updated_at)",
+      "status": "done",
+      "sdd": true,
+      "complexity": "medium"
+    },
+    {
+      "id": 2,
+      "name": "login(home)",
+      "description": "Genera la pantalla de home del login pide los campos de email y contraseña",
+      "status": "done",
+      "sdd": true,
+      "complexity": "low"
+    }
+  ]
+}

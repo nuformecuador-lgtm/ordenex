@@ -1,0 +1,25 @@
+export interface EmailOtpChallengeRecord {
+  id: string;
+  usuarioId: string;
+  codeHash: string;
+  deviceHash: string;
+  ipAddress: string;
+  expiresAt: Date;
+  consumedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface CreateEmailOtpChallengeInput {
+  usuarioId: string;
+  codeHash: string;
+  deviceHash: string;
+  ipAddress: string;
+  expiresAt: Date;
+}
+
+export interface IEmailOtpChallengeRepository {
+  create(input: CreateEmailOtpChallengeInput): Promise<EmailOtpChallengeRecord>;
+  /** Devuelve null si no existe, ya fue consumido, o ya expiro (R20). */
+  findActiveById(id: string): Promise<EmailOtpChallengeRecord | null>;
+  markConsumed(id: string): Promise<void>;
+}

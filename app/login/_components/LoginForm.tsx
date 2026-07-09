@@ -1,0 +1,357 @@
+"use client";
+
+import { useState, useTransition, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { z } from "zod";
+import { login, verifyChallenge } from "@/lib/actions/auth";
+import { OTP_CODE_LENGTH } from "@/lib/types/auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Validación de cliente: email válido, password no vacía
+const credentialsSchema = z.object({
+  email: z.string().email("Correo electrónico inválido"),
+  password: z.string().min(1, "La contraseña es requerida"),
+});
+
+// Validación de cliente: código de 6 dígitos
+const codeSchema = z.object({
+  code: z
+    .string()
+    .regex(/^\d{6}$/, "El código debe ser exactamente 6 dígitos numéricos"),
+});
+
+// Calcula el target de redirección validando el parámetro
+function getRedirectTarget(redirectParam: string | null): string {
+  if (!redirectParam) return "/";
+  // Proteger contra open-redirect: debe empezar con / pero no con //
+  if (typeof redirectParam === "string" && redirectParam.startsWith("/") && !redirectParam.startsWith("//")) {
+    return redirectParam;
+  }
+  return "/";
+}
+
+export interface LoginFormProps {
+  redirectParam: string | null;
+}
+
+export function LoginForm({ redirectParam }: LoginFormProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  // Estado del formulario de credenciales
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Estado de la fase actual
+  const [phase, setPhase] = useState<"credentials" | "challenge">("credentials");
+
+  // Estado de challenge OTP
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+
+  // Estado de errores
+  const [credentialsFieldErrors, setCredentialsFieldErrors] = useState<
+    Record<string, string[]>
+  >({});
+  const [codeFieldErrors, setCodeFieldErrors] = useState<Record<string, string[]>>({});
+  const [generalError, setGeneralError] = useState<string | null>(null);
+
+  // Referencias para gestionar el foco (R21, R22)
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
+
+  // Al montar, colocar el foco en el email (R21)
+  useEffect(() => {
+    emailRef.current?.focus();
+  }, []);
+
+  // Mover el foco al primer campo con error (R22).
+  // Recibe los errores recien calculados (variable local del handler que
+  // llama a esta funcion), NUNCA el state, porque el state todavia no se
+  // actualizo en el mismo render (closure obsoleto/"stale").
+  const moveFocusToFirstError = (
+    phase: "credentials" | "challenge",
+    errors: Record<string, string[]>,
+  ) => {
+    if (phase === "credentials") {
+      if (errors.email) {
+        emailRef.current?.focus();
+      } else if (errors.password) {
+        passwordRef.current?.focus();
+      }
+    } else if (phase === "challenge") {
+      if (errors.code) {
+        codeRef.current?.focus();
+      }
+    }
+  };
+
+  // Manejar el envío del formulario de credenciales
+  const handleSubmitCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGeneralError(null);
+    setCredentialsFieldErrors({});
+
+    // Validación de cliente (R3, R4)
+    const result = credentialsSchema.safeParse({ email, password });
+    if (!result.success) {
+      const errors = result.error.flatten().fieldErrors as Record<string, string[]>;
+      setCredentialsFieldErrors(errors);
+      moveFocusToFirstError("credentials", errors);
+      return;
+    }
+
+    // Invocar Server Action login (R5)
+    startTransition(async () => {
+      const loginResult = await login({ email, password });
+
+      switch (loginResult.status) {
+        case "ok":
+          // R7: redirigir con lógica de redirect param
+          router.push(getRedirectTarget(redirectParam));
+          break;
+
+        case "challenge_required":
+          // R12: transicionar a fase challenge, guardar challengeId
+          setChallengeId(loginResult.challengeId);
+          setPhase("challenge");
+          setCode("");
+          setCodeFieldErrors({});
+          // Mover el foco al campo de código tras la transición
+          setTimeout(() => codeRef.current?.focus(), 0);
+          break;
+
+        case "invalid_credentials":
+          // R8: mensaje de error genérico, permanecer en credenciales
+          setGeneralError("Correo o contraseña inválidos");
+          break;
+
+        case "account_unavailable":
+          // R9: error distinguible
+          setGeneralError("Esta cuenta no está disponible para iniciar sesión");
+          break;
+
+        case "account_locked":
+          // R10: incluir retryAfterMinutes
+          setGeneralError(
+            `Cuenta bloqueada. Intenta de nuevo en ${loginResult.retryAfterMinutes} minuto${loginResult.retryAfterMinutes > 1 ? "s" : ""}`
+          );
+          break;
+
+        case "validation_error":
+          // R11: mostrar errores por campo
+          setCredentialsFieldErrors(loginResult.fieldErrors);
+          moveFocusToFirstError("credentials", loginResult.fieldErrors);
+          break;
+      }
+    });
+  };
+
+  // Manejar el envío del código de verificación
+  const handleSubmitChallenge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGeneralError(null);
+    setCodeFieldErrors({});
+
+    if (!challengeId) {
+      setGeneralError("Sesión expirada. Intenta de nuevo");
+      return;
+    }
+
+    // Validación de cliente (R14)
+    const result = codeSchema.safeParse({ code });
+    if (!result.success) {
+      const errors = result.error.flatten().fieldErrors as Record<string, string[]>;
+      setCodeFieldErrors(errors);
+      moveFocusToFirstError("challenge", errors);
+      return;
+    }
+
+    // Invocar Server Action verifyChallenge (R15)
+    startTransition(async () => {
+      const verifyChallengeResult = await verifyChallenge({ challengeId, code });
+
+      switch (verifyChallengeResult.status) {
+        case "ok":
+          // R16: redirigir con la misma lógica que R7
+          router.push(getRedirectTarget(redirectParam));
+          break;
+
+        case "otp_invalid":
+          // R17: error, mantener fase y challengeId
+          setGeneralError("El código es inválido o ha expirado");
+          break;
+
+        case "validation_error":
+          // R18: errores por campo
+          setCodeFieldErrors(verifyChallengeResult.fieldErrors);
+          moveFocusToFirstError("challenge", verifyChallengeResult.fieldErrors);
+          break;
+      }
+    });
+  };
+
+  if (phase === "credentials") {
+    return (
+      <Card className="w-full max-w-md p-8 space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-center">Iniciar sesión</h1>
+        </div>
+
+        {generalError && (
+          <Alert variant="destructive" role="alert" aria-live="assertive">
+            <AlertDescription>{generalError}</AlertDescription>
+          </Alert>
+        )}
+
+        {/*
+          noValidate: la validacion HTML5 nativa del navegador (p. ej. sobre
+          type="email") interrumpe el envio antes de que se ejecute nuestro
+          onSubmit y muestra un tooltip nativo en vez del error accesible
+          (role="alert" + aria-describedby) que exigen R3/R4/R20. La
+          validacion real es la de credentialsSchema (zod) + el servidor.
+        */}
+        <form onSubmit={handleSubmitCredentials} noValidate className="space-y-4">
+          {/* Campo de email (R1, R19) */}
+          <div className="space-y-2">
+            <Label htmlFor="email">Correo electrónico</Label>
+            <Input
+              ref={emailRef}
+              id="email"
+              type="email"
+              placeholder="tu@correo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isPending}
+              aria-invalid={!!credentialsFieldErrors.email}
+              aria-describedby={credentialsFieldErrors.email ? "email-error" : undefined}
+            />
+            {credentialsFieldErrors.email && (
+              <div
+                id="email-error"
+                role="alert"
+                className="text-sm text-red-600 dark:text-red-400 space-y-1"
+              >
+                {credentialsFieldErrors.email.map((msg, idx) => (
+                  <div key={idx}>{msg}</div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Campo de password (R1, R19) */}
+          <div className="space-y-2">
+            <Label htmlFor="password">Contraseña</Label>
+            <Input
+              ref={passwordRef}
+              id="password"
+              type="password"
+              placeholder="Tu contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isPending}
+              aria-invalid={!!credentialsFieldErrors.password}
+              aria-describedby={credentialsFieldErrors.password ? "password-error" : undefined}
+            />
+            {credentialsFieldErrors.password && (
+              <div
+                id="password-error"
+                role="alert"
+                className="text-sm text-red-600 dark:text-red-400 space-y-1"
+              >
+                {credentialsFieldErrors.password.map((msg, idx) => (
+                  <div key={idx}>{msg}</div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Botón de envío (R2, R6, R6a) */}
+          <Button type="submit" disabled={isPending} className="w-full">
+            {isPending ? "Verificando..." : "Iniciar sesión"}
+          </Button>
+        </form>
+      </Card>
+    );
+  }
+
+  // Fase challenge (R12, R13)
+  return (
+    <Card className="w-full max-w-md p-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-center">Verificar código</h1>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400 text-center mt-2">
+          Se ha enviado un código de 6 dígitos a tu correo electrónico
+        </p>
+      </div>
+
+      {generalError && (
+        <Alert variant="destructive" role="alert" aria-live="assertive">
+          <AlertDescription>{generalError}</AlertDescription>
+        </Alert>
+      )}
+
+      <form onSubmit={handleSubmitChallenge} noValidate className="space-y-4">
+        {/* Campo de código (R13, R19) */}
+        <div className="space-y-2">
+          <Label htmlFor="code">Código de verificación</Label>
+          <Input
+            ref={codeRef}
+            id="code"
+            type="text"
+            inputMode="numeric"
+            placeholder="000000"
+            maxLength={OTP_CODE_LENGTH}
+            value={code}
+            onChange={(e) => {
+              // Solo permitir dígitos
+              const filtered = e.target.value.replace(/\D/g, "");
+              setCode(filtered);
+            }}
+            disabled={isPending}
+            aria-invalid={!!codeFieldErrors.code}
+            aria-describedby={codeFieldErrors.code ? "code-error" : undefined}
+          />
+          {codeFieldErrors.code && (
+            <div
+              id="code-error"
+              role="alert"
+              className="text-sm text-red-600 dark:text-red-400 space-y-1"
+            >
+              {codeFieldErrors.code.map((msg, idx) => (
+                <div key={idx}>{msg}</div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Botón de envío del código (R6, R6a) */}
+        <Button type="submit" disabled={isPending} className="w-full">
+          {isPending ? "Verificando..." : "Verificar código"}
+        </Button>
+      </form>
+
+      {/* Link para volver a credenciales (afordancia UX, no es requisito) */}
+      <button
+        type="button"
+        onClick={() => {
+          setPhase("credentials");
+          setChallengeId(null);
+          setCode("");
+          setGeneralError(null);
+          setCodeFieldErrors({});
+          emailRef.current?.focus();
+        }}
+        disabled={isPending}
+        className="w-full text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 underline disabled:opacity-50"
+      >
+        Volver a correo y contraseña
+      </button>
+    </Card>
+  );
+}

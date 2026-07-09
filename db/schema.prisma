@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model TipoIdentificacion {
+  id    String @id @default(uuid())
+  value String @unique // seed: "cedula", "ruc", "pasaporte"
+
+  usuarios Usuario[]
+
+  @@map("tipo_identificacion")
+}
+
+model Rol {
+  id    String @id @default(uuid())
+  value String @unique // seed: "admin", "usuario"
+
+  usuarios Usuario[]
+
+  @@map("rol")
+}
+
+enum EstadoUsuario {
+  pendiente // recien creado, sin verificar
+  activo
+  inactivo
+  bloqueado // por seguridad / bloqueo por fallos
+
+  @@map("estado_usuario")
+}
+
+model Usuario {
+  id                   String        @id @default(uuid())
+  nombre               String
+  email                String        @unique
+  telefono             String
+  passwordHash         String        @map("password_hash")
+  estado               EstadoUsuario @default(pendiente)
+  cedula               String        @unique
+  tipoIdentificacionId String        @map("tipo_identificacion_id")
+  rolId                String        @map("rol_id")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  tipoIdentificacion TipoIdentificacion  @relation(fields: [tipoIdentificacionId], references: [id])
+  rol                Rol                 @relation(fields: [rolId], references: [id])
+  loginAttempts      LoginAttempt[]
+  trustedDevices     TrustedDevice[]
+  otpChallenges      EmailOtpChallenge[]
+
+  @@map("usuario")
+  @@index([tipoIdentificacionId])
+  @@index([rolId])
+}
+
+model LoginAttempt {
+  id         String   @id @default(uuid())
+  usuarioId  String?  @map("usuario_id") // null si el email no resolvio a usuario
+  emailUsado String   @map("email_usado")
+  exitoso    Boolean
+  ipAddress  String   @map("ip_address")
+  userAgent  String   @map("user_agent")
+  riskScore  Int      @map("risk_score")
+  riskReason String   @map("risk_reason") // resumen de senales usadas
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@map("login_attempt")
+  @@index([usuarioId, createdAt])
+  @@index([ipAddress, createdAt])
+}
+
+model TrustedDevice {
+  id         String   @id @default(uuid())
+  usuarioId  String   @map("usuario_id")
+  deviceHash String   @map("device_hash") // hash de fingerprint (UA + atributos), nunca PII cruda
+  ipAddress  String   @map("ip_address")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@map("trusted_device")
+  @@unique([usuarioId, deviceHash])
+  @@index([usuarioId])
+}
+
+// Challenge OTP por email para el paso adicional de RBA (R17-R20).
+model EmailOtpChallenge {
+  id         String    @id @default(uuid())
+  usuarioId  String    @map("usuario_id")
+  codeHash   String    @map("code_hash") // hash del codigo OTP, nunca el codigo en claro
+  deviceHash String    @map("device_hash") // dispositivo a confiar si el OTP se supera (R19)
+  ipAddress  String    @map("ip_address")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@map("email_otp_challenge")
+  @@index([usuarioId, createdAt])
+}
