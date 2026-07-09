@@ -60,17 +60,139 @@
       "id": 8,
       "name": "paginacion",
       "description": "al componente de tabla agrega paginacion como componente separado",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": "high"
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/8-paginacion",
+      "depends_on": null
     },
     {
       "id": 9,
       "name": "componente carga masiva",
-      "description": "Genera un componente que permita cargar un archivo, debe permitir pasarle el tipo de archivo que se va a cargar (csv, xlsx, etc) y la ruta de la api donde se va a enviar el archivo, debe tener un boton para descargar la plantilla y un boton para cargar el archivo",
+      "description": "Genera un componente que permita cargar un archivo, debe permitir pasarle el tipo de archivo que se va a cargar (csv, xlsx, etc) y la ruta de la api donde se va a enviar el archivo, debe tener un boton para descargar la plantilla y un boton para cargar el archivo, debe permitir parametrizar los campos de la plantilla",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/9-carga-masiva",
+      "depends_on": null
+    },
+    {
+      "id": 10,
+      "name": "manejador de errores",
+      "description": "Genera un manejador de errores global que capture los errores desde el backend y lo envie en una estructura comun para todos los endpoints",
+      "status": "done",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/10-manejador-errores",
+      "depends_on": null
+    },
+    {
+      "id": 11,
+      "name": "notificaciones",
+      "description": "Agrega un toast para mostrar mensajes al usuario",
       "status": "pending",
       "sdd": true,
-      "complexity": "high"
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": null
+    },
+    {
+      "id": 12,
+      "name": "notificaciones - fix",
+      "description": "reemplaza los mensajes de error que se hacian mediante switch case por el manejador de errores global",
+      "status": "spec_ready",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/12-notificaciones-fix",
+      "depends_on": 10
+    },
+    {
+      "id": 13,
+      "name": "modal",
+      "description": "Genera un componente modal reutilizable, que ademas pueda manejar funciones async, cuando sea async debe mostrar un spinner mientras se ejecuta la funcion y bloquear el boton de confirmacion",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/13-modal",
+      "depends_on": null
+    },
+    {
+      "id": 14,
+      "name": "ordenes - carga masiva",
+      "description": "en ordenes agrega un boton para abrir un modal que contenga el componente de carga masiva",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": 9
+    },
+    {
+      "id": 15,
+      "name": "ordenes - carga masiva",
+      "description": "agrega el endpoint para cargar masivamente ordenes, el endpoint debe recibir un archivo csv o xlsx y procesarlo, debe soportar volumenes altos de datos, los datos que trae el csv son los siguientes: num_remision, destinatario telefono, provincia, canton, distrito, direccion(actualiza la tabla orden), producto, notas, monto_cobrar(actualiza la tabla orden), mensajero_sugerido_id(actualiza la tabla orden, agega la relacion con users para este campo), actualiza el enum de estados para agregar en preparación, este sera el nuevo valor por defecto, debe verificar que el num_remision no exista ya en la base de datos, en caso que exista retornar el estado de la orden",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "backend",
+      "branch": "feature/15-carga-masiva-endpoint",
+      "depends_on": null
+    },
+    {
+      "id": 16,
+      "name": "ordenes - carga masiva - etapa 2",
+      "description": "Una vez cargadas y validadas las ordenes, muestra un resumen de los datos ingresados, columna por columna, num_remision debe ser unico, debe mostrar un select que consuma los users filtrados por role = mensajero, este se asiganara al campo mensajero_sugerido_id",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null
+    },
+    {
+      "id": 17,
+      "name": "ordenes - revision a bodega/asignacion mensajero",
+      "description": "Los estados embalaje(agrega este estado a order_status) y en preparacion son estados de revision. En la lista de ordenes debe permitirse seleccionar mediante checkbox una o varias ordenes que esten en estos estados para procesarlas. Al intentar pasarlas al estado en bodega, como la carga masiva ya trae un mensajero sugerido, debe preguntarse si se desea mantener ese mensajero sugerido o cambiarlo. Casos: (1) si se decide mantener el mensajero sugerido, la orden no pasa a en bodega sino al estado en espera de aceptacion por el mensajero; (2) si se decide cambiar el mensajero, se debe permitir seleccionar a que mensajero se le asigna, y una vez seleccionado la orden pasa al estado en espera de aceptacion por el mensajero; (3) si no se selecciona ningun mensajero, la orden queda en estado en bodega. Requiere agregar el estado en espera de aceptacion por el mensajero al enum de estados.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null
+    },
+    {
+      "id": 18,
+      "name": "costos",
+      "description": "generar el crud de cobros, crea la tabla costos, con valor_flete, valor_flete_devuelto, valor_flete_GAM, valor_flete_devuelto_GAM, embalaje",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null
+    },
+    {
+      "id": 19,
+      "name": "cobros",
+      "description": "generar un componente para gestionar los cobros, en este solo se debe poder seleccionar un ",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null
+    },
+    {
+      "id": 0,
+      "name": "admin tienda",
+      "description": "",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null
     }
   ]
 }

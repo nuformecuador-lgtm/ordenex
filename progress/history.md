@@ -155,3 +155,33 @@
   feature 8); columna tienda con nombre legible (opción b, amplía el listado backend).
 - Review APROBADO, 0 bloqueantes. Sin deuda de DB (la ampliación no requiere migración;
   la deuda de aplicar el CRUD contra Postgres sigue siendo la de la feature 6).
+
+## 2026-07-09 — paginacion (componente separado + paginación server-side de /ordenes)
+- Componente `Pagination` (`components/shared/`) SEPARADO, controlado y transport-agnostic
+  (compone con `DataTable` como hermano, sin tocar su contrato): ventana de números de
+  página con elipsis + `aria-current="page"`, botones primera/última (`showFirstLast`),
+  selector de tamaño `[10,25,50]`, `<nav aria-label>` + botones reales con `disabled`
+  semántico y `aria-live`. Hook `usePagination` (`hooks/`) para modo client-side
+  reutilizable. Vista `/ordenes` cableada SERVER-SIDE: SWR key `[ordenes:list,page,pageSize]`
+  → `listarOrdenes({page,pageSize})` (feature 6, sin tocar backend), reset a página 1 al
+  cambiar tamaño. `DEFAULT_PAGE_SIZE` cambiado 20→25 para alinear con el selector.
+- Requisitos cubiertos: R1–R34, mapeados a tests reales en `progress/impl_paginacion.md`.
+  Suite: 40 archivos / 289 tests verdes; typecheck/lint/init.sh OK.
+- Decisiones (del humano, 2026-07-09): server-side en /ordenes; números de página con
+  elipsis; selector 10/25/50; primera/última; `DEFAULT_PAGE_SIZE=25` (era 20, fuera del
+  selector). No toca DB, migraciones, RLS ni `app/api/`; `DataTable` intacto.
+- Review APROBADO, 0 bloqueantes (3 menores no bloqueantes documentados en
+  `progress/review_paginacion.md`). Rama `feature/8-paginacion` mergeada a `origin/dev`
+  (6bada04) por el humano vía UI (gh no instalado). Proceso nuevo: rama desde `dev`, PR a `dev`.
+
+## 2026-07-09 — manejador de errores (estructura de error común + wrapper global backend)
+- Manejador de errores global de backend: estructura de error común para todos los
+  endpoints/Server Actions (códigos, shape serializable, normalización de errores
+  desconocidos, logger, y un wrapper `withErrorHandler`). Módulo bajo `lib/errors/`
+  con suite dedicada en `tests/unit/errors/` (app-error, codes, http, index, logger,
+  normalize, shape, with-error-handler). Zona backend pura; no toca UI.
+- Requisitos cubiertos: R1–R20 (ver spec en la rama y `progress/review_*` del track).
+  Verificación: 320 tests verdes tras merge de dev; typecheck/lint/init.sh OK.
+- Proceso: desarrollada EN PARALELO con la feature 8 (zonas disjuntas frontend/backend)
+  en worktree `../ordenex-f10`. Review APROBADO, 0 mayores. Commit b4ff324, mergeada a
+  `origin/dev` vía PR #4 (f6a5da4). Desbloquea la feature 12 (notificaciones-fix, depends_on:10).
