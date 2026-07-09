@@ -15,7 +15,7 @@ afterEach(() => {
 describe("loadOrdenesConfig valores por defecto (N1/R33)", () => {
   it("usa defaults cuando no hay env", () => {
     const cfg = loadOrdenesConfig();
-    expect(cfg.DEFAULT_PAGE_SIZE).toBe(20);
+    expect(cfg.DEFAULT_PAGE_SIZE).toBe(25);
     expect(cfg.MAX_PAGE_SIZE).toBe(100);
     expect(cfg.DEFAULT_ESTATUS_VALUE).toBe("en_bodega");
   });
@@ -37,6 +37,6 @@ describe("loadOrdenesConfig overrides por entorno", () => {
     process.env.ORDENES_DEFAULT_PAGE_SIZE = "abc";
     const cfg = loadOrdenesConfig();
     expect(cfg.MAX_PAGE_SIZE).toBe(100);
-    expect(cfg.DEFAULT_PAGE_SIZE).toBe(20);
+    expect(cfg.DEFAULT_PAGE_SIZE).toBe(25);
   });
 });
