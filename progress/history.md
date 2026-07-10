@@ -386,3 +386,26 @@
   `origin/dev` vía **PR #14** (e5a0f5d, 2026-07-10).
 - DEUDA (aceptada, dictaminada no bloqueante por el reviewer): sin e2e de login `adminTienda` (el
   repo no tiene infra seed/login e2e); R1/R7 cubiertos por component tests + test real de backend.
+
+## 2026-07-10 — rename estado embalaje -> en_fulfillment (feature 28, BACKEND)
+- Corrección de nomenclatura. Rename del valor de catálogo `order_status` `embalaje` -> `en_fulfillment`
+  (convención `en_`) en la fuente única `lib/types/order-status.ts` (`ORDER_STATUS_SEED`) y migración
+  `UPDATE order_status SET value='en_fulfillment' WHERE value='embalaje'` con `down.sql` inverso.
+- DECISIONES HUMANAS (2026-07-10): (1) ADEMÁS se crea un enum de Postgres `order_status_value`
+  **STANDALONE** (CREATE TYPE con los 8 valores incl. `en_fulfillment`, patrón `RolValue`; down `DROP TYPE`)
+  para validaciones futuras, SIN retipar la columna `order_status.value` (sigue TEXT) — SQL manual porque
+  Prisma no materializa enums no referenciados; (2) a partir de esta feature las migraciones SÍ se ejecutan
+  contra Postgres real (deuda de despliegue 4/6/15 LEVANTADA).
+- Fix de soporte: `scripts/seed-catalogos.ts` ahora construye el cliente con el driver adapter `PrismaPg`
+  (+`loadEnvFile`) — antes fallaba contra DB real. Guard anti-`embalaje` + tests de migración (rename y enum)
+  + test de sincronía enum<->ORDER_STATUS_SEED.
+- Requisitos R1–R11 (EARS) -> tests reales. Ver `progress/impl_rename-embalaje-fulfillment.md` y
+  `progress/review_rename-embalaje-fulfillment.md`. Suite 81 files / 698 tests verdes (tras merge con dev/26);
+  typecheck/lint/init.sh OK.
+- R11 verificado por el reviewer contra Postgres real (localhost:5432/ordenex): `order_status` con 8 valores,
+  `embalaje`=0, `en_fulfillment`=1; tipo `order_status_value` con 8 labels; `down.sql` revierten y la
+  re-aplicación restaura el estado.
+- Review APROBADO, 0 bloqueantes. Corrió en PARALELO con la feature 26 (frontend). Mergeada a `origin/dev`
+  vía **PR #15** (d259e6a, 2026-07-10).
+- DEUDA nueva (fuera de alcance): `scripts/db-rollback.ts` usa el flag `--schema` (roto en Prisma 7) ->
+  arreglar en una feature aparte; el rollback R11 se ejecutó con `prisma db execute --file`.
