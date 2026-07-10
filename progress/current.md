@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/20-recuperacion-contrasena | fullstack (backend slice) | F2.4 | **backend slice IMPL + reviewer APROBADO (0 bloqueantes). PR #20 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/20 → base dev). Spec R1–R20. Backend (Bloque 0–3, T00–T05): política pass fuerte (zod), constantes `AUTH_RESET_*`, schemas, `updatePasswordHash`, repos + rate-limit, `PasswordResetService`, Server Actions. FRONTEND T06–T08 (`app/recuperar-contrasena/`, R16–R18) DIFERIDO — zona frontend ya libre tras #31; se hará como 2º slice. Reusa infra OTP sin tabla nueva. Suite 762/762 verde. Log OTP del issuer: excepción aceptada (humano: dejar). |
+| feature/20-recuperacion-contrasena | fullstack | F2.4 | **COMPLETA (backend+frontend) + reviewer APROBADO en ambos slices (0 bloqueantes). PR #20 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/20 → base dev). Backend T00–T05 + Frontend T06–T08 (`app/recuperar-contrasena/` 3 fases + enlace en login). Zona frontend se liberó tras #29/#31 y se completó aquí. Suite 782/782 verde; init.sh verde. Pasa a `done` al mergear. Spec R1–R20. Backend (Bloque 0–3, T00–T05): política pass fuerte (zod), constantes `AUTH_RESET_*`, schemas, `updatePasswordHash`, repos + rate-limit, `PasswordResetService`, Server Actions. FRONTEND T06–T08 (`app/recuperar-contrasena/`, R16–R18) DIFERIDO — zona frontend ya libre tras #31; se hará como 2º slice. Reusa infra OTP sin tabla nueva. Suite 762/762 verde. Log OTP del issuer: excepción aceptada (humano: dejar). |
 
 > Feature 31 (plantilla XLSX) CERRADA 2026-07-10: **PR #19 mergeado** a `origin/dev` (17:21Z),
 > status -> `done`, entrada en `history.md`. Frontend puro (CSV→XLSX, exceljs import dinámico),
