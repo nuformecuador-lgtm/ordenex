@@ -1,3 +1,9 @@
+import { PageHeader } from "@/components/shared/PageHeader";
+
 export default function PerfilPage() {
-  return <h1>Perfil</h1>;
+  return (
+    <section>
+      <PageHeader title="Perfil" />
+    </section>
+  );
 }

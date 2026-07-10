@@ -1,3 +1,9 @@
+import { PageHeader } from "@/components/shared/PageHeader";
+
 export default function ConfiguracionPage() {
-  return <h1>Configuración</h1>;
+  return (
+    <section>
+      <PageHeader title="Configuración" />
+    </section>
+  );
 }

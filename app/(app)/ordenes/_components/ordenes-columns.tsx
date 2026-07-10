@@ -1,5 +1,6 @@
 import type { Column } from "@/components/shared/DataTable";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
+import { EstatusBadge } from "./EstatusBadge";
 
 /**
  * Columnas concretas de `/ordenes` (R17, R24). Exactamente 5, en orden. La tabla
@@ -20,7 +21,9 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   {
     id: "estatus",
     value: "Estatus",
-    render: (row) => row.estatusValue ?? row.estatusId,
+    render: (row) => (
+      <EstatusBadge value={row.estatusValue ?? row.estatusId} />
+    ),
   },
   { id: "destinatario", value: "Destinatario" },
   { id: "tienda", value: "Tienda", render: (row) => row.tiendaNombre },
