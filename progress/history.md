@@ -490,3 +490,53 @@
   (b1ef459, 2026-07-10 19:15Z). Impl vía backend_dev/frontend_dev DIRECTO (implementer inestable
   por sonnet-4). Excepción aceptada por el humano: `OtpChallengeIssuer` loguea el OTP en claro
   (código heredado, fuera de alcance).
+
+## 2026-07-10 — gestión de usuarios (feature 25, FULLSTACK)
+- CRUD de usuarios en `app/(app)/configuracion/`, accesible **solo para rol maestro**, SIN tabla
+  nueva (reusa `Usuario`). Requisitos R1–R36 (EARS). BACKEND (T1–T7): `lib/config/usuarios.ts`
+  (límites de paginación); `lib/types/usuario.ts` — `crearUsuarioSchema` (unión discriminada por
+  `passwordMode`: manual usa `strongPasswordSchema` de la #20, generate sin password),
+  `actualizarUsuarioSchema`/`cambiarEstadoUsuarioSchema`/`listarUsuariosSchema`;
+  `lib/utils/password-generator.ts` (`generateStrongPassword`, aleatoriedad criptográfica, valida
+  su salida, no loguea); `UserRepository`+`IUserRepository` con `list`/`count`/`update`/`setEstado`/
+  `listTiposIdentificacion`/`listRoles` (`PUBLIC_SELECT` sin `passwordHash`); `UsuarioService`
+  (`ALLOWED_ROLES={maestro}`, autz ANTES de datos, hashPassword, estado `activo`, `generatedPassword`
+  una vez en modo generate); `lib/actions/usuarios.ts` (`crear`/`listar`/`obtener`/`actualizar`/
+  `cambiarEstado`/`listarTiposIdentificacion`/`listarRoles`). FRONTEND (T8–T11):
+  `configuracion/page.tsx` (Server Component valida maestro + pre-fetch), `usuarios-columns`,
+  `UsuarioForm` (toggle contraseña escribir/generar), `UsuariosModule` (DataTable+Pagination+Modal
+  async+Toast).
+- GAP funcional detectado y cerrado antes del merge: el select de rol enviaba el enum `value` pero
+  el backend espera `rolId` (UUID) → `CatalogoInvalidoError` en crear. Fix: acción `listarRoles`
+  (backend) + wiring del select por `rol.id` (frontend).
+- Depends_on 20 (comparte `strongPasswordSchema`); arrancó F2 tras mergear la #20.
+- Reviewer APROBADO, 0 bloqueantes; suite ~886 verde; typecheck + init.sh verdes. Mergeada a
+  `origin/dev` vía **PR #24** (95d5025, 2026-07-10 20:39Z). Impl vía backend_dev→frontend_dev
+  DIRECTO (implementer inestable por sonnet-4). Deuda menor (no bloqueante): subir timeout de un
+  test de `usuario-form` (flaky bajo carga paralela).
+
+## 2026-07-10 — vehículos (feature 50, BACKEND) [cierre de bookkeeping]
+- Catálogo `vehiculos` SOLO-LECTURA: enum PG `vehiculo_value` (moto/carro/camion) + model `Vehiculo{id,name}`,
+  migración `20260710160000_vehiculos` + seed, VERIFICADOS contra Postgres real. Implementada y mergeada
+  por otra sesión vía **PR #21** (eb6a17d). Reviewer APROBADO. status -> `done` (bookkeeping corregido en
+  esta sesión: el archivo había quedado en `in_progress`). Desbloquea 21→22→23.
+
+## 2026-07-10 — postulación de mensajero (feature 21, FULLSTACK) [cierre de bookkeeping]
+- Registro público (postulación) de mensajeros: única vía de auto-registro. Fullstack, R1–R26 (EARS).
+  Implementada y mergeada por otra sesión vía **PR #23** (c5c1c97, 2026-07-10 20:32Z); esta sesión solo
+  corrige el bookkeeping (el archivo quedó en `pending` por drift de sesiones paralelas). status -> `done`.
+- DB: migración `20260710170000_postulacion_mensajero` — agrega a `usuario` las columnas nullable
+  `primer_apellido`/`segundo_apellido`/`vehiculo_id`(FK RESTRICT→vehiculos)/`placa` + índice; crea enum
+  `mensajero_documento_tipo` (5 valores) y tabla `mensajero_documento` (unique `(usuario_id,tipo)`, FK
+  CASCADE, RLS). BACKEND: `lib/types/postulacion-mensajero.ts` (`postulacionSchema` reusa
+  `strongPasswordSchema`, valida los 5 documentos por MIME/tamaño), `lib/config/postulacion.ts`,
+  `PostulacionRepository`/`MensajeroDocumentoRepository`, `PostulacionMensajeroService` (resuelve rol
+  mensajero → valida FKs → unicidad email/cédula → bcrypt → sube 5 docs a Storage → transacción
+  crear usuario+docs → **rollback de archivos si falla**; estado `pendiente` por default de DB),
+  Server Action `postularMensajero` (FormData, rate-limit por IP|email, NO concede sesión),
+  `SupabaseFileStorage` sobre bucket privado `mensajero-docs`. FRONTEND: `app/postulacion/` (page pública
+  + `PostulacionForm` con los 5 file inputs y vista de confirmación).
+- Reviewer: bloqueante inicial (trazabilidad de `foto_rostro`) RESUELTO → **APROBADO**. Tests: 7 archivos
+  unit/component + integración, 56 tests verdes en aislamiento. DEUDA (no bloqueante, documentada):
+  aplicar la migración a Postgres real + crear el bucket privado `mensajero-docs`; aprobación/URL firmada
+  de documentos diferida a la feature 22.
