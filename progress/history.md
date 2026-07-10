@@ -514,3 +514,29 @@
   `origin/dev` vía **PR #24** (95d5025, 2026-07-10 20:39Z). Impl vía backend_dev→frontend_dev
   DIRECTO (implementer inestable por sonnet-4). Deuda menor (no bloqueante): subir timeout de un
   test de `usuario-form` (flaky bajo carga paralela).
+
+## 2026-07-10 — vehículos (feature 50, BACKEND) [cierre de bookkeeping]
+- Catálogo `vehiculos` SOLO-LECTURA: enum PG `vehiculo_value` (moto/carro/camion) + model `Vehiculo{id,name}`,
+  migración `20260710160000_vehiculos` + seed, VERIFICADOS contra Postgres real. Implementada y mergeada
+  por otra sesión vía **PR #21** (eb6a17d). Reviewer APROBADO. status -> `done` (bookkeeping corregido en
+  esta sesión: el archivo había quedado en `in_progress`). Desbloquea 21→22→23.
+
+## 2026-07-10 — postulación de mensajero (feature 21, FULLSTACK) [cierre de bookkeeping]
+- Registro público (postulación) de mensajeros: única vía de auto-registro. Fullstack, R1–R26 (EARS).
+  Implementada y mergeada por otra sesión vía **PR #23** (c5c1c97, 2026-07-10 20:32Z); esta sesión solo
+  corrige el bookkeeping (el archivo quedó en `pending` por drift de sesiones paralelas). status -> `done`.
+- DB: migración `20260710170000_postulacion_mensajero` — agrega a `usuario` las columnas nullable
+  `primer_apellido`/`segundo_apellido`/`vehiculo_id`(FK RESTRICT→vehiculos)/`placa` + índice; crea enum
+  `mensajero_documento_tipo` (5 valores) y tabla `mensajero_documento` (unique `(usuario_id,tipo)`, FK
+  CASCADE, RLS). BACKEND: `lib/types/postulacion-mensajero.ts` (`postulacionSchema` reusa
+  `strongPasswordSchema`, valida los 5 documentos por MIME/tamaño), `lib/config/postulacion.ts`,
+  `PostulacionRepository`/`MensajeroDocumentoRepository`, `PostulacionMensajeroService` (resuelve rol
+  mensajero → valida FKs → unicidad email/cédula → bcrypt → sube 5 docs a Storage → transacción
+  crear usuario+docs → **rollback de archivos si falla**; estado `pendiente` por default de DB),
+  Server Action `postularMensajero` (FormData, rate-limit por IP|email, NO concede sesión),
+  `SupabaseFileStorage` sobre bucket privado `mensajero-docs`. FRONTEND: `app/postulacion/` (page pública
+  + `PostulacionForm` con los 5 file inputs y vista de confirmación).
+- Reviewer: bloqueante inicial (trazabilidad de `foto_rostro`) RESUELTO → **APROBADO**. Tests: 7 archivos
+  unit/component + integración, 56 tests verdes en aislamiento. DEUDA (no bloqueante, documentada):
+  aplicar la migración a Postgres real + crear el bucket privado `mensajero-docs`; aprobación/URL firmada
+  de documentos diferida a la feature 22.

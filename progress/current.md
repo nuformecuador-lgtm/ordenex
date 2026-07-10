@@ -9,6 +9,15 @@
 |--------|------|------|--------|
 | (ninguna en curso) | — | — | Zonas frontend y backend LIBRES. |
 
+> Feature 21 (postulación de mensajero) CERRADA 2026-07-10: **PR #23 mergeado** a `origin/dev`
+> (c5c1c97, 20:32Z), status -> `done` (bookkeeping corregido en esta sesión; había quedado en
+> `pending` por drift de sesiones paralelas — la impl real la hizo otra sesión). Fullstack, R1–R26:
+> registro público de mensajeros (rol mensajero, estado `pendiente`), migración con apellidos+vehiculo+
+> placa+tabla `mensajero_documento`, `PostulacionMensajeroService` con subida a Storage privado
+> (`mensajero-docs`) y rollback, Server Action con rate-limit, `app/postulacion/`. Reviewer APROBADO
+> (bloqueante `foto_rostro` resuelto). 56 tests verdes en aislamiento. DEUDA (no bloqueante): aplicar
+> migración a Postgres real + crear bucket privado; aprobación/URL firmada diferida a la #22.
+
 > Feature 25 (gestión de usuarios) CERRADA 2026-07-10: **PR #24 mergeado** a `origin/dev`
 > (95d5025, 20:39Z), status -> `done`, entrada en `history.md`. Fullstack, sin tabla nueva; CRUD
 > usuarios en configuración (solo maestro), R1–R36. Reviewer APROBADO 0 bloqueantes; suite ~886
