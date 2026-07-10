@@ -7,17 +7,12 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/28-rename-embalaje-fulfillment | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** 78 files / 687 tests verdes; migración R11 aplicada+revertida contra Postgres real (order_status: embalaje=0, en_fulfillment=1, 8 valores; enum PG order_status_value con 8 labels; columna value sigue TEXT). Pendiente: PR + merge (humano). DEUDA nueva: arreglar `scripts/db-rollback.ts` (usa `--schema`, roto en Prisma 7) en feature aparte. Spec v2 (R1..R11). Rename `order_status` `embalaje` -> `en_fulfillment` vía `UPDATE` (fila catálogo) + `down.sql`. DECISIONES HUMANAS (2026-07-10): (1) ADEMÁS enum PG `order_status_value` (8 valores con `en_fulfillment`, patrón `RolValue`) **STANDALONE** (NO retipar la columna, sigue TEXT); (2) migraciones YA se ejecutan contra DB real (deuda 4/6/15 LEVANTADA desde esta feature). FIX de soporte incluido: `scripts/seed-catalogos.ts` ahora usa el adapter `PrismaPg` + `loadEnvFile`. `progress/*` append-only. |
-| feature/26-dashboard-admin-tienda | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Landing `/` condicional por rol server-side (adminTienda → dashboard = header + módulo de órdenes de su tienda). Extraído `OrdenesModule` (una sola tabla+fetch, R10); columnas sin "Tienda" (R11) sin mutar `ordenes-columns.tsx`; frontend puro (backend intacto, filtro tienda vía OrdenService.listar feature 6). R1–R11 → test. Suite 689/689 verde, init.sh verde (verificado por reviewer). E2E login adminTienda DIFERIDO (deuda aceptada, repo sin infra seed/login e2e). Commit `91823ef` + push hechos. **PR PENDIENTE de abrir desde la WEB**: https://github.com/nuformecuador-lgtm/ordenex/pull/new/feature/26-dashboard-admin-tienda → base `dev`. Pasa a `done` al mergear. |
+> Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
+> `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en
+> paralelo con la 19 (backend). Reviewer APROBADO 0 bloqueantes; suite 689/689 verde. Deuda
+> aceptada: sin e2e de login adminTienda (repo sin infra seed/login e2e). Cierre commiteado a
+> `dev` (chore/state) — otra sesión trabaja la 28 en paralelo.
 
-> DEUDA DE MIGRACIONES SALDADA (2026-07-10): aplicadas contra Postgres real (localhost:5432/ordenex)
-> las 3 migraciones pendientes (carga_masiva_ordenes, cobros, rol_admin_satelite); `prisma migrate
-> status` = "Database schema is up to date!" (9/9). El SEED de catálogos reveló el bug del adapter
-> (corregido dentro de la feature 28).
-
-> Feature 19 (rol adminSatelite) CERRADA 2026-07-10: PR #13 mergeado a `origin/dev` (75b7abc),
-> status -> `done`, entrada en `history.md`. El cierre de la 19 + registro de la 28 viajan en
-> el primer commit de `feature/28-rename-embalaje-fulfillment`.
 
 > Feature 18 (cobros crud) CERRADA 2026-07-10: PR #12 mergeado a `origin/dev` (a379d8e),
 > status -> `done`, entrada en `history.md`. El cierre de la 18 + registro de la 19 viajan en
