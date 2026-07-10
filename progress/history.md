@@ -490,3 +490,27 @@
   (b1ef459, 2026-07-10 19:15Z). Impl vía backend_dev/frontend_dev DIRECTO (implementer inestable
   por sonnet-4). Excepción aceptada por el humano: `OtpChallengeIssuer` loguea el OTP en claro
   (código heredado, fuera de alcance).
+
+## 2026-07-10 — gestión de usuarios (feature 25, FULLSTACK)
+- CRUD de usuarios en `app/(app)/configuracion/`, accesible **solo para rol maestro**, SIN tabla
+  nueva (reusa `Usuario`). Requisitos R1–R36 (EARS). BACKEND (T1–T7): `lib/config/usuarios.ts`
+  (límites de paginación); `lib/types/usuario.ts` — `crearUsuarioSchema` (unión discriminada por
+  `passwordMode`: manual usa `strongPasswordSchema` de la #20, generate sin password),
+  `actualizarUsuarioSchema`/`cambiarEstadoUsuarioSchema`/`listarUsuariosSchema`;
+  `lib/utils/password-generator.ts` (`generateStrongPassword`, aleatoriedad criptográfica, valida
+  su salida, no loguea); `UserRepository`+`IUserRepository` con `list`/`count`/`update`/`setEstado`/
+  `listTiposIdentificacion`/`listRoles` (`PUBLIC_SELECT` sin `passwordHash`); `UsuarioService`
+  (`ALLOWED_ROLES={maestro}`, autz ANTES de datos, hashPassword, estado `activo`, `generatedPassword`
+  una vez en modo generate); `lib/actions/usuarios.ts` (`crear`/`listar`/`obtener`/`actualizar`/
+  `cambiarEstado`/`listarTiposIdentificacion`/`listarRoles`). FRONTEND (T8–T11):
+  `configuracion/page.tsx` (Server Component valida maestro + pre-fetch), `usuarios-columns`,
+  `UsuarioForm` (toggle contraseña escribir/generar), `UsuariosModule` (DataTable+Pagination+Modal
+  async+Toast).
+- GAP funcional detectado y cerrado antes del merge: el select de rol enviaba el enum `value` pero
+  el backend espera `rolId` (UUID) → `CatalogoInvalidoError` en crear. Fix: acción `listarRoles`
+  (backend) + wiring del select por `rol.id` (frontend).
+- Depends_on 20 (comparte `strongPasswordSchema`); arrancó F2 tras mergear la #20.
+- Reviewer APROBADO, 0 bloqueantes; suite ~886 verde; typecheck + init.sh verdes. Mergeada a
+  `origin/dev` vía **PR #24** (95d5025, 2026-07-10 20:39Z). Impl vía backend_dev→frontend_dev
+  DIRECTO (implementer inestable por sonnet-4). Deuda menor (no bloqueante): subir timeout de un
+  test de `usuario-form` (flaky bajo carga paralela).
