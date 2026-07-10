@@ -114,13 +114,13 @@ duplica la política.
 
 ## Bloque 4 — Frontend (configuración)
 
-- **T8** [P] — `app/(app)/configuracion/_components/usuarios-columns.tsx`: columnas
+- [x] **T8** [P] — `app/(app)/configuracion/_components/usuarios-columns.tsx`: columnas
   (nombre, email, rol, estado, acciones) para DataTable (patrón `ordenes-columns`).
   - Cubre: R14, R26. Dep: T2.
   - Hecho: columnas tipadas; estado renderizado legible.
   - Test: `tests/unit/components/usuarios-columns.test.tsx` — "define columnas nombre/email/rol/estado sin exponer campos sensibles (R14)".
 
-- **T9** [P] — `app/(app)/configuracion/_components/UsuarioForm.tsx`: form crear/editar
+- [x] **T9** [P] — `app/(app)/configuracion/_components/UsuarioForm.tsx`: form crear/editar
   con select de rol (`ROLES_SEED`) y de tipo de documento (acción
   `listarTiposIdentificacion`), inputs `components/ui/*`, y toggle de modo de contraseña
   (escribir/generar). En modo generar oculta el input; tras crear muestra
@@ -129,7 +129,7 @@ duplica la política.
   - Hecho: en modo editar deshabilita email/cedula (R16); valida en cliente antes de enviar.
   - Test: `tests/unit/components/usuario-form.test.tsx` — "modo editar bloquea email y cedula (R16)", "puebla selects de rol y tipo de documento (R29)", "toggle generar oculta input y muestra la password una vez tras crear (R36)".
 
-- **T10** — `app/(app)/configuracion/_components/UsuariosModule.tsx` (client):
+- [x] **T10** — `app/(app)/configuracion/_components/UsuariosModule.tsx` (client):
   DataTable + Pagination (R26), botón Crear + Modal (R27), activar/inactivar por fila,
   `useToast` para feedback (R28).
   - Cubre: R26, R27, R28, R20, R21, R36 (hospeda el UsuarioForm con el modo de
@@ -137,7 +137,7 @@ duplica la política.
   - Hecho: acciones cablean las Server Actions; Modal async muestra spinner/bloquea botón.
   - Test: `tests/unit/components/usuarios-module.test.tsx` — "lista en DataTable con paginacion (R26)", "crear/editar en Modal async (R27)", "muestra toast de exito/error del backend (R28)", "boton activar/inactivar cambia estado (R20/R21)".
 
-- **T11** — `app/(app)/configuracion/page.tsx` (Server Component): valida rol autorizado
+- [x] **T11** — `app/(app)/configuracion/page.tsx` (Server Component): valida rol autorizado
   (`resolveActorFromSession`), pre-fetch del listado y render de `UsuariosModule`.
   Si no autorizado, no renderiza el módulo.
   - Cubre: R1, R3, R13. Dep: T10, T7.
@@ -146,7 +146,7 @@ duplica la política.
 
 ## Bloque 5 — Cierre
 
-- **T12** — Documentar el mapa `R<n> → test` en `progress/impl_gestion-usuarios.md`;
+- [x] **T12** — Documentar el mapa `R<n> → test` en `progress/impl_gestion-usuarios.md`;
   correr `./init.sh` y la suite de tests en verde.
   - Cubre: trazabilidad (todos los R1–R36). Dep: T1–T11.
   - Hecho: init verde, todos los tests pasan, cada R mapeado a ≥1 test.

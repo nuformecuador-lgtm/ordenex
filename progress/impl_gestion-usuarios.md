@@ -77,3 +77,87 @@ R26–R28, R36 → frontend (T8–T11), PENDIENTE.
 
 ## Veredicto
 Backend de la feature 25 (Bloque 0–3) completo y verde; frontend (Bloque 4) pendiente.
+
+---
+
+# Impl — Feature 25 · FRONTEND (Bloque 4, T8–T11)
+
+Rama: `feature/25-gestion-usuarios`. Alcance frontend: T8, T9, T10, T11 (+ cierre T12).
+Solo capa de presentación; NO se tocó `lib/**`, `db/`, `app/api/` (solo se importan tipos
+y Server Actions ya existentes en lectura).
+
+## Archivos creados (app/(app)/configuracion/**)
+- `_components/usuarios-columns.tsx` (T8) — `buildUsuariosColumns({onEditar,onCambiarEstado,
+  estadoPendienteId})`: columnas nombre/email/rol(value legible)/estado(chip)/acciones. NO
+  expone campos sensibles (el DTO de fila no tiene hash). `ROL_LABELS`/`ESTADO_LABELS` +
+  `EstadoUsuarioBadge`.
+- `_components/UsuarioForm.tsx` (T9) — `forwardRef<UsuarioFormHandle>` con `submit()` imperativo.
+  Selects de rol (`ROLES_SEED`) y tipo de documento (SWR sobre `listarTiposIdentificacion`).
+  Toggle de modo de contraseña escribir/generar (oculta input en generar); tras crear muestra
+  `generatedPassword` UNA vez con botón copiar + aviso. En edición deshabilita email/cedula.
+  Valida en cliente reusando `crearUsuarioSchema`/`actualizarUsuarioSchema` (incluye
+  `strongPasswordSchema` vía la unión), sin duplicar reglas.
+- `_components/UsuariosModule.tsx` (T10, client) — DataTable + Pagination (SWR con
+  `fallbackData` del prefetch), botón Crear + Modal async (`closeOnConfirm=false`, dispara
+  `formRef.submit()`), activar/inactivar por fila, `useToast` para feedback. Cablea las
+  Server Actions.
+
+## Archivos modificados
+- `app/(app)/configuracion/page.tsx` (T11) — Server Component: `resolveActorFromSession`;
+  si `rol !== "maestro"` NO renderiza el módulo (mensaje "No tienes permiso"); si maestro,
+  prefetch de `listarUsuarios(page 1, DEFAULT_PAGE_SIZE)` y render de `UsuariosModule`.
+  Reemplaza el placeholder.
+- `tests/components/PlaceholderPages.test.tsx` — se quita el caso `/configuracion` (ya no es
+  placeholder; ahora es Server Component con auth, cubierto por el test de integración nuevo).
+
+## Tests creados
+- `tests/unit/components/usuarios-columns.test.tsx`
+- `tests/unit/components/usuario-form.test.tsx`
+- `tests/unit/components/usuarios-module.test.tsx`
+- `tests/integration/configuracion/usuarios-page.test.tsx`
+(Actions mockeadas; SWR aislado por `SWRConfig`/`ToastProvider`.)
+
+## Mapa R (frontend) → test
+- R1/R3 (auth server-side, solo maestro): usuarios-page "rol no autorizado no ve el módulo",
+  "sesión ausente tampoco ve el módulo".
+- R13 (prefetch listado): usuarios-page "pre-carga el listado del maestro y lo pasa al módulo"
+  (+ fallback a datos vacíos si el listado falla).
+- R14/R26 (columnas sin datos sensibles): usuarios-columns "define columnas nombre/email/rol/
+  estado sin exponer campos sensibles", "renderiza rol legible y estado como chip".
+- R26 (DataTable + Pagination): usuarios-module "lista en DataTable con paginación".
+- R27 (Modal async crear/editar): usuarios-module "el botón Crear abre el Modal async",
+  "Editar carga el usuario y abre el Modal en modo edición".
+- R28 (feedback useToast del backend): usuarios-module "muestra toast de éxito" / "toast de error".
+- R16 (editar bloquea email/cedula): usuario-form "modo editar bloquea email y cedula".
+- R29 (selects rol/tipo doc): usuario-form "puebla el select de rol desde ROLES_SEED y el de
+  tipo de documento desde la acción".
+- R5/R6 (validación en cliente): usuario-form "modo manual con contraseña débil devuelve
+  validation_error sin llamar a la acción".
+- R36/R33 (toggle generar + muestra password una vez): usuario-form "toggle generar oculta el
+  input y muestra la password una vez tras crear".
+- R20/R21 (activar/inactivar): usuarios-columns "muestra Inactivar/Activar según estado";
+  usuarios-module "el botón Inactivar cambia el estado".
+
+## Nota abierta (no bloqueante)
+El select de rol se puebla desde `ROLES_SEED` (valores `RolValue`), pero el backend
+(`crearUsuarioSchema`/`create`) espera `rolId` = id del catálogo `rol` (UUID, `gen_random_uuid`
+en el seed). Se sigue la Decisión 1.4 (R29: "poblar desde ROLES_SEED") al pie de la letra en el
+frontend; queda la posible discrepancia valor/id (y el prefill de rol en edición, cuyo `rolId`
+UUID no matchea las opciones por valor) como gap entre la decisión firme y el contrato del
+schema. No existe acción para listar roles con id y crear una tocaría `lib/**` (fuera de alcance).
+
+## Verificación (salida real)
+- `npx tsc --noEmit`: 0 errores, exit 0.
+- Tests frontend nuevos + PlaceholderPages en aislamiento: **5 files, 19 passed**, exit 0.
+- `npx vitest run` (suite completa): **114 files, 882 tests passed** (en corrida limpia), exit 0.
+  Bajo carga paralela aparecen timeouts flaky pre-existentes en `tests/components/LoginForm`,
+  `tests/integration/recuperar-contrasena-form` y `tests/integration/api/ordenes-carga-masiva.route`
+  (auth/integración, ajenos a esta feature); verde al reintentar. A los 2 tests propios más
+  pesados (userEvent + selects) se les fijó timeout holgado (15–20 s).
+- `./init.sh`: **== init OK ==**, exit 0.
+- Diff fuera de `app/(app)/configuracion/**`: solo `tests/**` (4 tests nuevos + ajuste de
+  `PlaceholderPages.test.tsx`) y `progress/impl_gestion-usuarios.md`. NO se tocó `lib/**`,
+  `db/`, ni `app/api/`.
+
+## Veredicto (frontend)
+Frontend de la feature 25 (Bloque 4, T8–T11) completo y verde; T12 cerrado.
