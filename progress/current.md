@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/12-notificaciones-fix | backend | F1 spec | **spec REGENERADO 2026-07-09** (el anterior se perdio con el worktree ../ordenex-f12 sin pushear). Nuevo spec en `specs/notificaciones-fix/` (R1..R12, T1..T16, mapa R->test completo), anclado al codigo real. Decisiones humanas incorporadas: DIFERIR auth (solo `lib/actions/ordenes.ts`), UI-safe (adaptador `toActionError` inverso de `CODE_BY_DOMAIN_STATUS`), CONSERVAR `id` en fieldErrors. depends_on:10 CUMPLIDO. Branch recreado desde origin/dev en el checkout principal (sin worktree; no hay frontend en paralelo). **PARADO en F1.4** esperando "aprobado" + resolucion de 2 [ABIERTO]: (1) INTERNAL -> re-throw vs nuevo miembro tipado; (2) alcance = unificar error backend (no toasts, eso es feature 11). |
+| feature/12-notificaciones-fix | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Spec regenerado y aprobado 2026-07-09 (el anterior se perdio con el worktree ../ordenex-f12 sin pushear). Decisiones humanas cerradas: DIFERIR auth (solo `lib/actions/ordenes.ts`); INTERNAL -> re-lanzar (sin nuevo miembro en ActionError); alcance solo backend (toasts = feature 11); UI-safe via adaptador `toActionError`; CONSERVAR `id` en fieldErrors. Suite 51 files / 384 tests verdes. Commit + push hechos a `origin/feature/12-notificaciones-fix`. **PR pendiente de abrir a mano** (gh no instalado): https://github.com/nuformecuador-lgtm/ordenex/pull/new/feature/12-notificaciones-fix -> base `dev`. Pasa a `done` cuando el humano mergee. |
 
 > Reconciliacion 2026-07-09 (leader): las features 9 (carga-masiva, PR #5 d4a21c8) y
 > 13 (modal, PR #6 26c3272) ya estaban mergeadas a `origin/dev` pero seguian marcadas
