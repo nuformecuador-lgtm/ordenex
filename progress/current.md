@@ -7,7 +7,13 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/16-carga-masiva-etapa2 | fullstack | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Backend: `listMensajeros` (activos, {id,nombre}), `resumenCargaMasiva`, `asignarMensajeroSugerido` (global+fila, todo-o-nada, updateMany) + Server Actions (`lib/actions/mensajeros.ts`), refactor `toActionError`->`_shared/`. Frontend: `components/ui/select.tsx` (sobre @base-ui/react/select) + `OrdenesCargaResumen` como 2º paso del modal de la 14 (DataTable, select global "aplicar a todos" + override por fila, confirmar->asignar+toast+mutate). Post-commit (no toca 15). Sin migración (R20). R1..R34 -> tests. Suite 67 files / 572 tests verdes (+66). Commit + push hechos. **PR #11 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/11 -> base `dev`. Pasa a `done` al mergear. |
+| feature/18-cobros-crud | backend | F1 spec | SELECCIONADA por F1.0 (feature 18). CRUD backend de cobros (tabla nueva + capas). La 17 (siguiente por id) quedó BLOQUEADA: el humano la reescribió para depender de las features 27 y 28 (rename embalaje->en_fulfillment, estado inicial fulfillment, diferir num_guia), aún pending. Branch desde `origin/dev`. spec_author en curso. |
+
+> Feature 16 (carga masiva etapa 2) CERRADA 2026-07-10: PR #11 mergeado a `origin/dev`
+> (b5009ae), status -> `done`, entrada en `history.md`. El cierre de la 16 + registro de la
+> 18 viajan en el primer commit de `feature/18-cobros-crud`.
+> SKIP de la 17: sus dependencias (27 rename+estado inicial, 28 rename embalaje) no están
+> `done`; por la regla depends_on no arranca. Se retoma cuando 27/28 cierren.
 
 > Feature 14 (botón carga masiva en órdenes) CERRADA 2026-07-10: PR #10 mergeado a
 > `origin/dev` (bb511f1), status -> `done`, entrada en `history.md`. El cierre de la 14 +
@@ -66,9 +72,9 @@
 (Ninguno por ahora)
 
 ## Plan de la sesion
-- [x] Features 1-15: ciclos SDD completos (ver history.md).
-- [ ] Feature 16 (fullstack, medium, resumen etapa 2 + asignacion mensajero): F1 spec en curso.
-- [ ] Features 17, 18, 19...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
+- [x] Features 1-16: ciclos SDD completos (ver history.md).
+- [ ] Feature 18 (backend, medium, CRUD cobros): F1 spec en curso.
+- [ ] Feature 17 BLOQUEADA (depends 27/28). Elegibles: 18,19,20,21,24,25,26,28,29.
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.

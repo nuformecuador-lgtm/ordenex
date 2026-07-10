@@ -148,7 +148,7 @@
       "id": 16,
       "name": "ordenes - carga masiva - etapa 2",
       "description": "Una vez cargadas y validadas las ordenes, muestra un resumen de los datos ingresados, columna por columna, num_remision debe ser unico, debe mostrar un select que consuma los users filtrados por role = mensajero, este se asiganara al campo mensajero_sugerido_id",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
@@ -157,8 +157,8 @@
     },
     {
       "id": 17,
-      "name": "ordenes - revision a bodega/asignacion mensajero",
-      "description": "Los estados en_fulfillment (antes 'embalaje', renombrado por la feature 28) y en_preparacion son estados de revision. En la lista de ordenes debe permitirse seleccionar mediante checkbox una o varias ordenes que esten en estos estados para procesarlas. Al intentar pasarlas al estado en bodega, como la carga masiva ya trae un mensajero sugerido, debe preguntarse si se desea mantener ese mensajero sugerido o cambiarlo. Casos: (1) si se decide mantener el mensajero sugerido, la orden no pasa a en bodega sino al estado en espera de aceptacion por el mensajero; (2) si se decide cambiar el mensajero, se debe permitir seleccionar a que mensajero se le asigna, y una vez seleccionado la orden pasa al estado en espera de aceptacion por el mensajero; (3) si no se selecciona ningun mensajero, la orden queda en estado en bodega. Requiere agregar el estado en espera de aceptacion por el mensajero al enum de estados.",
+      "name": "ordenes - revision maestro / generar guia / asignacion mensajero",
+      "description": "El modulo de ordenes del admin maestro muestra de forma SEPARADA las ordenes en en_fulfillment y las ordenes en en_preparacion (ambos estados de revision; en_fulfillment antes 'embalaje', renombrado por la feature 28). El maestro puede seleccionar via checkbox una o varias ordenes de un estado para procesarlas. FLUJO DE FULFILLMENT: con ordenes en_fulfillment seleccionadas hay un boton 'Generar guia'. Al pulsarlo, por cada orden que tenga mensajero sugerido (mensajero_sugerido_id de la carga masiva) el sistema pregunta si se desea asignar directamente esas ordenes al mensajero sugerido. Casos: (1) si SI -> las ordenes pasan al estado 'en espera de aceptacion del mensajero' (nombre corto en_espera_aceptacion, estado NUEVO) y aparecen en un apartado 'En espera de aceptacion del mensajero'; (2) si NO -> el sistema permite seleccionar OTRO mensajero y, tras asignarlo, las ordenes pasan al mismo estado en_espera_aceptacion; (3) si NO se selecciona ningun mensajero -> la orden pasa al estado en_bodega. Las ordenes en en_bodega se pueden seleccionar y asignar a cualquier mensajero (pasan a en_espera_aceptacion). Ademas, al pulsar 'Generar guia' se asigna a cada orden un NUMERO DE GUIA (num_guia) incremental y unico. DECISION DEL HUMANO (2026-07-10): se DIFIERE la asignacion de num_guia al momento de 'Generar guia'. Hoy Orden.num_guia es autoincrement asignado al INSERTAR la fila (feature 6); esta feature lo cambia a NULLABLE hasta generar la guia y, al pulsar 'Generar guia', asigna una secuencia incremental+unica. Requiere migracion (num_guia nullable + mecanismo de secuencia) y ajustar la carga masiva (feature 15) para NO asignar num_guia al insertar. Estado NUEVO: en_espera_aceptacion. La logica por ZONA/GAM (a que mensajeros puede asignar el maestro y el ruteo a bodega satelite) se maneja en la feature 30. Es fullstack de alta complejidad. Depende de la feature 27 (estado en_fulfillment / estado inicial de fulfillment) y de la feature 28 (rename embalaje->en_fulfillment).",
       "status": "pending",
       "sdd": true,
       "complexity": null,
@@ -169,11 +169,12 @@
       "id": 18,
       "name": "cobros - crud",
       "description": "generar el crud de cobros, crea la tabla cobros con valor_flete, valor_flete_devuelto, valor_flete_GAM, valor_flete_devuelto_GAM, fulfillment, comision_cod, iva_flete, iva_comision_cod",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/18-cobros-crud",
+      "depends_on": null
     },
     {
       "id": 19,
@@ -288,6 +289,17 @@
       "zone": null,
       "branch": null,
       "depends_on": 16
+    },
+    {
+      "id": 30,
+      "name": "asignacion por zona (GAM) y ruteo a bodega satelite",
+      "description": "Reglas de asignacion por ZONA y ruteo a bodega satelite, sobre el flujo de generacion de guia (feature 17) y las zonas de la feature 24 (mensajeros y adminSatelite quedan asignados a una zona). El admin maestro (bodega central) SOLO controla la zona GAM: al asignar un mensajero a una orden, solo aparecen los mensajeros cuya zona es GAM; un mensajero asignado a otra zona NO le aparece al maestro. Si una orden tiene una zona DIFERENTE de GAM, el maestro NO puede asignarla a un mensajero: lo unico que puede hacer es asignarla a la bodega satelite de esa zona, y la orden pasa a un estado NUEVO 'en ruta hacia la bodega <nombre de zona>'. ABIERTO a decidir en spec: (a) como se identifica la zona GAM -> flag booleano (p.ej. es_gam / es_central) en la tabla zona (recomendado) vs. por nombre 'GAM'; (b) el estado de ruteo -> UN solo estado (p.ej. en_ruta_bodega_satelite) con el nombre de zona derivado de orden.zona_id para el display (recomendado; hay precedente en_ruta_bodega_principal) vs. un estado dinamico por zona. Toca backend (order_status nuevo, consultas de mensajeros filtradas por zona, transiciones) y ajustes de la UI del maestro. Es fullstack de alta complejidad. Depende de la feature 24 (zonas) y de la feature 17 (generar guia / asignacion).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 24
     }
   ]
 }
