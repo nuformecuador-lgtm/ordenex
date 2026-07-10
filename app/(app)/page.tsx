@@ -3,8 +3,18 @@ import { SESSION_COOKIE_NAME } from "@/lib/constants/auth";
 import { SessionRepository } from "@/lib/repositories/SessionRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { LogoutButton } from "@/app/_components/LogoutButton";
+import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { AdminTiendaDashboard } from "@/app/(app)/_components/AdminTiendaDashboard";
 
 export default async function Home() {
+  // Ramificación por rol resuelta SOLO server-side (feature 26, R5): el
+  // `adminTienda` ve su dashboard/apartado (R1); cualquier otro rol o sesión
+  // ausente conserva el placeholder "Bienvenido" (R3, R4).
+  const actor = await resolveActorFromSession();
+  if (actor?.rol === "adminTienda") {
+    return <AdminTiendaDashboard />;
+  }
+
   // Check for valid session (R25)
   let hasValidSession = false;
 

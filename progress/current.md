@@ -7,19 +7,17 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/28-rename-embalaje-fulfillment | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** 78 files / 687 tests verdes; migración R11 aplicada+revertida contra Postgres real (order_status: embalaje=0, en_fulfillment=1, 8 valores; enum PG order_status_value con 8 labels; columna value sigue TEXT). Pendiente: sync dev + PR + merge (humano). DEUDA nueva: arreglar `scripts/db-rollback.ts` (usa `--schema`, roto en Prisma 7) en feature aparte. Spec v2 (R1..R11), impl. Rename `order_status` `embalaje` -> `en_fulfillment` vía `UPDATE` (fila catálogo) + `down.sql`. DECISIONES HUMANAS (2026-07-10): (1) ADEMÁS crear enum PG `order_status_value` (8 valores con `en_fulfillment`, patrón `RolValue`) **STANDALONE** (NO retipar la columna `order_status.value`, sigue TEXT) — SQL manual porque Prisma no materializa enums no referenciados; (2) migraciones YA se ejecutan contra DB real: R11 exige aplicar migración+rollback contra Postgres (deuda 4/6/15 LEVANTADA desde esta feature). Incluye FIX de soporte: `scripts/seed-catalogos.ts` usa `new PrismaClient()` sin adapter -> falla contra DB real; backend_dev lo corrige (usar cliente con `PrismaPg` de `lib/db/prisma-client.ts`) para poder sembrar `order_status` y verificar el rename. `progress/*` append-only (no editar). |
+| feature/28-rename-embalaje-fulfillment | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** 78 files / 687 tests verdes; migración R11 aplicada+revertida contra Postgres real (order_status: embalaje=0, en_fulfillment=1, 8 valores; enum PG order_status_value con 8 labels; columna value sigue TEXT). Pendiente: PR + merge (humano). DEUDA nueva: arreglar `scripts/db-rollback.ts` (usa `--schema`, roto en Prisma 7) en feature aparte. Spec v2 (R1..R11). Rename `order_status` `embalaje` -> `en_fulfillment` vía `UPDATE` (fila catálogo) + `down.sql`. DECISIONES HUMANAS (2026-07-10): (1) ADEMÁS enum PG `order_status_value` (8 valores con `en_fulfillment`, patrón `RolValue`) **STANDALONE** (NO retipar la columna, sigue TEXT); (2) migraciones YA se ejecutan contra DB real (deuda 4/6/15 LEVANTADA desde esta feature). FIX de soporte incluido: `scripts/seed-catalogos.ts` ahora usa el adapter `PrismaPg` + `loadEnvFile`. `progress/*` append-only. |
+| feature/26-dashboard-admin-tienda | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Landing `/` condicional por rol server-side (adminTienda → dashboard = header + módulo de órdenes de su tienda). Extraído `OrdenesModule` (una sola tabla+fetch, R10); columnas sin "Tienda" (R11) sin mutar `ordenes-columns.tsx`; frontend puro (backend intacto, filtro tienda vía OrdenService.listar feature 6). R1–R11 → test. Suite 689/689 verde, init.sh verde (verificado por reviewer). E2E login adminTienda DIFERIDO (deuda aceptada, repo sin infra seed/login e2e). Commit `91823ef` + push hechos. **PR PENDIENTE de abrir desde la WEB**: https://github.com/nuformecuador-lgtm/ordenex/pull/new/feature/26-dashboard-admin-tienda → base `dev`. Pasa a `done` al mergear. |
 
 > DEUDA DE MIGRACIONES SALDADA (2026-07-10): aplicadas contra Postgres real (localhost:5432/ordenex)
 > las 3 migraciones pendientes (carga_masiva_ordenes, cobros, rol_admin_satelite); `prisma migrate
 > status` = "Database schema is up to date!" (9/9). El SEED de catálogos reveló el bug del adapter
-> (arriba); se corrige dentro de la feature 28.
+> (corregido dentro de la feature 28).
 
 > Feature 19 (rol adminSatelite) CERRADA 2026-07-10: PR #13 mergeado a `origin/dev` (75b7abc),
 > status -> `done`, entrada en `history.md`. El cierre de la 19 + registro de la 28 viajan en
 > el primer commit de `feature/28-rename-embalaje-fulfillment`.
-> NOTA: la feature 26 (frontend, dashboard adminTienda) corre EN PARALELO en su propia rama
-> `feature/26-dashboard-admin-tienda` (zona frontend, disjunta de la 28 backend); su registro
-> vive en esa rama y se reconcilia al mergear a `dev`.
 
 > Feature 18 (cobros crud) CERRADA 2026-07-10: PR #12 mergeado a `origin/dev` (a379d8e),
 > status -> `done`, entrada en `history.md`. El cierre de la 18 + registro de la 19 viajan en
@@ -76,6 +74,15 @@
   `en_preparacion`; la 16 muestra el resumen y asigna mensajero sobre ordenes YA creadas, NO
   cambia la 15/14. (2) asignacion de mensajero AMBOS: select global "aplicar a todos" +
   override por fila.
+- `dashboard/apartado del admin de tienda` (id 26): **zone=frontend, complexity=medium,
+  branch=feature/26-dashboard-admin-tienda, depends_on=null.** Evaluada 2026-07-10:
+  la descripcion dice "Frontend" y sus insumos estan done — autz por rol (feature 6),
+  DataTable + columna tiendaNombre (feature 7), boton/modal de carga masiva (features
+  14/16). NO hay backend nuevo: el filtrado de ordenes a la tienda del adminTienda ya lo
+  hace la autz de la 6. Zona frontend LIBRE (unica en curso: 19 backend) -> corre en
+  paralelo. Seleccionada por el humano ignorando la cadena de la 28 (28->27->17).
+  ABIERTO para el spec: que mas muestra el dashboard del adminTienda ademas del modulo de
+  ordenes (metricas/accesos) -> el humano decidira en la puerta de aprobacion F1.4.
 
 ## Conflictos pendientes
 
