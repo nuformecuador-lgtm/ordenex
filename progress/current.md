@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/31-plantilla-xlsx | frontend | F2.1 | **spec APROBADO (F1.4) → in_progress.** Plantilla descargable de `BulkUpload` de CSV→XLSX (exceljs ^4.4.0, import dinámico). Nuevo generador `buildXlsxTemplate` + `handleDownloadTemplate` async; siempre XLSX (sin prop `templateFormat`); `csv-template.ts` conservado. Impl vía frontend_dev DIRECTO (implementer falla por sonnet-4). Zona frontend LIBRE tras cerrar la 29. |
+| feature/31-plantilla-xlsx | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Plantilla de `BulkUpload` CSV→XLSX: nuevo `lib/utils/xlsx-template.ts` (buildXlsxTemplate async, bold+anchos+ejemplo), `handleDownloadTemplate` async mime XLSX, `DEFAULT_TEMPLATE_NAME`+consumidor de órdenes a `.xlsx`. exceljs import DINÁMICO (R6b). `csv-template.ts` intacto. Frontend puro (no toca backend). Tests 61/61 aislado; typecheck OK; init.sh verde. Flaky de timeouts pre-existente (no det., ajeno). **PR #19 ABIERTO** (CLI): https://github.com/nuformecuador-lgtm/ordenex/pull/19 → base `dev`. Lleva también el cierre de la 29. Pasa a `done` al mergear. |
 
 > Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a
 > `origin/dev` (7535961), status -> `done`, entrada en `history.md`. Frontend puro (R1–R19),
