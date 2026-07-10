@@ -10,6 +10,7 @@ import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { ordenesColumns } from "./_components/ordenes-columns";
+import { OrdenesCargaMasivaButton } from "./_components/OrdenesCargaMasivaButton";
 
 // R33: opciones firmes acotadas por MAX_PAGE_SIZE del backend; ninguna opción
 // ofrecida supera el máximo permitido.
@@ -44,6 +45,9 @@ export default function OrdenesPage() {
 
   return (
     <section className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <OrdenesCargaMasivaButton />
+      </div>
       <DataTable
         columns={ordenesColumns}
         data={data?.items ?? []}

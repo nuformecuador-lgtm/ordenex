@@ -7,7 +7,13 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/15-carga-masiva-endpoint | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Endpoint `POST /api/ordenes/carga-masiva` (CSV/XLSX vía `exceljs`, dep nueva), migración (columnas `direccion`/`monto_cobrar`/`mensajero_sugerido_id`+FK a usuario, `peso` nullable, `en_preparacion` en order_status) con `down.sql`+RLS, `BulkOrdenService`/parsers, dedup `num_remision` intra-archivo+DB, batch `skipDuplicates`, éxito parcial. Decisiones humanas: autorización SOLO `adminTienda` (R11), `tienda_id`=actor (R24), default GLOBAL `en_preparacion` (cambia feature 6 + su test), zona derivada de provincia, `peso` nullable. R1..R32 -> tests. Suite 60 files / 485 tests verdes (+72). Deuda: aplicar migración contra Postgres real (aceptada, patrón 6/10). Commit + push hechos. **PR #9 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/9 -> base `dev`. Pasa a `done` al mergear. NOTA: se revirtió un cambio espurio fuera de alcance del implementer (alteraba el hash bcrypt del `maestro` en la migración histórica `20260709120000_seed_maestro_user`); NO entró al commit. |
+| feature/14-ordenes-carga-masiva | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Composición pura: botón "Carga masiva" en `/ordenes` + wrapper local `_components/OrdenesCargaMasivaButton.tsx` que abre `Modal` (contenedor: hideCancel, "Cerrar", sin onConfirm) con `BulkUpload` (endpoint `/api/ordenes/carga-masiva`, accept csv/xlsx, 11 fields). onSuccess: `mutate` SWR + toast (success/warning según conError, no cierra el modal); onError: toast error. Sin tocar genéricos ni backend. R1..R19 -> tests. Suite 61 files / 506 tests verdes (+21). Commit + push hechos. **PR #10 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/10 -> base `dev`. Pasa a `done` al mergear. |
+
+> Feature 15 (endpoint carga masiva) CERRADA 2026-07-10: PR #9 mergeado a `origin/dev`
+> (aff6e73), status -> `done`, entrada en `history.md`. El cierre de la 15 + registro de la
+> 14 viajan en el primer commit de `feature/14-ordenes-carga-masiva` (bookkeeping vía PR).
+> Se revirtió un cambio espurio del implementer (hash bcrypt del maestro en migración
+> histórica); no entró al PR #9.
 
 > Feature 11 (notificaciones/toast) CERRADA 2026-07-10: PR #8 mergeado a `origin/dev`
 > (1169312), status -> `done`, entrada en `history.md`. El cierre de la 11 + registro de
@@ -49,9 +55,9 @@
 (Ninguno por ahora)
 
 ## Plan de la sesion
-- [x] Features 1-10, 9, 13, 12, 11: ciclos SDD completos (ver history.md).
-- [ ] Feature 15 (backend, high, endpoint carga masiva): F1 spec en curso.
-- [ ] Features 14, 16, 17...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
+- [x] Features 1-13, 15: ciclos SDD completos (ver history.md).
+- [ ] Feature 14 (frontend, low, boton carga masiva en ordenes): F1 spec en curso.
+- [ ] Features 16, 17, 18...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.

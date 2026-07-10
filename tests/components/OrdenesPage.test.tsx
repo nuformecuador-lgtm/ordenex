@@ -5,6 +5,7 @@ import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
 import OrdenesPage from "@/app/(app)/ordenes/page";
+import { ToastProvider } from "@/providers/ToastProvider";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import type {
   ListarOrdenesResult,
@@ -48,9 +49,11 @@ function makeOrden(
 /** Renderiza la página REAL con cache de SWR aislada por render (sin fugas entre tests). */
 function renderPage(): ReactElement {
   const ui = (
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <OrdenesPage />
-    </SWRConfig>
+    <ToastProvider>
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <OrdenesPage />
+      </SWRConfig>
+    </ToastProvider>
   );
   render(ui);
   return ui;
