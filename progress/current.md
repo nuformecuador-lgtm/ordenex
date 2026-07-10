@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/23-dashboard-maestro | frontend | F1.2 | **SELECCIONADA (2026-07-10).** Dashboard del admin maestro como primera pantalla tras login (reemplaza el placeholder 'Bienvenido' de `app/(app)/page.tsx`). Arranca 'en blanco' salvo el **panel de postulaciones de mensajeros pendientes**: lista pendientes con sus datos + documentos (URLs firmadas) y permite **aprobar/rechazar** consumiendo el backend de la 22 (`lib/actions/aprobacion-postulaciones.ts`). Visible para `maestro` (y `admin`, que comparte la autz). Frontend puro, complexity=medium, depends_on=22 (**DONE**). Worktree `../ordenex-f23` desde `origin/dev`. **spec_author en curso; PARA en F1.4.** |
+| feature/23-dashboard-maestro | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO** (tras marcar tasks; único mayor era documental). Dashboard del maestro: `page.tsx` ramifica por rol (maestro/admin → `AdminMaestroDashboard`; adminTienda → dashboard de la 26 intacto; resto → 'Bienvenido'). Panel de postulaciones pendientes en tarjetas + Pagination, docs como enlaces "Ver" (A1), aprobar/rechazar con Modal async (13) + Toast + refresco SWR (A2), rechazo sin motivo (A3). Consume actions de la 22 (frontend puro). R1–R19 mapeados. **Suite 1018 verde**, typecheck+lint OK, init.sh EXIT 0. **PR abriéndose** → base `dev`. |
 
 > Feature 22 (aprobación de postulaciones) CERRADA 2026-07-10: **PR #26 mergeado** a `origin/dev` (8eaed55), status `done`, entrada en `history.md`. Backend puro (R1–R21), reviewer APROBADO 0 mayores, sin migraciones. Rechazo→`inactivo`, URLs firmadas TTL 300s. Desbloquea la 23.
 
