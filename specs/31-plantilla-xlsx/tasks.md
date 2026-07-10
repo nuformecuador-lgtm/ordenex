@@ -11,14 +11,14 @@
 
 ## Bloque A — Generador XLSX (util pura)
 
-- [ ] **T1 — Crear `lib/utils/xlsx-template.ts`** con `buildXlsxTemplate(fields)` y
+- [x] **T1 — Crear `lib/utils/xlsx-template.ts`** con `buildXlsxTemplate(fields)` y
   la interfaz `XlsxTemplateField` (D1).
   - Cubre: R1, R2, R3, R4, R5, R6, R7.
   - Hecho cuando: existe la función `Promise<ArrayBuffer>`, sin `any`, `tsc`
     (strict) pasa, y `npx eslint` limpio en el archivo.
   - Depende de: nada.
 
-- [ ] **T2 [P] — Test unitario `tests/unit/utils/xlsx-template.test.ts`** (UNIT-GEN).
+- [x] **T2 [P] — Test unitario `tests/unit/utils/xlsx-template.test.ts`** (UNIT-GEN).
   Escenarios que releen el buffer con `ExcelJS.Workbook` (round-trip):
   - Cabecera en orden con `label ?? key` → **R1**.
   - Celdas de fila 1 con `font.bold === true` → **R2**.
@@ -35,7 +35,7 @@
 
 ## Bloque B — Componente `BulkUpload`
 
-- [ ] **T3 — Migrar `handleDownloadTemplate` a XLSX async** en
+- [x] **T3 — Migrar `handleDownloadTemplate` a XLSX async** en
   `components/shared/BulkUpload.tsx` (D2/D3):
   - `DEFAULT_TEMPLATE_NAME = "plantilla.xlsx"`; **import dinámico** de
     `xlsx-template` (que a su vez importa exceljs — R6b, sin import estático al tope);
@@ -47,7 +47,7 @@
     exceljs en `BulkUpload`, el bloque de subida queda intacto.
   - Depende de: T1.
 
-- [ ] **T4 — Actualizar/añadir tests de descarga en `tests/components/BulkUpload.test.tsx`**
+- [x] **T4 — Actualizar/añadir tests de descarga en `tests/components/BulkUpload.test.tsx`**
   (COMP-BTN):
   - Descarga crea Blob con MIME XLSX y dispara `<a>.click()` sin llamar a `fetch`
     (adaptar el test existente R4/R8 a async con `waitFor`) → **R8**.
@@ -66,7 +66,7 @@
 
 ## Bloque C — Consumidor de órdenes
 
-- [ ] **T5 [P] — Cambiar nombre de plantilla en
+- [x] **T5 [P] — Cambiar nombre de plantilla en
   `app/(app)/ordenes/_components/OrdenesCargaMasivaButton.tsx`**:
   `templateFileName` → `"plantilla-ordenes-carga-masiva.xlsx"` (D4). No tocar
   `ORDENES_BULK_FIELDS` ni `accept`.
@@ -81,7 +81,7 @@
 
 ## Bloque D — Limpieza de csv-template (según P2)
 
-- [ ] **T6 — Conservar `lib/utils/csv-template.ts` intacto** (decisión firme F1.4-2):
+- [x] **T6 — Conservar `lib/utils/csv-template.ts` intacto** (decisión firme F1.4-2):
   - NO borrar `lib/utils/csv-template.ts` ni `tests/unit/utils/csv-template.test.ts`;
     quedan intactos.
   - Confirmar que `BulkUpload` ya no lo importa (hecho en T3) y que su único
@@ -95,7 +95,7 @@
 
 ## Bloque E — Verificación final
 
-- [ ] **T7 — Verificación ejecutable de la feature**:
+- [x] **T7 — Verificación ejecutable de la feature**:
   - `./init.sh` en verde.
   - Suite completa de tests sin rojos (unit + component).
   - Mapa de trazabilidad R1–R13 → test, documentado en
