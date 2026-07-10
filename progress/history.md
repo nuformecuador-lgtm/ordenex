@@ -312,3 +312,26 @@
 - Review APROBADO, 0 bloqueantes. Mergeada a `origin/dev` vía **PR #10** (bb511f1, 2026-07-10).
   Cierra la cadena de carga masiva: 9 (componente) -> 15 (endpoint) -> 14 (UI).
 - Sin deuda de DB (frontend puro).
+
+## 2026-07-10 — ordenes - carga masiva - etapa 2 (feature 16, FULLSTACK)
+- Tras la carga (feature 15, que ya crea las órdenes en `en_preparacion`), resumen del lote
+  + asignación de `mensajero_sugerido_id`. POST-COMMIT (no cambia el flujo 14/15). **Backend:**
+  `UserRepository.listMensajeros()` (rol mensajero + estado activo, `{id,nombre}`);
+  `OrdenRepository` `findResumenByNumRemisiones`/`asignarMensajeroSugerido`/`countOrdenesDeTienda`;
+  `AsignacionMensajeroService` (valida mensajero, todo-o-nada por tienda, `updateMany` por
+  mensajeroId distinto, lista vacía=no-op); Server Actions `lib/actions/mensajeros.ts`
+  (`withErrorHandler`+`toActionError`, extraído a `lib/actions/_shared/`). Autorización:
+  listarMensajeros→adminTienda/maestro/admin; resumen/asignar→solo adminTienda. **Sin migración**
+  (reutiliza `mensajero_sugerido_id` de la 15). **Frontend:** `components/ui/select.tsx` sobre
+  `@base-ui/react/select`; `OrdenesCargaResumen` como 2º paso del modal de la 14 (`DataTable`,
+  select global "aplicar a todos" + override por fila con pre-selección, confirmar→asignar+toast+mutate).
+  Lote identificado por `num_remision` con `resultado="creada"` del `BulkSummary`.
+- Requisitos R1–R34 (EARS, backend+frontend) -> tests reales. Ver `progress/impl_carga-masiva-etapa2.md`.
+  Suite 67 files / 572 tests verdes (+66); typecheck/lint/init.sh OK.
+- Decisiones humanas (2026-07-10): post-commit; asignación global+fila; mensajeros solo activo;
+  autorización como arriba; lote por BulkSummary; sin nombres de geografía; todo-o-nada; resumen
+  en el modal; Select sobre @base-ui/react/select.
+- Proceso: evaluada FULLSTACK y corrida como UN ciclo (no se partió la entrada del feature_list,
+  mitades secuenciales). Reviewer verificó que el refactor de `toActionError` a `_shared/` no
+  rompió la feature 12. Review APROBADO, 0 bloqueantes. Mergeada vía **PR #11** (b5009ae, 2026-07-10).
+- Sin deuda de DB (no migración).
