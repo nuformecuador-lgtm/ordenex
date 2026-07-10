@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/12-notificaciones-fix | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Spec regenerado y aprobado 2026-07-09 (el anterior se perdio con el worktree ../ordenex-f12 sin pushear). Decisiones humanas cerradas: DIFERIR auth (solo `lib/actions/ordenes.ts`); INTERNAL -> re-lanzar (sin nuevo miembro en ActionError); alcance solo backend (toasts = feature 11); UI-safe via adaptador `toActionError`; CONSERVAR `id` en fieldErrors. Suite 51 files / 384 tests verdes. Commit + push hechos a `origin/feature/12-notificaciones-fix`. **PR pendiente de abrir a mano** (gh no instalado): https://github.com/nuformecuador-lgtm/ordenex/pull/new/feature/12-notificaciones-fix -> base `dev`. Pasa a `done` cuando el humano mergee. |
+| feature/12-notificaciones-fix | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Spec regenerado y aprobado 2026-07-09 (el anterior se perdio con el worktree ../ordenex-f12 sin pushear). Decisiones humanas cerradas: DIFERIR auth (solo `lib/actions/ordenes.ts`); INTERNAL -> re-lanzar (sin nuevo miembro en ActionError); alcance solo backend (toasts = feature 11); UI-safe via adaptador `toActionError`; CONSERVAR `id` en fieldErrors. Suite 51 files / 384 tests verdes. Commit + push hechos a `origin/feature/12-notificaciones-fix`. **PR #7 ABIERTO** (gh instalado 2026-07-09, v2.96.0): https://github.com/nuformecuador-lgtm/ordenex/pull/7 -> base `dev`. Pasa a `done` cuando el humano apruebe y mergee. |
 
 > Reconciliacion 2026-07-09 (leader): las features 9 (carga-masiva, PR #5 d4a21c8) y
 > 13 (modal, PR #6 26c3272) ya estaban mergeadas a `origin/dev` pero seguian marcadas
