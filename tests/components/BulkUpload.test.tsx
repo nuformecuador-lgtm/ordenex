@@ -8,6 +8,18 @@ import {
   type TemplateField,
 } from "@/components/shared/BulkUpload";
 
+const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+// Mock del generador XLSX: el componente lo carga con import dinámico (R6b). Se
+// aísla de exceljs para observar el flujo de descarga de forma determinista.
+const { buildXlsxTemplateMock } = vi.hoisted(() => ({
+  buildXlsxTemplateMock: vi.fn<(fields: TemplateField[]) => Promise<ArrayBuffer>>(),
+}));
+vi.mock("@/lib/utils/xlsx-template", () => ({
+  buildXlsxTemplate: buildXlsxTemplateMock,
+}));
+
 const fields: TemplateField[] = [
   { key: "num_remision", label: "Nº Remisión", example: "R-001" },
   { key: "telefono", example: "0999999999" },
@@ -58,6 +70,8 @@ beforeEach(() => {
     .spyOn(HTMLAnchorElement.prototype, "click")
     .mockImplementation(() => {});
   vi.stubGlobal("fetch", vi.fn());
+  buildXlsxTemplateMock.mockReset();
+  buildXlsxTemplateMock.mockResolvedValue(new ArrayBuffer(8));
 });
 
 afterEach(() => {
@@ -90,31 +104,72 @@ describe("BulkUpload — configuración y accesibilidad (R1, R3, R17)", () => {
   });
 });
 
-describe("BulkUpload — descarga de plantilla (R4, R8, R20)", () => {
-  it("R4/R8: al descargar crea un Blob y dispara la descarga con el nombre por defecto, sin llamar al endpoint", () => {
+describe("BulkUpload — descarga de plantilla XLSX (R6, R8, R9, R10, R11)", () => {
+  it("R8: al descargar genera el XLSX, crea un Blob con MIME XLSX y dispara la descarga sin llamar al endpoint", async () => {
     renderBulkUpload({ templateFileName: undefined });
 
     fireEvent.click(screen.getByRole("button", { name: "Descargar plantilla" }));
 
-    expect(createObjectURL).toHaveBeenCalledTimes(1);
-    expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    // R6b: el generador (import dinámico de exceljs) se invoca con los fields.
+    expect(buildXlsxTemplateMock).toHaveBeenCalledWith(fields);
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    expect(blob).toBeInstanceOf(Blob);
+    // R6: MIME XLSX.
+    expect(blob.type).toBe(XLSX_MIME);
     expect(anchorClick).toHaveBeenCalledTimes(1);
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("R4: usa templateFileName como nombre del archivo descargado cuando se provee", () => {
+  it("R9: usa 'plantilla.xlsx' como nombre por defecto del archivo descargado", async () => {
     let downloadedName = "";
     anchorClick.mockImplementation(function (this: HTMLAnchorElement) {
       downloadedName = this.download;
     });
 
-    renderBulkUpload({ templateFileName: "ordenes.csv" });
+    renderBulkUpload({ templateFileName: undefined });
     fireEvent.click(screen.getByRole("button", { name: "Descargar plantilla" }));
 
-    expect(downloadedName).toBe("ordenes.csv");
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledTimes(1));
+    expect(downloadedName).toBe("plantilla.xlsx");
   });
 
-  it("R20: deshabilita 'Descargar plantilla' cuando fields está vacío", () => {
+  it("R9: usa templateFileName como nombre del archivo descargado cuando se provee", async () => {
+    let downloadedName = "";
+    anchorClick.mockImplementation(function (this: HTMLAnchorElement) {
+      downloadedName = this.download;
+    });
+
+    renderBulkUpload({ templateFileName: "ordenes.xlsx" });
+    fireEvent.click(screen.getByRole("button", { name: "Descargar plantilla" }));
+
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledTimes(1));
+    expect(downloadedName).toBe("ordenes.xlsx");
+  });
+
+  it("R10: mientras la generación está pendiente el botón queda deshabilitado y no re-dispara", async () => {
+    let resolveGen!: (buffer: ArrayBuffer) => void;
+    buildXlsxTemplateMock.mockReturnValue(
+      new Promise<ArrayBuffer>((res) => {
+        resolveGen = res;
+      }),
+    );
+    renderBulkUpload();
+
+    const button = screen.getByRole("button", { name: "Descargar plantilla" });
+    fireEvent.click(button);
+
+    // Durante la promesa pendiente el botón está deshabilitado (R10).
+    await waitFor(() => expect(button).toBeDisabled());
+    fireEvent.click(button); // clic repetido ignorado
+    expect(buildXlsxTemplateMock).toHaveBeenCalledTimes(1);
+
+    resolveGen(new ArrayBuffer(8));
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("R11: deshabilita 'Descargar plantilla' cuando fields está vacío", () => {
     renderBulkUpload({ fields: [] });
     expect(
       screen.getByRole("button", { name: "Descargar plantilla" }),

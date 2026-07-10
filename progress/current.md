@@ -7,11 +7,16 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/50-vehiculos | backend | F1.2 | **SELECCIONADA (2026-07-10).** CRUD + tabla `vehiculos` (campos `id`, `name` — OJO `name`, no `value`) + enum PG nuevo (moto/carro/camion) + seed, solo rol maestro. Patrón feature 4 (role seed). Sin deps; desbloquea la 21→22→23. Corre en zona backend (libre) en paralelo con la 31/rebrand (frontend). Worktree `../ordenex-f50` desde `origin/dev`. spec_author en curso; PARA en F1.4 (aprobación humana del spec). |
+| feature/31-plantilla-xlsx | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Plantilla de `BulkUpload` CSV→XLSX: nuevo `lib/utils/xlsx-template.ts` (buildXlsxTemplate async, bold+anchos+ejemplo), `handleDownloadTemplate` async mime XLSX, `DEFAULT_TEMPLATE_NAME`+consumidor de órdenes a `.xlsx`. exceljs import DINÁMICO (R6b). `csv-template.ts` intacto. Frontend puro (no toca backend). Tests 61/61 aislado; typecheck OK; init.sh verde. Flaky de timeouts pre-existente (no det., ajeno). **PR #19 ABIERTO** (CLI): https://github.com/nuformecuador-lgtm/ordenex/pull/19 → base `dev`. Lleva también el cierre de la 29. Pasa a `done` al mergear. |
+| feature/50-vehiculos | backend | F2.4 | **impl COMPLETA + reviewer APROBADO** (tras marcar tasks; 0 mayores de código). CRUD-catálogo `vehiculos` SOLO-LECTURA (P1=A): enum PG `VehiculoValue` (moto/carro/camion) + model `Vehiculo{id,name}` (columna **`name`**, no `value`), migración `20260710160000_vehiculos` (CREATE TYPE/TABLE+UNIQUE+RLS)+down.sql, `lib/types/vehiculos.ts` (`VEHICULOS_SEED`), `seedVehiculos` idempotente en seed-catalogos, `IVehiculoService/Repository`+`VehiculoService` (guard `maestro`)+action. R1–R11/R13–R15 mapeados; R12 N/A (sin escritura por P1=A); T7 omitida. Suite **754 verde** (33 nuevos), typecheck+lint OK. Backend puro. **PR abriéndose** → base `dev`. Corrió en zona backend en paralelo con la 31 (frontend). Deuda: aplicar migración/seed contra Postgres (sin DB en el entorno). Desbloquea la 21→22→23. |
 
-> **chore rebrand-ordenex-co** (identidad ordenex.co: naranja `#f26419`+navy `#0b2545`+Poppins/JetBrains): **PR #18 MERGEADO a `origin/dev`** (2026-07-10, merge `0750695`). Frontend puro, backend intacto; `globals.css`+`layout.tsx`+`PageHeader`+`EstatusBadge`+login/Toast. Verificado: typecheck ✅, tests 698/698 (3 timeouts flaky). NO es feature del `feature_list.json` (chore de estilos) → no lleva entrada en `history.md`. Ya incluido en la base de `feature/50`.
+> **chore rebrand-ordenex-co** CERRADO: **PR #18 MERGEADO a `origin/dev`** (2026-07-10, merge `0750695`). Identidad ordenex.co (naranja `#f26419`+navy `#0b2545`+Poppins/JetBrains); frontend puro. NO es feature del `feature_list.json` (chore) → sin entrada en `history.md`. Ya en la base de `dev`.
 
-> Feature 29 (validación carga masiva) CERRADA: **PR #17 mergeado** a `origin/dev`, status `done`, en `history.md`. Frontend puro (R1–R19), reviewer APROBADO 0 bloqueantes.
+> Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a
+> `origin/dev` (7535961), status -> `done`, entrada en `history.md`. Frontend puro (R1–R19),
+> reviewer APROBADO 0 bloqueantes, suite 721/721 verde. Corrió en paralelo con la 28 (backend).
+> El cierre (done + history) viaja en la rama `feature/31-plantilla-xlsx` (bookkeeping vía PR).
+
 > Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
 > `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en
 > paralelo con la 19 (backend). Reviewer APROBADO 0 bloqueantes; suite 689/689 verde. Deuda
