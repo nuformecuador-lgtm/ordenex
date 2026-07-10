@@ -7,7 +7,14 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/19-rol-adminsatelite | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. `adminSatelite` (label DB slug, sin @map) añadido al enum `RolValue`; migración incremental `ALTER TYPE ADD VALUE` con down.sql que recrea el tipo; ROLES_SEED (5 valores) y seed idempotentes derivan del enum; sin permisos nuevos (forbidden por defecto, verificado). Migración de login intacta. R1..R12 -> tests. Suite 75 files / 678 tests verdes (+18). Deuda: aplicar ALTER TYPE/rollback contra Postgres real (aceptada, patrón 4). Commit + push hechos. **PR #13 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/13 -> base `dev`. Pasa a `done` al mergear. |
+| feature/28-rename-embalaje-fulfillment | backend | F1.2 | **Spec en curso.** Rename del estado `order_status` `embalaje` -> `en_fulfillment` (convención `en_`): valor en `ORDER_STATUS_SEED` (lib/types/order-status.ts), migración Prisma `UPDATE order_status value` con down.sql, y todas las referencias en código/tests/specs. Feature APARTE porque la 6 (y otras que usaron `embalaje`) ya están `done`. Backend/medium. Desbloquea parcialmente la cadena 28->27->17. |
+
+> Feature 19 (rol adminSatelite) CERRADA 2026-07-10: PR #13 mergeado a `origin/dev` (75b7abc),
+> status -> `done`, entrada en `history.md`. El cierre de la 19 + registro de la 28 viajan en
+> el primer commit de `feature/28-rename-embalaje-fulfillment`.
+> NOTA: la feature 26 (frontend, dashboard adminTienda) corre EN PARALELO en su propia rama
+> `feature/26-dashboard-admin-tienda` (zona frontend, disjunta de la 28 backend); su registro
+> vive en esa rama y se reconcilia al mergear a `dev`.
 
 > Feature 18 (cobros crud) CERRADA 2026-07-10: PR #12 mergeado a `origin/dev` (a379d8e),
 > status -> `done`, entrada en `history.md`. El cierre de la 18 + registro de la 19 viajan en
