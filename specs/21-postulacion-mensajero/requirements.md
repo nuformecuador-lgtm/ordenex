@@ -160,3 +160,19 @@ login/hash reutilizable vive en `lib/utils/password.ts` (bcrypt, coste 10).
 - **A5 — Política mínima de contraseña.** El login solo exige `min(1)`. Confirmar
   si la postulación debe imponer una política más fuerte (longitud mínima, etc.)
   o reutilizar la del login.
+
+## Decisiones F1.4 (APROBADAS por el humano, 2026-07-10)
+
+- **A1 — RESUELTO (falsa alarma):** la feature 50 (vehículos) está COMPLETA en `origin/dev`
+  (schema + migración `20260710160000_vehiculos/` + `lib/types/vehiculos.ts` + código). El worktree
+  f21 nace de `dev`, así que el FK `usuario.vehiculo_id -> vehiculos.id` se crea sin rebase adicional.
+- **A2 — Almacenamiento = Supabase Storage (bucket PRIVADO).** Los 5 documentos van a un bucket
+  privado; en `Usuario`/perfil se guardan los paths/URLs. Solo imágenes (jpg/png) con límite de tamaño
+  (definir en design; descartada la alternativa bytea en DB).
+- **A3 — Duplicados = error ESPECÍFICO por campo.** Ante email o número de documento ya registrados,
+  responder con error identificando el campo ("este email/cédula ya está registrado"), norma de
+  registro (NO la respuesta genérica del login/recuperación).
+- **A4 — Rate-limiting = SÍ, incluirlo** en esta feature (acción pública). Diseñar el throttle
+  (por IP/email) aquí; no hay uno reutilizable.
+- **A5 — Política de contraseña = mínimo 8 caracteres** (más la confirmación), reforzando el `min(1)`
+  del login actual.
