@@ -7,6 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
+| feature/29-validacion-carga-masiva | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Frontend puro (R1–R19): `carga-masiva-clasificacion.ts` + `estatus-label.ts` (mapa anclado a ORDER_STATUS_SEED) + `OrdenesCargaResumenPaso.tsx` (3 secciones: nuevas=OrdenesCargaResumen intacto / existentes solo-lectura / errores solo-lectura) + `OrdenesCargaMasivaButton.handleSuccess`. R14 respetado (no toca backend). Suite 721/721 verde; typecheck + 50 tests verdes post-merge con origin/dev. Flaky de auth (HomePage/LoginForm) pre-existente, ajeno. **PR #17 ABIERTO** (por CLI, gh autenticado): https://github.com/nuformecuador-lgtm/ordenex/pull/17 → base `dev`. Pasa a `done` al mergear. Impl vía frontend_dev DIRECTO (el implementer falló 2× por sonnet-4, ver memoria). Corrió en paralelo con la 28 (backend). |
 > Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
 > `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en
 > paralelo con la 19 (backend). Reviewer APROBADO 0 bloqueantes; suite 689/689 verde. Deuda
