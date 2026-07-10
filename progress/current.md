@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/14-ordenes-carga-masiva | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Composición pura: botón "Carga masiva" en `/ordenes` + wrapper local `_components/OrdenesCargaMasivaButton.tsx` que abre `Modal` (contenedor: hideCancel, "Cerrar", sin onConfirm) con `BulkUpload` (endpoint `/api/ordenes/carga-masiva`, accept csv/xlsx, 11 fields). onSuccess: `mutate` SWR + toast (success/warning según conError, no cierra el modal); onError: toast error. Sin tocar genéricos ni backend. R1..R19 -> tests. Suite 61 files / 506 tests verdes (+21). Commit + push + **PR pendiente** -> base `dev`. |
+| feature/14-ordenes-carga-masiva | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Composición pura: botón "Carga masiva" en `/ordenes` + wrapper local `_components/OrdenesCargaMasivaButton.tsx` que abre `Modal` (contenedor: hideCancel, "Cerrar", sin onConfirm) con `BulkUpload` (endpoint `/api/ordenes/carga-masiva`, accept csv/xlsx, 11 fields). onSuccess: `mutate` SWR + toast (success/warning según conError, no cierra el modal); onError: toast error. Sin tocar genéricos ni backend. R1..R19 -> tests. Suite 61 files / 506 tests verdes (+21). Commit + push hechos. **PR #10 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/10 -> base `dev`. Pasa a `done` al mergear. |
 
 > Feature 15 (endpoint carga masiva) CERRADA 2026-07-10: PR #9 mergeado a `origin/dev`
 > (aff6e73), status -> `done`, entrada en `history.md`. El cierre de la 15 + registro de la
