@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/18-cobros-crud | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. CRUD backend de `cobro` (patrón órdenes): tabla multi-fila con `nombre` + 8 columnas — montos `Decimal(12,2)` (valor_flete*, fulfillment), porcentajes `Decimal(5,2)` 0..100 (comision_cod, iva_flete, iva_comision_cod). Migración con down.sql + RLS. Capas service/repo/actions/zod, autorización solo `maestro` escribe (admin lee). R1..R27 -> tests. Suite 73 files / 660 tests verdes (+88). Deuda: RLS anon + rollback contra Postgres real (aceptada, patrón 6/15). Commit + push + **PR pendiente** -> base `dev`. La 17 sigue BLOQUEADA (deps 27/28). |
+| feature/18-cobros-crud | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. CRUD backend de `cobro` (patrón órdenes): tabla multi-fila con `nombre` + 8 columnas — montos `Decimal(12,2)` (valor_flete*, fulfillment), porcentajes `Decimal(5,2)` 0..100 (comision_cod, iva_flete, iva_comision_cod). Migración con down.sql + RLS. Capas service/repo/actions/zod, autorización solo `maestro` escribe (admin lee). R1..R27 -> tests. Suite 73 files / 660 tests verdes (+88). Deuda: RLS anon + rollback contra Postgres real (aceptada, patrón 6/15). Commit + push hechos. **PR #12 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/12 -> base `dev`. Pasa a `done` al mergear. La 17 sigue BLOQUEADA (deps 27/28). |
 
 > Feature 16 (carga masiva etapa 2) CERRADA 2026-07-10: PR #11 mergeado a `origin/dev`
 > (b5009ae), status -> `done`, entrada en `history.md`. El cierre de la 16 + registro de la
