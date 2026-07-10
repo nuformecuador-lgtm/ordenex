@@ -266,3 +266,31 @@
 - Review APROBADO, 0 bloqueantes (menores no bloqueantes: `catch` de `useToast` re-lanza
   sin `cause`). Mergeada a `origin/dev` vía **PR #8** (1169312, 2026-07-10).
 - Sin deuda de DB (frontend puro).
+
+## 2026-07-10 — ordenes - carga masiva (endpoint) (feature 15)
+- Backend, high. Endpoint `POST /api/ordenes/carga-masiva` (Route Handler, multipart campo
+  `file`) que parsea CSV y XLSX con `exceljs` (dependencia nueva), valida/resuelve por fila,
+  deduplica `num_remision` (intra-archivo + DB), persiste en lote (`skipDuplicates`) con
+  semántica de éxito parcial, y responde `{ total, creadas, duplicadas, conError, filas[] }`;
+  errores estructurales vía el manejador global (feature 10). Capas nuevas: `BulkOrdenService`,
+  parser de hojas (`lib/parsers/`), config de límites, `lib/auth/resolve-actor`.
+- Migración `20260710000000_carga_masiva_ordenes` (con `down.sql` + RLS conservada): añade a
+  `orden` las columnas `direccion`, `monto_cobrar`, `mensajero_sugerido_id` (FK -> `usuario`
+  `ON DELETE SET NULL` + índice), vuelve `peso` NULLABLE, e inserta `en_preparacion` en
+  `order_status` (`ON CONFLICT DO NOTHING`).
+- Requisitos: R1–R32 (EARS) -> tests reales (unit de parseo/servicio/repo + integración del
+  Route Handler mockeando prisma). Ver `progress/impl_carga-masiva-endpoint.md`. Suite 60
+  files / 485 tests verdes (+72); typecheck/lint/init.sh OK; migración con `down.sql`.
+- Decisiones humanas (2026-07-10): (A-6) carga masiva SOLO rol `adminTienda` -> 403 el resto
+  (R11), `tienda_id` = actor.usuarioId siempre, sin campo `tiendaId` (maestro/admin = feature
+  futura); (A-2) `en_preparacion` = DEFAULT GLOBAL de creación (`ordenesConfig.DEFAULT_ESTATUS_VALUE`,
+  antes `en_bodega`) -> cambió el CRUD de la feature 6 y su test (actualizado); (A-5) zona
+  derivada de la provincia; (A-1) `peso` nullable en columna pero `crearOrdenSchema` sigue
+  exigiendo `peso>0`; (A-3) value = slug `en_preparacion`; (A-4) geografía = prerrequisito
+  externo. Parser `exceljs` elegido (cubre CSV+XLSX).
+- Review APROBADO, 0 bloqueantes. NOTA de proceso: el implementer había introducido un cambio
+  ESPURIO fuera de alcance (alteraba el hash bcrypt del `maestro` en la migración histórica
+  `20260709120000_seed_maestro_user`); el leader lo detectó al revisar el diff y lo REVIRTIÓ
+  antes de commitear (no entró al PR). Mergeada a `origin/dev` vía **PR #9** (aff6e73, 2026-07-10).
+- DEUDA (aceptada, patrón features 6/10, requiere DB real): aplicar la migración contra
+  Postgres. Lo verificable sin DB está cubierto por unit + integración mockeada.
