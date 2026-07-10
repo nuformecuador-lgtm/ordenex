@@ -185,3 +185,38 @@
 - Proceso: desarrollada EN PARALELO con la feature 8 (zonas disjuntas frontend/backend)
   en worktree `../ordenex-f10`. Review APROBADO, 0 mayores. Commit b4ff324, mergeada a
   `origin/dev` vía PR #4 (f6a5da4). Desbloquea la feature 12 (notificaciones-fix, depends_on:10).
+
+## 2026-07-09 — componente carga masiva (BulkUpload genérico + plantilla CSV)
+- Componente frontend reutilizable `BulkUpload` (`components/shared/BulkUpload.tsx`)
+  parametrizable: recibe el tipo de archivo aceptado (accept derivado de props),
+  la ruta del endpoint destino y la definición de campos de la plantilla. Botón de
+  descarga de plantilla (CSV generado desde los `fields`) y botón de carga (POST
+  multipart al endpoint provisto). Validación de tipo por extensión (autoridad) +
+  MIME (MIME vacío no rechaza; MIME contradictorio rechaza), `maxSizeBytes` opcional,
+  estados/mensajes accesibles (`role=alert`), botón de carga deshabilitado sin
+  archivo válido. Zona frontend pura; el endpoint lo decide la feature consumidora
+  (excepción consciente documentada en `design.md` D3, la usará la feature 14).
+- Requisitos cubiertos: R1–R23 (EARS), mapeados a 25 tests reales (20 en
+  `BulkUpload.test.tsx` + 5 en `csv-template.test.ts`) en `progress/impl_carga-masiva.md`.
+  Suite verde tras merge de dev; typecheck/lint/init.sh OK.
+- Review APROBADO, 0 bloqueantes. Commit 33e8b1f, mergeada a `origin/dev` vía PR #5
+  (d4a21c8). Desbloquea la feature 14 (ordenes - carga masiva, depends_on:9).
+- Sin deuda de DB (componente de UI puro).
+
+## 2026-07-09 — modal (componente Modal reutilizable con soporte async)
+- Componente frontend reutilizable `Modal` (`components/shared/Modal.tsx`) construido
+  sobre `@base-ui/react/dialog`: soporta `onConfirm` síncrono o async; cuando es async
+  muestra un spinner mientras la promesa está pendiente y bloquea el botón de confirmar
+  (doble red anti-doble-submit: `disabled` + `pendingRef` síncrono). Al resolver cierra
+  si `closeOnConfirm!==false`; al rechazar no cierra, reactiva los botones e invoca
+  `onError(error)` (sin render de error propio). Opciones: `confirmVariant`
+  (p.ej. `destructive`), `hideCancel`, `dismissible=false` (bloquea Escape/overlay pero
+  no los botones). Accesibilidad delegada a Base UI: `aria-modal`, foco inicial dentro,
+  focus trap, restauración de foco. Zona frontend pura.
+- Requisitos cubiertos: R1–R31 (EARS); R1–R30 mapeados a 34 tests reales en
+  `Modal.test.tsx`, R31 (restauración de foco) delegado a Base UI sin lógica propia
+  (decisión humana 2026-07-09). Ver `progress/impl_modal.md`. Suite 379/379 verde;
+  typecheck/lint/init.sh OK.
+- Review APROBADO, 0 bloqueantes. Commit 7577abe, mergeada a `origin/dev` vía PR #6
+  (26c3272). La feature 14 montará `BulkUpload` dentro de este `Modal`.
+- Sin deuda de DB (componente de UI puro).

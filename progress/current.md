@@ -7,9 +7,14 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/9-carga-masiva | frontend | F2 | reviewer APROBADO (345 tests tras merge de dev); commit + push hechos (33e8b1f). **PR pendiente de abrir a mano** (gh no instalado). |
-| feature/12-notificaciones-fix | backend | F1 spec | spec_ready (R1..R12). Decisiones humanas (2026-07-09): DIFERIR auth (solo migra Server Actions de ordenes, UI-safe); CONSERVAR `id` en fieldErrors. Spec ya consistente, sin cambios. depends_on:10 CUMPLIDO. PARADO esperando "aprobado" explicito para lanzar implementer. Worktree ../ordenex-f12. |
-| feature/13-modal | frontend | F2 impl | spec APROBADA (2026-07-09); implementacion en curso (frontend_dev). Sobre @base-ui/react/dialog. La feature 14 montara BulkUpload dentro. |
+| feature/12-notificaciones-fix | backend | F1 spec | **spec REGENERADO 2026-07-09** (el anterior se perdio con el worktree ../ordenex-f12 sin pushear). Nuevo spec en `specs/notificaciones-fix/` (R1..R12, T1..T16, mapa R->test completo), anclado al codigo real. Decisiones humanas incorporadas: DIFERIR auth (solo `lib/actions/ordenes.ts`), UI-safe (adaptador `toActionError` inverso de `CODE_BY_DOMAIN_STATUS`), CONSERVAR `id` en fieldErrors. depends_on:10 CUMPLIDO. Branch recreado desde origin/dev en el checkout principal (sin worktree; no hay frontend en paralelo). **PARADO en F1.4** esperando "aprobado" + resolucion de 2 [ABIERTO]: (1) INTERNAL -> re-throw vs nuevo miembro tipado; (2) alcance = unificar error backend (no toasts, eso es feature 11). |
+
+> Reconciliacion 2026-07-09 (leader): las features 9 (carga-masiva, PR #5 d4a21c8) y
+> 13 (modal, PR #6 26c3272) ya estaban mergeadas a `origin/dev` pero seguian marcadas
+> `in_progress` en `feature_list.json` (violaba la regla una-feature-por-zona en init.sh:
+> dos frontend in_progress). Ambas -> `done`, entradas anadidas a `history.md`, limpiadas
+> de esta tabla. Ademas el cliente Prisma no estaba generado (9 test files rojos por
+> `.prisma/client/default`); `pnpm db:generate` -> suite verde 51 files / 379 tests.
 
 ## Evaluaciones
 
@@ -44,8 +49,9 @@
 (Ninguno por ahora)
 
 ## Plan de la sesion
-- [x] Features 1-7: ciclos SDD completos (ver history.md).
-- [ ] Features 8-12: evaluacion -> spec -> aprobacion -> impl -> review -> done.
+- [x] Features 1-10, 9, 13: ciclos SDD completos (ver history.md).
+- [ ] Feature 12 (backend): spec_ready, PARADA en puerta de aprobacion humana.
+- [ ] Features 11, 14, 15...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.

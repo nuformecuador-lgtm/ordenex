@@ -242,3 +242,67 @@ describe("R14b/R42: dependencia de geografia y errores tipados sin PII", () => {
     }
   });
 });
+
+describe("R9: conserva la clave id en fieldErrors", () => {
+  it("obtenerOrden con id vacio -> validation_error con solo la clave id", async () => {
+    const service = fakeService();
+    const r = await obtenerOrden("", { ordenService: service, getActor });
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(r.fieldErrors.id).toBeDefined();
+      expect(Object.keys(r.fieldErrors)).toEqual(["id"]);
+    }
+    expect(service.obtener).not.toHaveBeenCalled();
+  });
+
+  it("actualizarOrden con id vacio -> validation_error con solo la clave id", async () => {
+    const service = fakeService();
+    const r = await actualizarOrden("", { producto: "N" }, { ordenService: service, getActor });
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(r.fieldErrors.id).toBeDefined();
+      expect(Object.keys(r.fieldErrors)).toEqual(["id"]);
+    }
+    expect(service.actualizar).not.toHaveBeenCalled();
+  });
+
+  it("borrarOrden con id vacio -> validation_error con solo la clave id", async () => {
+    const service = fakeService();
+    const r = await borrarOrden("", { ordenService: service, getActor });
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(r.fieldErrors.id).toBeDefined();
+      expect(Object.keys(r.fieldErrors)).toEqual(["id"]);
+    }
+    expect(service.borrar).not.toHaveBeenCalled();
+  });
+});
+
+describe("R11: error de dominio por nombre -> conflict via handler", () => {
+  it("crear con NumRemisionDuplicadoError -> conflict (no lanza, no 500)", async () => {
+    class NumRemisionDuplicadoError extends Error {
+      constructor() {
+        super("dup");
+        this.name = "NumRemisionDuplicadoError";
+      }
+    }
+    const service = fakeService({
+      crear: vi.fn().mockRejectedValue(new NumRemisionDuplicadoError()),
+    });
+    const r = await crearOrden(validCrear, { ordenService: service, getActor });
+    expect(r.status).toBe("conflict");
+  });
+});
+
+describe("INTERNAL: throw inesperado se re-lanza", () => {
+  it("crear con error desconocido -> la accion rechaza (preserva 500)", async () => {
+    const service = fakeService({
+      crear: vi.fn().mockImplementation(() => {
+        throw new Error("boom");
+      }),
+    });
+    await expect(
+      crearOrden(validCrear, { ordenService: service, getActor }),
+    ).rejects.toThrow();
+  });
+});
