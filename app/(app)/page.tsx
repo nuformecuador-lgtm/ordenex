@@ -5,6 +5,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { LogoutButton } from "@/app/_components/LogoutButton";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { AdminTiendaDashboard } from "@/app/(app)/_components/AdminTiendaDashboard";
+import { AdminMaestroDashboard } from "@/app/(app)/_components/AdminMaestroDashboard";
 import { PageHeader } from "@/components/shared/PageHeader";
 
 export default async function Home() {
@@ -14,6 +15,13 @@ export default async function Home() {
   const actor = await resolveActorFromSession();
   if (actor?.rol === "adminTienda") {
     return <AdminTiendaDashboard />;
+  }
+
+  // Feature 23 (R1): maestro/admin ven el dashboard del admin maestro con el
+  // panel de postulaciones pendientes. Va DESPUÉS de la rama adminTienda (R2) y
+  // ANTES del placeholder "Bienvenido" (R3, R4), sin alterar ninguna de ambas.
+  if (actor?.rol === "maestro" || actor?.rol === "admin") {
+    return <AdminMaestroDashboard />;
   }
 
   // Check for valid session (R25)

@@ -96,10 +96,11 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
     expect(resolveActorMock).toHaveBeenCalledTimes(1);
   });
 
-  it("R3: un rol distinto de adminTienda NO renderiza el dashboard, conserva el placeholder", async () => {
+  it("R3: un rol distinto de adminTienda NO renderiza el dashboard de tienda, conserva el placeholder", async () => {
+    // Feature 23: maestro/admin ahora ven el dashboard maestro (cubierto en
+    // HomePageMaestro.test.tsx), por lo que ya no conservan el placeholder aquí.
+    // Los roles que siguen viendo "Bienvenido" son mensajero y adminSatelite.
     const otrosRoles: RolValue[] = [
-      "maestro",
-      "admin",
       "mensajero",
       "adminSatelite",
     ];
