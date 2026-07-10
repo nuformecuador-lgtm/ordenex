@@ -7,22 +7,14 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/27-fulfillment-tienda | fullstack | F2 impl | Spec APROBADO por el humano (25 EARS, 3 decisiones cerradas). implementer en curso (backend→frontend). Ocupa ambas zonas. |
+| feature/27-fulfillment-tienda | fullstack | F2.4 | **impl COMPLETA + reviewer APROBADO 0 bloqueantes.** Campo `Usuario.fulfillment` (migración+down.sql), backend fuerza false si rol!=adminTienda (R4/R4a), switch condicional en UsuarioForm (R5/R6), estado inicial condicional en BulkOrdenService según adminTienda autenticado (R15). Mergeado `origin/dev` (drift 22/23) sin conflictos de código. Suite verde post-merge. PR hacia `dev` en creación. Ocupa ambas zonas. |
+| feature/23-dashboard-maestro | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO** (tras marcar tasks; único mayor era documental). Dashboard del maestro: `page.tsx` ramifica por rol (maestro/admin → `AdminMaestroDashboard`; adminTienda → dashboard de la 26 intacto; resto → 'Bienvenido'). Panel de postulaciones pendientes en tarjetas + Pagination, docs como enlaces "Ver" (A1), aprobar/rechazar con Modal async (13) + Toast + refresco SWR (A2), rechazo sin motivo (A3). Consume actions de la 22 (frontend puro). R1–R19 mapeados. **Suite 1018 verde**, typecheck+lint OK, init.sh EXIT 0. **PR #28 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/28) → base `dev`. Pasa a `done` al mergear. |
 
-> Feature 21 (postulación de mensajero) CERRADA 2026-07-10: **PR #23 mergeado** a `origin/dev`
-> (c5c1c97, 20:32Z), status -> `done` (bookkeeping corregido en esta sesión; había quedado en
-> `pending` por drift de sesiones paralelas — la impl real la hizo otra sesión). Fullstack, R1–R26:
-> registro público de mensajeros (rol mensajero, estado `pendiente`), migración con apellidos+vehiculo+
-> placa+tabla `mensajero_documento`, `PostulacionMensajeroService` con subida a Storage privado
-> (`mensajero-docs`) y rollback, Server Action con rate-limit, `app/postulacion/`. Reviewer APROBADO
-> (bloqueante `foto_rostro` resuelto). 56 tests verdes en aislamiento. DEUDA (no bloqueante): aplicar
-> migración a Postgres real + crear bucket privado; aprobación/URL firmada diferida a la #22.
+> Feature 22 (aprobación de postulaciones) CERRADA 2026-07-10: **PR #26 mergeado** a `origin/dev` (8eaed55), status `done`, entrada en `history.md`. Backend puro (R1–R21), reviewer APROBADO 0 mayores, sin migraciones. Rechazo→`inactivo`, URLs firmadas TTL 300s. Desbloquea la 23.
 
-> Feature 25 (gestión de usuarios) CERRADA 2026-07-10: **PR #24 mergeado** a `origin/dev`
-> (95d5025, 20:39Z), status -> `done`, entrada en `history.md`. Fullstack, sin tabla nueva; CRUD
-> usuarios en configuración (solo maestro), R1–R36. Reviewer APROBADO 0 bloqueantes; suite ~886
-> verde. GAP de rol id/value cerrado (`listarRoles`, select por UUID). Deuda menor: timeout de un
-> test de `usuario-form` (flaky bajo carga).
+> Feature 21 (postulación de mensajero) CERRADA 2026-07-10: **PR #23 mergeado** a `origin/dev` (20db364), status `done`, entrada en `history.md`. Fullstack (R1–R26), reviewer APROBADO (bloqueante R17 resuelto). `primer_apellido` OBLIGATORIO; migración APLICADA y VERIFICADA contra Postgres real. Desbloquea la 22→23. Pendiente humano: crear bucket privado `mensajero-docs` en Supabase Storage.
+
+> Feature 25 (gestión de usuarios) CERRADA 2026-07-10: **PR #24 mergeado** a `origin/dev` (95d5025), status `done`, entrada en `history.md`. Fullstack (R1–R36), otra sesión, reviewer APROBADO 0 bloqueantes.
 
 > Feature 50 (vehiculos) CERRADA 2026-07-10: **PR #21 mergeado** a `origin/dev` (eb6a17d), status `done`, entrada en `history.md`. Backend puro (R1–R15, R12 N/A). Migración+seed **aplicados y verificados contra Postgres real**. Desbloquea la 21→22→23.
 

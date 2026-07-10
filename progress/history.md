@@ -540,3 +540,27 @@
   unit/component + integración, 56 tests verdes en aislamiento. DEUDA (no bloqueante, documentada):
   aplicar la migración a Postgres real + crear el bucket privado `mensajero-docs`; aprobación/URL firmada
   de documentos diferida a la feature 22.
+
+
+## 2026-07-10 — aprobación de postulaciones de mensajeros (feature 22, BACKEND)
+- Backend puro (sin UI; la consume el dashboard de la feature 23) para que SOLO los roles `maestro`/`admin`
+  listen, aprueben o rechacen postulaciones de mensajeros en estado `pendiente`. Mergeada vía **PR #26**
+  (8eaed55). SIN migraciones ni cambios de enum (decisiones F1.4: rechazo reusa `inactivo`).
+- Requisitos cubiertos: R1–R21 (EARS), cada uno mapeado a test (ver `progress/impl_22-aprobacion-postulaciones.md`).
+  Autorización R2–R5 (maestro/admin → ok; mensajero/adminTienda/adminSatelite → `forbidden`; sin sesión →
+  `unauthenticated`; guard ANTES de tocar datos/Storage). Aprobar `pendiente→activo` (R12); rechazar
+  `pendiente→inactivo` (R16, decisión P1); `not_found` vs `conflict` vía `updateMany` condicional + reconsulta
+  (R13/R14/R17/R18); solo se toca `estado` (R15/R19); id inválido → `validation_error` sin tocar datos (R21);
+  URLs firmadas del bucket privado con TTL 300s configurable (R9, P3); paginación acotada (R10); lista vacía
+  sin error (R11); contratos discriminados por `status` reusando el manejador global feature 10 (R20).
+- Archivos: `lib/actions/aprobacion-postulaciones.ts`, `lib/services/AprobacionPostulacionService.ts`,
+  `lib/repositories/AprobacionPostulacionRepository.ts`, `lib/storage/SupabaseSignedUrlProvider.ts`,
+  interfaces en `lib/interfaces/**`, `lib/types/aprobacion-postulacion.ts`, `lib/config/aprobacion-postulaciones.ts`
+  + 4 archivos de test (service/repository/action/storage). Reviewer **APROBADO** 0 bloqueantes; tests propios
+  40/40; suite completa 998/999 (único rojo = flaky preexistente de la feature 20, pasa aislado).
+- Decisiones F1.4 (humano): P1 rechazo=`inactivo` (cero migraciones); P2 sin motivo de rechazo; P3 TTL firma
+  300s; P4 auditoría quién/cuándo fuera de alcance (feature aparte). Desbloquea la feature 23 (dashboard maestro).
+- Hallazgos menores no bloqueantes (reviewer): R1 sin test negativo explícito de "no hay ruta pública"; clamp
+  de `PAGE_SIZE_MAX` sin test dedicado; fallback silencioso `urlByPath[path] ?? ""` en `toDTO`.
+- DEUDA heredada de la 21 sigue vigente: la aprobación real requiere aplicar la migración de la 21 a Postgres
+  y crear el bucket privado `mensajero-docs` (entorno con DB real).
