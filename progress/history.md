@@ -540,3 +540,16 @@
   unit/component + integración, 56 tests verdes en aislamiento. DEUDA (no bloqueante, documentada):
   aplicar la migración a Postgres real + crear el bucket privado `mensajero-docs`; aprobación/URL firmada
   de documentos diferida a la feature 22.
+
+## 2026-07-10 — aprobación de postulaciones de mensajeros (feature 22, BACKEND) — DONE
+- Backend puro, SIN migraciones. SOLO `maestro`/`admin` aprueban/rechazan las postulaciones de
+  mensajeros en estado `pendiente` (creadas por la 21); el resto de roles -> `forbidden`, sin sesión
+  -> `unauthenticated`. Expone Server Actions: listar pendientes (datos + 5 documentos como URLs
+  firmadas del bucket privado `mensajero-docs`, TTL 300s), aprobar (`pendiente->activo`) y rechazar
+  (`pendiente->inactivo`), con `updateMany` condicional anti-carrera.
+- `IAprobacionPostulacion{Service,Repository}`+impl, `ISignedUrlProvider`+`SupabaseSignedUrlProvider`,
+  `lib/actions/aprobacion-postulaciones.ts`. Reusa schema/bucket/`MensajeroDocumento` de la 21; no duplica lógica.
+- Decisiones F1.4 (2026-07-10): P1 rechazo->`inactivo` (reusa enum, cero migraciones), P2 sin motivo,
+  P3 URL firmada TTL 300s configurable, P4 sin auditoría. R1–R21 -> tests reales.
+- Reviewer APROBADO, 0 mayores (1 menor no bloqueante). Suite 999 verde, typecheck+lint OK. Mergeada
+  a `origin/dev` vía **PR #26** (8eaed55, 2026-07-10). Impl backend_dev DIRECTO. Desbloquea la 23.
