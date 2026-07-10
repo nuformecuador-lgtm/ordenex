@@ -354,3 +354,23 @@
   por zona = feature 24). Interpretación registrada: "fulfillment=monto, comision_cod=%".
 - Review APROBADO, 0 bloqueantes (tipos verificados exactos). Mergeada vía **PR #12** (a379d8e, 2026-07-10).
 - DEUDA (aceptada, patrón 6/15, requiere DB real): aplicar migración/RLS/rollback contra Postgres.
+
+## 2026-07-10 — dashboard/apartado del admin de tienda (feature 26, FRONTEND)
+- Frontend puro. Landing `/` autenticada condicional por rol (server-side, `resolveActorFromSession`):
+  el rol `adminTienda` ve su apartado/dashboard como primera experiencia tras login = encabezado +
+  su módulo de órdenes (solo las de su tienda) con botón de carga masiva; los demás roles y el
+  anónimo conservan el placeholder. **Se extrae `OrdenesModule`** (client) desde `ordenes/page.tsx`;
+  `/ordenes` lo consume sin cambio funcional (una sola implementación de `DataTable`+fetch, R10).
+  `ordenes-columns-admin-tienda` = columnas SIN "Tienda" (R11) sin mutar `ordenes-columns.tsx`.
+  `AdminTiendaDashboard` (server component) = header + `OrdenesModule` con columnas del rol.
+  SIN backend/DB/actions/RLS: el filtrado por tienda sigue en `OrdenService.listar` (feature 6).
+- Requisitos R1–R11 (EARS) -> tests reales (component + ramificación por rol + estructural/reuso +
+  filtro backend). Ver `progress/impl_26-dashboard-admin-tienda.md` y `progress/review_26-...md`.
+  Suite 689/689 tests verdes; typecheck/lint/init.sh OK.
+- Decisiones humanas (F1.4, 2026-07-10): (1) MVP "solo órdenes" (sin métricas/KPIs); (2) landing `/`
+  condicional por rol (no ruta dedicada `/tienda`); (3) ocultar columna "Tienda" para adminTienda;
+  (4) Sidebar sin cambios.
+- Review APROBADO, 0 bloqueantes. Corrió en PARALELO con la feature 19 (backend). Mergeada a
+  `origin/dev` vía **PR #14** (e5a0f5d, 2026-07-10).
+- DEUDA (aceptada, dictaminada no bloqueante por el reviewer): sin e2e de login `adminTienda` (el
+  repo no tiene infra seed/login e2e); R1/R7 cubiertos por component tests + test real de backend.
