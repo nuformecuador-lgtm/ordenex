@@ -6,6 +6,7 @@ import {
   actualizarOrdenSchema,
   crearOrdenSchema,
   listarOrdenesSchema,
+  type ActionError,
   type ActualizarOrdenResult,
   type BorrarOrdenResult,
   type CrearOrdenResult,
@@ -18,6 +19,14 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { SessionRepository } from "@/lib/repositories/SessionRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { SESSION_COOKIE_NAME } from "@/lib/constants/auth";
+import {
+  withErrorHandler,
+  isAppErrorShape,
+  UnauthenticatedError,
+  ValidationError,
+  MSG,
+  type AppErrorShape,
+} from "@/lib/errors";
 
 const idSchema = z.string().min(1);
 
@@ -54,8 +63,38 @@ export interface OrdenActionDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
-function fieldErrorsFrom(error: z.ZodError): Record<string, string[]> {
-  return error.flatten().fieldErrors as Record<string, string[]>;
+/**
+ * Adaptador inverso de CODE_BY_DOMAIN_STATUS: traduce el AppErrorShape que produce
+ * el manejador global de errores al ActionError tipado que consume la UI, SIN
+ * cambiar el contrato publico. Switch exhaustivo sobre los 6 AppErrorCode.
+ */
+function toActionError(shape: AppErrorShape): ActionError {
+  switch (shape.code) {
+    case "VALIDATION_ERROR":
+      return {
+        status: "validation_error",
+        // La frontera ya fue validada por el handler global (normalizeError produce
+        // details.fieldErrors via z.flattenError o via ValidationError con details).
+        // Casteo seguro en esa frontera, sin `any`.
+        fieldErrors: (shape.details?.fieldErrors as Record<string, string[]> | undefined) ?? {},
+      };
+    case "UNAUTHORIZED":
+      return { status: "unauthenticated" };
+    case "FORBIDDEN":
+      return { status: "forbidden" };
+    case "NOT_FOUND":
+      return { status: "not_found" };
+    case "CONFLICT":
+      return { status: "conflict" };
+    case "INTERNAL":
+      // R: re-lanzar. El handler global ya loggeo el error real; preservamos el 500
+      // actual sin exponer detalles internos ni ampliar el contrato ActionError.
+      throw new Error("internal");
+    default: {
+      const _exhaustive: never = shape.code;
+      throw new Error(`Unhandled AppErrorCode: ${String(_exhaustive)}`);
+    }
+  }
 }
 
 /** R25/R26/R27/R28: crear orden. */
@@ -63,16 +102,14 @@ export async function crearOrden(
   input: unknown,
   deps: OrdenActionDeps = {},
 ): Promise<CrearOrdenResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" }; // R18
-
-  const parsed = crearOrdenSchema.safeParse(input);
-  if (!parsed.success) {
-    return { status: "validation_error", fieldErrors: fieldErrorsFrom(parsed.error) };
-  }
-
-  const service = deps.ordenService ?? buildOrdenService();
-  return service.crear(parsed.data, actor); // R42: resultado tipado
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R18: antes de tocar el service
+    const data = crearOrdenSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.ordenService ?? buildOrdenService();
+    return service.crear(data, actor); // R42: resultado tipado de dominio
+  });
+  return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
 /** R29/R34: obtener orden por id. */
@@ -80,16 +117,18 @@ export async function obtenerOrden(
   id: unknown,
   deps: OrdenActionDeps = {},
 ): Promise<ObtenerOrdenResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" }; // R18
-
-  const parsedId = idSchema.safeParse(id);
-  if (!parsedId.success) {
-    return { status: "validation_error", fieldErrors: { id: ["id invalido"] } };
-  }
-
-  const service = deps.ordenService ?? buildOrdenService();
-  return service.obtener(parsedId.data, actor);
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R18
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success) {
+      // R9: conservar la clave `id` en fieldErrors.
+      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
+    }
+    const service = deps.ordenService ?? buildOrdenService();
+    return service.obtener(parsedId.data, actor);
+  });
+  return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
 /** R30/R31/R32/R33/R34: listar ordenes paginadas. */
@@ -97,16 +136,14 @@ export async function listarOrdenes(
   input: unknown,
   deps: OrdenActionDeps = {},
 ): Promise<ListarOrdenesResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" }; // R18
-
-  const parsed = listarOrdenesSchema.safeParse(input ?? {});
-  if (!parsed.success) {
-    return { status: "validation_error", fieldErrors: fieldErrorsFrom(parsed.error) }; // R32
-  }
-
-  const service = deps.ordenService ?? buildOrdenService();
-  return service.listar(parsed.data, actor);
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R18
+    const data = listarOrdenesSchema.parse(input ?? {}); // R32: ZodError -> VALIDATION_ERROR
+    const service = deps.ordenService ?? buildOrdenService();
+    return service.listar(data, actor);
+  });
+  return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
 /** R35/R36/R37/R38: actualizar orden por id. */
@@ -115,20 +152,19 @@ export async function actualizarOrden(
   input: unknown,
   deps: OrdenActionDeps = {},
 ): Promise<ActualizarOrdenResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" }; // R18
-
-  const parsedId = idSchema.safeParse(id);
-  if (!parsedId.success) {
-    return { status: "validation_error", fieldErrors: { id: ["id invalido"] } };
-  }
-  const parsed = actualizarOrdenSchema.safeParse(input);
-  if (!parsed.success) {
-    return { status: "validation_error", fieldErrors: fieldErrorsFrom(parsed.error) };
-  }
-
-  const service = deps.ordenService ?? buildOrdenService();
-  return service.actualizar(parsedId.data, parsed.data, actor);
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R18
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success) {
+      // R9: conservar la clave `id` en fieldErrors.
+      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
+    }
+    const data = actualizarOrdenSchema.parse(input); // R38: ZodError -> VALIDATION_ERROR
+    const service = deps.ordenService ?? buildOrdenService();
+    return service.actualizar(parsedId.data, data, actor);
+  });
+  return isAppErrorShape(r) ? toActionError(r) : r;
 }
 
 /** R39/R40/R41: borrado logico de orden por id. */
@@ -136,14 +172,16 @@ export async function borrarOrden(
   id: unknown,
   deps: OrdenActionDeps = {},
 ): Promise<BorrarOrdenResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" }; // R18
-
-  const parsedId = idSchema.safeParse(id);
-  if (!parsedId.success) {
-    return { status: "validation_error", fieldErrors: { id: ["id invalido"] } };
-  }
-
-  const service = deps.ordenService ?? buildOrdenService();
-  return service.borrar(parsedId.data, actor);
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R18
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success) {
+      // R9: conservar la clave `id` en fieldErrors.
+      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
+    }
+    const service = deps.ordenService ?? buildOrdenService();
+    return service.borrar(parsedId.data, actor);
+  });
+  return isAppErrorShape(r) ? toActionError(r) : r;
 }
