@@ -335,3 +335,22 @@
   mitades secuenciales). Reviewer verificó que el refactor de `toActionError` a `_shared/` no
   rompió la feature 12. Review APROBADO, 0 bloqueantes. Mergeada vía **PR #11** (b5009ae, 2026-07-10).
 - Sin deuda de DB (no migración).
+
+## 2026-07-10 — cobros - crud (feature 18)
+- Backend puro. CRUD de `cobro` (tarifas) replicando el patrón por capas del CRUD de órdenes
+  (feature 6): tabla nueva multi-fila con `nombre` (TEXT NOT NULL) + 8 columnas — montos
+  `Decimal(12,2)` (`valor_flete`, `valor_flete_devuelto`, `valor_flete_gam`,
+  `valor_flete_devuelto_gam`, `fulfillment`) y porcentajes 0..100 `Decimal(5,2)`
+  (`comision_cod`, `iva_flete`, `iva_comision_cod`) — más id/created_at/updated_at/deleted_at
+  (soft delete). Migración `20260710120000_cobros` con `down.sql` + RLS (sin policies). Capas
+  `CobroService`/`CobroRepository`/`lib/types/cobro.ts` (zod) + Server Actions (`withErrorHandler`
+  + `toActionError`). Autorización: solo `maestro` escribe; `admin` solo lee/lista;
+  `adminTienda`/`mensajero` → forbidden. DTO serializa Decimal→number, no expone `deleted_at`;
+  zod valida NOT NULL, ≥0 y porcentajes ≤100.
+- Requisitos R1–R27 (EARS) -> tests reales (service/repo/zod/action/rls/config). Ver
+  `progress/impl_cobros-crud.md`. Suite 73 files / 660 tests verdes (+88); typecheck/lint/init.sh OK.
+- Decisiones humanas (2026-07-10): tarifas multi-fila con `nombre`; IVA y `comision_cod` como
+  porcentaje 0..100; `fulfillment` como monto; solo `maestro` escribe; sin FK a zona (relación
+  por zona = feature 24). Interpretación registrada: "fulfillment=monto, comision_cod=%".
+- Review APROBADO, 0 bloqueantes (tipos verificados exactos). Mergeada vía **PR #12** (a379d8e, 2026-07-10).
+- DEUDA (aceptada, patrón 6/15, requiere DB real): aplicar migración/RLS/rollback contra Postgres.

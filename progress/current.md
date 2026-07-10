@@ -7,13 +7,13 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/18-cobros-crud | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. CRUD backend de `cobro` (patrón órdenes): tabla multi-fila con `nombre` + 8 columnas — montos `Decimal(12,2)` (valor_flete*, fulfillment), porcentajes `Decimal(5,2)` 0..100 (comision_cod, iva_flete, iva_comision_cod). Migración con down.sql + RLS. Capas service/repo/actions/zod, autorización solo `maestro` escribe (admin lee). R1..R27 -> tests. Suite 73 files / 660 tests verdes (+88). Deuda: RLS anon + rollback contra Postgres real (aceptada, patrón 6/15). Commit + push hechos. **PR #12 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/12 -> base `dev`. Pasa a `done` al mergear. La 17 sigue BLOQUEADA (deps 27/28). |
+| feature/19-rol-adminsatelite | backend | F1 spec | SELECCIONADA por F1.0 (feature 19, backend, low). Añade el valor `adminSatelite` al enum `RolValue` (Postgres) + seed, patrón feature 4. Migración que altera el enum con down.sql. Branch desde `origin/dev`. spec_author en curso. |
 
-> Feature 16 (carga masiva etapa 2) CERRADA 2026-07-10: PR #11 mergeado a `origin/dev`
-> (b5009ae), status -> `done`, entrada en `history.md`. El cierre de la 16 + registro de la
-> 18 viajan en el primer commit de `feature/18-cobros-crud`.
-> SKIP de la 17: sus dependencias (27 rename+estado inicial, 28 rename embalaje) no están
-> `done`; por la regla depends_on no arranca. Se retoma cuando 27/28 cierren.
+> Feature 18 (cobros crud) CERRADA 2026-07-10: PR #12 mergeado a `origin/dev` (a379d8e),
+> status -> `done`, entrada en `history.md`. El cierre de la 18 + registro de la 19 viajan en
+> el primer commit de `feature/19-rol-adminsatelite`.
+> SKIP de la 17: deps 27/28 no `done`; no arranca hasta que cierren. Otras elegibles: 20, 21,
+> 24 (necesita Excel), 25, 26, 28, 29.
 
 > Feature 14 (botón carga masiva en órdenes) CERRADA 2026-07-10: PR #10 mergeado a
 > `origin/dev` (bb511f1), status -> `done`, entrada en `history.md`. El cierre de la 14 +
@@ -72,9 +72,9 @@
 (Ninguno por ahora)
 
 ## Plan de la sesion
-- [x] Features 1-16: ciclos SDD completos (ver history.md).
-- [ ] Feature 18 (backend, medium, CRUD cobros): F1 spec en curso.
-- [ ] Feature 17 BLOQUEADA (depends 27/28). Elegibles: 18,19,20,21,24,25,26,28,29.
+- [x] Features 1-16, 18: ciclos SDD completos (ver history.md).
+- [ ] Feature 19 (backend, low, rol adminSatelite): F1 spec en curso.
+- [ ] Feature 17 BLOQUEADA (depends 27/28). Elegibles: 19,20,21,24,25,26,28,29.
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.

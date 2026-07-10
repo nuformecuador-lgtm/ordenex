@@ -169,7 +169,7 @@
       "id": 18,
       "name": "cobros - crud",
       "description": "generar el crud de cobros, crea la tabla cobros con valor_flete, valor_flete_devuelto, valor_flete_GAM, valor_flete_devuelto_GAM, fulfillment, comision_cod, iva_flete, iva_comision_cod",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
@@ -180,11 +180,11 @@
       "id": 19,
       "name": "rol admin bodega satelite",
       "description": "Agrega el rol 'admin de bodega satelite' al sistema: nuevo valor adminSatelite en el enum Postgres RolValue y en el seed de roles (ROLES_SEED), siguiendo el patron de la feature 4 (role seed). Con esto el catalogo de roles pasa de 4 a 5: maestro, admin, mensajero, adminTienda, adminSatelite. Requiere migracion Prisma que altere el enum RolValue con su down.sql y actualice la fuente unica de verdad en TS (lib/types/roles.ts). Nota de autorizacion: adminSatelite NO puede aprobar postulaciones de mensajeros (esa capacidad queda limitada a maestro/admin, ver feature de aprobacion).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
+      "complexity": "low",
+      "zone": "backend",
+      "branch": "feature/19-rol-adminsatelite"
     },
     {
       "id": 20,
@@ -397,6 +397,116 @@
       "zone": null,
       "branch": null,
       "depends_on": 24
+    },
+    {
+      "id": 40,
+      "name": "cierre de bodega satelite -> bodega principal",
+      "description": "Segundo nivel de cierre: la bodega satelite, como entidad, debe SOLICITAR su cierre a la bodega principal, y la bodega principal lo APRUEBA o RECHAZA. Complementa el cierre mensajero->bodega (features 37/38): el adminSatelite primero aprueba los cierres de SUS mensajeros y luego consolida y solicita el cierre de su bodega a la central. La bodega principal (admin maestro) aprueba tanto los cierres de sus propios mensajeros del GAM como los cierres de las bodegas satelite. Muy detallado: el cierre de la bodega satelite agrega el detalle de los cierres de sus mensajeros (ordenes, resultados, dinero por metodo de pago, pagos a mensajeros). Fullstack. Depende de las features 37 y 38 (cierres mensajero/admin).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 38
+    },
+    {
+      "id": 41,
+      "name": "reglas y bloqueos de cierre (obligatoriedad, vencidos)",
+      "description": "Reglas de negocio de los cierres (son OBLIGATORIOS y criticos: reflejan el ingreso de dinero de la empresa) y bloqueos asociados. (1) JERARQUIA/RESPONSABLE: cada mensajero cierra ante su bodega responsable = la bodega de su zona (bodega principal si es GAM, o su bodega satelite); cada bodega satelite cierra ante la bodega principal (feature 40). (2) OBLIGATORIEDAD + VENCIDOS: si un mensajero termina el dia y NO solicita cierre, ese cierre se marca como VENCIDO y se evidencia en la bodega responsable del mensajero. (3) BLOQUEO DEL MENSAJERO: cuando el mensajero solicita cierre queda BLOQUEADO y no se le pueden asignar mas ordenes hasta que su cierre sea APROBADO. (4) BLOQUEO DE BODEGA SATELITE: una bodega satelite con cierres pendientes queda BLOQUEADA y no puede asignar ordenes a sus mensajeros hasta hacer los cierres necesarios. DISPARADOR DE VENCIDO (decision del humano 2026-07-10): a las 00:00 (medianoche) de cada dia se ejecuta AUTOMATICAMENTE el corte diario -job programado/cron-: los cierres que el mensajero no solicito quedan VENCIDOS y se evidencian en su bodega responsable. Backend principalmente (job de corte, estados de cierre, flags de bloqueo, reglas que impiden asignar) + reflejo en la UI. Depende de las features 37, 38 y 40 (flujo de cierres) y afecta las asignaciones (17/34), que deben respetar los bloqueos.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 40
+    },
+    {
+      "id": 42,
+      "name": "wallet - caja principal de ordenex",
+      "description": "Nuevo modulo WALLET. Caja PRINCIPAL de Ordenex donde ENTRAN los ingresos y SALEN los gastos, conectada con los cierres (cada cierre aprobado alimenta la caja). Ingresos de Ordenex por cada orden: (a) el FLETE que cobra Ordenex, (b) la COMISION por el COD, (c) el IVA del flete y (d) el IVA de la comision. Estos valores provienen del CRUD de cobros (feature 18: valor_flete, valor_flete_GAM, comision_cod, iva_flete, iva_comision_cod, etc.). La caja registra ingresos y egresos (p.ej. pagos a tiendas -feature 43-, pagos a mensajeros -feature 44- y gastos/sueldos -feature 45-). MODELO (decision del humano 2026-07-10): la wallet es un LIBRO DE MOVIMIENTOS (entradas/salidas con saldo), no un tablero de saldos calculados. Debe mostrar ademas el BALANCE general de la empresa (si esta en positivo o negativo) comparando ingresos vs. gastos. ABIERTO a decidir en spec: como se modela el cobro (por orden vs. por zona/config). Fullstack de alta complejidad. Depende de la feature 18 (cobros) y de los cierres (37/38/40).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 18
+    },
+    {
+      "id": 43,
+      "name": "wallet por tienda (saldo a favor de la tienda)",
+      "description": "Cada tienda (admin de tienda) tiene su PROPIA wallet con su informacion: cuanto le debe ENTREGAR Ordenex. Ordenex recibe el dinero total de la venta (COD total recaudado) y parte le pertenece a la tienda: COD total MENOS el flete, MENOS la comision del COD, MENOS el IVA del flete y MENOS el IVA de la comision. La tienda debe poder VER cuanto le debe Ordenex (su saldo a favor). Se alimenta de los cierres aprobados y del calculo de la caja principal (feature 42). Fullstack. Depende de la feature 42 (wallet/caja) y 18 (cobros).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 42
+    },
+    {
+      "id": 44,
+      "name": "wallet - pago a mensajeros y cuentas por pagar",
+      "description": "Pago a los mensajeros dentro de la wallet. En los cierres se ve cuanto se le debe pagar a cada mensajero segun su zona (feature 39). Normalmente ese pago se toma del EFECTIVO que el propio mensajero recaudo; si el mensajero NO recaudo efectivo (todo fue por SIMPE o transferencia), el pago queda como CUENTA POR PAGAR y se evidencia en la wallet. La wallet refleja lo ya pagado (descontado del efectivo recaudado) y lo pendiente (cuentas por pagar a mensajeros). Fullstack. Depende de las features 39 (pago por zona), 42 (wallet/caja) y 37 (cierre del mensajero con montos por metodo de pago).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 42
+    },
+    {
+      "id": 45,
+      "name": "wallet - gastos fijos/variables y sueldos",
+      "description": "Gestion de EGRESOS administrativos en la wallet (feature 42): crear GASTOS FIJOS y GASTOS VARIABLES, y registrar los SUELDOS de los trabajadores. Todos estos egresos SALEN de la caja principal de Ordenex y se reflejan en el libro de movimientos y en el BALANCE general (ingresos vs. gastos). Fullstack. Depende de la feature 42 (wallet/caja - libro de movimientos).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 42
+    },
+    {
+      "id": 46,
+      "name": "reprogramacion: bloqueo y liberacion programada",
+      "description": "(FASE 2 / detalle del flujo del mensajero, feature 36.) Cuando el mensajero REPROGRAMA una orden (estado reprogramada) con una fecha, la orden queda BLOQUEADA hasta esa fecha de reprogramacion (no reasignable/enviable antes). Al llegar la fecha, la orden se LIBERA automaticamente de vuelta a la bodega responsable para ser enviada ese dia, y se AVISA de la liberacion. Requiere un disparador temporal (job diario, en linea con el corte de las 00:00 de la feature 41) y una notificacion/aviso al liberar. Depende de la feature 36 (gestion: reprogramar con fecha y motivo).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 36
+    },
+    {
+      "id": 47,
+      "name": "reintentos de entrega y escalado a rechazo",
+      "description": "(FASE 2 / detalle.) Una DEVOLUCION (estado devuelta) hace que la orden vuelva a la bodega para cumplir OTRO intento de entrega. Por ley se hacen MINIMO 3 intentos de entrega; la orden lleva un CONTADOR DE INTENTOS. Al 3er intento fallido, la orden ESCALA automaticamente a RECHAZO (estado final). Las devoluciones deben mostrar cuantos intentos lleva la orden. ABIERTO a decidir en spec: si el minimo de 3 es fijo o configurable, y la relacion exacta entre 'devuelta' (intermedia, reintentable), 'devuelta_origen' y 'rechazada' (finales). Depende de la feature 36 (gestion) y se apoya en la trazabilidad (feature 49).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 36
+    },
+    {
+      "id": 48,
+      "name": "rechazo: devolucion a la tienda de origen",
+      "description": "(FASE 2 / detalle.) Cuando una orden llega a RECHAZO (estado final, tras 3 intentos fallidos o rechazo directo, features 47/36), la orden debe VOLVER a la tienda (admin de tienda) que la cargo originalmente en la carga masiva. Incluye el flujo y la visibilidad del retorno a la tienda de origen (la tienda ve sus ordenes rechazadas devueltas). Depende de la feature 47 (escalado a rechazo) y 36.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 47
+    },
+    {
+      "id": 49,
+      "name": "trazabilidad / historial de estados de la orden",
+      "description": "(FASE 2 / detalle, transversal.) Registrar la TRAZABILIDAD COMPLETA de cada orden: el historial de todos los estados por los que paso, CUANDO ocurrio cada cambio (timestamp) y cuando ESCALA de un estado a otro, mas el contador de intentos de entrega. Debe poder consultarse como LINEA DE TIEMPO en el detalle de la orden. Es la base para saber cuando una orden escala a rechazo, cuantos intentos lleva, etc. Aplica a toda la maquina de estados (features 17, 30, 33, 34, 36, 46, 47). Fullstack (tabla de historial de estados + UI de linea de tiempo). Se relaciona con el tiempo real (feature 35). Depende de la feature 36.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 36
     }
   ]
 }
