@@ -200,7 +200,7 @@
       "id": 21,
       "name": "postulacion de mensajero",
       "description": "Agrega el registro publico (postulacion) de mensajeros: unica via de auto-registro del sistema. Un aspirante completa un formulario con los campos: nombre, primer apellido, segundo apellido, email, telefono, tipo de documento (FK a tipo_identificacion), numero de documento, vehiculo_id(fk a vehiculos), placa del vehiculo, contrasena y confirmacion de contrasena; y sube documentos: foto de cedula por ambos lados (anverso y reverso), tarjeta de propiedad del vehiculo por ambos lados (anverso y reverso), y una foto de su rostro (que acompanara su perfil de mensajero). Al enviar, se crea la cuenta con rol mensajero en estado pendiente (default de EstadoUsuario), sin acceso hasta ser aprobada (ver feature de aprobacion). Requiere extender el modelo Usuario/perfil de mensajero con los campos nuevos (primer apellido y segundo apellido -hoy Usuario tiene un unico campo nombre-, vehiculo, placa) y el almacenamiento de los 5 documentos subidos (cedula anverso, cedula reverso, tarjeta propiedad anverso, tarjeta propiedad reverso, foto de rostro). El email y el numero de documento no deben duplicarse; la contrasena se hashea con bcrypt (mismo coste que el login). Es fullstack (pantalla de postulacion + backend/migracion/almacenamiento de archivos).",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
