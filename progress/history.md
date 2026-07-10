@@ -490,3 +490,30 @@
   (b1ef459, 2026-07-10 19:15Z). Impl vía backend_dev/frontend_dev DIRECTO (implementer inestable
   por sonnet-4). Excepción aceptada por el humano: `OtpChallengeIssuer` loguea el OTP en claro
   (código heredado, fuera de alcance).
+
+## 2026-07-10 — postulación de mensajero (feature 21, FULLSTACK) — DONE
+- Registro PÚBLICO (postulación) de mensajeros, única vía de auto-registro. Fullstack en 2 slices.
+  Depende de la feature 50 (vehículos). BACKEND: migración `20260710170000_postulacion_mensajero`
+  (extiende `Usuario`: `primer_apellido` NOT NULL —OBLIGATORIO por decisión del humano—,
+  `segundo_apellido`/`placa`/`vehiculo_id` nullable, FK a `vehiculos`; tabla `MensajeroDocumento`;
+  unicidad email/nº doc) + down.sql; `IFileStorage`+`SupabaseFileStorage` (bucket privado
+  `mensajero-docs`); service/action pública (crea cuenta rol `mensajero` estado `pendiente`, bcrypt,
+  error por campo en duplicados, rate-limit). FRONTEND: página pública `/postulacion` + `PostulacionForm`
+  (2 selects + 5 uploads, validación por campo, confirmación); link desde login.
+- Decisiones F1.4 (2026-07-10): A2 Supabase Storage bucket privado, A3 error específico por campo,
+  A4 rate-limiting, A5 contraseña mín. 8 (reusa `strongPasswordSchema` de la 20). NO implementa la
+  aprobación (feature 22). R1–R26 -> tests reales (R17 con test de `findByUsuario` tras hallazgo del reviewer).
+- Reviewer APROBADO (bloqueante R17 resuelto). Suite 888 verde, typecheck+lint OK. **Migración APLICADA
+  y VERIFICADA contra Postgres real** (localhost:5432/ordenex): `primer_apellido` NOT NULL, FK y tabla
+  `mensajero_documento` creadas, maestro backfilleado con ''. Mergeada a `origin/dev` vía **PR #23**
+  (20db364, 2026-07-10). Impl backend_dev + frontend_dev DIRECTO. Desbloquea la 22 -> 23.
+- Pendiente (setup humano, no bloqueante de código): crear el bucket privado `mensajero-docs` en Supabase Storage.
+
+## 2026-07-10 — gestión de usuarios (feature 25, FULLSTACK, otra sesión) — DONE
+- CRUD de usuarios en configuración (SOLO maestro), sin tabla nueva. R1–R36. Backend: `UsuarioService`
+  + list/update/count/setEstado/listTiposIdentificacion/listRoles en `UserRepository` + `password-generator`
+  reusando `strongPasswordSchema` de la 20. Frontend: `app/(app)/configuracion/` con DataTable+Pagination+
+  Modal+Toast, form con toggle contraseña escribir/generar; select de rol por UUID.
+- Reviewer APROBADO 0 bloqueantes; suite ~886 verde. Mergeada a `origin/dev` vía **PR #24** (95d5025,
+  2026-07-10). Corrió en otra sesión en paralelo. Cierre (done + history) registrado desde la rama
+  `feature/22-aprobacion-postulaciones` (bookkeeping vía PR).

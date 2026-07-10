@@ -7,8 +7,11 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/25-gestion-usuarios | fullstack | F2.4 | **COMPLETA (backend+frontend) + reviewer APROBADO (0 bloqueantes).** CRUD usuarios en configuración (SOLO maestro), sin tabla nueva. R1–R36. Backend T1–T7 (`UsuarioService` + list/update/count/setEstado/listTiposIdentificacion/listRoles en UserRepository + `password-generator` reusando `strongPasswordSchema` de la #20). Frontend T8–T11 (`app/(app)/configuracion/` DataTable+Pagination+Modal+Toast, form con toggle contraseña escribir/generar). GAP de rol id/value CERRADO (`listarRoles`, select por UUID). Suite ~886 verde; typecheck+init.sh verdes. Menor: subir timeout de un test propio (flaky bajo carga). **PR #24 ABIERTO** a `dev` (rama pusheada, pendiente merge humano). |
-| feature/50-vehiculos | backend | F2.4 | **impl COMPLETA + reviewer APROBADO** (otra sesión). CRUD-catálogo `vehiculos` SOLO-LECTURA: enum `VehiculoValue` (moto/carro/camion) + model `Vehiculo{id,name}`, migración+seed VERIFICADOS contra Postgres real. Código YA en `dev` (**PR #21 mergeado**); bookkeeping a `done` a cargo de esa sesión. Desbloquea 21→22→23. |
+| feature/22-aprobacion-postulaciones | backend | F1.2 | **SELECCIONADA (2026-07-10).** Backend para que SOLO `maestro` y `admin` aprueben/rechacen las postulaciones de mensajeros en estado `pendiente` (creadas por la 21). Aprobar → `activo` (habilita acceso); rechazar → estado sin habilitar (inactivo/bloqueado/rechazado, a decidir en spec). Expone Server Actions/consultas: listar pendientes (con datos + documentos de Storage) y aprobar/rechazar, con autz por rol. NO UI (la consume el dashboard de la feature 23). Backend puro, complexity=medium, depends_on=21 (**DONE**). Worktree `../ordenex-f22` desde `origin/dev`. **spec_author en curso; PARA en F1.4.** |
+
+> Feature 21 (postulación de mensajero) CERRADA 2026-07-10: **PR #23 mergeado** a `origin/dev` (20db364), status `done`, entrada en `history.md`. Fullstack (R1–R26), reviewer APROBADO (bloqueante R17 resuelto). `primer_apellido` OBLIGATORIO; migración APLICADA y VERIFICADA contra Postgres real. Desbloquea la 22→23. Pendiente humano: crear bucket privado `mensajero-docs` en Supabase Storage.
+
+> Feature 25 (gestión de usuarios) CERRADA 2026-07-10: **PR #24 mergeado** a `origin/dev` (95d5025), status `done`, entrada en `history.md`. Fullstack (R1–R36), otra sesión, reviewer APROBADO 0 bloqueantes.
 
 > Feature 50 (vehiculos) CERRADA 2026-07-10: **PR #21 mergeado** a `origin/dev` (eb6a17d), status `done`, entrada en `history.md`. Backend puro (R1–R15, R12 N/A). Migración+seed **aplicados y verificados contra Postgres real**. Desbloquea la 21→22→23.
 
