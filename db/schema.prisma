@@ -160,7 +160,7 @@ model EmailOtpChallenge {
 model OrderStatus {
   id    String @id @default(uuid())
   value String @unique // seed (8): entregada, devuelta, devuelta_origen,
-  //   reprogramada, embalaje, en_ruta_bodega_principal, en_bodega, en_preparacion
+  //   reprogramada, en_fulfillment, en_ruta_bodega_principal, en_bodega, en_preparacion
 
   ordenes Orden[]
 

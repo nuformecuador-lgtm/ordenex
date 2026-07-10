@@ -35,7 +35,7 @@ consistente con `Rol`/`TipoIdentificacion`.
 model OrderStatus {
   id    String @id @default(uuid())
   value String @unique // seed (7): entregada, devuelta, devuelta_origen,
-                        //   reprogramada, embalaje, en_ruta_bodega_principal, en_bodega
+                        //   reprogramada, en_fulfillment, en_ruta_bodega_principal, en_bodega
 
   ordenes Orden[]
 
@@ -203,7 +203,7 @@ export const ORDER_STATUS_SEED = [
   "devuelta",
   "devuelta_origen",
   "reprogramada",
-  "embalaje",
+  "en_fulfillment",
   "en_ruta_bodega_principal",
   "en_bodega",
 ] as const;

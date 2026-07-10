@@ -24,7 +24,7 @@
   `value` único.
 - **R2 (ubicuo):** El sistema DEBE poder sembrar `order_status` de forma
   idempotente con exactamente estos 7 valores: `entregada`, `devuelta`,
-  `devuelta_origen`, `reprogramada`, `embalaje`, `en_ruta_bodega_principal`,
+  `devuelta_origen`, `reprogramada`, `en_fulfillment`, `en_ruta_bodega_principal`,
   `en_bodega`.
 - **R3 (por evento):** CUANDO el seed de `order_status` se ejecuta más de una vez,
   el sistema DEBE conservar las filas y sus `id` existentes sin duplicar
