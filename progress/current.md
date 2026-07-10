@@ -7,6 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
+| feature/21-postulacion-mensajero | fullstack | F2.4 | **impl COMPLETA (backend+frontend) + reviewer APROBADO** (tras cerrar el bloqueante R17: test de `findByUsuario`). Registro público de mensajeros. Backend: migración `20260710170000_postulacion_mensajero` (extiende `Usuario` apellidos+placa+`vehiculo_id` FK a vehiculos; tabla `MensajeroDocumento`; unicidad email/nºdoc)+down.sql; `SupabaseFileStorage` (bucket privado); service/action de postulación → cuenta `mensajero` `pendiente`, bcrypt, error por campo (A3), rate-limit (A4), password mín.8 reusa `strongPasswordSchema` (A5). Frontend: página pública `/postulacion` + `PostulacionForm` (2 selects + 5 uploads). R1–R26 mapeados a test. **Suite 887 verde**, typecheck+lint OK. NO implementa la aprobación (feature 22). **PR #23 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/23) → base `dev`. Pasa a `done` al mergear. **Setup de despliegue pendiente**: aplicar migración a Postgres + crear bucket privado `mensajero-docs` en Supabase Storage. |
+
+> Feature 50 (vehiculos) CERRADA 2026-07-10: **PR #21 mergeado** a `origin/dev` (eb6a17d), status `done`, entrada en `history.md`. Backend puro (R1–R15, R12 N/A). Migración+seed **aplicados y verificados contra Postgres real**. Desbloquea la 21→22→23.
 
 > Feature 20 (recuperación de contraseña) CERRADA 2026-07-10: **PR #20 mergeado** a `origin/dev`
 > (b1ef459, 19:15Z), status -> `done`, entrada en `history.md`. Fullstack (reusa infra OTP, sin
@@ -15,7 +18,6 @@
 
 > Feature 31 (plantilla XLSX) CERRADA 2026-07-10: **PR #19 mergeado**, status -> `done`, entrada
 > en `history.md`. Frontend puro (CSV→XLSX, exceljs import dinámico), reviewer APROBADO 0 bloqueantes.
-| feature/50-vehiculos | backend | F2.4 | **impl COMPLETA + reviewer APROBADO** (tras marcar tasks; 0 mayores de código). CRUD-catálogo `vehiculos` SOLO-LECTURA (P1=A): enum PG `VehiculoValue` (moto/carro/camion) + model `Vehiculo{id,name}` (columna **`name`**, no `value`), migración `20260710160000_vehiculos` (CREATE TYPE/TABLE+UNIQUE+RLS)+down.sql, `lib/types/vehiculos.ts` (`VEHICULOS_SEED`), `seedVehiculos` idempotente en seed-catalogos, `IVehiculoService/Repository`+`VehiculoService` (guard `maestro`)+action. R1–R11/R13–R15 mapeados; R12 N/A (sin escritura por P1=A); T7 omitida. Suite **754 verde** (33 nuevos), typecheck+lint OK. Backend puro. **PR #21 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/21) → base `dev`. Pasa a `done` al mergear. Corrió en zona backend en paralelo con la 31 (frontend). **Migración+seed APLICADOS y VERIFICADOS contra Postgres real** (`localhost:5432/ordenex`, 2026-07-10): `migrate deploy` OK (1 pendiente aplicada), 3 filas `moto/carro/camion` idempotentes, RLS habilitada, índice único `vehiculos_name_key`, enum `vehiculo_value` con los 3 labels. Deuda de despliegue CERRADA. Desbloquea la 21→22→23. |
 
 > Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a
 > `origin/dev` (7535961), status -> `done`, entrada en `history.md`. Frontend puro (R1–R19),

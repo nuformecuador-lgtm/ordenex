@@ -93,7 +93,13 @@ describe("no se modifico ninguna migracion previa (R3)", () => {
       .sort();
     const vehiculosDir = dirs.find((d) => d.endsWith("_vehiculos"));
     expect(vehiculosDir).toBeDefined();
-    const previos = dirs.filter((d) => !d.endsWith("_vehiculos"));
+    // Se excluye la migracion de la feature 21 (`_postulacion_mensajero`), que se
+    // APENDIO despues con un timestamp posterior: el invariante que este guard
+    // cuida es que vehiculos no se inserto ANTES de las migraciones que ya
+    // existian cuando se creo, no que sea la ultima del repo para siempre.
+    const previos = dirs.filter(
+      (d) => !d.endsWith("_vehiculos") && !d.endsWith("_postulacion_mensajero"),
+    );
     const maxPrevio = previos[previos.length - 1];
     // El timestamp (prefijo) de vehiculos es mayor que el ultimo previo.
     expect(vehiculosDir! > maxPrevio).toBe(true);

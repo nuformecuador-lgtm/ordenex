@@ -289,6 +289,16 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
             ¿Olvidaste tu contraseña?
           </Link>
         </div>
+
+        {/* Enlace a la postulación pública de mensajero (feature 21, afordancia) */}
+        <div className="text-center">
+          <Link
+            href="/postulacion"
+            className="text-sm text-muted-foreground hover:text-foreground underline"
+          >
+            ¿Quieres ser mensajero? Postúlate aquí
+          </Link>
+        </div>
       </Card>
     );
   }

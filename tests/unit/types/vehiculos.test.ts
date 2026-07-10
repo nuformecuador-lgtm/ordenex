@@ -78,10 +78,13 @@ describe("db/schema.prisma declara el modelo Vehiculo con columna name (R2, R13)
     expect(body).toMatch(/id\s+String\s+@id\s+@default\(uuid\(\)\)/);
   });
 
-  it("el modelo Usuario NO gana vehiculo_id en esta feature (R13)", () => {
+  it("el modelo Usuario gana vehiculo_id en la feature 21, no en la 50 (R13)", () => {
+    // Feature 50 dejo el id de Vehiculo listo como PK estable pero NO cableo el
+    // FK usuario.vehiculo_id (deferido explicitamente). La feature 21
+    // (postulacion de mensajero) lo agrega; este guard se actualizo en
+    // consecuencia: el FK ahora vive en el schema, aportado por la 21.
     const match = schema.match(/model\s+Usuario\s*\{([\s\S]*?)\n\}/);
     const body = match ? match[1] : "";
-    expect(body).not.toMatch(/vehiculo_id/);
-    expect(body).not.toMatch(/vehiculoId/);
+    expect(body).toMatch(/vehiculoId\s+String\?\s+@map\("vehiculo_id"\)/);
   });
 });
