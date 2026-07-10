@@ -223,7 +223,7 @@
       "id": 23,
       "name": "dashboard admin maestro",
       "description": "Dashboard del admin maestro como primera pantalla tras iniciar sesion (reemplaza el placeholder 'Bienvenido' de la home autenticada app/(app)/page.tsx). Arranca 'en blanco' salvo por el panel de postulaciones de mensajeros: lista las postulaciones en estado pendiente con sus datos y documentos, y permite aprobar o rechazar cada una consumiendo el backend de la feature 22. Visible para el rol maestro (y admin, que comparte la autorizacion de aprobacion). Frontend. Depende de la feature de aprobacion de postulaciones (22).",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",

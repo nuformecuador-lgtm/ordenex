@@ -117,3 +117,12 @@
 - **A3 — Rechazo sin motivo.** `rechazarPostulacion(id)` de la feature 22 solo
   recibe el `id` (no acepta motivo). Se asume rechazo sin captura de motivo. ¿Se
   confirma? Impacta R14/R15.
+
+## Decisiones F1.4 (APROBADAS por el humano, 2026-07-10)
+
+- **A1 — Documentos = enlaces "Ver"** (uno por documento) que abren la URL firmada en una pestaña
+  nueva (`target="_blank" rel="noopener noreferrer"`). Sin miniaturas/visor inline.
+- **A2 — Caducidad de URLs firmadas (TTL 300s) = refrescar la lista.** Las URLs se regeneran al
+  recargar el listado (tras aprobar/rechazar y por revalidación SWR al foco/interacción). Un enlace
+  caducado se renueva con un refresh; NO se sube el TTL del backend de la 22.
+- **A3 — Rechazo SIN motivo** (consistente con la decisión P2 de la feature 22; la Server Action solo recibe `id`).
