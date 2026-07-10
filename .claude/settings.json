@@ -1,5 +1,8 @@
 {
   "$comment": "Hooks que automatizan la verificacion del arnes. El esquema de hooks de Claude Code evoluciona; si un hook no dispara, revisa el formato vigente con: claude --help o la doc de hooks. La idea es: tras cada edicion de codigo, recordar correr la verificacion; y al terminar la sesion, recordar actualizar progress/.",
+  "env": {
+    "IMPECCABLE_NO_UPDATE_CHECK": "1"
+  },
   "hooks": {
     "PostToolUse": [
       {
