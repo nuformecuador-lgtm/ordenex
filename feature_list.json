@@ -201,11 +201,11 @@
       "id": 21,
       "name": "postulacion de mensajero",
       "description": "Agrega el registro publico (postulacion) de mensajeros: unica via de auto-registro del sistema. Un aspirante completa un formulario con los campos: nombre, primer apellido, segundo apellido, email, telefono, tipo de documento (FK a tipo_identificacion), numero de documento, vehiculo_id(fk a vehiculos), placa del vehiculo, contrasena y confirmacion de contrasena; y sube documentos: foto de cedula por ambos lados (anverso y reverso), tarjeta de propiedad del vehiculo por ambos lados (anverso y reverso), y una foto de su rostro (que acompanara su perfil de mensajero). Al enviar, se crea la cuenta con rol mensajero en estado pendiente (default de EstadoUsuario), sin acceso hasta ser aprobada (ver feature de aprobacion). Requiere extender el modelo Usuario/perfil de mensajero con los campos nuevos (primer apellido y segundo apellido -hoy Usuario tiene un unico campo nombre-, vehiculo, placa) y el almacenamiento de los 5 documentos subidos (cedula anverso, cedula reverso, tarjeta propiedad anverso, tarjeta propiedad reverso, foto de rostro). El email y el numero de documento no deben duplicarse; la contrasena se hashea con bcrypt (mismo coste que el login). Es fullstack (pantalla de postulacion + backend/migracion/almacenamiento de archivos).",
-      "status": "in_progress",
+      "status": "pending",
       "sdd": true,
-      "complexity": "high",
-      "zone": "fullstack",
-      "branch": "feature/21-postulacion-mensajero",
+      "complexity": null,
+      "zone": null,
+      "branch": null,
       "depends_on": 50
     },
     {
@@ -244,11 +244,12 @@
       "id": 25,
       "name": "gestion de usuarios (configuracion)",
       "description": "Agrega un modulo de gestion de usuarios dentro de configuracion (ruta app/(app)/configuracion, hoy placeholder de la feature 5) que permite al admin maestro CRUD de usuarios: crear, listar, editar y activar/inactivar. Crear un usuario define nombre, email, telefono, tipo de documento (FK a tipo_identificacion), numero de documento, rol (FK al catalogo rol: maestro, admin, mensajero, adminTienda, adminSatelite) y contrasena inicial; el usuario creado por el admin queda en estado activo (a diferencia de la postulacion publica de mensajeros, que nace pendiente). Email y numero de documento no se duplican; la contrasena se hashea con bcrypt (mismo coste que el login). La baja es logica via el enum EstadoUsuario (inactivo/bloqueado), no borrado fisico. Reusa la infraestructura existente: DataTable + Pagination para el listado, Modal para crear/editar, Toast para feedback y el manejador de errores global del backend. Autorizacion: solo maestro (a confirmar si admin tambien). Es fullstack (pantalla en configuracion + backend Server Actions/service/repository). ABIERTO a decidir en spec: si el admin puede crear cualquier rol o hay restricciones, y si al crear un mensajero por esta via se piden los campos extra (vehiculo, placa, documentos) de la feature 21 o solo el set base.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": "feature/25-gestion-usuarios",
+      "depends_on": 20
     },
     {
       "id": 26,
@@ -516,7 +517,7 @@
       "id": 50,
       "name": "vehiculos",
       "description": "Genera el CRUD y la tabla vehiculos, disponible unicamente para el rol maestro. La tabla tiene los campos id y name (OJO: name, NO 'value' como los demas catalogos rol/order_status/tipo_identificacion). Nuevo enum Postgres (moto, carro, camion); los valores del enum van en la columna name y son los mismos que se siembran en el seed de la tabla. Lo consume la postulacion de mensajero (feature 21, vehiculo_id fk a vehiculos).",
-      "status": "done",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "low",
       "zone": "backend",
@@ -525,3 +526,4 @@
     }
   ]
 }
+

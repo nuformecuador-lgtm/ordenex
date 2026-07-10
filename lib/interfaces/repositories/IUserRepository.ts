@@ -1,4 +1,4 @@
-import type { EstadoUsuario } from "@prisma/client";
+import type { EstadoUsuario, RolValue } from "@prisma/client";
 import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
 
 /** Usuario sin datos sensibles: nunca incluye el hash de la contrasena (R7). */
@@ -56,6 +56,53 @@ export class UsuarioDuplicadoError extends Error {
   }
 }
 
+// Feature 25/R14: fila del listado de usuarios. Incluye el `value` legible del
+// rol (via include) y NUNCA el hash de la contrasena (R24).
+export interface UsuarioListItem {
+  id: string;
+  nombre: string;
+  email: string;
+  rolValue: RolValue;
+  estado: EstadoUsuario;
+  createdAt: Date;
+}
+
+// Feature 25/R13/R15: parametros del listado paginado. `sortBy` llega como
+// string desde el borde y el repositorio lo valida contra su lista blanca (R15).
+export interface ListUsuariosParams {
+  skip: number;
+  take: number;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+}
+
+export interface ListUsuariosResult {
+  items: UsuarioListItem[];
+  total: number;
+}
+
+// Feature 25/R16: solo los campos editables por el maestro. NUNCA email, cedula
+// ni passwordHash (Decision 5).
+export interface UpdateUsuarioData {
+  nombre?: string;
+  telefono?: string;
+  rolId?: string;
+  tipoIdentificacionId?: string;
+}
+
+// Feature 25/R29: catalogo de tipos de identificacion para poblar el select.
+export interface TipoIdentificacionItem {
+  id: string;
+  value: string;
+}
+
+// Feature 25: catalogo de roles para poblar el select (par id/value que la UI
+// necesita porque `rolId` es el UUID del rol, no su `value`).
+export interface RolItem {
+  id: string;
+  value: RolValue;
+}
+
 export interface IUserRepository {
   /**
    * Unico metodo que expone el hash de contrasena. Solo debe usarse desde
@@ -75,4 +122,24 @@ export interface IUserRepository {
    * proyectados a `{ id, nombre }` (nunca PII/hash), ordenados por `nombre`.
    */
   listMensajeros(): Promise<MensajeroDTO[]>;
+  /**
+   * Feature 25/R13/R14/R15: listado paginado con `rolValue`, ordenado por una
+   * columna de lista blanca. Nunca proyecta `passwordHash` (R24).
+   */
+  list(params: ListUsuariosParams): Promise<ListUsuariosResult>;
+  /** Feature 25/R13: total de usuarios (soporte del `total` del listado). */
+  count(): Promise<number>;
+  /**
+   * Feature 25/R16/R18/R19: aplica solo los campos editables; valida las FK de
+   * catalogo (CatalogoInvalidoError). `null` si el usuario no existe (R17).
+   */
+  update(id: string, data: UpdateUsuarioData): Promise<UsuarioPublico | null>;
+  /**
+   * Feature 25/R20/R21/R22: cambia solo el `estado`; `null` si no existe.
+   */
+  setEstado(id: string, estado: EstadoUsuario): Promise<UsuarioPublico | null>;
+  /** Feature 25/R29: catalogo `tipo_identificacion` proyectado a id/value. */
+  listTiposIdentificacion(): Promise<TipoIdentificacionItem[]>;
+  /** Feature 25: catalogo `rol` proyectado a id/value, ordenado por `value`. */
+  listRoles(): Promise<RolItem[]>;
 }

@@ -1,10 +1,16 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type EstadoUsuario, type PrismaClient } from "@prisma/client";
 import {
   CatalogoInvalidoError,
   UsuarioDuplicadoError,
   type CreateUsuarioInput,
   type IUserRepository,
+  type ListUsuariosParams,
+  type ListUsuariosResult,
+  type RolItem,
+  type TipoIdentificacionItem,
+  type UpdateUsuarioData,
   type UsuarioConHash,
+  type UsuarioListItem,
   type UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
 import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
@@ -23,6 +29,24 @@ const PUBLIC_SELECT = {
   createdAt: true,
   updatedAt: true,
 } as const;
+
+// R14: seleccion del listado; incluye el `value` legible del rol y NUNCA el hash.
+const LIST_SELECT = {
+  id: true,
+  nombre: true,
+  email: true,
+  estado: true,
+  createdAt: true,
+  rol: { select: { value: true } },
+} as const;
+
+// R15: columna de negocio -> columna Prisma (lista blanca). Default `createdAt`.
+const SORT_COLUMN: Record<string, "createdAt" | "nombre" | "email" | "estado"> = {
+  createdAt: "createdAt",
+  nombre: "nombre",
+  email: "email",
+  estado: "estado",
+};
 
 export class UserRepository implements IUserRepository {
   constructor(private readonly prisma: UserPrismaClient) {}
@@ -75,6 +99,100 @@ export class UserRepository implements IUserRepository {
       select: { id: true, nombre: true },
       orderBy: { nombre: "asc" },
     });
+  }
+
+  /** Feature 25/R13/R14/R15: listado paginado con `rolValue`, sin hash. */
+  async list(params: ListUsuariosParams): Promise<ListUsuariosResult> {
+    const column = SORT_COLUMN[params.sortBy ?? "createdAt"] ?? "createdAt"; // R15
+    const orderBy = { [column]: params.sortDir ?? "desc" } as const;
+
+    const [rows, total] = await Promise.all([
+      this.prisma.usuario.findMany({
+        select: LIST_SELECT,
+        orderBy,
+        skip: params.skip,
+        take: params.take,
+      }),
+      this.prisma.usuario.count(),
+    ]);
+
+    const items: UsuarioListItem[] = rows.map((row) => ({
+      id: row.id,
+      nombre: row.nombre,
+      email: row.email,
+      rolValue: row.rol.value,
+      estado: row.estado,
+      createdAt: row.createdAt,
+    }));
+    return { items, total };
+  }
+
+  /** Feature 25/R13: total de usuarios. */
+  async count(): Promise<number> {
+    return this.prisma.usuario.count();
+  }
+
+  /**
+   * Feature 25/R16/R18/R19: aplica solo campos editables; valida FK de catalogo
+   * (mismo patron que `create`). `null` si el usuario no existe (R17).
+   */
+  async update(id: string, data: UpdateUsuarioData): Promise<UsuarioPublico | null> {
+    // R18: valida las FK de catalogo provistas antes de tocar la fila.
+    if (data.tipoIdentificacionId !== undefined) {
+      const tipo = await this.prisma.tipoIdentificacion.findUnique({
+        where: { id: data.tipoIdentificacionId },
+      });
+      if (!tipo) throw new CatalogoInvalidoError("tipoIdentificacionId", data.tipoIdentificacionId);
+    }
+    if (data.rolId !== undefined) {
+      const rol = await this.prisma.rol.findUnique({ where: { id: data.rolId } });
+      if (!rol) throw new CatalogoInvalidoError("rolId", data.rolId);
+    }
+
+    const result = await this.prisma.usuario.updateMany({
+      where: { id },
+      data: this.toUpdateData(data), // R16: solo campos editables
+    });
+    if (result.count === 0) return null; // R17
+
+    return this.prisma.usuario.findUnique({ where: { id }, select: PUBLIC_SELECT });
+  }
+
+  /** Feature 25/R20/R21/R22: cambia solo el estado; `null` si no existe. */
+  async setEstado(id: string, estado: EstadoUsuario): Promise<UsuarioPublico | null> {
+    const result = await this.prisma.usuario.updateMany({
+      where: { id },
+      data: { estado }, // baja logica (R20) / alta (R21): nunca borra la fila
+    });
+    if (result.count === 0) return null; // R22
+    return this.prisma.usuario.findUnique({ where: { id }, select: PUBLIC_SELECT });
+  }
+
+  /** Feature 25/R29: catalogo `tipo_identificacion` proyectado a id/value. */
+  async listTiposIdentificacion(): Promise<TipoIdentificacionItem[]> {
+    return this.prisma.tipoIdentificacion.findMany({
+      select: { id: true, value: true },
+      orderBy: { value: "asc" },
+    });
+  }
+
+  /** Feature 25: catalogo `rol` proyectado a id/value, ordenado por `value`. */
+  async listRoles(): Promise<RolItem[]> {
+    return this.prisma.rol.findMany({
+      select: { id: true, value: true },
+      orderBy: { value: "asc" },
+    });
+  }
+
+  private toUpdateData(data: UpdateUsuarioData): Prisma.UsuarioUncheckedUpdateManyInput {
+    const out: Prisma.UsuarioUncheckedUpdateManyInput = {};
+    if (data.nombre !== undefined) out.nombre = data.nombre;
+    if (data.telefono !== undefined) out.telefono = data.telefono;
+    if (data.rolId !== undefined) out.rolId = data.rolId;
+    if (data.tipoIdentificacionId !== undefined) {
+      out.tipoIdentificacionId = data.tipoIdentificacionId;
+    }
+    return out;
   }
 }
 
