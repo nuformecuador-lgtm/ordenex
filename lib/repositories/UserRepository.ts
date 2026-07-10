@@ -60,6 +60,14 @@ export class UserRepository implements IUserRepository {
     }
   }
 
+  /** Feature 20/R9: actualiza solo `password_hash`; no expone el hash de vuelta. */
+  async updatePasswordHash(usuarioId: string, passwordHash: string): Promise<void> {
+    await this.prisma.usuario.update({
+      where: { id: usuarioId },
+      data: { passwordHash },
+    });
+  }
+
   /** Feature 16/R1/R2/R3: solo mensajeros activos, proyectados a id/nombre. */
   async listMensajeros(): Promise<MensajeroDTO[]> {
     return this.prisma.usuario.findMany({

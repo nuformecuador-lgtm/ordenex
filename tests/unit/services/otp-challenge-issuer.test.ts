@@ -19,6 +19,8 @@ describe("OtpChallengeIssuer", () => {
       create,
       findActiveById: vi.fn(),
       markConsumed: vi.fn(),
+      findLatestActiveByUsuarioId: vi.fn(),
+      contarRecientesPorUsuario: vi.fn(),
     };
     const emailProvider: IEmailProvider = { sendOtpCode: vi.fn() };
     const issuer = new OtpChallengeIssuer(otpRepo, emailProvider);
@@ -52,6 +54,8 @@ describe("OtpChallengeIssuer", () => {
       create,
       findActiveById: vi.fn(),
       markConsumed: vi.fn(),
+      findLatestActiveByUsuarioId: vi.fn(),
+      contarRecientesPorUsuario: vi.fn(),
     };
     const emailProvider: IEmailProvider = { sendOtpCode };
     const issuer = new OtpChallengeIssuer(otpRepo, emailProvider);
