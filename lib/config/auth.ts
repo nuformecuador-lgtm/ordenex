@@ -24,6 +24,14 @@ export interface AuthConfig {
   CEDULA_TELEFONO_MIN_LENGTH: number;
   /** Longitud maxima aceptada para cedula/telefono (R10a). */
   CEDULA_TELEFONO_MAX_LENGTH: number;
+  /** Ventana en minutos para el limite de solicitudes de reset (F20/R19). */
+  RESET_REQUEST_WINDOW_MINUTES: number;
+  /** Maximo de solicitudes de reset por email dentro de la ventana (F20/R19). */
+  RESET_MAX_REQUESTS: number;
+  /** Ventana en minutos para el limite de intentos de verificacion (F20/R20). */
+  RESET_VERIFY_WINDOW_MINUTES: number;
+  /** Maximo de intentos de verificacion por email/IP dentro de la ventana (F20/R20). */
+  RESET_MAX_VERIFY_ATTEMPTS: number;
 }
 
 export function loadAuthConfig(): AuthConfig {
@@ -35,6 +43,10 @@ export function loadAuthConfig(): AuthConfig {
     RISK_THRESHOLD: readPositiveInt("AUTH_RISK_THRESHOLD", 50),
     CEDULA_TELEFONO_MIN_LENGTH: readPositiveInt("AUTH_ID_MIN_LENGTH", 7),
     CEDULA_TELEFONO_MAX_LENGTH: readPositiveInt("AUTH_ID_MAX_LENGTH", 15),
+    RESET_REQUEST_WINDOW_MINUTES: readPositiveInt("AUTH_RESET_REQUEST_WINDOW_MINUTES", 15),
+    RESET_MAX_REQUESTS: readPositiveInt("AUTH_RESET_MAX_REQUESTS", 3),
+    RESET_VERIFY_WINDOW_MINUTES: readPositiveInt("AUTH_RESET_VERIFY_WINDOW_MINUTES", 10),
+    RESET_MAX_VERIFY_ATTEMPTS: readPositiveInt("AUTH_RESET_MAX_VERIFY_ATTEMPTS", 5),
   };
 }
 

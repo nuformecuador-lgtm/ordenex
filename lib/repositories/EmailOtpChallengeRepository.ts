@@ -28,4 +28,32 @@ export class EmailOtpChallengeRepository implements IEmailOtpChallengeRepository
       data: { consumedAt: new Date() },
     });
   }
+
+  /** Feature 20/R5/R13: desafio activo mas reciente del usuario, o null. */
+  async findLatestActiveByUsuarioId(
+    usuarioId: string,
+  ): Promise<EmailOtpChallengeRecord | null> {
+    return this.prisma.emailOtpChallenge.findFirst({
+      where: {
+        usuarioId,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /** Feature 20/R19: cuenta los desafios del usuario dentro de la ventana. */
+  async contarRecientesPorUsuario(
+    usuarioId: string,
+    ventanaMinutos: number,
+  ): Promise<number> {
+    const desde = new Date(Date.now() - ventanaMinutos * 60_000);
+    return this.prisma.emailOtpChallenge.count({
+      where: {
+        usuarioId,
+        createdAt: { gte: desde },
+      },
+    });
+  }
 }

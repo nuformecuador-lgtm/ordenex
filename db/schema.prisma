@@ -275,3 +275,22 @@ model Cobro {
   @@map("cobro")
   @@index([createdAt])
 }
+
+// Catalogo de tipos de vehiculo (feature 50). Backed por enum Postgres
+// vehiculo_value. OJO: columna "name" (NO "value" como rol/order_status/tipo_id).
+// El id (uuid PK) queda listo para el FK usuario.vehiculo_id de la feature 21
+// (NO se implementa ese FK aqui). Solo-lectura sembrado (P1=A), sin escritura.
+model Vehiculo {
+  id   String        @id @default(uuid())
+  name VehiculoValue @unique // seed (3): moto, carro, camion
+
+  @@map("vehiculos")
+}
+
+enum VehiculoValue {
+  moto
+  carro
+  camion
+
+  @@map("vehiculo_value")
+}

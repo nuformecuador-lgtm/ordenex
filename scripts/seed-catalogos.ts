@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { pathToFileURL } from "node:url";
 import { ROLES_SEED } from "@/lib/types/roles";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
+import { VEHICULOS_SEED } from "@/lib/types/vehiculos";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 
 const TIPOS_IDENTIFICACION = ["cedula", "ruc", "pasaporte"] as const;
@@ -52,6 +53,23 @@ export async function seedOrderStatus(
   }
 }
 
+// Siembra idempotente del catalogo de vehiculos (feature 50, R7/R8). Itera
+// VEHICULOS_SEED (fuente unica de verdad derivada del enum VehiculoValue) con
+// upsert por `name` (OJO: `name`, NO `value` como los demas catalogos): conserva
+// la fila y su `id` si ya existe, sin duplicar ni tocar otras tablas. Recibe el
+// cliente Prisma por parametro para testear sin conexion real.
+export async function seedVehiculos(
+  prisma: Pick<PrismaClient, "vehiculo">
+): Promise<void> {
+  for (const name of VEHICULOS_SEED) {
+    await prisma.vehiculo.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
+  }
+}
+
 async function main(): Promise<void> {
   // Prisma 7 no auto-carga el .env; ese loadEnvFile solo lo hace el CLI de
   // Prisma via `prisma.config.ts`. Este script corre por `tsx`, no por el CLI,
@@ -68,8 +86,9 @@ async function main(): Promise<void> {
     await seedTiposIdentificacion(prisma);
     await seedRoles(prisma);
     await seedOrderStatus(prisma);
+    await seedVehiculos(prisma);
     console.log(
-      "Seed de catalogos completado (tipo_identificacion, rol, order_status)."
+      "Seed de catalogos completado (tipo_identificacion, rol, order_status, vehiculos)."
     );
   } finally {
     await prisma.$disconnect();

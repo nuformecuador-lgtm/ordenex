@@ -35,6 +35,7 @@ function buildMocks() {
     findByEmail: vi.fn(),
     create: vi.fn(),
     listMensajeros: vi.fn().mockResolvedValue([]),
+    updatePasswordHash: vi.fn(),
   };
   const loginAttemptRepo: ILoginAttemptRepository = {
     registrar: vi.fn(),
@@ -58,6 +59,8 @@ function buildMocks() {
     }),
     findActiveById: vi.fn(),
     markConsumed: vi.fn(),
+    findLatestActiveByUsuarioId: vi.fn(),
+    contarRecientesPorUsuario: vi.fn().mockResolvedValue(0),
   };
   const sessionRepo: ISessionRepository = {
     create: vi.fn().mockResolvedValue({

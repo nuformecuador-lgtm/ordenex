@@ -7,13 +7,20 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/25-gestion-usuarios | fullstack | F1.4 | **spec_ready — PARADA en puerta humana.** Spec R1–R36 en `specs/25-gestion-usuarios/`. CRUD usuarios en configuración (SOLO maestro), sin tabla nueva. Decisiones F1.4: solo maestro; set base + contraseña ESCRITA o AUTOGENERADA (R30–R36, util nuevo); reusa `strongPasswordSchema` de la #20 → **depends_on=20** (F2 BLOQUEADA hasta que la 20 mergee a dev); editar nombre/telefono/rol/tipoDoc (no email/cedula); baja `inactivo`. FALTAN en backend: list/update/count + `UserService`. NOTA: F2 espera merge #20 + liberar zonas. |
-| feature/31-plantilla-xlsx | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Plantilla de `BulkUpload` CSV→XLSX: nuevo `lib/utils/xlsx-template.ts` (buildXlsxTemplate async, bold+anchos+ejemplo), `handleDownloadTemplate` async mime XLSX, `DEFAULT_TEMPLATE_NAME`+consumidor de órdenes a `.xlsx`. exceljs import DINÁMICO (R6b). `csv-template.ts` intacto. Frontend puro (no toca backend). Tests 61/61 aislado; typecheck OK; init.sh verde. Flaky de timeouts pre-existente (no det., ajeno). **PR #19 ABIERTO** (CLI): https://github.com/nuformecuador-lgtm/ordenex/pull/19 → base `dev`. Lleva también el cierre de la 29. Pasa a `done` al mergear. |
+| feature/25-gestion-usuarios | fullstack | F2.1 | **spec APROBADO → in_progress. Impl AHORA (dep #20 mergeada).** CRUD usuarios en configuración (SOLO maestro), sin tabla nueva. R1–R36. Backend: `UserService` nuevo + `list`/`update`/`count`/cambio-estado en `UserRepository` + autogeneración de contraseña (reusa `strongPasswordSchema` de la #20, ya en dev). Frontend: pantalla en configuración (DataTable+Pagination+Modal+Toast). File-disjoint de la #50 (Usuario vs Vehiculo). |
+| feature/50-vehiculos | backend | F2.4 | **impl COMPLETA + reviewer APROBADO** (otra sesión). CRUD-catálogo `vehiculos` SOLO-LECTURA: enum `VehiculoValue` (moto/carro/camion) + model `Vehiculo{id,name}`, migración+seed VERIFICADOS contra Postgres real. Código YA en `dev` (**PR #21 mergeado**); bookkeeping a `done` a cargo de esa sesión. Desbloquea 21→22→23. |
+
+> Feature 20 (recuperación de contraseña) CERRADA 2026-07-10: **PR #20 mergeado** a `origin/dev`
+> (b1ef459, 19:15Z), status -> `done`, entrada en `history.md`. Fullstack (reusa infra OTP, sin
+> tabla nueva); implementada en 2 slices (backend + frontend), reviewer APROBADO en ambos, 0
+> bloqueantes, suite 782/782 verde. Desbloquea la #25 (comparte `strongPasswordSchema`).
+
+> Feature 31 (plantilla XLSX) CERRADA 2026-07-10: **PR #19 mergeado**, status -> `done`, entrada
+> en `history.md`. Frontend puro (CSV→XLSX, exceljs import dinámico), reviewer APROBADO 0 bloqueantes.
 
 > Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a
 > `origin/dev` (7535961), status -> `done`, entrada en `history.md`. Frontend puro (R1–R19),
 > reviewer APROBADO 0 bloqueantes, suite 721/721 verde. Corrió en paralelo con la 28 (backend).
-> El cierre (done + history) viaja en la rama `feature/31-plantilla-xlsx` (bookkeeping vía PR).
 
 > Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
 > `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en
