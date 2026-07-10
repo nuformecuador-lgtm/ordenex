@@ -1,7 +1,6 @@
 "use server";
 
 import { z } from "zod";
-import { cookies } from "next/headers";
 import {
   actualizarOrdenSchema,
   crearOrdenSchema,
@@ -16,9 +15,8 @@ import {
 import type { Actor, IOrdenService } from "@/lib/interfaces/services/IOrdenService";
 import { OrdenService } from "@/lib/services/OrdenService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { SessionRepository } from "@/lib/repositories/SessionRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
-import { SESSION_COOKIE_NAME } from "@/lib/constants/auth";
+import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   withErrorHandler,
   isAppErrorShape,
@@ -33,29 +31,6 @@ const idSchema = z.string().min(1);
 function buildOrdenService(): IOrdenService {
   const prisma = getPrismaClient();
   return new OrdenService(new OrdenRepository(prisma));
-}
-
-/**
- * Resuelve el actor autenticado desde la cookie de sesion (R18/R19): valida la
- * sesion y resuelve el rol (RolValue) del usuario. Devuelve null si no hay sesion
- * valida, sin tocar la capa de ordenes.
- */
-async function resolveActorFromSession(): Promise<Actor | null> {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionId) return null;
-
-  const prisma = getPrismaClient();
-  const session = await new SessionRepository(prisma).findValidById(sessionId);
-  if (!session) return null;
-
-  const usuario = await prisma.usuario.findUnique({
-    where: { id: session.userId },
-    include: { rol: true },
-  });
-  if (!usuario) return null;
-
-  return { usuarioId: usuario.id, rol: usuario.rol.value };
 }
 
 export interface OrdenActionDeps {

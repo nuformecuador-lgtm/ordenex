@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/15-carga-masiva-endpoint | backend | F1 spec | SELECCIONADA por F1.0 (feature 15, backend, complexity **high**). Endpoint de carga masiva de órdenes desde CSV/XLSX, alto volumen, dedup por `num_remision`. Branch desde `origin/dev` (ya incluye la 11). spec_author en curso. |
+| feature/15-carga-masiva-endpoint | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Endpoint `POST /api/ordenes/carga-masiva` (CSV/XLSX vía `exceljs`, dep nueva), migración (columnas `direccion`/`monto_cobrar`/`mensajero_sugerido_id`+FK a usuario, `peso` nullable, `en_preparacion` en order_status) con `down.sql`+RLS, `BulkOrdenService`/parsers, dedup `num_remision` intra-archivo+DB, batch `skipDuplicates`, éxito parcial. Decisiones humanas: autorización SOLO `adminTienda` (R11), `tienda_id`=actor (R24), default GLOBAL `en_preparacion` (cambia feature 6 + su test), zona derivada de provincia, `peso` nullable. R1..R32 -> tests. Suite 60 files / 485 tests verdes (+72). Deuda: aplicar migración contra Postgres real (aceptada, patrón 6/10). Commit + push + **PR pendiente** -> base `dev`. |
 
 > Feature 11 (notificaciones/toast) CERRADA 2026-07-10: PR #8 mergeado a `origin/dev`
 > (1169312), status -> `done`, entrada en `history.md`. El cierre de la 11 + registro de

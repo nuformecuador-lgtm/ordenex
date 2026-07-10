@@ -166,28 +166,8 @@
     },
     {
       "id": 18,
-      "name": "costos",
-      "description": "generar el crud de cobros, crea la tabla costos, con valor_flete, valor_flete_devuelto, valor_flete_GAM, valor_flete_devuelto_GAM, embalaje",
-      "status": "pending",
-      "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
-    },
-    {
-      "id": 19,
-      "name": "cobros",
-      "description": "generar un componente para gestionar los cobros, en este solo se debe poder seleccionar un ",
-      "status": "pending",
-      "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
-    },
-    {
-      "id": 0,
-      "name": "admin tienda",
-      "description": "",
+      "name": "cobros - crud",
+      "description": "generar el crud de cobros, crea la tabla cobros con valor_flete, valor_flete_devuelto, valor_flete_GAM, valor_flete_devuelto_GAM, fulfillment, comision_cod, iva_flete, iva_comision_cod",
       "status": "pending",
       "sdd": true,
       "complexity": null,

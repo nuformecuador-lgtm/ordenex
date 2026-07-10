@@ -17,7 +17,7 @@ describe("loadOrdenesConfig valores por defecto (N1/R33)", () => {
     const cfg = loadOrdenesConfig();
     expect(cfg.DEFAULT_PAGE_SIZE).toBe(25);
     expect(cfg.MAX_PAGE_SIZE).toBe(100);
-    expect(cfg.DEFAULT_ESTATUS_VALUE).toBe("en_bodega");
+    expect(cfg.DEFAULT_ESTATUS_VALUE).toBe("en_preparacion"); // feature 15/R7/R8: default GLOBAL
   });
 });
 
