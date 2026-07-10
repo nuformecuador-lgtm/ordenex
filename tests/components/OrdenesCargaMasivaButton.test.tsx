@@ -216,11 +216,11 @@ describe("OrdenesCargaMasivaButton — props de BulkUpload (R8-R12)", () => {
     );
   });
 
-  it("R12: templateFileName = 'plantilla-ordenes-carga-masiva.csv'", async () => {
+  it("R12: templateFileName = 'plantilla-ordenes-carga-masiva.xlsx'", async () => {
     render(<OrdenesCargaMasivaButton />);
     await openModal();
     expect(bulkProps().templateFileName).toBe(
-      "plantilla-ordenes-carga-masiva.csv",
+      "plantilla-ordenes-carga-masiva.xlsx",
     );
   });
 });

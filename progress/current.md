@@ -7,7 +7,13 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/29-validacion-carga-masiva | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Frontend puro (R1–R19): `carga-masiva-clasificacion.ts` + `estatus-label.ts` (mapa anclado a ORDER_STATUS_SEED) + `OrdenesCargaResumenPaso.tsx` (3 secciones: nuevas=OrdenesCargaResumen intacto / existentes solo-lectura / errores solo-lectura) + `OrdenesCargaMasivaButton.handleSuccess`. R14 respetado (no toca backend). Suite 721/721 verde; typecheck + 50 tests verdes post-merge con origin/dev. Flaky de auth (HomePage/LoginForm) pre-existente, ajeno. **PR #17 ABIERTO** (por CLI, gh autenticado): https://github.com/nuformecuador-lgtm/ordenex/pull/17 → base `dev`. Pasa a `done` al mergear. Impl vía frontend_dev DIRECTO (el implementer falló 2× por sonnet-4, ver memoria). Corrió en paralelo con la 28 (backend). |
+| feature/31-plantilla-xlsx | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Plantilla de `BulkUpload` CSV→XLSX: nuevo `lib/utils/xlsx-template.ts` (buildXlsxTemplate async, bold+anchos+ejemplo), `handleDownloadTemplate` async mime XLSX, `DEFAULT_TEMPLATE_NAME`+consumidor de órdenes a `.xlsx`. exceljs import DINÁMICO (R6b). `csv-template.ts` intacto. Frontend puro (no toca backend). Tests 61/61 aislado; typecheck OK; init.sh verde. Flaky de timeouts pre-existente (no det., ajeno). **PR #19 ABIERTO** (CLI): https://github.com/nuformecuador-lgtm/ordenex/pull/19 → base `dev`. Lleva también el cierre de la 29. Pasa a `done` al mergear. |
+
+> Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a
+> `origin/dev` (7535961), status -> `done`, entrada en `history.md`. Frontend puro (R1–R19),
+> reviewer APROBADO 0 bloqueantes, suite 721/721 verde. Corrió en paralelo con la 28 (backend).
+> El cierre (done + history) viaja en la rama `feature/31-plantilla-xlsx` (bookkeeping vía PR).
+
 > Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
 > `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en
 > paralelo con la 19 (backend). Reviewer APROBADO 0 bloqueantes; suite 689/689 verde. Deuda
