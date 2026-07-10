@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import { OrdenesCargaMasivaButton } from "@/app/(app)/ordenes/_components/OrdenesCargaMasivaButton";
 import type { BulkUploadProps } from "@/components/shared/BulkUpload";
+import type { OrdenesCargaResumenProps } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -38,6 +39,19 @@ vi.mock("@/components/shared/BulkUpload", () => ({
   },
 }));
 
+// R21: se aísla `OrdenesCargaResumen` (probado en su propia suite) para que
+// esta suite solo verifique el enrutamiento de pasos del botón/modal.
+const resumen = vi.hoisted(() => ({
+  props: null as OrdenesCargaResumenProps | null,
+}));
+
+vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumen", () => ({
+  OrdenesCargaResumen: (props: OrdenesCargaResumenProps) => {
+    resumen.props = props;
+    return <div data-testid="ordenes-carga-resumen-double" />;
+  },
+}));
+
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 
 vi.mock("swr", async (importOriginal) => {
@@ -55,6 +69,7 @@ vi.mock("swr", async (importOriginal) => {
 beforeEach(() => {
   vi.clearAllMocks();
   bulk.props = null;
+  resumen.props = null;
 });
 
 afterEach(() => {
@@ -288,6 +303,79 @@ describe("OrdenesCargaMasivaButton — onSuccess (R13, R14, R15, R17)", () => {
     });
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R21 — paso "resumen" dentro del mismo modal (feature 16)
+// ---------------------------------------------------------------------------
+describe("OrdenesCargaMasivaButton — paso de resumen (R21)", () => {
+  it("R21a: creadas>0 monta OrdenesCargaResumen con los numRemisiones 'creada'", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+
+    act(() => {
+      bulkProps().onSuccess?.({
+        status: 200,
+        data: {
+          total: 3,
+          creadas: 2,
+          duplicadas: 1,
+          conError: 0,
+          filas: [
+            { fila: 1, numRemision: "REM-0001", resultado: "creada" },
+            { fila: 2, numRemision: "REM-0002", resultado: "duplicada" },
+            { fila: 3, numRemision: "REM-0003", resultado: "creada" },
+          ],
+        },
+      });
+    });
+
+    expect(screen.getByTestId("ordenes-carga-resumen-double")).toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-upload-double")).not.toBeInTheDocument();
+    expect(resumen.props?.numRemisiones).toEqual(["REM-0001", "REM-0003"]);
+  });
+
+  it("R21b: creadas===0 conserva el comportamiento de feature 14 (sigue en upload)", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+
+    act(() => {
+      bulkProps().onSuccess?.({
+        status: 200,
+        data: { total: 2, creadas: 0, duplicadas: 1, conError: 1, filas: [] },
+      });
+    });
+
+    expect(screen.getByTestId("bulk-upload-double")).toBeInTheDocument();
+    expect(screen.queryByTestId("ordenes-carga-resumen-double")).not.toBeInTheDocument();
+    expect(warningMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("R21c: al cerrar el modal tras mostrar el resumen, el siguiente open vuelve a 'upload'", async () => {
+    const user = userEvent.setup();
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+
+    act(() => {
+      bulkProps().onSuccess?.({
+        status: 200,
+        data: {
+          total: 1,
+          creadas: 1,
+          duplicadas: 0,
+          conError: 0,
+          filas: [{ fila: 1, numRemision: "REM-0001", resultado: "creada" }],
+        },
+      });
+    });
+    expect(screen.getByTestId("ordenes-carga-resumen-double")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /cerrar/i }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await openModal();
+    expect(screen.getByTestId("bulk-upload-double")).toBeInTheDocument();
   });
 });
 

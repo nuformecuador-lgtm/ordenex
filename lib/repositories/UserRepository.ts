@@ -7,6 +7,7 @@ import {
   type UsuarioConHash,
   type UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
+import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
 
 type UserPrismaClient = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;
 
@@ -57,6 +58,15 @@ export class UserRepository implements IUserRepository {
     } catch (error) {
       throw mapDuplicadoError(error);
     }
+  }
+
+  /** Feature 16/R1/R2/R3: solo mensajeros activos, proyectados a id/nombre. */
+  async listMensajeros(): Promise<MensajeroDTO[]> {
+    return this.prisma.usuario.findMany({
+      where: { rol: { value: "mensajero" }, estado: "activo" },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    });
   }
 }
 

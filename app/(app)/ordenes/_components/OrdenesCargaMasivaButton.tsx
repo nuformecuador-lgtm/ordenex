@@ -11,6 +11,7 @@ import {
   type BulkUploadResult,
   type TemplateField,
 } from "@/components/shared/BulkUpload";
+import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
 import { useToast } from "@/hooks/useToast";
 
 /**
@@ -61,13 +62,40 @@ function parseResumen(data: unknown): ResumenCarga | null {
 }
 
 /**
+ * R7/R21: extrae los `num_remision` con `resultado === "creada"` del
+ * `BulkSummary.filas` (feature 15) recibido como `result.data` (`unknown`
+ * desde `BulkUpload`). Identifica con precisión el lote recién cargado para
+ * pasarlo a `OrdenesCargaResumen`; guard defensivo, sin lanzar ante formas
+ * inesperadas.
+ */
+function extractNumRemisionesCreadas(data: unknown): string[] {
+  if (typeof data !== "object" || data === null) return [];
+  const filas = (data as Record<string, unknown>).filas;
+  if (!Array.isArray(filas)) return [];
+  const numRemisiones: string[] = [];
+  for (const fila of filas) {
+    if (typeof fila !== "object" || fila === null) continue;
+    const row = fila as Record<string, unknown>;
+    if (row.resultado === "creada" && typeof row.numRemision === "string") {
+      numRemisiones.push(row.numRemision);
+    }
+  }
+  return numRemisiones;
+}
+
+/** Paso mostrado en el cuerpo del modal (R21, [RESUELTO-6]). */
+type Step = "upload" | "resumen";
+
+/**
  * Wrapper de cliente que compone el botón "Carga masiva", el `Modal`
- * contenedor y el `BulkUpload` genérico apuntando al endpoint de órdenes
- * (feature 14). Pura composición: no reimplementa accesibilidad ni lógica de
- * subida (R18, R19).
+ * contenedor y, según el paso, el `BulkUpload` genérico (feature 14) o el
+ * resumen de asignación de mensajero (feature 16, R21). Pura composición: no
+ * reimplementa accesibilidad ni lógica de subida (R18, R19).
  */
 export function OrdenesCargaMasivaButton() {
   const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<Step>("upload");
+  const [numRemisiones, setNumRemisiones] = useState<string[]>([]);
   const { mutate } = useSWRConfig();
   const toast = useToast();
 
@@ -93,12 +121,29 @@ export function OrdenesCargaMasivaButton() {
       toast.success(message);
     }
 
+    // R21: con creadas > 0 el modal pasa al paso de resumen + asignación; si
+    // creadas === 0 (o el resumen no es parseable) se conserva el
+    // comportamiento de feature 14 (solo toast, sigue en "upload").
+    if (resumen && resumen.creadas > 0) {
+      setNumRemisiones(extractNumRemisionesCreadas(result.data));
+      setStep("resumen");
+    }
+
     // R17: no se cierra el modal automáticamente tras el éxito.
   }
 
   function handleError(error: BulkUploadError) {
     toast.error(`No se pudo cargar el archivo: ${error.message}`);
     // R16: no se refresca la lista ante un fallo.
+  }
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) {
+      // El siguiente uso del modal vuelve a arrancar en el paso de subida.
+      setStep("upload");
+      setNumRemisiones([]);
+    }
   }
 
   return (
@@ -108,21 +153,25 @@ export function OrdenesCargaMasivaButton() {
       </Button>
       <Modal
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
         title="Carga masiva de órdenes"
         hideCancel
         confirmLabel="Cerrar"
       >
-        <BulkUpload
-          endpoint="/api/ordenes/carga-masiva"
-          accept={["csv", "xlsx"]}
-          fieldName="file"
-          templateFileName="plantilla-ordenes-carga-masiva.csv"
-          fields={ORDENES_BULK_FIELDS}
-          onSuccess={handleSuccess}
-          onError={handleError}
-          label="Archivo de órdenes"
-        />
+        {step === "upload" ? (
+          <BulkUpload
+            endpoint="/api/ordenes/carga-masiva"
+            accept={["csv", "xlsx"]}
+            fieldName="file"
+            templateFileName="plantilla-ordenes-carga-masiva.csv"
+            fields={ORDENES_BULK_FIELDS}
+            onSuccess={handleSuccess}
+            onError={handleError}
+            label="Archivo de órdenes"
+          />
+        ) : (
+          <OrdenesCargaResumen numRemisiones={numRemisiones} />
+        )}
       </Modal>
     </>
   );

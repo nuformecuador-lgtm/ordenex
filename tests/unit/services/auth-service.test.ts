@@ -34,6 +34,7 @@ function buildMocks() {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
+    listMensajeros: vi.fn().mockResolvedValue([]),
   };
   const loginAttemptRepo: ILoginAttemptRepository = {
     registrar: vi.fn(),

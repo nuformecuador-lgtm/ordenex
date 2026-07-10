@@ -5,7 +5,6 @@ import {
   actualizarOrdenSchema,
   crearOrdenSchema,
   listarOrdenesSchema,
-  type ActionError,
   type ActualizarOrdenResult,
   type BorrarOrdenResult,
   type CrearOrdenResult,
@@ -17,14 +16,8 @@ import { OrdenService } from "@/lib/services/OrdenService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
-import {
-  withErrorHandler,
-  isAppErrorShape,
-  UnauthenticatedError,
-  ValidationError,
-  MSG,
-  type AppErrorShape,
-} from "@/lib/errors";
+import { withErrorHandler, isAppErrorShape, UnauthenticatedError, ValidationError, MSG } from "@/lib/errors";
+import { toActionError } from "@/lib/actions/_shared/to-action-error";
 
 const idSchema = z.string().min(1);
 
@@ -36,40 +29,6 @@ function buildOrdenService(): IOrdenService {
 export interface OrdenActionDeps {
   ordenService?: IOrdenService;
   getActor?: () => Promise<Actor | null>;
-}
-
-/**
- * Adaptador inverso de CODE_BY_DOMAIN_STATUS: traduce el AppErrorShape que produce
- * el manejador global de errores al ActionError tipado que consume la UI, SIN
- * cambiar el contrato publico. Switch exhaustivo sobre los 6 AppErrorCode.
- */
-function toActionError(shape: AppErrorShape): ActionError {
-  switch (shape.code) {
-    case "VALIDATION_ERROR":
-      return {
-        status: "validation_error",
-        // La frontera ya fue validada por el handler global (normalizeError produce
-        // details.fieldErrors via z.flattenError o via ValidationError con details).
-        // Casteo seguro en esa frontera, sin `any`.
-        fieldErrors: (shape.details?.fieldErrors as Record<string, string[]> | undefined) ?? {},
-      };
-    case "UNAUTHORIZED":
-      return { status: "unauthenticated" };
-    case "FORBIDDEN":
-      return { status: "forbidden" };
-    case "NOT_FOUND":
-      return { status: "not_found" };
-    case "CONFLICT":
-      return { status: "conflict" };
-    case "INTERNAL":
-      // R: re-lanzar. El handler global ya loggeo el error real; preservamos el 500
-      // actual sin exponer detalles internos ni ampliar el contrato ActionError.
-      throw new Error("internal");
-    default: {
-      const _exhaustive: never = shape.code;
-      throw new Error(`Unhandled AppErrorCode: ${String(_exhaustive)}`);
-    }
-  }
 }
 
 /** R25/R26/R27/R28: crear orden. */
