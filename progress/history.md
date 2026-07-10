@@ -220,3 +220,24 @@
 - Review APROBADO, 0 bloqueantes. Commit 7577abe, mergeada a `origin/dev` vía PR #6
   (26c3272). La feature 14 montará `BulkUpload` dentro de este `Modal`.
 - Sin deuda de DB (componente de UI puro).
+
+## 2026-07-09 — notificaciones - fix (migración de errores de órdenes al manejador global)
+- Backend puro. Migra el manejo de error de las 5 Server Actions de `lib/actions/ordenes.ts`
+  (`crear`/`obtener`/`listar`/`actualizar`/`borrar`) al manejador global de la feature 10
+  (`withErrorHandler` / `normalizeError`), eliminando la construcción ad-hoc de literales
+  de error y el helper local `fieldErrorsFrom`. Nuevo adaptador `toActionError(shape)`
+  (inverso de `CODE_BY_DOMAIN_STATUS`, switch exhaustivo sobre los 6 `AppErrorCode` con
+  guard `never`) traduce el `AppErrorShape` de vuelta al literal de dominio que la UI ya
+  consume → contrato `*Result` intacto, UI y tests de componente sin cambios (UI-safe).
+- Requisitos cubiertos: R1–R12 (EARS), mapeados a tests reales en
+  `tests/integration/actions/ordenes-action.test.ts` (solo se AGREGARON casos T13/T14/T15;
+  asserts previos intactos). Ver `progress/impl_notificaciones-fix.md`. Suite 51 files /
+  384 tests verdes (+5 sobre baseline); typecheck/lint/init.sh OK.
+- Decisiones humanas cerradas (2026-07-09): (1) DIFERIR auth — solo `ordenes.ts`,
+  `auth.ts` NO se toca; (2) errores inesperados `INTERNAL` se loggean y se **re-lanzan**
+  (sin agregar miembro a `ActionError`, para no romper el contrato UI); (3) alcance solo
+  backend (los toasts al usuario son la feature 11); (4) conservar clave `id` en `fieldErrors`.
+- NOTA de proceso: el spec original se había perdido (worktree `../ordenex-f12` eliminado
+  sin pushear el branch); se REGENERÓ desde cero anclado al código real antes de implementar.
+- Review APROBADO, 0 bloqueantes. Mergeada a `origin/dev` vía **PR #7** (2026-07-10).
+- Sin deuda de DB (no toca DB, migraciones ni RLS).

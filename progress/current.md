@@ -7,14 +7,12 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/12-notificaciones-fix | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Spec regenerado y aprobado 2026-07-09 (el anterior se perdio con el worktree ../ordenex-f12 sin pushear). Decisiones humanas cerradas: DIFERIR auth (solo `lib/actions/ordenes.ts`); INTERNAL -> re-lanzar (sin nuevo miembro en ActionError); alcance solo backend (toasts = feature 11); UI-safe via adaptador `toActionError`; CONSERVAR `id` en fieldErrors. Suite 51 files / 384 tests verdes. Commit + push hechos a `origin/feature/12-notificaciones-fix`. **PR #7 ABIERTO** (gh instalado 2026-07-09, v2.96.0): https://github.com/nuformecuador-lgtm/ordenex/pull/7 -> base `dev`. Pasa a `done` cuando el humano apruebe y mergee. |
+| feature/11-notificaciones | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Sistema de toast (`ToastProvider` + `useToast` + `Toast`) compuesto sobre `@base-ui/react/toast` (decisión humana: consistente con Modal), + adaptador puro `messageFromActionError`. Cableado de `/ordenes`/`Modal` = follow-up (fuera de alcance); `validation_error` = mensaje genérico. R1..R21 -> T1..T13. Suite 54 files / 413 tests verdes (+29). Menores no bloqueantes: `catch` de useToast re-lanza sin `cause`. Commit + push hechos. **PR #8 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/8 -> base `dev`. Pasa a `done` al mergear. |
 
-> Reconciliacion 2026-07-09 (leader): las features 9 (carga-masiva, PR #5 d4a21c8) y
-> 13 (modal, PR #6 26c3272) ya estaban mergeadas a `origin/dev` pero seguian marcadas
-> `in_progress` en `feature_list.json` (violaba la regla una-feature-por-zona en init.sh:
-> dos frontend in_progress). Ambas -> `done`, entradas anadidas a `history.md`, limpiadas
-> de esta tabla. Ademas el cliente Prisma no estaba generado (9 test files rojos por
-> `.prisma/client/default`); `pnpm db:generate` -> suite verde 51 files / 379 tests.
+> Feature 12 (notificaciones-fix) CERRADA 2026-07-10: PR #7 mergeado a `origin/dev`,
+> status -> `done`, entrada en `history.md`. El cierre de la 12 + registro de la 11
+> viajan en el primer commit de `feature/11-notificaciones` (bookkeeping vía PR, sin
+> commits directos a `dev`), igual que se hizo con el cierre de 9/13 en el PR de la 12.
 
 ## Evaluaciones
 
@@ -49,9 +47,9 @@
 (Ninguno por ahora)
 
 ## Plan de la sesion
-- [x] Features 1-10, 9, 13: ciclos SDD completos (ver history.md).
-- [ ] Feature 12 (backend): spec_ready, PARADA en puerta de aprobacion humana.
-- [ ] Features 11, 14, 15...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
+- [x] Features 1-10, 9, 13, 12: ciclos SDD completos (ver history.md).
+- [ ] Feature 11 (frontend, toast): F1 spec en curso.
+- [ ] Features 14, 15...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.
