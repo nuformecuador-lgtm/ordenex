@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/11-notificaciones | frontend | F1 spec | SELECCIONADA por F1.0 (zona frontend libre; primera pending por id tras cerrar la 12). Toast para mostrar mensajes al usuario; complementa la 12 (que unificó los errores en backend). Branch desde `origin/dev`. spec_author en curso. |
+| feature/11-notificaciones | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Sistema de toast (`ToastProvider` + `useToast` + `Toast`) compuesto sobre `@base-ui/react/toast` (decisión humana: consistente con Modal), + adaptador puro `messageFromActionError`. Cableado de `/ordenes`/`Modal` = follow-up (fuera de alcance); `validation_error` = mensaje genérico. R1..R21 -> T1..T13. Suite 54 files / 413 tests verdes (+29). Menores no bloqueantes: `catch` de useToast re-lanza sin `cause`. Commit + push + **PR pendiente** -> base `dev`. Pasa a `done` al mergear. |
 
 > Feature 12 (notificaciones-fix) CERRADA 2026-07-10: PR #7 mergeado a `origin/dev`,
 > status -> `done`, entrada en `history.md`. El cierre de la 12 + registro de la 11
