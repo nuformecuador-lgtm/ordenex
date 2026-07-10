@@ -307,11 +307,12 @@
       "id": 31,
       "name": "plantilla de carga en XLSX (correccion)",
       "description": "CORRECCION de la plantilla descargable de la carga masiva: hoy la plantilla se descarga como CSV (feature 9, componente BulkUpload) y se prefiere que sea un archivo Excel (XLSX) formateado, para que una persona con poco conocimiento tecnico pueda llenar facilmente columna por columna cada dato de las ordenes. Cambia la generacion de la plantilla de CSV a XLSX (encabezados por columna, formato basico legible), reutilizando la dependencia exceljs ya presente en el repo (feature 15). Se hace como feature APARTE porque la feature 9 ya esta done. Toca el componente BulkUpload (boton 'descargar plantilla') y su generador de plantilla. Nota: el endpoint de carga (feature 15) ya acepta CSV y XLSX al subir, asi que este cambio es solo el formato de la plantilla que se DESCARGA.",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/31-plantilla-xlsx",
+      "depends_on": null
     },
     {
       "id": 32,
