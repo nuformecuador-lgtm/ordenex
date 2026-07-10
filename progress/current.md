@@ -7,8 +7,16 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/20-recuperacion-contrasena | fullstack (backend slice) | F2.1 | **spec APROBADO → in_progress. SPLIT: backend AHORA, frontend DESPUÉS del merge #31.** Spec R1–R20. Impl backend (backend_dev directo, opus): Bloque 0–3 de tasks.md = T00 política pass fuerte (zod), T00b constantes `AUTH_RESET_*`, T01 schemas, T02 `updatePasswordHash`, T03/T03b/T03c repos+rate-limit, T04 `PasswordResetService`, T05 Server Actions. FRONTEND T06–T08 (ruta `app/recuperar-contrasena/`) DIFERIDO hasta liberar zona frontend (#31). Reusa infra OTP sin tabla nueva. Log OTP del issuer: excepción aceptada (humano: dejar). |
-| feature/29-validacion-carga-masiva | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Frontend puro (R1–R19): `carga-masiva-clasificacion.ts` + `estatus-label.ts` (mapa anclado a ORDER_STATUS_SEED) + `OrdenesCargaResumenPaso.tsx` (3 secciones: nuevas=OrdenesCargaResumen intacto / existentes solo-lectura / errores solo-lectura) + `OrdenesCargaMasivaButton.handleSuccess`. R14 respetado (no toca backend). Suite 721/721 verde; typecheck + 50 tests verdes post-merge con origin/dev. Flaky de auth (HomePage/LoginForm) pre-existente, ajeno. **PR #17 ABIERTO** (por CLI, gh autenticado): https://github.com/nuformecuador-lgtm/ordenex/pull/17 → base `dev`. Pasa a `done` al mergear. Impl vía frontend_dev DIRECTO (el implementer falló 2× por sonnet-4, ver memoria). Corrió en paralelo con la 28 (backend). |
+| feature/20-recuperacion-contrasena | fullstack (backend slice) | F2.4 | **backend slice IMPL + reviewer APROBADO (0 bloqueantes) → PR pendiente.** Spec R1–R20. Backend (Bloque 0–3, T00–T05): política pass fuerte (zod), constantes `AUTH_RESET_*`, schemas, `updatePasswordHash`, repos + rate-limit, `PasswordResetService`, Server Actions. FRONTEND T06–T08 (`app/recuperar-contrasena/`, R16–R18) DIFERIDO — zona frontend ya libre tras #31; se hará como 2º slice. Reusa infra OTP sin tabla nueva. Suite 762/762 verde. Log OTP del issuer: excepción aceptada (humano: dejar). |
+
+> Feature 31 (plantilla XLSX) CERRADA 2026-07-10: **PR #19 mergeado** a `origin/dev` (17:21Z),
+> status -> `done`, entrada en `history.md`. Frontend puro (CSV→XLSX, exceljs import dinámico),
+> reviewer APROBADO 0 bloqueantes. Llevó también el cierre de la 29.
+
+> Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a
+> `origin/dev` (7535961), status -> `done`, entrada en `history.md`. Frontend puro (R1–R19),
+> reviewer APROBADO 0 bloqueantes, suite 721/721 verde. Corrió en paralelo con la 28 (backend).
+
 > Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
 > `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en
 > paralelo con la 19 (backend). Reviewer APROBADO 0 bloqueantes; suite 689/689 verde. Deuda

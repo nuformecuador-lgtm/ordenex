@@ -160,7 +160,7 @@ export function OrdenesCargaMasivaButton() {
             endpoint="/api/ordenes/carga-masiva"
             accept={["csv", "xlsx"]}
             fieldName="file"
-            templateFileName="plantilla-ordenes-carga-masiva.csv"
+            templateFileName="plantilla-ordenes-carga-masiva.xlsx"
             fields={ORDENES_BULK_FIELDS}
             onSuccess={handleSuccess}
             onError={handleError}

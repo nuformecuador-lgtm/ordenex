@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { buildCsvTemplate } from "@/lib/utils/csv-template";
 
 /** Definición parametrizable de una columna de la plantilla (R1, R5, R6). */
 export interface TemplateField {
@@ -44,7 +43,7 @@ export interface BulkUploadProps {
   accept: UploadFileType[];
   /** Definición de columnas de la plantilla, en orden (R1, R5). */
   fields: TemplateField[];
-  /** Nombre del archivo de plantilla descargado (R4). Por defecto "plantilla.csv". */
+  /** Nombre del archivo de plantilla descargado (R4). Por defecto "plantilla.xlsx". */
   templateFileName?: string;
   /** Nombre del campo multipart bajo el que viaja el archivo (R12). Por defecto "file". */
   fieldName?: string;
@@ -79,8 +78,12 @@ const FILE_TYPE_MAP: Record<UploadFileType, { ext: string; mimes: string[] }> = 
   xls: { ext: ".xls", mimes: ["application/vnd.ms-excel"] },
 };
 
-const DEFAULT_TEMPLATE_NAME = "plantilla.csv";
+const DEFAULT_TEMPLATE_NAME = "plantilla.xlsx";
 const DEFAULT_FIELD_NAME = "file";
+
+/** MIME de un libro XLSX (OpenXML), para el Blob de descarga (R6). */
+const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 type UploadStatus = "idle" | "selected" | "uploading" | "success" | "error";
 
@@ -127,7 +130,7 @@ function validateFile(
 
 /**
  * Componente genérico y reutilizable de carga masiva (UI pura). Ofrece dos
- * acciones: descargar una plantilla CSV parametrizada por `fields` y subir un
+ * acciones: descargar una plantilla XLSX parametrizada por `fields` y subir un
  * archivo por `POST` multipart al `endpoint`. No conoce el dominio ni el destino.
  */
 export function BulkUpload({
@@ -144,6 +147,7 @@ export function BulkUpload({
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const acceptAttr = useMemo(
@@ -152,22 +156,32 @@ export function BulkUpload({
   );
 
   const isUploading = status === "uploading";
-  const canDownloadTemplate = fields.length > 0 && !isUploading;
+  const canDownloadTemplate =
+    fields.length > 0 && !isUploading && !isGeneratingTemplate;
   const hasValidFile = file !== null && (status === "selected" || status === "error" || status === "success");
   const canUpload = hasValidFile && Boolean(endpoint) && !isUploading;
 
-  function handleDownloadTemplate() {
-    if (fields.length === 0) return;
-    const csv = buildCsvTemplate(fields);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = templateFileName ?? DEFAULT_TEMPLATE_NAME;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+  async function handleDownloadTemplate() {
+    // R10/R11: no re-dispara si no hay campos o ya hay una generación en curso.
+    if (fields.length === 0 || isGeneratingTemplate) return;
+    setIsGeneratingTemplate(true);
+    try {
+      // Import dinámico (R6b): exceljs queda fuera del bundle inicial del componente.
+      const { buildXlsxTemplate } = await import("@/lib/utils/xlsx-template");
+      const buffer = await buildXlsxTemplate(fields);
+      const blob = new Blob([buffer], { type: XLSX_MIME });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = templateFileName ?? DEFAULT_TEMPLATE_NAME;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } finally {
+      // Se restablece pase lo que pase; un fallo de build burbujea a la consola.
+      setIsGeneratingTemplate(false);
+    }
   }
 
   function handleSelect(event: ChangeEvent<HTMLInputElement>) {
