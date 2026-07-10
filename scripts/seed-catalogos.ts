@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { pathToFileURL } from "node:url";
 import { ROLES_SEED } from "@/lib/types/roles";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
+import { getPrismaClient } from "@/lib/db/prisma-client";
 
 const TIPOS_IDENTIFICACION = ["cedula", "ruc", "pasaporte"] as const;
 
@@ -52,7 +53,17 @@ export async function seedOrderStatus(
 }
 
 async function main(): Promise<void> {
-  const prisma = new PrismaClient();
+  // Prisma 7 no auto-carga el .env; ese loadEnvFile solo lo hace el CLI de
+  // Prisma via `prisma.config.ts`. Este script corre por `tsx`, no por el CLI,
+  // asi que sin esto `process.env.DATABASE_URL` llega undefined a
+  // `getPrismaClient()` y `PrismaPg` se construye sin connectionString.
+  try {
+    process.loadEnvFile();
+  } catch {
+    // sin .env: se usan las variables ya presentes en process.env
+  }
+
+  const prisma = getPrismaClient();
   try {
     await seedTiposIdentificacion(prisma);
     await seedRoles(prisma);

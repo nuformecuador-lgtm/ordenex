@@ -9,7 +9,7 @@ describe("ORDER_STATUS_SEED (R2/R5)", () => {
       [
         "devuelta",
         "devuelta_origen",
-        "embalaje",
+        "en_fulfillment",
         "en_bodega",
         "en_preparacion",
         "en_ruta_bodega_principal",

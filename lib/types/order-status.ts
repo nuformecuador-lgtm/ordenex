@@ -7,7 +7,7 @@ export const ORDER_STATUS_SEED = [
   "devuelta",
   "devuelta_origen",
   "reprogramada",
-  "embalaje",
+  "en_fulfillment",
   "en_ruta_bodega_principal",
   "en_bodega",
   "en_preparacion",

@@ -355,6 +355,18 @@
 - Review APROBADO, 0 bloqueantes (tipos verificados exactos). Mergeada vía **PR #12** (a379d8e, 2026-07-10).
 - DEUDA (aceptada, patrón 6/15, requiere DB real): aplicar migración/RLS/rollback contra Postgres.
 
+## 2026-07-10 — rol admin bodega satelite (feature 19)
+- Backend puro. Agrega el valor `adminSatelite` (label DB slug, sin `@map`) al enum Postgres
+  `RolValue` y al `ROLES_SEED`, llevando el catálogo de roles de 4 a 5 (maestro, admin, mensajero,
+  adminTienda, adminSatelite), patrón de la feature 4 (role seed). Migración incremental
+  `ALTER TYPE ... ADD VALUE` con `down.sql` que recrea el tipo; seed idempotente derivado del enum;
+  fuente única de verdad en `lib/types/roles.ts`. Sin permisos nuevos: `adminSatelite` queda
+  forbidden por defecto (verificado) y NO puede aprobar postulaciones de mensajeros (limitado a
+  maestro/admin). Migración de login intacta.
+- Requisitos R1–R12 (EARS) -> tests reales. Ver `progress/impl_rol-adminsatelite.md`.
+  Suite 75 files / 678 tests verdes (+18); typecheck/lint/init.sh OK.
+- Review APROBADO, 0 bloqueantes. Mergeada vía **PR #13** (75b7abc, 2026-07-10).
+- DEUDA (aceptada, patrón 4, requiere DB real): aplicar `ALTER TYPE`/rollback contra Postgres.
 ## 2026-07-10 — dashboard/apartado del admin de tienda (feature 26, FRONTEND)
 - Frontend puro. Landing `/` autenticada condicional por rol (server-side, `resolveActorFromSession`):
   el rol `adminTienda` ve su apartado/dashboard como primera experiencia tras login = encabezado +

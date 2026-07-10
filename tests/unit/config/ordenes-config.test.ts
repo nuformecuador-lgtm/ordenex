@@ -25,11 +25,11 @@ describe("loadOrdenesConfig overrides por entorno", () => {
   it("respeta valores validos de env", () => {
     process.env.ORDENES_DEFAULT_PAGE_SIZE = "10";
     process.env.ORDENES_MAX_PAGE_SIZE = "50";
-    process.env.ORDENES_DEFAULT_ESTATUS_VALUE = "embalaje";
+    process.env.ORDENES_DEFAULT_ESTATUS_VALUE = "en_fulfillment";
     const cfg = loadOrdenesConfig();
     expect(cfg.DEFAULT_PAGE_SIZE).toBe(10);
     expect(cfg.MAX_PAGE_SIZE).toBe(50);
-    expect(cfg.DEFAULT_ESTATUS_VALUE).toBe("embalaje");
+    expect(cfg.DEFAULT_ESTATUS_VALUE).toBe("en_fulfillment");
   });
 
   it("ignora env no positivo o no numerico y cae al default (R33)", () => {
