@@ -7,7 +7,12 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/28-rename-embalaje-fulfillment | backend | F1.2 | **Spec en curso.** Rename del estado `order_status` `embalaje` -> `en_fulfillment` (convención `en_`): valor en `ORDER_STATUS_SEED` (lib/types/order-status.ts), migración Prisma `UPDATE order_status value` con down.sql, y todas las referencias en código/tests/specs. Feature APARTE porque la 6 (y otras que usaron `embalaje`) ya están `done`. Backend/medium. Desbloquea parcialmente la cadena 28->27->17. |
+| feature/28-rename-embalaje-fulfillment | backend | F2.1 | **Spec v2 APROBADA (R1..R11), impl en curso.** Rename `order_status` `embalaje` -> `en_fulfillment` vía `UPDATE` (fila catálogo) + `down.sql`. DECISIONES HUMANAS (2026-07-10): (1) ADEMÁS crear enum PG `order_status_value` (8 valores con `en_fulfillment`, patrón `RolValue`) **STANDALONE** (NO retipar la columna `order_status.value`, sigue TEXT) — SQL manual porque Prisma no materializa enums no referenciados; (2) migraciones YA se ejecutan contra DB real: R11 exige aplicar migración+rollback contra Postgres (deuda 4/6/15 LEVANTADA desde esta feature). Incluye FIX de soporte: `scripts/seed-catalogos.ts` usa `new PrismaClient()` sin adapter -> falla contra DB real; backend_dev lo corrige (usar cliente con `PrismaPg` de `lib/db/prisma-client.ts`) para poder sembrar `order_status` y verificar el rename. `progress/*` append-only (no editar). |
+
+> DEUDA DE MIGRACIONES SALDADA (2026-07-10): aplicadas contra Postgres real (localhost:5432/ordenex)
+> las 3 migraciones pendientes (carga_masiva_ordenes, cobros, rol_admin_satelite); `prisma migrate
+> status` = "Database schema is up to date!" (9/9). El SEED de catálogos reveló el bug del adapter
+> (arriba); se corrige dentro de la feature 28.
 
 > Feature 19 (rol adminSatelite) CERRADA 2026-07-10: PR #13 mergeado a `origin/dev` (75b7abc),
 > status -> `done`, entrada en `history.md`. El cierre de la 19 + registro de la 28 viajan en

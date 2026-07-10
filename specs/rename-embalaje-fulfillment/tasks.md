@@ -47,6 +47,32 @@ otra `[P]` del mismo bloque). El orden numerico refleja dependencias.
   - Hecho cuando: el test pasa contra los archivos de T4/T5.
   - Depende de: T4, T5.
 
+## Bloque B2 — Enum de Postgres `order_status_value` (standalone)
+
+> Sujeto a la Sub-decision ABIERTA (standalone vs retipar). Estas tasks asumen
+> STANDALONE (recomendado). Si el humano decide retipar, ajustar T-enum + schema.
+
+- [ ] **T4b (R9).** Crear
+  `db/migrations/20260710150000_order_status_value_enum/migration.sql` con
+  `CREATE TYPE "order_status_value" AS ENUM (...)` y los 8 valores ya con
+  `en_fulfillment`, en el mismo orden que `ORDER_STATUS_SEED`. NO retipa la
+  columna `order_status.value`. Patron: `CREATE TYPE "rol_value"` de la migracion
+  `20260708212416_login_usuario_rba`.
+  - Hecho cuando: existe el `CREATE TYPE` con los 8 valores y ningun `ALTER TABLE`.
+  - Test: `tests/integration/db/order-status-enum-migration.test.ts`.
+
+- [ ] **T5b (R9).** Crear `.../down.sql` con `DROP TYPE IF EXISTS "order_status_value";`.
+  - Hecho cuando: el archivo existe y revierte T4b.
+  - Depende de: T4b.
+
+- [ ] **T6b (R9, R10).** Crear el test estatico
+  `tests/integration/db/order-status-enum-migration.test.ts`: lee `migration.sql`
+  del enum, extrae los valores del `CREATE TYPE` y afirma que el conjunto es
+  identico a `ORDER_STATUS_SEED` (R10); afirma `DROP TYPE IF EXISTS` en el
+  `down.sql` y que el UP no contiene `ALTER TABLE` (standalone, R9).
+  - Hecho cuando: el test pasa contra T4b/T5b y detecta desincronizacion.
+  - Depende de: T1 (fuente TS actualizada), T4b, T5b.
+
 ## Bloque C — Referencias en tests, specs y comentarios
 
 - [ ] **T7 [P] (R5).** En `tests/unit/config/ordenes-config.test.ts`, cambiar el
@@ -73,29 +99,48 @@ otra `[P]` del mismo bloque). El orden numerico refleja dependencias.
   - Hecho cuando: el test pasa (sin rastros fuera del whitelist).
   - Depende de: T1–T9.
 
-- [ ] **T11 (R8).** Correr `npm run typecheck`, `npm run lint`, `npm test` y
+- [ ] **T11 (R11).** Aplicar las migraciones contra el Postgres real
+  (`DATABASE_URL` del `.env`): `prisma migrate` (up) de rename + enum, `prisma
+  generate`. Luego verificar el rollback ejecutando ambos `down.sql` contra la DB
+  real y confirmar que la base vuelve al estado previo (fila `en_fulfillment`
+  revertida a `embalaje`, `order_status_value` eliminado). Reaplicar up para dejar
+  la DB en el estado final.
+  - Hecho cuando: up y down corren sin error contra la DB real y su salida queda
+    pegada en `progress/impl_rename-embalaje-fulfillment.md`.
+  - Depende de: T4, T5, T4b, T5b.
+
+- [ ] **T12 (R8).** Correr `npm run typecheck`, `npm run lint`, `npm test` y
   `./init.sh`; todo en verde.
   - Hecho cuando: `./init.sh` termina en verde y se pega la salida en
     `progress/impl_rename-embalaje-fulfillment.md` con el mapa R<n> -> test.
-  - Depende de: T1–T10.
+  - Depende de: T1–T11.
 
-- [ ] **T12 (proceso).** Documentar en `progress/impl_rename-embalaje-fulfillment.md`
-  la correccion y la mencion historica en `progress/history.md`/`review_ordenes.md`
-  (que NO se editan). NO reescribir `progress/history.md`.
-  - Hecho cuando: el impl doc registra el mapa de trazabilidad y la nota de
-    append-only.
-  - Depende de: T11.
+- [ ] **T13 (proceso).** Documentar en `progress/impl_rename-embalaje-fulfillment.md`
+  la correccion, el mapa de trazabilidad R1..R11 -> test, la evidencia de
+  ejecucion real (R11) y la nota de que `progress/*` (history + review_ordenes) es
+  append-only y NO se edita.
+  - Hecho cuando: el impl doc registra trazabilidad, evidencia y nota append-only.
+  - Depende de: T12.
 
 ## Dependencias (resumen)
 
 - T2, T3 -> T1
 - T5, T6 -> T4
-- T7, T8, T9 son `[P]` entre si y respecto a los bloques A/B
-- T10 -> T1..T9
-- T11 -> T1..T10
-- T12 -> T11
+- T5b, T6b -> T4b; T6b -> T1
+- Bloque B2 (enum) es `[P]` respecto al Bloque B (rename)
+- T7, T8, T9 son `[P]` entre si y respecto a los bloques A/B/B2
+- T10 -> T1..T9 (incluye T4b–T6b)
+- T11 (ejecucion real) -> T4, T5, T4b, T5b
+- T12 -> T1..T11
+- T13 -> T12
 
 ## Nota (puerta de aprobacion)
 
-Antes de Fase 2, resolver las Preguntas abiertas de `requirements.md`
-(trato de `progress/review_ordenes.md` y del slug/branch en `feature_list.json`).
+Antes de Fase 2, resolver la **Sub-decision ABIERTA** de `requirements.md`: enum
+PG **standalone** (recomendado) vs **retipar** la columna `order_status.value`. Si
+se decide retipar, ajustar el Bloque B2 (schema.prisma + `ALTER TABLE` en la
+migracion del enum + rollback del retipado) antes de implementar.
+
+Decisiones ya confirmadas por el humano: `progress/*` (incl. `review_ordenes.md`)
+es append-only (no se edita, whitelist del guard); `feature_list.json` conserva
+`embalaje` en nombre/slug/branch (whitelist).

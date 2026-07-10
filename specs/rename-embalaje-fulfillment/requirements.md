@@ -27,11 +27,19 @@ Hechos verificados sobre el repo (grounding re-confirmado con Grep):
   `progress/history.md:112`, y en `feature_list.json` (definicion de la feature 28).
 - NO hay referencias en `.tsx`/UI. Es backend puro.
 
-Deuda aceptada del repo (patron features 4/6/15): las migraciones **no** se
-aplican contra un Postgres real en CI. Se verifican de forma ESTATICA leyendo
-`migration.sql`/`down.sql` y afirmando por regex (ver
-`tests/integration/db/carga-masiva-schema.test.ts`). Esta feature hereda esa
-misma estrategia; la aplicacion/reversion real contra Postgres queda DIFERIDA.
+Alcance ampliado por decision humana (2026-07-10): ademas del rename en la tabla,
+esta feature crea un **enum de Postgres** para los estados de orden (para
+validaciones posteriores), siguiendo el patron del enum `rol_value` (`RolValue`,
+feature 19). Hoy NO existe tal enum: `order_status` es solo tabla catalogo y
+`OrderStatusValue` (TS) se deriva de `ORDER_STATUS_SEED`.
+
+Deuda de despliegue LEVANTADA para esta feature: a diferencia del patron
+4/6/15 (migraciones no aplicadas contra Postgres en CI), aqui las migraciones
+**SI se aplican y revierten contra Postgres real** (el worktree tiene `.env` con
+`DATABASE_URL` funcional; `prisma generate` corre y la suite pasa). La
+verificacion estatica (leer `migration.sql`/`down.sql` y afirmar por regex, patron
+`tests/integration/db/carga-masiva-schema.test.ts`) se conserva como primera
+barrera, pero NO sustituye a la ejecucion real de up + down (R11).
 
 ## Requisitos (EARS)
 
@@ -80,6 +88,28 @@ misma estrategia; la aplicacion/reversion real contra Postgres queda DIFERIDA.
 - **R8 — No regresion.** El sistema DEBE mantener en verde `npm run typecheck`,
   `npm run lint`, `npm test` y `./init.sh` tras el cambio.
 
+- **R9 — Enum de Postgres para estados de orden.** El sistema DEBE crear, via
+  migracion Prisma manual (SQL), un enum de Postgres `order_status_value`
+  (patron `rol_value`) que contenga EXACTAMENTE los 8 valores de
+  `ORDER_STATUS_SEED` ya con `en_fulfillment` (entregada, devuelta,
+  devuelta_origen, reprogramada, en_fulfillment, en_ruta_bodega_principal,
+  en_bodega, en_preparacion). El `down.sql` DEBE eliminar el tipo
+  (`DROP TYPE IF EXISTS "order_status_value"`). El enum se crea **standalone**
+  (recomendacion, ver Sub-decision abierta): NO retipa la columna
+  `order_status.value`, que permanece `TEXT`.
+
+- **R10 — Sincronia enum PG <-> fuente unica TS.** El sistema DEBE garantizar,
+  con un test estatico, que el conjunto de valores del enum `order_status_value`
+  (leido de su `migration.sql`) es identico al conjunto de `ORDER_STATUS_SEED`.
+  SI ambos divergen, ENTONCES el test DEBE fallar.
+
+- **R11 — Ejecucion real de migraciones y rollback.** CUANDO se apliquen las
+  migraciones de esta feature (rename `order_status` + creacion del enum), el
+  sistema DEBE aplicarlas y luego revertirlas (`down.sql`) contra el Postgres
+  real (`DATABASE_URL` del worktree), sin errores y dejando la base en su estado
+  previo. La evidencia (salida de `prisma migrate` up + ejecucion de los
+  `down.sql`) DEBE registrarse en `progress/impl_rename-embalaje-fulfillment.md`.
+
 ## Mapa R<n> -> test (trazabilidad)
 
 | Req | Test que lo cubre |
@@ -92,17 +122,37 @@ misma estrategia; la aplicacion/reversion real contra Postgres queda DIFERIDA.
 | R6  | Guard test grep en `tests/unit/guards/no-embalaje.test.ts` (NUEVO) sobre `specs/ordenes/*` y `db/schema.prisma` |
 | R7  | Guard test grep en `tests/unit/guards/no-embalaje.test.ts` (NUEVO) sobre el repo con whitelist de excepciones |
 | R8  | Suite completa via `./init.sh` (typecheck + lint + test) |
+| R9  | `tests/integration/db/order-status-enum-migration.test.ts` (NUEVO; assert regex sobre `CREATE TYPE` UP y `DROP TYPE` DOWN) |
+| R10 | `tests/integration/db/order-status-enum-migration.test.ts` (NUEVO; compara valores del enum contra `ORDER_STATUS_SEED`) |
+| R11 | Ejecucion real `prisma migrate` up + `down.sql` contra `DATABASE_URL`; evidencia en `progress/impl_rename-embalaje-fulfillment.md` (ver docs/verification.md) |
 
-## Preguntas abiertas (puerta de aprobacion humana)
+## Decisiones confirmadas por el humano (2026-07-10)
 
-1. **`progress/review_ordenes.md:47`** menciona `embalaje`. Se propone tratar
-   `progress/*` como bitacora/registro historico (mismo criterio que
-   `progress/history.md`, append-only) y **NO editarlo**, documentando la
-   correccion en los artefactos de esta feature. ¿Se confirma no editar
-   `progress/review_ordenes.md`? (Si se decidiera editarlo, saldria del whitelist
-   de R7 y habria que actualizarlo tambien.)
+- **`progress/*` es append-only** (incluye `progress/history.md` y
+  `progress/review_ordenes.md`): NO se edita; queda en el whitelist del guard
+  anti-`embalaje` (R7). La correccion se documenta en los artefactos de esta
+  feature, no reescribiendo history/review.
+- **`feature_list.json`** conserva `embalaje` en nombre/slug/branch de la feature
+  28 (`feature/28-rename-embalaje-fulfillment`); es la definicion de la feature,
+  queda en el whitelist (R7).
 
-2. **Nombre/slug historicos.** `feature_list.json` contiene `embalaje` en el
-   nombre, slug y branch de la feature 28 (`feature/28-rename-embalaje-fulfillment`).
-   Es la definicion de la feature, no una referencia al estado; se propone dejarlo
-   como esta (whitelist R7). ¿Se confirma?
+## Sub-decision ABIERTA (puerta de aprobacion humana)
+
+**Enum PG: standalone vs retipar la columna.** ¿La columna `order_status.value`
+se RETIPA al nuevo enum `order_status_value`, o el enum queda STANDALONE (la tabla
+conserva `value TEXT` y el enum solo sirve para validaciones/columnas futuras)?
+
+- **Recomendacion: STANDALONE (no retipar ahora).** Coherente con la instruccion
+  del humano de "solo renombralo en la tabla" (no reestructurar). El enum se crea
+  con SQL manual y no toca la tabla; menor riesgo, reversible con `DROP TYPE`.
+- **Trade-off:** standalone deja dos representaciones del mismo dominio (columna
+  `TEXT` + enum PG) hasta que una feature futura decida retipar; el enum no valida
+  aun la columna real. Retipar ahora daria validacion inmediata a nivel DB, pero
+  implica `ALTER TABLE ... ALTER COLUMN value TYPE order_status_value USING
+  (value::text::order_status_value)`, exige que TODA fila existente sea un valor
+  valido del enum (incluida la ya renombrada a `en_fulfillment`), acopla el enum a
+  Prisma (habria que declararlo en `schema.prisma` y retipar el modelo) y complica
+  el rollback. Contradice el alcance minimo pedido.
+
+Requiere confirmacion humana antes de Fase 2. R9 asume STANDALONE; si se decide
+retipar, R9/R11 y la lista de archivos cambian (ver design.md).

@@ -273,7 +273,7 @@
       "id": 28,
       "name": "rename estado embalaje -> en_fulfillment",
       "description": "Feature de CORRECCION de nomenclatura: el estado de order_status 'embalaje' en realidad representa el concepto 'fulfillment' y debe renombrarse a 'en_fulfillment' (siguiendo la convencion en_ de los demas estados: en_preparacion, en_bodega). Cambia TODO lo que diga embalaje por en_fulfillment: el valor en ORDER_STATUS_SEED (lib/types/order-status.ts), una migracion Prisma que actualice la fila del catalogo order_status (UPDATE value 'embalaje' -> 'en_fulfillment') con su down.sql, y todas las referencias en codigo, tests y specs. Se hace como feature APARTE porque las features viejas que introdujeron/usaron 'embalaje' (feature 6 y otras) ya estan done y no se re-ejecutan. Backend, complejidad media. Nota: 'en_fulfillment' es el estado inicial de la carga masiva para tiendas con fulfillment (feature 27); junto con en_preparacion son los estados de revision (feature 17).",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "backend",
