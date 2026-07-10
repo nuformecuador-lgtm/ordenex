@@ -541,6 +541,7 @@
   aplicar la migración a Postgres real + crear el bucket privado `mensajero-docs`; aprobación/URL firmada
   de documentos diferida a la feature 22.
 
+
 ## 2026-07-10 — aprobación de postulaciones de mensajeros (feature 22, BACKEND)
 - Backend puro (sin UI; la consume el dashboard de la feature 23) para que SOLO los roles `maestro`/`admin`
   listen, aprueben o rechacen postulaciones de mensajeros en estado `pendiente`. Mergeada vía **PR #26**
