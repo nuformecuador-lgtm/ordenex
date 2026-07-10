@@ -82,6 +82,8 @@ enum EstadoUsuario {
 model Usuario {
   id                   String        @id @default(uuid())
   nombre               String
+  primerApellido       String?       @map("primer_apellido") // feature 21: identidad; requerido en postulacion via servicio, nullable en DB
+  segundoApellido      String?       @map("segundo_apellido") // feature 21: opcional
   email                String        @unique
   telefono             String
   passwordHash         String        @map("password_hash")
@@ -89,20 +91,52 @@ model Usuario {
   cedula               String        @unique
   tipoIdentificacionId String        @map("tipo_identificacion_id")
   rolId                String        @map("rol_id")
+  vehiculoId           String?       @map("vehiculo_id") // feature 21: solo mensajeros; FK -> vehiculos
+  placa                String? // feature 21: placa del vehiculo del mensajero, normalizada uppercase/trim
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
-  tipoIdentificacion TipoIdentificacion  @relation(fields: [tipoIdentificacionId], references: [id])
-  rol                Rol                 @relation(fields: [rolId], references: [id])
+  tipoIdentificacion TipoIdentificacion   @relation(fields: [tipoIdentificacionId], references: [id])
+  rol                Rol                  @relation(fields: [rolId], references: [id])
+  vehiculo           Vehiculo?            @relation(fields: [vehiculoId], references: [id]) // feature 21
   loginAttempts      LoginAttempt[]
   trustedDevices     TrustedDevice[]
   otpChallenges      EmailOtpChallenge[]
-  ordenesTienda      Orden[]             @relation("OrdenTienda")
-  ordenesMensajeria  Orden[]             @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
+  documentos         MensajeroDocumento[] // feature 21
+  ordenesTienda      Orden[]              @relation("OrdenTienda")
+  ordenesMensajeria  Orden[]              @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
 
   @@map("usuario")
   @@index([tipoIdentificacionId])
   @@index([rolId])
+  @@index([vehiculoId]) // feature 21
+}
+
+// Feature 21: documentos de postulacion del mensajero. 1:N (5 tipos por usuario).
+// El binario vive en Supabase Storage (bucket privado); aqui solo el path/metadatos.
+model MensajeroDocumento {
+  id          String                 @id @default(uuid())
+  usuarioId   String                 @map("usuario_id")
+  tipo        MensajeroDocumentoTipo
+  storagePath String                 @map("storage_path") // path en el bucket privado, NO URL publica (R18)
+  contentType String                 @map("content_type") // image/jpeg | image/png | image/webp
+  createdAt   DateTime               @default(now()) @map("created_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, tipo]) // R16: un documento por tipo por usuario
+  @@index([usuarioId])
+  @@map("mensajero_documento")
+}
+
+enum MensajeroDocumentoTipo {
+  cedula_anverso
+  cedula_reverso
+  propiedad_anverso
+  propiedad_reverso
+  foto_rostro
+
+  @@map("mensajero_documento_tipo")
 }
 
 model LoginAttempt {
@@ -283,6 +317,8 @@ model Cobro {
 model Vehiculo {
   id   String        @id @default(uuid())
   name VehiculoValue @unique // seed (3): moto, carro, camion
+
+  usuarios Usuario[] // feature 21: mensajeros que declararon este vehiculo
 
   @@map("vehiculos")
 }

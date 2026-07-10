@@ -10,6 +10,8 @@
 | feature/25-gestion-usuarios | fullstack | F2.4 | **COMPLETA (backend+frontend) + reviewer APROBADO (0 bloqueantes).** CRUD usuarios en configuración (SOLO maestro), sin tabla nueva. R1–R36. Backend T1–T7 (`UsuarioService` + list/update/count/setEstado/listTiposIdentificacion/listRoles en UserRepository + `password-generator` reusando `strongPasswordSchema` de la #20). Frontend T8–T11 (`app/(app)/configuracion/` DataTable+Pagination+Modal+Toast, form con toggle contraseña escribir/generar). GAP de rol id/value CERRADO (`listarRoles`, select por UUID). Suite ~886 verde; typecheck+init.sh verdes. Menor: subir timeout de un test propio (flaky bajo carga). **PR #24 ABIERTO** a `dev` (rama pusheada, pendiente merge humano). |
 | feature/50-vehiculos | backend | F2.4 | **impl COMPLETA + reviewer APROBADO** (otra sesión). CRUD-catálogo `vehiculos` SOLO-LECTURA: enum `VehiculoValue` (moto/carro/camion) + model `Vehiculo{id,name}`, migración+seed VERIFICADOS contra Postgres real. Código YA en `dev` (**PR #21 mergeado**); bookkeeping a `done` a cargo de esa sesión. Desbloquea 21→22→23. |
 
+> Feature 50 (vehiculos) CERRADA 2026-07-10: **PR #21 mergeado** a `origin/dev` (eb6a17d), status `done`, entrada en `history.md`. Backend puro (R1–R15, R12 N/A). Migración+seed **aplicados y verificados contra Postgres real**. Desbloquea la 21→22→23.
+
 > Feature 20 (recuperación de contraseña) CERRADA 2026-07-10: **PR #20 mergeado** a `origin/dev`
 > (b1ef459, 19:15Z), status -> `done`, entrada en `history.md`. Fullstack (reusa infra OTP, sin
 > tabla nueva); implementada en 2 slices (backend + frontend), reviewer APROBADO en ambos, 0

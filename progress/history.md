@@ -432,6 +432,23 @@
 - Flaky pre-existente de auth (HomePage/LoginForm bajo ejecución paralela) dictaminado no bloqueante
   (pasa 29/29 en aislamiento; el diff no toca esos archivos).
 
+## Feature 50 — vehiculos — DONE 2026-07-10
+- Backend puro. Catalogo `vehiculos` (tabla + enum PG) disponible solo para rol `maestro`, patron de
+  las features 4/19 con una diferencia deliberada: columna de valor **`name`** (no `value`). Enum
+  `VehiculoValue` (moto/carro/camion), model `Vehiculo{id uuid, name}`, migracion
+  `20260710160000_vehiculos` (CREATE TYPE/TABLE + UNIQUE `vehiculos_name_key` + RLS) + down.sql,
+  `lib/types/vehiculos.ts` (`VEHICULOS_SEED` derivado del enum), `seedVehiculos` idempotente por `name`,
+  `IVehiculoService/Repository` + `VehiculoService` (guard `maestro` -> forbidden/unauthenticated) + action.
+  Deja `vehiculos.id` como PK uuid estable para el FK `vehiculo_id` de la feature 21 (NO implementado aqui).
+- Decisiones humanas (F1.4, 2026-07-10): P1=A (catalogo sembrado + SOLO LECTURA, T7 omitida, R12 N/A),
+  P2=`VehiculoValue`, P3=seed en `scripts/seed-catalogos.ts`. R1–R11/R13–R15 -> tests reales (33 nuevos).
+- Reviewer APROBADO (unico mayor documental: checkboxes de tasks, ya corregido). Suite 754 verde,
+  typecheck+lint OK. **Migracion+seed APLICADOS y VERIFICADOS contra Postgres real** (localhost:5432/ordenex):
+  3 filas idempotentes, RLS on, indice unico, enum con 3 labels. Deuda de despliegue CERRADA.
+- Mergeada a `origin/dev` via **PR #21** (eb6a17d, 2026-07-10). Corrio en zona backend en paralelo con
+  la 31 (frontend). Impl via backend_dev DIRECTO (el implementer falla con el modelo legacy sonnet-4).
+  Desbloquea la cadena 21 -> 22 -> 23.
+
 ## 2026-07-10 — plantilla de carga en XLSX (feature 31, FRONTEND)
 - Frontend puro. La plantilla descargable de `BulkUpload` (botón "Descargar plantilla") pasa de
   CSV a XLSX formateado (cabecera en negrita, anchos legibles, fila de ejemplo opcional con la
