@@ -82,7 +82,7 @@ enum EstadoUsuario {
 model Usuario {
   id                   String        @id @default(uuid())
   nombre               String
-  primerApellido       String?       @map("primer_apellido") // feature 21: identidad; requerido en postulacion via servicio, nullable en DB
+  primerApellido       String        @map("primer_apellido") // feature 21: identidad; OBLIGATORIO (NOT NULL en DB)
   segundoApellido      String?       @map("segundo_apellido") // feature 21: opcional
   email                String        @unique
   telefono             String

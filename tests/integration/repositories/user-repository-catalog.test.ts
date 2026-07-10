@@ -11,6 +11,7 @@ type MockedPrisma = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">
 
 const INPUT = {
   nombre: "Luis Perez",
+  primerApellido: "Perez", // feature 21: primer_apellido es obligatorio (NOT NULL)
   email: "luis@example.com",
   telefono: "0987654321",
   passwordHash: "hash-simulado",

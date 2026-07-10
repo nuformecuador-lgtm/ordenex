@@ -6,8 +6,13 @@
 -- CreateEnum
 CREATE TYPE "mensajero_documento_tipo" AS ENUM ('cedula_anverso', 'cedula_reverso', 'propiedad_anverso', 'propiedad_reverso', 'foto_rostro');
 
--- AlterTable: columnas nuevas en "usuario" (todas NULLABLE, R13)
-ALTER TABLE "usuario" ADD COLUMN "primer_apellido" TEXT;
+-- AlterTable: columnas nuevas en "usuario".
+-- primer_apellido es OBLIGATORIO (NOT NULL). La(s) fila(s) preexistente(s) (el
+-- usuario maestro del seed) no tienen valor, asi que se agrega con DEFAULT ''
+-- para backfillearlas y luego se elimina el DEFAULT: los inserts futuros DEBEN
+-- proveer el valor. El resto (segundo_apellido, vehiculo_id, placa) sigue NULLABLE.
+ALTER TABLE "usuario" ADD COLUMN "primer_apellido" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "usuario" ALTER COLUMN "primer_apellido" DROP DEFAULT;
 ALTER TABLE "usuario" ADD COLUMN "segundo_apellido" TEXT;
 ALTER TABLE "usuario" ADD COLUMN "vehiculo_id" TEXT;
 ALTER TABLE "usuario" ADD COLUMN "placa" TEXT;

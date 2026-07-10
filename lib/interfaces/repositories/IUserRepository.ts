@@ -29,9 +29,10 @@ export interface CreateUsuarioInput {
   tipoIdentificacionId: string;
   rolId: string;
   estado?: EstadoUsuario;
-  // Feature 21 (postulacion de mensajero): identidad + vehiculo, todos opcionales
-  // porque solo aplican a mensajeros (nullable en DB).
-  primerApellido?: string | null;
+  // Feature 21 (postulacion de mensajero): primer_apellido es OBLIGATORIO
+  // (NOT NULL en DB). El resto (segundo apellido + vehiculo) sigue opcional
+  // porque solo aplica a mensajeros (nullable en DB).
+  primerApellido: string;
   segundoApellido?: string | null;
   vehiculoId?: string | null;
   placa?: string | null;

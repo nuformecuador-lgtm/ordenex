@@ -59,7 +59,7 @@ export class PostulacionRepository implements IPostulacionRepository {
           data: {
             id: usuario.id,
             nombre: usuario.nombre,
-            primerApellido: usuario.primerApellido ?? null,
+            primerApellido: usuario.primerApellido,
             segundoApellido: usuario.segundoApellido ?? null,
             email: usuario.email,
             telefono: usuario.telefono,

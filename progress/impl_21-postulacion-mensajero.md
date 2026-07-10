@@ -172,3 +172,38 @@ Action ya existente (`postularMensajero`). NO se tocó backend, DB, migraciones 
 Slice frontend COMPLETO y verde. Página pública + formulario accesible que consume la Server
 Action sin tocar backend. Bloqueos: ninguno (los 2 fallos de la suite son flaky de auth
 preexistentes, verdes en aislado).
+
+---
+
+## Cambio backend: `primer_apellido` OBLIGATORIO (post-spec, decision humana)
+
+El humano decidio que `primer_apellido` pasa de nullable a **NOT NULL** a nivel de
+datos y de modelo. `segundo_apellido`, `vehiculo_id` y `placa` siguen NULLABLE.
+
+### Archivos tocados
+- `db/schema.prisma`: `primerApellido String @map("primer_apellido")` (se quito el `?`).
+- `db/migrations/20260710170000_postulacion_mensajero/migration.sql` (EDITADA, no nueva):
+  `ADD COLUMN "primer_apellido" TEXT NOT NULL DEFAULT ''` + `ALTER COLUMN ... DROP DEFAULT`
+  (backfill seguro de la fila maestro preexistente; inserts futuros deben proveerlo).
+  `down.sql` ya revierte con `DROP COLUMN` (sin cambios).
+- `lib/interfaces/repositories/IUserRepository.ts`: `CreateUsuarioInput.primerApellido` ahora
+  `string` (requerido).
+- `lib/repositories/PostulacionRepository.ts`: `primerApellido: usuario.primerApellido` (sin `?? null`).
+- `tests/integration/db/postulacion-mensajero-migration.test.ts`: aserciones actualizadas
+  a NOT NULL DEFAULT '' + DROP DEFAULT (con orden) y ya-no-nullable.
+- `tests/unit/repositories/user-repository.test.ts` y
+  `tests/integration/repositories/user-repository-catalog.test.ts`: los inputs de creacion de
+  usuario ahora incluyen `primerApellido` (llamadores ajustados por el cambio a requerido).
+
+Nota: el seed del maestro vive en la migracion `20260709120000_seed_maestro_user/migration.sql`,
+que corre ANTES de esta (la columna aun no existe), por lo que NO se le agrega `primer_apellido`;
+el `DEFAULT ''` de esta migracion backfillea esa fila. La validacion zod
+(`lib/types/postulacion-mensajero.ts`) y `PostularMensajeroCommand` ya exigian el campo.
+
+### Verificacion del cambio
+- `npm run db:generate` OK. `npm run typecheck` VERDE (0 errores). `npm run lint` 0 errores.
+- `npm test` → 888/888 VERDE (sin flaky esta corrida). Migracion NO aplicada a Postgres
+  (queda para el humano/leader); su correctitud se cubre por los tests estaticos de migracion.
+
+### Veredicto
+`primer_apellido` obligatorio implementado en datos, modelo, tipos y tests. Todo verde.

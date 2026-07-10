@@ -31,13 +31,27 @@ function extractEnumValues(sql: string): string[] {
 }
 
 describe("postulacion migration.sql (UP) — columnas nuevas en usuario (R13)", () => {
-  it("agrega primer_apellido, segundo_apellido, vehiculo_id y placa como TEXT nullable", () => {
-    expect(upSql).toMatch(/ALTER TABLE "usuario" ADD COLUMN "primer_apellido" TEXT;/);
+  it("agrega segundo_apellido, vehiculo_id y placa como TEXT nullable", () => {
     expect(upSql).toMatch(/ALTER TABLE "usuario" ADD COLUMN "segundo_apellido" TEXT;/);
     expect(upSql).toMatch(/ALTER TABLE "usuario" ADD COLUMN "vehiculo_id" TEXT;/);
     expect(upSql).toMatch(/ALTER TABLE "usuario" ADD COLUMN "placa" TEXT;/);
-    // Nullable: sin NOT NULL para preservar filas existentes de otros roles.
-    expect(upSql).not.toMatch(/ADD COLUMN "primer_apellido" TEXT NOT NULL/);
+  });
+
+  it("agrega primer_apellido como OBLIGATORIO (NOT NULL) con backfill seguro", () => {
+    // NOT NULL con DEFAULT '' para backfillear filas preexistentes (maestro),
+    // seguido de DROP DEFAULT para que los inserts futuros deban proveerlo.
+    expect(upSql).toMatch(
+      /ALTER TABLE "usuario" ADD COLUMN "primer_apellido" TEXT NOT NULL DEFAULT '';/,
+    );
+    expect(upSql).toMatch(
+      /ALTER TABLE "usuario" ALTER COLUMN "primer_apellido" DROP DEFAULT;/,
+    );
+    // Orden: primero se agrega la columna, luego se suelta el default.
+    const idxAdd = upSql.indexOf('ADD COLUMN "primer_apellido"');
+    const idxDrop = upSql.indexOf('ALTER COLUMN "primer_apellido" DROP DEFAULT');
+    expect(idxDrop).toBeGreaterThan(idxAdd);
+    // No debe quedar como columna nullable (sin NOT NULL).
+    expect(upSql).not.toMatch(/ADD COLUMN "primer_apellido" TEXT;/);
   });
 
   it("crea el FK usuario.vehiculo_id -> vehiculos(id) con ON DELETE RESTRICT (R13)", () => {

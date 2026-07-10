@@ -30,6 +30,7 @@ function buildMockPrisma(overrides: Partial<{
 
 const CREATE_INPUT = {
   nombre: "Ana Torres",
+  primerApellido: "Torres", // feature 21: primer_apellido es obligatorio (NOT NULL)
   email: "ana@example.com",
   telefono: "0991234567",
   passwordHash: "hash-simulado",
