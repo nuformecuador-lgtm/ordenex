@@ -199,12 +199,13 @@
     {
       "id": 21,
       "name": "postulacion de mensajero",
-      "description": "Agrega el registro publico (postulacion) de mensajeros: unica via de auto-registro del sistema. Un aspirante completa un formulario con los campos: nombre, primer apellido, segundo apellido, email, telefono, tipo de documento (FK a tipo_identificacion), numero de documento, vehiculo (nuevo enum: moto, carro, camion), placa del vehiculo, contrasena y confirmacion de contrasena; y sube documentos: foto de cedula por ambos lados (anverso y reverso), tarjeta de propiedad del vehiculo por ambos lados (anverso y reverso), y una foto de su rostro (que acompanara su perfil de mensajero). Al enviar, se crea la cuenta con rol mensajero en estado pendiente (default de EstadoUsuario), sin acceso hasta ser aprobada (ver feature de aprobacion). Requiere extender el modelo Usuario/perfil de mensajero con los campos nuevos (primer apellido y segundo apellido -hoy Usuario tiene un unico campo nombre-, vehiculo, placa) y el almacenamiento de los 5 documentos subidos (cedula anverso, cedula reverso, tarjeta propiedad anverso, tarjeta propiedad reverso, foto de rostro). El email y el numero de documento no deben duplicarse; la contrasena se hashea con bcrypt (mismo coste que el login). Es fullstack (pantalla de postulacion + backend/migracion/almacenamiento de archivos).",
+      "description": "Agrega el registro publico (postulacion) de mensajeros: unica via de auto-registro del sistema. Un aspirante completa un formulario con los campos: nombre, primer apellido, segundo apellido, email, telefono, tipo de documento (FK a tipo_identificacion), numero de documento, vehiculo_id(fk a vehiculos), placa del vehiculo, contrasena y confirmacion de contrasena; y sube documentos: foto de cedula por ambos lados (anverso y reverso), tarjeta de propiedad del vehiculo por ambos lados (anverso y reverso), y una foto de su rostro (que acompanara su perfil de mensajero). Al enviar, se crea la cuenta con rol mensajero en estado pendiente (default de EstadoUsuario), sin acceso hasta ser aprobada (ver feature de aprobacion). Requiere extender el modelo Usuario/perfil de mensajero con los campos nuevos (primer apellido y segundo apellido -hoy Usuario tiene un unico campo nombre-, vehiculo, placa) y el almacenamiento de los 5 documentos subidos (cedula anverso, cedula reverso, tarjeta propiedad anverso, tarjeta propiedad reverso, foto de rostro). El email y el numero de documento no deben duplicarse; la contrasena se hashea con bcrypt (mismo coste que el login). Es fullstack (pantalla de postulacion + backend/migracion/almacenamiento de archivos).",
       "status": "pending",
       "sdd": true,
       "complexity": null,
       "zone": null,
-      "branch": null
+      "branch": null,
+      "depends_on": 50
     },
     {
       "id": 22,
@@ -252,11 +253,12 @@
       "id": 26,
       "name": "dashboard/apartado del admin de tienda",
       "description": "Vistas propias del admin de tienda (rol adminTienda): un apartado/dashboard DISTINTO al del admin maestro (feature 23), como primera experiencia tras iniciar sesion para ese rol. Incluye su modulo de ordenes que lista UNICAMENTE las ordenes de su propia tienda y desde el cual accede al boton de carga masiva (feature 14) para subir ordenes desde la plantilla Excel. Reusa lo existente: la autorizacion por rol de la feature 6 ya filtra adminTienda a sus ordenes, la tabla/list de la feature 7, la carga masiva de las features 14/16. Nota: el reflejo de esas ordenes en el modulo del admin maestro (que ve las de TODAS las tiendas, con el nombre de la tienda que cargo cada orden) YA esta cubierto por la feature 6 (autorizacion) y la feature 7 (columna tiendaNombre). Frontend. ABIERTO a decidir en spec: que mas muestra el dashboard del adminTienda ademas de su modulo de ordenes (metricas, accesos, etc.).",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/26-dashboard-admin-tienda",
+      "depends_on": null
     },
     {
       "id": 27,
@@ -507,6 +509,16 @@
       "zone": null,
       "branch": null,
       "depends_on": 36
+    },
+    {
+      "id": 50,
+      "name": "vehiculos",
+      "description": "Genera el crud y la tabla vehiculos, disponible unicamente para el rol maestro, el enum (nuevo enum: moto, carro, camion), los valores del enum son los mismos que debn ir en el seed de esta tabla",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": null
     }
   ]
 }

@@ -7,7 +7,8 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/19-rol-adminsatelite | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. `adminSatelite` (label DB slug, sin @map) añadido al enum `RolValue`; migración incremental `ALTER TYPE ADD VALUE` con down.sql que recrea el tipo; ROLES_SEED (5 valores) y seed idempotentes derivan del enum; sin permisos nuevos (forbidden por defecto, verificado). Migración de login intacta. R1..R12 -> tests. Suite 75 files / 678 tests verdes (+18). Deuda: aplicar ALTER TYPE/rollback contra Postgres real (aceptada, patrón 4). Commit + push hechos. **PR #13 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/13 -> base `dev`. Pasa a `done` al mergear. |
+| feature/19-rol-adminsatelite | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. `adminSatelite` (label DB slug, sin @map) añadido al enum `RolValue`; migración incremental `ALTER TYPE ADD VALUE` con down.sql que recrea el tipo; ROLES_SEED (5 valores) y seed idempotentes derivan del enum; sin permisos nuevos (forbidden por defecto, verificado). Migración de login intacta. R1..R12 -> tests. Suite 75 files / 678 tests verdes (+18). Deuda: aplicar ALTER TYPE/rollback contra Postgres real (aceptada, patrón 4). Commit + push hechos. **PR #13 MERGEADO** a `origin/dev` (75b7abc). Pasa a `done` al cerrar bookkeeping. |
+| feature/26-dashboard-admin-tienda | frontend | F1.4 | **spec_ready — PARADA en puerta humana.** Spec en `specs/26-dashboard-admin-tienda/` (requirements R1–R11 + design + tasks). MVP frontend-only: landing por rol para adminTienda = encabezado + módulo de órdenes de su tienda (reusa `app/(app)/ordenes` + `listarOrdenes`, autz de la 6 ya filtra por tiendaId). Sin backend nuevo. 4 preguntas abiertas para el humano (ver abajo). Corre en PARALELO con la 19 (backend). |
 
 > Feature 18 (cobros crud) CERRADA 2026-07-10: PR #12 mergeado a `origin/dev` (a379d8e),
 > status -> `done`, entrada en `history.md`. El cierre de la 18 + registro de la 19 viajan en
@@ -64,6 +65,15 @@
   `en_preparacion`; la 16 muestra el resumen y asigna mensajero sobre ordenes YA creadas, NO
   cambia la 15/14. (2) asignacion de mensajero AMBOS: select global "aplicar a todos" +
   override por fila.
+- `dashboard/apartado del admin de tienda` (id 26): **zone=frontend, complexity=medium,
+  branch=feature/26-dashboard-admin-tienda, depends_on=null.** Evaluada 2026-07-10:
+  la descripcion dice "Frontend" y sus insumos estan done — autz por rol (feature 6),
+  DataTable + columna tiendaNombre (feature 7), boton/modal de carga masiva (features
+  14/16). NO hay backend nuevo: el filtrado de ordenes a la tienda del adminTienda ya lo
+  hace la autz de la 6. Zona frontend LIBRE (unica en curso: 19 backend) -> corre en
+  paralelo. Seleccionada por el humano ignorando la cadena de la 28 (28->27->17).
+  ABIERTO para el spec: que mas muestra el dashboard del adminTienda ademas del modulo de
+  ordenes (metricas/accesos) -> el humano decidira en la puerta de aprobacion F1.4.
 
 ## Conflictos pendientes
 
