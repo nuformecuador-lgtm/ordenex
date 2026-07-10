@@ -7,7 +7,14 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/31-plantilla-xlsx | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Plantilla de `BulkUpload` CSV→XLSX: nuevo `lib/utils/xlsx-template.ts` (buildXlsxTemplate async, bold+anchos+ejemplo), `handleDownloadTemplate` async mime XLSX, `DEFAULT_TEMPLATE_NAME`+consumidor de órdenes a `.xlsx`. exceljs import DINÁMICO (R6b). `csv-template.ts` intacto. Frontend puro (no toca backend). Tests 61/61 aislado; typecheck OK; init.sh verde. Flaky de timeouts pre-existente (no det., ajeno). **PR #19 ABIERTO** (CLI): https://github.com/nuformecuador-lgtm/ordenex/pull/19 → base `dev`. Lleva también el cierre de la 29. Pasa a `done` al mergear. |
+
+> Feature 20 (recuperación de contraseña) CERRADA 2026-07-10: **PR #20 mergeado** a `origin/dev`
+> (b1ef459, 19:15Z), status -> `done`, entrada en `history.md`. Fullstack (reusa infra OTP, sin
+> tabla nueva); implementada en 2 slices (backend + frontend), reviewer APROBADO en ambos, 0
+> bloqueantes, suite 782/782 verde. Desbloquea la #25 (comparte `strongPasswordSchema`).
+
+> Feature 31 (plantilla XLSX) CERRADA 2026-07-10: **PR #19 mergeado**, status -> `done`, entrada
+> en `history.md`. Frontend puro (CSV→XLSX, exceljs import dinámico), reviewer APROBADO 0 bloqueantes.
 | feature/50-vehiculos | backend | F2.4 | **impl COMPLETA + reviewer APROBADO** (tras marcar tasks; 0 mayores de código). CRUD-catálogo `vehiculos` SOLO-LECTURA (P1=A): enum PG `VehiculoValue` (moto/carro/camion) + model `Vehiculo{id,name}` (columna **`name`**, no `value`), migración `20260710160000_vehiculos` (CREATE TYPE/TABLE+UNIQUE+RLS)+down.sql, `lib/types/vehiculos.ts` (`VEHICULOS_SEED`), `seedVehiculos` idempotente en seed-catalogos, `IVehiculoService/Repository`+`VehiculoService` (guard `maestro`)+action. R1–R11/R13–R15 mapeados; R12 N/A (sin escritura por P1=A); T7 omitida. Suite **754 verde** (33 nuevos), typecheck+lint OK. Backend puro. **PR #21 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/21) → base `dev`. Pasa a `done` al mergear. Corrió en zona backend en paralelo con la 31 (frontend). **Migración+seed APLICADOS y VERIFICADOS contra Postgres real** (`localhost:5432/ordenex`, 2026-07-10): `migrate deploy` OK (1 pendiente aplicada), 3 filas `moto/carro/camion` idempotentes, RLS habilitada, índice único `vehiculos_name_key`, enum `vehiculo_value` con los 3 labels. Deuda de despliegue CERRADA. Desbloquea la 21→22→23. |
 
 > Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a

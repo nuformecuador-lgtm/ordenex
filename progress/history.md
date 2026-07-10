@@ -450,3 +450,26 @@
   sonnet-4). El PR #19 llevó también el cierre de la feature 29.
 - Flaky de timeouts pre-existente (auth + integración bajo ejecución paralela), no determinista y
   ajeno al diff; init.sh no gatea sobre vitest.
+
+## 2026-07-10 — recuperación de contraseña (feature 20, FULLSTACK)
+- Flujo público de reset de contraseña reusando la infra OTP por email del login RBA, SIN tabla
+  nueva (reusa `EmailOtpChallenge`). BACKEND: `strongPasswordSchema` (zod, 8-72 + complejidad,
+  `lib/types/password-policy.ts`, reutilizable); constantes `AUTH_RESET_*` en authConfig;
+  `PasswordResetService` (solicitar/verificarCodigo/restablecer) reusando `OtpChallengeIssuer`,
+  `EmailOtpChallengeRepository` (+ `findLatestActiveByUsuarioId`, `contarRecientesPorUsuario`),
+  `UserRepository.updatePasswordHash`, `hashPassword`; limitador de verificación en memoria
+  (`reset-rate-limit.ts`); Server Actions (`lib/actions/password-reset.ts`). No enumeración de
+  usuarios (respuesta genérica); rate-limit propio (NO reutiliza el lockout del login, no bloquea
+  la cuenta); marca `consumedAt` al usar el OTP. FRONTEND: `app/recuperar-contrasena/` (page +
+  `RecuperarContrasenaForm` de 3 fases email→código→nueva contraseña→éxito) + enlace desde login.
+- Requisitos R1–R20 (EARS) -> tests reales (policy/schemas/rate-limit/service/actions + component).
+  Ver `progress/impl_20-...md`, `review_20-...md` (backend) y `review_20-frontend-...md`.
+  Implementada en 2 slices (backend con zona libre; frontend al liberarse tras #29/#31). Suite
+  782/782 verde; typecheck + init.sh verdes.
+- Decisiones humanas (F1.4, 2026-07-10): ruta `app/recuperar-contrasena/`; contraseña fuerte 8+
+  con complejidad (validador zod reutilizable); device/ip reales del request; TTL + rate-limit
+  ligero propio (sin lockout de cuenta).
+- Reviewer APROBADO en ambos slices, 0 bloqueantes. Mergeada a `origin/dev` vía **PR #20**
+  (b1ef459, 2026-07-10 19:15Z). Impl vía backend_dev/frontend_dev DIRECTO (implementer inestable
+  por sonnet-4). Excepción aceptada por el humano: `OtpChallengeIssuer` loguea el OTP en claro
+  (código heredado, fuera de alcance).

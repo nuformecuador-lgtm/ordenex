@@ -190,7 +190,7 @@
       "id": 20,
       "name": "recuperacion de contrasena",
       "description": "Agrega el flujo de recuperacion/restablecimiento de contrasena reutilizando la infraestructura de OTP por email del login RBA (EmailOtpChallenge, EmailProvider). El usuario solicita la recuperacion indicando su email; si existe, se genera y envia un codigo OTP al correo; tras verificar el codigo el usuario define una nueva contrasena con su confirmacion, que se hashea con bcrypt (mismo coste que el login) y se persiste en Usuario.password_hash. Incluye las pantallas de 'olvide mi contrasena' -> ingreso de codigo -> nueva contrasena, y las Server Actions correspondientes. Invalida el desafio OTP una vez usado y respeta el mismo endurecimiento del login (expiracion del codigo, limite de intentos). No revela si el email existe o no (respuesta generica). Es fullstack (pantallas + backend), sin tabla nueva (reusa EmailOtpChallenge).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
