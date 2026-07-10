@@ -24,6 +24,7 @@ async function buildPendiente(): Promise<UsuarioConHash> {
     cedula: "1710034065",
     tipoIdentificacionId: "tipo-1",
     rolId: "rol-mensajero",
+    fulfillment: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

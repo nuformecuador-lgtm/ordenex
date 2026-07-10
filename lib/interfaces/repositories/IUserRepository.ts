@@ -11,6 +11,9 @@ export interface UsuarioPublico {
   cedula: string;
   tipoIdentificacionId: string;
   rolId: string;
+  // Feature 27/R14: flag de fulfillment de la tienda (solo `true` para adminTienda,
+  // invariante R4a). Se expone en la forma publica para el prefill de la UI.
+  fulfillment: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +32,8 @@ export interface CreateUsuarioInput {
   tipoIdentificacionId: string;
   rolId: string;
   estado?: EstadoUsuario;
+  // Feature 27/R8/R9: flag de fulfillment; el repo mapea `?? false` al persistir.
+  fulfillment?: boolean;
   // Feature 21 (postulacion de mensajero): identidad + vehiculo, todos opcionales
   // porque solo aplican a mensajeros (nullable en DB).
   primerApellido?: string | null;
@@ -88,6 +93,8 @@ export interface UpdateUsuarioData {
   telefono?: string;
   rolId?: string;
   tipoIdentificacionId?: string;
+  // Feature 27/R12: valor efectivo ya resuelto por el service (invariante R4a).
+  fulfillment?: boolean;
 }
 
 // Feature 25/R29: catalogo de tipos de identificacion para poblar el select.

@@ -38,6 +38,7 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       findMany: vi.fn(),
       count: vi.fn(),
       updateMany: vi.fn(),
+      create: vi.fn(),
     },
     tipoIdentificacion: {
       findUnique: vi.fn().mockResolvedValue({ id: "tipo-1", value: "cedula" }),
@@ -50,6 +51,81 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe("UserRepository.create — fulfillment (feature 27/R3/R8/R9/R14)", () => {
+  it("create sin fulfillment persiste false (R3)", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.create = vi.fn().mockResolvedValue(usuarioRow({ fulfillment: false }));
+    const repo = new UserRepository(prisma as unknown as PrismaClient);
+
+    const dto = await repo.create({
+      nombre: "Ana",
+      email: "ana@example.com",
+      telefono: "099",
+      passwordHash: "h",
+      cedula: "1710034065",
+      tipoIdentificacionId: "tipo-1",
+      rolId: "rol-1",
+    });
+
+    const arg = prisma.usuario.create.mock.calls[0][0];
+    expect(arg.data.fulfillment).toBe(false); // R3: ausente -> false, no null
+    expect(dto.fulfillment).toBe(false); // R14: expuesto en la forma publica
+    expect(dto).not.toHaveProperty("passwordHash"); // R14
+  });
+
+  it("create con fulfillment true lo persiste (R8)", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.create = vi.fn().mockResolvedValue(usuarioRow({ fulfillment: true }));
+    const repo = new UserRepository(prisma as unknown as PrismaClient);
+
+    const dto = await repo.create({
+      nombre: "Tienda",
+      email: "t@example.com",
+      telefono: "099",
+      passwordHash: "h",
+      cedula: "1710034065",
+      tipoIdentificacionId: "tipo-1",
+      rolId: "rol-1",
+      fulfillment: true,
+    });
+
+    expect(prisma.usuario.create.mock.calls[0][0].data.fulfillment).toBe(true);
+    expect(dto.fulfillment).toBe(true);
+  });
+
+  it("PUBLIC_SELECT incluye fulfillment y nunca passwordHash (R14)", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.create = vi.fn().mockResolvedValue(usuarioRow({ fulfillment: false }));
+    const repo = new UserRepository(prisma as unknown as PrismaClient);
+
+    await repo.create({
+      nombre: "Ana",
+      email: "ana@example.com",
+      telefono: "099",
+      passwordHash: "h",
+      cedula: "1710034065",
+      tipoIdentificacionId: "tipo-1",
+      rolId: "rol-1",
+    });
+
+    const select = prisma.usuario.create.mock.calls[0][0].select;
+    expect(select.fulfillment).toBe(true);
+    expect(select).not.toHaveProperty("passwordHash");
+  });
+
+  it("update aplica fulfillment como campo editable (R12)", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.updateMany.mockResolvedValue({ count: 1 });
+    prisma.usuario.findUnique.mockResolvedValue(usuarioRow({ fulfillment: true }));
+    const repo = new UserRepository(prisma as unknown as PrismaClient);
+
+    const dto = await repo.update("usr-1", { fulfillment: true });
+
+    expect(prisma.usuario.updateMany.mock.calls[0][0].data).toEqual({ fulfillment: true });
+    expect(dto?.fulfillment).toBe(true);
+  });
+});
 
 describe("UserRepository.list (R13/R14/R15/R24)", () => {
   it("list devuelve items paginados con rolValue y total, sin passwordHash (R13/R14/R24)", async () => {

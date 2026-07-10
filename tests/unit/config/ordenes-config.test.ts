@@ -6,6 +6,7 @@ const ENV_KEYS = [
   "ORDENES_DEFAULT_PAGE_SIZE",
   "ORDENES_MAX_PAGE_SIZE",
   "ORDENES_DEFAULT_ESTATUS_VALUE",
+  "ORDENES_FULFILLMENT_ESTATUS_VALUE",
 ] as const;
 
 afterEach(() => {
@@ -18,6 +19,8 @@ describe("loadOrdenesConfig valores por defecto (N1/R33)", () => {
     expect(cfg.DEFAULT_PAGE_SIZE).toBe(25);
     expect(cfg.MAX_PAGE_SIZE).toBe(100);
     expect(cfg.DEFAULT_ESTATUS_VALUE).toBe("en_preparacion"); // feature 15/R7/R8: default GLOBAL
+    // feature 27/R16/R23: estatus inicial de tiendas con fulfillment (valor ya sembrado)
+    expect(cfg.FULFILLMENT_ESTATUS_VALUE).toBe("en_fulfillment");
   });
 });
 
@@ -26,10 +29,12 @@ describe("loadOrdenesConfig overrides por entorno", () => {
     process.env.ORDENES_DEFAULT_PAGE_SIZE = "10";
     process.env.ORDENES_MAX_PAGE_SIZE = "50";
     process.env.ORDENES_DEFAULT_ESTATUS_VALUE = "en_fulfillment";
+    process.env.ORDENES_FULFILLMENT_ESTATUS_VALUE = "otro_estatus";
     const cfg = loadOrdenesConfig();
     expect(cfg.DEFAULT_PAGE_SIZE).toBe(10);
     expect(cfg.MAX_PAGE_SIZE).toBe(50);
     expect(cfg.DEFAULT_ESTATUS_VALUE).toBe("en_fulfillment");
+    expect(cfg.FULFILLMENT_ESTATUS_VALUE).toBe("otro_estatus"); // feature 27/R16
   });
 
   it("ignora env no positivo o no numerico y cae al default (R33)", () => {

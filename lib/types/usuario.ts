@@ -22,6 +22,9 @@ const baseCrearFields = {
   tipoIdentificacionId: z.string().min(1),
   cedula: z.string().min(1),
   rolId: z.string().min(1),
+  // Feature 27/R10: flag de fulfillment de tienda, booleano opcional en el borde.
+  // El default (false) y la invariante por rol (R4a) los aplica el service.
+  fulfillment: z.boolean().optional(),
 };
 
 // R5/R6/R30/R31/R32: creacion con el bloque de contrasena como union
@@ -55,6 +58,9 @@ export const actualizarUsuarioSchema = z
     telefono: z.string().min(1),
     rolId: z.string().min(1),
     tipoIdentificacionId: z.string().min(1),
+    // Feature 27/R13: fulfillment editable; el service recalcula la invariante
+    // R4a segun el rol resultante. `.strict()` sigue rechazando email/cedula/password.
+    fulfillment: z.boolean(),
   })
   .partial()
   .strict();

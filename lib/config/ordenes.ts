@@ -26,6 +26,12 @@ export interface OrdenesConfig {
    * "en_bodega"), compartido por el CRUD (feature 6) y la carga masiva.
    */
   DEFAULT_ESTATUS_VALUE: string;
+  /**
+   * Feature 27/R16/R23: estatus inicial de la carga masiva cuando la tienda que
+   * carga tiene `fulfillment = true`. Reutiliza el valor de catalogo ya sembrado
+   * (`en_fulfillment`, feature 28); hermana de DEFAULT_ESTATUS_VALUE.
+   */
+  FULFILLMENT_ESTATUS_VALUE: string;
 }
 
 export function loadOrdenesConfig(): OrdenesConfig {
@@ -33,6 +39,10 @@ export function loadOrdenesConfig(): OrdenesConfig {
     DEFAULT_PAGE_SIZE: readPositiveInt("ORDENES_DEFAULT_PAGE_SIZE", 25),
     MAX_PAGE_SIZE: readPositiveInt("ORDENES_MAX_PAGE_SIZE", 100),
     DEFAULT_ESTATUS_VALUE: readNonEmpty("ORDENES_DEFAULT_ESTATUS_VALUE", "en_preparacion"),
+    FULFILLMENT_ESTATUS_VALUE: readNonEmpty(
+      "ORDENES_FULFILLMENT_ESTATUS_VALUE",
+      "en_fulfillment",
+    ),
   };
 }
 

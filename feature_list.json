@@ -266,11 +266,11 @@
       "id": 27,
       "name": "fulfillment de tienda + estado inicial condicional",
       "description": "Fulfillment por tienda. (1) Al crear un usuario admin de tienda (feature 25) se agrega un interruptor 'esta tienda tiene fulfillment' (si/no) -> nuevo campo booleano fulfillment en el modelo Usuario, aplicable al rol adminTienda (default false), con migracion + down.sql. (2) Usa el estado order_status 'en_fulfillment' que la feature 28 renombra desde 'embalaje' (NO se agrega un estado nuevo). (3) Se cambia el estado INICIAL de la carga masiva de ordenes (feature 15, hoy default GLOBAL en_preparacion via ORDENES_DEFAULT_ESTATUS_VALUE / BulkOrdenService) para que sea CONDICIONAL segun la tienda que realiza la carga: si la tienda tiene fulfillment habilitado -> las ordenes nacen en estado en_fulfillment; si NO -> nacen en en_preparacion (comportamiento actual). Toca: modelo Usuario (migracion), la UI de creacion de usuario (feature 25) y la logica del servicio/endpoint de carga masiva (BulkOrdenService, feature 15). Depende ademas de la feature 28 (el estado en_fulfillment debe existir renombrado) y se relaciona con la feature 18 cobros (que incluye un campo fulfillment). Es fullstack de complejidad alta por el cruce con carga masiva y creacion de usuarios.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/27-fulfillment-tienda",
       "depends_on": 25
     },
     {

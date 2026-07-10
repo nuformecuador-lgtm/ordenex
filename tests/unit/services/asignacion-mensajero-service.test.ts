@@ -38,6 +38,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     softDelete: vi.fn(),
     existsEstatus: vi.fn(),
     findEstatusIdByValue: vi.fn(),
+    findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27
     existsGeo: vi.fn(),
     findExistingRemisiones: vi.fn(),
     findProvinciasByNombres: vi.fn(),

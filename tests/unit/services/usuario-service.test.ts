@@ -34,6 +34,7 @@ function usuario(overrides: Partial<UsuarioPublico> = {}): UsuarioPublico {
     cedula: "1710034065",
     tipoIdentificacionId: "tipo-1",
     rolId: "rol-1",
+    fulfillment: false,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,
@@ -158,7 +159,9 @@ describe("actualizar (R16/R17/R18/R19)", () => {
     const r = await service.actualizar("usr-1", { nombre: "Nuevo", rolId: "rol-2" }, MAESTRO);
     expect(r.status).toBe("ok");
     const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect(data).toEqual({ nombre: "Nuevo", rolId: "rol-2" });
+    // feature 27: al cambiar el rol se recalcula la invariante (rol-2 no es
+    // adminTienda en el catalogo por defecto -> fulfillment false, R4a).
+    expect(data).toEqual({ nombre: "Nuevo", rolId: "rol-2", fulfillment: false });
   });
 
   it("actualizar de usuario inexistente -> not_found (R17)", async () => {
@@ -178,6 +181,79 @@ describe("actualizar (R16/R17/R18/R19)", () => {
     if (r.status === "validation_error") {
       expect(r.fieldErrors).toHaveProperty("tipoIdentificacionId");
     }
+  });
+});
+
+describe("fulfillment — invariante por rol (feature 27/R4/R4a/R8/R9/R12)", () => {
+  const ROLES = [
+    { id: "rol-1", value: "maestro" as const },
+    { id: "rol-tienda", value: "adminTienda" as const },
+    { id: "rol-msg", value: "mensajero" as const },
+  ];
+  const createArg = () => (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  const updateArg = () => (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
+
+  function withRoles(overrides: Partial<IUserRepository> = {}) {
+    repo = buildRepo({ listRoles: vi.fn().mockResolvedValue(ROLES), ...overrides });
+    service = new UsuarioService(repo);
+  }
+
+  it("crear adminTienda con fulfillment=true persiste true (R8)", async () => {
+    withRoles();
+    await service.crear({ ...crearManual, rolId: "rol-tienda", fulfillment: true }, MAESTRO);
+    expect(createArg().fulfillment).toBe(true);
+  });
+
+  it("crear adminTienda con fulfillment=false persiste false (R9)", async () => {
+    withRoles();
+    await service.crear({ ...crearManual, rolId: "rol-tienda", fulfillment: false }, MAESTRO);
+    expect(createArg().fulfillment).toBe(false);
+  });
+
+  it("crear adminTienda sin fulfillment persiste false (R3/R9)", async () => {
+    withRoles();
+    await service.crear({ ...crearManual, rolId: "rol-tienda" }, MAESTRO);
+    expect(createArg().fulfillment).toBe(false);
+  });
+
+  it("crear rol != adminTienda ignora fulfillment=true recibido -> false (R4/R4a)", async () => {
+    withRoles();
+    await service.crear({ ...crearManual, rolId: "rol-msg", fulfillment: true }, MAESTRO);
+    expect(createArg().fulfillment).toBe(false);
+  });
+
+  it("editar adminTienda cambia solo fulfillment (R12)", async () => {
+    withRoles({
+      findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-tienda", fulfillment: false })),
+    });
+    const r = await service.actualizar("usr-1", { fulfillment: true }, MAESTRO);
+    expect(r.status).toBe("ok");
+    expect(updateArg()).toEqual({ fulfillment: true });
+  });
+
+  it("editar cambiando rol de adminTienda a otro fuerza fulfillment=false (R4a)", async () => {
+    withRoles({
+      findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-tienda", fulfillment: true })),
+    });
+    await service.actualizar("usr-1", { rolId: "rol-msg" }, MAESTRO);
+    expect(updateArg()).toMatchObject({ rolId: "rol-msg", fulfillment: false });
+  });
+
+  it("editar rol != adminTienda con fulfillment=true recibido -> false (R4a)", async () => {
+    withRoles({
+      findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-msg", fulfillment: false })),
+    });
+    await service.actualizar("usr-1", { fulfillment: true }, MAESTRO);
+    expect(updateArg().fulfillment).toBe(false);
+  });
+
+  it("editar adminTienda solo el nombre conserva fulfillment (no lo pisa)", async () => {
+    withRoles({
+      findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-tienda", fulfillment: true })),
+    });
+    await service.actualizar("usr-1", { nombre: "Otro" }, MAESTRO);
+    // sin fulfillment ni rolId en el input -> no se toca el flag (R12).
+    expect(updateArg()).toEqual({ nombre: "Otro" });
   });
 });
 

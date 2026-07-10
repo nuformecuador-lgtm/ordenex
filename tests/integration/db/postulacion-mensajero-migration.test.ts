@@ -132,7 +132,11 @@ describe("no se modifico ninguna migracion previa", () => {
       .map((e) => e.name)
       .sort();
     const postulacionDir = dirs.find((d) => d.endsWith("_postulacion_mensajero"))!;
-    const previos = dirs.filter((d) => !d.endsWith("_postulacion_mensajero"));
+    const previos = dirs.filter(
+      (d) =>
+        !d.endsWith("_postulacion_mensajero") &&
+        !d.endsWith("_usuario_fulfillment"), // feature 27: apendida despues con timestamp posterior
+    );
     const maxPrevio = previos[previos.length - 1];
     expect(postulacionDir > maxPrevio).toBe(true);
   });

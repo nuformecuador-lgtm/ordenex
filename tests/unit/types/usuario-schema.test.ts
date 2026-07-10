@@ -62,6 +62,37 @@ describe("crearUsuarioSchema — union discriminada por passwordMode", () => {
     });
     expect(r.success).toBe(false);
   });
+
+  it("feature 27/R10: acepta fulfillment booleano (opcional) en ambas ramas", () => {
+    const manual = crearUsuarioSchema.safeParse({
+      ...baseCrear,
+      passwordMode: "manual",
+      password: "Abcdef1!",
+      fulfillment: true,
+    });
+    const generate = crearUsuarioSchema.safeParse({
+      ...baseCrear,
+      passwordMode: "generate",
+      fulfillment: false,
+    });
+    const sinFlag = crearUsuarioSchema.safeParse({ ...baseCrear, passwordMode: "generate" });
+    expect(manual.success).toBe(true);
+    expect(generate.success).toBe(true);
+    expect(sinFlag.success).toBe(true); // opcional
+  });
+
+  it("feature 27/R10: rechaza fulfillment no booleano", () => {
+    const r = crearUsuarioSchema.safeParse({
+      ...baseCrear,
+      passwordMode: "generate",
+      fulfillment: "si",
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const fields = r.error.issues.map((i) => i.path.join("."));
+      expect(fields).toContain("fulfillment");
+    }
+  });
 });
 
 describe("actualizarUsuarioSchema", () => {
@@ -75,6 +106,16 @@ describe("actualizarUsuarioSchema", () => {
       const r = actualizarUsuarioSchema.safeParse(campo);
       expect(r.success).toBe(false);
     }
+  });
+
+  it("feature 27/R13: acepta fulfillment booleano y sigue rechazando email/cedula", () => {
+    expect(actualizarUsuarioSchema.safeParse({ fulfillment: true }).success).toBe(true);
+    expect(actualizarUsuarioSchema.safeParse({ fulfillment: false }).success).toBe(true);
+    expect(actualizarUsuarioSchema.safeParse({ fulfillment: "no" }).success).toBe(false);
+    // R13: `.strict()` sigue rechazando campos no editables aun con fulfillment.
+    expect(
+      actualizarUsuarioSchema.safeParse({ fulfillment: true, email: "x@y.com" }).success,
+    ).toBe(false);
   });
 });
 

@@ -98,7 +98,10 @@ describe("no se modifico ninguna migracion previa (R3)", () => {
     // cuida es que vehiculos no se inserto ANTES de las migraciones que ya
     // existian cuando se creo, no que sea la ultima del repo para siempre.
     const previos = dirs.filter(
-      (d) => !d.endsWith("_vehiculos") && !d.endsWith("_postulacion_mensajero"),
+      (d) =>
+        !d.endsWith("_vehiculos") &&
+        !d.endsWith("_postulacion_mensajero") &&
+        !d.endsWith("_usuario_fulfillment"), // feature 27: apendida despues
     );
     const maxPrevio = previos[previos.length - 1];
     // El timestamp (prefijo) de vehiculos es mayor que el ultimo previo.
