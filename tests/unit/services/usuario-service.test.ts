@@ -53,6 +53,7 @@ function buildRepo(overrides: Partial<IUserRepository> = {}): IUserRepository {
     update: vi.fn().mockResolvedValue(usuario()),
     setEstado: vi.fn().mockResolvedValue(usuario({ estado: "inactivo" })),
     listTiposIdentificacion: vi.fn().mockResolvedValue([{ id: "tipo-1", value: "cedula" }]),
+    listRoles: vi.fn().mockResolvedValue([{ id: "rol-1", value: "maestro" }]),
     ...overrides,
   };
 }
@@ -86,6 +87,7 @@ describe("autorizacion — solo maestro (R3/R4)", () => {
       expect((await service.actualizar("usr-1", { nombre: "N" }, actor)).status).toBe("forbidden");
       expect((await service.cambiarEstado("usr-1", { estado: "inactivo" }, actor)).status).toBe("forbidden");
       expect((await service.listarTiposIdentificacion(actor)).status).toBe("forbidden");
+      expect((await service.listarRoles(actor)).status).toBe("forbidden");
     }
     expect(repo.create).not.toHaveBeenCalled();
     expect(repo.list).not.toHaveBeenCalled();
@@ -217,5 +219,11 @@ describe("listar / listarTiposIdentificacion", () => {
     const r = await service.listarTiposIdentificacion(MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.tipos).toEqual([{ id: "tipo-1", value: "cedula" }]);
+  });
+
+  it("listarRoles devuelve el catalogo de roles", async () => {
+    const r = await service.listarRoles(MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.roles).toEqual([{ id: "rol-1", value: "maestro" }]);
   });
 });

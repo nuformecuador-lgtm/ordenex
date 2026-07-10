@@ -6,6 +6,7 @@ import {
   actualizarUsuario,
   cambiarEstadoUsuario,
   listarTiposIdentificacion,
+  listarRoles,
 } from "@/lib/actions/usuarios";
 import type { Actor, IUsuarioService } from "@/lib/interfaces/services/IUsuarioService";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
@@ -43,6 +44,9 @@ function fakeService(overrides: Partial<IUsuarioService> = {}): IUsuarioService 
     listarTiposIdentificacion: vi
       .fn()
       .mockResolvedValue({ status: "ok", tipos: [{ id: "tipo-1", value: "cedula" }] }),
+    listarRoles: vi
+      .fn()
+      .mockResolvedValue({ status: "ok", roles: [{ id: "rol-1", value: "maestro" }] }),
     ...overrides,
   };
 }
@@ -79,6 +83,7 @@ describe("R2: sin sesion -> unauthenticated sin tocar el service", () => {
       "unauthenticated",
     );
     expect((await listarTiposIdentificacion(deps)).status).toBe("unauthenticated");
+    expect((await listarRoles(deps)).status).toBe("unauthenticated");
     expect(service.crear).not.toHaveBeenCalled();
     expect(service.listar).not.toHaveBeenCalled();
   });
@@ -153,6 +158,22 @@ describe("R28: delega en el service y adapta resultados de dominio", () => {
       { usuarioService: service, getActor: getActor(MAESTRO) },
     );
     expect(r.status).toBe("not_found");
+  });
+
+  it("listarRoles delega en el service y devuelve id/value", async () => {
+    const service = fakeService();
+    const r = await listarRoles({ usuarioService: service, getActor: getActor(MAESTRO) });
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.roles).toEqual([{ id: "rol-1", value: "maestro" }]);
+    expect(service.listarRoles).toHaveBeenCalledWith(MAESTRO);
+  });
+
+  it("listarRoles propaga forbidden del service", async () => {
+    const service = fakeService({
+      listarRoles: vi.fn().mockResolvedValue({ status: "forbidden" }),
+    });
+    const r = await listarRoles({ usuarioService: service, getActor: getActor(MAESTRO) });
+    expect(r.status).toBe("forbidden");
   });
 
   it("crear valido delega con actor y datos parseados", async () => {

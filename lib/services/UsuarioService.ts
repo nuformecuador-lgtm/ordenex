@@ -10,6 +10,7 @@ import type {
   CambiarEstadoUsuarioServiceResult,
   CrearUsuarioServiceResult,
   IUsuarioService,
+  ListarRolesServiceResult,
   ListarTiposIdentificacionServiceResult,
   ListarUsuariosServiceResult,
   ObtenerUsuarioServiceResult,
@@ -119,6 +120,13 @@ export class UsuarioService implements IUsuarioService {
 
     const tipos = await this.repo.listTiposIdentificacion(); // R29
     return { status: "ok", tipos };
+  }
+
+  async listarRoles(actor: Actor): Promise<ListarRolesServiceResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4
+
+    const roles = await this.repo.listRoles();
+    return { status: "ok", roles };
   }
 
   // R9/R10/R11: traduce los errores de dominio del repositorio a resultados

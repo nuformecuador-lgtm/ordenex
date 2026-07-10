@@ -6,6 +6,7 @@ import {
   type IUserRepository,
   type ListUsuariosParams,
   type ListUsuariosResult,
+  type RolItem,
   type TipoIdentificacionItem,
   type UpdateUsuarioData,
   type UsuarioConHash,
@@ -170,6 +171,14 @@ export class UserRepository implements IUserRepository {
   /** Feature 25/R29: catalogo `tipo_identificacion` proyectado a id/value. */
   async listTiposIdentificacion(): Promise<TipoIdentificacionItem[]> {
     return this.prisma.tipoIdentificacion.findMany({
+      select: { id: true, value: true },
+      orderBy: { value: "asc" },
+    });
+  }
+
+  /** Feature 25: catalogo `rol` proyectado a id/value, ordenado por `value`. */
+  async listRoles(): Promise<RolItem[]> {
+    return this.prisma.rol.findMany({
       select: { id: true, value: true },
       orderBy: { value: "asc" },
     });

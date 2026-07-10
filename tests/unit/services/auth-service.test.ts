@@ -41,6 +41,7 @@ function buildMocks() {
     update: vi.fn(),
     setEstado: vi.fn(),
     listTiposIdentificacion: vi.fn(),
+    listRoles: vi.fn(),
   };
   const loginAttemptRepo: ILoginAttemptRepository = {
     registrar: vi.fn(),

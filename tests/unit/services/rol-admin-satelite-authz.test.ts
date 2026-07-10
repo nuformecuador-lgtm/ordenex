@@ -148,6 +148,7 @@ function buildUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepositor
     update: vi.fn(),
     setEstado: vi.fn(),
     listTiposIdentificacion: vi.fn(),
+    listRoles: vi.fn(),
     ...overrides,
   };
 }

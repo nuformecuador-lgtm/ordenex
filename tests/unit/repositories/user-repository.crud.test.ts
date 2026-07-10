@@ -45,6 +45,7 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     },
     rol: {
       findUnique: vi.fn().mockResolvedValue({ id: "rol-1", value: "mensajero" }),
+      findMany: vi.fn(),
     },
     ...overrides,
   };
@@ -171,5 +172,25 @@ describe("UserRepository.listTiposIdentificacion (R29)", () => {
       id: true,
       value: true,
     });
+  });
+});
+
+describe("UserRepository.listRoles", () => {
+  it("listRoles devuelve id/value del catalogo rol ordenado por value", async () => {
+    const prisma = buildPrisma();
+    prisma.rol.findMany.mockResolvedValue([
+      { id: "rol-1", value: "admin" },
+      { id: "rol-2", value: "maestro" },
+    ]);
+    const repo = new UserRepository(prisma as unknown as PrismaClient);
+
+    const roles = await repo.listRoles();
+    expect(roles).toEqual([
+      { id: "rol-1", value: "admin" },
+      { id: "rol-2", value: "maestro" },
+    ]);
+    const arg = prisma.rol.findMany.mock.calls[0][0];
+    expect(arg.select).toEqual({ id: true, value: true });
+    expect(arg.orderBy).toEqual({ value: "asc" });
   });
 });

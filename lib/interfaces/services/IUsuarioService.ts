@@ -1,4 +1,4 @@
-import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
+import type { RolItem, UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   ActualizarUsuarioInput,
@@ -44,6 +44,10 @@ export type ListarTiposIdentificacionServiceResult =
   | { status: "ok"; tipos: { id: string; value: string }[] }
   | { status: "forbidden" };
 
+export type ListarRolesServiceResult =
+  | { status: "ok"; roles: RolItem[] }
+  | { status: "forbidden" };
+
 export interface IUsuarioService {
   crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult>;
   listar(input: ListarUsuariosInput, actor: Actor): Promise<ListarUsuariosServiceResult>;
@@ -59,4 +63,5 @@ export interface IUsuarioService {
     actor: Actor,
   ): Promise<CambiarEstadoUsuarioServiceResult>;
   listarTiposIdentificacion(actor: Actor): Promise<ListarTiposIdentificacionServiceResult>;
+  listarRoles(actor: Actor): Promise<ListarRolesServiceResult>;
 }

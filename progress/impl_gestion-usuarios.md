@@ -161,3 +161,46 @@ schema. No existe acción para listar roles con id y crear una tocaría `lib/**`
 
 ## Veredicto (frontend)
 Frontend de la feature 25 (Bloque 4, T8–T11) completo y verde; T12 cerrado.
+
+## GAP de integración — listado de roles (BACKEND, follow-up)
+Cierra la "Nota abierta": el select de rol necesitaba pares `{id, value}` del catálogo
+`rol` (el schema espera `rolId` = UUID). Se añadió, espejo EXACTO de
+`listTiposIdentificacion`, una vía para listar roles. Solo `lib/**` + `tests/**`; `app/**`
+intacto.
+
+### Archivos modificados
+- `lib/interfaces/repositories/IUserRepository.ts` — tipo `RolItem { id; value: RolValue }` +
+  `listRoles(): Promise<RolItem[]>`.
+- `lib/repositories/UserRepository.ts` — `listRoles()` (`prisma.rol.findMany`,
+  `select: { id, value }`, `orderBy: { value: "asc" }`).
+- `lib/interfaces/services/IUsuarioService.ts` — `ListarRolesServiceResult` + `listarRoles(actor)`.
+- `lib/services/UsuarioService.ts` — `listarRoles()` con misma authz que
+  `listarTiposIdentificacion` (solo `maestro`; resto `forbidden`).
+- `lib/types/usuario.ts` — `ListarRolesResult = { status:"ok"; roles: RolItem[] } | ActionError`.
+- `lib/actions/usuarios.ts` — Server Action `listarRoles(deps?)`
+  (`withErrorHandler` + `resolveActorFromSession` + deps inyectable).
+- Mocks ampliados (ripple del cambio de interfaz):
+  `tests/unit/services/{auth-service,asignacion-mensajero-service,rol-admin-satelite-authz,usuario-service}.test.ts`,
+  `tests/unit/actions/usuarios.test.ts`, `tests/unit/repositories/user-repository.crud.test.ts`.
+
+### Firma final de la action (para cablear el frontend)
+`listarRoles(deps?: UsuarioActionDeps): Promise<{ status: "ok"; roles: { id: string; value: RolValue }[] } | ActionError>`
+
+### Mapa nuevo → test
+- repo `listRoles` → `user-repository.crud.test.ts` › "listRoles devuelve id/value del catálogo rol ordenado por value".
+- service `listarRoles` ok/forbidden → `usuario-service.test.ts` › "listarRoles devuelve el catalogo de roles" y bloque authz (loop admin/mensajero/desconocido).
+- action `listarRoles` unauth/delega/forbidden → `usuarios.test.ts` › casos "listarRoles ...".
+
+### Verificación (salida real)
+- `npx prisma generate --schema db/schema.prisma`: OK (v7.8.0).
+- `pnpm run typecheck`: 0 errores, exit 0.
+- `pnpm run lint`: 0 errores (135 warnings pre-existentes en `.claude/skills/**`, ajenos).
+- Tests afectados en aislamiento (6 files): **75 passed**, exit 0.
+- `npx vitest run` (suite completa): **883–885 passed**; los mismos timeouts flaky pre-existentes
+  (`LoginForm`, `recuperar-contrasena-form`, `ordenes-carga-masiva.route`) verdes al reintentar en
+  aislamiento; ninguno en el scope de este cambio.
+- `./init.sh`: **== init OK ==**.
+
+### Veredicto (gap backend)
+Listado de roles añadido como espejo exacto de tipos de identificación; verde. El frontend ya
+puede resolver `rolId` (UUID) desde `listarRoles`.

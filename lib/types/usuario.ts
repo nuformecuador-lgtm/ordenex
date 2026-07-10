@@ -2,6 +2,7 @@ import { z } from "zod";
 import { usuariosConfig } from "@/lib/config/usuarios";
 import { strongPasswordSchema } from "@/lib/types/password-policy";
 import type {
+  RolItem,
   UsuarioListItem,
   UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
@@ -107,3 +108,4 @@ export type CambiarEstadoUsuarioResult = { status: "ok"; usuario: UsuarioPublico
 export type ListarTiposIdentificacionResult =
   | { status: "ok"; tipos: { id: string; value: string }[] }
   | ActionError;
+export type ListarRolesResult = { status: "ok"; roles: RolItem[] } | ActionError;

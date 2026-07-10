@@ -10,6 +10,7 @@ import {
   type ActualizarUsuarioResult,
   type CambiarEstadoUsuarioResult,
   type CrearUsuarioResult,
+  type ListarRolesResult,
   type ListarTiposIdentificacionResult,
   type ListarUsuariosResult,
   type ObtenerUsuarioResult,
@@ -149,6 +150,19 @@ export async function listarTiposIdentificacion(
     if (!actor) throw new UnauthenticatedError(); // R2
     const service = deps.usuarioService ?? buildUsuarioService();
     return service.listarTiposIdentificacion(actor);
+  });
+  return isAppErrorShape(r) ? toUsuarioActionError(r) : r;
+}
+
+/** R1/R2: catalogo de roles para poblar el select del formulario. */
+export async function listarRoles(
+  deps: UsuarioActionDeps = {},
+): Promise<ListarRolesResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R2
+    const service = deps.usuarioService ?? buildUsuarioService();
+    return service.listarRoles(actor);
   });
   return isAppErrorShape(r) ? toUsuarioActionError(r) : r;
 }

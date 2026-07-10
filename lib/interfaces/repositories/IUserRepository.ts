@@ -90,6 +90,13 @@ export interface TipoIdentificacionItem {
   value: string;
 }
 
+// Feature 25: catalogo de roles para poblar el select (par id/value que la UI
+// necesita porque `rolId` es el UUID del rol, no su `value`).
+export interface RolItem {
+  id: string;
+  value: RolValue;
+}
+
 export interface IUserRepository {
   /**
    * Unico metodo que expone el hash de contrasena. Solo debe usarse desde
@@ -127,4 +134,6 @@ export interface IUserRepository {
   setEstado(id: string, estado: EstadoUsuario): Promise<UsuarioPublico | null>;
   /** Feature 25/R29: catalogo `tipo_identificacion` proyectado a id/value. */
   listTiposIdentificacion(): Promise<TipoIdentificacionItem[]>;
+  /** Feature 25: catalogo `rol` proyectado a id/value, ordenado por `value`. */
+  listRoles(): Promise<RolItem[]>;
 }
