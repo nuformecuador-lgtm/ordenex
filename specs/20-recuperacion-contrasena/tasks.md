@@ -116,7 +116,7 @@
 
 ## Bloque 4 — Frontend (depende de T05; UI en paralelo con Bloque 3 salvo integración)
 
-- [ ] **T06 — Página pública** (`app/recuperar-contrasena/page.tsx`) [P]
+- [x] **T06 — Página pública** (`app/recuperar-contrasena/page.tsx`) [P]
   - Server Component público; si hay sesión válida redirige a `/` (patrón `login/page.tsx`).
     Monta `RecuperarContrasenaForm`. Ruta FIRME `app/recuperar-contrasena/` (no bajo login).
   - Cubre: R12.
@@ -124,7 +124,7 @@
     sesión válida"; "renderiza el formulario si no hay sesión".
   - Hecho: página renderiza, test verde.
 
-- [ ] **T07 — Formulario multi-fase** (`app/recuperar-contrasena/_components/RecuperarContrasenaForm.tsx`)
+- [x] **T07 — Formulario multi-fase** (`app/recuperar-contrasena/_components/RecuperarContrasenaForm.tsx`)
   - Fases `email → code → password → done`, reutiliza shadcn/ui y patrón de `LoginForm`.
     Conserva email+código en estado entre fases. Mensajes genéricos (no revela existencia).
     Confirmación de éxito con enlace a login.
@@ -134,7 +134,7 @@
     confirmación y enlace a login tras restablecer".
   - Hecho: las tres fases funcionan contra actions mockeadas, tests verdes.
 
-- [ ] **T08 — Enlace desde login** (`app/login/_components/LoginForm.tsx`) [P]
+- [x] **T08 — Enlace desde login** (`app/login/_components/LoginForm.tsx`) [P]
   - Añade enlace "¿Olvidaste tu contraseña?" hacia `app/recuperar-contrasena`.
   - Cubre: R18.
   - Test: `tests/integration/login-form-reset-link.test.tsx` — "muestra enlace de

@@ -86,7 +86,66 @@ R16/R17/R18 → PENDIENTES (frontend T06/T07/T08).
 - R14: el código NUEVO no loguea OTP ni contraseña. El `console.log` heredado en
   `OtpChallengeIssuer` NO se tocó (excepción aceptada por el humano).
 
+---
+
+# Implementación Feature 20 — FRONTEND (Bloque 4, T06/T07/T08)
+
+> Alcance: SOLO capa de presentación. NO se tocó `lib/actions/`, `lib/services/`,
+> `lib/repositories/`, `lib/types/password-*`, `db/` ni `app/api/`. Se consumen las
+> Server Actions del backend (T05) tal cual, con sus firmas/uniones de resultado.
+
+## Tasks completadas: T06, T07, T08 → `[x]`
+
+## Archivos creados
+
+- `app/recuperar-contrasena/page.tsx` — Server Component público (R12): si hay sesión
+  válida (`SESSION_COOKIE_NAME` + `SessionRepository.findValidById`) redirige a `/`;
+  si no, monta `RecuperarContrasenaForm`. Réplica del patrón de `app/login/page.tsx`.
+- `app/recuperar-contrasena/_components/RecuperarContrasenaForm.tsx` — Client Component
+  multi-fase `email → code → password → done` (R16/R17). Conserva email+código en estado
+  entre fases. Llama `solicitarRecuperacion`, `verificarCodigoRecuperacion`,
+  `restablecerContrasena`. Mensajes genéricos (nunca revela existencia; errores de
+  verificación/restablecimiento indistinguibles). Feedback temprano de la política fuerte
+  reutilizando `strongPasswordSchema` (sin duplicar reglas) y coincidencia de contraseñas.
+  Éxito → confirmación + enlace a `/login`.
+- Tests: `tests/integration/recuperar-contrasena-page.test.tsx`,
+  `tests/integration/recuperar-contrasena-form.test.tsx`,
+  `tests/integration/login-form-reset-link.test.tsx`.
+
+## Archivos modificados
+
+- `app/login/_components/LoginForm.tsx` — enlace "¿Olvidaste tu contraseña?" →
+  `/recuperar-contrasena` en la fase de credenciales (R18). Cambio mínimo; import de
+  `next/link`. No altera la lógica de login (29 tests existentes verdes).
+- `specs/20-recuperacion-contrasena/tasks.md` — T06/T07/T08 marcadas `[x]`.
+
+## Mapa R → test (cobertura frontend)
+
+| R | Test |
+|---|------|
+| R12 | `recuperar-contrasena-page.test.tsx` "redirige a / cuando la cookie de sesión es válida"; "renderiza el formulario cuando no hay cookie"; "…cuando la sesión está expirada/inválida" |
+| R16 | `recuperar-contrasena-form.test.tsx` "avanza de email a código tras solicitar"; "avanza a nueva contraseña tras verificar con éxito" (3 fases + confirmación) |
+| R17 | `recuperar-contrasena-form.test.tsx` "muestra confirmación y enlace a login tras restablecer con éxito" |
+| R18 | `login-form-reset-link.test.tsx` "muestra un enlace hacia la ruta de reset" |
+| R6/R11 (consumidos) | `recuperar-contrasena-form.test.tsx` "muestra error genérico con código inválido"; "muestra error genérico si el desafío ya no está activo (invalid_or_expired)" |
+| R7 (consumido) | `recuperar-contrasena-form.test.tsx` "bloquea el envío con confirmación distinta y no invoca la action" |
+
+## Salida de verificación (real)
+
+- Tests nuevos aislados (3 archivos) → **11 tests verdes**.
+- Tests de login existentes (`LoginForm` + `LoginPage`) → **29 verdes** (T08 no rompe nada).
+- `npx vitest run` (suite completa) → **99 archivos, 782 tests, todos verdes (0 rojos)**.
+- `./init.sh` → **verde, exit 0** (`== init OK ==`). Lint: 0 errores, 135 warnings
+  pre-existentes en `.claude/skills/**` ajenos a esta feature. No apareció ningún flaky.
+
+## Notas de seguridad
+
+- La UI nunca distingue "email no existe" de "email enviado": tras `solicitarRecuperacion`
+  siempre avanza a la fase de código con `status: "ok"`.
+- Los fallos de verificación y de restablecimiento (`invalid_or_expired`) muestran el mismo
+  mensaje genérico, sin revelar la causa ni la existencia de la cuenta.
+
 ## Veredicto
 
-Backend de la Feature 20 (Bloques 0–3, T00–T05) implementado y verde; frontend
-(T06–T08, R16/R17/R18) pendiente.
+Frontend de la Feature 20 (Bloque 4, T06/T07/T08 → R16/R17/R18 + R12) implementado,
+consumiendo el backend existente sin tocarlo; suite completa e `init.sh` en verde.
