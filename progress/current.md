@@ -14,6 +14,12 @@
 > aceptada: sin e2e de login adminTienda (repo sin infra seed/login e2e). Cierre commiteado a
 > `dev` (chore/state) — otra sesión trabaja la 28 en paralelo.
 
+> Feature 28 (rename estado embalaje -> en_fulfillment) CERRADA 2026-07-10: **PR #15 mergeado** a
+> `origin/dev` (d259e6a), status -> `done`, entrada en `history.md`. Backend puro; enum PG
+> `order_status_value` standalone + rename de fila de catálogo, verificado contra Postgres real (R11).
+> El cierre (done + history) viaja en la rama `chore/skills-cierre-28` junto con las skills de diseño.
+> DEUDA nueva: `scripts/db-rollback.ts` (flag `--schema` roto en Prisma 7) -> feature aparte.
+
 
 > Feature 18 (cobros crud) CERRADA 2026-07-10: PR #12 mergeado a `origin/dev` (a379d8e),
 > status -> `done`, entrada en `history.md`. El cierre de la 18 + registro de la 19 viajan en
