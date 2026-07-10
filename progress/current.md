@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/18-cobros-crud | backend | F1 spec | SELECCIONADA por F1.0 (feature 18). CRUD backend de cobros (tabla nueva + capas). La 17 (siguiente por id) quedó BLOQUEADA: el humano la reescribió para depender de las features 27 y 28 (rename embalaje->en_fulfillment, estado inicial fulfillment, diferir num_guia), aún pending. Branch desde `origin/dev`. spec_author en curso. |
+| feature/18-cobros-crud | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. CRUD backend de `cobro` (patrón órdenes): tabla multi-fila con `nombre` + 8 columnas — montos `Decimal(12,2)` (valor_flete*, fulfillment), porcentajes `Decimal(5,2)` 0..100 (comision_cod, iva_flete, iva_comision_cod). Migración con down.sql + RLS. Capas service/repo/actions/zod, autorización solo `maestro` escribe (admin lee). R1..R27 -> tests. Suite 73 files / 660 tests verdes (+88). Deuda: RLS anon + rollback contra Postgres real (aceptada, patrón 6/15). Commit + push + **PR pendiente** -> base `dev`. La 17 sigue BLOQUEADA (deps 27/28). |
 
 > Feature 16 (carga masiva etapa 2) CERRADA 2026-07-10: PR #11 mergeado a `origin/dev`
 > (b5009ae), status -> `done`, entrada en `history.md`. El cierre de la 16 + registro de la
