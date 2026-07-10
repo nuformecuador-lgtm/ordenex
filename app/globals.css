@@ -46,6 +46,35 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Paleta completa del sitio ordenex.co (fase 2 rebrand), como tokens de
+     utilidad Tailwind v4 (bg-, text-, border- generados por color).
+     Complementa a los tokens shadcn de arriba; no los reemplaza. */
+  --color-brand: #f26419;
+  --color-brand-dark: #d4530d;
+  --color-brand-light: #ffaa6b;
+  --color-brand-soft: #fff0e8;
+  --color-navy: #0b2545;
+  --color-navy-deep: #0d2444;
+  --color-asfalto-0: #f2f5fb;
+  --color-asfalto-1: #e9edf6;
+  --color-asfalto-2: #dde1ee;
+  --color-asfalto-4: #8a94ad;
+  --color-asfalto-5: #4a5368;
+  --color-asfalto-7: #1f3a63;
+  --color-asfalto-9: #0d2444;
+  --color-info: #1a56db;
+  --color-ink-blue: #1d5fd4;
+  --color-success: #10b981;
+  --color-success-soft: #d1fae5;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #ef4444;
+  --color-danger-soft: #fee2e2;
+  --color-hivis: #f4c500;
+  --color-kraft-canvas: #f7f8fc;
+  --color-kraft-card: #ffffff;
+  --color-kraft-inset: #f1f4fb;
 }
 
 :root {

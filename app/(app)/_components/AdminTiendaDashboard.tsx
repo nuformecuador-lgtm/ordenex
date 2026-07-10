@@ -12,13 +12,11 @@ import { ordenesColumnsAdminTienda } from "./ordenes-columns-admin-tienda";
 export function AdminTiendaDashboard() {
   return (
     <section className="flex flex-1 flex-col gap-6 p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+      <header className="flex flex-col gap-1 rounded-lg bg-navy px-5 py-4 text-white">
+        <h1 className="text-2xl font-semibold tracking-tight">
           Panel de tienda
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Órdenes de mi tienda
-        </p>
+        <p className="text-sm text-white/70">Órdenes de mi tienda</p>
       </header>
       <OrdenesModule columns={ordenesColumnsAdminTienda} />
     </section>
