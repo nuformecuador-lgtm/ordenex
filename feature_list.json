@@ -212,11 +212,11 @@
       "id": 22,
       "name": "aprobacion de postulaciones de mensajeros",
       "description": "Backend para que SOLO los roles maestro y admin (adminSatelite, adminTienda y mensajero NO) aprueben o rechacen las postulaciones de mensajeros en estado pendiente. Aprobar cambia el estado de la cuenta de pendiente a activo, habilitando el acceso del mensajero. Rechazar deja la cuenta sin habilitar (estado resultante inactivo o bloqueado/rechazado: a decidir en el spec). Expone las Server Actions/consultas para listar postulaciones pendientes (con sus datos y documentos) y para aprobar/rechazar una postulacion, con autorizacion por rol. La UI que las consume es el dashboard del maestro (ver feature de dashboard). Depende de la feature de postulacion de mensajero (21).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/22-aprobacion-postulaciones",
       "depends_on": 21
     },
     {
@@ -526,3 +526,4 @@
     }
   ]
 }
+

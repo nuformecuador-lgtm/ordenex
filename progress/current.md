@@ -7,22 +7,11 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Zonas frontend y backend LIBRES. |
+| feature/22-aprobacion-postulaciones | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 mayores).** Backend para que SOLO `maestro`/`admin` aprueben/rechacen postulaciones `pendiente` (de la 21). Decisiones F1.4: rechazo→**`inactivo`** (SIN migración), aprobar→`activo`, URLs firmadas TTL 300s del bucket privado, sin motivo, sin auditoría. `IAprobacionPostulacion{Service,Repository}`+impl, `ISignedUrlProvider`+`SupabaseSignedUrlProvider`, `lib/actions/aprobacion-postulaciones.ts` (listar pendientes con URLs firmadas / aprobar / rechazar); autz por rol (resto forbidden, sin sesión unauthenticated); `updateMany` condicional anti-carrera. **Sin UI, sin migraciones.** R1–R21 mapeados. **Suite 999 verde**, typecheck+lint OK. **PR #26 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/26) → base `dev`. Pasa a `done` al mergear. Desbloquea la feature 23 (dashboard maestro). |
 
-> Feature 21 (postulación de mensajero) CERRADA 2026-07-10: **PR #23 mergeado** a `origin/dev`
-> (c5c1c97, 20:32Z), status -> `done` (bookkeeping corregido en esta sesión; había quedado en
-> `pending` por drift de sesiones paralelas — la impl real la hizo otra sesión). Fullstack, R1–R26:
-> registro público de mensajeros (rol mensajero, estado `pendiente`), migración con apellidos+vehiculo+
-> placa+tabla `mensajero_documento`, `PostulacionMensajeroService` con subida a Storage privado
-> (`mensajero-docs`) y rollback, Server Action con rate-limit, `app/postulacion/`. Reviewer APROBADO
-> (bloqueante `foto_rostro` resuelto). 56 tests verdes en aislamiento. DEUDA (no bloqueante): aplicar
-> migración a Postgres real + crear bucket privado; aprobación/URL firmada diferida a la #22.
+> Feature 21 (postulación de mensajero) CERRADA 2026-07-10: **PR #23 mergeado** a `origin/dev` (20db364), status `done`, entrada en `history.md`. Fullstack (R1–R26), reviewer APROBADO (bloqueante R17 resuelto). `primer_apellido` OBLIGATORIO; migración APLICADA y VERIFICADA contra Postgres real. Desbloquea la 22→23. Pendiente humano: crear bucket privado `mensajero-docs` en Supabase Storage.
 
-> Feature 25 (gestión de usuarios) CERRADA 2026-07-10: **PR #24 mergeado** a `origin/dev`
-> (95d5025, 20:39Z), status -> `done`, entrada en `history.md`. Fullstack, sin tabla nueva; CRUD
-> usuarios en configuración (solo maestro), R1–R36. Reviewer APROBADO 0 bloqueantes; suite ~886
-> verde. GAP de rol id/value cerrado (`listarRoles`, select por UUID). Deuda menor: timeout de un
-> test de `usuario-form` (flaky bajo carga).
+> Feature 25 (gestión de usuarios) CERRADA 2026-07-10: **PR #24 mergeado** a `origin/dev` (95d5025), status `done`, entrada en `history.md`. Fullstack (R1–R36), otra sesión, reviewer APROBADO 0 bloqueantes.
 
 > Feature 50 (vehiculos) CERRADA 2026-07-10: **PR #21 mergeado** a `origin/dev` (eb6a17d), status `done`, entrada en `history.md`. Backend puro (R1–R15, R12 N/A). Migración+seed **aplicados y verificados contra Postgres real**. Desbloquea la 21→22→23.
 
