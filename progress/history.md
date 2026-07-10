@@ -294,3 +294,21 @@
   antes de commitear (no entró al PR). Mergeada a `origin/dev` vía **PR #9** (aff6e73, 2026-07-10).
 - DEUDA (aceptada, patrón features 6/10, requiere DB real): aplicar la migración contra
   Postgres. Lo verificable sin DB está cubierto por unit + integración mockeada.
+
+## 2026-07-10 — ordenes - carga masiva (botón + modal) (feature 14)
+- Frontend puro por composición: botón "Carga masiva" en la cabecera de `/ordenes` +
+  wrapper de cliente local `app/(app)/ordenes/_components/OrdenesCargaMasivaButton.tsx` que
+  abre el `Modal` (feature 13) como CONTENEDOR (`hideCancel`, `confirmLabel="Cerrar"`, sin
+  `onConfirm`) con el `BulkUpload` (feature 9) dentro, apuntando al endpoint de la feature 15
+  (`/api/ordenes/carga-masiva`, `accept=["csv","xlsx"]`, `fieldName="file"`, 11 columnas en
+  orden). `onSuccess`: refresca la lista (SWR `mutate` sobre `["ordenes:list", …]`) + toast
+  (feature 11) `success`/`warning` según `conError`, sin cerrar el modal; `onError`: toast
+  `error` sin refrescar. NO modifica los componentes genéricos ni el backend.
+- Requisitos: R1–R19 (EARS) -> tests reales en `tests/components/OrdenesCargaMasivaButton.test.tsx`
+  (mock de `fetch`, spies de `useToast`/`mutate`). Ver `progress/impl_ordenes-carga-masiva-ui.md`.
+  Suite 61 files / 506 tests verdes (+21); typecheck/lint/init.sh OK.
+- Decisiones humanas (2026-07-10): modal NO se cierra al éxito; botón solo texto; sin
+  `maxSizeBytes` en cliente; toast solo con totales (el detalle por fila es la feature 16).
+- Review APROBADO, 0 bloqueantes. Mergeada a `origin/dev` vía **PR #10** (bb511f1, 2026-07-10).
+  Cierra la cadena de carga masiva: 9 (componente) -> 15 (endpoint) -> 14 (UI).
+- Sin deuda de DB (frontend puro).

@@ -7,13 +7,11 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/14-ordenes-carga-masiva | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Composición pura: botón "Carga masiva" en `/ordenes` + wrapper local `_components/OrdenesCargaMasivaButton.tsx` que abre `Modal` (contenedor: hideCancel, "Cerrar", sin onConfirm) con `BulkUpload` (endpoint `/api/ordenes/carga-masiva`, accept csv/xlsx, 11 fields). onSuccess: `mutate` SWR + toast (success/warning según conError, no cierra el modal); onError: toast error. Sin tocar genéricos ni backend. R1..R19 -> tests. Suite 61 files / 506 tests verdes (+21). Commit + push hechos. **PR #10 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/10 -> base `dev`. Pasa a `done` al mergear. |
+| feature/16-carga-masiva-etapa2 | fullstack | F1 spec | SELECCIONADA por F1.0 (feature 16). Resumen post-carga columna por columna + asignación de `mensajero_sugerido_id`. Branch desde `origin/dev`. spec_author en curso. |
 
-> Feature 15 (endpoint carga masiva) CERRADA 2026-07-10: PR #9 mergeado a `origin/dev`
-> (aff6e73), status -> `done`, entrada en `history.md`. El cierre de la 15 + registro de la
-> 14 viajan en el primer commit de `feature/14-ordenes-carga-masiva` (bookkeeping vía PR).
-> Se revirtió un cambio espurio del implementer (hash bcrypt del maestro en migración
-> histórica); no entró al PR #9.
+> Feature 14 (botón carga masiva en órdenes) CERRADA 2026-07-10: PR #10 mergeado a
+> `origin/dev` (bb511f1), status -> `done`, entrada en `history.md`. El cierre de la 14 +
+> registro de la 16 viajan en el primer commit de `feature/16-carga-masiva-etapa2`.
 
 > Feature 11 (notificaciones/toast) CERRADA 2026-07-10: PR #8 mergeado a `origin/dev`
 > (1169312), status -> `done`, entrada en `history.md`. El cierre de la 11 + registro de
@@ -47,6 +45,19 @@
   soporte async (spinner + bloqueo de confirmacion).
 - `ordenes - carga masiva` (id 14): **zone=frontend, complexity=low, depends_on=9.**
   Boton en ordenes que abre modal con el componente de carga masiva.
+- `ordenes - carga masiva - etapa 2` (id 16): **zone=fullstack, complexity=medium,
+  branch=feature/16-carga-masiva-etapa2, depends_on=15.** Evaluada 2026-07-10 con el
+  codigo en mano: es FULLSTACK (backend nuevo — listar usuarios `role=mensajero` como
+  `{id,nombre}` para el select y asignar/actualizar `mensajero_sugerido_id`; hoy no hay
+  metodo de listado por rol en `UserRepository`; y frontend — resumen columna por columna
+  + selects). DECISION DE PROCESO (leader): NO se parte la entrada del feature_list (que el
+  humano curo) en dos; como las mitades son ESTRICTAMENTE SECUENCIALES (frontend depende del
+  backend, sin paralelismo que ganar) se corre como UN ciclo fullstack (implementer delega
+  backend_dev -> frontend_dev, un PR). Si el humano prefiere el split formal, se hace.
+  Decisiones humanas (2026-07-10): (1) flujo POST-COMMIT — las ordenes ya las crea la 15 en
+  `en_preparacion`; la 16 muestra el resumen y asigna mensajero sobre ordenes YA creadas, NO
+  cambia la 15/14. (2) asignacion de mensajero AMBOS: select global "aplicar a todos" +
+  override por fila.
 
 ## Conflictos pendientes
 
@@ -55,9 +66,9 @@
 (Ninguno por ahora)
 
 ## Plan de la sesion
-- [x] Features 1-13, 15: ciclos SDD completos (ver history.md).
-- [ ] Feature 14 (frontend, low, boton carga masiva en ordenes): F1 spec en curso.
-- [ ] Features 16, 17, 18...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
+- [x] Features 1-15: ciclos SDD completos (ver history.md).
+- [ ] Feature 16 (fullstack, medium, resumen etapa 2 + asignacion mensajero): F1 spec en curso.
+- [ ] Features 17, 18, 19...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.
