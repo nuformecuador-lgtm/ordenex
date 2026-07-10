@@ -22,6 +22,13 @@ vi.mock("@/lib/db/prisma-client", () => ({
   getPrismaClient: vi.fn(() => ({})),
 }));
 
+// Feature 26: page.tsx ramifica por rol server-side. Estos tests cubren el
+// placeholder de sesión (R25), no el dashboard: el actor se resuelve a null para
+// mantener la rama de placeholder. La ramificación por rol vive en HomePageRol.test.
+vi.mock("@/lib/auth/resolve-actor", () => ({
+  resolveActorFromSession: vi.fn(async () => null),
+}));
+
 // El boton en si (invocacion de logout, R26) se cubre en LogoutButton.test.tsx;
 // aqui se aisla la logica de visibilidad condicional de app/page.tsx (R25).
 vi.mock("@/app/_components/LogoutButton", () => ({
