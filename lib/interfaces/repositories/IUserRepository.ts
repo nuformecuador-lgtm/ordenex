@@ -29,6 +29,12 @@ export interface CreateUsuarioInput {
   tipoIdentificacionId: string;
   rolId: string;
   estado?: EstadoUsuario;
+  // Feature 21 (postulacion de mensajero): identidad + vehiculo, todos opcionales
+  // porque solo aplican a mensajeros (nullable en DB).
+  primerApellido?: string | null;
+  segundoApellido?: string | null;
+  vehiculoId?: string | null;
+  placa?: string | null;
 }
 
 /** R10: FK de catalogo (tipo_identificacion_id / rol_id) inexistente. */
