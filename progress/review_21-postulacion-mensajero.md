@@ -95,3 +95,17 @@ F1.4, seguridad, migración, alcance por slice, typecheck/lint/test verdes) pasa
 - **`MensajeroDocumentoRepository` sin cobertura directa.** Relacionado con R17: la clase
   de repositorio de lectura queda sin ningún test propio; conviene cubrirla al cerrar el MAYOR.
 
+
+---
+
+## Resolución del bloqueante (leader, 2026-07-10)
+
+- **MAYOR R17 — RESUELTO.** Se agregó `tests/unit/repositories/mensajero-documento-repository.test.ts`
+  (unit de `MensajeroDocumentoRepository.findByUsuario` con fake in-memory de Prisma): verifica el
+  filtrado por `usuarioId`, y afirma que el resultado permite resolver la `foto_rostro`
+  (documento `tipo === "foto_rostro"`) — R17 termina ahora en un test concreto. El mapa R→test del
+  impl se actualizó. Suite completa **887/887 verde**, typecheck+lint OK.
+- Menores (no bloqueantes): (1) setup de despliegue pendiente (aplicar migración a Postgres + crear
+  bucket privado `mensajero-docs`) — deuda documentada; (2) cobertura directa de `MensajeroDocumentoRepository`
+  — cubierta por el test nuevo de R17.
+- **Veredicto final: APROBADO** (bloqueante cerrado).
