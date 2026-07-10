@@ -517,7 +517,7 @@
       "id": 50,
       "name": "vehiculos",
       "description": "Genera el CRUD y la tabla vehiculos, disponible unicamente para el rol maestro. La tabla tiene los campos id y name (OJO: name, NO 'value' como los demas catalogos rol/order_status/tipo_identificacion). Nuevo enum Postgres (moto, carro, camion); los valores del enum van en la columna name y son los mismos que se siembran en el seed de la tabla. Lo consume la postulacion de mensajero (feature 21, vehiculo_id fk a vehiculos).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "backend",
