@@ -7,20 +7,21 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/21-postulacion-mensajero | fullstack | F1.2 | **SELECCIONADA (2026-07-10).** Registro público (postulación) de mensajeros: única vía de auto-registro. Form (nombre, primer/segundo apellido, email, teléfono, tipo doc, nº doc, `vehiculo_id`→vehiculos de la 50, placa, contraseña+confirmación) + subida de 5 documentos (cédula anverso/reverso, tarjeta propiedad anverso/reverso, foto rostro). Crea cuenta rol `mensajero` estado `pendiente` (sin acceso hasta aprobación de la feature 22). Extiende modelo `Usuario` (apellidos, vehículo, placa) + almacenamiento de archivos + migración. email y nº doc únicos; bcrypt (coste del login). Fullstack, complexity=high, depends_on=50 (**DONE**). Worktree `../ordenex-f21` desde `origin/dev`. **spec R1–R26 APROBADO (F1.4, 2026-07-10)**: A2=Supabase Storage bucket privado, A3=error específico por campo en duplicados, A4=con rate-limiting, A5=contraseña mín. 8 (A1 falsa alarma: 50 completa en dev). **Fase 2 (impl) EN ESPERA**: la 21 es fullstack (necesita ambas zonas) y hoy 20 (PR #20 abierto) + 25 (en curso) ocupan las dos. Arranca en cuanto ambas cierren. |
-
-> Feature 31 (plantilla XLSX) CERRADA 2026-07-10: **PR #19 mergeado** a `origin/dev` (eae983c), status `done`, entrada en `history.md`. Frontend puro (R1–R13), reviewer APROBADO 0 bloqueantes.
+| feature/21-postulacion-mensajero | fullstack | F2.1 | **spec APROBADO (F1.4) → in_progress (2026-07-10).** Registro público (postulación) de mensajeros. Decisiones F1.4: A2=Supabase Storage bucket privado, A3=error específico por campo en duplicados, A4=con rate-limiting, A5=contraseña mín. 8 (A1 falsa alarma: 50 completa en dev). **Impl ARRANCANDO**: slice backend (extiende `Usuario`: apellidos+`vehiculo_id`+placa, migración, FK a vehiculos de la 50, Storage de 5 docs, service/action de postulación → cuenta `mensajero` `pendiente`, bcrypt, unicidad email/nºdoc, rate-limit) → slice frontend (form público con subidas). Zonas LIBRES: 20 mergeada (PR #20), 25 solo `spec_ready`. Worktree `../ordenex-f21`. |
 
 > Feature 50 (vehiculos) CERRADA 2026-07-10: **PR #21 mergeado** a `origin/dev` (eb6a17d), status `done`, entrada en `history.md`. Backend puro (R1–R15, R12 N/A). Migración+seed **aplicados y verificados contra Postgres real**. Desbloquea la 21→22→23.
 
-> EN VUELO (otras sesiones, 2026-07-10): **feature 20** (recuperación contraseña, fullstack) — PR #20 ABIERTO; **feature 25** (gestión usuarios, fullstack) — en curso en el worktree principal. Ambas ocupan las dos zonas → la impl de la 21 espera a que una libere.
+> Feature 20 (recuperación de contraseña) CERRADA 2026-07-10: **PR #20 mergeado** a `origin/dev`
+> (b1ef459, 19:15Z), status -> `done`, entrada en `history.md`. Fullstack (reusa infra OTP, sin
+> tabla nueva); implementada en 2 slices (backend + frontend), reviewer APROBADO en ambos, 0
+> bloqueantes, suite 782/782 verde. Desbloquea la #25 (comparte `strongPasswordSchema`).
 
-> **chore rebrand-ordenex-co** CERRADO: **PR #18 MERGEADO a `origin/dev`** (2026-07-10, merge `0750695`). Identidad ordenex.co (naranja `#f26419`+navy `#0b2545`+Poppins/JetBrains); frontend puro. NO es feature del `feature_list.json` (chore) → sin entrada en `history.md`. Ya en la base de `dev`.
+> Feature 31 (plantilla XLSX) CERRADA 2026-07-10: **PR #19 mergeado**, status -> `done`, entrada
+> en `history.md`. Frontend puro (CSV→XLSX, exceljs import dinámico), reviewer APROBADO 0 bloqueantes.
 
 > Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a
 > `origin/dev` (7535961), status -> `done`, entrada en `history.md`. Frontend puro (R1–R19),
 > reviewer APROBADO 0 bloqueantes, suite 721/721 verde. Corrió en paralelo con la 28 (backend).
-> El cierre (done + history) viaja en la rama `feature/31-plantilla-xlsx` (bookkeeping vía PR).
 
 > Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
 > `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en

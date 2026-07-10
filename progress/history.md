@@ -432,16 +432,6 @@
 - Flaky pre-existente de auth (HomePage/LoginForm bajo ejecución paralela) dictaminado no bloqueante
   (pasa 29/29 en aislamiento; el diff no toca esos archivos).
 
-## Feature 31 — plantilla de carga en XLSX (correccion) — DONE 2026-07-10
-- Frontend puro. Cambia la plantilla descargable de `BulkUpload` de CSV a XLSX formateado
-  (encabezados por columna, negrita, anchos, fila de ejemplo) reutilizando `exceljs` (feature 15)
-  con import DINAMICO. Nuevo `lib/utils/xlsx-template.ts` (`buildXlsxTemplate` async),
-  `handleDownloadTemplate` async con mime XLSX, `DEFAULT_TEMPLATE_NAME`, consumidor de ordenes a `.xlsx`.
-  `csv-template.ts` conservado intacto. NO toca backend (el endpoint de carga de la 15 ya acepta XLSX).
-- Requisitos R1–R13 (EARS) -> tests reales. Reviewer APROBADO 0 bloqueantes; tests 61/61 aislado,
-  typecheck + init.sh verde. Mergeada a `origin/dev` via **PR #19** (eae983c, 2026-07-10).
-- El cierre (done + history) viaja en la rama `feature/21-postulacion-mensajero` (bookkeeping via PR).
-
 ## Feature 50 — vehiculos — DONE 2026-07-10
 - Backend puro. Catalogo `vehiculos` (tabla + enum PG) disponible solo para rol `maestro`, patron de
   las features 4/19 con una diferencia deliberada: columna de valor **`name`** (no `value`). Enum
@@ -458,3 +448,45 @@
 - Mergeada a `origin/dev` via **PR #21** (eb6a17d, 2026-07-10). Corrio en zona backend en paralelo con
   la 31 (frontend). Impl via backend_dev DIRECTO (el implementer falla con el modelo legacy sonnet-4).
   Desbloquea la cadena 21 -> 22 -> 23.
+
+## 2026-07-10 — plantilla de carga en XLSX (feature 31, FRONTEND)
+- Frontend puro. La plantilla descargable de `BulkUpload` (botón "Descargar plantilla") pasa de
+  CSV a XLSX formateado (cabecera en negrita, anchos legibles, fila de ejemplo opcional con la
+  misma regla del CSV), para que se llene columna por columna con facilidad. Nuevo generador
+  `lib/utils/xlsx-template.ts` (`buildXlsxTemplate` async con exceljs); `handleDownloadTemplate`
+  async con mime XLSX y estado mientras genera; `DEFAULT_TEMPLATE_NAME` y el consumidor de órdenes
+  a `.xlsx`. Solo cambia la plantilla que se DESCARGA (el endpoint de carga ya aceptaba XLSX).
+- Decisiones humanas (F1.4, 2026-07-10): SIEMPRE XLSX (sin prop `templateFormat`); exceljs por
+  IMPORT DINÁMICO (`await import`, R6b) para no inflar el bundle; `lib/utils/csv-template.ts` y su
+  test CONSERVADOS intactos.
+- Requisitos R1–R13 (+R6b) -> tests reales (round-trip del generador releyendo el buffer con
+  ExcelJS + component del botón). Ver `progress/impl_31-plantilla-xlsx.md` y `review_31-...md`.
+  Feature en aislamiento 61/61; typecheck OK; init.sh verde.
+- Review APROBADO, 0 bloqueantes. Corrió en paralelo con la 28 (backend). Mergeada a `origin/dev`
+  vía **PR #19** (2026-07-10 17:21Z). Impl vía frontend_dev DIRECTO (implementer inestable por
+  sonnet-4). El PR #19 llevó también el cierre de la feature 29.
+- Flaky de timeouts pre-existente (auth + integración bajo ejecución paralela), no determinista y
+  ajeno al diff; init.sh no gatea sobre vitest.
+
+## 2026-07-10 — recuperación de contraseña (feature 20, FULLSTACK)
+- Flujo público de reset de contraseña reusando la infra OTP por email del login RBA, SIN tabla
+  nueva (reusa `EmailOtpChallenge`). BACKEND: `strongPasswordSchema` (zod, 8-72 + complejidad,
+  `lib/types/password-policy.ts`, reutilizable); constantes `AUTH_RESET_*` en authConfig;
+  `PasswordResetService` (solicitar/verificarCodigo/restablecer) reusando `OtpChallengeIssuer`,
+  `EmailOtpChallengeRepository` (+ `findLatestActiveByUsuarioId`, `contarRecientesPorUsuario`),
+  `UserRepository.updatePasswordHash`, `hashPassword`; limitador de verificación en memoria
+  (`reset-rate-limit.ts`); Server Actions (`lib/actions/password-reset.ts`). No enumeración de
+  usuarios (respuesta genérica); rate-limit propio (NO reutiliza el lockout del login, no bloquea
+  la cuenta); marca `consumedAt` al usar el OTP. FRONTEND: `app/recuperar-contrasena/` (page +
+  `RecuperarContrasenaForm` de 3 fases email→código→nueva contraseña→éxito) + enlace desde login.
+- Requisitos R1–R20 (EARS) -> tests reales (policy/schemas/rate-limit/service/actions + component).
+  Ver `progress/impl_20-...md`, `review_20-...md` (backend) y `review_20-frontend-...md`.
+  Implementada en 2 slices (backend con zona libre; frontend al liberarse tras #29/#31). Suite
+  782/782 verde; typecheck + init.sh verdes.
+- Decisiones humanas (F1.4, 2026-07-10): ruta `app/recuperar-contrasena/`; contraseña fuerte 8+
+  con complejidad (validador zod reutilizable); device/ip reales del request; TTL + rate-limit
+  ligero propio (sin lockout de cuenta).
+- Reviewer APROBADO en ambos slices, 0 bloqueantes. Mergeada a `origin/dev` vía **PR #20**
+  (b1ef459, 2026-07-10 19:15Z). Impl vía backend_dev/frontend_dev DIRECTO (implementer inestable
+  por sonnet-4). Excepción aceptada por el humano: `OtpChallengeIssuer` loguea el OTP en claro
+  (código heredado, fuera de alcance).

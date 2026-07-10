@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { login, verifyChallenge } from "@/lib/actions/auth";
@@ -278,6 +279,16 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
             {isPending ? "Verificando..." : "Iniciar sesión"}
           </Button>
         </form>
+
+        {/* Enlace al flujo de recuperación de contraseña (R18) */}
+        <div className="text-center">
+          <Link
+            href="/recuperar-contrasena"
+            className="text-sm text-muted-foreground hover:text-foreground underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </div>
       </Card>
     );
   }
