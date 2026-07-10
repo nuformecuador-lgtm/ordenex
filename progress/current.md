@@ -104,6 +104,16 @@
   paralelo. Seleccionada por el humano ignorando la cadena de la 28 (28->27->17).
   ABIERTO para el spec: que mas muestra el dashboard del adminTienda ademas del modulo de
   ordenes (metricas/accesos) -> el humano decidira en la puerta de aprobacion F1.4.
+- `gestion de zonas` (id 24): **zone=fullstack, complexity=high, branch=feature/24-gestion-zonas,
+  depends_on=null.** Evaluada 2026-07-10: fullstack (migracion + seed XLSX + backend CRUD + UI en
+  configuracion). Por precedente del repo (features 20/21/25 corrieron fullstack SIN partir) se corre
+  como UN ciclo fullstack (implementer delega backend_dev->frontend_dev, un PR). Worktree
+  `../ordenex-f24` desde `origin/dev`. Seleccionada por el humano (2026-07-10) excluyendo 23 y 27; la
+  siguiente por id, la 17, esta bloqueada semanticamente por la 27 (in_progress). Es foundational:
+  destraba 30 (asignacion por zona) y 39 (pago por zona). **F1 (spec R1-R28) COMPLETA -> spec_ready.**
+  DOS GATES antes de impl: (1) es fullstack -> NO corre en paralelo con la feature 27 (tambien
+  fullstack, in_progress en otra sesion); (2) el seed necesita el **Excel de zonas** que el humano debe
+  proveer. Preguntas abiertas para F1.4 en `specs/24-gestion-zonas/requirements.md`.
 
 ## Conflictos pendientes
 
