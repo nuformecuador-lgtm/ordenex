@@ -7,12 +7,14 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/11-notificaciones | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Sistema de toast (`ToastProvider` + `useToast` + `Toast`) compuesto sobre `@base-ui/react/toast` (decisión humana: consistente con Modal), + adaptador puro `messageFromActionError`. Cableado de `/ordenes`/`Modal` = follow-up (fuera de alcance); `validation_error` = mensaje genérico. R1..R21 -> T1..T13. Suite 54 files / 413 tests verdes (+29). Menores no bloqueantes: `catch` de useToast re-lanza sin `cause`. Commit + push hechos. **PR #8 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/8 -> base `dev`. Pasa a `done` al mergear. |
+| feature/15-carga-masiva-endpoint | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Endpoint `POST /api/ordenes/carga-masiva` (CSV/XLSX vía `exceljs`, dep nueva), migración (columnas `direccion`/`monto_cobrar`/`mensajero_sugerido_id`+FK a usuario, `peso` nullable, `en_preparacion` en order_status) con `down.sql`+RLS, `BulkOrdenService`/parsers, dedup `num_remision` intra-archivo+DB, batch `skipDuplicates`, éxito parcial. Decisiones humanas: autorización SOLO `adminTienda` (R11), `tienda_id`=actor (R24), default GLOBAL `en_preparacion` (cambia feature 6 + su test), zona derivada de provincia, `peso` nullable. R1..R32 -> tests. Suite 60 files / 485 tests verdes (+72). Deuda: aplicar migración contra Postgres real (aceptada, patrón 6/10). Commit + push hechos. **PR #9 ABIERTO**: https://github.com/nuformecuador-lgtm/ordenex/pull/9 -> base `dev`. Pasa a `done` al mergear. NOTA: se revirtió un cambio espurio fuera de alcance del implementer (alteraba el hash bcrypt del `maestro` en la migración histórica `20260709120000_seed_maestro_user`); NO entró al commit. |
 
-> Feature 12 (notificaciones-fix) CERRADA 2026-07-10: PR #7 mergeado a `origin/dev`,
-> status -> `done`, entrada en `history.md`. El cierre de la 12 + registro de la 11
-> viajan en el primer commit de `feature/11-notificaciones` (bookkeeping vía PR, sin
-> commits directos a `dev`), igual que se hizo con el cierre de 9/13 en el PR de la 12.
+> Feature 11 (notificaciones/toast) CERRADA 2026-07-10: PR #8 mergeado a `origin/dev`
+> (1169312), status -> `done`, entrada en `history.md`. El cierre de la 11 + registro de
+> la 15 viajan en el primer commit de `feature/15-carga-masiva-endpoint` (bookkeeping vía
+> PR, sin commits directos a `dev`).
+> NOTA: al mergear la 11, la zona frontend quedó libre → la feature 14 (frontend, low,
+> depends_on 9 done) está desbloqueada y podría correr en PARALELO con la 15 (backend).
 
 ## Evaluaciones
 
@@ -47,9 +49,9 @@
 (Ninguno por ahora)
 
 ## Plan de la sesion
-- [x] Features 1-10, 9, 13, 12: ciclos SDD completos (ver history.md).
-- [ ] Feature 11 (frontend, toast): F1 spec en curso.
-- [ ] Features 14, 15...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
+- [x] Features 1-10, 9, 13, 12, 11: ciclos SDD completos (ver history.md).
+- [ ] Feature 15 (backend, high, endpoint carga masiva): F1 spec en curso.
+- [ ] Features 14, 16, 17...: evaluacion -> spec -> aprobacion -> impl -> review -> done.
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.

@@ -2,17 +2,20 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 import {
   NumRemisionDuplicadoError,
+  type CantonRow,
   type CreateOrdenData,
+  type DistritoRow,
   type GeoExistence,
   type IOrdenRepository,
   type ListOrdenesParams,
   type ListOrdenesResult,
+  type ProvinciaRow,
   type UpdateOrdenData,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 type OrdenPrismaClient = Pick<
   PrismaClient,
-  "orden" | "orderStatus" | "zona" | "provincia" | "canton" | "distrito"
+  "orden" | "orderStatus" | "zona" | "provincia" | "canton" | "distrito" | "usuario"
 >;
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
@@ -49,8 +52,8 @@ type OrdenListRow = Prisma.OrdenGetPayload<{
   };
 }>;
 
-// Serializa la fila de Prisma a OrdenDTO: peso Decimal -> number, nunca expone
-// deletedAt (R42/N3).
+// Serializa la fila de Prisma a OrdenDTO: peso Decimal -> number (o null,
+// feature 15/R4), nunca expone deletedAt (R42/N3).
 function toDTO(row: OrdenRow): OrdenDTO {
   return {
     id: row.id,
@@ -66,7 +69,7 @@ function toDTO(row: OrdenRow): OrdenDTO {
     cantonId: row.cantonId,
     distritoId: row.distritoId,
     producto: row.producto,
-    peso: row.peso.toNumber(),
+    peso: row.peso ? row.peso.toNumber() : null,
     notas: row.notas,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -99,8 +102,11 @@ export class OrdenRepository implements IOrdenRepository {
           cantonId: data.cantonId,
           distritoId: data.distritoId ?? null,
           producto: data.producto,
-          peso: new Prisma.Decimal(data.peso),
+          peso: data.peso !== null ? new Prisma.Decimal(data.peso) : null,
           notas: data.notas ?? null,
+          direccion: data.direccion ?? null,
+          montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
+          mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
         },
         ...WITH_ESTATUS,
       });
@@ -205,9 +211,97 @@ export class OrdenRepository implements IOrdenRepository {
     if (data.cantonId !== undefined) out.cantonId = data.cantonId;
     if (data.distritoId !== undefined) out.distritoId = data.distritoId;
     if (data.producto !== undefined) out.producto = data.producto;
-    if (data.peso !== undefined) out.peso = new Prisma.Decimal(data.peso);
+    if (data.peso !== undefined) {
+      out.peso = data.peso !== null ? new Prisma.Decimal(data.peso) : null;
+    }
     if (data.notas !== undefined) out.notas = data.notas;
     return out;
+  }
+
+  // --- Feature 15: carga masiva (metodos batch) ---
+
+  /** R25: remision -> estatus.value de la orden existente (no borrada). */
+  async findExistingRemisiones(nums: string[]): Promise<Map<string, string>> {
+    if (nums.length === 0) return new Map();
+    const rows = await this.prisma.orden.findMany({
+      where: { numRemision: { in: nums }, deletedAt: null },
+      select: { numRemision: true, estatus: { select: { value: true } } },
+    });
+    return new Map(rows.map((r) => [r.numRemision, r.estatus.value]));
+  }
+
+  /** R19/R21: provincias candidatas por nombre; el service resuelve jerarquia/ambiguedad. */
+  async findProvinciasByNombres(nombres: string[]): Promise<ProvinciaRow[]> {
+    if (nombres.length === 0) return [];
+    const rows = await this.prisma.provincia.findMany({
+      where: { nombre: { in: nombres, mode: "insensitive" } },
+      select: { id: true, nombre: true, zonaId: true },
+    });
+    return rows;
+  }
+
+  /** R19: cantones de las provincias resueltas (todo el universo, el service filtra por jerarquia). */
+  async findCantonesByProvinciaIds(provinciaIds: string[]): Promise<CantonRow[]> {
+    if (provinciaIds.length === 0) return [];
+    const rows = await this.prisma.canton.findMany({
+      where: { provinciaId: { in: provinciaIds } },
+      select: { id: true, nombre: true, provinciaId: true },
+    });
+    return rows;
+  }
+
+  /** R19: distritos de los cantones resueltos. */
+  async findDistritosByCantonIds(cantonIds: string[]): Promise<DistritoRow[]> {
+    if (cantonIds.length === 0) return [];
+    const rows = await this.prisma.distrito.findMany({
+      where: { cantonId: { in: cantonIds } },
+      select: { id: true, nombre: true, cantonId: true },
+    });
+    return rows;
+  }
+
+  /** R22: subconjunto de `ids` con rol `mensajero`. */
+  async findMensajerosByIds(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.usuario.findMany({
+      where: { id: { in: ids }, rol: { value: "mensajero" } },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /** R27: insercion masiva en lotes de `batchSize`, tolerando carreras de num_remision. */
+  async createManyOrdenes(data: CreateOrdenData[], batchSize: number): Promise<number> {
+    let inserted = 0;
+    for (let i = 0; i < data.length; i += batchSize) {
+      const chunk = data.slice(i, i + batchSize);
+      const result = await this.prisma.orden.createMany({
+        data: chunk.map((d) => this.toCreateManyInput(d)),
+        skipDuplicates: true,
+      });
+      inserted += result.count;
+    }
+    return inserted;
+  }
+
+  private toCreateManyInput(data: CreateOrdenData): Prisma.OrdenCreateManyInput {
+    return {
+      numRemision: data.numRemision,
+      estatusId: data.estatusId,
+      destinatario: data.destinatario,
+      telefonoDest: data.telefonoDest,
+      tiendaId: data.tiendaId,
+      zonaId: data.zonaId,
+      provinciaId: data.provinciaId,
+      cantonId: data.cantonId,
+      distritoId: data.distritoId ?? null,
+      producto: data.producto,
+      peso: data.peso !== null ? new Prisma.Decimal(data.peso) : null,
+      notas: data.notas ?? null,
+      direccion: data.direccion ?? null,
+      montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
+      mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
+    };
   }
 }
 

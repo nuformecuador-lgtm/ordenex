@@ -77,7 +77,7 @@ export interface OrdenDTO {
   cantonId: string;
   distritoId: string | null;
   producto: string;
-  peso: number;
+  peso: number | null; // feature 15/R4: nullable (carga masiva no trae peso)
   notas: string | null;
   createdAt: Date;
   updatedAt: Date;

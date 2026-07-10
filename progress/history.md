@@ -241,3 +241,28 @@
   sin pushear el branch); se REGENERÓ desde cero anclado al código real antes de implementar.
 - Review APROBADO, 0 bloqueantes. Mergeada a `origin/dev` vía **PR #7** (2026-07-10).
 - Sin deuda de DB (no toca DB, migraciones ni RLS).
+
+## 2026-07-10 — notificaciones (sistema de toast reutilizable)
+- Frontend puro. Sistema de toast sobre `@base-ui/react/toast` (decisión humana:
+  consistente con `Modal`/feature 13 sobre `@base-ui/react/dialog`): `ToastProvider`
+  (`providers/`) + hook `useToast()` (`hooks/`, API `success`/`error`/`info`/`warning`/
+  `show`/`dismiss` con id estable) + componente presentacional `Toast`
+  (`components/shared/`). 4 variantes con `role="alert"` (error/warning) / `role="status"`
+  (success/info), viewport en portal con `role="region"`+`aria-label`, botón de cierre con
+  `aria-label`. Aprovecha nativamente de Base UI: auto-descarte (`timeout`), persistencia
+  (`timeout:0`), pausa por hover/foco, apilado y límite (`limit`), ids únicos, cierre
+  programático (`close`), `onClose`. Adaptador puro `messageFromActionError`
+  (`lib/utils/`) que reutiliza `MSG` + `CODE_BY_DOMAIN_STATUS` de la feature 12
+  (`validation_error` → mensaje genérico). Provider montado en `app/(app)/layout.tsx`.
+- Requisitos cubiertos: R1–R21 (EARS), mapeados a tests reales que renderizan el
+  componente (`tests/components/ToastProvider.test.tsx`, `Toast.test.tsx`,
+  `tests/unit/utils/action-error-message.test.ts`). Ver `progress/impl_notificaciones.md`.
+  Suite 54 files / 413 tests verdes (+29); typecheck/lint/init.sh OK. Sin regresiones en
+  `AppLayout`/sidebar ni `OrdenesPage`.
+- Decisiones humanas (2026-07-10): (1) base `@base-ui/react/toast` (no toast propio);
+  (2) cablear `/ordenes` y `Modal.onError` = follow-up, FUERA de alcance; (3)
+  `validation_error` → mensaje genérico. `@base-ui/react/toast` confirmado presente
+  (v1.6.0) antes de decidir.
+- Review APROBADO, 0 bloqueantes (menores no bloqueantes: `catch` de `useToast` re-lanza
+  sin `cause`). Mergeada a `origin/dev` vía **PR #8** (1169312, 2026-07-10).
+- Sin deuda de DB (frontend puro).

@@ -57,6 +57,14 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     existsGeo: vi
       .fn()
       .mockResolvedValue({ zona: true, provincia: true, canton: true, distrito: true }),
+    // Feature 15: metodos batch de carga masiva, no ejercitados por el CRUD
+    // (feature 6) pero exigidos por la interfaz IOrdenRepository.
+    findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
+    findProvinciasByNombres: vi.fn().mockResolvedValue([]),
+    findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
+    findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
+    findMensajerosByIds: vi.fn().mockResolvedValue(new Set()),
+    createManyOrdenes: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
@@ -123,10 +131,10 @@ describe("crear — matriz de autorizacion", () => {
 });
 
 describe("crear — validacion de FKs y defaults", () => {
-  it("R27: sin estatusId aplica default en_bodega y delega en el repo", async () => {
+  it("R27/R7/R8: sin estatusId aplica default GLOBAL en_preparacion y delega en el repo", async () => {
     const r = await service.crear(crearInput({ estatusId: undefined }), TIENDA);
     expect(r.status).toBe("ok");
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_bodega");
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
     const data = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(data.estatusId).toBe("os-bodega");
   });

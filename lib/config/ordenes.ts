@@ -20,7 +20,11 @@ export interface OrdenesConfig {
   DEFAULT_PAGE_SIZE: number;
   /** Cota maxima del tamano de pagina, evita consultas sin limite (R33). */
   MAX_PAGE_SIZE: number;
-  /** Valor de estatus inicial por defecto al crear si no se especifica (N1/R10/R27). */
+  /**
+   * Valor de estatus inicial por defecto al crear si no se especifica
+   * (N1/R10/R27). Feature 15/R7/R8: default GLOBAL "en_preparacion" (antes
+   * "en_bodega"), compartido por el CRUD (feature 6) y la carga masiva.
+   */
   DEFAULT_ESTATUS_VALUE: string;
 }
 
@@ -28,7 +32,7 @@ export function loadOrdenesConfig(): OrdenesConfig {
   return {
     DEFAULT_PAGE_SIZE: readPositiveInt("ORDENES_DEFAULT_PAGE_SIZE", 25),
     MAX_PAGE_SIZE: readPositiveInt("ORDENES_MAX_PAGE_SIZE", 100),
-    DEFAULT_ESTATUS_VALUE: readNonEmpty("ORDENES_DEFAULT_ESTATUS_VALUE", "en_bodega"),
+    DEFAULT_ESTATUS_VALUE: readNonEmpty("ORDENES_DEFAULT_ESTATUS_VALUE", "en_preparacion"),
   };
 }
 
