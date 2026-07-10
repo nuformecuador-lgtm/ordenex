@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/23-dashboard-maestro | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO** (tras marcar tasks; único mayor era documental). Dashboard del maestro: `page.tsx` ramifica por rol (maestro/admin → `AdminMaestroDashboard`; adminTienda → dashboard de la 26 intacto; resto → 'Bienvenido'). Panel de postulaciones pendientes en tarjetas + Pagination, docs como enlaces "Ver" (A1), aprobar/rechazar con Modal async (13) + Toast + refresco SWR (A2), rechazo sin motivo (A3). Consume actions de la 22 (frontend puro). R1–R19 mapeados. **Suite 1018 verde**, typecheck+lint OK, init.sh EXIT 0. **PR abriéndose** → base `dev`. |
+| feature/23-dashboard-maestro | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO** (tras marcar tasks; único mayor era documental). Dashboard del maestro: `page.tsx` ramifica por rol (maestro/admin → `AdminMaestroDashboard`; adminTienda → dashboard de la 26 intacto; resto → 'Bienvenido'). Panel de postulaciones pendientes en tarjetas + Pagination, docs como enlaces "Ver" (A1), aprobar/rechazar con Modal async (13) + Toast + refresco SWR (A2), rechazo sin motivo (A3). Consume actions de la 22 (frontend puro). R1–R19 mapeados. **Suite 1018 verde**, typecheck+lint OK, init.sh EXIT 0. **PR #28 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/28) → base `dev`. Pasa a `done` al mergear. |
 
 > Feature 22 (aprobación de postulaciones) CERRADA 2026-07-10: **PR #26 mergeado** a `origin/dev` (8eaed55), status `done`, entrada en `history.md`. Backend puro (R1–R21), reviewer APROBADO 0 mayores, sin migraciones. Rechazo→`inactivo`, URLs firmadas TTL 300s. Desbloquea la 23.
 
