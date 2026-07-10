@@ -204,3 +204,38 @@ intacto.
 ### Veredicto (gap backend)
 Listado de roles añadido como espejo exacto de tipos de identificación; verde. El frontend ya
 puede resolver `rolId` (UUID) desde `listarRoles`.
+
+---
+
+# GAP de integración — select de rol por id (FRONTEND, cierre)
+
+Cierra definitivamente la "Nota abierta" del Bloque 4. El select de rol dejaba `form.rolId` con
+el `RolValue` (p. ej. "maestro") en lugar del UUID del catálogo `rol` que espera el backend, así
+que **crear usuario siempre fallaba** y el prefill en edición no matcheaba. Solo se tocó
+`app/(app)/configuracion/**` + `tests/**`; NO se tocó `lib/**`, `db/`, ni `app/api/`.
+
+## Archivos modificados
+- `app/(app)/configuracion/_components/UsuarioForm.tsx` — se elimina el uso de `ROLES_SEED`/
+  `ROL_LABELS` para el select de rol. Ahora se puebla vía SWR sobre la Server Action `listarRoles`
+  (mismo patrón que `listarTiposIdentificacion`): `rolOptions` con `value = rol.id` (UUID) y
+  `label = rol.value` (nombre legible). Con esto `form.rolId` contiene el UUID tanto en crear como
+  en editar; el prefill selecciona la opción cuyo `id === usuario.rolId`.
+- `tests/unit/components/usuario-form.test.tsx` — se mockea `listarRoles` (igual que
+  `listarTiposIdentificacion`); fixture `ROLES` con `{id,value}`. Caso nuevo/actualizado
+  "puebla el select de rol desde listarRoles con id como value" que selecciona un rol y verifica
+  que el payload de `crearUsuario` lleva `rolId === "rol-mensajero"` (UUID, no el value). Caso nuevo
+  de prefill por UUID en edición.
+- `tests/unit/components/usuarios-module.test.tsx` — se añade el mock de `listarRoles` (ripple:
+  el módulo monta `UsuarioForm`).
+
+## Verificación (salida real)
+- `npx tsc --noEmit`: 0 errores, exit 0.
+- Tests de componentes tocados en aislamiento: **2 files, 10 passed**, exit 0.
+- `npx vitest run` (suite completa): **886 passed**; el único rojo por corrida es un timeout flaky
+  pre-existente de auth/integración (`HomePage`/`recuperar-contrasena-form`, varía entre corridas),
+  ajeno a este cambio y verde/aislado según la corrida.
+- `./init.sh`: **== init OK ==**.
+
+## Veredicto (gap frontend)
+El select de rol ahora envía el UUID del catálogo `rol`; crear y editar usuario quedan cableados
+correctamente. Gap cerrado.

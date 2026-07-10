@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
-import { ROLES_SEED } from "@/lib/types/roles";
 import {
   actualizarUsuarioSchema,
   crearUsuarioSchema,
@@ -24,11 +23,10 @@ import {
 import {
   actualizarUsuario,
   crearUsuario,
+  listarRoles,
   listarTiposIdentificacion,
 } from "@/lib/actions/usuarios";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
-
-import { ROL_LABELS } from "./usuarios-columns";
 
 /** Modo de contraseña inicial (R30/R36). */
 type PasswordMode = "manual" | "generate";
@@ -59,11 +57,6 @@ interface FormState {
   password: string;
 }
 
-const ROLE_OPTIONS: SelectOption[] = ROLES_SEED.map((value) => ({
-  value,
-  label: ROL_LABELS[value] ?? value,
-}));
-
 function initialState(usuario?: UsuarioPublico | null): FormState {
   return {
     nombre: usuario?.nombre ?? "",
@@ -77,8 +70,9 @@ function initialState(usuario?: UsuarioPublico | null): FormState {
 }
 
 /**
- * Formulario de creación/edición de usuario. Selects de rol (`ROLES_SEED`) y de
- * tipo de documento (acción `listarTiposIdentificacion`, R29). En creación ofrece
+ * Formulario de creación/edición de usuario. Selects de rol (acción `listarRoles`,
+ * cuyo `value` es el UUID del catálogo `rol`) y de tipo de documento (acción
+ * `listarTiposIdentificacion`, R29). En creación ofrece
  * el toggle de modo de contraseña escribir/generar (R36): en modo generar oculta
  * el input; tras crear con éxito muestra la `generatedPassword` UNA vez con botón
  * copiar y aviso (R33). En edición deshabilita email y cédula (R16). Valida en
@@ -102,6 +96,18 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
     const tipoOptions: SelectOption[] = useMemo(
       () => (tipos ?? []).map((t) => ({ value: t.id, label: t.value })),
       [tipos],
+    );
+
+    const { data: roles } = useSWR("usuarios:roles", async () => {
+      const res = await listarRoles();
+      return res.status === "ok" ? res.roles : [];
+    });
+
+    // `value` = UUID del catálogo `rol` (lo que espera el backend en `rolId`);
+    // `label` = nombre legible del rol (p. ej. "maestro").
+    const rolOptions: SelectOption[] = useMemo(
+      () => (roles ?? []).map((r) => ({ value: r.id, label: r.value })),
+      [roles],
     );
 
     const isEditar = mode === "editar";
@@ -276,7 +282,7 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
           <Select
             aria-label="Rol"
             value={form.rolId}
-            options={ROLE_OPTIONS}
+            options={rolOptions}
             onValueChange={(v) => setField("rolId", v)}
           />
         </Field>

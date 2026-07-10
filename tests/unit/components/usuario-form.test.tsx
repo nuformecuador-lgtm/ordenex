@@ -18,11 +18,13 @@ import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserReposito
 const crearUsuarioMock = vi.fn();
 const actualizarUsuarioMock = vi.fn();
 const listarTiposIdentificacionMock = vi.fn();
+const listarRolesMock = vi.fn();
 vi.mock("@/lib/actions/usuarios", () => ({
   crearUsuario: (...args: unknown[]) => crearUsuarioMock(...args),
   actualizarUsuario: (...args: unknown[]) => actualizarUsuarioMock(...args),
   listarTiposIdentificacion: (...args: unknown[]) =>
     listarTiposIdentificacionMock(...args),
+  listarRoles: (...args: unknown[]) => listarRolesMock(...args),
 }));
 
 import {
@@ -34,6 +36,13 @@ const TIPOS = [
   { id: "t1", value: "cedula" },
   { id: "t2", value: "ruc" },
 ];
+
+// El `id` es el UUID del catálogo `rol` (lo que el backend espera en `rolId`);
+// el `value` es el nombre legible del rol.
+const ROLES = [
+  { id: "rol-maestro", value: "maestro" },
+  { id: "rol-mensajero", value: "mensajero" },
+] as const;
 
 const USUARIO: UsuarioPublico = {
   id: "u1",
@@ -60,6 +69,7 @@ function renderIsolated(ui: ReactElement) {
 beforeEach(() => {
   vi.clearAllMocks();
   listarTiposIdentificacionMock.mockResolvedValue({ status: "ok", tipos: TIPOS });
+  listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES] });
 });
 
 afterEach(() => {
@@ -81,28 +91,55 @@ describe("UsuarioForm — edición (R16)", () => {
     // No hay bloque de contraseña en edición (reset fuera de alcance).
     expect(screen.queryByLabelText("Contraseña")).not.toBeInTheDocument();
   });
+
+  it("preselecciona el rol cuya id coincide con usuario.rolId (prefill por UUID)", async () => {
+    renderIsolated(<UsuarioForm mode="editar" usuario={USUARIO} />);
+
+    // USUARIO.rolId es el UUID "rol-mensajero"; el trigger muestra su etiqueta.
+    const rolTrigger = screen.getByRole("combobox", { name: "Rol" });
+    await waitFor(() => expect(rolTrigger).toHaveTextContent("mensajero"));
+  });
 });
 
 describe("UsuarioForm — selects (R29)", () => {
-  it("puebla el select de rol desde ROLES_SEED y el de tipo de documento desde la acción (R29)", async () => {
+  it("puebla el select de rol desde listarRoles con id como value (R29)", async () => {
     const user = userEvent.setup();
-    renderIsolated(<UsuarioForm mode="crear" />);
+    crearUsuarioMock.mockResolvedValue({ status: "ok", usuario: { ...USUARIO } });
 
-    // Rol desde ROLES_SEED (etiquetas legibles).
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(<UsuarioForm ref={ref} mode="crear" />);
+
+    // Rol desde la acción listarRoles: opciones etiquetadas con el nombre legible.
+    await waitFor(() => expect(listarRolesMock).toHaveBeenCalled());
     await user.click(screen.getByRole("combobox", { name: "Rol" }));
     const rolList = await screen.findByRole("listbox");
-    expect(within(rolList).getByRole("option", { name: "Maestro" })).toBeInTheDocument();
-    expect(
-      within(rolList).getByRole("option", { name: "Mensajero" }),
-    ).toBeInTheDocument();
-    await user.keyboard("{Escape}");
+    expect(within(rolList).getByRole("option", { name: "maestro" })).toBeInTheDocument();
+    await user.click(within(rolList).getByRole("option", { name: "mensajero" }));
 
     // Tipo de documento desde la acción listarTiposIdentificacion.
     await waitFor(() => expect(listarTiposIdentificacionMock).toHaveBeenCalled());
     await user.click(screen.getByRole("combobox", { name: "Tipo de documento" }));
-    const tipoList = await screen.findByRole("listbox");
-    expect(within(tipoList).getByRole("option", { name: "cedula" })).toBeInTheDocument();
-    expect(within(tipoList).getByRole("option", { name: "ruc" })).toBeInTheDocument();
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "cedula",
+      }),
+    );
+
+    // Completa el resto del set base y envía.
+    await user.type(screen.getByLabelText("Nombre"), "Nuevo Usuario");
+    await user.type(screen.getByLabelText("Email"), "nuevo@example.com");
+    await user.type(screen.getByLabelText("Teléfono"), "0988888888");
+    await user.type(screen.getByLabelText("Número de documento"), "1712345678");
+    await user.type(screen.getByLabelText("Contraseña"), "Abcd1234$xy");
+
+    await act(async () => {
+      await ref.current!.submit();
+    });
+
+    // El payload envía el UUID del catálogo como rolId, no el RolValue "mensajero".
+    expect(crearUsuarioMock).toHaveBeenCalledTimes(1);
+    const enviado = crearUsuarioMock.mock.calls[0][0] as { rolId: string };
+    expect(enviado.rolId).toBe("rol-mensajero");
   }, 15000);
 });
 
@@ -141,7 +178,7 @@ describe("UsuarioForm — modo de contraseña (R36)", () => {
     await user.click(screen.getByRole("combobox", { name: "Rol" }));
     await user.click(
       within(await screen.findByRole("listbox")).getByRole("option", {
-        name: "Mensajero",
+        name: "mensajero",
       }),
     );
 

@@ -21,6 +21,7 @@ const obtenerUsuarioMock = vi.fn();
 const crearUsuarioMock = vi.fn();
 const actualizarUsuarioMock = vi.fn();
 const listarTiposIdentificacionMock = vi.fn();
+const listarRolesMock = vi.fn();
 vi.mock("@/lib/actions/usuarios", () => ({
   listarUsuarios: (...a: unknown[]) => listarUsuariosMock(...a),
   cambiarEstadoUsuario: (...a: unknown[]) => cambiarEstadoUsuarioMock(...a),
@@ -29,6 +30,7 @@ vi.mock("@/lib/actions/usuarios", () => ({
   actualizarUsuario: (...a: unknown[]) => actualizarUsuarioMock(...a),
   listarTiposIdentificacion: (...a: unknown[]) =>
     listarTiposIdentificacionMock(...a),
+  listarRoles: (...a: unknown[]) => listarRolesMock(...a),
 }));
 
 import { UsuariosModule } from "@/app/(app)/configuracion/_components/UsuariosModule";
@@ -75,6 +77,10 @@ beforeEach(() => {
     total: 1,
   });
   listarTiposIdentificacionMock.mockResolvedValue({ status: "ok", tipos: [] });
+  listarRolesMock.mockResolvedValue({
+    status: "ok",
+    roles: [{ id: "rol-mensajero", value: "mensajero" }],
+  });
   obtenerUsuarioMock.mockResolvedValue({ status: "ok", usuario: USUARIO });
 });
 
