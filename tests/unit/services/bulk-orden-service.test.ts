@@ -20,6 +20,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     softDelete: vi.fn(),
     existsEstatus: vi.fn(),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-preparacion"),
+    // Feature 27: por defecto la tienda NO tiene fulfillment -> en_preparacion (R17/R22).
+    findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
     existsGeo: vi.fn(),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
     findProvinciasByNombres: vi.fn().mockResolvedValue([
@@ -332,6 +334,82 @@ describe("BulkOrdenService.cargarMasiva — estatus por defecto (R7)", () => {
 
     if (r.status === "ok") {
       expect(r.summary.conError).toBe(1);
+    }
+    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+  });
+});
+
+describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulfillment (feature 27/R16/R17/R18/R19/R20)", () => {
+  it("R16: tienda con fulfillment=true -> ordenes en_fulfillment", async () => {
+    const repo = buildRepo({
+      findUsuarioFulfillment: vi.fn().mockResolvedValue(true),
+      findEstatusIdByValue: vi.fn().mockResolvedValue("os-fulfillment"),
+    });
+    const service = new BulkOrdenService(repo);
+
+    const r = await service.cargarMasiva([row()], TIENDA);
+
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_fulfillment"); // R16/R20
+    if (r.status === "ok") {
+      expect(r.summary.filas[0].estatus).toBe("en_fulfillment"); // R19
+    }
+    const arg = createManyArg(repo);
+    expect(arg[0].estatusId).toBe("os-fulfillment");
+  });
+
+  it("R17: tienda con fulfillment=false -> ordenes en_preparacion (no-regresion)", async () => {
+    const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
+    const service = new BulkOrdenService(repo);
+
+    const r = await service.cargarMasiva([row()], TIENDA);
+
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion"); // R17
+    if (r.status === "ok") {
+      expect(r.summary.filas[0].estatus).toBe("en_preparacion");
+    }
+  });
+
+  it("R15/R18: lee fulfillment de la tienda del actor UNA vez por lote", async () => {
+    const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
+    const service = new BulkOrdenService(repo);
+
+    await service.cargarMasiva(
+      [row({ num_remision: "A" }), row({ num_remision: "B" }), row({ num_remision: "C" })],
+      TIENDA,
+    );
+
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledTimes(1); // R18
+    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith("store1"); // R15: actor.usuarioId
+  });
+
+  it("R19: el estatus resuelto se reporta tambien en duplicadas intra-archivo", async () => {
+    const repo = buildRepo({
+      findUsuarioFulfillment: vi.fn().mockResolvedValue(true),
+      findEstatusIdByValue: vi.fn().mockResolvedValue("os-fulfillment"),
+    });
+    const service = new BulkOrdenService(repo);
+
+    const r = await service.cargarMasiva([row(), row()], TIENDA);
+
+    if (r.status === "ok") {
+      expect(r.summary.filas[0].estatus).toBe("en_fulfillment");
+      expect(r.summary.filas[1]).toMatchObject({ resultado: "duplicada", estatus: "en_fulfillment" });
+    }
+  });
+
+  it("R20: estatus en_fulfillment inexistente -> 0 creadas, error de estatus por fila", async () => {
+    const repo = buildRepo({
+      findUsuarioFulfillment: vi.fn().mockResolvedValue(true),
+      findEstatusIdByValue: vi.fn().mockResolvedValue(null),
+    });
+    const service = new BulkOrdenService(repo);
+
+    const r = await service.cargarMasiva([row()], TIENDA);
+
+    if (r.status === "ok") {
+      expect(r.summary.creadas).toBe(0);
+      expect(r.summary.conError).toBe(1);
+      expect(r.summary.filas[0].errores).toHaveProperty("estatus");
     }
     expect(repo.createManyOrdenes).not.toHaveBeenCalled();
   });

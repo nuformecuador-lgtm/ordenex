@@ -53,6 +53,7 @@ const USUARIO: UsuarioPublico = {
   cedula: "1712345678",
   tipoIdentificacionId: "t1",
   rolId: "rol-mensajero",
+  fulfillment: false,
   createdAt: new Date("2026-01-01T00:00:00Z"),
   updatedAt: new Date("2026-01-01T00:00:00Z"),
 };
@@ -219,4 +220,140 @@ describe("UsuarioForm — modo de contraseña (R36)", () => {
     expect(result.status).toBe("validation_error");
     expect(crearUsuarioMock).not.toHaveBeenCalled();
   });
+});
+
+// Feature 27: el switch "esta tienda tiene fulfillment" aparece solo para el rol
+// `adminTienda` (decisión P3). Catálogo de roles que incluye ese rol.
+const ROLES_FF = [
+  { id: "rol-maestro", value: "maestro" },
+  { id: "rol-mensajero", value: "mensajero" },
+  { id: "rol-admin-tienda", value: "adminTienda" },
+] as const;
+
+const USUARIO_FF: UsuarioPublico = {
+  ...USUARIO,
+  rolId: "rol-admin-tienda",
+  fulfillment: true,
+};
+
+describe("UsuarioForm — fulfillment (feature 27)", () => {
+  it("muestra el switch de fulfillment al seleccionar rol adminTienda en crear (R5)", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_FF] });
+    renderIsolated(<UsuarioForm mode="crear" />);
+
+    // Sin rol seleccionado (o rol distinto), el switch no está presente.
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+
+    await waitFor(() => expect(listarRolesMock).toHaveBeenCalled());
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "adminTienda",
+      }),
+    );
+
+    expect(
+      screen.getByRole("switch", { name: "Esta tienda tiene fulfillment" }),
+    ).toBeInTheDocument();
+  }, 15000);
+
+  it("el switch inicia en false al elegir adminTienda en crear (R7)", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_FF] });
+    renderIsolated(<UsuarioForm mode="crear" />);
+
+    await waitFor(() => expect(listarRolesMock).toHaveBeenCalled());
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "adminTienda",
+      }),
+    );
+
+    expect(
+      screen.getByRole("switch", { name: "Esta tienda tiene fulfillment" }),
+    ).toHaveAttribute("aria-checked", "false");
+  }, 15000);
+
+  it("oculta el switch y no envía fulfillment con rol != adminTienda (R6)", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_FF] });
+    crearUsuarioMock.mockResolvedValue({ status: "ok", usuario: { ...USUARIO } });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(<UsuarioForm ref={ref} mode="crear" />);
+
+    await user.type(screen.getByLabelText("Nombre"), "Nuevo Usuario");
+    await user.type(screen.getByLabelText("Email"), "nuevo@example.com");
+    await user.type(screen.getByLabelText("Teléfono"), "0988888888");
+    await user.type(screen.getByLabelText("Número de documento"), "1712345678");
+    await user.type(screen.getByLabelText("Contraseña"), "Abcd1234$xy");
+
+    await user.click(screen.getByRole("combobox", { name: "Tipo de documento" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "cedula",
+      }),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "mensajero",
+      }),
+    );
+
+    // Rol no-adminTienda: el switch permanece oculto (R6).
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await ref.current!.submit();
+    });
+
+    expect(crearUsuarioMock).toHaveBeenCalledTimes(1);
+    const enviado = crearUsuarioMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(enviado).not.toHaveProperty("fulfillment");
+  }, 15000);
+
+  it("prefilla el switch con el valor actual al editar adminTienda (R11)", async () => {
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_FF] });
+    renderIsolated(<UsuarioForm mode="editar" usuario={USUARIO_FF} />);
+
+    const sw = await screen.findByRole("switch", {
+      name: "Esta tienda tiene fulfillment",
+    });
+    expect(sw).toHaveAttribute("aria-checked", "true");
+  }, 15000);
+
+  it("propaga el nuevo valor del switch al submit en editar (R12)", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_FF] });
+    actualizarUsuarioMock.mockResolvedValue({
+      status: "ok",
+      usuario: { ...USUARIO_FF },
+    });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(<UsuarioForm ref={ref} mode="editar" usuario={USUARIO_FF} />);
+
+    const sw = await screen.findByRole("switch", {
+      name: "Esta tienda tiene fulfillment",
+    });
+    expect(sw).toHaveAttribute("aria-checked", "true");
+
+    // Alterna el switch a "no".
+    await user.click(sw);
+    expect(sw).toHaveAttribute("aria-checked", "false");
+
+    await act(async () => {
+      await ref.current!.submit();
+    });
+
+    expect(actualizarUsuarioMock).toHaveBeenCalledTimes(1);
+    const enviado = actualizarUsuarioMock.mock.calls[0][1] as {
+      fulfillment?: boolean;
+    };
+    expect(enviado.fulfillment).toBe(false);
+  }, 15000);
 });

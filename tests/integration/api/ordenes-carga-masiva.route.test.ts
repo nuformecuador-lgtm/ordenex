@@ -249,6 +249,27 @@ describe("R32: la respuesta nunca expone deleted_at ni datos internos", () => {
   });
 });
 
+describe("R22 (feature 27): tienda sin fulfillment -> ordenes en_preparacion (no-regresion)", () => {
+  it("propaga el resumen del service con estatus en_preparacion para cada fila creada", async () => {
+    // Tienda sin fulfillment: el service (feature 27/R17) resuelve en_preparacion,
+    // exactamente como antes de la feature. El route solo propaga ese resumen.
+    const summary = okSummary({
+      filas: [{ fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "en_preparacion" }],
+    });
+    const service = fakeService({
+      cargarMasiva: vi.fn().mockResolvedValue({ status: "ok", summary }),
+    });
+    const req = requestWithFormData(formDataWithFile(csvFile(["REM-1,Ana,099,Pichincha,Quito"])));
+
+    const res = await handleCargaMasiva(req, deps(TIENDA, service));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.filas[0]).toMatchObject({ resultado: "creada", estatus: "en_preparacion" });
+    expect(body.filas.every((f: { estatus?: string }) => f.estatus !== "en_fulfillment")).toBe(true);
+  });
+});
+
 describe("R31: fallo interno inesperado -> AppErrorShape 500", () => {
   it("el service rechaza con un error desconocido", async () => {
     const service = fakeService({

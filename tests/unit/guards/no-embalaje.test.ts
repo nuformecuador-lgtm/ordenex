@@ -51,6 +51,9 @@ const TEXT_EXTENSIONS = new Set([
 const WHITELIST_PREFIXES = [
   "specs/rename-embalaje-fulfillment/",
   "db/migrations/20260710140000_rename_order_status_embalaje_en_fulfillment/",
+  // Feature 27: el spec cita 'embalaje' solo para documentar el rename historico
+  // (embalaje -> en_fulfillment, feature 28) como contexto; no reintroduce el valor.
+  "specs/27-fulfillment-tienda/",
 ];
 const WHITELIST_FILES = new Set([
   "feature_list.json",

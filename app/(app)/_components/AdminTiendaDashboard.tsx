@@ -1,3 +1,5 @@
+"use client";
+
 import { OrdenesModule } from "@/app/(app)/ordenes/_components/OrdenesModule";
 import { PageHeader } from "@/components/shared/PageHeader";
 

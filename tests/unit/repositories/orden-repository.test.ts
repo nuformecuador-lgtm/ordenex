@@ -66,6 +66,7 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     provincia: { findUnique: vi.fn() },
     canton: { findUnique: vi.fn() },
     distrito: { findUnique: vi.fn() },
+    usuario: { findUnique: vi.fn() },
     ...overrides,
   };
 }
@@ -281,5 +282,34 @@ describe("OrdenRepository.existsGeo / existsEstatus / findEstatusIdByValue", () 
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     expect(await repo.existsEstatus("os-x")).toBe(false);
+  });
+});
+
+describe("OrdenRepository.findUsuarioFulfillment (feature 27/R15/R16/R17)", () => {
+  it("devuelve el flag fulfillment de la tienda que carga", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.findUnique.mockResolvedValue({ fulfillment: true });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.findUsuarioFulfillment("store-1")).toBe(true);
+    const arg = prisma.usuario.findUnique.mock.calls[0][0];
+    expect(arg.where).toEqual({ id: "store-1" });
+    expect(arg.select).toEqual({ fulfillment: true }); // R14: nunca passwordHash
+  });
+
+  it("devuelve false cuando el flag es false (R17)", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.findUnique.mockResolvedValue({ fulfillment: false });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.findUsuarioFulfillment("store-1")).toBe(false);
+  });
+
+  it("default false cuando el usuario no resuelve", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.findUnique.mockResolvedValue(null);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.findUsuarioFulfillment("desconocido")).toBe(false);
   });
 });

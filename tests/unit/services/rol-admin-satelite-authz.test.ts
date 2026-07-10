@@ -60,6 +60,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     softDelete: vi.fn().mockResolvedValue(true),
     existsEstatus: vi.fn().mockResolvedValue(true),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-bodega"),
+    findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27
     existsGeo: vi
       .fn()
       .mockResolvedValue({ zona: true, provincia: true, canton: true, distrito: true }),

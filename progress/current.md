@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Zonas frontend y backend LIBRES. |
+| feature/27-fulfillment-tienda | fullstack | F2 impl | Spec APROBADO por el humano (25 EARS, 3 decisiones cerradas). implementer en curso (backend→frontend). Ocupa ambas zonas. |
 
 > Feature 21 (postulación de mensajero) CERRADA 2026-07-10: **PR #23 mergeado** a `origin/dev`
 > (c5c1c97, 20:32Z), status -> `done` (bookkeeping corregido en esta sesión; había quedado en
@@ -115,6 +115,18 @@
   paralelo. Seleccionada por el humano ignorando la cadena de la 28 (28->27->17).
   ABIERTO para el spec: que mas muestra el dashboard del adminTienda ademas del modulo de
   ordenes (metricas/accesos) -> el humano decidira en la puerta de aprobacion F1.4.
+
+- `fulfillment de tienda + estado inicial condicional` (id 27): **zone=fullstack,
+  complexity=high, branch=feature/27-fulfillment-tienda, depends_on=25.** Evaluada
+  2026-07-10: fullstack (backend — campo booleano `fulfillment` en Usuario +
+  migracion/down.sql + logica condicional en `BulkOrdenService`/carga masiva feature 15;
+  frontend — switch 'esta tienda tiene fulfillment' en la UI de creacion de usuario de la
+  feature 25). Deps 25 y 28 **done**. DECISION DE PROCESO (leader): NO se parte el entry
+  del feature_list; las mitades son ESTRICTAMENTE SECUENCIALES (el switch del frontend
+  depende del campo backend, sin paralelismo que ganar) -> se corre como UN ciclo
+  fullstack (implementer delega backend_dev -> frontend_dev, un PR), mismo criterio que
+  las features 16 y 25. Si el humano prefiere el split formal, se hace. Rama creada desde
+  `origin/dev` (al dia con 21/25/50/28).
 
 ## Conflictos pendientes
 

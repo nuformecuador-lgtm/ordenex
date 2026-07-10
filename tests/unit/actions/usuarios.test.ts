@@ -26,6 +26,7 @@ function usuario(overrides: Partial<UsuarioPublico> = {}): UsuarioPublico {
     cedula: "1710034065",
     tipoIdentificacionId: "tipo-1",
     rolId: "rol-1",
+    fulfillment: false,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,
