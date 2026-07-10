@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/16-carga-masiva-etapa2 | fullstack | F1 spec | SELECCIONADA por F1.0 (feature 16). Resumen post-carga columna por columna + asignación de `mensajero_sugerido_id`. Branch desde `origin/dev`. spec_author en curso. |
+| feature/16-carga-masiva-etapa2 | fullstack | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes)**. Backend: `listMensajeros` (activos, {id,nombre}), `resumenCargaMasiva`, `asignarMensajeroSugerido` (global+fila, todo-o-nada, updateMany) + Server Actions (`lib/actions/mensajeros.ts`), refactor `toActionError`->`_shared/`. Frontend: `components/ui/select.tsx` (sobre @base-ui/react/select) + `OrdenesCargaResumen` como 2º paso del modal de la 14 (DataTable, select global "aplicar a todos" + override por fila, confirmar->asignar+toast+mutate). Post-commit (no toca 15). Sin migración (R20). R1..R34 -> tests. Suite 67 files / 572 tests verdes (+66). Commit + push + **PR pendiente** -> base `dev`. |
 
 > Feature 14 (botón carga masiva en órdenes) CERRADA 2026-07-10: PR #10 mergeado a
 > `origin/dev` (bb511f1), status -> `done`, entrada en `history.md`. El cierre de la 14 +

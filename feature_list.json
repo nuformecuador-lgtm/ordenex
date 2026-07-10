@@ -158,7 +158,7 @@
     {
       "id": 17,
       "name": "ordenes - revision a bodega/asignacion mensajero",
-      "description": "Los estados embalaje(agrega este estado a order_status) y en preparacion son estados de revision. En la lista de ordenes debe permitirse seleccionar mediante checkbox una o varias ordenes que esten en estos estados para procesarlas. Al intentar pasarlas al estado en bodega, como la carga masiva ya trae un mensajero sugerido, debe preguntarse si se desea mantener ese mensajero sugerido o cambiarlo. Casos: (1) si se decide mantener el mensajero sugerido, la orden no pasa a en bodega sino al estado en espera de aceptacion por el mensajero; (2) si se decide cambiar el mensajero, se debe permitir seleccionar a que mensajero se le asigna, y una vez seleccionado la orden pasa al estado en espera de aceptacion por el mensajero; (3) si no se selecciona ningun mensajero, la orden queda en estado en bodega. Requiere agregar el estado en espera de aceptacion por el mensajero al enum de estados.",
+      "description": "Los estados en_fulfillment (antes 'embalaje', renombrado por la feature 28) y en_preparacion son estados de revision. En la lista de ordenes debe permitirse seleccionar mediante checkbox una o varias ordenes que esten en estos estados para procesarlas. Al intentar pasarlas al estado en bodega, como la carga masiva ya trae un mensajero sugerido, debe preguntarse si se desea mantener ese mensajero sugerido o cambiarlo. Casos: (1) si se decide mantener el mensajero sugerido, la orden no pasa a en bodega sino al estado en espera de aceptacion por el mensajero; (2) si se decide cambiar el mensajero, se debe permitir seleccionar a que mensajero se le asigna, y una vez seleccionado la orden pasa al estado en espera de aceptacion por el mensajero; (3) si no se selecciona ningun mensajero, la orden queda en estado en bodega. Requiere agregar el estado en espera de aceptacion por el mensajero al enum de estados.",
       "status": "pending",
       "sdd": true,
       "complexity": null,
@@ -226,6 +226,68 @@
       "zone": null,
       "branch": null,
       "depends_on": 22
+    },
+    {
+      "id": 24,
+      "name": "gestion de zonas (configuracion)",
+      "description": "Agrega, dentro de configuracion, la gestion de ZONAS por el admin maestro, SOBRE el modelo de geografia actual (feature 6, tablas creadas vacias): la jerarquia se MANTIENE con Zona como raiz -> Provincia (zona_id) -> Canton -> Distrito (decision del humano 2026-07-10: no se remodela). Crear una zona: poner un nombre y, bajo esa zona, seleccionar/definir la provincia, el canton y los distritos que le pertenecen (se pueblan las tablas de geografia hoy vacias como hijos de la zona). El esquema permite N provincias por zona, pero el uso sera 1 provincia + 1 canton + varios distritos por zona. Cada zona lleva precios de mensajeria: costo de ENTREGA y costo de DEVOLUCION de una orden en esa zona (nuevas columnas en la tabla zona; se relaciona con la feature 18 cobros/fletes, alinear al llegar alla). Requisitos conexos importantes: (a) mensajeros, ordenes y administradores de bodega satelite (adminSatelite) deben estar ASIGNADOS a una zona -> agregar zona_id a Usuario (aplicable a rol mensajero y adminSatelite); Orden ya tiene zona_id. (b) seed base con las zonas existentes de 'Orden X' a partir de un archivo Excel predefinido que el humano proveera (input requerido para la fase de impl). Requiere migracion Prisma que agregue los precios a zona y zona_id a Usuario, con su down.sql y RLS. Es fullstack de alta complejidad (migracion + seed desde Excel + UI en configuracion + backend). Modulo transversal: se conecta con ordenes, mensajeros, bodega satelite y cobros.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null
+    },
+    {
+      "id": 25,
+      "name": "gestion de usuarios (configuracion)",
+      "description": "Agrega un modulo de gestion de usuarios dentro de configuracion (ruta app/(app)/configuracion, hoy placeholder de la feature 5) que permite al admin maestro CRUD de usuarios: crear, listar, editar y activar/inactivar. Crear un usuario define nombre, email, telefono, tipo de documento (FK a tipo_identificacion), numero de documento, rol (FK al catalogo rol: maestro, admin, mensajero, adminTienda, adminSatelite) y contrasena inicial; el usuario creado por el admin queda en estado activo (a diferencia de la postulacion publica de mensajeros, que nace pendiente). Email y numero de documento no se duplican; la contrasena se hashea con bcrypt (mismo coste que el login). La baja es logica via el enum EstadoUsuario (inactivo/bloqueado), no borrado fisico. Reusa la infraestructura existente: DataTable + Pagination para el listado, Modal para crear/editar, Toast para feedback y el manejador de errores global del backend. Autorizacion: solo maestro (a confirmar si admin tambien). Es fullstack (pantalla en configuracion + backend Server Actions/service/repository). ABIERTO a decidir en spec: si el admin puede crear cualquier rol o hay restricciones, y si al crear un mensajero por esta via se piden los campos extra (vehiculo, placa, documentos) de la feature 21 o solo el set base.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null
+    },
+    {
+      "id": 26,
+      "name": "dashboard/apartado del admin de tienda",
+      "description": "Vistas propias del admin de tienda (rol adminTienda): un apartado/dashboard DISTINTO al del admin maestro (feature 23), como primera experiencia tras iniciar sesion para ese rol. Incluye su modulo de ordenes que lista UNICAMENTE las ordenes de su propia tienda y desde el cual accede al boton de carga masiva (feature 14) para subir ordenes desde la plantilla Excel. Reusa lo existente: la autorizacion por rol de la feature 6 ya filtra adminTienda a sus ordenes, la tabla/list de la feature 7, la carga masiva de las features 14/16. Nota: el reflejo de esas ordenes en el modulo del admin maestro (que ve las de TODAS las tiendas, con el nombre de la tienda que cargo cada orden) YA esta cubierto por la feature 6 (autorizacion) y la feature 7 (columna tiendaNombre). Frontend. ABIERTO a decidir en spec: que mas muestra el dashboard del adminTienda ademas de su modulo de ordenes (metricas, accesos, etc.).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null
+    },
+    {
+      "id": 27,
+      "name": "fulfillment de tienda + estado inicial condicional",
+      "description": "Fulfillment por tienda. (1) Al crear un usuario admin de tienda (feature 25) se agrega un interruptor 'esta tienda tiene fulfillment' (si/no) -> nuevo campo booleano fulfillment en el modelo Usuario, aplicable al rol adminTienda (default false), con migracion + down.sql. (2) Usa el estado order_status 'en_fulfillment' que la feature 28 renombra desde 'embalaje' (NO se agrega un estado nuevo). (3) Se cambia el estado INICIAL de la carga masiva de ordenes (feature 15, hoy default GLOBAL en_preparacion via ORDENES_DEFAULT_ESTATUS_VALUE / BulkOrdenService) para que sea CONDICIONAL segun la tienda que realiza la carga: si la tienda tiene fulfillment habilitado -> las ordenes nacen en estado en_fulfillment; si NO -> nacen en en_preparacion (comportamiento actual). Toca: modelo Usuario (migracion), la UI de creacion de usuario (feature 25) y la logica del servicio/endpoint de carga masiva (BulkOrdenService, feature 15). Depende ademas de la feature 28 (el estado en_fulfillment debe existir renombrado) y se relaciona con la feature 18 cobros (que incluye un campo fulfillment). Es fullstack de complejidad alta por el cruce con carga masiva y creacion de usuarios.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 25
+    },
+    {
+      "id": 28,
+      "name": "rename estado embalaje -> en_fulfillment",
+      "description": "Feature de CORRECCION de nomenclatura: el estado de order_status 'embalaje' en realidad representa el concepto 'fulfillment' y debe renombrarse a 'en_fulfillment' (siguiendo la convencion en_ de los demas estados: en_preparacion, en_bodega). Cambia TODO lo que diga embalaje por en_fulfillment: el valor en ORDER_STATUS_SEED (lib/types/order-status.ts), una migracion Prisma que actualice la fila del catalogo order_status (UPDATE value 'embalaje' -> 'en_fulfillment') con su down.sql, y todas las referencias en codigo, tests y specs. Se hace como feature APARTE porque las features viejas que introdujeron/usaron 'embalaje' (feature 6 y otras) ya estan done y no se re-ejecutan. Backend, complejidad media. Nota: 'en_fulfillment' es el estado inicial de la carga masiva para tiendas con fulfillment (feature 27); junto con en_preparacion son los estados de revision (feature 17).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null
+    },
+    {
+      "id": 29,
+      "name": "enriquecer validacion previa a la carga masiva",
+      "description": "Enriquece la validacion previa a la carga de ordenes (la etapa de resumen de la feature 16). Se hace como feature APARTE porque la 16 esta in_progress y no se re-ejecuta al cambiar su descripcion. La validacion debe: (a) al chequear el archivo por num_remision, SEPARAR las ordenes ya existentes de las nuevas; (b) mostrar/reportar las ordenes existentes con su estado actual (dato que el backend de la feature 15 ya devuelve) y NO permitir recargarlas; (c) dejar claro cuales son NUEVAS y cargar UNICAMENTE esas; (d) conservar el select por fila (columna con un select) para predefinir el mensajero (mensajero_sugerido_id) que aporta la feature 16. Frontend que consume el backend de las features 15/16. Depende de la feature 16.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 16
     }
   ]
 }

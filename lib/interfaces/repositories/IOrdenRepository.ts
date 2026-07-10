@@ -1,4 +1,5 @@
 import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
+import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 
 // Datos listos para persistir una orden. `estatusId` y `tiendaId` ya resueltos
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
@@ -122,4 +123,23 @@ export interface IOrdenRepository {
   findMensajerosByIds(ids: string[]): Promise<Set<string>>;
   /** R27: inserta en lotes de `batchSize` con `skipDuplicates`; devuelve el total insertado. */
   createManyOrdenes(data: CreateOrdenData[], batchSize: number): Promise<number>;
+
+  // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
+
+  /**
+   * R6/R8/R9/R10: filas del resumen del lote (por `num_remision`), acotadas a la
+   * tienda del actor y no borradas. Preserva unicidad de `num_remision`.
+   */
+  findResumenByNumRemisiones(nums: string[], tiendaId: string): Promise<ResumenCargaOrdenDTO[]>;
+  /**
+   * R15/R16: actualiza `mensajero_sugerido_id` en lote, solo ordenes no borradas
+   * de `tiendaId`; devuelve el numero de filas afectadas.
+   */
+  asignarMensajeroSugerido(
+    ordenIds: string[],
+    mensajeroSugeridoId: string,
+    tiendaId: string,
+  ): Promise<number>;
+  /** R14: cuenta cuantas de `ordenIds` pertenecen a `tiendaId` y no estan borradas. */
+  countOrdenesDeTienda(ordenIds: string[], tiendaId: string): Promise<number>;
 }

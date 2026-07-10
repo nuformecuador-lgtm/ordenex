@@ -1,4 +1,5 @@
 import type { EstadoUsuario } from "@prisma/client";
+import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
 
 /** Usuario sin datos sensibles: nunca incluye el hash de la contrasena (R7). */
 export interface UsuarioPublico {
@@ -58,4 +59,9 @@ export interface IUserRepository {
   findById(id: string): Promise<UsuarioPublico | null>;
   findByEmail(email: string): Promise<UsuarioPublico | null>;
   create(input: CreateUsuarioInput): Promise<UsuarioPublico>;
+  /**
+   * Feature 16/R1/R2/R3: usuarios con rol `mensajero` y `estado = activo`,
+   * proyectados a `{ id, nombre }` (nunca PII/hash), ordenados por `nombre`.
+   */
+  listMensajeros(): Promise<MensajeroDTO[]>;
 }

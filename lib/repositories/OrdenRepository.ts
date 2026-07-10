@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
+import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import {
   NumRemisionDuplicadoError,
   type CantonRow,
@@ -82,6 +83,42 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
   return {
     ...toDTO(row),
     tiendaNombre: row.tienda.nombre,
+  };
+}
+
+// Feature 16 — resumen del lote: estatus.value + mensajeroSugerido.nombre.
+const WITH_RESUMEN = {
+  select: {
+    id: true,
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    producto: true,
+    montoCobrar: true,
+    direccion: true,
+    mensajeroSugeridoId: true,
+    estatus: { select: { value: true } },
+    mensajeroSugerido: { select: { nombre: true } },
+  },
+} as const;
+
+type OrdenResumenRow = Prisma.OrdenGetPayload<typeof WITH_RESUMEN>;
+
+// R6/R9: mapea Decimal montoCobrar -> number|null; NO expone deletedAt/internos.
+function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
+  return {
+    id: row.id,
+    numGuia: row.numGuia,
+    numRemision: row.numRemision,
+    destinatario: row.destinatario,
+    telefonoDest: row.telefonoDest,
+    producto: row.producto,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    direccion: row.direccion,
+    estatusValue: row.estatus?.value,
+    mensajeroSugeridoId: row.mensajeroSugeridoId,
+    mensajeroSugeridoNombre: row.mensajeroSugerido?.nombre ?? null,
   };
 }
 
@@ -302,6 +339,43 @@ export class OrdenRepository implements IOrdenRepository {
       montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
       mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
     };
+  }
+
+  // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
+
+  /** R6/R8/R9/R10: filas del resumen, acotadas a tienda del actor y no borradas. */
+  async findResumenByNumRemisiones(
+    nums: string[],
+    tiendaId: string,
+  ): Promise<ResumenCargaOrdenDTO[]> {
+    if (nums.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { numRemision: { in: nums }, tiendaId, deletedAt: null },
+      ...WITH_RESUMEN,
+    });
+    return rows.map(toResumenDTO);
+  }
+
+  /** R15/R16: actualiza en lote, solo ordenes no borradas de `tiendaId`. */
+  async asignarMensajeroSugerido(
+    ordenIds: string[],
+    mensajeroSugeridoId: string,
+    tiendaId: string,
+  ): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    const result = await this.prisma.orden.updateMany({
+      where: { id: { in: ordenIds }, tiendaId, deletedAt: null },
+      data: { mensajeroSugeridoId },
+    });
+    return result.count;
+  }
+
+  /** R14: cuenta cuantas de `ordenIds` pertenecen a `tiendaId` y no estan borradas. */
+  async countOrdenesDeTienda(ordenIds: string[], tiendaId: string): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    return this.prisma.orden.count({
+      where: { id: { in: ordenIds }, tiendaId, deletedAt: null },
+    });
   }
 }
 
