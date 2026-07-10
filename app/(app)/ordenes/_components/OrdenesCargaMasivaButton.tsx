@@ -11,7 +11,11 @@ import {
   type BulkUploadResult,
   type TemplateField,
 } from "@/components/shared/BulkUpload";
-import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
+import { OrdenesCargaResumenPaso } from "@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso";
+import {
+  clasificarBulkSummary,
+  type ClasificacionCarga,
+} from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
 import { useToast } from "@/hooks/useToast";
 
 /**
@@ -61,28 +65,6 @@ function parseResumen(data: unknown): ResumenCarga | null {
   return null;
 }
 
-/**
- * R7/R21: extrae los `num_remision` con `resultado === "creada"` del
- * `BulkSummary.filas` (feature 15) recibido como `result.data` (`unknown`
- * desde `BulkUpload`). Identifica con precisión el lote recién cargado para
- * pasarlo a `OrdenesCargaResumen`; guard defensivo, sin lanzar ante formas
- * inesperadas.
- */
-function extractNumRemisionesCreadas(data: unknown): string[] {
-  if (typeof data !== "object" || data === null) return [];
-  const filas = (data as Record<string, unknown>).filas;
-  if (!Array.isArray(filas)) return [];
-  const numRemisiones: string[] = [];
-  for (const fila of filas) {
-    if (typeof fila !== "object" || fila === null) continue;
-    const row = fila as Record<string, unknown>;
-    if (row.resultado === "creada" && typeof row.numRemision === "string") {
-      numRemisiones.push(row.numRemision);
-    }
-  }
-  return numRemisiones;
-}
-
 /** Paso mostrado en el cuerpo del modal (R21, [RESUELTO-6]). */
 type Step = "upload" | "resumen";
 
@@ -95,7 +77,11 @@ type Step = "upload" | "resumen";
 export function OrdenesCargaMasivaButton() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("upload");
-  const [numRemisiones, setNumRemisiones] = useState<string[]>([]);
+  const [clasificacion, setClasificacion] = useState<ClasificacionCarga>({
+    numRemisionesNuevas: [],
+    existentes: [],
+    errores: [],
+  });
   const { mutate } = useSWRConfig();
   const toast = useToast();
 
@@ -121,11 +107,18 @@ export function OrdenesCargaMasivaButton() {
       toast.success(message);
     }
 
-    // R21: con creadas > 0 el modal pasa al paso de resumen + asignación; si
-    // creadas === 0 (o el resumen no es parseable) se conserva el
-    // comportamiento de feature 14 (solo toast, sigue en "upload").
-    if (resumen && resumen.creadas > 0) {
-      setNumRemisiones(extractNumRemisionesCreadas(result.data));
+    // R1/R11/R12/R18: clasifica las filas del BulkSummary y avanza al resumen si
+    // hay algo que mostrar (nuevas O existentes O errores). Con los tres grupos
+    // vacíos (p. ej. `filas: []`) se conserva el comportamiento de feature 14
+    // (solo toast, sigue en "upload").
+    const clasif = clasificarBulkSummary(result.data);
+    setClasificacion(clasif);
+
+    if (
+      clasif.numRemisionesNuevas.length > 0 ||
+      clasif.existentes.length > 0 ||
+      clasif.errores.length > 0
+    ) {
       setStep("resumen");
     }
 
@@ -142,7 +135,11 @@ export function OrdenesCargaMasivaButton() {
     if (!next) {
       // El siguiente uso del modal vuelve a arrancar en el paso de subida.
       setStep("upload");
-      setNumRemisiones([]);
+      setClasificacion({
+        numRemisionesNuevas: [],
+        existentes: [],
+        errores: [],
+      });
     }
   }
 
@@ -170,7 +167,7 @@ export function OrdenesCargaMasivaButton() {
             label="Archivo de órdenes"
           />
         ) : (
-          <OrdenesCargaResumen numRemisiones={numRemisiones} />
+          <OrdenesCargaResumenPaso clasificacion={clasificacion} />
         )}
       </Modal>
     </>
