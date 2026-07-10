@@ -114,6 +114,12 @@
   DOS GATES antes de impl: (1) es fullstack -> NO corre en paralelo con la feature 27 (tambien
   fullstack, in_progress en otra sesion); (2) el seed necesita el **Excel de zonas** que el humano debe
   proveer. Preguntas abiertas para F1.4 en `specs/24-gestion-zonas/requirements.md`.
+  **F1.4 APROBADA por el humano 2026-07-10** (las 7 propuestas tal cual) -> status `in_progress` (F2.0).
+  **IMPL EN ESPERA (no arrancada):** la feature 27 esta implementando AHORA en el checkout principal y
+  ya tiene modificados `db/schema.prisma`, `UserRepository`/`IUserRepository`, `OrdenRepository` y la UI
+  de configuracion -> arrancar la 24 chocaria en la migracion de `usuario` y los repos (regla #1 no
+  negociable). La impl de la 24 arranca cuando la 27 este `done` en `dev`; entonces se sincroniza. El
+  seed ademas espera el Excel. Rama `feature/24-gestion-zonas` pusheada con el spec para revision.
 
 ## Conflictos pendientes
 

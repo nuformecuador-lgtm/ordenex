@@ -198,3 +198,30 @@ Cada una lleva mi **propuesta firme**; el humano confirma o corrige.
    `es_gam`. `pago_entrega`/`pago_rechazo` numéricos; `es_gam` booleano
    (`true`/`false` o `1`/`0`), a lo sumo una zona con `true`. Hoja única. Confirmar
    nombres de encabezado y si habrá una zona GAM marcada en el propio Excel.
+
+## Decisiones F1.4 (APROBADAS por el humano, 2026-07-10)
+
+El humano aprobó el spec con las 7 propuestas firmes tal cual (respuesta "aprobado"):
+
+- **P1** — `zona.pago_entrega`/`zona.pago_rechazo` `Decimal @db.Decimal(12,2)` default `0`;
+  `zona.es_gam Boolean` default `false` (nombre `es_gam`).
+- **P2** — Escritura de zonas SOLO rol `maestro`; lectura del catálogo ligero `maestro` + `admin`.
+- **P3** — Geografía (provincia/cantón/distritos) por creación **inline** en el formulario de zona;
+  sin catálogo nacional precargado.
+- **P4** — `nombre` de zona **único** (normalizado trim+lowercase); **un solo** `es_gam=true`
+  (al marcar una nueva se desmarca la anterior).
+- **P5** — Sin borrado en esta feature (solo crear/listar/editar); FK `ON DELETE RESTRICT`.
+- **P6** — `usuario.zona_id` **nullable** en DB; obligatoriedad para mensajero/adminSatelite como
+  regla de negocio en el servicio de usuarios (no en el schema).
+- **P7** — Excel de seed: una fila por distrito, columnas
+  `zona | provincia | canton | distrito | pago_entrega | pago_rechazo | es_gam`, hoja única,
+  a lo sumo una zona con `es_gam=true`.
+
+### GATES de implementación (F2) — impl EN ESPERA
+1. **No paralelizable con la feature 27** (también fullstack, `in_progress` en otra sesión que ya
+   modifica `db/schema.prisma`, `UserRepository`/`IUserRepository` y la UI de configuración). La
+   migración de `usuario` (zona_id) y los repos chocarían. La impl de la 24 arranca cuando la 27
+   esté `done` (mergeada a `dev`), y entonces la 24 se sincroniza con ese `dev`.
+2. **Seed (E / T de seed) necesita el Excel de zonas** que proveerá el humano. Todo lo demás
+   (migración + backend CRUD + UI) puede implementarse sin el Excel; solo la carga de datos del
+   seed queda como gate/deuda hasta recibirlo.
