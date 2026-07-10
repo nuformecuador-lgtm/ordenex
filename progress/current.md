@@ -7,6 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
+| feature/29-validacion-carga-masiva | frontend | F2.1 | **spec APROBADO por humano (2026-07-10) → in_progress.** Spec R1–R19. Impl (implementer→frontend_dev): `carga-masiva-clasificacion.ts` (helper puro con guards sobre unknown), `estatus-label.ts` (mapa value→label anclado a ORDER_STATUS_SEED), contenedor de paso con 3 secciones (nuevas=OrdenesCargaResumen intacto / existentes solo-lectura / errores solo-lectura), y ajuste de OrdenesCargaMasivaButton.handleSuccess. Frontend puro (R14–R16: no toca lib/actions,services,repositories,api,db). Corre en paralelo con la 28 (backend, otra sesión). |
 > Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
 > `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en
 > paralelo con la 19 (backend). Reviewer APROBADO 0 bloqueantes; suite 689/689 verde. Deuda

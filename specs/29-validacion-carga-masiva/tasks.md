@@ -148,7 +148,7 @@
 
 ## T5 — Verificación y trazabilidad (R14, R15, R16)
 
-- [ ] **T5.1** Verificación estática de alcance frontend puro: confirmar por diff
+- [x] **T5.1** Verificación estática de alcance frontend puro: confirmar por diff
   que no hay cambios bajo `lib/actions/`, `lib/services/`, `lib/repositories/`,
   `app/api/`, `db/` (R14); búsqueda de `any` en los archivos nuevos = 0 (R15);
   ninguna primitiva (`DataTable`/`Modal`/`Select`/`Alert`/`useToast`/`BulkUpload`)
@@ -157,7 +157,7 @@
   `app/(app)/ordenes/_components/` y `tests/components/`.
   Depende de: T1–T4.
 
-- [ ] **T5.2** Completar el mapa de trazabilidad `R<n> → test` en
+- [x] **T5.2** Completar el mapa de trazabilidad `R<n> → test` en
   `progress/impl_29-validacion-carga-masiva.md`: cada R1..R19 apuntando a su test
   (o, para R14/R16, a la verificación de revisión de T5.1).
   **Hecho:** los 19 requisitos mapeados; el reviewer puede validar sin huecos.

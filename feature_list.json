@@ -285,11 +285,11 @@
       "id": 29,
       "name": "enriquecer validacion previa a la carga masiva",
       "description": "Enriquece la validacion previa a la carga de ordenes (la etapa de resumen de la feature 16). Se hace como feature APARTE porque la 16 esta in_progress y no se re-ejecuta al cambiar su descripcion. La validacion debe: (a) al chequear el archivo por num_remision, SEPARAR las ordenes ya existentes de las nuevas; (b) mostrar/reportar las ordenes existentes con su estado actual (dato que el backend de la feature 15 ya devuelve) y NO permitir recargarlas; (c) dejar claro cuales son NUEVAS y cargar UNICAMENTE esas; (d) conservar el select por fila (columna con un select) para predefinir el mensajero (mensajero_sugerido_id) que aporta la feature 16. Frontend que consume el backend de las features 15/16. Depende de la feature 16.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/29-validacion-carga-masiva",
       "depends_on": 16
     },
     {
