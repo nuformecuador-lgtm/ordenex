@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
 import OrdenesPage from "@/app/(app)/ordenes/page";
+import { ToastProvider } from "@/providers/ToastProvider";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { ListarOrdenesResult, OrdenListItemDTO } from "@/lib/types/orden";
 
@@ -57,9 +58,11 @@ function mockDataset(total: number): void {
 
 function renderPage(): void {
   render(
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <OrdenesPage />
-    </SWRConfig>,
+    <ToastProvider>
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <OrdenesPage />
+      </SWRConfig>
+    </ToastProvider>,
   );
 }
 
