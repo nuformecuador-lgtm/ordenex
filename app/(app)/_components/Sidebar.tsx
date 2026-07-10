@@ -28,8 +28,9 @@ export function Sidebar() {
           aria-current={isActive ? "page" : undefined}
           onClick={onNavigate}
           className={cn(
-            "block rounded-md px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
-            isActive && "bg-zinc-100 text-black dark:bg-zinc-800 dark:text-white",
+            "block rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            isActive &&
+              "border-sidebar-primary bg-sidebar-primary/15 text-sidebar-accent-foreground",
           )}
         >
           {item.label}
@@ -41,7 +42,7 @@ export function Sidebar() {
   return (
     <nav
       aria-label="Navegación principal"
-      className="flex flex-col gap-2 border-b border-zinc-200 p-4 md:h-full md:w-60 md:border-r md:border-b-0 dark:border-zinc-800"
+      className="flex flex-col gap-2 border-b border-sidebar-border bg-sidebar p-4 text-sidebar-foreground md:h-full md:w-60 md:border-r md:border-b-0"
     >
       {/* Control hamburguesa: visible solo en móvil (R7, R11, R16) */}
       <Button

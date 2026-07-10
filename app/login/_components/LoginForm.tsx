@@ -198,9 +198,11 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
 
   if (phase === "credentials") {
     return (
-      <Card className="w-full max-w-md p-8 space-y-6">
+      <Card className="w-full max-w-md border-t-4 border-t-brand p-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-center">Iniciar sesión</h1>
+          <h1 className="text-2xl font-semibold text-center text-navy dark:text-foreground">
+            Iniciar sesión
+          </h1>
         </div>
 
         {generalError && (
@@ -235,7 +237,7 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
               <div
                 id="email-error"
                 role="alert"
-                className="text-sm text-red-600 dark:text-red-400 space-y-1"
+                className="text-sm text-destructive space-y-1"
               >
                 {credentialsFieldErrors.email.map((msg, idx) => (
                   <div key={idx}>{msg}</div>
@@ -262,7 +264,7 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
               <div
                 id="password-error"
                 role="alert"
-                className="text-sm text-red-600 dark:text-red-400 space-y-1"
+                className="text-sm text-destructive space-y-1"
               >
                 {credentialsFieldErrors.password.map((msg, idx) => (
                   <div key={idx}>{msg}</div>
@@ -282,10 +284,12 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
 
   // Fase challenge (R12, R13)
   return (
-    <Card className="w-full max-w-md p-8 space-y-6">
+    <Card className="w-full max-w-md border-t-4 border-t-brand p-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-center">Verificar código</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400 text-center mt-2">
+        <h1 className="text-2xl font-semibold text-center text-navy dark:text-foreground">
+          Verificar código
+        </h1>
+        <p className="text-sm text-muted-foreground text-center mt-2">
           Se ha enviado un código de 6 dígitos a tu correo electrónico
         </p>
       </div>
@@ -321,7 +325,7 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
             <div
               id="code-error"
               role="alert"
-              className="text-sm text-red-600 dark:text-red-400 space-y-1"
+              className="text-sm text-destructive space-y-1"
             >
               {codeFieldErrors.code.map((msg, idx) => (
                 <div key={idx}>{msg}</div>
@@ -348,7 +352,7 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
           emailRef.current?.focus();
         }}
         disabled={isPending}
-        className="w-full text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 underline disabled:opacity-50"
+        className="w-full text-sm text-muted-foreground hover:text-foreground underline disabled:opacity-50"
       >
         Volver a correo y contraseña
       </button>

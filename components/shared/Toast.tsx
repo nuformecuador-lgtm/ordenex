@@ -20,10 +20,16 @@ const toastVariants = cva(
   {
     variants: {
       variant: {
-        success: "border-green-200 bg-green-50 text-green-900",
-        error: "border-red-200 bg-red-50 text-red-900",
-        info: "border-blue-200 bg-blue-50 text-blue-900",
-        warning: "border-amber-200 bg-amber-50 text-amber-900",
+        // Fondo -soft (marca) + texto oscurecido sobre ese fondo (mix con
+        // negro) para pasar AA en light; en dark, fondo translucido sobre el
+        // canvas oscuro + texto aclarado (mix con blanco) por la misma razon.
+        success:
+          "border-success/30 bg-success-soft text-[color-mix(in_srgb,var(--color-success)_55%,black)] dark:border-success/40 dark:bg-success/15 dark:text-[color-mix(in_srgb,var(--color-success)_80%,white)]",
+        error:
+          "border-danger/30 bg-danger-soft text-[color-mix(in_srgb,var(--color-danger)_55%,black)] dark:border-danger/40 dark:bg-danger/15 dark:text-[color-mix(in_srgb,var(--color-danger)_80%,white)]",
+        info: "border-info/30 bg-[color-mix(in_srgb,var(--color-info)_10%,white)] text-[color-mix(in_srgb,var(--color-info)_55%,black)] dark:border-info/40 dark:bg-info/15 dark:text-[color-mix(in_srgb,var(--color-info)_80%,white)]",
+        warning:
+          "border-warning/30 bg-warning-soft text-[color-mix(in_srgb,var(--color-warning)_55%,black)] dark:border-warning/40 dark:bg-warning/15 dark:text-[color-mix(in_srgb,var(--color-warning)_80%,white)]",
       },
     },
     defaultVariants: {
