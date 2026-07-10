@@ -27,30 +27,29 @@ else
   warn "no hay package.json todavia (repo recien inicializado)"
 fi
 
-# 3. Regla: una feature por zona a la vez (maximo un in_progress por zone)
-if command -v jq >/dev/null 2>&1 && [ -f feature_list.json ]; then
-  IN_PROGRESS_COUNT=$(jq '[.features[] | select(.status=="in_progress")] | length' feature_list.json)
-  if [ "$IN_PROGRESS_COUNT" -gt 0 ]; then
-    DUPLICATE_ZONES=$(jq -r '
-      [.features[] | select(.status=="in_progress" and .zone != null)]
-      | group_by(.zone)
-      | map(select(length > 1))[]
-      | "\(.[0].zone): \(map(.name) | join(", "))"
-    ' feature_list.json)
-    if [ -n "$DUPLICATE_ZONES" ]; then
-      fail "features en in_progress con misma zona: $DUPLICATE_ZONES"
-    fi
+# 3. Candado LOCAL: una feature por zona en in_progress + ancla Jira.
+#    Corre via node (garantizado en este repo) para NO depender de jq. La capa de
+#    nube (Jira In Progress) la valida el leader en sesion (ver docs/jira-sync.md).
+if [ -f feature_list.json ]; then
+  if command -v node >/dev/null 2>&1; then
+    node scripts/check-zone-lock.mjs || fail "candado local del arnes fallo (ver detalle arriba)"
+  else
+    warn "node no disponible: se omite el candado local (scripts/check-zone-lock.mjs)"
   fi
-  ok "regla una-feature-por-zona respetada (in_progress=$IN_PROGRESS_COUNT)"
 
-  # 4. Toda feature sdd que no este en pending debe tener su carpeta de specs
-  MISSING=$(jq -r '.features[] | select(.sdd==true and .status!="pending") | .name' feature_list.json | while read -r f; do
-    [ -f "specs/$f/requirements.md" ] || echo "$f"
-  done)
-  if [ -n "$MISSING" ]; then
-    fail "faltan specs para features sdd ya iniciadas: $MISSING"
+  # 4. Toda feature sdd que no este en pending debe tener su carpeta de specs.
+  #    Check por-nombre, jq-gated y opcional. OJO: specs/ usa slugs (p.ej.
+  #    '31-plantilla-xlsx'), no el .name de la feature -> este check puede dar
+  #    falsos positivos hasta unificar el naming. Se mantiene como estaba.
+  if command -v jq >/dev/null 2>&1; then
+    MISSING=$(jq -r '.features[] | select(.sdd==true and .status!="pending") | .name' feature_list.json | while read -r f; do
+      [ -f "specs/$f/requirements.md" ] || echo "$f"
+    done)
+    if [ -n "$MISSING" ]; then
+      fail "faltan specs para features sdd ya iniciadas: $MISSING"
+    fi
+    ok "specs presentes para features sdd iniciadas"
   fi
-  ok "specs presentes para features sdd iniciadas"
 fi
 
 # 5. Calidad de codigo (si los scripts existen)

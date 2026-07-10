@@ -87,6 +87,21 @@ Dos features pueden correr en paralelo si sus `zone` son **disjuntas**:
 
 Feature con `depends_on` no arranca hasta que su dependencia este `done`.
 
+## Integracion con Jira (backlog en la nube)
+
+El backlog vive tambien en Jira (`KAN`) y se sincroniza bidireccionalmente con
+`feature_list.json`. Detalle completo en `docs/jira-sync.md`. Lo minimo que el
+leader debe hacer:
+
+- **Arranque:** pull de Jira y reconciliar `status` (paso 2 de "Arranque de sesion"
+  en `CLAUDE.md`).
+- **Al cambiar `status` de una feature**, refleja el cambio en su issue anclada
+  (campo `jira: "KAN-<n>"`): `spec_ready`→To Do, `in_progress`→In Progress (21),
+  `done`→Done (41). Transiciones via `transitionJiraIssue`.
+- **Candado de nube** en F1.0 (arriba).
+- **Feature nueva:** crea el issue `Feature` en `KAN` y escribe su key en el campo
+  `jira` de `feature_list.json`.
+
 ## Flujo de una feature (dos fases)
 
 ### Fase 1 — Especificacion
@@ -97,9 +112,15 @@ Feature con `depends_on` no arranca hasta que su dependencia este `done`.
      criterios de arriba y actualiza `feature_list.json` con los valores asignados.
    - Documenta cada evaluacion en `progress/current.md > Evaluaciones`.
    - Identifica las `zone` ocupadas: features que ya estan `in_progress`.
+     **Candado de dos capas (ver `docs/jira-sync.md`):** primero consulta la NUBE
+     (JQL `project = KAN AND labels = "zone-<zona>" AND statusCategory = "In Progress"`;
+     y que el issue objetivo no este asignado a otra persona) y luego lo LOCAL
+     (`feature_list.json`). Una zona esta ocupada si lo esta en cualquiera de las dos.
    - Recorre las `pending` (ya evaluadas) en orden de `id` y selecciona la
      **primera** cuya `zone` NO este ocupada. Si la zona ya tiene una feature
      corriendo, la saltea y evalua la siguiente.
+   - Al seleccionar: en Jira, **asignate** el issue anclado (`KAN-<n>`) y
+     transicionalo a *In Progress* (toma del candado en la nube).
    - Si ninguna zona esta libre (todas las `pending` son de zonas ocupadas),
      espera a que una feature `in_progress` pase a `done` y vuelve a este paso.
    - Si la feature seleccionada evalua como `fullstack`, la parte en dos features

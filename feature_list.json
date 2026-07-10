@@ -2,6 +2,7 @@
   "features": [
     {
       "id": 1,
+      "jira": "KAN-1",
       "name": "login",
       "description": "Genera el flujo de login RBA, la db debe llevar los campos (nombre, email, telefono, contraseña, estado, cedula, tipo_identificacion_id, rol_id, created_at, updated_at)",
       "status": "done",
@@ -10,6 +11,7 @@
     },
     {
       "id": 2,
+      "jira": "KAN-2",
       "name": "login(home)",
       "description": "Genera la pantalla de home del login pide los campos de email y contraseña",
       "status": "done",
@@ -18,6 +20,7 @@
     },
     {
       "id": 3,
+      "jira": "KAN-3",
       "name": "permissions",
       "description": "Genera la tabla permisos con los campos (id, nombre, method, route, created_at, updated_at) y la relacion con los roles, no ahi lista de permisos, deja vacio",
       "status": "done",
@@ -26,6 +29,7 @@
     },
     {
       "id": 4,
+      "jira": "KAN-4",
       "name": "role seed",
       "description": "genera un seed para la tabla rol, con los values de maestro, admin, mensagero y admin Tienda",
       "status": "done",
@@ -34,6 +38,7 @@
     },
     {
       "id": 5,
+      "jira": "KAN-5",
       "name": "home - sidebar",
       "description": "Genera un menu responsive, simple con los items configuracion, perfil y ordenes",
       "status": "done",
@@ -42,6 +47,7 @@
     },
     {
       "id": 6,
+      "jira": "KAN-6",
       "name": "ordenes",
       "description": "genera el crud de ordenes",
       "status": "done",
@@ -50,6 +56,7 @@
     },
     {
       "id": 7,
+      "jira": "KAN-7",
       "name": "ordenes - list",
       "description": "Muestra las ordenes en el item ordenes del menu (genera una tabla reutilizable que reciba como parametros, la data normalizada en una estructura especifica, id, value, render(fucnion que renderiza la informacion (compnente custom), o string))",
       "status": "done",
@@ -58,6 +65,7 @@
     },
     {
       "id": 8,
+      "jira": "KAN-8",
       "name": "paginacion",
       "description": "al componente de tabla agrega paginacion como componente separado",
       "status": "done",
@@ -69,6 +77,7 @@
     },
     {
       "id": 9,
+      "jira": "KAN-9",
       "name": "componente carga masiva",
       "description": "Genera un componente que permita cargar un archivo, debe permitir pasarle el tipo de archivo que se va a cargar (csv, xlsx, etc) y la ruta de la api donde se va a enviar el archivo, debe tener un boton para descargar la plantilla y un boton para cargar el archivo, debe permitir parametrizar los campos de la plantilla",
       "status": "done",
@@ -80,6 +89,7 @@
     },
     {
       "id": 10,
+      "jira": "KAN-10",
       "name": "manejador de errores",
       "description": "Genera un manejador de errores global que capture los errores desde el backend y lo envie en una estructura comun para todos los endpoints",
       "status": "done",
@@ -91,6 +101,7 @@
     },
     {
       "id": 11,
+      "jira": "KAN-11",
       "name": "notificaciones",
       "description": "Agrega un toast para mostrar mensajes al usuario",
       "status": "done",
@@ -102,6 +113,7 @@
     },
     {
       "id": 12,
+      "jira": "KAN-12",
       "name": "notificaciones - fix",
       "description": "reemplaza los mensajes de error que se hacian mediante switch case por el manejador de errores global",
       "status": "done",
@@ -113,6 +125,7 @@
     },
     {
       "id": 13,
+      "jira": "KAN-13",
       "name": "modal",
       "description": "Genera un componente modal reutilizable, que ademas pueda manejar funciones async, cuando sea async debe mostrar un spinner mientras se ejecuta la funcion y bloquear el boton de confirmacion",
       "status": "done",
@@ -124,6 +137,7 @@
     },
     {
       "id": 14,
+      "jira": "KAN-14",
       "name": "ordenes - carga masiva",
       "description": "en ordenes agrega un boton para abrir un modal que contenga el componente de carga masiva",
       "status": "done",
@@ -135,6 +149,7 @@
     },
     {
       "id": 15,
+      "jira": "KAN-15",
       "name": "ordenes - carga masiva",
       "description": "agrega el endpoint para cargar masivamente ordenes, el endpoint debe recibir un archivo csv o xlsx y procesarlo, debe soportar volumenes altos de datos, los datos que trae el csv son los siguientes: num_remision, destinatario telefono, provincia, canton, distrito, direccion(actualiza la tabla orden), producto, notas, monto_cobrar(actualiza la tabla orden), mensajero_sugerido_id(actualiza la tabla orden, agega la relacion con users para este campo), actualiza el enum de estados para agregar en preparación, este sera el nuevo valor por defecto, debe verificar que el num_remision no exista ya en la base de datos, en caso que exista retornar el estado de la orden",
       "status": "done",
@@ -146,6 +161,7 @@
     },
     {
       "id": 16,
+      "jira": "KAN-16",
       "name": "ordenes - carga masiva - etapa 2",
       "description": "Una vez cargadas y validadas las ordenes, muestra un resumen de los datos ingresados, columna por columna, num_remision debe ser unico, debe mostrar un select que consuma los users filtrados por role = mensajero, este se asiganara al campo mensajero_sugerido_id",
       "status": "done",
@@ -157,6 +173,7 @@
     },
     {
       "id": 17,
+      "jira": "KAN-17",
       "name": "ordenes - revision maestro / generar guia / asignacion mensajero",
       "description": "El modulo de ordenes del admin maestro muestra de forma SEPARADA las ordenes en en_fulfillment y las ordenes en en_preparacion (ambos estados de revision; en_fulfillment antes 'embalaje', renombrado por la feature 28). El maestro puede seleccionar via checkbox una o varias ordenes de un estado para procesarlas. FLUJO DE FULFILLMENT: con ordenes en_fulfillment seleccionadas hay un boton 'Generar guia'. Al pulsarlo, por cada orden que tenga mensajero sugerido (mensajero_sugerido_id de la carga masiva) el sistema pregunta si se desea asignar directamente esas ordenes al mensajero sugerido. Casos: (1) si SI -> las ordenes pasan al estado 'en espera de aceptacion del mensajero' (nombre corto en_espera_aceptacion, estado NUEVO) y aparecen en un apartado 'En espera de aceptacion del mensajero'; (2) si NO -> el sistema permite seleccionar OTRO mensajero y, tras asignarlo, las ordenes pasan al mismo estado en_espera_aceptacion; (3) si NO se selecciona ningun mensajero -> la orden pasa al estado en_bodega. Las ordenes en en_bodega se pueden seleccionar y asignar a cualquier mensajero (pasan a en_espera_aceptacion). Ademas, al pulsar 'Generar guia' se asigna a cada orden un NUMERO DE GUIA (num_guia) incremental y unico. DECISION DEL HUMANO (2026-07-10): se DIFIERE la asignacion de num_guia al momento de 'Generar guia'. Hoy Orden.num_guia es autoincrement asignado al INSERTAR la fila (feature 6); esta feature lo cambia a NULLABLE hasta generar la guia y, al pulsar 'Generar guia', asigna una secuencia incremental+unica. Requiere migracion (num_guia nullable + mecanismo de secuencia) y ajustar la carga masiva (feature 15) para NO asignar num_guia al insertar. Estado NUEVO: en_espera_aceptacion. La logica por ZONA/GAM (a que mensajeros puede asignar el maestro y el ruteo a bodega satelite) se maneja en la feature 30. Es fullstack de alta complejidad. Depende de la feature 27 (estado en_fulfillment / estado inicial de fulfillment) y de la feature 28 (rename embalaje->en_fulfillment).",
       "status": "pending",
@@ -167,6 +184,7 @@
     },
     {
       "id": 18,
+      "jira": "KAN-18",
       "name": "cobros - crud",
       "description": "generar el crud de cobros, crea la tabla cobros con valor_flete, valor_flete_devuelto, valor_flete_GAM, valor_flete_devuelto_GAM, fulfillment, comision_cod, iva_flete, iva_comision_cod",
       "status": "done",
@@ -178,6 +196,7 @@
     },
     {
       "id": 19,
+      "jira": "KAN-19",
       "name": "rol admin bodega satelite",
       "description": "Agrega el rol 'admin de bodega satelite' al sistema: nuevo valor adminSatelite en el enum Postgres RolValue y en el seed de roles (ROLES_SEED), siguiendo el patron de la feature 4 (role seed). Con esto el catalogo de roles pasa de 4 a 5: maestro, admin, mensajero, adminTienda, adminSatelite. Requiere migracion Prisma que altere el enum RolValue con su down.sql y actualice la fuente unica de verdad en TS (lib/types/roles.ts). Nota de autorizacion: adminSatelite NO puede aprobar postulaciones de mensajeros (esa capacidad queda limitada a maestro/admin, ver feature de aprobacion).",
       "status": "done",
@@ -188,6 +207,7 @@
     },
     {
       "id": 20,
+      "jira": "KAN-20",
       "name": "recuperacion de contrasena",
       "description": "Agrega el flujo de recuperacion/restablecimiento de contrasena reutilizando la infraestructura de OTP por email del login RBA (EmailOtpChallenge, EmailProvider). El usuario solicita la recuperacion indicando su email; si existe, se genera y envia un codigo OTP al correo; tras verificar el codigo el usuario define una nueva contrasena con su confirmacion, que se hashea con bcrypt (mismo coste que el login) y se persiste en Usuario.password_hash. Incluye las pantallas de 'olvide mi contrasena' -> ingreso de codigo -> nueva contrasena, y las Server Actions correspondientes. Invalida el desafio OTP una vez usado y respeta el mismo endurecimiento del login (expiracion del codigo, limite de intentos). No revela si el email existe o no (respuesta generica). Es fullstack (pantallas + backend), sin tabla nueva (reusa EmailOtpChallenge).",
       "status": "done",
@@ -199,6 +219,7 @@
     },
     {
       "id": 21,
+      "jira": "KAN-21",
       "name": "postulacion de mensajero",
       "description": "Agrega el registro publico (postulacion) de mensajeros: unica via de auto-registro del sistema. Un aspirante completa un formulario con los campos: nombre, primer apellido, segundo apellido, email, telefono, tipo de documento (FK a tipo_identificacion), numero de documento, vehiculo_id(fk a vehiculos), placa del vehiculo, contrasena y confirmacion de contrasena; y sube documentos: foto de cedula por ambos lados (anverso y reverso), tarjeta de propiedad del vehiculo por ambos lados (anverso y reverso), y una foto de su rostro (que acompanara su perfil de mensajero). Al enviar, se crea la cuenta con rol mensajero en estado pendiente (default de EstadoUsuario), sin acceso hasta ser aprobada (ver feature de aprobacion). Requiere extender el modelo Usuario/perfil de mensajero con los campos nuevos (primer apellido y segundo apellido -hoy Usuario tiene un unico campo nombre-, vehiculo, placa) y el almacenamiento de los 5 documentos subidos (cedula anverso, cedula reverso, tarjeta propiedad anverso, tarjeta propiedad reverso, foto de rostro). El email y el numero de documento no deben duplicarse; la contrasena se hashea con bcrypt (mismo coste que el login). Es fullstack (pantalla de postulacion + backend/migracion/almacenamiento de archivos).",
       "status": "pending",
@@ -210,6 +231,7 @@
     },
     {
       "id": 22,
+      "jira": "KAN-22",
       "name": "aprobacion de postulaciones de mensajeros",
       "description": "Backend para que SOLO los roles maestro y admin (adminSatelite, adminTienda y mensajero NO) aprueben o rechacen las postulaciones de mensajeros en estado pendiente. Aprobar cambia el estado de la cuenta de pendiente a activo, habilitando el acceso del mensajero. Rechazar deja la cuenta sin habilitar (estado resultante inactivo o bloqueado/rechazado: a decidir en el spec). Expone las Server Actions/consultas para listar postulaciones pendientes (con sus datos y documentos) y para aprobar/rechazar una postulacion, con autorizacion por rol. La UI que las consume es el dashboard del maestro (ver feature de dashboard). Depende de la feature de postulacion de mensajero (21).",
       "status": "pending",
@@ -221,6 +243,7 @@
     },
     {
       "id": 23,
+      "jira": "KAN-23",
       "name": "dashboard admin maestro",
       "description": "Dashboard del admin maestro como primera pantalla tras iniciar sesion (reemplaza el placeholder 'Bienvenido' de la home autenticada app/(app)/page.tsx). Arranca 'en blanco' salvo por el panel de postulaciones de mensajeros: lista las postulaciones en estado pendiente con sus datos y documentos, y permite aprobar o rechazar cada una consumiendo el backend de la feature 22. Visible para el rol maestro (y admin, que comparte la autorizacion de aprobacion). Frontend. Depende de la feature de aprobacion de postulaciones (22).",
       "status": "pending",
@@ -232,6 +255,7 @@
     },
     {
       "id": 24,
+      "jira": "KAN-24",
       "name": "gestion de zonas (configuracion)",
       "description": "Agrega, dentro de configuracion, la gestion de ZONAS por el admin maestro, SOBRE el modelo de geografia actual (feature 6, tablas creadas vacias): la jerarquia se MANTIENE con Zona como raiz -> Provincia (zona_id) -> Canton -> Distrito (decision del humano 2026-07-10: no se remodela). Crear una zona: poner un nombre y, bajo esa zona, seleccionar/definir la provincia, el canton y los distritos que le pertenecen (se pueblan las tablas de geografia hoy vacias como hijos de la zona). El esquema permite N provincias por zona, pero el uso sera 1 provincia + 1 canton + varios distritos por zona. Cada zona lleva el PAGO AL MENSAJERO: cuanto se le paga a un mensajero por la ENTREGA y cuanto por el RECHAZO de una orden en esa zona (nuevas columnas en la tabla zona). Como cada mensajero esta atado a una zona, es la zona la que determina su pago. Se relaciona con la feature 18 cobros/fletes (lo que se COBRA al cliente/tienda, distinto del pago al mensajero); alinear al llegar alla. Requisitos conexos importantes: (a) mensajeros, ordenes y administradores de bodega satelite (adminSatelite) deben estar ASIGNADOS a una zona -> agregar zona_id a Usuario (aplicable a rol mensajero y adminSatelite); Orden ya tiene zona_id. (b) seed base con las zonas existentes de 'Orden X' a partir de un archivo Excel predefinido que el humano proveera (input requerido para la fase de impl). Requiere migracion Prisma que agregue los precios a zona y zona_id a Usuario, con su down.sql y RLS. Es fullstack de alta complejidad (migracion + seed desde Excel + UI en configuracion + backend). Modulo transversal: se conecta con ordenes, mensajeros, bodega satelite y cobros. Incluye crear desde configuracion la zona GAM/central y marcarla como la zona de la bodega central (ver el flag es_gam/es_central de la feature 30), para que la bodega central pueda asignar desde ahi; las demas zonas se van creando igual desde configuracion.",
       "status": "pending",
@@ -242,6 +266,7 @@
     },
     {
       "id": 25,
+      "jira": "KAN-25",
       "name": "gestion de usuarios (configuracion)",
       "description": "Agrega un modulo de gestion de usuarios dentro de configuracion (ruta app/(app)/configuracion, hoy placeholder de la feature 5) que permite al admin maestro CRUD de usuarios: crear, listar, editar y activar/inactivar. Crear un usuario define nombre, email, telefono, tipo de documento (FK a tipo_identificacion), numero de documento, rol (FK al catalogo rol: maestro, admin, mensajero, adminTienda, adminSatelite) y contrasena inicial; el usuario creado por el admin queda en estado activo (a diferencia de la postulacion publica de mensajeros, que nace pendiente). Email y numero de documento no se duplican; la contrasena se hashea con bcrypt (mismo coste que el login). La baja es logica via el enum EstadoUsuario (inactivo/bloqueado), no borrado fisico. Reusa la infraestructura existente: DataTable + Pagination para el listado, Modal para crear/editar, Toast para feedback y el manejador de errores global del backend. Autorizacion: solo maestro (a confirmar si admin tambien). Es fullstack (pantalla en configuracion + backend Server Actions/service/repository). ABIERTO a decidir en spec: si el admin puede crear cualquier rol o hay restricciones, y si al crear un mensajero por esta via se piden los campos extra (vehiculo, placa, documentos) de la feature 21 o solo el set base.",
       "status": "pending",
@@ -252,6 +277,7 @@
     },
     {
       "id": 26,
+      "jira": "KAN-26",
       "name": "dashboard/apartado del admin de tienda",
       "description": "Vistas propias del admin de tienda (rol adminTienda): un apartado/dashboard DISTINTO al del admin maestro (feature 23), como primera experiencia tras iniciar sesion para ese rol. Incluye su modulo de ordenes que lista UNICAMENTE las ordenes de su propia tienda y desde el cual accede al boton de carga masiva (feature 14) para subir ordenes desde la plantilla Excel. Reusa lo existente: la autorizacion por rol de la feature 6 ya filtra adminTienda a sus ordenes, la tabla/list de la feature 7, la carga masiva de las features 14/16. Nota: el reflejo de esas ordenes en el modulo del admin maestro (que ve las de TODAS las tiendas, con el nombre de la tienda que cargo cada orden) YA esta cubierto por la feature 6 (autorizacion) y la feature 7 (columna tiendaNombre). Frontend. ABIERTO a decidir en spec: que mas muestra el dashboard del adminTienda ademas de su modulo de ordenes (metricas, accesos, etc.).",
       "status": "done",
@@ -263,6 +289,7 @@
     },
     {
       "id": 27,
+      "jira": "KAN-27",
       "name": "fulfillment de tienda + estado inicial condicional",
       "description": "Fulfillment por tienda. (1) Al crear un usuario admin de tienda (feature 25) se agrega un interruptor 'esta tienda tiene fulfillment' (si/no) -> nuevo campo booleano fulfillment en el modelo Usuario, aplicable al rol adminTienda (default false), con migracion + down.sql. (2) Usa el estado order_status 'en_fulfillment' que la feature 28 renombra desde 'embalaje' (NO se agrega un estado nuevo). (3) Se cambia el estado INICIAL de la carga masiva de ordenes (feature 15, hoy default GLOBAL en_preparacion via ORDENES_DEFAULT_ESTATUS_VALUE / BulkOrdenService) para que sea CONDICIONAL segun la tienda que realiza la carga: si la tienda tiene fulfillment habilitado -> las ordenes nacen en estado en_fulfillment; si NO -> nacen en en_preparacion (comportamiento actual). Toca: modelo Usuario (migracion), la UI de creacion de usuario (feature 25) y la logica del servicio/endpoint de carga masiva (BulkOrdenService, feature 15). Depende ademas de la feature 28 (el estado en_fulfillment debe existir renombrado) y se relaciona con la feature 18 cobros (que incluye un campo fulfillment). Es fullstack de complejidad alta por el cruce con carga masiva y creacion de usuarios.",
       "status": "pending",
@@ -274,6 +301,7 @@
     },
     {
       "id": 28,
+      "jira": "KAN-28",
       "name": "rename estado embalaje -> en_fulfillment",
       "description": "Feature de CORRECCION de nomenclatura: el estado de order_status 'embalaje' en realidad representa el concepto 'fulfillment' y debe renombrarse a 'en_fulfillment' (siguiendo la convencion en_ de los demas estados: en_preparacion, en_bodega). Cambia TODO lo que diga embalaje por en_fulfillment: el valor en ORDER_STATUS_SEED (lib/types/order-status.ts), una migracion Prisma que actualice la fila del catalogo order_status (UPDATE value 'embalaje' -> 'en_fulfillment') con su down.sql, y todas las referencias en codigo, tests y specs. Se hace como feature APARTE porque las features viejas que introdujeron/usaron 'embalaje' (feature 6 y otras) ya estan done y no se re-ejecutan. Backend, complejidad media. Nota: 'en_fulfillment' es el estado inicial de la carga masiva para tiendas con fulfillment (feature 27); junto con en_preparacion son los estados de revision (feature 17).",
       "status": "done",
@@ -284,6 +312,7 @@
     },
     {
       "id": 29,
+      "jira": "KAN-29",
       "name": "enriquecer validacion previa a la carga masiva",
       "description": "Enriquece la validacion previa a la carga de ordenes (la etapa de resumen de la feature 16). Se hace como feature APARTE porque la 16 esta in_progress y no se re-ejecuta al cambiar su descripcion. La validacion debe: (a) al chequear el archivo por num_remision, SEPARAR las ordenes ya existentes de las nuevas; (b) mostrar/reportar las ordenes existentes con su estado actual (dato que el backend de la feature 15 ya devuelve) y NO permitir recargarlas; (c) dejar claro cuales son NUEVAS y cargar UNICAMENTE esas; (d) conservar el select por fila (columna con un select) para predefinir el mensajero (mensajero_sugerido_id) que aporta la feature 16. Frontend que consume el backend de las features 15/16. Depende de la feature 16.",
       "status": "done",
@@ -295,6 +324,7 @@
     },
     {
       "id": 30,
+      "jira": "KAN-30",
       "name": "asignacion por zona (GAM) y ruteo a bodega satelite",
       "description": "Reglas de asignacion por ZONA y ruteo a bodega satelite, sobre el flujo de generacion de guia (feature 17) y las zonas de la feature 24 (mensajeros y adminSatelite quedan asignados a una zona). El admin maestro (bodega central) SOLO controla la zona GAM: al asignar un mensajero a una orden, solo aparecen los mensajeros cuya zona es GAM; un mensajero asignado a otra zona NO le aparece al maestro. Si una orden tiene una zona DIFERENTE de GAM, el maestro NO puede asignarla a un mensajero: lo unico que puede hacer es asignarla a la bodega satelite de esa zona, y la orden pasa a un estado NUEVO 'en ruta hacia la bodega <nombre de zona>'. ABIERTO a decidir en spec: (a) como se identifica la zona GAM -> flag booleano (p.ej. es_gam / es_central) en la tabla zona (recomendado) vs. por nombre 'GAM'; (b) el estado de ruteo -> UN solo estado (p.ej. en_ruta_bodega_satelite) con el nombre de zona derivado de orden.zona_id para el display (recomendado; hay precedente en_ruta_bodega_principal) vs. un estado dinamico por zona. Toca backend (order_status nuevo, consultas de mensajeros filtradas por zona, transiciones) y ajustes de la UI del maestro. Es fullstack de alta complejidad. Depende de la feature 24 (zonas) y de la feature 17 (generar guia / asignacion).",
       "status": "pending",
@@ -306,6 +336,7 @@
     },
     {
       "id": 31,
+      "jira": "KAN-31",
       "name": "plantilla de carga en XLSX (correccion)",
       "description": "CORRECCION de la plantilla descargable de la carga masiva: hoy la plantilla se descarga como CSV (feature 9, componente BulkUpload) y se prefiere que sea un archivo Excel (XLSX) formateado, para que una persona con poco conocimiento tecnico pueda llenar facilmente columna por columna cada dato de las ordenes. Cambia la generacion de la plantilla de CSV a XLSX (encabezados por columna, formato basico legible), reutilizando la dependencia exceljs ya presente en el repo (feature 15). Se hace como feature APARTE porque la feature 9 ya esta done. Toca el componente BulkUpload (boton 'descargar plantilla') y su generador de plantilla. Nota: el endpoint de carga (feature 15) ya acepta CSV y XLSX al subir, asi que este cambio es solo el formato de la plantilla que se DESCARGA.",
       "status": "done",
@@ -317,6 +348,7 @@
     },
     {
       "id": 32,
+      "jira": "KAN-32",
       "name": "etiqueta de guia con QR y codigo de barras",
       "description": "Al pulsar 'Generar guia' (feature 17), ademas de asignar el num_guia, se genera para cada guia una ETIQUETA imprimible con toda la informacion del paquete (num_guia, num_remision, destinatario, telefono, direccion, zona/provincia/canton/distrito, producto, monto_cobrar, tienda, etc.) e incluye un CODIGO QR y un CODIGO DE BARRAS. El QR se usa mas adelante para que la bodega satelite reciba los paquetes escaneando (feature 33), por lo que debe codificar un identificador de la guia/orden (num_guia u orden.id: a decidir en spec). Requiere una libreria de generacion de QR y otra de codigo de barras (dependencias nuevas probables). ABIERTO a decidir en spec: que dato exacto codifican el QR y el codigo de barras, y el formato/render de la etiqueta (PDF imprimible / HTML para imprimir). Depende de la feature 17 (generar guia).",
       "status": "pending",
@@ -328,6 +360,7 @@
     },
     {
       "id": 33,
+      "jira": "KAN-33",
       "name": "bodega satelite - mis asignaciones y recepcion por QR",
       "description": "Modulo 'Mis asignaciones' para el rol adminSatelite (admin de bodega satelite) + recepcion de paquetes por escaneo. Cuando el maestro asigna una orden a una bodega satelite (feature 30), la orden queda en estado en_ruta_bodega_satelite ('en ruta hacia la bodega <zona>') y se refleja en el modulo 'Mis asignaciones' del adminSatelite de esa zona, mostrada de forma SEPARADA. Esas ordenes permanecen ahi y NO se pueden asignar a nadie hasta ser RECIBIDAS. Recepcion: el adminSatelite, logueado, escanea el codigo QR de la etiqueta (feature 32) de cada paquete fisico; a medida que escanea, cada orden pasa del estado en_ruta_bodega_satelite al estado NUEVO en_bodega_satelite ('en bodega satelite de <zona>', p.ej. 'en bodega satelite de limon'). Estado NUEVO: en_bodega_satelite (sigue la misma decision de modelado de estados por zona de la feature 30: un estado con la zona derivada de orden.zona_id). ABIERTO a decidir en spec: mecanismo de escaneo (camara via web vs. lector fisico de QR que actua como teclado). Fullstack (vista del adminSatelite + transicion de estado). Depende de la feature 30 (ruteo a satelite) y de la feature 32 (etiqueta con QR).",
       "status": "pending",
@@ -339,6 +372,7 @@
     },
     {
       "id": 34,
+      "jira": "KAN-34",
       "name": "bodega satelite - asignacion a mensajeros de su zona",
       "description": "Asignacion de ordenes a mensajeros desde la bodega satelite. Una vez las ordenes estan en en_bodega_satelite (recibidas, feature 33), el adminSatelite entra practicamente al MISMO flujo de asignacion a mensajeros del maestro (feature 17), pero con dos restricciones: (1) solo puede asignar las ordenes que estan en SU bodega (en_bodega_satelite de su zona); (2) solo puede asignarlas a los mensajeros asignados a ESA zona (regla de zona de la feature 30). Tras asignar, la orden pasa a en_espera_aceptacion (mismo estado del flujo del maestro, feature 17). Reusa el mecanismo de asignacion de la feature 17 y el filtrado de mensajeros por zona de la feature 30. Fullstack. Depende de la feature 33 (ordenes recibidas en bodega satelite), la feature 17 (flujo de asignacion) y la feature 24 (zonas).",
       "status": "pending",
@@ -350,6 +384,7 @@
     },
     {
       "id": 35,
+      "jira": "KAN-35",
       "name": "estados de orden en tiempo real",
       "description": "Todos los modulos que muestran ordenes (admin de tienda, admin maestro, admin de bodega satelite y mensajero) deben reflejar en TIEMPO REAL el estado actual de cada orden, sin recargar. A medida que una orden cambia de estado a lo largo del flujo (en_preparacion, en_fulfillment, en_espera_aceptacion, en_bodega, en_ruta_bodega_satelite, en_bodega_satelite, entregada, reprogramada, devuelta, rechazada, etc.), el cambio se ve reflejado en vivo en la vista de cada rol que corresponda. ABIERTO a decidir en spec: mecanismo (Supabase Realtime sobre la tabla orden, recomendado dado el stack, vs. polling/revalidacion con SWR). Fullstack (suscripcion realtime + cableado en las vistas de ordenes). Transversal: afecta las vistas de las features 7, 17, 26, 30, 33, 34 y el modulo del mensajero (feature 36).",
       "status": "pending",
@@ -360,6 +395,7 @@
     },
     {
       "id": 36,
+      "jira": "KAN-36",
       "name": "mensajero - mis asignaciones y gestion de ordenes",
       "description": "Modulo principal del rol mensajero llamado 'Mis asignaciones'. El mensajero ve TODAS sus asignaciones (ordenes que le fueron asignadas desde la bodega central -feature 17- o una bodega satelite -feature 34-) con el DETALLE COMPLETO de cada orden a entregar. Las ordenes se gestionan de UNA en una: al escoger/habilitar una orden, las demas se BLOQUEAN hasta terminar de gestionarla; al terminar, se liberan para escoger la siguiente, y asi hasta gestionar todas. Gestion de una orden (4 resultados): (1) ENTREGADA -> cargar evidencia en foto de la entrega + monto recibido + metodo de pago (nuevo enum: efectivo, SIMPE, transferencia); (2) REAGENDAR/REPROGRAMAR -> seleccionar la nueva fecha + motivo; (3) DEVOLUCION -> motivo de la devolucion; (4) RECHAZO -> cargar evidencia en foto del rechazo + motivo. Cada resultado deja la orden en el estado correspondiente (entregada, reprogramada, devuelta, y RECHAZO). Requiere modelar el registro de gestion (evidencias/fotos con almacenamiento, monto recibido, metodo de pago, motivos, fecha de reprogramacion) asociado a la orden. PASO DE ACEPTACION (decision del humano 2026-07-10): antes de gestionar, el mensajero DEBE ACEPTAR sus asignaciones y SOLO puede aceptarlas (no hay accion de rechazar la asignacion en este paso); al aceptar, la orden pasa de en_espera_aceptacion a un estado 'aceptada/por entregar' (nombre exacto a definir en spec, estado NUEVO) desde el cual ya se puede gestionar. ABIERTO a decidir en spec: si el RESULTADO 'RECHAZO' de la gestion es un estado NUEVO 'rechazada' o mapea a uno existente (devuelta/devuelta_origen). Fullstack de alta complejidad. Depende de la feature 17 y la feature 34 (que dejan ordenes asignadas al mensajero).",
       "status": "pending",
@@ -371,6 +407,7 @@
     },
     {
       "id": 37,
+      "jira": "KAN-37",
       "name": "mensajero - cierre del dia",
       "description": "Modulo 'Cierre del dia' del mensajero. Cada vez que el mensajero gestiona una orden en 'Mis asignaciones' (feature 36), esa orden pasa a ESPERAR en el modulo de cierre del dia. El mensajero SOLO puede cerrar el dia cuando haya gestionado TODAS sus ordenes asignadas. Al terminar, el modulo muestra el detalle exacto de lo que hizo: cuales entrego, cuales reprogramo, cuales devolvio y cuales fueron rechazadas, con el detalle total de cada orden. Muestra ademas el dinero recogido por cada orden y los TOTALES por metodo de pago: total en efectivo, total en SIMPE y total en transferencia. Tras revisar, un boton 'Solicitar cierre' envia la solicitud al administrador de la bodega a la que pertenece el mensajero segun su zona (bodega central/admin maestro si es GAM, o el adminSatelite de su zona). Fullstack. Depende de la feature 36 (gestion de ordenes).",
       "status": "pending",
@@ -382,6 +419,7 @@
     },
     {
       "id": 38,
+      "jira": "KAN-38",
       "name": "admin - cierres del dia (aprobar/rechazar)",
       "description": "Modulo 'Cierres del dia' para el administrador de una bodega (admin maestro para la bodega central/GAM y adminSatelite para su bodega). Muestra TODAS las solicitudes de cierre que le han hecho sus mensajeros (feature 37, boton 'Solicitar cierre'), para que el administrador pueda APROBAR o RECHAZAR cada cierre segun sea necesario. El administrador puede ver absolutamente TODO el detalle de cada orden del cierre (gestion, evidencias en foto, montos, metodos de pago, motivos) y los totales de dinero por metodo. Fullstack. Depende de la feature 37 (solicitud de cierre del mensajero).",
       "status": "pending",
@@ -393,6 +431,7 @@
     },
     {
       "id": 39,
+      "jira": "KAN-39",
       "name": "pago al mensajero por zona en el cierre",
       "description": "Cada orden que llega a un cierre del dia debe traer el monto a PAGAR AL MENSAJERO segun la ZONA: la zona almacena cuanto se le paga por la ENTREGA y cuanto por el RECHAZO (feature 24), y como cada mensajero esta atado a una zona ese pago sale de su zona. Cada orden en el cierre expone el pago al mensajero segun su zona y su resultado de gestion (entrega o rechazo), y el modulo de cierre totaliza lo que se le debe pagar. Es distinto de lo que se COBRA al cliente/tienda (feature 18 cobros: valor_flete, comision_cod, etc.), concepto aparte. Backend principalmente; se integra en los modulos de cierre (features 37/38). Depende de las features 24 (pago por zona) y 37 (cierre del mensajero).",
       "status": "pending",
@@ -404,6 +443,7 @@
     },
     {
       "id": 40,
+      "jira": "KAN-40",
       "name": "cierre de bodega satelite -> bodega principal",
       "description": "Segundo nivel de cierre: la bodega satelite, como entidad, debe SOLICITAR su cierre a la bodega principal, y la bodega principal lo APRUEBA o RECHAZA. Complementa el cierre mensajero->bodega (features 37/38): el adminSatelite primero aprueba los cierres de SUS mensajeros y luego consolida y solicita el cierre de su bodega a la central. La bodega principal (admin maestro) aprueba tanto los cierres de sus propios mensajeros del GAM como los cierres de las bodegas satelite. Muy detallado: el cierre de la bodega satelite agrega el detalle de los cierres de sus mensajeros (ordenes, resultados, dinero por metodo de pago, pagos a mensajeros). Fullstack. Depende de las features 37 y 38 (cierres mensajero/admin).",
       "status": "pending",
@@ -415,6 +455,7 @@
     },
     {
       "id": 41,
+      "jira": "KAN-41",
       "name": "reglas y bloqueos de cierre (obligatoriedad, vencidos)",
       "description": "Reglas de negocio de los cierres (son OBLIGATORIOS y criticos: reflejan el ingreso de dinero de la empresa) y bloqueos asociados. (1) JERARQUIA/RESPONSABLE: cada mensajero cierra ante su bodega responsable = la bodega de su zona (bodega principal si es GAM, o su bodega satelite); cada bodega satelite cierra ante la bodega principal (feature 40). (2) OBLIGATORIEDAD + VENCIDOS: si un mensajero termina el dia y NO solicita cierre, ese cierre se marca como VENCIDO y se evidencia en la bodega responsable del mensajero. (3) BLOQUEO DEL MENSAJERO: cuando el mensajero solicita cierre queda BLOQUEADO y no se le pueden asignar mas ordenes hasta que su cierre sea APROBADO. (4) BLOQUEO DE BODEGA SATELITE: una bodega satelite con cierres pendientes queda BLOQUEADA y no puede asignar ordenes a sus mensajeros hasta hacer los cierres necesarios. DISPARADOR DE VENCIDO (decision del humano 2026-07-10): a las 00:00 (medianoche) de cada dia se ejecuta AUTOMATICAMENTE el corte diario -job programado/cron-: los cierres que el mensajero no solicito quedan VENCIDOS y se evidencian en su bodega responsable. Backend principalmente (job de corte, estados de cierre, flags de bloqueo, reglas que impiden asignar) + reflejo en la UI. Depende de las features 37, 38 y 40 (flujo de cierres) y afecta las asignaciones (17/34), que deben respetar los bloqueos.",
       "status": "pending",
@@ -426,6 +467,7 @@
     },
     {
       "id": 42,
+      "jira": "KAN-42",
       "name": "wallet - caja principal de ordenex",
       "description": "Nuevo modulo WALLET. Caja PRINCIPAL de Ordenex donde ENTRAN los ingresos y SALEN los gastos, conectada con los cierres (cada cierre aprobado alimenta la caja). Ingresos de Ordenex por cada orden: (a) el FLETE que cobra Ordenex, (b) la COMISION por el COD, (c) el IVA del flete y (d) el IVA de la comision. Estos valores provienen del CRUD de cobros (feature 18: valor_flete, valor_flete_GAM, comision_cod, iva_flete, iva_comision_cod, etc.). La caja registra ingresos y egresos (p.ej. pagos a tiendas -feature 43-, pagos a mensajeros -feature 44- y gastos/sueldos -feature 45-). MODELO (decision del humano 2026-07-10): la wallet es un LIBRO DE MOVIMIENTOS (entradas/salidas con saldo), no un tablero de saldos calculados. Debe mostrar ademas el BALANCE general de la empresa (si esta en positivo o negativo) comparando ingresos vs. gastos. ABIERTO a decidir en spec: como se modela el cobro (por orden vs. por zona/config). Fullstack de alta complejidad. Depende de la feature 18 (cobros) y de los cierres (37/38/40).",
       "status": "pending",
@@ -437,6 +479,7 @@
     },
     {
       "id": 43,
+      "jira": "KAN-43",
       "name": "wallet por tienda (saldo a favor de la tienda)",
       "description": "Cada tienda (admin de tienda) tiene su PROPIA wallet con su informacion: cuanto le debe ENTREGAR Ordenex. Ordenex recibe el dinero total de la venta (COD total recaudado) y parte le pertenece a la tienda: COD total MENOS el flete, MENOS la comision del COD, MENOS el IVA del flete y MENOS el IVA de la comision. La tienda debe poder VER cuanto le debe Ordenex (su saldo a favor). Se alimenta de los cierres aprobados y del calculo de la caja principal (feature 42). Fullstack. Depende de la feature 42 (wallet/caja) y 18 (cobros).",
       "status": "pending",
@@ -448,6 +491,7 @@
     },
     {
       "id": 44,
+      "jira": "KAN-44",
       "name": "wallet - pago a mensajeros y cuentas por pagar",
       "description": "Pago a los mensajeros dentro de la wallet. En los cierres se ve cuanto se le debe pagar a cada mensajero segun su zona (feature 39). Normalmente ese pago se toma del EFECTIVO que el propio mensajero recaudo; si el mensajero NO recaudo efectivo (todo fue por SIMPE o transferencia), el pago queda como CUENTA POR PAGAR y se evidencia en la wallet. La wallet refleja lo ya pagado (descontado del efectivo recaudado) y lo pendiente (cuentas por pagar a mensajeros). Fullstack. Depende de las features 39 (pago por zona), 42 (wallet/caja) y 37 (cierre del mensajero con montos por metodo de pago).",
       "status": "pending",
@@ -459,6 +503,7 @@
     },
     {
       "id": 45,
+      "jira": "KAN-45",
       "name": "wallet - gastos fijos/variables y sueldos",
       "description": "Gestion de EGRESOS administrativos en la wallet (feature 42): crear GASTOS FIJOS y GASTOS VARIABLES, y registrar los SUELDOS de los trabajadores. Todos estos egresos SALEN de la caja principal de Ordenex y se reflejan en el libro de movimientos y en el BALANCE general (ingresos vs. gastos). Fullstack. Depende de la feature 42 (wallet/caja - libro de movimientos).",
       "status": "pending",
@@ -470,6 +515,7 @@
     },
     {
       "id": 46,
+      "jira": "KAN-46",
       "name": "reprogramacion: bloqueo y liberacion programada",
       "description": "(FASE 2 / detalle del flujo del mensajero, feature 36.) Cuando el mensajero REPROGRAMA una orden (estado reprogramada) con una fecha, la orden queda BLOQUEADA hasta esa fecha de reprogramacion (no reasignable/enviable antes). Al llegar la fecha, la orden se LIBERA automaticamente de vuelta a la bodega responsable para ser enviada ese dia, y se AVISA de la liberacion. Requiere un disparador temporal (job diario, en linea con el corte de las 00:00 de la feature 41) y una notificacion/aviso al liberar. Depende de la feature 36 (gestion: reprogramar con fecha y motivo).",
       "status": "pending",
@@ -481,6 +527,7 @@
     },
     {
       "id": 47,
+      "jira": "KAN-47",
       "name": "reintentos de entrega y escalado a rechazo",
       "description": "(FASE 2 / detalle.) Una DEVOLUCION (estado devuelta) hace que la orden vuelva a la bodega para cumplir OTRO intento de entrega. Por ley se hacen MINIMO 3 intentos de entrega; la orden lleva un CONTADOR DE INTENTOS. Al 3er intento fallido, la orden ESCALA automaticamente a RECHAZO (estado final). Las devoluciones deben mostrar cuantos intentos lleva la orden. ABIERTO a decidir en spec: si el minimo de 3 es fijo o configurable, y la relacion exacta entre 'devuelta' (intermedia, reintentable), 'devuelta_origen' y 'rechazada' (finales). Depende de la feature 36 (gestion) y se apoya en la trazabilidad (feature 49).",
       "status": "pending",
@@ -492,6 +539,7 @@
     },
     {
       "id": 48,
+      "jira": "KAN-48",
       "name": "rechazo: devolucion a la tienda de origen",
       "description": "(FASE 2 / detalle.) Cuando una orden llega a RECHAZO (estado final, tras 3 intentos fallidos o rechazo directo, features 47/36), la orden debe VOLVER a la tienda (admin de tienda) que la cargo originalmente en la carga masiva. Incluye el flujo y la visibilidad del retorno a la tienda de origen (la tienda ve sus ordenes rechazadas devueltas). Depende de la feature 47 (escalado a rechazo) y 36.",
       "status": "pending",
@@ -503,6 +551,7 @@
     },
     {
       "id": 49,
+      "jira": "KAN-49",
       "name": "trazabilidad / historial de estados de la orden",
       "description": "(FASE 2 / detalle, transversal.) Registrar la TRAZABILIDAD COMPLETA de cada orden: el historial de todos los estados por los que paso, CUANDO ocurrio cada cambio (timestamp) y cuando ESCALA de un estado a otro, mas el contador de intentos de entrega. Debe poder consultarse como LINEA DE TIEMPO en el detalle de la orden. Es la base para saber cuando una orden escala a rechazo, cuantos intentos lleva, etc. Aplica a toda la maquina de estados (features 17, 30, 33, 34, 36, 46, 47). Fullstack (tabla de historial de estados + UI de linea de tiempo). Se relaciona con el tiempo real (feature 35). Depende de la feature 36.",
       "status": "pending",
@@ -514,6 +563,7 @@
     },
     {
       "id": 50,
+      "jira": "KAN-50",
       "name": "vehiculos",
       "description": "Genera el CRUD y la tabla vehiculos, disponible unicamente para el rol maestro. La tabla tiene los campos id y name (OJO: name, NO 'value' como los demas catalogos rol/order_status/tipo_identificacion). Nuevo enum Postgres (moto, carro, camion); los valores del enum van en la columna name y son los mismos que se siembran en el seed de la tabla. Lo consume la postulacion de mensajero (feature 21, vehiculo_id fk a vehiculos).",
       "status": "in_progress",

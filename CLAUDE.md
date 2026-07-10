@@ -18,8 +18,11 @@ Cuando abres Claude Code en la raíz de este repo, actúas como **leader**. El l
 ## Reglas no negociables
 
 1. **Una feature por zona a la vez.** Solo puede haber una feature en `in_progress`
-   por `zone` en `feature_list.json`. Dos features pueden correr en paralelo si
-   sus zonas son disjuntas (frontend vs backend). `./init.sh` lo valida.
+   por `zone`. Dos features pueden correr en paralelo si sus zonas son disjuntas
+   (frontend vs backend). El candado tiene **dos capas**: primero la **nube**
+   (Jira: ninguna Feature de esa zona en *In Progress*, ni el issue asignado a otra
+   persona) y luego lo **local** (`./init.sh` valida sobre `feature_list.json`).
+   Ver `docs/jira-sync.md`.
 2. **SDD obligatorio** para toda feature con `"sdd": true`: requirements (EARS) →
    design → tasks → código. Nunca saltes directo a código.
 3. **Estado en disco, no en el chat.** Cada subagente escribe su resultado en un
@@ -35,10 +38,13 @@ Cuando abres Claude Code en la raíz de este repo, actúas como **leader**. El l
 ## Arranque de sesión
 
 1. Corre `./init.sh`. Debe terminar en verde.
-2. Lee `progress/current.md` para ver si hay una sesión a medias.
-3. Lee `feature_list.json` y toma la primera feature en `pending` (o retoma la
+2. **Pull de Jira** (si el MCP de Atlassian está conectado): lee los estados del
+   proyecto `KAN` y reconcilia contra `feature_list.json` (regla de conflicto en
+   `docs/jira-sync.md`). Así ves lo que otras personas movieron en la nube.
+3. Lee `progress/current.md` para ver si hay una sesión a medias.
+4. Lee `feature_list.json` y toma la primera feature en `pending` (o retoma la
    que esté en `spec_ready` / `in_progress`).
-4. Sigue el flujo de `AGENTS.md`.
+5. Sigue el flujo de `AGENTS.md`.
 
 ## Mapa rápido
 
@@ -47,4 +53,5 @@ Cuando abres Claude Code en la raíz de este repo, actúas como **leader**. El l
 - Estilo, nombres, manejo de errores → `docs/conventions.md`
 - Proceso SDD (EARS, 3 archivos, aprobación) → `docs/specs.md`
 - Cómo demostrar que funciona → `docs/verification.md`
+- Backlog en la nube (Jira ↔ `feature_list.json`) → `docs/jira-sync.md`
 - Criterios de estado final correcto → `CHECKPOINTS.md`

@@ -17,7 +17,11 @@
     "db:rollback": "tsx scripts/db-rollback.ts",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
-    "db:seed": "tsx scripts/seed-catalogos.ts"
+    "db:seed": "tsx scripts/seed-catalogos.ts",
+    "check:zones": "node scripts/check-zone-lock.mjs",
+    "jira:check": "node scripts/jira-sync.mjs check",
+    "jira:push": "node scripts/jira-sync.mjs push",
+    "jira:pull": "node scripts/jira-sync.mjs pull"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

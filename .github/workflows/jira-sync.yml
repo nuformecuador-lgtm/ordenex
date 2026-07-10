@@ -1,0 +1,47 @@
+name: jira-sync
+
+# Sync desatendido feature_list.json <-> Jira (KAN). Ver docs/jira-sync.md.
+# - Por schedule: corre 'check' READ-ONLY y falla si hay drift (queda visible en Actions).
+# - Manual (workflow_dispatch): permite 'check' o 'push' (JSON -> Jira). 'push --apply'
+#   transiciona estados en Jira; no escribe el repo.
+# 'pull --apply' (Jira -> feature_list.json) NO corre en CI: cambia un archivo curado a
+#   mano; hacelo local (pnpm jira:pull --apply) o via el agente en sesion, y revisa el diff.
+
+on:
+  schedule:
+    - cron: '0 * * * *' # cada hora
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Modo a correr'
+        type: choice
+        options: [check, push]
+        default: check
+      apply:
+        description: 'Aplicar cambios (solo push). Sin esto es dry-run.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run jira-sync
+        env:
+          JIRA_SITE: ${{ secrets.JIRA_SITE }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_PROJECT: ${{ secrets.JIRA_PROJECT || 'KAN' }}
+        run: |
+          MODE="${{ github.event.inputs.mode || 'check' }}"
+          APPLY=""
+          if [ "${{ github.event.inputs.apply }}" = "true" ] && [ "$MODE" = "push" ]; then APPLY="--apply"; fi
+          echo "Ejecutando: node scripts/jira-sync.mjs $MODE $APPLY"
+          node scripts/jira-sync.mjs "$MODE" $APPLY
