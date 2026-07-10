@@ -409,3 +409,25 @@
   vía **PR #15** (d259e6a, 2026-07-10).
 - DEUDA nueva (fuera de alcance): `scripts/db-rollback.ts` usa el flag `--schema` (roto en Prisma 7) ->
   arreglar en una feature aparte; el rollback R11 se ejecutó con `prisma db execute --file`.
+
+## 2026-07-10 — enriquecer validación previa a la carga masiva (feature 29, FRONTEND)
+- Frontend puro. Enriquece el paso de resumen de la carga masiva (feature 16): en vez de descartar
+  las filas `duplicada`/`error` del `BulkSummary` (que ya trae el backend de la feature 15), el
+  resumen ahora SEPARA el resultado en 3 secciones: NUEVAS (`OrdenesCargaResumen` de la 16 intacto,
+  con su select de mensajero por fila), EXISTENTES (solo lectura: nº remisión + estado ACTUAL como
+  etiqueta legible, aviso de que no se recargan) y ERRORES (solo lectura: fila/nº remisión + motivo).
+  Nuevos helpers puros `carga-masiva-clasificacion.ts` (guards sobre `unknown`) y `estatus-label.ts`
+  (mapa value→label anclado a `ORDER_STATUS_SEED`, `Record` tipado que rompe el build si cambian los
+  estados; fallback al value crudo); contenedor `OrdenesCargaResumenPaso.tsx`; ajuste de
+  `OrdenesCargaMasivaButton.handleSuccess`. SIN backend/DB/actions (R14): el filtrado/creación sigue
+  en el backend de las features 15/16.
+- Requisitos R1–R19 (EARS) -> tests reales (unit de helpers + component). Ver
+  `progress/impl_29-validacion-carga-masiva.md` y `progress/review_29-...md`. Suite 721/721 verde;
+  typecheck + init.sh OK.
+- Decisiones humanas (F1.4, 2026-07-10): (A) frontend puro (descartado B: dry-run pre-commit fullstack);
+  avanzar mostrando existentes si 0 nuevas; detalle por fila de errores; etiqueta legible del estado.
+- Review APROBADO, 0 bloqueantes. Corrió en PARALELO con la feature 28 (backend). Mergeada a
+  `origin/dev` vía **PR #17** (7535961, 2026-07-10). Impl vía frontend_dev DIRECTO (el implementer
+  falló 2× con el modelo legacy `sonnet-4`; ver memoria model-name-mapping).
+- Flaky pre-existente de auth (HomePage/LoginForm bajo ejecución paralela) dictaminado no bloqueante
+  (pasa 29/29 en aislamiento; el diff no toca esos archivos).

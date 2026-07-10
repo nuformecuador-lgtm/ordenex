@@ -7,11 +7,12 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/31-plantilla-xlsx | frontend | F1.4 | **spec_ready — PARADA en puerta humana.** Spec R1–R13 en `specs/31-plantilla-xlsx/`. Plantilla descargable de `BulkUpload` de CSV→XLSX (exceljs ^4.4.0). Nuevo generador `buildXlsxTemplate` + `handleDownloadTemplate` async. 3 preguntas abiertas (contrato XLSX-siempre vs prop `templateFormat`; destino de csv-template.ts; import dinámico de exceljs). NOTA: la impl (F2) NO arranca hasta mergear la #29 (PR #17) — regla "una frontend a la vez". La 28 (backend) ya cerró (PR #15). |
+| feature/31-plantilla-xlsx | frontend | F2.1 | **spec APROBADO (F1.4) → in_progress.** Plantilla descargable de `BulkUpload` de CSV→XLSX (exceljs ^4.4.0, import dinámico). Nuevo generador `buildXlsxTemplate` + `handleDownloadTemplate` async; siempre XLSX (sin prop `templateFormat`); `csv-template.ts` conservado. Impl vía frontend_dev DIRECTO (implementer falla por sonnet-4). Zona frontend LIBRE tras cerrar la 29. |
 
-> Feature 29 (enriquecer validación carga masiva) EN VUELO en la rama `feature/29-validacion-carga-masiva`:
-> reviewer APROBADO, **PR #17 ABIERTO** (base dev). Su row de "en curso" vive en esa rama (este branch nace de
-> origin/dev, que aún no la tiene). Ocupa la zona frontend hasta mergear.
+> Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a
+> `origin/dev` (7535961), status -> `done`, entrada en `history.md`. Frontend puro (R1–R19),
+> reviewer APROBADO 0 bloqueantes, suite 721/721 verde. Corrió en paralelo con la 28 (backend).
+> El cierre (done + history) viaja en la rama `feature/31-plantilla-xlsx` (bookkeeping vía PR).
 
 > Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
 > `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en

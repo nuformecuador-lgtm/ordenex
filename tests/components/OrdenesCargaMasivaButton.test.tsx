@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import { OrdenesCargaMasivaButton } from "@/app/(app)/ordenes/_components/OrdenesCargaMasivaButton";
 import type { BulkUploadProps } from "@/components/shared/BulkUpload";
-import type { OrdenesCargaResumenProps } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
+import type { OrdenesCargaResumenPasoProps } from "@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -39,16 +39,17 @@ vi.mock("@/components/shared/BulkUpload", () => ({
   },
 }));
 
-// R21: se aísla `OrdenesCargaResumen` (probado en su propia suite) para que
-// esta suite solo verifique el enrutamiento de pasos del botón/modal.
+// R11/R21: se aísla `OrdenesCargaResumenPaso` (probado en su propia suite) para
+// que esta suite solo verifique el enrutamiento de pasos del botón/modal y la
+// clasificación que se le pasa.
 const resumen = vi.hoisted(() => ({
-  props: null as OrdenesCargaResumenProps | null,
+  props: null as OrdenesCargaResumenPasoProps | null,
 }));
 
-vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumen", () => ({
-  OrdenesCargaResumen: (props: OrdenesCargaResumenProps) => {
+vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso", () => ({
+  OrdenesCargaResumenPaso: (props: OrdenesCargaResumenPasoProps) => {
     resumen.props = props;
-    return <div data-testid="ordenes-carga-resumen-double" />;
+    return <div data-testid="resumen-paso-double" />;
   },
 }));
 
@@ -307,10 +308,10 @@ describe("OrdenesCargaMasivaButton — onSuccess (R13, R14, R15, R17)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// R21 — paso "resumen" dentro del mismo modal (feature 16)
+// R11, R12, R13 — paso "resumen" con clasificación (feature 29)
 // ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — paso de resumen (R21)", () => {
-  it("R21a: creadas>0 monta OrdenesCargaResumen con los numRemisiones 'creada'", async () => {
+describe("OrdenesCargaMasivaButton — paso de resumen (R11, R12, R13)", () => {
+  it("R11a: creadas>0 y duplicadas>0 → avanza a resumen con la clasificación esperada", async () => {
     render(<OrdenesCargaMasivaButton />);
     await openModal();
 
@@ -324,35 +325,126 @@ describe("OrdenesCargaMasivaButton — paso de resumen (R21)", () => {
           conError: 0,
           filas: [
             { fila: 1, numRemision: "REM-0001", resultado: "creada" },
-            { fila: 2, numRemision: "REM-0002", resultado: "duplicada" },
+            {
+              fila: 2,
+              numRemision: "REM-0002",
+              resultado: "duplicada",
+              estatus: "en_bodega",
+            },
             { fila: 3, numRemision: "REM-0003", resultado: "creada" },
           ],
         },
       });
     });
 
-    expect(screen.getByTestId("ordenes-carga-resumen-double")).toBeInTheDocument();
+    expect(screen.getByTestId("resumen-paso-double")).toBeInTheDocument();
     expect(screen.queryByTestId("bulk-upload-double")).not.toBeInTheDocument();
-    expect(resumen.props?.numRemisiones).toEqual(["REM-0001", "REM-0003"]);
+    expect(resumen.props?.clasificacion.numRemisionesNuevas).toEqual([
+      "REM-0001",
+      "REM-0003",
+    ]);
+    expect(resumen.props?.clasificacion.existentes).toEqual([
+      { numRemision: "REM-0002", estatus: "en_bodega" },
+    ]);
+    expect(resumen.props?.clasificacion.errores).toEqual([]);
   });
 
-  it("R21b: creadas===0 conserva el comportamiento de feature 14 (sigue en upload)", async () => {
+  it("R11b: creadas===0 y duplicadas>0 con fila real → avanza al resumen y muestra solo las existentes sin nuevas", async () => {
     render(<OrdenesCargaMasivaButton />);
     await openModal();
 
     act(() => {
       bulkProps().onSuccess?.({
         status: 200,
-        data: { total: 2, creadas: 0, duplicadas: 1, conError: 1, filas: [] },
+        data: {
+          total: 1,
+          creadas: 0,
+          duplicadas: 1,
+          conError: 0,
+          filas: [
+            {
+              fila: 1,
+              numRemision: "REM-0002",
+              resultado: "duplicada",
+              estatus: "en_bodega",
+            },
+          ],
+        },
+      });
+    });
+
+    expect(screen.getByTestId("resumen-paso-double")).toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-upload-double")).not.toBeInTheDocument();
+    expect(resumen.props?.clasificacion.numRemisionesNuevas).toEqual([]);
+    expect(resumen.props?.clasificacion.existentes).toEqual([
+      { numRemision: "REM-0002", estatus: "en_bodega" },
+    ]);
+  });
+
+  it("R12: creadas===0, duplicadas===0, conError===0 (filas:[]) → no muestra secciones vacias cuando no hay filas", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+
+    act(() => {
+      bulkProps().onSuccess?.({
+        status: 200,
+        data: { total: 0, creadas: 0, duplicadas: 0, conError: 0, filas: [] },
       });
     });
 
     expect(screen.getByTestId("bulk-upload-double")).toBeInTheDocument();
-    expect(screen.queryByTestId("ordenes-carga-resumen-double")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("resumen-paso-double")).not.toBeInTheDocument();
+  });
+
+  it("R12b: conError>0 con fila de error real → avanza al resumen con los errores", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+
+    act(() => {
+      bulkProps().onSuccess?.({
+        status: 200,
+        data: {
+          total: 1,
+          creadas: 0,
+          duplicadas: 0,
+          conError: 1,
+          filas: [
+            {
+              fila: 1,
+              numRemision: "REM-0009",
+              resultado: "error",
+              errores: { telefono: ["obligatorio"] },
+            },
+          ],
+        },
+      });
+    });
+
+    expect(screen.getByTestId("resumen-paso-double")).toBeInTheDocument();
+    expect(resumen.props?.clasificacion.errores).toEqual([
+      { fila: 1, numRemision: "REM-0009", errores: { telefono: ["obligatorio"] } },
+    ]);
     expect(warningMock).toHaveBeenCalledTimes(1);
   });
 
-  it("R21c: al cerrar el modal tras mostrar el resumen, el siguiente open vuelve a 'upload'", async () => {
+  it("R13: revalida la lista tras la carga (toast + mutate ordenes:list)", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+
+    act(() => {
+      bulkProps().onSuccess?.({
+        status: 200,
+        data: { total: 3, creadas: 2, duplicadas: 1, conError: 0, filas: [] },
+      });
+    });
+
+    expect(mutateMock).toHaveBeenCalledTimes(1);
+    const matcher = mutateMock.mock.calls[0][0];
+    expect(matcher(["ordenes:list", 1, 10])).toBe(true);
+    expect(successMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("R11c: al cerrar el modal tras mostrar el resumen, el siguiente open vuelve a 'upload'", async () => {
     const user = userEvent.setup();
     render(<OrdenesCargaMasivaButton />);
     await openModal();
@@ -369,7 +461,7 @@ describe("OrdenesCargaMasivaButton — paso de resumen (R21)", () => {
         },
       });
     });
-    expect(screen.getByTestId("ordenes-carga-resumen-double")).toBeInTheDocument();
+    expect(screen.getByTestId("resumen-paso-double")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /cerrar/i }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
