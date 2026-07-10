@@ -19,6 +19,11 @@ function buildUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepositor
     create: vi.fn(),
     listMensajeros: vi.fn().mockResolvedValue([{ id: "msg-1", nombre: "Ana" }]),
     updatePasswordHash: vi.fn(),
+    list: vi.fn(),
+    count: vi.fn(),
+    update: vi.fn(),
+    setEstado: vi.fn(),
+    listTiposIdentificacion: vi.fn(),
     ...overrides,
   };
 }

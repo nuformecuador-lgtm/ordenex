@@ -17,13 +17,13 @@ duplica la política.
 
 ## Bloque 0 — Tipos y config (borde)
 
-- **T1** — Crear `lib/config/usuarios.ts` con `DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`
+- [x] **T1** — Crear `lib/config/usuarios.ts` con `DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`
   (patrón `lib/config/cobros.ts`).
   - Cubre: R13. Dep: ninguna.
   - Hecho: exporta las constantes; importado por schema y service.
   - Test: `tests/unit/config/usuarios.test.ts` — "expone limites de paginacion positivos y MAX>=DEFAULT".
 
-- **T2** [P] — Crear `lib/types/usuario.ts`: `crearUsuarioSchema` (strict) con el bloque
+- [x] **T2** [P] — Crear `lib/types/usuario.ts`: `crearUsuarioSchema` (strict) con el bloque
   de contraseña como **unión discriminada por `passwordMode`** (`manual` con
   `password: strongPasswordSchema` importado de `lib/types/password-policy.ts`;
   `generate` sin password); `actualizarUsuarioSchema` (partial de editables: nombre/
@@ -35,7 +35,7 @@ duplica la política.
     duplica la política.
   - Test: `tests/unit/types/usuario-schema.test.ts` — "modo manual rechaza password que no cumple strongPasswordSchema (R6/R31)", "modo generate no requiere password (R30/R32)", "actualizar rechaza email/cedula/password (R16)", "cambiarEstado solo acepta activo|inactivo (R23)", "listar acota pageSize a MAX (R13)".
 
-- **T2b** [P] — Crear `lib/utils/password-generator.ts`: `generateStrongPassword()` con
+- [x] **T2b** [P] — Crear `lib/utils/password-generator.ts`: `generateStrongPassword()` con
   aleatoriedad criptográfica que garantiza mayúscula/minúscula/dígito/símbolo y longitud
   válida; valida su propia salida contra `strongPasswordSchema` antes de devolver.
   - Cubre: R32, R34. Dep: **feature 20 en dev**.
@@ -44,14 +44,14 @@ duplica la política.
 
 ## Bloque 1 — Repository
 
-- **T3** — Extender `lib/interfaces/repositories/IUserRepository.ts`: firmas `list`,
+- [x] **T3** — Extender `lib/interfaces/repositories/IUserRepository.ts`: firmas `list`,
   `count`, `update`, `setEstado`, `listTiposIdentificacion`; tipos `ListUsuariosParams`,
   `ListUsuariosResult`, `UpdateUsuarioData`, `UsuarioListItem`.
   - Cubre: R13, R14, R15, R16, R20, R21, R29. Dep: T2.
   - Hecho: interfaz compila; no expone `passwordHash` en ningún tipo de salida.
   - Test: (contrato verificado indirectamente por T4).
 
-- **T4** — Implementar en `lib/repositories/UserRepository.ts`: `list` (paginado, include
+- [x] **T4** — Implementar en `lib/repositories/UserRepository.ts`: `list` (paginado, include
   `rol.value`, orden por lista blanca, `PUBLIC_SELECT` sin hash), `count`, `update`
   (valida FK catálogo reusando patrón `create`, `null` si no existe), `setEstado`
   (`null` si no existe), `listTiposIdentificacion`.
@@ -67,13 +67,13 @@ duplica la política.
 
 ## Bloque 2 — Service
 
-- **T5** — Crear `lib/interfaces/services/IUsuarioService.ts`: `Actor` (reusa de
+- [x] **T5** — Crear `lib/interfaces/services/IUsuarioService.ts`: `Actor` (reusa de
   IOrdenService), resultados discriminados de `crear/listar/obtener/actualizar/
   cambiarEstado/listarTiposIdentificacion`.
   - Cubre: R1–R4, R12, R19, R24. Dep: T2, T3.
   - Hecho: interfaz compila; ningún result expone `passwordHash`.
 
-- **T6** — Crear `lib/services/UsuarioService.ts` (patrón `CobroService`): única
+- [x] **T6** — Crear `lib/services/UsuarioService.ts` (patrón `CobroService`): única
   constante `ALLOWED_ROLES = { maestro }` (Decisión 1); `crear` (resuelve contraseña por
   `passwordMode`: manual usa la del input, generate llama `generateStrongPassword`;
   hashPassword + estado `activo` + traducción de errores catálogo/duplicado; devuelve
@@ -97,7 +97,7 @@ duplica la política.
 
 ## Bloque 3 — Server Actions
 
-- **T7** — Crear `lib/actions/usuarios.ts` (`'use server'`, patrón `cobros.ts`):
+- [x] **T7** — Crear `lib/actions/usuarios.ts` (`'use server'`, patrón `cobros.ts`):
   `crearUsuario`, `listarUsuarios`, `obtenerUsuario`, `actualizarUsuario`,
   `cambiarEstadoUsuario`, `listarTiposIdentificacion` con `withErrorHandler` +
   `toActionError` + `resolveActorFromSession` (inyectable `deps.getActor`/

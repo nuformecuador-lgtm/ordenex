@@ -36,6 +36,11 @@ function buildMocks() {
     create: vi.fn(),
     listMensajeros: vi.fn().mockResolvedValue([]),
     updatePasswordHash: vi.fn(),
+    list: vi.fn(),
+    count: vi.fn(),
+    update: vi.fn(),
+    setEstado: vi.fn(),
+    listTiposIdentificacion: vi.fn(),
   };
   const loginAttemptRepo: ILoginAttemptRepository = {
     registrar: vi.fn(),
