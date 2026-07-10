@@ -190,11 +190,12 @@
       "id": 20,
       "name": "recuperacion de contrasena",
       "description": "Agrega el flujo de recuperacion/restablecimiento de contrasena reutilizando la infraestructura de OTP por email del login RBA (EmailOtpChallenge, EmailProvider). El usuario solicita la recuperacion indicando su email; si existe, se genera y envia un codigo OTP al correo; tras verificar el codigo el usuario define una nueva contrasena con su confirmacion, que se hashea con bcrypt (mismo coste que el login) y se persiste en Usuario.password_hash. Incluye las pantallas de 'olvide mi contrasena' -> ingreso de codigo -> nueva contrasena, y las Server Actions correspondientes. Invalida el desafio OTP una vez usado y respeta el mismo endurecimiento del login (expiracion del codigo, limite de intentos). No revela si el email existe o no (respuesta generica). Es fullstack (pantallas + backend), sin tabla nueva (reusa EmailOtpChallenge).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": "feature/20-recuperacion-contrasena",
+      "depends_on": null
     },
     {
       "id": 21,
@@ -307,7 +308,7 @@
       "id": 31,
       "name": "plantilla de carga en XLSX (correccion)",
       "description": "CORRECCION de la plantilla descargable de la carga masiva: hoy la plantilla se descarga como CSV (feature 9, componente BulkUpload) y se prefiere que sea un archivo Excel (XLSX) formateado, para que una persona con poco conocimiento tecnico pueda llenar facilmente columna por columna cada dato de las ordenes. Cambia la generacion de la plantilla de CSV a XLSX (encabezados por columna, formato basico legible), reutilizando la dependencia exceljs ya presente en el repo (feature 15). Se hace como feature APARTE porque la feature 9 ya esta done. Toca el componente BulkUpload (boton 'descargar plantilla') y su generador de plantilla. Nota: el endpoint de carga (feature 15) ya acepta CSV y XLSX al subir, asi que este cambio es solo el formato de la plantilla que se DESCARGA.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",

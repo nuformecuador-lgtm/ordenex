@@ -431,3 +431,22 @@
   falló 2× con el modelo legacy `sonnet-4`; ver memoria model-name-mapping).
 - Flaky pre-existente de auth (HomePage/LoginForm bajo ejecución paralela) dictaminado no bloqueante
   (pasa 29/29 en aislamiento; el diff no toca esos archivos).
+
+## 2026-07-10 — plantilla de carga en XLSX (feature 31, FRONTEND)
+- Frontend puro. La plantilla descargable de `BulkUpload` (botón "Descargar plantilla") pasa de
+  CSV a XLSX formateado (cabecera en negrita, anchos legibles, fila de ejemplo opcional con la
+  misma regla del CSV), para que se llene columna por columna con facilidad. Nuevo generador
+  `lib/utils/xlsx-template.ts` (`buildXlsxTemplate` async con exceljs); `handleDownloadTemplate`
+  async con mime XLSX y estado mientras genera; `DEFAULT_TEMPLATE_NAME` y el consumidor de órdenes
+  a `.xlsx`. Solo cambia la plantilla que se DESCARGA (el endpoint de carga ya aceptaba XLSX).
+- Decisiones humanas (F1.4, 2026-07-10): SIEMPRE XLSX (sin prop `templateFormat`); exceljs por
+  IMPORT DINÁMICO (`await import`, R6b) para no inflar el bundle; `lib/utils/csv-template.ts` y su
+  test CONSERVADOS intactos.
+- Requisitos R1–R13 (+R6b) -> tests reales (round-trip del generador releyendo el buffer con
+  ExcelJS + component del botón). Ver `progress/impl_31-plantilla-xlsx.md` y `review_31-...md`.
+  Feature en aislamiento 61/61; typecheck OK; init.sh verde.
+- Review APROBADO, 0 bloqueantes. Corrió en paralelo con la 28 (backend). Mergeada a `origin/dev`
+  vía **PR #19** (2026-07-10 17:21Z). Impl vía frontend_dev DIRECTO (implementer inestable por
+  sonnet-4). El PR #19 llevó también el cierre de la feature 29.
+- Flaky de timeouts pre-existente (auth + integración bajo ejecución paralela), no determinista y
+  ajeno al diff; init.sh no gatea sobre vitest.

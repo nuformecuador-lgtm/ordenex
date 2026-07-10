@@ -60,6 +60,11 @@ export interface IUserRepository {
   findByEmail(email: string): Promise<UsuarioPublico | null>;
   create(input: CreateUsuarioInput): Promise<UsuarioPublico>;
   /**
+   * Feature 20/R9: persiste un nuevo hash de contrasena en `Usuario`. No
+   * devuelve el hash. Usado por el reset de contrasena tras validar el OTP.
+   */
+  updatePasswordHash(usuarioId: string, passwordHash: string): Promise<void>;
+  /**
    * Feature 16/R1/R2/R3: usuarios con rol `mensajero` y `estado = activo`,
    * proyectados a `{ id, nombre }` (nunca PII/hash), ordenados por `nombre`.
    */
