@@ -11,11 +11,14 @@ import { seedRoles } from "@/scripts/seed-catalogos";
 // rol` (R8). La verificacion contra Postgres real queda DIFERIDA (sin DB).
 
 // Mapa nombre-de-miembro-Prisma -> label real del enum en la DB.
+// Feature 19: adminSatelite es identidad (sin @map): el nombre del miembro y
+// el label DB coinciden.
 const DB_LABEL: Record<string, string> = {
   maestro: "maestro",
   admin: "admin",
   mensajero: "mensajero",
   adminTienda: "Admin Tienda",
+  adminSatelite: "adminSatelite",
 };
 
 interface RolRow {
@@ -51,7 +54,7 @@ function createFakeRol() {
   return { rows, upsert };
 }
 
-describe("seedRoles crea los cuatro roles con grafia exacta (R8)", () => {
+describe("seedRoles crea los cinco roles con grafia exacta (R8, R7)", () => {
   it("persiste una fila por cada valor del enum con el label real de la DB", async () => {
     const fake = createFakeRol();
     await seedRoles({ rol: { upsert: fake.upsert } } as unknown as Pick<
@@ -60,12 +63,24 @@ describe("seedRoles crea los cuatro roles con grafia exacta (R8)", () => {
     >);
 
     const valores = [...fake.rows.values()].map((r) => r.value).sort();
-    expect(valores).toEqual(["Admin Tienda", "admin", "maestro", "mensajero"].sort());
+    expect(valores).toEqual(
+      ["Admin Tienda", "admin", "adminSatelite", "maestro", "mensajero"].sort()
+    );
+  });
+
+  it("incluye una fila con value = 'adminSatelite' (R7)", async () => {
+    const fake = createFakeRol();
+    await seedRoles({ rol: { upsert: fake.upsert } } as unknown as Pick<
+      PrismaClient,
+      "rol"
+    >);
+    const valores = [...fake.rows.values()].map((r) => r.value);
+    expect(valores).toContain("adminSatelite");
   });
 });
 
 describe("seedRoles es idempotente (R9, R10)", () => {
-  it("dos ejecuciones dejan exactamente 4 filas, sin duplicados y con id estable", async () => {
+  it("dos ejecuciones dejan exactamente 5 filas, sin duplicados y con id estable", async () => {
     const fake = createFakeRol();
     const client = { rol: { upsert: fake.upsert } } as unknown as Pick<
       PrismaClient,
@@ -73,13 +88,13 @@ describe("seedRoles es idempotente (R9, R10)", () => {
     >;
 
     await seedRoles(client);
-    expect(fake.rows.size).toBe(4);
+    expect(fake.rows.size).toBe(5);
     const idsPrimera = new Map(
       [...fake.rows.entries()].map(([k, v]) => [k, v.id])
     );
 
     await seedRoles(client);
-    expect(fake.rows.size).toBe(4); // no crecen (R10)
+    expect(fake.rows.size).toBe(5); // no crecen (R10)
 
     for (const [k, v] of fake.rows.entries()) {
       expect(v.id).toBe(idsPrimera.get(k)); // id estable (R9)
@@ -117,7 +132,7 @@ describe("seedRoles no toca otras tablas (R12)", () => {
 
     await seedRoles(client);
 
-    expect(fake.upsert).toHaveBeenCalledTimes(4);
+    expect(fake.upsert).toHaveBeenCalledTimes(5);
     expect(otras.tipoIdentificacion.upsert).not.toHaveBeenCalled();
     expect(otras.usuario.upsert).not.toHaveBeenCalled();
     expect(otras.usuario.create).not.toHaveBeenCalled();

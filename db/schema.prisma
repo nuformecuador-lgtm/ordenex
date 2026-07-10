@@ -24,7 +24,7 @@ model TipoIdentificacion {
 
 model Rol {
   id    String   @id @default(uuid())
-  value RolValue @unique // seed: "maestro", "admin", "mensajero", "Admin Tienda"
+  value RolValue @unique // seed: "maestro", "admin", "mensajero", "Admin Tienda", "adminSatelite"
 
   usuarios Usuario[]
   permisos RolPermiso[]
@@ -37,6 +37,7 @@ enum RolValue {
   admin
   mensajero
   adminTienda @map("Admin Tienda")
+  adminSatelite // feature 19: label literal en la DB 'adminSatelite' (slug camelCase, SIN @map)
 
   @@map("rol_value")
 }
