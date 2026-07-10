@@ -132,3 +132,13 @@ Notación EARS. Cada requisito es verificable con un test (ver trazabilidad en `
   y cuándo (columnas `revisado_por`/`revisado_en` o log)? No lo pide el
   `feature_list`. Propuesta: fuera de alcance en F22; marcar como posible
   siguiente feature. Confirmar en F1.4.
+
+## Decisiones F1.4 (APROBADAS por el humano, 2026-07-10)
+
+- **P1 — Estado de RECHAZO = `inactivo`** (reusar valor existente de `EstadoUsuario`). CERO migraciones.
+  Transición: `pendiente --rechazar--> inactivo`. Aprobar: `pendiente --aprobar--> activo`.
+- **P2 — NO se guarda motivo de rechazo** (fuera de alcance; sin columna nueva ni migración).
+- **P3 — TTL de URL firmada del bucket privado = 300 s** (configurable).
+- **P4 — Auditoría quién/cuándo del approve/reject = FUERA DE ALCANCE** (feature aparte).
+
+Con P1+P2 la feature es **backend puro y SIN migraciones**: solo service/repository/action + tests.
