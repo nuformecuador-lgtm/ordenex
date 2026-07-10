@@ -7,7 +7,11 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/29-validacion-carga-masiva | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Frontend puro (R1–R19): `carga-masiva-clasificacion.ts` + `estatus-label.ts` (mapa anclado a ORDER_STATUS_SEED) + `OrdenesCargaResumenPaso.tsx` (3 secciones: nuevas=OrdenesCargaResumen intacto / existentes solo-lectura / errores solo-lectura) + `OrdenesCargaMasivaButton.handleSuccess`. R14 respetado (no toca backend). Suite 721/721 verde; typecheck + 50 tests verdes post-merge con origin/dev. Flaky de auth (HomePage/LoginForm) pre-existente, ajeno. **PR #17 ABIERTO** (por CLI, gh autenticado): https://github.com/nuformecuador-lgtm/ordenex/pull/17 → base `dev`. Pasa a `done` al mergear. Impl vía frontend_dev DIRECTO (el implementer falló 2× por sonnet-4, ver memoria). Corrió en paralelo con la 28 (backend). |
+| feature/50-vehiculos | backend | F1.2 | **SELECCIONADA (2026-07-10).** CRUD + tabla `vehiculos` (campos `id`, `name` — OJO `name`, no `value`) + enum PG nuevo (moto/carro/camion) + seed, solo rol maestro. Patrón feature 4 (role seed). Sin deps; desbloquea la 21→22→23. Corre en zona backend (libre) en paralelo con la 31/rebrand (frontend). Worktree `../ordenex-f50` desde `origin/dev`. spec_author en curso; PARA en F1.4 (aprobación humana del spec). |
+
+> **chore rebrand-ordenex-co** (identidad ordenex.co: naranja `#f26419`+navy `#0b2545`+Poppins/JetBrains): **PR #18 MERGEADO a `origin/dev`** (2026-07-10, merge `0750695`). Frontend puro, backend intacto; `globals.css`+`layout.tsx`+`PageHeader`+`EstatusBadge`+login/Toast. Verificado: typecheck ✅, tests 698/698 (3 timeouts flaky). NO es feature del `feature_list.json` (chore de estilos) → no lleva entrada en `history.md`. Ya incluido en la base de `feature/50`.
+
+> Feature 29 (validación carga masiva) CERRADA: **PR #17 mergeado** a `origin/dev`, status `done`, en `history.md`. Frontend puro (R1–R19), reviewer APROBADO 0 bloqueantes.
 > Feature 26 (dashboard/apartado admin de tienda) CERRADA 2026-07-10: **PR #14 mergeado** a
 > `origin/dev` (e5a0f5d), status -> `done`, entrada en `history.md`. Frontend puro, corrió en
 > paralelo con la 19 (backend). Reviewer APROBADO 0 bloqueantes; suite 689/689 verde. Deuda
