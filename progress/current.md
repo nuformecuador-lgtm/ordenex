@@ -7,6 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
+| feature/25-gestion-usuarios | fullstack | F1.4 | **spec_ready — PARADA en puerta humana.** Spec R1–R36 en `specs/25-gestion-usuarios/`. CRUD usuarios en configuración (SOLO maestro), sin tabla nueva. Decisiones F1.4: solo maestro; set base + contraseña ESCRITA o AUTOGENERADA (R30–R36, util nuevo); reusa `strongPasswordSchema` de la #20 → **depends_on=20** (F2 BLOQUEADA hasta que la 20 mergee a dev); editar nombre/telefono/rol/tipoDoc (no email/cedula); baja `inactivo`. FALTAN en backend: list/update/count + `UserService`. NOTA: F2 espera merge #20 + liberar zonas. |
 | feature/31-plantilla-xlsx | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 bloqueantes).** Plantilla de `BulkUpload` CSV→XLSX: nuevo `lib/utils/xlsx-template.ts` (buildXlsxTemplate async, bold+anchos+ejemplo), `handleDownloadTemplate` async mime XLSX, `DEFAULT_TEMPLATE_NAME`+consumidor de órdenes a `.xlsx`. exceljs import DINÁMICO (R6b). `csv-template.ts` intacto. Frontend puro (no toca backend). Tests 61/61 aislado; typecheck OK; init.sh verde. Flaky de timeouts pre-existente (no det., ajeno). **PR #19 ABIERTO** (CLI): https://github.com/nuformecuador-lgtm/ordenex/pull/19 → base `dev`. Lleva también el cierre de la 29. Pasa a `done` al mergear. |
 
 > Feature 29 (enriquecer validación carga masiva) CERRADA 2026-07-10: **PR #17 mergeado** a

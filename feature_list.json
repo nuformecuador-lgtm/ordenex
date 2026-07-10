@@ -243,11 +243,12 @@
       "id": 25,
       "name": "gestion de usuarios (configuracion)",
       "description": "Agrega un modulo de gestion de usuarios dentro de configuracion (ruta app/(app)/configuracion, hoy placeholder de la feature 5) que permite al admin maestro CRUD de usuarios: crear, listar, editar y activar/inactivar. Crear un usuario define nombre, email, telefono, tipo de documento (FK a tipo_identificacion), numero de documento, rol (FK al catalogo rol: maestro, admin, mensajero, adminTienda, adminSatelite) y contrasena inicial; el usuario creado por el admin queda en estado activo (a diferencia de la postulacion publica de mensajeros, que nace pendiente). Email y numero de documento no se duplican; la contrasena se hashea con bcrypt (mismo coste que el login). La baja es logica via el enum EstadoUsuario (inactivo/bloqueado), no borrado fisico. Reusa la infraestructura existente: DataTable + Pagination para el listado, Modal para crear/editar, Toast para feedback y el manejador de errores global del backend. Autorizacion: solo maestro (a confirmar si admin tambien). Es fullstack (pantalla en configuracion + backend Server Actions/service/repository). ABIERTO a decidir en spec: si el admin puede crear cualquier rol o hay restricciones, y si al crear un mensajero por esta via se piden los campos extra (vehiculo, placa, documentos) de la feature 21 o solo el set base.",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": "feature/25-gestion-usuarios",
+      "depends_on": 20
     },
     {
       "id": 26,
