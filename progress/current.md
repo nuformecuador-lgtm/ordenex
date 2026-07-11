@@ -17,7 +17,8 @@
 
 - **Feature 52 (build /postulacion)** — ✅ CERRADA (fix aplicado, `pnpm build` verde). Pendiente solo el PR/merge.
 - **TAREA HUMANA — bucket `gestion-evidencias`**: crear el bucket PRIVADO en Supabase Storage (feature 36). Las fotos de evidencia de entrega/rechazo lo necesitan en runtime. Sin esto, la gestión de órdenes del mensajero falla al subir evidencia.
-- **DEUDA DE DESPLIEGUE (repo-wide, aceptada)**: las migraciones de las features 17/24/27/30/32(n/a)/33/36 NO se han aplicado contra Postgres real (no hay DB aislada; `.env` apunta a Supabase compartido). Cubiertas por tests de integración estáticos. Pendiente correr up/down reales en un entorno con DB. Igual, los E2E (`e2e/*.spec.ts`) están ESCRITOS pero NO ejecutados (requieren DB/seed/login).
+- **DEUDA DE DESPLIEGUE — migraciones**: ✅ **SALDADA 2026-07-11.** `DATABASE_URL` apunta a un **Postgres LOCAL** (`localhost:5432`, db `ordenex`), NO a un Supabase compartido (la nota vieja era incorrecta). Se aplicaron las 12 migraciones pendientes con `prisma migrate deploy` (17/24/27/28/30/33/36 y previas); `prisma migrate status` = "up to date"; `pnpm db:seed` (catálogos) OK. Verificado por leader.
+- **DEUDA DE DESPLIEGUE — restante (env-dependiente)**: (1) **E2E** (`e2e/*.spec.ts`) escritos pero NO ejecutados — requieren dev server + usuarios sembrados de login por rol + fixtures (los specs usan emails placeholder); ejecutarlos de verdad necesita un HARNESS de seed/login e2e que hoy NO existe (candidato a feature propia). (2) **seed de ZONAS** (`seed-zonas.ts`) pendiente — necesita el **Excel de zonas** que debe proveer el humano. (3) verificación de **rollback** (down.sql) y **RLS con key anon** no ejecutadas (destructivo/config).
 - **Posible feature futura — PWA**: convertir la app en PWA (mencionado por el humano en la F1.4 de la 33, para el escaneo móvil del adminSatelite). No creada aún.
 
 > Feature 33 (bodega satélite: mis asignaciones + recepción QR) CERRADA 2026-07-11: **impl COMPLETA (R1–R23) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh` + `pnpm build`, 1493 tests). Fullstack un ciclo. Estado `done` + `history.md` + `review_33`. Módulo `/recepcion-satelite` del adminSatelite ("Por recibir"/"Recibidas"), recepción por escaneo (cámara `html5-qrcode` + lector keyboard-wedge) → estado NUEVO `en_bodega_satelite`; alcance por zona server-side, idempotente. Migración `20260711160000`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: migración no aplicada, verificación manual de hardware, E2E no ejecutado. **HALLAZGO ajeno (pre-existente):** `pnpm build` falla el prerender de `/postulacion` (feature 21, Prisma en prerender sin `export const dynamic`) → candidato a corrección aparte. Desbloquea 34.
@@ -239,7 +240,9 @@
   paralelismo por zonas disjuntas.
 
 ## Bloqueos / preguntas abiertas
-- DEUDA DE DESPLIEGUE (aceptada, requiere entorno con DB real): ejecutar E2E de
-  auth en verde (T017), verificar rechazo RLS con key anon (T004) y rollback de
-  migracion (T020). Hasta correrlos, CHECKPOINTS no se cumple al 100% pese al
-  estado `done`.
+- DEUDA DE DESPLIEGUE (parcial): ✅ **migraciones APLICADAS 2026-07-11** contra el Postgres
+  LOCAL (`localhost:5432`), `prisma migrate deploy` + `db:seed` OK, `migrate status` up to date.
+  RESTA (env-dependiente): ejecutar los E2E en verde (requieren harness de seed/login e2e —
+  hoy los specs usan emails placeholder; candidato a feature propia), verificar rechazo RLS con
+  key anon (T004), rollback de migracion (T020, destructivo), y el seed de ZONAS (necesita el
+  Excel del humano). Hasta esos, CHECKPOINTS no llega al 100% pese al estado `done`.
