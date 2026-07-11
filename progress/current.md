@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/34-asignacion-satelite | fullstack | F2.0 (impl) | **F1 COMPLETA (R1–R20, spec en `specs/34-...`) + F1.4 APROBADA 2026-07-11** (6 decisiones recomendadas). SIN migración (reúsa `en_bodega_satelite`/`en_espera_aceptacion`). Decisiones: (a) **servicio paralelo `AsignacionSateliteService`**; (b) renombrar `findMensajerosGam`→`findMensajerosByZona` (+ actualizar llamadores de la 30); (c) **extender `recepcion-satelite`** (sección "Recibidas" gana "Asignar"); (d) **lote con 1 mensajero** (patrón `AsignarBodegaModal`); (e) errores tipados (`estado_invalido`/`zona_ajena`/`mensajero_invalido`/`sin_zona`/`no_encontrada`, todo-o-nada); (f) **E2E**. **SIGUIENTE: `implementer`.** |
+| (ninguna en curso) | — | — | Feature 34 CERRADA (impl+reviewer OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+
+> Feature 34 (asignación desde bodega satélite) CERRADA 2026-07-11: **impl COMPLETA (R1–R20) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1519 tests). Fullstack un ciclo, SIN migración. Estado `done` + `history.md` + `review_34`. `AsignacionSateliteService` paralelo (guardas rol+zona server-side, 5 errores tipados, lote todo-o-nada) + rename honesto `...Gam`→`...ByZona` (maestro verde) + UI "Asignar" en `recepcion-satelite`. **CIERRA la cadena satelital** (30→32→33→34→36). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: E2E escrito no ejecutado.
 
 > Feature 52 (fix build /postulacion) CERRADA 2026-07-11: `export const dynamic="force-dynamic"` en `app/postulacion/page.tsx`. `pnpm build` PASA, `init.sh` verde 1493 tests. Ciclo ágil (spec inline, sin reviewer aparte). Estado `done` + `history.md`. **PENDIENTE: PR a `dev` + merge.**
 

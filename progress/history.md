@@ -805,3 +805,29 @@
   feature), seed de ZONAS (necesita el Excel del humano), RLS con key anon (T004). El bucket `gestion-evidencias`
   aplica solo si se usa Supabase Storage.
 - Proceso: ciclo ágil, spec inline (feature_list id 53). Corrió sobre la rama `chore/deuda-despliegue-migraciones`.
+
+## 2026-07-11 — bodega satélite: asignación a mensajeros de su zona (feature 34, FULLSTACK)
+- El adminSatelite asigna sus órdenes `en_bodega_satelite` (recibidas, feature 33) a mensajeros de SU zona →
+  `en_espera_aceptacion` (mismo estado del flujo del maestro, feature 17; luego la consume el mensajero en la 36).
+  SIN estados nuevos, SIN migración, SIN generar `num_guia` (las órdenes ya lo tienen). Cierra la cadena operativa
+  satelital: rutear (30) → etiqueta QR (32) → recibir (33) → **asignar (34)** → mensajero recoge/gestiona (36).
+- Backend (backend_dev, model opus): `AsignacionSateliteService` (servicio PARALELO al `GuiaAsignacionService` del
+  maestro, decisión F1.4-a; guardas rol `adminSatelite` + zona propia resuelta server-side vía `findUsuarioZonaId`;
+  5 errores tipados `estado_invalido`/`zona_ajena`/`mensajero_invalido`/`sin_zona`/`no_encontrada`; lote todo-o-nada)
+  + `OrdenRepository.asignarSateliteLote` (`updateMany` guardado por estado+zona+deletedAt, concurrencia-segura,
+  re-lee y `conflict` si count≠esperado). Action con zod + `resolveActorFromSession` + `withErrorHandler`.
+  RENAME honesto (decisión F1.4-b): `findMensajerosGam`→`findMensajerosByZona`, `findMensajeroIdsValidosGam`→
+  `findMensajeroIdsValidosByZona` (interfaz + repo + llamadores 17/30; maestro sigue pasando la zona GAM, VERDE).
+- Frontend (frontend_dev, model opus): EXTIENDE `recepcion-satelite` (decisión F1.4-c, no ruta nueva): la sección
+  "Recibidas" → `ListaRecibidas` con checkbox por fila + "Asignar" + `AsignarSateliteModal` (lote con 1 mensajero,
+  patrón `AsignarBodegaModal` de la 17, decisión F1.4-d). Mensajeros por props desde Server Component.
+- Requisitos cubiertos: R1–R20 (EARS), mapeados 1:1 a test. Reviewer **APROBADO** 0 bloqueantes (corrió `init.sh`).
+  Verificación: `pnpm test` **1519/1519**, `./init.sh` EXIT 0, typecheck (incl. `e2e/`) + lint OK. Rename NO rompió
+  el maestro (17/30 verdes).
+- Decisiones F1.4 (humano 2026-07-11, las 6 recomendadas): (a) servicio paralelo; (b) rename a `...ByZona`;
+  (c) extender `recepcion-satelite`; (d) lote con 1 mensajero; (e) errores tipados todo-o-nada; (f) E2E
+  `e2e/asignacion-satelite.spec.ts` (escrito, ejecución diferida).
+- DEUDA declarada: E2E escrito NO ejecutado (requiere entorno con DB/seed/login). Hallazgo menor (aceptado): en el
+  detalle de carrera R14, motivo `conflict` vs `estado_invalido` (cosmético).
+- **Desbloquea/completa**: cierra la cadena satelital operativa. Consumió 33 (`en_bodega_satelite`), 17 (asignación/
+  `en_espera_aceptacion`) y 30 (filtro de mensajeros por zona, ahora `...ByZona`).

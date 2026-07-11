@@ -81,9 +81,9 @@
 
 ## Bloque 6 — Cierre
 
-- [ ] **T12** — Completar tabla `R<n> → test` en `progress/impl_34-asignacion-satelite.md`
+- [x] **T12** — Completar tabla `R<n> → test` en `progress/impl_34-asignacion-satelite.md`
   (trazabilidad). **Hecho:** cada R1–R19 mapeado a un test concreto por ruta. (R20)
-- [ ] **T13** — `./init.sh` verde: `pnpm typecheck`, `pnpm lint`, `pnpm test` pasan. **Hecho:**
+- [x] **T13** — `./init.sh` verde: `pnpm typecheck`, `pnpm lint`, `pnpm test` pasan. **Hecho:**
   init en verde; sin migración pendiente que verificar (no hay `down.sql` porque no hay esquema
   nuevo, §1 del design). (CHECKPOINTS)
 
