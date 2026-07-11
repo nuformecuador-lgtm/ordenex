@@ -4,6 +4,7 @@ import {
   asignarDesdeBodega,
   listarMensajerosParaAsignacion,
   listarCatalogoEstatus,
+  rutearABodegaSatelite,
 } from "@/lib/actions/ordenes-guia";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IGuiaAsignacionService } from "@/lib/interfaces/services/IGuiaAsignacionService";
@@ -16,6 +17,7 @@ function fakeGuiaService(overrides: Partial<IGuiaAsignacionService> = {}): IGuia
   return {
     generarGuia: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     asignarDesdeBodega: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
+    rutearABodegaSatelite: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     ...overrides,
   };
 }
@@ -44,11 +46,24 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
   });
 
   it("listarMensajerosParaAsignacion", async () => {
-    const ordenRepo = { findAllMensajeros: vi.fn() };
-    const r = await listarMensajerosParaAsignacion({ ordenRepo, getActor: getActor(null) });
+    const ordenRepo = { findMensajerosGam: vi.fn() };
+    const zonaRepo = { findGamZonaId: vi.fn() };
+    const r = await listarMensajerosParaAsignacion({ ordenRepo, zonaRepo, getActor: getActor(null) });
 
     expect(r.status).toBe("unauthenticated");
-    expect(ordenRepo.findAllMensajeros).not.toHaveBeenCalled();
+    expect(zonaRepo.findGamZonaId).not.toHaveBeenCalled();
+    expect(ordenRepo.findMensajerosGam).not.toHaveBeenCalled();
+  });
+
+  it("rutearABodegaSatelite", async () => {
+    const service = fakeGuiaService();
+    const r = await rutearABodegaSatelite(
+      { ordenIds: ["o1"] },
+      { guiaService: service, getActor: getActor(null) },
+    );
+
+    expect(r.status).toBe("unauthenticated");
+    expect(service.rutearABodegaSatelite).not.toHaveBeenCalled();
   });
 
   it("listarCatalogoEstatus", async () => {
@@ -131,14 +146,16 @@ describe("generarGuia — camino ok delega al service con el actor resuelto", ()
   });
 });
 
-describe("R28: listarMensajerosParaAsignacion devuelve la lista SIN filtro de zona", () => {
-  it("maestro: repo.findAllMensajeros sin argumentos (no recibe zonaId)", async () => {
-    const findAllMensajeros = vi.fn().mockResolvedValue([
+describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros de la zona GAM", () => {
+  it("maestro: resuelve gamZonaId y llama findMensajerosGam con esa zona", async () => {
+    const findGamZonaId = vi.fn().mockResolvedValue("z-gam");
+    const findMensajerosGam = vi.fn().mockResolvedValue([
       { id: "m1", nombre: "Ana" },
       { id: "m2", nombre: "Beto" },
     ]);
     const r = await listarMensajerosParaAsignacion({
-      ordenRepo: { findAllMensajeros },
+      ordenRepo: { findMensajerosGam },
+      zonaRepo: { findGamZonaId },
       getActor: getActor(MAESTRO),
     });
 
@@ -149,13 +166,28 @@ describe("R28: listarMensajerosParaAsignacion devuelve la lista SIN filtro de zo
         { id: "m2", nombre: "Beto" },
       ],
     });
-    expect(findAllMensajeros).toHaveBeenCalledWith(); // sin parametros: sin filtro de zona
+    expect(findMensajerosGam).toHaveBeenCalledWith("z-gam"); // R5: filtrado por zona GAM
+  });
+
+  it("R5: sin zona GAM configurada -> lista vacia, sin consultar mensajeros", async () => {
+    const findGamZonaId = vi.fn().mockResolvedValue(null);
+    const findMensajerosGam = vi.fn();
+    const r = await listarMensajerosParaAsignacion({
+      ordenRepo: { findMensajerosGam },
+      zonaRepo: { findGamZonaId },
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(r).toEqual({ status: "ok", mensajeros: [] });
+    expect(findMensajerosGam).not.toHaveBeenCalled();
   });
 
   it("admin (solo-lectura del modulo) tambien puede listar", async () => {
-    const findAllMensajeros = vi.fn().mockResolvedValue([]);
+    const findGamZonaId = vi.fn().mockResolvedValue("z-gam");
+    const findMensajerosGam = vi.fn().mockResolvedValue([]);
     const r = await listarMensajerosParaAsignacion({
-      ordenRepo: { findAllMensajeros },
+      ordenRepo: { findMensajerosGam },
+      zonaRepo: { findGamZonaId },
       getActor: getActor(ADMIN),
     });
 
@@ -163,14 +195,49 @@ describe("R28: listarMensajerosParaAsignacion devuelve la lista SIN filtro de zo
   });
 
   it("mensajero/adminTienda -> forbidden", async () => {
-    const findAllMensajeros = vi.fn();
+    const findGamZonaId = vi.fn();
+    const findMensajerosGam = vi.fn();
     const r = await listarMensajerosParaAsignacion({
-      ordenRepo: { findAllMensajeros },
+      ordenRepo: { findMensajerosGam },
+      zonaRepo: { findGamZonaId },
       getActor: getActor({ usuarioId: "u-msg", rol: "mensajero" }),
     });
 
     expect(r).toEqual({ status: "forbidden" });
-    expect(findAllMensajeros).not.toHaveBeenCalled();
+    expect(findGamZonaId).not.toHaveBeenCalled();
+    expect(findMensajerosGam).not.toHaveBeenCalled();
+  });
+});
+
+describe("Feature 30/R13/R16: rutearABodegaSatelite (server action)", () => {
+  it("input invalido -> validation_error sin llamar al service", async () => {
+    const service = fakeGuiaService();
+    const r = await rutearABodegaSatelite(
+      { ordenIds: "no-es-array" },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r.status).toBe("validation_error");
+    expect(service.rutearABodegaSatelite).not.toHaveBeenCalled();
+  });
+
+  it("camino ok delega al service con el actor resuelto y devuelve su resultado", async () => {
+    const service = fakeGuiaService({
+      rutearABodegaSatelite: vi.fn().mockResolvedValue({
+        status: "ok",
+        resultados: [{ ordenId: "o1", estado: "en_ruta_bodega_satelite" }],
+      }),
+    });
+    const r = await rutearABodegaSatelite(
+      { ordenIds: ["o1"] },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r).toEqual({
+      status: "ok",
+      resultados: [{ ordenId: "o1", estado: "en_ruta_bodega_satelite" }],
+    });
+    expect(service.rutearABodegaSatelite).toHaveBeenCalledWith({ ordenIds: ["o1"] }, MAESTRO);
   });
 });
 

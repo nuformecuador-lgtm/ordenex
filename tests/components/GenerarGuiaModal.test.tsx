@@ -154,6 +154,65 @@ describe("GenerarGuiaModal", () => {
     await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
   });
 
+  it("R7/R8: una orden NO-GAM no muestra select de mensajero y aparece en el grupo 'bodega satélite'; al confirmar envía mensajeroId=null para ella", async () => {
+    const user = userEvent.setup();
+    generarGuiaMock.mockResolvedValue({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", numGuia: 1, estado: "en_espera_aceptacion" },
+        { ordenId: "o2", numGuia: 2, estado: "en_ruta_bodega_satelite" },
+      ],
+    });
+
+    const ordenes = [
+      // GAM: conserva el camino de la feature 17 (con select de mensajero).
+      makeOrden({
+        id: "o1",
+        numRemision: "REM-GAM",
+        zonaEsGam: true,
+        zonaNombre: "GAM",
+        mensajeroSugeridoId: "m1",
+      }),
+      // NO-GAM: se rutea a la bodega satélite de su zona, SIN select.
+      makeOrden({
+        id: "o2",
+        numRemision: "REM-NOGAM",
+        zonaEsGam: false,
+        zonaNombre: "Limón",
+      }),
+    ];
+    const { onSuccess } = renderModal(ordenes);
+
+    // El grupo de bodega satélite de la zona aparece.
+    const grupoSatelite = screen.getByRole("table", {
+      name: "Se enviarán a la bodega satélite de Limón",
+    });
+    expect(within(grupoSatelite).getByText("REM-NOGAM")).toBeInTheDocument();
+
+    // La orden NO-GAM NO ofrece select de mensajero.
+    expect(
+      screen.queryByRole("combobox", {
+        name: "Mensajero para la orden REM-NOGAM",
+      }),
+    ).toBeNull();
+    // La orden GAM sí conserva su select.
+    expect(
+      screen.getByRole("combobox", { name: "Mensajero para la orden REM-GAM" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Generar guía" }));
+
+    expect(generarGuiaMock).toHaveBeenCalledTimes(1);
+    expect(generarGuiaMock).toHaveBeenCalledWith({
+      decisiones: [
+        { ordenId: "o1", mensajeroId: "m1" }, // GAM: sugerido confirmado
+        { ordenId: "o2", mensajeroId: null }, // NO-GAM: siempre null (→ satélite)
+      ],
+    });
+
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+
   it("R25: si generarGuia responde un status no-ok, no se refresca (permanece abierto vía onError del Modal)", async () => {
     const user = userEvent.setup();
     generarGuiaMock.mockResolvedValue({

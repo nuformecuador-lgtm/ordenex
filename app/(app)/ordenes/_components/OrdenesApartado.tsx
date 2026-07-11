@@ -39,6 +39,14 @@ export interface OrdenesApartadoProps {
   actionLabel?: string;
   /** Se invoca con las órdenes seleccionadas (snapshot) al pulsar el botón. */
   onAction?: (seleccionadas: OrdenListItemDTO[]) => void;
+  /**
+   * Feature 30/R13: acción secundaria opcional ("Rutear a bodega satélite") que
+   * comparte la misma selección por checkbox. Convive con la acción primaria en
+   * los apartados de revisión y `en_bodega`.
+   */
+  secondaryActionLabel?: string;
+  /** Se invoca con las órdenes seleccionadas (snapshot) al pulsar la acción secundaria. */
+  onSecondaryAction?: (seleccionadas: OrdenListItemDTO[]) => void;
 }
 
 interface ApartadoPageData {
@@ -71,6 +79,8 @@ export function OrdenesApartado({
   selectable = false,
   actionLabel,
   onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
 }: OrdenesApartadoProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -121,18 +131,37 @@ export function OrdenesApartado({
     onAction?.(seleccionadas);
   }
 
+  function handleSecondaryAction() {
+    if (seleccionadas.length === 0) return;
+    onSecondaryAction?.(seleccionadas);
+  }
+
   return (
     <section className="flex flex-col gap-3" aria-label={titulo}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">{titulo}</h2>
-        {selectable && actionLabel ? (
-          <Button
-            type="button"
-            onClick={handleAction}
-            disabled={seleccionadas.length === 0}
-          >
-            {actionLabel}
-          </Button>
+        {selectable && (actionLabel || secondaryActionLabel) ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {actionLabel ? (
+              <Button
+                type="button"
+                onClick={handleAction}
+                disabled={seleccionadas.length === 0}
+              >
+                {actionLabel}
+              </Button>
+            ) : null}
+            {secondaryActionLabel ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSecondaryAction}
+                disabled={seleccionadas.length === 0}
+              >
+                {secondaryActionLabel}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <DataTable

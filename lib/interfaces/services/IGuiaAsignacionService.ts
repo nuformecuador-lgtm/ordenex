@@ -32,6 +32,16 @@ export interface AsignarBodegaResultadoItem {
   estado: string;
 }
 
+// Feature 30/R13 — ruteo dedicado de ordenes no-GAM a la bodega satelite.
+export interface RutearSateliteInput {
+  ordenIds: string[];
+}
+
+export interface RutearSateliteResultadoItem {
+  ordenId: string;
+  estado: string; // siempre "en_ruta_bodega_satelite"
+}
+
 // R29: motivo por orden cuando el lote se rechaza (orden inexistente, borrada,
 // estado de origen no permitido). El servicio ABORTA sin efectos (R25).
 export interface DetalleConflicto {
@@ -47,6 +57,15 @@ export type GenerarGuiaServiceResult =
 
 export type AsignarBodegaServiceResult =
   | { status: "ok"; resultados: AsignarBodegaResultadoItem[] }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "conflict"; detalle: DetalleConflicto[] };
+
+// Feature 30/R13/R16/R17: resultado del ruteo a satelite. `validation_error`
+// cubre la guardia R4 (zona GAM no configurada) y catalogo incompleto; `conflict`
+// cubre origen invalido / borrada / orden GAM (no se rutea a satelite).
+export type RutearSateliteServiceResult =
+  | { status: "ok"; resultados: RutearSateliteResultadoItem[] }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "conflict"; detalle: DetalleConflicto[] };
@@ -67,4 +86,15 @@ export interface IGuiaAsignacionService {
     input: AsignarBodegaInput,
     actor: Actor,
   ): Promise<AsignarBodegaServiceResult>;
+  /**
+   * Feature 30/R13/R16/R17: rutea una o varias ordenes no-GAM a
+   * `en_ruta_bodega_satelite` desde los origenes permitidos (`en_fulfillment`,
+   * `en_preparacion`, `en_bodega`), asignando `num_guia` (R10) y dejando el
+   * mensajero en NULL (R9). Guardia R4 (zona GAM configurada). Una orden GAM en
+   * el lote -> `conflict` ("orden GAM no se rutea a satelite"). Solo `maestro`.
+   */
+  rutearABodegaSatelite(
+    input: RutearSateliteInput,
+    actor: Actor,
+  ): Promise<RutearSateliteServiceResult>;
 }

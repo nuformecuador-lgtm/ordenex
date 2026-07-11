@@ -75,4 +75,11 @@ export interface IZonaRepository {
   setGam(id: string): Promise<boolean>;
   /** R15: proyeccion ligera `{ id, nombre, esGam }` ordenada por nombre. */
   listLight(): Promise<ZonaLightDTO[]>;
+  /**
+   * Feature 30/R3: resuelve el `id` de la zona GAM (bodega central), identificada
+   * por el flag `esGam = true` (unica fuente de verdad; el indice unico parcial
+   * `zona_es_gam_unico` garantiza a lo sumo una). `null` si aun no hay ninguna
+   * zona marcada como GAM (dispara el guardia R4 en el service).
+   */
+  findGamZonaId(): Promise<string | null>;
 }

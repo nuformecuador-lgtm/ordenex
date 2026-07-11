@@ -103,10 +103,18 @@ export type ActionError =
 // NO se agrega a OrdenDTO base para no ampliar el contrato del CRUD. Opcionales
 // (`?`) para no romper mocks/fixtures de UI existentes que construyen
 // OrdenListItemDTO sin estos campos; el repositorio SIEMPRE los envia (string|null).
+// Feature 30/R14/R19: agrega `zonaNombre` (columna de zona del listado) y
+// `zonaEsGam` (la UI decide por fila si muestra select de mensajero (GAM) o
+// "-> bodega satelite" (no-GAM)). Opcionales (`?`) por el mismo motivo que los
+// campos de mensajero (feature 17): no romper mocks/fixtures de UI existentes que
+// construyen OrdenListItemDTO sin ellos (R19, cambio aditivo); el repositorio
+// SIEMPRE los envia (string/boolean concretos desde la relacion Orden.zona).
 export type OrdenListItemDTO = OrdenDTO & {
   tiendaNombre: string;
   mensajeroSugeridoId?: string | null;
   mensajeroAsignadoId?: string | null;
+  zonaNombre?: string;
+  zonaEsGam?: boolean;
 };
 
 export type CrearOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;

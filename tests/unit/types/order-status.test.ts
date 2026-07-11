@@ -3,10 +3,11 @@ import type { PrismaClient } from "@prisma/client";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import { seedOrderStatus } from "@/scripts/seed-catalogos";
 
-// R2/R5/R9: exactamente 9 valores canonicos, incluido en_preparacion (feature 15)
-// y en_espera_aceptacion (feature 17); en_bodega se conserva como valor historico.
-describe("ORDER_STATUS_SEED (R2/R5/R9)", () => {
-  it("contiene exactamente los 9 valores esperados", () => {
+// R2/R5/R9: exactamente 10 valores canonicos, incluido en_preparacion (feature 15),
+// en_espera_aceptacion (feature 17) y en_ruta_bodega_satelite (feature 30/R1);
+// en_bodega se conserva como valor historico.
+describe("ORDER_STATUS_SEED (R2/R5/R9 · feature 30/R1)", () => {
+  it("contiene exactamente los 10 valores esperados", () => {
     expect([...ORDER_STATUS_SEED].sort()).toEqual(
       [
         "devuelta",
@@ -16,6 +17,7 @@ describe("ORDER_STATUS_SEED (R2/R5/R9)", () => {
         "en_preparacion",
         "en_espera_aceptacion",
         "en_ruta_bodega_principal",
+        "en_ruta_bodega_satelite",
         "entregada",
         "reprogramada",
       ].sort(),
@@ -31,9 +33,14 @@ describe("ORDER_STATUS_SEED (R2/R5/R9)", () => {
     expect(ORDER_STATUS_SEED[8]).toBe("en_espera_aceptacion");
   });
 
+  it("R1: incluye en_ruta_bodega_satelite como 10mo valor (feature 30)", () => {
+    expect(ORDER_STATUS_SEED).toContain("en_ruta_bodega_satelite");
+    expect(ORDER_STATUS_SEED[9]).toBe("en_ruta_bodega_satelite");
+  });
+
   it("no tiene valores duplicados", () => {
     expect(new Set(ORDER_STATUS_SEED).size).toBe(ORDER_STATUS_SEED.length);
-    expect(ORDER_STATUS_SEED).toHaveLength(9);
+    expect(ORDER_STATUS_SEED).toHaveLength(10);
   });
 });
 
@@ -73,11 +80,12 @@ describe("seedOrderStatus siembra en_espera_aceptacion de forma idempotente (R9)
 
     await seedOrderStatus(client);
     expect(fake.rows.has("en_espera_aceptacion")).toBe(true);
-    expect(fake.rows.size).toBe(9);
+    expect(fake.rows.has("en_ruta_bodega_satelite")).toBe(true); // feature 30/R1
+    expect(fake.rows.size).toBe(10);
     const idPrimera = fake.rows.get("en_espera_aceptacion")?.id;
 
     await seedOrderStatus(client); // segunda ejecucion: idempotente
-    expect(fake.rows.size).toBe(9); // no crece
+    expect(fake.rows.size).toBe(10); // no crece
     expect(fake.rows.get("en_espera_aceptacion")?.id).toBe(idPrimera); // id conservado
   });
 });

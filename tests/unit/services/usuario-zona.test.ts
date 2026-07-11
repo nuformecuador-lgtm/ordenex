@@ -70,6 +70,7 @@ function buildZonaRepo(exists: boolean): IZonaRepository {
     update: vi.fn(),
     setGam: vi.fn(),
     listLight: vi.fn(),
+    findGamZonaId: vi.fn().mockResolvedValue(null),
   };
 }
 

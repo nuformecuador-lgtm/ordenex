@@ -3,16 +3,20 @@
 import {
   asignarBodegaSchema,
   generarGuiaSchema,
+  rutearSateliteSchema,
   type AsignarBodegaResult,
   type GenerarGuiaResult,
   type ListarCatalogoEstatusResult,
   type ListarMensajerosParaAsignacionResult,
+  type RutearSateliteResult,
 } from "@/lib/types/orden-guia";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IGuiaAsignacionService } from "@/lib/interfaces/services/IGuiaAsignacionService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
@@ -20,11 +24,16 @@ import type { AppErrorShape } from "@/lib/errors";
 
 function buildGuiaService(): IGuiaAsignacionService {
   const prisma = getPrismaClient();
-  return new GuiaAsignacionService(new OrdenRepository(prisma));
+  // Feature 30/R18: inyecta ademas ZonaRepository (guardia GAM); firmas estables.
+  return new GuiaAsignacionService(new OrdenRepository(prisma), new ZonaRepository(prisma));
 }
 
-function buildOrdenRepo(): Pick<IOrdenRepository, "findAllMensajeros"> {
+function buildOrdenRepo(): Pick<IOrdenRepository, "findMensajerosGam"> {
   return new OrdenRepository(getPrismaClient());
+}
+
+function buildZonaRepoParaMensajeros(): Pick<IZonaRepository, "findGamZonaId"> {
+  return new ZonaRepository(getPrismaClient());
 }
 
 function buildOrdenRepoParaCatalogo(): Pick<IOrdenRepository, "listOrderStatus"> {
@@ -37,7 +46,8 @@ export interface GuiaActionDeps {
 }
 
 export interface ListarMensajerosDeps {
-  ordenRepo?: Pick<IOrdenRepository, "findAllMensajeros">;
+  ordenRepo?: Pick<IOrdenRepository, "findMensajerosGam">;
+  zonaRepo?: Pick<IZonaRepository, "findGamZonaId">;
   getActor?: () => Promise<Actor | null>;
 }
 
@@ -99,9 +109,11 @@ export async function asignarDesdeBodega(
 }
 
 /**
- * T15/R28: TODOS los usuarios rol mensajero, SIN filtro de zona (la feature 30
- * restringira el CUERPO de este loader sin cambiar la firma). `maestro` escribe
- * en este modulo y `admin` es solo-lectura (R12); ambos pueden listar
+ * Feature 30/R5/R18: SOLO los usuarios rol mensajero de la zona GAM (firma y tipo
+ * `MensajeroLiteDTO[]` intactos respecto a la feature 17). Resuelve `gamZonaId` y
+ * filtra por zona en el repo; si aun no hay zona GAM configurada -> lista vacia
+ * (la UI ya maneja lista vacia; la escritura falla con R4 en el service, mensaje
+ * claro). `maestro` escribe y `admin` es solo-lectura (R16); ambos pueden listar
  * mensajeros para el modal. El resto -> forbidden.
  */
 export async function listarMensajerosParaAsignacion(
@@ -113,13 +125,34 @@ export async function listarMensajerosParaAsignacion(
     if (actor.rol !== "maestro" && actor.rol !== "admin") {
       return { status: "forbidden" as const };
     }
+    const zonaRepo = deps.zonaRepo ?? buildZonaRepoParaMensajeros();
+    const gamZonaId = await zonaRepo.findGamZonaId();
+    if (gamZonaId === null) {
+      // R5: sin zona GAM configurada, no hay mensajeros GAM que listar.
+      return { status: "ok" as const, mensajeros: [] };
+    }
     const repo = deps.ordenRepo ?? buildOrdenRepo();
-    const mensajeros = await repo.findAllMensajeros();
+    const mensajeros = await repo.findMensajerosGam(gamZonaId);
     return { status: "ok" as const, mensajeros };
   });
   // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el
   // unico AppErrorShape posible es UNAUTHORIZED.
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/** Feature 30/R13/R16: rutea ordenes no-GAM a en_ruta_bodega_satelite (solo maestro). */
+export async function rutearABodegaSatelite(
+  input: unknown,
+  deps: GuiaActionDeps = {},
+): Promise<RutearSateliteResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
+    const data = rutearSateliteSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.guiaService ?? buildGuiaService();
+    return service.rutearABodegaSatelite(data, actor); // resultado tipado de dominio
+  });
+  return isAppErrorShape(r) ? toGuiaActionError(r) : r;
 }
 
 /**

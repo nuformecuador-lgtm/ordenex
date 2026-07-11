@@ -12,13 +12,18 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { OrdenesApartado } from "./OrdenesApartado";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
+import { RutearSateliteModal } from "./RutearSateliteModal";
 
 export interface OrdenesRevisionMaestroProps {
   /** R12-UI: `admin` es solo-lectura (sin checkboxes ni botones/modales de acción). */
   readOnly?: boolean;
 }
 
-type ModalAbierto = "generar-guia" | "asignar-bodega" | null;
+type ModalAbierto =
+  | "generar-guia"
+  | "asignar-bodega"
+  | "rutear-satelite"
+  | null;
 
 async function catalogoEstatusFetcher() {
   const res = await listarCatalogoEstatus();
@@ -35,12 +40,18 @@ async function mensajerosFetcher() {
 /**
  * Orquestador de la vista de revisión del maestro (feature 17, T16/T17):
  * carga en paralelo el catálogo de estados (para resolver `value -> estatusId`,
- * design.md §4) y la lista de mensajeros (R28), y renderiza los 4 apartados por
+ * design.md §4) y la lista de mensajeros (R28), y renderiza los apartados por
  * estado (R15/R16) con selección por lote (R17) y las acciones "Generar guía"
  * (R18, sobre `en_fulfillment`/`en_preparacion`) y "Asignar mensajero" (R26,
  * sobre `en_bodega`). El apartado `en_espera_aceptacion` es de solo lectura en
  * esta feature: no tiene acción propia (la respuesta del mensajero es de la
  * feature 36).
+ *
+ * Feature 30 (T16, R13/R15): añade un 5.º apartado solo-lectura para
+ * `en_ruta_bodega_satelite` ("En ruta a bodega satélite") y una acción
+ * secundaria "Rutear a bodega satélite" en los apartados de revisión y
+ * `en_bodega` que rutea las órdenes NO-GAM seleccionadas vía
+ * `rutearABodegaSatelite`.
  *
  * `readOnly` (R12-UI, `admin`): ningún apartado es seleccionable y no se montan
  * botones ni modales de acción; el backend igual rechaza escrituras (R12,
@@ -84,13 +95,21 @@ export function OrdenesRevisionMaestro({
     setModalAbierto("asignar-bodega");
   }
 
+  // Feature 30/R13: "Rutear a bodega satélite" solo aplica a órdenes NO-GAM
+  // (`zonaEsGam === false`). Se filtra el snapshot seleccionado antes de abrir el
+  // modal; el service revalida (defensa en profundidad).
+  function abrirRutearSatelite(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === false));
+    setModalAbierto("rutear-satelite");
+  }
+
   function cerrarModal(open: boolean) {
     if (!open) setModalAbierto(null);
   }
 
   function handleSuccess() {
     setModalAbierto(null);
-    // Revalida los 4 apartados (todos comparten el prefijo de key, sin
+    // Revalida todos los apartados (comparten el prefijo de key, sin
     // acoplarse a estatusValue/página/tamaño actuales de cada uno).
     void mutate(
       (key) => Array.isArray(key) && key[0] === "ordenes:apartado",
@@ -119,6 +138,8 @@ export function OrdenesRevisionMaestro({
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Generar guía"}
         onAction={readOnly ? undefined : abrirGenerarGuia}
+        secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
+        onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
       />
       <OrdenesApartado
         titulo="En preparación"
@@ -127,6 +148,8 @@ export function OrdenesRevisionMaestro({
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Generar guía"}
         onAction={readOnly ? undefined : abrirGenerarGuia}
+        secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
+        onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
       />
       <OrdenesApartado
         titulo="En espera de aceptación del mensajero"
@@ -141,6 +164,16 @@ export function OrdenesRevisionMaestro({
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Asignar mensajero"}
         onAction={readOnly ? undefined : abrirAsignarBodega}
+        secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
+        onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
+      />
+      {/* Feature 30/R15: 5.º apartado solo-lectura. Las órdenes ruteadas a
+          satélite se muestran con su estado legible por zona (EstatusBadge). */}
+      <OrdenesApartado
+        titulo="En ruta a bodega satélite"
+        estatusValue="en_ruta_bodega_satelite"
+        estatusId={estatusIdPorValue.get("en_ruta_bodega_satelite")}
+        selectable={false}
       />
 
       {!readOnly ? (
@@ -156,6 +189,12 @@ export function OrdenesRevisionMaestro({
             open={modalAbierto === "asignar-bodega"}
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          <RutearSateliteModal
+            open={modalAbierto === "rutear-satelite"}
+            ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />

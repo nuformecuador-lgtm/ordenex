@@ -36,6 +36,7 @@ function buildRepo(over: Partial<IZonaRepository> = {}): IZonaRepository {
     update: vi.fn().mockResolvedValue(dto()),
     setGam: vi.fn().mockResolvedValue(true),
     listLight: vi.fn().mockResolvedValue([{ id: "z1", nombre: "Zona Sur", esGam: false }]),
+    findGamZonaId: vi.fn().mockResolvedValue(null),
     ...over,
   };
 }

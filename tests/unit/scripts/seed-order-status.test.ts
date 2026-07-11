@@ -30,8 +30,9 @@ function createFakeOrderStatus() {
   return { rows, upsert };
 }
 
-// Feature 17/R9: ORDER_STATUS_SEED paso de 8 a 9 valores (suma en_espera_aceptacion).
-describe("seedOrderStatus siembra los 9 estatus por value (R2/R5/R9)", () => {
+// Feature 17/R9 + feature 30/R1: ORDER_STATUS_SEED paso de 8 a 9 (en_espera_aceptacion)
+// y de 9 a 10 valores (en_ruta_bodega_satelite).
+describe("seedOrderStatus siembra los 10 estatus por value (R2/R5/R9 · feature 30/R1)", () => {
   it("crea una fila por cada valor de ORDER_STATUS_SEED", async () => {
     const fake = createFakeOrderStatus();
     await seedOrderStatus({ orderStatus: { upsert: fake.upsert } } as unknown as Pick<
@@ -39,14 +40,14 @@ describe("seedOrderStatus siembra los 9 estatus por value (R2/R5/R9)", () => {
       "orderStatus"
     >);
 
-    expect(fake.upsert).toHaveBeenCalledTimes(9);
+    expect(fake.upsert).toHaveBeenCalledTimes(10);
     const valores = [...fake.rows.values()].map((r) => r.value).sort();
     expect(valores).toEqual([...ORDER_STATUS_SEED].sort());
   });
 });
 
 describe("seedOrderStatus es idempotente (R3)", () => {
-  it("dos ejecuciones dejan 9 filas, sin duplicar y con id estable", async () => {
+  it("dos ejecuciones dejan 10 filas, sin duplicar y con id estable", async () => {
     const fake = createFakeOrderStatus();
     const client = { orderStatus: { upsert: fake.upsert } } as unknown as Pick<
       PrismaClient,
@@ -54,11 +55,11 @@ describe("seedOrderStatus es idempotente (R3)", () => {
     >;
 
     await seedOrderStatus(client);
-    expect(fake.rows.size).toBe(9);
+    expect(fake.rows.size).toBe(10);
     const idsPrimera = new Map([...fake.rows.entries()].map(([k, v]) => [k, v.id]));
 
     await seedOrderStatus(client);
-    expect(fake.rows.size).toBe(9); // no crece
+    expect(fake.rows.size).toBe(10); // no crece
 
     for (const [k, v] of fake.rows.entries()) {
       expect(v.id).toBe(idsPrimera.get(k)); // id conservado (R3)

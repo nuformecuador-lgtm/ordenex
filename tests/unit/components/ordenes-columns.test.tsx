@@ -58,3 +58,46 @@ describe("ordenesColumns — R30 (numGuia nullable en el listado)", () => {
     expect(within(fila).queryByText("Pendiente")).toBeNull();
   });
 });
+
+describe("ordenesColumns — feature 30 (R14: columna de zona)", () => {
+  it("R14: renderiza el nombre de la zona (zonaNombre) en la fila", () => {
+    const orden = makeOrden({
+      id: "o1",
+      numRemision: "REM-Z1",
+      zonaNombre: "Limón",
+    });
+    render(
+      <DataTable columns={ordenesColumns} data={[orden]} rowKey="id" ariaLabel="Órdenes" />,
+    );
+
+    // Encabezado de la columna presente.
+    expect(
+      screen.getByRole("columnheader", { name: "Zona" }),
+    ).toBeInTheDocument();
+    const fila = screen.getByRole("row", { name: /REM-Z1/ });
+    expect(within(fila).getByText("Limón")).toBeInTheDocument();
+  });
+});
+
+describe("ordenesColumns — feature 30 (R15: estado ruteado legible por zona)", () => {
+  it("R15: una fila en_ruta_bodega_satelite se lee 'En ruta a bodega <zona>' con el nombre real", () => {
+    const orden = makeOrden({
+      id: "o1",
+      numRemision: "REM-S1",
+      estatusValue: "en_ruta_bodega_satelite",
+      zonaNombre: "Guápiles",
+    });
+    render(
+      <DataTable columns={ordenesColumns} data={[orden]} rowKey="id" ariaLabel="Órdenes" />,
+    );
+
+    const fila = screen.getByRole("row", { name: /REM-S1/ });
+    expect(
+      within(fila).getByText("En ruta a bodega Guápiles"),
+    ).toBeInTheDocument();
+    // No debe caer al label estático genérico "satélite".
+    expect(
+      within(fila).queryByText("En ruta a bodega satélite"),
+    ).toBeNull();
+  });
+});

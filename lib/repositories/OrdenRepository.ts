@@ -55,18 +55,23 @@ const WITH_ESTATUS = {
 // R25/R26: solo el LISTADO incluye el nombre legible de la tienda
 // (relacion Orden.tienda -> Usuario.nombre). No requiere migracion: es un include
 // sobre una relacion ya existente en el esquema.
+// Feature 30/R14: el listado ademas incluye el nombre de la zona (`zona.nombre`)
+// y su flag GAM (`zona.esGam`) — relacion Orden.zona ya existente (zonaId NOT
+// NULL, feature 24). Aditivo: no requiere migracion.
 const WITH_ESTATUS_Y_TIENDA = {
   include: {
     estatus: { select: { value: true } },
     tienda: { select: { nombre: true } },
+    zona: { select: { nombre: true, esGam: true } },
   },
 } as const;
 
-// Fila de orden del listado: estatus.value + tienda.nombre.
+// Fila de orden del listado: estatus.value + tienda.nombre + zona.{nombre,esGam}.
 type OrdenListRow = Prisma.OrdenGetPayload<{
   include: {
     estatus: { select: { value: true } };
     tienda: { select: { nombre: true } };
+    zona: { select: { nombre: true; esGam: true } };
   };
 }>;
 
@@ -104,6 +109,10 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     tiendaNombre: row.tienda.nombre,
     mensajeroSugeridoId: row.mensajeroSugeridoId,
     mensajeroAsignadoId: row.mensajeroAsignadoId,
+    // Feature 30/R14/R19: nombre de zona (columna del listado) + flag GAM (la UI
+    // decide por fila si muestra select de mensajero o "-> bodega satelite").
+    zonaNombre: row.zona.nombre,
+    zonaEsGam: row.zona.esGam,
   };
 }
 
@@ -420,6 +429,9 @@ export class OrdenRepository implements IOrdenRepository {
         numGuia: true,
         deletedAt: true,
         estatus: { select: { value: true } },
+        // Feature 30/R8/R9/R11/R12: zona de la orden + flag GAM de esa zona.
+        zonaId: true,
+        zona: { select: { esGam: true } },
       },
     });
     return rows.map((r) => ({
@@ -427,6 +439,8 @@ export class OrdenRepository implements IOrdenRepository {
       estatusValue: r.estatus.value,
       numGuia: r.numGuia,
       deletedAt: r.deletedAt,
+      zonaId: r.zonaId,
+      zonaEsGam: r.zona.esGam,
     }));
   }
 
@@ -447,6 +461,25 @@ export class OrdenRepository implements IOrdenRepository {
       select: { id: true, nombre: true },
       orderBy: { nombre: "asc" },
     });
+  }
+
+  /** Feature 30/R5: usuarios rol `mensajero` Y `zonaId = gamZonaId` (solo GAM). */
+  async findMensajerosGam(gamZonaId: string): Promise<MensajeroLiteRow[]> {
+    return this.prisma.usuario.findMany({
+      where: { rol: { value: "mensajero" }, zonaId: gamZonaId },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    });
+  }
+
+  /** Feature 30/R6: subconjunto de `ids` con rol `mensajero` Y `zonaId = gamZonaId`. */
+  async findMensajeroIdsValidosGam(ids: string[], gamZonaId: string): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.usuario.findMany({
+      where: { id: { in: ids }, rol: { value: "mensajero" }, zonaId: gamZonaId },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
   }
 
   /** R15/R16: catalogo completo `order_status` (id, value), solo lectura. */
@@ -501,6 +534,32 @@ export class OrdenRepository implements IOrdenRepository {
       data: { mensajeroAsignadoId: mensajeroId, estatusId },
     });
     return result.count;
+  }
+
+  /**
+   * Feature 30/R10/R13: rutea el lote no-GAM a `en_ruta_bodega_satelite`.
+   * Transaccional (todo-o-nada, Prisma revierte si el callback lanza). Por cada
+   * orden asigna `num_guia = nextval(...)` SOLO si es NULL (idempotente, R10, no
+   * consume la secuencia para filas ya numeradas), fija `estatusId` y deja
+   * `mensajeroAsignadoId = NULL` (R9). El nombre de la secuencia es la constante
+   * del modulo (nunca se interpola entrada de usuario en el SQL).
+   */
+  async rutearBodegaSateliteLote(ordenIds: string[], estatusId: string): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      for (const id of ordenIds) {
+        // R10: idempotente — solo consume nextval() si num_guia es NULL.
+        await tx.$executeRawUnsafe(
+          `UPDATE "orden" SET num_guia = nextval('${NUM_GUIA_SEQUENCE}') WHERE id = $1 AND num_guia IS NULL`,
+          id,
+        );
+        await tx.orden.update({
+          where: { id },
+          data: { estatusId, mensajeroAsignadoId: null }, // R9
+        });
+      }
+      return ordenIds.length;
+    });
   }
 }
 
