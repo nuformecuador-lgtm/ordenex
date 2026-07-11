@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/36-mensajero-mis-asignaciones | fullstack | F2.0 (impl) | **F1 COMPLETA (R0–R34, spec en `specs/36-...`) + F1.4 APROBADA 2026-07-11.** Máquina de estados aclarada por el humano: asignada → `en_espera_aceptacion` (="esperando que el mensajero la recoja") → [botón **Recoger**] → NUEVO `en_reparto` → gestión → entregada/reprogramada/devuelta/`rechazada`(NUEVO). Decisiones F1.4: (a) estado recogida=**`en_reparto`** (NO `aceptada`), acción="Recoger"; (b) RECHAZO→NUEVO `rechazada`; (c) enum PG `metodo_pago_value`; (d) tabla `gestion_orden` con `resultado`; (e) bloqueo backend `usuario.orden_en_gestion_id`; (f) bucket NUEVO `gestion-evidencias`; (g) recoger AMBAS (todas+individual); (h) monto recibido cuadra EXACTO con montoCobrar; (i) obligatoriedad por resultado; (j) trato idéntico central/satélite. 2 estados nuevos + enum + tabla + puntero. **SIGUIENTE: `implementer`.** |
+| (ninguna en curso) | — | — | Feature 36 CERRADA (impl+re-review OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+
+> Feature 36 (mensajero: mis asignaciones y gestión) CERRADA 2026-07-11: **impl COMPLETA (R0–R35) + reviewer APROBADO** tras 1 ciclo de rechazo (bloqueantes de checkpoint: tasks sin marcar + falta E2E de recaudo; el humano decidió AÑADIR el E2E). Fullstack un ciclo. Estado `done` + `history.md` + `progress/review_36-...md`. Máquina de estados: `en_espera_aceptacion` →[Recoger]→ `en_reparto` (NUEVO) → gestión → entregada/reprogramada/devuelta/`rechazada`(NUEVO). Migración `20260711150000` (2 estados + enum `metodo_pago_value` + tabla `gestion_orden`+RLS + puntero `usuario.orden_en_gestion_id`). Módulo `/mis-asignaciones` del mensajero. Verificación: `pnpm test` **1433/1433**, `init.sh` verde. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: crear bucket `gestion-evidencias` (HUMANO), migración no aplicada, E2E no ejecutado. Desbloquea 37 (cierre del día) y base de 46/47/48/49.
 
 > Feature 32 (etiqueta de guía con QR + código de barras) CERRADA 2026-07-11: **impl COMPLETA (R1–R15) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1314 tests). Fullstack un ciclo, SIN migración (read derivado). Estado `done` + `history.md` + `progress/review_32-...md`. Backend: `EtiquetaGuiaDTO`/`findEtiquetasByIds` (resuelve nombres geografía/tienda + direccion + monto), `EtiquetaGuiaService`, action. Frontend: acción "Imprimir etiquetas" sobre el lote → PDF 100×100mm por orden (jspdf), QR=`orden.id`, barcode=`num_guia`. Deps: qrcode.react, react-barcode, jspdf, jsbarcode. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: verificación manual del binario del PDF + escaneabilidad. Desbloquea 33.
 
@@ -195,9 +197,11 @@
 ## Plan de la sesion
 - [x] Features 1-29, 31, 50, 51: ciclos SDD completos (ver history.md).
 - [x] Feature 17 (revisión maestro / generar guía): done, PR #32 mergeado 2026-07-11.
-- [x] Feature 30 (asignación por zona GAM / ruteo satélite): done (impl+reviewer OK); pendiente PR a `dev`.
-- [ ] Siguientes elegibles: **32** (etiqueta QR, depends 17 done), **36** (mensajero mis asignaciones, depends 17 done),
-      **33** (recepción QR satélite, depends 30 done → ahora desbloqueada), **42** (wallet, depends 18 done), 35 (realtime).
+- [x] Feature 30 (asignación por zona GAM / ruteo satélite): done, PR #33 mergeado.
+- [x] Feature 32 (etiqueta guía QR/barcode): done, PR #34 mergeado.
+- [x] Feature 36 (mensajero mis asignaciones y gestión): done (impl+re-review OK); pendiente PR a `dev`.
+- [ ] Siguientes elegibles: **33** (recepción QR satélite, depends 30+32 done), **37** (cierre del día, depends 36 done),
+      **42** (wallet, depends 18 done), 35 (realtime). También 34 (asignación satélite, depends 33).
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.

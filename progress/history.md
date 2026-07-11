@@ -703,3 +703,38 @@
 - DEUDA / verificación MANUAL (declarada): el tamaño binario exacto del PDF y la escaneabilidad física del QR no son
   unit-testeables; quedan como verificación manual.
 - **Desbloquea**: feature 33 (recepción por escaneo del QR en bodega satélite). Consumió la 17 (`num_guia`).
+
+## 2026-07-11 — mensajero: "Mis asignaciones" y gestión de órdenes (feature 36, FULLSTACK)
+- Módulo `/mis-asignaciones` del rol `mensajero`. Máquina de estados (aclaración del humano: "aceptar" = orden
+  RECOGIDA por el mensajero): asignada (17/34) → `en_espera_aceptacion` ("esperando que el mensajero la recoja")
+  → [botón **Recoger**, lote "Recoger todas" + individual] → estado NUEVO **`en_reparto`** → gestión de UNA en una
+  → `entregada`/`reprogramada`/`devuelta`/estado NUEVO **`rechazada`**.
+- Gestión (4 resultados, obligatoriedad por resultado): ENTREGADA → foto evidencia + `montoRecibido` (DEBE cuadrar
+  EXACTO con `montoCobrar`, comparación `Prisma.Decimal.equals`) + método de pago; REPROGRAMAR → fecha futura +
+  motivo; DEVOLUCIÓN → motivo; RECHAZO → foto evidencia + motivo.
+- Backend (backend_dev, model opus): migración `20260711150000_gestion_orden_estados_metodo_pago` (up+down):
+  2 valores de order_status (`en_reparto`, `rechazada`), enum PG `metodo_pago_value` (efectivo/SIMPE/transferencia),
+  enum `gestion_resultado`, tabla `gestion_orden` (+**RLS**, sin policies = solo service role), puntero de bloqueo
+  1-a-1 `usuario.orden_en_gestion_id` (FK ON DELETE SET NULL). `GestionOrdenRepository`, `MisAsignacionesService`
+  (listar / recoger lote+individual / gestionar por resultado / **liberarGestion**), actions en `lib/actions/
+  mis-asignaciones.ts` (zod + `resolveActorFromSession` + `withErrorHandler`). Bloqueo 1-a-1 robusto ante carreras
+  (`updateMany` idempotente) y recargas; se libera al completar (dentro de la tx) o al CANCELAR el modal (R35).
+  Evidencias en bucket privado NUEVO `gestion-evidencias` (patrón `SupabaseFileStorage`/`ISignedUrlProvider`, path
+  privado + URL firmada, atomicidad storage↔DB con remove best-effort).
+- Frontend (frontend_dev, model opus): módulo con detalle completo, secciones por-recoger/en-reparto, "Recoger
+  todas" + individual, `GestionarOrdenModal` (4 resultados), bloqueo 1-a-1 respaldado por el puntero backend, subida
+  de foto, select de método de pago; labels `en_reparto`/`rechazada`. Reusa DataTable/Pagination/Modal/Toast.
+- Requisitos cubiertos: R0–R34 + R35 (liberar lock, aditivo), mapeados 1:1 a test. **Ciclo con 1 rechazo**: el
+  reviewer bloqueó por (1) tasks sin marcar y (2) falta E2E de recaudo (checkpoint de flujo de dinero); el humano
+  decidió AÑADIR el E2E. Correcciones: `e2e/mis-asignaciones.spec.ts` (recoger→ENTREGAR/RECHAZO/REPROGRAMAR,
+  patrón escrito-no-ejecutado de `auth.spec.ts`), `withErrorHandler` en actions, `liberarGestion`, comparación de
+  monto en Decimal. **Re-review APROBADO** 0 bloqueantes. Verificación: `pnpm test` **1433/1433**, `./init.sh`
+  EXIT 0, typecheck (incl. `e2e/`) + lint OK.
+- Decisiones F1.4 (humano 2026-07-11): (a) estado recogida=`en_reparto`/acción "Recoger"; (b) rechazo=`rechazada`
+  nuevo; (c) enum PG `metodo_pago_value`; (d) tabla `gestion_orden` con `resultado`; (e) bloqueo backend
+  `usuario.orden_en_gestion_id`; (f) bucket `gestion-evidencias`; (g) recoger lote+individual; (h) monto exacto;
+  (i) obligatoriedad por resultado; (j) trato idéntico central/satélite.
+- DEUDA declarada: crear bucket privado `gestion-evidencias` en Supabase (HUMANO); migración NO aplicada contra
+  Postgres real (deuda de despliegue); E2E ESCRITO pero NO ejecutado (requiere entorno con DB/seed/login).
+- **Desbloquea**: feature 37 (cierre del día, consume las órdenes gestionadas y los montos por método de pago),
+  y es base de 46/47/48/49 (reprogramación/reintentos/retorno/trazabilidad). Consumió la 17.
