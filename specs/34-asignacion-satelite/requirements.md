@@ -3,9 +3,29 @@
 Zone: `fullstack` · complexity: `high` · depends_on: 33 (`done`), 17 (`done`), 24 (`done`) ·
 branch: `feature/34-asignacion-satelite`
 
-> Estado: `spec_ready` (F1.4 pendiente de aprobación humana). Los requisitos R1–R20 están
-> redactados sobre la opción **recomendada** de cada pregunta abierta (ver "## Preguntas abiertas
-> para F1.4"); si el humano elige otra alternativa, se revisan los R afectados antes de implementar.
+> Estado: `in_progress` (F2.0). **F1.4 APROBADA por el humano el 2026-07-11** — TODAS las 6
+> decisiones en la opción RECOMENDADA (ver "## Decisiones F1.4 (APROBADAS)" abajo, que SUPERSEDE
+> "## Preguntas abiertas para F1.4"). Los R1–R20 ya estaban redactados sobre esas recomendaciones,
+> así que no hay cambios de requisito; solo se cierran las decisiones.
+
+## Decisiones F1.4 (APROBADAS 2026-07-11)
+
+- **(a) Servicio PARALELO `AsignacionSateliteService`** (NO generalizar `asignarDesdeBodega`): servicio
+  nuevo para el adminSatelite, separado del `GuiaAsignacionService` del maestro (no toca el contrato
+  probado de la 17); reusa los repos por zona.
+- **(b) RENOMBRAR** `OrdenRepository.findMensajerosGam`/`findMensajeroIdsValidosGam` (+ interfaz
+  `IOrdenRepository`) → `findMensajerosByZona`/`findMensajeroIdsValidosByZona` (más honesto: filtran por
+  la zona pasada). Actualizar TODOS los llamadores de la feature 30 (`GuiaAsignacionService`) sin cambiar
+  su comportamiento (el maestro sigue pasando la zona GAM).
+- **(c) EXTENDER el módulo `recepcion-satelite`** (feature 33): la sección "Recibidas" gana la acción
+  "Asignar" (o una sub-sección "Asignar"). Todo el flujo satelital del adminSatelite en un solo lugar.
+- **(d) Asignación por LOTE con UN mensajero**, patrón `AsignarBodegaModal` (feature 17): seleccionar
+  varias órdenes `en_bodega_satelite` y asignarlas todas a UN mensajero de su zona.
+- **(e) Casos de error TIPADOS**: `estado_invalido` (orden no en `en_bodega_satelite`), `zona_ajena`
+  (orden de otra zona), `mensajero_invalido` (mensajero no es de la zona del adminSatelite),
+  `sin_zona` (adminSatelite sin zona), `no_encontrada`. Lote **todo-o-nada** (transaccional).
+- **(f) AÑADIR E2E** (Playwright) del flujo satélite `recibida → asignar → en_espera_aceptacion`
+  (escrito, ejecución diferida, patrón del repo `e2e/*.spec.ts`).
 
 Notación EARS. Cada requisito es testeable y mapeable a un test concreto (ver "Tabla de
 trazabilidad"). El "actor" se resuelve server-side vía `resolveActorFromSession` →

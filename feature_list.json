@@ -345,7 +345,7 @@
       "id": 34,
       "name": "bodega satelite - asignacion a mensajeros de su zona",
       "description": "Asignacion de ordenes a mensajeros desde la bodega satelite. Una vez las ordenes estan en en_bodega_satelite (recibidas, feature 33), el adminSatelite entra practicamente al MISMO flujo de asignacion a mensajeros del maestro (feature 17), pero con dos restricciones: (1) solo puede asignar las ordenes que estan en SU bodega (en_bodega_satelite de su zona); (2) solo puede asignarlas a los mensajeros asignados a ESA zona (regla de zona de la feature 30). Tras asignar, la orden pasa a en_espera_aceptacion (mismo estado del flujo del maestro, feature 17). Reusa el mecanismo de asignacion de la feature 17 y el filtrado de mensajeros por zona de la feature 30. Fullstack. Depende de la feature 33 (ordenes recibidas en bodega satelite), la feature 17 (flujo de asignacion) y la feature 24 (zonas).",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
