@@ -2,14 +2,50 @@
 
 Zone: `fullstack` · complexity: `high` · depends_on: 17 (`done`), 34 (`pending`, aún no construida) · branch: `feature/36-mensajero-mis-asignaciones`
 
-> Estado: **spec en revisión (pre-F1.4)**. A diferencia de la feature 17, la puerta de
-> aprobación **F1.4 NO está cerrada**: hay decisiones de modelado con impacto (nombre del
-> estado nuevo, mapeo del "rechazo", forma del enum de método de pago, forma del registro
-> de gestión, mecanismo del bloqueo 1-a-1, bucket de evidencias, aceptación lote/por-orden).
-> Están listadas al final en **"Preguntas abiertas (F1.4)"** con mi recomendación y
-> alternativas. Los requisitos que dependen de una decisión abierta usan el valor
-> **recomendado como provisional** y lo marcan `(prov. F1.4-x)`. No se implementa nada hasta
-> que el humano cierre F1.4.
+> Estado: `in_progress` (F2.0). **F1.4 APROBADA por el humano el 2026-07-11.** Las decisiones
+> cerradas están en el bloque "## Decisiones F1.4 (APROBADAS)" inmediatamente abajo, que
+> **SUPERSEDE** todos los valores provisionales `(prov. F1.4-x)` del resto del documento y de
+> "Preguntas abiertas (F1.4)". ⚠️ CAMBIO DE TERMINOLOGÍA CLAVE respecto al borrador: el estado
+> provisional `aceptada` se llama **`en_reparto`**, y la acción del mensajero es **"Recoger"**
+> (no "aceptar"). Al leer el resto del spec, mapea mentalmente `aceptada` → `en_reparto` y
+> "aceptar" → "recoger".
+
+## Decisiones F1.4 (APROBADAS 2026-07-11)
+
+Semántica del paso de recogida (aclaración del humano): "aceptar" NO es aceptar-vs-rechazar la
+asignación; es que **la orden fue RECOGIDA/tomada por el mensajero** y sale a reparto.
+
+- **(a) Estado tras recoger = NUEVO `en_reparto`** (NO `aceptada`). Máquina de estados:
+  `en_bodega`/`en_fulfillment`/`en_preparacion` → (maestro/satélite asigna, feature 17/34) →
+  **`en_espera_aceptacion`** = "esperando a que el mensajero la recoja" (estado EXISTENTE, se
+  reutiliza; su label de presentación se ajusta a la semántica de recogida) → (mensajero pulsa
+  **"Recoger"**) → **`en_reparto`** (estado NUEVO) → (gestión) → `entregada`/`reprogramada`/
+  `devuelta`/`rechazada`. Donde el borrador dice `aceptada`, léase `en_reparto`; donde dice
+  "aceptar/aceptación", léase "recoger/recogida".
+- **(b) RECHAZO (resultado de intento de entrega) → estado NUEVO `rechazada`.** No se mapea a
+  `devuelta`/`devuelta_origen`. `en_reparto` y `rechazada` son DOS valores nuevos de
+  `ORDER_STATUS_SEED` + su migración de catálogo con `down.sql` (patrón features 17/28/30).
+- **(c) Método de pago = enum Postgres nativo `metodo_pago_value`** (`efectivo`, `SIMPE`,
+  `transferencia`), fuente única de verdad en `lib/types`, patrón `vehiculos`/`RolValue`.
+- **(d) Registro de gestión = UNA tabla `gestion_orden`** con discriminador `resultado` +
+  campos nullable (evidencia `storagePath`, `montoRecibido`, `metodoPago`, `motivo`,
+  `fechaReprogramacion`), con migración + `down.sql` + RLS.
+- **(e) Bloqueo 1-a-1 = backend robusto**: puntero **`usuario.orden_en_gestion_id`** (nullable,
+  FK a orden). Sobrevive recargas/multi-dispositivo; el backend impide gestionar otra orden
+  mientras haya una en gestión. Requiere migración + down.sql.
+- **(f) Bucket de evidencias = NUEVO bucket privado `gestion-evidencias`** (no reusar
+  `mensajero-docs`). Mismo patrón `SupabaseFileStorage`/`ISignedUrlProvider` (path privado +
+  URL firmada), creación de bucket = tarea humana declarada.
+- **(g) Recoger = AMBAS modalidades**: botón "Recoger todas" (lote) + "Recoger" individual por
+  fila. Ambas transicionan `en_espera_aceptacion` → `en_reparto`.
+- **(h) ENTREGA: `montoRecibido` DEBE cuadrar EXACTO con `orden.montoCobrar`** (validación en el
+  resultado ENTREGADA; si no cuadra, `validation_error`, no persiste).
+- **(i) Obligatoriedad por resultado**: ENTREGADA → foto de evidencia + monto (== montoCobrar) +
+  método de pago; REPROGRAMAR → fecha (futura) + motivo; DEVOLUCIÓN → motivo; RECHAZO → foto de
+  evidencia + motivo.
+- **(j) Trato IDÉNTICO** para asignaciones de bodega central (feature 17) y satélite (feature 34,
+  aún `pending`): mismo flujo recoger→gestionar; la fuente de asignación no cambia la lógica.
+
 
 Notación EARS. Cada requisito es testeable y mapeable a un test (ver "Tabla de
 trazabilidad"). El "actor" se resuelve vía `resolveActorFromSession` → `{ usuarioId, rol }`
