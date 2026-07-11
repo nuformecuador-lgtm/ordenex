@@ -159,11 +159,12 @@
       "id": 17,
       "name": "ordenes - revision maestro / generar guia / asignacion mensajero",
       "description": "El modulo de ordenes del admin maestro muestra de forma SEPARADA las ordenes en en_fulfillment y las ordenes en en_preparacion (ambos estados de revision; en_fulfillment antes 'embalaje', renombrado por la feature 28). El maestro puede seleccionar via checkbox una o varias ordenes de un estado para procesarlas. FLUJO DE FULFILLMENT: con ordenes en_fulfillment seleccionadas hay un boton 'Generar guia'. Al pulsarlo, por cada orden que tenga mensajero sugerido (mensajero_sugerido_id de la carga masiva) el sistema pregunta si se desea asignar directamente esas ordenes al mensajero sugerido. Casos: (1) si SI -> las ordenes pasan al estado 'en espera de aceptacion del mensajero' (nombre corto en_espera_aceptacion, estado NUEVO) y aparecen en un apartado 'En espera de aceptacion del mensajero'; (2) si NO -> el sistema permite seleccionar OTRO mensajero y, tras asignarlo, las ordenes pasan al mismo estado en_espera_aceptacion; (3) si NO se selecciona ningun mensajero -> la orden pasa al estado en_bodega. Las ordenes en en_bodega se pueden seleccionar y asignar a cualquier mensajero (pasan a en_espera_aceptacion). Ademas, al pulsar 'Generar guia' se asigna a cada orden un NUMERO DE GUIA (num_guia) incremental y unico. DECISION DEL HUMANO (2026-07-10): se DIFIERE la asignacion de num_guia al momento de 'Generar guia'. Hoy Orden.num_guia es autoincrement asignado al INSERTAR la fila (feature 6); esta feature lo cambia a NULLABLE hasta generar la guia y, al pulsar 'Generar guia', asigna una secuencia incremental+unica. Requiere migracion (num_guia nullable + mecanismo de secuencia) y ajustar la carga masiva (feature 15) para NO asignar num_guia al insertar. Estado NUEVO: en_espera_aceptacion. La logica por ZONA/GAM (a que mensajeros puede asignar el maestro y el ruteo a bodega satelite) se maneja en la feature 30. Es fullstack de alta complejidad. Depende de la feature 27 (estado en_fulfillment / estado inicial de fulfillment) y de la feature 28 (rename embalaje->en_fulfillment).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/17-revision-maestro-generar-guia",
+      "depends_on": 27
     },
     {
       "id": 18,
