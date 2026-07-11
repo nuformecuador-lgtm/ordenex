@@ -4,6 +4,12 @@ import type { SelectOption } from "@/components/ui/select";
 import type { VehiculoValue } from "@prisma/client";
 import { PostulacionForm } from "./_components/PostulacionForm";
 
+// Opt-out del prerender estatico: esta pagina publica consulta catalogos de DB
+// (tipos de identificacion y vehiculos) en request time y NO lee cookies()/headers(),
+// asi que Next intentaria prerenderizarla en build; sin DB eso rompe el build
+// (Prisma P2021). Forzarla dinamica difiere la consulta al request real.
+export const dynamic = "force-dynamic";
+
 // Feature 21 — pagina PUBLICA de postulacion de mensajero (R1). Es la unica via
 // de auto-registro. Acceso sin sesion ni cookie (R22): no se verifica ni concede
 // sesion aqui, a diferencia de app/login/page.tsx. Server Component minimo: solo

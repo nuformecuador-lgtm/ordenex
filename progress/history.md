@@ -770,3 +770,17 @@
   NO lo causa (solo se carga en cliente).
 - **Desbloquea**: feature 34 (asignación a mensajeros desde la satélite, parte de `en_bodega_satelite`). Consumió
   la 30 (`en_ruta_bodega_satelite`) y la 32 (QR=`orden.id`).
+
+## 2026-07-11 — fix build: /postulacion prerender dinámico (feature 52, FRONTEND)
+- Corrección de BUILD (bug PRE-EXISTENTE detectado por el reviewer de la feature 33, ajeno a ella). `pnpm build`
+  fallaba el prerender ESTÁTICO de la ruta pública `app/postulacion/page.tsx` (feature 21): Server Component async
+  que consulta Prisma (`VehiculoRepository.findMany()` + `prisma.tipoIdentificacion.findMany()`) sin leer
+  `cookies()`/`headers()`, así que Next intentaba prerenderizarla en build; sin DB → `P2021 TableDoesNotExist`.
+  Las otras rutas con Prisma (`app/(app)/page.tsx`, `login`, `recuperar-contrasena`) leen `cookies()` y salen
+  dinámicas solas, por eso no fallaban.
+- FIX: `export const dynamic = "force-dynamic"` en `app/postulacion/page.tsx` (renderiza en request time; apropiado
+  para página pública que lee catálogos de DB). Una línea + comentario; sin tocar lógica ni otras rutas.
+- Verificación: **`pnpm build` PASA** (`/postulacion` ahora `ƒ Dynamic`); `./init.sh` verde, `pnpm test` **1493/1493**.
+- Proceso: corrección pequeña, ciclo SDD agilizado (spec inline por el leader en `feature_list.json` id 52, sin
+  reviewer formal aparte; el criterio de aceptación es el build verde). No hay patrón en el repo para unit-testear
+  config de ruta (`export const dynamic`); la verificación es el `pnpm build`.
