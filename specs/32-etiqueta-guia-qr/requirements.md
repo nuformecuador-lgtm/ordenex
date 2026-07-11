@@ -1,5 +1,8 @@
 # Feature 32 — Etiqueta de guía con QR y código de barras — requirements (EARS)
 
+> Estado: `in_progress` (F2.0). **F1.4 APROBADA por el humano 2026-07-11** (ver "Decisiones F1.4"
+> más abajo). Decisión clave: la etiqueta es un **PDF de 100mm × 100mm** por orden (no HTML print).
+>
 > Depende de la feature 17 (Generar guía asigna `num_guia`). Alcance: generar y
 > renderizar una ETIQUETA imprimible por orden con QR + código de barras, y
 > exponer los datos necesarios. NO construye la recepción por escaneo (feature 33,
@@ -109,7 +112,28 @@
   válido; entrada inválida DEBE devolver `validation_error`.
   *Verificable:* input con lista vacía o id malformado devuelve `validation_error`.
 
-## Preguntas abiertas (para F1.4 — decisión humana; NO cerradas aquí)
+## Decisiones F1.4 (APROBADAS por el humano 2026-07-11)
+
+- **(a) QR codifica `orden.id`** (UUID estable). La feature 33 lo escanea para recepción (lookup por PK).
+- **(b) Código de barras codifica `num_guia`** (numérico, CODE128/1D para lector físico). [recomendado]
+- **(c) Render = PDF real, cada etiqueta EXACTAMENTE `100mm × 100mm`.** ⚠️ CAMBIO vs. la recomendación
+  (era HTML `window.print()`): el humano exige un **PDF descargable** con página/etiqueta cuadrada de
+  100×100 mm. Implica una vía de generación de PDF además de las libs de QR/barcode. RECONCILIACIÓN con
+  (d): `qrcode.react` y `react-barcode` renderizan SVG en el DOM; para producir el PDF de 100×100 mm el
+  implementer debe (opción recomendada) renderizar la etiqueta a 100×100 mm y convertirla a PDF
+  (p. ej. DOM→canvas→PDF con `html2canvas`+`jspdf`, o embebido del SVG del QR/barcode como imagen en
+  un PDF con `jspdf`/`pdf-lib`). Esto AÑADE una dep de generación de PDF (a elegir por el implementer,
+  liviana y mantenida) por encima de qrcode.react + react-barcode. R9–R12 quedan referidas a este PDF
+  100×100 mm (una etiqueta cuadrada por orden; el lote produce un PDF multipágina, una etiqueta por página).
+- **(d) Librerías QR + barcode = `qrcode.react` + `react-barcode`** (deps nuevas) + la dep de PDF que
+  imponga (c) (ver reconciliación arriba).
+- **(e) Disparo = acción EXPLÍCITA "Imprimir etiquetas" sobre la selección/lote** (desacoplada de
+  "Generar guía"); el lote genera un PDF multipágina (una etiqueta 100×100 mm por orden con `num_guia`).
+- **(f) Rol = `maestro`**, sobre órdenes que YA tienen `num_guia` (apartados `en_espera_aceptacion`,
+  `en_bodega`, `en_ruta_bodega_satelite`); órdenes sin guía se omiten (R2). [recomendado]
+- **(g) Reimpresión permitida sin límite ni auditoría** (la etiqueta es derivada, sin estado propio). [recomendado]
+
+## Preguntas abiertas (registro histórico — RESUELTAS arriba en Decisiones F1.4)
 
 - **(a) Qué codifica el QR.** Recomendación: `orden.id` (UUID estable e inmutable).
   Trade-off: la feature 33 escanea el QR para RECIBIR el paquete; `orden.id` es un
