@@ -548,6 +548,17 @@
       "zone": "frontend",
       "branch": "feature/52-fix-build-postulacion",
       "depends_on": null
+    },
+    {
+      "id": 53,
+      "name": "fix db-rollback para Prisma 7",
+      "description": "CORRECCION de tooling: `scripts/db-rollback.ts` (revierte la ultima migracion aplicando su down.sql) esta ROTO en Prisma 7 por DOS motivos, detectados al verificar la deuda de rollback (T020) contra el Postgres local: (1) `prisma db execute --file=... --schema=db/schema.prisma` -> Prisma 7 ya NO acepta `--schema` en `db execute` (la datasource se lee de prisma.config.ts); (2) `prisma migrate resolve --rolled-back <migracion>` -> falla con P3012 'cannot be rolled back because it is not in a failed state' (en Prisma 7 `--rolled-back` solo aplica a migraciones FALLIDAS, no a las aplicadas con exito). FIX: (a) quitar `--schema` del `prisma db execute`; (b) reemplazar el `migrate resolve --rolled-back` por la eliminacion directa del registro de la migracion en la tabla `_prisma_migrations` (DELETE ... WHERE migration_name = '<name>'), de modo que `prisma migrate status` la muestre pendiente y `prisma migrate deploy` la reaplique. Criterio de aceptacion: round-trip verificado contra la DB local (rollback de la ultima migracion -> status muestra pendiente -> migrate deploy reaplica -> up to date) + init.sh verde. Tooling/backend, correccion pequena.",
+      "status": "done",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "backend",
+      "branch": "chore/deuda-despliegue-migraciones",
+      "depends_on": null
     }
   ]
 }
