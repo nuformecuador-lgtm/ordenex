@@ -19,7 +19,7 @@ export function AdminTiendaDashboard() {
         title="Panel de tienda"
         description="Órdenes de mi tienda"
       />
-      <OrdenesModule columns={ordenesColumnsAdminTienda} />
+      <OrdenesModule columns={ordenesColumnsAdminTienda} puedeCargarMasiva />
     </section>
   );
 }

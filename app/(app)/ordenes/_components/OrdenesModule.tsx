@@ -45,8 +45,10 @@ async function ordenesFetcher(
  */
 export function OrdenesModule({
   columns = ordenesColumns,
+  puedeCargarMasiva = false,
 }: {
   columns?: Column<OrdenListItemDTO>[];
+  puedeCargarMasiva?: boolean;
 } = {}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -58,9 +60,11 @@ export function OrdenesModule({
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <OrdenesCargaMasivaButton />
-      </div>
+      {puedeCargarMasiva && (
+        <div className="flex justify-end">
+          <OrdenesCargaMasivaButton />
+        </div>
+      )}
       <DataTable
         columns={columns}
         data={data?.items ?? []}

@@ -4,9 +4,12 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
+import { RolValue } from "@prisma/client";
+
 import OrdenesPage from "@/app/(app)/ordenes/page";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { listarOrdenes } from "@/lib/actions/ordenes";
+import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type {
   ListarOrdenesResult,
   OrdenListItemDTO,
@@ -18,7 +21,14 @@ vi.mock("@/lib/actions/ordenes", () => ({
   listarOrdenes: vi.fn(),
 }));
 
+// La página resuelve el actor server-side para decidir si ofrece la carga masiva.
+// Devuelve null por defecto: sin adminTienda no hay botón, igual que antes.
+vi.mock("@/lib/auth/resolve-actor", () => ({
+  resolveActorFromSession: vi.fn(async () => null),
+}));
+
 const listarOrdenesMock = vi.mocked(listarOrdenes);
+const resolveActorMock = vi.mocked(resolveActorFromSession);
 
 /** Construye un `OrdenListItemDTO` completo con overrides legibles por test. */
 function makeOrden(
@@ -46,12 +56,16 @@ function makeOrden(
   };
 }
 
-/** Renderiza la página REAL con cache de SWR aislada por render (sin fugas entre tests). */
-function renderPage(): ReactElement {
+/**
+ * Renderiza la página REAL con cache de SWR aislada por render (sin fugas entre
+ * tests). `OrdenesPage` es un Server Component async: se resuelve su elemento con
+ * `await` antes de montarlo (patrón para async server components en RTL).
+ */
+async function renderPage(): Promise<ReactElement> {
   const ui = (
     <ToastProvider>
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <OrdenesPage />
+        {await OrdenesPage()}
       </SWRConfig>
     </ToastProvider>
   );
@@ -117,7 +131,7 @@ describe("OrdenesPage", () => {
       total: 3,
     });
 
-    renderPage();
+    await renderPage();
 
     // Espera la resolución async de SWR.
     await screen.findByText("Tienda Uno");
@@ -162,7 +176,7 @@ describe("OrdenesPage", () => {
       new Promise<ListarOrdenesResult>(() => {}),
     );
 
-    renderPage();
+    await renderPage();
 
     expect(screen.getByRole("status")).toBeInTheDocument();
     // No debe confundirse con el estado vacío.
@@ -181,7 +195,7 @@ describe("OrdenesPage", () => {
       total: 0,
     });
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText("No hay órdenes");
     const rows = bodyRows();
@@ -200,7 +214,7 @@ describe("OrdenesPage", () => {
 
     for (const result of noOk) {
       listarOrdenesMock.mockResolvedValue(result);
-      renderPage();
+      await renderPage();
 
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent("No se pudieron cargar las órdenes");
@@ -215,7 +229,7 @@ describe("OrdenesPage", () => {
 
     // Throw real del transporte (rechazo de la action) también cae en error.
     listarOrdenesMock.mockRejectedValue(new Error("network down"));
-    renderPage();
+    await renderPage();
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("No se pudieron cargar las órdenes");
     expect(screen.queryByText(/network down/i)).toBeNull();
@@ -235,7 +249,7 @@ describe("OrdenesPage", () => {
       total: 2,
     });
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText("2001");
     // Rinde tantas filas como items del mock, ni más ni menos.
@@ -252,7 +266,7 @@ describe("OrdenesPage", () => {
       total: 1,
     });
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText("Sol");
     // Ahora /ordenes SÍ tiene controles de paginación (feature paginación):
@@ -272,6 +286,52 @@ describe("OrdenesPage", () => {
     expect(bodyRows()).toHaveLength(1);
   });
 
+  it("carga masiva: el botón se ofrece SOLO al adminTienda", async () => {
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      page: 1,
+      pageSize: 25,
+      total: 0,
+    });
+    resolveActorMock.mockResolvedValueOnce({
+      usuarioId: "tienda-1",
+      rol: RolValue.adminTienda,
+    });
+
+    await renderPage();
+
+    expect(
+      screen.getByRole("button", { name: /carga masiva/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("carga masiva: NO se ofrece a otros roles ni sin sesión", async () => {
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      page: 1,
+      pageSize: 25,
+      total: 0,
+    });
+
+    for (const rol of [RolValue.maestro, RolValue.admin, RolValue.mensajero]) {
+      resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
+      await renderPage();
+      expect(
+        screen.queryByRole("button", { name: /carga masiva/i }),
+      ).toBeNull();
+      cleanup();
+    }
+
+    // Sin sesión (actor null): tampoco.
+    resolveActorMock.mockResolvedValueOnce(null);
+    await renderPage();
+    expect(
+      screen.queryByRole("button", { name: /carga masiva/i }),
+    ).toBeNull();
+  });
+
   it("D7: el fetcher invoca la Server Action con { page, pageSize } y NO hace fetch a rutas API (R18, R20, R31)", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -285,7 +345,7 @@ describe("OrdenesPage", () => {
       total: 1,
     });
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText("Tienda F");
     // Server-side: la vista pasa { page, pageSize } (feature paginación).

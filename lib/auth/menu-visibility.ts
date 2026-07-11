@@ -1,4 +1,4 @@
-import type { RolValue } from "@prisma/client";
+import { RolValue } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { ROLES_SEED } from "@/lib/types/roles";
 
@@ -25,12 +25,17 @@ export interface MenuItem {
  * - Perfil: cualquier rol autenticado (ningun service lo restringe).
  */
 export const SIDEBAR_ITEMS: readonly MenuItem[] = [
-  { label: "Configuración", href: "/configuracion", roles: ["maestro"] },
+  { label: "Configuración", href: "/configuracion", roles: [RolValue.maestro] },
   { label: "Perfil", href: "/perfil", roles: ROLES_SEED },
   {
     label: "Órdenes",
     href: "/ordenes",
-    roles: ["maestro", "admin", "adminTienda", "mensajero"],
+    roles: [
+      RolValue.maestro,
+      RolValue.admin,
+      RolValue.adminTienda,
+      RolValue.mensajero,
+    ],
   },
 ] as const;
 

@@ -18,26 +18,18 @@ import {
 } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
 import { useToast } from "@/hooks/useToast";
 
-/**
- * Columnas del contrato de entrada del endpoint de carga masiva de órdenes
- * (feature 15), en orden (R11, design.md D3).
- */
-const ORDENES_BULK_FIELDS: TemplateField[] = [
-  { key: "num_remision", label: "Nº Remisión", example: "REM-0001" },
-  { key: "destinatario", label: "Destinatario", example: "Juan Pérez" },
-  { key: "telefono", label: "Teléfono", example: "0999999999" },
-  { key: "provincia", label: "Provincia", example: "Pichincha" },
-  { key: "canton", label: "Cantón", example: "Quito" },
-  { key: "distrito", label: "Distrito", example: "Iñaquito" },
-  { key: "direccion", label: "Dirección", example: "Av. Amazonas N34-451" },
-  { key: "producto", label: "Producto", example: "Camiseta talla M" },
-  { key: "notas", label: "Notas", example: "Entregar en la tarde" },
-  { key: "monto_cobrar", label: "Monto a cobrar", example: "25.90" },
-  {
-    key: "mensajero_sugerido_id",
-    label: "Mensajero sugerido",
-    example: "",
-  },
+export const ORDENES_BULK_FIELDS: TemplateField[] = [
+  { key: "num_remision", example: "REM-0001" },
+  { key: "destinatario", example: "Juan Pérez" },
+  { key: "telefono", example: "0999999999" },
+  { key: "provincia", example: "Pichincha" },
+  { key: "canton", example: "Quito" },
+  { key: "distrito", example: "Iñaquito" },
+  { key: "direccion", example: "Av. Amazonas N34-451" },
+  { key: "producto", example: "Camiseta talla M" },
+  { key: "notas", example: "Entregar en la tarde" },
+  { key: "monto_cobrar", example: "25.90" },
+  { key: "mensajero_sugerido_id", example: "" },
 ];
 
 interface ResumenCarga {
