@@ -82,6 +82,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findMensajerosGam: vi.fn().mockResolvedValue([]),
     findMensajeroIdsValidosGam: vi.fn().mockResolvedValue(new Set()),
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
+    // Feature 32: etiqueta de guia, no ejercitada por el CRUD (feature 6) pero
+    // exigida por la interfaz IOrdenRepository.
+    findEtiquetasByIds: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }

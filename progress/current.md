@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 30 CERRADA (impl+reviewer OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+| (ninguna en curso) | — | — | Feature 32 CERRADA (impl+reviewer OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+
+> Feature 32 (etiqueta de guía con QR + código de barras) CERRADA 2026-07-11: **impl COMPLETA (R1–R15) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1314 tests). Fullstack un ciclo, SIN migración (read derivado). Estado `done` + `history.md` + `progress/review_32-...md`. Backend: `EtiquetaGuiaDTO`/`findEtiquetasByIds` (resuelve nombres geografía/tienda + direccion + monto), `EtiquetaGuiaService`, action. Frontend: acción "Imprimir etiquetas" sobre el lote → PDF 100×100mm por orden (jspdf), QR=`orden.id`, barcode=`num_guia`. Deps: qrcode.react, react-barcode, jspdf, jsbarcode. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: verificación manual del binario del PDF + escaneabilidad. Desbloquea 33.
 
 > Feature 30 (asignación por zona GAM / ruteo bodega satélite) CERRADA 2026-07-11: **impl COMPLETA (R1–R22) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1287 tests verde). Fullstack un ciclo. Estado `done` + `history.md` + `progress/review_30-...md`. Backend: estado `en_ruta_bodega_satelite` (migración+down.sql), guardia R4, filtro mensajeros GAM, ruteo con `num_guia`. Frontend: columna Zona, badge dinámico, apartado + `RutearSateliteModal`, `GenerarGuiaModal` split GAM/no-GAM. F1.4 (6 decisiones recomendadas). **PENDIENTE: abrir PR a `dev` y merge (requiere OK humano, como el #32).** DEUDA: migración no aplicada contra Postgres real. Desbloquea 33/34/39.
 
@@ -155,6 +157,20 @@
   -OJO: la 24 dejo `es_gam` como toggle de UI NO sembrado, hay que reconciliar-; (b)
   estado de ruteo -> UN `en_ruta_bodega_satelite` con nombre de zona derivado de
   `orden.zona_id` (recomendado, precedente `en_ruta_bodega_principal`) vs. estado por zona.
+
+- `etiqueta de guia con QR y codigo de barras` (id 32): **zone=fullstack, complexity=medium,
+  branch=feature/32-etiqueta-guia-qr, depends_on=17.** Evaluada 2026-07-11 con el código en mano:
+  aunque "renderizar una etiqueta" suena frontend, el `OrdenDTO` (lib/types/orden.ts) NO expone
+  `direccion`, `montoCobrar` ni los NOMBRES de provincia/canton/distrito (solo IDs; el listado
+  añade `zonaNombre`/`tiendaNombre`). El modelo `Orden` sí tiene esos datos (direccion, montoCobrar,
+  relaciones a geografía) → hace falta un READ backend que ensamble el payload completo de la
+  etiqueta. Además NO hay librerías de QR ni de código de barras en package.json (deps nuevas). Por
+  eso es FULLSTACK, un ciclo (precedente 16/24/25/27/30). Preguntas ABIERTAS para F1.4: (a) qué
+  codifica el QR (orden.id UUID estable -recomendado, lo escanea la feature 33- vs num_guia); (b) qué
+  codifica el código de barras (num_guia numérico -recomendado- vs num_remision); (c) render de la
+  etiqueta (HTML imprimible con CSS print/window.print -recomendado, sin dep de PDF- vs PDF generado);
+  (d) qué librerías QR + barcode (deps nuevas, el spec recomienda); (e) disparo (¿auto al 'Generar
+  guía' vs acción "imprimir etiqueta" por orden/lote?; ¿una etiqueta por orden o hoja con el lote?).
 
 ## Conflictos pendientes
 

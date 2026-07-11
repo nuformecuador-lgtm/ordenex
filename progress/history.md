@@ -678,3 +678,28 @@
   siempre los envía. (2) `listarMensajerosParaAsignacion` devuelve vacío si no hay zona GAM — candidato a aviso de UX.
 - **Desbloquea / se apoya en**: feed a features 33 (recepción QR en satélite consume `en_ruta_bodega_satelite`),
   34 (asignación desde satélite) y 39 (pago por zona). Consumió 24 (zonas/`esGam`) y 17 (generar guía/`num_guia`).
+
+## 2026-07-11 — etiqueta de guía con QR y código de barras (feature 32, FULLSTACK)
+- Al pulsar la acción "Imprimir etiquetas" sobre el lote seleccionado (vista del maestro, feature 17), se genera un
+  **PDF descargable, una etiqueta EXACTAMENTE 100mm × 100mm por orden** (PDF multipágina), con todos los datos del
+  paquete + un **código QR** (codifica `orden.id`, lo escaneará la feature 33 para recepción) y un **código de barras**
+  (codifica `num_guia`, CODE128). Solo se etiquetan órdenes que YA tienen `num_guia`; las demás se omiten con aviso.
+- Backend (backend_dev, model opus), **SIN migración/tabla** (read DERIVADO): `EtiquetaGuiaDTO` (`lib/types/etiqueta-guia.ts`)
+  + `OrdenRepository.findEtiquetasByIds` que RESUELVE lo que el `OrdenDTO` no expone (nombres de tienda/zona/provincia/
+  cantón/distrito + `direccion` + `montoCobrar` Decimal→number); `EtiquetaGuiaService` (guardia `num_guia`, autz
+  maestro-only) + Server Action `lib/actions/etiquetas-guia.ts` (zod + `resolveActorFromSession` + `withErrorHandler`).
+  `findEtiquetasByIds` es aditivo en `IOrdenRepository` (contratos 6/7/17/26/30 intactos). `lib/config/moneda.ts` (patrón
+  de `lib/config/ordenes.ts`, env override, default `es-CR`/`CRC`).
+- Frontend (frontend_dev, model opus): acción "Imprimir etiquetas" en `OrdenesRevisionMaestro` sobre la selección/lote,
+  `EtiquetaGuia`/`EtiquetasGuiaModal`, y `etiquetas-pdf.ts` con **jspdf** (`unit:"mm", format:[100,100]`, una página por
+  etiqueta, rasteriza el QR de `qrcode.react` y el barcode de `jsbarcode`). Deps NUEVAS: `qrcode.react`, `react-barcode`,
+  `jspdf`, `jsbarcode`.
+- Requisitos cubiertos: R1–R15 (EARS), mapeados 1:1 a test. Reviewer **APROBADO** 0 bloqueantes (corrió `./init.sh` él
+  mismo). Verificación: `pnpm test` **1314/1314**, `./init.sh` EXIT 0, typecheck/lint OK.
+- Decisiones F1.4 (humano 2026-07-11): (a) QR=`orden.id`; (b) barcode=`num_guia`; **(c) PDF real 100×100 mm** (CAMBIO vs
+  la recomendación HTML `window.print()` → superseded R10; suma dep de PDF sobre qrcode.react+react-barcode); (d)
+  `qrcode.react`+`react-barcode`(+`jspdf`/`jsbarcode`); (e) acción "Imprimir etiquetas" sobre el lote; (f) rol maestro,
+  órdenes con `num_guia`; (g) reimpresión libre sin auditoría.
+- DEUDA / verificación MANUAL (declarada): el tamaño binario exacto del PDF y la escaneabilidad física del QR no son
+  unit-testeables; quedan como verificación manual.
+- **Desbloquea**: feature 33 (recepción por escaneo del QR en bodega satélite). Consumió la 17 (`num_guia`).

@@ -14,6 +14,7 @@ import {
   asignarDesdeBodega,
   rutearABodegaSatelite,
 } from "@/lib/actions/ordenes-guia";
+import { generarEtiquetas } from "@/lib/actions/etiquetas-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { EstatusLiteDTO, MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
@@ -33,12 +34,31 @@ vi.mock("@/lib/actions/ordenes-guia", () => ({
   rutearABodegaSatelite: vi.fn(),
 }));
 
+// Feature 32: el orquestador monta ahora `EtiquetasGuiaModal`, que consume la
+// action de lectura y arma un PDF. Se mockean la action, el helper de PDF (no
+// testeable en jsdom) y los stubs de QR/barcode (canvas no soportado).
+vi.mock("@/lib/actions/etiquetas-guia", () => ({
+  generarEtiquetas: vi.fn(),
+}));
+vi.mock("@/app/(app)/ordenes/_components/etiquetas-pdf", () => ({
+  descargarEtiquetasPdf: vi.fn(),
+}));
+vi.mock("qrcode.react", () => ({
+  QRCodeCanvas: () => <canvas data-testid="qr-stub" />,
+}));
+vi.mock("react-barcode", () => ({
+  default: ({ value }: { value: string }) => (
+    <div data-testid="barcode-stub" data-value={value} />
+  ),
+}));
+
 const listarOrdenesMock = vi.mocked(listarOrdenes);
 const listarCatalogoEstatusMock = vi.mocked(listarCatalogoEstatus);
 const listarMensajerosMock = vi.mocked(listarMensajerosParaAsignacion);
 const generarGuiaMock = vi.mocked(generarGuia);
 const asignarDesdeBodegaMock = vi.mocked(asignarDesdeBodega);
 const rutearABodegaSateliteMock = vi.mocked(rutearABodegaSatelite);
+const generarEtiquetasMock = vi.mocked(generarEtiquetas);
 
 const ESTATUS: EstatusLiteDTO[] = [
   { id: "id-fulfillment", value: "en_fulfillment" },
@@ -90,6 +110,9 @@ const ORDENES_POR_ESTATUS: Record<string, OrdenListItemDTO[]> = {
   "id-bodega": [
     makeOrden({ id: "ob1", numRemision: "REM-B1", estatusId: "id-bodega" }),
   ],
+  "id-satelite": [
+    makeOrden({ id: "os1", numRemision: "REM-S1", estatusId: "id-satelite" }),
+  ],
 };
 
 function renderComponent(readOnly = false) {
@@ -106,6 +129,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   listarCatalogoEstatusMock.mockResolvedValue({ status: "ok", estatus: ESTATUS });
   listarMensajerosMock.mockResolvedValue({ status: "ok", mensajeros: MENSAJEROS });
+  generarEtiquetasMock.mockResolvedValue({
+    status: "ok",
+    etiquetas: [],
+    omitidas: [],
+  });
   listarOrdenesMock.mockImplementation(async (input) => {
     const { estatusId, page, pageSize } = input as {
       estatusId?: string;
@@ -154,6 +182,10 @@ describe("OrdenesRevisionMaestro", () => {
     expect(screen.queryByRole("button", { name: "Generar guía" })).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Asignar mensajero" }),
+    ).toBeNull();
+    // Feature 32/R13/F1.4(f): admin (readOnly) tampoco ve "Imprimir etiquetas".
+    expect(
+      screen.queryByRole("button", { name: "Imprimir etiquetas" }),
     ).toBeNull();
   });
 
@@ -208,15 +240,19 @@ describe("OrdenesRevisionMaestro", () => {
     ).toBeInTheDocument();
   });
 
-  it("no ofrece selección ni acción en el apartado en_espera_aceptacion (fuera de alcance, feature 36)", async () => {
+  it("en_espera_aceptacion: solo ofrece 'Imprimir etiquetas' (la respuesta del mensajero sigue fuera de alcance, feature 36)", async () => {
     renderComponent();
 
     await screen.findByText("REM-E1");
     const espera = screen.getByRole("region", {
       name: "En espera de aceptación del mensajero",
     });
-    expect(within(espera).queryAllByRole("checkbox")).toHaveLength(0);
-    // Sin botón de acción por lote (solo los controles de paginación, que sí existen).
+    // Feature 32/R13/F1.4(f): sus órdenes ya tienen guía → seleccionable para imprimir.
+    expect(within(espera).getAllByRole("checkbox")).toHaveLength(1);
+    expect(
+      within(espera).getByRole("button", { name: "Imprimir etiquetas" }),
+    ).toBeInTheDocument();
+    // Pero NO las acciones de generación/asignación (no aplican a este estado).
     expect(
       within(espera).queryByRole("button", { name: "Generar guía" }),
     ).toBeNull();
@@ -242,21 +278,49 @@ describe("OrdenesRevisionMaestro", () => {
     expect(asignarDesdeBodegaMock).not.toHaveBeenCalled();
   });
 
-  it("R15: monta el 5.º apartado solo-lectura 'En ruta a bodega satélite'", async () => {
+  it("R15: monta el 5.º apartado 'En ruta a bodega satélite' (imprimible: sus órdenes ya tienen guía)", async () => {
     renderComponent();
 
-    await screen.findByText("REM-F1");
     const satelite = screen.getByRole("region", {
       name: "En ruta a bodega satélite",
     });
     expect(satelite).toBeInTheDocument();
-    // Solo-lectura: sin checkboxes ni acciones.
-    expect(within(satelite).queryAllByRole("checkbox")).toHaveLength(0);
+    await within(satelite).findByText("REM-S1");
+    // Feature 32/R13/F1.4(f): seleccionable para "Imprimir etiquetas"...
+    expect(within(satelite).getAllByRole("checkbox")).toHaveLength(1);
+    expect(
+      within(satelite).getByRole("button", { name: "Imprimir etiquetas" }),
+    ).toBeInTheDocument();
+    // ...pero sin acciones de escritura (no se rutea ni se asigna desde aquí).
     expect(
       within(satelite).queryByRole("button", {
         name: "Rutear a bodega satélite",
       }),
     ).toBeNull();
+    expect(
+      within(satelite).queryByRole("button", { name: "Asignar mensajero" }),
+    ).toBeNull();
+  });
+
+  it("Feature 32/R11: 'Imprimir etiquetas' de en_bodega abre el modal de etiquetas con la selección", async () => {
+    const user = userEvent.setup();
+    renderComponent();
+
+    await screen.findByText("REM-B1");
+    const bodega = screen.getByRole("region", { name: "En bodega" });
+    await user.click(within(bodega).getAllByRole("checkbox")[0]);
+    await user.click(
+      within(bodega).getByRole("button", { name: "Imprimir etiquetas" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Imprimir etiquetas" }),
+    ).toBeInTheDocument();
+    // Abre consultando la action de lectura con la selección (no muta nada).
+    await vi.waitFor(() =>
+      expect(generarEtiquetasMock).toHaveBeenCalledWith({ ordenIds: ["ob1"] }),
+    );
+    expect(asignarDesdeBodegaMock).not.toHaveBeenCalled();
   });
 
   it("R13: 'Rutear a bodega satélite' invoca la action con los ordenIds NO-GAM seleccionados", async () => {

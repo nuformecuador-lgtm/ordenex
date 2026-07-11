@@ -47,6 +47,15 @@ export interface OrdenesApartadoProps {
   secondaryActionLabel?: string;
   /** Se invoca con las órdenes seleccionadas (snapshot) al pulsar la acción secundaria. */
   onSecondaryAction?: (seleccionadas: OrdenListItemDTO[]) => void;
+  /**
+   * Feature 32/R11/R13: acción terciaria opcional ("Imprimir etiquetas") que
+   * comparte la misma selección por checkbox. Se añade porque `en_bodega` ya usa
+   * la primaria ("Asignar mensajero") y la secundaria ("Rutear a bodega
+   * satélite"): la terciaria da un tercer slot sin romper los existentes.
+   */
+  tertiaryActionLabel?: string;
+  /** Se invoca con las órdenes seleccionadas (snapshot) al pulsar la acción terciaria. */
+  onTertiaryAction?: (seleccionadas: OrdenListItemDTO[]) => void;
 }
 
 interface ApartadoPageData {
@@ -81,6 +90,8 @@ export function OrdenesApartado({
   onAction,
   secondaryActionLabel,
   onSecondaryAction,
+  tertiaryActionLabel,
+  onTertiaryAction,
 }: OrdenesApartadoProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -136,11 +147,17 @@ export function OrdenesApartado({
     onSecondaryAction?.(seleccionadas);
   }
 
+  function handleTertiaryAction() {
+    if (seleccionadas.length === 0) return;
+    onTertiaryAction?.(seleccionadas);
+  }
+
   return (
     <section className="flex flex-col gap-3" aria-label={titulo}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">{titulo}</h2>
-        {selectable && (actionLabel || secondaryActionLabel) ? (
+        {selectable &&
+        (actionLabel || secondaryActionLabel || tertiaryActionLabel) ? (
           <div className="flex flex-wrap items-center gap-2">
             {actionLabel ? (
               <Button
@@ -159,6 +176,16 @@ export function OrdenesApartado({
                 disabled={seleccionadas.length === 0}
               >
                 {secondaryActionLabel}
+              </Button>
+            ) : null}
+            {tertiaryActionLabel ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleTertiaryAction}
+                disabled={seleccionadas.length === 0}
+              >
+                {tertiaryActionLabel}
               </Button>
             ) : null}
           </div>
