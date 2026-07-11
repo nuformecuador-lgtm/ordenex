@@ -14,6 +14,8 @@ export interface UsuarioPublico {
   // Feature 27/R14: flag de fulfillment de la tienda (solo `true` para adminTienda,
   // invariante R4a). Se expone en la forma publica para el prefill de la UI.
   fulfillment: boolean;
+  // Feature 24/R27: zona asignada (solo mensajero/adminSatelite; null en el resto).
+  zonaId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +36,8 @@ export interface CreateUsuarioInput {
   estado?: EstadoUsuario;
   // Feature 27/R8/R9: flag de fulfillment; el repo mapea `?? false` al persistir.
   fulfillment?: boolean;
+  // Feature 24/R27: zona (valor efectivo ya resuelto por el service).
+  zonaId?: string | null;
   // Feature 21 (postulacion de mensajero): identidad + vehiculo, todos opcionales
   // porque solo aplican a mensajeros (nullable en DB).
   primerApellido?: string | null;
@@ -95,6 +99,8 @@ export interface UpdateUsuarioData {
   tipoIdentificacionId?: string;
   // Feature 27/R12: valor efectivo ya resuelto por el service (invariante R4a).
   fulfillment?: boolean;
+  // Feature 24/R27: zona (valor efectivo ya resuelto por el service).
+  zonaId?: string | null;
 }
 
 // Feature 25/R29: catalogo de tipos de identificacion para poblar el select.

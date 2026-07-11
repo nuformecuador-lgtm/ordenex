@@ -16,6 +16,16 @@ vi.mock("@/lib/actions/usuarios", () => ({
   listarUsuarios: (...a: unknown[]) => listarUsuariosMock(...a),
 }));
 
+// Feature 24: la misma página pre-carga el listado de zonas. Se mockea la acción
+// y se stubea el módulo de zonas para aislar la lógica de usuarios de este test.
+const listarZonasMock = vi.fn();
+vi.mock("@/lib/actions/zonas", () => ({
+  listarZonas: (...a: unknown[]) => listarZonasMock(...a),
+}));
+vi.mock("@/app/(app)/configuracion/_components/ZonasModule", () => ({
+  ZonasModule: () => <div data-testid="zonas-module-stub" />,
+}));
+
 // Stub identificable del módulo cliente que captura las props recibidas.
 const moduleCalls: UsuariosPageData[] = [];
 vi.mock("@/app/(app)/configuracion/_components/UsuariosModule", () => ({
@@ -28,6 +38,13 @@ vi.mock("@/app/(app)/configuracion/_components/UsuariosModule", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   moduleCalls.length = 0;
+  listarZonasMock.mockResolvedValue({
+    status: "ok",
+    items: [],
+    page: 1,
+    pageSize: 25,
+    total: 0,
+  });
 });
 
 describe("app/(app)/configuracion/page.tsx — autorización (R1/R3)", () => {

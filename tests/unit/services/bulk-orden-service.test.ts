@@ -25,12 +25,14 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     existsGeo: vi.fn(),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
     findProvinciasByNombres: vi.fn().mockResolvedValue([
-      { id: "p1", nombre: "Pichincha", zonaId: "z1" },
+      { id: "p1", nombre: "Pichincha" },
     ]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([
       { id: "c1", nombre: "Quito", provinciaId: "p1" },
     ]),
-    findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
+    findDistritosByCantonIds: vi.fn().mockResolvedValue([
+      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" },
+    ]),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1"])),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
     // Feature 16: metodos de resumen/asignacion, no ejercitados por la carga
@@ -49,7 +51,7 @@ function row(overrides: Partial<RawRow> = {}): RawRow {
     telefono: "0991234567",
     provincia: "Pichincha",
     canton: "Quito",
-    distrito: "",
+    distrito: "La Mariscal",
     direccion: "",
     producto: "Caja",
     notas: "",
@@ -160,7 +162,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     }
   });
 
-  it("deriva zonaId desde la provincia resuelta", async () => {
+  it("deriva zonaId desde el distrito resuelto", async () => {
     const repo = buildRepo();
     const service = new BulkOrdenService(repo);
 
@@ -170,16 +172,39 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     expect(arg[0].zonaId).toBe("z1");
     expect(arg[0].provinciaId).toBe("p1");
     expect(arg[0].cantonId).toBe("c1");
+    expect(arg[0].distritoId).toBe("d1");
   });
 
-  it("distrito opcional: vacio no se resuelve (distritoId null)", async () => {
+  it("sin distrito -> error de fila (la zona se deriva del distrito)", async () => {
     const repo = buildRepo();
     const service = new BulkOrdenService(repo);
 
-    await service.cargarMasiva([row({ distrito: "" })], TIENDA);
+    const r = await service.cargarMasiva([row({ distrito: "" })], TIENDA);
 
-    const arg = createManyArg(repo);
-    expect(arg[0].distritoId).toBeNull();
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.summary.filas[0].resultado).toBe("error");
+      expect(r.summary.filas[0].errores).toHaveProperty("distrito");
+    }
+    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+  });
+
+  it("distrito sin zona asignada -> error de fila", async () => {
+    const repo = buildRepo({
+      findDistritosByCantonIds: vi.fn().mockResolvedValue([
+        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: null },
+      ]),
+    });
+    const service = new BulkOrdenService(repo);
+
+    const r = await service.cargarMasiva([row()], TIENDA);
+
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.summary.filas[0].resultado).toBe("error");
+      expect(r.summary.filas[0].errores).toHaveProperty("distrito");
+    }
+    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
   });
 
   it("distrito provisto pero inexistente en el canton -> error de fila", async () => {

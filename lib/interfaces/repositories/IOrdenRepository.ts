@@ -73,7 +73,6 @@ export class NumRemisionDuplicadoError extends Error {
 export interface ProvinciaRow {
   id: string;
   nombre: string;
-  zonaId: string;
 }
 
 export interface CantonRow {
@@ -86,6 +85,7 @@ export interface DistritoRow {
   id: string;
   nombre: string;
   cantonId: string;
+  zonaId: string | null; // feature 24/R4: la zona de la orden se deriva del distrito (carga masiva).
 }
 
 export interface IOrdenRepository {

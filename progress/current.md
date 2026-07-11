@@ -107,6 +107,22 @@
   paralelo. Seleccionada por el humano ignorando la cadena de la 28 (28->27->17).
   ABIERTO para el spec: que mas muestra el dashboard del adminTienda ademas del modulo de
   ordenes (metricas/accesos) -> el humano decidira en la puerta de aprobacion F1.4.
+- `gestion de zonas` (id 24): **zone=fullstack, complexity=high, branch=feature/24-gestion-zonas,
+  depends_on=null.** Evaluada 2026-07-10: fullstack (migracion + seed XLSX + backend CRUD + UI en
+  configuracion). Por precedente del repo (features 20/21/25 corrieron fullstack SIN partir) se corre
+  como UN ciclo fullstack (implementer delega backend_dev->frontend_dev, un PR). Worktree
+  `../ordenex-f24` desde `origin/dev`. Seleccionada por el humano (2026-07-10) excluyendo 23 y 27; la
+  siguiente por id, la 17, esta bloqueada semanticamente por la 27 (in_progress). Es foundational:
+  destraba 30 (asignacion por zona) y 39 (pago por zona). **F1 (spec R1-R28) COMPLETA -> spec_ready.**
+  DOS GATES antes de impl: (1) es fullstack -> NO corre en paralelo con la feature 27 (tambien
+  fullstack, in_progress en otra sesion); (2) el seed necesita el **Excel de zonas** que el humano debe
+  proveer. Preguntas abiertas para F1.4 en `specs/24-gestion-zonas/requirements.md`.
+  **F1.4 APROBADA por el humano 2026-07-10** (las 7 propuestas tal cual) -> status `in_progress` (F2.0).
+  **IMPL EN ESPERA (no arrancada):** la feature 27 esta implementando AHORA en el checkout principal y
+  ya tiene modificados `db/schema.prisma`, `UserRepository`/`IUserRepository`, `OrdenRepository` y la UI
+  de configuracion -> arrancar la 24 chocaria en la migracion de `usuario` y los repos (regla #1 no
+  negociable). La impl de la 24 arranca cuando la 27 este `done` en `dev`; entonces se sincroniza. El
+  seed ademas espera el Excel. Rama `feature/24-gestion-zonas` pusheada con el spec para revision.
 
 - `fulfillment de tienda + estado inicial condicional` (id 27): **zone=fullstack,
   complexity=high, branch=feature/27-fulfillment-tienda, depends_on=25.** Evaluada

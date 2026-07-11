@@ -27,6 +27,7 @@ const PUBLIC_SELECT = {
   tipoIdentificacionId: true,
   rolId: true,
   fulfillment: true, // feature 27/R14: expuesto en la forma publica (nunca el hash)
+  zonaId: true, // feature 24/R27: zona asignada (mensajero/adminSatelite)
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -198,6 +199,7 @@ export class UserRepository implements IUserRepository {
       out.tipoIdentificacionId = data.tipoIdentificacionId;
     }
     if (data.fulfillment !== undefined) out.fulfillment = data.fulfillment; // feature 27/R12
+    if (data.zonaId !== undefined) out.zonaId = data.zonaId; // feature 24/R27
     return out;
   }
 }
