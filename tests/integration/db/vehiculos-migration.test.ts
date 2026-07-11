@@ -101,7 +101,8 @@ describe("no se modifico ninguna migracion previa (R3)", () => {
       (d) =>
         !d.endsWith("_vehiculos") &&
         !d.endsWith("_postulacion_mensajero") &&
-        !d.endsWith("_usuario_fulfillment"), // feature 27: apendida despues
+        !d.endsWith("_usuario_fulfillment") && // feature 27: apendida despues
+        !d.endsWith("_zonas_catalogo_global_pagos"), // feature 24: apendida despues
     );
     const maxPrevio = previos[previos.length - 1];
     // El timestamp (prefijo) de vehiculos es mayor que el ultimo previo.

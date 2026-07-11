@@ -101,10 +101,18 @@ function resolveGeo(
   }
   const canton = cantonResult.row;
 
+  // Feature 24/R4 (parcial): `provincia.zona_id` es nullable. La orden exige una
+  // zona (NOT NULL); una provincia sin zona -> fila con error hasta que la
+  // derivacion de zona en carga masiva migre al modelo por-distrito.
+  if (provincia.zonaId === null) {
+    return { ok: false, fieldErrors: { provincia: ["la provincia no tiene zona asignada"] } };
+  }
+  const zonaId = provincia.zonaId;
+
   if (raw.distrito.trim() === "") {
     return {
       ok: true,
-      geo: { provinciaId: provincia.id, zonaId: provincia.zonaId, cantonId: canton.id, distritoId: null },
+      geo: { provinciaId: provincia.id, zonaId, cantonId: canton.id, distritoId: null },
     };
   }
 
@@ -126,7 +134,7 @@ function resolveGeo(
     ok: true,
     geo: {
       provinciaId: provincia.id,
-      zonaId: provincia.zonaId,
+      zonaId,
       cantonId: canton.id,
       distritoId: distritoResult.row.id,
     },

@@ -22,6 +22,7 @@ import type {
   CrearUsuarioInput,
   ListarUsuariosInput,
 } from "@/lib/types/usuario";
+import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import { hashPassword } from "@/lib/utils/password";
 import { generateStrongPassword } from "@/lib/utils/password-generator";
 
@@ -29,8 +30,17 @@ import { generateStrongPassword } from "@/lib/utils/password-generator";
 // rol (incluido uno no reconocido) -> forbidden (R3/R4).
 const ALLOWED_ROLES = new Set<string>(["maestro"]);
 
+// Feature 24/R27: roles que pueden llevar una zona asignada. Para el resto el
+// `zonaId` se fuerza a null (misma politica que el `fulfillment` de adminTienda).
+const ZONA_ROLES = new Set<string>(["mensajero", "adminSatelite"]);
+
 export class UsuarioService implements IUsuarioService {
-  constructor(private readonly repo: IUserRepository) {}
+  // Feature 24/R28: `zonaRepo` opcional para validar la existencia de la zona. Se
+  // inyecta en produccion; los tests que no ejercitan zona pueden omitirlo.
+  constructor(
+    private readonly repo: IUserRepository,
+    private readonly zonaRepo?: IZonaRepository,
+  ) {}
 
   async crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4
@@ -44,6 +54,12 @@ export class UsuarioService implements IUsuarioService {
     // confia en la UI. Solo `adminTienda` puede quedar con `fulfillment = true`.
     const fulfillment = await this.resolverFulfillment(input.rolId, input.fulfillment ?? false);
 
+    // Feature 24/R27/R28: resuelve la zona segun el rol y valida su existencia.
+    const zona = await this.resolverZona(input.rolId, input.zonaId);
+    if (!zona.ok) {
+      return { status: "validation_error", fieldErrors: { zonaId: ["La zona indicada no existe"] } };
+    }
+
     try {
       const usuario = await this.repo.create({
         nombre: input.nombre,
@@ -55,6 +71,7 @@ export class UsuarioService implements IUsuarioService {
         passwordHash,
         estado: "activo", // R8: nace activo (a diferencia de la postulacion publica)
         fulfillment, // R8/R9: valor efectivo ya restringido por rol
+        zonaId: zona.zonaId, // R27: null salvo mensajero/adminSatelite
       });
       // R33: contrasena en claro UNA vez solo en modo autogenerado; R35: nunca en manual.
       return generated
@@ -100,6 +117,18 @@ export class UsuarioService implements IUsuarioService {
     if (!actual) return { status: "not_found" }; // R17
 
     const data = await this.buildUpdateData(input, actual); // R16: solo campos editables
+
+    // Feature 24/R27/R28: si se edita la zona, se valida y se aplica la invariante
+    // por rol (con el rol resultante). Si no viene `zonaId`, no se toca.
+    if (input.zonaId !== undefined) {
+      const rolIdResultante = input.rolId ?? actual.rolId;
+      const zona = await this.resolverZona(rolIdResultante, input.zonaId);
+      if (!zona.ok) {
+        return { status: "validation_error", fieldErrors: { zonaId: ["La zona indicada no existe"] } };
+      }
+      data.zonaId = zona.zonaId;
+    }
+
     try {
       const usuario = await this.repo.update(id, data);
       if (!usuario) return { status: "not_found" }; // R17
@@ -185,5 +214,28 @@ export class UsuarioService implements IUsuarioService {
     const roles = await this.repo.listRoles();
     const rolValue = roles.find((r) => r.id === rolId)?.value;
     return rolValue === "adminTienda";
+  }
+
+  // Feature 24/R27/R28: resuelve el `zonaId` efectivo. Solo mensajero/adminSatelite
+  // lo conservan; para otros roles se fuerza null (ignora el valor recibido, R27).
+  // Cuando aplica y se provee una zona, valida su existencia (R28) -> `ok: false`.
+  private async resolverZona(
+    rolId: string,
+    deseado: string | null | undefined,
+  ): Promise<{ ok: true; zonaId: string | null } | { ok: false }> {
+    if (deseado === undefined || deseado === null) return { ok: true, zonaId: null };
+
+    const roles = await this.repo.listRoles();
+    const rolValue = roles.find((r) => r.id === rolId)?.value;
+    if (rolValue === undefined || !ZONA_ROLES.has(rolValue)) {
+      return { ok: true, zonaId: null }; // R27: rol no aplicable -> null
+    }
+
+    // R28: valida existencia si hay repo de zonas inyectado.
+    if (this.zonaRepo) {
+      const zona = await this.zonaRepo.findById(deseado);
+      if (!zona) return { ok: false };
+    }
+    return { ok: true, zonaId: deseado };
   }
 }

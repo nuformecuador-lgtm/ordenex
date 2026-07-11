@@ -94,12 +94,14 @@ model Usuario {
   vehiculoId           String?       @map("vehiculo_id") // feature 21: solo mensajeros; FK -> vehiculos
   placa                String? // feature 21: placa del vehiculo del mensajero, normalizada uppercase/trim
   fulfillment          Boolean       @default(false) // feature 27: tienda con fulfillment (rol adminTienda); default false
+  zonaId               String?       @map("zona_id") // feature 24/R6: nullable; solo mensajero/adminSatelite lo llevan
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
   tipoIdentificacion TipoIdentificacion   @relation(fields: [tipoIdentificacionId], references: [id])
   rol                Rol                  @relation(fields: [rolId], references: [id])
   vehiculo           Vehiculo?            @relation(fields: [vehiculoId], references: [id]) // feature 21
+  zona               Zona?                @relation(fields: [zonaId], references: [id]) // feature 24/R6/R8: ON DELETE RESTRICT
   loginAttempts      LoginAttempt[]
   trustedDevices     TrustedDevice[]
   otpChallenges      EmailOtpChallenge[]
@@ -110,6 +112,7 @@ model Usuario {
   @@index([tipoIdentificacionId])
   @@index([rolId])
   @@index([vehiculoId]) // feature 21
+  @@index([zonaId]) // feature 24/R6
   @@map("usuario")
 }
 
@@ -202,23 +205,33 @@ model OrderStatus {
   @@map("order_status")
 }
 
-// Geografia jerarquica (R4/R5). Tablas creadas vacias (sin seed).
+// Geografia jerarquica (feature 6 la creo vacia). Feature 24: la zona pasa a ser un
+// catalogo global con pagos al mensajero y flag `es_gam`; la asignacion nueva vive
+// en `distrito.zona_id`. NOTA (blocker feature 24/R4): la eliminacion de
+// `provincia.zona_id` queda DIFERIDA porque la carga masiva (feature 15) deriva
+// `orden.zona_id` (NOT NULL) desde `provincia.zona_id`. Se elimina en un paso
+// posterior, una vez migrada esa derivacion al modelo por-distrito.
 model Zona {
-  id     String @id @default(uuid())
-  nombre String
+  id          String  @id @default(uuid())
+  nombre      String  @unique // feature 24/R2: unico (comparado normalizado en el service/seed)
+  pagoEntrega Decimal @default(0) @db.Decimal(12, 2) @map("pago_entrega") // feature 24/R1
+  pagoRechazo Decimal @default(0) @db.Decimal(12, 2) @map("pago_rechazo") // feature 24/R1
+  esGam       Boolean @default(false) @map("es_gam") // feature 24/R3: a lo sumo una true (indice parcial en SQL)
 
-  provincias Provincia[]
+  provincias Provincia[] // feature 6 / carga masiva (feature 15). Se retira con R4 (diferido).
+  distritos  Distrito[] // feature 24/R5: distritos asignados a esta zona
+  usuarios   Usuario[] // feature 24/R6: mensajero/adminSatelite asignados a esta zona
   ordenes    Orden[]
 
   @@map("zona")
 }
 
 model Provincia {
-  id     String @id @default(uuid())
+  id     String  @id @default(uuid())
   nombre String
-  zonaId String @map("zona_id")
+  zonaId String? @map("zona_id") // feature 24/R4 (parcial): se relaja a nullable; el drop total queda diferido por la dependencia de carga masiva (feature 15)
 
-  zona     Zona     @relation(fields: [zonaId], references: [id])
+  zona     Zona?    @relation(fields: [zonaId], references: [id])
   cantones Canton[]
   ordenes  Orden[]
 
@@ -240,14 +253,17 @@ model Canton {
 }
 
 model Distrito {
-  id       String @id @default(uuid())
+  id       String  @id @default(uuid())
   nombre   String
-  cantonId String @map("canton_id")
+  cantonId String  @map("canton_id")
+  zonaId   String? @map("zona_id") // feature 24/R5: nullable; NULL = distrito sin zona asignada
 
   canton  Canton  @relation(fields: [cantonId], references: [id])
+  zona    Zona?   @relation(fields: [zonaId], references: [id]) // feature 24/R5/R8: ON DELETE RESTRICT
   ordenes Orden[]
 
   @@index([cantonId])
+  @@index([zonaId]) // feature 24/R5
   @@map("distrito")
 }
 

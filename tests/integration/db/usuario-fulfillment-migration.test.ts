@@ -60,7 +60,12 @@ describe("estructura up/down y orden temporal (R2, convencion del repo)", () => 
       .map((e) => e.name)
       .sort();
     const fulfillmentDir = dirs.find((d) => d.endsWith("_usuario_fulfillment"))!;
-    const previos = dirs.filter((d) => !d.endsWith("_usuario_fulfillment"));
+    // feature 24: `_zonas_catalogo_global_pagos` se apendio despues con timestamp
+    // posterior; el invariante que cuida este guard es que fulfillment no se
+    // inserto ANTES de lo ya existente, no que sea la ultima del repo para siempre.
+    const previos = dirs.filter(
+      (d) => !d.endsWith("_usuario_fulfillment") && !d.endsWith("_zonas_catalogo_global_pagos"),
+    );
     const maxPrevio = previos[previos.length - 1];
     expect(fulfillmentDir > maxPrevio).toBe(true);
   });
