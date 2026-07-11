@@ -2,10 +2,36 @@
 
 Zone: `fullstack` · complexity: `high` · depends_on: 30 (`done`), 32 (`done`) · branch: `feature/33-recepcion-qr-satelite`
 
-> Estado: `spec_ready` pendiente de la puerta de aprobación humana **F1.4**. Las decisiones
-> abiertas están al final ("Preguntas abiertas para F1.4") con recomendación + alternativas;
-> el implementer NO construye hasta que el humano las cierre. Los requisitos R1–R23 están
-> redactados sobre la **opción recomendada** de cada pregunta (patrón feature 30).
+> Estado: `in_progress` (F2.0). **F1.4 APROBADA por el humano el 2026-07-11** (ver bloque
+> "## Decisiones F1.4 (APROBADAS)" abajo, que SUPERSEDE la sección "Preguntas abiertas para
+> F1.4"). Los requisitos R1–R23 estaban redactados sobre la opción recomendada; el ÚNICO cambio
+> respecto a lo provisional es (a): se implementan **AMBOS** mecanismos de escaneo (cámara +
+> lector keyboard-wedge), no solo el lector.
+
+## Decisiones F1.4 (APROBADAS 2026-07-11)
+
+- **(a) Escaneo = AMBOS mecanismos**: (1) **cámara del dispositivo** (getUserMedia + librería de
+  decodificación QR — dependencia NUEVA, a elegir por el implementer: mantenida, liviana,
+  compatible con Next App Router / Client Component) y (2) **lector físico tipo pistola
+  (keyboard-wedge)**: el lector "teclea" el contenido del QR en un input y dispara la recepción.
+  Ambos caminos resuelven a la MISMA lógica de recepción (dado un `orden.id`, transiciona).
+  NOTA: convertir la app en **PWA** es una feature FUTURA aparte — NO entra en la 33.
+- **(b)** UN solo estado NUEVO **`en_bodega_satelite`** con la zona derivada de `orden.zonaId`
+  para el display ("en bodega satélite de <zona>"). Mismo patrón de la feature 30.
+- **(c)** El adminSatelite **SOLO recibe órdenes de SU zona**: escanear una orden con
+  `zonaId` ≠ zona del adminSatelite → error `zona_ajena`, sin transicionar.
+- **(d)** Recepción **1-a-1** por escaneo, con feedback por ítem. Idempotente: reescanear una
+  orden ya `en_bodega_satelite` → mensaje "ya recibida", sin error duro ni doble transición.
+- **(e)** Los 5 casos de error del escaneo quedan definidos (QR ilegible/no-`orden.id`; orden
+  inexistente; orden NO en `en_ruta_bodega_satelite`; orden de otra zona `zona_ajena`; ya
+  recibida), cada uno con comportamiento verificable.
+- **(f)** El módulo lista **DOS secciones separadas**: "Por recibir" (`en_ruta_bodega_satelite`)
+  y **"Recibidas"** (`en_bodega_satelite`). Las recibidas son la base de la feature 34.
+- **(g)** **SÍ se añade un E2E** (Playwright) del flujo de recepción por escaneo (escanear →
+  recepción → `en_bodega_satelite`), patrón del repo (escrito, ejecución diferida, como
+  `e2e/auth.spec.ts`/`e2e/mis-asignaciones.spec.ts`).
+- **(h)** El maestro/GAM **NO** ve esta recepción en la 33 (la visibilidad se maneja en tiempo
+  real, feature 35, o trazabilidad, 49). Fuera de alcance aquí.
 
 Notación EARS. Cada requisito es testeable y mapeable a un test concreto (ver "Tabla de
 trazabilidad"). El "actor" se resuelve vía `resolveActorFromSession` → `{ usuarioId, rol }`
