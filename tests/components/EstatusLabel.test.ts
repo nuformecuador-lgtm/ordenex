@@ -12,6 +12,7 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   en_ruta_bodega_principal: "En ruta a bodega principal",
   en_bodega: "En bodega",
   en_preparacion: "En preparación",
+  en_espera_aceptacion: "En espera de aceptación del mensajero",
 };
 
 describe("estatusLabel — mapa de presentación value → label (R17)", () => {

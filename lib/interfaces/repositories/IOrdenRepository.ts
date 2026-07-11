@@ -68,6 +68,44 @@ export class NumRemisionDuplicadoError extends Error {
   }
 }
 
+// Feature 17 — fila de orden proyectada para validar transiciones de "Generar
+// guia"/"asignar desde bodega" (R27/R29). NO filtra deleted_at en el repo: el
+// service necesita distinguir "no existe" de "borrada" para reportar el motivo
+// exacto en `conflict.detalle` (R29).
+export interface OrdenTransicionRow {
+  id: string;
+  estatusValue: string;
+  numGuia: number | null;
+  deletedAt: Date | null;
+}
+
+// Feature 17/T15 — fila liviana de mensajero para el loader del modal (R28).
+export interface MensajeroLiteRow {
+  id: string;
+  nombre: string;
+}
+
+// Feature 17 — fila liviana del catalogo `order_status` para que la UI resuelva
+// value -> estatusId y siga filtrando `listarOrdenes` por `estatusId` (R15/R16,
+// mismo patron que design.md §4). Solo lectura, sin logica de negocio.
+export interface OrderStatusLiteRow {
+  id: string;
+  value: string;
+}
+
+// Feature 17 — decision final por orden ya resuelta por el service (estatusId y
+// mensajeroAsignadoId concretos, no el `value`/`mensajeroId` crudo del input).
+export interface GenerarGuiaDecisionData {
+  ordenId: string;
+  estatusId: string;
+  mensajeroAsignadoId: string | null;
+}
+
+export interface GenerarGuiaResultRow {
+  ordenId: string;
+  numGuia: number;
+}
+
 // Feature 15 — filas de catalogo geografico usadas para resolver por nombre
 // (R19/R21), jerarquicas: canton dentro de provincia, distrito dentro de canton.
 export interface ProvinciaRow {
@@ -148,4 +186,43 @@ export interface IOrdenRepository {
   ): Promise<number>;
   /** R14: cuenta cuantas de `ordenIds` pertenecen a `tiendaId` y no estan borradas. */
   countOrdenesDeTienda(ordenIds: string[], tiendaId: string): Promise<number>;
+
+  // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
+
+  /**
+   * R27/R29: filas de orden por id, INCLUYE borradas (deletedAt !== null) para
+   * que el service pueda distinguir "no existe" de "borrada" y reportar el
+   * motivo exacto en `conflict.detalle`. Vacio si `ids` esta vacio.
+   */
+  findByIdsForTransicion(ids: string[]): Promise<OrdenTransicionRow[]>;
+  /**
+   * R28: subconjunto de `ids` que corresponde a un usuario con rol `mensajero`,
+   * SIN filtro de zona (el filtrado por zona/GAM es la feature 30, ver design.md
+   * "Limites"). Mismo criterio que `findMensajerosByIds`, nombre propio para el
+   * contrato de esta feature.
+   */
+  findMensajeroIdsValidos(ids: string[]): Promise<Set<string>>;
+  /** R28/T15: TODOS los usuarios con rol `mensajero`, SIN filtro de zona. */
+  findAllMensajeros(): Promise<MensajeroLiteRow[]>;
+  /**
+   * R15/R16: catalogo completo `order_status` (id, value) de solo lectura, para
+   * que la UI resuelva `value` -> `estatusId` y siga filtrando `listarOrdenes`
+   * por `estatusId` (contrato feature 6/7 intacto).
+   */
+  listOrderStatus(): Promise<OrderStatusLiteRow[]>;
+  /**
+   * R5/R19/R25: transaccional (todo-o-nada). Por cada decision, asigna
+   * `num_guia = nextval('orden_num_guia_seq')` SOLO si `num_guia IS NULL`
+   * (idempotente, R5) y fija `estatusId`/`mensajeroAsignadoId`; TODAS las
+   * decisiones reciben `num_guia` (incluidas las que van a en_bodega, R19). El
+   * llamador DEBE haber validado el lote completo antes de invocar este metodo
+   * (sin validaciones de negocio aqui, solo persistencia).
+   */
+  generarGuiaLote(decisiones: GenerarGuiaDecisionData[]): Promise<GenerarGuiaResultRow[]>;
+  /**
+   * R26: fija `mensajeroAsignadoId`/`estatusId` en lote; NUNCA toca `numGuia`
+   * (idempotencia R5, esas ordenes ya lo tienen). Devuelve el numero de filas
+   * afectadas.
+   */
+  asignarBodegaLote(ordenIds: string[], mensajeroId: string, estatusId: string): Promise<number>;
 }

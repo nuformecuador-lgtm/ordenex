@@ -121,7 +121,11 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
       .map((e) => e.name)
       .sort();
     const thisDir = dirs.find((d) => d.endsWith("_zonas_catalogo_global_pagos"))!;
-    const previas = dirs.filter((d) => !d.endsWith("_zonas_catalogo_global_pagos"));
+    const previas = dirs.filter(
+      (d) =>
+        !d.endsWith("_zonas_catalogo_global_pagos") &&
+        !d.endsWith("_orden_num_guia_deferred_mensajero_asignado_espera_aceptacion"), // feature 17: apendida despues
+    );
     expect(thisDir > previas[previas.length - 1]).toBe(true);
   });
 });

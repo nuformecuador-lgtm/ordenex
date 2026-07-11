@@ -21,6 +21,13 @@ vi.mock("@/app/(app)/ordenes/_components/OrdenesModule", () => ({
   },
 }));
 
+// Feature 17: page.tsx ramifica por rol server-side; se resuelve a null para
+// mantener la rama del listado plano que monta `OrdenesModule` (R10) SIN
+// regresión.
+vi.mock("@/lib/auth/resolve-actor", () => ({
+  resolveActorFromSession: vi.fn(async () => null),
+}));
+
 beforeEach(() => {
   moduleCalls.length = 0;
 });
@@ -32,7 +39,7 @@ afterEach(() => {
 describe("Reuso de OrdenesModule (R10)", () => {
   it("/ordenes monta OrdenesModule sin columnas custom (variante por defecto)", async () => {
     const { default: OrdenesPage } = await import("@/app/(app)/ordenes/page");
-    render(<OrdenesPage />);
+    render(await OrdenesPage());
 
     expect(screen.getByTestId("ordenes-module-stub")).toBeInTheDocument();
     expect(moduleCalls).toHaveLength(1);

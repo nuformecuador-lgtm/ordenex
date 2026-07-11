@@ -18,6 +18,15 @@ vi.mock("@/lib/actions/ordenes", () => ({
   listarOrdenes: vi.fn(),
 }));
 
+// Feature 17: page.tsx ramifica por rol server-side (resuelto SOLO en el
+// servidor). Estos tests cubren el listado plano previo (rol sin sesión / no
+// maestro-admin), no la vista de revisión (cubierta en OrdenesRevisionMaestro
+// .test.tsx); se resuelve a null para mantener la rama SIN regresión (R15-R18
+// no aplican aquí).
+vi.mock("@/lib/auth/resolve-actor", () => ({
+  resolveActorFromSession: vi.fn(async () => null),
+}));
+
 const listarOrdenesMock = vi.mocked(listarOrdenes);
 
 /** Construye un `OrdenListItemDTO` completo con overrides legibles por test. */
@@ -46,12 +55,18 @@ function makeOrden(
   };
 }
 
-/** Renderiza la página REAL con cache de SWR aislada por render (sin fugas entre tests). */
-function renderPage(): ReactElement {
+/**
+ * Renderiza la página REAL con cache de SWR aislada por render (sin fugas
+ * entre tests). `OrdenesPage` es un Server Component async (feature 17): se
+ * resuelve su árbol con `await` (patrón `HomePageRol.test.tsx`) antes de
+ * pasarlo al render síncrono de Testing Library.
+ */
+async function renderPage(): Promise<ReactElement> {
+  const page = await OrdenesPage();
   const ui = (
     <ToastProvider>
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <OrdenesPage />
+        {page}
       </SWRConfig>
     </ToastProvider>
   );
@@ -117,7 +132,7 @@ describe("OrdenesPage", () => {
       total: 3,
     });
 
-    renderPage();
+    await renderPage();
 
     // Espera la resolución async de SWR.
     await screen.findByText("Tienda Uno");
@@ -162,7 +177,7 @@ describe("OrdenesPage", () => {
       new Promise<ListarOrdenesResult>(() => {}),
     );
 
-    renderPage();
+    await renderPage();
 
     expect(screen.getByRole("status")).toBeInTheDocument();
     // No debe confundirse con el estado vacío.
@@ -181,7 +196,7 @@ describe("OrdenesPage", () => {
       total: 0,
     });
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText("No hay órdenes");
     const rows = bodyRows();
@@ -200,7 +215,7 @@ describe("OrdenesPage", () => {
 
     for (const result of noOk) {
       listarOrdenesMock.mockResolvedValue(result);
-      renderPage();
+      await renderPage();
 
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent("No se pudieron cargar las órdenes");
@@ -215,7 +230,7 @@ describe("OrdenesPage", () => {
 
     // Throw real del transporte (rechazo de la action) también cae en error.
     listarOrdenesMock.mockRejectedValue(new Error("network down"));
-    renderPage();
+    await renderPage();
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("No se pudieron cargar las órdenes");
     expect(screen.queryByText(/network down/i)).toBeNull();
@@ -235,7 +250,7 @@ describe("OrdenesPage", () => {
       total: 2,
     });
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText("2001");
     // Rinde tantas filas como items del mock, ni más ni menos.
@@ -252,7 +267,7 @@ describe("OrdenesPage", () => {
       total: 1,
     });
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText("Sol");
     // Ahora /ordenes SÍ tiene controles de paginación (feature paginación):
@@ -285,7 +300,7 @@ describe("OrdenesPage", () => {
       total: 1,
     });
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText("Tienda F");
     // Server-side: la vista pasa { page, pageSize } (feature paginación).

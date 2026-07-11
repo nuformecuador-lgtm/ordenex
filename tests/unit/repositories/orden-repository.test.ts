@@ -23,6 +23,8 @@ function ordenRow(overrides: Record<string, unknown> = {}) {
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     estatus: { value: "en_bodega" },
+    mensajeroSugeridoId: null,
+    mensajeroAsignadoId: null,
     ...overrides,
   };
 }
@@ -82,6 +84,31 @@ describe("OrdenRepository.create", () => {
     expect(dto.peso).toBe(1.5);
     expect(dto.estatusValue).toBe("en_bodega");
     expect(dto).not.toHaveProperty("deletedAt");
+  });
+
+  // Feature 17/R2/R8: num_guia se asigna en "Generar guia" (nunca al insertar) y
+  // mensajero_asignado_id nace NULL (es un acto posterior del maestro).
+  it("no envia num_guia ni mensajero_asignado_id al crear (R2/R8)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.create.mockResolvedValue(ordenRow({ numGuia: null }));
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.create(baseCreateData());
+
+    const arg = prisma.orden.create.mock.calls[0][0];
+    expect(arg.data).not.toHaveProperty("numGuia");
+    expect(arg.data).not.toHaveProperty("mensajeroAsignadoId");
+  });
+
+  // Feature 17/R30: numGuia NULL se serializa como null (sin romper el DTO).
+  it("serializa numGuia NULL como null (R30)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.create.mockResolvedValue(ordenRow({ numGuia: null }));
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const dto = await repo.create(baseCreateData());
+
+    expect(dto.numGuia).toBeNull();
   });
 
   it("traduce P2002 de num_remision a NumRemisionDuplicadoError (R14/R28)", async () => {
@@ -176,6 +203,31 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(arg.include).toMatchObject({ tienda: { select: { nombre: true } } });
     // R25: el listado sigue trayendo el value del estatus.
     expect(arg.include).toMatchObject({ estatus: { select: { value: true } } });
+  });
+
+  // Feature 17/R20: el modal "Generar guia" agrupa por mensajero sugerido y las
+  // secciones en_espera_aceptacion/en_bodega muestran el mensajero asignado.
+  it("R20: mapea mensajeroSugeridoId y mensajeroAsignadoId en el DTO del listado", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow({ id: "ord-con", mensajeroSugeridoId: "msj-1", mensajeroAsignadoId: "msj-2" }),
+      ordenListRow({ id: "ord-sin", mensajeroSugeridoId: null, mensajeroAsignadoId: null }),
+    ]);
+    prisma.orden.count.mockResolvedValue(2);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.list({
+      where: {},
+      sortBy: "created_at",
+      sortDir: "desc",
+      skip: 0,
+      take: 20,
+    });
+
+    expect(res.items[0].mensajeroSugeridoId).toBe("msj-1");
+    expect(res.items[0].mensajeroAsignadoId).toBe("msj-2");
+    expect(res.items[1].mensajeroSugeridoId).toBeNull();
+    expect(res.items[1].mensajeroAsignadoId).toBeNull();
   });
 
   it("inyecta tiendaId en el where cuando se pasa (alcance adminTienda)", async () => {

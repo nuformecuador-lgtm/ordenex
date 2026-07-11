@@ -13,9 +13,11 @@ export interface MensajeroDTO {
 
 // R6: fila del resumen de una orden del lote recien cargado. Campos disponibles
 // ya en la orden; NO incluye deletedAt/passwordHash/ids de sesion (R9).
+// Feature 17/R30: `numGuia` es `number | null` (la guia se asigna despues, en
+// "Generar guia"; el resumen de carga masiva siempre la muestra pendiente).
 export interface ResumenCargaOrdenDTO {
   id: string;
-  numGuia: number;
+  numGuia: number | null;
   numRemision: string;
   destinatario: string;
   telefonoDest: string;
