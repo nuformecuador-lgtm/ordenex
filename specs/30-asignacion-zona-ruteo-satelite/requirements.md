@@ -2,9 +2,9 @@
 
 Zone: `fullstack` · complexity: `high` · depends_on: 24 (`done`), 17 (`done`) · branch: `feature/30-asignacion-zona-ruteo-satelite`
 
-> Estado: `spec_ready`. La puerta de aprobación **F1.4 está ABIERTA**: hay decisiones
-> recomendadas pendientes de confirmación humana (ver "Preguntas abiertas para F1.4").
-> Este documento NO cierra esas preguntas: recomienda y expone alternativas.
+> Estado: `in_progress` (F2.0). La puerta de aprobación **F1.4 fue APROBADA por el humano
+> el 2026-07-11**: las 6 decisiones quedaron en la opción recomendada (ver "Decisiones F1.4"
+> más abajo). El implementer construye contra esas decisiones cerradas.
 
 Notación EARS. Cada requisito es testeable y mapeable a un test concreto (ver "Tabla de
 trazabilidad"). El "actor" se resuelve vía `resolveActorFromSession` → `{ usuarioId, rol }`
@@ -199,7 +199,22 @@ siendo **exclusivamente `maestro`** (feature 17, decisión 3); `admin` es solo-l
 
 ---
 
-## Preguntas abiertas para F1.4 (con recomendación y alternativas)
+## Decisiones F1.4 (APROBADAS por el humano 2026-07-11)
+
+Las 6 preguntas se resolvieron en la opción **recomendada**:
+- **(a)** Identificación GAM = flag `zona.esGam` como fuente de verdad + **guardia R4** (rechazo
+  explícito si no hay zona GAM marcada). NO se siembra zona GAM por migración; el maestro la
+  marca desde configuración (feature 24, `setGam`).
+- **(b)** UN solo estado nuevo `en_ruta_bodega_satelite`; el nombre de bodega/zona se deriva de
+  `orden.zonaId` para el display.
+- **(c)** El ruteo es SOLO transición de estado + `orden.zonaId` (sin FK explícita a
+  bodega/adminSatelite; la feature 33 filtra por zona en recepción).
+- **(d)** Orígenes de ruteo a satélite: `en_fulfillment`, `en_preparacion` y `en_bodega`.
+- **(e)** SÍ: la restricción mensajeros-GAM aplica también al override por orden del
+  `GenerarGuiaModal` (feature 17); el service revalida (R6/R7).
+- **(f)** SÍ: la orden ruteada a satélite recibe `num_guia` en el momento del ruteo (R10).
+
+## Preguntas abiertas para F1.4 (registro histórico — RESUELTAS arriba)
 
 **(a) Identificación de la zona GAM y garantía de que exista exactamente una.**
 - *Recomendación:* usar el flag `zona.esGam` como fuente de verdad (R3); el índice único

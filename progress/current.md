@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/30-asignacion-zona-ruteo-satelite | fullstack | F1 (spec) | **Rama creada desde `origin/dev` (5e06aeb, incluye la 17). Evaluada: fullstack high, un ciclo (precedente 16/24/25/27). Deps 24 y 17 done.** spec_author LANZADO. Al terminar F1 → `spec_ready` y PARADA en puerta F1.4 (preguntas abiertas: (a) identificación GAM = flag `es_gam`/`es_central` vs nombre; (b) estado de ruteo = un `en_ruta_bodega_satelite` con zona derivada vs estado por zona). NO se toca código hasta aprobación humana. |
+| feature/30-asignacion-zona-ruteo-satelite | fullstack | F2.0 (impl) | **F1 COMPLETA (R1–R22, spec en `specs/30-...`) + F1.4 APROBADA por el humano 2026-07-11** (las 6 decisiones en la opción recomendada: (a) GAM=flag `esGam`+guardia R4; (b) un `en_ruta_bodega_satelite` con zona derivada; (c) solo transición + `orden.zonaId`; (d) orígenes `en_fulfillment`/`en_preparacion`/`en_bodega`; (e) override del GenerarGuiaModal también filtrado a GAM; (f) `num_guia` al rutear). Evaluada fullstack high, un ciclo (precedente 16/24/25/27). Deps 24 y 17 done. Rama pusheada. **SIGUIENTE: lanzar `implementer` (backend_dev → frontend_dev).** |
 
 > Feature 17 (revisión maestro / generar guía / asignación mensajero) CERRADA 2026-07-11: **PR #32 mergeado** a `origin/dev` (5e06aeb). Fullstack (R0–R32), reviewer APROBADO 0 bloqueantes, migración `num_guia` NULLABLE + secuencia + `mensajero_asignado_id` + estado `en_espera_aceptacion`. Suite 1244 verde tras integrar `dev` (feature 51). Desbloquea 30/32/36. Pendiente humano: aplicar la migración contra Postgres real (deuda de despliegue).
 

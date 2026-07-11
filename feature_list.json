@@ -301,7 +301,7 @@
       "id": 30,
       "name": "asignacion por zona (GAM) y ruteo a bodega satelite",
       "description": "Reglas de asignacion por ZONA y ruteo a bodega satelite, sobre el flujo de generacion de guia (feature 17) y las zonas de la feature 24 (mensajeros y adminSatelite quedan asignados a una zona). El admin maestro (bodega central) SOLO controla la zona GAM: al asignar un mensajero a una orden, solo aparecen los mensajeros cuya zona es GAM; un mensajero asignado a otra zona NO le aparece al maestro. Si una orden tiene una zona DIFERENTE de GAM, el maestro NO puede asignarla a un mensajero: lo unico que puede hacer es asignarla a la bodega satelite de esa zona, y la orden pasa a un estado NUEVO 'en ruta hacia la bodega <nombre de zona>'. ABIERTO a decidir en spec: (a) como se identifica la zona GAM -> flag booleano (p.ej. es_gam / es_central) en la tabla zona (recomendado) vs. por nombre 'GAM'; (b) el estado de ruteo -> UN solo estado (p.ej. en_ruta_bodega_satelite) con el nombre de zona derivado de orden.zona_id para el display (recomendado; hay precedente en_ruta_bodega_principal) vs. un estado dinamico por zona. Toca backend (order_status nuevo, consultas de mensajeros filtradas por zona, transiciones) y ajustes de la UI del maestro. Es fullstack de alta complejidad. Depende de la feature 24 (zonas) y de la feature 17 (generar guia / asignacion).",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
