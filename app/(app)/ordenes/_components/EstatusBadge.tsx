@@ -21,6 +21,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30
   en_reparto: "En reparto", // feature 36
   rechazada: "Rechazada", // feature 36
+  en_bodega_satelite: "En bodega satélite", // feature 33 (R9: la UI puede derivar la zona)
 };
 
 const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
@@ -47,6 +48,8 @@ const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
     "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light", // feature 36
   rechazada:
     "bg-danger-soft text-[#991b1b] dark:bg-danger/15 dark:text-danger", // feature 36
+  en_bodega_satelite:
+    "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 33
 };
 
 const NEUTRAL_CLASSES =

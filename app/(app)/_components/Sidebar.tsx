@@ -26,9 +26,17 @@ const MIS_ASIGNACIONES_ITEM: SidebarItem = {
   href: "/mis-asignaciones",
 };
 
+// Feature 33 (R3): "Recepción satélite" es exclusiva del rol `adminSatelite`; la
+// página igual valida el rol server-side como defensa real (design §6).
+const RECEPCION_SATELITE_ITEM: SidebarItem = {
+  label: "Recepción satélite",
+  href: "/recepcion-satelite",
+};
+
 /** Deriva los ítems del sidebar según el rol del actor (o base si no hay rol). */
 export function sidebarItemsForRol(rol?: string): readonly SidebarItem[] {
   if (rol === "mensajero") return [...SIDEBAR_ITEMS, MIS_ASIGNACIONES_ITEM];
+  if (rol === "adminSatelite") return [...SIDEBAR_ITEMS, RECEPCION_SATELITE_ITEM];
   return SIDEBAR_ITEMS;
 }
 

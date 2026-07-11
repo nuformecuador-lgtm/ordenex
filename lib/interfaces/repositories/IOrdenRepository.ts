@@ -155,6 +155,30 @@ export interface EtiquetaRow {
   distritoNombre: string | null;
 }
 
+// Feature 33 — fila proyectada para el modulo de la bodega satelite ("Mis
+// asignaciones" del adminSatelite, R6/R8/R9). Trae los nombres legibles de
+// tienda/geografia (no IDs, patron EtiquetaRow) y `montoCobrar` ya como
+// number|null (Decimal->number). `estatusValue` distingue "Por recibir"
+// (en_ruta_bodega_satelite) de "Recibidas" (en_bodega_satelite); el service parte
+// en grupos. NUNCA incluye `deletedAt`: el repo YA filtra `deletedAt: null`.
+// `distritoNombre` es nullable (la orden puede no tener distrito).
+export interface RecepcionSateliteRow {
+  id: string;
+  numGuia: number | null;
+  numRemision: string;
+  estatusValue: string; // en_ruta_bodega_satelite | en_bodega_satelite
+  destinatario: string;
+  telefonoDest: string;
+  direccion: string | null;
+  producto: string;
+  montoCobrar: number | null;
+  tiendaNombre: string;
+  zonaNombre: string;
+  provinciaNombre: string;
+  cantonNombre: string;
+  distritoNombre: string | null;
+}
+
 export interface IOrdenRepository {
   create(data: CreateOrdenData): Promise<OrdenDTO>;
   /** Excluye borradas (deleted_at IS NOT NULL); null si no existe o esta borrada (R34). */
@@ -291,4 +315,37 @@ export interface IOrdenRepository {
    * sin logica de negocio. Vacio si `ids` esta vacio.
    */
   findEtiquetasByIds(ids: string[]): Promise<EtiquetaRow[]>;
+
+  // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
+
+  /**
+   * Feature 33/R4/R5: `usuario.zonaId` del adminSatelite autenticado, resuelto
+   * server-side por `usuarioId` (espejo de `findUsuarioFulfillment`). `null` si
+   * el usuario no resuelve o no tiene zona asignada (R5: modulo vacio + sin_zona
+   * en la recepcion). No hay logica de negocio: solo la query.
+   */
+  findUsuarioZonaId(usuarioId: string): Promise<string | null>;
+  /**
+   * Feature 33/R6/R8/R9: ordenes NO borradas (`deletedAt: null`) de `zonaId`
+   * cuyo `estatus.value` esta en `estatusValues` (["en_ruta_bodega_satelite",
+   * "en_bodega_satelite"]), con los nombres legibles de tienda/geografia (patron
+   * `findEtiquetasByIds`). El service parte en "Por recibir"/"Recibidas" por el
+   * `estatusValue`. Solo query. Vacio si `estatusValues` esta vacio.
+   */
+  findRecepcionSateliteByZona(
+    zonaId: string,
+    estatusValues: string[],
+  ): Promise<RecepcionSateliteRow[]>;
+  /**
+   * Feature 33/R11/R18: transicion atomica y concurrencia-segura de UNA orden a
+   * `en_bodega_satelite`. UPDATE guardado por estado de ORIGEN (solo si sigue en
+   * `en_ruta_bodega_satelite`), zona (`zonaId`) y no borrada (`deletedAt IS
+   * NULL`). Devuelve `true` si afecto 1 fila (recibida), `false` si 0 (ya no
+   * estaba en el origen -> race). NO toca `mensajeroAsignadoId` ni `numGuia` (R11).
+   */
+  recibirEnSatelite(
+    ordenId: string,
+    zonaId: string,
+    destinoEstatusId: string,
+  ): Promise<boolean>;
 }

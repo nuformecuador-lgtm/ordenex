@@ -17,6 +17,7 @@ import {
   type OrdenTransicionRow,
   type OrderStatusLiteRow,
   type ProvinciaRow,
+  type RecepcionSateliteRow,
   type UpdateOrdenData,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 
@@ -36,6 +37,11 @@ type OrdenPrismaClient = Pick<
 // usuario en el SQL crudo). Es la misma secuencia que el SERIAL de la feature 6
 // creo y que esta migracion desliga con `OWNED BY NONE`.
 const NUM_GUIA_SEQUENCE = "orden_num_guia_seq";
+
+// Feature 33/R11/R18: estado de ORIGEN de la recepcion en satelite. La escritura
+// guardada (`recibirEnSatelite`) solo transiciona una orden que sigue en este
+// estado (guardia por estado de origen en el propio UPDATE, patron feature 17/36).
+const ORIGEN_RECEPCION_SATELITE = "en_ruta_bodega_satelite";
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
 const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
@@ -186,6 +192,54 @@ function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
     id: row.id,
     numGuia: row.numGuia,
     numRemision: row.numRemision,
+    destinatario: row.destinatario,
+    telefonoDest: row.telefonoDest,
+    direccion: row.direccion,
+    producto: row.producto,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    tiendaNombre: row.tienda.nombre,
+    zonaNombre: row.zona.nombre,
+    provinciaNombre: row.provincia.nombre,
+    cantonNombre: row.canton.nombre,
+    distritoNombre: row.distrito?.nombre ?? null,
+  };
+}
+
+// Feature 33/R6/R8/R9 — proyeccion del modulo de la bodega satelite: los datos de
+// la orden + `estatus.value` (para partir "Por recibir"/"Recibidas") + los NOMBRES
+// (no IDs) de tienda/geografia via relaciones ya existentes (patron WITH_ETIQUETA).
+// `distrito` es la unica relacion opcional. No selecciona `deletedAt` ni internos;
+// el filtro `deletedAt: null` va en el `where` del findMany.
+const WITH_RECEPCION_SATELITE = {
+  select: {
+    id: true,
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    direccion: true,
+    producto: true,
+    montoCobrar: true,
+    estatus: { select: { value: true } },
+    tienda: { select: { nombre: true } },
+    zona: { select: { nombre: true } },
+    provincia: { select: { nombre: true } },
+    canton: { select: { nombre: true } },
+    distrito: { select: { nombre: true } },
+  },
+} as const;
+
+type OrdenRecepcionSateliteRow = Prisma.OrdenGetPayload<typeof WITH_RECEPCION_SATELITE>;
+
+// R6/R8/R9: serializa la fila a RecepcionSateliteRow. Resuelve los nombres
+// legibles, mapea Decimal montoCobrar -> number|null y deja distritoNombre null si
+// la orden no tiene distrito. NO expone deletedAt.
+function toRecepcionSateliteRow(row: OrdenRecepcionSateliteRow): RecepcionSateliteRow {
+  return {
+    id: row.id,
+    numGuia: row.numGuia,
+    numRemision: row.numRemision,
+    estatusValue: row.estatus.value,
     destinatario: row.destinatario,
     telefonoDest: row.telefonoDest,
     direccion: row.direccion,
@@ -624,6 +678,60 @@ export class OrdenRepository implements IOrdenRepository {
       ...WITH_ETIQUETA,
     });
     return rows.map(toEtiquetaRow);
+  }
+
+  // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
+
+  /** Feature 33/R4/R5: `usuario.zonaId` del adminSatelite; `null` si no tiene. */
+  async findUsuarioZonaId(usuarioId: string): Promise<string | null> {
+    const row = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { zonaId: true },
+    });
+    return row?.zonaId ?? null;
+  }
+
+  /**
+   * Feature 33/R6/R8/R9: ordenes NO borradas de `zonaId` cuyo `estatus.value`
+   * esta en `estatusValues`, con nombres legibles de tienda/geografia. Solo query.
+   */
+  async findRecepcionSateliteByZona(
+    zonaId: string,
+    estatusValues: string[],
+  ): Promise<RecepcionSateliteRow[]> {
+    if (estatusValues.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: {
+        zonaId,
+        deletedAt: null, // R6: excluye borradas
+        estatus: { value: { in: estatusValues } },
+      },
+      ...WITH_RECEPCION_SATELITE,
+    });
+    return rows.map(toRecepcionSateliteRow);
+  }
+
+  /**
+   * Feature 33/R11/R18: transiciona UNA orden a `en_bodega_satelite` SOLO si sigue
+   * en `en_ruta_bodega_satelite`, es de `zonaId` y no esta borrada (guardia por
+   * estado de origen + zona en el propio UPDATE; concurrencia-segura). Devuelve
+   * `true` si afecto 1 fila. NO toca `mensajeroAsignadoId` ni `numGuia`.
+   */
+  async recibirEnSatelite(
+    ordenId: string,
+    zonaId: string,
+    destinoEstatusId: string,
+  ): Promise<boolean> {
+    const result = await this.prisma.orden.updateMany({
+      where: {
+        id: ordenId,
+        zonaId,
+        deletedAt: null,
+        estatus: { value: ORIGEN_RECEPCION_SATELITE },
+      },
+      data: { estatusId: destinoEstatusId },
+    });
+    return result.count === 1;
   }
 }
 

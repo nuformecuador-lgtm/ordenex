@@ -92,6 +92,28 @@ describe("Sidebar", () => {
     expect(screen.getAllByRole("link")).toHaveLength(3);
   });
 
+  it("feature 33/R3: el rol adminSatelite ve la entrada 'Recepción satélite'; otros roles no", () => {
+    const { unmount } = render(<Sidebar rol="adminSatelite" />);
+    const sateliteLink = screen.getByRole("link", { name: "Recepción satélite" });
+    expect(sateliteLink).toHaveAttribute("href", "/recepcion-satelite");
+    // Base (3) + 1 exclusiva del adminSatelite.
+    expect(screen.getAllByRole("link")).toHaveLength(4);
+    // No ve la entrada del mensajero.
+    expect(
+      screen.queryByRole("link", { name: "Mis asignaciones" }),
+    ).toBeNull();
+    unmount();
+
+    // Otros roles no ven la entrada del adminSatelite.
+    for (const rol of ["mensajero", "maestro", "admin"] as const) {
+      const { unmount: u } = render(<Sidebar rol={rol} />);
+      expect(
+        screen.queryByRole("link", { name: "Recepción satélite" }),
+      ).toBeNull();
+      u();
+    }
+  });
+
   it("item activo (R4, R5)", () => {
     const cases: Array<{ path: string; active: string }> = [
       { path: "/configuracion", active: "Configuración" },

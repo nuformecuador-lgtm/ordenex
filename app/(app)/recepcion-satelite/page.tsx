@@ -1,0 +1,39 @@
+import { notFound } from "next/navigation";
+
+import { PageHeader } from "@/components/shared/PageHeader";
+import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { listarRecepcionSatelite } from "@/lib/actions/recepcion-satelite";
+
+import { RecepcionSateliteModule } from "./_components/RecepcionSateliteModule";
+
+/**
+ * Feature 33 (T11, R3/R4): módulo "Mis asignaciones" de la bodega satélite. El rol
+ * se resuelve SOLO server-side vía `resolveActorFromSession` (patrón feature
+ * 36): cualquier rol distinto de `adminSatelite` (o sin sesión) NO ve el módulo
+ * (`notFound`, defensa real). Pre-fetch del listado por la Server Action y paso de
+ * datos sensibles a los componentes cliente por props (el padre valida permisos).
+ * La ruta es `/recepcion-satelite` (el path `/mis-asignaciones` es del mensajero,
+ * feature 36); el título de la UI sí es "Mis asignaciones".
+ */
+export default async function RecepcionSatelitePage() {
+  const actor = await resolveActorFromSession();
+  if (!actor || actor.rol !== "adminSatelite") notFound(); // R3
+
+  const result = await listarRecepcionSatelite();
+  if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
+
+  return (
+    <section className="flex flex-1 flex-col gap-6 p-6">
+      <PageHeader
+        title="Mis asignaciones"
+        description="Recepción de órdenes de tu bodega satélite por escaneo de QR"
+      />
+      <RecepcionSateliteModule
+        porRecibir={result.porRecibir}
+        recibidas={result.recibidas}
+        zonaNombre={result.zonaNombre}
+        sinZona={result.sinZona}
+      />
+    </section>
+  );
+}
