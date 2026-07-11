@@ -13,6 +13,9 @@
 // en_espera_aceptacion al pulsar "Recoger") y sale a reparto; "rechazada" (12mo)
 // — resultado RECHAZO de la gestion (NO se mapea a devuelta/devuelta_origen, que
 // pertenecen a los flujos 47/48). Sembrados idempotentemente por seedOrderStatus.
+// Feature 33/R1: suma "en_bodega_satelite" (13mo valor) — la orden ruteada a la
+// satelite (feature 30, en_ruta_bodega_satelite) es RECIBIDA por el adminSatelite
+// al escanear su QR (nombre de zona derivado de orden.zonaId para el display, R9).
 export const ORDER_STATUS_SEED = [
   "entregada",
   "devuelta",
@@ -26,6 +29,7 @@ export const ORDER_STATUS_SEED = [
   "en_ruta_bodega_satelite", // feature 30
   "en_reparto", // feature 36: recogida por el mensajero / en reparto
   "rechazada", // feature 36: resultado RECHAZO de la gestion
+  "en_bodega_satelite", // feature 33: recibida en la bodega satelite de su zona
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

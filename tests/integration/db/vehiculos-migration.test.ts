@@ -105,7 +105,8 @@ describe("no se modifico ninguna migracion previa (R3)", () => {
         !d.endsWith("_zonas_catalogo_global_pagos") && // feature 24: apendida despues
         !d.endsWith("_orden_num_guia_deferred_mensajero_asignado_espera_aceptacion") && // feature 17: apendida despues
         !d.endsWith("_order_status_en_ruta_bodega_satelite") && // feature 30: apendida despues
-        !d.endsWith("_gestion_orden_estados_metodo_pago"),
+        !d.endsWith("_gestion_orden_estados_metodo_pago") && // feature 36: apendida despues
+        !d.endsWith("_order_status_en_bodega_satelite"), // feature 33: apendida despues
     );
     const maxPrevio = previos[previos.length - 1];
     // El timestamp (prefijo) de vehiculos es mayor que el ultimo previo.

@@ -85,6 +85,11 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 32: etiqueta de guia, no ejercitada por el CRUD (feature 6) pero
     // exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
+    // Feature 33: recepcion en bodega satelite, no ejercitada aqui pero exigida
+    // por la interfaz IOrdenRepository.
+    findUsuarioZonaId: vi.fn().mockResolvedValue(null),
+    findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
+    recibirEnSatelite: vi.fn().mockResolvedValue(false),
     ...overrides,
   };
 }

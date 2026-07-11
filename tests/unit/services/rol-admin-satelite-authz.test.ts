@@ -86,6 +86,11 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 32: etiqueta de guia, exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
+    // Feature 33: recepcion en bodega satelite, no ejercitada aqui pero exigida
+    // por la interfaz IOrdenRepository.
+    findUsuarioZonaId: vi.fn().mockResolvedValue(null),
+    findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
+    recibirEnSatelite: vi.fn().mockResolvedValue(false),
     ...overrides,
   };
 }
