@@ -76,6 +76,22 @@ describe("Sidebar", () => {
     }
   });
 
+  it("feature 36/R9: el rol mensajero ve la entrada 'Mis asignaciones'; otros roles no", () => {
+    const { unmount } = render(<Sidebar rol="mensajero" />);
+    const mensajeroLink = screen.getByRole("link", { name: "Mis asignaciones" });
+    expect(mensajeroLink).toHaveAttribute("href", "/mis-asignaciones");
+    // Base (3) + 1 exclusiva del mensajero.
+    expect(screen.getAllByRole("link")).toHaveLength(4);
+    unmount();
+
+    // Otro rol: sin la entrada exclusiva; solo las 3 base.
+    render(<Sidebar rol="maestro" />);
+    expect(
+      screen.queryByRole("link", { name: "Mis asignaciones" }),
+    ).toBeNull();
+    expect(screen.getAllByRole("link")).toHaveLength(3);
+  });
+
   it("item activo (R4, R5)", () => {
     const cases: Array<{ path: string; active: string }> = [
       { path: "/configuracion", active: "Configuración" },

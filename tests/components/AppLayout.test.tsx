@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import AppLayout from "@/app/(app)/layout";
+import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 
 // El layout monta el <Sidebar /> (Client Component) que usa usePathname; se
 // mockea next/navigation y next/link igual que en Sidebar.test.tsx.
@@ -12,6 +13,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => "/",
 }));
+
+// Feature 36: el layout ahora resuelve el actor server-side para pasar el rol al
+// Sidebar. Se mockea (sin sesión → rol undefined → sidebar base).
+vi.mock("@/lib/auth/resolve-actor", () => ({
+  resolveActorFromSession: vi.fn(async () => null),
+}));
+
+const resolveActorMock = vi.mocked(resolveActorFromSession);
 
 vi.mock("next/link", () => ({
   __esModule: true,
@@ -27,12 +36,12 @@ vi.mock("next/link", () => ({
 }));
 
 describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
-  it("monta el sidebar y los children (R14)", () => {
-    render(
-      <AppLayout>
-        <div data-testid="page-children">Contenido de la página</div>
-      </AppLayout>,
-    );
+  it("monta el sidebar y los children (R14)", async () => {
+    resolveActorMock.mockResolvedValue(null);
+    const layout = await AppLayout({
+      children: <div data-testid="page-children">Contenido de la página</div>,
+    });
+    render(layout);
 
     // El landmark de navegación del Sidebar está presente...
     expect(

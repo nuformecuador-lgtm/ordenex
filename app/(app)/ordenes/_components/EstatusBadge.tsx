@@ -19,6 +19,8 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   reprogramada: "Reprogramada",
   en_espera_aceptacion: "En espera de aceptación del mensajero", // feature 17
   en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30
+  en_reparto: "En reparto", // feature 36
+  rechazada: "Rechazada", // feature 36
 };
 
 const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
@@ -41,6 +43,10 @@ const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
     "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 17
   en_ruta_bodega_satelite:
     "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 30
+  en_reparto:
+    "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light", // feature 36
+  rechazada:
+    "bg-danger-soft text-[#991b1b] dark:bg-danger/15 dark:text-danger", // feature 36
 };
 
 const NEUTRAL_CLASSES =
