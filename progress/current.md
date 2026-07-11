@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 52 CERRADA (fix build, `pnpm build` verde); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+| feature/34-asignacion-satelite | fullstack | F1 (spec) | **Rama desde `origin/dev` (6b40050). Evaluada fullstack high, un ciclo. Dep 33 done (+ reúsa 17 y 30).** El adminSatélite asigna sus órdenes `en_bodega_satelite` a mensajeros de SU zona → `en_espera_aceptacion` (que consume la 36). REÚSO clave: `GuiaAsignacionService.asignarDesdeBodega` (17) y `findMensajerosGam`/`findMensajeroIdsValidosGam` (30) YA están parametrizados por `zonaId` (nombre "Gam" pero filtran por la zona pasada) → se reusan con la zona del adminSatélite (`findUsuarioZonaId`, 33). spec_author LANZADO. Parada en F1.4. |
 
 > Feature 52 (fix build /postulacion) CERRADA 2026-07-11: `export const dynamic="force-dynamic"` en `app/postulacion/page.tsx`. `pnpm build` PASA, `init.sh` verde 1493 tests. Ciclo ágil (spec inline, sin reviewer aparte). Estado `done` + `history.md`. **PENDIENTE: PR a `dev` + merge.**
 
