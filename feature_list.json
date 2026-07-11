@@ -537,6 +537,17 @@
       "zone": "frontend",
       "branch": "feature/51-carga-masiva-cr",
       "depends_on": 24
+    },
+    {
+      "id": 52,
+      "name": "fix build - /postulacion prerender dinamico",
+      "description": "CORRECCION de BUILD detectada por el reviewer de la feature 33 (ajena a esa feature). `pnpm build` (`next build`) falla el prerender ESTATICO de la ruta publica `app/postulacion/page.tsx` (feature 21): es un Server Component async que consulta Prisma en render (`VehiculoRepository.findMany()` + `prisma.tipoIdentificacion.findMany()`) para poblar los selects del formulario, y NO lee cookies/headers, por lo que Next intenta prerenderizarla estaticamente en build; sin DB da `PrismaClientKnownRequestError P2021 TableDoesNotExist` y rompe el build. Las otras rutas que consultan Prisma (`app/(app)/page.tsx`, `app/login/page.tsx`, `app/recuperar-contrasena/page.tsx`) leen `cookies()` y Next las marca dinamicas solas, por eso no fallan. FIX: declarar la ruta como dinamica (`export const dynamic = 'force-dynamic'`) en `app/postulacion/page.tsx` para que renderice en request time (apropiado: pagina publica que lee catalogos de DB). Criterio de aceptacion: `pnpm build` PASA (ademas de init.sh/suite). Frontend puro, correccion pequena; ciclo SDD agilizado (spec inline por el leader, patron feature 51).",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": "feature/52-fix-build-postulacion",
+      "depends_on": null
     }
   ]
 }
