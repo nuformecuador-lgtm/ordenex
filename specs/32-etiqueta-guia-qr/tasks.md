@@ -62,14 +62,14 @@
 
 ## Bloque 3 — Trazabilidad y cierre
 
-- [ ] **T3.1** Escribir el mapa `R<n> → test` en `progress/impl_32-etiqueta-guia-qr.md`
+- [x] **T3.1** Escribir el mapa `R<n> → test` en `progress/impl_32-etiqueta-guia-qr.md`
   (tabla §7 de `design.md`). *Hecho:* cada R1–R15 mapea a ≥1 test existente.
-- [ ] **T3.2** `pnpm run typecheck`, `pnpm run lint`, `pnpm test` en verde; `./init.sh`
-  en verde. *Hecho:* todo pasa localmente sin errores.
-- [ ] **T3.3** Verificar CHECKPOINTS: sin tabla nueva (sin RLS/migración
+- [x] **T3.2** `pnpm run typecheck`, `pnpm run lint`, `pnpm test` en verde; `./init.sh`
+  en verde. *Hecho:* todo pasa localmente sin errores (reviewer verificó 1314 tests).
+- [x] **T3.3** Verificar CHECKPOINTS: sin tabla nueva (sin RLS/migración
   aplicables), contrato del CRUD intacto, componentes cliente correctos, un commit
-  por task lógica. *Hecho:* checklist de `CHECKPOINTS.md` revisada; añadir entrada a
-  `progress/history.md`.
+  por task lógica. *Hecho:* reviewer APROBADO 0 bloqueantes; entrada añadida a
+  `progress/history.md` y `progress/review_32-etiqueta-guia-qr.md`.
 
 ## Notas de dependencias
 - T1.1 desbloquea T1.5 y T2.1. T1.4 desbloquea T1.5. T1.6 desbloquea T2.3.

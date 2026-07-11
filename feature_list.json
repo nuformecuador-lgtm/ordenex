@@ -323,7 +323,7 @@
       "id": 32,
       "name": "etiqueta de guia con QR y codigo de barras",
       "description": "Al pulsar 'Generar guia' (feature 17), ademas de asignar el num_guia, se genera para cada guia una ETIQUETA imprimible con toda la informacion del paquete (num_guia, num_remision, destinatario, telefono, direccion, zona/provincia/canton/distrito, producto, monto_cobrar, tienda, etc.) e incluye un CODIGO QR y un CODIGO DE BARRAS. El QR se usa mas adelante para que la bodega satelite reciba los paquetes escaneando (feature 33), por lo que debe codificar un identificador de la guia/orden (num_guia u orden.id: a decidir en spec). Requiere una libreria de generacion de QR y otra de codigo de barras (dependencias nuevas probables). ABIERTO a decidir en spec: que dato exacto codifican el QR y el codigo de barras, y el formato/render de la etiqueta (PDF imprimible / HTML para imprimir). Depende de la feature 17 (generar guia).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
