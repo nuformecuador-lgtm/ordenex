@@ -101,6 +101,17 @@ describe("buildXlsxTemplate", () => {
     expect(rowValues(worksheet, 1, 2)).toEqual(["a", "b"]);
   });
 
+  it("feature 51: sufija con ' *' la cabecera de un campo obligatorio y deja intactos los opcionales", async () => {
+    const fields: XlsxTemplateField[] = [
+      { key: "distrito", label: "Distrito", required: true },
+      { key: "notas", label: "Notas" },
+    ];
+
+    const worksheet = await loadFirstWorksheet(await buildXlsxTemplate(fields));
+
+    expect(rowValues(worksheet, 1, 2)).toEqual(["Distrito *", "Notas"]);
+  });
+
   it("R5: rechaza si se invoca sin campos (contrato de uso)", async () => {
     await expect(buildXlsxTemplate([])).rejects.toThrow();
   });
