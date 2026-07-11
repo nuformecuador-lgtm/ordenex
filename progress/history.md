@@ -738,3 +738,35 @@
   Postgres real (deuda de despliegue); E2E ESCRITO pero NO ejecutado (requiere entorno con DB/seed/login).
 - **Desbloquea**: feature 37 (cierre del día, consume las órdenes gestionadas y los montos por método de pago),
   y es base de 46/47/48/49 (reprogramación/reintentos/retorno/trazabilidad). Consumió la 17.
+
+## 2026-07-11 — bodega satélite: "Mis asignaciones" y recepción por QR (feature 33, FULLSTACK)
+- Módulo del rol `adminSatelite` en ruta NUEVA `/recepcion-satelite` (no `mis-asignaciones`, que es del mensajero,
+  feature 36). Dos secciones: "Por recibir" (`en_ruta_bodega_satelite` de SU zona) y "Recibidas"
+  (`en_bodega_satelite`). Recepción por ESCANEO del QR de la etiqueta (feature 32, QR=`orden.id`): cada escaneo
+  transiciona `en_ruta_bodega_satelite` → estado NUEVO `en_bodega_satelite` ("en bodega satélite de <zona>",
+  zona derivada de `orden.zonaId`, patrón feature 30).
+- Backend (backend_dev, model opus): 13.º valor `en_bodega_satelite` en `ORDER_STATUS_SEED` + migración
+  `20260711160000_order_status_en_bodega_satelite` (up+down condicional, patrón 30). `findUsuarioZonaId` (espejo de
+  `findUsuarioFulfillment`; el zonaId del adminSatelite se resuelve SERVER-SIDE, no se toca el tipo `Actor`),
+  `findRecepcionSateliteByZona`, `recibirEnSatelite` (UPDATE con `WHERE` por estado origen + zonaId).
+  `RecepcionSateliteService.recibir`: guardas rol `adminSatelite` + zona propia (orden de otra zona → `zona_ajena`,
+  doble defensa), idempotencia (ya recibida → `ya_recibida` sin doble transición), 5 casos de error tipados. Actions
+  con zod + `resolveActorFromSession` + `withErrorHandler`.
+- Frontend (frontend_dev, model opus): página protegida server-side (`notFound` si no adminSatelite), módulo dos
+  secciones, `EscanerRecepcion` con AMBOS caminos — **cámara `html5-qrcode`** (import dinámico dentro de `useEffect`,
+  nunca SSR) + **lector físico keyboard-wedge** (input), ambos → misma action; feedback por ítem (Toast); ítem de
+  Sidebar gated por rol. Cambios a EstatusBadge/estatus-label/order-status/Sidebar puramente aditivos.
+- Requisitos cubiertos: R1–R23 (EARS), mapeados 1:1 a test. Reviewer **APROBADO** 0 bloqueantes (corrió `init.sh` +
+  `pnpm build`). Verificación: `pnpm test` **1493/1493**, `./init.sh` EXIT 0, typecheck/lint OK. Dep nueva `html5-qrcode`.
+- Decisiones F1.4 (humano 2026-07-11): (a) escaneo AMBOS = cámara + lector keyboard-wedge (PWA = feature FUTURA
+  aparte); (b) un `en_bodega_satelite` zona-derivada; (c) solo su zona (server-side, `zona_ajena`); (d) 1-a-1
+  idempotente; (e) 5 casos de error; (f) sección "Recibidas" aparte; (g) E2E `e2e/recepcion-satelite.spec.ts`
+  (escrito, ejecución diferida); (h) sin vista del maestro.
+- DEUDA declarada: migración NO aplicada contra Postgres real (cubierta por test estático); verificación MANUAL del
+  hardware (cámara/lector); E2E escrito NO ejecutado.
+- HALLAZGO ajeno (pre-existente, NO de la 33): `pnpm build` falla el prerender de `/postulacion` (feature 21) por
+  `prisma.vehiculo.findMany()` en prerender estático sin `export const dynamic` (`P2021` sin DB en build). Candidato
+  a **feature de corrección aparte** (declarar la ruta dinámica o no consultar Prisma en prerender). `html5-qrcode`
+  NO lo causa (solo se carga en cliente).
+- **Desbloquea**: feature 34 (asignación a mensajeros desde la satélite, parte de `en_bodega_satelite`). Consumió
+  la 30 (`en_ruta_bodega_satelite`) y la 32 (QR=`orden.id`).

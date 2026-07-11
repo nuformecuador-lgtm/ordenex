@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/33-recepcion-qr-satelite | fullstack | F2.0 (impl) | **F1 COMPLETA (R1–R23, spec en `specs/33-...`) + F1.4 APROBADA 2026-07-11.** Módulo del rol `adminSatelite` (ruta `recepcion-satelite`): "Por recibir" (`en_ruta_bodega_satelite` de SU zona) + "Recibidas" (`en_bodega_satelite`). Recepción por escaneo del QR (=`orden.id`, feature 32) → estado NUEVO `en_bodega_satelite` (zona derivada). Decisiones F1.4: (a) escaneo AMBOS = **cámara (dep QR nueva) + lector keyboard-wedge** (PWA = feature futura aparte); (b) un estado zona-derivada; (c) solo su zona (`zona_ajena` error); (d) 1-a-1 idempotente; (e) 5 casos de error; (f) sección "Recibidas" aparte; (g) **añadir E2E**; (h) sin vista del maestro. **SIGUIENTE: `implementer`.** |
+| (ninguna en curso) | — | — | Feature 33 CERRADA (impl+reviewer OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+
+> Feature 33 (bodega satélite: mis asignaciones + recepción QR) CERRADA 2026-07-11: **impl COMPLETA (R1–R23) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh` + `pnpm build`, 1493 tests). Fullstack un ciclo. Estado `done` + `history.md` + `review_33`. Módulo `/recepcion-satelite` del adminSatelite ("Por recibir"/"Recibidas"), recepción por escaneo (cámara `html5-qrcode` + lector keyboard-wedge) → estado NUEVO `en_bodega_satelite`; alcance por zona server-side, idempotente. Migración `20260711160000`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: migración no aplicada, verificación manual de hardware, E2E no ejecutado. **HALLAZGO ajeno (pre-existente):** `pnpm build` falla el prerender de `/postulacion` (feature 21, Prisma en prerender sin `export const dynamic`) → candidato a corrección aparte. Desbloquea 34.
 
 > Feature 36 (mensajero: mis asignaciones y gestión) CERRADA 2026-07-11: **impl COMPLETA (R0–R35) + reviewer APROBADO** tras 1 ciclo de rechazo (bloqueantes de checkpoint: tasks sin marcar + falta E2E de recaudo; el humano decidió AÑADIR el E2E). Fullstack un ciclo. Estado `done` + `history.md` + `progress/review_36-...md`. Máquina de estados: `en_espera_aceptacion` →[Recoger]→ `en_reparto` (NUEVO) → gestión → entregada/reprogramada/devuelta/`rechazada`(NUEVO). Migración `20260711150000` (2 estados + enum `metodo_pago_value` + tabla `gestion_orden`+RLS + puntero `usuario.orden_en_gestion_id`). Módulo `/mis-asignaciones` del mensajero. Verificación: `pnpm test` **1433/1433**, `init.sh` verde. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: crear bucket `gestion-evidencias` (HUMANO), migración no aplicada, E2E no ejecutado. Desbloquea 37 (cierre del día) y base de 46/47/48/49.
 
@@ -210,9 +212,11 @@
 - [x] Feature 17 (revisión maestro / generar guía): done, PR #32 mergeado 2026-07-11.
 - [x] Feature 30 (asignación por zona GAM / ruteo satélite): done, PR #33 mergeado.
 - [x] Feature 32 (etiqueta guía QR/barcode): done, PR #34 mergeado.
-- [x] Feature 36 (mensajero mis asignaciones y gestión): done (impl+re-review OK); pendiente PR a `dev`.
-- [ ] Siguientes elegibles: **33** (recepción QR satélite, depends 30+32 done), **37** (cierre del día, depends 36 done),
-      **42** (wallet, depends 18 done), 35 (realtime). También 34 (asignación satélite, depends 33).
+- [x] Feature 36 (mensajero mis asignaciones y gestión): done, PR #35 mergeado.
+- [x] Feature 33 (recepción QR bodega satélite): done (impl+reviewer OK); pendiente PR a `dev`.
+- [ ] Siguientes elegibles: **34** (asignación desde satélite, depends 33 done → desbloqueada), **37** (cierre del día,
+      depends 36 done), **42** (wallet, depends 18 done), 35 (realtime).
+- [ ] DEUDA nueva detectada: `/postulacion` (feature 21) rompe `pnpm build` (Prisma en prerender sin `dynamic`) → feature de corrección aparte.
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.
