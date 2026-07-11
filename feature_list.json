@@ -334,11 +334,11 @@
       "id": 33,
       "name": "bodega satelite - mis asignaciones y recepcion por QR",
       "description": "Modulo 'Mis asignaciones' para el rol adminSatelite (admin de bodega satelite) + recepcion de paquetes por escaneo. Cuando el maestro asigna una orden a una bodega satelite (feature 30), la orden queda en estado en_ruta_bodega_satelite ('en ruta hacia la bodega <zona>') y se refleja en el modulo 'Mis asignaciones' del adminSatelite de esa zona, mostrada de forma SEPARADA. Esas ordenes permanecen ahi y NO se pueden asignar a nadie hasta ser RECIBIDAS. Recepcion: el adminSatelite, logueado, escanea el codigo QR de la etiqueta (feature 32) de cada paquete fisico; a medida que escanea, cada orden pasa del estado en_ruta_bodega_satelite al estado NUEVO en_bodega_satelite ('en bodega satelite de <zona>', p.ej. 'en bodega satelite de limon'). Estado NUEVO: en_bodega_satelite (sigue la misma decision de modelado de estados por zona de la feature 30: un estado con la zona derivada de orden.zona_id). ABIERTO a decidir en spec: mecanismo de escaneo (camara via web vs. lector fisico de QR que actua como teclado). Fullstack (vista del adminSatelite + transicion de estado). Depende de la feature 30 (ruteo a satelite) y de la feature 32 (etiqueta con QR).",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/33-recepcion-qr-satelite",
       "depends_on": 30
     },
     {

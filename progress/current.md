@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 36 CERRADA (impl+re-review OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+| feature/33-recepcion-qr-satelite | fullstack | F1 (spec) | **Rama desde `origin/dev` (3423f93, incluye 30/32/36). Evaluada fullstack high, un ciclo. Dep 30 done + se apoya en 32 done.** Módulo "Mis asignaciones" del rol `adminSatelite` (órdenes `en_ruta_bodega_satelite` de SU zona) + recepción por escaneo del QR (=`orden.id`, feature 32) → estado NUEVO `en_bodega_satelite` (zona derivada de `orden.zonaId`, patrón feature 30). Reusa `en_ruta_bodega_satelite`(30)/`usuario.zonaId`(24)/rol adminSatelite(19). spec_author LANZADO. Parada en F1.4 (abierto: mecanismo de escaneo cámara vs lector físico). |
 
 > Feature 36 (mensajero: mis asignaciones y gestión) CERRADA 2026-07-11: **impl COMPLETA (R0–R35) + reviewer APROBADO** tras 1 ciclo de rechazo (bloqueantes de checkpoint: tasks sin marcar + falta E2E de recaudo; el humano decidió AÑADIR el E2E). Fullstack un ciclo. Estado `done` + `history.md` + `progress/review_36-...md`. Máquina de estados: `en_espera_aceptacion` →[Recoger]→ `en_reparto` (NUEVO) → gestión → entregada/reprogramada/devuelta/`rechazada`(NUEVO). Migración `20260711150000` (2 estados + enum `metodo_pago_value` + tabla `gestion_orden`+RLS + puntero `usuario.orden_en_gestion_id`). Módulo `/mis-asignaciones` del mensajero. Verificación: `pnpm test` **1433/1433**, `init.sh` verde. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: crear bucket `gestion-evidencias` (HUMANO), migración no aplicada, E2E no ejecutado. Desbloquea 37 (cierre del día) y base de 46/47/48/49.
 
@@ -187,6 +187,17 @@
   método de pago (¿catálogo tabla como order_status vs enum PG?); (d) forma del modelo de gestión (un registro
   con `resultado` + campos nullable vs tablas separadas); (e) bloqueo 1-a-1 solo UI vs flag backend; (f) bucket
   de evidencias (reusar `mensajero-docs` vs nuevo `gestion-evidencias`); (g) aceptación en lote vs por-orden.
+
+- `bodega satelite - mis asignaciones y recepcion por QR` (id 33): **zone=fullstack, complexity=high,
+  branch=feature/33-recepcion-qr-satelite, depends_on=30.** Evaluada 2026-07-11: fullstack (vista del
+  `adminSatelite` + transición de estado + escaneo). Se apoya en: `en_ruta_bodega_satelite` (feature 30, órdenes
+  ruteadas a satélite), QR=`orden.id` (feature 32), `usuario.zonaId` del adminSatelite (feature 24), rol
+  adminSatelite (feature 19). Añade estado NUEVO `en_bodega_satelite` (zona derivada de `orden.zonaId`, mismo
+  patrón de la 30). Preguntas ABIERTAS para F1.4: (a) mecanismo de escaneo -> lector físico tipo teclado
+  (keyboard-wedge, robusto/barato, recomendado) vs. cámara web (getUserMedia + lib QR) vs. ambos; (b) confirmar
+  estado único `en_bodega_satelite` con zona derivada; (c) ¿el adminSatelite solo recibe órdenes de SU zona? (sí:
+  rechazar escaneo de orden de otra zona); (d) recepción 1-a-1 por escaneo con feedback por item vs. lote;
+  (e) ¿qué hace el escaneo de un QR inválido / orden no en_ruta_bodega_satelite / ya recibida?
 
 ## Conflictos pendientes
 
