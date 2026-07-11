@@ -71,7 +71,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     // --- Precarga: ordenes (con zona/GAM) + mensajeros validos de la zona GAM (R6) ---
     const [ordenes, mensajerosValidos] = await Promise.all([
       this.repo.findByIdsForTransicion(ordenIds),
-      this.repo.findMensajeroIdsValidosGam(mensajeroIds, gamZonaId),
+      this.repo.findMensajeroIdsValidosByZona(mensajeroIds, gamZonaId),
     ]);
     const ordenMap = new Map(ordenes.map((o) => [o.id, o]));
 
@@ -203,7 +203,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
 
     // --- R6: mensajeroId debe ser un usuario rol mensajero de la zona GAM ---
-    const mensajerosValidos = await this.repo.findMensajeroIdsValidosGam(
+    const mensajerosValidos = await this.repo.findMensajeroIdsValidosByZona(
       [input.mensajeroId],
       gamZonaId,
     );

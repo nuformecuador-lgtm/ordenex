@@ -5,7 +5,10 @@ import type { RolValue } from "@prisma/client";
 
 import RecepcionSatelitePage from "@/app/(app)/recepcion-satelite/page";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
-import { listarRecepcionSatelite } from "@/lib/actions/recepcion-satelite";
+import {
+  listarRecepcionSatelite,
+  listarMensajerosSatelite,
+} from "@/lib/actions/recepcion-satelite";
 
 // Feature 33 (T11) — la página resuelve el rol SOLO server-side; rol ≠
 // adminSatelite (o sin sesión) → `notFound`. Se mockean el resolver, la action de
@@ -16,6 +19,7 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
 }));
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   listarRecepcionSatelite: vi.fn(),
+  listarMensajerosSatelite: vi.fn(),
   recibirPorQr: vi.fn(),
 }));
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
@@ -46,6 +50,7 @@ vi.mock("@/hooks/useToast", () => ({
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarRecepcionSatelite);
+const listarMensajerosMock = vi.mocked(listarMensajerosSatelite);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -55,6 +60,10 @@ beforeEach(() => {
     recibidas: [],
     zonaNombre: "Limón",
     sinZona: false,
+  });
+  listarMensajerosMock.mockResolvedValue({
+    status: "ok",
+    mensajeros: [{ id: "m1", nombre: "Ana Mensajera" }],
   });
 });
 

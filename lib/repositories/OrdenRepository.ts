@@ -564,20 +564,20 @@ export class OrdenRepository implements IOrdenRepository {
     });
   }
 
-  /** Feature 30/R5: usuarios rol `mensajero` Y `zonaId = gamZonaId` (solo GAM). */
-  async findMensajerosGam(gamZonaId: string): Promise<MensajeroLiteRow[]> {
+  /** Feature 30/R5 + 34/R5: usuarios rol `mensajero` cuyo `zonaId` sea la zona pasada. */
+  async findMensajerosByZona(zonaId: string): Promise<MensajeroLiteRow[]> {
     return this.prisma.usuario.findMany({
-      where: { rol: { value: "mensajero" }, zonaId: gamZonaId },
+      where: { rol: { value: "mensajero" }, zonaId },
       select: { id: true, nombre: true },
       orderBy: { nombre: "asc" },
     });
   }
 
-  /** Feature 30/R6: subconjunto de `ids` con rol `mensajero` Y `zonaId = gamZonaId`. */
-  async findMensajeroIdsValidosGam(ids: string[], gamZonaId: string): Promise<Set<string>> {
+  /** Feature 30/R6 + 34/R9: subconjunto de `ids` con rol `mensajero` Y `zonaId` = zona pasada. */
+  async findMensajeroIdsValidosByZona(ids: string[], zonaId: string): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
     const rows = await this.prisma.usuario.findMany({
-      where: { id: { in: ids }, rol: { value: "mensajero" }, zonaId: gamZonaId },
+      where: { id: { in: ids }, rol: { value: "mensajero" }, zonaId },
       select: { id: true },
     });
     return new Set(rows.map((r) => r.id));
@@ -732,6 +732,36 @@ export class OrdenRepository implements IOrdenRepository {
       data: { estatusId: destinoEstatusId },
     });
     return result.count === 1;
+  }
+
+  // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
+
+  /**
+   * Feature 34/R7/R14: transiciona el lote a `en_espera_aceptacion` fijando
+   * `mensajeroAsignadoId`, con escritura guardada por estado de ORIGEN + zona (solo
+   * las que sigan en `origenEstatusId`, de `zonaId` y no borradas; patron
+   * `recibirEnSatelite`, concurrencia-segura). Filtra por `estatusId` (id ya
+   * resuelto por el service), NO por `estatus.value`. NUNCA toca `numGuia` (R8).
+   * Devuelve el numero de filas efectivamente transicionadas.
+   */
+  async asignarSateliteLote(
+    ordenIds: string[],
+    mensajeroId: string,
+    zonaId: string,
+    destinoEstatusId: string,
+    origenEstatusId: string,
+  ): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    const result = await this.prisma.orden.updateMany({
+      where: {
+        id: { in: ordenIds },
+        estatusId: origenEstatusId,
+        zonaId,
+        deletedAt: null,
+      },
+      data: { mensajeroAsignadoId: mensajeroId, estatusId: destinoEstatusId },
+    });
+    return result.count;
   }
 }
 

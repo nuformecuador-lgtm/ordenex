@@ -1,13 +1,17 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { RecepcionDetalle } from "./RecepcionDetalle";
+import { AsignarSateliteModal } from "./AsignarSateliteModal";
 
 // Feature 33 (T12, R6/R7/R8/R9): módulo de la bodega satélite. Recibe los DOS
 // grupos ya resueltos por el Server Component padre (datos sensibles por props,
@@ -25,6 +29,11 @@ export interface RecepcionSateliteModuleProps {
   zonaNombre: string | null;
   /** `true` si el adminSatelite no tiene zona asignada (R5). */
   sinZona: boolean;
+  /**
+   * Feature 34 (T8/R5): mensajeros de la zona del adminSatelite para el modal de
+   * asignación (ya scoped server-side; el módulo no fetchea datos sensibles).
+   */
+  mensajeros: { id: string; nombre: string }[];
 }
 
 /**
@@ -72,13 +81,91 @@ function ListaOrdenes({
   );
 }
 
+/**
+ * Feature 34 (T8, R4): lista SELECCIONABLE de órdenes `en_bodega_satelite` de la
+ * sección "Recibidas". Cada fila tiene un checkbox accesible; la selección la
+ * gobierna el módulo padre (fuente de verdad) para poder abrir el modal de
+ * asignación con el lote elegido.
+ */
+function ListaRecibidas({
+  ordenes,
+  zonaNombre,
+  seleccionados,
+  onToggle,
+}: {
+  ordenes: RecepcionSateliteDTO[];
+  zonaNombre: string | null;
+  seleccionados: Set<string>;
+  onToggle: (id: string, checked: boolean) => void;
+}) {
+  if (ordenes.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Aún no has recibido órdenes.
+      </p>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-3">
+      {ordenes.map((orden) => (
+        <li key={orden.id} className="flex items-start gap-3">
+          <Checkbox
+            className="mt-4"
+            checked={seleccionados.has(orden.id)}
+            onCheckedChange={(checked) => onToggle(orden.id, checked === true)}
+            aria-label={`Seleccionar ${orden.numRemision}`}
+          />
+          <Card className="flex-1">
+            <CardHeader>
+              <CardTitle>
+                {orden.numRemision} · {orden.destinatario}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RecepcionDetalle
+                orden={orden}
+                estadoLegible={estadoLegible(orden, zonaNombre)}
+              />
+            </CardContent>
+          </Card>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function RecepcionSateliteModule({
   porRecibir,
   recibidas,
   zonaNombre,
   sinZona,
+  mensajeros,
 }: RecepcionSateliteModuleProps) {
   const router = useRouter();
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [modalOpen, setModalOpen] = useState(false);
+
+  function toggleSeleccion(id: string, checked: boolean) {
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  // Snapshot de las órdenes seleccionadas (por id, filtrando las que sigan en la
+  // lista actual) para pasarlas al modal de asignación.
+  const ordenesSeleccionadas = useMemo(
+    () => recibidas.filter((orden) => seleccionados.has(orden.id)),
+    [recibidas, seleccionados],
+  );
+
+  function handleSuccess() {
+    setSeleccionados(new Set());
+    setModalOpen(false);
+    router.refresh(); // relee el estado del servidor (patrón feature 33)
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -107,17 +194,36 @@ export function RecepcionSateliteModule({
       </section>
 
       {/* ---------- Sección: Recibidas (en_bodega_satelite) ---------- */}
+      {/* Feature 34 (R4): lista seleccionable + acción "Asignar". */}
       <section
         aria-label="Recibidas"
         className="flex flex-col gap-3 border-t pt-6"
       >
-        <h2 className="text-lg font-semibold">Recibidas</h2>
-        <ListaOrdenes
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Recibidas</h2>
+          <Button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            disabled={ordenesSeleccionadas.length === 0}
+          >
+            Asignar
+          </Button>
+        </div>
+        <ListaRecibidas
           ordenes={recibidas}
           zonaNombre={zonaNombre}
-          vacio="Aún no has recibido órdenes."
+          seleccionados={seleccionados}
+          onToggle={toggleSeleccion}
         />
       </section>
+
+      <AsignarSateliteModal
+        open={modalOpen}
+        ordenes={ordenesSeleccionadas}
+        mensajeros={mensajeros}
+        onOpenChange={setModalOpen}
+        onSuccess={handleSuccess}
+      />
     </div>
   );
 }

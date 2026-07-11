@@ -75,8 +75,8 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     ),
     asignarBodegaLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
     // Feature 30: por defecto todos los mensajeros pasados son GAM validos.
-    findMensajerosGam: vi.fn(async () => []),
-    findMensajeroIdsValidosGam: vi.fn(
+    findMensajerosByZona: vi.fn(async () => []),
+    findMensajeroIdsValidosByZona: vi.fn(
       async (ids: string[]): Promise<Set<string>> => new Set(ids),
     ),
     rutearBodegaSateliteLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
@@ -299,7 +299,7 @@ describe("GuiaAsignacionService.generarGuia — guardias de origen/mensajero (R2
         ordenRow({ id: "o2", estatusValue: "en_fulfillment" }),
       ]),
       // Feature 30/R6: el service valida el mensajero contra la zona GAM.
-      findMensajeroIdsValidosGam: vi.fn(async () => new Set(["m-valido"])),
+      findMensajeroIdsValidosByZona: vi.fn(async () => new Set(["m-valido"])),
     });
     const service = newService(repo);
 
@@ -469,7 +469,7 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
 
   it("R28: mensajeroId sin rol mensajero -> validation_error (lote completo)", async () => {
     // Feature 30/R6: la validacion del mensajero es contra la zona GAM.
-    const repo = fakeRepo({ findMensajeroIdsValidosGam: vi.fn(async () => new Set<string>()) });
+    const repo = fakeRepo({ findMensajeroIdsValidosByZona: vi.fn(async () => new Set<string>()) });
     const service = newService(repo);
 
     const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "no-msg" }, MAESTRO);
@@ -538,8 +538,8 @@ describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () =>
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
       ]),
-      // El mensajero pasado NO es GAM: findMensajeroIdsValidosGam lo excluye.
-      findMensajeroIdsValidosGam: vi.fn(async () => new Set<string>()),
+      // El mensajero pasado NO es GAM: findMensajeroIdsValidosByZona lo excluye.
+      findMensajeroIdsValidosByZona: vi.fn(async () => new Set<string>()),
     });
     const service = newService(repo);
 

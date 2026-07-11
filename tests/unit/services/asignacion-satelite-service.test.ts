@@ -1,0 +1,225 @@
+import { describe, it, expect, vi } from "vitest";
+import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
+import type {
+  IOrdenRepository,
+  OrdenTransicionRow,
+} from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+
+// Feature 34 — service de la asignacion satelite. Dobles de repo (sin DB/HTTP),
+// patron recepcion-satelite-service.test.ts. Cubre R3, R7, R8, R9, R10, R11, R12,
+// R13, R14.
+
+const ADMIN: Actor = { usuarioId: "as1", rol: "adminSatelite" };
+const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
+const MENSAJERO_ACTOR: Actor = { usuarioId: "m1", rol: "mensajero" };
+
+const ZONA = "z-satelite";
+const MENSAJERO = "m-zona";
+
+const ESTATUS_ID_BY_VALUE: Record<string, string> = {
+  en_bodega_satelite: "os-bodega-satelite",
+  en_espera_aceptacion: "os-espera",
+};
+
+type RepoMethods = Pick<
+  IOrdenRepository,
+  | "findUsuarioZonaId"
+  | "findMensajeroIdsValidosByZona"
+  | "findByIdsForTransicion"
+  | "findEstatusIdByValue"
+  | "asignarSateliteLote"
+>;
+
+function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
+  return {
+    id: "o1",
+    estatusValue: "en_bodega_satelite",
+    numGuia: 10,
+    deletedAt: null,
+    zonaId: ZONA,
+    zonaEsGam: false,
+    ...overrides,
+  };
+}
+
+function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
+  return {
+    findUsuarioZonaId: vi.fn(async () => ZONA),
+    findMensajeroIdsValidosByZona: vi.fn(async () => new Set([MENSAJERO])),
+    findByIdsForTransicion: vi.fn(async () => [transicionRow()]),
+    findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
+    asignarSateliteLote: vi.fn(async () => 1),
+    ...overrides,
+  };
+}
+
+function newService(repo: RepoMethods = fakeRepo()) {
+  return new AsignacionSateliteService(repo as unknown as IOrdenRepository);
+}
+
+describe("AsignacionSateliteService.asignar", () => {
+  it("R13: rol != adminSatelite -> forbidden ANTES de tocar datos", async () => {
+    const repo = fakeRepo();
+    for (const actor of [MAESTRO, MENSAJERO_ACTOR]) {
+      const res = await newService(repo).asignar(
+        { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+        actor,
+      );
+      expect(res).toEqual({ status: "forbidden" });
+    }
+    // Sin efectos ni lecturas: la autorizacion corta antes de resolver la zona.
+    expect(repo.findUsuarioZonaId).not.toHaveBeenCalled();
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("R3: adminSatelite sin zona (zonaId null) -> sin_zona, sin escribir", async () => {
+    const repo = fakeRepo({ findUsuarioZonaId: vi.fn(async () => null) });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({ status: "sin_zona" });
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("R9: mensajero de otra zona / no-mensajero -> validation_error mensajero_invalido, sin escribir", async () => {
+    const repo = fakeRepo({ findMensajeroIdsValidosByZona: vi.fn(async () => new Set<string>()) });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: "m-ajeno" },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "validation_error",
+      fieldErrors: { mensajeroId: ["mensajero_invalido"] },
+    });
+    // Valida el mensajero contra la zona del actor (defensa en profundidad R5/R9).
+    expect(repo.findMensajeroIdsValidosByZona).toHaveBeenCalledWith(["m-ajeno"], ZONA);
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("R7/R8: lote OK -> ok, todas en_espera_aceptacion; escribe con mensajero y NO toca num_guia", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        transicionRow({ id: "o1" }),
+        transicionRow({ id: "o2" }),
+      ]),
+      asignarSateliteLote: vi.fn(async () => 2),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1", "o2"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", estado: "en_espera_aceptacion" },
+        { ordenId: "o2", estado: "en_espera_aceptacion" },
+      ],
+    });
+    // R8: escribe con estatus origen/destino resueltos, sin num_guia.
+    expect(repo.asignarSateliteLote).toHaveBeenCalledWith(
+      ["o1", "o2"],
+      MENSAJERO,
+      ZONA,
+      "os-espera",
+      "os-bodega-satelite",
+    );
+  });
+
+  it("R10/R11: orden de otra zona en el lote -> conflict/zona_ajena; ninguna transiciona", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        transicionRow({ id: "o1" }),
+        transicionRow({ id: "o2", zonaId: "z-otra" }),
+      ]),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1", "o2"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "conflict",
+      detalle: [{ ordenId: "o2", motivo: "zona_ajena" }],
+    });
+    // R10 (todo-o-nada): no escribe si hay cualquier motivo.
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("R10/R12: orden en estado != en_bodega_satelite -> conflict/estado_invalido con el estado actual", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        transicionRow({ id: "o1", estatusValue: "en_espera_aceptacion" }),
+      ]),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: "estado_invalido: en_espera_aceptacion" }],
+    });
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("R10: orden inexistente o borrada -> conflict/no_encontrada", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        transicionRow({ id: "o1", deletedAt: new Date("2026-01-01") }),
+        // o2 no existe (ausente del resultado)
+      ]),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1", "o2"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "conflict",
+      detalle: [
+        { ordenId: "o1", motivo: "no_encontrada" },
+        { ordenId: "o2", motivo: "no_encontrada" },
+      ],
+    });
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("catalogo de estados incompleto -> validation_error, sin escribir", async () => {
+    const repo = fakeRepo({ findEstatusIdByValue: vi.fn(async () => null) });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "validation_error",
+      fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
+    });
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("R14: carrera (write count incompleto) -> conflict re-leido, sin efectos parciales", async () => {
+    const findByIds = vi
+      .fn()
+      // 1a lectura: ambas validas.
+      .mockResolvedValueOnce([transicionRow({ id: "o1" }), transicionRow({ id: "o2" })])
+      // re-lectura tras el count incompleto: o2 ya se movio (carrera).
+      .mockResolvedValueOnce([
+        transicionRow({ id: "o1" }),
+        transicionRow({ id: "o2", estatusValue: "en_espera_aceptacion" }),
+      ]);
+    const repo = fakeRepo({
+      findByIdsForTransicion: findByIds,
+      asignarSateliteLote: vi.fn(async () => 1), // solo 1 de 2 transiciono
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1", "o2"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "conflict",
+      detalle: [{ ordenId: "o2", motivo: "conflict" }],
+    });
+    // Re-lee para armar el detalle de la carrera.
+    expect(findByIds).toHaveBeenCalledTimes(2);
+  });
+});

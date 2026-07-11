@@ -57,8 +57,8 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     listOrderStatus: vi.fn().mockResolvedValue([]),
     generarGuiaLote: vi.fn().mockResolvedValue([]),
     asignarBodegaLote: vi.fn().mockResolvedValue(0),
-    findMensajerosGam: vi.fn().mockResolvedValue([]),
-    findMensajeroIdsValidosGam: vi.fn().mockResolvedValue(new Set()),
+    findMensajerosByZona: vi.fn().mockResolvedValue([]),
+    findMensajeroIdsValidosByZona: vi.fn().mockResolvedValue(new Set()),
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 32: etiqueta de guia, exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
@@ -67,6 +67,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
+    asignarSateliteLote: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }

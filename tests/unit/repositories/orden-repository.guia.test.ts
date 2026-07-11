@@ -131,13 +131,13 @@ describe("OrdenRepository.findAllMensajeros (R28/T15)", () => {
   });
 });
 
-describe("OrdenRepository.findMensajerosGam (feature 30/R5)", () => {
+describe("OrdenRepository.findMensajerosByZona (feature 30/R5)", () => {
   it("filtra por rol mensajero Y zonaId = gamZonaId (excluye otras zonas y zonaId NULL)", async () => {
     const { prisma } = buildPrisma();
     prisma.usuario.findMany.mockResolvedValue([{ id: "m1", nombre: "Ana" }]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const mensajeros = await repo.findMensajerosGam("z-gam");
+    const mensajeros = await repo.findMensajerosByZona("z-gam");
 
     expect(mensajeros).toEqual([{ id: "m1", nombre: "Ana" }]);
     const arg = prisma.usuario.findMany.mock.calls[0][0];
@@ -148,14 +148,14 @@ describe("OrdenRepository.findMensajerosGam (feature 30/R5)", () => {
   });
 });
 
-describe("OrdenRepository.findMensajeroIdsValidosGam (feature 30/R6)", () => {
+describe("OrdenRepository.findMensajeroIdsValidosByZona (feature 30/R6)", () => {
   it("subconjunto con rol mensajero Y zonaId = gamZonaId; excluye otras zonas/NULL", async () => {
     const { prisma } = buildPrisma();
     // La DB solo devuelve el mensajero GAM; m-otra-zona y m-sin-zona no matchean.
     prisma.usuario.findMany.mockResolvedValue([{ id: "m-gam" }]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const set = await repo.findMensajeroIdsValidosGam(
+    const set = await repo.findMensajeroIdsValidosByZona(
       ["m-gam", "m-otra-zona", "m-sin-zona"],
       "z-gam",
     );
@@ -175,7 +175,7 @@ describe("OrdenRepository.findMensajeroIdsValidosGam (feature 30/R6)", () => {
     const { prisma } = buildPrisma();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    expect((await repo.findMensajeroIdsValidosGam([], "z-gam")).size).toBe(0);
+    expect((await repo.findMensajeroIdsValidosByZona([], "z-gam")).size).toBe(0);
     expect(prisma.usuario.findMany).not.toHaveBeenCalled();
   });
 });

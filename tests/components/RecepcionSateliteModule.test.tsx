@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
@@ -10,6 +11,7 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
+  asignarDesdeSatelite: vi.fn(),
 }));
 
 const { refreshMock } = vi.hoisted(() => ({ refreshMock: vi.fn() }));
@@ -62,6 +64,7 @@ function renderModule(
       recibidas={props?.recibidas ?? []}
       zonaNombre={props?.zonaNombre ?? "Limón"}
       sinZona={props?.sinZona ?? false}
+      mensajeros={props?.mensajeros ?? [{ id: "m1", nombre: "Ana Mensajera" }]}
     />,
   );
 }
@@ -167,5 +170,52 @@ describe("RecepcionSateliteModule", () => {
     expect(
       screen.getByRole("textbox", { name: "Código de la orden" }),
     ).toBeInTheDocument();
+  });
+
+  // ---------- Feature 34 (T8) ----------
+
+  it("R4 (34): 'Recibidas' permite seleccionar órdenes y habilita 'Asignar'", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Recibidas" });
+    const asignar = within(region).getByRole("button", { name: "Asignar" });
+    // Sin selección, la acción está deshabilitada.
+    expect(asignar).toBeDisabled();
+
+    const checkbox = within(region).getByRole("checkbox", {
+      name: "Seleccionar REM-B1",
+    });
+    await user.click(checkbox);
+
+    expect(asignar).toBeEnabled();
+  });
+
+  it("R7 (33, no regresión): 'Por recibir' NO ofrece seleccionar ni asignar", () => {
+    renderModule({
+      porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+    });
+
+    const porRecibir = screen.getByRole("region", { name: "Por recibir" });
+    // Ni checkbox de selección ni botón de asignar en "Por recibir".
+    expect(within(porRecibir).queryByRole("checkbox")).toBeNull();
+    expect(
+      within(porRecibir).queryByRole("button", { name: /asignar/i }),
+    ).toBeNull();
   });
 });

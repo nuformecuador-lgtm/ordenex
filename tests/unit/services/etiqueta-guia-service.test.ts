@@ -57,8 +57,8 @@ function fakeRepo(rows: EtiquetaRow[] = [etiquetaRow()]): IOrdenRepository {
     listOrderStatus: vi.fn(),
     generarGuiaLote: vi.fn(),
     asignarBodegaLote: vi.fn(),
-    findMensajerosGam: vi.fn(),
-    findMensajeroIdsValidosGam: vi.fn(),
+    findMensajerosByZona: vi.fn(),
+    findMensajeroIdsValidosByZona: vi.fn(),
     rutearBodegaSateliteLote: vi.fn(),
     // Feature 32: filtra por ids solicitados (simula el `where id in` del repo).
     findEtiquetasByIds: vi.fn(async (ids: string[]) => rows.filter((r) => ids.includes(r.id))),
