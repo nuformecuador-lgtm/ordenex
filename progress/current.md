@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 32 CERRADA (impl+reviewer OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+| (ninguna en curso) | — | — | Feature 36 CERRADA (impl+re-review OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+
+> Feature 36 (mensajero: mis asignaciones y gestión) CERRADA 2026-07-11: **impl COMPLETA (R0–R35) + reviewer APROBADO** tras 1 ciclo de rechazo (bloqueantes de checkpoint: tasks sin marcar + falta E2E de recaudo; el humano decidió AÑADIR el E2E). Fullstack un ciclo. Estado `done` + `history.md` + `progress/review_36-...md`. Máquina de estados: `en_espera_aceptacion` →[Recoger]→ `en_reparto` (NUEVO) → gestión → entregada/reprogramada/devuelta/`rechazada`(NUEVO). Migración `20260711150000` (2 estados + enum `metodo_pago_value` + tabla `gestion_orden`+RLS + puntero `usuario.orden_en_gestion_id`). Módulo `/mis-asignaciones` del mensajero. Verificación: `pnpm test` **1433/1433**, `init.sh` verde. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: crear bucket `gestion-evidencias` (HUMANO), migración no aplicada, E2E no ejecutado. Desbloquea 37 (cierre del día) y base de 46/47/48/49.
 
 > Feature 32 (etiqueta de guía con QR + código de barras) CERRADA 2026-07-11: **impl COMPLETA (R1–R15) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1314 tests). Fullstack un ciclo, SIN migración (read derivado). Estado `done` + `history.md` + `progress/review_32-...md`. Backend: `EtiquetaGuiaDTO`/`findEtiquetasByIds` (resuelve nombres geografía/tienda + direccion + monto), `EtiquetaGuiaService`, action. Frontend: acción "Imprimir etiquetas" sobre el lote → PDF 100×100mm por orden (jspdf), QR=`orden.id`, barcode=`num_guia`. Deps: qrcode.react, react-barcode, jspdf, jsbarcode. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: verificación manual del binario del PDF + escaneabilidad. Desbloquea 33.
 
@@ -172,6 +174,20 @@
   (d) qué librerías QR + barcode (deps nuevas, el spec recomienda); (e) disparo (¿auto al 'Generar
   guía' vs acción "imprimir etiqueta" por orden/lote?; ¿una etiqueta por orden o hoja con el lote?).
 
+- `mensajero - mis asignaciones y gestion de ordenes` (id 36): **zone=fullstack, complexity=high,
+  branch=feature/36-mensajero-mis-asignaciones, depends_on=17.** Evaluada 2026-07-11: fullstack high,
+  un ciclo. Las órdenes llegan al mensajero vía la 17 (`en_espera_aceptacion` + `mensajeroAsignadoId`);
+  la 34 (asignación desde satélite) alimentará lo mismo más adelante pero NO bloquea (dep JSON = 17). Requiere
+  NUEVO modelo de registro de gestión (evidencias/fotos en Supabase Storage -patrón `MensajeroDocumento`/
+  `SupabaseFileStorage`/`ISignedUrlProvider` de la feature 21-, monto recibido, método de pago, motivos, fecha
+  de reprogramación), NUEVO enum de método de pago (efectivo/SIMPE/transferencia; hoy NO existe), estado NUEVO
+  'aceptada/por entregar', paso de aceptación (solo aceptar, sin rechazar la asignación), y bloqueo de gestión
+  1-a-1. Preguntas ABIERTAS para F1.4: (a) nombre exacto del estado 'aceptada/por entregar'; (b) ¿el RESULTADO
+  'RECHAZO' es estado NUEVO 'rechazada' o mapea a existente (devuelta/devuelta_origen)?; (c) forma del enum de
+  método de pago (¿catálogo tabla como order_status vs enum PG?); (d) forma del modelo de gestión (un registro
+  con `resultado` + campos nullable vs tablas separadas); (e) bloqueo 1-a-1 solo UI vs flag backend; (f) bucket
+  de evidencias (reusar `mensajero-docs` vs nuevo `gestion-evidencias`); (g) aceptación en lote vs por-orden.
+
 ## Conflictos pendientes
 
 > Conflictos de merge que el agente no pudo resolver solo. El humano decide.
@@ -181,9 +197,11 @@
 ## Plan de la sesion
 - [x] Features 1-29, 31, 50, 51: ciclos SDD completos (ver history.md).
 - [x] Feature 17 (revisión maestro / generar guía): done, PR #32 mergeado 2026-07-11.
-- [x] Feature 30 (asignación por zona GAM / ruteo satélite): done (impl+reviewer OK); pendiente PR a `dev`.
-- [ ] Siguientes elegibles: **32** (etiqueta QR, depends 17 done), **36** (mensajero mis asignaciones, depends 17 done),
-      **33** (recepción QR satélite, depends 30 done → ahora desbloqueada), **42** (wallet, depends 18 done), 35 (realtime).
+- [x] Feature 30 (asignación por zona GAM / ruteo satélite): done, PR #33 mergeado.
+- [x] Feature 32 (etiqueta guía QR/barcode): done, PR #34 mergeado.
+- [x] Feature 36 (mensajero mis asignaciones y gestión): done (impl+re-review OK); pendiente PR a `dev`.
+- [ ] Siguientes elegibles: **33** (recepción QR satélite, depends 30+32 done), **37** (cierre del día, depends 36 done),
+      **42** (wallet, depends 18 done), 35 (realtime). También 34 (asignación satélite, depends 33).
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.

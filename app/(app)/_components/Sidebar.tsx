@@ -7,17 +7,43 @@ import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export const SIDEBAR_ITEMS = [
+export interface SidebarItem {
+  label: string;
+  href: string;
+}
+
+export const SIDEBAR_ITEMS: readonly SidebarItem[] = [
   { label: "Configuración", href: "/configuracion" },
   { label: "Perfil", href: "/perfil" },
   { label: "Órdenes", href: "/ordenes" },
 ] as const;
 
-type SidebarItem = (typeof SIDEBAR_ITEMS)[number];
+// Feature 36 (T18/R9): entradas visibles solo para ciertos roles. "Mis
+// asignaciones" es exclusivo del rol `mensajero`; la página igual valida el rol
+// server-side como defensa real (design §6).
+const MIS_ASIGNACIONES_ITEM: SidebarItem = {
+  label: "Mis asignaciones",
+  href: "/mis-asignaciones",
+};
 
-export function Sidebar() {
+/** Deriva los ítems del sidebar según el rol del actor (o base si no hay rol). */
+export function sidebarItemsForRol(rol?: string): readonly SidebarItem[] {
+  if (rol === "mensajero") return [...SIDEBAR_ITEMS, MIS_ASIGNACIONES_ITEM];
+  return SIDEBAR_ITEMS;
+}
+
+export interface SidebarProps {
+  /**
+   * Rol del actor autenticado (resuelto server-side por el layout). Determina
+   * las entradas visibles por rol (feature 36/R9). `undefined` → solo las base.
+   */
+  rol?: string;
+}
+
+export function Sidebar({ rol }: SidebarProps = {}) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const items = sidebarItemsForRol(rol);
 
   const renderItem = (item: SidebarItem, onNavigate?: () => void) => {
     const isActive = pathname === item.href;
@@ -65,7 +91,7 @@ export function Sidebar() {
         data-testid="sidebar-desktop-list"
         className="hidden flex-col gap-1 md:flex"
       >
-        {SIDEBAR_ITEMS.map((item) => renderItem(item))}
+        {items.map((item) => renderItem(item))}
       </ul>
 
       {/*
@@ -77,7 +103,7 @@ export function Sidebar() {
           data-testid="sidebar-mobile-list"
           className="flex flex-col gap-1 md:hidden"
         >
-          {SIDEBAR_ITEMS.map((item) => renderItem(item, () => setIsOpen(false)))}
+          {items.map((item) => renderItem(item, () => setIsOpen(false)))}
         </ul>
       )}
     </nav>

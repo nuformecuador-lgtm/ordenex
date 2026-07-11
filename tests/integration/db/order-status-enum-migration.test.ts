@@ -54,6 +54,8 @@ describe("order_status_value migration.sql (UP) — enum standalone (R9)", () =>
     const seedOriginal = new Set(ORDER_STATUS_SEED);
     seedOriginal.delete("en_espera_aceptacion");
     seedOriginal.delete("en_ruta_bodega_satelite"); // feature 30
+    seedOriginal.delete("en_reparto"); // feature 36
+    seedOriginal.delete("rechazada"); // feature 36
     expect(new Set(enumValues)).toEqual(seedOriginal);
   });
 });
