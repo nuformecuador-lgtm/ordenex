@@ -7,7 +7,10 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/22-aprobacion-postulaciones | backend | F2.4 | **impl COMPLETA + reviewer APROBADO (0 mayores).** Backend para que SOLO `maestro`/`admin` aprueben/rechacen postulaciones `pendiente` (de la 21). Decisiones F1.4: rechazo→**`inactivo`** (SIN migración), aprobar→`activo`, URLs firmadas TTL 300s del bucket privado, sin motivo, sin auditoría. `IAprobacionPostulacion{Service,Repository}`+impl, `ISignedUrlProvider`+`SupabaseSignedUrlProvider`, `lib/actions/aprobacion-postulaciones.ts` (listar pendientes con URLs firmadas / aprobar / rechazar); autz por rol (resto forbidden, sin sesión unauthenticated); `updateMany` condicional anti-carrera. **Sin UI, sin migraciones.** R1–R21 mapeados. **Suite 999 verde**, typecheck+lint OK. **PR #26 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/26) → base `dev`. Pasa a `done` al mergear. Desbloquea la feature 23 (dashboard maestro). |
+| feature/27-fulfillment-tienda | fullstack | F2.4 | **impl COMPLETA + reviewer APROBADO 0 bloqueantes.** Campo `Usuario.fulfillment` (migración+down.sql), backend fuerza false si rol!=adminTienda (R4/R4a), switch condicional en UsuarioForm (R5/R6), estado inicial condicional en BulkOrdenService según adminTienda autenticado (R15). Mergeado `origin/dev` (drift 22/23) sin conflictos de código. **Suite 1053 verde post-merge**, init.sh OK. **PR #29 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/29) → base `dev`. Pasa a `done` al mergear. Ocupa ambas zonas. |
+| feature/23-dashboard-maestro | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO** (tras marcar tasks; único mayor era documental). Dashboard del maestro: `page.tsx` ramifica por rol (maestro/admin → `AdminMaestroDashboard`; adminTienda → dashboard de la 26 intacto; resto → 'Bienvenido'). Panel de postulaciones pendientes en tarjetas + Pagination, docs como enlaces "Ver" (A1), aprobar/rechazar con Modal async (13) + Toast + refresco SWR (A2), rechazo sin motivo (A3). Consume actions de la 22 (frontend puro). R1–R19 mapeados. **Suite 1018 verde**, typecheck+lint OK, init.sh EXIT 0. **PR #28 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/28) → base `dev`. Pasa a `done` al mergear. |
+
+> Feature 22 (aprobación de postulaciones) CERRADA 2026-07-10: **PR #26 mergeado** a `origin/dev` (8eaed55), status `done`, entrada en `history.md`. Backend puro (R1–R21), reviewer APROBADO 0 mayores, sin migraciones. Rechazo→`inactivo`, URLs firmadas TTL 300s. Desbloquea la 23.
 
 > Feature 21 (postulación de mensajero) CERRADA 2026-07-10: **PR #23 mergeado** a `origin/dev` (20db364), status `done`, entrada en `history.md`. Fullstack (R1–R26), reviewer APROBADO (bloqueante R17 resuelto). `primer_apellido` OBLIGATORIO; migración APLICADA y VERIFICADA contra Postgres real. Desbloquea la 22→23. Pendiente humano: crear bucket privado `mensajero-docs` en Supabase Storage.
 
@@ -120,6 +123,18 @@
   de configuracion -> arrancar la 24 chocaria en la migracion de `usuario` y los repos (regla #1 no
   negociable). La impl de la 24 arranca cuando la 27 este `done` en `dev`; entonces se sincroniza. El
   seed ademas espera el Excel. Rama `feature/24-gestion-zonas` pusheada con el spec para revision.
+
+- `fulfillment de tienda + estado inicial condicional` (id 27): **zone=fullstack,
+  complexity=high, branch=feature/27-fulfillment-tienda, depends_on=25.** Evaluada
+  2026-07-10: fullstack (backend — campo booleano `fulfillment` en Usuario +
+  migracion/down.sql + logica condicional en `BulkOrdenService`/carga masiva feature 15;
+  frontend — switch 'esta tienda tiene fulfillment' en la UI de creacion de usuario de la
+  feature 25). Deps 25 y 28 **done**. DECISION DE PROCESO (leader): NO se parte el entry
+  del feature_list; las mitades son ESTRICTAMENTE SECUENCIALES (el switch del frontend
+  depende del campo backend, sin paralelismo que ganar) -> se corre como UN ciclo
+  fullstack (implementer delega backend_dev -> frontend_dev, un PR), mismo criterio que
+  las features 16 y 25. Si el humano prefiere el split formal, se hace. Rama creada desde
+  `origin/dev` (al dia con 21/25/50/28).
 
 ## Conflictos pendientes
 

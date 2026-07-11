@@ -22,6 +22,7 @@ async function buildUsuario(overrides: Partial<UsuarioConHash> = {}): Promise<Us
     cedula: "1710034065",
     tipoIdentificacionId: "tipo-1",
     rolId: "rol-1",
+    fulfillment: false,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

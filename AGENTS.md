@@ -77,13 +77,30 @@ El leader elige modelo al delegar:
 
 ## Paralelismo
 
-Dos features pueden correr en paralelo si sus `zone` son **disjuntas**:
+Se permite un maximo de **3 features concurrentes por zona** (`frontend`, `backend`),
+siempre que no haya conflicto de archivos con las que ya estan `in_progress`.
 
 | Feature A | Feature B | Paralelo? |
 | --- | --- | --- |
 | `frontend` | `backend` | Si |
-| `frontend` | `frontend` | No |
-| `backend` | `backend` | No |
+| `frontend` | `frontend` | Si (max 3, validando sin conflicto de archivos) |
+| `backend` | `backend` | Si (max 3, validando sin conflicto de archivos) |
+
+### Validacion de conflicto entre features de la misma zona
+
+Antes de lanzar una feature de zona `Z` cuando ya hay `N` features `in_progress`
+en esa zona (`N < 3`), el leader debe:
+
+1. Listar los archivos que las features `in_progress` de zona `Z` estan tocando,
+   consultando `progress/impl_<feature>.md` de cada una.
+2. Revisar en `specs/<nueva-feature>/tasks.md` los archivos esperados.
+3. Si hay **interseccion de archivos** entre la nueva feature y las `in_progress`,
+   esa feature se **bloquea** hasta que alguna de las que tocan esos archivos pase
+   a `done`.
+4. Si no hay interseccion (o la nueva es la primera de su zona), se permite el
+   paralelismo.
+5. Si ya hay 3 features `in_progress` en zona `Z`, se espera a que una pase a
+   `done` antes de evaluar la siguiente.
 
 Feature con `depends_on` no arranca hasta que su dependencia este `done`.
 
@@ -96,12 +113,17 @@ Feature con `depends_on` no arranca hasta que su dependencia este `done`.
    - Para cada una con `zone`/`complexity`/`branch` en `null`, evalua usando los
      criterios de arriba y actualiza `feature_list.json` con los valores asignados.
    - Documenta cada evaluacion en `progress/current.md > Evaluaciones`.
-   - Identifica las `zone` ocupadas: features que ya estan `in_progress`.
+   - Agrupa las features `in_progress` por `zone` y cuenta cuantas hay en cada una.
    - Recorre las `pending` (ya evaluadas) en orden de `id` y selecciona la
-     **primera** cuya `zone` NO este ocupada. Si la zona ya tiene una feature
-     corriendo, la saltea y evalua la siguiente.
-   - Si ninguna zona esta libre (todas las `pending` son de zonas ocupadas),
-     espera a que una feature `in_progress` pase a `done` y vuelve a este paso.
+     **primera** que cumpla **ambas** condiciones:
+     a. Su zona tiene **menos de 3** features `in_progress`.
+     b. Pasa la **validacion de conflicto** de archivos (ver `## Paralelismo`):
+        ningun archivo de `specs/<feature>/tasks.md` intersecta con los archivos
+        que estan tocando las features `in_progress` de la misma zona.
+   - Si la zona ya tiene 3 features `in_progress`, o hay conflicto de archivos,
+     saltea la feature y evalua la siguiente.
+   - Si ninguna feature `pending` pasa el filtro, espera a que una feature
+     `in_progress` pase a `done` y vuelve a este paso.
    - Si la feature seleccionada evalua como `fullstack`, la parte en dos features
      (`backend` + `frontend`), las registra en `feature_list.json` con `depends_on`
      y vuelve a este paso para la feature `backend` (la `frontend` queda bloqueada

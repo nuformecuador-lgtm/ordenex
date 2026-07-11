@@ -3,6 +3,7 @@ import {
   UsuarioDuplicadoError,
   type IUserRepository,
   type UpdateUsuarioData,
+  type UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
 import type {
   Actor,
@@ -39,6 +40,10 @@ export class UsuarioService implements IUsuarioService {
     const plain = generated ? generateStrongPassword() : input.password; // R32/R31
     const passwordHash = await hashPassword(plain); // R7/R34: solo se persiste el hash
 
+    // Feature 27/R4a (Decision P1): la invariante de rol se calcula aqui, NO se
+    // confia en la UI. Solo `adminTienda` puede quedar con `fulfillment = true`.
+    const fulfillment = await this.resolverFulfillment(input.rolId, input.fulfillment ?? false);
+
     try {
       const usuario = await this.repo.create({
         nombre: input.nombre,
@@ -49,6 +54,7 @@ export class UsuarioService implements IUsuarioService {
         rolId: input.rolId,
         passwordHash,
         estado: "activo", // R8: nace activo (a diferencia de la postulacion publica)
+        fulfillment, // R8/R9: valor efectivo ya restringido por rol
       });
       // R33: contrasena en claro UNA vez solo en modo autogenerado; R35: nunca en manual.
       return generated
@@ -88,7 +94,12 @@ export class UsuarioService implements IUsuarioService {
   ): Promise<ActualizarUsuarioServiceResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4
 
-    const data = this.buildUpdateData(input); // R16: solo campos editables
+    // Feature 27/R12/R4a: se recalcula `fulfillment` con el rol resultante, por lo
+    // que se necesita el usuario actual (rol e/o valor previo). `null` -> not_found.
+    const actual = await this.repo.findById(id);
+    if (!actual) return { status: "not_found" }; // R17
+
+    const data = await this.buildUpdateData(input, actual); // R16: solo campos editables
     try {
       const usuario = await this.repo.update(id, data);
       if (!usuario) return { status: "not_found" }; // R17
@@ -141,7 +152,10 @@ export class UsuarioService implements IUsuarioService {
     throw error;
   }
 
-  private buildUpdateData(input: ActualizarUsuarioInput): UpdateUsuarioData {
+  private async buildUpdateData(
+    input: ActualizarUsuarioInput,
+    actual: UsuarioPublico,
+  ): Promise<UpdateUsuarioData> {
     const data: UpdateUsuarioData = {};
     if (input.nombre !== undefined) data.nombre = input.nombre;
     if (input.telefono !== undefined) data.telefono = input.telefono;
@@ -149,6 +163,27 @@ export class UsuarioService implements IUsuarioService {
     if (input.tipoIdentificacionId !== undefined) {
       data.tipoIdentificacionId = input.tipoIdentificacionId;
     }
+
+    // Feature 27/R12/R4a: se recalcula solo si cambia `fulfillment` o el rol. Con
+    // el rol resultante (el nuevo si se edita, o el actual) se aplica la invariante:
+    // solo `adminTienda` puede quedar en `true`; un cambio a otro rol fuerza `false`.
+    // Si el rol se mantiene `adminTienda` y no se envia `fulfillment`, se conserva
+    // el valor actual (no se pisa por defecto).
+    if (input.fulfillment !== undefined || input.rolId !== undefined) {
+      const rolIdResultante = input.rolId ?? actual.rolId;
+      const deseado = input.fulfillment ?? actual.fulfillment;
+      data.fulfillment = await this.resolverFulfillment(rolIdResultante, deseado);
+    }
     return data;
+  }
+
+  // Feature 27/R4a (Decision P1): resuelve el flag efectivo. Solo `adminTienda`
+  // puede quedar en `true`; para cualquier otro rol se fuerza `false`, ignorando
+  // un `true` recibido. El `value` del rol se resuelve desde su `id` via el repo.
+  private async resolverFulfillment(rolId: string, deseado: boolean): Promise<boolean> {
+    if (!deseado) return false;
+    const roles = await this.repo.listRoles();
+    const rolValue = roles.find((r) => r.id === rolId)?.value;
+    return rolValue === "adminTienda";
   }
 }

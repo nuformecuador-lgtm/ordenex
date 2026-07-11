@@ -26,6 +26,7 @@ const PUBLIC_SELECT = {
   cedula: true,
   tipoIdentificacionId: true,
   rolId: true,
+  fulfillment: true, // feature 27/R14: expuesto en la forma publica (nunca el hash)
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -78,7 +79,11 @@ export class UserRepository implements IUserRepository {
     }
 
     try {
-      return await this.prisma.usuario.create({ data: input, select: PUBLIC_SELECT });
+      return await this.prisma.usuario.create({
+        // Feature 27/R3: `fulfillment` ausente se persiste como `false` (no null).
+        data: { ...input, fulfillment: input.fulfillment ?? false },
+        select: PUBLIC_SELECT,
+      });
     } catch (error) {
       throw mapDuplicadoError(error);
     }
@@ -192,6 +197,7 @@ export class UserRepository implements IUserRepository {
     if (data.tipoIdentificacionId !== undefined) {
       out.tipoIdentificacionId = data.tipoIdentificacionId;
     }
+    if (data.fulfillment !== undefined) out.fulfillment = data.fulfillment; // feature 27/R12
     return out;
   }
 }

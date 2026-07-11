@@ -156,6 +156,9 @@ interface PreloadedContext {
   distritoIndex: Map<string, DistritoRow[]>;
   mensajerosValidos: Set<string>;
   estatusId: string | null;
+  // Feature 27/R18/R19: `value` del estatus inicial resuelto UNA vez por lote
+  // (en_fulfillment | en_preparacion), reportado por fila creada y en el dedup.
+  estatusInicialValue: string;
 }
 
 export class BulkOrdenService implements IBulkOrdenService {
@@ -167,16 +170,25 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     const tiendaId = actor.usuarioId; // R24: siempre la tienda del actor
 
-    const ctx = await this.precargar(rows);
+    // Feature 27/R15/R16/R17/R18: se resuelve UNA sola vez por lote el estatus
+    // inicial a partir del flag `fulfillment` de la tienda que carga (el actor).
+    const fulfillment = await this.repo.findUsuarioFulfillment(tiendaId);
+    const estatusInicialValue = fulfillment
+      ? ordenesConfig.FULFILLMENT_ESTATUS_VALUE // "en_fulfillment"
+      : ordenesConfig.DEFAULT_ESTATUS_VALUE; // "en_preparacion"
+
+    const ctx = await this.precargar(rows, estatusInicialValue);
 
     if (ctx.estatusId === null) {
-      // Guarda defensiva (patron OrdenService.crear): el seed del estatus por
-      // defecto no esta disponible. Ninguna fila puede crearse.
+      // Guarda defensiva (patron OrdenService.crear): el seed del estatus inicial
+      // requerido no esta disponible. Ninguna fila puede crearse (R20).
       const filas: RowResult[] = rows.map((raw, idx) => ({
         fila: idx + 1,
         numRemision: (raw.num_remision ?? "").trim(),
         resultado: "error",
-        errores: { estatus: ["estatus por defecto no disponible (seed pendiente)"] },
+        errores: {
+          estatus: [`estatus inicial "${estatusInicialValue}" no disponible (seed pendiente)`],
+        },
       }));
       return { status: "ok", summary: this.buildSummary(rows.length, filas) };
     }
@@ -206,7 +218,7 @@ export class BulkOrdenService implements IBulkOrdenService {
         fila,
         numRemision: result.createData.numRemision,
         resultado: "creada",
-        estatus: ordenesConfig.DEFAULT_ESTATUS_VALUE,
+        estatus: ctx.estatusInicialValue, // R19: estatus resuelto por lote (R16/R17)
       });
     });
 
@@ -278,7 +290,7 @@ export class BulkOrdenService implements IBulkOrdenService {
       seen.set(data.num_remision, existingEstatus);
       return { status: "duplicada", numRemision: data.num_remision, estatus: existingEstatus };
     }
-    seen.set(data.num_remision, ordenesConfig.DEFAULT_ESTATUS_VALUE);
+    seen.set(data.num_remision, ctx.estatusInicialValue); // R19: estatus resuelto por lote
 
     return {
       status: "creada",
@@ -302,7 +314,10 @@ export class BulkOrdenService implements IBulkOrdenService {
     };
   }
 
-  private async precargar(rows: RawRow[]): Promise<PreloadedContext> {
+  private async precargar(
+    rows: RawRow[],
+    estatusInicialValue: string,
+  ): Promise<PreloadedContext> {
     const numRemisiones = distinct(rows.map((r) => (r.num_remision ?? "").trim()).filter(Boolean));
     const provinciaNames = distinct(rows.map((r) => (r.provincia ?? "").trim()).filter(Boolean));
     const mensajeroIds = distinct(
@@ -312,7 +327,7 @@ export class BulkOrdenService implements IBulkOrdenService {
     const [existingMap, provincias, estatusId] = await Promise.all([
       this.repo.findExistingRemisiones(numRemisiones), // R25
       this.repo.findProvinciasByNombres(provinciaNames), // R19/R21
-      this.repo.findEstatusIdByValue(ordenesConfig.DEFAULT_ESTATUS_VALUE), // R7
+      this.repo.findEstatusIdByValue(estatusInicialValue), // R7/R20: estatus inicial del lote
     ]);
     const provinciaIndex = indexBy(provincias, (p) => normalize(p.nombre));
 
@@ -327,6 +342,14 @@ export class BulkOrdenService implements IBulkOrdenService {
     ]);
     const distritoIndex = indexBy(distritos, (d) => `${d.cantonId}::${normalize(d.nombre)}`);
 
-    return { existingMap, provinciaIndex, cantonIndex, distritoIndex, mensajerosValidos, estatusId };
+    return {
+      existingMap,
+      provinciaIndex,
+      cantonIndex,
+      distritoIndex,
+      mensajerosValidos,
+      estatusId,
+      estatusInicialValue,
+    };
   }
 }

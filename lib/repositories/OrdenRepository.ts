@@ -215,6 +215,15 @@ export class OrdenRepository implements IOrdenRepository {
     return found?.id ?? null;
   }
 
+  /** Feature 27/R15/R16/R17: `usuario.fulfillment` de la tienda; `false` si no resuelve. */
+  async findUsuarioFulfillment(usuarioId: string): Promise<boolean> {
+    const row = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { fulfillment: true },
+    });
+    return row?.fulfillment ?? false;
+  }
+
   async existsGeo(input: {
     zonaId: string;
     provinciaId: string;

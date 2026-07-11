@@ -99,6 +99,12 @@ export interface IOrdenRepository {
   softDelete(id: string): Promise<boolean>;
   existsEstatus(estatusId: string): Promise<boolean>;
   findEstatusIdByValue(value: string): Promise<string | null>;
+  /**
+   * Feature 27/R15/R16/R17: lee `usuario.fulfillment` de la tienda que realiza la
+   * carga masiva (el `adminTienda` autenticado). `false` por defecto si el usuario
+   * no resuelve, coherente con el default de la columna (R3).
+   */
+  findUsuarioFulfillment(usuarioId: string): Promise<boolean>;
   existsGeo(input: {
     zonaId: string;
     provinciaId: string;

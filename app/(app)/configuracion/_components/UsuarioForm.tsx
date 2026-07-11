@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   actualizarUsuarioSchema,
   crearUsuarioSchema,
@@ -55,6 +56,7 @@ interface FormState {
   cedula: string;
   rolId: string;
   password: string;
+  fulfillment: boolean;
 }
 
 function initialState(usuario?: UsuarioPublico | null): FormState {
@@ -66,6 +68,7 @@ function initialState(usuario?: UsuarioPublico | null): FormState {
     cedula: usuario?.cedula ?? "",
     rolId: usuario?.rolId ?? "",
     password: "",
+    fulfillment: usuario?.fulfillment ?? false,
   };
 }
 
@@ -112,6 +115,11 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
 
     const isEditar = mode === "editar";
 
+    // El switch de fulfillment aplica solo al rol `adminTienda` (R5/R6, decisión P3).
+    // `roles` mapea cada `RolItem` como `{ id, value }`; `form.rolId` guarda el UUID.
+    const esAdminTienda =
+      (roles ?? []).find((r) => r.id === form.rolId)?.value === "adminTienda";
+
     function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
       setForm((prev) => ({ ...prev, [key]: value }));
     }
@@ -123,6 +131,9 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
           telefono: form.telefono,
           rolId: form.rolId,
           tipoIdentificacionId: form.tipoIdentificacionId,
+          // Solo se envía cuando el rol es `adminTienda` (R6/R12); el backend
+          // fuerza `false` para otros roles (R4a).
+          ...(esAdminTienda ? { fulfillment: form.fulfillment } : {}),
         });
         if (!parsed.success) {
           const fieldErrors = parsed.error.flatten().fieldErrors as FieldErrors;
@@ -138,6 +149,8 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
         tipoIdentificacionId: form.tipoIdentificacionId,
         cedula: form.cedula,
         rolId: form.rolId,
+        // Solo se envía para rol `adminTienda` (R6); si no, se omite (R6).
+        ...(esAdminTienda ? { fulfillment: form.fulfillment } : {}),
       };
       const candidate =
         passwordMode === "manual"
@@ -286,6 +299,18 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
             onValueChange={(v) => setField("rolId", v)}
           />
         </Field>
+
+        {esAdminTienda ? (
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="fulfillment">Esta tienda tiene fulfillment</Label>
+            <Switch
+              id="fulfillment"
+              aria-label="Esta tienda tiene fulfillment"
+              checked={form.fulfillment}
+              onCheckedChange={(next) => setField("fulfillment", next)}
+            />
+          </div>
+        ) : null}
 
         {!isEditar ? (
           <fieldset className="flex flex-col gap-2 border-t border-border pt-3">
