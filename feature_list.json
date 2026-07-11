@@ -223,7 +223,7 @@
       "id": 23,
       "name": "dashboard admin maestro",
       "description": "Dashboard del admin maestro como primera pantalla tras iniciar sesion (reemplaza el placeholder 'Bienvenido' de la home autenticada app/(app)/page.tsx). Arranca 'en blanco' salvo por el panel de postulaciones de mensajeros: lista las postulaciones en estado pendiente con sus datos y documentos, y permite aprobar o rechazar cada una consumiendo el backend de la feature 22. Visible para el rol maestro (y admin, que comparte la autorizacion de aprobacion). Frontend. Depende de la feature de aprobacion de postulaciones (22).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
@@ -268,7 +268,7 @@
       "id": 27,
       "name": "fulfillment de tienda + estado inicial condicional",
       "description": "Fulfillment por tienda. (1) Al crear un usuario admin de tienda (feature 25) se agrega un interruptor 'esta tienda tiene fulfillment' (si/no) -> nuevo campo booleano fulfillment en el modelo Usuario, aplicable al rol adminTienda (default false), con migracion + down.sql. (2) Usa el estado order_status 'en_fulfillment' que la feature 28 renombra desde 'embalaje' (NO se agrega un estado nuevo). (3) Se cambia el estado INICIAL de la carga masiva de ordenes (feature 15, hoy default GLOBAL en_preparacion via ORDENES_DEFAULT_ESTATUS_VALUE / BulkOrdenService) para que sea CONDICIONAL segun la tienda que realiza la carga: si la tienda tiene fulfillment habilitado -> las ordenes nacen en estado en_fulfillment; si NO -> nacen en en_preparacion (comportamiento actual). Toca: modelo Usuario (migracion), la UI de creacion de usuario (feature 25) y la logica del servicio/endpoint de carga masiva (BulkOrdenService, feature 15). Depende ademas de la feature 28 (el estado en_fulfillment debe existir renombrado) y se relaciona con la feature 18 cobros (que incluye un campo fulfillment). Es fullstack de complejidad alta por el cruce con carga masiva y creacion de usuarios.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
@@ -525,6 +525,17 @@
       "zone": "backend",
       "branch": "feature/50-vehiculos",
       "depends_on": null
+    },
+    {
+      "id": 51,
+      "name": "carga masiva - correccion CR + acoplamiento distrito/zona",
+      "description": "CORRECCION frontend derivada de hallazgos del reviewer de la feature 24. (1) La plantilla/UI de carga masiva de ordenes (features 9/14/31, componente OrdenesCargaMasivaButton/BulkUpload) debe marcar el campo 'Distrito' como OBLIGATORIO y comunicar el nuevo acoplamiento: tras la decision R4/R11 (opcion b) de la feature 24, orden.zona_id se deriva de distrito.zona_id y una fila cuyo distrito no tenga zona asignada se rechaza; la UI debe anticiparlo (texto de ayuda/aviso), no solo mostrar el error por fila. (2) Los ejemplos de la plantilla siguen siendo de Ecuador (Pichincha/Quito/Inaquito) pese a ser catalogo de Costa Rica; cambiarlos a ejemplos reales de CR (p.ej. San Jose/San Jose/Carmen). Frontend puro; no toca backend ni la logica de carga (feature 15). Depende de la 24 (done).",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": "feature/51-carga-masiva-cr",
+      "depends_on": 24
     }
   ]
 }
