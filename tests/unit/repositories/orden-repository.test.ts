@@ -35,6 +35,8 @@ function ordenListRow(overrides: Record<string, unknown> = {}) {
   return {
     ...ordenRow(),
     tienda: { nombre: "Tienda Uno" },
+    // Feature 30/R14: el listado incluye la zona (nombre + flag GAM).
+    zona: { nombre: "GAM", esGam: true },
     ...overrides,
   };
 }
@@ -228,6 +230,36 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(res.items[0].mensajeroAsignadoId).toBe("msj-2");
     expect(res.items[1].mensajeroSugeridoId).toBeNull();
     expect(res.items[1].mensajeroAsignadoId).toBeNull();
+  });
+
+  // Feature 30/R14/R19: el listado suma zonaNombre/zonaEsGam (columna de zona),
+  // sin romper el contrato del listado (tiendaNombre/mensajero* siguen presentes).
+  it("R14: incluye zona.{nombre,esGam} en el select y mapea zonaNombre/zonaEsGam por item", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow(),
+      ordenListRow({ id: "ord-2", zona: { nombre: "Limón", esGam: false } }),
+    ]);
+    prisma.orden.count.mockResolvedValue(2);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.list({
+      where: {},
+      sortBy: "created_at",
+      sortDir: "desc",
+      skip: 0,
+      take: 20,
+    });
+
+    expect(res.items[0].zonaNombre).toBe("GAM");
+    expect(res.items[0].zonaEsGam).toBe(true);
+    expect(res.items[1].zonaNombre).toBe("Limón");
+    expect(res.items[1].zonaEsGam).toBe(false);
+    // R19: no rompe los campos previos del listado.
+    expect(res.items[0].tiendaNombre).toBe("Tienda Uno");
+
+    const arg = prisma.orden.findMany.mock.calls[0][0];
+    expect(arg.include).toMatchObject({ zona: { select: { nombre: true, esGam: true } } });
   });
 
   it("inyecta tiendaId en el where cuando se pasa (alcance adminTienda)", async () => {

@@ -13,6 +13,7 @@ const ESTATUS_LABELS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   en_bodega: "En bodega",
   en_preparacion: "En preparación",
   en_espera_aceptacion: "En espera de aceptación del mensajero", // feature 17
+  en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30 (R15: la UI puede derivar la zona)
 };
 
 /**

@@ -23,6 +23,7 @@ function zonaRow(over: Record<string, unknown> = {}) {
 
 function buildPrisma(over: Record<string, ReturnType<typeof vi.fn>> = {}) {
   const zonaFindUnique = over.zonaFindUnique ?? vi.fn().mockResolvedValue(zonaRow());
+  const zonaFindFirst = over.zonaFindFirst ?? vi.fn().mockResolvedValue(null);
   const zonaFindMany = over.zonaFindMany ?? vi.fn().mockResolvedValue([zonaRow()]);
   const zonaCreate = over.zonaCreate ?? vi.fn().mockResolvedValue({ id: "z1" });
   const zonaUpdate = over.zonaUpdate ?? vi.fn().mockResolvedValue({ id: "z1" });
@@ -38,6 +39,7 @@ function buildPrisma(over: Record<string, ReturnType<typeof vi.fn>> = {}) {
   const prisma = {
     zona: {
       findUnique: zonaFindUnique,
+      findFirst: zonaFindFirst,
       findMany: zonaFindMany,
       create: zonaCreate,
       update: zonaUpdate,
@@ -51,6 +53,7 @@ function buildPrisma(over: Record<string, ReturnType<typeof vi.fn>> = {}) {
   return {
     prisma,
     zonaFindUnique,
+    zonaFindFirst,
     zonaFindMany,
     zonaCreate,
     zonaUpdate,
@@ -202,5 +205,30 @@ describe("ZonaRepository.list / listLight / findByNombreKey (R24/R15/R21)", () =
     expect(await repo.findByNombreKey("zona sur", "z1")).toBeNull();
     // clave inexistente
     expect(await repo.findByNombreKey("otra")).toBeNull();
+  });
+});
+
+// Feature 30/R3: identificacion de la zona GAM por el flag esGam (unica fuente de
+// verdad); el indice unico parcial garantiza a lo sumo una.
+describe("ZonaRepository.findGamZonaId (feature 30/R3)", () => {
+  it("devuelve el id de la zona con esGam = true", async () => {
+    const m = buildPrisma({
+      zonaFindFirst: vi.fn().mockResolvedValue({ id: "z-gam" }),
+    });
+    const repo = new ZonaRepository(m.prisma);
+
+    expect(await repo.findGamZonaId()).toBe("z-gam");
+    const arg = m.zonaFindFirst.mock.calls[0][0];
+    expect(arg.where).toEqual({ esGam: true });
+    expect(arg.select).toEqual({ id: true });
+  });
+
+  it("devuelve null cuando ninguna zona esta marcada como GAM (dispara guardia R4)", async () => {
+    const m = buildPrisma({
+      zonaFindFirst: vi.fn().mockResolvedValue(null),
+    });
+    const repo = new ZonaRepository(m.prisma);
+
+    expect(await repo.findGamZonaId()).toBeNull();
   });
 });

@@ -159,6 +159,15 @@ export class ZonaRepository implements IZonaRepository {
       orderBy: { nombre: "asc" },
     });
   }
+
+  /** Feature 30/R3: `id` de la zona con `esGam = true`; `null` si no hay ninguna. */
+  async findGamZonaId(): Promise<string | null> {
+    const row = await this.prisma.zona.findFirst({
+      where: { esGam: true },
+      select: { id: true },
+    });
+    return row?.id ?? null;
+  }
 }
 
 // R18/R19/R20: los distritos deben existir y no pertenecer a OTRA zona

@@ -124,7 +124,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
     const previas = dirs.filter(
       (d) =>
         !d.endsWith("_zonas_catalogo_global_pagos") &&
-        !d.endsWith("_orden_num_guia_deferred_mensajero_asignado_espera_aceptacion"), // feature 17: apendida despues
+        !d.endsWith("_orden_num_guia_deferred_mensajero_asignado_espera_aceptacion") && // feature 17: apendida despues
+        !d.endsWith("_order_status_en_ruta_bodega_satelite"), // feature 30: apendida despues
     );
     expect(thisDir > previas[previas.length - 1]).toBe(true);
   });

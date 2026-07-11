@@ -72,11 +72,17 @@ export class NumRemisionDuplicadoError extends Error {
 // guia"/"asignar desde bodega" (R27/R29). NO filtra deleted_at en el repo: el
 // service necesita distinguir "no existe" de "borrada" para reportar el motivo
 // exacto en `conflict.detalle` (R29).
+// Feature 30/R8/R9/R11/R12 — la fila de transicion suma la zona de la orden
+// (`zonaId` NOT NULL) y el flag GAM de esa zona (`zonaEsGam`), para que el
+// service clasifique cada orden GAM/no-GAM por `zonaId === gamZonaId` sin una
+// consulta extra.
 export interface OrdenTransicionRow {
   id: string;
   estatusValue: string;
   numGuia: number | null;
   deletedAt: Date | null;
+  zonaId: string;
+  zonaEsGam: boolean;
 }
 
 // Feature 17/T15 — fila liviana de mensajero para el loader del modal (R28).
@@ -205,6 +211,18 @@ export interface IOrdenRepository {
   /** R28/T15: TODOS los usuarios con rol `mensajero`, SIN filtro de zona. */
   findAllMensajeros(): Promise<MensajeroLiteRow[]>;
   /**
+   * Feature 30/R5: usuarios con rol `mensajero` Y `zonaId = gamZonaId` (solo la
+   * zona GAM), ordenados por nombre. Reemplaza el cuerpo de `findAllMensajeros`
+   * en el loader del modal: un mensajero de otra zona o sin zona NO aparece.
+   */
+  findMensajerosGam(gamZonaId: string): Promise<MensajeroLiteRow[]>;
+  /**
+   * Feature 30/R6: subconjunto de `ids` que corresponde a un usuario con rol
+   * `mensajero` Y `zonaId = gamZonaId`. Defensa en profundidad sobre R5 (el
+   * service revalida el mensajero recibido, aunque la lista visible ya sea GAM).
+   */
+  findMensajeroIdsValidosGam(ids: string[], gamZonaId: string): Promise<Set<string>>;
+  /**
    * R15/R16: catalogo completo `order_status` (id, value) de solo lectura, para
    * que la UI resuelva `value` -> `estatusId` y siga filtrando `listarOrdenes`
    * por `estatusId` (contrato feature 6/7 intacto).
@@ -225,4 +243,17 @@ export interface IOrdenRepository {
    * afectadas.
    */
   asignarBodegaLote(ordenIds: string[], mensajeroId: string, estatusId: string): Promise<number>;
+
+  // --- Feature 30: ruteo a bodega satelite (R10/R13) ---
+
+  /**
+   * Feature 30/R10/R13: rutea un lote homogeneo de ordenes no-GAM a
+   * `en_ruta_bodega_satelite`. Transaccional (todo-o-nada): por cada orden asigna
+   * `num_guia = nextval('orden_num_guia_seq')` SOLO si `num_guia IS NULL`
+   * (idempotente, R10), fija `estatusId` y deja `mensajeroAsignadoId = NULL`
+   * (R9). El llamador DEBE haber validado el lote (existencia, origen permitido,
+   * zona no-GAM) antes de invocar (sin logica de negocio aqui). Devuelve el
+   * numero de ordenes ruteadas.
+   */
+  rutearBodegaSateliteLote(ordenIds: string[], estatusId: string): Promise<number>;
 }

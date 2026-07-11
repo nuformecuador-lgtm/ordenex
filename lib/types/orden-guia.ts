@@ -33,6 +33,18 @@ export interface AsignarBodegaResultadoItem {
   estado: string;
 }
 
+// Feature 30/R13 — ruteo dedicado de ordenes no-GAM a la bodega satelite. Zod en
+// el borde (mismo patron que asignarBodegaSchema).
+export const rutearSateliteSchema = z.object({
+  ordenIds: z.array(z.string().min(1)),
+});
+export type RutearSateliteActionInput = z.infer<typeof rutearSateliteSchema>;
+
+export interface RutearSateliteResultadoItem {
+  ordenId: string;
+  estado: string; // "en_ruta_bodega_satelite"
+}
+
 export interface DetalleConflicto {
   ordenId: string;
   motivo: string;
@@ -54,6 +66,15 @@ export type AsignarBodegaResult =
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "conflict"; detalle: DetalleConflicto[] };
+
+// Feature 30/R13/R16 — resultado discriminado del ruteo a satelite. `conflict`
+// trae `detalle` por orden (origen invalido / borrada / orden GAM).
+export type RutearSateliteResult =
+  | { status: "ok"; resultados: RutearSateliteResultadoItem[] }
+  | { status: "unauthenticated" } // R16
+  | { status: "forbidden" } // R16
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R4/catalogo
+  | { status: "conflict"; detalle: DetalleConflicto[] }; // R17
 
 // T15 — loader de mensajeros para el modal (R28): TODOS los usuarios rol
 // mensajero, SIN filtro de zona. La feature 30 restringira el CUERPO del loader

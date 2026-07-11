@@ -12,6 +12,7 @@ import {
   listarMensajerosParaAsignacion,
   generarGuia,
   asignarDesdeBodega,
+  rutearABodegaSatelite,
 } from "@/lib/actions/ordenes-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { EstatusLiteDTO, MensajeroLiteDTO } from "@/lib/types/orden-guia";
@@ -29,6 +30,7 @@ vi.mock("@/lib/actions/ordenes-guia", () => ({
   listarMensajerosParaAsignacion: vi.fn(),
   generarGuia: vi.fn(),
   asignarDesdeBodega: vi.fn(),
+  rutearABodegaSatelite: vi.fn(),
 }));
 
 const listarOrdenesMock = vi.mocked(listarOrdenes);
@@ -36,12 +38,14 @@ const listarCatalogoEstatusMock = vi.mocked(listarCatalogoEstatus);
 const listarMensajerosMock = vi.mocked(listarMensajerosParaAsignacion);
 const generarGuiaMock = vi.mocked(generarGuia);
 const asignarDesdeBodegaMock = vi.mocked(asignarDesdeBodega);
+const rutearABodegaSateliteMock = vi.mocked(rutearABodegaSatelite);
 
 const ESTATUS: EstatusLiteDTO[] = [
   { id: "id-fulfillment", value: "en_fulfillment" },
   { id: "id-preparacion", value: "en_preparacion" },
   { id: "id-espera", value: "en_espera_aceptacion" },
   { id: "id-bodega", value: "en_bodega" },
+  { id: "id-satelite", value: "en_ruta_bodega_satelite" },
 ];
 
 const MENSAJEROS: MensajeroLiteDTO[] = [{ id: "m1", nombre: "Juan Mensajero" }];
@@ -236,5 +240,87 @@ describe("OrdenesRevisionMaestro", () => {
       await screen.findByRole("dialog", { name: "Asignar mensajero" }),
     ).toBeInTheDocument();
     expect(asignarDesdeBodegaMock).not.toHaveBeenCalled();
+  });
+
+  it("R15: monta el 5.º apartado solo-lectura 'En ruta a bodega satélite'", async () => {
+    renderComponent();
+
+    await screen.findByText("REM-F1");
+    const satelite = screen.getByRole("region", {
+      name: "En ruta a bodega satélite",
+    });
+    expect(satelite).toBeInTheDocument();
+    // Solo-lectura: sin checkboxes ni acciones.
+    expect(within(satelite).queryAllByRole("checkbox")).toHaveLength(0);
+    expect(
+      within(satelite).queryByRole("button", {
+        name: "Rutear a bodega satélite",
+      }),
+    ).toBeNull();
+  });
+
+  it("R13: 'Rutear a bodega satélite' invoca la action con los ordenIds NO-GAM seleccionados", async () => {
+    const user = userEvent.setup();
+    // En fulfillment: una orden NO-GAM (ruteable) y una GAM (no debe ir al lote).
+    listarOrdenesMock.mockImplementation(async (input) => {
+      const { estatusId, page, pageSize } = input as {
+        estatusId?: string;
+        page: number;
+        pageSize: number;
+      };
+      const items =
+        estatusId === "id-fulfillment"
+          ? [
+              makeOrden({
+                id: "no-gam-1",
+                numRemision: "REM-NOGAM",
+                estatusId: "id-fulfillment",
+                zonaEsGam: false,
+                zonaNombre: "Limón",
+              }),
+              makeOrden({
+                id: "gam-1",
+                numRemision: "REM-GAM",
+                estatusId: "id-fulfillment",
+                zonaEsGam: true,
+                zonaNombre: "GAM",
+              }),
+            ]
+          : [];
+      return { status: "ok", items, page, pageSize, total: items.length };
+    });
+    rutearABodegaSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "no-gam-1", estado: "en_ruta_bodega_satelite" }],
+    });
+
+    renderComponent();
+
+    await screen.findByText("REM-NOGAM");
+    const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
+    // Selecciona AMBAS órdenes; solo la NO-GAM debe rutearse.
+    const checkboxes = within(fulfillment).getAllByRole("checkbox");
+    await user.click(checkboxes[0]);
+    await user.click(checkboxes[1]);
+
+    await user.click(
+      within(fulfillment).getByRole("button", {
+        name: "Rutear a bodega satélite",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Rutear a bodega satélite",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Rutear a bodega satélite" }),
+    );
+
+    await vi.waitFor(() =>
+      expect(rutearABodegaSateliteMock).toHaveBeenCalledTimes(1),
+    );
+    expect(rutearABodegaSateliteMock).toHaveBeenCalledWith({
+      ordenIds: ["no-gam-1"],
+    });
   });
 });

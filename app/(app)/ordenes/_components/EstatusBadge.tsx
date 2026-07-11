@@ -18,6 +18,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   devuelta_origen: "Devuelta a origen",
   reprogramada: "Reprogramada",
   en_espera_aceptacion: "En espera de aceptación del mensajero", // feature 17
+  en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30
 };
 
 const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
@@ -38,6 +39,8 @@ const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
     "border border-hivis/60 bg-warning-soft text-[#92400e] dark:border-hivis/40 dark:bg-warning/15 dark:text-warning",
   en_espera_aceptacion:
     "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 17
+  en_ruta_bodega_satelite:
+    "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 30
 };
 
 const NEUTRAL_CLASSES =
@@ -50,10 +53,27 @@ function isKnownStatus(value: string): value is OrderStatusValue {
 /**
  * Chip de estatus de orden. Si `value` no matchea ningún estatus conocido, cae
  * a un chip neutro con el valor crudo (no rompe la UI ante datos inesperados).
+ *
+ * Feature 30/R15: para `en_ruta_bodega_satelite` el destino es la bodega de la
+ * ZONA de la orden. Cuando el consumidor pasa `zonaNombre` (derivado por fila de
+ * `orden.zonaId`), el label se vuelve legible como "En ruta a bodega <zona>"; sin
+ * él, cae al label estático genérico (el único estado con nombre derivado; el
+ * resto de estados ignora `zonaNombre`).
  */
-export function EstatusBadge({ value }: { value: string }) {
+export function EstatusBadge({
+  value,
+  zonaNombre,
+}: {
+  value: string;
+  zonaNombre?: string;
+}) {
   const known = isKnownStatus(value);
-  const label = known ? ORDER_STATUS_LABELS[value] : value;
+  const label =
+    value === "en_ruta_bodega_satelite" && zonaNombre
+      ? `En ruta a bodega ${zonaNombre}`
+      : known
+        ? ORDER_STATUS_LABELS[value]
+        : value;
   const classes = known ? ORDER_STATUS_CLASSES[value] : NEUTRAL_CLASSES;
 
   return (

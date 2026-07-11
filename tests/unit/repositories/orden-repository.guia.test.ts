@@ -33,24 +33,56 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
   return { prisma, tx };
 }
 
-describe("OrdenRepository.findByIdsForTransicion (R27/R29)", () => {
-  it("incluye ordenes borradas (deletedAt !== null) y mapea estatusValue/numGuia", async () => {
+describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)", () => {
+  it("incluye ordenes borradas (deletedAt !== null) y mapea estatusValue/numGuia/zona", async () => {
     const { prisma } = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
-      { id: "o1", numGuia: null, deletedAt: null, estatus: { value: "en_fulfillment" } },
-      { id: "o2", numGuia: 5, deletedAt: new Date("2026-01-01"), estatus: { value: "entregada" } },
+      {
+        id: "o1",
+        numGuia: null,
+        deletedAt: null,
+        estatus: { value: "en_fulfillment" },
+        zonaId: "z-gam",
+        zona: { esGam: true },
+      },
+      {
+        id: "o2",
+        numGuia: 5,
+        deletedAt: new Date("2026-01-01"),
+        estatus: { value: "entregada" },
+        zonaId: "z-limon",
+        zona: { esGam: false },
+      },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findByIdsForTransicion(["o1", "o2"]);
 
+    // Feature 30/R8/R9: la fila de transicion suma zonaId + zonaEsGam.
     expect(rows).toEqual([
-      { id: "o1", estatusValue: "en_fulfillment", numGuia: null, deletedAt: null },
-      { id: "o2", estatusValue: "entregada", numGuia: 5, deletedAt: new Date("2026-01-01") },
+      {
+        id: "o1",
+        estatusValue: "en_fulfillment",
+        numGuia: null,
+        deletedAt: null,
+        zonaId: "z-gam",
+        zonaEsGam: true,
+      },
+      {
+        id: "o2",
+        estatusValue: "entregada",
+        numGuia: 5,
+        deletedAt: new Date("2026-01-01"),
+        zonaId: "z-limon",
+        zonaEsGam: false,
+      },
     ]);
     const arg = prisma.orden.findMany.mock.calls[0][0];
     // R29: NO filtra deletedAt — el service es quien reporta "orden borrada".
     expect(arg.where).toEqual({ id: { in: ["o1", "o2"] } });
+    // Feature 30: proyecta zonaId + zona.esGam.
+    expect(arg.select.zonaId).toBe(true);
+    expect(arg.select.zona).toEqual({ select: { esGam: true } });
   });
 
   it("devuelve vacio sin consultar cuando ids esta vacio", async () => {
@@ -96,6 +128,87 @@ describe("OrdenRepository.findAllMensajeros (R28/T15)", () => {
     const arg = prisma.usuario.findMany.mock.calls[0][0];
     expect(arg.where).toEqual({ rol: { value: "mensajero" } });
     expect(arg.where).not.toHaveProperty("zonaId");
+  });
+});
+
+describe("OrdenRepository.findMensajerosGam (feature 30/R5)", () => {
+  it("filtra por rol mensajero Y zonaId = gamZonaId (excluye otras zonas y zonaId NULL)", async () => {
+    const { prisma } = buildPrisma();
+    prisma.usuario.findMany.mockResolvedValue([{ id: "m1", nombre: "Ana" }]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const mensajeros = await repo.findMensajerosGam("z-gam");
+
+    expect(mensajeros).toEqual([{ id: "m1", nombre: "Ana" }]);
+    const arg = prisma.usuario.findMany.mock.calls[0][0];
+    // R5: el filtro exige rol mensajero Y la zona GAM; sin zona (NULL) o de otra
+    // zona no matchea la igualdad zonaId = gamZonaId.
+    expect(arg.where).toEqual({ rol: { value: "mensajero" }, zonaId: "z-gam" });
+    expect(arg.orderBy).toEqual({ nombre: "asc" });
+  });
+});
+
+describe("OrdenRepository.findMensajeroIdsValidosGam (feature 30/R6)", () => {
+  it("subconjunto con rol mensajero Y zonaId = gamZonaId; excluye otras zonas/NULL", async () => {
+    const { prisma } = buildPrisma();
+    // La DB solo devuelve el mensajero GAM; m-otra-zona y m-sin-zona no matchean.
+    prisma.usuario.findMany.mockResolvedValue([{ id: "m-gam" }]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const set = await repo.findMensajeroIdsValidosGam(
+      ["m-gam", "m-otra-zona", "m-sin-zona"],
+      "z-gam",
+    );
+
+    expect(set.has("m-gam")).toBe(true);
+    expect(set.has("m-otra-zona")).toBe(false);
+    expect(set.has("m-sin-zona")).toBe(false);
+    const arg = prisma.usuario.findMany.mock.calls[0][0];
+    expect(arg.where).toEqual({
+      id: { in: ["m-gam", "m-otra-zona", "m-sin-zona"] },
+      rol: { value: "mensajero" },
+      zonaId: "z-gam",
+    });
+  });
+
+  it("devuelve vacio sin consultar cuando ids esta vacio", async () => {
+    const { prisma } = buildPrisma();
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    expect((await repo.findMensajeroIdsValidosGam([], "z-gam")).size).toBe(0);
+    expect(prisma.usuario.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("OrdenRepository.rutearBodegaSateliteLote (feature 30/R10/R13)", () => {
+  it("num_guia idempotente (WHERE num_guia IS NULL, secuencia constante) + estatus + mensajero NULL", async () => {
+    const { prisma, tx } = buildPrisma();
+    tx.orden.update.mockResolvedValue({ id: "o1" });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const count = await repo.rutearBodegaSateliteLote(["o1", "o2"], "os-ruta-satelite");
+
+    expect(count).toBe(2);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    // R10: una asignacion de guia idempotente por orden.
+    expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(2);
+    const [sql, ordenId] = tx.$executeRawUnsafe.mock.calls[0];
+    expect(sql).toContain("num_guia IS NULL");
+    expect(sql).toContain("nextval('orden_num_guia_seq')");
+    expect(ordenId).toBe("o1");
+    // R9: fija estatus y deja mensajeroAsignadoId NULL.
+    expect(tx.orden.update).toHaveBeenCalledWith({
+      where: { id: "o1" },
+      data: { estatusId: "os-ruta-satelite", mensajeroAsignadoId: null },
+    });
+  });
+
+  it("devuelve 0 sin abrir transaccion cuando el lote esta vacio", async () => {
+    const { prisma } = buildPrisma();
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.rutearBodegaSateliteLote([], "os-ruta-satelite")).toBe(0);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 

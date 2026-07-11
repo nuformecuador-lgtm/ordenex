@@ -37,12 +37,47 @@ function seleccionInicial(ordenes: OrdenListItemDTO[]): Record<string, string> {
 }
 
 /**
+ * ¿La orden es GAM? Feature 30/R7/R8: `zonaEsGam === false` → NO-GAM (se rutea a
+ * satélite, sin mensajero). `true` o `undefined` (mocks/fixtures previos a la
+ * feature 30 que no traen el flag) → se trata como GAM: conserva el camino de la
+ * feature 17 sin regresión.
+ */
+function esGam(orden: OrdenListItemDTO): boolean {
+  return orden.zonaEsGam !== false;
+}
+
+const SATELITE_ZONA_DESCONOCIDA = "su zona";
+
+/** Agrupa las órdenes NO-GAM por nombre de zona para titular cada bodega satélite destino. */
+function groupByZona(
+  ordenes: OrdenListItemDTO[],
+): { zonaNombre: string; ordenes: OrdenListItemDTO[] }[] {
+  const grupos = new Map<string, OrdenListItemDTO[]>();
+  for (const orden of ordenes) {
+    const zona = orden.zonaNombre ?? SATELITE_ZONA_DESCONOCIDA;
+    const actual = grupos.get(zona);
+    if (actual) actual.push(orden);
+    else grupos.set(zona, [orden]);
+  }
+  return Array.from(grupos, ([zonaNombre, items]) => ({
+    zonaNombre,
+    ordenes: items,
+  }));
+}
+
+/**
  * Modal async "Generar guía" (feature 17, T18, R20/R24): agrupa la selección
  * en (a) órdenes CON `mensajeroSugeridoId` (preselecciona, permite override o
  * "sin mensajero") y (b) SIN sugerido (elige mensajero o deja "sin"). Al
  * confirmar construye `decisiones: [{ ordenId, mensajeroId | null }]` y hace
  * UNA sola llamada a `generarGuia` (R19/R21-R24), con independencia de que la
  * orden termine en `en_espera_aceptacion` o `en_bodega` (R23).
+ *
+ * Feature 30 (T17, R7/R8/R9/R11): las órdenes NO-GAM (`zonaEsGam === false`) NO
+ * pueden llevar mensajero. Se listan en un grupo aparte "Se enviarán a la bodega
+ * satélite de <zona>" SIN select; al confirmar su `mensajeroId` va SIEMPRE `null`
+ * y el service las rutea a `en_ruta_bodega_satelite` en la misma transacción del
+ * lote (R11). El toast distingue los tres destinos (espera / bodega / satélite).
  */
 export function GenerarGuiaModal({
   open,
@@ -68,8 +103,14 @@ export function GenerarGuiaModal({
   }
 
   const mensajeroOptions = toMensajeroOptions(mensajeros);
-  const conSugerido = ordenes.filter((o) => o.mensajeroSugeridoId != null);
-  const sinSugerido = ordenes.filter((o) => o.mensajeroSugeridoId == null);
+  // Feature 30/R8: primero se separa GAM (con select) de NO-GAM (a satélite, sin
+  // select). Dentro de GAM se conserva el subgrupo sugerido/sin-sugerido (feat 17).
+  const gamOrdenes = ordenes.filter(esGam);
+  const noGamOrdenes = ordenes.filter((o) => !esGam(o));
+  const conSugerido = gamOrdenes.filter((o) => o.mensajeroSugeridoId != null);
+  const sinSugerido = gamOrdenes.filter((o) => o.mensajeroSugeridoId == null);
+  // Grupos NO-GAM por zona: cada zona informa su bodega satélite destino (R8/R15).
+  const noGamPorZona = groupByZona(noGamOrdenes);
 
   function handleRowChange(ordenId: string, mensajeroId: string) {
     setSeleccion((prev) => ({ ...prev, [ordenId]: mensajeroId }));
@@ -93,10 +134,22 @@ export function GenerarGuiaModal({
     },
   ];
 
+  // R8: las órdenes NO-GAM NO ofrecen columna de mensajero (a satélite, sin select).
+  const noGamColumns: Column<OrdenListItemDTO>[] = [
+    { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
+    { id: "destinatario", value: "Destinatario", render: "destinatario" },
+  ];
+
   async function handleConfirm() {
+    // R9/R11: NO-GAM → `mensajeroId` null siempre (el service las rutea a
+    // satélite); GAM → la selección del maestro (o null = "sin mensajero").
     const decisiones = ordenes.map((orden) => ({
       ordenId: orden.id,
-      mensajeroId: seleccion[orden.id] ? seleccion[orden.id] : null,
+      mensajeroId: esGam(orden)
+        ? seleccion[orden.id]
+          ? seleccion[orden.id]
+          : null
+        : null,
     }));
 
     const result = await generarGuia({ decisiones });
@@ -112,8 +165,11 @@ export function GenerarGuiaModal({
     const bodega = result.resultados.filter(
       (r) => r.estado === "en_bodega",
     ).length;
+    const satelite = result.resultados.filter(
+      (r) => r.estado === "en_ruta_bodega_satelite",
+    ).length;
     toast.success(
-      `Guía generada para ${result.resultados.length} orden(es): ${espera} en espera de aceptación, ${bodega} en bodega.`,
+      `Guía generada para ${result.resultados.length} orden(es): ${espera} en espera de aceptación, ${bodega} en bodega, ${satelite} en ruta a bodega satélite.`,
     );
     onSuccess();
   }
@@ -156,6 +212,20 @@ export function GenerarGuiaModal({
             />
           </div>
         ) : null}
+        {noGamPorZona.map((grupo) => {
+          const titulo = `Se enviarán a la bodega satélite de ${grupo.zonaNombre}`;
+          return (
+            <div key={grupo.zonaNombre} className="flex flex-col gap-2">
+              <h3 className="text-sm font-medium">{titulo}</h3>
+              <DataTable
+                columns={noGamColumns}
+                data={grupo.ordenes}
+                rowKey="id"
+                ariaLabel={titulo}
+              />
+            </div>
+          );
+        })}
       </div>
     </Modal>
   );

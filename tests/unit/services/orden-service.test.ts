@@ -79,6 +79,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     listOrderStatus: vi.fn().mockResolvedValue([]),
     generarGuiaLote: vi.fn().mockResolvedValue([]),
     asignarBodegaLote: vi.fn().mockResolvedValue(0),
+    findMensajerosGam: vi.fn().mockResolvedValue([]),
+    findMensajeroIdsValidosGam: vi.fn().mockResolvedValue(new Set()),
+    rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }

@@ -7,8 +7,13 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/27-fulfillment-tienda | fullstack | F2.4 | **impl COMPLETA + reviewer APROBADO 0 bloqueantes.** Campo `Usuario.fulfillment` (migración+down.sql), backend fuerza false si rol!=adminTienda (R4/R4a), switch condicional en UsuarioForm (R5/R6), estado inicial condicional en BulkOrdenService según adminTienda autenticado (R15). Mergeado `origin/dev` (drift 22/23) sin conflictos de código. **Suite 1053 verde post-merge**, init.sh OK. **PR #29 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/29) → base `dev`. Pasa a `done` al mergear. Ocupa ambas zonas. |
-| feature/23-dashboard-maestro | frontend | F2.4 | **impl COMPLETA + reviewer APROBADO** (tras marcar tasks; único mayor era documental). Dashboard del maestro: `page.tsx` ramifica por rol (maestro/admin → `AdminMaestroDashboard`; adminTienda → dashboard de la 26 intacto; resto → 'Bienvenido'). Panel de postulaciones pendientes en tarjetas + Pagination, docs como enlaces "Ver" (A1), aprobar/rechazar con Modal async (13) + Toast + refresco SWR (A2), rechazo sin motivo (A3). Consume actions de la 22 (frontend puro). R1–R19 mapeados. **Suite 1018 verde**, typecheck+lint OK, init.sh EXIT 0. **PR #28 ABIERTO** (https://github.com/nuformecuador-lgtm/ordenex/pull/28) → base `dev`. Pasa a `done` al mergear. |
+| (ninguna en curso) | — | — | Feature 30 CERRADA (impl+reviewer OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+
+> Feature 30 (asignación por zona GAM / ruteo bodega satélite) CERRADA 2026-07-11: **impl COMPLETA (R1–R22) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1287 tests verde). Fullstack un ciclo. Estado `done` + `history.md` + `progress/review_30-...md`. Backend: estado `en_ruta_bodega_satelite` (migración+down.sql), guardia R4, filtro mensajeros GAM, ruteo con `num_guia`. Frontend: columna Zona, badge dinámico, apartado + `RutearSateliteModal`, `GenerarGuiaModal` split GAM/no-GAM. F1.4 (6 decisiones recomendadas). **PENDIENTE: abrir PR a `dev` y merge (requiere OK humano, como el #32).** DEUDA: migración no aplicada contra Postgres real. Desbloquea 33/34/39.
+
+> Feature 17 (revisión maestro / generar guía / asignación mensajero) CERRADA 2026-07-11: **PR #32 mergeado** a `origin/dev` (5e06aeb). Fullstack (R0–R32), reviewer APROBADO 0 bloqueantes, migración `num_guia` NULLABLE + secuencia + `mensajero_asignado_id` + estado `en_espera_aceptacion`. Suite 1244 verde tras integrar `dev` (feature 51). Desbloquea 30/32/36. Pendiente humano: aplicar la migración contra Postgres real (deuda de despliegue).
+
+> Feature 23 (dashboard maestro) CERRADA 2026-07-10/11: **PR #28 mergeado** a `origin/dev`. Frontend puro (R1–R19). Feature 27 (fulfillment tienda) CERRADA: **PR #29 mergeado**. Feature 51 (corrección carga masiva CR) CERRADA: **PR #31 mergeado**. Ver `history.md`.
 
 > Feature 22 (aprobación de postulaciones) CERRADA 2026-07-10: **PR #26 mergeado** a `origin/dev` (8eaed55), status `done`, entrada en `history.md`. Backend puro (R1–R21), reviewer APROBADO 0 mayores, sin migraciones. Rechazo→`inactivo`, URLs firmadas TTL 300s. Desbloquea la 23.
 
@@ -136,6 +141,21 @@
   las features 16 y 25. Si el humano prefiere el split formal, se hace. Rama creada desde
   `origin/dev` (al dia con 21/25/50/28).
 
+- `asignacion por zona (GAM) y ruteo a bodega satelite` (id 30): **zone=fullstack,
+  complexity=high, branch=feature/30-asignacion-zona-ruteo-satelite, depends_on=24.**
+  Evaluada 2026-07-11: fullstack (backend — nuevo `order_status` de ruteo a satelite,
+  consultas de mensajeros filtradas por zona, transiciones de asignacion; frontend —
+  UI del maestro: lista de mensajeros restringida a GAM + accion 'rutear a bodega
+  satelite'). Deps 24 (zonas, con `distrito.zona_id` y `Usuario.zona_id`) y 17 (generar
+  guia / `mensajero_asignado_id` / `en_espera_aceptacion`) **done**. DECISION DE PROCESO
+  (leader): NO se parte el entry; por precedente del repo (16/24/25/27) se corre como UN
+  ciclo fullstack (implementer delega backend_dev -> frontend_dev, un PR). Rama creada
+  desde `origin/dev` (5e06aeb). Preguntas ABIERTAS para F1.4: (a) identificacion de la
+  zona GAM -> flag `es_gam`/`es_central` en `zona` (recomendado) vs. por nombre 'GAM'
+  -OJO: la 24 dejo `es_gam` como toggle de UI NO sembrado, hay que reconciliar-; (b)
+  estado de ruteo -> UN `en_ruta_bodega_satelite` con nombre de zona derivado de
+  `orden.zona_id` (recomendado, precedente `en_ruta_bodega_principal`) vs. estado por zona.
+
 ## Conflictos pendientes
 
 > Conflictos de merge que el agente no pudo resolver solo. El humano decide.
@@ -143,9 +163,11 @@
 (Ninguno por ahora)
 
 ## Plan de la sesion
-- [x] Features 1-16, 18: ciclos SDD completos (ver history.md).
-- [ ] Feature 19 (backend, low, rol adminSatelite): F1 spec en curso.
-- [ ] Feature 17 BLOQUEADA (depends 27/28). Elegibles: 19,20,21,24,25,26,28,29.
+- [x] Features 1-29, 31, 50, 51: ciclos SDD completos (ver history.md).
+- [x] Feature 17 (revisión maestro / generar guía): done, PR #32 mergeado 2026-07-11.
+- [x] Feature 30 (asignación por zona GAM / ruteo satélite): done (impl+reviewer OK); pendiente PR a `dev`.
+- [ ] Siguientes elegibles: **32** (etiqueta QR, depends 17 done), **36** (mensajero mis asignaciones, depends 17 done),
+      **33** (recepción QR satélite, depends 30 done → ahora desbloqueada), **42** (wallet, depends 18 done), 35 (realtime).
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.
