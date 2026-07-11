@@ -784,3 +784,24 @@
 - Proceso: corrección pequeña, ciclo SDD agilizado (spec inline por el leader en `feature_list.json` id 52, sin
   reviewer formal aparte; el criterio de aceptación es el build verde). No hay patrón en el repo para unit-testear
   config de ruta (`export const dynamic`); la verificación es el `pnpm build`.
+
+## 2026-07-11 — deuda de despliegue: migraciones aplicadas + fix db-rollback Prisma 7 (feature 53, BACKEND/TOOLING)
+- Contexto: el humano pidió saldar las deudas dependientes del entorno (ejemplo: migraciones) antes de avanzar.
+- HALLAZGO clave: `DATABASE_URL` apunta a un **Postgres LOCAL** (`localhost:5432`, db `ordenex`), NO a un Supabase
+  compartido (la nota vieja del repo era incorrecta). Riesgo bajo.
+- Migraciones: `prisma migrate deploy` aplicó las **12 pendientes** (cobros, rol adminSatelite, rename
+  embalaje→en_fulfillment, enum order_status, vehículos, postulación, fulfillment, zonas, num_guia diferido,
+  en_ruta_bodega_satelite, gestion_orden+enums, en_bodega_satelite). `migrate status` = "up to date"; `db:seed`
+  (catálogos) OK.
+- Al verificar el ROLLBACK (T020) se descubrió que `scripts/db-rollback.ts` estaba **doblemente roto en Prisma 7**:
+  (1) `prisma db execute` ya no acepta `--schema` (datasource vía `prisma.config.ts`); (2) `migrate resolve
+  --rolled-back` da P3012 (solo migraciones FALLIDAS, no aplicadas). FIX (backend_dev, model opus): quitar
+  `--schema` del `db execute`, y reemplazar `migrate resolve --rolled-back` por un `DELETE FROM "_prisma_migrations"
+  WHERE "migration_name"=...` (a un archivo temporal ejecutado con `db execute`, guard de validación del nombre).
+- Verificación del rollback (round-trip real contra la DB local): `pnpm db:rollback` (revierte la última) →
+  `migrate status` la muestra pendiente → `migrate deploy` la reaplica → "up to date". DB dejada consistente.
+  `./init.sh` verde, `pnpm test` **1493/1493**, typecheck OK.
+- DEUDA RESTANTE (registrada en `current.md`): E2E ejecutables (falta harness de seed/login e2e — candidato a
+  feature), seed de ZONAS (necesita el Excel del humano), RLS con key anon (T004). El bucket `gestion-evidencias`
+  aplica solo si se usa Supabase Storage.
+- Proceso: ciclo ágil, spec inline (feature_list id 53). Corrió sobre la rama `chore/deuda-despliegue-migraciones`.
