@@ -51,6 +51,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
     asignarMensajeroSugerido: vi.fn().mockResolvedValue(0),
     countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
+    // Feature 32: etiqueta de guia, exigida por la interfaz IOrdenRepository.
+    findEtiquetasByIds: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }

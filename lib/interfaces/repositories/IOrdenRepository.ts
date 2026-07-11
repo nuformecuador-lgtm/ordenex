@@ -132,6 +132,29 @@ export interface DistritoRow {
   zonaId: string | null; // feature 24/R4: la zona de la orden se deriva del distrito (carga masiva).
 }
 
+// Feature 32 — fila proyectada para armar la etiqueta de guia (R1). Trae los
+// nombres legibles de tienda/geografia (no IDs) y `montoCobrar` ya como
+// number|null (Decimal->number, R5). `numGuia` puede venir null: el filtro
+// `sin_guia` (R2) lo decide el service, no el repo. NUNCA incluye `deletedAt`
+// (R6): el repo YA filtra `deletedAt: null` para que una orden borrada cuente
+// como no encontrada (R3), no como fila con guia. `distritoNombre` es nullable
+// (R4: la orden puede no tener distrito).
+export interface EtiquetaRow {
+  id: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  telefonoDest: string;
+  direccion: string | null;
+  producto: string;
+  montoCobrar: number | null;
+  tiendaNombre: string;
+  zonaNombre: string;
+  provinciaNombre: string;
+  cantonNombre: string;
+  distritoNombre: string | null;
+}
+
 export interface IOrdenRepository {
   create(data: CreateOrdenData): Promise<OrdenDTO>;
   /** Excluye borradas (deleted_at IS NOT NULL); null si no existe o esta borrada (R34). */
@@ -256,4 +279,16 @@ export interface IOrdenRepository {
    * numero de ordenes ruteadas.
    */
   rutearBodegaSateliteLote(ordenIds: string[], estatusId: string): Promise<number>;
+
+  // --- Feature 32: etiqueta de guia (READ derivado, R1/R3) ---
+
+  /**
+   * Feature 32/R1/R3: filas para la etiqueta por id, con los nombres legibles de
+   * tienda/zona/provincia/canton/distrito resueltos (no IDs). Filtra
+   * `deletedAt: null` para que una orden borrada NO aparezca (el service la
+   * reporta como `no_encontrada`, R3). NO filtra por `num_guia`: devuelve filas
+   * con `numGuia` posible null y el service decide `sin_guia` (R2). Solo query,
+   * sin logica de negocio. Vacio si `ids` esta vacio.
+   */
+  findEtiquetasByIds(ids: string[]): Promise<EtiquetaRow[]>;
 }

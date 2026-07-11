@@ -13,6 +13,7 @@ import { OrdenesApartado } from "./OrdenesApartado";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { RutearSateliteModal } from "./RutearSateliteModal";
+import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 
 export interface OrdenesRevisionMaestroProps {
   /** R12-UI: `admin` es solo-lectura (sin checkboxes ni botones/modales de acción). */
@@ -23,6 +24,7 @@ type ModalAbierto =
   | "generar-guia"
   | "asignar-bodega"
   | "rutear-satelite"
+  | "etiquetas"
   | null;
 
 async function catalogoEstatusFetcher() {
@@ -103,6 +105,15 @@ export function OrdenesRevisionMaestro({
     setModalAbierto("rutear-satelite");
   }
 
+  // Feature 32/R11/R13: "Imprimir etiquetas" sobre la selección de un apartado
+  // con `num_guia`. El backend descarta las órdenes sin guía (R2, aviso en el
+  // modal) y rechaza a roles no autorizados (R13); solo `maestro` (no `readOnly`)
+  // ve la acción (decisión F1.4 (f)).
+  function abrirEtiquetas(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("etiquetas");
+  }
+
   function cerrarModal(open: boolean) {
     if (!open) setModalAbierto(null);
   }
@@ -151,11 +162,16 @@ export function OrdenesRevisionMaestro({
         secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
         onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
       />
+      {/* Feature 32/R13/F1.4(f): órdenes con `num_guia`. La respuesta del
+          mensajero sigue fuera de alcance (feature 36); la única acción del
+          maestro aquí es "Imprimir etiquetas". */}
       <OrdenesApartado
         titulo="En espera de aceptación del mensajero"
         estatusValue="en_espera_aceptacion"
         estatusId={estatusIdPorValue.get("en_espera_aceptacion")}
-        selectable={false}
+        selectable={!readOnly}
+        actionLabel={readOnly ? undefined : "Imprimir etiquetas"}
+        onAction={readOnly ? undefined : abrirEtiquetas}
       />
       <OrdenesApartado
         titulo="En bodega"
@@ -166,14 +182,19 @@ export function OrdenesRevisionMaestro({
         onAction={readOnly ? undefined : abrirAsignarBodega}
         secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
         onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
+        tertiaryActionLabel={readOnly ? undefined : "Imprimir etiquetas"}
+        onTertiaryAction={readOnly ? undefined : abrirEtiquetas}
       />
-      {/* Feature 30/R15: 5.º apartado solo-lectura. Las órdenes ruteadas a
-          satélite se muestran con su estado legible por zona (EstatusBadge). */}
+      {/* Feature 30/R15: 5.º apartado. Feature 32/R13/F1.4(f): sus órdenes ya
+          tienen `num_guia`, así que el maestro puede "Imprimir etiquetas"
+          (selección por checkbox); sigue sin acciones de escritura. */}
       <OrdenesApartado
         titulo="En ruta a bodega satélite"
         estatusValue="en_ruta_bodega_satelite"
         estatusId={estatusIdPorValue.get("en_ruta_bodega_satelite")}
-        selectable={false}
+        selectable={!readOnly}
+        actionLabel={readOnly ? undefined : "Imprimir etiquetas"}
+        onAction={readOnly ? undefined : abrirEtiquetas}
       />
 
       {!readOnly ? (
@@ -197,6 +218,11 @@ export function OrdenesRevisionMaestro({
             ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
+          />
+          <EtiquetasGuiaModal
+            open={modalAbierto === "etiquetas"}
+            ordenes={ordenesSeleccionadas}
+            onOpenChange={cerrarModal}
           />
         </>
       ) : null}

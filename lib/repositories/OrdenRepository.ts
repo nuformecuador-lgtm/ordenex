@@ -6,6 +6,7 @@ import {
   type CantonRow,
   type CreateOrdenData,
   type DistritoRow,
+  type EtiquetaRow,
   type GenerarGuiaDecisionData,
   type GenerarGuiaResultRow,
   type GeoExistence,
@@ -149,6 +150,52 @@ function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
     estatusValue: row.estatus?.value,
     mensajeroSugeridoId: row.mensajeroSugeridoId,
     mensajeroSugeridoNombre: row.mensajeroSugerido?.nombre ?? null,
+  };
+}
+
+// Feature 32/R1 — proyeccion para la etiqueta: los datos de la orden + los
+// NOMBRES (no IDs) de tienda/geografia via relaciones ya existentes (patron
+// WITH_ESTATUS_Y_TIENDA). `distrito` es la unica relacion opcional (R4). No
+// selecciona `deletedAt` ni internos (R6); el filtro `deletedAt: null` va en el
+// `where` del findMany (R3).
+const WITH_ETIQUETA = {
+  select: {
+    id: true,
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    direccion: true,
+    producto: true,
+    montoCobrar: true,
+    tienda: { select: { nombre: true } },
+    zona: { select: { nombre: true } },
+    provincia: { select: { nombre: true } },
+    canton: { select: { nombre: true } },
+    distrito: { select: { nombre: true } },
+  },
+} as const;
+
+type OrdenEtiquetaRow = Prisma.OrdenGetPayload<typeof WITH_ETIQUETA>;
+
+// R1/R4/R5/R6: serializa la fila de etiqueta a EtiquetaRow. Resuelve los nombres
+// legibles, mapea Decimal montoCobrar -> number|null (R5, sin moneda) y deja
+// distritoNombre null si la orden no tiene distrito (R4). NO expone deletedAt (R6).
+function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
+  return {
+    id: row.id,
+    numGuia: row.numGuia,
+    numRemision: row.numRemision,
+    destinatario: row.destinatario,
+    telefonoDest: row.telefonoDest,
+    direccion: row.direccion,
+    producto: row.producto,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    tiendaNombre: row.tienda.nombre,
+    zonaNombre: row.zona.nombre,
+    provinciaNombre: row.provincia.nombre,
+    cantonNombre: row.canton.nombre,
+    distritoNombre: row.distrito?.nombre ?? null,
   };
 }
 
@@ -560,6 +607,23 @@ export class OrdenRepository implements IOrdenRepository {
       }
       return ordenIds.length;
     });
+  }
+
+  // --- Feature 32: etiqueta de guia (READ derivado, R1/R3) ---
+
+  /**
+   * Feature 32/R1/R3: filas para la etiqueta por id. `where` filtra
+   * `deletedAt: null` (R3: borrada/inexistente -> ausente, el service la reporta
+   * como `no_encontrada`). NO filtra por `num_guia`: devuelve filas con `numGuia`
+   * posible null y el service decide `sin_guia` (R2). Solo query.
+   */
+  async findEtiquetasByIds(ids: string[]): Promise<EtiquetaRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { id: { in: ids }, deletedAt: null }, // R3
+      ...WITH_ETIQUETA,
+    });
+    return rows.map(toEtiquetaRow);
   }
 }
 
