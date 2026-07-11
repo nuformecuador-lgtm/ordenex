@@ -564,3 +564,30 @@
   de `PAGE_SIZE_MAX` sin test dedicado; fallback silencioso `urlByPath[path] ?? ""` en `toDTO`.
 - DEUDA heredada de la 21 sigue vigente: la aprobación real requiere aplicar la migración de la 21 a Postgres
   y crear el bucket privado `mensajero-docs` (entorno con DB real).
+
+
+## 2026-07-10 — gestión de zonas (feature 24, FULLSTACK) — con REMODELADO de geografía
+- **Cambio de modelo respecto a la descripción del backlog** (decisiones del humano en F1.4, spec reabierto):
+  la geografía deja de ser hija de la zona y pasa a ser un **catálogo GLOBAL** de Costa Rica
+  (`provincia → cantón → distrito`); se **ELIMINA `provincia.zona_id`** y la zona se asigna a nivel de
+  **distrito** (`distrito.zona_id` nullable). Motivo: el Excel real asigna zona por distrito y una zona
+  cruza provincias (GAM abarca SJ/Alajuela/Cartago/Heredia). El spec previo (geografía inline hija de la
+  zona) estaba aprobado pero era incorrecto; se reescribió (R1–R40).
+- Construido: migración `20260711120000_zonas_catalogo_global_pagos` (up+down+RLS): DROP `provincia.zona_id`;
+  `distrito.zona_id`; `zona.pago_entrega`/`pago_rechazo` (Decimal 12,2 default 0), `zona.es_gam` (bool, índice
+  único parcial "a lo sumo una true"); `usuario.zona_id` nullable. Backend (tipos/normalize/config, interfaces,
+  `ZonaRepository`/`GeoRepository`/`ZonaService`, `lib/actions/zonas.ts`, `zonaId` en usuarios). Frontend en
+  `configuracion` (`ZonaForm`/`ZonasModule`/`zonas-columns`, auth server-side). Seed `scripts/seed-zonas.ts`
+  de **dos fuentes**: geografía desde el mapa oficial completo `public/geografia-cr-completa.xlsx`
+  (7 prov / 84 cant / 491 dist, generado y validado por el humano) + hints de zona desde el Excel original;
+  idempotente, `es_gam` NUNCA sembrado (toggle de UI).
+- Decisión R4/R11 del humano (opción b): `orden.zona_id` (NOT NULL) se deriva de `distrito.zona_id` en
+  `BulkOrdenService` (feature 15); distrito obligatorio y sin zona → **error de validación por fila**.
+  Consecuencia operativa: una carga masiva exige que el maestro haya zonificado los distritos involucrados.
+- Requisitos R1–R39 mapeados 1:1 a test (ver `progress/impl_24-gestion-zonas.md`); R40 = gate de despliegue.
+  Reviewer **APROBADO** 0 bloqueantes. Verificación: `pnpm test` 1160/1160, `./init.sh` OK, typecheck/lint limpios.
+- DEUDA (gate de despliegue, DB real): aplicar la migración y correr `seed-zonas.ts` contra Postgres con los dos XLSX.
+- Hallazgos menores (no bloqueantes): (1) el template de carga masiva no marca "Distrito" como obligatorio ni
+  comunica el nuevo acoplamiento zona↔distrito; (2) métrica `distritosSinZona` del seed cuenta por hint, no por
+  distrito distinto (solo afecta el reporte); (3) índice único de `nombre` sobre valor crudo. Aside preexistente
+  feature 15: ejemplos del template siguen siendo de Ecuador (Pichincha/Quito), no Costa Rica.
