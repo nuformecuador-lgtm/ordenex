@@ -3,19 +3,29 @@ import { Sidebar } from "./_components/Sidebar";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { itemsVisibles, SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 
-export default async function AppLayout({ children }: { children: ReactNode }) {
-  // Se resuelve una sola vez por carga (los layouts no re-renderizan en la
-  // navegacion soft del App Router) y se filtran los items del menu por rol.
+export default async function AppLayout({
+  children,
+}: Readonly<{
+  children: ReactNode;
+}>) {
   const actor = await resolveActorFromSession();
   const items = itemsVisibles(SIDEBAR_ITEMS, actor);
 
   return (
     <ToastProvider>
-      <div className="flex flex-1 flex-col md:flex-row">
+      <SidebarProvider>
         <Sidebar items={items} />
-        <main className="flex flex-1 flex-col">{children}</main>
-      </div>
+        <SidebarInset>
+          <SidebarTrigger className={"relative md:hidden"} />
+          {children}
+        </SidebarInset>
+      </SidebarProvider>
     </ToastProvider>
   );
 }

@@ -1,16 +1,35 @@
-import { RolValue } from "@prisma/client";
+import type { RolValue } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { ROLES_SEED } from "@/lib/types/roles";
+
+/**
+ * Clave string del icono de un item. El icono real (componente de lucide) NO
+ * viaja en los datos porque cruza el borde RSC (Server Component layout ->
+ * Client Component Sidebar) y las funciones/componentes no son serializables.
+ * El Sidebar resuelve `iconKey -> componente` en el cliente al renderizar.
+ */
+export type IconKey = "settings" | "user" | "package";
+
+/** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
+export interface MenuChild {
+  label: string;
+  href: string;
+}
 
 /**
  * Item de navegacion con los roles autorizados a verlo. La visibilidad del menu
  * se decide aqui, en un unico punto, para poder migrar de "por rol" a "por
  * permisos granulares" (tablas Permiso/RolPermiso) sin tocar el Sidebar.
+ *
+ * Solo contiene datos 100% serializables (strings/arrays): `iconKey` en vez del
+ * componente de icono, para poder cruzar el borde RSC hacia el Sidebar cliente.
  */
 export interface MenuItem {
   label: string;
   href: string;
+  iconKey: IconKey;
   roles: readonly RolValue[];
+  children?: readonly MenuChild[];
 }
 
 /**
@@ -25,16 +44,26 @@ export interface MenuItem {
  * - Perfil: cualquier rol autenticado (ningun service lo restringe).
  */
 export const SIDEBAR_ITEMS: readonly MenuItem[] = [
-  { label: "Configuración", href: "/configuracion", roles: [RolValue.maestro] },
-  { label: "Perfil", href: "/perfil", roles: ROLES_SEED },
+  {
+    label: "Configuración",
+    href: "/configuracion",
+    iconKey: "settings",
+    roles: ["maestro"],
+  },
+  {
+    label: "Perfil",
+    href: "/perfil",
+    iconKey: "user",
+    roles: ROLES_SEED,
+  },
   {
     label: "Órdenes",
     href: "/ordenes",
-    roles: [
-      RolValue.maestro,
-      RolValue.admin,
-      RolValue.adminTienda,
-      RolValue.mensajero,
+    iconKey: "package",
+    roles: ["maestro", "admin", "adminTienda", "mensajero"],
+    children: [
+      { label: "Todas", href: "/ordenes" },
+      { label: "Crear", href: "/ordenes/crear" },
     ],
   },
 ] as const;

@@ -4,6 +4,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps, ReactNode } from "react";
 import { Sidebar } from "@/app/(app)/_components/Sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import type { MenuItem } from "@/lib/auth/menu-visibility";
 
 // usePathname es configurable por test; useRouter se mockea porque el patrón
 // del repo lo espera aunque el Sidebar no lo consuma directamente.
@@ -14,8 +16,9 @@ vi.mock("next/navigation", () => ({
   usePathname: () => currentPathname,
 }));
 
-// next/link se reemplaza por un <a> real (mantiene el Sidebar bajo prueba tal
-// cual; solo se evita el runtime del router de Next y la navegación de jsdom).
+// next/link se reemplaza por un <a> real. El Sidebar de shadcn lo pasa vía la
+// prop `render` de SidebarMenuButton (variante base-ui), por lo que el <a>
+// recibe className, data-* y children ya mergeados por useRender.
 vi.mock("next/link", () => ({
   __esModule: true,
   default: ({
@@ -41,168 +44,213 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+// El Sidebar de shadcn requiere el SidebarProvider (contexto useSidebar). Sin
+// prop `items` usa el default (SIDEBAR_ITEMS de menu-visibility).
+function renderSidebar(items?: readonly MenuItem[]) {
+  return render(
+    <SidebarProvider>
+      <Sidebar items={items} />
+    </SidebarProvider>,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   currentPathname = "/";
 });
 
 describe("Sidebar", () => {
-  it("render de items (R1, R2, R3)", () => {
-    render(<Sidebar />);
+  it("render de los items principales (R1, R2, R3)", () => {
+    renderSidebar();
 
     const nav = screen.getByRole("navigation", {
       name: /navegación principal/i,
     });
     expect(nav).toBeInTheDocument();
 
-    // Estado colapsado por defecto: solo el listado de escritorio está montado,
-    // así que hay exactamente 3 enlaces sin ambigüedad.
-    const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(3);
+    // Configuración y Perfil son enlaces directos.
+    const config = screen.getByRole("link", { name: "Configuración" });
+    const perfil = screen.getByRole("link", { name: "Perfil" });
+    expect(config).toHaveAttribute("href", "/configuracion");
+    expect(perfil).toHaveAttribute("href", "/perfil");
+
+    // Órdenes tiene subítems: es un botón colapsable, no un enlace.
+    const ordenes = screen.getByRole("button", { name: /órdenes/i });
+    expect(ordenes).toBeInTheDocument();
+    expect(ordenes).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("cada item tiene un icono propio (svg de lucide)", () => {
+    renderSidebar();
 
     const config = screen.getByRole("link", { name: "Configuración" });
     const perfil = screen.getByRole("link", { name: "Perfil" });
-    const ordenes = screen.getByRole("link", { name: "Órdenes" });
+    const ordenes = screen.getByRole("button", { name: /órdenes/i });
 
-    expect(config).toHaveAttribute("href", "/configuracion");
-    expect(perfil).toHaveAttribute("href", "/perfil");
-    expect(ordenes).toHaveAttribute("href", "/ordenes");
+    for (const el of [config, perfil, ordenes]) {
+      expect(el.querySelector("svg")).not.toBeNull();
+    }
+  });
 
-    // href internos: empiezan con "/" y no con "//"
-    for (const link of links) {
+  it("los enlaces internos empiezan con '/' y no con '//'", () => {
+    renderSidebar();
+    for (const link of screen.getAllByRole("link")) {
       const href = link.getAttribute("href") ?? "";
       expect(href.startsWith("/")).toBe(true);
       expect(href.startsWith("//")).toBe(false);
     }
   });
 
-  it("renderiza solo los items recibidos por prop (filtrado por rol)", () => {
-    // El layout pasa la lista ya filtrada; aquí simulamos un rol que no ve
-    // "Configuración" (solo maestro) pero sí "Perfil" y "Órdenes".
-    render(
-      <Sidebar
-        items={[
-          { label: "Perfil", href: "/perfil", roles: ["mensajero"] },
-          { label: "Órdenes", href: "/ordenes", roles: ["mensajero"] },
-        ]}
-      />,
-    );
+  it("expande el submenú y muestra los subítems con href correctos", async () => {
+    const user = userEvent.setup();
+    renderSidebar();
 
-    const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(2);
-    expect(screen.getByRole("link", { name: "Perfil" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Órdenes" })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "Configuración" }),
-    ).not.toBeInTheDocument();
+    // Cerrado por defecto: los subítems no están en el DOM.
+    expect(screen.queryByRole("link", { name: "Todas" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Crear" })).toBeNull();
+
+    // Al abrir el colapsable aparecen los subítems.
+    await user.click(screen.getByRole("button", { name: /órdenes/i }));
+
+    const todas = screen.getByRole("link", { name: "Todas" });
+    const crear = screen.getByRole("link", { name: "Crear" });
+    expect(todas).toHaveAttribute("href", "/ordenes");
+    expect(crear).toHaveAttribute("href", "/ordenes/crear");
   });
 
-  it("item activo (R4, R5)", () => {
+  it("abre el submenú por defecto cuando un subítem está activo (R4)", () => {
+    currentPathname = "/ordenes/crear";
+    renderSidebar();
+
+    const ordenes = screen.getByRole("button", { name: /órdenes/i });
+    expect(ordenes).toHaveAttribute("aria-expanded", "true");
+
+    const crear = screen.getByRole("link", { name: "Crear" });
+    expect(crear).toHaveAttribute("aria-current", "page");
+    expect(crear).toHaveAttribute("data-active");
+
+    const todas = screen.getByRole("link", { name: "Todas" });
+    expect(todas).not.toHaveAttribute("aria-current");
+  });
+
+  it("marca item simple activo por ruta (R4, R5)", () => {
     const cases: Array<{ path: string; active: string }> = [
       { path: "/configuracion", active: "Configuración" },
       { path: "/perfil", active: "Perfil" },
-      { path: "/ordenes", active: "Órdenes" },
     ];
 
     for (const { path, active } of cases) {
       currentPathname = path;
-      const { unmount } = render(<Sidebar />);
+      const { unmount } = renderSidebar();
 
-      for (const link of screen.getAllByRole("link")) {
-        if (link.textContent === active) {
-          expect(link).toHaveAttribute("aria-current", "page");
-        } else {
-          expect(link).not.toHaveAttribute("aria-current");
-        }
-      }
+      const link = screen.getByRole("link", { name: active });
+      expect(link).toHaveAttribute("aria-current", "page");
+      expect(link).toHaveAttribute("data-active");
       unmount();
     }
 
-    // Ruta ajena: ningún item marcado como activo (R5)
+    // Ruta ajena: ningún item simple marcado como activo (R5).
     currentPathname = "/";
-    render(<Sidebar />);
+    renderSidebar();
     for (const link of screen.getAllByRole("link")) {
       expect(link).not.toHaveAttribute("aria-current");
     }
   });
 
-  it("responsive: boton de menu colapsado por defecto (R7, R11)", () => {
-    render(<Sidebar />);
+  it("los items son operables por teclado (R12)", () => {
+    renderSidebar();
 
-    const button = screen.getByRole("button", { name: /abrir menú/i });
-    expect(button).toHaveAttribute("aria-expanded", "false");
-    // Listado móvil no montado mientras está colapsado.
-    expect(screen.queryByTestId("sidebar-mobile-list")).not.toBeInTheDocument();
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.tagName).toBe("A");
+      expect(link).toHaveAttribute("href");
+    }
+    // El trigger del submenú es un botón enfocable.
+    const ordenes = screen.getByRole("button", { name: /órdenes/i });
+    expect(ordenes.tagName).toBe("BUTTON");
   });
 
-  it("toggle abre y cierra (R8, R9, R11)", async () => {
-    const user = userEvent.setup();
-    render(<Sidebar />);
+  it("renderiza solo los items recibidos por prop (filtrado por rol en el server)", () => {
+    // Set de prueba ya filtrado: solo Perfil (p.ej. rol adminSatelite).
+    const items: readonly MenuItem[] = [
+      { label: "Perfil", href: "/perfil", iconKey: "user", roles: [] },
+    ];
+    renderSidebar(items);
 
-    const button = screen.getByRole("button", { name: /abrir menú/i });
-    expect(button).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByTestId("sidebar-mobile-list")).not.toBeInTheDocument();
-
-    // Abrir
-    await user.click(button);
-    expect(button).toHaveAttribute("aria-expanded", "true");
-    const mobileList = screen.getByTestId("sidebar-mobile-list");
-    expect(within(mobileList).getAllByRole("link")).toHaveLength(3);
-
-    // Cerrar
-    await user.click(screen.getByRole("button", { name: /cerrar menú/i }));
-    expect(
-      screen.getByRole("button", { name: /abrir menú/i }),
-    ).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByTestId("sidebar-mobile-list")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute(
+      "href",
+      "/perfil",
+    );
+    // Los items no incluidos en la prop no se renderizan.
+    expect(screen.queryByRole("link", { name: "Configuración" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /órdenes/i })).toBeNull();
   });
 
-  it("cierra al navegar desde un item (R10)", async () => {
-    const user = userEvent.setup();
-    render(<Sidebar />);
+  it("resuelve el icono por iconKey en cada item recibido", () => {
+    const items: readonly MenuItem[] = [
+      { label: "Configuración", href: "/configuracion", iconKey: "settings", roles: [] },
+      {
+        label: "Órdenes",
+        href: "/ordenes",
+        iconKey: "package",
+        roles: [],
+        children: [{ label: "Todas", href: "/ordenes" }],
+      },
+    ];
+    renderSidebar(items);
 
-    await user.click(screen.getByRole("button", { name: /abrir menú/i }));
-    const mobileList = screen.getByTestId("sidebar-mobile-list");
     expect(
-      screen.getByRole("button", { name: /cerrar menú/i }),
-    ).toHaveAttribute("aria-expanded", "true");
-
-    // Click en un item del listado móvil abierto
-    await user.click(within(mobileList).getByRole("link", { name: "Perfil" }));
-
+      screen.getByRole("link", { name: "Configuración" }).querySelector("svg"),
+    ).not.toBeNull();
     expect(
-      screen.getByRole("button", { name: /abrir menú/i }),
-    ).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByTestId("sidebar-mobile-list")).not.toBeInTheDocument();
+      screen.getByRole("button", { name: /órdenes/i }).querySelector("svg"),
+    ).not.toBeNull();
+  });
+});
+
+describe("Sidebar colapso (desktop)", () => {
+  it("expone un control accesible de colapso", () => {
+    renderSidebar();
+    // Expandido por defecto (SidebarProvider defaultOpen): la acción es colapsar.
+    expect(
+      screen.getByRole("button", { name: /colapsar menú/i }),
+    ).toBeInTheDocument();
   });
 
-  it("operable por teclado (R12, R13)", async () => {
+  it("alterna el estado al activarlo (colapsar/expandir)", async () => {
     const user = userEvent.setup();
-    render(<Sidebar />);
+    renderSidebar();
 
-    const button = screen.getByRole("button", { name: /abrir menú/i });
+    // Estado inicial: expandido. El botón dice "Colapsar menú".
+    const colapsar = screen.getByRole("button", { name: /colapsar menú/i });
+    await user.click(colapsar);
 
-    // Los 3 items son alcanzables por tabulación en orden (R12).
-    // El primer tab llega al botón hamburguesa; los siguientes a los links.
-    await user.tab();
-    expect(button).toHaveFocus();
-    await user.tab();
-    expect(screen.getByRole("link", { name: "Configuración" })).toHaveFocus();
-    await user.tab();
-    expect(screen.getByRole("link", { name: "Perfil" })).toHaveFocus();
-    await user.tab();
-    expect(screen.getByRole("link", { name: "Órdenes" })).toHaveFocus();
-
-    // Enter/Espacio sobre el botón alterna aria-expanded (R13).
-    button.focus();
-    expect(button).toHaveAttribute("aria-expanded", "false");
-    await user.keyboard("{Enter}");
+    // Tras el click el estado cambió: ahora ofrece "Expandir menú".
+    const expandir = await screen.findByRole("button", {
+      name: /expandir menú/i,
+    });
+    expect(expandir).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /cerrar menú/i }),
-    ).toHaveAttribute("aria-expanded", "true");
-    await user.keyboard(" ");
+      screen.queryByRole("button", { name: /colapsar menú/i }),
+    ).toBeNull();
+
+    // Y vuelve a expandir.
+    await user.click(expandir);
     expect(
-      screen.getByRole("button", { name: /abrir menú/i }),
-    ).toHaveAttribute("aria-expanded", "false");
+      screen.getByRole("button", { name: /colapsar menú/i }),
+    ).toBeInTheDocument();
+  });
+});
+
+// Guard: el submenú se agrupa dentro de un SidebarMenuItem del nav principal.
+describe("Sidebar estructura", () => {
+  it("el submenú vive dentro del landmark de navegación", async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+    await user.click(screen.getByRole("button", { name: /órdenes/i }));
+
+    const nav = screen.getByRole("navigation", {
+      name: /navegación principal/i,
+    });
+    expect(within(nav).getByRole("link", { name: "Todas" })).toBeInTheDocument();
   });
 });
