@@ -8,7 +8,7 @@ ALTER INDEX "cobro_created_at_idx" RENAME TO "tarifas_created_at_idx";
 -- AlterTable
 -- zona_id NULLABLE a proposito: "tarifas" puede tener filas ya persistidas y
 -- un NOT NULL sin default fallaria contra datos existentes.
-ALTER TABLE "tarifas" ADD COLUMN "zona_id" TEXT;
+ALTER TABLE "tarifas" ADD COLUMN "zona_id" TEXT NOT NULL;
 
 -- CreateIndex
 CREATE INDEX "tarifas_zona_id_idx" ON "tarifas"("zona_id");
