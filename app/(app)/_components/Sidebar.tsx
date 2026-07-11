@@ -6,16 +6,16 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SIDEBAR_ITEMS, type MenuItem } from "@/lib/auth/menu-visibility";
 
-export const SIDEBAR_ITEMS = [
-  { label: "Configuración", href: "/configuracion" },
-  { label: "Perfil", href: "/perfil" },
-  { label: "Órdenes", href: "/ordenes" },
-] as const;
+type SidebarItem = MenuItem;
 
-type SidebarItem = (typeof SIDEBAR_ITEMS)[number];
+export interface SidebarProps {
+  /** Items ya filtrados por rol (los resuelve el layout). Default: todos. */
+  items?: readonly SidebarItem[];
+}
 
-export function Sidebar() {
+export function Sidebar({ items = SIDEBAR_ITEMS }: SidebarProps) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -65,7 +65,7 @@ export function Sidebar() {
         data-testid="sidebar-desktop-list"
         className="hidden flex-col gap-1 md:flex"
       >
-        {SIDEBAR_ITEMS.map((item) => renderItem(item))}
+        {items.map((item) => renderItem(item))}
       </ul>
 
       {/*
@@ -77,7 +77,7 @@ export function Sidebar() {
           data-testid="sidebar-mobile-list"
           className="flex flex-col gap-1 md:hidden"
         >
-          {SIDEBAR_ITEMS.map((item) => renderItem(item, () => setIsOpen(false)))}
+          {items.map((item) => renderItem(item, () => setIsOpen(false)))}
         </ul>
       )}
     </nav>

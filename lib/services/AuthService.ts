@@ -1,6 +1,9 @@
 import bcrypt from "bcryptjs";
 import type { IUserRepository } from "@/lib/interfaces/repositories/IUserRepository";
-import type { ILoginAttemptRepository } from "@/lib/interfaces/repositories/ILoginAttemptRepository";
+import type {
+  ILoginAttemptRepository,
+  RegistrarIntentoInput,
+} from "@/lib/interfaces/repositories/ILoginAttemptRepository";
 import type { ITrustedDeviceRepository } from "@/lib/interfaces/repositories/ITrustedDeviceRepository";
 import type { IEmailOtpChallengeRepository } from "@/lib/interfaces/repositories/IEmailOtpChallengeRepository";
 import type { ISessionRepository } from "@/lib/interfaces/repositories/ISessionRepository";
@@ -33,18 +36,34 @@ export class AuthService implements IAuthService {
     this.otpIssuer = new OtpChallengeIssuer(this.otpRepo, this.emailProvider);
   }
 
+  /**
+   * Registra un intento de login rellenando el contexto comun (email, IP,
+   * userAgent) y aceptando solo las partes que varian entre call sites.
+   */
+  private registrarIntento(
+    contexto: Pick<RegistrarIntentoInput, "emailUsado" | "ipAddress" | "userAgent">,
+    variable: Pick<
+      RegistrarIntentoInput,
+      "usuarioId" | "exitoso" | "riskScore" | "riskReason"
+    >,
+  ): Promise<void> {
+    return this.loginAttemptRepo.registrar({ ...contexto, ...variable });
+  }
+
   async login(input: LoginCommandInput): Promise<LoginCommandResult> {
     const deviceHash = computeDeviceHash(input.userAgent);
+    const contexto = {
+      emailUsado: input.email,
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
+    };
     const usuario = await this.userRepo.findByEmailWithHash(input.email);
 
     if (!usuario) {
       // R12: no revelar si fue el email o la contrasena lo que fallo.
-      await this.loginAttemptRepo.registrar({
+      await this.registrarIntento(contexto, {
         usuarioId: null,
-        emailUsado: input.email,
         exitoso: false,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
         riskScore: 0,
         riskReason: "usuario_no_encontrado",
       });
@@ -62,12 +81,9 @@ export class AuthService implements IAuthService {
 
     const passwordValida = await verifyPassword(input.password, usuario.passwordHash);
     if (!passwordValida) {
-      await this.loginAttemptRepo.registrar({
+      await this.registrarIntento(contexto, {
         usuarioId: usuario.id,
-        emailUsado: input.email,
         exitoso: false,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
         riskScore: 0,
         riskReason: "password_incorrecta",
       });
@@ -75,12 +91,9 @@ export class AuthService implements IAuthService {
     }
 
     if (usuario.estado !== "activo") {
-      await this.loginAttemptRepo.registrar({
+      await this.registrarIntento(contexto, {
         usuarioId: usuario.id,
-        emailUsado: input.email,
         exitoso: false,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
         riskScore: 0,
         riskReason: `estado_no_activo:${usuario.estado}`,
       });
@@ -102,12 +115,9 @@ export class AuthService implements IAuthService {
         deviceHash,
         ipAddress: input.ipAddress,
       });
-      await this.loginAttemptRepo.registrar({
+      await this.registrarIntento(contexto, {
         usuarioId: usuario.id,
-        emailUsado: input.email,
         exitoso: true,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
         riskScore: risk.score,
         riskReason: risk.reasons.join(",") || "ninguno",
       });
@@ -125,12 +135,9 @@ export class AuthService implements IAuthService {
       deviceHash,
       ipAddress: input.ipAddress,
     });
-    await this.loginAttemptRepo.registrar({
+    await this.registrarIntento(contexto, {
       usuarioId: usuario.id,
-      emailUsado: input.email,
       exitoso: false,
-      ipAddress: input.ipAddress,
-      userAgent: input.userAgent,
       riskScore: risk.score,
       riskReason: risk.reasons.join(","),
     });
@@ -160,15 +167,19 @@ export class AuthService implements IAuthService {
     });
 
     const usuario = await this.userRepo.findById(challenge.usuarioId);
-    await this.loginAttemptRepo.registrar({
-      usuarioId: challenge.usuarioId,
-      emailUsado: usuario?.email ?? "",
-      exitoso: true,
-      ipAddress: input.ipAddress,
-      userAgent: input.userAgent,
-      riskScore: 0,
-      riskReason: "otp_verificado",
-    });
+    await this.registrarIntento(
+      {
+        emailUsado: usuario?.email ?? "",
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+      },
+      {
+        usuarioId: challenge.usuarioId,
+        exitoso: true,
+        riskScore: 0,
+        riskReason: "otp_verificado",
+      },
+    );
 
     const session = await this.sessionRepo.create({
       userId: challenge.usuarioId,

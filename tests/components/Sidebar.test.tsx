@@ -76,6 +76,27 @@ describe("Sidebar", () => {
     }
   });
 
+  it("renderiza solo los items recibidos por prop (filtrado por rol)", () => {
+    // El layout pasa la lista ya filtrada; aquí simulamos un rol que no ve
+    // "Configuración" (solo maestro) pero sí "Perfil" y "Órdenes".
+    render(
+      <Sidebar
+        items={[
+          { label: "Perfil", href: "/perfil", roles: ["mensajero"] },
+          { label: "Órdenes", href: "/ordenes", roles: ["mensajero"] },
+        ]}
+      />,
+    );
+
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Perfil" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Órdenes" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Configuración" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("item activo (R4, R5)", () => {
     const cases: Array<{ path: string; active: string }> = [
       { path: "/configuracion", active: "Configuración" },
