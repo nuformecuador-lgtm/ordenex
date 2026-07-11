@@ -650,3 +650,31 @@
 - Tests de componente añadidos (distrito requerido, opcional no requerido, aviso renderizado, ejemplos CR / no
   Ecuador) + test del sufijo " *". Suite 1165/1165 verde; typecheck/lint/`init.sh` OK.
 - Proceso: corrección pequeña, ciclo SDD agilizado (spec inline por el leader, sin reviewer formal aparte).
+
+## 2026-07-11 — asignación por zona (GAM) y ruteo a bodega satélite (feature 30, FULLSTACK)
+- El maestro (bodega central) SOLO controla la zona GAM. Al asignar mensajero, solo aparecen los de zona GAM
+  (filtro por `zonaId` = zona con `esGam=true`); si la orden es de otra zona, el maestro no la asigna a mensajero:
+  la rutea a la bodega satélite de esa zona → estado NUEVO `en_ruta_bodega_satelite` ("En ruta a bodega <zona>",
+  nombre derivado de `orden.zonaId`). Al rutear se asigna `num_guia` (secuencia, idempotente).
+- Backend (backend_dev, model opus): 10.º valor `en_ruta_bodega_satelite` en `ORDER_STATUS_SEED` + migración
+  `20260711140000_order_status_en_ruta_bodega_satelite` (ADD VALUE IF NOT EXISTS + INSERT ON CONFLICT + `down.sql`
+  reversible con DELETE condicional, patrón feat 17/28). `ZonaRepository.findGamZonaId`; en `OrdenRepository`
+  `findMensajerosGam`/`findMensajeroIdsValidosGam`/`rutearBodegaSateliteLote` + zona en transición y listado;
+  `GuiaAsignacionService` inyecta `IZonaRepository`, guardia R4 (rechazo `validation_error` si no hay zona GAM),
+  clasificación GAM/no-GAM en lote mixto (una tx), método `rutearABodegaSatelite`; actions `rutearABodegaSatelite`
+  + `listarMensajerosParaAsignacion` filtrada a GAM (firmas estables).
+- Frontend (frontend_dev, model opus): columna "Zona", badge dinámico, 5.º apartado solo-lectura "En ruta a
+  bodega satélite" + `RutearSateliteModal`, y `GenerarGuiaModal` con split GAM (select) / no-GAM (grupo satélite
+  sin select, `mensajeroId=null`). Contrato de columnas de la feature 26 intacto.
+- Requisitos cubiertos: R1–R22 (EARS), mapeados 1:1 a test (ver `progress/impl_30-...md`). Reviewer **APROBADO**
+  0 bloqueantes (corrió `./init.sh` él mismo). Verificación: `pnpm test` **1287/1287**, `./init.sh` EXIT 0, typecheck/lint OK.
+- Decisiones F1.4 (humano 2026-07-11, las 6 recomendadas): (a) GAM=flag `esGam`+guardia R4 (sin sembrar zona GAM);
+  (b) un `en_ruta_bodega_satelite` con zona derivada; (c) ruteo solo transición + `orden.zonaId`; (d) orígenes
+  `en_fulfillment`/`en_preparacion`/`en_bodega`; (e) override del `GenerarGuiaModal` también filtrado a GAM (service
+  revalida); (f) `num_guia` al rutear.
+- DEUDA (gate de despliegue, DB real): migración NO aplicada contra Postgres (sin DB aislada); cubierta por test de
+  integración estático `order-status-satelite-migration.test.ts`.
+- Hallazgos menores (aceptados): (1) `zonaNombre`/`zonaEsGam` opcionales en `OrdenListItemDTO` (aditivo R19); el repo
+  siempre los envía. (2) `listarMensajerosParaAsignacion` devuelve vacío si no hay zona GAM — candidato a aviso de UX.
+- **Desbloquea / se apoya en**: feed a features 33 (recepción QR en satélite consume `en_ruta_bodega_satelite`),
+  34 (asignación desde satélite) y 39 (pago por zona). Consumió 24 (zonas/`esGam`) y 17 (generar guía/`num_guia`).

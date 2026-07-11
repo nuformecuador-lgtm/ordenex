@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/30-asignacion-zona-ruteo-satelite | fullstack | F2.0 (impl) | **F1 COMPLETA (R1–R22, spec en `specs/30-...`) + F1.4 APROBADA por el humano 2026-07-11** (las 6 decisiones en la opción recomendada: (a) GAM=flag `esGam`+guardia R4; (b) un `en_ruta_bodega_satelite` con zona derivada; (c) solo transición + `orden.zonaId`; (d) orígenes `en_fulfillment`/`en_preparacion`/`en_bodega`; (e) override del GenerarGuiaModal también filtrado a GAM; (f) `num_guia` al rutear). Evaluada fullstack high, un ciclo (precedente 16/24/25/27). Deps 24 y 17 done. Rama pusheada. **SIGUIENTE: lanzar `implementer` (backend_dev → frontend_dev).** |
+| (ninguna en curso) | — | — | Feature 30 CERRADA (impl+reviewer OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+
+> Feature 30 (asignación por zona GAM / ruteo bodega satélite) CERRADA 2026-07-11: **impl COMPLETA (R1–R22) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1287 tests verde). Fullstack un ciclo. Estado `done` + `history.md` + `progress/review_30-...md`. Backend: estado `en_ruta_bodega_satelite` (migración+down.sql), guardia R4, filtro mensajeros GAM, ruteo con `num_guia`. Frontend: columna Zona, badge dinámico, apartado + `RutearSateliteModal`, `GenerarGuiaModal` split GAM/no-GAM. F1.4 (6 decisiones recomendadas). **PENDIENTE: abrir PR a `dev` y merge (requiere OK humano, como el #32).** DEUDA: migración no aplicada contra Postgres real. Desbloquea 33/34/39.
 
 > Feature 17 (revisión maestro / generar guía / asignación mensajero) CERRADA 2026-07-11: **PR #32 mergeado** a `origin/dev` (5e06aeb). Fullstack (R0–R32), reviewer APROBADO 0 bloqueantes, migración `num_guia` NULLABLE + secuencia + `mensajero_asignado_id` + estado `en_espera_aceptacion`. Suite 1244 verde tras integrar `dev` (feature 51). Desbloquea 30/32/36. Pendiente humano: aplicar la migración contra Postgres real (deuda de despliegue).
 
@@ -161,9 +163,11 @@
 (Ninguno por ahora)
 
 ## Plan de la sesion
-- [x] Features 1-16, 18: ciclos SDD completos (ver history.md).
-- [ ] Feature 19 (backend, low, rol adminSatelite): F1 spec en curso.
-- [ ] Feature 17 BLOQUEADA (depends 27/28). Elegibles: 19,20,21,24,25,26,28,29.
+- [x] Features 1-29, 31, 50, 51: ciclos SDD completos (ver history.md).
+- [x] Feature 17 (revisión maestro / generar guía): done, PR #32 mergeado 2026-07-11.
+- [x] Feature 30 (asignación por zona GAM / ruteo satélite): done (impl+reviewer OK); pendiente PR a `dev`.
+- [ ] Siguientes elegibles: **32** (etiqueta QR, depends 17 done), **36** (mensajero mis asignaciones, depends 17 done),
+      **33** (recepción QR satélite, depends 30 done → ahora desbloqueada), **42** (wallet, depends 18 done), 35 (realtime).
 
 ## Notas / decisiones tomadas
 - Modelos legacy de AGENTS.md (sonnet-4/opus-4.8) mapeados a sonnet/opus/haiku.
