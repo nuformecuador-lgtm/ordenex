@@ -1,6 +1,6 @@
 // Configuracion del CRUD de usuarios (feature 25). Sobreescribible por variable
 // de entorno para no hardcodear cotas de negocio (docs/architecture.md: "Sin
-// hardcode de contexto"), patron de lib/config/cobros.ts.
+// hardcode de contexto"), patron de lib/config/tarifas.ts.
 
 function readPositiveInt(name: string, fallback: number): number {
   const raw = process.env[name];

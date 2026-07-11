@@ -204,11 +204,14 @@ model OrderStatus {
 
 // Geografia jerarquica (R4/R5). Tablas creadas vacias (sin seed).
 model Zona {
-  id     String @id @default(uuid())
-  nombre String
+  id            String  @id @default(uuid())
+  nombre        String
+  cobroVehiculo Boolean @default(false) @map("cobro_vehiculo") // feature 24: cobro extra por vehiculo en esta zona
 
-  provincias Provincia[]
-  ordenes    Orden[]
+  provincias           Provincia[]
+  ordenes              Orden[]
+  tarifas              Tarifa[]
+  tarifaZonaMensajeros TarifaZonaMensajero[]
 
   @@map("zona")
 }
@@ -289,10 +292,11 @@ model Orden {
   @@map("orden")
 }
 
-// Cobro: tarifas de flete/comision, tabla multi-fila con `nombre` para
-// distinguirlas (feature 18, D1). Sin FK a zona/orden/tienda en esta feature
-// (la relacion por zona es la feature 24). Borrado logico via deleted_at.
-model Cobro {
+// Tarifa: tarifas de flete/comision, tabla multi-fila con `nombre` para
+// distinguirlas (feature 18, D1). zona_id nullable: agregado en la migracion
+// de rename (feature 24), no todas las tarifas existentes tienen zona
+// asignada. Borrado logico via deleted_at.
+model Tarifa {
   id                    String    @id @default(uuid())
   nombre                String // D1: distingue tarifas (NOT NULL, no unico)
   valorFlete            Decimal   @map("valor_flete") @db.Decimal(12, 2) // R2 (monto)
@@ -303,12 +307,34 @@ model Cobro {
   comisionCod           Decimal   @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
   ivaFlete              Decimal   @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
   ivaComisionCod        Decimal   @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
+  zonaId                String?   @map("zona_id") // feature 24: nullable, agregado via ALTER
   deletedAt             DateTime? @map("deleted_at") // soft delete (R19/R24)
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
+  zona Zona? @relation(fields: [zonaId], references: [id])
+
   @@index([createdAt])
-  @@map("cobro")
+  @@index([zonaId])
+  @@map("tarifas")
+}
+
+// TarifaZonaMensajero: tarifa de comision por zona pagada al mensajero
+// (feature 24). vehiculo_id nullable (tarifa general de la zona si no aplica
+// por tipo de vehiculo); zona_id obligatoria.
+model TarifaZonaMensajero {
+  id             String  @id @default(uuid())
+  cobroEntregado Decimal @map("cobro_entregado") @db.Decimal(12, 2)
+  cobroRechazado Decimal @map("cobro_rechazado") @db.Decimal(12, 2)
+  vehiculoId     String? @map("vehiculo_id")
+  zonaId         String  @map("zona_id")
+
+  vehiculo Vehiculo? @relation(fields: [vehiculoId], references: [id])
+  zona     Zona      @relation(fields: [zonaId], references: [id])
+
+  @@index([vehiculoId])
+  @@index([zonaId])
+  @@map("tarifa_zona_mensajero")
 }
 
 // Catalogo de tipos de vehiculo (feature 50). Backed por enum Postgres
@@ -319,7 +345,8 @@ model Vehiculo {
   id   String        @id @default(uuid())
   name VehiculoValue @unique // seed (3): moto, carro, camion
 
-  usuarios Usuario[] // feature 21: mensajeros que declararon este vehiculo
+  usuarios             Usuario[] // feature 21: mensajeros que declararon este vehiculo
+  tarifaZonaMensajeros TarifaZonaMensajero[] // feature 24
 
   @@map("vehiculos")
 }

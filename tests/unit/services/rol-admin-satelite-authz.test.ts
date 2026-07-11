@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { OrdenService } from "@/lib/services/OrdenService";
-import { CobroService } from "@/lib/services/CobroService";
+import { TarifaService } from "@/lib/services/TarifaService";
 import { AsignacionMensajeroService } from "@/lib/services/AsignacionMensajeroService";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { ICobroRepository } from "@/lib/interfaces/repositories/ICobroRepository";
+import type { ITarifaRepository } from "@/lib/interfaces/repositories/ITarifaRepository";
 import type { IUserRepository } from "@/lib/interfaces/repositories/IUserRepository";
 import type { Actor as OrdenActor } from "@/lib/interfaces/services/IOrdenService";
-import type { Actor as CobroActor } from "@/lib/interfaces/services/ICobroService";
+import type { Actor as TarifaActor } from "@/lib/interfaces/services/ITarifaService";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
-import type { CobroDTO } from "@/lib/types/cobro";
+import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 
 // Feature 19 (rol-adminsatelite): R9, R10, R11. `adminSatelite` es un rol SIN
@@ -19,9 +19,9 @@ import type { RawRow } from "@/lib/parsers/spreadsheet";
 // de no-regresion por servicio con un rol previamente autorizado.
 
 const ADMIN_SATELITE_ORDEN: OrdenActor = { usuarioId: "sat1", rol: "adminSatelite" };
-const ADMIN_SATELITE_COBRO: CobroActor = { usuarioId: "sat1", rol: "adminSatelite" };
+const ADMIN_SATELITE_TARIFA: TarifaActor = { usuarioId: "sat1", rol: "adminSatelite" };
 const MAESTRO_ORDEN: OrdenActor = { usuarioId: "m1", rol: "maestro" };
-const MAESTRO_COBRO: CobroActor = { usuarioId: "m1", rol: "maestro" };
+const MAESTRO_TARIFA: TarifaActor = { usuarioId: "m1", rol: "maestro" };
 const TIENDA_ORDEN: OrdenActor = { usuarioId: "store1", rol: "adminTienda" };
 
 function ordenDto(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
@@ -92,7 +92,7 @@ function crearOrdenInput(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function cobroDto(overrides: Partial<CobroDTO> = {}): CobroDTO {
+function tarifaDto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
     nombre: "Tarifa GAM",
@@ -110,18 +110,18 @@ function cobroDto(overrides: Partial<CobroDTO> = {}): CobroDTO {
   };
 }
 
-function buildCobroRepo(overrides: Partial<ICobroRepository> = {}): ICobroRepository {
+function buildTarifaRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRepository {
   return {
-    create: vi.fn().mockResolvedValue(cobroDto()),
-    findById: vi.fn().mockResolvedValue(cobroDto()),
-    list: vi.fn().mockResolvedValue({ items: [cobroDto()], total: 1 }),
-    update: vi.fn().mockResolvedValue(cobroDto()),
+    create: vi.fn().mockResolvedValue(tarifaDto()),
+    findById: vi.fn().mockResolvedValue(tarifaDto()),
+    list: vi.fn().mockResolvedValue({ items: [tarifaDto()], total: 1 }),
+    update: vi.fn().mockResolvedValue(tarifaDto()),
     softDelete: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
 
-function crearCobroInput(overrides: Record<string, unknown> = {}) {
+function crearTarifaInput(overrides: Record<string, unknown> = {}) {
   return {
     nombre: "Tarifa GAM",
     valorFlete: 10,
@@ -192,35 +192,35 @@ describe("OrdenService.crear — adminSatelite sin permisos nuevos (R9, R11)", (
   });
 });
 
-describe("CobroService — adminSatelite sin permisos nuevos (R9, R11)", () => {
+describe("TarifaService — adminSatelite sin permisos nuevos (R9, R11)", () => {
   it("lectura (obtener): adminSatelite -> forbidden, no consulta el repo", async () => {
-    const repo = buildCobroRepo();
-    const service = new CobroService(repo);
+    const repo = buildTarifaRepo();
+    const service = new TarifaService(repo);
 
-    const r = await service.obtener("cob-1", ADMIN_SATELITE_COBRO);
+    const r = await service.obtener("cob-1", ADMIN_SATELITE_TARIFA);
 
     expect(r.status).toBe("forbidden");
     expect(repo.findById).not.toHaveBeenCalled();
   });
 
   it("escritura (crear): adminSatelite -> forbidden, no persiste", async () => {
-    const repo = buildCobroRepo();
-    const service = new CobroService(repo);
+    const repo = buildTarifaRepo();
+    const service = new TarifaService(repo);
 
-    const r = await service.crear(crearCobroInput(), ADMIN_SATELITE_COBRO);
+    const r = await service.crear(crearTarifaInput(), ADMIN_SATELITE_TARIFA);
 
     expect(r.status).toBe("forbidden");
     expect(repo.create).not.toHaveBeenCalled();
   });
 
   it("no-regresion: maestro conserva su resultado exitoso en lectura y escritura (R11)", async () => {
-    const repo = buildCobroRepo();
-    const service = new CobroService(repo);
+    const repo = buildTarifaRepo();
+    const service = new TarifaService(repo);
 
-    const rLectura = await service.obtener("cob-1", MAESTRO_COBRO);
+    const rLectura = await service.obtener("cob-1", MAESTRO_TARIFA);
     expect(rLectura.status).toBe("ok");
 
-    const rEscritura = await service.crear(crearCobroInput(), MAESTRO_COBRO);
+    const rEscritura = await service.crear(crearTarifaInput(), MAESTRO_TARIFA);
     expect(rEscritura.status).toBe("ok");
   });
 });

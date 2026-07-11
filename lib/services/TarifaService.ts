@@ -1,14 +1,14 @@
-import type { ICobroRepository, UpdateCobroData } from "@/lib/interfaces/repositories/ICobroRepository";
+import type { ITarifaRepository, UpdateTarifaData } from "@/lib/interfaces/repositories/ITarifaRepository";
 import type {
   Actor,
-  ActualizarCobroServiceResult,
-  BorrarCobroServiceResult,
-  CrearCobroServiceResult,
-  ICobroService,
-  ListarCobrosServiceResult,
-  ObtenerCobroServiceResult,
-} from "@/lib/interfaces/services/ICobroService";
-import type { ActualizarCobroInput, CrearCobroInput, ListarCobrosInput } from "@/lib/types/cobro";
+  ActualizarTarifaServiceResult,
+  BorrarTarifaServiceResult,
+  CrearTarifaServiceResult,
+  ITarifaService,
+  ListarTarifasServiceResult,
+  ObtenerTarifaServiceResult,
+} from "@/lib/interfaces/services/ITarifaService";
+import type { ActualizarTarifaInput, CrearTarifaInput, ListarTarifasInput } from "@/lib/types/tarifa";
 
 // Matriz rol -> operacion (R9-R13). maestro CRUD completo (R10); admin solo
 // lectura (R11); adminTienda/mensajero sin acceso (R12); un rol no reconocido
@@ -16,13 +16,13 @@ import type { ActualizarCobroInput, CrearCobroInput, ListarCobrosInput } from "@
 const READ_ROLES = new Set<string>(["maestro", "admin"]); // R10/R11
 const WRITE_ROLES = new Set<string>(["maestro"]); // R10/R11/D4: solo maestro escribe
 
-export class CobroService implements ICobroService {
-  constructor(private readonly repo: ICobroRepository) {}
+export class TarifaService implements ITarifaService {
+  constructor(private readonly repo: ITarifaRepository) {}
 
-  async crear(input: CrearCobroInput, actor: Actor): Promise<CrearCobroServiceResult> {
+  async crear(input: CrearTarifaInput, actor: Actor): Promise<CrearTarifaServiceResult> {
     if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" }; // R11/R12/R13
 
-    const cobro = await this.repo.create({
+    const tarifa = await this.repo.create({
       nombre: input.nombre,
       valorFlete: input.valorFlete,
       valorFleteDevuelto: input.valorFleteDevuelto,
@@ -33,18 +33,18 @@ export class CobroService implements ICobroService {
       ivaFlete: input.ivaFlete,
       ivaComisionCod: input.ivaComisionCod,
     });
-    return { status: "ok", cobro }; // R16
+    return { status: "ok", tarifa }; // R16
   }
 
-  async obtener(id: string, actor: Actor): Promise<ObtenerCobroServiceResult> {
+  async obtener(id: string, actor: Actor): Promise<ObtenerTarifaServiceResult> {
     if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R11/R12/R13
 
-    const cobro = await this.repo.findById(id); // excluye borrados (R19)
-    if (!cobro) return { status: "not_found" }; // R17
-    return { status: "ok", cobro };
+    const tarifa = await this.repo.findById(id); // excluye borrados (R19)
+    if (!tarifa) return { status: "not_found" }; // R17
+    return { status: "ok", tarifa };
   }
 
-  async listar(input: ListarCobrosInput, actor: Actor): Promise<ListarCobrosServiceResult> {
+  async listar(input: ListarTarifasInput, actor: Actor): Promise<ListarTarifasServiceResult> {
     if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R11/R12/R13
 
     const skip = (input.page - 1) * input.pageSize;
@@ -64,9 +64,9 @@ export class CobroService implements ICobroService {
 
   async actualizar(
     id: string,
-    input: ActualizarCobroInput,
+    input: ActualizarTarifaInput,
     actor: Actor,
-  ): Promise<ActualizarCobroServiceResult> {
+  ): Promise<ActualizarTarifaServiceResult> {
     if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" }; // R11/R12/R13
 
     const existente = await this.repo.findById(id); // excluye borrados (R19)
@@ -76,10 +76,10 @@ export class CobroService implements ICobroService {
     const data = this.buildUpdateData(input);
     const actualizado = await this.repo.update(id, data);
     if (!actualizado) return { status: "not_found" }; // carrera: borrado entre medias
-    return { status: "ok", cobro: actualizado };
+    return { status: "ok", tarifa: actualizado };
   }
 
-  async borrar(id: string, actor: Actor): Promise<BorrarCobroServiceResult> {
+  async borrar(id: string, actor: Actor): Promise<BorrarTarifaServiceResult> {
     if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" }; // R11/R12/R13
 
     const existente = await this.repo.findById(id); // excluye ya borrados (R25)
@@ -90,8 +90,8 @@ export class CobroService implements ICobroService {
     return { status: "ok" };
   }
 
-  private buildUpdateData(input: ActualizarCobroInput): UpdateCobroData {
-    const data: UpdateCobroData = {};
+  private buildUpdateData(input: ActualizarTarifaInput): UpdateTarifaData {
+    const data: UpdateTarifaData = {};
     if (input.nombre !== undefined) data.nombre = input.nombre;
     if (input.valorFlete !== undefined) data.valorFlete = input.valorFlete;
     if (input.valorFleteDevuelto !== undefined) data.valorFleteDevuelto = input.valorFleteDevuelto;

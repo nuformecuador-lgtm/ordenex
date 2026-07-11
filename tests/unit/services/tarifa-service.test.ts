@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { RolValue } from "@prisma/client";
-import { CobroService } from "@/lib/services/CobroService";
-import type { ICobroRepository } from "@/lib/interfaces/repositories/ICobroRepository";
-import type { Actor } from "@/lib/interfaces/services/ICobroService";
-import type { CobroDTO } from "@/lib/types/cobro";
+import { TarifaService } from "@/lib/services/TarifaService";
+import type { ITarifaRepository } from "@/lib/interfaces/repositories/ITarifaRepository";
+import type { Actor } from "@/lib/interfaces/services/ITarifaService";
+import type { TarifaDTO } from "@/lib/types/tarifa";
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
@@ -11,7 +11,7 @@ const TIENDA: Actor = { usuarioId: "store1", rol: "adminTienda" };
 const MENSAJERO: Actor = { usuarioId: "msg1", rol: "mensajero" };
 const DESCONOCIDO: Actor = { usuarioId: "x", rol: "invitado" as RolValue };
 
-function dto(overrides: Partial<CobroDTO> = {}): CobroDTO {
+function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
     nombre: "Tarifa GAM",
@@ -29,7 +29,7 @@ function dto(overrides: Partial<CobroDTO> = {}): CobroDTO {
   };
 }
 
-function buildRepo(overrides: Partial<ICobroRepository> = {}): ICobroRepository {
+function buildRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRepository {
   return {
     create: vi.fn().mockResolvedValue(dto()),
     findById: vi.fn().mockResolvedValue(dto()),
@@ -55,12 +55,12 @@ function crearInput(overrides: Record<string, unknown> = {}) {
   };
 }
 
-let repo: ICobroRepository;
-let service: CobroService;
+let repo: ITarifaRepository;
+let service: TarifaService;
 
 beforeEach(() => {
   repo = buildRepo();
-  service = new CobroService(repo);
+  service = new TarifaService(repo);
 });
 
 describe("crear — matriz de autorizacion (R9-R13/R16)", () => {
@@ -97,7 +97,7 @@ describe("crear — matriz de autorizacion (R9-R13/R16)", () => {
   it("R16: crear valido persiste y devuelve el DTO", async () => {
     const r = await service.crear(crearInput(), MAESTRO);
     expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.cobro).toEqual(dto());
+    if (r.status === "ok") expect(r.tarifa).toEqual(dto());
   });
 });
 
@@ -130,7 +130,7 @@ describe("obtener (R9-R13/R17/R19)", () => {
 
   it("R17/R19: inexistente o borrado -> not_found", async () => {
     repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
-    service = new CobroService(repo);
+    service = new TarifaService(repo);
     const r = await service.obtener("x", MAESTRO);
     expect(r.status).toBe("not_found");
   });
@@ -172,7 +172,7 @@ describe("listar (R9-R13/R18/R19)", () => {
 
   it("R19: no expone borrados (delegado al repo, que ya filtra)", async () => {
     repo = buildRepo({ list: vi.fn().mockResolvedValue({ items: [], total: 0 }) });
-    service = new CobroService(repo);
+    service = new TarifaService(repo);
     const r = await service.listar({ page: 1, pageSize: 20 }, MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.items).toHaveLength(0);
@@ -187,7 +187,7 @@ describe("actualizar (R9-R13/R20-R23)", () => {
     expect(data).toEqual({ nombre: "Nueva", fulfillment: 9 });
   });
 
-  it("R22: no toca id/created_at (no estan en UpdateCobroData)", async () => {
+  it("R22: no toca id/created_at (no estan en UpdateTarifaData)", async () => {
     await service.actualizar("cob-1", { nombre: "Nueva" }, MAESTRO);
     const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(data).not.toHaveProperty("id");
@@ -215,7 +215,7 @@ describe("actualizar (R9-R13/R20-R23)", () => {
 
   it("R21: inexistente o borrado -> not_found", async () => {
     repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
-    service = new CobroService(repo);
+    service = new TarifaService(repo);
     const r = await service.actualizar("x", { nombre: "Nueva" }, MAESTRO);
     expect(r.status).toBe("not_found");
     expect(repo.update).not.toHaveBeenCalled();
@@ -250,7 +250,7 @@ describe("borrar (R9-R13/R24/R25)", () => {
 
   it("R25: inexistente o ya borrado -> not_found", async () => {
     repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
-    service = new CobroService(repo);
+    service = new TarifaService(repo);
     const r = await service.borrar("x", MAESTRO);
     expect(r.status).toBe("not_found");
     expect(repo.softDelete).not.toHaveBeenCalled();
@@ -259,7 +259,7 @@ describe("borrar (R9-R13/R24/R25)", () => {
   it("R24: desaparece del listado tras borrar (repo delega correctamente)", async () => {
     await service.borrar("cob-1", MAESTRO);
     repo = buildRepo({ list: vi.fn().mockResolvedValue({ items: [], total: 0 }) });
-    service = new CobroService(repo);
+    service = new TarifaService(repo);
     const r = await service.listar({ page: 1, pageSize: 20 }, MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.items).toHaveLength(0);

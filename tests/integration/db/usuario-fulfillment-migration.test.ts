@@ -60,7 +60,11 @@ describe("estructura up/down y orden temporal (R2, convencion del repo)", () => 
       .map((e) => e.name)
       .sort();
     const fulfillmentDir = dirs.find((d) => d.endsWith("_usuario_fulfillment"))!;
-    const previos = dirs.filter((d) => !d.endsWith("_usuario_fulfillment"));
+    const previos = dirs.filter(
+      (d) =>
+        !d.endsWith("_usuario_fulfillment") &&
+        !d.endsWith("_rename_cobro_tarifas"), // feature 24: apendida despues con timestamp posterior
+    );
     const maxPrevio = previos[previos.length - 1];
     expect(fulfillmentDir > maxPrevio).toBe(true);
   });
