@@ -115,6 +115,34 @@ describe("GestionOrdenRepository.setOrdenEnGestion (R19-R21)", () => {
   });
 });
 
+describe("GestionOrdenRepository.liberarOrdenEnGestion (R35)", () => {
+  it("limpia SOLO si el puntero del mismo mensajero apunta a esa orden (count>0 -> true)", async () => {
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const repo = new GestionOrdenRepository({ usuario: { updateMany } } as never);
+
+    expect(await repo.liberarOrdenEnGestion("m1", "o1")).toBe(true);
+    const arg = (updateMany.mock.calls[0] as unknown[])[0] as {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    };
+    // WHERE guardado: solo el propio actor + puntero apuntando a ESA orden.
+    expect(arg.where.id).toBe("m1");
+    expect(arg.where.ordenEnGestionId).toBe("o1");
+    expect(arg.data.ordenEnGestionId).toBeNull();
+  });
+
+  it("no limpia si el puntero apunta a otra orden / es de otro actor (count 0 -> false)", async () => {
+    const updateMany = vi.fn(async () => ({ count: 0 }));
+    const repo = new GestionOrdenRepository({ usuario: { updateMany } } as never);
+
+    expect(await repo.liberarOrdenEnGestion("m1", "o1")).toBe(false);
+    // El WHERE nunca permite tocar el puntero de otro actor u otra orden.
+    const arg = (updateMany.mock.calls[0] as unknown[])[0] as { where: Record<string, unknown> };
+    expect(arg.where.id).toBe("m1");
+    expect(arg.where.ordenEnGestionId).toBe("o1");
+  });
+});
+
 describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30)", () => {
   function buildTxRepo() {
     const gestionCreate = vi.fn(async () => ({ id: "g1" }));

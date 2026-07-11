@@ -15,6 +15,7 @@ import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import {
   escogerParaGestion,
+  liberarGestion,
   recogerAsignaciones,
 } from "@/lib/actions/mis-asignaciones";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
@@ -82,8 +83,22 @@ export function MisAsignacionesModule({
   }
 
   function handleGestionSuccess() {
+    // Path de ÉXITO: el backend YA limpió el puntero dentro de la transacción de
+    // `gestionar`. NO se llama a `liberarGestion` aquí (evita doble limpieza).
     setGestionOrden(null);
     router.refresh();
+  }
+
+  // R35: cancelar/cerrar manual del modal SIN registrar resultado libera el
+  // puntero de bloqueo (`orden_en_gestion_id`) para que las demás vuelvan a ser
+  // gestionables. Limpieza best-effort (idempotente en backend); sin Toast.
+  async function cancelarGestion() {
+    const orden = gestionOrden;
+    setGestionOrden(null);
+    if (orden) {
+      await liberarGestion({ ordenId: orden.id });
+      router.refresh();
+    }
   }
 
   return (
@@ -206,7 +221,7 @@ export function MisAsignacionesModule({
         open={gestionOrden !== null}
         orden={gestionOrden}
         onOpenChange={(next) => {
-          if (!next) setGestionOrden(null);
+          if (!next) void cancelarGestion();
         }}
         onSuccess={handleGestionSuccess}
       />

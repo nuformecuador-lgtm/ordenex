@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   escogerParaGestion,
   gestionar,
+  liberarGestion,
   listarMisAsignaciones,
   recogerAsignaciones,
 } from "@/lib/actions/mis-asignaciones";
@@ -31,6 +32,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
     recogerAsignaciones: vi.fn(async () => ({ status: "ok" as const, recogidas: ["o1"] })),
     escogerParaGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),
     gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "entregada" })),
+    liberarGestion: vi.fn(async () => ({ status: "ok" as const })),
     ...overrides,
   };
 }
@@ -186,5 +188,81 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     const [input] = (service.gestionar as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(input.resultado).toBe("rechazada");
     expect(input.evidencia.bytes).toBeInstanceOf(Uint8Array);
+  });
+});
+
+// --- menor-1: errores EXCEPCIONALES pasan por withErrorHandler ---
+
+describe("menor-1: withErrorHandler envuelve los cuerpos de las actions", () => {
+  it("un error EXCEPCIONAL del service NO se propaga crudo (pasa por el manejador)", async () => {
+    // Con el patron de ordenes-guia.ts: withErrorHandler captura y normaliza a
+    // INTERNAL; toMisAsignacionesActionError lo re-lanza como AppErrorCode
+    // inesperado. Lo relevante: el error crudo "db down" NO escapa sin pasar por
+    // el manejador (antes se propagaba tal cual).
+    const service = buildService({
+      gestionar: vi.fn(async () => {
+        throw new Error("db down");
+      }),
+    });
+    const fd = new FormData();
+    fd.set("ordenId", "o1");
+    fd.set("resultado", "devuelta");
+    fd.set("motivo", "cliente no estaba");
+
+    await expect(gestionar(fd, { service, getActor: actorMensajero })).rejects.toThrow(
+      /AppErrorCode inesperado/,
+    );
+    // El mensaje crudo del service ya NO se propaga sin pasar por el manejador.
+    await expect(gestionar(fd, { service, getActor: actorMensajero })).rejects.not.toThrow(
+      /^db down$/,
+    );
+  });
+
+  it("unauthenticated (actor ausente) sigue devolviendose a traves de withErrorHandler", async () => {
+    const service = buildService({
+      gestionar: vi.fn(async () => {
+        throw new Error("no deberia llamarse");
+      }),
+    });
+    const fd = new FormData();
+    fd.set("ordenId", "o1");
+    fd.set("resultado", "devuelta");
+    fd.set("motivo", "x");
+    const r = await gestionar(fd, { service, getActor: noActor });
+    expect(r.status).toBe("unauthenticated");
+    expect(service.gestionar).not.toHaveBeenCalled();
+  });
+
+  it("validation_error (zod invalido) sigue devolviendose a traves de withErrorHandler", async () => {
+    const service = buildService();
+    // recoger con lista vacia: ZodError -> VALIDATION_ERROR normalizado.
+    const r = await recogerAsignaciones({ ordenIds: [] }, { service, getActor: actorMensajero });
+    expect(r.status).toBe("validation_error");
+    expect(service.recogerAsignaciones).not.toHaveBeenCalled();
+  });
+});
+
+// --- menor-3: liberarGestion (R35) ---
+
+describe("menor-3: liberarGestion action (R35)", () => {
+  it("actor ausente -> unauthenticated, sin tocar el service", async () => {
+    const service = buildService();
+    const r = await liberarGestion({ ordenId: "o1" }, { service, getActor: noActor });
+    expect(r.status).toBe("unauthenticated");
+    expect(service.liberarGestion).not.toHaveBeenCalled();
+  });
+
+  it("zod invalido (ordenId vacio) -> validation_error, sin tocar el service", async () => {
+    const service = buildService();
+    const r = await liberarGestion({ ordenId: "" }, { service, getActor: actorMensajero });
+    expect(r.status).toBe("validation_error");
+    expect(service.liberarGestion).not.toHaveBeenCalled();
+  });
+
+  it("ok: delega en el service con el ordenId y el actor", async () => {
+    const service = buildService();
+    const r = await liberarGestion({ ordenId: "o1" }, { service, getActor: actorMensajero });
+    expect(r.status).toBe("ok");
+    expect(service.liberarGestion).toHaveBeenCalledWith("o1", MENSAJERO);
   });
 });

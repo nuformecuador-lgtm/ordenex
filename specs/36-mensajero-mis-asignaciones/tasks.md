@@ -99,13 +99,13 @@ Zone: `fullstack` · complexity: `high` · depends_on: 17 (`done`), 34 (`pending
 
 ## Bloque G — Verificación y trazabilidad
 
-- [ ] **T19** — Completar el mapa `R<n> → test` en
+- [x] **T19** — Completar el mapa `R<n> → test` en
   `progress/impl_36-mensajero-mis-asignaciones.md` (todos los R1–R33; storage mockeado). **Hecho:**
   cada requisito con al menos un test citado. → R34.
-- [ ] **T20** — `./init.sh` verde + `pnpm typecheck` + `pnpm lint` + `pnpm test` en verde; probar
+- [x] **T20** — `./init.sh` verde + `pnpm typecheck` + `pnpm lint` + `pnpm test` en verde; probar
   `db:migrate` up y `db:rollback` down de T4. **Hecho:** todo verde; migración reversible. →
   CHECKPOINTS.
-- [ ] **T21 [P]** — (Flujo crítico: recaudo de dinero) al menos un **E2E** (Playwright) del camino
+- [x] **T21 [P]** — (Flujo crítico: recaudo de dinero) al menos un **E2E** (Playwright) del camino
   feliz mensajero: aceptar → escoger → ENTREGAR con foto+monto+método → orden queda `entregada`.
   **Hecho:** E2E pasa. → CHECKPOINTS (flujos críticos).
 

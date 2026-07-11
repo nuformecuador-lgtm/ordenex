@@ -145,5 +145,72 @@ Todos los R0–R34 mapeados a al menos un test concreto. **Trazabilidad: sí (co
    de migraciones, sin tocar lógica de features 6/7/17/26/30/32; contratos estables.
 
 ## 6. Estado de tasks
-T1–T18 marcadas `[x]` en tasks.md. T19 (este mapa) y T20 (init.sh verde) completadas.
-**T21 (E2E) queda abierta como deuda declarada** (requiere DB + bucket reales).
+T1–T18 marcadas `[x]` en tasks.md. **T19, T20 y T21 marcadas `[x]`** tras el ciclo de correcciones
+(ver §7): el mapa R→test está completo (incluye R35), `./init.sh` queda verde y el E2E scaffold
+cierra T21 (escrito, typecheckea, NO ejecutado — patrón del repo, ver `e2e/auth.spec.ts`).
+
+---
+
+## 7. Ciclo de correcciones (post-review RECHAZADO) — 2026-07-11
+
+Cierres de checkpoint + 3 arreglos menores sobre la impl base (commit `9efe147`). Coordinado por el
+`implementer` delegando en `backend_dev` (A/B/C + R35) y `frontend_dev` (cableado + E2E). Decisión
+humana: AÑADIR el E2E ahora (no diferirlo), siguiendo el patrón "escrito pero NO ejecutado".
+
+### 7.1 Arreglos aplicados
+1. **BLOQUEANTE-2 / T21 — E2E scaffold.** `e2e/mis-asignaciones.spec.ts` (nuevo): camino feliz del
+   recaudo (mensajero → recoger `en_espera_aceptacion`→`en_reparto` → gestionar → ENTREGADA con
+   foto + `montoRecibido == montoCobrar` + método → `entregada`) + camino RECHAZO (foto+motivo →
+   `rechazada`) + REPROGRAMAR (fecha futura+motivo → `reprogramada`). Usa selectores reales
+   (regiones por `aria-label`, botones por texto, `Resultado de la gestión`/`Monto recibido`/
+   `Método de pago`/`Foto de evidencia…`/`Motivo`). Incluye la MISMA EXECUTION NOTE que
+   `e2e/auth.spec.ts` (requiere dev server + DB test + mensajero sembrado + bucket
+   `gestion-evidencias`). TYPECHECKEA; NO se ejecuta (no corre en `pnpm test`).
+2. **menor-1 — `withErrorHandler` en las actions.** `lib/actions/mis-asignaciones.ts`: nueva
+   `toMisAsignacionesActionError` (espejo de `toGuiaActionError`) y las 4 actions + la nueva
+   `liberarGestion` envueltas en `withErrorHandler` (patrón `ordenes-guia.ts`): un error excepcional
+   (caída de DB en la tx, fallo de storage) pasa por el manejador (se normaliza/loguea) en vez de
+   propagarse crudo; los retornos de dominio (forbidden/conflict/validation_error/unauthenticated)
+   intactos.
+3. **menor-3 — liberar el puntero al CANCELAR.** Backend: `IGestionOrdenRepository`/
+   `GestionOrdenRepository` → `liberarOrdenEnGestion(mensajeroId, ordenId)` (`updateMany` con
+   `where: { id: mensajeroId, ordenEnGestionId: ordenId }` → concurrencia-seguro, solo el puntero
+   propio y solo si apunta a esa orden). `IMisAsignacionesService`/`MisAsignacionesService` →
+   `liberarGestion(ordenId, actor)` (forbidden si no es mensajero; ok idempotente). `gestion-orden.ts`
+   → `liberarSchema` + `LiberarResult`; action `liberarGestion`. Frontend
+   (`MisAsignacionesModule.tsx`): handler `cancelarGestion` cableado al `onOpenChange(!next)` del
+   `GestionarOrdenModal` (libera + `router.refresh`); el path de ÉXITO NO libera (el backend ya
+   limpió el puntero en su transacción). → **R35**.
+4. **menor-2 — comparación de montos en Decimal.** `MisAsignacionesService.ts`: la rama `entregada`
+   usa `new Prisma.Decimal(input.montoRecibido).equals(new Prisma.Decimal(orden.montoCobrar))` en
+   vez de `!==` sobre float; preserva la regla (h) y el `validation_error` si no cuadra.
+5. **BLOQUEANTE-1 — bookkeeping.** T19/T20/T21 → `[x]` en `tasks.md`.
+
+### 7.2 Archivos tocados en el ciclo
+Backend: `lib/actions/mis-asignaciones.ts`, `lib/services/MisAsignacionesService.ts`,
+`lib/repositories/GestionOrdenRepository.ts`, `lib/interfaces/repositories/IGestionOrdenRepository.ts`,
+`lib/interfaces/services/IMisAsignacionesService.ts`, `lib/types/gestion-orden.ts`.
+Frontend: `app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx`, `e2e/mis-asignaciones.spec.ts`.
+Spec/tests: `specs/36-mensajero-mis-asignaciones/requirements.md` (R35 + fila de trazabilidad),
+`tests/unit/actions/mis-asignaciones-action.test.ts`, `tests/unit/services/mis-asignaciones-service.test.ts`,
+`tests/unit/repositories/gestion-orden-repository.test.ts`, `tests/components/MisAsignacionesModule.test.tsx`.
+
+### 7.3 Trazabilidad nueva
+| Req | Test (archivo::caso) |
+| --- | --- |
+| R35 | gestion-orden-repository.test.ts::"liberarOrdenEnGestion limpia solo el propio puntero que apunta a esa orden / count 0 → false" + mis-asignaciones-service.test.ts::"liberarGestion: rol != mensajero → forbidden / mensajero → ok delega" + mis-asignaciones-action.test.ts::"liberarGestion: unauthenticated / validation_error / ok" + MisAsignacionesModule.test.tsx::"cancelar modal → liberarGestion + refresh; éxito → NO libera" |
+
+R0–R34 intactos; R35 aditivo (no se renumeró nada). menor-1 cubierto por
+mis-asignaciones-action.test.ts (error excepcional vía withErrorHandler); menor-2 por
+mis-asignaciones-service.test.ts (Decimal exacto ok / diferencia mínima → validation_error).
+
+### 7.4 Verificación ejecutable (salida real del ciclo)
+- `./init.sh` → **== init OK ==** (verde).
+- `pnpm run typecheck` (tsc --noEmit, incluye `e2e/mis-asignaciones.spec.ts`): 0 errores.
+- `pnpm run lint`: 0 errores (135 warnings preexistentes en `.claude/skills/*`, ninguno de la feature).
+- `pnpm test` (vitest): **167 archivos, 1433 tests, todos PASS** (~41s).
+- E2E: NO ejecutado (no corre en `pnpm test`; requiere DB/bucket/servidor reales, ver EXECUTION NOTE).
+
+### 7.5 Deudas que SIGUEN abiertas (sin cambios)
+- Bucket `gestion-evidencias` (tarea humana) y migración no aplicada contra Postgres (deuda aceptada);
+  el E2E queda ESCRITO pero NO EJECUTADO hasta que el entorno (DB test + seed mensajero + bucket) esté listo.

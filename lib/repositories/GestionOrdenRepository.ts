@@ -127,6 +127,20 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     return actual === ordenId;
   }
 
+  /**
+   * R35: limpia el puntero de bloqueo del PROPIO mensajero SOLO si apunta a esa
+   * orden. El WHERE guardado (`id = mensajeroId`, `ordenEnGestionId = ordenId`)
+   * garantiza que nunca toca el puntero de otro actor ni limpia si apunta a otra
+   * orden. Idempotente: `count 0 -> false` (no habia nada que limpiar).
+   */
+  async liberarOrdenEnGestion(mensajeroId: string, ordenId: string): Promise<boolean> {
+    const result = await this.prisma.usuario.updateMany({
+      where: { id: mensajeroId, ordenEnGestionId: ordenId },
+      data: { ordenEnGestionId: null },
+    });
+    return result.count > 0;
+  }
+
   /** R15/R16: guardia de propiedad + origen en el WHERE; devuelve filas afectadas. */
   async recogerLote(
     ordenIds: string[],

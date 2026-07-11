@@ -18,19 +18,48 @@ import type {
 import {
   escogerSchema,
   gestionarSchema,
+  liberarSchema,
   recogerSchema,
   type EscogerResult,
   type GestionarActionInput,
   type GestionarResult,
+  type LiberarResult,
   type ListarMisAsignacionesResult,
   type RecogerResult,
 } from "@/lib/types/gestion-orden";
+import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
+import type { AppErrorShape } from "@/lib/errors";
 
 // Feature 36 — Server Actions del flujo del mensajero (mutaciones internas del
 // mismo proyecto; van como Server Action, no como Route API, patron feature 21).
 // Resuelve el actor por sesion, valida en el borde con zod y delega en el
-// servicio. `unauthenticated` se resuelve en el borde; `forbidden`/`conflict`/
-// `validation_error` los devuelve el service como resultado de dominio.
+// servicio, TODO bajo `withErrorHandler` (patron ordenes-guia.ts): un error
+// EXCEPCIONAL (caida de DB en la tx, fallo de storage) se loguea/normaliza a
+// AppErrorShape en vez de propagarse crudo. `unauthenticated` se resuelve en el
+// borde (UNAUTHORIZED); `forbidden`/`conflict`/`validation_error` los devuelve el
+// service como resultado de dominio (nunca como excepcion).
+
+// Traduce el AppErrorShape que puede producir este borde: solo ZodError
+// (VALIDATION_ERROR) o falta de sesion (UNAUTHORIZED). `forbidden`/`conflict` los
+// devuelve el service directamente como resultado de dominio, por eso NO aparecen
+// aqui. Espejo EXACTO de `toGuiaActionError` en ordenes-guia.ts.
+function toMisAsignacionesActionError(
+  shape: AppErrorShape,
+): { status: "validation_error"; fieldErrors: Record<string, string[]> } | { status: "unauthenticated" } {
+  switch (shape.code) {
+    case "VALIDATION_ERROR":
+      return {
+        status: "validation_error",
+        fieldErrors: (shape.details?.fieldErrors as Record<string, string[]> | undefined) ?? {},
+      };
+    case "UNAUTHORIZED":
+      return { status: "unauthenticated" };
+    default:
+      // FORBIDDEN/NOT_FOUND/CONFLICT/INTERNAL: este borde nunca los lanza como
+      // AppError; si algo desconocido llega aqui, se propaga como fallo real.
+      throw new Error(`mis-asignaciones: AppErrorCode inesperado ${shape.code}`);
+  }
+}
 
 function buildService(): IMisAsignacionesService {
   const prisma = getPrismaClient();
@@ -60,10 +89,14 @@ interface FileLike {
 export async function listarMisAsignaciones(
   deps: MisAsignacionesDeps = {},
 ): Promise<ListarMisAsignacionesResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" }; // R12: antes de tocar el service
-  const service = deps.service ?? buildService();
-  return service.listarMisAsignaciones(actor);
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R12: antes de tocar el service
+    const service = deps.service ?? buildService();
+    return service.listarMisAsignaciones(actor);
+  });
+  // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
+  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
 /** R14-R17: recoger (lote o de a una) en_espera_aceptacion -> en_reparto. */
@@ -71,18 +104,15 @@ export async function recogerAsignaciones(
   input: unknown,
   deps: MisAsignacionesDeps = {},
 ): Promise<RecogerResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" };
-  const parsed = recogerSchema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      status: "validation_error",
-      fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
-    };
-  }
-  const service = deps.service ?? buildService();
-  const recogerInput: RecogerInput = { ordenIds: parsed.data.ordenIds };
-  return service.recogerAsignaciones(recogerInput, actor);
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = recogerSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    const recogerInput: RecogerInput = { ordenIds: data.ordenIds };
+    return service.recogerAsignaciones(recogerInput, actor);
+  });
+  return isAppErrorShape(r) ? toMisAsignacionesActionError(r) : r;
 }
 
 /** R19-R21: escoger una orden para gestionar (fija el bloqueo 1-a-1). */
@@ -90,17 +120,14 @@ export async function escogerParaGestion(
   input: unknown,
   deps: MisAsignacionesDeps = {},
 ): Promise<EscogerResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" };
-  const parsed = escogerSchema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      status: "validation_error",
-      fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
-    };
-  }
-  const service = deps.service ?? buildService();
-  return service.escogerParaGestion(parsed.data.ordenId, actor);
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = escogerSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.escogerParaGestion(data.ordenId, actor);
+  });
+  return isAppErrorShape(r) ? toMisAsignacionesActionError(r) : r;
 }
 
 /**
@@ -113,21 +140,36 @@ export async function gestionar(
   formData: FormData,
   deps: MisAsignacionesDeps = {},
 ): Promise<GestionarResult> {
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "unauthenticated" };
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const raw = rawFromFormData(formData);
+    const data = gestionarSchema.parse(raw); // ZodError -> VALIDATION_ERROR
+    const input = await toGestionarInput(data);
+    const service = deps.service ?? buildService();
+    return service.gestionar(input, actor);
+  });
+  return isAppErrorShape(r) ? toMisAsignacionesActionError(r) : r;
+}
 
-  const raw = rawFromFormData(formData);
-  const parsed = gestionarSchema.safeParse(raw);
-  if (!parsed.success) {
-    return {
-      status: "validation_error",
-      fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
-    };
-  }
-
-  const input = await toGestionarInput(parsed.data);
-  const service = deps.service ?? buildService();
-  return service.gestionar(input, actor);
+/**
+ * R35: libera el puntero de bloqueo (`usuario.orden_en_gestion_id`) del PROPIO
+ * actor cuando cancela/cierra la gestion sin registrar un resultado. Delega en el
+ * service, que solo limpia si el puntero apunta a esa orden (concurrencia-seguro,
+ * idempotente).
+ */
+export async function liberarGestion(
+  input: unknown,
+  deps: MisAsignacionesDeps = {},
+): Promise<LiberarResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = liberarSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.liberarGestion(data.ordenId, actor);
+  });
+  return isAppErrorShape(r) ? toMisAsignacionesActionError(r) : r;
 }
 
 /** Extrae los campos de gestion del FormData (montoRecibido a number). */

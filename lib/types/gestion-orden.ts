@@ -60,6 +60,12 @@ export const escogerSchema = z.object({
 });
 export type EscogerActionInput = z.infer<typeof escogerSchema>;
 
+// R35: liberar el puntero de bloqueo (cancelar/cerrar sin registrar resultado).
+export const liberarSchema = z.object({
+  ordenId: z.string().min(1),
+});
+export type LiberarActionInput = z.infer<typeof liberarSchema>;
+
 /** True si `value` (YYYY-MM-DD) representa una fecha estrictamente futura (R25). */
 export function esFechaFutura(value: string): boolean {
   const fecha = new Date(`${value}T00:00:00.000Z`);
@@ -139,3 +145,10 @@ export type GestionarResult =
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "conflict"; motivo: string };
+
+// R35: resultado de la action que libera el puntero de bloqueo (idempotente).
+export type LiberarResult =
+  | { status: "ok" }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };

@@ -14,16 +14,18 @@ import {
   recogerAsignaciones,
   escogerParaGestion,
   gestionar,
+  liberarGestion,
 } from "@/lib/actions/mis-asignaciones";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 36 (T15-T17) — módulo del mensajero. Se mockean las Server Actions
-// (recoger / escoger / gestionar), el toast y el router (refresh) para afirmar la
-// composición y los envíos sin DB ni sesión.
+// (recoger / escoger / gestionar / liberar), el toast y el router (refresh) para
+// afirmar la composición y los envíos sin DB ni sesión.
 vi.mock("@/lib/actions/mis-asignaciones", () => ({
   recogerAsignaciones: vi.fn(),
   escogerParaGestion: vi.fn(),
   gestionar: vi.fn(),
+  liberarGestion: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -50,6 +52,7 @@ vi.mock("next/navigation", () => ({
 const recogerMock = vi.mocked(recogerAsignaciones);
 const escogerMock = vi.mocked(escogerParaGestion);
 const gestionarMock = vi.mocked(gestionar);
+const liberarMock = vi.mocked(liberarGestion);
 
 function makeAsignacion(
   over: Partial<MiAsignacionDTO> & { id: string },
@@ -112,6 +115,7 @@ beforeEach(() => {
     estado: "entregada",
   });
   recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
+  liberarMock.mockResolvedValue({ status: "ok" });
 });
 
 afterEach(() => {
@@ -419,5 +423,46 @@ describe("MisAsignacionesModule", () => {
     expect(
       await screen.findByText("el monto debe cuadrar con el monto a cobrar"),
     ).toBeInTheDocument();
+  });
+
+  it("R35: CANCELAR el modal de gestión libera el puntero (liberarGestion) y refresca", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Gestionar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Gestionar orden" });
+
+    // Cerrar/cancelar SIN registrar resultado → onOpenChange(false).
+    await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    await vi.waitFor(() =>
+      expect(liberarMock).toHaveBeenCalledWith({ ordenId: "g1" }),
+    );
+    expect(liberarMock).toHaveBeenCalledTimes(1);
+    // La gestión NO se registró en este path.
+    expect(gestionarMock).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  it("R35: en el path de ÉXITO (onSuccess) NO se llama a liberarGestion", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", montoCobrar: 150 })],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Gestionar" }));
+    await screen.findByRole("dialog", { name: "Gestionar orden" });
+
+    // Entrega válida (default): método + evidencia + monto prellenado.
+    await elegirEnSelect(user, "Método de pago", "Efectivo");
+    await subirEvidencia(user, "Foto de evidencia de entrega");
+    await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
+
+    await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
+    // El backend ya limpió el puntero dentro de su transacción: no se libera aquí.
+    expect(liberarMock).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 });

@@ -63,6 +63,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     findByIdsParaGestion: vi.fn(async () => [gestionRow()]),
     getOrdenEnGestion: vi.fn(async () => null),
     setOrdenEnGestion: vi.fn(async () => true),
+    liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
     crearGestionYTransicionar: vi.fn(async () => "g1"),
     ...overrides,
@@ -277,6 +278,39 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
     expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
   });
 
+  // menor-2: comparacion en Decimal EXACTA (no float).
+  it("menor-2: monto == montoCobrar EXACTO -> ok (comparacion Decimal)", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ montoCobrar: 100 })]),
+    });
+    const r = await newService(repo).gestionar(entrega(100), MENSAJERO);
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(gArg.gestion.montoRecibido).toBe(100);
+  });
+
+  it("menor-2: diferencia minima (100.01 vs 100) -> validation_error, sin persistir", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ montoCobrar: 100 })]),
+    });
+    const storage = fakeStorage();
+    const r = await newService(repo, storage).gestionar(entrega(100.01), MENSAJERO);
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") return;
+    expect(r.fieldErrors.montoRecibido).toBeDefined();
+    expect(storage.upload).not.toHaveBeenCalled();
+    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+  });
+
+  it("menor-2: montoCobrar null -> validation_error", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ montoCobrar: null })]),
+    });
+    const r = await newService(repo).gestionar(entrega(100), MENSAJERO);
+    expect(r.status).toBe("validation_error");
+  });
+
   it("R23/R32: entrega valida -> sube foto, crea gestion(entregada), deja estado entregada + URL firmada", async () => {
     const repo = fakeRepo();
     const storage = fakeStorage();
@@ -375,5 +409,29 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
       ),
     ).rejects.toThrow("db caida");
     expect(storage.remove).toHaveBeenCalledTimes(1);
+  });
+});
+
+// --- menor-3: liberarGestion (R35) ---
+
+describe("liberarGestion (R35)", () => {
+  it("R12: rol != mensajero -> forbidden, sin tocar el repo", async () => {
+    const repo = fakeRepo();
+    const r = await newService(repo).liberarGestion("o1", MAESTRO);
+    expect(r.status).toBe("forbidden");
+    expect(repo.liberarOrdenEnGestion).not.toHaveBeenCalled();
+  });
+
+  it("mensajero -> ok e invoca repo.liberarOrdenEnGestion(actor, orden)", async () => {
+    const repo = fakeRepo();
+    const r = await newService(repo).liberarGestion("o1", MENSAJERO);
+    expect(r.status).toBe("ok");
+    expect(repo.liberarOrdenEnGestion).toHaveBeenCalledWith("m1", "o1");
+  });
+
+  it("idempotente: ok aunque el repo no limpiara nada (count 0 -> false)", async () => {
+    const repo = fakeRepo({ liberarOrdenEnGestion: vi.fn(async () => false) });
+    const r = await newService(repo).liberarGestion("o1", MENSAJERO);
+    expect(r.status).toBe("ok");
   });
 });

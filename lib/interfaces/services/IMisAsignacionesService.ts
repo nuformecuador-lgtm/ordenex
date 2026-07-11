@@ -86,6 +86,10 @@ export type GestionarServiceResult =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R22/R24 (monto != montoCobrar, etc.)
   | { status: "conflict"; motivo: string }; // R18/R21 origen invalido / otra orden activa
 
+// R35: liberar el puntero de bloqueo. Idempotente: `ok` aunque no hubiera nada
+// que limpiar; `forbidden` si el actor no es mensajero.
+export type LiberarServiceResult = { status: "ok" } | { status: "forbidden" };
+
 export interface IMisAsignacionesService {
   /** R9-R13: dos grupos + puntero de bloqueo; solo `mensajero` (sobre sus ordenes). */
   listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult>;
@@ -95,4 +99,6 @@ export interface IMisAsignacionesService {
   escogerParaGestion(ordenId: string, actor: Actor): Promise<EscogerServiceResult>;
   /** R18/R22-R32: registra la gestion (4 resultados) con atomicidad storage<->DB. */
   gestionar(input: GestionarInput, actor: Actor): Promise<GestionarServiceResult>;
+  /** R35: libera el puntero de bloqueo del propio actor si apunta a esa orden. */
+  liberarGestion(ordenId: string, actor: Actor): Promise<LiberarServiceResult>;
 }

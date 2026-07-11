@@ -171,6 +171,10 @@ Contexto de código real (anclas, no inventar):
   de la UI.
 - **R21** — SI el mensajero intenta gestionar una orden distinta de la que tiene activa MIENTRAS
   hay una en gestión, ENTONCES el sistema DEBE rechazar la operación (`conflict`, sin efectos).
+- **R35** — CUANDO el mensajero CANCELA/CIERRA la gestión de una orden sin registrar un resultado,
+  el sistema DEBE LIBERAR el puntero de bloqueo (`usuario.orden_en_gestion_id`) del PROPIO actor y
+  SOLO si apunta a esa orden (concurrencia-seguro; nunca toca el de otro mensajero), dejando las
+  demás órdenes gestionables de nuevo.
 
 ## Resultado 1 — ENTREGADA
 
@@ -281,6 +285,7 @@ Contexto de código real (anclas, no inventar):
 | R32 | unit service: cada resultado deja SOLO el estado resultante (sin efectos de 37/46/47/48/49) |
 | R33 | unit/build: `estatus-label` exhaustivo; listados existentes verdes |
 | R34 | revisión: todos los R con test; archivos con storage mockeado (reviewer) |
+| R35 | unit service+repo: liberar limpia solo el puntero propio que apunta a esa orden; no toca el de otro actor |
 
 ---
 

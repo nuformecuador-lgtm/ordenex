@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { GESTION_MIME_EXTENSION, gestionConfig, type GestionMimeType } from "@/lib/config/gestion";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
@@ -15,6 +16,7 @@ import type {
   GestionarInput,
   GestionarServiceResult,
   IMisAsignacionesService,
+  LiberarServiceResult,
   ListarMisAsignacionesServiceResult,
   MiAsignacionDTO,
   RecogerInput,
@@ -135,9 +137,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       return { status: "conflict", motivo: "tienes otra orden activa en gestion" };
     }
 
-    // R22 (h): ENTREGADA exige monto == montoCobrar EXACTO; si no cuadra, no persiste.
+    // R22 (h): ENTREGADA exige monto == montoCobrar EXACTO; si no cuadra, no
+    // persiste. Comparacion en Decimal (no float) para evitar falsos negativos
+    // por representacion binaria de los montos.
     if (input.resultado === "entregada") {
-      if (orden.montoCobrar === null || input.montoRecibido !== orden.montoCobrar) {
+      const cuadra =
+        orden.montoCobrar !== null &&
+        new Prisma.Decimal(input.montoRecibido).equals(new Prisma.Decimal(orden.montoCobrar));
+      if (!cuadra) {
         return {
           status: "validation_error",
           fieldErrors: {
@@ -194,6 +201,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       );
     }
     return { status: "ok", ordenId: input.ordenId, estado: input.resultado, evidenciaUrl };
+  }
+
+  async liberarGestion(ordenId: string, actor: Actor): Promise<LiberarServiceResult> {
+    if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12/R35
+    // R35: idempotente y concurrencia-seguro. El repo limpia SOLO si el puntero
+    // del propio actor apunta a esa orden; devolvemos ok aunque no hubiera nada.
+    await this.repo.liberarOrdenEnGestion(actor.usuarioId, ordenId);
+    return { status: "ok" };
   }
 
   /**

@@ -79,6 +79,15 @@ export interface IGestionOrdenRepository {
   setOrdenEnGestion(mensajeroId: string, ordenId: string): Promise<boolean>;
 
   /**
+   * R35: libera `usuario.orden_en_gestion_id` del PROPIO mensajero SOLO si apunta
+   * a `ordenId` (WHERE con `id = mensajeroId` y `orden_en_gestion_id = ordenId`).
+   * Concurrencia-seguro: nunca toca el puntero de otro actor ni limpia si apunta a
+   * otra orden. Devuelve `true` si limpio una fila (`count > 0`); `false` si no
+   * habia nada que limpiar (idempotente).
+   */
+  liberarOrdenEnGestion(mensajeroId: string, ordenId: string): Promise<boolean>;
+
+  /**
    * R15/R16: transiciona en lote de `origenEstatusId` a `destinoEstatusId` SOLO
    * las ordenes de `ordenIds` que pertenecen al mensajero y estan en el origen
    * (guardia de propiedad + origen en el WHERE). Devuelve el numero de filas
