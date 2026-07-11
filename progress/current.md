@@ -7,13 +7,15 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/52-fix-build-postulacion | frontend | impl (ágil) | **Corrección de BUILD (bug pre-existente detectado por el reviewer de la 33).** `pnpm build` falla el prerender estático de `app/postulacion/page.tsx` (feature 21): Server Component async que consulta Prisma sin `cookies()` → Next prerenderiza estático → `P2021` sin DB. FIX: `export const dynamic = "force-dynamic"`. Solo esa ruta falla (las otras 3 con Prisma leen cookies → dinámicas solas). Criterio: `pnpm build` PASA. Ciclo ágil (spec inline, patrón feature 51). |
+| (ninguna en curso) | — | — | Feature 52 CERRADA (fix build, `pnpm build` verde); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+
+> Feature 52 (fix build /postulacion) CERRADA 2026-07-11: `export const dynamic="force-dynamic"` en `app/postulacion/page.tsx`. `pnpm build` PASA, `init.sh` verde 1493 tests. Ciclo ágil (spec inline, sin reviewer aparte). Estado `done` + `history.md`. **PENDIENTE: PR a `dev` + merge.**
 
 ## Pendientes / deudas registradas (el humano pidió dejar constancia — 2026-07-11)
 
 > Bugs y deudas detectadas que NO se pierden. Cada bug de código se registra como feature.
 
-- **Feature 52 (build /postulacion)** — EN CURSO. Bug pre-existente: `pnpm build` roto por prerender de `/postulacion`. Ver arriba.
+- **Feature 52 (build /postulacion)** — ✅ CERRADA (fix aplicado, `pnpm build` verde). Pendiente solo el PR/merge.
 - **TAREA HUMANA — bucket `gestion-evidencias`**: crear el bucket PRIVADO en Supabase Storage (feature 36). Las fotos de evidencia de entrega/rechazo lo necesitan en runtime. Sin esto, la gestión de órdenes del mensajero falla al subir evidencia.
 - **DEUDA DE DESPLIEGUE (repo-wide, aceptada)**: las migraciones de las features 17/24/27/30/32(n/a)/33/36 NO se han aplicado contra Postgres real (no hay DB aislada; `.env` apunta a Supabase compartido). Cubiertas por tests de integración estáticos. Pendiente correr up/down reales en un entorno con DB. Igual, los E2E (`e2e/*.spec.ts`) están ESCRITOS pero NO ejecutados (requieren DB/seed/login).
 - **Posible feature futura — PWA**: convertir la app en PWA (mencionado por el humano en la F1.4 de la 33, para el escaneo móvil del adminSatelite). No creada aún.
