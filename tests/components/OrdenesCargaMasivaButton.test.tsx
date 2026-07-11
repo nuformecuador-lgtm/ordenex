@@ -226,6 +226,58 @@ describe("OrdenesCargaMasivaButton — props de BulkUpload (R8-R12)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Feature 51 — Distrito obligatorio, aviso distrito↔zona y ejemplos de CR
+// ---------------------------------------------------------------------------
+describe("OrdenesCargaMasivaButton — feature 51 (CR + acoplamiento distrito/zona)", () => {
+  function fieldByKey(key: string) {
+    const field = bulkProps().fields.find((f) => f.key === key);
+    if (!field) throw new Error(`no existe el campo ${key}`);
+    return field;
+  }
+
+  it("marca 'Distrito' como campo obligatorio en la plantilla", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+    expect(fieldByKey("distrito").required).toBe(true);
+  });
+
+  it("no marca como obligatorio un campo opcional (ej. notas)", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+    expect(fieldByKey("notas").required).toBeFalsy();
+  });
+
+  it("renderiza el aviso del acoplamiento distrito↔zona antes de cargar", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+    expect(screen.getByText(/el distrito es obligatorio/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/debe tener\s+una zona asignada/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/se rechazará al cargar/i)).toBeInTheDocument();
+  });
+
+  it("usa ejemplos de Costa Rica y no de Ecuador", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+    const examples = bulkProps()
+      .fields.map((f) => f.example ?? "")
+      .join(" | ");
+
+    // Ecuador fuera.
+    expect(examples).not.toMatch(/pichincha/i);
+    expect(examples).not.toMatch(/quito/i);
+    expect(examples).not.toMatch(/iñaquito/i);
+    expect(examples).not.toMatch(/amazonas/i);
+
+    // Costa Rica dentro.
+    expect(fieldByKey("provincia").example).toBe("San José");
+    expect(fieldByKey("canton").example).toBe("San José");
+    expect(fieldByKey("distrito").example).toBe("Carmen");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // R13-R15, R17 — onSuccess: refresh + toast, sin cerrar el modal
 // ---------------------------------------------------------------------------
 describe("OrdenesCargaMasivaButton — onSuccess (R13, R14, R15, R17)", () => {

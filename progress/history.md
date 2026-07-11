@@ -591,3 +591,38 @@
   comunica el nuevo acoplamiento zona↔distrito; (2) métrica `distritosSinZona` del seed cuenta por hint, no por
   distrito distinto (solo afecta el reporte); (3) índice único de `nombre` sobre valor crudo. Aside preexistente
   feature 15: ejemplos del template siguen siendo de Ecuador (Pichincha/Quito), no Costa Rica.
+
+
+## 2026-07-10 — dashboard admin maestro (feature 23, FRONTEND)
+- Frontend puro: `app/(app)/page.tsx` ramifica por rol — `maestro`/`admin` → `AdminMaestroDashboard`;
+  `adminTienda` → dashboard de la feature 26 intacto; resto → placeholder 'Bienvenido'. Panel de
+  postulaciones de mensajeros en estado `pendiente` en tarjetas + `Pagination` (feature 8); documentos
+  como enlaces "Ver" (A1); aprobar/rechazar con `Modal` async (feature 13) + `Toast` (feature 11) +
+  refresco SWR (A2); rechazo sin motivo (A3). Consume las Server Actions de la feature 22. Mergeada
+  vía **PR #28** (6bf385b).
+- Requisitos cubiertos: R1–R19 (EARS), mapeados a test (ver `progress/impl_23-dashboard-maestro.md`).
+- Reviewer **APROBADO** (único mayor era documental, resuelto marcando tasks). Suite 1018 verde;
+  typecheck + lint OK; `init.sh` EXIT 0.
+- Decisiones F1.4 (humano): A1 documentos como enlaces "Ver"; A2 refresco vía SWR; A3 rechazo sin motivo.
+
+## 2026-07-10 — fulfillment de tienda + estado inicial condicional (feature 27, FULLSTACK)
+- Fullstack en un ciclo. (1) Nuevo campo booleano `Usuario.fulfillment` (default false) con migración +
+  `down.sql`. (2) El backend fuerza `fulfillment=false` si el rol ≠ `adminTienda` (R4/R4a). (3) Switch
+  'esta tienda tiene fulfillment' en `UsuarioForm` (feature 25, R5/R6). (4) Estado inicial de la carga
+  masiva CONDICIONAL en `BulkOrdenService` según el `adminTienda` autenticado: con fulfillment →
+  `en_fulfillment`; sin fulfillment → `en_preparacion` (R15). Mergeada vía **PR #29** (c4530c4).
+- Requisitos cubiertos: R1–R15 (EARS), mapeados a test (ver `progress/impl_27-fulfillment-tienda.md`).
+- Reviewer **APROBADO** 0 bloqueantes. Suite 1053 verde post-merge; `init.sh` OK.
+- **Desbloquea la feature 17** (deps 27 y 28 done).
+
+
+## 2026-07-10 — carga masiva: corrección CR + acoplamiento distrito/zona (feature 51, FRONTEND)
+- Corrección derivada de hallazgos del reviewer de la feature 24. Frontend puro (sin tocar backend/feature 15).
+  (1) `OrdenesCargaMasivaButton.tsx`: campo `distrito` marcado `required` (sufijo " *" en la cabecera XLSX vía
+  `xlsx-template.ts`); (2) Alert (shadcn, icono Info) dentro del modal avisando que cada orden debe indicar un
+  distrito y ese distrito debe tener zona, o la fila se rechaza (acoplamiento R4/R11 de la feature 24);
+  (3) ejemplos de plantilla Ecuador→Costa Rica (San José/San José/Carmen; teléfono 8 dígitos CR).
+  `BulkUpload.tsx`/`xlsx-template.ts` extendidos con `required?`.
+- Tests de componente añadidos (distrito requerido, opcional no requerido, aviso renderizado, ejemplos CR / no
+  Ecuador) + test del sufijo " *". Suite 1165/1165 verde; typecheck/lint/`init.sh` OK.
+- Proceso: corrección pequeña, ciclo SDD agilizado (spec inline por el leader, sin reviewer formal aparte).

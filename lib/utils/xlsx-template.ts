@@ -21,6 +21,20 @@ export interface XlsxTemplateField {
   label?: string;
   /** Valor de ejemplo opcional para la fila de muestra (R4). */
   example?: string;
+  /**
+   * Marca la columna como obligatoria: la cabecera se sufija con " *" para que
+   * el usuario lo anticipe al abrir la plantilla (feature 51).
+   */
+  required?: boolean;
+}
+
+/** Sufijo visible que marca una columna obligatoria en la cabecera (feature 51). */
+const REQUIRED_SUFFIX = " *";
+
+/** Cabecera mostrada para una columna: `label ?? key`, con marca de obligatorio. */
+function headerFor(field: XlsxTemplateField): string {
+  const base = field.label ?? field.key;
+  return field.required ? `${base}${REQUIRED_SUFFIX}` : base;
 }
 
 /** Ancho mínimo legible de columna, en caracteres (R3). */
@@ -32,7 +46,7 @@ const PAD = 2;
 
 /** Calcula un ancho legible por columna a partir de cabecera y ejemplo (R3). */
 function computeWidth(field: XlsxTemplateField): number {
-  const header = field.label ?? field.key;
+  const header = headerFor(field);
   const example = field.example ?? "";
   const content = Math.max(header.length, example.length) + PAD;
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, content));
@@ -70,7 +84,7 @@ export async function buildXlsxTemplate(
 
   // `header` fija la fila 1 (R1); `width` da un ancho legible por columna (R3).
   worksheet.columns = fields.map((field) => ({
-    header: field.label ?? field.key,
+    header: headerFor(field),
     key: field.key,
     width: computeWidth(field),
   }));

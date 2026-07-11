@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useSWRConfig } from "swr";
+import { Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Modal } from "@/components/shared/Modal";
 import {
   BulkUpload,
@@ -25,11 +27,18 @@ import { useToast } from "@/hooks/useToast";
 const ORDENES_BULK_FIELDS: TemplateField[] = [
   { key: "num_remision", label: "Nº Remisión", example: "REM-0001" },
   { key: "destinatario", label: "Destinatario", example: "Juan Pérez" },
-  { key: "telefono", label: "Teléfono", example: "0999999999" },
-  { key: "provincia", label: "Provincia", example: "Pichincha" },
-  { key: "canton", label: "Cantón", example: "Quito" },
-  { key: "distrito", label: "Distrito", example: "Iñaquito" },
-  { key: "direccion", label: "Dirección", example: "Av. Amazonas N34-451" },
+  { key: "telefono", label: "Teléfono", example: "88887777" },
+  { key: "provincia", label: "Provincia", example: "San José" },
+  { key: "canton", label: "Cantón", example: "San José" },
+  // Distrito es OBLIGATORIO: de él se deriva la zona de la orden (feature 24,
+  // decisión R4/R11). Una fila sin distrito —o con un distrito sin zona
+  // asignada— se rechaza en la carga (feature 51).
+  { key: "distrito", label: "Distrito", example: "Carmen", required: true },
+  {
+    key: "direccion",
+    label: "Dirección",
+    example: "Avenida Central, 100 m norte del Parque Central",
+  },
   { key: "producto", label: "Producto", example: "Camiseta talla M" },
   { key: "notas", label: "Notas", example: "Entregar en la tarde" },
   { key: "monto_cobrar", label: "Monto a cobrar", example: "25.90" },
@@ -156,16 +165,32 @@ export function OrdenesCargaMasivaButton() {
         confirmLabel="Cerrar"
       >
         {step === "upload" ? (
-          <BulkUpload
-            endpoint="/api/ordenes/carga-masiva"
-            accept={["csv", "xlsx"]}
-            fieldName="file"
-            templateFileName="plantilla-ordenes-carga-masiva.xlsx"
-            fields={ORDENES_BULK_FIELDS}
-            onSuccess={handleSuccess}
-            onError={handleError}
-            label="Archivo de órdenes"
-          />
+          <div className="flex flex-col gap-4">
+            {/*
+              Aviso del acoplamiento distrito↔zona (feature 24, R4/R11): se
+              comunica ANTES de cargar para que el usuario lo anticipe, en vez de
+              enterarse solo por el error fila a fila (feature 51).
+            */}
+            <Alert>
+              <Info aria-hidden="true" />
+              <AlertTitle>El distrito es obligatorio</AlertTitle>
+              <AlertDescription>
+                Cada orden debe indicar un distrito, y ese distrito debe tener
+                una zona asignada. Si el distrito falta o no tiene zona, esa fila
+                se rechazará al cargar.
+              </AlertDescription>
+            </Alert>
+            <BulkUpload
+              endpoint="/api/ordenes/carga-masiva"
+              accept={["csv", "xlsx"]}
+              fieldName="file"
+              templateFileName="plantilla-ordenes-carga-masiva.xlsx"
+              fields={ORDENES_BULK_FIELDS}
+              onSuccess={handleSuccess}
+              onError={handleError}
+              label="Archivo de órdenes"
+            />
+          </div>
         ) : (
           <OrdenesCargaResumenPaso clasificacion={clasificacion} />
         )}
