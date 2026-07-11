@@ -71,11 +71,15 @@ describe("UP — distrito.zona_id y usuario.zona_id (R5/R6/R7/R8)", () => {
   });
 });
 
-describe("UP — provincia.zona_id: R4 diferido (relajado a nullable)", () => {
-  it("relaja provincia.zona_id a NULLABLE (no lo elimina; drop total diferido por feature 15)", () => {
-    expect(upSql).toMatch(/ALTER TABLE "provincia" ALTER COLUMN "zona_id" DROP NOT NULL;/);
-    // NO se elimina la columna ni su FK en este paso
-    expect(upSql).not.toMatch(/ALTER TABLE "provincia" DROP COLUMN/);
+describe("UP — provincia.zona_id: R4 DROP ejecutado", () => {
+  it("elimina provincia.zona_id (columna + FK + indice); la zona se deriva del distrito", () => {
+    expect(upSql).toMatch(
+      /ALTER TABLE "provincia" DROP CONSTRAINT IF EXISTS "provincia_zona_id_fkey"/,
+    );
+    expect(upSql).toMatch(/DROP INDEX IF EXISTS "provincia_zona_id_idx"/);
+    expect(upSql).toMatch(/ALTER TABLE "provincia" DROP COLUMN "zona_id"/);
+    // ya NO se relaja a nullable: se elimina del todo
+    expect(upSql).not.toMatch(/ALTER COLUMN "zona_id" DROP NOT NULL/);
   });
 });
 
@@ -100,11 +104,12 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
     expect(downSql).toMatch(/ALTER TABLE "distrito" DROP COLUMN IF EXISTS "zona_id"/);
   });
 
-  it("elimina indices y columnas nuevas de zona y restaura el NOT NULL de provincia.zona_id", () => {
+  it("elimina indices y columnas nuevas de zona y restaura provincia.zona_id (columna + FK)", () => {
     expect(downSql).toMatch(/DROP INDEX IF EXISTS "zona_es_gam_unico"/);
     expect(downSql).toMatch(/DROP INDEX IF EXISTS "zona_nombre_key"/);
     expect(downSql).toMatch(/ALTER TABLE "zona" DROP COLUMN IF EXISTS "es_gam"/);
-    expect(downSql).toMatch(/ALTER TABLE "provincia" ALTER COLUMN "zona_id" SET NOT NULL/);
+    expect(downSql).toMatch(/ALTER TABLE "provincia" ADD COLUMN "zona_id" TEXT NOT NULL/);
+    expect(downSql).toMatch(/ADD CONSTRAINT "provincia_zona_id_fkey"/);
   });
 
   it("la carpeta contiene migration.sql y down.sql, con timestamp posterior a las previas", () => {

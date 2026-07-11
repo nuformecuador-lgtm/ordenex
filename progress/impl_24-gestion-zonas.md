@@ -2,8 +2,10 @@
 
 Rama: feature/24-gestion-zonas (desde dev, al dia).
 Fecha: 2026-07-10. Coordinado por implementer (backend_dev + frontend_dev, modelo opus).
-Estado: implementacion CASI COMPLETA - suite verde (1159 tests), typecheck/lint/init.sh OK.
-HAY UN BLOCKER DE PRODUCTO EN R4 (ver seccion "Blocker / decision humana"). Pendiente de revision por reviewer y de decision humana sobre R4/R11.
+Estado: implementacion COMPLETA - suite verde (1160 tests), typecheck/lint/init.sh OK.
+BLOCKER R4/R11 RESUELTO (decision humana = opcion b, 2026-07-10): DROP total de provincia.zona_id
+ejecutado en la migracion; la carga masiva (feature 15) deriva orden.zona_id del distrito de la
+orden y exige distrito con zona. Ver seccion "Blocker / decision humana". Pendiente solo de review.
 
 Decisiones humanas respetadas: D1-D8 (F1.4, aprobadas 2026-07-10). es_gam NUNCA se siembra
 (toggle de UI, R37); geografia = catalogo global; zona a nivel de distrito.zona_id; escritura solo
@@ -16,7 +18,7 @@ maestro, lectura de catalogo maestro+admin; sin borrado de zona.
 ### Backend - datos / migracion (T1-T3)
 - db/migrations/20260711120000_zonas_catalogo_global_pagos/migration.sql (UP)
 - db/migrations/20260711120000_zonas_catalogo_global_pagos/down.sql (DOWN)
-- db/schema.prisma (modificado): Zona +pagoEntrega/pagoRechazo/esGam +unique nombre +relaciones inversas distritos/usuarios; Distrito +zonaId nullable; Usuario +zonaId nullable; Provincia.zonaId RELAJADO a nullable (ver blocker, NO eliminado).
+- db/schema.prisma (modificado): Zona +pagoEntrega/pagoRechazo/esGam +unique nombre +relaciones inversas distritos/usuarios; Distrito +zonaId nullable; Usuario +zonaId nullable; Provincia.zonaId ELIMINADO (campo + relacion zona + @@index), y back-relation Zona.provincias retirada (R4 cerrado, decision b).
 
 ### Backend - tipos / config / normalizacion / interfaces (T4-T7)
 - lib/types/zona.ts (schemas Zod crear/actualizar/listar strict + ZonaDTO montos number + resultados por status)
@@ -37,8 +39,13 @@ maestro, lectura de catalogo maestro+admin; sin borrado de zona.
 ### Backend - seed (T17, gate de despliegue T18 diferido)
 - scripts/seed-zonas.ts (dos parsers exceljs: mapa completo -> geografia; Excel original hoja Jerarquia revisar -> dedup zonas + cruce por terna; idempotente; no auto-corre al importar)
 
-### Adaptaciones por el blocker R4
-- lib/interfaces/repositories/IOrdenRepository.ts, lib/services/BulkOrdenService.ts (ProvinciaRow.zonaId -> nullable + guard en resolveGeo: provincia sin zona -> fila con error)
+### Cierre R4/R11 (decision humana b, 2026-07-10) - carga masiva por distrito
+- lib/interfaces/repositories/IOrdenRepository.ts (ProvinciaRow SIN zonaId; DistritoRow +zonaId nullable)
+- lib/repositories/OrdenRepository.ts (findProvinciasByNombres select sin zonaId; findDistritosByCantonIds select +zonaId)
+- lib/services/BulkOrdenService.ts (resolveGeo deriva orden.zona_id del DISTRITO, no de la provincia; distrito obligatorio; distrito sin zona -> fila con error)
+- db/migrations/.../migration.sql (DROP total provincia.zona_id: FK provincia_zona_id_fkey + indice provincia_zona_id_idx + columna)
+- db/migrations/.../down.sql (restaura provincia.zona_id columna+indice+FK; asume geografia vacia)
+- Tests feature 15 actualizados: tests/unit/services/bulk-orden-service.test.ts, tests/unit/repositories/orden-repository.bulk.test.ts
 
 ### Frontend (T13-T16)
 - app/(app)/configuracion/_components/ZonaForm.tsx (nombre/pagos/toggle esGam + selector distritos navegando provincia->canton->distrito; fieldErrors/conflicto)
@@ -69,14 +76,14 @@ maestro, lectura de catalogo maestro+admin; sin borrado de zona.
 | R1 | zonas-migration.test.ts :: agrega pago_entrega/pago_rechazo/es_gam con defaults |
 | R2 | zonas-migration.test.ts :: indice unico zona_nombre_key ; normalize.test.ts :: normalizeZonaKey |
 | R3 | zonas-migration.test.ts :: indice unico parcial zona_es_gam_unico |
-| R4 | DIFERIDO/BLOQUEADO - zonas-migration.test.ts :: relaja provincia.zona_id a nullable (DROP total NO ejecutado; ver blocker) |
+| R4 | CUMPLIDO - zonas-migration.test.ts :: R4 DROP ejecutado (provincia.zona_id + FK + indice eliminados; ya NO existe la columna) |
 | R5 | zonas-migration.test.ts :: distrito.zona_id nullable + FK RESTRICT + indice |
 | R6 | zonas-migration.test.ts :: usuario.zona_id nullable + FK RESTRICT + indice |
 | R7 | zonas-migration.test.ts :: FK ON DELETE RESTRICT + nullable |
 | R8 | zonas-migration.test.ts :: FK ON DELETE RESTRICT |
 | R9 | zonas-migration.test.ts :: no altera FK canton/distrito |
 | R10 | zonas-migration.test.ts :: ni UP ni DOWN tocan orden |
-| R11 | zonas-migration.test.ts :: DOWN revierte lo aditivo (restaura provincia NOT NULL) - parcial, ver blocker |
+| R11 | CUMPLIDO - zonas-migration.test.ts :: DOWN restaura provincia.zona_id (columna TEXT NOT NULL + indice + FK) sin tocar orden |
 | R12 | zonas-migration.test.ts :: RLS geografia habilitado / no deshabilita |
 | R13 | zonas-action.test.ts :: sin sesion -> unauthenticated |
 | R14 | geo-repository.test.ts ; zona-service.test.ts catalogo ; zonas-action.test.ts |
@@ -114,7 +121,7 @@ maestro, lectura de catalogo maestro+admin; sin borrado de zona.
 - pnpm db:generate: OK (Prisma Client 7.8.0).
 - pnpm run typecheck: 0 errores.
 - pnpm run lint: 0 errores, 135 warnings (todas preexistentes en .claude/skills/impeccable/scripts).
-- pnpm test: 1159 passed / 1159 (144 files, 0 fallos).
+- pnpm test: 1160 passed / 1160 (144 files, 0 fallos) tras cerrar R4/R11.
 - ./init.sh: == init OK == (todas las migraciones con down.sql; .env presente).
 
 ---
@@ -125,15 +132,16 @@ maestro, lectura de catalogo maestro+admin; sin borrado de zona.
 
 ---
 
-## Blocker / decision humana (R4 / R11) - IMPORTANTE
+## Blocker / decision humana (R4 / R11) - RESUELTO (2026-07-10, opcion b)
 
-El spec (D3/R4) manda ELIMINAR provincia.zona_id, afirmando que no afecta a orden. Es cierto a nivel de FK del schema, PERO la carga masiva (feature 15) deriva orden.zona_id (NOT NULL) desde provincia.zona_id en BulkOrdenService.resolveGeo (con ~15 tests que lo fijan). Eliminar la columna rompe la compilacion y la semantica de la 15; migrar esa derivacion al modelo por-distrito choca con que orden.zona_id es NOT NULL y distrito/distrito.zona_id son opcionales.
+Contexto (historico): el spec (D3/R4) manda ELIMINAR provincia.zona_id. Pero la carga masiva (feature 15) derivaba orden.zona_id (NOT NULL) desde provincia.zona_id en BulkOrdenService.resolveGeo (~15 tests). Eliminar la columna sin migrar esa derivacion rompia la 15; por eso se dejo un paso intermedio (provincia.zona_id relajado a nullable) a la espera de la decision humana.
 
-Accion tomada (paso intermedio minimo y reversible, para no inventar producto ni romper la 15): todo lo aditivo de la 24 implementado y provincia.zona_id RELAJADO a NULLABLE en vez de eliminado; guard en resolveGeo (provincia sin zona -> fila con error). Consecuencia a ratificar: con el seed nuevo de la 24 las provincias nacen sin zona, por lo que la carga masiva no podria fijar orden.zona_id hasta que su derivacion migre al modelo por-distrito.
+DECISION HUMANA = opcion (b): derivar orden.zona_id del DISTRITO de la orden y exigir distrito con zona. Implementado:
+- Migracion: DROP total de provincia.zona_id (FK provincia_zona_id_fkey + indice provincia_zona_id_idx + columna). down.sql restaura la columna (TEXT NOT NULL + indice + FK), documentando que asume geografia vacia.
+- schema.prisma: eliminado Provincia.zonaId, su relacion y su @@index; retirada la back-relation Zona.provincias. distrito.zona_id (nullable) se mantiene; orden.zona_id sigue NOT NULL.
+- Carga masiva (BulkOrdenService.resolveGeo): orden.zona_id se deriva de distrito.zona_id. El distrito pasa a ser OBLIGATORIO en carga masiva; si no se resuelve el distrito o su zona_id es NULL -> la fila se rechaza como error de validacion por fila (mensaje "el distrito '<n>' no tiene zona asignada" / "distrito requerido"), mismo patron de errores por fila de la 15. IOrdenRepository/OrdenRepository: ProvinciaRow ya no lleva zonaId; DistritoRow lleva zonaId.
+- Tests: bulk-orden-service.test.ts y orden-repository.bulk.test.ts migrados al modelo por-distrito (caso happy = distrito con zona; distrito sin zona -> error; sin distrito -> error). zonas-migration.test.ts: R4 = DROP ejecutado; R11 = down restaura provincia.zona_id.
 
-Decision que el humano debe tomar para cerrar R4/R11 - como debe fijar la carga masiva orden.zona_id bajo el modelo por-distrito:
-- (a) hacer orden.zona_id nullable;
-- (b) derivarlo del distrito y exigir distrito con zona;
-- (c) una zona por defecto.
+Trazabilidad R4/R11: CUMPLIDO (ver tabla arriba).
 
-Hasta esa decision, el DROP total de provincia.zona_id queda diferido (documentado en migration.sql, schema.prisma y tasks.md). El reviewer debe evaluar esto como hallazgo de trazabilidad en R4/R11.
+CONSECUENCIA OPERATIVA (para el maestro y el reviewer): una carga masiva ahora EXIGE que el maestro haya asignado zona a los distritos involucrados. Las filas cuyo distrito no tenga zona (o cuyo distrito no se resuelva / venga vacio) se rechazan como error por fila; no se crean con zona indeterminada. Esto es un cambio de comportamiento de la feature 15 respecto al modelo por-provincia anterior: el reviewer debe validar que sea el comportamiento deseado y que la UI/mensajeria de carga masiva lo comunique.

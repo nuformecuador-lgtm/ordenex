@@ -207,10 +207,9 @@ model OrderStatus {
 
 // Geografia jerarquica (feature 6 la creo vacia). Feature 24: la zona pasa a ser un
 // catalogo global con pagos al mensajero y flag `es_gam`; la asignacion nueva vive
-// en `distrito.zona_id`. NOTA (blocker feature 24/R4): la eliminacion de
-// `provincia.zona_id` queda DIFERIDA porque la carga masiva (feature 15) deriva
-// `orden.zona_id` (NOT NULL) desde `provincia.zona_id`. Se elimina en un paso
-// posterior, una vez migrada esa derivacion al modelo por-distrito.
+// en `distrito.zona_id`. Feature 24/R4: `provincia.zona_id` fue ELIMINADO (la zona
+// ya no cuelga de la provincia); la carga masiva (feature 15) deriva `orden.zona_id`
+// del DISTRITO de la orden (`distrito.zona_id`), no de la provincia.
 model Zona {
   id          String  @id @default(uuid())
   nombre      String  @unique // feature 24/R2: unico (comparado normalizado en el service/seed)
@@ -218,7 +217,6 @@ model Zona {
   pagoRechazo Decimal @default(0) @db.Decimal(12, 2) @map("pago_rechazo") // feature 24/R1
   esGam       Boolean @default(false) @map("es_gam") // feature 24/R3: a lo sumo una true (indice parcial en SQL)
 
-  provincias Provincia[] // feature 6 / carga masiva (feature 15). Se retira con R4 (diferido).
   distritos  Distrito[] // feature 24/R5: distritos asignados a esta zona
   usuarios   Usuario[] // feature 24/R6: mensajero/adminSatelite asignados a esta zona
   ordenes    Orden[]
@@ -229,13 +227,10 @@ model Zona {
 model Provincia {
   id     String  @id @default(uuid())
   nombre String
-  zonaId String? @map("zona_id") // feature 24/R4 (parcial): se relaja a nullable; el drop total queda diferido por la dependencia de carga masiva (feature 15)
 
-  zona     Zona?    @relation(fields: [zonaId], references: [id])
   cantones Canton[]
   ordenes  Orden[]
 
-  @@index([zonaId])
   @@map("provincia")
 }
 

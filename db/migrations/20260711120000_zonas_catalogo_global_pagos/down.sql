@@ -1,7 +1,7 @@
 -- DOWN: revierte EXACTAMENTE migration.sql de esta carpeta, en orden inverso
--- (R10/R11). NO toca la tabla "orden" ni ninguna otra migracion previa. Como la
--- eliminacion de provincia.zona_id quedo DIFERIDA (blocker R4), el down tampoco la
--- restaura: provincia.zona_id nunca se toco en el UP.
+-- (R10/R11). NO toca la tabla "orden" ni ninguna otra migracion previa. El UP
+-- ELIMINA provincia.zona_id (R4), asi que este down SI la restaura (columna +
+-- indice + FK), asumiendo geografia vacia (ver bloque de provincia mas abajo).
 
 -- usuario: elimina zona_id + FK + indice.
 ALTER TABLE "usuario" DROP CONSTRAINT IF EXISTS "usuario_zona_id_fkey";
@@ -13,9 +13,14 @@ ALTER TABLE "distrito" DROP CONSTRAINT IF EXISTS "distrito_zona_id_fkey";
 DROP INDEX IF EXISTS "distrito_zona_id_idx";
 ALTER TABLE "distrito" DROP COLUMN IF EXISTS "zona_id";
 
--- provincia: restaura el NOT NULL de zona_id (relajado en el UP). Requiere que no
--- haya filas con zona_id NULL; la geografia esta vacia en este repo.
-ALTER TABLE "provincia" ALTER COLUMN "zona_id" SET NOT NULL;
+-- provincia: restaura zona_id (columna + indice + FK) tal como existia antes de la
+-- feature 24. ASUME geografia VACIA (sin filas): re-crea la columna como NOT NULL sin
+-- default, lo cual solo es valido si "provincia" no tiene filas. En este repo la
+-- geografia esta vacia (feature 6 la creo vacia).
+ALTER TABLE "provincia" ADD COLUMN "zona_id" TEXT NOT NULL;
+CREATE INDEX "provincia_zona_id_idx" ON "provincia"("zona_id");
+ALTER TABLE "provincia" ADD CONSTRAINT "provincia_zona_id_fkey"
+  FOREIGN KEY ("zona_id") REFERENCES "zona"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- zona: elimina indices y columnas nuevas (orden inverso a la creacion).
 DROP INDEX IF EXISTS "zona_es_gam_unico";

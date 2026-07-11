@@ -73,9 +73,6 @@ export class NumRemisionDuplicadoError extends Error {
 export interface ProvinciaRow {
   id: string;
   nombre: string;
-  // Feature 24/R4 (parcial): `provincia.zona_id` pasa a nullable. La carga masiva
-  // aun deriva orden.zona_id de aqui; una provincia sin zona -> fila con error.
-  zonaId: string | null;
 }
 
 export interface CantonRow {
@@ -88,6 +85,7 @@ export interface DistritoRow {
   id: string;
   nombre: string;
   cantonId: string;
+  zonaId: string | null; // feature 24/R4: la zona de la orden se deriva del distrito (carga masiva).
 }
 
 export interface IOrdenRepository {

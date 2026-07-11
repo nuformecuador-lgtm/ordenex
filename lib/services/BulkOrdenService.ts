@@ -64,7 +64,9 @@ type GeoResult =
   | { ok: false; fieldErrors: Record<string, string[]> };
 
 // R19/R20/R21: resuelve provincia -> canton (dentro de la provincia) -> distrito
-// (dentro del canton, opcional) por nombre, y deriva zonaId de la provincia.
+// (dentro del canton) por nombre. El distrito es OBLIGATORIO y de el se deriva
+// zonaId (modelo por-distrito, feature 24/R4/R11 decision b); una fila sin distrito,
+// con distrito no resoluble, o con distrito sin zona -> error de fila.
 function resolveGeo(
   raw: { provincia: string; canton: string; distrito: string },
   provinciaIndex: Map<string, ProvinciaRow[]>,
@@ -101,18 +103,14 @@ function resolveGeo(
   }
   const canton = cantonResult.row;
 
-  // Feature 24/R4 (parcial): `provincia.zona_id` es nullable. La orden exige una
-  // zona (NOT NULL); una provincia sin zona -> fila con error hasta que la
-  // derivacion de zona en carga masiva migre al modelo por-distrito.
-  if (provincia.zonaId === null) {
-    return { ok: false, fieldErrors: { provincia: ["la provincia no tiene zona asignada"] } };
-  }
-  const zonaId = provincia.zonaId;
-
+  // Feature 24/R4/R11: la zona de la orden se deriva del DISTRITO, que pasa a ser
+  // obligatorio. Sin distrito no hay forma de resolver orden.zona_id (NOT NULL).
   if (raw.distrito.trim() === "") {
     return {
-      ok: true,
-      geo: { provinciaId: provincia.id, zonaId, cantonId: canton.id, distritoId: null },
+      ok: false,
+      fieldErrors: {
+        distrito: ["distrito requerido: la zona de la orden se deriva del distrito"],
+      },
     };
   }
 
@@ -129,14 +127,21 @@ function resolveGeo(
       },
     };
   }
+  const distrito = distritoResult.row;
+  if (distrito.zonaId === null) {
+    return {
+      ok: false,
+      fieldErrors: { distrito: [`el distrito '${raw.distrito.trim()}' no tiene zona asignada`] },
+    };
+  }
 
   return {
     ok: true,
     geo: {
       provinciaId: provincia.id,
-      zonaId,
+      zonaId: distrito.zonaId,
       cantonId: canton.id,
-      distritoId: distritoResult.row.id,
+      distritoId: distrito.id,
     },
   };
 }

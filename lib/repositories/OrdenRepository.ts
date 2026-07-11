@@ -281,7 +281,7 @@ export class OrdenRepository implements IOrdenRepository {
     if (nombres.length === 0) return [];
     const rows = await this.prisma.provincia.findMany({
       where: { nombre: { in: nombres, mode: "insensitive" } },
-      select: { id: true, nombre: true, zonaId: true },
+      select: { id: true, nombre: true },
     });
     return rows;
   }
@@ -301,7 +301,7 @@ export class OrdenRepository implements IOrdenRepository {
     if (cantonIds.length === 0) return [];
     const rows = await this.prisma.distrito.findMany({
       where: { cantonId: { in: cantonIds } },
-      select: { id: true, nombre: true, cantonId: true },
+      select: { id: true, nombre: true, cantonId: true, zonaId: true },
     });
     return rows;
   }
