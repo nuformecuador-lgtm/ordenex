@@ -614,3 +614,15 @@
 - Requisitos cubiertos: R1–R15 (EARS), mapeados a test (ver `progress/impl_27-fulfillment-tienda.md`).
 - Reviewer **APROBADO** 0 bloqueantes. Suite 1053 verde post-merge; `init.sh` OK.
 - **Desbloquea la feature 17** (deps 27 y 28 done).
+
+
+## 2026-07-10 — carga masiva: corrección CR + acoplamiento distrito/zona (feature 51, FRONTEND)
+- Corrección derivada de hallazgos del reviewer de la feature 24. Frontend puro (sin tocar backend/feature 15).
+  (1) `OrdenesCargaMasivaButton.tsx`: campo `distrito` marcado `required` (sufijo " *" en la cabecera XLSX vía
+  `xlsx-template.ts`); (2) Alert (shadcn, icono Info) dentro del modal avisando que cada orden debe indicar un
+  distrito y ese distrito debe tener zona, o la fila se rechaza (acoplamiento R4/R11 de la feature 24);
+  (3) ejemplos de plantilla Ecuador→Costa Rica (San José/San José/Carmen; teléfono 8 dígitos CR).
+  `BulkUpload.tsx`/`xlsx-template.ts` extendidos con `required?`.
+- Tests de componente añadidos (distrito requerido, opcional no requerido, aviso renderizado, ejemplos CR / no
+  Ecuador) + test del sufijo " *". Suite 1165/1165 verde; typecheck/lint/`init.sh` OK.
+- Proceso: corrección pequeña, ciclo SDD agilizado (spec inline por el leader, sin reviewer formal aparte).

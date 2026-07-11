@@ -530,7 +530,7 @@
       "id": 51,
       "name": "carga masiva - correccion CR + acoplamiento distrito/zona",
       "description": "CORRECCION frontend derivada de hallazgos del reviewer de la feature 24. (1) La plantilla/UI de carga masiva de ordenes (features 9/14/31, componente OrdenesCargaMasivaButton/BulkUpload) debe marcar el campo 'Distrito' como OBLIGATORIO y comunicar el nuevo acoplamiento: tras la decision R4/R11 (opcion b) de la feature 24, orden.zona_id se deriva de distrito.zona_id y una fila cuyo distrito no tenga zona asignada se rechaza; la UI debe anticiparlo (texto de ayuda/aviso), no solo mostrar el error por fila. (2) Los ejemplos de la plantilla siguen siendo de Ecuador (Pichincha/Quito/Inaquito) pese a ser catalogo de Costa Rica; cambiarlos a ejemplos reales de CR (p.ej. San Jose/San Jose/Carmen). Frontend puro; no toca backend ni la logica de carga (feature 15). Depende de la 24 (done).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "frontend",
