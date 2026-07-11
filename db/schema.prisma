@@ -108,6 +108,7 @@ model Usuario {
   documentos         MensajeroDocumento[] // feature 21
   ordenesTienda      Orden[]              @relation("OrdenTienda")
   ordenesMensajeria  Orden[]              @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
+  ordenesAsignadas   Orden[]              @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -265,7 +266,7 @@ model Distrito {
 // Orden de negocio (R7-R14a). Borrado logico via deleted_at (soft delete).
 model Orden {
   id                  String    @id @default(uuid())
-  numGuia             Int       @unique @default(autoincrement()) @map("num_guia") // R8/R14: SERIAL
+  numGuia             Int?      @unique @map("num_guia") // feature 17/R1: nullable, sin default; asignado en "Generar guia" via nextval(orden_num_guia_seq)
   numRemision         String    @unique @map("num_remision") // R9/R14: lo provee el usuario
   estatusId           String    @map("estatus_id") // R10: FK not null
   destinatario        String
@@ -280,7 +281,8 @@ model Orden {
   notas               String? // R14a: texto nullable
   direccion           String? // feature 15/R1: nuevo, carga masiva
   montoCobrar         Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
-  mensajeroSugeridoId String?   @map("mensajero_sugerido_id") // feature 15/R1/R2
+  mensajeroSugeridoId String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
+  mensajeroAsignadoId String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
   deletedAt           DateTime? @map("deleted_at") // soft delete
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
@@ -292,11 +294,13 @@ model Orden {
   canton            Canton      @relation(fields: [cantonId], references: [id])
   distrito          Distrito?   @relation(fields: [distritoId], references: [id])
   mensajeroSugerido Usuario?    @relation("OrdenMensajeroSugerido", fields: [mensajeroSugeridoId], references: [id])
+  mensajeroAsignado Usuario?    @relation("OrdenMensajeroAsignado", fields: [mensajeroAsignadoId], references: [id], onDelete: SetNull) // feature 17/R7
 
   @@index([tiendaId])
   @@index([estatusId])
   @@index([createdAt])
   @@index([mensajeroSugeridoId])
+  @@index([mensajeroAsignadoId]) // feature 17/R7
   @@map("orden")
 }
 

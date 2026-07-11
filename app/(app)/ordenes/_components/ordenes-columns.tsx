@@ -7,7 +7,9 @@ import { EstatusBadge } from "./EstatusBadge";
  * genérica NO conoce el dominio orden: estas columnas viven junto a la página.
  *
  * Se ejercita el contrato completo de `render` (R6/R7/R8):
- *  - `numGuia`: sin `render` → celda por `column.id` (R8).
+ *  - `numGuia`: `render` función → "Pendiente" si `null` (feature 17/R30: la
+ *    guía se asigna en "Generar guía", no al crear la orden; una orden aún sin
+ *    guía se lista mostrándola como pendiente en vez de vacío/null crudo).
  *  - `numRemision`: `render` string/clave → `row.numRemision` (R7).
  *  - `estatus`: `render` función → `estatusValue ?? estatusId` (R6). Su `id` no es
  *    campo del DTO, por eso requiere función.
@@ -16,7 +18,11 @@ import { EstatusBadge } from "./EstatusBadge";
  *    `tiendaId` (R24). Su `id` no es campo del DTO.
  */
 export const ordenesColumns: Column<OrdenListItemDTO>[] = [
-  { id: "numGuia", value: "Nº Guía" },
+  {
+    id: "numGuia",
+    value: "Nº Guía",
+    render: (row) => (row.numGuia === null ? "Pendiente" : row.numGuia),
+  },
   { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
   {
     id: "estatus",

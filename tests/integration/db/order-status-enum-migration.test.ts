@@ -42,10 +42,17 @@ describe("order_status_value migration.sql (UP) — enum standalone (R9)", () =>
     expect(upSql).not.toMatch(/ALTER TABLE/i);
   });
 
-  it("tiene exactamente 8 valores identicos al conjunto de ORDER_STATUS_SEED (R10)", () => {
+  it("tiene exactamente los 8 valores originales de ORDER_STATUS_SEED (R10)", () => {
+    // Feature 17: ORDER_STATUS_SEED sumo un 9no valor ("en_espera_aceptacion"),
+    // agregado al enum standalone por una migracion POSTERIOR
+    // (`ALTER TYPE ... ADD VALUE`, ver *_orden_num_guia_deferred_...). Esta
+    // migracion es historica y no se edita: sigue creando el tipo con los 8
+    // valores originales.
     const enumValues = extractEnumValues(upSql);
     expect(enumValues).toHaveLength(8);
-    expect(new Set(enumValues)).toEqual(new Set(ORDER_STATUS_SEED));
+    const seedOriginal = new Set(ORDER_STATUS_SEED);
+    seedOriginal.delete("en_espera_aceptacion");
+    expect(new Set(enumValues)).toEqual(seedOriginal);
   });
 });
 

@@ -15,6 +15,12 @@ vi.mock("@/lib/actions/ordenes", () => ({
   listarOrdenes: vi.fn(),
 }));
 
+// Feature 17: page.tsx ramifica por rol server-side; se resuelve a null para
+// mantener la rama del listado plano (paginación) SIN regresión.
+vi.mock("@/lib/auth/resolve-actor", () => ({
+  resolveActorFromSession: vi.fn(async () => null),
+}));
+
 const listarOrdenesMock = vi.mocked(listarOrdenes);
 
 function makeOrden(id: string, numGuia: number): OrdenListItemDTO {
@@ -56,11 +62,13 @@ function mockDataset(total: number): void {
   });
 }
 
-function renderPage(): void {
+/** `OrdenesPage` es un Server Component async (feature 17): resuelve su árbol con `await`. */
+async function renderPage(): Promise<void> {
+  const page = await OrdenesPage();
   render(
     <ToastProvider>
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <OrdenesPage />
+        {page}
       </SWRConfig>
     </ToastProvider>,
   );
@@ -87,7 +95,7 @@ afterEach(() => {
 describe("OrdenesPage — paginación", () => {
   it("E1: compone DataTable + Pagination como hermanos y pide la primera página vía SWR (R19, R20)", async () => {
     mockDataset(45);
-    renderPage();
+    await renderPage();
 
     await screen.findByText("REM-1001");
 
@@ -105,7 +113,7 @@ describe("OrdenesPage — paginación", () => {
   it("E2: al cambiar de página re-consulta listarOrdenes con la nueva page y renderiza sus filas (R21)", async () => {
     const user = userEvent.setup();
     mockDataset(45);
-    renderPage();
+    await renderPage();
 
     await screen.findByText("REM-1001");
     await user.click(screen.getByRole("button", { name: "Página siguiente" }));
@@ -119,7 +127,7 @@ describe("OrdenesPage — paginación", () => {
   it("E3: el selector ofrece [10,25,50] y cambiar de tamaño vuelve a la página 1 (R33, R34)", async () => {
     const user = userEvent.setup();
     mockDataset(90);
-    renderPage();
+    await renderPage();
 
     await screen.findByText("REM-1001");
     // Estando en página 2...
@@ -140,9 +148,9 @@ describe("OrdenesPage — paginación", () => {
     expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 50 });
   });
 
-  it("E4: durante la carga muestra el estado de DataTable y deshabilita los controles sin perder el indicador (R23)", () => {
+  it("E4: durante la carga muestra el estado de DataTable y deshabilita los controles sin perder el indicador (R23)", async () => {
     listarOrdenesMock.mockReturnValue(new Promise<ListarOrdenesResult>(() => {}));
-    renderPage();
+    await renderPage();
 
     expect(screen.getByRole("status")).toBeInTheDocument();
     for (const button of within(pagination()).getAllByRole("button")) {
@@ -154,7 +162,7 @@ describe("OrdenesPage — paginación", () => {
 
   it("E5: total 0 muestra 'No hay órdenes' y el Pagination vacío con controles disabled (R24)", async () => {
     mockDataset(0);
-    renderPage();
+    await renderPage();
 
     await screen.findByText("No hay órdenes");
     const nav = pagination();
@@ -173,7 +181,7 @@ describe("OrdenesPage — paginación", () => {
       pageSize: 25,
       total: 45,
     });
-    renderPage();
+    await renderPage();
 
     await screen.findByText("REM-5001");
     // totalPages = ceil(45/25) = 2, derivado del total del backend (no de 2 items).
@@ -184,7 +192,7 @@ describe("OrdenesPage — paginación", () => {
   it("E7: primera/última activos: navegan a la última y primera página server-side (R32)", async () => {
     const user = userEvent.setup();
     mockDataset(90);
-    renderPage();
+    await renderPage();
 
     await screen.findByText("REM-1001");
     // Cambiar a tamaño 10 → 9 páginas.
@@ -206,7 +214,7 @@ describe("OrdenesPage — paginación", () => {
   it("E8: la ventana numérica marca la página actual con aria-current y sus botones re-consultan (R32, R28, R29)", async () => {
     const user = userEvent.setup();
     mockDataset(90);
-    renderPage();
+    await renderPage();
 
     await screen.findByText("REM-1001");
     await user.selectOptions(

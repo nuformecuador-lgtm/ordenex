@@ -17,6 +17,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   devuelta: "Devuelta",
   devuelta_origen: "Devuelta a origen",
   reprogramada: "Reprogramada",
+  en_espera_aceptacion: "En espera de aceptación del mensajero", // feature 17
 };
 
 const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
@@ -35,6 +36,8 @@ const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
     "bg-danger-soft text-[#991b1b] dark:bg-danger/15 dark:text-danger",
   reprogramada:
     "border border-hivis/60 bg-warning-soft text-[#92400e] dark:border-hivis/40 dark:bg-warning/15 dark:text-warning",
+  en_espera_aceptacion:
+    "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 17
 };
 
 const NEUTRAL_CLASSES =

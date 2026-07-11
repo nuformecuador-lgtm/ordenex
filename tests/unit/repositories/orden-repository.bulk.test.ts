@@ -169,4 +169,18 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     expect(arg.data[0].montoCobrar).toBeNull();
     expect(arg.data[0].mensajeroSugeridoId).toBeNull();
   });
+
+  // Feature 17/R2/R8: la carga masiva NUNCA fija num_guia (queda NULL, se asigna
+  // en "Generar guia") ni mensajero_asignado_id (acto posterior del maestro).
+  it("no envia num_guia ni mensajero_asignado_id (R2/R8)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.createMany.mockResolvedValue({ count: 1 });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.createManyOrdenes([baseCreateData()], 500);
+
+    const arg = prisma.orden.createMany.mock.calls[0][0];
+    expect(arg.data[0]).not.toHaveProperty("numGuia");
+    expect(arg.data[0]).not.toHaveProperty("mensajeroAsignadoId");
+  });
 });

@@ -6,18 +6,35 @@ import {
   type CantonRow,
   type CreateOrdenData,
   type DistritoRow,
+  type GenerarGuiaDecisionData,
+  type GenerarGuiaResultRow,
   type GeoExistence,
   type IOrdenRepository,
   type ListOrdenesParams,
   type ListOrdenesResult,
+  type MensajeroLiteRow,
+  type OrdenTransicionRow,
+  type OrderStatusLiteRow,
   type ProvinciaRow,
   type UpdateOrdenData,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 type OrdenPrismaClient = Pick<
   PrismaClient,
-  "orden" | "orderStatus" | "zona" | "provincia" | "canton" | "distrito" | "usuario"
+  | "orden"
+  | "orderStatus"
+  | "zona"
+  | "provincia"
+  | "canton"
+  | "distrito"
+  | "usuario"
+  | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
 >;
+
+// Feature 17/R3: nombre CONSTANTE de la secuencia (nunca interpolar entrada de
+// usuario en el SQL crudo). Es la misma secuencia que el SERIAL de la feature 6
+// creo y que esta migracion desliga con `OWNED BY NONE`.
+const NUM_GUIA_SEQUENCE = "orden_num_guia_seq";
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
 const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
@@ -79,10 +96,14 @@ function toDTO(row: OrdenRow): OrdenDTO {
 
 // R25/R26: serializa una fila del listado a OrdenListItemDTO, agregando el nombre
 // legible de la tienda. Solo el listado usa este mapeo; el resto del CRUD usa toDTO.
+// Feature 17/R20: agrega mensajeroSugeridoId/mensajeroAsignadoId (ya vienen en el
+// row via WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
 function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
   return {
     ...toDTO(row),
     tiendaNombre: row.tienda.nombre,
+    mensajeroSugeridoId: row.mensajeroSugeridoId,
+    mensajeroAsignadoId: row.mensajeroAsignadoId,
   };
 }
 
@@ -385,6 +406,101 @@ export class OrdenRepository implements IOrdenRepository {
     return this.prisma.orden.count({
       where: { id: { in: ordenIds }, tiendaId, deletedAt: null },
     });
+  }
+
+  // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
+
+  /** R27/R29: INCLUYE borradas (el service distingue "no existe" de "borrada"). */
+  async findByIdsForTransicion(ids: string[]): Promise<OrdenTransicionRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        numGuia: true,
+        deletedAt: true,
+        estatus: { select: { value: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      estatusValue: r.estatus.value,
+      numGuia: r.numGuia,
+      deletedAt: r.deletedAt,
+    }));
+  }
+
+  /** R28: subconjunto de `ids` con rol `mensajero`, SIN filtro de zona. */
+  async findMensajeroIdsValidos(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.usuario.findMany({
+      where: { id: { in: ids }, rol: { value: "mensajero" } },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /** R28/T15: TODOS los usuarios con rol `mensajero`, SIN filtro de zona. */
+  async findAllMensajeros(): Promise<MensajeroLiteRow[]> {
+    return this.prisma.usuario.findMany({
+      where: { rol: { value: "mensajero" } },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    });
+  }
+
+  /** R15/R16: catalogo completo `order_status` (id, value), solo lectura. */
+  async listOrderStatus(): Promise<OrderStatusLiteRow[]> {
+    return this.prisma.orderStatus.findMany({
+      select: { id: true, value: true },
+    });
+  }
+
+  /**
+   * R5/R19/R25: transaccional (todo-o-nada, Prisma revierte automaticamente si
+   * el callback lanza). Por cada decision: asigna `num_guia = nextval(...)` SOLO
+   * si es NULL (idempotente, no consume la secuencia para filas ya numeradas) y
+   * fija `estatusId`/`mensajeroAsignadoId`. El nombre de la secuencia es la
+   * constante del modulo (nunca se interpola entrada de usuario en el SQL).
+   */
+  async generarGuiaLote(decisiones: GenerarGuiaDecisionData[]): Promise<GenerarGuiaResultRow[]> {
+    if (decisiones.length === 0) return [];
+    return this.prisma.$transaction(async (tx) => {
+      const resultados: GenerarGuiaResultRow[] = [];
+      for (const d of decisiones) {
+        // R5: idempotente — solo consume nextval() si num_guia es NULL.
+        await tx.$executeRawUnsafe(
+          `UPDATE "orden" SET num_guia = nextval('${NUM_GUIA_SEQUENCE}') WHERE id = $1 AND num_guia IS NULL`,
+          d.ordenId,
+        );
+        const updated = await tx.orden.update({
+          where: { id: d.ordenId },
+          data: { estatusId: d.estatusId, mensajeroAsignadoId: d.mensajeroAsignadoId },
+          select: { numGuia: true },
+        });
+        if (updated.numGuia === null) {
+          // Guarda defensiva: no deberia ocurrir (el UPDATE previo siempre deja
+          // num_guia asignado), pero se documenta en vez de mentir con `as number`.
+          throw new Error(`num_guia no asignado para la orden ${d.ordenId}`);
+        }
+        resultados.push({ ordenId: d.ordenId, numGuia: updated.numGuia });
+      }
+      return resultados;
+    });
+  }
+
+  /** R26: fija mensajero/estatus en lote; NUNCA toca num_guia (idempotencia R5). */
+  async asignarBodegaLote(
+    ordenIds: string[],
+    mensajeroId: string,
+    estatusId: string,
+  ): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    const result = await this.prisma.orden.updateMany({
+      where: { id: { in: ordenIds } },
+      data: { mensajeroAsignadoId: mensajeroId, estatusId },
+    });
+    return result.count;
   }
 }
 

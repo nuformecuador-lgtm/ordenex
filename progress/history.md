@@ -593,6 +593,30 @@
   feature 15: ejemplos del template siguen siendo de Ecuador (Pichincha/Quito), no Costa Rica.
 
 
+## 2026-07-11 — revisión maestro / generar guía / asignación de mensajero (feature 17, FULLSTACK)
+- El módulo de órdenes del maestro muestra por separado `en_fulfillment`, `en_preparacion`, "en espera de
+  aceptación" (`en_espera_aceptacion`, estado NUEVO) y `en_bodega`, con selección por checkbox.
+- Backend: migración `20260711130000_orden_num_guia_deferred_mensajero_asignado_espera_aceptacion` (up+down):
+  `orden.num_guia` → NULLABLE, secuencia `orden_num_guia_seq` desligada del SERIAL (`OWNED BY NONE`, DROP DEFAULT,
+  UNIQUE intacto); nueva columna `orden.mensajero_asignado_id` (FK ON DELETE SET NULL, distinta de
+  `mensajero_sugerido_id`); estado `en_espera_aceptacion` en ORDER_STATUS_SEED + fila de catálogo (patrón feat 28).
+  `GuiaAsignacionService` (generar-guía sobre AMBOS estados de revisión + asignar-mensajero desde `en_bodega`,
+  transaccional, idempotente `WHERE num_guia IS NULL`, `nextval` por fila, solo `maestro`, guardia por estado de
+  origen). Server Actions discriminadas por `status`. `BulkOrdenService` (feature 15) ya NO asigna `num_guia` al
+  insertar; barrido de `numGuia` → `number|null` en DTOs/consumidores (features 6/7).
+- Frontend: vista del maestro con 4 apartados, `GenerarGuiaModal` (modal por lote: agrupa con/sin sugerido,
+  override por orden, una sola llamada `{ordenId, mensajeroId|null}`), `AsignarBodegaModal`, columnas + Toast.
+  Lista de mensajeros SIN filtro de zona (el filtro por zona/GAM es de la feature 30; límite explícito).
+- Requisitos R0–R32 mapeados 1:1 a test. Reviewer **APROBADO** 0 bloqueantes. Verificación: `pnpm test` 1239/1239,
+  `./init.sh` OK, typecheck/lint limpios.
+- DEUDA (gate de despliegue, DB real): aplicar la migración contra Postgres (no aplicada; sin DB).
+- Hallazgos menores (no bloqueantes): (1) brecha TOCTOU en `asignarBodegaLote`/`generarGuiaLote` (re-consulta por
+  id sin re-guardar estado/deletedAt dentro de la tx), mitigada por la guardia de estado-origen ante reintentos;
+  (2) unicidad de `num_guia` bajo concurrencia real solo ejercida con secuencia mockeada (migración no aplicada
+  contra Postgres). Ambos consistentes con el nivel de concurrencia y la deuda de DB del repo.
+- **Desbloquea**: features 30 (asignación por zona/GAM, restringe la lista de mensajeros), 32 (etiqueta/QR sobre
+  num_guia), 36 (mis asignaciones del mensajero, consume `mensajero_asignado_id` y `en_espera_aceptacion`).
+
 ## 2026-07-10 — dashboard admin maestro (feature 23, FRONTEND)
 - Frontend puro: `app/(app)/page.tsx` ramifica por rol — `maestro`/`admin` → `AdminMaestroDashboard`;
   `adminTienda` → dashboard de la feature 26 intacto; resto → placeholder 'Bienvenido'. Panel de
