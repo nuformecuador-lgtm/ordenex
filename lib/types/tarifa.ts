@@ -7,12 +7,15 @@ const montoSchema = z.number().nonnegative();
 const porcentajeSchema = z.number().min(0).max(100);
 // D1/R5: nombre no vacio, distingue tarifas.
 const nombreSchema = z.string().min(1);
+// feature 24: id de la zona a la que pertenece la tarifa (FK obligatoria).
+const idSchema = z.string().min(1);
 
-// R14/R15: validacion de creacion en el borde. nombre + las 8 columnas
+// R14/R15: validacion de creacion en el borde. nombre + zona + las 8 columnas
 // numericas obligatorias (D5); strict para rechazar campos desconocidos.
 export const crearTarifaSchema = z
   .object({
     nombre: nombreSchema,
+    zonaId: idSchema, // feature 24: cada tarifa pertenece a una zona
     valorFlete: montoSchema,
     valorFleteDevuelto: montoSchema,
     valorFleteGam: montoSchema,
@@ -48,6 +51,7 @@ export type ListarTarifasInput = z.infer<typeof listarTarifasSchema>;
 export interface TarifaDTO {
   id: string;
   nombre: string;
+  zonaId: string; // feature 24: zona a la que pertenece la tarifa
   valorFlete: number;
   valorFleteDevuelto: number;
   valorFleteGam: number;

@@ -15,6 +15,7 @@ function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
     nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -43,6 +44,7 @@ function buildRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRepositor
 function crearInput(overrides: Record<string, unknown> = {}) {
   return {
     nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,

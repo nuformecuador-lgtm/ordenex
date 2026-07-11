@@ -18,6 +18,7 @@ function toDTO(row: TarifaRow): TarifaDTO {
   return {
     id: row.id,
     nombre: row.nombre,
+    zonaId: row.zonaId,
     valorFlete: row.valorFlete.toNumber(),
     valorFleteDevuelto: row.valorFleteDevuelto.toNumber(),
     valorFleteGam: row.valorFleteGam.toNumber(),
@@ -38,6 +39,7 @@ export class TarifaRepository implements ITarifaRepository {
     const row = await this.prisma.tarifa.create({
       data: {
         nombre: data.nombre,
+        zonaId: data.zonaId,
         valorFlete: new Prisma.Decimal(data.valorFlete),
         valorFleteDevuelto: new Prisma.Decimal(data.valorFleteDevuelto),
         valorFleteGam: new Prisma.Decimal(data.valorFleteGam),
@@ -96,6 +98,7 @@ export class TarifaRepository implements ITarifaRepository {
   private toUpdateData(data: UpdateTarifaData): Prisma.TarifaUncheckedUpdateManyInput {
     const out: Prisma.TarifaUncheckedUpdateManyInput = {};
     if (data.nombre !== undefined) out.nombre = data.nombre;
+    if (data.zonaId !== undefined) out.zonaId = data.zonaId;
     if (data.valorFlete !== undefined) out.valorFlete = new Prisma.Decimal(data.valorFlete);
     if (data.valorFleteDevuelto !== undefined) {
       out.valorFleteDevuelto = new Prisma.Decimal(data.valorFleteDevuelto);

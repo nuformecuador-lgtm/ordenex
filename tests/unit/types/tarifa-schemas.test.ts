@@ -5,6 +5,7 @@ import { tarifasConfig } from "@/lib/config/tarifas";
 function baseCrear() {
   return {
     nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -34,6 +35,14 @@ describe("crearTarifaSchema — validacion de creacion (R2/R3/R5/R14/R15)", () =
     const r = crearTarifaSchema.safeParse(rest);
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("nombre");
+  });
+
+  it("rechaza zonaId ausente (feature 24)", () => {
+    const { zonaId, ...rest } = baseCrear();
+    void zonaId;
+    const r = crearTarifaSchema.safeParse(rest);
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("zonaId");
   });
 
   it("rechaza una columna numerica ausente (R5/R15)", () => {

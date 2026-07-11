@@ -293,9 +293,9 @@ model Orden {
 }
 
 // Tarifa: tarifas de flete/comision, tabla multi-fila con `nombre` para
-// distinguirlas (feature 18, D1). zona_id nullable: agregado en la migracion
-// de rename (feature 24), no todas las tarifas existentes tienen zona
-// asignada. Borrado logico via deleted_at.
+// distinguirlas (feature 18, D1). zona_id NOT NULL: cada tarifa pertenece a una
+// zona (feature 24). Se agrego via la migracion de rename cuando la tabla estaba
+// vacia. Borrado logico via deleted_at.
 model Tarifa {
   id                    String    @id @default(uuid())
   nombre                String // D1: distingue tarifas (NOT NULL, no unico)
@@ -307,12 +307,12 @@ model Tarifa {
   comisionCod           Decimal   @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
   ivaFlete              Decimal   @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
   ivaComisionCod        Decimal   @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
-  zonaId                String?   @map("zona_id") // feature 24: nullable, agregado via ALTER
+  zonaId                String    @map("zona_id") // feature 24: NOT NULL (tabla vacia al migrar)
   deletedAt             DateTime? @map("deleted_at") // soft delete (R19/R24)
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  zona Zona? @relation(fields: [zonaId], references: [id])
+  zona Zona @relation(fields: [zonaId], references: [id])
 
   @@index([createdAt])
   @@index([zonaId])
@@ -332,6 +332,12 @@ model TarifaZonaMensajero {
   vehiculo Vehiculo? @relation(fields: [vehiculoId], references: [id])
   zona     Zona      @relation(fields: [zonaId], references: [id])
 
+  // feature 24: una sola tarifa por (zona, vehiculo). El indice en SQL usa
+  // NULLS NOT DISTINCT (PG15+), de modo que a lo sumo exista UNA tarifa por
+  // defecto (vehiculo_id NULL) por zona, haciendo determinista la resolucion
+  // "sin vehiculo -> tarifa por defecto de la zona". Prisma no expresa
+  // NULLS NOT DISTINCT: ver la migracion tarifa_zona_mensajero_zona_vehiculo_unique.
+  @@unique([zonaId, vehiculoId])
   @@index([vehiculoId])
   @@index([zonaId])
   @@map("tarifa_zona_mensajero")

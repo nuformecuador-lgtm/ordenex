@@ -4,6 +4,7 @@ import type { TarifaDTO } from "@/lib/types/tarifa";
 // Prisma.Decimal). Las 8 columnas numericas + nombre son obligatorias (R5).
 export interface CreateTarifaData {
   nombre: string;
+  zonaId: string; // feature 24: FK obligatoria a zona
   valorFlete: number;
   valorFleteDevuelto: number;
   valorFleteGam: number;
@@ -17,6 +18,7 @@ export interface CreateTarifaData {
 // Campos actualizables a nivel de datos; todos opcionales (R20/R22).
 export interface UpdateTarifaData {
   nombre?: string;
+  zonaId?: string; // feature 24: reasignar la tarifa a otra zona
   valorFlete?: number;
   valorFleteDevuelto?: number;
   valorFleteGam?: number;

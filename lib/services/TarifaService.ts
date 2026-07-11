@@ -24,6 +24,7 @@ export class TarifaService implements ITarifaService {
 
     const tarifa = await this.repo.create({
       nombre: input.nombre,
+      zonaId: input.zonaId,
       valorFlete: input.valorFlete,
       valorFleteDevuelto: input.valorFleteDevuelto,
       valorFleteGam: input.valorFleteGam,
@@ -93,6 +94,7 @@ export class TarifaService implements ITarifaService {
   private buildUpdateData(input: ActualizarTarifaInput): UpdateTarifaData {
     const data: UpdateTarifaData = {};
     if (input.nombre !== undefined) data.nombre = input.nombre;
+    if (input.zonaId !== undefined) data.zonaId = input.zonaId;
     if (input.valorFlete !== undefined) data.valorFlete = input.valorFlete;
     if (input.valorFleteDevuelto !== undefined) data.valorFleteDevuelto = input.valorFleteDevuelto;
     if (input.valorFleteGam !== undefined) data.valorFleteGam = input.valorFleteGam;

@@ -6,6 +6,7 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "cob-1",
     nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: new Prisma.Decimal("10.00"),
     valorFleteDevuelto: new Prisma.Decimal("5.00"),
     valorFleteGam: new Prisma.Decimal("8.00"),
@@ -24,6 +25,7 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
 function baseCreateData() {
   return {
     nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -59,8 +61,10 @@ describe("TarifaRepository.create (R16/R27)", () => {
     const arg = prisma.tarifa.create.mock.calls[0][0];
     expect(arg.data.valorFlete).toBeInstanceOf(Prisma.Decimal);
     expect(arg.data.valorFlete.toString()).toBe("10");
+    expect(arg.data.zonaId).toBe("zona-1"); // feature 24: FK a zona
 
     expect(dto.nombre).toBe("Tarifa GAM");
+    expect(dto.zonaId).toBe("zona-1");
     expect(dto.valorFlete).toBe(10);
     expect(dto.ivaComisionCod).toBe(15);
     expect(dto).not.toHaveProperty("deletedAt");
