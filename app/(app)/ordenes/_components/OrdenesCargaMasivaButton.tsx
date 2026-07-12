@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSWRConfig } from "swr";
 import { Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
+import { Select, type SelectOption } from "@/components/ui/select";
 import { Modal } from "@/components/shared/Modal";
 import {
   BulkUpload,
@@ -19,6 +21,8 @@ import {
   type ClasificacionCarga,
 } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
 import { useToast } from "@/hooks/useToast";
+import { listarMensajeros } from "@/lib/actions/mensajeros";
+import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
 
 export const ORDENES_BULK_FIELDS: TemplateField[] = [
   { key: "num_remision", example: "REM-0001" },
@@ -76,8 +80,35 @@ export function OrdenesCargaMasivaButton() {
     existentes: [],
     errores: [],
   });
+  // Mensajero sugerido opcional para todo el lote; se envía como
+  // `mensajeroSugeridoId` junto al archivo si el usuario elige uno.
+  const [mensajeros, setMensajeros] = useState<MensajeroDTO[]>([]);
+  const [mensajeroSugeridoId, setMensajeroSugeridoId] = useState("");
   const { mutate } = useSWRConfig();
   const toast = useToast();
+
+  // Carga la lista de mensajeros al abrir el modal (una sola vez por apertura).
+  useEffect(() => {
+    if (!open || mensajeros.length > 0) return;
+    let cancelled = false;
+    listarMensajeros()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.status === "ok") setMensajeros(result.mensajeros);
+      })
+      .catch(() => {
+        // Silencioso: el mensajero sugerido es opcional; sin lista, el select
+        // queda vacío y la carga sigue funcionando.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mensajeros.length]);
+
+  const mensajeroOptions: SelectOption[] = mensajeros.map((m) => ({
+    value: m.id,
+    label: m.nombre,
+  }));
 
   function handleSuccess(result: BulkUploadResult) {
     const resumen = parseResumen(result.data);
@@ -134,6 +165,7 @@ export function OrdenesCargaMasivaButton() {
         existentes: [],
         errores: [],
       });
+      setMensajeroSugeridoId("");
     }
   }
 
@@ -165,12 +197,31 @@ export function OrdenesCargaMasivaButton() {
                 se rechazará al cargar.
               </AlertDescription>
             </Alert>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="carga-mensajero-sugerido">
+                Mensajero sugerido (opcional)
+              </Label>
+              <Select
+                value={mensajeroSugeridoId}
+                onValueChange={setMensajeroSugeridoId}
+                options={mensajeroOptions}
+                placeholder="Sin sugerir"
+                disabled={mensajeroOptions.length === 0}
+                aria-label="Mensajero sugerido para el lote"
+              />
+              <p className="text-sm text-muted-foreground">
+                Puedes sugerir un mensajero para que se haga cargo de todos los
+                pedidos de esta carga. Es opcional; si no eliges ninguno, las
+                órdenes quedarán sin mensajero sugerido.
+              </p>
+            </div>
             <BulkUpload
               endpoint="/api/ordenes/carga-masiva"
               accept={["csv", "xlsx"]}
               fieldName="file"
               templateFileName="plantilla-ordenes-carga-masiva.xlsx"
               fields={ORDENES_BULK_FIELDS}
+              extraFields={{ mensajeroSugeridoId }}
               onSuccess={handleSuccess}
               onError={handleError}
               label="Archivo de órdenes"

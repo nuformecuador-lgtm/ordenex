@@ -53,6 +53,16 @@ vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso", () => ({
   },
 }));
 
+// El mensajero sugerido es opcional; se aísla la Server Action para no tocar
+// `cookies()` en jsdom. Lista vacía → el select queda deshabilitado.
+const { listarMensajerosMock } = vi.hoisted(() => ({
+  listarMensajerosMock: vi.fn(),
+}));
+
+vi.mock("@/lib/actions/mensajeros", () => ({
+  listarMensajeros: listarMensajerosMock,
+}));
+
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 
 vi.mock("swr", async (importOriginal) => {
@@ -71,7 +81,19 @@ beforeEach(() => {
   vi.clearAllMocks();
   bulk.props = null;
   resumen.props = null;
+  listarMensajerosMock.mockResolvedValue({ status: "ok", mensajeros: [] });
 });
+
+/**
+ * Botón "Cerrar" del pie del modal (texto visible), distinto de la "X" de cierre
+ * de la cabecera (icono con aria-label "Cerrar" pero sin texto).
+ */
+function footerCerrarButton(): HTMLElement {
+  const botones = screen.getAllByRole("button", { name: /cerrar/i });
+  const footer = botones.find((b) => b.textContent?.trim() === "Cerrar");
+  if (!footer) throw new Error("No se encontró el botón 'Cerrar' del pie");
+  return footer;
+}
 
 afterEach(() => {
   cleanup();
@@ -155,7 +177,11 @@ describe("OrdenesCargaMasivaButton — contenedor puro y cierre (R6, R7, R18)", 
   it("R6: el pie tiene un único botón 'Cerrar' y no 'Confirmar'", async () => {
     render(<OrdenesCargaMasivaButton />);
     await openModal();
-    expect(screen.getByRole("button", { name: /cerrar/i })).toBeInTheDocument();
+    // Un único "Cerrar" en el pie (con texto); la "X" de cabecera es aparte.
+    const cerrarConTexto = screen
+      .getAllByRole("button", { name: /cerrar/i })
+      .filter((b) => b.textContent?.trim() === "Cerrar");
+    expect(cerrarConTexto).toHaveLength(1);
     expect(
       screen.queryByRole("button", { name: /confirmar/i }),
     ).not.toBeInTheDocument();
@@ -166,7 +192,7 @@ describe("OrdenesCargaMasivaButton — contenedor puro y cierre (R6, R7, R18)", 
     render(<OrdenesCargaMasivaButton />);
     await openModal();
 
-    await user.click(screen.getByRole("button", { name: /cerrar/i }));
+    await user.click(footerCerrarButton());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -515,7 +541,7 @@ describe("OrdenesCargaMasivaButton — paso de resumen (R11, R12, R13)", () => {
     });
     expect(screen.getByTestId("resumen-paso-double")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /cerrar/i }));
+    await user.click(footerCerrarButton());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     await openModal();
