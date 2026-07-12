@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { MetodoPagoValue } from "@prisma/client";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,12 +14,17 @@ import {
   rechazarCierre,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
-import type {
-  CierreDetalleGestion,
-  CierreGrupos,
-  CierreResultado,
-} from "@/lib/interfaces/services/ICierreDiaService";
-import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+import type { CierreGrupos } from "@/lib/interfaces/services/ICierreDiaService";
+import type { CierreDestinoTipo } from "@/lib/types/cierre";
+import {
+  money,
+  ESTADO_LABEL,
+  ORDEN_RESULTADOS,
+  RESULTADO_LABEL,
+  RESULTADO_VACIO,
+  TotalItem,
+  columnasPara,
+} from "./cierre-detalle-shared";
 
 // Feature 38 (T13, R3-R11): módulo cliente de "Cierres del día" del admin. Recibe
 // del Server Component padre los cierres del alcance ya resueltos (pendientes de
@@ -29,7 +33,8 @@ import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 // snapshot (R8) + las 4 secciones por resultado (reuso del render de la 37, R6).
 // Las decisiones (aprobar/rechazar) van por Server Action y refrescan la ruta. Los
 // montos llegan como STRING (money-safe, R9): se renderizan tal cual, sin
-// `parseFloat`/`Number`.
+// `parseFloat`/`Number`. Los helpers de detalle (money/columnas/etiquetas) viven en
+// `cierre-detalle-shared` (compartidos con los módulos de cierre de bodega, feat 40).
 
 export interface CierresAdminModuleProps {
   /** Cierres en estado `solicitado` del alcance del admin (cola de decisión, R4). */
@@ -40,60 +45,10 @@ export interface CierresAdminModuleProps {
   sinZona: boolean;
 }
 
-// --- Etiquetas i18n-ready (texto separado de la lógica) ---
-const RESULTADO_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregadas",
-  reprogramada: "Reprogramadas",
-  devuelta: "Devueltas",
-  rechazada: "Rechazadas",
-};
-
-const RESULTADO_VACIO: Record<CierreResultado, string> = {
-  entregada: "No hay entregas.",
-  reprogramada: "No hay reprogramaciones.",
-  devuelta: "No hay devoluciones.",
-  rechazada: "No hay rechazos.",
-};
-
-const METODO_LABEL: Record<MetodoPagoValue, string> = {
-  efectivo: "Efectivo",
-  SIMPE: "SIMPE",
-  transferencia: "Transferencia",
-};
-
-const ESTADO_LABEL: Record<CierreEstado, string> = {
-  solicitado: "Solicitado",
-  aprobado: "Aprobado",
-  rechazado: "Rechazado",
-};
-
 const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
   bodega_central: "Bodega central",
   bodega_satelite: "Bodega satélite",
 };
-
-/** Orden fijo de las 4 secciones del detalle (R6). */
-const ORDEN_RESULTADOS: CierreResultado[] = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
-];
-
-/**
- * Prefija el símbolo de colón a un monto que YA viene como string (money-safe,
- * R8/R9): NUNCA se parsea a número para no perder precisión. `null` → "—".
- */
-function money(value: string | null): string {
-  return value === null ? "—" : `₡${value}`;
-}
-
-/** Une la jerarquía geográfica en una línea legible (omite los vacíos, R6). */
-function ubicacion(g: CierreDetalleGestion): string {
-  return [g.zonaNombre, g.provinciaNombre, g.cantonNombre, g.distritoNombre]
-    .filter((parte): parte is string => Boolean(parte))
-    .join(" · ");
-}
 
 /** Destino legible de un cierre (tipo + zona). */
 function destino(c: CierreAdminResumen): string {
@@ -447,28 +402,6 @@ export function CierresAdminModule({
   );
 }
 
-/** Ítem del panel de totales. */
-function TotalItem({
-  label,
-  value,
-  emphasis = false,
-}: {
-  label: string;
-  value: string;
-  emphasis?: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <span
-        className={emphasis ? "text-lg font-semibold" : "text-base font-medium"}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
 // --- Columnas de la cola de pendientes (R4) ---
 function columnasPendientes(
   abrir: (cierreId: string) => void,
@@ -490,11 +423,7 @@ function columnasPendientes(
       id: "acciones",
       value: "Acciones",
       render: (c) => (
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => abrir(c.cierreId)}
-        >
+        <Button type="button" size="sm" onClick={() => abrir(c.cierreId)}>
           Ver / decidir
         </Button>
       ),
@@ -538,78 +467,6 @@ function columnasHistorico(
           Ver
         </Button>
       ),
-    },
-  ];
-}
-
-// --- Columnas comunes a las 4 secciones del detalle (R6, reuso de la 37) ---
-const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
-  { id: "numGuia", value: "Nº Guía", render: (g) => g.numGuia ?? "—" },
-  { id: "numRemision", value: "Nº Remisión" },
-  { id: "destinatario", value: "Destinatario" },
-  { id: "direccion", value: "Dirección", render: (g) => g.direccion ?? "—" },
-  { id: "ubicacion", value: "Ubicación", render: (g) => ubicacion(g) || "—" },
-  { id: "producto", value: "Producto" },
-  { id: "tiendaNombre", value: "Tienda" },
-];
-
-/**
- * Construye las columnas de una sección del detalle: las comunes (R6) + las
- * específicas del resultado (monto+método si entregada R8; fecha+motivo si
- * reprogramada; motivo si devuelta; motivo+evidencia firmada si rechazada, R7).
- */
-function columnasPara(
-  resultado: CierreResultado,
-  verEvidencia: (url: string) => void,
-): Column<CierreDetalleGestion>[] {
-  if (resultado === "entregada") {
-    return [
-      ...COLUMNAS_COMUNES,
-      { id: "monto", value: "Monto", render: (g) => money(g.montoRecibido) },
-      {
-        id: "metodo",
-        value: "Método",
-        render: (g) => (g.metodoPago ? METODO_LABEL[g.metodoPago] : "—"),
-      },
-    ];
-  }
-  if (resultado === "reprogramada") {
-    return [
-      ...COLUMNAS_COMUNES,
-      {
-        id: "fechaReprogramacion",
-        value: "Nueva fecha",
-        render: (g) => g.fechaReprogramacion ?? "—",
-      },
-      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
-    ];
-  }
-  if (resultado === "devuelta") {
-    return [
-      ...COLUMNAS_COMUNES,
-      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
-    ];
-  }
-  // rechazada: motivo + evidencia firmada (R7)
-  return [
-    ...COLUMNAS_COMUNES,
-    { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
-    {
-      id: "evidencia",
-      value: "Evidencia",
-      render: (g) =>
-        g.evidenciaUrl ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => verEvidencia(g.evidenciaUrl as string)}
-          >
-            Ver evidencia
-          </Button>
-        ) : (
-          "—"
-        ),
     },
   ];
 }
