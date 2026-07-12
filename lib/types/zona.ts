@@ -180,3 +180,17 @@ export type ListarZonasResult =
   | ZonaActionError;
 export type BorrarZonaResult = { status: "ok" } | ZonaActionError;
 export type ArbolZonasResult = { status: "ok"; arbol: ArbolZonas } | ZonaActionError;
+
+// Feature 55/R10: resultados de las Server Actions del catalogo geografico. Reusan
+// el shape ZonaActionError (superset: geo solo produce validation_error/
+// unauthenticated/forbidden) para no duplicar el manejo tipado de errores.
+export type GeoActionError = ZonaActionError;
+export type ListarProvinciasResult =
+  | { status: "ok"; items: ProvinciaLightDTO[] }
+  | GeoActionError;
+export type ListarCantonesResult =
+  | { status: "ok"; items: CantonLightDTO[] }
+  | GeoActionError;
+export type ListarDistritosResult =
+  | { status: "ok"; items: DistritoCatalogoDTO[] }
+  | GeoActionError;
