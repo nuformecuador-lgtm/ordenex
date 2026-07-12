@@ -20,8 +20,10 @@ import {
   money,
   ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
+  INGRESO_BODEGA_RECHAZOS_COL,
   DetalleSecciones,
   PagoMensajeroTotal,
+  IngresoBodegaRechazosTotal,
   TotalesPanel,
   VisorEvidencia,
 } from "./cierre-detalle-shared";
@@ -243,6 +245,12 @@ export function CierresBodegaAdminModule({
               label="Total a pagar a mensajeros"
             />
 
+            {/* Feature 56/R17: agregado del ingreso de bodega por rechazos, separado. */}
+            <IngresoBodegaRechazosTotal
+              value={detalle.cierre.totalIngresoBodegaRechazos}
+              ariaLabel="Ingreso de bodega por rechazos del cierre de bodega"
+            />
+
             {/* Motivo de rechazo si el cierre de bodega del histórico fue rechazado. */}
             {detalle.cierre.motivoRechazo ? (
               <p className="text-sm text-muted-foreground">
@@ -273,6 +281,11 @@ export function CierresBodegaAdminModule({
                 <PagoMensajeroTotal
                   value={cierreDia.totalPagoMensajero}
                   ariaLabel={`Pago al mensajero · ${cierreDia.mensajeroNombre}`}
+                />
+                {/* Feature 56/R19: ingreso de bodega por rechazos de este cierre_dia, separado. */}
+                <IngresoBodegaRechazosTotal
+                  value={cierreDia.totalIngresoBodegaRechazos}
+                  ariaLabel={`Ingreso de bodega por rechazos · ${cierreDia.mensajeroNombre}`}
                 />
                 <DetalleSecciones
                   grupos={cierreDia.grupos}
@@ -392,6 +405,11 @@ function columnasPendientes(
       render: (c) => money(c.totalPagoMensajero),
     },
     {
+      id: "ingresoBodegaRechazos",
+      value: INGRESO_BODEGA_RECHAZOS_COL,
+      render: (c) => money(c.totalIngresoBodegaRechazos),
+    },
+    {
       id: "acciones",
       value: "Acciones",
       render: (c) => (
@@ -433,6 +451,11 @@ function columnasHistorico(
       id: "pagoMensajero",
       value: PAGO_MENSAJERO_COL,
       render: (c) => money(c.totalPagoMensajero),
+    },
+    {
+      id: "ingresoBodegaRechazos",
+      value: INGRESO_BODEGA_RECHAZOS_COL,
+      render: (c) => money(c.totalIngresoBodegaRechazos),
     },
     {
       id: "motivoRechazo",

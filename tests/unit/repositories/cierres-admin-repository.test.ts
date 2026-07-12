@@ -23,6 +23,7 @@ function cierreResumenRow(overrides: Record<string, unknown> = {}) {
     totalTransferencia: new Prisma.Decimal("0"),
     totalGeneral: new Prisma.Decimal("15.5"),
     totalPagoMensajero: new Prisma.Decimal("5"), // feature 39/R17: snapshot del pago
+    totalIngresoBodegaRechazos: new Prisma.Decimal("3"), // feature 56/R16: snapshot del ingreso
     solicitadoAt: new Date("2026-07-12T10:00:00.000Z"),
     resueltoAt: null,
     motivoRechazo: null,
@@ -89,6 +90,7 @@ describe("CierresAdminRepository.findCierresByAlcance (R2/R4/R5)", () => {
       destinoZonaNombre: "Central",
       totales: { efectivo: "10.00", simpe: "5.50", transferencia: "0.00", general: "15.50" },
       totalPagoMensajero: "5.00", // feature 39/R17: snapshot money-safe STRING
+      totalIngresoBodegaRechazos: "3.00", // feature 56/R16: snapshot money-safe STRING
       solicitadoAt: "2026-07-12T10:00:00.000Z",
       resueltoAt: null,
       motivoRechazo: null,
@@ -127,6 +129,7 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
         fechaReprogramacion: null,
         evidenciaStoragePath: "o1/e.jpg",
         pagoMensajero: new Prisma.Decimal("5.00"), // feature 39/R16: snapshot leido
+        ingresoBodegaRechazo: new Prisma.Decimal("0.00"), // feature 56/R15: snapshot leido
         orden: {
           numGuia: 10,
           numRemision: "REM-1",

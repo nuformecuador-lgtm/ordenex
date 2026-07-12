@@ -30,6 +30,7 @@ export interface CierreAdminResumenRow {
     general: string;
   };
   totalPagoMensajero: string; // feature 39/R17: snapshot total del pago al mensajero (STRING)
+  totalIngresoBodegaRechazos: string; // feature 56/R16: snapshot total del ingreso de bodega por rechazos (STRING)
   solicitadoAt: string; // ISO
   resueltoAt: string | null; // ISO
   motivoRechazo: string | null;

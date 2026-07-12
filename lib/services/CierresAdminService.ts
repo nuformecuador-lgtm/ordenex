@@ -184,6 +184,7 @@ function toResumen(row: CierreAdminResumenRow): CierreAdminResumen {
     destinoZonaNombre: row.destinoZonaNombre,
     totales: row.totales,
     totalPagoMensajero: row.totalPagoMensajero, // R17: snapshot, sin recomputar
+    totalIngresoBodegaRechazos: row.totalIngresoBodegaRechazos, // feature 56/R16: snapshot, sin recomputar
     solicitadoAt: row.solicitadoAt,
     resueltoAt: row.resueltoAt,
     motivoRechazo: row.motivoRechazo,

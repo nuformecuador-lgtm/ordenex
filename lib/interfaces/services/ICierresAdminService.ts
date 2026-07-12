@@ -23,6 +23,7 @@ export interface CierreAdminResumen {
   destinoZonaNombre: string;
   totales: CierreTotales; // snapshot (money-safe string, R8/R9)
   totalPagoMensajero: string; // feature 39/R17: snapshot total del pago al mensajero (STRING), separado de `totales`
+  totalIngresoBodegaRechazos: string; // feature 56/R16: snapshot total del ingreso de bodega por rechazos (STRING), separado de `totales` y del pago al mensajero
   solicitadoAt: string; // ISO
   resueltoAt: string | null; // ISO; null si solicitado (F1.4-e)
   motivoRechazo: string | null; // solo rechazado (F1.4-e)

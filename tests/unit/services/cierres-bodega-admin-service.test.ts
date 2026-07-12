@@ -31,6 +31,7 @@ function bodegaResumenRow(
     estado: "solicitado",
     totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
     totalPagoMensajero: "5.00", // feature 39/R20: snapshot agregado del pago a mensajeros
+    totalIngresoBodegaRechazos: "0.00", // feature 56/R19: snapshot agregado del ingreso de bodega
     cantidadCierres: 2,
     solicitadoAt: "2026-07-12T10:00:00.000Z",
     resueltoAt: null,
@@ -48,6 +49,7 @@ function detalleCierreRow(
     mensajeroNombre: "Ana Mensajera",
     totales: { efectivo: "10.00", simpe: "0.00", transferencia: "0.00", general: "10.00" },
     totalPagoMensajero: "5.00", // feature 39/R20: snapshot del pago del cierre_dia
+    totalIngresoBodegaRechazos: "0.00", // feature 56/R19: snapshot del ingreso del cierre_dia
     ...overrides,
   };
 }
@@ -73,6 +75,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     fechaReprogramacion: null,
     evidenciaStoragePath: null,
     pagoMensajero: "5.00", // feature 39/R20: snapshot del pago de la gestion
+    ingresoBodegaRechazo: "0.00", // feature 56/R19: snapshot del ingreso de la gestion
     ...overrides,
   };
 }
@@ -277,6 +280,32 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
     // R20: por gestion (snapshot leido, no recomputado).
     expect(r.cierres[0].grupos.entregada[0].pagoMensajero).toBe("12.00");
     expect(typeof r.cierre.totalPagoMensajero).toBe("string"); // R23
+  });
+
+  it("R19: el detalle expone el ingreso de bodega por rechazos por cierre_dia y el agregado (snapshot)", async () => {
+    const repo = fakeRepo({
+      findCierreBodegaConDetalle: vi.fn(async () => ({
+        cierre: bodegaResumenRow({ totalIngresoBodegaRechazos: "9.00" }),
+        cierresDia: [
+          {
+            resumen: detalleCierreRow({ cierreDiaId: "cd1", totalIngresoBodegaRechazos: "9.00" }),
+            gestiones: [
+              gestionRow({ gestionId: "g1", resultado: "rechazada", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "3.00" }),
+            ],
+          },
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // R19: agregado del cierre de bodega (cabecera).
+    expect(r.cierre.totalIngresoBodegaRechazos).toBe("9.00");
+    // R19: por cada cierre_dia incluido (snapshot, sin recomputar).
+    expect(r.cierres[0].totalIngresoBodegaRechazos).toBe("9.00");
+    // R19: por gestion rechazada (snapshot leido).
+    expect(r.cierres[0].grupos.rechazada[0].ingresoBodegaRechazo).toBe("3.00");
+    expect(typeof r.cierre.totalIngresoBodegaRechazos).toBe("string"); // R22
   });
 
   it("R19: id inexistente (repo null) -> no_encontrada", async () => {

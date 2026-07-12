@@ -15,6 +15,7 @@ export interface CierreDiaConsolidableRow {
   mensajeroNombre: string;
   totales: CierreTotales; // snapshot del cierre_dia (STRING escala 2)
   totalPagoMensajero: string; // feature 39/R18: snapshot del pago al mensajero del cierre_dia (STRING)
+  totalIngresoBodegaRechazos: string; // feature 56/R17: snapshot del ingreso de bodega por rechazos del cierre_dia (STRING)
 }
 
 // Fila cruda de un cierre de bodega (cabecera). Totales ya como STRING (money-safe);
@@ -29,6 +30,7 @@ export interface CierreBodegaResumenRow {
   estado: CierreEstado;
   totales: CierreTotales;
   totalPagoMensajero: string; // feature 39/R19/R20: snapshot agregado del pago a mensajeros (STRING)
+  totalIngresoBodegaRechazos: string; // feature 56/R19: snapshot agregado del ingreso de bodega por rechazos (STRING)
   cantidadCierres: number;
   solicitadoAt: string; // ISO
   resueltoAt: string | null; // ISO
@@ -43,6 +45,7 @@ export interface CrearCierreBodegaInput {
   cierreDiaIds: string[];
   totales: CierreTotales;
   totalPagoMensajero: string; // feature 39/R19: snapshot agregado del pago a mensajeros (STRING)
+  totalIngresoBodegaRechazos: string; // feature 56/R18: snapshot agregado del ingreso de bodega por rechazos (STRING)
 }
 
 export interface ICierreBodegaRepository {

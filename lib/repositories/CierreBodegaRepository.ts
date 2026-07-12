@@ -38,6 +38,7 @@ const CONSOLIDABLE_SELECT = {
   totalTransferencia: true,
   totalGeneral: true,
   totalPagoMensajero: true, // feature 39/R18: snapshot del pago al mensajero del cierre_dia
+  totalIngresoBodegaRechazos: true, // feature 56/R17: snapshot del ingreso de bodega por rechazos del cierre_dia
   mensajero: { select: { nombre: true } },
 } as const;
 
@@ -54,6 +55,7 @@ export const BODEGA_RESUMEN_SELECT = {
   totalTransferencia: true,
   totalGeneral: true,
   totalPagoMensajero: true, // feature 39/R19/R20: snapshot agregado del pago a mensajeros
+  totalIngresoBodegaRechazos: true, // feature 56/R18/R19: snapshot agregado del ingreso de bodega por rechazos
   solicitadoAt: true,
   resueltoAt: true,
   motivoRechazo: true,
@@ -76,6 +78,7 @@ export function toBodegaResumenRow(r: BodegaResumenRow): CierreBodegaResumenRow 
     estado: r.estado,
     totales: totalesToString(r),
     totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R19/R20: snapshot money-safe STRING
+    totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R18/R19: snapshot money-safe STRING
     cantidadCierres: r._count.cierresDia,
     solicitadoAt: r.solicitadoAt.toISOString(),
     resueltoAt: r.resueltoAt ? r.resueltoAt.toISOString() : null,
@@ -111,6 +114,7 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
       mensajeroNombre: r.mensajero.nombre,
       totales: totalesToString(r),
       totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R18: snapshot money-safe STRING
+      totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R17: snapshot money-safe STRING
     }));
   }
 
@@ -135,7 +139,8 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
 
   /** R9/R10: INSERT cierre_bodega (snapshot Decimal) + vincular cierre_dia, atomico. */
   async crearCierreBodega(input: CrearCierreBodegaInput): Promise<string> {
-    const { zonaId, solicitadoPor, cierreDiaIds, totales, totalPagoMensajero } = input;
+    const { zonaId, solicitadoPor, cierreDiaIds, totales, totalPagoMensajero, totalIngresoBodegaRechazos } =
+      input;
     return this.prisma.$transaction(async (tx) => {
       const cierre = await tx.cierreBodega.create({
         data: {
@@ -148,6 +153,8 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
           totalGeneral: new Prisma.Decimal(totales.general),
           // Feature 39/R19: snapshot agregado del pago a mensajeros, en la misma tx.
           totalPagoMensajero: new Prisma.Decimal(totalPagoMensajero),
+          // Feature 56/R18: snapshot agregado del ingreso de bodega por rechazos, en la misma tx.
+          totalIngresoBodegaRechazos: new Prisma.Decimal(totalIngresoBodegaRechazos),
         },
         select: { id: true },
       });

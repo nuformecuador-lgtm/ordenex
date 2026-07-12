@@ -57,6 +57,7 @@ beforeEach(() => {
       general: "0.00",
     },
     totalPagoMensajero: "0.00", // feature 39/R11
+    totalIngresoBodegaRechazos: "0.00", // feature 56/R10
     puedesSolicitar: false,
     motivoBloqueo: "No hay gestiones para cerrar.",
     cierresPasados: [],

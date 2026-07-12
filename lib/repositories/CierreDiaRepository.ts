@@ -27,6 +27,7 @@ export const WITH_DETALLE = {
     fechaReprogramacion: true,
     evidenciaStoragePath: true,
     pagoMensajero: true, // feature 39: snapshot del pago al mensajero (reuso 38/40)
+    ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo (reuso 38/40)
     orden: {
       select: {
         numGuia: true,
@@ -78,6 +79,9 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
     // Feature 39: snapshot del pago al mensajero (Decimal->string; null si aun sin cerrar
     // o cierre pre-migracion, R22). En la vista EN VIVO (37) el service lo DERIVA aparte.
     pagoMensajero: decimalToString(row.pagoMensajero),
+    // Feature 56: snapshot del ingreso de bodega por rechazo (Decimal->string; null si aun
+    // sin cerrar o cierre pre-migracion, R21/R22). En la vista EN VIVO (37) el service lo DERIVA.
+    ingresoBodegaRechazo: decimalToString(row.ingresoBodegaRechazo),
   };
 }
 
@@ -122,8 +126,16 @@ export class CierreDiaRepository implements ICierreDiaRepository {
 
   /** R13/R14: INSERT cierre_dia + vincular gestiones pendientes + snapshot pago, atomico. */
   async crearCierre(input: CrearCierreInput): Promise<string> {
-    const { mensajeroId, destinoTipo, destinoZonaId, totales, pagoByGestionId, totalPagoMensajero } =
-      input;
+    const {
+      mensajeroId,
+      destinoTipo,
+      destinoZonaId,
+      totales,
+      pagoByGestionId,
+      totalPagoMensajero,
+      ingresoByGestionId,
+      totalIngresoBodegaRechazos,
+    } = input;
     return this.prisma.$transaction(async (tx) => {
       const cierre = await tx.cierreDia.create({
         data: {
@@ -137,6 +149,8 @@ export class CierreDiaRepository implements ICierreDiaRepository {
           totalGeneral: new Prisma.Decimal(totales.general),
           // Feature 39/R13/R14: total snapshot del pago al mensajero, en la misma tx.
           totalPagoMensajero: new Prisma.Decimal(totalPagoMensajero),
+          // Feature 56/R12/R13: total snapshot del ingreso de bodega por rechazos, en la misma tx.
+          totalIngresoBodegaRechazos: new Prisma.Decimal(totalIngresoBodegaRechazos),
         },
         select: { id: true },
       });
@@ -161,6 +175,22 @@ export class CierreDiaRepository implements ICierreDiaRepository {
           data: { pagoMensajero: new Prisma.Decimal(pago) },
         });
       }
+      // Feature 56/R11/R13: puebla ingreso_bodega_rechazo por gestion AGRUPADO por valor
+      // (a lo sumo 2 valores distintos — cobroRechazado para `rechazada` que aplica, "0.00"
+      // para el resto). Guardia por cierreId=nuevo (las que acabamos de vincular). Todo en
+      // la MISMA tx que el INSERT y el pago al mensajero (atomico, R13).
+      const idsByIngreso = new Map<string, string[]>();
+      for (const [gestionId, ingreso] of Object.entries(ingresoByGestionId)) {
+        const arr = idsByIngreso.get(ingreso);
+        if (arr) arr.push(gestionId);
+        else idsByIngreso.set(ingreso, [gestionId]);
+      }
+      for (const [ingreso, ids] of idsByIngreso) {
+        await tx.gestionOrden.updateMany({
+          where: { id: { in: ids }, cierreId: cierre.id },
+          data: { ingresoBodegaRechazo: new Prisma.Decimal(ingreso) },
+        });
+      }
       return cierre.id;
     });
   }
@@ -180,6 +210,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         totalTransferencia: true,
         totalGeneral: true,
         totalPagoMensajero: true, // feature 39/R13: total snapshot del pago al mensajero
+        totalIngresoBodegaRechazos: true, // feature 56/R12: total snapshot del ingreso de bodega por rechazos
         solicitadoAt: true,
       },
     });
@@ -195,6 +226,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         general: r.totalGeneral.toFixed(2),
       },
       totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R13: snapshot money-safe STRING
+      totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R12: snapshot money-safe STRING
       solicitadoAt: r.solicitadoAt.toISOString(),
     }));
   }

@@ -53,6 +53,9 @@ export const ESTADO_LABEL: Record<CierreEstado, string> = {
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
 export const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
 export const PAGO_MENSAJERO_COL = "Pago mensajero";
+// --- Feature 56: etiquetas del ingreso de bodega por rechazos (texto separado, i18n-ready) ---
+export const INGRESO_BODEGA_RECHAZOS_LABEL = "Ingreso de bodega por rechazos";
+export const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
 /** Aviso discreto (F1.4-5): pago de una entrega resuelto a ₡0.00 (tarifa faltante). */
 export const PAGO_SIN_TARIFA_LABEL = "Sin tarifa";
 export const PAGO_SIN_TARIFA_NOTA =
@@ -167,18 +170,45 @@ export function PagoMensajeroTotal({
 }
 
 /**
- * Feature 39 (R16/R20): render del pago al mensajero por orden. Money-safe: el monto
- * llega como STRING y se muestra tal cual. En las ENTREGADAS con pago "0.00" (compara
- * el STRING, nunca `parseFloat`) muestra un aviso discreto de posible tarifa faltante
- * (F1.4-5); el DTO no trae un flag explícito, así que el aviso es informativo.
+ * Feature 56 (R10/R16/R17/R19): total del ingreso de bodega por rechazos, en un panel
+ * PROPIO y SEPARADO del dinero recibido (`TotalesPanel`) y del pago al mensajero
+ * (`PagoMensajeroTotal`). Espejo visual de `PagoMensajeroTotal`. El monto llega como
+ * STRING y se renderiza tal cual (money-safe). `region` accesible por `ariaLabel`.
+ */
+export function IngresoBodegaRechazosTotal({
+  value,
+  ariaLabel,
+  label = INGRESO_BODEGA_RECHAZOS_LABEL,
+}: {
+  value: string;
+  ariaLabel: string;
+  label?: string;
+}) {
+  return (
+    <section aria-label={ariaLabel} className="flex flex-col gap-3">
+      <Card className="border-dashed">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+          <span className="text-sm font-medium text-muted-foreground">
+            {label}
+          </span>
+          <span className="text-lg font-semibold">{money(value)}</span>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+/**
+ * Feature 39/56 (R16/R20/R23): render del pago al mensajero por orden. Money-safe: el
+ * monto llega como STRING y se muestra tal cual. El aviso "Sin tarifa" ahora se decide
+ * por el flag `tarifaFaltante` resuelto SERVER-SIDE (F1.4-Q6): reemplaza la heurística
+ * de string `entregada && pago === "0.00"` de la 39 y aplica a ENTREGAS Y RECHAZOS.
  */
 export function renderPagoMensajero(g: CierreDetalleGestion): ReactNode {
-  const avisoSinTarifa =
-    g.resultado === "entregada" && g.pagoMensajero === "0.00";
   return (
     <span className="inline-flex items-center gap-2">
       {money(g.pagoMensajero)}
-      {avisoSinTarifa ? (
+      {g.tarifaFaltante ? (
         <Badge
           variant="outline"
           title={PAGO_SIN_TARIFA_NOTA}
@@ -196,6 +226,17 @@ export const COLUMNA_PAGO_MENSAJERO: Column<CierreDetalleGestion> = {
   id: "pagoMensajero",
   value: PAGO_MENSAJERO_COL,
   render: renderPagoMensajero,
+};
+
+/**
+ * Feature 56 (R12): columna del ingreso de bodega por rechazos por orden. Solo aplica a
+ * la sección `rechazada`; money-safe (el monto llega como STRING, `null` → "—" vía
+ * `money()`, NUNCA se parsea a número). Concepto separado del pago al mensajero.
+ */
+export const COLUMNA_INGRESO_BODEGA_RECHAZOS: Column<CierreDetalleGestion> = {
+  id: "ingresoBodegaRechazo",
+  value: INGRESO_BODEGA_RECHAZOS_COL,
+  render: (g) => money(g.ingresoBodegaRechazo),
 };
 
 // --- Columnas comunes a las 4 secciones del detalle (R11, reuso de la 37) ---
@@ -250,7 +291,7 @@ export function columnasPara(
       COLUMNA_PAGO_MENSAJERO,
     ];
   }
-  // rechazada: motivo + evidencia firmada (R12)
+  // rechazada: motivo + evidencia firmada (R12) + ingreso de bodega por rechazos (56/R12)
   return [
     ...COLUMNAS_COMUNES,
     { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
@@ -272,6 +313,7 @@ export function columnasPara(
         ),
     },
     COLUMNA_PAGO_MENSAJERO,
+    COLUMNA_INGRESO_BODEGA_RECHAZOS,
   ];
 }
 

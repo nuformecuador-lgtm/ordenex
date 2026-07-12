@@ -17,7 +17,9 @@ import {
   money,
   ESTADO_LABEL,
   PAGO_MENSAJERO_COL,
+  INGRESO_BODEGA_RECHAZOS_COL,
   PagoMensajeroTotal,
+  IngresoBodegaRechazosTotal,
   TotalesPanel,
 } from "./cierre-detalle-shared";
 
@@ -36,6 +38,8 @@ export interface ConsolidacionBodegaModuleProps {
   totalesAgregados: CierreTotales;
   /** Feature 39/R18: suma snapshot del pago a mensajeros (STRING), separado de los totales. */
   totalPagoMensajeroAgregado: string;
+  /** Feature 56/R17: suma snapshot del ingreso de bodega por rechazos (STRING), separado. */
+  totalIngresoBodegaRechazosAgregado: string;
   /** Gate de "Solicitar cierre de bodega" (R6/R7). */
   puedesSolicitar: boolean;
   /** Texto accionable del bloqueo si `!puedesSolicitar`. */
@@ -50,6 +54,7 @@ export function ConsolidacionBodegaModule({
   consolidables,
   totalesAgregados,
   totalPagoMensajeroAgregado,
+  totalIngresoBodegaRechazosAgregado,
   puedesSolicitar,
   motivoBloqueo,
   cierresBodegaPasados,
@@ -114,6 +119,12 @@ export function ConsolidacionBodegaModule({
             value={totalPagoMensajeroAgregado}
             ariaLabel="Pago a mensajeros a consolidar"
             label="Total a pagar a mensajeros"
+          />
+
+          {/* Feature 56/R17: agregado del ingreso de bodega por rechazos, separado. */}
+          <IngresoBodegaRechazosTotal
+            value={totalIngresoBodegaRechazosAgregado}
+            ariaLabel="Ingreso de bodega por rechazos a consolidar"
           />
 
           {/* ---------- Cierres del día a consolidar (R5) ---------- */}
@@ -222,6 +233,11 @@ const COLUMNAS_CONSOLIDABLES: Column<CierreBodegaResumenLite>[] = [
     value: PAGO_MENSAJERO_COL,
     render: (c) => money(c.totalPagoMensajero),
   },
+  {
+    id: "ingresoBodegaRechazos",
+    value: INGRESO_BODEGA_RECHAZOS_COL,
+    render: (c) => money(c.totalIngresoBodegaRechazos),
+  },
 ];
 
 // --- Columnas del histórico de cierres de bodega (solo lectura, F1.4-h) ---
@@ -246,6 +262,11 @@ const COLUMNAS_PASADOS: Column<CierreBodegaResumen>[] = [
     id: "pagoMensajero",
     value: PAGO_MENSAJERO_COL,
     render: (c) => money(c.totalPagoMensajero),
+  },
+  {
+    id: "ingresoBodegaRechazos",
+    value: INGRESO_BODEGA_RECHAZOS_COL,
+    render: (c) => money(c.totalIngresoBodegaRechazos),
   },
   {
     id: "motivoRechazo",

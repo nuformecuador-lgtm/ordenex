@@ -7,7 +7,11 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 39 CERRADA 2026-07-12 (abajo). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** |
+| _(ninguna en curso)_ | — | — | — |
+
+> Feature 56 (ingreso de bodega por rechazos, `cobroRechazado`) CERRADA 2026-07-12: **impl COMPLETA (R1–R22+R7b+R23) + reviewer APROBADO 0 bloqueantes** (verde REAL con round-trip de migración real: `prisma validate` OK, typecheck 0, lint 0, **1867 tests** —1 flaky ajeno `LoginForm`, pasa aislado—, `init.sh` OK, migración round-trip OK, **SIN regresión 37/38/39/40**). Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Espejo de la 39 para el otro lado: el `cobroRechazado` de una gestión `rechazada` es INGRESO PARA LA BODEGA (destino del cierre), no pago al mensajero; reusa `TarifaZonaMensajero`/`resolvePagoTarifa` sin modelo nuevo, **SNAPSHOT** al solicitar (migración aditiva `20260712140000_ingreso_bodega_rechazos` en 3 niveles; snapshot inmutable verificado). **Q6 RESOLVIÓ la deuda m1 de la 39**: flag `tarifaFaltante` server-side reemplaza la heurística frontend (sin falsos positivos en entregas de ₡0.00). Estado `done` + `history.md` + `review_56`. **IMPL EN 2 COMMITS** (el `implementer` murió por el bug opus-4.8[1m] tras el backend): backend `6a0153d` + UI `40d99e2` (frontend_dev directo). Cierra el par pago-por-zona (mensajero 39 + bodega 56). **PENDIENTE: abrir PR a `dev` + merge (OK humano).**
+
+> Feature 39 CERRADA y **MERGEADA a `dev`** (PR #46) 2026-07-12. Cadena de cierres 37/38/40/39 completa en `dev`. Ver `history.md`.
 
 > Feature 39 (pago al mensajero por zona en el cierre) CERRADA 2026-07-12: **impl COMPLETA (R1–R23+R7b) + reviewer APROBADO 0 bloqueantes** (verde REAL con round-trip de migración real: `init.sh` OK, typecheck 0, lint 0, **1829/1829 tests**, build OK, **SIN regresión 37/38/40**). Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Estado `done` + `history.md` + `review_39`. Pago vía `TarifaZonaMensajero` (zona+vehículo del mensajero, fallback tarifa por defecto), **SNAPSHOT** al solicitar (migración aditiva `20260712130000_pago_mensajero_cierre` en 3 niveles; snapshot inmutable verificado), **SOLO `entregada` paga**; `cobroRechazado`→bodega separado a la **feature 56**. Commit `941ea7c`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA menor: aviso tarifa-faltante por heurística frontend (candidato flag server-side).
 

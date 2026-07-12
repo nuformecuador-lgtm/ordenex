@@ -37,6 +37,17 @@ export interface CierreDetalleGestion {
   // es DERIVADO por resultado+tarifa; en el detalle admin (38/40) es el snapshot leido.
   // `null` en cierres pre-migracion (R22). Concepto INDEPENDIENTE de montoRecibido (R21).
   pagoMensajero: string | null;
+  // Feature 56/R9/R15: ingreso de bodega por rechazo (money-safe STRING). En la vista EN
+  // VIVO (37) es DERIVADO por resultado+tarifa; en el detalle admin (38/40) es el snapshot
+  // leido. `null` en cierres pre-migracion (R22). Concepto INDEPENDIENTE del pago al
+  // mensajero (R7b) y del dinero recibido (R20). Solo `rechazada` con tarifa que aplica != 0.00.
+  ingresoBodegaRechazo: string | null;
+  // Feature 56/R23 (F1.4-Q6): flag derivado SERVER-SIDE. `true` SOLO cuando el resolver de
+  // tarifa devolvio `null` (zona SIN tarifa capturada, incluye el caso sin zona); `false`
+  // cuando existe tarifa aunque sus montos sean 0.00. Reemplaza la heuristica de frontend
+  // `entregada && pago === "0.00"` de la 39, para entregas Y rechazos. En el detalle admin
+  // (38/40), donde no se re-resuelve la tarifa (snapshot), es `false` por defecto.
+  tarifaFaltante: boolean;
 }
 
 // Totales por metodo de pago + general (R7/R8). Decimal serializado a STRING (R9).
@@ -58,6 +69,7 @@ export interface CierrePasadoDTO {
   destinoZonaId: string;
   totales: CierreTotales;
   totalPagoMensajero: string; // feature 39/R13: total snapshot del pago al mensajero (STRING)
+  totalIngresoBodegaRechazos: string; // feature 56/R12: total snapshot del ingreso de bodega por rechazos (STRING)
   solicitadoAt: string; // ISO
 }
 
@@ -70,6 +82,7 @@ export type ListarCierreDiaServiceResult =
       grupos: CierreGrupos;
       totales: CierreTotales;
       totalPagoMensajero: string; // feature 39/R11: total DERIVADO del pago al mensajero (STRING), separado de `totales`
+      totalIngresoBodegaRechazos: string; // feature 56/R10: total DERIVADO del ingreso de bodega por rechazos (STRING), separado de `totales` y del pago al mensajero
       puedesSolicitar: boolean; // R10/R11: false si hay pendientes o no hay gestiones
       motivoBloqueo: string | null; // texto accionable si !puedesSolicitar
       cierresPasados: CierrePasadoDTO[]; // R18

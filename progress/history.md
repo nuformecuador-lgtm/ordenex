@@ -977,3 +977,28 @@
 - DEUDA menor: el aviso de "tarifa faltante" se infiere por heurística en el frontend (`entregada` && pago==="0.00"),
   con falso positivo posible en una entrega legítima de ₡0.00 → candidato a flag `tarifaFaltante` server-side
   (feature 56 o follow-up). Comentario obsoleto en un test de la 40 (m2). `ZonaRepository.toNumber` fuera de flujo (m4).
+
+## 2026-07-12 — feature 56 (ingreso de bodega por rechazos, `cobroRechazado`)
+- Money-critical. Espejo de la 39 para el OTRO lado del par pago-por-zona: cuando una gestión de un cierre resulta
+  `rechazada`, el `cobroRechazado` de la tarifa de la zona es un INGRESO PARA LA BODEGA (destino del cierre: central
+  si `esCentral`, satélite si no), no un pago al mensajero. Se resuelve con la MISMA `TarifaZonaMensajero` de la 39
+  (reusa `resolvePagoTarifa`, sin modelo nuevo), se snapshotea al solicitar el cierre y se totaliza en los 3 niveles.
+- Requisitos cubiertos: R1–R22 + R7b + R23 (cada uno con test concreto; reviewer verificó trazabilidad + round-trip).
+- **Decisiones F1.4 (aprobadas por el humano 2026-07-12):** (Q1) aplica cuando la tarifa de la zona tiene
+  `cobroRechazado>0` — la condición vive en la tarifa, no hay flag aparte; (Q2) SOLO `rechazada` genera ingreso;
+  (Q3) **SNAPSHOT** al solicitar (inmutable, verificado); (Q4) migración aditiva `20260712140000_ingreso_bodega_rechazos`
+  en 3 niveles (`gestion_orden.ingreso_bodega_rechazo` NULL + `cierre_dia`/`cierre_bodega`.`total_ingreso_bodega_rechazos`
+  DEFAULT 0) + `down.sql`; (Q5) la bodega beneficiaria es el DESTINO del cierre ya calculado por la 37; (Q6) SÍ añadir
+  flag **`tarifaFaltante` server-side** al DTO — **RESUELVE la deuda m1 de la 39**: elimina la heurística frontend
+  (`entregada && pago==="0.00"`) por un flag derivado donde el resolver da `null`, sin falsos positivos en entregas
+  legítimas de ₡0.00; (Q7) se muestra en las 3 vistas de cierre existentes (sin pantallas nuevas).
+- Nuevos: `lib/utils/ingreso-bodega.ts` (util puro solo-rechazada, espejo de `pago-mensajero.ts`); columnas/labels
+  "Ingreso de bodega por rechazos" en `/cierre-dia`, `/cierres-admin` y detalle de bodega. Money-safe: `Prisma.Decimal`,
+  string `toFixed(2)`, cero `parseFloat`/`Number(` en rutas de dinero.
+- **IMPL EN 2 COMMITS** por el bug de subagente opus-4.8[1m]: el `implementer` completó el backend y murió (API error)
+  antes del frontend → el leader commiteó el backend verde (`6a0153d`) y relanzó `frontend_dev` directo (model:opus)
+  para completar Q6+Q7 con asserts de UI (`40d99e2`). Verde: prisma OK, typecheck 0, lint 0, **1867 tests** (1 flaky
+  ajeno `LoginForm`, pasa aislado), `init.sh` OK, migración round-trip OK, SIN regresión 37/38/39/40. Reviewer APROBADO
+  0 bloqueantes (verificación round-trip real, snapshot inmutable probado, deuda m1 de la 39 RESUELTA).
+- **CIERRA el par pago-por-zona** (mensajero 39 + bodega 56). Deuda menor: R21 test de migración estático (round-trip
+  real corrido por el reviewer); E2E ejecución diferida.

@@ -22,6 +22,7 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo } from "@/lib/types/cierre";
 import { pagoPorResultado } from "@/lib/utils/pago-mensajero";
+import { ingresoBodegaPorResultado } from "@/lib/utils/ingreso-bodega";
 
 // Solo el rol autorizado en el modulo (R1/R2): el mensajero, SIEMPRE acotado a su
 // propio `usuario.id` (el filtro por mensajero vive en el repo, en el WHERE).
@@ -89,6 +90,15 @@ export class CierreDiaService implements ICierreDiaService {
     // Concepto INDEPENDIENTE del dinero recibido (R21): no toca `totales`.
     const { pagoByGestionId, total: totalPagoMensajero } = derivarPagos(gestiones, tarifa);
 
+    // Feature 56/R9/R10: ingreso de bodega por rechazo DERIVADO por gestion + total, con la
+    // MISMA tarifa ya resuelta (sin query extra). Concepto INDEPENDIENTE del pago al
+    // mensajero (R7b) y del dinero recibido (R20). R23: tarifaFaltante = (tarifa === null).
+    const { ingresoByGestionId, total: totalIngresoBodegaRechazos } = derivarIngresoBodega(
+      gestiones,
+      tarifa,
+    );
+    const tarifaFaltante = tarifa === null;
+
     // R5: firma en lote las evidencias (path crudo -> URL firmada de TTL acotado).
     const paths = gestiones
       .map((g) => g.evidenciaStoragePath)
@@ -102,7 +112,15 @@ export class CierreDiaService implements ICierreDiaService {
     // pago DERIVADO en vivo (override del snapshot, que aqui es null: gestion sin cerrar).
     const grupos: CierreGrupos = { entregada: [], reprogramada: [], devuelta: [], rechazada: [] };
     for (const g of gestiones) {
-      grupos[g.resultado].push(toDetalleDTO(g, urlByPath, pagoByGestionId[g.gestionId]));
+      grupos[g.resultado].push(
+        toDetalleDTO(
+          g,
+          urlByPath,
+          pagoByGestionId[g.gestionId], // feature 39: pago DERIVADO en vivo (override snapshot)
+          ingresoByGestionId[g.gestionId], // feature 56: ingreso DERIVADO en vivo (override snapshot)
+          tarifaFaltante, // feature 56/R23: derivado server-side (tarifa === null)
+        ),
+      );
     }
 
     // R7/R8/R9: totales por metodo con Prisma.Decimal (exactos al centavo).
@@ -124,6 +142,7 @@ export class CierreDiaService implements ICierreDiaService {
       grupos,
       totales,
       totalPagoMensajero, // R11: separado de `totales` (R21)
+      totalIngresoBodegaRechazos, // feature 56/R10: separado de `totales` y del pago al mensajero (R20)
       puedesSolicitar,
       motivoBloqueo,
       cierresPasados,
@@ -173,7 +192,16 @@ export class CierreDiaService implements ICierreDiaService {
     const tarifa = await this.tarifaZonaRepo.resolvePagoTarifa(zonaId, vehiculoId);
     const { pagoByGestionId, total: totalPagoMensajero } = derivarPagos(gestiones, tarifa);
 
-    // R13/R14: transaccion todo-o-nada (INSERT + vincular gestiones + snapshot pago).
+    // Feature 56/R8/R11/R12: snapshot del ingreso de bodega por rechazos con la MISMA
+    // tarifa ya resuelta (sin query extra) y el MISMO destino ya calculado (R8: el ingreso
+    // queda atribuido a destinoTipo/destinoZonaId del cierre). El numero se congela: una
+    // edicion posterior de la tarifa (feature 55) NO altera el cierre (R14).
+    const { ingresoByGestionId, total: totalIngresoBodegaRechazos } = derivarIngresoBodega(
+      gestiones,
+      tarifa,
+    );
+
+    // R13/R14: transaccion todo-o-nada (INSERT + vincular gestiones + snapshot pago + ingreso).
     const cierreId = await this.repo.crearCierre({
       mensajeroId: actor.usuarioId,
       destinoTipo,
@@ -181,6 +209,8 @@ export class CierreDiaService implements ICierreDiaService {
       totales,
       pagoByGestionId, // R12: pago snapshoteado por gestion
       totalPagoMensajero, // R13: total snapshoteado
+      ingresoByGestionId, // feature 56/R11: ingreso snapshoteado por gestion
+      totalIngresoBodegaRechazos, // feature 56/R12: total snapshoteado del ingreso de bodega
     });
 
     return { status: "ok", cierreId, totales, destinoTipo };
@@ -193,10 +223,17 @@ export class CierreDiaService implements ICierreDiaService {
 // Feature 39: `pagoMensajero` opcional. En la vista EN VIVO del mensajero (37) se pasa el
 // pago DERIVADO (override, R10). En el detalle admin (38/40) NO se pasa y se usa el
 // snapshot `g.pagoMensajero` leido de la columna (R16). Nunca se mezcla con montoRecibido.
+// Feature 56: `ingresoBodegaRechazo` opcional (mismo patron que `pagoMensajero`): en la
+// vista EN VIVO (37) se pasa el ingreso DERIVADO (override, R9); en el detalle admin (38/40)
+// NO se pasa y se usa el snapshot `g.ingresoBodegaRechazo` leido de la columna (R15/R19).
+// `tarifaFaltante` (R23, F1.4-Q6): derivado server-side del `tarifa === null` en la vista
+// EN VIVO; en el detalle admin (snapshot, sin re-resolver tarifa) es `false` por defecto.
 export function toDetalleDTO(
   g: CierreGestionPendienteRow,
   urlByPath: Record<string, string>,
   pagoMensajero?: string | null,
+  ingresoBodegaRechazo?: string | null,
+  tarifaFaltante = false,
 ): CierreDetalleGestion {
   return {
     gestionId: g.gestionId,
@@ -218,6 +255,9 @@ export function toDetalleDTO(
     fechaReprogramacion: g.fechaReprogramacion,
     evidenciaUrl: g.evidenciaStoragePath ? (urlByPath[g.evidenciaStoragePath] ?? null) : null,
     pagoMensajero: pagoMensajero !== undefined ? pagoMensajero : g.pagoMensajero,
+    ingresoBodegaRechazo:
+      ingresoBodegaRechazo !== undefined ? ingresoBodegaRechazo : g.ingresoBodegaRechazo,
+    tarifaFaltante,
   };
 }
 
@@ -237,6 +277,26 @@ function derivarPagos(
     total = total.plus(pago);
   }
   return { pagoByGestionId, total: total.toFixed(2) };
+}
+
+// Feature 56/R9-R12: ingreso de BODEGA por rechazo por gestion (DERIVADO/snapshot segun
+// uso) + total, con la MISMA tarifa ya resuelta para el pago (sin query extra). ESPEJO de
+// `derivarPagos`: solo `rechazada` con tarifa que aplica genera ingreso; el resto 0.00
+// (F1.4-Q1/Q2). Suma money-safe con Prisma.Decimal (R7). Reuso por listarCierreDia (en
+// vivo, R9/R10) y solicitarCierre (congela el snapshot, R11/R12). Concepto INDEPENDIENTE
+// del pago al mensajero (R7b) y del dinero recibido (R20).
+function derivarIngresoBodega(
+  gestiones: CierreGestionPendienteRow[],
+  tarifa: PagoTarifa | null,
+): { ingresoByGestionId: Record<string, string>; total: string } {
+  const ingresoByGestionId: Record<string, string> = {};
+  let total = new Prisma.Decimal(0);
+  for (const g of gestiones) {
+    const ingreso = ingresoBodegaPorResultado(g.resultado, tarifa);
+    ingresoByGestionId[g.gestionId] = ingreso;
+    total = total.plus(ingreso);
+  }
+  return { ingresoByGestionId, total: total.toFixed(2) };
 }
 
 // R7/R8/R9: suma con Prisma.Decimal (exacto). Solo `entregada` con montoRecibido

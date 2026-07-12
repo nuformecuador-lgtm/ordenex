@@ -44,6 +44,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     fechaReprogramacion: null,
     evidenciaStoragePath: null,
     pagoMensajero: null, // feature 39: en vivo el snapshot es null; el service lo DERIVA
+    ingresoBodegaRechazo: null, // feature 56: en vivo el snapshot es null; el service lo DERIVA
     ...overrides,
   };
 }
@@ -512,6 +513,7 @@ describe("listarCierreDia — snapshot congelado del historico (R15)", () => {
           destinoZonaId: ZONA_MENSAJERO,
           totales: { efectivo: "20.00", simpe: "0.00", transferencia: "0.00", general: "20.00" },
           totalPagoMensajero: "99.99", // snapshot congelado
+          totalIngresoBodegaRechazos: "0.00",
           solicitadoAt: "2026-07-10T10:00:00.000Z",
         },
       ]),
@@ -520,5 +522,176 @@ describe("listarCierreDia — snapshot congelado del historico (R15)", () => {
     const r = await service.listarCierreDia(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.cierresPasados[0].totalPagoMensajero).toBe("99.99"); // R15: no re-derivado
+  });
+});
+
+// --- Feature 56: ingreso de bodega por rechazos DERIVADO en vivo (R2/R7b/R9/R10/R20/R23) ---
+
+describe("listarCierreDia — ingreso de bodega por rechazos derivado (R9/R10)", () => {
+  it("R9: expone ingresoBodegaRechazo por gestion (rechazada -> cobroRechazado; resto -> 0.00)", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada", metodoPago: "efectivo", montoRecibido: "12.00" }),
+        pendiente({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+        pendiente({ gestionId: "c", resultado: "reprogramada", montoRecibido: null, metodoPago: null }),
+        pendiente({ gestionId: "d", resultado: "devuelta", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo }); // TARIFA_DEFECTO: cobroRechazado 3.00
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.rechazada[0].ingresoBodegaRechazo).toBe("3.00"); // cobroRechazado
+    expect(r.grupos.entregada[0].ingresoBodegaRechazo).toBe("0.00"); // no genera ingreso
+    expect(r.grupos.reprogramada[0].ingresoBodegaRechazo).toBe("0.00");
+    expect(r.grupos.devuelta[0].ingresoBodegaRechazo).toBe("0.00");
+    expect(typeof r.grupos.rechazada[0].ingresoBodegaRechazo).toBe("string"); // R22
+  });
+
+  it("R10/R7b/R20: totalIngresoBodegaRechazos separado de totales y de pago mensajero; no los altera", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada", metodoPago: "efectivo", montoRecibido: "12.00" }),
+        pendiente({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+        pendiente({ gestionId: "c", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo }); // cobroEntregado 5.00, cobroRechazado 3.00
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // R10: total del ingreso de bodega = 3.00 x2 rechazadas.
+    expect(r.totalIngresoBodegaRechazos).toBe("6.00");
+    // R7b: el pago al mensajero (1 entregada x 5.00) queda intacto, NO recibe cobroRechazado.
+    expect(r.totalPagoMensajero).toBe("5.00");
+    // R20: dinero recibido intacto (solo la entregada de 12.00 efectivo).
+    expect(r.totales).toEqual({
+      efectivo: "12.00",
+      simpe: "0.00",
+      transferencia: "0.00",
+      general: "12.00",
+    });
+  });
+
+  it("R9: sin tarifa (gap de datos) -> ingreso 0.00 en todas, no bloquea", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [pendiente({ gestionId: "a", resultado: "rechazada", montoRecibido: null, metodoPago: null })]),
+    });
+    const { service } = newService({ repo, tarifa: null });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.rechazada[0].ingresoBodegaRechazo).toBe("0.00");
+    expect(r.totalIngresoBodegaRechazos).toBe("0.00");
+  });
+
+  it("R2: resuelve el ingreso por la zona+vehiculo del MENSAJERO (usuarioId del actor), no de la orden", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [pendiente({ resultado: "rechazada", montoRecibido: null, metodoPago: null })]),
+    });
+    const { service, ordenRepo, tarifaZonaRepo } = newService({
+      repo,
+      zonaMensajero: ZONA_MENSAJERO,
+      vehiculoMensajero: "veh-1",
+    });
+    await service.listarCierreDia(MENSAJERO);
+    // Feature 56/R2: la tarifa (fuente del cobroRechazado) se resuelve por la zona del mensajero.
+    expect(ordenRepo.findUsuarioZonaId).toHaveBeenCalledWith("m1");
+    expect(tarifaZonaRepo.resolvePagoTarifa).toHaveBeenCalledWith(ZONA_MENSAJERO, "veh-1");
+  });
+});
+
+describe("listarCierreDia — flag tarifaFaltante server-side (R23)", () => {
+  it("R23: tarifaFaltante=true cuando el resolver -> null (zona sin tarifa capturada)", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada" }),
+        pendiente({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo, tarifa: null });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // Aplica a entregas Y rechazos (reemplaza la heuristica de frontend de la 39).
+    expect(r.grupos.entregada[0].tarifaFaltante).toBe(true);
+    expect(r.grupos.rechazada[0].tarifaFaltante).toBe(true);
+  });
+
+  it("R23: tarifaFaltante=false cuando existe tarifa AUNQUE sus montos sean 0.00 (sin falso positivo)", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada" }),
+        pendiente({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    // Tarifa REAL con montos 0.00: pago 0.00 pero NO es tarifa faltante (arregla la deuda m1 de la 39).
+    const { service } = newService({ repo, tarifa: { cobroEntregado: "0.00", cobroRechazado: "0.00" } });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.entregada[0].pagoMensajero).toBe("0.00");
+    expect(r.grupos.entregada[0].tarifaFaltante).toBe(false); // entrega legitima de 0.00, NO badge
+    expect(r.grupos.rechazada[0].tarifaFaltante).toBe(false);
+  });
+});
+
+describe("solicitarCierre — snapshot del ingreso de bodega por rechazos (R8/R11/R12/R14/R20)", () => {
+  it("R11/R12: pasa a crearCierre el ingreso por gestion + el total, congelados con la tarifa vigente", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada", metodoPago: "efectivo", montoRecibido: "12.00" }),
+        pendiente({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+        pendiente({ gestionId: "c", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo, zonaMensajero: ZONA_MENSAJERO, centralZonaId: ZONA_CENTRAL });
+    const r = await service.solicitarCierre(MENSAJERO);
+    expect(r.status).toBe("ok");
+    const arg = (repo.crearCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // R11: ingreso snapshoteado por gestion (rechazadas 3.00; entregada 0.00).
+    expect(arg.ingresoByGestionId).toEqual({ a: "0.00", b: "3.00", c: "3.00" });
+    // R12: total snapshot del ingreso de bodega.
+    expect(arg.totalIngresoBodegaRechazos).toBe("6.00");
+  });
+
+  it("R8/R20: el ingreso se snapshotea junto al destino del cierre, sin alterar pago mensajero ni totales", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada", metodoPago: "efectivo", montoRecibido: "10.00" }),
+        pendiente({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo, zonaMensajero: ZONA_MENSAJERO, centralZonaId: ZONA_CENTRAL });
+    const r = await service.solicitarCierre(MENSAJERO);
+    expect(r).toMatchObject({ status: "ok", destinoTipo: "bodega_satelite" });
+    const arg = (repo.crearCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // R8: el ingreso viaja en el MISMO crearCierre que fija destinoTipo/destinoZonaId (bodega responsable).
+    expect(arg.destinoTipo).toBe("bodega_satelite");
+    expect(arg.destinoZonaId).toBe(ZONA_MENSAJERO);
+    expect(arg.totalIngresoBodegaRechazos).toBe("3.00");
+    // R20: pago al mensajero y totales de dinero recibido INTACTOS (carriles separados).
+    expect(arg.totalPagoMensajero).toBe("5.00");
+    expect(arg.totales).toEqual({ efectivo: "10.00", simpe: "0.00", transferencia: "0.00", general: "10.00" });
+  });
+
+  it("R14: cambiar la tarifa DESPUES del cierre NO altera el snapshot leido del historico", async () => {
+    // El cierre pasado ya congelo total_ingreso_bodega_rechazos=7.50; aunque la tarifa vigente
+    // cambie, el historico lee el snapshot del repo, NO se re-deriva.
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => []),
+      findCierresByMensajero: vi.fn(async () => [
+        {
+          cierreId: "c1",
+          estado: "aprobado" as const,
+          destinoTipo: "bodega_satelite" as const,
+          destinoZonaId: ZONA_MENSAJERO,
+          totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+          totalPagoMensajero: "0.00",
+          totalIngresoBodegaRechazos: "7.50", // snapshot congelado
+          solicitadoAt: "2026-07-10T10:00:00.000Z",
+        },
+      ]),
+    });
+    // Tarifa vigente distinta (cobroRechazado 3.00): NO debe reemplazar el 7.50 congelado.
+    const { service } = newService({ repo, tarifa: TARIFA_DEFECTO });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.cierresPasados[0].totalIngresoBodegaRechazos).toBe("7.50"); // R14: no re-derivado
   });
 });
