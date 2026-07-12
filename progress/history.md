@@ -858,3 +858,29 @@
   `esCentral`, así que `findCentralZonaId` devuelve null y el maestro (30) no puede asignar en runtime hasta
   completarla. También: limpieza cosmética de nombres `esGam` legacy; drift schema/DB en `provincia.zonaId`.
 - **DESBLOQUEA**: `dev` vuelve a estar verde → repara 17/30/34 y destraba la feature 37 (pausada, spec intacto).
+
+## 2026-07-12 — feature 37 (mensajero: "Cierre del día")
+- Módulo `/cierre-dia` del rol mensajero: acumula las gestiones (feature 36) aún sin cierre
+  (`cierre_id IS NULL`), las agrupa por resultado (entregada/reprogramada/devuelta/rechazada) con el
+  detalle completo por orden, calcula los **totales por método de pago** (efectivo/SIMPE/transferencia)
+  + total general, y permite **Solicitar cierre** (crea `cierre_dia` en estado `solicitado`, snapshotea
+  los totales, vincula las gestiones y deriva el destino por zona). Histórico de cierres propios.
+- Requisitos cubiertos: R1–R20 + E2E (cada uno con test concreto; reviewer verificó la trazabilidad).
+- Modelo: tabla NUEVA `cierre_dia` (mensajero, estado, `destino_tipo`/`destino_zona_id`, totales
+  Decimal snapshot) + enums `cierre_estado`(`solicitado`/`aprobado`/`rechazado`, los 2 últimos
+  reservados para la 38) y `cierre_destino_tipo`(`bodega_central`/`bodega_satelite`) + FK nullable
+  `cierre_id` en `gestion_orden` (ON DELETE SET NULL). Migración `20260712100000_cierre_dia` con
+  `down.sql` (round-trip verificado) y **RLS** sin políticas anon/authenticated.
+- Money-critical: montos `Prisma.Decimal`, serializados como **string** cruzando Server Action→cliente
+  (cero `parseFloat`); totales cuadran al centavo. Ruteo server-side con `IZonaRepository.findCentralZonaId()`.
+- Decisiones F1.4 (aprobadas por el humano 2026-07-11): (a) tabla+FK; (b) agrupa por `cierre_id IS NULL`,
+  no por fecha; (c) precondición sin órdenes pendientes; (d) sin estado "abierto", nace `solicitado`;
+  (e) destino `tipo`+`zona` (no un admin puntual); (f) snapshot de totales; (g) E2E; (h) histórico; (i) $0
+  para reprog/dev/rech. Verde: prisma OK, typecheck 0, lint 0, **1623/1623 tests (+58)**, init.sh OK.
+- Contexto: F2 estaba PAUSADA por el #40 (dev roto); la feature 54 reparó dev y renombró el resolver
+  `findGamZonaId`→`findCentralZonaId` (`esGam`→`esCentral`), reconciliado en el spec de la 37 antes de impl.
+- DEUDA/limitación (feature 55, pending): hasta que la 55 marque una zona `esCentral`, en runtime
+  `findCentralZonaId()` devuelve null → todo mensajero rutea a satélite (fallback seguro, sin romper);
+  la clasificación a `bodega_central` "despierta" cuando caiga la 55. E2E escrito, ejecución diferida
+  (sin harness seed/login e2e). Migración no aplicada aún contra Postgres real.
+- **DESBLOQUEA**: feature 38 (aprobar/rechazar cierre) y la base de 39/40/41.
