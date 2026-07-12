@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useSWRConfig } from "swr";
+import { Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Modal } from "@/components/shared/Modal";
 import {
   BulkUpload,
@@ -148,16 +150,32 @@ export function OrdenesCargaMasivaButton() {
         confirmLabel="Cerrar"
       >
         {step === "upload" ? (
-          <BulkUpload
-            endpoint="/api/ordenes/carga-masiva"
-            accept={["csv", "xlsx"]}
-            fieldName="file"
-            templateFileName="plantilla-ordenes-carga-masiva.xlsx"
-            fields={ORDENES_BULK_FIELDS}
-            onSuccess={handleSuccess}
-            onError={handleError}
-            label="Archivo de órdenes"
-          />
+          <div className="flex flex-col gap-4">
+            {/*
+              Aviso del acoplamiento distrito↔zona (feature 24, R4/R11): se
+              comunica ANTES de cargar para que el usuario lo anticipe, en vez de
+              enterarse solo por el error fila a fila (feature 51).
+            */}
+            <Alert>
+              <Info aria-hidden="true" />
+              <AlertTitle>El distrito es obligatorio</AlertTitle>
+              <AlertDescription>
+                Cada orden debe indicar un distrito, y ese distrito debe tener
+                una zona asignada. Si el distrito falta o no tiene zona, esa fila
+                se rechazará al cargar.
+              </AlertDescription>
+            </Alert>
+            <BulkUpload
+              endpoint="/api/ordenes/carga-masiva"
+              accept={["csv", "xlsx"]}
+              fieldName="file"
+              templateFileName="plantilla-ordenes-carga-masiva.xlsx"
+              fields={ORDENES_BULK_FIELDS}
+              onSuccess={handleSuccess}
+              onError={handleError}
+              label="Archivo de órdenes"
+            />
+          </div>
         ) : (
           <OrdenesCargaResumenPaso clasificacion={clasificacion} />
         )}

@@ -1,0 +1,160 @@
+import { describe, it, expect } from "vitest";
+import fs from "fs";
+import path from "path";
+
+// Feature 24 — cobertura ESTATICA de la migracion `*_zonas_catalogo_global_pagos`
+// (patron usuario-fulfillment-migration): lee migration.sql/down.sql/schema.prisma
+// y verifica su contenido por regex. NO requiere Postgres real.
+
+const ROOT = path.join(__dirname, "..", "..", "..");
+const MIGRATIONS_DIR = path.join(ROOT, "db", "migrations");
+
+function migrationDirFor(suffix: string): string {
+  const dir = fs
+    .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .find((name) => name.endsWith(suffix));
+  if (!dir) throw new Error(`No se encontro la carpeta de migracion ${suffix}`);
+  return path.join(MIGRATIONS_DIR, dir);
+}
+
+const migrationDir = migrationDirFor("_zonas_catalogo_global_pagos");
+const upSql = fs.readFileSync(path.join(migrationDir, "migration.sql"), "utf8");
+const downSql = fs.readFileSync(path.join(migrationDir, "down.sql"), "utf8");
+const schema = fs.readFileSync(path.join(ROOT, "db", "schema.prisma"), "utf8");
+const geoMigration = fs.readFileSync(
+  path.join(migrationDirFor("_ordenes_catalogos_geografia"), "migration.sql"),
+  "utf8",
+);
+
+describe("UP — columnas de zona (R1/R2/R3)", () => {
+  it("R1: agrega pago_entrega/pago_rechazo (DECIMAL 12,2 NOT NULL DEFAULT 0) y es_gam (BOOLEAN DEFAULT false)", () => {
+    expect(upSql).toMatch(/ADD COLUMN "pago_entrega" DECIMAL\(12,2\) NOT NULL DEFAULT 0/);
+    expect(upSql).toMatch(/ADD COLUMN "pago_rechazo" DECIMAL\(12,2\) NOT NULL DEFAULT 0/);
+    expect(upSql).toMatch(/ADD COLUMN "es_gam" BOOLEAN NOT NULL DEFAULT false/);
+  });
+
+  it("R2: crea el indice unico zona_nombre_key", () => {
+    expect(upSql).toMatch(/CREATE UNIQUE INDEX "zona_nombre_key" ON "zona"\("nombre"\)/);
+  });
+
+  it("R3: crea el indice unico parcial zona_es_gam_unico WHERE es_gam = true", () => {
+    expect(upSql).toMatch(
+      /CREATE UNIQUE INDEX "zona_es_gam_unico" ON "zona"\("es_gam"\) WHERE "es_gam" = true/,
+    );
+  });
+});
+
+describe("UP — distrito.zona_id y usuario.zona_id (R5/R6/R7/R8)", () => {
+  it("R5: agrega distrito.zona_id (nullable) + indice + FK RESTRICT", () => {
+    expect(upSql).toMatch(/ALTER TABLE "distrito" ADD COLUMN "zona_id" TEXT;/);
+    expect(upSql).toMatch(/CREATE INDEX "distrito_zona_id_idx" ON "distrito"\("zona_id"\)/);
+    expect(upSql).toMatch(
+      /ALTER TABLE "distrito" ADD CONSTRAINT "distrito_zona_id_fkey"[\s\S]*REFERENCES "zona"\("id"\)[\s\S]*ON DELETE RESTRICT/,
+    );
+  });
+
+  it("R6: agrega usuario.zona_id (nullable) + indice + FK RESTRICT", () => {
+    expect(upSql).toMatch(/ALTER TABLE "usuario" ADD COLUMN "zona_id" TEXT;/);
+    expect(upSql).toMatch(/CREATE INDEX "usuario_zona_id_idx" ON "usuario"\("zona_id"\)/);
+    expect(upSql).toMatch(
+      /ALTER TABLE "usuario" ADD CONSTRAINT "usuario_zona_id_fkey"[\s\S]*REFERENCES "zona"\("id"\)[\s\S]*ON DELETE RESTRICT/,
+    );
+  });
+
+  it("R7/R8: ambas FK usan ON DELETE RESTRICT (impide referenciar/borrar zona inexistente/en uso)", () => {
+    const restrictCount = (upSql.match(/ON DELETE RESTRICT/g) ?? []).length;
+    expect(restrictCount).toBeGreaterThanOrEqual(2);
+    // nullable: las columnas se agregan como TEXT sin NOT NULL
+    expect(upSql).not.toMatch(/ADD COLUMN "zona_id" TEXT NOT NULL/);
+  });
+});
+
+describe("UP — provincia.zona_id: R4 DROP ejecutado", () => {
+  it("elimina provincia.zona_id (columna + FK + indice); la zona se deriva del distrito", () => {
+    expect(upSql).toMatch(
+      /ALTER TABLE "provincia" DROP CONSTRAINT IF EXISTS "provincia_zona_id_fkey"/,
+    );
+    expect(upSql).toMatch(/DROP INDEX IF EXISTS "provincia_zona_id_idx"/);
+    expect(upSql).toMatch(/ALTER TABLE "provincia" DROP COLUMN "zona_id"/);
+    // ya NO se relaja a nullable: se elimina del todo
+    expect(upSql).not.toMatch(/ALTER COLUMN "zona_id" DROP NOT NULL/);
+  });
+});
+
+describe("R9/R10 — jerarquia geografica y orden intactas", () => {
+  it("R9: la migracion NO altera las FK canton.provincia_id ni distrito.canton_id", () => {
+    expect(upSql).not.toMatch(/canton_provincia_id_fkey/);
+    expect(upSql).not.toMatch(/distrito_canton_id_fkey/);
+  });
+
+  it("R10: ni el UP ni el DOWN tocan la tabla orden", () => {
+    expect(upSql).not.toMatch(/ALTER TABLE "orden"/);
+    expect(downSql).not.toMatch(/ALTER TABLE "orden"/);
+    expect(upSql).not.toMatch(/DROP TABLE/i);
+  });
+});
+
+describe("DOWN — revierte lo aditivo (R11)", () => {
+  it("elimina usuario.zona_id y distrito.zona_id (FK + indice + columna)", () => {
+    expect(downSql).toMatch(/ALTER TABLE "usuario" DROP CONSTRAINT IF EXISTS "usuario_zona_id_fkey"/);
+    expect(downSql).toMatch(/ALTER TABLE "usuario" DROP COLUMN IF EXISTS "zona_id"/);
+    expect(downSql).toMatch(/ALTER TABLE "distrito" DROP CONSTRAINT IF EXISTS "distrito_zona_id_fkey"/);
+    expect(downSql).toMatch(/ALTER TABLE "distrito" DROP COLUMN IF EXISTS "zona_id"/);
+  });
+
+  it("elimina indices y columnas nuevas de zona y restaura provincia.zona_id (columna + FK)", () => {
+    expect(downSql).toMatch(/DROP INDEX IF EXISTS "zona_es_gam_unico"/);
+    expect(downSql).toMatch(/DROP INDEX IF EXISTS "zona_nombre_key"/);
+    expect(downSql).toMatch(/ALTER TABLE "zona" DROP COLUMN IF EXISTS "es_gam"/);
+    expect(downSql).toMatch(/ALTER TABLE "provincia" ADD COLUMN "zona_id" TEXT NOT NULL/);
+    expect(downSql).toMatch(/ADD CONSTRAINT "provincia_zona_id_fkey"/);
+  });
+
+  it("la carpeta contiene migration.sql y down.sql, con timestamp posterior a las previas", () => {
+    expect(fs.existsSync(path.join(migrationDir, "migration.sql"))).toBe(true);
+    expect(fs.existsSync(path.join(migrationDir, "down.sql"))).toBe(true);
+    const dirs = fs
+      .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+    const thisDir = dirs.find((d) => d.endsWith("_zonas_catalogo_global_pagos"))!;
+    const previas = dirs.filter(
+      (d) =>
+        !d.endsWith("_zonas_catalogo_global_pagos") &&
+        !d.endsWith("_orden_num_guia_deferred_mensajero_asignado_espera_aceptacion") && // feature 17: apendida despues
+        !d.endsWith("_order_status_en_ruta_bodega_satelite") && // feature 30: apendida despues
+        !d.endsWith("_gestion_orden_estados_metodo_pago") && // feature 36: apendida despues
+        !d.endsWith("_order_status_en_bodega_satelite"), // feature 33: apendida despues
+    );
+    expect(thisDir > previas[previas.length - 1]).toBe(true);
+  });
+});
+
+describe("R12 — RLS de la geografia permanece habilitado", () => {
+  it("la migracion previa habilito RLS en zona/provincia/canton/distrito", () => {
+    expect(geoMigration).toMatch(/ALTER TABLE "zona" ENABLE ROW LEVEL SECURITY/);
+    expect(geoMigration).toMatch(/ALTER TABLE "provincia" ENABLE ROW LEVEL SECURITY/);
+    expect(geoMigration).toMatch(/ALTER TABLE "canton" ENABLE ROW LEVEL SECURITY/);
+    expect(geoMigration).toMatch(/ALTER TABLE "distrito" ENABLE ROW LEVEL SECURITY/);
+  });
+
+  it("esta migracion NO deshabilita RLS", () => {
+    expect(upSql).not.toMatch(/DISABLE ROW LEVEL SECURITY/);
+  });
+});
+
+describe("schema.prisma refleja el modelo", () => {
+  it("Zona lleva pagoEntrega/pagoRechazo/esGam y nombre unico", () => {
+    expect(schema).toMatch(/pagoEntrega Decimal .*@map\("pago_entrega"\)/);
+    expect(schema).toMatch(/pagoRechazo Decimal .*@map\("pago_rechazo"\)/);
+    expect(schema).toMatch(/esGam\s+Boolean .*@map\("es_gam"\)/);
+    expect(schema).toMatch(/nombre\s+String\s+@unique/);
+  });
+
+  it("Distrito y Usuario tienen zonaId nullable con relacion e indice", () => {
+    expect(schema).toMatch(/zonaId\s+String\?\s+@map\("zona_id"\)/);
+  });
+});

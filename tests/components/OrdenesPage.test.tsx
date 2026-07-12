@@ -89,7 +89,7 @@ afterEach(() => {
 });
 
 describe("OrdenesPage", () => {
-  it("D1: renderiza las 5 columnas y una fila por orden mapeando cada celda; Tienda muestra el nombre, no el uuid (R18, R19, R24, R26, R6, R7, R8)", async () => {
+  it("D1: renderiza las 6 columnas y una fila por orden mapeando cada celda; Tienda muestra el nombre, no el uuid (R18, R19, R24, R26, R6, R7, R8; feature 30/R14: Zona)", async () => {
     const items: OrdenListItemDTO[] = [
       makeOrden({
         id: "o1",
@@ -136,7 +136,7 @@ describe("OrdenesPage", () => {
     // Espera la resolución async de SWR.
     await screen.findByText("Tienda Uno");
 
-    // 5 cabeceras en orden.
+    // 6 cabeceras en orden (feature 30/R14 añade "Zona").
     const headers = screen.getAllByRole("columnheader");
     expect(headers.map((h) => h.textContent)).toEqual([
       "Nº Guía",
@@ -144,6 +144,7 @@ describe("OrdenesPage", () => {
       "Estatus",
       "Destinatario",
       "Tienda",
+      "Zona",
     ]);
 
     // 3 filas de datos.
@@ -201,8 +202,8 @@ describe("OrdenesPage", () => {
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent("No hay órdenes");
-    // La cabecera sigue presente.
-    expect(screen.getAllByRole("columnheader")).toHaveLength(5);
+    // La cabecera sigue presente (6 columnas con "Zona", feature 30/R14).
+    expect(screen.getAllByRole("columnheader")).toHaveLength(6);
   });
 
   it("D4: cualquier resultado no-ok o throw del transporte muestra error accesible genérico, sin tabla de datos ni internals (R21)", async () => {

@@ -18,6 +18,7 @@ import {
 import type { Actor, IUsuarioService } from "@/lib/interfaces/services/IUsuarioService";
 import { UsuarioService } from "@/lib/services/UsuarioService";
 import { UserRepository } from "@/lib/repositories/UserRepository";
+import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
@@ -45,7 +46,8 @@ function toUsuarioActionError(shape: AppErrorShape): ActionError {
 
 function buildUsuarioService(): IUsuarioService {
   const prisma = getPrismaClient();
-  return new UsuarioService(new UserRepository(prisma));
+  // Feature 24/R28: se inyecta el repo de zonas para validar `usuario.zona_id`.
+  return new UsuarioService(new UserRepository(prisma), new ZonaRepository(prisma));
 }
 
 export interface UsuarioActionDeps {

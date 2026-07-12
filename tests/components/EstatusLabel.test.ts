@@ -12,6 +12,11 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   en_ruta_bodega_principal: "En ruta a bodega principal",
   en_bodega: "En bodega",
   en_preparacion: "En preparación",
+  en_espera_aceptacion: "Por recoger", // feature 36: ajuste de semántica de recogida
+  en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30
+  en_reparto: "En reparto", // feature 36
+  rechazada: "Rechazada", // feature 36
+  en_bodega_satelite: "En bodega satélite", // feature 33
 };
 
 describe("estatusLabel — mapa de presentación value → label (R17)", () => {

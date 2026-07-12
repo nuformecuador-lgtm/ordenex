@@ -17,6 +17,11 @@ export interface TemplateField {
   label?: string;
   /** Valor de ejemplo opcional para la fila de muestra (R6). */
   example?: string;
+  /**
+   * Marca la columna como obligatoria. Se propaga a la plantilla XLSX, cuya
+   * cabecera se sufija con " *" para anticiparlo al usuario (feature 51).
+   */
+  required?: boolean;
 }
 
 /** Tipos de archivo admitidos para la SUBIDA (R3). */

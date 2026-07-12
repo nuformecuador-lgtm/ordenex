@@ -94,22 +94,30 @@ model Usuario {
   vehiculoId           String?       @map("vehiculo_id") // feature 21: solo mensajeros; FK -> vehiculos
   placa                String? // feature 21: placa del vehiculo del mensajero, normalizada uppercase/trim
   fulfillment          Boolean       @default(false) // feature 27: tienda con fulfillment (rol adminTienda); default false
+  zonaId               String?       @map("zona_id") // feature 24/R6: nullable; solo mensajero/adminSatelite lo llevan
+  ordenEnGestionId     String?       @map("orden_en_gestion_id") // feature 36/R19-R21: orden activa 1-a-1 en gestion; NULL = ninguna
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
-  tipoIdentificacion TipoIdentificacion   @relation(fields: [tipoIdentificacionId], references: [id])
-  rol                Rol                  @relation(fields: [rolId], references: [id])
-  vehiculo           Vehiculo?            @relation(fields: [vehiculoId], references: [id]) // feature 21
-  loginAttempts      LoginAttempt[]
-  trustedDevices     TrustedDevice[]
-  otpChallenges      EmailOtpChallenge[]
-  documentos         MensajeroDocumento[] // feature 21
-  ordenesTienda      Orden[]              @relation("OrdenTienda")
-  ordenesMensajeria  Orden[]              @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
+  tipoIdentificacion  TipoIdentificacion   @relation(fields: [tipoIdentificacionId], references: [id])
+  rol                 Rol                  @relation(fields: [rolId], references: [id])
+  vehiculo            Vehiculo?            @relation(fields: [vehiculoId], references: [id]) // feature 21
+  zona                Zona?                @relation(fields: [zonaId], references: [id]) // feature 24/R6/R8: ON DELETE RESTRICT
+  ordenEnGestion      Orden?               @relation("UsuarioOrdenEnGestion", fields: [ordenEnGestionId], references: [id], onDelete: SetNull) // feature 36/R19-R21
+  loginAttempts       LoginAttempt[]
+  trustedDevices      TrustedDevice[]
+  otpChallenges       EmailOtpChallenge[]
+  documentos          MensajeroDocumento[] // feature 21
+  ordenesTienda       Orden[]              @relation("OrdenTienda")
+  ordenesMensajeria   Orden[]              @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
+  ordenesAsignadas    Orden[]              @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
+  gestionesRealizadas GestionOrden[]       @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
   @@index([vehiculoId]) // feature 21
+  @@index([zonaId]) // feature 24/R6
+  @@index([ordenEnGestionId]) // feature 36
   @@map("usuario")
 }
 
@@ -202,7 +210,11 @@ model OrderStatus {
   @@map("order_status")
 }
 
-// Geografia jerarquica (R4/R5). Tablas creadas vacias (sin seed).
+// Geografia jerarquica (feature 6 la creo vacia). Feature 24: la zona pasa a ser un
+// catalogo global con pagos al mensajero y flag `es_gam`; la asignacion nueva vive
+// en `distrito.zona_id`. Feature 24/R4: `provincia.zona_id` fue ELIMINADO (la zona
+// ya no cuelga de la provincia); la carga masiva (feature 15) deriva `orden.zona_id`
+// del DISTRITO de la orden (`distrito.zona_id`), no de la provincia.
 model Zona {
   id            String  @id @default(uuid())
   nombre        String
@@ -226,7 +238,6 @@ model Provincia {
   cantones Canton[]
   ordenes  Orden[]
 
-  @@index([zonaId])
   @@map("provincia")
 }
 
@@ -244,15 +255,17 @@ model Canton {
 }
 
 model Distrito {
-  id       String @id @default(uuid())
+  id       String  @id @default(uuid())
   nombre   String
-  cantonId String @map("canton_id")
+  cantonId String  @map("canton_id")
+  zonaId   String? @map("zona_id") // feature 24/R5: nullable; NULL = distrito sin zona asignada
 
   canton  Canton         @relation(fields: [cantonId], references: [id])
   ordenes Orden[]
   zonas   ZonaDistrito[] // feature 24: relacion N:M con zona
 
   @@index([cantonId])
+  @@index([zonaId]) // feature 24/R5
   @@map("distrito")
 }
 
@@ -275,7 +288,7 @@ model ZonaDistrito {
 // Orden de negocio (R7-R14a). Borrado logico via deleted_at (soft delete).
 model Orden {
   id                  String    @id @default(uuid())
-  numGuia             Int       @unique @default(autoincrement()) @map("num_guia") // R8/R14: SERIAL
+  numGuia             Int?      @unique @map("num_guia") // feature 17/R1: nullable, sin default; asignado en "Generar guia" via nextval(orden_num_guia_seq)
   numRemision         String    @unique @map("num_remision") // R9/R14: lo provee el usuario
   estatusId           String    @map("estatus_id") // R10: FK not null
   destinatario        String
@@ -290,7 +303,8 @@ model Orden {
   notas               String? // R14a: texto nullable
   direccion           String? // feature 15/R1: nuevo, carga masiva
   montoCobrar         Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
-  mensajeroSugeridoId String?   @map("mensajero_sugerido_id") // feature 15/R1/R2
+  mensajeroSugeridoId String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
+  mensajeroAsignadoId String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
   deletedAt           DateTime? @map("deleted_at") // soft delete
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
@@ -302,12 +316,65 @@ model Orden {
   canton            Canton      @relation(fields: [cantonId], references: [id])
   distrito          Distrito?   @relation(fields: [distritoId], references: [id])
   mensajeroSugerido Usuario?    @relation("OrdenMensajeroSugerido", fields: [mensajeroSugeridoId], references: [id])
+  mensajeroAsignado Usuario?    @relation("OrdenMensajeroAsignado", fields: [mensajeroAsignadoId], references: [id], onDelete: SetNull) // feature 17/R7
+
+  gestiones           GestionOrden[] // feature 36: gestiones registradas sobre esta orden
+  mensajerosGestionando Usuario[]    @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
 
   @@index([tiendaId])
   @@index([estatusId])
   @@index([createdAt])
   @@index([mensajeroSugeridoId])
+  @@index([mensajeroAsignadoId]) // feature 17/R7
   @@map("orden")
+}
+
+// Feature 36 (R5, decision F1.4-c): metodo de pago del recaudo al cliente en una
+// ENTREGA. Enum Postgres nativo (patron RolValue/VehiculoValue), fuente unica de
+// verdad reflejada en lib/types/metodo-pago.ts. OJO 'SIMPE' en mayusculas (F1.4-c).
+enum MetodoPagoValue {
+  efectivo
+  SIMPE
+  transferencia
+
+  @@map("metodo_pago_value")
+}
+
+// Feature 36 (R6, decision F1.4-d): discriminador del resultado de una gestion.
+enum GestionResultado {
+  entregada
+  reprogramada
+  devuelta
+  rechazada
+
+  @@map("gestion_resultado")
+}
+
+// Feature 36 (R6-R8, decision F1.4-d): UN registro por gestion de orden, con un
+// discriminador `resultado` y campos NULLABLE segun resultado. La evidencia se
+// guarda como `storage_path` de un bucket PRIVADO (nunca URL publica, R8); se
+// firma al mostrar. RLS habilitada sin policies (solo service role, patron
+// mensajero_documento/orden). Una orden puede acumular varias gestiones a lo
+// largo de reintentos (features 46/47): NO se fuerza @@unique(ordenId).
+model GestionOrden {
+  id                   String           @id @default(uuid())
+  ordenId              String           @map("orden_id") // FK -> orden
+  mensajeroId          String           @map("mensajero_id") // FK -> usuario (el actor)
+  resultado            GestionResultado
+  montoRecibido        Decimal?         @map("monto_recibido") @db.Decimal(12, 2) // ENTREGADA
+  metodoPago           MetodoPagoValue? @map("metodo_pago") // ENTREGADA
+  evidenciaStoragePath String?          @map("evidencia_storage_path") // ENTREGADA/RECHAZO: path bucket privado, NO URL
+  evidenciaContentType String?          @map("evidencia_content_type") // image/jpeg|png|webp
+  motivo               String? // REPROGRAMAR/DEVOLUCION/RECHAZO
+  fechaReprogramacion  DateTime?        @map("fecha_reprogramacion") @db.Date // REPROGRAMAR
+  createdAt            DateTime         @default(now()) @map("created_at")
+
+  orden     Orden   @relation(fields: [ordenId], references: [id])
+  mensajero Usuario @relation("GestionMensajero", fields: [mensajeroId], references: [id])
+
+  @@index([ordenId]) // R7
+  @@index([mensajeroId]) // R7
+  @@map("gestion_orden")
 }
 
 // Tarifa: tarifas de flete/comision, tabla multi-fila con `nombre` para

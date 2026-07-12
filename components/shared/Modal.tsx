@@ -28,6 +28,12 @@ export interface ModalProps {
   confirmVariant?: "default" | "destructive";
   /** Oculta el botón cancelar (R10). Default false. */
   hideCancel?: boolean;
+  /**
+   * Deshabilita el botón confirmar por decisión del consumidor (p. ej. sin datos
+   * accionables). Aditivo; el bloqueo por fase "pending" es independiente.
+   * Default false.
+   */
+  confirmDisabled?: boolean;
 
   /**
    * Handler de confirmación (R9, R11, R14). Puede ser síncrono (void) o async
@@ -86,6 +92,7 @@ export function Modal({
   cancelLabel = "Cancelar",
   confirmVariant = "default",
   hideCancel = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
   onError,
@@ -131,8 +138,8 @@ export function Modal({
   }
 
   async function handleConfirm() {
-    if (pendingRef.current) {
-      return; // R17: anti-doble-submit (guarda síncrona, no depende del re-render)
+    if (pendingRef.current || confirmDisabled) {
+      return; // R17: anti-doble-submit; o confirmar deshabilitado por el consumidor
     }
     const result = onConfirm?.(); // R9, R11
 
@@ -218,7 +225,7 @@ export function Modal({
               type="button"
               variant={confirmVariant}
               onClick={handleConfirm}
-              disabled={pending}
+              disabled={pending || confirmDisabled}
             >
               {pending ? (
                 <span

@@ -6,18 +6,42 @@ import {
   type CantonRow,
   type CreateOrdenData,
   type DistritoRow,
+  type EtiquetaRow,
+  type GenerarGuiaDecisionData,
+  type GenerarGuiaResultRow,
   type GeoExistence,
   type IOrdenRepository,
   type ListOrdenesParams,
   type ListOrdenesResult,
+  type MensajeroLiteRow,
+  type OrdenTransicionRow,
+  type OrderStatusLiteRow,
   type ProvinciaRow,
+  type RecepcionSateliteRow,
   type UpdateOrdenData,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 type OrdenPrismaClient = Pick<
   PrismaClient,
-  "orden" | "orderStatus" | "zona" | "provincia" | "canton" | "distrito" | "usuario"
+  | "orden"
+  | "orderStatus"
+  | "zona"
+  | "provincia"
+  | "canton"
+  | "distrito"
+  | "usuario"
+  | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
 >;
+
+// Feature 17/R3: nombre CONSTANTE de la secuencia (nunca interpolar entrada de
+// usuario en el SQL crudo). Es la misma secuencia que el SERIAL de la feature 6
+// creo y que esta migracion desliga con `OWNED BY NONE`.
+const NUM_GUIA_SEQUENCE = "orden_num_guia_seq";
+
+// Feature 33/R11/R18: estado de ORIGEN de la recepcion en satelite. La escritura
+// guardada (`recibirEnSatelite`) solo transiciona una orden que sigue en este
+// estado (guardia por estado de origen en el propio UPDATE, patron feature 17/36).
+const ORIGEN_RECEPCION_SATELITE = "en_ruta_bodega_satelite";
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
 const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
@@ -38,18 +62,23 @@ const WITH_ESTATUS = {
 // R25/R26: solo el LISTADO incluye el nombre legible de la tienda
 // (relacion Orden.tienda -> Usuario.nombre). No requiere migracion: es un include
 // sobre una relacion ya existente en el esquema.
+// Feature 30/R14: el listado ademas incluye el nombre de la zona (`zona.nombre`)
+// y su flag GAM (`zona.esGam`) — relacion Orden.zona ya existente (zonaId NOT
+// NULL, feature 24). Aditivo: no requiere migracion.
 const WITH_ESTATUS_Y_TIENDA = {
   include: {
     estatus: { select: { value: true } },
     tienda: { select: { nombre: true } },
+    zona: { select: { nombre: true, esGam: true } },
   },
 } as const;
 
-// Fila de orden del listado: estatus.value + tienda.nombre.
+// Fila de orden del listado: estatus.value + tienda.nombre + zona.{nombre,esGam}.
 type OrdenListRow = Prisma.OrdenGetPayload<{
   include: {
     estatus: { select: { value: true } };
     tienda: { select: { nombre: true } };
+    zona: { select: { nombre: true; esGam: true } };
   };
 }>;
 
@@ -79,10 +108,18 @@ function toDTO(row: OrdenRow): OrdenDTO {
 
 // R25/R26: serializa una fila del listado a OrdenListItemDTO, agregando el nombre
 // legible de la tienda. Solo el listado usa este mapeo; el resto del CRUD usa toDTO.
+// Feature 17/R20: agrega mensajeroSugeridoId/mensajeroAsignadoId (ya vienen en el
+// row via WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
 function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
   return {
     ...toDTO(row),
     tiendaNombre: row.tienda.nombre,
+    mensajeroSugeridoId: row.mensajeroSugeridoId,
+    mensajeroAsignadoId: row.mensajeroAsignadoId,
+    // Feature 30/R14/R19: nombre de zona (columna del listado) + flag GAM (la UI
+    // decide por fila si muestra select de mensajero o "-> bodega satelite").
+    zonaNombre: row.zona.nombre,
+    zonaEsGam: row.zona.esGam,
   };
 }
 
@@ -119,6 +156,100 @@ function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
     estatusValue: row.estatus?.value,
     mensajeroSugeridoId: row.mensajeroSugeridoId,
     mensajeroSugeridoNombre: row.mensajeroSugerido?.nombre ?? null,
+  };
+}
+
+// Feature 32/R1 — proyeccion para la etiqueta: los datos de la orden + los
+// NOMBRES (no IDs) de tienda/geografia via relaciones ya existentes (patron
+// WITH_ESTATUS_Y_TIENDA). `distrito` es la unica relacion opcional (R4). No
+// selecciona `deletedAt` ni internos (R6); el filtro `deletedAt: null` va en el
+// `where` del findMany (R3).
+const WITH_ETIQUETA = {
+  select: {
+    id: true,
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    direccion: true,
+    producto: true,
+    montoCobrar: true,
+    tienda: { select: { nombre: true } },
+    zona: { select: { nombre: true } },
+    provincia: { select: { nombre: true } },
+    canton: { select: { nombre: true } },
+    distrito: { select: { nombre: true } },
+  },
+} as const;
+
+type OrdenEtiquetaRow = Prisma.OrdenGetPayload<typeof WITH_ETIQUETA>;
+
+// R1/R4/R5/R6: serializa la fila de etiqueta a EtiquetaRow. Resuelve los nombres
+// legibles, mapea Decimal montoCobrar -> number|null (R5, sin moneda) y deja
+// distritoNombre null si la orden no tiene distrito (R4). NO expone deletedAt (R6).
+function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
+  return {
+    id: row.id,
+    numGuia: row.numGuia,
+    numRemision: row.numRemision,
+    destinatario: row.destinatario,
+    telefonoDest: row.telefonoDest,
+    direccion: row.direccion,
+    producto: row.producto,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    tiendaNombre: row.tienda.nombre,
+    zonaNombre: row.zona.nombre,
+    provinciaNombre: row.provincia.nombre,
+    cantonNombre: row.canton.nombre,
+    distritoNombre: row.distrito?.nombre ?? null,
+  };
+}
+
+// Feature 33/R6/R8/R9 — proyeccion del modulo de la bodega satelite: los datos de
+// la orden + `estatus.value` (para partir "Por recibir"/"Recibidas") + los NOMBRES
+// (no IDs) de tienda/geografia via relaciones ya existentes (patron WITH_ETIQUETA).
+// `distrito` es la unica relacion opcional. No selecciona `deletedAt` ni internos;
+// el filtro `deletedAt: null` va en el `where` del findMany.
+const WITH_RECEPCION_SATELITE = {
+  select: {
+    id: true,
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    direccion: true,
+    producto: true,
+    montoCobrar: true,
+    estatus: { select: { value: true } },
+    tienda: { select: { nombre: true } },
+    zona: { select: { nombre: true } },
+    provincia: { select: { nombre: true } },
+    canton: { select: { nombre: true } },
+    distrito: { select: { nombre: true } },
+  },
+} as const;
+
+type OrdenRecepcionSateliteRow = Prisma.OrdenGetPayload<typeof WITH_RECEPCION_SATELITE>;
+
+// R6/R8/R9: serializa la fila a RecepcionSateliteRow. Resuelve los nombres
+// legibles, mapea Decimal montoCobrar -> number|null y deja distritoNombre null si
+// la orden no tiene distrito. NO expone deletedAt.
+function toRecepcionSateliteRow(row: OrdenRecepcionSateliteRow): RecepcionSateliteRow {
+  return {
+    id: row.id,
+    numGuia: row.numGuia,
+    numRemision: row.numRemision,
+    estatusValue: row.estatus.value,
+    destinatario: row.destinatario,
+    telefonoDest: row.telefonoDest,
+    direccion: row.direccion,
+    producto: row.producto,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    tiendaNombre: row.tienda.nombre,
+    zonaNombre: row.zona.nombre,
+    provinciaNombre: row.provincia.nombre,
+    cantonNombre: row.canton.nombre,
+    distritoNombre: row.distrito?.nombre ?? null,
   };
 }
 
@@ -281,7 +412,7 @@ export class OrdenRepository implements IOrdenRepository {
     if (nombres.length === 0) return [];
     const rows = await this.prisma.provincia.findMany({
       where: { nombre: { in: nombres, mode: "insensitive" } },
-      select: { id: true, nombre: true, zonaId: true },
+      select: { id: true, nombre: true },
     });
     return rows;
   }
@@ -301,7 +432,7 @@ export class OrdenRepository implements IOrdenRepository {
     if (cantonIds.length === 0) return [];
     const rows = await this.prisma.distrito.findMany({
       where: { cantonId: { in: cantonIds } },
-      select: { id: true, nombre: true, cantonId: true },
+      select: { id: true, nombre: true, cantonId: true, zonaId: true },
     });
     return rows;
   }
@@ -385,6 +516,252 @@ export class OrdenRepository implements IOrdenRepository {
     return this.prisma.orden.count({
       where: { id: { in: ordenIds }, tiendaId, deletedAt: null },
     });
+  }
+
+  // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
+
+  /** R27/R29: INCLUYE borradas (el service distingue "no existe" de "borrada"). */
+  async findByIdsForTransicion(ids: string[]): Promise<OrdenTransicionRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        numGuia: true,
+        deletedAt: true,
+        estatus: { select: { value: true } },
+        // Feature 30/R8/R9/R11/R12: zona de la orden + flag GAM de esa zona.
+        zonaId: true,
+        zona: { select: { esGam: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      estatusValue: r.estatus.value,
+      numGuia: r.numGuia,
+      deletedAt: r.deletedAt,
+      zonaId: r.zonaId,
+      zonaEsGam: r.zona.esGam,
+    }));
+  }
+
+  /** R28: subconjunto de `ids` con rol `mensajero`, SIN filtro de zona. */
+  async findMensajeroIdsValidos(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.usuario.findMany({
+      where: { id: { in: ids }, rol: { value: "mensajero" } },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /** R28/T15: TODOS los usuarios con rol `mensajero`, SIN filtro de zona. */
+  async findAllMensajeros(): Promise<MensajeroLiteRow[]> {
+    return this.prisma.usuario.findMany({
+      where: { rol: { value: "mensajero" } },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    });
+  }
+
+  /** Feature 30/R5 + 34/R5: usuarios rol `mensajero` cuyo `zonaId` sea la zona pasada. */
+  async findMensajerosByZona(zonaId: string): Promise<MensajeroLiteRow[]> {
+    return this.prisma.usuario.findMany({
+      where: { rol: { value: "mensajero" }, zonaId },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    });
+  }
+
+  /** Feature 30/R6 + 34/R9: subconjunto de `ids` con rol `mensajero` Y `zonaId` = zona pasada. */
+  async findMensajeroIdsValidosByZona(ids: string[], zonaId: string): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.usuario.findMany({
+      where: { id: { in: ids }, rol: { value: "mensajero" }, zonaId },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /** R15/R16: catalogo completo `order_status` (id, value), solo lectura. */
+  async listOrderStatus(): Promise<OrderStatusLiteRow[]> {
+    return this.prisma.orderStatus.findMany({
+      select: { id: true, value: true },
+    });
+  }
+
+  /**
+   * R5/R19/R25: transaccional (todo-o-nada, Prisma revierte automaticamente si
+   * el callback lanza). Por cada decision: asigna `num_guia = nextval(...)` SOLO
+   * si es NULL (idempotente, no consume la secuencia para filas ya numeradas) y
+   * fija `estatusId`/`mensajeroAsignadoId`. El nombre de la secuencia es la
+   * constante del modulo (nunca se interpola entrada de usuario en el SQL).
+   */
+  async generarGuiaLote(decisiones: GenerarGuiaDecisionData[]): Promise<GenerarGuiaResultRow[]> {
+    if (decisiones.length === 0) return [];
+    return this.prisma.$transaction(async (tx) => {
+      const resultados: GenerarGuiaResultRow[] = [];
+      for (const d of decisiones) {
+        // R5: idempotente — solo consume nextval() si num_guia es NULL.
+        await tx.$executeRawUnsafe(
+          `UPDATE "orden" SET num_guia = nextval('${NUM_GUIA_SEQUENCE}') WHERE id = $1 AND num_guia IS NULL`,
+          d.ordenId,
+        );
+        const updated = await tx.orden.update({
+          where: { id: d.ordenId },
+          data: { estatusId: d.estatusId, mensajeroAsignadoId: d.mensajeroAsignadoId },
+          select: { numGuia: true },
+        });
+        if (updated.numGuia === null) {
+          // Guarda defensiva: no deberia ocurrir (el UPDATE previo siempre deja
+          // num_guia asignado), pero se documenta en vez de mentir con `as number`.
+          throw new Error(`num_guia no asignado para la orden ${d.ordenId}`);
+        }
+        resultados.push({ ordenId: d.ordenId, numGuia: updated.numGuia });
+      }
+      return resultados;
+    });
+  }
+
+  /** R26: fija mensajero/estatus en lote; NUNCA toca num_guia (idempotencia R5). */
+  async asignarBodegaLote(
+    ordenIds: string[],
+    mensajeroId: string,
+    estatusId: string,
+  ): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    const result = await this.prisma.orden.updateMany({
+      where: { id: { in: ordenIds } },
+      data: { mensajeroAsignadoId: mensajeroId, estatusId },
+    });
+    return result.count;
+  }
+
+  /**
+   * Feature 30/R10/R13: rutea el lote no-GAM a `en_ruta_bodega_satelite`.
+   * Transaccional (todo-o-nada, Prisma revierte si el callback lanza). Por cada
+   * orden asigna `num_guia = nextval(...)` SOLO si es NULL (idempotente, R10, no
+   * consume la secuencia para filas ya numeradas), fija `estatusId` y deja
+   * `mensajeroAsignadoId = NULL` (R9). El nombre de la secuencia es la constante
+   * del modulo (nunca se interpola entrada de usuario en el SQL).
+   */
+  async rutearBodegaSateliteLote(ordenIds: string[], estatusId: string): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      for (const id of ordenIds) {
+        // R10: idempotente — solo consume nextval() si num_guia es NULL.
+        await tx.$executeRawUnsafe(
+          `UPDATE "orden" SET num_guia = nextval('${NUM_GUIA_SEQUENCE}') WHERE id = $1 AND num_guia IS NULL`,
+          id,
+        );
+        await tx.orden.update({
+          where: { id },
+          data: { estatusId, mensajeroAsignadoId: null }, // R9
+        });
+      }
+      return ordenIds.length;
+    });
+  }
+
+  // --- Feature 32: etiqueta de guia (READ derivado, R1/R3) ---
+
+  /**
+   * Feature 32/R1/R3: filas para la etiqueta por id. `where` filtra
+   * `deletedAt: null` (R3: borrada/inexistente -> ausente, el service la reporta
+   * como `no_encontrada`). NO filtra por `num_guia`: devuelve filas con `numGuia`
+   * posible null y el service decide `sin_guia` (R2). Solo query.
+   */
+  async findEtiquetasByIds(ids: string[]): Promise<EtiquetaRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { id: { in: ids }, deletedAt: null }, // R3
+      ...WITH_ETIQUETA,
+    });
+    return rows.map(toEtiquetaRow);
+  }
+
+  // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
+
+  /** Feature 33/R4/R5: `usuario.zonaId` del adminSatelite; `null` si no tiene. */
+  async findUsuarioZonaId(usuarioId: string): Promise<string | null> {
+    const row = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { zonaId: true },
+    });
+    return row?.zonaId ?? null;
+  }
+
+  /**
+   * Feature 33/R6/R8/R9: ordenes NO borradas de `zonaId` cuyo `estatus.value`
+   * esta en `estatusValues`, con nombres legibles de tienda/geografia. Solo query.
+   */
+  async findRecepcionSateliteByZona(
+    zonaId: string,
+    estatusValues: string[],
+  ): Promise<RecepcionSateliteRow[]> {
+    if (estatusValues.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: {
+        zonaId,
+        deletedAt: null, // R6: excluye borradas
+        estatus: { value: { in: estatusValues } },
+      },
+      ...WITH_RECEPCION_SATELITE,
+    });
+    return rows.map(toRecepcionSateliteRow);
+  }
+
+  /**
+   * Feature 33/R11/R18: transiciona UNA orden a `en_bodega_satelite` SOLO si sigue
+   * en `en_ruta_bodega_satelite`, es de `zonaId` y no esta borrada (guardia por
+   * estado de origen + zona en el propio UPDATE; concurrencia-segura). Devuelve
+   * `true` si afecto 1 fila. NO toca `mensajeroAsignadoId` ni `numGuia`.
+   */
+  async recibirEnSatelite(
+    ordenId: string,
+    zonaId: string,
+    destinoEstatusId: string,
+  ): Promise<boolean> {
+    const result = await this.prisma.orden.updateMany({
+      where: {
+        id: ordenId,
+        zonaId,
+        deletedAt: null,
+        estatus: { value: ORIGEN_RECEPCION_SATELITE },
+      },
+      data: { estatusId: destinoEstatusId },
+    });
+    return result.count === 1;
+  }
+
+  // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
+
+  /**
+   * Feature 34/R7/R14: transiciona el lote a `en_espera_aceptacion` fijando
+   * `mensajeroAsignadoId`, con escritura guardada por estado de ORIGEN + zona (solo
+   * las que sigan en `origenEstatusId`, de `zonaId` y no borradas; patron
+   * `recibirEnSatelite`, concurrencia-segura). Filtra por `estatusId` (id ya
+   * resuelto por el service), NO por `estatus.value`. NUNCA toca `numGuia` (R8).
+   * Devuelve el numero de filas efectivamente transicionadas.
+   */
+  async asignarSateliteLote(
+    ordenIds: string[],
+    mensajeroId: string,
+    zonaId: string,
+    destinoEstatusId: string,
+    origenEstatusId: string,
+  ): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    const result = await this.prisma.orden.updateMany({
+      where: {
+        id: { in: ordenIds },
+        estatusId: origenEstatusId,
+        zonaId,
+        deletedAt: null,
+      },
+      data: { mensajeroAsignadoId: mensajeroId, estatusId: destinoEstatusId },
+    });
+    return result.count;
   }
 }
 

@@ -564,3 +564,270 @@
   de `PAGE_SIZE_MAX` sin test dedicado; fallback silencioso `urlByPath[path] ?? ""` en `toDTO`.
 - DEUDA heredada de la 21 sigue vigente: la aprobación real requiere aplicar la migración de la 21 a Postgres
   y crear el bucket privado `mensajero-docs` (entorno con DB real).
+
+
+## 2026-07-10 — gestión de zonas (feature 24, FULLSTACK) — con REMODELADO de geografía
+- **Cambio de modelo respecto a la descripción del backlog** (decisiones del humano en F1.4, spec reabierto):
+  la geografía deja de ser hija de la zona y pasa a ser un **catálogo GLOBAL** de Costa Rica
+  (`provincia → cantón → distrito`); se **ELIMINA `provincia.zona_id`** y la zona se asigna a nivel de
+  **distrito** (`distrito.zona_id` nullable). Motivo: el Excel real asigna zona por distrito y una zona
+  cruza provincias (GAM abarca SJ/Alajuela/Cartago/Heredia). El spec previo (geografía inline hija de la
+  zona) estaba aprobado pero era incorrecto; se reescribió (R1–R40).
+- Construido: migración `20260711120000_zonas_catalogo_global_pagos` (up+down+RLS): DROP `provincia.zona_id`;
+  `distrito.zona_id`; `zona.pago_entrega`/`pago_rechazo` (Decimal 12,2 default 0), `zona.es_gam` (bool, índice
+  único parcial "a lo sumo una true"); `usuario.zona_id` nullable. Backend (tipos/normalize/config, interfaces,
+  `ZonaRepository`/`GeoRepository`/`ZonaService`, `lib/actions/zonas.ts`, `zonaId` en usuarios). Frontend en
+  `configuracion` (`ZonaForm`/`ZonasModule`/`zonas-columns`, auth server-side). Seed `scripts/seed-zonas.ts`
+  de **dos fuentes**: geografía desde el mapa oficial completo `public/geografia-cr-completa.xlsx`
+  (7 prov / 84 cant / 491 dist, generado y validado por el humano) + hints de zona desde el Excel original;
+  idempotente, `es_gam` NUNCA sembrado (toggle de UI).
+- Decisión R4/R11 del humano (opción b): `orden.zona_id` (NOT NULL) se deriva de `distrito.zona_id` en
+  `BulkOrdenService` (feature 15); distrito obligatorio y sin zona → **error de validación por fila**.
+  Consecuencia operativa: una carga masiva exige que el maestro haya zonificado los distritos involucrados.
+- Requisitos R1–R39 mapeados 1:1 a test (ver `progress/impl_24-gestion-zonas.md`); R40 = gate de despliegue.
+  Reviewer **APROBADO** 0 bloqueantes. Verificación: `pnpm test` 1160/1160, `./init.sh` OK, typecheck/lint limpios.
+- DEUDA (gate de despliegue, DB real): aplicar la migración y correr `seed-zonas.ts` contra Postgres con los dos XLSX.
+- Hallazgos menores (no bloqueantes): (1) el template de carga masiva no marca "Distrito" como obligatorio ni
+  comunica el nuevo acoplamiento zona↔distrito; (2) métrica `distritosSinZona` del seed cuenta por hint, no por
+  distrito distinto (solo afecta el reporte); (3) índice único de `nombre` sobre valor crudo. Aside preexistente
+  feature 15: ejemplos del template siguen siendo de Ecuador (Pichincha/Quito), no Costa Rica.
+
+
+## 2026-07-11 — revisión maestro / generar guía / asignación de mensajero (feature 17, FULLSTACK)
+- El módulo de órdenes del maestro muestra por separado `en_fulfillment`, `en_preparacion`, "en espera de
+  aceptación" (`en_espera_aceptacion`, estado NUEVO) y `en_bodega`, con selección por checkbox.
+- Backend: migración `20260711130000_orden_num_guia_deferred_mensajero_asignado_espera_aceptacion` (up+down):
+  `orden.num_guia` → NULLABLE, secuencia `orden_num_guia_seq` desligada del SERIAL (`OWNED BY NONE`, DROP DEFAULT,
+  UNIQUE intacto); nueva columna `orden.mensajero_asignado_id` (FK ON DELETE SET NULL, distinta de
+  `mensajero_sugerido_id`); estado `en_espera_aceptacion` en ORDER_STATUS_SEED + fila de catálogo (patrón feat 28).
+  `GuiaAsignacionService` (generar-guía sobre AMBOS estados de revisión + asignar-mensajero desde `en_bodega`,
+  transaccional, idempotente `WHERE num_guia IS NULL`, `nextval` por fila, solo `maestro`, guardia por estado de
+  origen). Server Actions discriminadas por `status`. `BulkOrdenService` (feature 15) ya NO asigna `num_guia` al
+  insertar; barrido de `numGuia` → `number|null` en DTOs/consumidores (features 6/7).
+- Frontend: vista del maestro con 4 apartados, `GenerarGuiaModal` (modal por lote: agrupa con/sin sugerido,
+  override por orden, una sola llamada `{ordenId, mensajeroId|null}`), `AsignarBodegaModal`, columnas + Toast.
+  Lista de mensajeros SIN filtro de zona (el filtro por zona/GAM es de la feature 30; límite explícito).
+- Requisitos R0–R32 mapeados 1:1 a test. Reviewer **APROBADO** 0 bloqueantes. Verificación: `pnpm test` 1239/1239,
+  `./init.sh` OK, typecheck/lint limpios.
+- DEUDA (gate de despliegue, DB real): aplicar la migración contra Postgres (no aplicada; sin DB).
+- Hallazgos menores (no bloqueantes): (1) brecha TOCTOU en `asignarBodegaLote`/`generarGuiaLote` (re-consulta por
+  id sin re-guardar estado/deletedAt dentro de la tx), mitigada por la guardia de estado-origen ante reintentos;
+  (2) unicidad de `num_guia` bajo concurrencia real solo ejercida con secuencia mockeada (migración no aplicada
+  contra Postgres). Ambos consistentes con el nivel de concurrencia y la deuda de DB del repo.
+- **Desbloquea**: features 30 (asignación por zona/GAM, restringe la lista de mensajeros), 32 (etiqueta/QR sobre
+  num_guia), 36 (mis asignaciones del mensajero, consume `mensajero_asignado_id` y `en_espera_aceptacion`).
+
+## 2026-07-10 — dashboard admin maestro (feature 23, FRONTEND)
+- Frontend puro: `app/(app)/page.tsx` ramifica por rol — `maestro`/`admin` → `AdminMaestroDashboard`;
+  `adminTienda` → dashboard de la feature 26 intacto; resto → placeholder 'Bienvenido'. Panel de
+  postulaciones de mensajeros en estado `pendiente` en tarjetas + `Pagination` (feature 8); documentos
+  como enlaces "Ver" (A1); aprobar/rechazar con `Modal` async (feature 13) + `Toast` (feature 11) +
+  refresco SWR (A2); rechazo sin motivo (A3). Consume las Server Actions de la feature 22. Mergeada
+  vía **PR #28** (6bf385b).
+- Requisitos cubiertos: R1–R19 (EARS), mapeados a test (ver `progress/impl_23-dashboard-maestro.md`).
+- Reviewer **APROBADO** (único mayor era documental, resuelto marcando tasks). Suite 1018 verde;
+  typecheck + lint OK; `init.sh` EXIT 0.
+- Decisiones F1.4 (humano): A1 documentos como enlaces "Ver"; A2 refresco vía SWR; A3 rechazo sin motivo.
+
+## 2026-07-10 — fulfillment de tienda + estado inicial condicional (feature 27, FULLSTACK)
+- Fullstack en un ciclo. (1) Nuevo campo booleano `Usuario.fulfillment` (default false) con migración +
+  `down.sql`. (2) El backend fuerza `fulfillment=false` si el rol ≠ `adminTienda` (R4/R4a). (3) Switch
+  'esta tienda tiene fulfillment' en `UsuarioForm` (feature 25, R5/R6). (4) Estado inicial de la carga
+  masiva CONDICIONAL en `BulkOrdenService` según el `adminTienda` autenticado: con fulfillment →
+  `en_fulfillment`; sin fulfillment → `en_preparacion` (R15). Mergeada vía **PR #29** (c4530c4).
+- Requisitos cubiertos: R1–R15 (EARS), mapeados a test (ver `progress/impl_27-fulfillment-tienda.md`).
+- Reviewer **APROBADO** 0 bloqueantes. Suite 1053 verde post-merge; `init.sh` OK.
+- **Desbloquea la feature 17** (deps 27 y 28 done).
+
+
+## 2026-07-10 — carga masiva: corrección CR + acoplamiento distrito/zona (feature 51, FRONTEND)
+- Corrección derivada de hallazgos del reviewer de la feature 24. Frontend puro (sin tocar backend/feature 15).
+  (1) `OrdenesCargaMasivaButton.tsx`: campo `distrito` marcado `required` (sufijo " *" en la cabecera XLSX vía
+  `xlsx-template.ts`); (2) Alert (shadcn, icono Info) dentro del modal avisando que cada orden debe indicar un
+  distrito y ese distrito debe tener zona, o la fila se rechaza (acoplamiento R4/R11 de la feature 24);
+  (3) ejemplos de plantilla Ecuador→Costa Rica (San José/San José/Carmen; teléfono 8 dígitos CR).
+  `BulkUpload.tsx`/`xlsx-template.ts` extendidos con `required?`.
+- Tests de componente añadidos (distrito requerido, opcional no requerido, aviso renderizado, ejemplos CR / no
+  Ecuador) + test del sufijo " *". Suite 1165/1165 verde; typecheck/lint/`init.sh` OK.
+- Proceso: corrección pequeña, ciclo SDD agilizado (spec inline por el leader, sin reviewer formal aparte).
+
+## 2026-07-11 — asignación por zona (GAM) y ruteo a bodega satélite (feature 30, FULLSTACK)
+- El maestro (bodega central) SOLO controla la zona GAM. Al asignar mensajero, solo aparecen los de zona GAM
+  (filtro por `zonaId` = zona con `esGam=true`); si la orden es de otra zona, el maestro no la asigna a mensajero:
+  la rutea a la bodega satélite de esa zona → estado NUEVO `en_ruta_bodega_satelite` ("En ruta a bodega <zona>",
+  nombre derivado de `orden.zonaId`). Al rutear se asigna `num_guia` (secuencia, idempotente).
+- Backend (backend_dev, model opus): 10.º valor `en_ruta_bodega_satelite` en `ORDER_STATUS_SEED` + migración
+  `20260711140000_order_status_en_ruta_bodega_satelite` (ADD VALUE IF NOT EXISTS + INSERT ON CONFLICT + `down.sql`
+  reversible con DELETE condicional, patrón feat 17/28). `ZonaRepository.findGamZonaId`; en `OrdenRepository`
+  `findMensajerosGam`/`findMensajeroIdsValidosGam`/`rutearBodegaSateliteLote` + zona en transición y listado;
+  `GuiaAsignacionService` inyecta `IZonaRepository`, guardia R4 (rechazo `validation_error` si no hay zona GAM),
+  clasificación GAM/no-GAM en lote mixto (una tx), método `rutearABodegaSatelite`; actions `rutearABodegaSatelite`
+  + `listarMensajerosParaAsignacion` filtrada a GAM (firmas estables).
+- Frontend (frontend_dev, model opus): columna "Zona", badge dinámico, 5.º apartado solo-lectura "En ruta a
+  bodega satélite" + `RutearSateliteModal`, y `GenerarGuiaModal` con split GAM (select) / no-GAM (grupo satélite
+  sin select, `mensajeroId=null`). Contrato de columnas de la feature 26 intacto.
+- Requisitos cubiertos: R1–R22 (EARS), mapeados 1:1 a test (ver `progress/impl_30-...md`). Reviewer **APROBADO**
+  0 bloqueantes (corrió `./init.sh` él mismo). Verificación: `pnpm test` **1287/1287**, `./init.sh` EXIT 0, typecheck/lint OK.
+- Decisiones F1.4 (humano 2026-07-11, las 6 recomendadas): (a) GAM=flag `esGam`+guardia R4 (sin sembrar zona GAM);
+  (b) un `en_ruta_bodega_satelite` con zona derivada; (c) ruteo solo transición + `orden.zonaId`; (d) orígenes
+  `en_fulfillment`/`en_preparacion`/`en_bodega`; (e) override del `GenerarGuiaModal` también filtrado a GAM (service
+  revalida); (f) `num_guia` al rutear.
+- DEUDA (gate de despliegue, DB real): migración NO aplicada contra Postgres (sin DB aislada); cubierta por test de
+  integración estático `order-status-satelite-migration.test.ts`.
+- Hallazgos menores (aceptados): (1) `zonaNombre`/`zonaEsGam` opcionales en `OrdenListItemDTO` (aditivo R19); el repo
+  siempre los envía. (2) `listarMensajerosParaAsignacion` devuelve vacío si no hay zona GAM — candidato a aviso de UX.
+- **Desbloquea / se apoya en**: feed a features 33 (recepción QR en satélite consume `en_ruta_bodega_satelite`),
+  34 (asignación desde satélite) y 39 (pago por zona). Consumió 24 (zonas/`esGam`) y 17 (generar guía/`num_guia`).
+
+## 2026-07-11 — etiqueta de guía con QR y código de barras (feature 32, FULLSTACK)
+- Al pulsar la acción "Imprimir etiquetas" sobre el lote seleccionado (vista del maestro, feature 17), se genera un
+  **PDF descargable, una etiqueta EXACTAMENTE 100mm × 100mm por orden** (PDF multipágina), con todos los datos del
+  paquete + un **código QR** (codifica `orden.id`, lo escaneará la feature 33 para recepción) y un **código de barras**
+  (codifica `num_guia`, CODE128). Solo se etiquetan órdenes que YA tienen `num_guia`; las demás se omiten con aviso.
+- Backend (backend_dev, model opus), **SIN migración/tabla** (read DERIVADO): `EtiquetaGuiaDTO` (`lib/types/etiqueta-guia.ts`)
+  + `OrdenRepository.findEtiquetasByIds` que RESUELVE lo que el `OrdenDTO` no expone (nombres de tienda/zona/provincia/
+  cantón/distrito + `direccion` + `montoCobrar` Decimal→number); `EtiquetaGuiaService` (guardia `num_guia`, autz
+  maestro-only) + Server Action `lib/actions/etiquetas-guia.ts` (zod + `resolveActorFromSession` + `withErrorHandler`).
+  `findEtiquetasByIds` es aditivo en `IOrdenRepository` (contratos 6/7/17/26/30 intactos). `lib/config/moneda.ts` (patrón
+  de `lib/config/ordenes.ts`, env override, default `es-CR`/`CRC`).
+- Frontend (frontend_dev, model opus): acción "Imprimir etiquetas" en `OrdenesRevisionMaestro` sobre la selección/lote,
+  `EtiquetaGuia`/`EtiquetasGuiaModal`, y `etiquetas-pdf.ts` con **jspdf** (`unit:"mm", format:[100,100]`, una página por
+  etiqueta, rasteriza el QR de `qrcode.react` y el barcode de `jsbarcode`). Deps NUEVAS: `qrcode.react`, `react-barcode`,
+  `jspdf`, `jsbarcode`.
+- Requisitos cubiertos: R1–R15 (EARS), mapeados 1:1 a test. Reviewer **APROBADO** 0 bloqueantes (corrió `./init.sh` él
+  mismo). Verificación: `pnpm test` **1314/1314**, `./init.sh` EXIT 0, typecheck/lint OK.
+- Decisiones F1.4 (humano 2026-07-11): (a) QR=`orden.id`; (b) barcode=`num_guia`; **(c) PDF real 100×100 mm** (CAMBIO vs
+  la recomendación HTML `window.print()` → superseded R10; suma dep de PDF sobre qrcode.react+react-barcode); (d)
+  `qrcode.react`+`react-barcode`(+`jspdf`/`jsbarcode`); (e) acción "Imprimir etiquetas" sobre el lote; (f) rol maestro,
+  órdenes con `num_guia`; (g) reimpresión libre sin auditoría.
+- DEUDA / verificación MANUAL (declarada): el tamaño binario exacto del PDF y la escaneabilidad física del QR no son
+  unit-testeables; quedan como verificación manual.
+- **Desbloquea**: feature 33 (recepción por escaneo del QR en bodega satélite). Consumió la 17 (`num_guia`).
+
+## 2026-07-11 — mensajero: "Mis asignaciones" y gestión de órdenes (feature 36, FULLSTACK)
+- Módulo `/mis-asignaciones` del rol `mensajero`. Máquina de estados (aclaración del humano: "aceptar" = orden
+  RECOGIDA por el mensajero): asignada (17/34) → `en_espera_aceptacion` ("esperando que el mensajero la recoja")
+  → [botón **Recoger**, lote "Recoger todas" + individual] → estado NUEVO **`en_reparto`** → gestión de UNA en una
+  → `entregada`/`reprogramada`/`devuelta`/estado NUEVO **`rechazada`**.
+- Gestión (4 resultados, obligatoriedad por resultado): ENTREGADA → foto evidencia + `montoRecibido` (DEBE cuadrar
+  EXACTO con `montoCobrar`, comparación `Prisma.Decimal.equals`) + método de pago; REPROGRAMAR → fecha futura +
+  motivo; DEVOLUCIÓN → motivo; RECHAZO → foto evidencia + motivo.
+- Backend (backend_dev, model opus): migración `20260711150000_gestion_orden_estados_metodo_pago` (up+down):
+  2 valores de order_status (`en_reparto`, `rechazada`), enum PG `metodo_pago_value` (efectivo/SIMPE/transferencia),
+  enum `gestion_resultado`, tabla `gestion_orden` (+**RLS**, sin policies = solo service role), puntero de bloqueo
+  1-a-1 `usuario.orden_en_gestion_id` (FK ON DELETE SET NULL). `GestionOrdenRepository`, `MisAsignacionesService`
+  (listar / recoger lote+individual / gestionar por resultado / **liberarGestion**), actions en `lib/actions/
+  mis-asignaciones.ts` (zod + `resolveActorFromSession` + `withErrorHandler`). Bloqueo 1-a-1 robusto ante carreras
+  (`updateMany` idempotente) y recargas; se libera al completar (dentro de la tx) o al CANCELAR el modal (R35).
+  Evidencias en bucket privado NUEVO `gestion-evidencias` (patrón `SupabaseFileStorage`/`ISignedUrlProvider`, path
+  privado + URL firmada, atomicidad storage↔DB con remove best-effort).
+- Frontend (frontend_dev, model opus): módulo con detalle completo, secciones por-recoger/en-reparto, "Recoger
+  todas" + individual, `GestionarOrdenModal` (4 resultados), bloqueo 1-a-1 respaldado por el puntero backend, subida
+  de foto, select de método de pago; labels `en_reparto`/`rechazada`. Reusa DataTable/Pagination/Modal/Toast.
+- Requisitos cubiertos: R0–R34 + R35 (liberar lock, aditivo), mapeados 1:1 a test. **Ciclo con 1 rechazo**: el
+  reviewer bloqueó por (1) tasks sin marcar y (2) falta E2E de recaudo (checkpoint de flujo de dinero); el humano
+  decidió AÑADIR el E2E. Correcciones: `e2e/mis-asignaciones.spec.ts` (recoger→ENTREGAR/RECHAZO/REPROGRAMAR,
+  patrón escrito-no-ejecutado de `auth.spec.ts`), `withErrorHandler` en actions, `liberarGestion`, comparación de
+  monto en Decimal. **Re-review APROBADO** 0 bloqueantes. Verificación: `pnpm test` **1433/1433**, `./init.sh`
+  EXIT 0, typecheck (incl. `e2e/`) + lint OK.
+- Decisiones F1.4 (humano 2026-07-11): (a) estado recogida=`en_reparto`/acción "Recoger"; (b) rechazo=`rechazada`
+  nuevo; (c) enum PG `metodo_pago_value`; (d) tabla `gestion_orden` con `resultado`; (e) bloqueo backend
+  `usuario.orden_en_gestion_id`; (f) bucket `gestion-evidencias`; (g) recoger lote+individual; (h) monto exacto;
+  (i) obligatoriedad por resultado; (j) trato idéntico central/satélite.
+- DEUDA declarada: crear bucket privado `gestion-evidencias` en Supabase (HUMANO); migración NO aplicada contra
+  Postgres real (deuda de despliegue); E2E ESCRITO pero NO ejecutado (requiere entorno con DB/seed/login).
+- **Desbloquea**: feature 37 (cierre del día, consume las órdenes gestionadas y los montos por método de pago),
+  y es base de 46/47/48/49 (reprogramación/reintentos/retorno/trazabilidad). Consumió la 17.
+
+## 2026-07-11 — bodega satélite: "Mis asignaciones" y recepción por QR (feature 33, FULLSTACK)
+- Módulo del rol `adminSatelite` en ruta NUEVA `/recepcion-satelite` (no `mis-asignaciones`, que es del mensajero,
+  feature 36). Dos secciones: "Por recibir" (`en_ruta_bodega_satelite` de SU zona) y "Recibidas"
+  (`en_bodega_satelite`). Recepción por ESCANEO del QR de la etiqueta (feature 32, QR=`orden.id`): cada escaneo
+  transiciona `en_ruta_bodega_satelite` → estado NUEVO `en_bodega_satelite` ("en bodega satélite de <zona>",
+  zona derivada de `orden.zonaId`, patrón feature 30).
+- Backend (backend_dev, model opus): 13.º valor `en_bodega_satelite` en `ORDER_STATUS_SEED` + migración
+  `20260711160000_order_status_en_bodega_satelite` (up+down condicional, patrón 30). `findUsuarioZonaId` (espejo de
+  `findUsuarioFulfillment`; el zonaId del adminSatelite se resuelve SERVER-SIDE, no se toca el tipo `Actor`),
+  `findRecepcionSateliteByZona`, `recibirEnSatelite` (UPDATE con `WHERE` por estado origen + zonaId).
+  `RecepcionSateliteService.recibir`: guardas rol `adminSatelite` + zona propia (orden de otra zona → `zona_ajena`,
+  doble defensa), idempotencia (ya recibida → `ya_recibida` sin doble transición), 5 casos de error tipados. Actions
+  con zod + `resolveActorFromSession` + `withErrorHandler`.
+- Frontend (frontend_dev, model opus): página protegida server-side (`notFound` si no adminSatelite), módulo dos
+  secciones, `EscanerRecepcion` con AMBOS caminos — **cámara `html5-qrcode`** (import dinámico dentro de `useEffect`,
+  nunca SSR) + **lector físico keyboard-wedge** (input), ambos → misma action; feedback por ítem (Toast); ítem de
+  Sidebar gated por rol. Cambios a EstatusBadge/estatus-label/order-status/Sidebar puramente aditivos.
+- Requisitos cubiertos: R1–R23 (EARS), mapeados 1:1 a test. Reviewer **APROBADO** 0 bloqueantes (corrió `init.sh` +
+  `pnpm build`). Verificación: `pnpm test` **1493/1493**, `./init.sh` EXIT 0, typecheck/lint OK. Dep nueva `html5-qrcode`.
+- Decisiones F1.4 (humano 2026-07-11): (a) escaneo AMBOS = cámara + lector keyboard-wedge (PWA = feature FUTURA
+  aparte); (b) un `en_bodega_satelite` zona-derivada; (c) solo su zona (server-side, `zona_ajena`); (d) 1-a-1
+  idempotente; (e) 5 casos de error; (f) sección "Recibidas" aparte; (g) E2E `e2e/recepcion-satelite.spec.ts`
+  (escrito, ejecución diferida); (h) sin vista del maestro.
+- DEUDA declarada: migración NO aplicada contra Postgres real (cubierta por test estático); verificación MANUAL del
+  hardware (cámara/lector); E2E escrito NO ejecutado.
+- HALLAZGO ajeno (pre-existente, NO de la 33): `pnpm build` falla el prerender de `/postulacion` (feature 21) por
+  `prisma.vehiculo.findMany()` en prerender estático sin `export const dynamic` (`P2021` sin DB en build). Candidato
+  a **feature de corrección aparte** (declarar la ruta dinámica o no consultar Prisma en prerender). `html5-qrcode`
+  NO lo causa (solo se carga en cliente).
+- **Desbloquea**: feature 34 (asignación a mensajeros desde la satélite, parte de `en_bodega_satelite`). Consumió
+  la 30 (`en_ruta_bodega_satelite`) y la 32 (QR=`orden.id`).
+
+## 2026-07-11 — fix build: /postulacion prerender dinámico (feature 52, FRONTEND)
+- Corrección de BUILD (bug PRE-EXISTENTE detectado por el reviewer de la feature 33, ajeno a ella). `pnpm build`
+  fallaba el prerender ESTÁTICO de la ruta pública `app/postulacion/page.tsx` (feature 21): Server Component async
+  que consulta Prisma (`VehiculoRepository.findMany()` + `prisma.tipoIdentificacion.findMany()`) sin leer
+  `cookies()`/`headers()`, así que Next intentaba prerenderizarla en build; sin DB → `P2021 TableDoesNotExist`.
+  Las otras rutas con Prisma (`app/(app)/page.tsx`, `login`, `recuperar-contrasena`) leen `cookies()` y salen
+  dinámicas solas, por eso no fallaban.
+- FIX: `export const dynamic = "force-dynamic"` en `app/postulacion/page.tsx` (renderiza en request time; apropiado
+  para página pública que lee catálogos de DB). Una línea + comentario; sin tocar lógica ni otras rutas.
+- Verificación: **`pnpm build` PASA** (`/postulacion` ahora `ƒ Dynamic`); `./init.sh` verde, `pnpm test` **1493/1493**.
+- Proceso: corrección pequeña, ciclo SDD agilizado (spec inline por el leader en `feature_list.json` id 52, sin
+  reviewer formal aparte; el criterio de aceptación es el build verde). No hay patrón en el repo para unit-testear
+  config de ruta (`export const dynamic`); la verificación es el `pnpm build`.
+
+## 2026-07-11 — deuda de despliegue: migraciones aplicadas + fix db-rollback Prisma 7 (feature 53, BACKEND/TOOLING)
+- Contexto: el humano pidió saldar las deudas dependientes del entorno (ejemplo: migraciones) antes de avanzar.
+- HALLAZGO clave: `DATABASE_URL` apunta a un **Postgres LOCAL** (`localhost:5432`, db `ordenex`), NO a un Supabase
+  compartido (la nota vieja del repo era incorrecta). Riesgo bajo.
+- Migraciones: `prisma migrate deploy` aplicó las **12 pendientes** (cobros, rol adminSatelite, rename
+  embalaje→en_fulfillment, enum order_status, vehículos, postulación, fulfillment, zonas, num_guia diferido,
+  en_ruta_bodega_satelite, gestion_orden+enums, en_bodega_satelite). `migrate status` = "up to date"; `db:seed`
+  (catálogos) OK.
+- Al verificar el ROLLBACK (T020) se descubrió que `scripts/db-rollback.ts` estaba **doblemente roto en Prisma 7**:
+  (1) `prisma db execute` ya no acepta `--schema` (datasource vía `prisma.config.ts`); (2) `migrate resolve
+  --rolled-back` da P3012 (solo migraciones FALLIDAS, no aplicadas). FIX (backend_dev, model opus): quitar
+  `--schema` del `db execute`, y reemplazar `migrate resolve --rolled-back` por un `DELETE FROM "_prisma_migrations"
+  WHERE "migration_name"=...` (a un archivo temporal ejecutado con `db execute`, guard de validación del nombre).
+- Verificación del rollback (round-trip real contra la DB local): `pnpm db:rollback` (revierte la última) →
+  `migrate status` la muestra pendiente → `migrate deploy` la reaplica → "up to date". DB dejada consistente.
+  `./init.sh` verde, `pnpm test` **1493/1493**, typecheck OK.
+- DEUDA RESTANTE (registrada en `current.md`): E2E ejecutables (falta harness de seed/login e2e — candidato a
+  feature), seed de ZONAS (necesita el Excel del humano), RLS con key anon (T004). El bucket `gestion-evidencias`
+  aplica solo si se usa Supabase Storage.
+- Proceso: ciclo ágil, spec inline (feature_list id 53). Corrió sobre la rama `chore/deuda-despliegue-migraciones`.
+
+## 2026-07-11 — bodega satélite: asignación a mensajeros de su zona (feature 34, FULLSTACK)
+- El adminSatelite asigna sus órdenes `en_bodega_satelite` (recibidas, feature 33) a mensajeros de SU zona →
+  `en_espera_aceptacion` (mismo estado del flujo del maestro, feature 17; luego la consume el mensajero en la 36).
+  SIN estados nuevos, SIN migración, SIN generar `num_guia` (las órdenes ya lo tienen). Cierra la cadena operativa
+  satelital: rutear (30) → etiqueta QR (32) → recibir (33) → **asignar (34)** → mensajero recoge/gestiona (36).
+- Backend (backend_dev, model opus): `AsignacionSateliteService` (servicio PARALELO al `GuiaAsignacionService` del
+  maestro, decisión F1.4-a; guardas rol `adminSatelite` + zona propia resuelta server-side vía `findUsuarioZonaId`;
+  5 errores tipados `estado_invalido`/`zona_ajena`/`mensajero_invalido`/`sin_zona`/`no_encontrada`; lote todo-o-nada)
+  + `OrdenRepository.asignarSateliteLote` (`updateMany` guardado por estado+zona+deletedAt, concurrencia-segura,
+  re-lee y `conflict` si count≠esperado). Action con zod + `resolveActorFromSession` + `withErrorHandler`.
+  RENAME honesto (decisión F1.4-b): `findMensajerosGam`→`findMensajerosByZona`, `findMensajeroIdsValidosGam`→
+  `findMensajeroIdsValidosByZona` (interfaz + repo + llamadores 17/30; maestro sigue pasando la zona GAM, VERDE).
+- Frontend (frontend_dev, model opus): EXTIENDE `recepcion-satelite` (decisión F1.4-c, no ruta nueva): la sección
+  "Recibidas" → `ListaRecibidas` con checkbox por fila + "Asignar" + `AsignarSateliteModal` (lote con 1 mensajero,
+  patrón `AsignarBodegaModal` de la 17, decisión F1.4-d). Mensajeros por props desde Server Component.
+- Requisitos cubiertos: R1–R20 (EARS), mapeados 1:1 a test. Reviewer **APROBADO** 0 bloqueantes (corrió `init.sh`).
+  Verificación: `pnpm test` **1519/1519**, `./init.sh` EXIT 0, typecheck (incl. `e2e/`) + lint OK. Rename NO rompió
+  el maestro (17/30 verdes).
+- Decisiones F1.4 (humano 2026-07-11, las 6 recomendadas): (a) servicio paralelo; (b) rename a `...ByZona`;
+  (c) extender `recepcion-satelite`; (d) lote con 1 mensajero; (e) errores tipados todo-o-nada; (f) E2E
+  `e2e/asignacion-satelite.spec.ts` (escrito, ejecución diferida).
+- DEUDA declarada: E2E escrito NO ejecutado (requiere entorno con DB/seed/login). Hallazgo menor (aceptado): en el
+  detalle de carrera R14, motivo `conflict` vs `estado_invalido` (cosmético).
+- **Desbloquea/completa**: cierra la cadena satelital operativa. Consumió 33 (`en_bodega_satelite`), 17 (asignación/
+  `en_espera_aceptacion`) y 30 (filtro de mensajeros por zona, ahora `...ByZona`).

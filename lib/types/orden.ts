@@ -63,9 +63,12 @@ export type ListarOrdenesInput = z.infer<typeof listarOrdenesSchema>;
 
 // R42/N3: DTO expuesto por las Server Actions. `numGuia` crudo (entero); `peso`
 // serializado a number (no Decimal). NUNCA expone `deletedAt`.
+// Feature 17/R30: `numGuia` es `number | null` — la guia se asigna en "Generar
+// guia" (feature 17), no al crear la orden (R1/R2); una orden sin guia aun se
+// lista con `numGuia: null` (pendiente).
 export interface OrdenDTO {
   id: string;
-  numGuia: number;
+  numGuia: number | null;
   numRemision: string;
   estatusId: string;
   estatusValue?: string;
@@ -94,7 +97,25 @@ export type ActionError =
 // R25/R26: elemento del LISTADO. Extiende OrdenDTO con el nombre legible de la
 // tienda (`Usuario.nombre` del usuario tienda). Solo aplica al listado; crear/
 // obtener/actualizar siguen devolviendo OrdenDTO sin `tiendaNombre`.
-export type OrdenListItemDTO = OrdenDTO & { tiendaNombre: string };
+// Feature 17/R20: agrega `mensajeroSugeridoId`/`mensajeroAsignadoId` (solo el
+// listado, para que el modal "Generar guia" agrupe por sugerido y las secciones
+// en_espera_aceptacion/en_bodega muestren el mensajero asignado). Cambio aditivo:
+// NO se agrega a OrdenDTO base para no ampliar el contrato del CRUD. Opcionales
+// (`?`) para no romper mocks/fixtures de UI existentes que construyen
+// OrdenListItemDTO sin estos campos; el repositorio SIEMPRE los envia (string|null).
+// Feature 30/R14/R19: agrega `zonaNombre` (columna de zona del listado) y
+// `zonaEsGam` (la UI decide por fila si muestra select de mensajero (GAM) o
+// "-> bodega satelite" (no-GAM)). Opcionales (`?`) por el mismo motivo que los
+// campos de mensajero (feature 17): no romper mocks/fixtures de UI existentes que
+// construyen OrdenListItemDTO sin ellos (R19, cambio aditivo); el repositorio
+// SIEMPRE los envia (string/boolean concretos desde la relacion Orden.zona).
+export type OrdenListItemDTO = OrdenDTO & {
+  tiendaNombre: string;
+  mensajeroSugeridoId?: string | null;
+  mensajeroAsignadoId?: string | null;
+  zonaNombre?: string;
+  zonaEsGam?: boolean;
+};
 
 export type CrearOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type ObtenerOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;

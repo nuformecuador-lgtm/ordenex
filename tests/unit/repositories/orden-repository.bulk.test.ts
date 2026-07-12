@@ -93,14 +93,14 @@ describe("OrdenRepository.findMensajerosByIds (R22)", () => {
 });
 
 describe("OrdenRepository — resolucion geografica batch (R19)", () => {
-  it("findProvinciasByNombres devuelve id/nombre/zonaId", async () => {
+  it("findProvinciasByNombres devuelve id/nombre", async () => {
     const prisma = buildPrisma();
-    prisma.provincia.findMany.mockResolvedValue([{ id: "p1", nombre: "Pichincha", zonaId: "z1" }]);
+    prisma.provincia.findMany.mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findProvinciasByNombres(["Pichincha"]);
 
-    expect(rows).toEqual([{ id: "p1", nombre: "Pichincha", zonaId: "z1" }]);
+    expect(rows).toEqual([{ id: "p1", nombre: "Pichincha" }]);
     const arg = prisma.provincia.findMany.mock.calls[0][0];
     expect(arg.where.nombre).toMatchObject({ in: ["Pichincha"], mode: "insensitive" });
   });
@@ -119,12 +119,14 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
 
   it("findDistritosByCantonIds filtra por cantonId in", async () => {
     const prisma = buildPrisma();
-    prisma.distrito.findMany.mockResolvedValue([{ id: "d1", nombre: "La Mariscal", cantonId: "c1" }]);
+    prisma.distrito.findMany.mockResolvedValue([
+      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" },
+    ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findDistritosByCantonIds(["c1"]);
 
-    expect(rows).toEqual([{ id: "d1", nombre: "La Mariscal", cantonId: "c1" }]);
+    expect(rows).toEqual([{ id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" }]);
     const arg = prisma.distrito.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ cantonId: { in: ["c1"] } });
   });
@@ -166,5 +168,19 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     expect(arg.data[0].peso).toBeNull();
     expect(arg.data[0].montoCobrar).toBeNull();
     expect(arg.data[0].mensajeroSugeridoId).toBeNull();
+  });
+
+  // Feature 17/R2/R8: la carga masiva NUNCA fija num_guia (queda NULL, se asigna
+  // en "Generar guia") ni mensajero_asignado_id (acto posterior del maestro).
+  it("no envia num_guia ni mensajero_asignado_id (R2/R8)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.createMany.mockResolvedValue({ count: 1 });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.createManyOrdenes([baseCreateData()], 500);
+
+    const arg = prisma.orden.createMany.mock.calls[0][0];
+    expect(arg.data[0]).not.toHaveProperty("numGuia");
+    expect(arg.data[0]).not.toHaveProperty("mensajeroAsignadoId");
   });
 });
