@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 34 CERRADA (impl+reviewer OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+| (ninguna en curso) | — | — | **`dev` REPARADO** por la feature 54 (reconciliación del #40); PR pendiente de merge. La feature 37 (pausada) se retoma al mergear. |
+
+> Feature 54 (reconciliación del refactor #40 → dev verde + `esCentral`) CERRADA 2026-07-12: **impl COMPLETA + reviewer APROBADO 0 bloqueantes** (verde REAL: `prisma validate` OK, `typecheck` 0, **1565/1565 tests**, `init.sh` OK, `pnpm build` OK). Fix-feature ágil. Repuso `esCentral`/`findCentralZonaId` (17/30 actualizadas), recableó ZonaRepository/TarifaRepository/GeoRepository, arregló schema (`Zona.usuarios`) + migración #40 rota, restauró la feature 51 (el #40 la había revertido a Ecuador), reconció los tests de menú/migración. Se conservó la intención del #40 (tarifas/N:M/menú). Estado `done` + `history.md` + `review_54`. **PENDIENTE: PR a `dev` + merge (OK humano)** → con eso `dev` sano y se retoma la 37. FOLLOW-UP feature 55: completar `ZonaForm` (setear `esCentral`) — sin eso `findCentralZonaId`=null y el maestro no asigna en runtime.
 
 > Feature 34 (asignación desde bodega satélite) CERRADA 2026-07-11: **impl COMPLETA (R1–R20) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1519 tests). Fullstack un ciclo, SIN migración. Estado `done` + `history.md` + `review_34`. `AsignacionSateliteService` paralelo (guardas rol+zona server-side, 5 errores tipados, lote todo-o-nada) + rename honesto `...Gam`→`...ByZona` (maestro verde) + UI "Asignar" en `recepcion-satelite`. **CIERRA la cadena satelital** (30→32→33→34→36). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: E2E escrito no ejecutado.
 

@@ -57,8 +57,8 @@ function makeFakePrisma() {
         async ({ where, create }: { where: { nombre: string }; create: Record<string, unknown> }) => {
           let row = state.zona.find((r) => r.nombre === where.nombre);
           if (!row) {
-            // defaults de la DB: pagos 0 y es_gam false
-            row = { id: nid("z"), pagoEntrega: 0, pagoRechazo: 0, esGam: false, ...create };
+            // feature 54: default de la DB es_central false (los pagos se movieron a tarifa_zona_mensajero)
+            row = { id: nid("z"), esCentral: false, ...create };
             state.zona.push(row);
           }
           // update: {} -> no sobrescribe nada (R39)
@@ -113,7 +113,7 @@ describe("parsers XLSX (R34/R35)", () => {
 });
 
 describe("seedZonas — dedup y defaults (R35/R37)", () => {
-  it("GAM + Gam producen UNA sola zona con pagos 0 y es_gam=false", async () => {
+  it("GAM + Gam producen UNA sola zona con es_central=false", async () => {
     const { prisma, state } = makeFakePrisma();
     const hints = parseZonaHintRows(zonaWorksheet(ZONA_ROWS));
     const zonaByKey = await seedZonas(prisma, hints);
@@ -122,8 +122,7 @@ describe("seedZonas — dedup y defaults (R35/R37)", () => {
     expect(state.zona).toHaveLength(2);
     const gam = state.zona.find((z) => z.nombre === "GAM");
     expect(gam).toBeDefined();
-    expect(gam?.pagoEntrega).toBe(0);
-    expect(gam?.esGam).toBe(false); // R37: nunca marca GAM
+    expect(gam?.esCentral).toBe(false); // R37: nunca marca la zona central
     expect(zonaByKey.get("gam")).toBe(gam?.id);
   });
 });
@@ -152,13 +151,13 @@ describe("seedZonasCompleto — cruce y resumen (R34/R36/R38)", () => {
     const limon = state.distrito.find((d) => d.nombre === "Limón");
     expect(limon?.zonaId).toBeUndefined(); // R36: sin zona -> NULL (no seteado)
 
-    // R37: ninguna zona sembrada con es_gam=true
-    expect(state.zona.every((z) => z.esGam === false)).toBe(true);
+    // R37: ninguna zona sembrada con es_central=true
+    expect(state.zona.every((z) => z.esCentral === false)).toBe(true);
   });
 });
 
 describe("idempotencia (R39)", () => {
-  it("dos corridas no duplican y conservan ids; no pisan pagos/es_gam editados", async () => {
+  it("dos corridas no duplican y conservan ids; no pisan es_central editado", async () => {
     const { prisma, state } = makeFakePrisma();
     const geoRows = parseGeografiaRows(geoWorksheet(GEO_ROWS));
     const hints = parseZonaHintRows(zonaWorksheet(ZONA_ROWS));
@@ -167,10 +166,9 @@ describe("idempotencia (R39)", () => {
     const provIds = state.provincia.map((p) => p.id);
     const zonaIds = state.zona.map((z) => z.id);
 
-    // el maestro edita pagos y marca GAM entre corridas
+    // el maestro marca la zona central entre corridas
     const gam = state.zona.find((z) => z.nombre === "GAM")!;
-    gam.pagoEntrega = 999;
-    gam.esGam = true;
+    gam.esCentral = true;
 
     await seedZonasCompleto(prisma, geoRows, hints);
 
@@ -178,8 +176,7 @@ describe("idempotencia (R39)", () => {
     expect(state.provincia.map((p) => p.id)).toEqual(provIds);
     expect(state.zona.map((z) => z.id)).toEqual(zonaIds);
     expect(state.distrito).toHaveLength(3);
-    // no se pisan pagos/es_gam editados
-    expect(gam.pagoEntrega).toBe(999);
-    expect(gam.esGam).toBe(true);
+    // no se pisa es_central editado (update: {} en el upsert)
+    expect(gam.esCentral).toBe(true);
   });
 });

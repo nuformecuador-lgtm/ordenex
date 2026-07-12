@@ -38,7 +38,7 @@ function tarifaToDTO(row: TarifaRow): TarifaZonaMensajeroDTO {
 }
 
 function toDTO(
-  zona: { id: string; nombre: string; cobroVehiculo: boolean },
+  zona: { id: string; nombre: string; cobroVehiculo: boolean; esCentral: boolean },
   distritosCount: number,
   tarifas: TarifaRow[] | undefined,
 ): ZonaDTO {
@@ -47,6 +47,7 @@ function toDTO(
     nombre: zona.nombre,
     cobroVehiculo: zona.cobroVehiculo,
     distritosCount,
+    esCentral: zona.esCentral,
   };
   if (tarifas !== undefined) dto.tarifas = tarifas.map(tarifaToDTO);
   return dto;
@@ -67,7 +68,7 @@ export class ZonaRepository implements IZonaRepository {
   async create(data: CreateZonaData): Promise<ZonaDTO> {
     return this.prisma.$transaction(async (tx) => {
       const zona = await tx.zona.create({
-        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo },
+        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esCentral: data.esCentral },
       });
       if (data.distritoIds.length > 0) {
         await tx.zonaDistrito.createMany({
@@ -135,7 +136,7 @@ export class ZonaRepository implements IZonaRepository {
 
       const zona = await tx.zona.update({
         where: { id },
-        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo },
+        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esCentral: data.esCentral },
       });
       // Reemplazo completo del N:M y de las tarifas.
       await tx.zonaDistrito.deleteMany({ where: { zonaId: id } });
@@ -208,5 +209,13 @@ export class ZonaRepository implements IZonaRepository {
   async countExistingVehiculos(ids: string[]): Promise<number> {
     if (ids.length === 0) return 0;
     return this.prisma.vehiculo.count({ where: { id: { in: ids } } });
+  }
+
+  async findCentralZonaId(): Promise<string | null> {
+    const z = await this.prisma.zona.findFirst({
+      where: { esCentral: true },
+      select: { id: true },
+    });
+    return z?.id ?? null;
   }
 }

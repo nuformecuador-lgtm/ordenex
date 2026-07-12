@@ -217,14 +217,16 @@ model OrderStatus {
 // del DISTRITO de la orden (`distrito.zona_id`), no de la provincia.
 model Zona {
   id            String  @id @default(uuid())
-  nombre        String
+  nombre        String  @unique // feature 24: nombre unico (indice zona_nombre_key); feature 54 restaura el @unique perdido en el refactor
   cobroVehiculo Boolean @default(false) @map("cobro_vehiculo") // feature 24: cobro extra por vehiculo en esta zona
+  esCentral     Boolean @default(false) @map("es_central") // feature 54: flag de zona central (renombrado del viejo es_gam); a lo sumo una via indice unico parcial
 
   provincias           Provincia[]
   ordenes              Orden[]
   tarifas              Tarifa[]
   tarifaZonaMensajeros TarifaZonaMensajero[]
   distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
+  usuarios             Usuario[] // feature 54: lado opuesto de Usuario.zona (mensajero/adminSatelite)
 
   @@map("zona")
 }

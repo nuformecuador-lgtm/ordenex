@@ -5,55 +5,72 @@ import {
   listarZonasSchema,
 } from "@/lib/types/zona";
 
-// Feature 24. Validacion en el borde (R19) y clamp de paginacion (R24).
+// Feature 24 / feature 54 (reconciliacion PR #40). Validacion en el borde (R19) y
+// clamp de paginacion (R24). El schema nuevo lleva cobroVehiculo + tarifas + esCentral
+// (default false), SIN pagoEntrega/pagoRechazo/esGam.
 
 const validCrear = {
   nombre: "Zona Sur",
-  pagoEntrega: 1000,
-  pagoRechazo: 500,
-  esGam: false,
+  cobroVehiculo: false,
   distritoIds: ["d1", "d2"],
+  tarifas: [],
 };
 
 describe("crearZonaSchema (R19)", () => {
-  it("acepta una entrada valida", () => {
+  it("acepta una entrada valida (esCentral opcional por default)", () => {
     expect(crearZonaSchema.safeParse(validCrear).success).toBe(true);
   });
 
+  it("aplica esCentral=false por default", () => {
+    const r = crearZonaSchema.parse(validCrear);
+    expect(r.esCentral).toBe(false);
+  });
+
+  it("acepta esCentral=true explicito", () => {
+    expect(crearZonaSchema.safeParse({ ...validCrear, esCentral: true }).success).toBe(true);
+  });
+
   it("rechaza nombre vacio", () => {
-    const r = crearZonaSchema.safeParse({ ...validCrear, nombre: "" });
-    expect(r.success).toBe(false);
-  });
-
-  it("rechaza monto negativo", () => {
-    expect(crearZonaSchema.safeParse({ ...validCrear, pagoEntrega: -1 }).success).toBe(false);
-    expect(crearZonaSchema.safeParse({ ...validCrear, pagoRechazo: -0.5 }).success).toBe(false);
-  });
-
-  it("rechaza monto no numerico", () => {
-    expect(crearZonaSchema.safeParse({ ...validCrear, pagoEntrega: "10" }).success).toBe(false);
+    expect(crearZonaSchema.safeParse({ ...validCrear, nombre: "" }).success).toBe(false);
   });
 
   it("rechaza conjunto de distritos vacio", () => {
-    const r = crearZonaSchema.safeParse({ ...validCrear, distritoIds: [] });
-    expect(r.success).toBe(false);
+    expect(crearZonaSchema.safeParse({ ...validCrear, distritoIds: [] }).success).toBe(false);
   });
 
   it("rechaza campos desconocidos (strict)", () => {
-    const r = crearZonaSchema.safeParse({ ...validCrear, hack: 1 });
-    expect(r.success).toBe(false);
+    expect(crearZonaSchema.safeParse({ ...validCrear, hack: 1 }).success).toBe(false);
+  });
+
+  it("cobroVehiculo=true exige >=1 tarifa con vehiculoId", () => {
+    expect(crearZonaSchema.safeParse({ ...validCrear, cobroVehiculo: true, tarifas: [] }).success).toBe(false);
+    expect(
+      crearZonaSchema.safeParse({
+        ...validCrear,
+        cobroVehiculo: true,
+        tarifas: [{ cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("cobroVehiculo=false rechaza tarifa con vehiculoId y >1 tarifa", () => {
+    expect(
+      crearZonaSchema.safeParse({
+        ...validCrear,
+        cobroVehiculo: false,
+        tarifas: [{ cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" }],
+      }).success,
+    ).toBe(false);
   });
 });
 
 describe("actualizarZonaSchema (R19/R22)", () => {
-  it("exige id y permite campos parciales", () => {
-    expect(actualizarZonaSchema.safeParse({ id: "z1", nombre: "Nueva" }).success).toBe(true);
-    expect(actualizarZonaSchema.safeParse({ id: "z1", distritoIds: [] }).success).toBe(true); // libera todos
-    expect(actualizarZonaSchema.safeParse({ nombre: "Nueva" }).success).toBe(false); // sin id
+  it("comparte forma con crearZonaSchema (reemplazo completo, id viaja aparte)", () => {
+    expect(actualizarZonaSchema.safeParse(validCrear).success).toBe(true);
   });
 
   it("rechaza campos desconocidos (strict)", () => {
-    expect(actualizarZonaSchema.safeParse({ id: "z1", hack: 1 }).success).toBe(false);
+    expect(actualizarZonaSchema.safeParse({ ...validCrear, hack: 1 }).success).toBe(false);
   });
 });
 

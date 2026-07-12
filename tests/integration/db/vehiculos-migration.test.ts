@@ -85,7 +85,13 @@ describe("vehiculos down.sql (DOWN) — revierte tabla antes que tipo (R4, R5)",
 });
 
 describe("no se modifico ninguna migracion previa (R3)", () => {
-  it("la migracion de vehiculos es la unica con sufijo _vehiculos y timestamp posterior al ultimo previo", () => {
+  // Invariante: cada migracion conserva su orden relativo respecto de sus
+  // predecesoras conocidas; nuevas migraciones apendidas despues NO la afectan.
+  // Por eso comparamos contra un PREDECESOR FIJO (la ultima migracion que existia
+  // cuando se creo vehiculos), no contra el maximo de todo el repo (que crece con
+  // features futuras). La asercion sigue fallando si alguien re-fechara vehiculos
+  // ANTES de su predecesor.
+  it("vehiculos fue apendida despues de su predecesor conocido (order_status_value_enum)", () => {
     const dirs = fs
       .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory())
@@ -93,23 +99,12 @@ describe("no se modifico ninguna migracion previa (R3)", () => {
       .sort();
     const vehiculosDir = dirs.find((d) => d.endsWith("_vehiculos"));
     expect(vehiculosDir).toBeDefined();
-    // Se excluye la migracion de la feature 21 (`_postulacion_mensajero`), que se
-    // APENDIO despues con un timestamp posterior: el invariante que este guard
-    // cuida es que vehiculos no se inserto ANTES de las migraciones que ya
-    // existian cuando se creo, no que sea la ultima del repo para siempre.
-    const previos = dirs.filter(
-      (d) =>
-        !d.endsWith("_vehiculos") &&
-        !d.endsWith("_postulacion_mensajero") &&
-        !d.endsWith("_usuario_fulfillment") && // feature 27: apendida despues
-        !d.endsWith("_rename_cobro_tarifas") && // feature 24: apendida despues
-        !d.endsWith("_seed_roles_catalogo") && // seed roles: apendida despues
-        !d.endsWith("_tarifa_zona_mensajero_zona_vehiculo_unique") && // feature 24: apendida despues
-        !d.endsWith("_provincia_zona_id_nullable") && // geografia sin zona: apendida despues
-        !d.endsWith("_zona_distrito_nm"), // feature 24 N:M: apendida despues
-    );
-    const maxPrevio = previos[previos.length - 1];
-    // El timestamp (prefijo) de vehiculos es mayor que el ultimo previo.
-    expect(vehiculosDir! > maxPrevio).toBe(true);
+
+    // Ultima migracion que existia cuando se creo la feature 50 (vehiculos).
+    const predecesor = "20260710150000_order_status_value_enum";
+    // Si alguien borra/renombra el predecesor, este test debe fallar.
+    expect(dirs).toContain(predecesor);
+    // El timestamp (prefijo) de vehiculos es posterior al de su predecesor.
+    expect(vehiculosDir! > predecesor).toBe(true);
   });
 });

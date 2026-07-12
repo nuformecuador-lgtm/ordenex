@@ -69,7 +69,7 @@ const WITH_ESTATUS_Y_TIENDA = {
   include: {
     estatus: { select: { value: true } },
     tienda: { select: { nombre: true } },
-    zona: { select: { nombre: true, esGam: true } },
+    zona: { select: { nombre: true, esCentral: true } },
   },
 } as const;
 
@@ -78,7 +78,7 @@ type OrdenListRow = Prisma.OrdenGetPayload<{
   include: {
     estatus: { select: { value: true } };
     tienda: { select: { nombre: true } };
-    zona: { select: { nombre: true; esGam: true } };
+    zona: { select: { nombre: true; esCentral: true } };
   };
 }>;
 
@@ -119,7 +119,7 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // Feature 30/R14/R19: nombre de zona (columna del listado) + flag GAM (la UI
     // decide por fila si muestra select de mensajero o "-> bodega satelite").
     zonaNombre: row.zona.nombre,
-    zonaEsGam: row.zona.esGam,
+    zonaEsGam: row.zona.esCentral,
   };
 }
 
@@ -532,7 +532,7 @@ export class OrdenRepository implements IOrdenRepository {
         estatus: { select: { value: true } },
         // Feature 30/R8/R9/R11/R12: zona de la orden + flag GAM de esa zona.
         zonaId: true,
-        zona: { select: { esGam: true } },
+        zona: { select: { esCentral: true } },
       },
     });
     return rows.map((r) => ({
@@ -541,7 +541,7 @@ export class OrdenRepository implements IOrdenRepository {
       numGuia: r.numGuia,
       deletedAt: r.deletedAt,
       zonaId: r.zonaId,
-      zonaEsGam: r.zona.esGam,
+      zonaEsGam: r.zona.esCentral,
     }));
   }
 

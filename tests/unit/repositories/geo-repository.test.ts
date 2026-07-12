@@ -15,8 +15,9 @@ function buildPrisma(over: {
   const distritoFindMany =
     over.distritoFindMany ??
     vi.fn().mockResolvedValue([
-      { id: "d1", nombre: "Carmen", zonaId: "z1", zona: { nombre: "GAM" } },
-      { id: "d2", nombre: "Merced", zonaId: null, zona: null },
+      // Feature 54: distrito<->zona es N:M (tabla puente `zonas`); el DTO expone la primera zona asignada.
+      { id: "d1", nombre: "Carmen", zonas: [{ zona: { id: "z1", nombre: "GAM" } }] },
+      { id: "d2", nombre: "Merced", zonas: [] },
     ]);
   const prisma = {
     provincia: { findMany: provinciaFindMany },
