@@ -114,6 +114,8 @@ model Usuario {
   gestionesRealizadas GestionOrden[]       @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
   cierresRealizados   CierreDia[]          @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
   cierresResueltos    CierreDia[]          @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
+  cierresBodegaSolicitados CierreBodega[]  @relation("CierreBodegaSolicitadoPor") // feature 40: cierres de bodega solicitados por este adminSatelite
+  cierresBodegaResueltos   CierreBodega[]  @relation("CierreBodegaResueltoPor") // feature 40: cierres de bodega que este maestro aprobo/rechazo
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -232,6 +234,7 @@ model Zona {
   distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
   usuarios             Usuario[] // feature 54: lado opuesto de Usuario.zona (mensajero/adminSatelite)
   cierresDestino       CierreDia[] // feature 37: cierres cuyo destino_zona_id apunta a esta zona
+  cierresBodega        CierreBodega[] // feature 40: cierres de bodega de esta zona satelite
 
   @@map("zona")
 }
@@ -432,16 +435,54 @@ model CierreDia {
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
 
+  cierreBodegaId     String?           @map("cierre_bodega_id") // feature 40: nullable; NULL = cierre_dia aun no consolidado en bodega
+
   mensajero          Usuario        @relation("CierreMensajero", fields: [mensajeroId], references: [id])
   destinoZona        Zona           @relation(fields: [destinoZonaId], references: [id])
   resueltoPorUsuario Usuario?       @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
+  cierreBodega       CierreBodega?  @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
   gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
 
   @@index([mensajeroId])
   @@index([destinoTipo, destinoZonaId]) // feature 38: filtra por rol+zona destino
   @@index([estado])
   @@index([resueltoPor]) // feature 38/R14: auditoria de quien resolvio
+  @@index([cierreBodegaId]) // feature 40: listar consolidables (cierre_bodega_id IS NULL)
   @@map("cierre_dia")
+}
+
+// Feature 40 (R8-R10/R16-R22, decision F1.4-a,b,e,g,k): cierre de NIVEL BODEGA. El
+// adminSatelite consolida los cierre_dia `aprobado` de su zona y solicita el cierre a
+// la bodega central; el maestro lo aprueba/rechaza. Reusa el enum CierreEstado (37).
+// Totales agregados SNAPSHOT (money-critical, R10). Auditoria del maestro (patron 38,
+// R20). Indice unico parcial (zona_id) WHERE estado='solicitado' + RLS habilitada sin
+// policies van a mano en el SQL de la migracion (Prisma no los expresa).
+model CierreBodega {
+  id                 String       @id @default(uuid())
+  zonaId             String       @map("zona_id") // zona satelite que cierra
+  solicitadoPor      String       @map("solicitado_por") // adminSatelite actor (FK usuario)
+  estado             CierreEstado @default(solicitado) // reuso enum feature 37 (F1.4-b)
+  totalEfectivo      Decimal      @default(0) @map("total_efectivo") @db.Decimal(12, 2) // snapshot agregado R10
+  totalSimpe         Decimal      @default(0) @map("total_simpe") @db.Decimal(12, 2) // snapshot agregado R10
+  totalTransferencia Decimal      @default(0) @map("total_transferencia") @db.Decimal(12, 2) // snapshot agregado R10
+  totalGeneral       Decimal      @default(0) @map("total_general") @db.Decimal(12, 2) // snapshot agregado R10
+  solicitadoAt       DateTime     @default(now()) @map("solicitado_at")
+  resueltoPor        String?      @map("resuelto_por") // maestro actor; NULL mientras solicitado (R20)
+  resueltoAt         DateTime?    @map("resuelto_at") // marca de tiempo de la resolucion (R20)
+  motivoRechazo      String?      @map("motivo_rechazo") // obligatorio SOLO al rechazar (R17); NULL si aprobado/solicitado
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  zona                 Zona        @relation(fields: [zonaId], references: [id])
+  solicitadoPorUsuario Usuario     @relation("CierreBodegaSolicitadoPor", fields: [solicitadoPor], references: [id])
+  resueltoPorUsuario   Usuario?    @relation("CierreBodegaResueltoPor", fields: [resueltoPor], references: [id])
+  cierresDia           CierreDia[] // los cierre_dia incluidos (cierre_bodega_id)
+
+  @@index([zonaId])
+  @@index([estado])
+  @@index([solicitadoPor])
+  @@index([resueltoPor])
+  @@map("cierre_bodega")
 }
 
 // Tarifa: tarifas de flete/comision, tabla multi-fila con `nombre` para
