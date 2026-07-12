@@ -20,8 +20,11 @@ export function PageHeader({
   actions,
   children,
 }: Readonly<PageHeaderProps>) {
+
+  const today = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
   return (
-    <header className="flex flex-col gap-3 px-5 py-4 text-navy border-b border-navy/20 mb-6">
+    <header className="flex flex-row gap-3 px-5 py-4 text-navy border-b border-navy/20 mb-6 justify-between">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
@@ -33,13 +36,17 @@ export function PageHeader({
           <div className="flex flex-wrap items-center gap-2">{actions}</div>
         ) : null}
       </div>
-
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1">
-          <Calendar />
-          <p></p>
+      <div className="flex items-center gap-3">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-navy/20 bg-navy/5 px-2.5 py-1 text-xs font-medium text-navy">
+          <Calendar className="size-3.5" aria-hidden="true" />
+          {today}
+        </span>
+        <div className="relative">
+          <Bell className="size-5 text-navy" aria-hidden="true" />
+          <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
+            +99
+          </span>
         </div>
-        <Bell />
         <LogoutButton />
       </div>
       {children}
