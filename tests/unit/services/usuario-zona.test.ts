@@ -64,13 +64,19 @@ function buildRepo(over: Partial<IUserRepository> = {}): IUserRepository {
 function buildZonaRepo(exists: boolean): IZonaRepository {
   return {
     create: vi.fn(),
-    findById: vi.fn().mockResolvedValue(exists ? { id: "z1", nombre: "GAM", pagoEntrega: 0, pagoRechazo: 0, esGam: false, distritosCount: 0 } : null),
-    findByNombreKey: vi.fn(),
+    // Feature 54: ZonaDTO nuevo (esCentral, sin pagos); findById(id, includeTarifas).
+    findById: vi
+      .fn()
+      .mockResolvedValue(
+        exists ? { id: "z1", nombre: "GAM", cobroVehiculo: false, distritosCount: 0, esCentral: false } : null,
+      ),
     list: vi.fn(),
     update: vi.fn(),
-    setGam: vi.fn(),
-    listLight: vi.fn(),
-    findGamZonaId: vi.fn().mockResolvedValue(null),
+    hardDelete: vi.fn(),
+    arbol: vi.fn(),
+    countExistingDistritos: vi.fn(),
+    countExistingVehiculos: vi.fn(),
+    findCentralZonaId: vi.fn().mockResolvedValue(null),
   };
 }
 

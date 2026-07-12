@@ -12,6 +12,7 @@ export interface TarifaZonaMensajeroData {
 export interface CreateZonaData {
   nombre: string;
   cobroVehiculo: boolean;
+  esCentral: boolean; // feature 54: flag de zona central (antes esGam)
   distritoIds: string[];
   tarifas: TarifaZonaMensajeroData[];
 }
@@ -49,4 +50,9 @@ export interface IZonaRepository {
   countExistingDistritos(ids: string[]): Promise<number>;
   /** Cuenta cuantos de `ids` existen como vehiculo (validacion de existencia). */
   countExistingVehiculos(ids: string[]): Promise<number>;
+  /**
+   * feature 54: id de la zona con `esCentral = true`, o null si ninguna la tiene.
+   * (antes findGamZonaId). El indice unico parcial garantiza a lo sumo una.
+   */
+  findCentralZonaId(): Promise<string | null>;
 }

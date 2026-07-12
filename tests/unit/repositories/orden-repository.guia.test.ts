@@ -43,7 +43,7 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
         deletedAt: null,
         estatus: { value: "en_fulfillment" },
         zonaId: "z-gam",
-        zona: { esGam: true },
+        zona: { esCentral: true },
       },
       {
         id: "o2",
@@ -51,7 +51,7 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
         deletedAt: new Date("2026-01-01"),
         estatus: { value: "entregada" },
         zonaId: "z-limon",
-        zona: { esGam: false },
+        zona: { esCentral: false },
       },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -82,7 +82,7 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
     expect(arg.where).toEqual({ id: { in: ["o1", "o2"] } });
     // Feature 30: proyecta zonaId + zona.esGam.
     expect(arg.select.zonaId).toBe(true);
-    expect(arg.select.zona).toEqual({ select: { esGam: true } });
+    expect(arg.select.zona).toEqual({ select: { esCentral: true } });
   });
 
   it("devuelve vacio sin consultar cuando ids esta vacio", async () => {

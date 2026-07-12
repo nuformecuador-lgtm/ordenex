@@ -233,7 +233,7 @@ export class UsuarioService implements IUsuarioService {
 
     // R28: valida existencia si hay repo de zonas inyectado.
     if (this.zonaRepo) {
-      const zona = await this.zonaRepo.findById(deseado);
+      const zona = await this.zonaRepo.findById(deseado, false);
       if (!zona) return { ok: false };
     }
     return { ok: true, zonaId: deseado };

@@ -83,10 +83,9 @@ describe("configuracion/page.tsx — pre-carga de zonas del maestro (R30)", () =
         {
           id: "z1",
           nombre: "Zona Sur",
-          pagoEntrega: 1500,
-          pagoRechazo: 750,
-          esGam: false,
+          cobroVehiculo: false,
           distritosCount: 7,
+          esCentral: false,
         },
       ],
       page: 1,

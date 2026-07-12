@@ -21,6 +21,9 @@ export type TarifaZonaMensajeroInput = z.infer<typeof tarifaZonaMensajeroInputSc
 const zonaFields = {
   nombre: nombreSchema,
   cobroVehiculo: z.boolean(),
+  // feature 54: flag de zona central (renombrado del viejo esGam). default lo hace
+  // opcional en el payload de crear/actualizar.
+  esCentral: z.boolean().default(false),
   // distritoIds: conjunto de distritos que componen la zona (N:M). Al menos uno.
   distritoIds: z.array(idSchema).min(1),
   // tarifas: filas de tarifa_zona_mensajero. Su cardinalidad/forma depende de
@@ -120,8 +123,26 @@ export interface ZonaDTO {
   nombre: string;
   cobroVehiculo: boolean;
   distritosCount: number;
+  esCentral: boolean; // feature 54: flag de zona central (antes esGam)
   // Presente en crear/actualizar/obtener; en listar solo si include incluye "tarifas".
   tarifas?: TarifaZonaMensajeroDTO[];
+}
+
+// Feature 24/R14: DTOs del catalogo geografico global (los usa GeoRepository/
+// IGeoRepository). Reintroducidos en feature 54 (reconciliacion PR #40).
+export interface ProvinciaLightDTO {
+  id: string;
+  nombre: string;
+}
+export interface CantonLightDTO {
+  id: string;
+  nombre: string;
+}
+export interface DistritoCatalogoDTO {
+  id: string;
+  nombre: string;
+  zonaId: string | null;
+  zonaNombre: string | null;
 }
 
 // --- Arbol de zonas indexado por nombre normalizado (get) ---

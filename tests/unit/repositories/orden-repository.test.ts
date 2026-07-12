@@ -36,7 +36,7 @@ function ordenListRow(overrides: Record<string, unknown> = {}) {
     ...ordenRow(),
     tienda: { nombre: "Tienda Uno" },
     // Feature 30/R14: el listado incluye la zona (nombre + flag GAM).
-    zona: { nombre: "GAM", esGam: true },
+    zona: { nombre: "GAM", esCentral: true },
     ...overrides,
   };
 }
@@ -238,7 +238,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
       ordenListRow(),
-      ordenListRow({ id: "ord-2", zona: { nombre: "Limón", esGam: false } }),
+      ordenListRow({ id: "ord-2", zona: { nombre: "Limón", esCentral: false } }),
     ]);
     prisma.orden.count.mockResolvedValue(2);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -259,7 +259,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(res.items[0].tiendaNombre).toBe("Tienda Uno");
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
-    expect(arg.include).toMatchObject({ zona: { select: { nombre: true, esGam: true } } });
+    expect(arg.include).toMatchObject({ zona: { select: { nombre: true, esCentral: true } } });
   });
 
   it("inyecta tiendaId en el where cuando se pasa (alcance adminTienda)", async () => {

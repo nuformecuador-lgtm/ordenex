@@ -117,7 +117,8 @@ export interface GenerarGuiaResultRow {
 export interface ProvinciaRow {
   id: string;
   nombre: string;
-  zonaId: string | null; // nullable: la provincia puede no tener zona asignada aun
+  // feature 54: la zona de la orden ya NO se deriva de la provincia (provincia.zona_id
+  // fue eliminada en la migracion de zonas); se deriva del distrito. Ver BulkOrdenService.
 }
 
 export interface CantonRow {

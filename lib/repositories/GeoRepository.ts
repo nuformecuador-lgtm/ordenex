@@ -29,21 +29,29 @@ export class GeoRepository implements IGeoRepository {
   }
 
   async listDistritos(cantonId: string): Promise<DistritoCatalogoDTO[]> {
+    // Feature 54 (reconciliacion PR #40): la relacion distrito<->zona pasa a N:M
+    // (tabla puente ZonaDistrito). El DTO expone una unica zona asignada (la
+    // primera), preservando el contrato zonaId/zonaNombre|null de la feature 24.
     const rows = await this.prisma.distrito.findMany({
       where: { cantonId },
       select: {
         id: true,
         nombre: true,
-        zonaId: true,
-        zona: { select: { nombre: true } }, // R14: marca de zona por distrito
+        zonas: {
+          select: { zona: { select: { id: true, nombre: true } } },
+          take: 1,
+        },
       },
       orderBy: { nombre: "asc" },
     });
-    return rows.map((row) => ({
-      id: row.id,
-      nombre: row.nombre,
-      zonaId: row.zonaId,
-      zonaNombre: row.zona?.nombre ?? null,
-    }));
+    return rows.map((row) => {
+      const asignada = row.zonas[0]?.zona ?? null;
+      return {
+        id: row.id,
+        nombre: row.nombre,
+        zonaId: asignada?.id ?? null,
+        zonaNombre: asignada?.nombre ?? null,
+      };
+    });
   }
 }

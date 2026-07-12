@@ -63,6 +63,7 @@ export class ZonaService implements IZonaService {
       data: {
         nombre: input.nombre,
         cobroVehiculo: input.cobroVehiculo,
+        esCentral: input.esCentral, // feature 54: flag de zona central
         distritoIds,
         tarifas: input.tarifas.map((t) => ({
           cobroEntregado: t.cobroEntregado,
