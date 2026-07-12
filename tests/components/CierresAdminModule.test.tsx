@@ -248,6 +248,148 @@ describe("CierresAdminModule", () => {
     expect(within(region).getByText("SIMPE")).toBeInTheDocument();
   });
 
+  it("feature 56/R23 (Q6): el badge 'Sin tarifa' se muestra por el flag tarifaFaltante en ENTREGAS", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({
+        gestionId: "g1",
+        resultado: "entregada",
+        numRemision: "REM-SINTARIFA",
+        montoRecibido: "1000.00",
+        metodoPago: "efectivo",
+        pagoMensajero: "0.00",
+        tarifaFaltante: true,
+      }),
+    ];
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "c1" }),
+      grupos,
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    const region = within(dialog).getByRole("region", { name: "Entregadas" });
+    expect(within(region).getByText("Sin tarifa")).toBeInTheDocument();
+  });
+
+  it("feature 56/R23 (Q6): SIN flag tarifaFaltante NO se muestra el badge, aun con pago 0.00 (entrega y rechazo)", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({
+        gestionId: "g1",
+        resultado: "entregada",
+        numRemision: "REM-ENT",
+        montoRecibido: "1000.00",
+        metodoPago: "efectivo",
+        pagoMensajero: "0.00",
+        tarifaFaltante: false,
+      }),
+    ];
+    grupos.rechazada = [
+      makeGestion({
+        gestionId: "g2",
+        resultado: "rechazada",
+        numRemision: "REM-REC",
+        pagoMensajero: "0.00",
+        tarifaFaltante: false,
+      }),
+    ];
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "c1" }),
+      grupos,
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    expect(within(dialog).queryByText("Sin tarifa")).not.toBeInTheDocument();
+  });
+
+  it("feature 56/R23 (Q6): el badge 'Sin tarifa' se muestra por el flag tarifaFaltante también en RECHAZOS", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.rechazada = [
+      makeGestion({
+        gestionId: "g1",
+        resultado: "rechazada",
+        numRemision: "REM-REC",
+        pagoMensajero: "0.00",
+        tarifaFaltante: true,
+      }),
+    ];
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "c1" }),
+      grupos,
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    expect(within(region).getByText("Sin tarifa")).toBeInTheDocument();
+  });
+
+  it("feature 56/R12: una gestión rechazada expone su ingreso de bodega por rechazos (string, money-safe)", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.rechazada = [
+      makeGestion({
+        gestionId: "g1",
+        resultado: "rechazada",
+        numRemision: "REM-REC",
+        motivo: "Cliente rechazó",
+        ingresoBodegaRechazo: "3500.00",
+      }),
+    ];
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "c1" }),
+      grupos,
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    expect(within(region).getByText("₡3500.00")).toBeInTheDocument();
+  });
+
+  it("feature 56/R16: el total del ingreso de bodega por rechazos se muestra separado en el detalle", async () => {
+    const user = userEvent.setup();
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({
+        cierreId: "c1",
+        totalIngresoBodegaRechazos: "9200.00",
+      }),
+      grupos: emptyGrupos(),
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    const region = within(dialog).getByRole("region", {
+      name: "Ingreso de bodega por rechazos del cierre",
+    });
+    expect(within(region).getByText("₡9200.00")).toBeInTheDocument();
+  });
+
   it("R7: la evidencia se muestra vía URL firmada en el visor (nunca el path crudo)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();

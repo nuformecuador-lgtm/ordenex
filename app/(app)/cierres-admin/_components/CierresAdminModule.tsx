@@ -21,9 +21,11 @@ import {
   ESTADO_LABEL,
   ORDEN_RESULTADOS,
   PAGO_MENSAJERO_COL,
+  INGRESO_BODEGA_RECHAZOS_COL,
   RESULTADO_LABEL,
   RESULTADO_VACIO,
   PagoMensajeroTotal,
+  IngresoBodegaRechazosTotal,
   TotalItem,
   columnasPara,
 } from "./cierre-detalle-shared";
@@ -277,6 +279,12 @@ export function CierresAdminModule({
               ariaLabel="Pago al mensajero del cierre"
             />
 
+            {/* Feature 56/R16: total snapshot del ingreso de bodega por rechazos, separado. */}
+            <IngresoBodegaRechazosTotal
+              value={detalle.cierre.totalIngresoBodegaRechazos}
+              ariaLabel="Ingreso de bodega por rechazos del cierre"
+            />
+
             {/* Motivo de rechazo si el cierre del histórico fue rechazado. */}
             {detalle.cierre.motivoRechazo ? (
               <p className="text-sm text-muted-foreground">
@@ -433,6 +441,11 @@ function columnasPendientes(
       render: (c) => money(c.totalPagoMensajero),
     },
     {
+      id: "ingresoBodegaRechazos",
+      value: INGRESO_BODEGA_RECHAZOS_COL,
+      render: (c) => money(c.totalIngresoBodegaRechazos),
+    },
+    {
       id: "acciones",
       value: "Acciones",
       render: (c) => (
@@ -466,6 +479,11 @@ function columnasHistorico(
       id: "pagoMensajero",
       value: PAGO_MENSAJERO_COL,
       render: (c) => money(c.totalPagoMensajero),
+    },
+    {
+      id: "ingresoBodegaRechazos",
+      value: INGRESO_BODEGA_RECHAZOS_COL,
+      render: (c) => money(c.totalIngresoBodegaRechazos),
     },
     {
       id: "motivoRechazo",

@@ -31,6 +31,8 @@ export interface CierreDiaModuleProps {
   totales: CierreTotales;
   /** Feature 39/R11: total DERIVADO a pagar al mensajero (STRING), separado de `totales`. */
   totalPagoMensajero: string;
+  /** Feature 56/R10: total DERIVADO del ingreso de bodega por rechazos (STRING), separado. */
+  totalIngresoBodegaRechazos: string;
   puedesSolicitar: boolean;
   motivoBloqueo: string | null;
   cierresPasados: CierrePasadoDTO[];
@@ -39,6 +41,9 @@ export interface CierreDiaModuleProps {
 /** Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready). */
 const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
 const PAGO_MENSAJERO_COL = "Pago mensajero";
+/** Feature 56: etiquetas del ingreso de bodega por rechazos (texto separado, i18n-ready). */
+const INGRESO_BODEGA_RECHAZOS_LABEL = "Ingreso de bodega por rechazos";
+const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
 const RESULTADO_LABEL: Record<CierreResultado, string> = {
@@ -99,6 +104,7 @@ export function CierreDiaModule({
   grupos,
   totales,
   totalPagoMensajero,
+  totalIngresoBodegaRechazos,
   puedesSolicitar,
   motivoBloqueo,
   cierresPasados,
@@ -160,6 +166,24 @@ export function CierreDiaModule({
             </span>
             <span className="text-lg font-semibold">
               {money(totalPagoMensajero)}
+            </span>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ---------- Ingreso de bodega por rechazos (56/R10): total SEPARADO ---------- */}
+      <section
+        aria-label={INGRESO_BODEGA_RECHAZOS_LABEL}
+        className="flex flex-col gap-3"
+      >
+        <h2 className="text-lg font-semibold">{INGRESO_BODEGA_RECHAZOS_LABEL}</h2>
+        <Card className="border-dashed">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+            <span className="text-sm font-medium text-muted-foreground">
+              Total ingreso de bodega por rechazos
+            </span>
+            <span className="text-lg font-semibold">
+              {money(totalIngresoBodegaRechazos)}
             </span>
           </CardContent>
         </Card>
@@ -365,7 +389,7 @@ function columnasPara(
       columnaPago,
     ];
   }
-  // rechazada: motivo + evidencia firmada (R5)
+  // rechazada: motivo + evidencia firmada (R5) + ingreso de bodega por rechazos (56/R12)
   return [
     ...COLUMNAS_COMUNES,
     { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
@@ -387,6 +411,12 @@ function columnasPara(
         ),
     },
     columnaPago,
+    // Feature 56/R12: ingreso de bodega por rechazos por orden (money-safe STRING, `null`→"—").
+    {
+      id: "ingresoBodegaRechazo",
+      value: INGRESO_BODEGA_RECHAZOS_COL,
+      render: (g) => money(g.ingresoBodegaRechazo),
+    },
   ];
 }
 
@@ -422,6 +452,11 @@ const COLUMNAS_PASADOS: Column<CierrePasadoDTO>[] = [
     id: "pagoMensajero",
     value: PAGO_MENSAJERO_COL,
     render: (c) => money(c.totalPagoMensajero),
+  },
+  {
+    id: "ingresoBodegaRechazos",
+    value: INGRESO_BODEGA_RECHAZOS_COL,
+    render: (c) => money(c.totalIngresoBodegaRechazos),
   },
   {
     id: "solicitadoAt",
