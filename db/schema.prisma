@@ -378,6 +378,7 @@ model GestionOrden {
   motivo               String? // REPROGRAMAR/DEVOLUCION/RECHAZO
   fechaReprogramacion  DateTime?        @map("fecha_reprogramacion") @db.Date // REPROGRAMAR
   cierreId             String?          @map("cierre_id") // feature 37/R13: nullable; NULL = gestion del dia aun no cerrada
+  pagoMensajero        Decimal?         @map("pago_mensajero") @db.Decimal(12, 2) // feature 39/R12: snapshot del pago al mensajero; NULL mientras no se cierra
   createdAt            DateTime         @default(now()) @map("created_at")
 
   orden     Orden      @relation(fields: [ordenId], references: [id])
@@ -428,6 +429,7 @@ model CierreDia {
   totalSimpe         Decimal           @default(0) @map("total_simpe") @db.Decimal(12, 2) // snapshot R14
   totalTransferencia Decimal           @default(0) @map("total_transferencia") @db.Decimal(12, 2) // snapshot R14
   totalGeneral       Decimal           @default(0) @map("total_general") @db.Decimal(12, 2) // snapshot R14
+  totalPagoMensajero Decimal           @default(0) @map("total_pago_mensajero") @db.Decimal(12, 2) // feature 39/R13: snapshot total del pago al mensajero
   solicitadoAt       DateTime          @default(now()) @map("solicitado_at")
   resueltoPor        String?           @map("resuelto_por") // feature 38/R14: FK -> usuario (admin actor); NULL mientras solicitado
   resueltoAt         DateTime?         @map("resuelto_at") // feature 38/R14: marca de tiempo de la resolucion
@@ -466,6 +468,7 @@ model CierreBodega {
   totalSimpe         Decimal      @default(0) @map("total_simpe") @db.Decimal(12, 2) // snapshot agregado R10
   totalTransferencia Decimal      @default(0) @map("total_transferencia") @db.Decimal(12, 2) // snapshot agregado R10
   totalGeneral       Decimal      @default(0) @map("total_general") @db.Decimal(12, 2) // snapshot agregado R10
+  totalPagoMensajero Decimal      @default(0) @map("total_pago_mensajero") @db.Decimal(12, 2) // feature 39/R19: snapshot agregado del pago a mensajeros
   solicitadoAt       DateTime     @default(now()) @map("solicitado_at")
   resueltoPor        String?      @map("resuelto_por") // maestro actor; NULL mientras solicitado (R20)
   resueltoAt         DateTime?    @map("resuelto_at") // marca de tiempo de la resolucion (R20)

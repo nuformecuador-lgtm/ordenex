@@ -56,6 +56,7 @@ beforeEach(() => {
       transferencia: "0.00",
       general: "0.00",
     },
+    totalPagoMensajero: "0.00", // feature 39/R11
     puedesSolicitar: false,
     motivoBloqueo: "No hay gestiones para cerrar.",
     cierresPasados: [],

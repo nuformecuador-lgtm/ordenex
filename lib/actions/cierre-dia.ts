@@ -3,6 +3,7 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { TarifaZonaMensajeroRepository } from "@/lib/repositories/TarifaZonaMensajeroRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { CierreDiaService } from "@/lib/services/CierreDiaService";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
@@ -30,6 +31,8 @@ function buildService(): ICierreDiaService {
     new OrdenRepository(prisma),
     // Las evidencias son las de gestion_orden (feature 36): mismo bucket privado.
     new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET),
+    // Feature 39: resolver de la tarifa de pago al mensajero (por zona+vehiculo).
+    new TarifaZonaMensajeroRepository(prisma),
   );
 }
 

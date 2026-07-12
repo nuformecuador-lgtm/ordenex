@@ -330,6 +330,13 @@ export interface IOrdenRepository {
    */
   findUsuarioZonaId(usuarioId: string): Promise<string | null>;
   /**
+   * Feature 39/R1/R4: `usuario.vehiculoId` del mensajero, resuelto server-side por
+   * `usuarioId` (espejo de `findUsuarioZonaId`). `null` si el usuario no resuelve o no
+   * tiene vehiculo asignado -> el resolver de tarifa cae a la tarifa por defecto de la
+   * zona (vehiculo_id IS NULL). Solo la query, sin logica de negocio.
+   */
+  findUsuarioVehiculoId(usuarioId: string): Promise<string | null>;
+  /**
    * Feature 33/R6/R8/R9: ordenes NO borradas (`deletedAt: null`) de `zonaId`
    * cuyo `estatus.value` esta en `estatusValues` (["en_ruta_bodega_satelite",
    * "en_bodega_satelite"]), con los nombres legibles de tienda/geografia (patron

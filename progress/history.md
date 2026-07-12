@@ -955,3 +955,25 @@
   Reviewer APROBADO 0 bloqueantes.
 - **DESBLOQUEA** la feature 41 (reglas/bloqueos/vencidos). Deuda menor: R8/R16/R18/R20-22 unit-mock (defensas DB
   verificadas live por el reviewer); R24 sin test automatizado de RLS; E2E ejecución diferida.
+
+## 2026-07-12 — feature 39 (pago al mensajero por zona en el cierre)
+- Money-critical. Cada gestión de un cierre trae el PAGO AL MENSAJERO resuelto por su zona+vehículo vía
+  `TarifaZonaMensajero` (`cobroEntregado`, con fallback a la tarifa por defecto de la zona `vehiculoId IS NULL`),
+  snapshoteado al solicitar el cierre y totalizado en los 3 niveles (mensajero 37, admin 38, bodega 40).
+- Requisitos cubiertos: R1–R23 + R7b (cada uno con test concreto; reviewer verificó trazabilidad + round-trip real).
+- **Decisiones F1.4 (aprobadas por el humano 2026-07-12):** (1) **SNAPSHOT** al solicitar (no derivado) — migración
+  aditiva `20260712130000_pago_mensajero_cierre`: `gestion_orden.pago_mensajero` (NULL), `cierre_dia`/`cierre_bodega`.`total_pago_mensajero` (DEFAULT 0) + `down.sql`; la vista viva del mensajero deriva solo para preview. Snapshot
+  INMUTABLE verificado (cambiar la tarifa después NO muta un cierre ya solicitado). (2) **SOLO `entregada` paga**
+  al mensajero (→`cobroEntregado`); `rechazada`/`reprogramada`/`devuelta` = 0.00. (3) El `cobroRechazado` (pago por
+  rechazo) NO va al mensajero sino a la BODEGA → SEPARADO en la **feature 56** nueva (`ingreso de bodega por
+  rechazos`, pending, dep 39). (4) Resolución por `usuario.zonaId`+`usuario.vehiculoId` con fallback; el pago sale
+  de la zona del MENSAJERO. (5) Tarifa faltante = 0.00, NO bloquea + aviso en vista admin. (6) Exponer en los DTOs
+  de 37/38/40 y totalizar en las pantallas existentes (sin pantallas nuevas).
+- **Reconciliación de modelo:** la descripción vieja del feature_list ("la zona almacena el pago") quedó desfasada
+  por el #40 — el pago vive en `TarifaZonaMensajero`. `usuario.zonaId`/`vehiculoId` existen.
+- Nuevos: `lib/interfaces/repositories/ITarifaZonaMensajeroRepository.ts` + repo, `lib/utils/pago-mensajero.ts`
+  (util puro solo-entregada). Money-safe: `Prisma.Decimal`, string `toFixed(2)`, cero `parseFloat`. Verde: prisma OK,
+  typecheck 0, lint 0, **1829/1829**, `init.sh` OK, build OK, SIN regresión 37/38/40. Reviewer APROBADO 0 bloqueantes.
+- DEUDA menor: el aviso de "tarifa faltante" se infiere por heurística en el frontend (`entregada` && pago==="0.00"),
+  con falso positivo posible en una entrega legítima de ₡0.00 → candidato a flag `tarifaFaltante` server-side
+  (feature 56 o follow-up). Comentario obsoleto en un test de la 40 (m2). `ZonaRepository.toNumber` fuera de flujo (m4).

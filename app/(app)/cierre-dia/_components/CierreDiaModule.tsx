@@ -29,10 +29,16 @@ import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 export interface CierreDiaModuleProps {
   grupos: CierreGrupos;
   totales: CierreTotales;
+  /** Feature 39/R11: total DERIVADO a pagar al mensajero (STRING), separado de `totales`. */
+  totalPagoMensajero: string;
   puedesSolicitar: boolean;
   motivoBloqueo: string | null;
   cierresPasados: CierrePasadoDTO[];
 }
+
+/** Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready). */
+const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
+const PAGO_MENSAJERO_COL = "Pago mensajero";
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
 const RESULTADO_LABEL: Record<CierreResultado, string> = {
@@ -92,6 +98,7 @@ function ubicacion(g: CierreDetalleGestion): string {
 export function CierreDiaModule({
   grupos,
   totales,
+  totalPagoMensajero,
   puedesSolicitar,
   motivoBloqueo,
   cierresPasados,
@@ -136,6 +143,24 @@ export function CierreDiaModule({
               value={money(totales.transferencia)}
             />
             <TotalItem label="Total general" value={money(totales.general)} emphasis />
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ---------- Pago al mensajero (R11): total SEPARADO del dinero recibido ---------- */}
+      <section
+        aria-label="Pago al mensajero"
+        className="flex flex-col gap-3"
+      >
+        <h2 className="text-lg font-semibold">{PAGO_MENSAJERO_LABEL}</h2>
+        <Card className="border-dashed">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+            <span className="text-sm font-medium text-muted-foreground">
+              Total a pagar al mensajero
+            </span>
+            <span className="text-lg font-semibold">
+              {money(totalPagoMensajero)}
+            </span>
           </CardContent>
         </Card>
       </section>
@@ -303,6 +328,12 @@ function columnasPara(
   resultado: CierreResultado,
   verEvidencia: (url: string) => void,
 ): Column<CierreDetalleGestion>[] {
+  // Feature 39/R10: pago al mensajero DERIVADO por orden (money-safe STRING, tal cual).
+  const columnaPago: Column<CierreDetalleGestion> = {
+    id: "pagoMensajero",
+    value: PAGO_MENSAJERO_COL,
+    render: (g) => money(g.pagoMensajero),
+  };
   if (resultado === "entregada") {
     return [
       ...COLUMNAS_COMUNES,
@@ -312,6 +343,7 @@ function columnasPara(
         value: "Método",
         render: (g) => (g.metodoPago ? METODO_LABEL[g.metodoPago] : "—"),
       },
+      columnaPago,
     ];
   }
   if (resultado === "reprogramada") {
@@ -323,12 +355,14 @@ function columnasPara(
         render: (g) => g.fechaReprogramacion ?? "—",
       },
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      columnaPago,
     ];
   }
   if (resultado === "devuelta") {
     return [
       ...COLUMNAS_COMUNES,
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      columnaPago,
     ];
   }
   // rechazada: motivo + evidencia firmada (R5)
@@ -352,6 +386,7 @@ function columnasPara(
           "—"
         ),
     },
+    columnaPago,
   ];
 }
 
@@ -382,6 +417,11 @@ const COLUMNAS_PASADOS: Column<CierrePasadoDTO>[] = [
     id: "general",
     value: "Total",
     render: (c) => money(c.totales.general),
+  },
+  {
+    id: "pagoMensajero",
+    value: PAGO_MENSAJERO_COL,
+    render: (c) => money(c.totalPagoMensajero),
   },
   {
     id: "solicitadoAt",

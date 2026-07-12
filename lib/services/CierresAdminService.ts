@@ -183,6 +183,7 @@ function toResumen(row: CierreAdminResumenRow): CierreAdminResumen {
     destinoZonaId: row.destinoZonaId,
     destinoZonaNombre: row.destinoZonaNombre,
     totales: row.totales,
+    totalPagoMensajero: row.totalPagoMensajero, // R17: snapshot, sin recomputar
     solicitadoAt: row.solicitadoAt,
     resueltoAt: row.resueltoAt,
     motivoRechazo: row.motivoRechazo,

@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { MetodoPagoValue } from "@prisma/client";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import type {
@@ -47,6 +49,14 @@ export const ESTADO_LABEL: Record<CierreEstado, string> = {
   aprobado: "Aprobado",
   rechazado: "Rechazado",
 };
+
+// --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
+export const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
+export const PAGO_MENSAJERO_COL = "Pago mensajero";
+/** Aviso discreto (F1.4-5): pago de una entrega resuelto a ₡0.00 (tarifa faltante). */
+export const PAGO_SIN_TARIFA_LABEL = "Sin tarifa";
+export const PAGO_SIN_TARIFA_NOTA =
+  "El pago al mensajero de esta entrega se resolvió en ₡0.00 (posible tarifa de zona sin configurar).";
 
 /** Orden fijo de las 4 secciones del detalle (R11). */
 export const ORDEN_RESULTADOS: CierreResultado[] = [
@@ -127,6 +137,67 @@ export function TotalesPanel({
   );
 }
 
+/**
+ * Feature 39 (R17/R18/R20): total a pagar al mensajero, en un panel PROPIO y
+ * SEPARADO del panel de dinero recibido (`TotalesPanel`) — es dinero que la empresa
+ * DEBE al mensajero, no dinero recibido (R21). El monto llega como STRING y se
+ * renderiza tal cual (money-safe). `region` accesible por `ariaLabel`.
+ */
+export function PagoMensajeroTotal({
+  value,
+  ariaLabel,
+  label = PAGO_MENSAJERO_LABEL,
+}: {
+  value: string;
+  ariaLabel: string;
+  label?: string;
+}) {
+  return (
+    <section aria-label={ariaLabel} className="flex flex-col gap-3">
+      <Card className="border-dashed">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+          <span className="text-sm font-medium text-muted-foreground">
+            {label}
+          </span>
+          <span className="text-lg font-semibold">{money(value)}</span>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+/**
+ * Feature 39 (R16/R20): render del pago al mensajero por orden. Money-safe: el monto
+ * llega como STRING y se muestra tal cual. En las ENTREGADAS con pago "0.00" (compara
+ * el STRING, nunca `parseFloat`) muestra un aviso discreto de posible tarifa faltante
+ * (F1.4-5); el DTO no trae un flag explícito, así que el aviso es informativo.
+ */
+export function renderPagoMensajero(g: CierreDetalleGestion): ReactNode {
+  const avisoSinTarifa =
+    g.resultado === "entregada" && g.pagoMensajero === "0.00";
+  return (
+    <span className="inline-flex items-center gap-2">
+      {money(g.pagoMensajero)}
+      {avisoSinTarifa ? (
+        <Badge
+          variant="outline"
+          title={PAGO_SIN_TARIFA_NOTA}
+          aria-label={PAGO_SIN_TARIFA_NOTA}
+        >
+          {PAGO_SIN_TARIFA_LABEL}
+        </Badge>
+      ) : null}
+    </span>
+  );
+}
+
+/** Columna del pago al mensajero por orden (R16/R20), reutilizable por sección. */
+export const COLUMNA_PAGO_MENSAJERO: Column<CierreDetalleGestion> = {
+  id: "pagoMensajero",
+  value: PAGO_MENSAJERO_COL,
+  render: renderPagoMensajero,
+};
+
 // --- Columnas comunes a las 4 secciones del detalle (R11, reuso de la 37) ---
 export const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
   { id: "numGuia", value: "Nº Guía", render: (g) => g.numGuia ?? "—" },
@@ -156,6 +227,8 @@ export function columnasPara(
         value: "Método",
         render: (g) => (g.metodoPago ? METODO_LABEL[g.metodoPago] : "—"),
       },
+      // Feature 39/R16: pago al mensajero snapshot por orden (separado del dinero recibido).
+      COLUMNA_PAGO_MENSAJERO,
     ];
   }
   if (resultado === "reprogramada") {
@@ -167,12 +240,14 @@ export function columnasPara(
         render: (g) => g.fechaReprogramacion ?? "—",
       },
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      COLUMNA_PAGO_MENSAJERO,
     ];
   }
   if (resultado === "devuelta") {
     return [
       ...COLUMNAS_COMUNES,
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      COLUMNA_PAGO_MENSAJERO,
     ];
   }
   // rechazada: motivo + evidencia firmada (R12)
@@ -196,6 +271,7 @@ export function columnasPara(
           "—"
         ),
     },
+    COLUMNA_PAGO_MENSAJERO,
   ];
 }
 

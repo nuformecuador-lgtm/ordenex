@@ -18,6 +18,7 @@ function bodegaDbRow(overrides: Record<string, unknown> = {}) {
     totalSimpe: new Prisma.Decimal("5.5"),
     totalTransferencia: new Prisma.Decimal("0"),
     totalGeneral: new Prisma.Decimal("15.5"),
+    totalPagoMensajero: new Prisma.Decimal("7.5"), // feature 39/R20: snapshot agregado
     solicitadoAt: new Date("2026-07-12T10:00:00.000Z"),
     resueltoAt: null,
     motivoRechazo: null,
@@ -36,6 +37,7 @@ function detalleCierreDbRow(overrides: Record<string, unknown> = {}) {
     totalSimpe: new Prisma.Decimal("0"),
     totalTransferencia: new Prisma.Decimal("0"),
     totalGeneral: new Prisma.Decimal("10"),
+    totalPagoMensajero: new Prisma.Decimal("5"), // feature 39/R20: snapshot del cierre_dia
     mensajero: { nombre: "Ana Mensajera" },
     ...overrides,
   };
@@ -51,6 +53,7 @@ function gestionDbRow(overrides: Record<string, unknown> = {}) {
     motivo: null,
     fechaReprogramacion: null,
     evidenciaStoragePath: "o1/e.jpg",
+    pagoMensajero: new Prisma.Decimal("5.00"), // feature 39/R20: snapshot leido
     orden: {
       numGuia: 10,
       numRemision: "REM-1",
@@ -95,6 +98,7 @@ describe("CierresBodegaAdminRepository.findCierresBodega (R15)", () => {
       solicitadoPorNombre: "Sara Satelite",
       estado: "solicitado",
       totales: { efectivo: "10.00", simpe: "5.50", transferencia: "0.00", general: "15.50" },
+      totalPagoMensajero: "7.50", // feature 39/R20: snapshot money-safe STRING
       cantidadCierres: 2,
       solicitadoAt: "2026-07-12T10:00:00.000Z",
       resueltoAt: null,

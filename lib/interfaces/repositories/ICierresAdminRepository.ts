@@ -29,6 +29,7 @@ export interface CierreAdminResumenRow {
     transferencia: string;
     general: string;
   };
+  totalPagoMensajero: string; // feature 39/R17: snapshot total del pago al mensajero (STRING)
   solicitadoAt: string; // ISO
   resueltoAt: string | null; // ISO
   motivoRechazo: string | null;

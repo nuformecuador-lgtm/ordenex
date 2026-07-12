@@ -30,6 +30,7 @@ export default async function CierreDiaPage() {
       <CierreDiaModule
         grupos={result.grupos}
         totales={result.totales}
+        totalPagoMensajero={result.totalPagoMensajero}
         puedesSolicitar={result.puedesSolicitar}
         motivoBloqueo={result.motivoBloqueo}
         cierresPasados={result.cierresPasados}

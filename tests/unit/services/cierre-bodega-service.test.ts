@@ -28,6 +28,7 @@ function consolidableRow(
     mensajeroId: "m1",
     mensajeroNombre: "Ana Mensajera",
     totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
+    totalPagoMensajero: "0.00", // feature 39/R18: snapshot del pago (override en tests R18/R19)
     ...overrides,
   };
 }
@@ -238,5 +239,46 @@ describe("CierreBodegaService — totales agregados exactos (R10)", () => {
       cierreDiaIds: ["cd1", "cd2"],
       totales: { efectivo: "10.01", simpe: "5.55", transferencia: "100.44", general: "116.00" },
     });
+  });
+});
+
+// --- Feature 39: pago a mensajeros agregado (R18/R19) ---
+
+describe("CierreBodegaService — pago a mensajeros agregado (R18/R19)", () => {
+  it("R18: listarConsolidacion expone totalPagoMensajeroAgregado = suma snapshot de los consolidables", async () => {
+    const repo = fakeRepo({
+      findCierresDiaConsolidables: vi.fn(async () => [
+        consolidableRow({ cierreDiaId: "cd1", totalPagoMensajero: "10.50" }),
+        consolidableRow({ cierreDiaId: "cd2", totalPagoMensajero: "0.25" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarConsolidacion(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalPagoMensajeroAgregado).toBe("10.75"); // suma exacta al centavo
+    expect(typeof r.totalPagoMensajeroAgregado).toBe("string"); // R23
+    // R21: separado del dinero recibido (no altera totalesAgregados).
+    expect(r.totalesAgregados.general).toBe("30.00"); // (15.00 + 15.00) de los dos consolidables
+  });
+
+  it("R18: sin zona -> totalPagoMensajeroAgregado 0.00", async () => {
+    const { service } = newService({ zonaSatelite: null });
+    const r = await service.listarConsolidacion(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalPagoMensajeroAgregado).toBe("0.00");
+  });
+
+  it("R19: solicitarCierreBodega pasa a crearCierreBodega el pago agregado snapshoteado", async () => {
+    const repo = fakeRepo({
+      findCierresDiaConsolidables: vi.fn(async () => [
+        consolidableRow({ cierreDiaId: "cd1", totalPagoMensajero: "10.50" }),
+        consolidableRow({ cierreDiaId: "cd2", totalPagoMensajero: "0.25" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.solicitarCierreBodega(ADMIN_SATELITE);
+    expect(r.status).toBe("ok");
+    const arg = (repo.crearCierreBodega as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.totalPagoMensajero).toBe("10.75"); // R19: snapshot agregado en la tx
   });
 });

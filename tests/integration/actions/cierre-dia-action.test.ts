@@ -11,6 +11,7 @@ import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaServic
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { ITarifaZonaMensajeroRepository } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 // Feature 37 — tests de integracion de las Server Actions del cierre (patron
@@ -52,6 +53,7 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
         destinoTipo: input.destinoTipo,
         destinoZonaId: input.destinoZonaId,
         totales: input.totales,
+        totalPagoMensajero: input.totalPagoMensajero, // feature 39/R13: snapshot
         solicitadoAt: "2026-07-12T10:00:00.000Z",
       });
       pendientes = []; // R13: consume las gestiones pendientes (cierre_id seteado)
@@ -63,8 +65,15 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
 
 function realService(repo: ICierreDiaRepository): ICierreDiaService {
   const zonaRepo = { findCentralZonaId: vi.fn(async () => "z-central") } as unknown as IZonaRepository;
-  const ordenRepo = { findUsuarioZonaId: vi.fn(async () => "z-satelite") } as unknown as IOrdenRepository;
-  return new CierreDiaService(repo, zonaRepo, ordenRepo, fakeSignedUrls());
+  const ordenRepo = {
+    findUsuarioZonaId: vi.fn(async () => "z-satelite"),
+    findUsuarioVehiculoId: vi.fn(async () => null), // feature 39
+  } as unknown as IOrdenRepository;
+  // Feature 39: tarifa por defecto (cobroEntregado 5.00); resuelve el pago en vivo/snapshot.
+  const tarifaZonaRepo = {
+    resolvePagoTarifa: vi.fn(async () => ({ cobroEntregado: "5.00", cobroRechazado: "3.00" })),
+  } as unknown as ITarifaZonaMensajeroRepository;
+  return new CierreDiaService(repo, zonaRepo, ordenRepo, fakeSignedUrls(), tarifaZonaRepo);
 }
 
 function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendienteRow {
@@ -87,6 +96,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     motivo: null,
     fechaReprogramacion: null,
     evidenciaStoragePath: null,
+    pagoMensajero: null, // feature 39: snapshot (derivado en vivo por el service)
     ...overrides,
   };
 }

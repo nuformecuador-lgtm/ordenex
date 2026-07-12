@@ -23,6 +23,7 @@ export interface CierreBodegaResumen {
   solicitadoPorNombre: string; // resuelto (no id crudo)
   estado: CierreEstado; // solicitado | aprobado | rechazado
   totales: CierreTotales; // snapshot agregado (money-safe string, R13)
+  totalPagoMensajero: string; // feature 39/R19/R20: snapshot agregado del pago a mensajeros (STRING)
   cantidadCierres: number; // # de cierre_dia incluidos
   solicitadoAt: string; // ISO
   resueltoAt: string | null; // ISO; null si solicitado (R20)
@@ -36,6 +37,7 @@ export interface CierreBodegaResumenLite {
   mensajeroId: string;
   mensajeroNombre: string;
   totales: CierreTotales; // snapshot del cierre_dia (money-safe)
+  totalPagoMensajero: string; // feature 39/R18: snapshot del pago al mensajero del cierre_dia (STRING)
 }
 
 // Un cierre_dia incluido, con su detalle de gestiones (reuso 37) + su total snapshot.
@@ -45,6 +47,7 @@ export interface CierreBodegaDetalleCierre {
   mensajeroId: string;
   mensajeroNombre: string;
   totales: CierreTotales; // snapshot del cierre_dia (money-safe)
+  totalPagoMensajero: string; // feature 39/R20: snapshot del pago al mensajero del cierre_dia (STRING)
   grupos: CierreGrupos; // por resultado (reuso CierreDetalleGestion de la 37, R11)
 }
 
@@ -57,6 +60,7 @@ export type ListarConsolidacionServiceResult =
       status: "ok";
       consolidables: CierreBodegaResumenLite[]; // cierre_dia aprobados sin cierre de bodega (R5)
       totalesAgregados: CierreTotales; // suma de los consolidables (R10)
+      totalPagoMensajeroAgregado: string; // feature 39/R18: suma snapshot del pago a mensajeros (STRING)
       puedesSolicitar: boolean; // R6/R7
       motivoBloqueo: string | null; // texto accionable si !puedesSolicitar
       cierresBodegaPasados: CierreBodegaResumen[]; // historico propio de la zona (F1.4-h)

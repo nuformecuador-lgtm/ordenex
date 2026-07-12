@@ -30,6 +30,7 @@ function resumenRow(overrides: Partial<CierreAdminResumenRow> = {}): CierreAdmin
     destinoZonaId: "z-central",
     destinoZonaNombre: "Central",
     totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
+    totalPagoMensajero: "5.00", // feature 39/R17: snapshot del pago al mensajero
     solicitadoAt: "2026-07-12T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
@@ -57,6 +58,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     motivo: null,
     fechaReprogramacion: null,
     evidenciaStoragePath: null,
+    pagoMensajero: null, // feature 39: snapshot (override para R16)
     ...overrides,
   };
 }
@@ -182,6 +184,20 @@ describe("CierresAdminService.listarCierresAdmin — particion y totales (R4/R5/
     expect(typeof c.totales.general).toBe("string");
   });
 
+  it("R17: el resumen expone totalPagoMensajero snapshot (string), separado de los totales", async () => {
+    const repo = fakeRepo({
+      findCierresByAlcance: vi.fn(async () => [resumenRow({ totalPagoMensajero: "42.50" })]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarCierresAdmin(MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    const c = r.pendientes[0];
+    expect(c.totalPagoMensajero).toBe("42.50"); // snapshot, sin recomputar
+    expect(typeof c.totalPagoMensajero).toBe("string"); // R23
+    // R21: no altera los totales de dinero recibido.
+    expect(c.totales).toEqual({ efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" });
+  });
+
   it("R16: listar NO muta (nunca invoca resolverCierre)", async () => {
     const repo = fakeRepo({
       findCierresByAlcance: vi.fn(async () => [resumenRow()]),
@@ -261,6 +277,26 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
     const r = await service.verCierreDetalle("c1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.cierre.totales).toEqual({ efectivo: "1.00", simpe: "2.00", transferencia: "3.00", general: "6.00" });
+  });
+
+  it("R16: cada gestion del detalle expone el pago al mensajero SNAPSHOTEADO (no recomputado)", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow({ totalPagoMensajero: "5.00" }),
+        gestiones: [
+          gestionRow({ gestionId: "a", resultado: "entregada", pagoMensajero: "5.00" }),
+          gestionRow({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null, pagoMensajero: "0.00" }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.entregada[0].pagoMensajero).toBe("5.00"); // snapshot leido de la columna
+    expect(r.grupos.rechazada[0].pagoMensajero).toBe("0.00");
+    expect(typeof r.grupos.entregada[0].pagoMensajero).toBe("string"); // R23
+    // R17: la cabecera del detalle trae el total snapshot.
+    expect(r.cierre.totalPagoMensajero).toBe("5.00");
   });
 
   it("R13: cierre fuera de alcance (repo devuelve null) -> no_encontrada", async () => {

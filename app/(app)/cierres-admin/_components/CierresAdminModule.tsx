@@ -20,8 +20,10 @@ import {
   money,
   ESTADO_LABEL,
   ORDEN_RESULTADOS,
+  PAGO_MENSAJERO_COL,
   RESULTADO_LABEL,
   RESULTADO_VACIO,
+  PagoMensajeroTotal,
   TotalItem,
   columnasPara,
 } from "./cierre-detalle-shared";
@@ -269,6 +271,12 @@ export function CierresAdminModule({
               </Card>
             </section>
 
+            {/* Feature 39/R17: total snapshot a pagar al mensajero, separado del dinero recibido. */}
+            <PagoMensajeroTotal
+              value={detalle.cierre.totalPagoMensajero}
+              ariaLabel="Pago al mensajero del cierre"
+            />
+
             {/* Motivo de rechazo si el cierre del histórico fue rechazado. */}
             {detalle.cierre.motivoRechazo ? (
               <p className="text-sm text-muted-foreground">
@@ -420,6 +428,11 @@ function columnasPendientes(
       render: (c) => money(c.totales.general),
     },
     {
+      id: "pagoMensajero",
+      value: PAGO_MENSAJERO_COL,
+      render: (c) => money(c.totalPagoMensajero),
+    },
+    {
       id: "acciones",
       value: "Acciones",
       render: (c) => (
@@ -448,6 +461,11 @@ function columnasHistorico(
       id: "general",
       value: "Total general",
       render: (c) => money(c.totales.general),
+    },
+    {
+      id: "pagoMensajero",
+      value: PAGO_MENSAJERO_COL,
+      render: (c) => money(c.totalPagoMensajero),
     },
     {
       id: "motivoRechazo",
