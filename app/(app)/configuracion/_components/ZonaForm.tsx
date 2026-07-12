@@ -3,30 +3,41 @@
 import {
   forwardRef,
   useImperativeHandle,
-  useMemo,
   useState,
   type ReactNode,
+  // TODO(zonas): `useMemo` y `useSWR` quedan sin uso al comentar el subsistema
+  // de distritos (navegación provincia→cantón→distrito). Reactivar cuando se
+  // reconstruya contra la API vigente (`arbolZonas`).
+  // useMemo,
 } from "react";
-import useSWR from "swr";
+// import useSWR from "swr";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, type SelectOption } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+// TODO(zonas): `Select`/`SelectOption` y `Switch` sólo los usaba el bloque
+// comentado (selectores de provincia/cantón y toggle esGam, que ya no existe).
+// import { Select, type SelectOption } from "@/components/ui/select";
+// import { Switch } from "@/components/ui/switch";
 import {
   actualizarZonaSchema,
   crearZonaSchema,
   type ActualizarZonaResult,
   type CrearZonaResult,
-  type DistritoCatalogoDTO,
+  // TODO(zonas): `DistritoCatalogoDTO` NO existe en `lib/types/zona`. El catálogo
+  // geográfico dejó de exponerse como lista plana de distritos; hoy se sirve como
+  // árbol (`ArbolZonas`/`ArbolDistritoNode`). Import comentado por inexistente.
+  // type DistritoCatalogoDTO,
   type ZonaDTO,
 } from "@/lib/types/zona";
 import {
   actualizarZona,
   crearZona,
-  listarCantones,
-  listarDistritos,
-  listarProvincias,
+  // TODO(zonas): `listarProvincias`/`listarCantones`/`listarDistritos` NO existen
+  // en `lib/actions/zonas`. La navegación del catálogo global se retiró; la única
+  // acción de lectura del árbol es `arbolZonas`. Imports comentados por inexistentes.
+  // listarCantones,
+  // listarDistritos,
+  // listarProvincias,
 } from "@/lib/actions/zonas";
 
 type FieldErrors = Record<string, string[]>;
@@ -47,17 +58,22 @@ export interface ZonaFormProps {
 
 interface FormState {
   nombre: string;
-  pagoEntrega: string;
-  pagoRechazo: string;
-  esGam: boolean;
+  // TODO(zonas): `pagoEntrega`/`pagoRechazo`/`esGam` ya no forman parte del
+  // modelo de zona. El esquema vigente pide `cobroVehiculo`, `distritoIds` y
+  // `tarifas` (tarifa_zona_mensajero). Campos conservados sólo como referencia.
+  // pagoEntrega: string;
+  // pagoRechazo: string;
+  // esGam: boolean;
 }
 
 function initialState(zona?: ZonaDTO | null): FormState {
   return {
     nombre: zona?.nombre ?? "",
-    pagoEntrega: zona ? String(zona.pagoEntrega) : "0",
-    pagoRechazo: zona ? String(zona.pagoRechazo) : "0",
-    esGam: zona?.esGam ?? false,
+    // TODO(zonas): `zona.pagoEntrega`/`pagoRechazo`/`esGam` NO existen en `ZonaDTO`
+    // (hoy: id, nombre, cobroVehiculo, distritosCount, tarifas?). Prefill roto.
+    // pagoEntrega: zona ? String(zona.pagoEntrega) : "0",
+    // pagoRechazo: zona ? String(zona.pagoRechazo) : "0",
+    // esGam: zona?.esGam ?? false,
   };
 }
 
@@ -71,6 +87,13 @@ function initialState(zona?: ZonaDTO | null): FormState {
  * errores de validación y los conflictos (nombre duplicado o distrito ya
  * asignado) se muestran junto a su campo sin perder los valores ya escritos
  * (R33). Reusa los schemas de `lib/types/zona` para validar en cliente.
+ *
+ * TODO(zonas): este componente está DESALINEADO con la API vigente de feature 24
+ * (redefinida). Se comentó todo lo que referencia símbolos inexistentes o el
+ * modelo antiguo (pagos/esGam, catálogo plano de distritos, conflict.reason,
+ * firma de actualizarZona). Sólo queda operativo el campo `nombre`. Reconstruir
+ * contra: crearZonaSchema/actualizarZonaSchema { nombre, cobroVehiculo,
+ * distritoIds, tarifas }, actualizarZona(id, input) y el árbol `arbolZonas`.
  */
 export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
   function ZonaForm({ mode, zona }, ref) {
@@ -79,6 +102,11 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
     const [form, setForm] = useState<FormState>(() => initialState(zona));
     const [errors, setErrors] = useState<FieldErrors>({});
 
+    // TODO(zonas): subsistema de distritos comentado en bloque. Dependía de
+    // `listarProvincias/listarCantones/listarDistritos` (inexistentes) y de
+    // `DistritoCatalogoDTO` (inexistente). Incluye el seed de edición, la
+    // navegación del catálogo global y la selección/toggle de distritos.
+    /*
     // Selección de distritos: id -> nombre (para chips y complete-set de envío).
     const [selected, setSelected] = useState<Record<string, string>>({});
     // El backend recibe el conjunto COMPLETO de distritos; en edición solo se
@@ -143,10 +171,6 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
 
     const selectedIds = Object.keys(selected);
 
-    function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
-      setForm((prev) => ({ ...prev, [key]: value }));
-    }
-
     function toggleDistrito(id: string, nombre: string) {
       setDistritosTocados(true);
       setSelected((prev) => {
@@ -156,7 +180,16 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
         return next;
       });
     }
+    */
 
+    function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
+      setForm((prev) => ({ ...prev, [key]: value }));
+    }
+
+    // TODO(zonas): `buildCandidate` construía el payload antiguo
+    // { nombre, pagoEntrega, pagoRechazo, esGam, distritoIds }. El esquema vigente
+    // exige { nombre, cobroVehiculo, distritoIds, tarifas }. Comentado por completo.
+    /*
     function buildCandidate(): unknown {
       const base = {
         nombre: form.nombre,
@@ -210,6 +243,26 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
       }
       return res;
     }
+    */
+
+    // Stub temporal: mientras el submit real está comentado, el handle debe
+    // seguir cumpliendo el contrato `ZonaFormHandle`. Referencia los símbolos
+    // vigentes (schemas + acciones) sólo para dejar el flujo mínimo alineado.
+    // TODO(zonas): reimplementar validate()/submit() contra el esquema y la firma
+    // actuales (crearZona(input) / actualizarZona(id, input)).
+    async function submit(): Promise<ZonaFormResult> {
+      void isEditar;
+      void zona;
+      void actualizarZonaSchema;
+      void crearZonaSchema;
+      void actualizarZona;
+      void crearZona;
+      const fieldErrors: FieldErrors = {
+        nombre: ["Formulario de zonas en reconstrucción (API desalineada)."],
+      };
+      setErrors(fieldErrors);
+      return { status: "validation_error", fieldErrors };
+    }
 
     useImperativeHandle(ref, () => ({ submit }));
 
@@ -224,6 +277,9 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
           />
         </Field>
 
+        {/* TODO(zonas): campos `pagoEntrega`/`pagoRechazo` y toggle `esGam`
+            comentados: no existen en el modelo vigente de zona. */}
+        {/*
         <Field id="pagoEntrega" label="Pago por entrega" errors={errors.pagoEntrega}>
           <Input
             id="pagoEntrega"
@@ -257,7 +313,13 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
             onCheckedChange={(next) => setField("esGam", next)}
           />
         </div>
+        */}
 
+        {/* TODO(zonas): selector de distritos (provincia → cantón → distrito)
+            comentado: dependía de listarProvincias/listarCantones/listarDistritos
+            (inexistentes) y del estado `selected`/`distritos`/`provinciaOptions`/
+            `cantonOptions`/`selectedIds` del bloque comentado arriba. */}
+        {/*
         <fieldset className="flex flex-col gap-3 border-t border-border pt-3">
           <legend className="text-sm font-medium">Distritos de la zona</legend>
 
@@ -339,12 +401,17 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
             </p>
           ) : null}
         </fieldset>
+        */}
       </div>
     );
   },
 );
 
-/** Mensaje del conflicto de distrito ya asignado a otra zona (R20/R33). */
+// TODO(zonas): `mensajeConflictoDistrito` usaba `conflict.distritoIds`, que ya
+// no forma parte del resultado de conflicto (hoy `{ status: "conflict" }` sin
+// payload). Helper comentado hasta que el conflicto de distrito vuelva a exponer
+// los ids afectados.
+/*
 function mensajeConflictoDistrito(
   ids: string[] | undefined,
   selected: Record<string, string>,
@@ -355,6 +422,7 @@ function mensajeConflictoDistrito(
   const nombres = ids.map((id) => selected[id] ?? id);
   return `Estos distritos ya pertenecen a otra zona: ${nombres.join(", ")}.`;
 }
+*/
 
 /** Envoltorio accesible de un campo con label y errores (i18n vía props). */
 function Field({
