@@ -99,11 +99,11 @@ Zone: `fullstack` · complexity: `high` · depends_on: 38 (`done`) · branch: `f
   el estilo y la "EXECUTION NOTE" de `e2e/cierres-admin.spec.ts` (patrón repo 33/34/36/37/38).
 
 ## T11 — Verificación final (gate de "done")
-- [ ] `npx prisma validate` OK · `pnpm typecheck` 0 · `pnpm lint` 0 · suite de tests verde (con los
+- [x] `npx prisma validate` OK · `pnpm typecheck` 0 · `pnpm lint` 0 · suite de tests verde (con los
   +N nuevos) · `pnpm build` pasa · `./init.sh` VERDE.
-- [ ] **Rollback round-trip** de la migración `cierre_bodega`: `db:migrate` → `db:rollback` → status
+- [x] **Rollback round-trip** de la migración `cierre_bodega`: `db:migrate` → `db:rollback` → status
   pendiente → `db:migrate` reaplica → up to date (R25); RLS verificada (R24).
-- [ ] `progress/impl_40-*.md` con la tabla R→test completa; entregar al `reviewer`. **Hecho:** todos
+- [x] `progress/impl_40-*.md` con la tabla R→test completa; entregar al `reviewer`. **Hecho:** todos
   los R1–R25 (+E2E) con test; 0 bloqueantes.
 
 ---
