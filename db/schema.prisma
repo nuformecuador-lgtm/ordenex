@@ -112,6 +112,7 @@ model Usuario {
   ordenesMensajeria   Orden[]              @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
   ordenesAsignadas    Orden[]              @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
   gestionesRealizadas GestionOrden[]       @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
+  cierresRealizados   CierreDia[]          @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -227,6 +228,7 @@ model Zona {
   tarifaZonaMensajeros TarifaZonaMensajero[]
   distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
   usuarios             Usuario[] // feature 54: lado opuesto de Usuario.zona (mensajero/adminSatelite)
+  cierresDestino       CierreDia[] // feature 37: cierres cuyo destino_zona_id apunta a esta zona
 
   @@map("zona")
 }
@@ -369,14 +371,69 @@ model GestionOrden {
   evidenciaContentType String?          @map("evidencia_content_type") // image/jpeg|png|webp
   motivo               String? // REPROGRAMAR/DEVOLUCION/RECHAZO
   fechaReprogramacion  DateTime?        @map("fecha_reprogramacion") @db.Date // REPROGRAMAR
+  cierreId             String?          @map("cierre_id") // feature 37/R13: nullable; NULL = gestion del dia aun no cerrada
   createdAt            DateTime         @default(now()) @map("created_at")
 
-  orden     Orden   @relation(fields: [ordenId], references: [id])
-  mensajero Usuario @relation("GestionMensajero", fields: [mensajeroId], references: [id])
+  orden     Orden      @relation(fields: [ordenId], references: [id])
+  mensajero Usuario    @relation("GestionMensajero", fields: [mensajeroId], references: [id])
+  cierre    CierreDia? @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
+  @@index([cierreId]) // feature 37/R3: listar gestiones sin cierre (cierre_id IS NULL)
   @@map("gestion_orden")
+}
+
+// Feature 37 (R13/R18, decision F1.4-d): estado del cierre del dia del mensajero.
+// La 37 SOLO crea en `solicitado`; `aprobado`/`rechazado` se reservan para la
+// feature 38 (patron "reservar valores del enum"). Fuente unica de verdad en
+// lib/types/cierre.ts (CIERRE_ESTADO_SEED).
+enum CierreEstado {
+  solicitado
+  aprobado
+  rechazado
+
+  @@map("cierre_estado")
+}
+
+// Feature 37 (R15, decision F1.4-e): destino derivado del cierre segun la zona del
+// mensajero. `bodega_central` si la zona es la central (findCentralZonaId);
+// `bodega_satelite` en caso contrario.
+enum CierreDestinoTipo {
+  bodega_central
+  bodega_satelite
+
+  @@map("cierre_destino_tipo")
+}
+
+// Feature 37 (R13-R16/R18/R19, decision F1.4-a,e,f): UN registro por solicitud de
+// cierre del dia de un mensajero. Los totales por metodo de pago + general se
+// SNAPSHOTEAN al crear (R14, money-critical); el detalle se deriva de las
+// gestion_orden vinculadas (cierre_id). Destino derivado server-side al solicitar
+// (para la feature 38). RLS habilitada sin policies (solo service role, patron
+// gestion_orden/orden).
+model CierreDia {
+  id                 String            @id @default(uuid())
+  mensajeroId        String            @map("mensajero_id") // FK -> usuario (el actor)
+  estado             CierreEstado      @default(solicitado)
+  destinoTipo        CierreDestinoTipo @map("destino_tipo") // central/satelite derivado al solicitar
+  destinoZonaId      String            @map("destino_zona_id") // zona del mensajero (central o satelite)
+  totalEfectivo      Decimal           @default(0) @map("total_efectivo") @db.Decimal(12, 2) // snapshot R14
+  totalSimpe         Decimal           @default(0) @map("total_simpe") @db.Decimal(12, 2) // snapshot R14
+  totalTransferencia Decimal           @default(0) @map("total_transferencia") @db.Decimal(12, 2) // snapshot R14
+  totalGeneral       Decimal           @default(0) @map("total_general") @db.Decimal(12, 2) // snapshot R14
+  solicitadoAt       DateTime          @default(now()) @map("solicitado_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  mensajero   Usuario        @relation("CierreMensajero", fields: [mensajeroId], references: [id])
+  destinoZona Zona           @relation(fields: [destinoZonaId], references: [id])
+  gestiones   GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
+
+  @@index([mensajeroId])
+  @@index([destinoTipo, destinoZonaId]) // feature 38: filtra por rol+zona destino
+  @@index([estado])
+  @@map("cierre_dia")
 }
 
 // Tarifa: tarifas de flete/comision, tabla multi-fila con `nombre` para

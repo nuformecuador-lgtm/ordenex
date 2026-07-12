@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Package,
   Settings,
   User,
@@ -84,6 +85,7 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   settings: Settings,
   user: User,
   package: Package,
+  clipboardCheck: ClipboardCheck,
 };
 
 // El Sidebar reexporta los tipos de dominio del menu para consumidores/tests.

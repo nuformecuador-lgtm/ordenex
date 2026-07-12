@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | **`dev` REPARADO** por la feature 54 (reconciliación del #40); PR pendiente de merge. La feature 37 (pausada) se retoma al mergear. |
+| (ninguna en curso) | — | — | Feature 37 CERRADA 2026-07-12 (abajo). **PENDIENTE: PR a `dev` + merge (OK humano)**. Siguiente acordada con el humano: **feature 55** (completar `ZonaForm` → `esCentral`). |
+
+> Feature 37 (mensajero: "Cierre del día") CERRADA 2026-07-12: **impl COMPLETA (R1–R20+E2E) + reviewer APROBADO 0 bloqueantes** (verde REAL verificado por el reviewer: `prisma validate` OK, `typecheck` 0, `lint` 0, **1623/1623 tests (+58)**, `init.sh` OK, rollback round-trip OK). Fullstack un ciclo; F1.4 aprobada 2026-07-11; F2 retomada al reparar `dev` (54). Estado `done` + `history.md` + `review_37`. Módulo `/cierre-dia`: tabla NUEVA `cierre_dia` (+ enums `cierre_estado`/`cierre_destino_tipo`, FK nullable `cierre_id` en `gestion_orden`, RLS) con totales `Decimal` **snapshot** por método (efectivo/SIMPE/transferencia) + general; **Solicitar cierre** crea `solicitado`, vincula gestiones (todo-o-nada), deriva destino por zona vía **`findCentralZonaId()`**; histórico de cierres. Migración `20260712100000_cierre_dia` (con `down.sql`). Commit `59d5b23`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: migración no aplicada contra Postgres real; E2E escrito no ejecutado; **runtime `bodega_central` espera la feature 55** (hasta que marque `esCentral`, `findCentralZonaId()`=null → todo rutea a satélite como fallback seguro). **DESBLOQUEA 38 y base de 39/40/41.**
 
 > Feature 54 (reconciliación del refactor #40 → dev verde + `esCentral`) CERRADA 2026-07-12: **impl COMPLETA + reviewer APROBADO 0 bloqueantes** (verde REAL: `prisma validate` OK, `typecheck` 0, **1565/1565 tests**, `init.sh` OK, `pnpm build` OK). Fix-feature ágil. Repuso `esCentral`/`findCentralZonaId` (17/30 actualizadas), recableó ZonaRepository/TarifaRepository/GeoRepository, arregló schema (`Zona.usuarios`) + migración #40 rota, restauró la feature 51 (el #40 la había revertido a Ecuador), reconció los tests de menú/migración. Se conservó la intención del #40 (tarifas/N:M/menú). Estado `done` + `history.md` + `review_54`. **PENDIENTE: PR a `dev` + merge (OK humano)** → con eso `dev` sano y se retoma la 37. FOLLOW-UP feature 55: completar `ZonaForm` (setear `esCentral`) — sin eso `findCentralZonaId`=null y el maestro no asigna en runtime.
 
@@ -226,7 +228,22 @@
 
 > Conflictos de merge que el agente no pudo resolver solo. El humano decide.
 
-(Ninguno por ahora)
+- ⛔ **`dev` ROTO por el PR #40 "adjustments" (2026-07-11, otra sesión)** — refactor grande mergeado a MEDIAS:
+  renombró `cobros`→`tarifas` (ICobroRepository→ITarifaRepository, ICobroService→ITarifaService), remodeló
+  `zona`/`distrito` (migraciones `rename_cobro_tarifas`, `zona_distrito_nm`), reescribió `IZonaRepository`/
+  `lib/types/zona.ts`, y agregó sidebar/menú nuevo (shadcn). **Rompió el baseline**: `prisma validate` inválido
+  (modelo `Zona` sin relación opuesta a `Usuario.zona`) + **86 errores de typecheck** (56 en producción). CAUSA
+  concreta: quitó `ZonaDTO.esGam`/`pagoEntrega`/`pagoRechazo` y **eliminó `IZonaRepository.findGamZonaId()`**, PERO
+  NO actualizó a sus consumidores → `lib/actions/ordenes-guia.ts` y `lib/services/GuiaAsignacionService.ts`
+  (features 17/30/34) siguen llamando `findGamZonaId` y no compilan.
+  - **Impacto**: `dev` no compila; NINGUNA feature nueva puede verificarse (init.sh rojo). La identificación de la
+    zona GAM (base de 30/34/37) quedó sin mecanismo.
+  - **Decisión del humano (2026-07-11)**: PAUSAR la feature 37; la **sesión dueña del refactor** (ramas
+    `origin/adjustments`, `origin/worktree-menu-config-submenu`) debe dejar `dev` VERDE — reconciliando el código
+    GAM de 17/30/34 con el nuevo modelo de zonas/tarifas (definir cómo se identifica GAM sin `esGam`). El leader NO
+    repara el refactor ajeno a ciegas (colisión + decisión de diseño desconocida).
+  - **Al retomar**: cuando `dev` compile en verde, la feature 37 arranca F2 con su spec INTACTO (`specs/37-...`,
+    F1.4 ya aprobada). Verificar antes: `prisma validate` OK, `pnpm typecheck` 0 errores, `./init.sh` verde.
 
 ## Plan de la sesion
 - [x] Features 1-29, 31, 50, 51: ciclos SDD completos (ver history.md).
