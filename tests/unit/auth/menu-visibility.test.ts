@@ -73,12 +73,21 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(itemsVisibles(SIDEBAR_ITEMS, null)).toEqual([]);
   });
 
-  it("conserva los children del ítem padre visible (Órdenes → Todas/Crear)", () => {
-    const [visibleOrdenes] = itemsVisibles(SIDEBAR_ITEMS, actor("mensajero"))
-      .filter((i) => i.label === "Órdenes");
-    expect(visibleOrdenes.children?.map((c) => c.href)).toEqual([
-      "/ordenes",
-      "/ordenes/crear",
+  it("conserva los children del ítem padre visible (Configuración → Usuarios/Tarifas/API)", () => {
+    const [visibleConfig] = itemsVisibles(SIDEBAR_ITEMS, actor("maestro"))
+      .filter((i) => i.label === "Configuración");
+    expect(visibleConfig.children?.map((c) => c.href)).toEqual([
+      "/configuracion",
+      "/configuracion/tarifas",
+      "/configuracion/api",
     ]);
+  });
+
+  it("Órdenes ya no tiene submenú (el listado vive en el ítem padre)", () => {
+    const [ordenes] = itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")).filter(
+      (i) => i.label === "Órdenes",
+    );
+    expect(ordenes.children).toBeUndefined();
+    expect(ordenes.href).toBe("/ordenes");
   });
 });

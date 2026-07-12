@@ -49,6 +49,11 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     href: "/configuracion",
     iconKey: "settings",
     roles: ["maestro"],
+    children: [
+      { label: "Usuarios", href: "/configuracion" },
+      { label: "Tarifas", href: "/configuracion/tarifas" },
+      { label: "API", href: "/configuracion/api" },
+    ],
   },
   {
     label: "Perfil",
@@ -61,10 +66,6 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     href: "/ordenes",
     iconKey: "package",
     roles: ["maestro", "admin", "adminTienda", "mensajero"],
-    children: [
-      { label: "Todas", href: "/ordenes" },
-      { label: "Crear", href: "/ordenes/crear" },
-    ],
   },
 ] as const;
 

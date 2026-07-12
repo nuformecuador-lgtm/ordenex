@@ -68,24 +68,24 @@ describe("Sidebar", () => {
     });
     expect(nav).toBeInTheDocument();
 
-    // Configuración y Perfil son enlaces directos.
-    const config = screen.getByRole("link", { name: "Configuración" });
+    // Perfil y Órdenes son enlaces directos.
     const perfil = screen.getByRole("link", { name: "Perfil" });
-    expect(config).toHaveAttribute("href", "/configuracion");
+    const ordenes = screen.getByRole("link", { name: "Órdenes" });
     expect(perfil).toHaveAttribute("href", "/perfil");
+    expect(ordenes).toHaveAttribute("href", "/ordenes");
 
-    // Órdenes tiene subítems: es un botón colapsable, no un enlace.
-    const ordenes = screen.getByRole("button", { name: /órdenes/i });
-    expect(ordenes).toBeInTheDocument();
-    expect(ordenes).toHaveAttribute("aria-expanded", "false");
+    // Configuración tiene subítems: es un botón colapsable, no un enlace.
+    const config = screen.getByRole("button", { name: /configuración/i });
+    expect(config).toBeInTheDocument();
+    expect(config).toHaveAttribute("aria-expanded", "false");
   });
 
   it("cada item tiene un icono propio (svg de lucide)", () => {
     renderSidebar();
 
-    const config = screen.getByRole("link", { name: "Configuración" });
+    const config = screen.getByRole("button", { name: /configuración/i });
     const perfil = screen.getByRole("link", { name: "Perfil" });
-    const ordenes = screen.getByRole("button", { name: /órdenes/i });
+    const ordenes = screen.getByRole("link", { name: "Órdenes" });
 
     for (const el of [config, perfil, ordenes]) {
       expect(el.querySelector("svg")).not.toBeNull();
@@ -106,36 +106,38 @@ describe("Sidebar", () => {
     renderSidebar();
 
     // Cerrado por defecto: los subítems no están en el DOM.
-    expect(screen.queryByRole("link", { name: "Todas" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Crear" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Tarifas" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "API" })).toBeNull();
 
     // Al abrir el colapsable aparecen los subítems.
-    await user.click(screen.getByRole("button", { name: /órdenes/i }));
+    await user.click(screen.getByRole("button", { name: /configuración/i }));
 
-    const todas = screen.getByRole("link", { name: "Todas" });
-    const crear = screen.getByRole("link", { name: "Crear" });
-    expect(todas).toHaveAttribute("href", "/ordenes");
-    expect(crear).toHaveAttribute("href", "/ordenes/crear");
+    const usuarios = screen.getByRole("link", { name: "Usuarios" });
+    const tarifas = screen.getByRole("link", { name: "Tarifas" });
+    const api = screen.getByRole("link", { name: "API" });
+    expect(usuarios).toHaveAttribute("href", "/configuracion");
+    expect(tarifas).toHaveAttribute("href", "/configuracion/tarifas");
+    expect(api).toHaveAttribute("href", "/configuracion/api");
   });
 
   it("abre el submenú por defecto cuando un subítem está activo (R4)", () => {
-    currentPathname = "/ordenes/crear";
+    currentPathname = "/configuracion/tarifas";
     renderSidebar();
 
-    const ordenes = screen.getByRole("button", { name: /órdenes/i });
-    expect(ordenes).toHaveAttribute("aria-expanded", "true");
+    const config = screen.getByRole("button", { name: /configuración/i });
+    expect(config).toHaveAttribute("aria-expanded", "true");
 
-    const crear = screen.getByRole("link", { name: "Crear" });
-    expect(crear).toHaveAttribute("aria-current", "page");
-    expect(crear).toHaveAttribute("data-active");
+    const tarifas = screen.getByRole("link", { name: "Tarifas" });
+    expect(tarifas).toHaveAttribute("aria-current", "page");
+    expect(tarifas).toHaveAttribute("data-active");
 
-    const todas = screen.getByRole("link", { name: "Todas" });
-    expect(todas).not.toHaveAttribute("aria-current");
+    const api = screen.getByRole("link", { name: "API" });
+    expect(api).not.toHaveAttribute("aria-current");
   });
 
   it("marca item simple activo por ruta (R4, R5)", () => {
     const cases: Array<{ path: string; active: string }> = [
-      { path: "/configuracion", active: "Configuración" },
+      { path: "/ordenes", active: "Órdenes" },
       { path: "/perfil", active: "Perfil" },
     ];
 
@@ -165,8 +167,8 @@ describe("Sidebar", () => {
       expect(link).toHaveAttribute("href");
     }
     // El trigger del submenú es un botón enfocable.
-    const ordenes = screen.getByRole("button", { name: /órdenes/i });
-    expect(ordenes.tagName).toBe("BUTTON");
+    const config = screen.getByRole("button", { name: /configuración/i });
+    expect(config.tagName).toBe("BUTTON");
   });
 
   it("renderiza solo los items recibidos por prop (filtrado por rol en el server)", () => {
@@ -181,8 +183,8 @@ describe("Sidebar", () => {
       "/perfil",
     );
     // Los items no incluidos en la prop no se renderizan.
-    expect(screen.queryByRole("link", { name: "Configuración" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /órdenes/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /configuración/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Órdenes" })).toBeNull();
   });
 
   it("resuelve el icono por iconKey en cada item recibido", () => {
@@ -246,11 +248,13 @@ describe("Sidebar estructura", () => {
   it("el submenú vive dentro del landmark de navegación", async () => {
     const user = userEvent.setup();
     renderSidebar();
-    await user.click(screen.getByRole("button", { name: /órdenes/i }));
+    await user.click(screen.getByRole("button", { name: /configuración/i }));
 
     const nav = screen.getByRole("navigation", {
       name: /navegación principal/i,
     });
-    expect(within(nav).getByRole("link", { name: "Todas" })).toBeInTheDocument();
+    expect(
+      within(nav).getByRole("link", { name: "Usuarios" }),
+    ).toBeInTheDocument();
   });
 });
