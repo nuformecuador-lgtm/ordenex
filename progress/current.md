@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/37-cierre-dia-mensajero | fullstack | F2.0 (impl) | **F1 COMPLETA (R1–R20+E2E, spec en `specs/37-...`) + F1.4 APROBADA 2026-07-11** (todo recomendado salvo (h): sí histórico). Decisiones: (a) tabla `cierre_dia` + FK `cierre_id` en `gestion_orden`; (b) agrupa sin `cierre_id`; (c) precondición sin pendientes (`en_espera_aceptacion`/`en_reparto`); (d) **sin "abierto"**, se crea al Solicitar (estado `solicitado`, enum + `aprobado`/`rechazado` reservados 38); (e) destino tipo+zona vía **`findGamZonaId()`** (NO leer `esGam`); (f) **snapshot** de totales por método; (g) **E2E**; (h) **listar cierres pasados**; (i) reprog/dev/rech=$0. **SIGUIENTE: `implementer`.** NOTA: otra sesión trabaja UI/menú (ramas `adjustments`/`worktree-menu-config-submenu`) → módulo `/cierre-dia` es nuevo, bajo riesgo de solape. |
+| feature/37-cierre-dia-mensajero | fullstack | F1 done / **F2 BLOQUEADA** | ⛔ **PAUSADA 2026-07-11** por baseline roto (ver "Conflictos pendientes"). **F1 COMPLETA (R1–R20+E2E, spec en `specs/37-...`) + F1.4 APROBADA 2026-07-11** (todo recomendado salvo (h): sí histórico). Decisiones: (a) tabla `cierre_dia` + FK `cierre_id` en `gestion_orden`; (b) agrupa sin `cierre_id`; (c) precondición sin pendientes (`en_espera_aceptacion`/`en_reparto`); (d) **sin "abierto"**, se crea al Solicitar (estado `solicitado`, enum + `aprobado`/`rechazado` reservados 38); (e) destino tipo+zona vía **`findGamZonaId()`** (NO leer `esGam`); (f) **snapshot** de totales por método; (g) **E2E**; (h) **listar cierres pasados**; (i) reprog/dev/rech=$0. **SIGUIENTE: `implementer`.** NOTA: otra sesión trabaja UI/menú (ramas `adjustments`/`worktree-menu-config-submenu`) → módulo `/cierre-dia` es nuevo, bajo riesgo de solape. |
 
 > Feature 34 (asignación desde bodega satélite) CERRADA 2026-07-11: **impl COMPLETA (R1–R20) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1519 tests). Fullstack un ciclo, SIN migración. Estado `done` + `history.md` + `review_34`. `AsignacionSateliteService` paralelo (guardas rol+zona server-side, 5 errores tipados, lote todo-o-nada) + rename honesto `...Gam`→`...ByZona` (maestro verde) + UI "Asignar" en `recepcion-satelite`. **CIERRA la cadena satelital** (30→32→33→34→36). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: E2E escrito no ejecutado.
 
@@ -224,7 +224,22 @@
 
 > Conflictos de merge que el agente no pudo resolver solo. El humano decide.
 
-(Ninguno por ahora)
+- ⛔ **`dev` ROTO por el PR #40 "adjustments" (2026-07-11, otra sesión)** — refactor grande mergeado a MEDIAS:
+  renombró `cobros`→`tarifas` (ICobroRepository→ITarifaRepository, ICobroService→ITarifaService), remodeló
+  `zona`/`distrito` (migraciones `rename_cobro_tarifas`, `zona_distrito_nm`), reescribió `IZonaRepository`/
+  `lib/types/zona.ts`, y agregó sidebar/menú nuevo (shadcn). **Rompió el baseline**: `prisma validate` inválido
+  (modelo `Zona` sin relación opuesta a `Usuario.zona`) + **86 errores de typecheck** (56 en producción). CAUSA
+  concreta: quitó `ZonaDTO.esGam`/`pagoEntrega`/`pagoRechazo` y **eliminó `IZonaRepository.findGamZonaId()`**, PERO
+  NO actualizó a sus consumidores → `lib/actions/ordenes-guia.ts` y `lib/services/GuiaAsignacionService.ts`
+  (features 17/30/34) siguen llamando `findGamZonaId` y no compilan.
+  - **Impacto**: `dev` no compila; NINGUNA feature nueva puede verificarse (init.sh rojo). La identificación de la
+    zona GAM (base de 30/34/37) quedó sin mecanismo.
+  - **Decisión del humano (2026-07-11)**: PAUSAR la feature 37; la **sesión dueña del refactor** (ramas
+    `origin/adjustments`, `origin/worktree-menu-config-submenu`) debe dejar `dev` VERDE — reconciliando el código
+    GAM de 17/30/34 con el nuevo modelo de zonas/tarifas (definir cómo se identifica GAM sin `esGam`). El leader NO
+    repara el refactor ajeno a ciegas (colisión + decisión de diseño desconocida).
+  - **Al retomar**: cuando `dev` compile en verde, la feature 37 arranca F2 con su spec INTACTO (`specs/37-...`,
+    F1.4 ya aprobada). Verificar antes: `prisma validate` OK, `pnpm typecheck` 0 errores, `./init.sh` verde.
 
 ## Plan de la sesion
 - [x] Features 1-29, 31, 50, 51: ciclos SDD completos (ver history.md).
