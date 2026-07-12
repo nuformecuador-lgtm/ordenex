@@ -1,0 +1,164 @@
+import { Prisma } from "@prisma/client";
+import type { ICierreBodegaRepository } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
+import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
+import type {
+  ICierreBodegaService,
+  ListarConsolidacionServiceResult,
+  SolicitarCierreBodegaServiceResult,
+} from "@/lib/interfaces/services/ICierreBodegaService";
+
+// Solo el rol autorizado (R1): el adminSatelite, SIEMPRE acotado a SU zona (el filtro
+// por zona vive en el repo, en el WHERE).
+const ROL_AUTORIZADO = "adminSatelite";
+
+// Mensajes accionables del gate/precondicion.
+const MSG_PENDIENTES =
+  "Primero resolve los cierres de tus mensajeros antes de cerrar la bodega."; // R6
+const MSG_VACIO = "No hay cierres de mensajero aprobados para consolidar."; // R7
+const MSG_DUPLICADO = "Ya tenes un cierre de bodega solicitado pendiente de aprobacion."; // R8
+const MSG_SIN_ZONA = "No tenes una zona asignada; contacta a tu administrador."; // R4
+
+// Metodos de repo que consume el service (Pick para dobles de test sin DB/red).
+type OrdenRepo = Pick<IOrdenRepository, "findUsuarioZonaId">;
+
+const ZERO_TOTALES: CierreTotales = {
+  efectivo: "0.00",
+  simpe: "0.00",
+  transferencia: "0.00",
+  general: "0.00",
+};
+
+// R10: suma exacta de los totales snapshot con Prisma.Decimal (sin parseFloat/Number).
+// Serializa a STRING escala 2 (money-safe).
+function sumTotales(items: { totales: CierreTotales }[]): CierreTotales {
+  let efectivo = new Prisma.Decimal(0);
+  let simpe = new Prisma.Decimal(0);
+  let transferencia = new Prisma.Decimal(0);
+  let general = new Prisma.Decimal(0);
+  for (const it of items) {
+    efectivo = efectivo.plus(it.totales.efectivo);
+    simpe = simpe.plus(it.totales.simpe);
+    transferencia = transferencia.plus(it.totales.transferencia);
+    general = general.plus(it.totales.general);
+  }
+  return {
+    efectivo: efectivo.toFixed(2),
+    simpe: simpe.toFixed(2),
+    transferencia: transferencia.toFixed(2),
+    general: general.toFixed(2),
+  };
+}
+
+// `true` si el error es una violacion del indice unico parcial (R8): otra solicitud
+// concurrente creo el CierreBodega `solicitado` de la zona antes que esta.
+function isUniqueViolation(e: unknown): boolean {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+}
+
+/**
+ * Feature 40 — logica de negocio del "Cierre de bodega" (lado adminSatelite: consolidar
+ * + solicitar). Espejo de CierreDiaService (37), un nivel arriba: agrega los cierre_dia
+ * `aprobado` de la zona en un CierreBodega con snapshot de totales AGREGADOS (R10). No
+ * conoce HTTP ni Prisma; testeable con dobles sin red/DB. El alcance por zona vive en
+ * el WHERE del repo (R3).
+ */
+export class CierreBodegaService implements ICierreBodegaService {
+  constructor(
+    private readonly repo: ICierreBodegaRepository,
+    private readonly ordenRepo: OrdenRepo,
+  ) {}
+
+  async listarConsolidacion(actor: Actor): Promise<ListarConsolidacionServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1
+
+    // R3/R4: alcance server-side por la zona del adminSatelite.
+    const zonaId = await this.ordenRepo.findUsuarioZonaId(actor.usuarioId);
+    if (zonaId === null) {
+      // R4: sin zona -> modulo vacio con aviso; no se puede solicitar.
+      return {
+        status: "ok",
+        consolidables: [],
+        totalesAgregados: ZERO_TOTALES,
+        puedesSolicitar: false,
+        motivoBloqueo: MSG_SIN_ZONA,
+        cierresBodegaPasados: [],
+        sinZona: true,
+      };
+    }
+
+    // R5/R6 + F1.4-h: SOLO lectura (R23). El filtro por zona/estado vive en el repo.
+    const [consolidables, solicitados, cierresBodegaPasados] = await Promise.all([
+      this.repo.findCierresDiaConsolidables(zonaId),
+      this.repo.contarCierresDiaSolicitados(zonaId),
+      this.repo.findCierresBodegaByZona(zonaId),
+    ]);
+
+    // R10: totales agregados exactos (suma con Prisma.Decimal de los snapshots).
+    const totalesAgregados = sumTotales(consolidables);
+
+    // R6/R7: gate de "Solicitar cierre de bodega" con motivo accionable.
+    let puedesSolicitar = true;
+    let motivoBloqueo: string | null = null;
+    if (solicitados > 0) {
+      puedesSolicitar = false;
+      motivoBloqueo = MSG_PENDIENTES; // R6
+    } else if (consolidables.length === 0) {
+      puedesSolicitar = false;
+      motivoBloqueo = MSG_VACIO; // R7
+    }
+
+    return {
+      status: "ok",
+      consolidables,
+      totalesAgregados,
+      puedesSolicitar,
+      motivoBloqueo,
+      cierresBodegaPasados,
+      sinZona: false,
+    };
+  }
+
+  async solicitarCierreBodega(actor: Actor): Promise<SolicitarCierreBodegaServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1
+
+    // R4: sin zona -> no se crea; mensaje accionable.
+    const zonaId = await this.ordenRepo.findUsuarioZonaId(actor.usuarioId);
+    if (zonaId === null) {
+      return { status: "validation_error", fieldErrors: { zona: [MSG_SIN_ZONA] } };
+    }
+
+    // R6: precondicion — sin cierre_dia de la zona pendientes de resolver.
+    if ((await this.repo.contarCierresDiaSolicitados(zonaId)) > 0) {
+      return { status: "conflict", motivo: MSG_PENDIENTES };
+    }
+
+    // R7: no se cierra una bodega vacia.
+    const consolidables = await this.repo.findCierresDiaConsolidables(zonaId);
+    if (consolidables.length === 0) return { status: "conflict", motivo: MSG_VACIO };
+
+    // R8: a lo sumo un cierre de bodega `solicitado` por zona a la vez.
+    if (await this.repo.existeCierreBodegaSolicitado(zonaId)) {
+      return { status: "conflict", motivo: MSG_DUPLICADO };
+    }
+
+    // R10: snapshot de totales agregados (mismo calculo que listarConsolidacion).
+    const totales = sumTotales(consolidables);
+
+    // R9: transaccion todo-o-nada (INSERT + vincular). Si una solicitud concurrente
+    // gano la carrera, el indice unico parcial lanza P2002 -> conflict (R8).
+    try {
+      const cierreBodegaId = await this.repo.crearCierreBodega({
+        zonaId,
+        solicitadoPor: actor.usuarioId,
+        cierreDiaIds: consolidables.map((c) => c.cierreDiaId),
+        totales,
+      });
+      return { status: "ok", cierreBodegaId, totales };
+    } catch (e) {
+      if (isUniqueViolation(e)) return { status: "conflict", motivo: MSG_DUPLICADO }; // R8
+      throw e;
+    }
+  }
+}
