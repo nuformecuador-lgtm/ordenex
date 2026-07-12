@@ -71,6 +71,44 @@ const EXAMPLE_NOTIFICATIONS: NotificationItem[] = [
     id: "n4",
     notification_type: "box",
     description: "El mensajero Juan Pérez confirmó la recolección.",
+    anexo: "Ruta 7",
+  },
+  {
+    id: "n5",
+    notification_type: "alert",
+    description: "Un pago contra entrega no fue registrado.",
+    anexo: "REM-0051",
+  },
+  {
+    id: "n6",
+    notification_type: "warning",
+    description: "El stock de guías físicas está por agotarse.",
+    anexo: "Bodega Norte",
+  },
+  {
+    id: "n7",
+    notification_type: "box",
+    description: "5 órdenes fueron entregadas con éxito hoy.",
+    anexo: "Zona Sur",
+  },
+  {
+    id: "n8",
+    notification_type: "warning",
+    description: "Una zona quedó sin tarifa configurada.",
+    anexo: "Zona Valle",
+  },
+  {
+    id: "n9",
+    notification_type: "alert",
+    description: "Un mensajero reportó una novedad en una entrega.",
+    anexo: "REM-0063",
+    read: true,
+  },
+  {
+    id: "n10",
+    notification_type: "box",
+    description: "El cierre de caja del día está disponible.",
+    anexo: "Caja #12",
     read: true,
   },
 ];
@@ -140,7 +178,7 @@ export function NotificationsBell({
                 No tienes notificaciones.
               </p>
             ) : (
-              <ul className="max-h-80 divide-y divide-border overflow-auto">
+              <ul className="max-h-[360px] divide-y divide-border overflow-auto">
                 {items.map((n) => {
                   const { Icon, className, label } = TYPE_ICON[n.notification_type];
                   return (
