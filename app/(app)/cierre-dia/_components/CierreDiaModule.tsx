@@ -1,0 +1,391 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import type { MetodoPagoValue } from "@prisma/client";
+
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/shared/Modal";
+import { DataTable, type Column } from "@/components/shared/DataTable";
+import { useToast } from "@/hooks/useToast";
+import { solicitarCierre } from "@/lib/actions/cierre-dia";
+import type {
+  CierreDetalleGestion,
+  CierreGrupos,
+  CierreTotales,
+  CierrePasadoDTO,
+  CierreResultado,
+} from "@/lib/interfaces/services/ICierreDiaService";
+import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+
+// Feature 37 (T15, R3-R7/R10/R11/R18): módulo cliente del "Cierre del día". Recibe
+// del Server Component padre los grupos ya resueltos (por resultado), los totales
+// snapshot-able, el gate `puedesSolicitar` + su `motivoBloqueo` y el histórico de
+// cierres. La única mutación (Solicitar cierre) va por Server Action y refresca la
+// ruta para releer el estado del servidor. Los montos llegan como STRING
+// (money-safe): se renderizan tal cual, sin `parseFloat`/`Number`.
+
+export interface CierreDiaModuleProps {
+  grupos: CierreGrupos;
+  totales: CierreTotales;
+  puedesSolicitar: boolean;
+  motivoBloqueo: string | null;
+  cierresPasados: CierrePasadoDTO[];
+}
+
+// --- Etiquetas i18n-ready (texto separado de la lógica) ---
+const RESULTADO_LABEL: Record<CierreResultado, string> = {
+  entregada: "Entregadas",
+  reprogramada: "Reprogramadas",
+  devuelta: "Devueltas",
+  rechazada: "Rechazadas",
+};
+
+const RESULTADO_VACIO: Record<CierreResultado, string> = {
+  entregada: "No hay entregas.",
+  reprogramada: "No hay reprogramaciones.",
+  devuelta: "No hay devoluciones.",
+  rechazada: "No hay rechazos.",
+};
+
+const METODO_LABEL: Record<MetodoPagoValue, string> = {
+  efectivo: "Efectivo",
+  SIMPE: "SIMPE",
+  transferencia: "Transferencia",
+};
+
+const ESTADO_LABEL: Record<CierreEstado, string> = {
+  solicitado: "Solicitado",
+  aprobado: "Aprobado",
+  rechazado: "Rechazado",
+};
+
+const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
+  bodega_central: "Bodega central",
+  bodega_satelite: "Bodega satélite",
+};
+
+/** Orden fijo de las 4 secciones (R3). */
+const ORDEN_RESULTADOS: CierreResultado[] = [
+  "entregada",
+  "reprogramada",
+  "devuelta",
+  "rechazada",
+];
+
+/**
+ * Prefija el símbolo de colón a un monto que YA viene como string (money-safe,
+ * R6/R7): NUNCA se parsea a número para no perder precisión. `null` → "—".
+ */
+function money(value: string | null): string {
+  return value === null ? "—" : `₡${value}`;
+}
+
+/** Une la jerarquía geográfica en una línea legible (omite los vacíos, R4). */
+function ubicacion(g: CierreDetalleGestion): string {
+  return [g.zonaNombre, g.provinciaNombre, g.cantonNombre, g.distritoNombre]
+    .filter((parte): parte is string => Boolean(parte))
+    .join(" · ");
+}
+
+export function CierreDiaModule({
+  grupos,
+  totales,
+  puedesSolicitar,
+  motivoBloqueo,
+  cierresPasados,
+}: CierreDiaModuleProps) {
+  const router = useRouter();
+  const toast = useToast();
+
+  // Confirmación de "Solicitar cierre"; true = modal abierto.
+  const [confirmar, setConfirmar] = useState(false);
+  // Evidencia (URL firmada, R5) en el visor; null = cerrado.
+  const [evidencia, setEvidencia] = useState<string | null>(null);
+
+  async function confirmarSolicitud() {
+    const result = await solicitarCierre();
+    if (result.status === "ok") {
+      toast.success("Cierre solicitado correctamente.");
+      setConfirmar(false);
+      router.refresh();
+      return;
+    }
+    const mensaje =
+      result.status === "conflict" || result.status === "validation_error"
+        ? mensajeError(result)
+        : result.status === "forbidden"
+          ? "No tenés permiso para solicitar el cierre."
+          : "No se pudo solicitar el cierre. Intentá de nuevo.";
+    toast.error(mensaje);
+    setConfirmar(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      {/* ---------- Panel de totales por método de pago (R7) ---------- */}
+      <section aria-label="Totales del día" className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Totales del día</h2>
+        <Card>
+          <CardContent className="grid grid-cols-2 gap-4 pt-6 sm:grid-cols-4">
+            <TotalItem label="Efectivo" value={money(totales.efectivo)} />
+            <TotalItem label="SIMPE" value={money(totales.simpe)} />
+            <TotalItem
+              label="Transferencia"
+              value={money(totales.transferencia)}
+            />
+            <TotalItem label="Total general" value={money(totales.general)} emphasis />
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ---------- Secciones por resultado (R3/R4/R5/R6) ---------- */}
+      {ORDEN_RESULTADOS.map((resultado) => {
+        const filas = grupos[resultado] ?? [];
+        return (
+          <section
+            key={resultado}
+            aria-label={RESULTADO_LABEL[resultado]}
+            className="flex flex-col gap-3"
+          >
+            <h2 className="text-lg font-semibold">
+              {RESULTADO_LABEL[resultado]}{" "}
+              <span className="text-sm font-normal text-muted-foreground">
+                ({filas.length})
+              </span>
+            </h2>
+            <div className="overflow-x-auto">
+              <DataTable
+                columns={columnasPara(resultado, setEvidencia)}
+                data={filas}
+                rowKey="gestionId"
+                ariaLabel={RESULTADO_LABEL[resultado]}
+                emptyMessage={RESULTADO_VACIO[resultado]}
+              />
+            </div>
+          </section>
+        );
+      })}
+
+      {/* ---------- Solicitar cierre (R10/R11) ---------- */}
+      <section aria-label="Solicitar cierre" className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            onClick={() => setConfirmar(true)}
+            disabled={!puedesSolicitar}
+            title={!puedesSolicitar ? motivoBloqueo ?? undefined : undefined}
+            aria-describedby={
+              !puedesSolicitar && motivoBloqueo ? "motivo-bloqueo" : undefined
+            }
+          >
+            Solicitar cierre
+          </Button>
+        </div>
+        {!puedesSolicitar && motivoBloqueo ? (
+          <p
+            id="motivo-bloqueo"
+            role="note"
+            className="text-sm text-muted-foreground"
+          >
+            {motivoBloqueo}
+          </p>
+        ) : null}
+      </section>
+
+      {/* ---------- Cierres solicitados (histórico, solo lectura, R18) ---------- */}
+      <section aria-label="Cierres solicitados" className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Cierres solicitados</h2>
+        <div className="overflow-x-auto">
+          <DataTable
+            columns={COLUMNAS_PASADOS}
+            data={cierresPasados}
+            rowKey="cierreId"
+            ariaLabel="Cierres solicitados"
+            emptyMessage="Aún no has solicitado ningún cierre."
+          />
+        </div>
+      </section>
+
+      {/* Confirmación de "Solicitar cierre". */}
+      <Modal
+        open={confirmar}
+        onOpenChange={setConfirmar}
+        title="Solicitar cierre del día"
+        description="Se agruparán todas tus gestiones pendientes en una solicitud de cierre. Esta acción no se puede deshacer."
+        confirmLabel="Solicitar cierre"
+        onConfirm={confirmarSolicitud}
+        closeOnConfirm={false}
+      />
+
+      {/* Visor de evidencia (URL firmada, R5). */}
+      <Modal
+        open={evidencia !== null}
+        onOpenChange={(next) => {
+          if (!next) setEvidencia(null);
+        }}
+        title="Evidencia de la gestión"
+        confirmLabel="Cerrar"
+        hideCancel
+        onConfirm={() => setEvidencia(null)}
+      >
+        {evidencia ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={evidencia}
+            alt="Evidencia fotográfica de la gestión"
+            className="max-h-[60vh] w-full rounded-md object-contain"
+          />
+        ) : null}
+      </Modal>
+    </div>
+  );
+}
+
+/** Devuelve el mensaje accionable de un resultado de dominio de error. */
+function mensajeError(
+  result:
+    | { status: "conflict"; motivo: string }
+    | { status: "validation_error"; fieldErrors: Record<string, string[]> },
+): string {
+  if (result.status === "conflict") return result.motivo;
+  const primero = Object.values(result.fieldErrors)[0]?.[0];
+  return primero ?? "No se pudo solicitar el cierre.";
+}
+
+/** Ítem del panel de totales. */
+function TotalItem({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span
+        className={
+          emphasis ? "text-lg font-semibold" : "text-base font-medium"
+        }
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// --- Columnas comunes a las 4 secciones (R4) ---
+const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
+  {
+    id: "numGuia",
+    value: "Nº Guía",
+    render: (g) => g.numGuia ?? "—",
+  },
+  { id: "numRemision", value: "Nº Remisión" },
+  { id: "destinatario", value: "Destinatario" },
+  { id: "direccion", value: "Dirección", render: (g) => g.direccion ?? "—" },
+  { id: "ubicacion", value: "Ubicación", render: (g) => ubicacion(g) || "—" },
+  { id: "producto", value: "Producto" },
+  { id: "tiendaNombre", value: "Tienda" },
+];
+
+/**
+ * Construye las columnas de una sección: las comunes (R4) + las específicas del
+ * resultado (monto+método si entregada R6; fecha+motivo si reprogramada; motivo
+ * si devuelta; motivo+evidencia si rechazada, R5). El setter del visor de
+ * evidencia se inyecta para la columna de la sección "Rechazadas".
+ */
+function columnasPara(
+  resultado: CierreResultado,
+  verEvidencia: (url: string) => void,
+): Column<CierreDetalleGestion>[] {
+  if (resultado === "entregada") {
+    return [
+      ...COLUMNAS_COMUNES,
+      { id: "monto", value: "Monto", render: (g) => money(g.montoRecibido) },
+      {
+        id: "metodo",
+        value: "Método",
+        render: (g) => (g.metodoPago ? METODO_LABEL[g.metodoPago] : "—"),
+      },
+    ];
+  }
+  if (resultado === "reprogramada") {
+    return [
+      ...COLUMNAS_COMUNES,
+      {
+        id: "fechaReprogramacion",
+        value: "Nueva fecha",
+        render: (g) => g.fechaReprogramacion ?? "—",
+      },
+      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+    ];
+  }
+  if (resultado === "devuelta") {
+    return [
+      ...COLUMNAS_COMUNES,
+      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+    ];
+  }
+  // rechazada: motivo + evidencia firmada (R5)
+  return [
+    ...COLUMNAS_COMUNES,
+    { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+    {
+      id: "evidencia",
+      value: "Evidencia",
+      render: (g) =>
+        g.evidenciaUrl ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => verEvidencia(g.evidenciaUrl as string)}
+          >
+            Ver evidencia
+          </Button>
+        ) : (
+          "—"
+        ),
+    },
+  ];
+}
+
+// --- Columnas del histórico de cierres (R18) ---
+const COLUMNAS_PASADOS: Column<CierrePasadoDTO>[] = [
+  {
+    id: "estado",
+    value: "Estado",
+    render: (c) => ESTADO_LABEL[c.estado],
+  },
+  {
+    id: "destino",
+    value: "Destino",
+    render: (c) => DESTINO_LABEL[c.destinoTipo],
+  },
+  {
+    id: "efectivo",
+    value: "Efectivo",
+    render: (c) => money(c.totales.efectivo),
+  },
+  { id: "simpe", value: "SIMPE", render: (c) => money(c.totales.simpe) },
+  {
+    id: "transferencia",
+    value: "Transferencia",
+    render: (c) => money(c.totales.transferencia),
+  },
+  {
+    id: "general",
+    value: "Total",
+    render: (c) => money(c.totales.general),
+  },
+  {
+    id: "solicitadoAt",
+    value: "Fecha",
+    render: (c) => c.solicitadoAt.slice(0, 10),
+  },
+];
