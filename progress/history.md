@@ -907,3 +907,26 @@
 - **DESBLOQUEA el runtime de `bodega_central`**: con una zona marcada `esCentral` desde la UI,
   `IZonaRepository.findCentralZonaId()` deja de devolver null → el maestro (30) puede asignar/rutear y despiertan
   34/37 en producción. Deuda menor: `conflict` sin payload por-campo; divergencia escalar↔N:M del seed (nivel feat-24).
+
+## 2026-07-12 — feature 38 (admin: cierres del día, aprobar/rechazar)
+- Módulo `/cierres-admin` para el admin de bodega (maestro para la central/GAM, adminSatelite para su bodega):
+  cola de cierres `solicitado` de su alcance + histórico de `aprobado`/`rechazado`, con el detalle COMPLETO de
+  cada cierre (órdenes gestionadas, evidencias por URL firmada, montos, métodos, motivos) y los totales snapshot.
+  Aprobar/rechazar de a uno tras ver el detalle. Consume el flujo de la feature 37.
+- Requisitos cubiertos: R1–R17 + E2E (cada uno con test concreto; reviewer verificó trazabilidad).
+- **Decisiones F1.4 (aprobadas por el humano 2026-07-12, todas recomendadas):** (a) rechazo **INMUTABLE**
+  (solo cambia `estado`; las `gestion_orden` NO se desvinculan; el desbloqueo/re-solicitud del mensajero es de
+  la feature 41); (b) REUSA el DTO de detalle de la 37 (`CierreDetalleGestion`/`WITH_DETALLE`/firma de evidencia)
+  + añade `findGestionesByCierre`; (c) cola + histórico por alcance; (d) transición con guardia de concurrencia
+  `updateMany ... WHERE id + estado='solicitado' + alcance` (sin TOCTOU; `count===0` → `conflict`/`fuera_de_alcance`);
+  (e) migración **ADITIVA** `20260712110000_cierre_dia_resolucion` (`resuelto_por` FK `ON DELETE SET NULL`,
+  `resuelto_at`, `motivo_rechazo` OBLIGATORIO al rechazar) con `down.sql`, RLS intacta; (f) E2E escrito; (g) de a uno.
+- Alcance por rol+zona SERVER-SIDE en el WHERE (listado, detalle y transición): `maestro`→`bodega_central`;
+  `adminSatelite`→`bodega_satelite` + `destinoZonaId = findUsuarioZonaId`. adminSatelite sin zona → `no_encontrada`
+  (no filtra existencia). Otro rol → `notFound()`. Money-critical: totales snapshot (Decimal→string, sin `parseFloat`).
+- Nuevos: `lib/services/CierresAdminService.ts`, `lib/repositories/CierresAdminRepository.ts`, sus interfaces,
+  `lib/types/cierres-admin.ts`, `lib/actions/cierres-admin.ts`, `app/(app)/cierres-admin/` + ítem de sidebar
+  (`menu-visibility.ts`, roles maestro/adminSatelite). Verde: prisma OK, typecheck 0, lint 0, **1739/1739 (+116)**,
+  `init.sh` OK, migración round-trip OK. Reviewer APROBADO 0 bloqueantes.
+- **DESBLOQUEA** la feature 40 (cierre bodega satélite → central) y complementa 39/41. Deuda menor: tests de
+  transición/migración unit-mock (no integración DB real); E2E ejecución diferida.

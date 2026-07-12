@@ -389,13 +389,13 @@
       "id": 38,
       "name": "admin - cierres del dia (aprobar/rechazar)",
       "description": "Modulo 'Cierres del dia' para el administrador de una bodega (admin maestro para la bodega central/GAM y adminSatelite para su bodega). Muestra TODAS las solicitudes de cierre que le han hecho sus mensajeros (feature 37, boton 'Solicitar cierre'), para que el administrador pueda APROBAR o RECHAZAR cada cierre segun sea necesario. El administrador puede ver absolutamente TODO el detalle de cada orden del cierre (gestion, evidencias en foto, montos, metodos de pago, motivos) y los totales de dinero por metodo. Fullstack. Depende de la feature 37 (solicitud de cierre del mensajero).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/38-cierres-admin",
       "depends_on": 37,
-      "status_note": "F1 (spec R1-R17+E2E en specs/38-cierres-admin/) COMPLETA + F1.4 APROBADA 2026-07-12 (todas recomendadas): (a) rechazo INMUTABLE (no desvincula gestiones; desbloqueo=feature 41); (b) reusar CierreDetalleGestion de la 37 + findGestionesByCierre; (c) cola solicitado + historico aprobado/rechazado por alcance; (d) concurrencia updateMany WHERE estado=solicitado; (e) migracion ADITIVA cierre_dia: resuelto_por/resuelto_at/motivo_rechazo (obligatorio al rechazar) + down.sql; (f) E2E escrito; (g) de a uno con detalle. Alcance por rol+zona: maestro->bodega_central, adminSatelite->bodega_satelite+destinoZonaId=su zona. F2 (impl) EN CURSO."
+      "status_note": "done 2026-07-12; F1.4 APROBADA (a rechazo INMUTABLE; b reusa CierreDetalleGestion de la 37; c cola+historico por alcance; d concurrencia updateMany sin TOCTOU; e migracion ADITIVA resuelto_por/resuelto_at/motivo_rechazo obligatorio + down.sql; f E2E escrito; g de a uno). Impl COMPLETA (R1-R17+E2E) + reviewer APROBADO 0 bloqueantes. VERDE: prisma OK, typecheck 0, lint 0, 1739/1739 tests (+116), init.sh OK, migracion round-trip OK. Modulo /cierres-admin (cola solicitado + historico + detalle + aprobar/rechazar). Alcance por rol+zona en el WHERE (maestro->bodega_central, adminSatelite->bodega_satelite+su zona). Commit 0418a1a. PENDIENTE PR a dev + merge (OK humano). Deuda menor: tests de transicion/migracion unit-mock (no integracion DB real); E2E ejecucion diferida."
     },
     {
       "id": 39,

@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/38-cierres-admin | fullstack | F1 done / **F2 en impl** | ▶️ **EN CURSO 2026-07-12** (rama ← `origin/dev` 63d02f0, con 37+55 mergeadas). **F1 (spec R1–R17+E2E en `specs/38-cierres-admin/`) COMPLETA + F1.4 APROBADA 2026-07-12** (todas recomendadas): (a) rechazo **INMUTABLE** (no desvincula; desbloqueo=41); (b) reusar `CierreDetalleGestion` de la 37 + `findGestionesByCierre`; (c) cola `solicitado` + histórico; (d) concurrencia `updateMany WHERE estado='solicitado'`; (e) migración **ADITIVA** `cierre_dia`: `resuelto_por`/`resuelto_at`/`motivo_rechazo` (obligatorio al rechazar) + `down.sql`; (f) E2E escrito; (g) de a uno con detalle. Alcance por rol+zona (maestro→`bodega_central`, adminSatelite→`bodega_satelite`+su zona). **SIGUIENTE: `implementer`.** |
+| (ninguna en curso) | — | — | Feature 38 CERRADA 2026-07-12 (abajo). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** |
+
+> Feature 38 (admin: cierres del día, aprobar/rechazar) CERRADA 2026-07-12: **impl COMPLETA (R1–R17+E2E) + reviewer APROBADO 0 bloqueantes** (verde REAL verificado por el reviewer: `prisma validate` OK, `typecheck` 0, `lint` 0, **1739/1739 tests (+116)**, `init.sh` OK, migración round-trip OK). Fullstack un ciclo; F1.4 aprobada 2026-07-12 (todas recomendadas). Estado `done` + `history.md` + `review_38`. Módulo `/cierres-admin` (cola `solicitado` + histórico + detalle completo con evidencias firmadas + aprobar/rechazar de a uno). Migración ADITIVA `20260712110000_cierre_dia_resolucion` (`resuelto_por`/`resuelto_at`/`motivo_rechazo` + `down.sql`). Alcance por rol+zona en el WHERE (maestro→`bodega_central`, adminSatelite→`bodega_satelite`+su zona); rechazo inmutable; concurrencia sin TOCTOU. Commit `0418a1a`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** **DESBLOQUEA 40** (cierre satélite→central) y complementa 39/41.
 
 > Features 37 y 55 CERRADAS y **MERGEADAS a `dev`** 2026-07-12 (PRs #42 y #43). Ver `history.md`.
 
