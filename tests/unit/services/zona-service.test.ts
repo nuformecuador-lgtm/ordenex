@@ -144,3 +144,43 @@ describe("actualizar", () => {
     expect((await service.actualizar("zX", crearInput(), MAESTRO)).status).toBe("not_found");
   });
 });
+
+describe("esCentral — invariante 'una central' (feature 55/R3/R4/R6)", () => {
+  it("crear segunda central: el repo reasigna y el service devuelve ok (sin filtrar P2002/500)", async () => {
+    // ya existe otra central; el repo reasigna en su transaccion y devuelve la nueva central
+    repo = buildRepo({
+      findCentralZonaId: vi.fn().mockResolvedValue("z-old"),
+      create: vi.fn().mockResolvedValue(dto({ id: "z-new", esCentral: true })),
+    });
+    service = new ZonaService(repo);
+
+    const r = await service.crear(crearInput({ esCentral: true }), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.zona.esCentral).toBe(true); // R3
+    // el flag esCentral=true se propaga tal cual al repo
+    const arg = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.esCentral).toBe(true);
+  });
+
+  it("editar a central existiendo otra: el repo reasigna y el service devuelve ok", async () => {
+    repo = buildRepo({
+      findCentralZonaId: vi.fn().mockResolvedValue("z-old"),
+      update: vi.fn().mockResolvedValue(dto({ id: "z1", esCentral: true })),
+    });
+    service = new ZonaService(repo);
+
+    const r = await service.actualizar("z1", crearInput({ esCentral: true }), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.zona.esCentral).toBe(true); // R3
+  });
+
+  it("crear con esCentral=false persiste false (R4)", async () => {
+    repo = buildRepo({ create: vi.fn().mockResolvedValue(dto({ esCentral: false })) });
+    service = new ZonaService(repo);
+    const r = await service.crear(crearInput({ esCentral: false }), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.zona.esCentral).toBe(false);
+    const arg = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.esCentral).toBe(false);
+  });
+});

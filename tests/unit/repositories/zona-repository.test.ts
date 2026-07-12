@@ -8,6 +8,7 @@ function buildTx() {
     zona: {
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       findUnique: vi.fn(),
       delete: vi.fn(),
     },
@@ -86,6 +87,160 @@ describe("ZonaRepository.create", () => {
     expect(dto.tarifas).toEqual([
       { id: "t1", cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" },
     ]);
+  });
+});
+
+describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () => {
+  it("create con esCentral=true desmarca cualquier central previa ANTES de crear", async () => {
+    const tx = buildTx();
+    tx.zona.create.mockResolvedValue({ id: "z2", nombre: "NUEVA", cobroVehiculo: false, esCentral: true });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    const dto = await repoOf(prisma).create({
+      nombre: "NUEVA",
+      cobroVehiculo: false,
+      esCentral: true,
+      distritoIds: ["d1"],
+      tarifas: [],
+    });
+
+    // sin id propio aun: desmarca TODAS las centrales previas
+    expect(tx.zona.updateMany).toHaveBeenCalledWith({
+      where: { esCentral: true },
+      data: { esCentral: false },
+    });
+    // el desmarcado ocurre antes de crear la zona (orden de invocacion)
+    expect(tx.zona.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.zona.create.mock.invocationCallOrder[0],
+    );
+    expect(dto.esCentral).toBe(true);
+  });
+
+  it("create con esCentral=false NO desmarca ninguna central", async () => {
+    const tx = buildTx();
+    tx.zona.create.mockResolvedValue({ id: "z2", nombre: "X", cobroVehiculo: false, esCentral: false });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    await repoOf(prisma).create({
+      nombre: "X",
+      cobroVehiculo: false,
+      esCentral: false,
+      distritoIds: ["d1"],
+      tarifas: [],
+    });
+
+    expect(tx.zona.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("update con esCentral=true desmarca cualquier OTRA central (NOT id propio) antes de actualizar", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.update.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: false, esCentral: true });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    const dto = await repoOf(prisma).update("z1", {
+      nombre: "GAM",
+      cobroVehiculo: false,
+      esCentral: true,
+      distritoIds: ["d1"],
+      tarifas: [],
+    });
+
+    expect(tx.zona.updateMany).toHaveBeenCalledWith({
+      where: { esCentral: true, NOT: { id: "z1" } },
+      data: { esCentral: false },
+    });
+    expect(tx.zona.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.zona.update.mock.invocationCallOrder[0],
+    );
+    expect(dto?.esCentral).toBe(true);
+  });
+
+  it("update con esCentral=false NO desmarca ninguna central", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.update.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: false, esCentral: false });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    await repoOf(prisma).update("z1", {
+      nombre: "GAM",
+      cobroVehiculo: false,
+      esCentral: false,
+      distritoIds: ["d1"],
+      tarifas: [],
+    });
+
+    expect(tx.zona.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("create: P2002 sobre es_central se traduce a ConflictError (no un error generico/500)", async () => {
+    const tx = buildTx();
+    tx.zona.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("unique", {
+        code: "P2002",
+        clientVersion: "x",
+        meta: { target: ["es_central"] },
+      }),
+    );
+    const prisma = buildPrisma(tx);
+
+    await expect(
+      repoOf(prisma).create({
+        nombre: "NUEVA",
+        cobroVehiculo: false,
+        esCentral: true,
+        distritoIds: ["d1"],
+        tarifas: [],
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("update: P2002 sobre es_central se traduce a ConflictError", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("unique", {
+        code: "P2002",
+        clientVersion: "x",
+        meta: { target: ["zona_es_central_unico"] },
+      }),
+    );
+    const prisma = buildPrisma(tx);
+
+    await expect(
+      repoOf(prisma).update("z1", {
+        nombre: "GAM",
+        cobroVehiculo: false,
+        esCentral: true,
+        distritoIds: ["d1"],
+        tarifas: [],
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("P2002 sobre OTRA constraint (nombre) NO se traduce a ConflictError de central: re-lanza tal cual", async () => {
+    const tx = buildTx();
+    const original = new Prisma.PrismaClientKnownRequestError("unique", {
+      code: "P2002",
+      clientVersion: "x",
+      meta: { target: ["nombre"] },
+    });
+    tx.zona.create.mockRejectedValue(original);
+    const prisma = buildPrisma(tx);
+
+    await expect(
+      repoOf(prisma).create({
+        nombre: "DUP",
+        cobroVehiculo: false,
+        esCentral: false,
+        distritoIds: ["d1"],
+        tarifas: [],
+      }),
+    ).rejects.toBe(original);
   });
 });
 
