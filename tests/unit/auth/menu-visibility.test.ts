@@ -20,6 +20,7 @@ const byLabel = (label: string): MenuItem => {
 const ordenes = byLabel("Órdenes");
 const config = byLabel("Configuración");
 const perfil = byLabel("Perfil");
+const cierreDia = byLabel("Cierre del día");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -29,6 +30,7 @@ describe("puedeVer", () => {
     expect(puedeVer(config, actor("maestro"))).toBe(true);
     expect(puedeVer(ordenes, actor("mensajero"))).toBe(true);
     expect(puedeVer(perfil, actor("adminSatelite"))).toBe(true);
+    expect(puedeVer(cierreDia, actor("mensajero"))).toBe(true);
   });
 
   it("oculta el item cuando el rol no está autorizado", () => {
@@ -36,6 +38,9 @@ describe("puedeVer", () => {
     expect(puedeVer(config, actor("adminTienda"))).toBe(false);
     expect(puedeVer(config, actor("adminSatelite"))).toBe(false);
     expect(puedeVer(ordenes, actor("adminSatelite"))).toBe(false);
+    // "Cierre del día" es exclusivo del mensajero (R1).
+    expect(puedeVer(cierreDia, actor("maestro"))).toBe(false);
+    expect(puedeVer(cierreDia, actor("adminSatelite"))).toBe(false);
   });
 
   it("oculta todo cuando no hay actor (sesión ausente o inválida)", () => {
@@ -66,9 +71,9 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("mensajero ve Órdenes + Perfil, NO Configuración", () => {
+  it("mensajero ve Órdenes + Cierre del día + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
-    expect(visibles).toEqual(["Órdenes", "Perfil"]);
+    expect(visibles).toEqual(["Órdenes", "Cierre del día", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
   });
 
