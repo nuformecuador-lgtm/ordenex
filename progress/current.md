@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 34 CERRADA (impl+reviewer OK); pendiente abrir/mergear PR a `dev`. Zonas libres. |
+| feature/54-reconciliar-zonas-tarifas | fullstack | F2 (reconciliación) | ⚙️ **FIX del baseline roto por el PR #40** (ver "Conflictos pendientes"). Decisión humana 2026-07-12: arreglar HACIA ADELANTE (conservar el refactor tarifas/N:M/menú) + reponer la zona central con flag NUEVO **`esCentral`** (renombrado desde `esGam`) + resolver `findCentralZonaId` (actualiza 17/30/34). Alcance: schema (`Zona.usuarios`), recablear ZonaRepository/TarifaRepository/GeoRepository, migración `esCentral`+down.sql, `zonas-columns.tsx` (usar esCentral, quitar pagos que fueron a tarifas), tests. **CRITERIO: `prisma validate` OK + `typecheck` 0 + `init.sh` verde + `pnpm build`.** DESBLOQUEA la feature 37 (pausada). implementer LANZADO. |
 
 > Feature 34 (asignación desde bodega satélite) CERRADA 2026-07-11: **impl COMPLETA (R1–R20) + reviewer APROBADO 0 bloqueantes** (corrió `init.sh`, 1519 tests). Fullstack un ciclo, SIN migración. Estado `done` + `history.md` + `review_34`. `AsignacionSateliteService` paralelo (guardas rol+zona server-side, 5 errores tipados, lote todo-o-nada) + rename honesto `...Gam`→`...ByZona` (maestro verde) + UI "Asignar" en `recepcion-satelite`. **CIERRA la cadena satelital** (30→32→33→34→36). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA: E2E escrito no ejecutado.
 

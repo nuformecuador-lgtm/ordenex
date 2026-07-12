@@ -559,6 +559,17 @@
       "zone": "backend",
       "branch": "chore/deuda-despliegue-migraciones",
       "depends_on": null
+    },
+    {
+      "id": 54,
+      "name": "reconciliar refactor zonas/tarifas (dev verde) + reponer identificacion GAM como esCentral",
+      "description": "FIX-FEATURE de reconciliacion: el PR #40 'Adjustments' (mergeado a dev 2026-07-12) fue un refactor grande dejado A MEDIAS que rompio el baseline (prisma validate invalido + 86 errores de typecheck, init.sh rojo). El refactor: (a) renombro cobros->tarifas (modelo `tarifas` por zona con valorFlete/valorFleteGam/IVA/comision + `TarifaZonaMensajero` pago-por-zona), (b) remodelo zona<->distrito a N:M (`ZonaDistrito`), (c) reescribio IZonaRepository/lib/types/zona.ts, (d) agrego sidebar/menu shadcn nuevo. PERO quito de `Zona` los campos `esGam`/`pagoEntrega`/`pagoRechazo` y ELIMINO `IZonaRepository.findGamZonaId()` sin actualizar a sus consumidores (features 17/30/34: lib/actions/ordenes-guia.ts, lib/services/GuiaAsignacionService.ts) y dejo el schema invalido (modelo `Zona` sin la relacion opuesta `usuarios Usuario[]`). DECISIONES DEL HUMANO (2026-07-12): (1) arreglar HACIA ADELANTE conservando el refactor (no revertir); (2) reponer la identificacion de la zona central con un flag NUEVO `esCentral` (renombrado desde el viejo `esGam`) en `Zona` (a lo sumo una true) + su resolver (findGamZonaId -> renombrar a findCentralZonaId, o equivalente) y actualizar los llamadores 17/30/34; los pagos ya viven en tarifas/TarifaZonaMensajero (no vuelven a zona). Alcance: arreglar schema.prisma (relacion `Zona.usuarios`), recablear ZonaRepository/TarifaRepository/GeoRepository al nuevo modelo, reponer `esCentral`+resolver (migracion + down.sql), corregir zonas-columns.tsx (usar esCentral; quitar columnas pagoEntrega/pagoRechazo que se movieron a tarifas), y actualizar TODOS los tests. CRITERIO DE ACEPTACION: `npx prisma validate` OK + `pnpm typecheck` 0 errores + `./init.sh` VERDE + `pnpm build` pasa. Fullstack de reconciliacion. DESBLOQUEA la feature 37 (pausada) y repara 17/30/34 en dev.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/54-reconciliar-zonas-tarifas",
+      "depends_on": null
     }
   ]
 }
