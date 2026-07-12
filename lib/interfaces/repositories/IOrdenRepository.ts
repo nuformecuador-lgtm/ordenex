@@ -258,17 +258,19 @@ export interface IOrdenRepository {
   /** R28/T15: TODOS los usuarios con rol `mensajero`, SIN filtro de zona. */
   findAllMensajeros(): Promise<MensajeroLiteRow[]>;
   /**
-   * Feature 30/R5: usuarios con rol `mensajero` Y `zonaId = gamZonaId` (solo la
-   * zona GAM), ordenados por nombre. Reemplaza el cuerpo de `findAllMensajeros`
-   * en el loader del modal: un mensajero de otra zona o sin zona NO aparece.
+   * Feature 30/R5 + feature 34/R5: usuarios con rol `mensajero` cuyo `zonaId`
+   * sea la zona pasada, ordenados por nombre. Filtra por la `zonaId` recibida (el
+   * maestro pasa la zona GAM; el adminSatelite pasa su propia zona): un mensajero
+   * de otra zona o sin zona NO aparece.
    */
-  findMensajerosGam(gamZonaId: string): Promise<MensajeroLiteRow[]>;
+  findMensajerosByZona(zonaId: string): Promise<MensajeroLiteRow[]>;
   /**
-   * Feature 30/R6: subconjunto de `ids` que corresponde a un usuario con rol
-   * `mensajero` Y `zonaId = gamZonaId`. Defensa en profundidad sobre R5 (el
-   * service revalida el mensajero recibido, aunque la lista visible ya sea GAM).
+   * Feature 30/R6 + feature 34/R9: subconjunto de `ids` que corresponde a un
+   * usuario con rol `mensajero` cuyo `zonaId` sea la zona pasada. Defensa en
+   * profundidad sobre R5 (el service revalida el mensajero recibido contra la
+   * zona del actor, aunque la lista visible ya venga filtrada por zona).
    */
-  findMensajeroIdsValidosGam(ids: string[], gamZonaId: string): Promise<Set<string>>;
+  findMensajeroIdsValidosByZona(ids: string[], zonaId: string): Promise<Set<string>>;
   /**
    * R15/R16: catalogo completo `order_status` (id, value) de solo lectura, para
    * que la UI resuelva `value` -> `estatusId` y siga filtrando `listarOrdenes`
@@ -348,4 +350,26 @@ export interface IOrdenRepository {
     zonaId: string,
     destinoEstatusId: string,
   ): Promise<boolean>;
+
+  // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
+
+  /**
+   * Feature 34/R7/R14: transiciona un lote de ordenes a `en_espera_aceptacion`
+   * fijando `mensajeroAsignadoId`, con escritura GUARDADA por estado de origen +
+   * zona (patron `recibirEnSatelite`): `updateMany` con
+   * `WHERE id IN (ordenIds) AND estatusId = origenEstatusId AND zonaId AND
+   * deletedAt IS NULL`. Concurrencia-segura: una orden que ya cambio de estado o
+   * de zona entre la lectura y la escritura NO se toca. Usa `estatusId` (el id del
+   * estado de origen ya resuelto por el service via `findEstatusIdByValue`), NO la
+   * relacion `estatus.value`. NUNCA toca `numGuia` (R8; las ordenes ya lo tienen
+   * del ruteo a satelite). Devuelve el numero de filas efectivamente
+   * transicionadas (el service compara con `ordenIds.length` para detectar carrera).
+   */
+  asignarSateliteLote(
+    ordenIds: string[],
+    mensajeroId: string,
+    zonaId: string,
+    destinoEstatusId: string,
+    origenEstatusId: string,
+  ): Promise<number>;
 }

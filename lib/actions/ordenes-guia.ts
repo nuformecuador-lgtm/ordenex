@@ -28,7 +28,7 @@ function buildGuiaService(): IGuiaAsignacionService {
   return new GuiaAsignacionService(new OrdenRepository(prisma), new ZonaRepository(prisma));
 }
 
-function buildOrdenRepo(): Pick<IOrdenRepository, "findMensajerosGam"> {
+function buildOrdenRepo(): Pick<IOrdenRepository, "findMensajerosByZona"> {
   return new OrdenRepository(getPrismaClient());
 }
 
@@ -46,7 +46,7 @@ export interface GuiaActionDeps {
 }
 
 export interface ListarMensajerosDeps {
-  ordenRepo?: Pick<IOrdenRepository, "findMensajerosGam">;
+  ordenRepo?: Pick<IOrdenRepository, "findMensajerosByZona">;
   zonaRepo?: Pick<IZonaRepository, "findGamZonaId">;
   getActor?: () => Promise<Actor | null>;
 }
@@ -132,7 +132,7 @@ export async function listarMensajerosParaAsignacion(
       return { status: "ok" as const, mensajeros: [] };
     }
     const repo = deps.ordenRepo ?? buildOrdenRepo();
-    const mensajeros = await repo.findMensajerosGam(gamZonaId);
+    const mensajeros = await repo.findMensajerosByZona(gamZonaId);
     return { status: "ok" as const, mensajeros };
   });
   // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el

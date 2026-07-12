@@ -2,7 +2,10 @@ import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
-import { listarRecepcionSatelite } from "@/lib/actions/recepcion-satelite";
+import {
+  listarRecepcionSatelite,
+  listarMensajerosSatelite,
+} from "@/lib/actions/recepcion-satelite";
 
 import { RecepcionSateliteModule } from "./_components/RecepcionSateliteModule";
 
@@ -22,6 +25,14 @@ export default async function RecepcionSatelitePage() {
   const result = await listarRecepcionSatelite();
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
+  // Feature 34/T7 (R2): pre-fetch de los mensajeros de la zona del actor para el
+  // modal de asignación (datos por props desde el Server Component que ya validó
+  // el rol). Degradación suave: si el loader no responde `ok`, se pasa lista vacía
+  // (la sección "Recibidas" desactiva la asignación, R6) sin romper la página.
+  const mensajerosResult = await listarMensajerosSatelite();
+  const mensajeros =
+    mensajerosResult.status === "ok" ? mensajerosResult.mensajeros : [];
+
   return (
     <section className="flex flex-1 flex-col gap-6 p-6">
       <PageHeader
@@ -33,6 +44,7 @@ export default async function RecepcionSatelitePage() {
         recibidas={result.recibidas}
         zonaNombre={result.zonaNombre}
         sinZona={result.sinZona}
+        mensajeros={mensajeros}
       />
     </section>
   );
