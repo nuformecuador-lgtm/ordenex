@@ -219,6 +219,7 @@ model Zona {
   id            String  @id @default(uuid())
   nombre        String
   cobroVehiculo Boolean @default(false) @map("cobro_vehiculo") // feature 24: cobro extra por vehiculo en esta zona
+  esGam         Boolean @default(false) @map("es_gam") // feature 24/R3: flag zona GAM; a lo sumo UNA en true (indice unico parcial zona_es_gam_unico)
 
   provincias           Provincia[]
   ordenes              Orden[]

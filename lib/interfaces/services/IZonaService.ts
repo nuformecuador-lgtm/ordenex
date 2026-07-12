@@ -43,6 +43,11 @@ export type ArbolZonasServiceResult =
   | { status: "ok"; arbol: ArbolZonas }
   | { status: "forbidden" };
 
+export type MarcarGamServiceResult =
+  | { status: "ok"; zona: ZonaDTO }
+  | { status: "forbidden" }
+  | { status: "not_found" };
+
 export interface IZonaService {
   crear(input: CrearZonaInput, actor: Actor): Promise<CrearZonaServiceResult>;
   obtener(id: string, actor: Actor): Promise<ObtenerZonaServiceResult>;
@@ -54,4 +59,6 @@ export interface IZonaService {
   ): Promise<ActualizarZonaServiceResult>;
   borrar(id: string, actor: Actor): Promise<BorrarZonaServiceResult>;
   arbol(actor: Actor): Promise<ArbolZonasServiceResult>;
+  /** Feature 24/R3: fija el flag GAM de la zona (a lo sumo una en true). Solo maestro. */
+  marcarGam(id: string, esGam: boolean, actor: Actor): Promise<MarcarGamServiceResult>;
 }

@@ -8,6 +8,7 @@ function buildTx() {
     zona: {
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       findUnique: vi.fn(),
       delete: vi.fn(),
     },
@@ -34,18 +35,23 @@ function repoOf(prisma: unknown) {
 describe("ZonaRepository.create", () => {
   it("crea zona + N:M + tarifas en transaccion y devuelve el DTO", async () => {
     const tx = buildTx();
-    tx.zona.create.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: false });
+    tx.zona.create.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: false, esGam: false });
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
 
     const dto = await repoOf(prisma).create({
       nombre: "GAM",
       cobroVehiculo: false,
+      esGam: false,
       distritoIds: ["d1", "d2"],
       tarifas: [],
     });
 
-    expect(tx.zona.create).toHaveBeenCalledWith({ data: { nombre: "GAM", cobroVehiculo: false } });
+    expect(tx.zona.create).toHaveBeenCalledWith({
+      data: { nombre: "GAM", cobroVehiculo: false, esGam: false },
+    });
+    // esGam=false: no desmarca otras zonas
+    expect(tx.zona.updateMany).not.toHaveBeenCalled();
     expect(tx.zonaDistrito.createMany).toHaveBeenCalledWith({
       data: [
         { zonaId: "z1", distritoId: "d1" },
@@ -58,7 +64,7 @@ describe("ZonaRepository.create", () => {
 
   it("persiste tarifas con Decimal y vehiculoId", async () => {
     const tx = buildTx();
-    tx.zona.create.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: true });
+    tx.zona.create.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: true, esGam: false });
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([
       {
         id: "t1",
@@ -72,6 +78,7 @@ describe("ZonaRepository.create", () => {
     const dto = await repoOf(prisma).create({
       nombre: "GAM",
       cobroVehiculo: true,
+      esGam: false,
       distritoIds: ["d1"],
       tarifas: [{ cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" }],
     });
@@ -82,6 +89,84 @@ describe("ZonaRepository.create", () => {
     expect(dto.tarifas).toEqual([
       { id: "t1", cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" },
     ]);
+  });
+});
+
+describe("ZonaRepository esGam (feature 24/R3: a lo sumo una GAM)", () => {
+  it("create con esGam=true desmarca las demas antes de insertar", async () => {
+    const tx = buildTx();
+    tx.zona.create.mockResolvedValue({ id: "z2", nombre: "GAM", cobroVehiculo: false, esGam: true });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    const dto = await repoOf(prisma).create({
+      nombre: "GAM",
+      cobroVehiculo: false,
+      esGam: true,
+      distritoIds: ["d1"],
+      tarifas: [],
+    });
+
+    expect(tx.zona.updateMany).toHaveBeenCalledWith({
+      where: { esGam: true },
+      data: { esGam: false },
+    });
+    expect(tx.zona.create).toHaveBeenCalledWith({
+      data: { nombre: "GAM", cobroVehiculo: false, esGam: true },
+    });
+    expect(dto.esGam).toBe(true);
+  });
+
+  it("marcarGam(true) desmarca las demas (NOT id) y fija la zona; devuelve el DTO", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.update.mockResolvedValue({
+      id: "z1",
+      nombre: "GAM",
+      cobroVehiculo: false,
+      esGam: true,
+      _count: { distritos: 4 },
+    });
+    const prisma = buildPrisma(tx);
+
+    const dto = await repoOf(prisma).marcarGam("z1", true);
+
+    expect(tx.zona.updateMany).toHaveBeenCalledWith({
+      where: { esGam: true, NOT: { id: "z1" } },
+      data: { esGam: false },
+    });
+    expect(tx.zona.update).toHaveBeenCalledWith({
+      where: { id: "z1" },
+      data: { esGam: true },
+      include: { _count: { select: { distritos: true } } },
+    });
+    expect(dto).toEqual({ id: "z1", nombre: "GAM", cobroVehiculo: false, esGam: true, distritosCount: 4 });
+  });
+
+  it("marcarGam(false) NO desmarca otras y solo fija la zona en false", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.update.mockResolvedValue({
+      id: "z1",
+      nombre: "GAM",
+      cobroVehiculo: false,
+      esGam: false,
+      _count: { distritos: 0 },
+    });
+    const prisma = buildPrisma(tx);
+
+    const dto = await repoOf(prisma).marcarGam("z1", false);
+
+    expect(tx.zona.updateMany).not.toHaveBeenCalled();
+    expect(dto?.esGam).toBe(false);
+  });
+
+  it("marcarGam en zona inexistente -> null", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue(null);
+    const prisma = buildPrisma(tx);
+    expect(await repoOf(prisma).marcarGam("zX", true)).toBeNull();
+    expect(tx.zona.update).not.toHaveBeenCalled();
   });
 });
 
@@ -162,7 +247,7 @@ describe("ZonaRepository.list", () => {
       zona: {
         findMany: vi
           .fn()
-          .mockResolvedValue([{ id: "z1", nombre: "GAM", cobroVehiculo: false, _count: { distritos: 3 } }]),
+          .mockResolvedValue([{ id: "z1", nombre: "GAM", cobroVehiculo: false, esGam: false, _count: { distritos: 3 } }]),
         count: vi.fn().mockResolvedValue(1),
       },
     });
@@ -178,7 +263,7 @@ describe("ZonaRepository.list", () => {
       zona: {
         findMany: vi
           .fn()
-          .mockResolvedValue([{ id: "z1", nombre: "GAM", cobroVehiculo: true, _count: { distritos: 1 } }]),
+          .mockResolvedValue([{ id: "z1", nombre: "GAM", cobroVehiculo: true, esGam: true, _count: { distritos: 1 } }]),
         count: vi.fn().mockResolvedValue(1),
       },
       tarifaZonaMensajero: {

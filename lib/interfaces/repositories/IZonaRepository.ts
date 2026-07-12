@@ -12,6 +12,7 @@ export interface TarifaZonaMensajeroData {
 export interface CreateZonaData {
   nombre: string;
   cobroVehiculo: boolean;
+  esGam: boolean; // feature 24/R3: si es true, el repo desmarca las demas (invariante 1 GAM)
   distritoIds: string[];
   tarifas: TarifaZonaMensajeroData[];
 }
@@ -41,6 +42,12 @@ export interface IZonaRepository {
   list(params: ListZonasParams): Promise<ListZonasResult>;
   /** Reemplaza datos + N:M + tarifas; null si la zona no existe. */
   update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null>;
+  /**
+   * Feature 24/R3: fija `es_gam` de la zona. Si `esGam` es true, desmarca las demas
+   * en la misma transaccion para garantizar que a lo sumo una quede en true.
+   * `null` si la zona no existe.
+   */
+  marcarGam(id: string, esGam: boolean): Promise<ZonaDTO | null>;
   /** Borrado FISICO (cascade de zona_distrito y tarifas). */
   hardDelete(id: string): Promise<DeleteZonaResult>;
   /** Arbol zona -> canton -> distrito indexado por nombre normalizado. */

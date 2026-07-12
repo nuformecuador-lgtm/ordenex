@@ -21,6 +21,9 @@ export type TarifaZonaMensajeroInput = z.infer<typeof tarifaZonaMensajeroInputSc
 const zonaFields = {
   nombre: nombreSchema,
   cobroVehiculo: z.boolean(),
+  // esGam: flag de zona GAM. Opcional en el borde (default false); a lo sumo una
+  // zona puede quedar en true (lo garantiza el indice unico parcial y el service).
+  esGam: z.boolean().default(false),
   // distritoIds: conjunto de distritos que componen la zona (N:M). Al menos uno.
   distritoIds: z.array(idSchema).min(1),
   // tarifas: filas de tarifa_zona_mensajero. Su cardinalidad/forma depende de
@@ -119,6 +122,7 @@ export interface ZonaDTO {
   id: string;
   nombre: string;
   cobroVehiculo: boolean;
+  esGam: boolean; // feature 24/R3: flag zona GAM (a lo sumo una en true)
   distritosCount: number;
   // Presente en crear/actualizar/obtener; en listar solo si include incluye "tarifas".
   tarifas?: TarifaZonaMensajeroDTO[];
@@ -151,6 +155,7 @@ export type ZonaActionError =
   | { status: "not_found" }
   | { status: "conflict" }; // borrar una zona referenciada por provincia/orden/tarifas
 
+export type MarcarZonaGamResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
 export type CrearZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
 export type ObtenerZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
 export type ActualizarZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;

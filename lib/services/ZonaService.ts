@@ -10,6 +10,7 @@ import type {
   CrearZonaServiceResult,
   IZonaService,
   ListarZonasServiceResult,
+  MarcarGamServiceResult,
   ObtenerZonaServiceResult,
 } from "@/lib/interfaces/services/IZonaService";
 import type { ActualizarZonaInput, CrearZonaInput, ListarZonasInput } from "@/lib/types/zona";
@@ -63,6 +64,7 @@ export class ZonaService implements IZonaService {
       data: {
         nombre: input.nombre,
         cobroVehiculo: input.cobroVehiculo,
+        esGam: input.esGam, // feature 24/R3: prop opcional; el repo mantiene 1 sola GAM
         distritoIds,
         tarifas: input.tarifas.map((t) => ({
           cobroEntregado: t.cobroEntregado,
@@ -125,5 +127,12 @@ export class ZonaService implements IZonaService {
     if (!esMaestro(actor)) return { status: "forbidden" };
     const arbol = await this.repo.arbol();
     return { status: "ok", arbol };
+  }
+
+  async marcarGam(id: string, esGam: boolean, actor: Actor): Promise<MarcarGamServiceResult> {
+    if (!esMaestro(actor)) return { status: "forbidden" };
+    const zona = await this.repo.marcarGam(id, esGam);
+    if (!zona) return { status: "not_found" };
+    return { status: "ok", zona };
   }
 }

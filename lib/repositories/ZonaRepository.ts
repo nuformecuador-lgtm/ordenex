@@ -38,7 +38,7 @@ function tarifaToDTO(row: TarifaRow): TarifaZonaMensajeroDTO {
 }
 
 function toDTO(
-  zona: { id: string; nombre: string; cobroVehiculo: boolean },
+  zona: { id: string; nombre: string; cobroVehiculo: boolean; esGam: boolean },
   distritosCount: number,
   tarifas: TarifaRow[] | undefined,
 ): ZonaDTO {
@@ -46,6 +46,7 @@ function toDTO(
     id: zona.id,
     nombre: zona.nombre,
     cobroVehiculo: zona.cobroVehiculo,
+    esGam: zona.esGam, // feature 24/R3
     distritosCount,
   };
   if (tarifas !== undefined) dto.tarifas = tarifas.map(tarifaToDTO);
@@ -66,8 +67,13 @@ export class ZonaRepository implements IZonaRepository {
 
   async create(data: CreateZonaData): Promise<ZonaDTO> {
     return this.prisma.$transaction(async (tx) => {
+      // R3: si nace GAM, desmarca cualquier otra en true antes de insertar (evita
+      // violar el indice unico parcial y mantiene la invariante de 1 sola GAM).
+      if (data.esGam) {
+        await tx.zona.updateMany({ where: { esGam: true }, data: { esGam: false } });
+      }
       const zona = await tx.zona.create({
-        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo },
+        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esGam: data.esGam },
       });
       if (data.distritoIds.length > 0) {
         await tx.zonaDistrito.createMany({
@@ -133,9 +139,16 @@ export class ZonaRepository implements IZonaRepository {
       const exists = await tx.zona.findUnique({ where: { id }, select: { id: true } });
       if (!exists) return null;
 
+      // R3: si pasa a GAM, desmarca las demas antes de fijarla (invariante de 1 GAM).
+      if (data.esGam) {
+        await tx.zona.updateMany({
+          where: { esGam: true, NOT: { id } },
+          data: { esGam: false },
+        });
+      }
       const zona = await tx.zona.update({
         where: { id },
-        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo },
+        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esGam: data.esGam },
       });
       // Reemplazo completo del N:M y de las tarifas.
       await tx.zonaDistrito.deleteMany({ where: { zonaId: id } });
@@ -150,6 +163,27 @@ export class ZonaRepository implements IZonaRepository {
       }
       const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: id } });
       return toDTO(zona, data.distritoIds.length, tarifas);
+    });
+  }
+
+  async marcarGam(id: string, esGam: boolean): Promise<ZonaDTO | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const exists = await tx.zona.findUnique({ where: { id }, select: { id: true } });
+      if (!exists) return null;
+
+      // R3: al marcar GAM, desmarca cualquier otra en true (a lo sumo una GAM).
+      if (esGam) {
+        await tx.zona.updateMany({
+          where: { esGam: true, NOT: { id } },
+          data: { esGam: false },
+        });
+      }
+      const zona = await tx.zona.update({
+        where: { id },
+        data: { esGam },
+        include: { _count: { select: { distritos: true } } },
+      });
+      return toDTO(zona, zona._count.distritos, undefined);
     });
   }
 

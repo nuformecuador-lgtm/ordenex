@@ -13,7 +13,7 @@ const DESCONOCIDO: Actor = { usuarioId: "z", rol: "invitado" as RolValue };
 const NO_MAESTROS = [ADMIN, MENSAJERO, TIENDA, DESCONOCIDO];
 
 function dto(overrides: Partial<ZonaDTO> = {}): ZonaDTO {
-  return { id: "z1", nombre: "GAM", cobroVehiculo: false, distritosCount: 1, ...overrides };
+  return { id: "z1", nombre: "GAM", cobroVehiculo: false, esGam: false, distritosCount: 1, ...overrides };
 }
 
 function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
@@ -22,6 +22,7 @@ function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
     findById: vi.fn().mockResolvedValue(dto()),
     list: vi.fn().mockResolvedValue({ items: [dto()], total: 1 }),
     update: vi.fn().mockResolvedValue(dto()),
+    marcarGam: vi.fn().mockResolvedValue(dto({ esGam: true })),
     hardDelete: vi.fn().mockResolvedValue("ok"),
     arbol: vi.fn().mockResolvedValue({}),
     // por defecto: todos los ids existen.
@@ -35,6 +36,7 @@ function crearInput(overrides: Partial<CrearZonaInput> = {}): CrearZonaInput {
   return {
     nombre: "GAM",
     cobroVehiculo: false,
+    esGam: false,
     distritoIds: ["d1"],
     tarifas: [],
     ...overrides,
@@ -140,5 +142,26 @@ describe("actualizar", () => {
     repo = buildRepo({ update: vi.fn().mockResolvedValue(null) });
     service = new ZonaService(repo);
     expect((await service.actualizar("zX", crearInput(), MAESTRO)).status).toBe("not_found");
+  });
+});
+
+describe("marcarGam (feature 24/R3)", () => {
+  it("maestro -> ok y delega en repo.marcarGam", async () => {
+    const r = await service.marcarGam("z1", true, MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.zona.esGam).toBe(true);
+    expect(repo.marcarGam).toHaveBeenCalledWith("z1", true);
+  });
+
+  it.each(NO_MAESTROS)("rol %o -> forbidden sin tocar el repo", async (actor) => {
+    const r = await service.marcarGam("z1", true, actor);
+    expect(r.status).toBe("forbidden");
+    expect(repo.marcarGam).not.toHaveBeenCalled();
+  });
+
+  it("zona inexistente -> not_found", async () => {
+    repo = buildRepo({ marcarGam: vi.fn().mockResolvedValue(null) });
+    service = new ZonaService(repo);
+    expect((await service.marcarGam("zX", true, MAESTRO)).status).toBe("not_found");
   });
 });
