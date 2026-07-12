@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarUsuarios } from "@/lib/actions/usuarios";
 import { usuariosConfig } from "@/lib/config/usuarios";
@@ -19,9 +20,11 @@ export default async function ConfiguracionPage() {
     return (
       <>
         <PageHeader title="Configuración" />
-        <p role="alert" className="text-sm text-muted-foreground">
-          No tienes permiso para acceder a esta sección.
-        </p>
+        <Container>
+          <p role="alert" className="text-sm text-muted-foreground">
+            No tienes permiso para acceder a esta sección.
+          </p>
+        </Container>
       </>
     );
   }
@@ -47,12 +50,14 @@ export default async function ConfiguracionPage() {
         description="Gestión de usuarios y zonas del sistema"
       />
 
-      <section aria-labelledby="config-usuarios-heading" className="flex flex-col gap-4">
-        <h2 id="config-usuarios-heading" className="text-lg font-semibold">
-          Usuarios
-        </h2>
-        <UsuariosModule initialData={usuariosData} />
-      </section>
+      <Container>
+        <section aria-labelledby="config-usuarios-heading" className="flex flex-col gap-4">
+          <h2 id="config-usuarios-heading" className="text-lg font-semibold">
+            Usuarios
+          </h2>
+          <UsuariosModule initialData={usuariosData} />
+        </section>
+      </Container>
     </>
   );
 }

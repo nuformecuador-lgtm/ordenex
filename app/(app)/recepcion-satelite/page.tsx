@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   listarRecepcionSatelite,
@@ -39,13 +40,15 @@ export default async function RecepcionSatelitePage() {
         title="Mis asignaciones"
         description="Recepción de órdenes de tu bodega satélite por escaneo de QR"
       />
-      <RecepcionSateliteModule
-        porRecibir={result.porRecibir}
-        recibidas={result.recibidas}
-        zonaNombre={result.zonaNombre}
-        sinZona={result.sinZona}
-        mensajeros={mensajeros}
-      />
+      <Container>
+        <RecepcionSateliteModule
+          porRecibir={result.porRecibir}
+          recibidas={result.recibidas}
+          zonaNombre={result.zonaNombre}
+          sinZona={result.sinZona}
+          mensajeros={mensajeros}
+        />
+      </Container>
     </>
   );
 }

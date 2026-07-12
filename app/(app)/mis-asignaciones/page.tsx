@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
 
@@ -27,11 +28,13 @@ export default async function MisAsignacionesPage() {
         title="Mis asignaciones"
         description="Órdenes por recoger y en reparto"
       />
-      <MisAsignacionesModule
-        porRecoger={result.porRecoger}
-        porGestionar={result.porGestionar}
-        ordenEnGestionId={result.ordenEnGestionId}
-      />
+      <Container>
+        <MisAsignacionesModule
+          porRecoger={result.porRecoger}
+          porGestionar={result.porGestionar}
+          ordenEnGestionId={result.ordenEnGestionId}
+        />
+      </Container>
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { RolValue } from "@prisma/client";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 
 import { OrdenesModule } from "./_components/OrdenesModule";
@@ -21,11 +22,13 @@ export default async function OrdenesPage() {
   return (
       <>
         <PageHeader title="Órdenes" description="Listado y gestión de órdenes" />
-        {esMaestroOAdmin ? (
-          <OrdenesRevisionMaestro readOnly={actor?.rol === "admin"} />
-        ) : (
-          <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} />
-        )}
+        <Container>
+          {esMaestroOAdmin ? (
+            <OrdenesRevisionMaestro readOnly={actor?.rol === "admin"} />
+          ) : (
+            <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} />
+          )}
+        </Container>
       </>
     );
   }

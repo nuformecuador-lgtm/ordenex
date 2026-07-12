@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 
 /**
@@ -13,9 +14,11 @@ export default async function ApiPage() {
     return (
       <>
         <PageHeader title="API" />
-        <p role="alert" className="text-sm text-muted-foreground">
-          No tienes permiso para acceder a esta sección.
-        </p>
+        <Container>
+          <p role="alert" className="text-sm text-muted-foreground">
+            No tienes permiso para acceder a esta sección.
+          </p>
+        </Container>
       </>
     );
   }
