@@ -205,7 +205,7 @@ export function NotificationsBell({
                         type="button"
                         onClick={() => dismiss(n.id)}
                         aria-label="Descartar notificación"
-                        className="shrink-0 rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-navy/40"
+                        className="shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-navy/40"
                       >
                         <X className="size-4" aria-hidden="true" />
                       </button>
