@@ -225,6 +225,7 @@ model Zona {
   tarifas              Tarifa[]
   tarifaZonaMensajeros TarifaZonaMensajero[]
   distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
+  usuarios             Usuario[] // feature 24/R6: lado inverso de Usuario.zona (mensajero/adminSatelite)
 
   @@map("zona")
 }
