@@ -68,5 +68,65 @@ NO vuelven a Zona.
 2. Drift schema/DB en provincia: schema aun declara Provincia.zonaId/Provincia.zona/Zona.provincias, pero provincia.zona_id fue dropeada en DB por 120000. Inofensivo hoy. Limpiar en migracion posterior.
 3. ZonaForm.tsx sigue stubbeado (solo campo Nombre; sin distritos/tarifas ni submit real) - deuda #40. No hay forma de setear esCentral desde la UI todavia (schema/DTO/repo ya lo soportan).
 
-## Veredicto
+## Veredicto (1er pase)
 Alcance de feature 54 reconciliado hacia adelante y VERDE: prisma valido, migraciones up-to-date, typecheck 0, lint 0, build OK, init.sh exit 0, 204/204 tests del cluster. Persisten 11 fallos de suite PRE-EXISTENTES del baseline #40 en subsistemas ajenos - documentados para decision del leader.
+
+---
+
+## 2do PASE - reconciliar los 11 loose-ends del #40 (decision del leader: ampliar alcance)
+
+Se cerraron los 11 fallos que quedaban de la suite (1554/1565 -> 1565/1565). Delegado a
+backend_dev (Grupos 1 y 3, solo tests) y frontend_dev (Grupo 2, restaurar feature 51).
+Ningun cambio de logica de produccion salvo la restauracion de la feature 51 (Grupo 2).
+
+### Grupo 1 - tests/unit/auth/menu-visibility.test.ts (7 fallos): TEST OBSOLETO (backend_dev)
+Causa: el test desestructuraba SIDEBAR_ITEMS POR POSICION con el orden VIEJO y tenia
+asserts de orden viejo. El #40 reordeno a [Ordenes, Configuracion, Perfil]. El codigo
+lib/auth/menu-visibility.ts es CORRECTO y NO se toco.
+Fix (solo test): referencia los items por LABEL (helper byLabel) en vez de por indice;
+asserts de itemsVisibles al orden real de salida: maestro -> [Ordenes,Configuracion,Perfil];
+admin/adminTienda/mensajero -> [Ordenes,Perfil]; adminSatelite -> [Perfil]; sin actor -> [].
+Visibilidad reflejada: Ordenes(maestro/admin/adminTienda/mensajero), Configuracion(solo
+maestro), Perfil(todos incl. adminSatelite, que si esta en RolValue/ROLES_SEED).
+
+### Grupo 2 - tests/components/OrdenesCargaMasivaButton.test.tsx (2 fallos): RESTAURAR feature 51 (frontend_dev)
+Causa: el #40 revirtio la feature 51 -> ejemplos de Ecuador y distrito sin required en
+ORDENES_BULK_FIELDS de app/(app)/ordenes/_components/OrdenesCargaMasivaButton.tsx.
+Fix (restaura comportamiento, sin debilitar el test): provincia/canton.example -> "San Jose";
+distrito.example -> "Carmen" + required: true; direccion.example -> "Av. Central, 200m
+norte del parque" (fuera "amazonas"); telefono.example -> "88887777" (CR 8 digitos).
+required SOLO en distrito (notas sigue opcional). Alert de acoplamiento distrito<->zona
+intacto. xlsx-template NO se toco: lib/utils/xlsx-template.ts ya aplicaba el sufijo " *"
+a cabeceras required (el #40 no revirtio esa capa; TemplateField ya declara required?).
+
+### Grupo 3 - {vehiculos,postulacion-mensajero,usuario-fulfillment}-migration.test.ts (3 fallos): invariante reconciliado (backend_dev)
+Causa: el it de orden temporal calculaba maxPrevio como el maximo de las migraciones NO
+excluidas mediante una lista de exclusiones que crece sin fin; migraciones posteriores
+nuevas (del #40 y la 20260712000000_zona_es_central_rename del 1er pase de la 54) no
+estaban excluidas y quedaban como maxPrevio > la migracion bajo prueba.
+Fix elegido (el MAS SEGURO: arreglo de tests, NO re-timestampear ninguna migracion
+aplicada): se elimino la lista de exclusiones fragil y se compara contra un PREDECESOR
+CONOCIDO FIJO/REAL. No es tautologico (no recalcula "el maximo de los que ya son menores")
+y sigue fallando si la migracion se re-fechara ANTES de su predecesor.
+INVARIANTE FINAL por archivo:
+- vehiculos: timestamp posterior a su predecesor conocido `20260710150000_order_status_value_enum`
+  (ultima migracion existente al crear la feature 50), que debe seguir presente en dirs.
+- postulacion_mensajero: se ordena estrictamente despues de `_vehiculos` por dependencia REAL
+  (crea el FK usuario.vehiculo_id -> vehiculos(id)); ese orden es obligatorio.
+- usuario_fulfillment: se ordena estrictamente despues de su predecesor inmediato
+  `_postulacion_mensajero`.
+Los demas it (SQL up/down) intactos.
+
+### Verificacion (salida real, 2do pase)
+- pnpm typecheck (tsc --noEmit) -> 0 errores.
+- npx prisma validate -> The schema at db\schema.prisma is valid.
+- pnpm build -> PASA (14 rutas).
+- pnpm test -> Test Files 182 passed (182) | Tests 1565 passed (1565) | 0 failed.
+- ./init.sh -> == init OK == (exit 0), incluye pnpm test 1565/1565.
+
+## Veredicto (2do pase)
+Suite 100% VERDE: 1565/1565 tests, 0 fallos. typecheck 0, prisma valido, build OK,
+init.sh exit 0. Grupos 1 y 3 fueron arreglo de tests (sin tocar produccion); Grupo 2
+restauro el comportamiento de la feature 51 (ejemplos CR + distrito required) sin
+debilitar el test. Los 11 loose-ends del #40 quedaron cerrados. Deuda #2 (drift
+schema/DB provincia) y #3 (ZonaForm stub) siguen abiertas, fuera de alcance.
