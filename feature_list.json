@@ -377,11 +377,11 @@
       "id": 37,
       "name": "mensajero - cierre del dia",
       "description": "Modulo 'Cierre del dia' del mensajero. Cada vez que el mensajero gestiona una orden en 'Mis asignaciones' (feature 36), esa orden pasa a ESPERAR en el modulo de cierre del dia. El mensajero SOLO puede cerrar el dia cuando haya gestionado TODAS sus ordenes asignadas. Al terminar, el modulo muestra el detalle exacto de lo que hizo: cuales entrego, cuales reprogramo, cuales devolvio y cuales fueron rechazadas, con el detalle total de cada orden. Muestra ademas el dinero recogido por cada orden y los TOTALES por metodo de pago: total en efectivo, total en SIMPE y total en transferencia. Tras revisar, un boton 'Solicitar cierre' envia la solicitud al administrador de la bodega a la que pertenece el mensajero segun su zona (bodega central/admin maestro si es GAM, o el adminSatelite de su zona). Fullstack. Depende de la feature 36 (gestion de ordenes).",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/37-cierre-dia-mensajero",
       "depends_on": 36
     },
     {
