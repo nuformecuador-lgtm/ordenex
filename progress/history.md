@@ -930,3 +930,28 @@
   `init.sh` OK, migración round-trip OK. Reviewer APROBADO 0 bloqueantes.
 - **DESBLOQUEA** la feature 40 (cierre bodega satélite → central) y complementa 39/41. Deuda menor: tests de
   transición/migración unit-mock (no integración DB real); E2E ejecución diferida.
+
+## 2026-07-12 — feature 40 (cierre de bodega satélite → bodega principal)
+- SEGUNDO NIVEL de cierre (doble espejo de 37/38): el adminSatélite CONSOLIDA los cierres de mensajero YA
+  aprobados de su zona y SOLICITA el cierre de su bodega a la central; el maestro lo APRUEBA o RECHAZA. Extiende
+  el módulo `/cierres-admin` de forma **role-aware** (adminSatélite solicita, maestro aprueba/rechaza); las
+  secciones de cierres de mensajero (feature 38) quedan intactas.
+- Requisitos cubiertos: R1–R25 + E2E (cada uno con test concreto; reviewer verificó trazabilidad y defensas DB live).
+- **Decisiones F1.4 (aprobadas por el humano 2026-07-12, todas recomendadas):** (a) tabla nueva `CierreBodega` +
+  FK nullable `cierre_bodega_id` en `cierre_dia` (espejo de `gestion_orden.cierre_id` de la 37); (b) reusa el enum
+  `CierreEstado`; (c) al solicitar entran solo los `cierre_dia` `aprobado` de la zona con `cierre_bodega_id IS NULL`
+  (los `rechazado` se excluyen y no bloquean); (d) precondición: bloquea si quedan `cierre_dia` `solicitado` sin
+  resolver en la zona; (e) totales snapshot AGREGADOS (suma Decimal congelada al solicitar, money-critical); (f)
+  pago al mensajero OMITIDO del detalle (es la feature 39); (g) índice único parcial `(zona_id) WHERE
+  estado='solicitado'` (≤1 cierre de bodega abierto por zona; `P2002`→`conflict`); (h) maestro ve cola+histórico;
+  (i) motivo de rechazo obligatorio; (j) rechazo INMUTABLE (no desvincula `cierre_dia`; desbloqueo=feature 41);
+  (k) auditoría `resuelto_por`/`resuelto_at`/`motivo_rechazo`; (l) extender `/cierres-admin` role-aware.
+- Alcance server-side: solicitar solo `adminSatelite` sobre SU zona (`findUsuarioZonaId`); resolver solo `maestro`;
+  transición guardada `updateMany WHERE estado='solicitado'` sin TOCTOU; otro rol → `notFound()`/`forbidden`.
+- Nuevos: `lib/services/CierreBodegaService.ts` (solicitar) + `CierresBodegaAdminService.ts` (resolver), sus repos e
+  interfaces, `lib/types/cierre-bodega.ts`, `lib/actions/cierre-bodega.ts`, migración `20260712120000_cierre_bodega`
+  (+ down.sql + RLS), `/cierres-admin` extendido. Reusa el detalle de 37/38 (sin duplicar). Verde: prisma OK,
+  typecheck 0, lint 0, **1797/1797 (+58)**, `init.sh` OK, build pasa, migración round-trip real en DB viva.
+  Reviewer APROBADO 0 bloqueantes.
+- **DESBLOQUEA** la feature 41 (reglas/bloqueos/vencidos). Deuda menor: R8/R16/R18/R20-22 unit-mock (defensas DB
+  verificadas live por el reviewer); R24 sin test automatizado de RLS; E2E ejecución diferida.
