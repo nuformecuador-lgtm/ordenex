@@ -103,10 +103,11 @@ export function OrdenesCargaMasivaButton() {
     };
   }, [open, mensajeros.length]);
 
-  const mensajeroOptions: SelectOption[] = mensajeros.map((m) => ({
-    value: m.id,
-    label: m.nombre,
-  }));
+  // Opción en blanco al inicio para poder desmarcar y enviar vacío.
+  const mensajeroOptions: SelectOption[] = [
+    { value: "", label: "Sin sugerir" },
+    ...mensajeros.map((m) => ({ value: m.id, label: m.nombre })),
+  ];
 
   function handleSuccess(result: BulkUploadResult) {
     const resumen = parseResumen(result.data);
@@ -192,7 +193,7 @@ export function OrdenesCargaMasivaButton() {
                 onValueChange={setMensajeroSugeridoId}
                 options={mensajeroOptions}
                 placeholder="Sin sugerir"
-                disabled={mensajeroOptions.length === 0}
+                disabled={mensajeros.length === 0}
                 aria-label="Mensajero sugerido para el lote"
               />
               <p className="text-sm text-muted-foreground">
