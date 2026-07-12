@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Features 37 y 55 CERRADAS 2026-07-12 (abajo). La 37 ya está en `dev` (**PR #42 mergeado**); el **PR #43** (55) se mergea tras esta reconciliación de bookkeeping. |
+| feature/38-cierres-admin | fullstack | F1 done / **F2 en impl** | ▶️ **EN CURSO 2026-07-12** (rama ← `origin/dev` 63d02f0, con 37+55 mergeadas). **F1 (spec R1–R17+E2E en `specs/38-cierres-admin/`) COMPLETA + F1.4 APROBADA 2026-07-12** (todas recomendadas): (a) rechazo **INMUTABLE** (no desvincula; desbloqueo=41); (b) reusar `CierreDetalleGestion` de la 37 + `findGestionesByCierre`; (c) cola `solicitado` + histórico; (d) concurrencia `updateMany WHERE estado='solicitado'`; (e) migración **ADITIVA** `cierre_dia`: `resuelto_por`/`resuelto_at`/`motivo_rechazo` (obligatorio al rechazar) + `down.sql`; (f) E2E escrito; (g) de a uno con detalle. Alcance por rol+zona (maestro→`bodega_central`, adminSatelite→`bodega_satelite`+su zona). **SIGUIENTE: `implementer`.** |
+
+> Features 37 y 55 CERRADAS y **MERGEADAS a `dev`** 2026-07-12 (PRs #42 y #43). Ver `history.md`.
 
 > Feature 55 (completar ZonaForm: `esCentral` + drift `provincia.zonaId`) CERRADA 2026-07-12: **impl COMPLETA (R1–R14) + reviewer APROBADO 0 bloqueantes** (verde REAL verificado por el reviewer: `prisma validate` valid, `migrate status` up-to-date 0 migraciones nuevas, `typecheck` 0, `lint` 0, **1614/1614 tests (+49)**, `init.sh` OK). Fullstack un ciclo; F1.4 aprobada 2026-07-12 (todo recomendado). Estado `done` + `history.md` + `review_55`. Reconstruyó `ZonaForm` (crear/editar + distritos N:M + `cobroVehiculo` + toggle `esCentral`), reasignación central transaccional (`P2002`→`conflict`), `GeoService`/`GeoActions` para el catálogo geo, drift `provincia.zonaId` reconciliado **solo-schema** (sin migración). **DESBLOQUEA el runtime de `bodega_central` en 30/34/37** (`findCentralZonaId` deja de ser null al marcar zona). **PR #43** abierto a `dev` (en merge). Deuda menor: `conflict` sin payload por-campo; confirmación de reasignación vía checkbox inline (reviewer: menor).
 
