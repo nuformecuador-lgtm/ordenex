@@ -178,6 +178,8 @@ export function OrdenesCargaMasivaButton() {
         title="Carga masiva de órdenes"
         hideCancel
         confirmLabel="Cerrar"
+        // Ancho del 75% de la pantalla con un mínimo de 320px.
+        className="w-[75vw] max-w-none min-w-[320px]"
       >
         {step === "upload" ? (
           <div className="flex flex-col gap-4">
