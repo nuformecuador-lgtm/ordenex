@@ -6,6 +6,10 @@ import type { RolValue } from "@prisma/client";
 import CierresAdminPage from "@/app/(app)/cierres-admin/page";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarCierresAdmin } from "@/lib/actions/cierres-admin";
+import {
+  listarConsolidacion,
+  listarCierresBodegaAdmin,
+} from "@/lib/actions/cierre-bodega";
 
 // Feature 38 (T12, R1/R3) — la página resuelve el rol SOLO server-side; rol ∉
 // {maestro, adminSatelite} (o sin sesión) → `notFound`. Se mockean el resolver, la
@@ -19,6 +23,17 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
+}));
+// Feature 40: la página, role-aware, pre-fetch los datos de cierre de bodega por rol
+// (adminSatelite → consolidación; maestro → cola/histórico). Se mockean para aislar
+// el control de acceso de la 38; por defecto `forbidden` → no se renderiza la sección.
+vi.mock("@/lib/actions/cierre-bodega", () => ({
+  listarConsolidacion: vi.fn(),
+  listarCierresBodegaAdmin: vi.fn(),
+  solicitarCierreBodega: vi.fn(),
+  verCierreBodegaDetalle: vi.fn(),
+  aprobarCierreBodega: vi.fn(),
+  rechazarCierreBodega: vi.fn(),
 }));
 
 class NotFoundError extends Error {
@@ -47,6 +62,8 @@ vi.mock("@/hooks/useToast", () => ({
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarCierresAdmin);
+const listarConsolidacionMock = vi.mocked(listarConsolidacion);
+const listarCierresBodegaAdminMock = vi.mocked(listarCierresBodegaAdmin);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -56,6 +73,10 @@ beforeEach(() => {
     historico: [],
     sinZona: false,
   });
+  // Feature 40: por defecto sin sección de cierre de bodega (aísla el control de
+  // acceso de la 38); cada test que la necesite sobreescribe con `status: "ok"`.
+  listarConsolidacionMock.mockResolvedValue({ status: "forbidden" });
+  listarCierresBodegaAdminMock.mockResolvedValue({ status: "forbidden" });
 });
 
 afterEach(() => {

@@ -412,12 +412,13 @@
       "id": 40,
       "name": "cierre de bodega satelite -> bodega principal",
       "description": "Segundo nivel de cierre: la bodega satelite, como entidad, debe SOLICITAR su cierre a la bodega principal, y la bodega principal lo APRUEBA o RECHAZA. Complementa el cierre mensajero->bodega (features 37/38): el adminSatelite primero aprueba los cierres de SUS mensajeros y luego consolida y solicita el cierre de su bodega a la central. La bodega principal (admin maestro) aprueba tanto los cierres de sus propios mensajeros del GAM como los cierres de las bodegas satelite. Muy detallado: el cierre de la bodega satelite agrega el detalle de los cierres de sus mensajeros (ordenes, resultados, dinero por metodo de pago, pagos a mensajeros). Fullstack. Depende de las features 37 y 38 (cierres mensajero/admin).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 38
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/40-cierre-bodega-satelite",
+      "depends_on": 38,
+      "status_note": "done 2026-07-12; F1.4 APROBADA (todas recomendadas). Segundo nivel de cierre (doble espejo 37/38): solicitar (adminSatelite) + aprobar/rechazar (maestro). Impl COMPLETA (R1-R25+E2E) + reviewer APROBADO 0 bloqueantes (verificacion en DB viva: round-trip migracion, RLS cierre_bodega sin policies, indice unico parcial, FK). VERDE: prisma OK, typecheck 0, lint 0, 1797/1797 tests (+58), init.sh OK, build pasa. Modelo tabla nueva CierreBodega (estado reusa CierreEstado, totales snapshot AGREGADOS, auditoria resuelto_por/at/motivo_rechazo, indice unico parcial (zona_id) WHERE estado=solicitado) + FK cierre_bodega_id en cierre_dia. (c) solo cierre_dia aprobado+FK null; (d) precondicion sin solicitado pendientes; (f) pago mensajero OMITIDO (feature 39); (j) rechazo inmutable; (l) /cierres-admin extendido role-aware. Migracion 20260712120000_cierre_bodega. Commit 105689d. Regresion 37/38 intacta. PENDIENTE PR a dev + merge (OK humano). Deuda menor: R8/R16/R18/R20-22 unit-mock (defensas DB verificadas live por reviewer); R24 sin test automatizado; E2E diferido. DESBLOQUEA 41."
     },
     {
       "id": 41,
