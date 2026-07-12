@@ -23,6 +23,7 @@ import type {
   ListarUsuariosInput,
 } from "@/lib/types/usuario";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type { ITarifaRepository } from "@/lib/interfaces/repositories/ITarifaRepository";
 import { hashPassword } from "@/lib/utils/password";
 import { generateStrongPassword } from "@/lib/utils/password-generator";
 
@@ -40,6 +41,9 @@ export class UsuarioService implements IUsuarioService {
   constructor(
     private readonly repo: IUserRepository,
     private readonly zonaRepo?: IZonaRepository,
+    // Opcional: al degradar un adminTienda de rol, sus tarifas pasan a `inactivo`.
+    // Se inyecta en produccion; los tests que no lo ejercitan pueden omitirlo.
+    private readonly tarifaRepo?: Pick<ITarifaRepository, "inactivarPorTienda">,
   ) {}
 
   async crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult> {
@@ -132,6 +136,16 @@ export class UsuarioService implements IUsuarioService {
     try {
       const usuario = await this.repo.update(id, data);
       if (!usuario) return { status: "not_found" }; // R17
+      // Regla tarifas: si el rol cambia a uno != adminTienda, las tarifas cuya
+      // tienda es este usuario pasan a `inactivo` (una tarifa solo vive mientras
+      // su tienda sea adminTienda). No-op si el usuario no tenia tarifas.
+      if (input.rolId !== undefined && this.tarifaRepo) {
+        const roles = await this.repo.listRoles();
+        const rolValue = roles.find((r) => r.id === input.rolId)?.value;
+        if (rolValue !== "adminTienda") {
+          await this.tarifaRepo.inactivarPorTienda(id);
+        }
+      }
       return { status: "ok", usuario }; // R19
     } catch (error) {
       if (error instanceof CatalogoInvalidoError) {

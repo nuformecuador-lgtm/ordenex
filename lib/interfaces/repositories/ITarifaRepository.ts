@@ -1,10 +1,11 @@
+import type { EstadoTarifa } from "@prisma/client";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 
 // Datos listos para persistir una tarifa (numbers; el repo convierte a
-// Prisma.Decimal). Las 8 columnas numericas + nombre son obligatorias (R5).
+// Prisma.Decimal). Las 8 columnas numericas + tiendaId son obligatorias (R5).
+// `status` no viaja aqui: nace `activo` por default de DB.
 export interface CreateTarifaData {
-  nombre: string;
-  zonaId: string; // feature 24: FK obligatoria a zona
+  tiendaId: string; // FK obligatoria a usuario (adminTienda)
   valorFlete: number;
   valorFleteDevuelto: number;
   valorFleteGam: number;
@@ -17,8 +18,8 @@ export interface CreateTarifaData {
 
 // Campos actualizables a nivel de datos; todos opcionales (R20/R22).
 export interface UpdateTarifaData {
-  nombre?: string;
-  zonaId?: string; // feature 24: reasignar la tarifa a otra zona
+  tiendaId?: string; // reasignar la tarifa a otra tienda (adminTienda)
+  status?: EstadoTarifa; // activo | inactivo
   valorFlete?: number;
   valorFleteDevuelto?: number;
   valorFleteGam?: number;
@@ -49,4 +50,11 @@ export interface ITarifaRepository {
   update(id: string, data: UpdateTarifaData): Promise<TarifaDTO | null>;
   /** Fija deleted_at; false si no existe o ya estaba borrado (R24/R25). */
   softDelete(id: string): Promise<boolean>;
+  /** true si `tiendaId` es un usuario existente con rol `adminTienda`. */
+  esTiendaAdminTienda(tiendaId: string): Promise<boolean>;
+  /**
+   * Pasa a `inactivo` todas las tarifas (no borradas) de la tienda dada. Se usa
+   * cuando el usuario deja de ser adminTienda. Devuelve cuantas se actualizaron.
+   */
+  inactivarPorTienda(tiendaId: string): Promise<number>;
 }

@@ -305,3 +305,41 @@ describe("listar / listarTiposIdentificacion", () => {
     if (r.status === "ok") expect(r.roles).toEqual([{ id: "rol-1", value: "maestro" }]);
   });
 });
+
+describe("actualizar — regla de tarifas al cambiar de rol", () => {
+  const ROLES = [
+    { id: "rol-tienda", value: "adminTienda" as RolValue },
+    { id: "rol-msg", value: "mensajero" as RolValue },
+  ];
+
+  function build(inactivarPorTienda: ReturnType<typeof vi.fn>) {
+    const r = buildRepo({
+      findById: vi.fn().mockResolvedValue(usuario({ id: "u-tienda", rolId: "rol-tienda" })),
+      update: vi.fn().mockResolvedValue(usuario({ id: "u-tienda" })),
+      listRoles: vi.fn().mockResolvedValue(ROLES),
+    });
+    return new UsuarioService(r, undefined, { inactivarPorTienda });
+  }
+
+  it("cambiar de adminTienda a mensajero -> inactiva las tarifas de la tienda", async () => {
+    const inactivarPorTienda = vi.fn().mockResolvedValue(2);
+    const service = build(inactivarPorTienda);
+    const res = await service.actualizar("u-tienda", { rolId: "rol-msg" }, MAESTRO);
+    expect(res.status).toBe("ok");
+    expect(inactivarPorTienda).toHaveBeenCalledWith("u-tienda");
+  });
+
+  it("el rol resultante sigue siendo adminTienda -> NO inactiva tarifas", async () => {
+    const inactivarPorTienda = vi.fn();
+    const service = build(inactivarPorTienda);
+    await service.actualizar("u-tienda", { rolId: "rol-tienda" }, MAESTRO);
+    expect(inactivarPorTienda).not.toHaveBeenCalled();
+  });
+
+  it("no se envia rolId (sin cambio de rol) -> NO inactiva tarifas", async () => {
+    const inactivarPorTienda = vi.fn();
+    const service = build(inactivarPorTienda);
+    await service.actualizar("u-tienda", { nombre: "Nuevo Nombre" }, MAESTRO);
+    expect(inactivarPorTienda).not.toHaveBeenCalled();
+  });
+});
