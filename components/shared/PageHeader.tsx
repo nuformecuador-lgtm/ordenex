@@ -1,5 +1,6 @@
 import { LogoutButton } from "@/app/_components/LogoutButton";
-import { Bell, Calendar } from "lucide-react";
+import { NotificationsBell } from "@/components/shared/NotificationsBell";
+import { Calendar } from "lucide-react";
 import type { ReactNode } from "react";
 
 interface PageHeaderProps {
@@ -41,12 +42,7 @@ export function PageHeader({
           <Calendar className="size-3.5" aria-hidden="true" />
           {today}
         </span>
-        <div className="relative">
-          <Bell className="size-5 text-navy" aria-hidden="true" />
-          <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
-            +99
-          </span>
-        </div>
+        <NotificationsBell />
         <LogoutButton />
       </div>
       {children}
