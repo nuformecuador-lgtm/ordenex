@@ -212,17 +212,19 @@ model OrderStatus {
 }
 
 // Geografia jerarquica (feature 6 la creo vacia). Feature 24: la zona pasa a ser un
-// catalogo global con pagos al mensajero y flag `es_gam`; la asignacion nueva vive
-// en `distrito.zona_id`. Feature 24/R4: `provincia.zona_id` fue ELIMINADO (la zona
-// ya no cuelga de la provincia); la carga masiva (feature 15) deriva `orden.zona_id`
-// del DISTRITO de la orden (`distrito.zona_id`), no de la provincia.
+// catalogo global con pagos al mensajero y flag `es_gam`. Feature 24/R4: la zona ya
+// NO cuelga de la provincia; la asignacion vive en `distrito.zona_id` (escalar) mas
+// la relacion N:M `ZonaDistrito`. La columna `provincia.zona_id` fue ELIMINADA en la
+// DB por la migracion 20260711120000_zonas_catalogo_global_pagos y nunca re-creada;
+// feature 55 (F1.4-C) reconcilia el schema removiendo los simbolos huerfanos
+// (`Provincia.zonaId`/`Provincia.zona`/`Zona.provincias`). La carga masiva (feature
+// 15) deriva `orden.zona_id` del DISTRITO de la orden (`distrito.zona_id`).
 model Zona {
   id            String  @id @default(uuid())
   nombre        String  @unique // feature 24: nombre unico (indice zona_nombre_key); feature 54 restaura el @unique perdido en el refactor
   cobroVehiculo Boolean @default(false) @map("cobro_vehiculo") // feature 24: cobro extra por vehiculo en esta zona
   esCentral     Boolean @default(false) @map("es_central") // feature 54: flag de zona central (renombrado del viejo es_gam); a lo sumo una via indice unico parcial
 
-  provincias           Provincia[]
   ordenes              Orden[]
   tarifas              Tarifa[]
   tarifaZonaMensajeros TarifaZonaMensajero[]
@@ -234,11 +236,11 @@ model Zona {
 }
 
 model Provincia {
-  id     String  @id @default(uuid())
+  id     String @id @default(uuid())
   nombre String
-  zonaId String? @map("zona_id") // nullable: la geografia se puede sembrar sin zona asignada
+  // feature 55 (F1.4-C): `provincia.zona_id` fue ELIMINADO en la DB (la zona ya no
+  // cuelga de la provincia; la asignacion vive en distrito.zona_id + N:M ZonaDistrito).
 
-  zona     Zona?    @relation(fields: [zonaId], references: [id])
   cantones Canton[]
   ordenes  Orden[]
 
