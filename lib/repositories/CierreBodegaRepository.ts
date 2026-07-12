@@ -37,6 +37,7 @@ const CONSOLIDABLE_SELECT = {
   totalSimpe: true,
   totalTransferencia: true,
   totalGeneral: true,
+  totalPagoMensajero: true, // feature 39/R18: snapshot del pago al mensajero del cierre_dia
   mensajero: { select: { nombre: true } },
 } as const;
 
@@ -52,6 +53,7 @@ export const BODEGA_RESUMEN_SELECT = {
   totalSimpe: true,
   totalTransferencia: true,
   totalGeneral: true,
+  totalPagoMensajero: true, // feature 39/R19/R20: snapshot agregado del pago a mensajeros
   solicitadoAt: true,
   resueltoAt: true,
   motivoRechazo: true,
@@ -73,6 +75,7 @@ export function toBodegaResumenRow(r: BodegaResumenRow): CierreBodegaResumenRow 
     solicitadoPorNombre: r.solicitadoPorUsuario.nombre,
     estado: r.estado,
     totales: totalesToString(r),
+    totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R19/R20: snapshot money-safe STRING
     cantidadCierres: r._count.cierresDia,
     solicitadoAt: r.solicitadoAt.toISOString(),
     resueltoAt: r.resueltoAt ? r.resueltoAt.toISOString() : null,
@@ -107,6 +110,7 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
       mensajeroId: r.mensajeroId,
       mensajeroNombre: r.mensajero.nombre,
       totales: totalesToString(r),
+      totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R18: snapshot money-safe STRING
     }));
   }
 
@@ -131,7 +135,7 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
 
   /** R9/R10: INSERT cierre_bodega (snapshot Decimal) + vincular cierre_dia, atomico. */
   async crearCierreBodega(input: CrearCierreBodegaInput): Promise<string> {
-    const { zonaId, solicitadoPor, cierreDiaIds, totales } = input;
+    const { zonaId, solicitadoPor, cierreDiaIds, totales, totalPagoMensajero } = input;
     return this.prisma.$transaction(async (tx) => {
       const cierre = await tx.cierreBodega.create({
         data: {
@@ -142,6 +146,8 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
           totalSimpe: new Prisma.Decimal(totales.simpe),
           totalTransferencia: new Prisma.Decimal(totales.transferencia),
           totalGeneral: new Prisma.Decimal(totales.general),
+          // Feature 39/R19: snapshot agregado del pago a mensajeros, en la misma tx.
+          totalPagoMensajero: new Prisma.Decimal(totalPagoMensajero),
         },
         select: { id: true },
       });

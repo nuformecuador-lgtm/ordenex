@@ -64,6 +64,7 @@ function makeGestion(
     motivo: null,
     fechaReprogramacion: null,
     evidenciaUrl: null,
+    pagoMensajero: null, // feature 39
     ...over,
   };
 }
@@ -84,6 +85,7 @@ function renderModule(props?: Partial<Parameters<typeof CierreDiaModule>[0]>) {
     <CierreDiaModule
       grupos={props?.grupos ?? emptyGrupos()}
       totales={props?.totales ?? ZERO_TOTALES}
+      totalPagoMensajero={props?.totalPagoMensajero ?? "0.00"}
       puedesSolicitar={props?.puedesSolicitar ?? true}
       motivoBloqueo={props?.motivoBloqueo ?? null}
       cierresPasados={props?.cierresPasados ?? []}
@@ -225,6 +227,31 @@ describe("CierreDiaModule", () => {
     expect(within(region).getByText("₡160.35")).toBeInTheDocument();
   });
 
+  it("R10: expone el pago al mensajero por orden (string, money-safe) en la sección de entregadas", () => {
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({
+        gestionId: "g1",
+        resultado: "entregada",
+        numRemision: "REM-ENT",
+        montoRecibido: "1250.50",
+        metodoPago: "efectivo",
+        pagoMensajero: "1500.00",
+      }),
+    ];
+    renderModule({ grupos });
+
+    const region = screen.getByRole("region", { name: "Entregadas" });
+    expect(within(region).getByText("₡1500.00")).toBeInTheDocument();
+  });
+
+  it("R11: el total a pagar al mensajero se muestra separado de los totales de dinero recibido", () => {
+    renderModule({ totalPagoMensajero: "4200.00" });
+
+    const region = screen.getByRole("region", { name: "Pago al mensajero" });
+    expect(within(region).getByText("₡4200.00")).toBeInTheDocument();
+  });
+
   it("R10/R11: sin poder solicitar, el botón está deshabilitado y se muestra el motivo", () => {
     renderModule({
       puedesSolicitar: false,
@@ -295,6 +322,7 @@ describe("CierreDiaModule", () => {
           transferencia: "0.00",
           general: "300.00",
         },
+        totalPagoMensajero: "0.00", // feature 39/R13
         solicitadoAt: "2026-07-11T10:00:00.000Z",
       },
     ];

@@ -135,7 +135,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_zona_es_central_rename") && // feature 54: apendida despues
         !d.endsWith("_cierre_dia") && // feature 37: apendida despues
         !d.endsWith("_cierre_dia_resolucion") && // feature 38: apendida despues
-        !d.endsWith("_cierre_bodega"), // feature 40: apendida despues
+        !d.endsWith("_cierre_bodega") && // feature 40: apendida despues
+        !d.endsWith("_pago_mensajero_cierre"), // feature 39: apendida despues
     );
     expect(thisDir > previas[previas.length - 1]).toBe(true);
   });

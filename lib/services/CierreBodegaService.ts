@@ -51,6 +51,17 @@ function sumTotales(items: { totales: CierreTotales }[]): CierreTotales {
   };
 }
 
+// Feature 39/R18/R19: suma exacta del pago a mensajeros snapshoteado de los consolidables
+// (Prisma.Decimal, sin parseFloat/Number). STRING escala 2 (money-safe). Concepto
+// INDEPENDIENTE del dinero recibido (no altera sumTotales).
+function sumPagoMensajero(items: { totalPagoMensajero: string }[]): string {
+  let total = new Prisma.Decimal(0);
+  for (const it of items) {
+    total = total.plus(it.totalPagoMensajero);
+  }
+  return total.toFixed(2);
+}
+
 // `true` si el error es una violacion del indice unico parcial (R8): otra solicitud
 // concurrente creo el CierreBodega `solicitado` de la zona antes que esta.
 function isUniqueViolation(e: unknown): boolean {
@@ -81,6 +92,7 @@ export class CierreBodegaService implements ICierreBodegaService {
         status: "ok",
         consolidables: [],
         totalesAgregados: ZERO_TOTALES,
+        totalPagoMensajeroAgregado: "0.00", // R18: sin zona, nada que agregar
         puedesSolicitar: false,
         motivoBloqueo: MSG_SIN_ZONA,
         cierresBodegaPasados: [],
@@ -97,6 +109,8 @@ export class CierreBodegaService implements ICierreBodegaService {
 
     // R10: totales agregados exactos (suma con Prisma.Decimal de los snapshots).
     const totalesAgregados = sumTotales(consolidables);
+    // R18: total agregado del pago a mensajeros (suma snapshot, separada de totalesAgregados).
+    const totalPagoMensajeroAgregado = sumPagoMensajero(consolidables);
 
     // R6/R7: gate de "Solicitar cierre de bodega" con motivo accionable.
     let puedesSolicitar = true;
@@ -113,6 +127,7 @@ export class CierreBodegaService implements ICierreBodegaService {
       status: "ok",
       consolidables,
       totalesAgregados,
+      totalPagoMensajeroAgregado, // R18
       puedesSolicitar,
       motivoBloqueo,
       cierresBodegaPasados,
@@ -145,6 +160,8 @@ export class CierreBodegaService implements ICierreBodegaService {
 
     // R10: snapshot de totales agregados (mismo calculo que listarConsolidacion).
     const totales = sumTotales(consolidables);
+    // R19: snapshot del pago agregado a mensajeros (mismo calculo que listarConsolidacion).
+    const totalPagoMensajero = sumPagoMensajero(consolidables);
 
     // R9: transaccion todo-o-nada (INSERT + vincular). Si una solicitud concurrente
     // gano la carrera, el indice unico parcial lanza P2002 -> conflict (R8).
@@ -154,6 +171,7 @@ export class CierreBodegaService implements ICierreBodegaService {
         solicitadoPor: actor.usuarioId,
         cierreDiaIds: consolidables.map((c) => c.cierreDiaId),
         totales,
+        totalPagoMensajero, // R19: snapshot agregado en la misma tx
       });
       return { status: "ok", cierreBodegaId, totales };
     } catch (e) {

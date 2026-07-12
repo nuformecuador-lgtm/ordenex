@@ -30,6 +30,7 @@ function bodegaResumenRow(
     solicitadoPorNombre: "Sara Satelite",
     estado: "solicitado",
     totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
+    totalPagoMensajero: "5.00", // feature 39/R20: snapshot agregado del pago a mensajeros
     cantidadCierres: 2,
     solicitadoAt: "2026-07-12T10:00:00.000Z",
     resueltoAt: null,
@@ -46,6 +47,7 @@ function detalleCierreRow(
     mensajeroId: "m1",
     mensajeroNombre: "Ana Mensajera",
     totales: { efectivo: "10.00", simpe: "0.00", transferencia: "0.00", general: "10.00" },
+    totalPagoMensajero: "5.00", // feature 39/R20: snapshot del pago del cierre_dia
     ...overrides,
   };
 }
@@ -70,6 +72,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     motivo: null,
     fechaReprogramacion: null,
     evidenciaStoragePath: null,
+    pagoMensajero: "5.00", // feature 39/R20: snapshot del pago de la gestion
     ...overrides,
   };
 }
@@ -252,19 +255,28 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
     expect(r.cierres[1].grupos.entregada[0].evidenciaUrl).toBe("https://signed/o2/e.jpg");
   });
 
-  it("R14: el DTO de detalle NO expone pago al mensajero", async () => {
+  it("R20: el detalle expone el pago al mensajero snapshoteado por cierre_dia, por gestion y el agregado", async () => {
     const repo = fakeRepo({
       findCierreBodegaConDetalle: vi.fn(async () => ({
-        cierre: bodegaResumenRow(),
-        cierresDia: [{ resumen: detalleCierreRow(), gestiones: [gestionRow()] }],
+        cierre: bodegaResumenRow({ totalPagoMensajero: "12.00" }),
+        cierresDia: [
+          {
+            resumen: detalleCierreRow({ cierreDiaId: "cd1", totalPagoMensajero: "12.00" }),
+            gestiones: [gestionRow({ gestionId: "g1", resultado: "entregada", pagoMensajero: "12.00" })],
+          },
+        ],
       })),
     });
     const { service } = newService({ repo });
     const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.cierres[0]).not.toHaveProperty("pagoMensajero");
-    expect(r.cierres[0].grupos.entregada[0]).not.toHaveProperty("pagoMensajero");
-    expect(Object.keys(r.cierres[0])).toEqual(["cierreDiaId", "mensajeroId", "mensajeroNombre", "totales", "grupos"]);
+    // R20: agregado del cierre de bodega (cabecera).
+    expect(r.cierre.totalPagoMensajero).toBe("12.00");
+    // R20: por cada cierre_dia incluido.
+    expect(r.cierres[0].totalPagoMensajero).toBe("12.00");
+    // R20: por gestion (snapshot leido, no recomputado).
+    expect(r.cierres[0].grupos.entregada[0].pagoMensajero).toBe("12.00");
+    expect(typeof r.cierre.totalPagoMensajero).toBe("string"); // R23
   });
 
   it("R19: id inexistente (repo null) -> no_encontrada", async () => {

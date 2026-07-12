@@ -13,7 +13,13 @@ import type {
   CierreBodegaResumenLite,
 } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
-import { money, ESTADO_LABEL, TotalesPanel } from "./cierre-detalle-shared";
+import {
+  money,
+  ESTADO_LABEL,
+  PAGO_MENSAJERO_COL,
+  PagoMensajeroTotal,
+  TotalesPanel,
+} from "./cierre-detalle-shared";
 
 // Feature 40 (T8) — módulo cliente del "Cierre de bodega" del adminSatelite (lado
 // SOLICITAR, espejo de la 37 un nivel arriba). Recibe del Server Component padre los
@@ -28,6 +34,8 @@ export interface ConsolidacionBodegaModuleProps {
   consolidables: CierreBodegaResumenLite[];
   /** Suma snapshot de los consolidables (R10). */
   totalesAgregados: CierreTotales;
+  /** Feature 39/R18: suma snapshot del pago a mensajeros (STRING), separado de los totales. */
+  totalPagoMensajeroAgregado: string;
   /** Gate de "Solicitar cierre de bodega" (R6/R7). */
   puedesSolicitar: boolean;
   /** Texto accionable del bloqueo si `!puedesSolicitar`. */
@@ -41,6 +49,7 @@ export interface ConsolidacionBodegaModuleProps {
 export function ConsolidacionBodegaModule({
   consolidables,
   totalesAgregados,
+  totalPagoMensajeroAgregado,
   puedesSolicitar,
   motivoBloqueo,
   cierresBodegaPasados,
@@ -98,6 +107,13 @@ export function ConsolidacionBodegaModule({
             totales={totalesAgregados}
             ariaLabel="Totales a consolidar"
             title="Totales a consolidar"
+          />
+
+          {/* Feature 39/R18: agregado a pagar a mensajeros, separado del dinero recibido. */}
+          <PagoMensajeroTotal
+            value={totalPagoMensajeroAgregado}
+            ariaLabel="Pago a mensajeros a consolidar"
+            label="Total a pagar a mensajeros"
           />
 
           {/* ---------- Cierres del día a consolidar (R5) ---------- */}
@@ -201,6 +217,11 @@ const COLUMNAS_CONSOLIDABLES: Column<CierreBodegaResumenLite>[] = [
     value: "Total general",
     render: (c) => money(c.totales.general),
   },
+  {
+    id: "pagoMensajero",
+    value: PAGO_MENSAJERO_COL,
+    render: (c) => money(c.totalPagoMensajero),
+  },
 ];
 
 // --- Columnas del histórico de cierres de bodega (solo lectura, F1.4-h) ---
@@ -220,6 +241,11 @@ const COLUMNAS_PASADOS: Column<CierreBodegaResumen>[] = [
     id: "general",
     value: "Total general",
     render: (c) => money(c.totales.general),
+  },
+  {
+    id: "pagoMensajero",
+    value: PAGO_MENSAJERO_COL,
+    render: (c) => money(c.totalPagoMensajero),
   },
   {
     id: "motivoRechazo",

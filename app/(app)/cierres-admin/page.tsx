@@ -67,6 +67,7 @@ export default async function CierresAdminPage() {
         <ConsolidacionBodegaModule
           consolidables={consolidacion.consolidables}
           totalesAgregados={consolidacion.totalesAgregados}
+          totalPagoMensajeroAgregado={consolidacion.totalPagoMensajeroAgregado}
           puedesSolicitar={consolidacion.puedesSolicitar}
           motivoBloqueo={consolidacion.motivoBloqueo}
           cierresBodegaPasados={consolidacion.cierresBodegaPasados}

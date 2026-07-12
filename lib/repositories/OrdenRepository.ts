@@ -691,6 +691,15 @@ export class OrdenRepository implements IOrdenRepository {
     return row?.zonaId ?? null;
   }
 
+  /** Feature 39/R1/R4: `usuario.vehiculoId` del mensajero; `null` si no tiene. */
+  async findUsuarioVehiculoId(usuarioId: string): Promise<string | null> {
+    const row = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { vehiculoId: true },
+    });
+    return row?.vehiculoId ?? null;
+  }
+
   /**
    * Feature 33/R6/R8/R9: ordenes NO borradas de `zonaId` cuyo `estatus.value`
    * esta en `estatusValues`, con nombres legibles de tienda/geografia. Solo query.

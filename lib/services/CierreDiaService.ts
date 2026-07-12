@@ -7,6 +7,10 @@ import type {
 } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type {
+  ITarifaZonaMensajeroRepository,
+  PagoTarifa,
+} from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   CierreDetalleGestion,
@@ -17,6 +21,7 @@ import type {
   SolicitarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo } from "@/lib/types/cierre";
+import { pagoPorResultado } from "@/lib/utils/pago-mensajero";
 
 // Solo el rol autorizado en el modulo (R1/R2): el mensajero, SIEMPRE acotado a su
 // propio `usuario.id` (el filtro por mensajero vive en el repo, en el WHERE).
@@ -35,7 +40,9 @@ const MSG_SIN_ZONA = "No tenes una zona asignada; contacta a tu administrador.";
 // Metodos de repo que consume el service (inyeccion por constructor). Se declaran
 // como Pick para dobles de test sin DB/red (patron RecepcionSateliteService).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
-type OrdenRepo = Pick<IOrdenRepository, "findUsuarioZonaId">;
+// Feature 39: ademas de la zona (37), el service resuelve el vehiculo del mensajero
+// para el resolver de tarifa.
+type OrdenRepo = Pick<IOrdenRepository, "findUsuarioZonaId" | "findUsuarioVehiculoId">;
 
 /**
  * Feature 37 — logica de negocio del "Cierre del dia" del mensajero. Lista el
@@ -49,17 +56,38 @@ export class CierreDiaService implements ICierreDiaService {
     private readonly zonaRepo: ZonaRepo,
     private readonly ordenRepo: OrdenRepo,
     private readonly signedUrls: ISignedUrlProvider,
+    // Feature 39: resolver de la tarifa de pago al mensajero (por zona+vehiculo).
+    private readonly tarifaZonaRepo: ITarifaZonaMensajeroRepository,
   ) {}
+
+  /**
+   * Feature 39/R1-R4: resuelve la tarifa de pago vigente del mensajero (por su zona +
+   * vehiculo, con fallback a la tarifa por defecto de la zona). `null` si el mensajero no
+   * tiene zona o la zona no tiene tarifa -> pago 0.00 no bloqueante (R8).
+   */
+  private async resolveTarifaMensajero(usuarioId: string): Promise<PagoTarifa | null> {
+    const zonaId = await this.ordenRepo.findUsuarioZonaId(usuarioId); // R4: zona del MENSAJERO
+    if (zonaId === null) return null; // sin zona -> pago 0.00 (R8), no bloquea la vista
+    const vehiculoId = await this.ordenRepo.findUsuarioVehiculoId(usuarioId);
+    return this.tarifaZonaRepo.resolvePagoTarifa(zonaId, vehiculoId); // R1/R2/R3
+  }
 
   async listarCierreDia(actor: Actor): Promise<ListarCierreDiaServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1/R2
 
-    // R2/R3/R10/R18: SOLO lectura (R17). Filtrado por el actor en el repo.
-    const [gestiones, pendientes, cierresPasados] = await Promise.all([
+    // R2/R3/R10/R18: SOLO lectura (R17). Filtrado por el actor en el repo. Feature 39:
+    // resuelve la tarifa de pago del mensajero UNA vez (por zona+vehiculo) para derivar
+    // el pago EN VIVO (R10/R11), en paralelo con el resto de lecturas.
+    const [gestiones, pendientes, cierresPasados, tarifa] = await Promise.all([
       this.repo.findGestionesPendientes(actor.usuarioId),
       this.repo.contarOrdenesPendientesGestion(actor.usuarioId, ESTADOS_PENDIENTES),
       this.repo.findCierresByMensajero(actor.usuarioId),
+      this.resolveTarifaMensajero(actor.usuarioId),
     ]);
+
+    // R10/R11: pago DERIVADO por gestion (money-safe) + total, con la tarifa vigente.
+    // Concepto INDEPENDIENTE del dinero recibido (R21): no toca `totales`.
+    const { pagoByGestionId, total: totalPagoMensajero } = derivarPagos(gestiones, tarifa);
 
     // R5: firma en lote las evidencias (path crudo -> URL firmada de TTL acotado).
     const paths = gestiones
@@ -70,10 +98,11 @@ export class CierreDiaService implements ICierreDiaService {
         ? await this.signedUrls.createSignedUrls(paths, cierreConfig.SIGNED_URL_TTL_SECONDS)
         : {};
 
-    // R3: agrupa por resultado (las 4 claves siempre presentes).
+    // R3: agrupa por resultado (las 4 claves siempre presentes). R10: cada DTO expone el
+    // pago DERIVADO en vivo (override del snapshot, que aqui es null: gestion sin cerrar).
     const grupos: CierreGrupos = { entregada: [], reprogramada: [], devuelta: [], rechazada: [] };
     for (const g of gestiones) {
-      grupos[g.resultado].push(toDetalleDTO(g, urlByPath));
+      grupos[g.resultado].push(toDetalleDTO(g, urlByPath, pagoByGestionId[g.gestionId]));
     }
 
     // R7/R8/R9: totales por metodo con Prisma.Decimal (exactos al centavo).
@@ -90,7 +119,15 @@ export class CierreDiaService implements ICierreDiaService {
       motivoBloqueo = MSG_VACIO; // R11
     }
 
-    return { status: "ok", grupos, totales, puedesSolicitar, motivoBloqueo, cierresPasados };
+    return {
+      status: "ok",
+      grupos,
+      totales,
+      totalPagoMensajero, // R11: separado de `totales` (R21)
+      puedesSolicitar,
+      motivoBloqueo,
+      cierresPasados,
+    };
   }
 
   async solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult> {
@@ -129,12 +166,21 @@ export class CierreDiaService implements ICierreDiaService {
     // R14: snapshot de totales calculado en este instante (mismo calculo que 3.1.4).
     const totales = computeTotales(gestiones);
 
-    // R13: transaccion todo-o-nada (INSERT + vincular gestiones pendientes).
+    // R12/R13: snapshot del pago al mensajero con la tarifa vigente en ESTE instante
+    // (por zona del mensajero + vehiculo; zonaId ya resuelto). El numero se congela: una
+    // edicion posterior de la tarifa (feature 55) NO altera el cierre (R15).
+    const vehiculoId = await this.ordenRepo.findUsuarioVehiculoId(actor.usuarioId);
+    const tarifa = await this.tarifaZonaRepo.resolvePagoTarifa(zonaId, vehiculoId);
+    const { pagoByGestionId, total: totalPagoMensajero } = derivarPagos(gestiones, tarifa);
+
+    // R13/R14: transaccion todo-o-nada (INSERT + vincular gestiones + snapshot pago).
     const cierreId = await this.repo.crearCierre({
       mensajeroId: actor.usuarioId,
       destinoTipo,
       destinoZonaId: zonaId,
       totales,
+      pagoByGestionId, // R12: pago snapshoteado por gestion
+      totalPagoMensajero, // R13: total snapshoteado
     });
 
     return { status: "ok", cierreId, totales, destinoTipo };
@@ -144,9 +190,13 @@ export class CierreDiaService implements ICierreDiaService {
 // R4/R5/R6: arma el DTO de detalle; la evidencia se expone SOLO firmada (R5).
 // Exportado para reuso por CierresAdminService (feature 38): el detalle admin usa el
 // MISMO mapper de gestion -> DTO (reuso F1.4-b).
+// Feature 39: `pagoMensajero` opcional. En la vista EN VIVO del mensajero (37) se pasa el
+// pago DERIVADO (override, R10). En el detalle admin (38/40) NO se pasa y se usa el
+// snapshot `g.pagoMensajero` leido de la columna (R16). Nunca se mezcla con montoRecibido.
 export function toDetalleDTO(
   g: CierreGestionPendienteRow,
   urlByPath: Record<string, string>,
+  pagoMensajero?: string | null,
 ): CierreDetalleGestion {
   return {
     gestionId: g.gestionId,
@@ -167,7 +217,26 @@ export function toDetalleDTO(
     motivo: g.motivo,
     fechaReprogramacion: g.fechaReprogramacion,
     evidenciaUrl: g.evidenciaStoragePath ? (urlByPath[g.evidenciaStoragePath] ?? null) : null,
+    pagoMensajero: pagoMensajero !== undefined ? pagoMensajero : g.pagoMensajero,
   };
+}
+
+// Feature 39/R10-R13: pago al mensajero por gestion (DERIVADO/snapshot segun uso) + total,
+// con la tarifa ya resuelta. Solo `entregada` paga `cobroEntregado`; el resto 0.00 (F1.4).
+// Suma money-safe con Prisma.Decimal (R9). Reuso por listarCierreDia (en vivo) y
+// solicitarCierre (congela el snapshot). Separado del dinero recibido (R21).
+function derivarPagos(
+  gestiones: CierreGestionPendienteRow[],
+  tarifa: PagoTarifa | null,
+): { pagoByGestionId: Record<string, string>; total: string } {
+  const pagoByGestionId: Record<string, string> = {};
+  let total = new Prisma.Decimal(0);
+  for (const g of gestiones) {
+    const pago = pagoPorResultado(g.resultado, tarifa);
+    pagoByGestionId[g.gestionId] = pago;
+    total = total.plus(pago);
+  }
+  return { pagoByGestionId, total: total.toFixed(2) };
 }
 
 // R7/R8/R9: suma con Prisma.Decimal (exacto). Solo `entregada` con montoRecibido

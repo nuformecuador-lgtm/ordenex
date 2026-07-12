@@ -25,6 +25,7 @@ const CIERRE_RESUMEN_SELECT = {
   totalSimpe: true,
   totalTransferencia: true,
   totalGeneral: true,
+  totalPagoMensajero: true, // feature 39/R17: snapshot total del pago al mensajero
   solicitadoAt: true,
   resueltoAt: true,
   motivoRechazo: true,
@@ -49,6 +50,7 @@ function toResumenRow(r: CierreResumenRow): CierreAdminResumenRow {
       transferencia: r.totalTransferencia.toFixed(2),
       general: r.totalGeneral.toFixed(2),
     },
+    totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R17: snapshot money-safe STRING
     solicitadoAt: r.solicitadoAt.toISOString(),
     resueltoAt: r.resueltoAt ? r.resueltoAt.toISOString() : null,
     motivoRechazo: r.motivoRechazo,

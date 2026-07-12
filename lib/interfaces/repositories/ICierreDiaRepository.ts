@@ -30,6 +30,10 @@ export interface CierreGestionPendienteRow {
   motivo: string | null;
   fechaReprogramacion: string | null; // ISO date (YYYY-MM-DD)
   evidenciaStoragePath: string | null;
+  // Feature 39: pago al mensajero SNAPSHOTEADO de la gestion (money-safe STRING). `null`
+  // en gestiones aun sin cerrar / cierres pre-migracion (R22). En la vista EN VIVO (37)
+  // el service lo DERIVA; en el detalle admin (38/40) es el snapshot leido de la columna.
+  pagoMensajero: string | null;
 }
 
 // Datos para crear la solicitud de cierre (R13/R14). Totales snapshot como STRING.
@@ -38,6 +42,10 @@ export interface CrearCierreInput {
   destinoTipo: CierreDestinoTipo;
   destinoZonaId: string;
   totales: CierreTotales;
+  // Feature 39/R12/R14: pago al mensajero snapshoteado por gestion (gestionId -> STRING)
+  // + total del cierre (STRING). Se persisten en la MISMA tx que crea el cierre.
+  pagoByGestionId: Record<string, string>;
+  totalPagoMensajero: string;
 }
 
 // Fila cruda de un cierre pasado (R18); el repo la mapea a CierrePasadoDTO.

@@ -19,7 +19,9 @@ import type {
 import {
   money,
   ESTADO_LABEL,
+  PAGO_MENSAJERO_COL,
   DetalleSecciones,
+  PagoMensajeroTotal,
   TotalesPanel,
   VisorEvidencia,
 } from "./cierre-detalle-shared";
@@ -234,6 +236,13 @@ export function CierresBodegaAdminModule({
               title="Totales del cierre de bodega"
             />
 
+            {/* Feature 39/R20: agregado a pagar a mensajeros, separado del dinero recibido. */}
+            <PagoMensajeroTotal
+              value={detalle.cierre.totalPagoMensajero}
+              ariaLabel="Pago a mensajeros del cierre de bodega"
+              label="Total a pagar a mensajeros"
+            />
+
             {/* Motivo de rechazo si el cierre de bodega del histórico fue rechazado. */}
             {detalle.cierre.motivoRechazo ? (
               <p className="text-sm text-muted-foreground">
@@ -259,6 +268,11 @@ export function CierresBodegaAdminModule({
                   totales={cierreDia.totales}
                   ariaLabel={`Totales · ${cierreDia.mensajeroNombre}`}
                   title="Totales del cierre del día"
+                />
+                {/* Feature 39/R20: pago snapshot a este mensajero, separado del dinero recibido. */}
+                <PagoMensajeroTotal
+                  value={cierreDia.totalPagoMensajero}
+                  ariaLabel={`Pago al mensajero · ${cierreDia.mensajeroNombre}`}
                 />
                 <DetalleSecciones
                   grupos={cierreDia.grupos}
@@ -373,6 +387,11 @@ function columnasPendientes(
       render: (c) => money(c.totales.general),
     },
     {
+      id: "pagoMensajero",
+      value: PAGO_MENSAJERO_COL,
+      render: (c) => money(c.totalPagoMensajero),
+    },
+    {
       id: "acciones",
       value: "Acciones",
       render: (c) => (
@@ -409,6 +428,11 @@ function columnasHistorico(
       id: "general",
       value: "Total general",
       render: (c) => money(c.totales.general),
+    },
+    {
+      id: "pagoMensajero",
+      value: PAGO_MENSAJERO_COL,
+      render: (c) => money(c.totalPagoMensajero),
     },
     {
       id: "motivoRechazo",

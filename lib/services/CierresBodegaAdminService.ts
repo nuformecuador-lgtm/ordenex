@@ -90,6 +90,7 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
         mensajeroId: cd.resumen.mensajeroId,
         mensajeroNombre: cd.resumen.mensajeroNombre,
         totales: cd.resumen.totales,
+        totalPagoMensajero: cd.resumen.totalPagoMensajero, // R20: snapshot por cierre_dia, sin recomputar
         grupos,
       };
     });
@@ -154,6 +155,7 @@ function toResumen(row: CierreBodegaResumenRow): CierreBodegaResumen {
     solicitadoPorNombre: row.solicitadoPorNombre,
     estado: row.estado,
     totales: row.totales,
+    totalPagoMensajero: row.totalPagoMensajero, // R20: snapshot agregado, sin recomputar
     cantidadCierres: row.cantidadCierres,
     solicitadoAt: row.solicitadoAt,
     resueltoAt: row.resueltoAt,

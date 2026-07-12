@@ -26,6 +26,7 @@ export const WITH_DETALLE = {
     motivo: true,
     fechaReprogramacion: true,
     evidenciaStoragePath: true,
+    pagoMensajero: true, // feature 39: snapshot del pago al mensajero (reuso 38/40)
     orden: {
       select: {
         numGuia: true,
@@ -74,6 +75,9 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
       ? row.fechaReprogramacion.toISOString().slice(0, 10)
       : null,
     evidenciaStoragePath: row.evidenciaStoragePath,
+    // Feature 39: snapshot del pago al mensajero (Decimal->string; null si aun sin cerrar
+    // o cierre pre-migracion, R22). En la vista EN VIVO (37) el service lo DERIVA aparte.
+    pagoMensajero: decimalToString(row.pagoMensajero),
   };
 }
 
@@ -116,9 +120,10 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     return count > 0;
   }
 
-  /** R13/R14: INSERT cierre_dia + vincular gestiones pendientes, atomico. */
+  /** R13/R14: INSERT cierre_dia + vincular gestiones pendientes + snapshot pago, atomico. */
   async crearCierre(input: CrearCierreInput): Promise<string> {
-    const { mensajeroId, destinoTipo, destinoZonaId, totales } = input;
+    const { mensajeroId, destinoTipo, destinoZonaId, totales, pagoByGestionId, totalPagoMensajero } =
+      input;
     return this.prisma.$transaction(async (tx) => {
       const cierre = await tx.cierreDia.create({
         data: {
@@ -130,6 +135,8 @@ export class CierreDiaRepository implements ICierreDiaRepository {
           totalSimpe: new Prisma.Decimal(totales.simpe),
           totalTransferencia: new Prisma.Decimal(totales.transferencia),
           totalGeneral: new Prisma.Decimal(totales.general),
+          // Feature 39/R13/R14: total snapshot del pago al mensajero, en la misma tx.
+          totalPagoMensajero: new Prisma.Decimal(totalPagoMensajero),
         },
         select: { id: true },
       });
@@ -139,6 +146,21 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         where: { mensajeroId, cierreId: null },
         data: { cierreId: cierre.id },
       });
+      // Feature 39/R12/R14: puebla pago_mensajero por gestion AGRUPADO por valor de pago
+      // (F1.4: a lo sumo 2 valores distintos — cobroEntregado para `entregada`, "0.00" para
+      // el resto). Guardia por cierreId=nuevo (las que acabamos de vincular). Todo en la tx.
+      const idsByPago = new Map<string, string[]>();
+      for (const [gestionId, pago] of Object.entries(pagoByGestionId)) {
+        const arr = idsByPago.get(pago);
+        if (arr) arr.push(gestionId);
+        else idsByPago.set(pago, [gestionId]);
+      }
+      for (const [pago, ids] of idsByPago) {
+        await tx.gestionOrden.updateMany({
+          where: { id: { in: ids }, cierreId: cierre.id },
+          data: { pagoMensajero: new Prisma.Decimal(pago) },
+        });
+      }
       return cierre.id;
     });
   }
@@ -157,6 +179,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         totalSimpe: true,
         totalTransferencia: true,
         totalGeneral: true,
+        totalPagoMensajero: true, // feature 39/R13: total snapshot del pago al mensajero
         solicitadoAt: true,
       },
     });
@@ -171,6 +194,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         transferencia: r.totalTransferencia.toFixed(2),
         general: r.totalGeneral.toFixed(2),
       },
+      totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R13: snapshot money-safe STRING
       solicitadoAt: r.solicitadoAt.toISOString(),
     }));
   }

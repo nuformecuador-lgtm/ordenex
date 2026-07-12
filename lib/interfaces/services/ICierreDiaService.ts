@@ -33,6 +33,10 @@ export interface CierreDetalleGestion {
   motivo: string | null; // reprogramada/devuelta/rechazada (R4)
   fechaReprogramacion: string | null; // ISO date (YYYY-MM-DD); solo reprogramada (R4)
   evidenciaUrl: string | null; // URL FIRMADA (R5), nunca el storage_path
+  // Feature 39/R10/R16: pago al mensajero (money-safe STRING). En la vista EN VIVO (37)
+  // es DERIVADO por resultado+tarifa; en el detalle admin (38/40) es el snapshot leido.
+  // `null` en cierres pre-migracion (R22). Concepto INDEPENDIENTE de montoRecibido (R21).
+  pagoMensajero: string | null;
 }
 
 // Totales por metodo de pago + general (R7/R8). Decimal serializado a STRING (R9).
@@ -53,6 +57,7 @@ export interface CierrePasadoDTO {
   destinoTipo: CierreDestinoTipo;
   destinoZonaId: string;
   totales: CierreTotales;
+  totalPagoMensajero: string; // feature 39/R13: total snapshot del pago al mensajero (STRING)
   solicitadoAt: string; // ISO
 }
 
@@ -64,6 +69,7 @@ export type ListarCierreDiaServiceResult =
       status: "ok";
       grupos: CierreGrupos;
       totales: CierreTotales;
+      totalPagoMensajero: string; // feature 39/R11: total DERIVADO del pago al mensajero (STRING), separado de `totales`
       puedesSolicitar: boolean; // R10/R11: false si hay pendientes o no hay gestiones
       motivoBloqueo: string | null; // texto accionable si !puedesSolicitar
       cierresPasados: CierrePasadoDTO[]; // R18

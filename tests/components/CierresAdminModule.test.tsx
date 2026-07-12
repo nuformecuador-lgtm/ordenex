@@ -70,6 +70,7 @@ function makeResumen(
     destinoZonaId: "z1",
     destinoZonaNombre: "GAM",
     totales: ZERO_TOTALES,
+    totalPagoMensajero: "0.00", // feature 39/R17
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
@@ -100,6 +101,7 @@ function makeGestion(
     motivo: null,
     fechaReprogramacion: null,
     evidenciaUrl: null,
+    pagoMensajero: null, // feature 39
     ...over,
   };
 }

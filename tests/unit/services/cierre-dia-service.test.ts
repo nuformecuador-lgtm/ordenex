@@ -7,6 +7,10 @@ import type {
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type {
+  ITarifaZonaMensajeroRepository,
+  PagoTarifa,
+} from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 // Feature 37 — tests unit del CierreDiaService (mocks de repos + dobles de
@@ -39,11 +43,15 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     motivo: null,
     fechaReprogramacion: null,
     evidenciaStoragePath: null,
+    pagoMensajero: null, // feature 39: en vivo el snapshot es null; el service lo DERIVA
     ...overrides,
   };
 }
 
 type Repo = ICierreDiaRepository;
+
+// Feature 39: tarifa por defecto para los tests (entregada paga cobroEntregado).
+const TARIFA_DEFECTO: PagoTarifa = { cobroEntregado: "5.00", cobroRechazado: "3.00" };
 
 function fakeRepo(overrides: Partial<Repo> = {}): Repo {
   return {
@@ -70,6 +78,8 @@ function newService(opts: {
   repo?: Repo;
   centralZonaId?: string | null;
   zonaMensajero?: string | null;
+  vehiculoMensajero?: string | null;
+  tarifa?: PagoTarifa | null; // feature 39: tarifa resuelta (default TARIFA_DEFECTO)
   signedUrls?: ISignedUrlProvider;
 } = {}) {
   const repo = opts.repo ?? fakeRepo();
@@ -78,15 +88,21 @@ function newService(opts: {
   } as unknown as Pick<IZonaRepository, "findCentralZonaId">;
   const ordenRepo = {
     findUsuarioZonaId: vi.fn(async () => (opts.zonaMensajero === undefined ? ZONA_MENSAJERO : opts.zonaMensajero)),
-  } as unknown as Pick<IOrdenRepository, "findUsuarioZonaId">;
+    findUsuarioVehiculoId: vi.fn(async () => opts.vehiculoMensajero ?? null),
+  } as unknown as Pick<IOrdenRepository, "findUsuarioZonaId" | "findUsuarioVehiculoId">;
+  const tarifa = opts.tarifa === undefined ? TARIFA_DEFECTO : opts.tarifa;
+  const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
+    resolvePagoTarifa: vi.fn(async () => tarifa),
+  };
   const signedUrls = opts.signedUrls ?? fakeSignedUrls();
   const service = new CierreDiaService(
     repo,
     zonaRepo as IZonaRepository,
     ordenRepo as IOrdenRepository,
     signedUrls,
+    tarifaZonaRepo,
   );
-  return { service, repo, zonaRepo, ordenRepo, signedUrls };
+  return { service, repo, zonaRepo, ordenRepo, tarifaZonaRepo, signedUrls };
 }
 
 // --- listarCierreDia (R1-R11, R17, R18) ---
@@ -374,5 +390,135 @@ describe("solicitarCierre — ruteo por zona (R15/R16) y snapshot (R13/R14)", ()
     const { service } = newService({ repo, zonaMensajero: ZONA_MENSAJERO, centralZonaId: null });
     const r = await service.solicitarCierre(MENSAJERO);
     expect(r).toMatchObject({ status: "ok", destinoTipo: "bodega_satelite" });
+  });
+});
+
+// --- Feature 39: pago al mensajero DERIVADO en vivo (R10/R11/R21) ---
+
+describe("listarCierreDia — pago al mensajero derivado (R10/R11/R21)", () => {
+  it("R10: expone pagoMensajero por orden (entregada -> cobroEntregado; resto -> 0.00)", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada", metodoPago: "efectivo", montoRecibido: "12.00" }),
+        pendiente({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+        pendiente({ gestionId: "c", resultado: "reprogramada", montoRecibido: null, metodoPago: null }),
+        pendiente({ gestionId: "d", resultado: "devuelta", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo }); // TARIFA_DEFECTO: cobroEntregado 5.00
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.entregada[0].pagoMensajero).toBe("5.00"); // cobroEntregado
+    expect(r.grupos.rechazada[0].pagoMensajero).toBe("0.00"); // NUNCA cobroRechazado
+    expect(r.grupos.reprogramada[0].pagoMensajero).toBe("0.00");
+    expect(r.grupos.devuelta[0].pagoMensajero).toBe("0.00");
+    expect(typeof r.grupos.entregada[0].pagoMensajero).toBe("string"); // R23
+  });
+
+  it("R10: sin tarifa (gap de datos) -> pagoMensajero 0.00 en todas, no bloquea", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada" }),
+      ]),
+    });
+    const { service } = newService({ repo, tarifa: null });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.entregada[0].pagoMensajero).toBe("0.00");
+    expect(r.totalPagoMensajero).toBe("0.00");
+  });
+
+  it("R11/R21: totalPagoMensajero es la suma de entregadas y NO altera los totales de dinero recibido", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada", metodoPago: "efectivo", montoRecibido: "12.00" }),
+        pendiente({ gestionId: "b", resultado: "entregada", metodoPago: "SIMPE", montoRecibido: "8.00" }),
+        pendiente({ gestionId: "c", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo }); // cobroEntregado 5.00 x2 = 10.00
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // R11: total del pago al mensajero (separado).
+    expect(r.totalPagoMensajero).toBe("10.00");
+    // R21: dinero recibido intacto (12 efectivo + 8 SIMPE), sin mezclar con el pago.
+    expect(r.totales).toEqual({
+      efectivo: "12.00",
+      simpe: "8.00",
+      transferencia: "0.00",
+      general: "20.00",
+    });
+  });
+
+  it("R4: resuelve la tarifa por la zona+vehiculo del MENSAJERO (usuarioId del actor)", async () => {
+    const repo = fakeRepo({ findGestionesPendientes: vi.fn(async () => [pendiente()]) });
+    const { service, ordenRepo, tarifaZonaRepo } = newService({
+      repo,
+      zonaMensajero: ZONA_MENSAJERO,
+      vehiculoMensajero: "veh-1",
+    });
+    await service.listarCierreDia(MENSAJERO);
+    expect(ordenRepo.findUsuarioZonaId).toHaveBeenCalledWith("m1");
+    expect(ordenRepo.findUsuarioVehiculoId).toHaveBeenCalledWith("m1");
+    expect(tarifaZonaRepo.resolvePagoTarifa).toHaveBeenCalledWith(ZONA_MENSAJERO, "veh-1");
+  });
+});
+
+// --- Feature 39: snapshot al solicitar (R12/R13/R15) ---
+
+describe("solicitarCierre — snapshot del pago al mensajero (R12/R13)", () => {
+  it("R12/R13: pasa a crearCierre el pago por gestion + el total, congelados con la tarifa vigente", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada", metodoPago: "efectivo", montoRecibido: "12.00" }),
+        pendiente({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo, zonaMensajero: ZONA_MENSAJERO, centralZonaId: ZONA_CENTRAL });
+    const r = await service.solicitarCierre(MENSAJERO);
+    expect(r.status).toBe("ok");
+    const arg = (repo.crearCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // R12: pago snapshoteado por gestion (entregada 5.00, rechazada 0.00).
+    expect(arg.pagoByGestionId).toEqual({ a: "5.00", b: "0.00" });
+    // R13: total snapshot del cierre.
+    expect(arg.totalPagoMensajero).toBe("5.00");
+  });
+
+  it("R12: sin tarifa aplicable -> snapshot 0.00 en todas y total 0.00, no bloquea el cierre", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "entregada" }),
+      ]),
+    });
+    const { service } = newService({ repo, zonaMensajero: ZONA_MENSAJERO, tarifa: null });
+    const r = await service.solicitarCierre(MENSAJERO);
+    expect(r.status).toBe("ok");
+    const arg = (repo.crearCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.pagoByGestionId).toEqual({ a: "0.00" });
+    expect(arg.totalPagoMensajero).toBe("0.00");
+  });
+});
+
+describe("listarCierreDia — snapshot congelado del historico (R15)", () => {
+  it("R15: el total del cierre pasado sale del snapshot del repo, NO se re-deriva con la tarifa vigente", async () => {
+    // Aunque la tarifa vigente sea 5.00, el cierre pasado ya congelo 99.99: no cambia.
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => []),
+      findCierresByMensajero: vi.fn(async () => [
+        {
+          cierreId: "c1",
+          estado: "aprobado" as const,
+          destinoTipo: "bodega_satelite" as const,
+          destinoZonaId: ZONA_MENSAJERO,
+          totales: { efectivo: "20.00", simpe: "0.00", transferencia: "0.00", general: "20.00" },
+          totalPagoMensajero: "99.99", // snapshot congelado
+          solicitadoAt: "2026-07-10T10:00:00.000Z",
+        },
+      ]),
+    });
+    const { service } = newService({ repo, tarifa: TARIFA_DEFECTO });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.cierresPasados[0].totalPagoMensajero).toBe("99.99"); // R15: no re-derivado
   });
 });

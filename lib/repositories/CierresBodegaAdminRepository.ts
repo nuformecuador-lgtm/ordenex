@@ -30,6 +30,7 @@ const DETALLE_CIERRE_SELECT = {
   totalSimpe: true,
   totalTransferencia: true,
   totalGeneral: true,
+  totalPagoMensajero: true, // feature 39/R20: snapshot del pago al mensajero del cierre_dia
   mensajero: { select: { nombre: true } },
 } as const;
 
@@ -46,6 +47,7 @@ function toDetalleCierreRow(r: DetalleCierreRow): CierreBodegaDetalleCierreRow {
       transferencia: r.totalTransferencia.toFixed(2),
       general: r.totalGeneral.toFixed(2),
     },
+    totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R20: snapshot money-safe STRING
   };
 }
 
