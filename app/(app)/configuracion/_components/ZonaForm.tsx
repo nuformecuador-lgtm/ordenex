@@ -3,115 +3,141 @@
 import {
   forwardRef,
   useImperativeHandle,
+  useMemo,
   useState,
   type ReactNode,
-  // TODO(zonas): `useMemo` y `useSWR` quedan sin uso al comentar el subsistema
-  // de distritos (navegación provincia→cantón→distrito). Reactivar cuando se
-  // reconstruya contra la API vigente (`arbolZonas`).
-  // useMemo,
 } from "react";
-// import useSWR from "swr";
+import useSWR from "swr";
+import type { ZodError } from "zod";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-// TODO(zonas): `Select`/`SelectOption` y `Switch` sólo los usaba el bloque
-// comentado (selectores de provincia/cantón y toggle esGam, que ya no existe).
-// import { Select, type SelectOption } from "@/components/ui/select";
-// import { Switch } from "@/components/ui/switch";
+import { Select, type SelectOption } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
-  actualizarZonaSchema,
   crearZonaSchema,
   type ActualizarZonaResult,
   type CrearZonaResult,
-  // TODO(zonas): `DistritoCatalogoDTO` NO existe en `lib/types/zona`. El catálogo
-  // geográfico dejó de exponerse como lista plana de distritos; hoy se sirve como
-  // árbol (`ArbolZonas`/`ArbolDistritoNode`). Import comentado por inexistente.
-  // type DistritoCatalogoDTO,
+  type DistritoCatalogoDTO,
   type ZonaDTO,
 } from "@/lib/types/zona";
+import { actualizarZona, crearZona } from "@/lib/actions/zonas";
 import {
-  actualizarZona,
-  crearZona,
-  // TODO(zonas): `listarProvincias`/`listarCantones`/`listarDistritos` NO existen
-  // en `lib/actions/zonas`. La navegación del catálogo global se retiró; la única
-  // acción de lectura del árbol es `arbolZonas`. Imports comentados por inexistentes.
-  // listarCantones,
-  // listarDistritos,
-  // listarProvincias,
-} from "@/lib/actions/zonas";
+  listarCantones,
+  listarDistritos,
+  listarProvincias,
+} from "@/lib/actions/geo";
+import { listarVehiculos } from "@/lib/actions/vehiculos";
 
 type FieldErrors = Record<string, string[]>;
 
 export type ZonaFormResult = CrearZonaResult | ActualizarZonaResult;
 
-/** Handle imperativo: el Modal anfitrión dispara el submit async (R31). */
+/** Handle imperativo: el Modal anfitrión dispara el submit async (R11/R12). */
 export interface ZonaFormHandle {
   submit: () => Promise<ZonaFormResult>;
 }
 
+/** Central actualmente designada, derivada por el módulo (R6-UI). */
+export interface CentralActual {
+  id: string;
+  nombre: string;
+}
+
 export interface ZonaFormProps {
-  /** "crear" pide el set completo; "editar" prefila nombre/pagos/esGam. */
+  /** "crear" pide el set completo; "editar" prefila los campos de la zona. */
   mode: "crear" | "editar";
-  /** Zona en edición (prefill de campos escalares). */
+  /** Zona en edición (prefill de escalares + tarifas). */
   zona?: ZonaDTO | null;
+  /**
+   * Zona que hoy es central (según el listado cargado). Sirve para advertir de la
+   * reasignación al marcar OTRA zona como central (R6-UI, decisión F1.4-A).
+   * Limitación conocida: sólo es fiable si la central está en la página cargada;
+   * el backend garantiza la invariante igualmente.
+   */
+  centralActual?: CentralActual | null;
 }
 
 interface FormState {
   nombre: string;
-  // TODO(zonas): `pagoEntrega`/`pagoRechazo`/`esGam` ya no forman parte del
-  // modelo de zona. El esquema vigente pide `cobroVehiculo`, `distritoIds` y
-  // `tarifas` (tarifa_zona_mensajero). Campos conservados sólo como referencia.
-  // pagoEntrega: string;
-  // pagoRechazo: string;
-  // esGam: boolean;
+  cobroVehiculo: boolean;
+  esCentral: boolean;
+}
+
+/** Fila de tarifa en la UI: montos como texto (inputs), vehículo "" = ninguno. */
+interface TarifaRow {
+  cobroEntregado: string;
+  cobroRechazado: string;
+  vehiculoId: string;
 }
 
 function initialState(zona?: ZonaDTO | null): FormState {
   return {
     nombre: zona?.nombre ?? "",
-    // TODO(zonas): `zona.pagoEntrega`/`pagoRechazo`/`esGam` NO existen en `ZonaDTO`
-    // (hoy: id, nombre, cobroVehiculo, distritosCount, tarifas?). Prefill roto.
-    // pagoEntrega: zona ? String(zona.pagoEntrega) : "0",
-    // pagoRechazo: zona ? String(zona.pagoRechazo) : "0",
-    // esGam: zona?.esGam ?? false,
+    cobroVehiculo: zona?.cobroVehiculo ?? false,
+    // R7: al editar una zona ya central, el toggle arranca activado.
+    esCentral: zona?.esCentral ?? false,
   };
 }
 
+function initialTarifas(zona?: ZonaDTO | null): TarifaRow[] {
+  return (zona?.tarifas ?? []).map((t) => ({
+    cobroEntregado: String(t.cobroEntregado),
+    cobroRechazado: String(t.cobroRechazado),
+    vehiculoId: t.vehiculoId ?? "",
+  }));
+}
+
 /**
- * Formulario de creación/edición de zona (patrón `UsuarioForm`). Captura
- * `nombre`, `pagoEntrega`, `pagoRechazo`, un toggle `esGam` ("marcar como zona
- * central/GAM") y un selector de distritos que navega el catálogo geográfico
- * GLOBAL provincia → cantón → distrito consumiendo las Server Actions
- * `listarProvincias`/`listarCantones`/`listarDistritos` (R31). Cada distrito ya
- * asignado a OTRA zona se deshabilita mostrando a qué zona pertenece. Los
- * errores de validación y los conflictos (nombre duplicado o distrito ya
- * asignado) se muestran junto a su campo sin perder los valores ya escritos
- * (R33). Reusa los schemas de `lib/types/zona` para validar en cliente.
+ * Reconstruye `fieldErrors` a partir de un `ZodError`. Los paths de primer nivel
+ * (`nombre`, `distritoIds`, `esCentral`, `tarifas`) salen de `flatten().fieldErrors`;
+ * los paths ANIDADOS de tarifas (`tarifas.i.vehiculoId`) no aparecen ahí, así que se
+ * recolectan aparte y se agregan a un mensaje visible bajo la clave `tarifas` (R11/R8).
+ */
+function toFieldErrors(error: ZodError): FieldErrors {
+  const flat = error.flatten().fieldErrors as FieldErrors;
+  const fieldErrors: FieldErrors = { ...flat };
+  for (const issue of error.issues) {
+    if (issue.path[0] === "tarifas" && issue.path.length > 1) {
+      const list = fieldErrors.tarifas ?? [];
+      list.push(issue.message);
+      fieldErrors.tarifas = list;
+    }
+  }
+  return fieldErrors;
+}
+
+/**
+ * Formulario de creación/edición de zona (patrón imperativo `forwardRef` disparado
+ * por el `Modal` de `ZonasModule`). Captura `nombre`, `cobroVehiculo`, el toggle
+ * `esCentral` (R3/R4/R7), el conjunto de distritos navegando el catálogo geográfico
+ * global provincia → cantón → distrito (R10) y las tarifas por mensajero condicionadas
+ * a `cobroVehiculo` (R8). Valida con el mismo `crearZonaSchema` en cliente y servidor,
+ * muestra errores por campo conservando los valores (R11) y, al marcar una zona como
+ * central existiendo otra, exige confirmación de la reasignación (R6-UI, F1.4-A).
  *
- * TODO(zonas): este componente está DESALINEADO con la API vigente de feature 24
- * (redefinida). Se comentó todo lo que referencia símbolos inexistentes o el
- * modelo antiguo (pagos/esGam, catálogo plano de distritos, conflict.reason,
- * firma de actualizarZona). Sólo queda operativo el campo `nombre`. Reconstruir
- * contra: crearZonaSchema/actualizarZonaSchema { nombre, cobroVehiculo,
- * distritoIds, tarifas }, actualizarZona(id, input) y el árbol `arbolZonas`.
+ * DIVERGENCIA escalar↔N:M (deuda de nivel feature-24, NO se resuelve aquí):
+ * el seed (`scripts/seed-zonas.ts`) asigna distritos por el ESCALAR `distrito.zonaId`,
+ * pero `listarDistritos` (GeoRepository) lee la asignación del N:M `ZonaDistrito`. Una
+ * zona SEMBRADA (no creada por el CRUD) tendría sus distritos NO pre-marcados en edición,
+ * porque no existen filas `ZonaDistrito` para ella. Sólo se documenta el efecto.
  */
 export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
-  function ZonaForm({ mode, zona }, ref) {
+  function ZonaForm({ mode, zona, centralActual }, ref) {
     const isEditar = mode === "editar";
 
     const [form, setForm] = useState<FormState>(() => initialState(zona));
-    const [errors, setErrors] = useState<FieldErrors>({});
-
-    // TODO(zonas): subsistema de distritos comentado en bloque. Dependía de
-    // `listarProvincias/listarCantones/listarDistritos` (inexistentes) y de
-    // `DistritoCatalogoDTO` (inexistente). Incluye el seed de edición, la
-    // navegación del catálogo global y la selección/toggle de distritos.
-    /*
-    // Selección de distritos: id -> nombre (para chips y complete-set de envío).
+    const [tarifas, setTarifas] = useState<TarifaRow[]>(() =>
+      initialTarifas(zona),
+    );
+    // Distritos seleccionados: id -> nombre (para armar el conjunto COMPLETO).
     const [selected, setSelected] = useState<Record<string, string>>({});
-    // El backend recibe el conjunto COMPLETO de distritos; en edición solo se
-    // envía si el usuario tocó el selector (si no, se dejan intactos).
-    const [distritosTocados, setDistritosTocados] = useState(false);
+    const [errors, setErrors] = useState<FieldErrors>({});
+    // Mensaje de conflicto de dominio a nivel formulario (sin campo concreto).
+    const [formError, setFormError] = useState<string | null>(null);
+    // R6-UI: confirmación explícita para reasignar la central.
+    const [confirmarReasignacion, setConfirmarReasignacion] = useState(false);
 
     // Navegación del catálogo global.
     const [provinciaId, setProvinciaId] = useState("");
@@ -130,11 +156,9 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
       },
     );
 
-    // R31 (edición): a medida que se cargan los distritos de un cantón, los que ya
-    // pertenecen a ESTA zona se pre-marcan (sin marcar el selector como "tocado",
-    // para no reescribir el conjunto si el usuario no cambia nada). Se hace en el
-    // `onSuccess` de SWR (callback de evento), no en un efecto, para evitar
-    // renders en cascada.
+    // R10 (edición): a medida que se cargan los distritos de un cantón, los que ya
+    // pertenecen a ESTA zona se pre-marcan. Se hace en el `onSuccess` de SWR (callback
+    // de evento), no en un efecto en cascada, para no re-renderizar de más.
     function seedSeleccionEdicion(items: DistritoCatalogoDTO[]) {
       if (!isEditar || !zona) return;
       setSelected((prev) => {
@@ -159,6 +183,11 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
       { onSuccess: seedSeleccionEdicion },
     );
 
+    const { data: vehiculos } = useSWR("zonas:vehiculos", async () => {
+      const res = await listarVehiculos();
+      return res.status === "ok" ? res.items : [];
+    });
+
     const provinciaOptions: SelectOption[] = useMemo(
       () => (provincias ?? []).map((p) => ({ value: p.id, label: p.nombre })),
       [provincias],
@@ -169,10 +198,24 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
       [cantones],
     );
 
+    const vehiculoOptions: SelectOption[] = useMemo(
+      () => (vehiculos ?? []).map((v) => ({ value: v.id, label: v.name })),
+      [vehiculos],
+    );
+
     const selectedIds = Object.keys(selected);
 
+    // R6-UI: hay que reasignar la central si el usuario la marca y ya existe OTRA.
+    const reasignaCentral =
+      form.esCentral &&
+      centralActual != null &&
+      centralActual.id !== (zona?.id ?? null);
+
+    function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
+      setForm((prev) => ({ ...prev, [key]: value }));
+    }
+
     function toggleDistrito(id: string, nombre: string) {
-      setDistritosTocados(true);
       setSelected((prev) => {
         const next = { ...prev };
         if (id in next) delete next[id];
@@ -180,94 +223,98 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
         return next;
       });
     }
-    */
 
-    function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
-      setForm((prev) => ({ ...prev, [key]: value }));
+    function addTarifa() {
+      setTarifas((prev) => [
+        ...prev,
+        { cobroEntregado: "", cobroRechazado: "", vehiculoId: "" },
+      ]);
     }
 
-    // TODO(zonas): `buildCandidate` construía el payload antiguo
-    // { nombre, pagoEntrega, pagoRechazo, esGam, distritoIds }. El esquema vigente
-    // exige { nombre, cobroVehiculo, distritoIds, tarifas }. Comentado por completo.
-    /*
+    function removeTarifa(index: number) {
+      setTarifas((prev) => prev.filter((_, i) => i !== index));
+    }
+
+    function updateTarifa(index: number, patch: Partial<TarifaRow>) {
+      setTarifas((prev) =>
+        prev.map((t, i) => (i === index ? { ...t, ...patch } : t)),
+      );
+    }
+
     function buildCandidate(): unknown {
-      const base = {
+      return {
         nombre: form.nombre,
-        pagoEntrega: Number(form.pagoEntrega),
-        pagoRechazo: Number(form.pagoRechazo),
-        esGam: form.esGam,
+        cobroVehiculo: form.cobroVehiculo,
+        esCentral: form.esCentral,
+        // El backend recibe SIEMPRE el conjunto COMPLETO (≥1) (R8/R9/R10).
+        distritoIds: selectedIds,
+        tarifas: tarifas.map((t) => {
+          const base = {
+            cobroEntregado: Number(t.cobroEntregado),
+            cobroRechazado: Number(t.cobroRechazado),
+          };
+          // vehiculoId sólo si el usuario eligió uno; el schema decide si es válido
+          // según `cobroVehiculo` (applyTarifaRules), igual en cliente y servidor.
+          return t.vehiculoId ? { ...base, vehiculoId: t.vehiculoId } : base;
+        }),
       };
-      if (isEditar) {
-        return {
-          ...base,
-          id: zona?.id ?? "",
-          // Complete-set: solo se envía si el usuario tocó el selector (R22).
-          ...(distritosTocados ? { distritoIds: selectedIds } : {}),
-        };
-      }
-      return { ...base, distritoIds: selectedIds };
-    }
-
-    function validate(): { input: unknown; result?: ZonaFormResult } {
-      const candidate = buildCandidate();
-      const schema = isEditar ? actualizarZonaSchema : crearZonaSchema;
-      const parsed = schema.safeParse(candidate);
-      if (!parsed.success) {
-        const fieldErrors = parsed.error.flatten().fieldErrors as FieldErrors;
-        return { input: null, result: { status: "validation_error", fieldErrors } };
-      }
-      return { input: parsed.data };
     }
 
     async function submit(): Promise<ZonaFormResult> {
-      const { input, result } = validate();
-      if (result) {
-        setErrors(result.status === "validation_error" ? result.fieldErrors : {});
-        return result;
+      setFormError(null);
+
+      // R6-UI: si reasigna la central, exige confirmación explícita ANTES de mutar.
+      if (reasignaCentral && !confirmarReasignacion) {
+        const fieldErrors: FieldErrors = {
+          esCentral: [
+            "Confirma la reasignación de la zona central antes de guardar.",
+          ],
+        };
+        setErrors(fieldErrors);
+        return { status: "validation_error", fieldErrors };
+      }
+
+      const candidate = buildCandidate();
+      const parsed = crearZonaSchema.safeParse(candidate);
+      if (!parsed.success) {
+        const fieldErrors = toFieldErrors(parsed.error);
+        setErrors(fieldErrors);
+        return { status: "validation_error", fieldErrors };
       }
 
       const res: ZonaFormResult =
-        isEditar && zona ? await actualizarZona(input) : await crearZona(input);
+        isEditar && zona
+          ? await actualizarZona(zona.id, parsed.data)
+          : await crearZona(parsed.data);
 
       if (res.status === "validation_error") {
         setErrors(res.fieldErrors);
       } else if (res.status === "conflict") {
-        // R33: el conflicto se muestra junto a su campo, sin perder valores.
-        if (res.reason === "nombre") {
-          setErrors({ nombre: ["Ya existe una zona con ese nombre."] });
-        } else {
-          setErrors({ distritoIds: [mensajeConflictoDistrito(res.distritoIds, selected)] });
-        }
-      } else {
+        // R11: el conflicto de dominio (nombre o distritos) no trae payload de razón;
+        // se muestra un mensaje genérico razonable, sin cerrar el modal ni resetear.
         setErrors({});
+        setFormError(
+          "Revisa el nombre o los distritos: ya hay un conflicto.",
+        );
+      } else if (res.status === "ok") {
+        setErrors({});
+        setFormError(null);
       }
       return res;
-    }
-    */
-
-    // Stub temporal: mientras el submit real está comentado, el handle debe
-    // seguir cumpliendo el contrato `ZonaFormHandle`. Referencia los símbolos
-    // vigentes (schemas + acciones) sólo para dejar el flujo mínimo alineado.
-    // TODO(zonas): reimplementar validate()/submit() contra el esquema y la firma
-    // actuales (crearZona(input) / actualizarZona(id, input)).
-    async function submit(): Promise<ZonaFormResult> {
-      void isEditar;
-      void zona;
-      void actualizarZonaSchema;
-      void crearZonaSchema;
-      void actualizarZona;
-      void crearZona;
-      const fieldErrors: FieldErrors = {
-        nombre: ["Formulario de zonas en reconstrucción (API desalineada)."],
-      };
-      setErrors(fieldErrors);
-      return { status: "validation_error", fieldErrors };
     }
 
     useImperativeHandle(ref, () => ({ submit }));
 
+    const canAddTarifa = form.cobroVehiculo || tarifas.length === 0;
+
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
+        {formError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {formError}
+          </p>
+        ) : null}
+
         <Field id="nombre" label="Nombre" errors={errors.nombre}>
           <Input
             id="nombre"
@@ -277,49 +324,54 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
           />
         </Field>
 
-        {/* TODO(zonas): campos `pagoEntrega`/`pagoRechazo` y toggle `esGam`
-            comentados: no existen en el modelo vigente de zona. */}
-        {/*
-        <Field id="pagoEntrega" label="Pago por entrega" errors={errors.pagoEntrega}>
-          <Input
-            id="pagoEntrega"
-            type="number"
-            min={0}
-            step="0.01"
-            value={form.pagoEntrega}
-            aria-invalid={errors.pagoEntrega ? true : undefined}
-            onChange={(e) => setField("pagoEntrega", e.target.value)}
-          />
-        </Field>
-
-        <Field id="pagoRechazo" label="Pago por rechazo" errors={errors.pagoRechazo}>
-          <Input
-            id="pagoRechazo"
-            type="number"
-            min={0}
-            step="0.01"
-            value={form.pagoRechazo}
-            aria-invalid={errors.pagoRechazo ? true : undefined}
-            onChange={(e) => setField("pagoRechazo", e.target.value)}
-          />
-        </Field>
-
         <div className="flex items-center justify-between gap-2">
-          <Label htmlFor="esGam">Marcar como zona central / GAM</Label>
+          <Label htmlFor="cobroVehiculo">Cobra por tipo de vehículo</Label>
           <Switch
-            id="esGam"
-            aria-label="Marcar como zona central / GAM"
-            checked={form.esGam}
-            onCheckedChange={(next) => setField("esGam", next)}
+            id="cobroVehiculo"
+            aria-label="Cobra por tipo de vehículo"
+            checked={form.cobroVehiculo}
+            onCheckedChange={(next) => setField("cobroVehiculo", next)}
           />
         </div>
-        */}
 
-        {/* TODO(zonas): selector de distritos (provincia → cantón → distrito)
-            comentado: dependía de listarProvincias/listarCantones/listarDistritos
-            (inexistentes) y del estado `selected`/`distritos`/`provinciaOptions`/
-            `cantonOptions`/`selectedIds` del bloque comentado arriba. */}
-        {/*
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="esCentral">Marcar como zona central</Label>
+            <Switch
+              id="esCentral"
+              aria-label="Marcar como zona central"
+              checked={form.esCentral}
+              onCheckedChange={(next) => {
+                setField("esCentral", next);
+                if (!next) setConfirmarReasignacion(false);
+              }}
+            />
+          </div>
+
+          {reasignaCentral ? (
+            <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/40 p-2">
+              <p role="alert" className="text-sm">
+                {`La zona «${centralActual?.nombre ?? ""}» dejará de ser la central.`}
+              </p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  aria-label="Entiendo que reasignaré la zona central"
+                  checked={confirmarReasignacion}
+                  onChange={(e) => setConfirmarReasignacion(e.target.checked)}
+                />
+                <span>Entiendo que reasignaré la zona central</span>
+              </label>
+            </div>
+          ) : null}
+
+          {errors.esCentral && errors.esCentral.length > 0 ? (
+            <p id="esCentral-error" role="alert" className="text-sm text-destructive">
+              {errors.esCentral.join(", ")}
+            </p>
+          ) : null}
+        </div>
+
         <fieldset className="flex flex-col gap-3 border-t border-border pt-3">
           <legend className="text-sm font-medium">Distritos de la zona</legend>
 
@@ -361,6 +413,7 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
                 </p>
               ) : (
                 (distritos ?? []).map((d) => {
+                  // Deshabilitar los distritos asignados a OTRA zona (R10).
                   const enOtraZona =
                     d.zonaId !== null && (!zona || d.zonaId !== zona.id);
                   const checked = d.id in selected;
@@ -379,7 +432,7 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
                       <span>{d.nombre}</span>
                       {enOtraZona ? (
                         <span className="text-xs text-muted-foreground">
-                          (asignado a {d.zonaNombre})
+                          {`(asignado a ${d.zonaNombre ?? "otra zona"})`}
                         </span>
                       ) : null}
                     </label>
@@ -389,7 +442,10 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
             </div>
           ) : null}
 
-          <p className="text-sm text-muted-foreground" data-testid="distritos-seleccionados">
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="distritos-seleccionados"
+          >
             {selectedIds.length > 0
               ? `Distritos seleccionados: ${selectedIds.length}`
               : "Sin distritos seleccionados"}
@@ -401,28 +457,104 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
             </p>
           ) : null}
         </fieldset>
-        */}
+
+        <fieldset className="flex flex-col gap-3 border-t border-border pt-3">
+          <legend className="text-sm font-medium">Tarifas de la zona</legend>
+
+          {tarifas.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin tarifas.</p>
+          ) : (
+            tarifas.map((t, i) => (
+              <div
+                key={i}
+                className="flex flex-col gap-2 rounded-lg border border-border p-2"
+                role="group"
+                aria-label={`Tarifa ${i + 1}`}
+              >
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`tarifa-${i}-entregado`}>
+                    Cobro entregado
+                  </Label>
+                  <Input
+                    id={`tarifa-${i}-entregado`}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    aria-label={`Cobro entregado tarifa ${i + 1}`}
+                    value={t.cobroEntregado}
+                    onChange={(e) =>
+                      updateTarifa(i, { cobroEntregado: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`tarifa-${i}-rechazado`}>
+                    Cobro rechazado
+                  </Label>
+                  <Input
+                    id={`tarifa-${i}-rechazado`}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    aria-label={`Cobro rechazado tarifa ${i + 1}`}
+                    value={t.cobroRechazado}
+                    onChange={(e) =>
+                      updateTarifa(i, { cobroRechazado: e.target.value })
+                    }
+                  />
+                </div>
+
+                {form.cobroVehiculo ? (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`tarifa-${i}-vehiculo`}>Vehículo</Label>
+                    <Select
+                      aria-label={`Vehículo tarifa ${i + 1}`}
+                      value={t.vehiculoId}
+                      options={vehiculoOptions}
+                      placeholder="Selecciona un vehículo"
+                      onValueChange={(v) => updateTarifa(i, { vehiculoId: v })}
+                    />
+                  </div>
+                ) : null}
+
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Quitar tarifa ${i + 1}`}
+                    onClick={() => removeTarifa(i)}
+                  >
+                    Quitar
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+
+          {canAddTarifa ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={addTarifa}
+            >
+              Agregar tarifa
+            </Button>
+          ) : null}
+
+          {errors.tarifas && errors.tarifas.length > 0 ? (
+            <p id="tarifas-error" role="alert" className="text-sm text-destructive">
+              {errors.tarifas.join(", ")}
+            </p>
+          ) : null}
+        </fieldset>
       </div>
     );
   },
 );
-
-// TODO(zonas): `mensajeConflictoDistrito` usaba `conflict.distritoIds`, que ya
-// no forma parte del resultado de conflicto (hoy `{ status: "conflict" }` sin
-// payload). Helper comentado hasta que el conflicto de distrito vuelva a exponer
-// los ids afectados.
-/*
-function mensajeConflictoDistrito(
-  ids: string[] | undefined,
-  selected: Record<string, string>,
-): string {
-  if (!ids || ids.length === 0) {
-    return "Uno de los distritos ya pertenece a otra zona.";
-  }
-  const nombres = ids.map((id) => selected[id] ?? id);
-  return `Estos distritos ya pertenecen a otra zona: ${nombres.join(", ")}.`;
-}
-*/
 
 /** Envoltorio accesible de un campo con label y errores (i18n vía props). */
 function Field({
