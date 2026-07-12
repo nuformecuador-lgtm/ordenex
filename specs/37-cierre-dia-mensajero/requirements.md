@@ -2,10 +2,33 @@
 
 Zone: `fullstack` · complexity: `high` · depends_on: 36 (`done`) · branch: `feature/37-cierre-dia-mensajero`
 
-> **Puerta F1.4 ABIERTA.** Este spec redacta los requisitos con los valores
-> **recomendados** de las decisiones abiertas (ver "Preguntas abiertas" al final y
-> `design.md`). Si el humano decide otra opción, se ajustan los puntos marcados
-> `prov. F1.4-x` sin reescribir la arquitectura. **No se implementa hasta cerrar F1.4.**
+> **F1.4 APROBADA por el humano el 2026-07-11** (ver "## Decisiones F1.4 (APROBADAS)"
+> abajo, que SUPERSEDE "Preguntas abiertas"). Casi todo quedó en la opción recomendada;
+> la ÚNICA ampliación es (h): SÍ se muestran los cierres PASADOS (histórico). Estado: `in_progress`.
+
+## Decisiones F1.4 (APROBADAS 2026-07-11)
+
+- **(a)** Tabla NUEVA `cierre_dia` + FK `cierre_id` (nullable) en `gestion_orden` (se setea al solicitar).
+  Migración + `down.sql` + **RLS**.
+- **(b)** El "día" agrupa las `gestion_orden` del mensajero que aún NO están en un cierre (`cierre_id IS NULL`),
+  NO por fecha calendario. (El corte de medianoche es de la feature 41, no acá.)
+- **(c)** Precondición: solo puede solicitar cierre si NO tiene órdenes pendientes (`en_espera_aceptacion`
+  ni `en_reparto`); si tiene, error claro "aún tienes órdenes por gestionar".
+- **(d) SIN estado 'abierto' previo**: el módulo muestra las gestionadas pendientes de cierre derivadas al
+  vuelo; al pulsar **"Solicitar cierre"** se CREA el `cierre_dia` en estado **`solicitado`**. Enum
+  `cierre_estado` = `solicitado` (+ `aprobado`/`rechazado` reservados para la feature 38). Al solicitar, se
+  fija `cierre_id` en las `gestion_orden` incluidas (todo-o-nada).
+- **(e)** El `cierre_dia` GUARDA el destino derivado: `destino_tipo` (central/satélite) + `destino_zona_id`,
+  resuelto SERVER-SIDE por la zona del mensajero usando el resolver existente `IZonaRepository.findGamZonaId()`
+  (NO leer `zona.esGam` directo — hay drift). Si la zona del mensajero es la GAM → central/maestro; si no →
+  adminSatelite de esa zona.
+- **(f) SNAPSHOT**: al solicitar, se CONGELAN en el `cierre_dia` los totales por método de pago (efectivo/
+  SIMPE/transferencia) y el total general (Decimal). Base estable para la aprobación (38) y la wallet (42).
+- **(g) SÍ E2E** (Playwright) del flujo: gestionar todo → ver totales → solicitar cierre (escrito, ejecución
+  diferida, patrón del repo).
+- **(h) SÍ listar cierres PASADOS**: el módulo muestra el cierre en curso (derivado) + un HISTÓRICO de los
+  `cierre_dia` del mensajero (solicitados/aprobados/rechazados) con su detalle y totales.
+- **(i)** Reprogramadas/devueltas/rechazadas cuentan **$0** (solo `entregada` aporta `montoRecibido`).
 
 ## Alcance (qué SÍ hace la 37)
 
