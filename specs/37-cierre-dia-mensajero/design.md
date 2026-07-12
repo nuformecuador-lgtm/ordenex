@@ -224,7 +224,7 @@ mensajero. DI por constructor (testeable sin DB/red), patrón `RecepcionSatelite
 - `ICierreDiaRepository` (nuevo) — lectura de gestiones pendientes con detalle de orden, conteo
   de órdenes pendientes de gestión, existencia de cierre `solicitado`, creación transaccional
   del cierre, lista de cierres pasados.
-- `IZonaRepository` (reuso feature 30) — `findGamZonaId()` para el ruteo (R15).
+- `IZonaRepository` (reuso feature 30) — `findCentralZonaId()` para el ruteo (R15).
 - `IOrdenRepository` (reuso) — `findUsuarioZonaId(actor)` (zona del mensajero, feature 33).
 - `ISignedUrlProvider` (reuso feature 22) — firmar `evidenciaStoragePath` al listar (R5).
 
@@ -250,7 +250,7 @@ Autorización (R1/R2): `actor.rol !== 'mensajero'` → `{ status: 'forbidden' }`
 3. **R12 (duplicado):** si `existeCierreSolicitado(actor)` → `conflict`.
 4. Cargar gestiones pendientes (`cierre_id IS NULL`). **R11:** si vacío → `conflict`.
 5. **Ruteo R15/R16:** `zonaId = ordenRepo.findUsuarioZonaId(actor)`; si `null` →
-   `validation_error` (R16). `gamZonaId = zonaRepo.findGamZonaId()`;
+   `validation_error` (R16). `gamZonaId = zonaRepo.findCentralZonaId()`;
    `destinoTipo = (zonaId === gamZonaId) ? bodega_central : bodega_satelite`;
    `destinoZonaId = zonaId`.
 6. **Totales snapshot R14:** calcular con `Prisma.Decimal` (mismo cálculo que 3.1.4).
@@ -337,11 +337,19 @@ servicio estable. → Servicio dedicado `CierreDiaService`.
 
 ## 6. Notas de riesgo para el implementer (no bloquean el spec)
 
-- **Drift `zona.esGam`:** el flag GAM lo resuelve `IZonaRepository.findGamZonaId()` (usado por
-  feature 30 y `OrdenRepository.esGam`). El snapshot de `db/schema.prisma` que se lea puede no
-  mostrar `esGam` en `model Zona`; **usar el resolver existente `findGamZonaId()`**, no leer la
-  columna directamente ni asumir su nombre. Si Prisma se queja de drift, sincronizar el schema
-  antes (fuera del alcance de esta feature) y avisar al leader.
+- **Ruteo por zona central (drift RESUELTO por la feature 54):** el flag central lo resuelve
+  `IZonaRepository.findCentralZonaId(): Promise<string|null>` (repuesto/renombrado desde el viejo
+  `findGamZonaId()` por la feature 54, ya en `dev`; flag `zona.esCentral`, antes `esGam`). **Usar el
+  resolver `findCentralZonaId()`**, NO leer la columna directamente. El schema ya es válido
+  (`prisma validate` verde), sin drift pendiente.
+  - **Caso `null` (limitación conocida ligada a la feature 55):** la UI que marca una zona como
+    central (`esCentral`) es la feature 55 (follow-up, aún `pending`); hasta que caiga, en runtime
+    `findCentralZonaId()` devuelve `null` (ninguna zona central sembrada). El ruteo R15 NO debe
+    romper por esto: con `centralZonaId === null`, **ningún** mensajero clasifica como central →
+    `destinoTipo = bodega_satelite` con su `destinoZonaId = zona del mensajero` (fallback seguro; no
+    lanzar). La clasificación a `bodega_central` empieza a funcionar en runtime cuando la 55 marque
+    la zona central. En los **tests unit** de R15, el doble de `findCentralZonaId` devuelve un id
+    para cubrir GAM→central y no-GAM→satélite (la lógica queda cubierta; solo el runtime espera a 55).
 - **Money-safe cruzando la frontera:** serializar `Decimal` como **string** en los DTO de Server
   Action (no `number`); sumar con `Prisma.Decimal`. El reviewer rechaza `parseFloat` sobre montos.
 - **Concurrencia del vínculo:** el `UPDATE ... WHERE cierre_id IS NULL AND mensajero_id = actor`

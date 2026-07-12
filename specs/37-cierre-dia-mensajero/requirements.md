@@ -19,8 +19,8 @@ Zone: `fullstack` · complexity: `high` · depends_on: 36 (`done`) · branch: `f
   `cierre_estado` = `solicitado` (+ `aprobado`/`rechazado` reservados para la feature 38). Al solicitar, se
   fija `cierre_id` en las `gestion_orden` incluidas (todo-o-nada).
 - **(e)** El `cierre_dia` GUARDA el destino derivado: `destino_tipo` (central/satélite) + `destino_zona_id`,
-  resuelto SERVER-SIDE por la zona del mensajero usando el resolver existente `IZonaRepository.findGamZonaId()`
-  (NO leer `zona.esGam` directo — hay drift). Si la zona del mensajero es la GAM → central/maestro; si no →
+  resuelto SERVER-SIDE por la zona del mensajero usando el resolver existente `IZonaRepository.findCentralZonaId()`
+  (NO leer `zona.esCentral` directo — hay drift). Si la zona del mensajero es la GAM → central/maestro; si no →
   adminSatelite de esa zona.
 - **(f) SNAPSHOT**: al solicitar, se CONGELAN en el `cierre_dia` los totales por método de pago (efectivo/
   SIMPE/transferencia) y el total general (Decimal). Base estable para la aprobación (38) y la wallet (42).
@@ -64,7 +64,7 @@ La 37 deja el enum de estado del cierre con los valores que la 38 necesitará
   `mensajero_asignado_id = actor` en estado `en_espera_aceptacion` ni `en_reparto`
   (`lib/types/order-status.ts`); todas resueltas a `entregada`/`reprogramada`/`devuelta`/`rechazada`.
 - Zona del mensajero: `usuario.zonaId`; GAM se resuelve server-side con
-  `IZonaRepository.findGamZonaId()` (patrón feature 30); mensajeros/adminSatelite por zona
+  `IZonaRepository.findCentralZonaId()` (patrón feature 30); mensajeros/adminSatelite por zona
   con `OrdenRepository.findMensajerosByZona` / `findUsuarioZonaId` (feature 33/34).
 
 ---
@@ -142,7 +142,7 @@ La 37 deja el enum de estado del cierre con los valores que la 38 necesitará
   *Testeable:* los totales snapshot del cierre coinciden con la suma de sus gestiones al crearlo.
 
 - **R15** — CUANDO se cree la solicitud, el sistema DEBE derivar server-side el destino a
-  partir de la zona del mensajero: SI `zona.esGam` es verdadero (`findGamZonaId()`), el
+  partir de la zona del mensajero: SI `zona.esCentral` es verdadero (`findCentralZonaId()`), el
   destino DEBE ser la **bodega central** (admin maestro); SI NO, el destino DEBE ser la
   **bodega satélite** de esa zona (adminSatelite de la zona). El destino DEBE persistirse en
   la solicitud (para la feature 38). `prov. F1.4-e`
@@ -190,7 +190,7 @@ La 37 deja el enum de estado del cierre con los valores que la 38 necesitará
 | R12 | unit service: cierre `solicitado` existente → `conflict` |
 | R13 | integración repo/DB: crea cierre + vincula gestiones (`cierre_id`) |
 | R14 | integración: totales snapshot == suma de gestiones |
-| R15 | unit service (doble `findGamZonaId`): GAM→central; no-GAM→satélite+zona |
+| R15 | unit service (doble `findCentralZonaId`): GAM→central; no-GAM→satélite+zona |
 | R16 | unit service: mensajero sin zona → `validation_error`, no crea |
 | R17 | unit service: listar no muta orden/gestión |
 | R18 | integración: cierre creado aparece en lista del mensajero |
@@ -222,8 +222,8 @@ Cada una con **recomendación** del spec_author y alternativa. NO se cierran aqu
   y el cierre nace `solicitado`). *Alternativa:* un estado `abierto` persistido por mensajero.
   *Sub-pregunta:* ¿a lo sumo UN cierre `solicitado` por mensajero a la vez? *Recomendado: sí (R12).*
 
-- **(e) Destino del "solicitar cierre".** *Recomendado:* derivar de `zona.esGam`
-  (`findGamZonaId`) y persistir `destino_tipo` (`bodega_central`/`bodega_satelite`) +
+- **(e) Destino del "solicitar cierre".** *Recomendado:* derivar de `zona.esCentral`
+  (`findCentralZonaId`) y persistir `destino_tipo` (`bodega_central`/`bodega_satelite`) +
   `destino_zona_id` en el cierre; la feature 38 filtra por rol+zona sin fijar un admin
   concreto. *Alternativa:* fijar además `destino_admin_id` (un adminSatelite puntual) — se
   descarta por defecto porque puede haber varios admins por bodega.
