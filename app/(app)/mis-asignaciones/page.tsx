@@ -22,7 +22,7 @@ export default async function MisAsignacionesPage() {
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
+    <>
       <PageHeader
         title="Mis asignaciones"
         description="Órdenes por recoger y en reparto"
@@ -32,6 +32,6 @@ export default async function MisAsignacionesPage() {
         porGestionar={result.porGestionar}
         ordenEnGestionId={result.ordenEnGestionId}
       />
-    </section>
+    </>
   );
 }

@@ -34,7 +34,7 @@ export default async function RecepcionSatelitePage() {
     mensajerosResult.status === "ok" ? mensajerosResult.mensajeros : [];
 
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
+    <>
       <PageHeader
         title="Mis asignaciones"
         description="Recepción de órdenes de tu bodega satélite por escaneo de QR"
@@ -46,6 +46,6 @@ export default async function RecepcionSatelitePage() {
         sinZona={result.sinZona}
         mensajeros={mensajeros}
       />
-    </section>
+    </>
   );
 }
