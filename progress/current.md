@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/55-zonaform-escentral | fullstack | F1 done / **F2 en impl** | ▶️ **EN CURSO 2026-07-12** (rama ← `origin/dev` a3af913). **F1 (spec R1–R14 en `specs/55-zonaform-escentral/`) COMPLETA + F1.4 APROBADA 2026-07-12** (todo recomendado): (A) reasignar central con confirmación en misma tx; (B) **reconstrucción COMPLETA** de `ZonaForm` (nombre + provincia/cantón/distritos N:M + `cobroVehiculo` + toggle `esCentral`); (C) drift `provincia.zonaId` = reconciliación **SOLO-SCHEMA** sin migración (borrar `Provincia.zonaId`/`zona` + `Zona.provincias` huérfanos); (D) seed NO toca `es_central`. **SIGUIENTE: `implementer`.** Desbloquea el runtime de `bodega_central` en 30/34/37. |
+| (ninguna en curso) | — | — | Features 37 y 55 CERRADAS 2026-07-12 (abajo). **PENDIENTE: mergear PR #42 (37) y el PR de la 55 a `dev`** (OK humano). |
+
+> Feature 55 (completar ZonaForm: `esCentral` + drift `provincia.zonaId`) CERRADA 2026-07-12: **impl COMPLETA (R1–R14) + reviewer APROBADO 0 bloqueantes** (verde REAL verificado por el reviewer: `prisma validate` valid, `migrate status` up-to-date 0 migraciones nuevas, `typecheck` 0, `lint` 0, **1614/1614 tests (+49)**, `init.sh` OK). Fullstack un ciclo; F1.4 aprobada 2026-07-12 (todo recomendado). Estado `done` + `history.md` + `review_55`. Reconstruyó `ZonaForm` (crear/editar + distritos N:M + `cobroVehiculo` + toggle `esCentral`), reasignación central transaccional (`P2002`→`conflict`), `GeoService`/`GeoActions` para el catálogo geo, drift `provincia.zonaId` reconciliado **solo-schema** (sin migración). **DESBLOQUEA el runtime de `bodega_central` en 30/34/37** (`findCentralZonaId` deja de ser null al marcar zona). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** Deuda menor: `conflict` sin payload por-campo; confirmación de reasignación vía checkbox inline (reviewer: menor).
 
 > NOTA: la feature 37 (cierre del día) está CERRADA `done` 2026-07-12 con **PR #42** abierto a `dev` (sin mergear, decisión del humano); su cierre completo vive en ese PR, no en esta rama.
 

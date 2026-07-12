@@ -858,3 +858,26 @@
   `esCentral`, así que `findCentralZonaId` devuelve null y el maestro (30) no puede asignar en runtime hasta
   completarla. También: limpieza cosmética de nombres `esGam` legacy; drift schema/DB en `provincia.zonaId`.
 - **DESBLOQUEA**: `dev` vuelve a estar verde → repara 17/30/34 y destraba la feature 37 (pausada, spec intacto).
+
+## 2026-07-12 — feature 55 (completar ZonaForm: `esCentral` + drift `provincia.zonaId`)
+- FOLLOW-UP de la 54 (deuda del #40). Reconstruyó por completo `app/(app)/configuracion/_components/ZonaForm.tsx`
+  (que el #40 había stubbeado a solo `nombre`): crear/editar zona con nombre + selección provincia/cantón/
+  distritos (N:M `ZonaDistrito`) + `cobroVehiculo` + tarifas + toggle **`esCentral`**. Crear zona (antes
+  imposible) y editar (prefill de distritos desde el N:M) vuelven a funcionar.
+- Requisitos cubiertos: R1–R14 (cada uno con test concreto; reviewer verificó trazabilidad).
+- **Decisiones F1.4 (aprobadas por el humano 2026-07-12, todas las recomendadas):** (A) marcar una zona como
+  central existiendo otra → **REASIGNAR** desmarcando la previa en la MISMA transacción (`ZonaRepository`
+  `tx.zona.updateMany` dentro de `$transaction`; `P2002` sobre `zona_es_central_unico` → `ConflictError`, no 500);
+  (B) reconstrucción COMPLETA de `ZonaForm`; (C) drift `provincia.zonaId` = reconciliación **SOLO-SCHEMA** (se
+  borraron los símbolos huérfanos `Provincia.zonaId`/`Provincia.zona`/`Zona.provincias` del `schema.prisma`; la
+  columna ya no existía en la DB — SIN migración ni `down.sql`); (D) el seed NO toca `es_central`.
+- Nuevos: `lib/interfaces/services/IGeoService.ts`, `lib/services/GeoService.ts`, `lib/actions/geo.ts` (catálogo
+  de geografía para los selectores, gate `maestro`), + tests (`provincia-schema-drift`, `geo-service`, `geo-action`).
+- Confirmación de reasignación (UI): checkbox inline bloqueante ("Entiendo que reasignaré la zona central");
+  sin marcarlo, el submit devuelve `validation_error` y no llama al backend. Reviewer lo dictaminó **menor** (el
+  design proponía Modal como ruta recomendada, no requisito duro; cumple "confirmación explícita antes de reasignar").
+- Verde: `prisma validate` valid, `migrate status` up-to-date (0 migraciones nuevas), typecheck 0, lint 0,
+  **1614/1614 tests (+49)**, `init.sh` OK. Reviewer APROBADO 0 bloqueantes.
+- **DESBLOQUEA el runtime de `bodega_central`**: con una zona marcada `esCentral` desde la UI,
+  `IZonaRepository.findCentralZonaId()` deja de devolver null → el maestro (30) puede asignar/rutear y despiertan
+  34/37 en producción. Deuda menor: `conflict` sin payload por-campo; divergencia escalar↔N:M del seed (nivel feat-24).
