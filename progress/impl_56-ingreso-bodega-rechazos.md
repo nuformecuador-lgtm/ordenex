@@ -85,3 +85,15 @@ de la 39 (false con tarifa 0.00 real). Fuera de alcance: UI (frontend_dev).
 Snapshots existentes (dinero recibido `total_efectivo/simpe/transferencia/general`,
 `total_pago_mensajero` a los 3 niveles) INTACTOS: sus tests pasan sin cambio de semántica;
 solo se AÑADIERON campos y se MEJORÓ el aviso de tarifa faltante con el flag server-side.
+
+## Adenda — completación del frontend (2026-07-12)
+NOTA DE PROCESO: esta bitácora la escribió la fase backend ANTES de que el implementer muriera por el
+bug del modelo `opus-4.8[1m]` (fallo transitorio del override). El backend quedó completo y verde
+(commit `6a0153d`). El leader lo reanudó lanzando `frontend_dev` para completar la UI faltante (Q6+Q7),
+commit `40d99e2`. La feature quedó COHERENTE Y COMPLETA (backend+frontend integrados), confirmado por el reviewer.
+
+Trazabilidad de UI (Q6/Q7) añadida por el frontend:
+- R23 / flag `tarifaFaltante`: `tests/components/CierresAdminModule.test.tsx` (badge "Sin tarifa" por el flag server-side, no por heurística; sin falso positivo en entrega legítima de ₡0.00, entregas Y rechazos).
+- R9/R10/R16/R19 (Q7, display del ingreso): `tests/components/CierreDiaModule.test.tsx` y `tests/components/CierresAdminModule.test.tsx` (columna por gestión rechazada + línea de total en las 3 vistas: mensajero/admin/bodega).
+- UI tocada: `cierre-detalle-shared.tsx` (flag Q6 + `COLUMNA_INGRESO_BODEGA_RECHAZOS` + `IngresoBodegaRechazosTotal`), `CierreDiaModule.tsx`, `CierresAdminModule.tsx`, `CierresBodegaAdminModule.tsx`, `ConsolidacionBodegaModule.tsx`, + las 2 `page.tsx`.
+Verde final: typecheck 0, lint 0, init.sh OK, **1867 tests** (1 flaky ajeno `LoginForm`, pasa aislado). Reviewer APROBADO 0 bloqueantes.
