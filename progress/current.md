@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/39-pago-mensajero-zona | fullstack | F1 done / **F2 en impl** | ▶️ **EN CURSO 2026-07-12** (rama ← `origin/dev` ec8f8d7, con 37/55/38/40). **F1 (spec R1–R23+R7b en `specs/39-pago-mensajero-zona/`) COMPLETA + F1.4 APROBADA 2026-07-12.** Money-critical. Pago vía **`TarifaZonaMensajero`** (la descripción vieja "zona almacena pago" está desfasada por el #40). Decisiones: **SNAPSHOT** al solicitar (migración aditiva `gestion_orden.pago_mensajero` + `cierre_dia`/`cierre_bodega.total_pago_mensajero` + `down.sql`); **SOLO `entregada` paga** (→`cobroEntregado`); rechazada/reprog/devuelta = 0.00; **`cobroRechazado`→bodega FUERA DE ALCANCE → feature 56 (nueva, `pending`)**; resolución por zona+vehículo del mensajero (fallback tarifa por defecto); tarifa faltante = 0.00 no bloquea + aviso; snapshot 3 niveles + DTOs de 37/38/40 sin pantallas nuevas. **SIGUIENTE: `implementer`.** |
+| (ninguna en curso) | — | — | Feature 39 CERRADA 2026-07-12 (abajo). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** |
+
+> Feature 39 (pago al mensajero por zona en el cierre) CERRADA 2026-07-12: **impl COMPLETA (R1–R23+R7b) + reviewer APROBADO 0 bloqueantes** (verde REAL con round-trip de migración real: `init.sh` OK, typecheck 0, lint 0, **1829/1829 tests**, build OK, **SIN regresión 37/38/40**). Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Estado `done` + `history.md` + `review_39`. Pago vía `TarifaZonaMensajero` (zona+vehículo del mensajero, fallback tarifa por defecto), **SNAPSHOT** al solicitar (migración aditiva `20260712130000_pago_mensajero_cierre` en 3 niveles; snapshot inmutable verificado), **SOLO `entregada` paga**; `cobroRechazado`→bodega separado a la **feature 56**. Commit `941ea7c`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA menor: aviso tarifa-faltante por heurística frontend (candidato flag server-side).
 
 > Feature 56 (ingreso de bodega por rechazos, `cobroRechazado`) REGISTRADA `pending` 2026-07-12 (`depends_on: 39`): separada de la 39 por decisión del humano — el pago por rechazo va a la bodega, no al mensajero.
 

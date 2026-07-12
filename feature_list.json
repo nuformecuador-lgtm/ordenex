@@ -401,13 +401,13 @@
       "id": 39,
       "name": "pago al mensajero por zona en el cierre",
       "description": "Cada orden que llega a un cierre del dia debe traer el monto a PAGAR AL MENSAJERO segun la ZONA: la zona almacena cuanto se le paga por la ENTREGA y cuanto por el RECHAZO (feature 24), y como cada mensajero esta atado a una zona ese pago sale de su zona. Cada orden en el cierre expone el pago al mensajero segun su zona y su resultado de gestion (entrega o rechazo), y el modulo de cierre totaliza lo que se le debe pagar. Es distinto de lo que se COBRA al cliente/tienda (feature 18 cobros: valor_flete, comision_cod, etc.), concepto aparte. Backend principalmente; se integra en los modulos de cierre (features 37/38). Depende de las features 24 (pago por zona) y 37 (cierre del mensajero).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/39-pago-mensajero-zona",
       "depends_on": 24,
-      "status_note": "F1 (spec R1-R23+R7b en specs/39-pago-mensajero-zona/) COMPLETA + F1.4 APROBADA 2026-07-12. Money-critical. Pago via TarifaZonaMensajero (cobroEntregado/cobroRechazado por zona+vehiculo, fallback tarifa por defecto vehiculoId NULL). Decisiones: (1) SNAPSHOT al solicitar (migracion aditiva gestion_orden.pago_mensajero + cierre_dia/cierre_bodega.total_pago_mensajero + down.sql; vista viva deriva para preview); (2) SOLO entregada paga al mensajero (->cobroEntregado); rechazada/reprogramada/devuelta = 0.00; (3) cobroRechazado->bodega FUERA DE ALCANCE -> feature 56 nueva; (4) resolver por usuario.zonaId+vehiculoId con fallback; (5) tarifa faltante = 0.00 NO bloquea + aviso admin; (6) snapshot 3 niveles + exponer en DTOs 37/38/40 sin pantallas nuevas. NOTA: modelo real es TarifaZonaMensajero (la descripcion vieja 'zona almacena pago' esta desfasada por el #40). F2 (impl) EN CURSO."
+      "status_note": "done 2026-07-12; F1.4 APROBADA. Money-critical. Impl COMPLETA (R1-R23+R7b) + reviewer APROBADO 0 bloqueantes (verificacion round-trip real). VERDE: prisma OK, typecheck 0, lint 0, 1829/1829 tests, init.sh OK, build OK, SIN regresion 37/38/40. Pago via TarifaZonaMensajero (por zona+vehiculo del mensajero, fallback tarifa por defecto). SNAPSHOT al solicitar (migracion aditiva 20260712130000_pago_mensajero_cierre: gestion_orden.pago_mensajero + cierre_dia/cierre_bodega.total_pago_mensajero + down.sql; snapshot inmutable verificado). SOLO entregada paga (->cobroEntregado); rechazada/reprog/devuelta = 0.00. cobroRechazado->bodega FUERA DE ALCANCE (feature 56). Tarifa faltante = 0.00 no bloquea. Nuevos: ITarifaZonaMensajeroRepository/repo, lib/utils/pago-mensajero.ts. Commit 941ea7c. PENDIENTE PR a dev + merge (OK humano). DEUDA menor: aviso tarifa-faltante por heuristica frontend (falso positivo en entrega legitima de 0.00) -> candidato flag server-side (feature 56/follow-up)."
     },
     {
       "id": 40,
