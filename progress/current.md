@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 39 CERRADA 2026-07-12 (abajo). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** |
+| feature/56-ingreso-bodega-rechazos | fullstack | F1 done / **F2 en impl** | ▶️ **EN CURSO 2026-07-12** (rama ← `origin/dev` 3ae6419, con 37/55/38/40/39). **F1 (spec R1–R22+R7b+R23 en `specs/56-ingreso-bodega-rechazos/`) COMPLETA + F1.4 APROBADA 2026-07-12.** Money-critical, espejo de la 39 (el `cobroRechazado` va a la BODEGA, no al mensajero). Decisiones: **Q1** aplica si la tarifa de la zona tiene `cobroRechazado>0` (condición en la tarifa; reusa `resolvePagoTarifa` de la 39); **Q2** solo `rechazada`; **Q3** snapshot al solicitar; **Q4** 3 niveles (`gestion_orden.ingreso_bodega_rechazo` + `cierre_dia`/`cierre_bodega.total_ingreso_bodega_rechazos`, migración aditiva); **Q5** bodega=destino del cierre; **Q6** añadir flag **`tarifaFaltante` server-side** (arregla deuda m1 de la 39); **Q7** pantallas existentes. **SIGUIENTE: `implementer`.** |
+
+> Feature 39 CERRADA y **MERGEADA a `dev`** (PR #46) 2026-07-12. Cadena de cierres 37/38/40/39 completa en `dev`. Ver `history.md`.
 
 > Feature 39 (pago al mensajero por zona en el cierre) CERRADA 2026-07-12: **impl COMPLETA (R1–R23+R7b) + reviewer APROBADO 0 bloqueantes** (verde REAL con round-trip de migración real: `init.sh` OK, typecheck 0, lint 0, **1829/1829 tests**, build OK, **SIN regresión 37/38/40**). Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Estado `done` + `history.md` + `review_39`. Pago vía `TarifaZonaMensajero` (zona+vehículo del mensajero, fallback tarifa por defecto), **SNAPSHOT** al solicitar (migración aditiva `20260712130000_pago_mensajero_cierre` en 3 niveles; snapshot inmutable verificado), **SOLO `entregada` paga**; `cobroRechazado`→bodega separado a la **feature 56**. Commit `941ea7c`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** DEUDA menor: aviso tarifa-faltante por heurística frontend (candidato flag server-side).
 

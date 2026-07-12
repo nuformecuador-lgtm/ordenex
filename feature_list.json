@@ -592,12 +592,13 @@
       "id": 56,
       "name": "ingreso de bodega por rechazos (cobroRechazado)",
       "description": "SEPARADA de la feature 39 por decision del humano (2026-07-12): al resolver el pago por zona (TarifaZonaMensajero), el `cobroRechazado` (pago por RECHAZO) NO va al mensajero sino a la BODEGA (satelite o central) que corresponda a la orden rechazada. La feature 39 quedo acotada a pago al MENSAJERO = solo `entregada`->cobroEntregado. Esta feature modela y registra el INGRESO DE LA BODEGA por rechazos: por cada gestion `rechazada` en un cierre, calcula `cobroRechazado` (via TarifaZonaMensajero, misma resolucion por zona+vehiculo con fallback que la 39) y lo ATRIBUYE a la bodega responsable, snapshoteado en el flujo de cierre (probablemente en cierre_dia y agregado en cierre_bodega, espejo del pago-al-mensajero de la 39). Es un concepto de INGRESO de la bodega, distinto de: el pago al mensajero (39), lo que se COBRA al cliente/tienda (18), y la caja central de Ordenex (42). ABIERTO en spec: la regla exacta 'siempre y cuando aplique el pago a las rechazadas' (el humano indico que el pago por rechazo aplica condicionalmente); definir cuando aplica. Fullstack, money-critical. Depende de 39 (patron de snapshot del pago por zona) y 40 (cierre de bodega, donde se agrega el ingreso).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 39
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/56-ingreso-bodega-rechazos",
+      "depends_on": 39,
+      "status_note": "F1 (spec R1-R22+R7b+R23 en specs/56-ingreso-bodega-rechazos/) COMPLETA + F1.4 APROBADA 2026-07-12. Money-critical, espejo de la 39. Decisiones: Q1 aplica cuando la tarifa de la zona tiene cobroRechazado>0 (condicion vive en la tarifa; reusa resolvePagoTarifa de la 39, sin modelo nuevo); Q2 SOLO rechazada genera ingreso; Q3 SNAPSHOT al solicitar; Q4 3 niveles (gestion_orden.ingreso_bodega_rechazo + cierre_dia/cierre_bodega.total_ingreso_bodega_rechazos, migracion aditiva + down.sql); Q5 bodega = destino del cierre (central si esCentral, satelite si no); Q6 SI anadir flag tarifaFaltante SERVER-SIDE al DTO (arregla deuda m1 de la 39 para entregas y rechazos); Q7 pantallas de cierre existentes. F2 (impl) EN CURSO."
     }
   ]
 }
