@@ -21,6 +21,7 @@ const ordenes = byLabel("Órdenes");
 const config = byLabel("Configuración");
 const perfil = byLabel("Perfil");
 const cierreDia = byLabel("Cierre del día");
+const cierresAdmin = byLabel("Cierres del día");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -31,6 +32,9 @@ describe("puedeVer", () => {
     expect(puedeVer(ordenes, actor("mensajero"))).toBe(true);
     expect(puedeVer(perfil, actor("adminSatelite"))).toBe(true);
     expect(puedeVer(cierreDia, actor("mensajero"))).toBe(true);
+    // "Cierres del día" (admin) es visible para maestro y adminSatelite (R1).
+    expect(puedeVer(cierresAdmin, actor("maestro"))).toBe(true);
+    expect(puedeVer(cierresAdmin, actor("adminSatelite"))).toBe(true);
   });
 
   it("oculta el item cuando el rol no está autorizado", () => {
@@ -41,6 +45,10 @@ describe("puedeVer", () => {
     // "Cierre del día" es exclusivo del mensajero (R1).
     expect(puedeVer(cierreDia, actor("maestro"))).toBe(false);
     expect(puedeVer(cierreDia, actor("adminSatelite"))).toBe(false);
+    // "Cierres del día" (admin) NO lo ve el mensajero ni otros roles.
+    expect(puedeVer(cierresAdmin, actor("mensajero"))).toBe(false);
+    expect(puedeVer(cierresAdmin, actor("admin"))).toBe(false);
+    expect(puedeVer(cierresAdmin, actor("adminTienda"))).toBe(false);
   });
 
   it("oculta todo cuando no hay actor (sesión ausente o inválida)", () => {
@@ -51,10 +59,11 @@ describe("puedeVer", () => {
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve los 3 ítems en el orden real (Órdenes, Configuración, Perfil)", () => {
+  it("maestro ve Órdenes, Configuración, Cierres del día y Perfil en orden real", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
       "Órdenes",
       "Configuración",
+      "Cierres del día",
       "Perfil",
     ]);
   });
@@ -77,9 +86,9 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminSatelite ve solo Perfil", () => {
+  it("adminSatelite ve Cierres del día + Perfil", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Perfil"],
+      ["Cierres del día", "Perfil"],
     );
   });
 

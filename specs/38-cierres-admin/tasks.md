@@ -7,13 +7,14 @@ Zone: `fullstack` · complexity: `high` · depends_on: 37 (`done`) · branch: `f
 > (`requirements.md > Preguntas abiertas`). Si F1.4-e = "sin auditoría", se OMITEN T1/T2 y las
 > columnas `resuelto_*`/`motivo_rechazo` de los contratos.
 
-## T0 — Baseline verde
+## T0 — Baseline verde  ✅ [x]
 - **Hecho:** `./init.sh` en verde sobre `feature/38-cierres-admin` (creada desde `origin/dev`),
   `pnpm run typecheck` y suite de tests actual pasan antes de tocar nada.
+- Verificado 2026-07-12: `pnpm run typecheck` exit 0 sobre HEAD `ce6e731`.
 
 ## Bloque A — Modelo de datos (solo si F1.4-e = auditoría)
 
-### T1 — Migración aditiva `cierre_dia` (audit + motivo) · R14, R17
+### T1 — Migración aditiva `cierre_dia` (audit + motivo) · R14, R17  ✅ [x]
 - Añadir a `model CierreDia` (`db/schema.prisma`): `resueltoPor String? @map("resuelto_por")`,
   `resueltoAt DateTime? @map("resuelto_at")`, `motivoRechazo String? @map("motivo_rechazo")`,
   relación `resueltoPorUsuario Usuario? @relation("CierreResueltoPor", ...)`, lado opuesto en
@@ -23,12 +24,12 @@ Zone: `fullstack` · complexity: `high` · depends_on: 37 (`done`) · branch: `f
 - **Hecho:** `prisma validate` verde; `pnpm run db:migrate` aplica; `pnpm run db:rollback`
   revierte limpio (round-trip up→down→up); RLS de `cierre_dia` sigue habilitada.
 
-### T2 — Test de migración (round-trip + RLS) · R17 · [P] tras T1
+### T2 — Test de migración (round-trip + RLS) · R17 · [P] tras T1  ✅ [x]
 - **Hecho:** test de integración de migración verde (up/down y RLS habilitada en `cierre_dia`).
 
 ## Bloque B — Contratos e interfaces
 
-### T3 — Tipos y contratos de la 38 · R2–R14 · [P]
+### T3 — Tipos y contratos de la 38 · R2–R14 · [P]  ✅ [x]
 - `lib/interfaces/services/ICierresAdminService.ts`: `CierreAdminResumen`,
   `ListarCierresAdminServiceResult`, `CierreDetalleAdminServiceResult`, `Aprobar/RechazarResult`,
   `ICierresAdminService`. **Reusar** `CierreDetalleGestion`/`CierreTotales`/`CierreResultado` de
@@ -41,19 +42,19 @@ Zone: `fullstack` · complexity: `high` · depends_on: 37 (`done`) · branch: `f
 
 ## Bloque C — Repositorio (Prisma)
 
-### T4 — `CierresAdminRepository.findCierresByAlcance` · R2, R4, R5, R8, R9
+### T4 — `CierresAdminRepository.findCierresByAlcance` · R2, R4, R5, R8, R9  ✅ [x]
 - WHERE `destino_tipo` (+ `destino_zona_id` si adminSatelite), join `usuario`/`zona` para
   nombres, `orderBy solicitadoAt desc`, totales snapshot → string. Usa índice
   `[destinoTipo, destinoZonaId]`.
 - **Hecho:** unit/integración: dado un set multi-zona/tipo, devuelve solo el alcance pedido con
   totales string.
 
-### T5 — `findCierreByIdEnAlcance` (cierre + gestiones) · R6, R7, R9, R13 · [P] con T4
+### T5 — `findCierreByIdEnAlcance` (cierre + gestiones) · R6, R7, R9, R13 · [P] con T4  ✅ [x]
 - Cierre SOLO si casa el alcance en el WHERE (guardia R13); gestiones con `WITH_DETALLE`
   (reuso 37) WHERE `cierre_id = X`. `montoRecibido`/totales como string.
 - **Hecho:** integración: cierre en alcance → detalle con gestiones; cierre fuera de alcance → `null`.
 
-### T6 — `resolverCierre` (transición guardada) · R10, R11, R12, R13, R14, R15
+### T6 — `resolverCierre` (transición guardada) · R10, R11, R12, R13, R14, R15  ✅ [x]
 - `updateMany WHERE id = X AND estado = 'solicitado' AND <alcance>`, `data` = estado +
   `resueltoPor` + `resueltoAt` + `motivoRechazo`. `count===1`→`updated`; si 0, distinguir
   `conflict` (en alcance) de `fuera_de_alcance`. NO toca `gestion_orden` ni otras tablas (R15).
@@ -62,23 +63,23 @@ Zone: `fullstack` · complexity: `high` · depends_on: 37 (`done`) · branch: `f
 
 ## Bloque D — Servicio
 
-### T7 — `CierresAdminService` + `resolveAlcance` · R1, R2, R3 (depende de T3)
+### T7 — `CierresAdminService` + `resolveAlcance` · R1, R2, R3 (depende de T3)  ✅ [x]
 - DI por constructor (`ICierresAdminRepository`, `IZonaRepository`, `IOrdenRepository`,
   `ISignedUrlProvider`). `resolveAlcance(actor)`: maestro→central; adminSatelite→satelite+zona
   (o `sinZona` si `findUsuarioZonaId` = null); otro rol → forbidden.
 - **Hecho:** unit (dobles): cada rol resuelve su alcance; adminSatelite sin zona → `sinZona`;
   rol inválido → `forbidden`.
 
-### T8 — `listarCierresAdmin` · R2, R3, R4, R5, R8, R9 (depende de T4, T7)
+### T8 — `listarCierresAdmin` · R2, R3, R4, R5, R8, R9 (depende de T4, T7)  ✅ [x]
 - Parte `pendientes` (solicitado) / `historico` (aprobado/rechazado); totales snapshot string.
 - **Hecho:** unit: pendientes vs histórico correctos por alcance; sinZona → vacío.
 
-### T9 — `verCierreDetalle` (con evidencias firmadas) · R6, R7, R9, R13, R16 (depende de T5, T7)
+### T9 — `verCierreDetalle` (con evidencias firmadas) · R6, R7, R9, R13, R16 (depende de T5, T7)  ✅ [x]
 - Firma en lote `evidenciaStoragePath` (doble `ISignedUrlProvider`); agrupa por resultado
   (mapper reuso 37). Fuera de alcance → `no_encontrada`. Solo lectura (R16).
 - **Hecho:** unit: detalle agrupado con URL firmada (no path); id ajeno → `no_encontrada`; no muta.
 
-### T10 — `aprobarCierre` / `rechazarCierre` · R10, R11, R12, R13, R14, R15 (depende de T6, T7)
+### T10 — `aprobarCierre` / `rechazarCierre` · R10, R11, R12, R13, R14, R15 (depende de T6, T7)  ✅ [x]
 - Aprobar: transición → `ok`/`conflict`/`no_encontrada`/`forbidden`. Rechazar: exige `motivo`
   (→ `validation_error` si vacío), persiste `motivoRechazo`. Mapea el resultado del repo.
 - **Hecho:** unit: aprobar solicitado → ok; rechazo sin motivo → validation_error; con motivo →
@@ -86,7 +87,7 @@ Zone: `fullstack` · complexity: `high` · depends_on: 37 (`done`) · branch: `f
 
 ## Bloque E — Acción (Server Actions)
 
-### T11 — `lib/actions/cierres-admin.ts` · R1, R11, R13 (depende de T8–T10)
+### T11 — `lib/actions/cierres-admin.ts` · R1, R11, R13 (depende de T8–T10)  ✅ [x]
 - `'use server'`; `listarCierresAdmin`/`verCierreDetalle`/`aprobarCierre`/`rechazarCierre` con
   `resolveActorFromSession` + `withErrorHandler` + zod (mutaciones) + deps inyectables; borde
   resuelve `unauthenticated`. Patrón `lib/actions/cierre-dia.ts`.
@@ -95,29 +96,29 @@ Zone: `fullstack` · complexity: `high` · depends_on: 37 (`done`) · branch: `f
 
 ## Bloque F — UI
 
-### T12 — Página `app/(app)/cierres-admin/page.tsx` · R1, R3 (depende de T11)
+### T12 — Página `app/(app)/cierres-admin/page.tsx` · R1, R3 (depende de T11)  ✅ [x]
 - Server Component: `resolveActorFromSession`; `rol ∉ {maestro, adminSatelite}` → `notFound()`.
   Pre-fetch `listarCierresAdmin`; pasa datos por props; render vacío + aviso si `sinZona`.
 - **Hecho:** integración: rol no admin → notFound; admin → módulo con datos; adminSatelite sin
   zona → estado vacío accionable.
 
-### T13 — `_components/CierresAdminModule.tsx` + detalle · R4–R8, R10, R11 · [P] tras T12
+### T13 — `_components/CierresAdminModule.tsx` + detalle · R4–R8, R10, R11 · [P] tras T12  ✅ [x]
 - Secciones Pendientes/Histórico (DataTable), Modal/Sheet de detalle (reuso render 37), visor de
   evidencia firmada, panel de totales, botones Aprobar/Rechazar (Rechazar exige motivo). Montos
   string sin `parseFloat`. Toast + refresco; maneja conflict/no_encontrada/forbidden.
 - **Hecho:** el módulo lista, abre detalle, aprueba y rechaza (con motivo) contra las actions.
 
-### T14 — Sidebar item "Cierres del día" (maestro/adminSatelite) · R1 · [P] tras T12
+### T14 — Sidebar item "Cierres del día" (maestro/adminSatelite) · R1 · [P] tras T12  ✅ [x]
 - **Hecho:** el item aparece para ambos roles; la defensa real sigue siendo el `notFound` (T12).
 
 ## Bloque G — E2E y cierre (si F1.4-f = sí)
 
-### T15 — E2E Playwright del flujo · trazabilidad E2E (depende de T13)
+### T15 — E2E Playwright del flujo · trazabilidad E2E (depende de T13)  ✅ [x]
 - admin ve cierre `solicitado` → abre detalle (totales+evidencia) → aprueba/rechaza → pasa a
   histórico. Escrito, ejecución diferida (patrón del repo, features 33/34/36/37).
 - **Hecho:** spec E2E escrita y enlazada en `progress/impl_38-cierres-admin.md`.
 
-### T16 — Trazabilidad + verificación final · todos los R
+### T16 — Trazabilidad + verificación final · todos los R  ✅ [x]
 - Completar `progress/impl_38-cierres-admin.md` con el mapa `R1..R17` → test concreto (cada R al
   menos un test; storage mockeado).
 - **Hecho:** `./init.sh` verde; `pnpm run typecheck`, `lint` y toda la suite de tests pasan;

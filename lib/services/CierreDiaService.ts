@@ -142,7 +142,9 @@ export class CierreDiaService implements ICierreDiaService {
 }
 
 // R4/R5/R6: arma el DTO de detalle; la evidencia se expone SOLO firmada (R5).
-function toDetalleDTO(
+// Exportado para reuso por CierresAdminService (feature 38): el detalle admin usa el
+// MISMO mapper de gestion -> DTO (reuso F1.4-b).
+export function toDetalleDTO(
   g: CierreGestionPendienteRow,
   urlByPath: Record<string, string>,
 ): CierreDetalleGestion {

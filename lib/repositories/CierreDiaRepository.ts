@@ -13,8 +13,10 @@ const ESTADO_SOLICITADO = "solicitado";
 type CierrePrismaClient = Pick<PrismaClient, "gestionOrden" | "orden" | "cierreDia" | "$transaction">;
 
 // Proyeccion de una gestion pendiente de cierre con el detalle de la orden via las
-// relaciones existentes (patron GestionOrdenRepository.WITH_ASIGNACION).
-const WITH_DETALLE = {
+// relaciones existentes (patron GestionOrdenRepository.WITH_ASIGNACION). Exportada
+// para reuso por CierresAdminRepository (feature 38): mismo detalle de gestion,
+// distinto WHERE (cierre_id = X en vez de cierre_id IS NULL).
+export const WITH_DETALLE = {
   select: {
     id: true,
     ordenId: true,
@@ -41,14 +43,16 @@ const WITH_DETALLE = {
   },
 } as const;
 
-type DetalleRow = Prisma.GestionOrdenGetPayload<typeof WITH_DETALLE>;
+export type DetalleRow = Prisma.GestionOrdenGetPayload<typeof WITH_DETALLE>;
 
 // Money-safe: Decimal -> string con escala 2 fija (nunca number/parseFloat).
 function decimalToString(d: Prisma.Decimal | null): string | null {
   return d === null ? null : d.toFixed(2);
 }
 
-function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
+// Mapper de la proyeccion WITH_DETALLE a la fila de dominio. Exportado para reuso
+// por CierresAdminRepository (feature 38).
+export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
   return {
     gestionId: row.id,
     ordenId: row.ordenId,

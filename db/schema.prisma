@@ -113,6 +113,7 @@ model Usuario {
   ordenesAsignadas    Orden[]              @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
   gestionesRealizadas GestionOrden[]       @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
   cierresRealizados   CierreDia[]          @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
+  cierresResueltos    CierreDia[]          @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -425,16 +426,21 @@ model CierreDia {
   totalTransferencia Decimal           @default(0) @map("total_transferencia") @db.Decimal(12, 2) // snapshot R14
   totalGeneral       Decimal           @default(0) @map("total_general") @db.Decimal(12, 2) // snapshot R14
   solicitadoAt       DateTime          @default(now()) @map("solicitado_at")
+  resueltoPor        String?           @map("resuelto_por") // feature 38/R14: FK -> usuario (admin actor); NULL mientras solicitado
+  resueltoAt         DateTime?         @map("resuelto_at") // feature 38/R14: marca de tiempo de la resolucion
+  motivoRechazo      String?           @map("motivo_rechazo") // feature 38/R11: obligatorio SOLO al rechazar; NULL en aprobado/solicitado
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
 
-  mensajero   Usuario        @relation("CierreMensajero", fields: [mensajeroId], references: [id])
-  destinoZona Zona           @relation(fields: [destinoZonaId], references: [id])
-  gestiones   GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
+  mensajero          Usuario        @relation("CierreMensajero", fields: [mensajeroId], references: [id])
+  destinoZona        Zona           @relation(fields: [destinoZonaId], references: [id])
+  resueltoPorUsuario Usuario?       @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
+  gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
 
   @@index([mensajeroId])
   @@index([destinoTipo, destinoZonaId]) // feature 38: filtra por rol+zona destino
   @@index([estado])
+  @@index([resueltoPor]) // feature 38/R14: auditoria de quien resolvio
   @@map("cierre_dia")
 }
 
