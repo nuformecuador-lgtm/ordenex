@@ -102,7 +102,11 @@ describe("no se modifico ninguna migracion previa (R3)", () => {
         !d.endsWith("_vehiculos") &&
         !d.endsWith("_postulacion_mensajero") &&
         !d.endsWith("_usuario_fulfillment") && // feature 27: apendida despues
-        !d.endsWith("_rename_cobro_tarifas"), // feature 24: apendida despues
+        !d.endsWith("_rename_cobro_tarifas") && // feature 24: apendida despues
+        !d.endsWith("_seed_roles_catalogo") && // seed roles: apendida despues
+        !d.endsWith("_tarifa_zona_mensajero_zona_vehiculo_unique") && // feature 24: apendida despues
+        !d.endsWith("_provincia_zona_id_nullable") && // geografia sin zona: apendida despues
+        !d.endsWith("_zona_distrito_nm"), // feature 24 N:M: apendida despues
     );
     const maxPrevio = previos[previos.length - 1];
     // El timestamp (prefijo) de vehiculos es mayor que el ultimo previo.

@@ -1,0 +1,52 @@
+import type { ArbolZonas, ZonaDTO } from "@/lib/types/zona";
+
+// Datos listos para persistir una fila de tarifa_zona_mensajero (numbers; el repo
+// convierte a Prisma.Decimal). vehiculoId ya normalizado a string | null.
+export interface TarifaZonaMensajeroData {
+  cobroEntregado: number;
+  cobroRechazado: number;
+  vehiculoId: string | null;
+}
+
+// Crear/actualizar comparten forma: reemplazo completo de datos + N:M + tarifas.
+export interface CreateZonaData {
+  nombre: string;
+  cobroVehiculo: boolean;
+  distritoIds: string[];
+  tarifas: TarifaZonaMensajeroData[];
+}
+export type UpdateZonaData = CreateZonaData;
+
+export interface ListZonasParams {
+  skip: number;
+  take: number;
+  includeTarifas: boolean;
+}
+
+export interface ListZonasResult {
+  items: ZonaDTO[];
+  total: number;
+}
+
+// Resultado del borrado fisico: `referenced` = la zona esta referenciada por
+// provincia/orden/tarifas (FK RESTRICT), no se puede borrar.
+export type DeleteZonaResult = "ok" | "not_found" | "referenced";
+
+export interface IZonaRepository {
+  /** Crea la zona + su N:M de distritos + sus tarifas, en una transaccion. */
+  create(data: CreateZonaData): Promise<ZonaDTO>;
+  /** null si no existe. Carga tarifas solo si includeTarifas. */
+  findById(id: string, includeTarifas: boolean): Promise<ZonaDTO | null>;
+  /** Listado paginado (orden por nombre asc). include tarifas opcional. */
+  list(params: ListZonasParams): Promise<ListZonasResult>;
+  /** Reemplaza datos + N:M + tarifas; null si la zona no existe. */
+  update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null>;
+  /** Borrado FISICO (cascade de zona_distrito y tarifas). */
+  hardDelete(id: string): Promise<DeleteZonaResult>;
+  /** Arbol zona -> canton -> distrito indexado por nombre normalizado. */
+  arbol(): Promise<ArbolZonas>;
+  /** Cuenta cuantos de `ids` existen como distrito (validacion de existencia). */
+  countExistingDistritos(ids: string[]): Promise<number>;
+  /** Cuenta cuantos de `ids` existen como vehiculo (validacion de existencia). */
+  countExistingVehiculos(ids: string[]): Promise<number>;
+}

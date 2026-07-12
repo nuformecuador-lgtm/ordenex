@@ -93,10 +93,9 @@ describe("migracion de rename cobro -> tarifas (feature 24)", () => {
     expect(s).toContain('ALTER INDEX "cobro_created_at_idx" RENAME TO "tarifas_created_at_idx";');
   });
 
-  it("agrega zona_id NULLABLE a tarifas con FK e indice", () => {
+  it("agrega zona_id NOT NULL a tarifas con FK e indice (feature 24: tarifa por zona)", () => {
     const s = sql(RENAME);
-    expect(s).toContain('ALTER TABLE "tarifas" ADD COLUMN "zona_id" TEXT;');
-    expect(s).not.toContain('ADD COLUMN "zona_id" TEXT NOT NULL');
+    expect(s).toContain('ALTER TABLE "tarifas" ADD COLUMN "zona_id" TEXT NOT NULL;');
     expect(s).toContain('CREATE INDEX "tarifas_zona_id_idx" ON "tarifas"("zona_id");');
     expect(s).toContain(
       'ALTER TABLE "tarifas" ADD CONSTRAINT "tarifas_zona_id_fkey" FOREIGN KEY ("zona_id") REFERENCES "zona"("id")',

@@ -212,16 +212,17 @@ model Zona {
   ordenes              Orden[]
   tarifas              Tarifa[]
   tarifaZonaMensajeros TarifaZonaMensajero[]
+  distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
 
   @@map("zona")
 }
 
 model Provincia {
-  id     String @id @default(uuid())
+  id     String  @id @default(uuid())
   nombre String
-  zonaId String @map("zona_id")
+  zonaId String? @map("zona_id") // nullable: la geografia se puede sembrar sin zona asignada
 
-  zona     Zona     @relation(fields: [zonaId], references: [id])
+  zona     Zona?    @relation(fields: [zonaId], references: [id])
   cantones Canton[]
   ordenes  Orden[]
 
@@ -247,11 +248,28 @@ model Distrito {
   nombre   String
   cantonId String @map("canton_id")
 
-  canton  Canton  @relation(fields: [cantonId], references: [id])
+  canton  Canton         @relation(fields: [cantonId], references: [id])
   ordenes Orden[]
+  zonas   ZonaDistrito[] // feature 24: relacion N:M con zona
 
   @@index([cantonId])
   @@map("distrito")
+}
+
+// Feature 24 (redefinida): tabla puente N:M zona <-> distrito. Par (zona, distrito)
+// unico. ON DELETE CASCADE en ambas FKs (ver migracion zona_distrito_nm).
+model ZonaDistrito {
+  id         String @id @default(uuid())
+  zonaId     String @map("zona_id")
+  distritoId String @map("distrito_id")
+
+  zona     Zona     @relation(fields: [zonaId], references: [id], onDelete: Cascade)
+  distrito Distrito @relation(fields: [distritoId], references: [id], onDelete: Cascade)
+
+  @@unique([zonaId, distritoId])
+  @@index([zonaId])
+  @@index([distritoId])
+  @@map("zona_distrito")
 }
 
 // Orden de negocio (R7-R14a). Borrado logico via deleted_at (soft delete).

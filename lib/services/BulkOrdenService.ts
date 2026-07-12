@@ -86,6 +86,16 @@ function resolveGeo(
   }
   const provincia = provinciaResult.row;
 
+  // La zona de la orden se deriva de la provincia (orden.zona_id es NOT NULL).
+  // Si la provincia aun no tiene zona asignada, la fila no se puede resolver.
+  const zonaId = provincia.zonaId;
+  if (zonaId === null) {
+    return {
+      ok: false,
+      fieldErrors: { provincia: ["la provincia no tiene zona asignada"] },
+    };
+  }
+
   const cantonResult = lookup(cantonIndex, `${provincia.id}::${normalize(raw.canton)}`);
   if (cantonResult.status !== "found") {
     return {
@@ -104,7 +114,7 @@ function resolveGeo(
   if (raw.distrito.trim() === "") {
     return {
       ok: true,
-      geo: { provinciaId: provincia.id, zonaId: provincia.zonaId, cantonId: canton.id, distritoId: null },
+      geo: { provinciaId: provincia.id, zonaId, cantonId: canton.id, distritoId: null },
     };
   }
 
@@ -126,7 +136,7 @@ function resolveGeo(
     ok: true,
     geo: {
       provinciaId: provincia.id,
-      zonaId: provincia.zonaId,
+      zonaId,
       cantonId: canton.id,
       distritoId: distritoResult.row.id,
     },

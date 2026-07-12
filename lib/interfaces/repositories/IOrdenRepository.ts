@@ -73,7 +73,7 @@ export class NumRemisionDuplicadoError extends Error {
 export interface ProvinciaRow {
   id: string;
   nombre: string;
-  zonaId: string;
+  zonaId: string | null; // nullable: la provincia puede no tener zona asignada aun
 }
 
 export interface CantonRow {
