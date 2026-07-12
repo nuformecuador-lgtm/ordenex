@@ -93,9 +93,10 @@ Zone: `fullstack` · complexity: `high` · depends_on: 38 (`done`) · branch: `f
   (RLS habilitada), R25 (rollback round-trip). **Hecho:** `progress/impl_40-*.md` mapea R→ruta de test.
 
 ## T10 — E2E Playwright (`prov. F1.4-l`) [P tras T8]
-- [ ] E2E del flujo money-critical: adminSatelite consolida → solicita → maestro ve la cola → abre el
-  detalle agregado → aprueba/rechaza → pasa a histórico. **Hecho:** escrito (ejecución diferida,
-  patrón repo 33/34/36/37/38).
+- [x] E2E del flujo money-critical: adminSatelite consolida → solicita → maestro ve la cola → abre el
+  detalle agregado → aprueba/rechaza → pasa a histórico. **Hecho:** `e2e/cierre-bodega-satelite.spec.ts`
+  escrito (ejecución diferida, no corre bajo `pnpm test`; requiere dev server + DB sembrada), espejando
+  el estilo y la "EXECUTION NOTE" de `e2e/cierres-admin.spec.ts` (patrón repo 33/34/36/37/38).
 
 ## T11 — Verificación final (gate de "done")
 - [ ] `npx prisma validate` OK · `pnpm typecheck` 0 · `pnpm lint` 0 · suite de tests verde (con los
