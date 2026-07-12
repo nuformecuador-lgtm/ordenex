@@ -18,6 +18,7 @@ function detalleRow(overrides: Record<string, unknown> = {}) {
     fechaReprogramacion: null,
     evidenciaStoragePath: "o1/entregada-1.jpg",
     pagoMensajero: null, // feature 39: snapshot (null salvo override)
+    ingresoBodegaRechazo: null, // feature 56: snapshot (null salvo override)
     orden: {
       numGuia: 10,
       numRemision: "REM-1",
@@ -60,7 +61,7 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
   it("R4/R9: mapea el detalle y serializa montoRecibido Decimal -> string toFixed(2)", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findMany.mockResolvedValue([
-      detalleRow({ pagoMensajero: new Prisma.Decimal("5.00") }), // feature 39: snapshot presente
+      detalleRow({ pagoMensajero: new Prisma.Decimal("5.00"), ingresoBodegaRechazo: new Prisma.Decimal("3.00") }), // feature 39/56: snapshots presentes
       detalleRow({
         id: "g2",
         resultado: "reprogramada",
@@ -70,6 +71,7 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
         fechaReprogramacion: new Date("2026-07-20T00:00:00.000Z"),
         evidenciaStoragePath: null,
         pagoMensajero: null, // feature 39: aun sin cerrar / snapshot ausente
+        ingresoBodegaRechazo: null, // feature 56: aun sin cerrar / snapshot ausente
         orden: { ...detalleRow().orden, distrito: null },
       }),
     ]);
@@ -87,9 +89,11 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
       tiendaNombre: "Tienda X",
       evidenciaStoragePath: "o1/entregada-1.jpg",
       pagoMensajero: "5.00", // feature 39/R23: snapshot Decimal->string
+      ingresoBodegaRechazo: "3.00", // feature 56/R22: snapshot Decimal->string
     });
     expect(typeof rows[0].montoRecibido).toBe("string");
     expect(typeof rows[0].pagoMensajero).toBe("string");
+    expect(typeof rows[0].ingresoBodegaRechazo).toBe("string");
     expect(rows[1]).toMatchObject({
       resultado: "reprogramada",
       montoRecibido: null,
@@ -98,6 +102,7 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
       fechaReprogramacion: "2026-07-20", // ISO date
       distritoNombre: null,
       pagoMensajero: null, // feature 39: sin snapshot -> null
+      ingresoBodegaRechazo: null, // feature 56: sin snapshot -> null
     });
   });
 });
@@ -171,6 +176,9 @@ describe("CierreDiaRepository.crearCierre (R13/R14)", () => {
       // Feature 39/R14: pago snapshoteado por gestion (entregada 5.00; resto 0.00) + total.
       pagoByGestionId: { g1: "5.00", g2: "0.00", g3: "0.00" },
       totalPagoMensajero: "5.00",
+      // Feature 56/R11/R13: ingreso snapshoteado por gestion (rechazada g2 3.00; resto 0.00) + total.
+      ingresoByGestionId: { g1: "0.00", g2: "3.00", g3: "0.00" },
+      totalIngresoBodegaRechazos: "3.00",
     });
 
     expect(id).toBe("c1");
@@ -187,6 +195,9 @@ describe("CierreDiaRepository.crearCierre (R13/R14)", () => {
     expect(createArg.data.totalGeneral.toFixed(2)).toBe("15.50");
     expect(createArg.data.totalPagoMensajero).toBeInstanceOf(Prisma.Decimal); // R14
     expect(createArg.data.totalPagoMensajero.toFixed(2)).toBe("5.00");
+    // Feature 56/R13: total_ingreso_bodega_rechazos como Prisma.Decimal, en el MISMO INSERT.
+    expect(createArg.data.totalIngresoBodegaRechazos).toBeInstanceOf(Prisma.Decimal);
+    expect(createArg.data.totalIngresoBodegaRechazos.toFixed(2)).toBe("3.00");
 
     // R13: la PRIMERA escritura vincula las gestiones sin cierre del propio mensajero.
     const calls = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls;
@@ -195,13 +206,23 @@ describe("CierreDiaRepository.crearCierre (R13/R14)", () => {
 
     // R14: luego puebla pago_mensajero AGRUPADO por valor (guardia por cierreId=c1), en la
     // misma tx. Grupo 5.00 -> [g1]; grupo 0.00 -> [g2,g3].
-    const pagoCalls = calls.slice(1);
+    const pagoCalls = calls.filter((c) => c[0].data.pagoMensajero !== undefined);
     expect(pagoCalls).toHaveLength(2);
     const c5 = pagoCalls.find((c) => c[0].data.pagoMensajero.toFixed(2) === "5.00");
     const c0 = pagoCalls.find((c) => c[0].data.pagoMensajero.toFixed(2) === "0.00");
     expect(c5?.[0].where).toEqual({ id: { in: ["g1"] }, cierreId: "c1" });
     expect(c0?.[0].where).toEqual({ id: { in: ["g2", "g3"] }, cierreId: "c1" });
     expect(c5?.[0].data.pagoMensajero).toBeInstanceOf(Prisma.Decimal);
+
+    // Feature 56/R13: en la MISMA tx puebla ingreso_bodega_rechazo AGRUPADO por valor
+    // (guardia por cierreId=c1). Grupo 3.00 -> [g2]; grupo 0.00 -> [g1,g3].
+    const ingresoCalls = calls.filter((c) => c[0].data.ingresoBodegaRechazo !== undefined);
+    expect(ingresoCalls).toHaveLength(2);
+    const i3 = ingresoCalls.find((c) => c[0].data.ingresoBodegaRechazo.toFixed(2) === "3.00");
+    const i0 = ingresoCalls.find((c) => c[0].data.ingresoBodegaRechazo.toFixed(2) === "0.00");
+    expect(i3?.[0].where).toEqual({ id: { in: ["g2"] }, cierreId: "c1" });
+    expect(i0?.[0].where).toEqual({ id: { in: ["g1", "g3"] }, cierreId: "c1" });
+    expect(i3?.[0].data.ingresoBodegaRechazo).toBeInstanceOf(Prisma.Decimal);
   });
 });
 
@@ -219,6 +240,7 @@ describe("CierreDiaRepository.findCierresByMensajero (R18)", () => {
         totalTransferencia: new Prisma.Decimal("5.5"),
         totalGeneral: new Prisma.Decimal("15.5"),
         totalPagoMensajero: new Prisma.Decimal("7.5"), // feature 39/R13: snapshot del pago
+        totalIngresoBodegaRechazos: new Prisma.Decimal("3"), // feature 56/R12: snapshot del ingreso
         solicitadoAt: new Date("2026-07-12T10:00:00.000Z"),
       },
     ]);
@@ -235,6 +257,7 @@ describe("CierreDiaRepository.findCierresByMensajero (R18)", () => {
       destinoZonaId: "z-central",
       totales: { efectivo: "10.00", simpe: "0.00", transferencia: "5.50", general: "15.50" },
       totalPagoMensajero: "7.50", // feature 39/R13: snapshot money-safe STRING
+      totalIngresoBodegaRechazos: "3.00", // feature 56/R12: snapshot money-safe STRING
       solicitadoAt: "2026-07-12T10:00:00.000Z",
     });
   });

@@ -54,6 +54,7 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
         destinoZonaId: input.destinoZonaId,
         totales: input.totales,
         totalPagoMensajero: input.totalPagoMensajero, // feature 39/R13: snapshot
+        totalIngresoBodegaRechazos: input.totalIngresoBodegaRechazos, // feature 56/R12: snapshot
         solicitadoAt: "2026-07-12T10:00:00.000Z",
       });
       pendientes = []; // R13: consume las gestiones pendientes (cierre_id seteado)
@@ -97,6 +98,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     fechaReprogramacion: null,
     evidenciaStoragePath: null,
     pagoMensajero: null, // feature 39: snapshot (derivado en vivo por el service)
+    ingresoBodegaRechazo: null, // feature 56: snapshot (derivado en vivo por el service)
     ...overrides,
   };
 }

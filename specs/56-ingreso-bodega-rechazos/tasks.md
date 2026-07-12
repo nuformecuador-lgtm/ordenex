@@ -10,7 +10,7 @@
   lint y `pnpm test` en verde (1829/1829 de la 39 como piso).
 - Releer la sección F1.4 aprobada de `requirements.md` y ajustar R3/R4/R5/R23 al texto
   aprobado por el humano ANTES de tocar código.
-- **Hecho:** init.sh verde + decisiones F1.4 transcritas en el encabezado del spec.
+- **Hecho:** init.sh verde + decisiones F1.4 transcritas en el encabezado del spec. ✅ [x] (baseline 1829/1829, init OK)
 
 ## T1 — Migración aditiva (R21) [depende de T0]
 - Crear `db/migrations/<timestamp>_ingreso_bodega_rechazos/migration.sql`: 3 `ADD COLUMN`

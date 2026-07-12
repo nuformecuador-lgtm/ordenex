@@ -16,6 +16,7 @@ function consolidableDbRow(overrides: Record<string, unknown> = {}) {
     totalTransferencia: new Prisma.Decimal("0"),
     totalGeneral: new Prisma.Decimal("15.5"),
     totalPagoMensajero: new Prisma.Decimal("5"), // feature 39/R18: snapshot del pago
+    totalIngresoBodegaRechazos: new Prisma.Decimal("3"), // feature 56/R17: snapshot del ingreso
     mensajero: { nombre: "Ana Mensajera" },
     ...overrides,
   };
@@ -60,9 +61,11 @@ describe("CierreBodegaRepository.findCierresDiaConsolidables (R5/R10)", () => {
       mensajeroNombre: "Ana Mensajera",
       totales: { efectivo: "10.00", simpe: "5.50", transferencia: "0.00", general: "15.50" },
       totalPagoMensajero: "5.00", // feature 39/R18: snapshot money-safe STRING
+      totalIngresoBodegaRechazos: "3.00", // feature 56/R17: snapshot money-safe STRING
     });
     expect(typeof rows[0].totales.general).toBe("string");
     expect(typeof rows[0].totalPagoMensajero).toBe("string");
+    expect(typeof rows[0].totalIngresoBodegaRechazos).toBe("string");
   });
 });
 
@@ -114,6 +117,7 @@ describe("CierreBodegaRepository.crearCierreBodega (R9/R10/R8)", () => {
       cierreDiaIds: ["cd1", "cd2"],
       totales: { efectivo: "10.01", simpe: "5.55", transferencia: "100.44", general: "116.00" },
       totalPagoMensajero: "10.75", // feature 39/R19: snapshot agregado del pago
+      totalIngresoBodegaRechazos: "6.50", // feature 56/R18: snapshot agregado del ingreso
     });
 
     expect(id).toBe("cb1");
@@ -130,6 +134,9 @@ describe("CierreBodegaRepository.crearCierreBodega (R9/R10/R8)", () => {
     // R19: snapshot agregado del pago a mensajeros como Prisma.Decimal.
     expect(createArg.data.totalPagoMensajero).toBeInstanceOf(Prisma.Decimal);
     expect(createArg.data.totalPagoMensajero.toFixed(2)).toBe("10.75");
+    // feature 56/R18: snapshot agregado del ingreso de bodega como Prisma.Decimal, mismo INSERT.
+    expect(createArg.data.totalIngresoBodegaRechazos).toBeInstanceOf(Prisma.Decimal);
+    expect(createArg.data.totalIngresoBodegaRechazos.toFixed(2)).toBe("6.50");
 
     // R9: vincula SOLO los consolidables de la zona (guardia concurrencia-segura).
     const updArg = (tx.cierreDia.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -167,6 +174,7 @@ describe("CierreBodegaRepository.crearCierreBodega (R9/R10/R8)", () => {
         cierreDiaIds: ["cd1"],
         totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
         totalPagoMensajero: "0.00",
+        totalIngresoBodegaRechazos: "0.00",
       }),
     ).rejects.toBe(p2002);
     // no llega a vincular si la INSERT fallo.
@@ -188,6 +196,7 @@ describe("CierreBodegaRepository.findCierresBodegaByZona (F1.4-h)", () => {
         totalTransferencia: new Prisma.Decimal("5.5"),
         totalGeneral: new Prisma.Decimal("15.5"),
         totalPagoMensajero: new Prisma.Decimal("7.5"), // feature 39/R19/R20: snapshot agregado
+        totalIngresoBodegaRechazos: new Prisma.Decimal("6.5"), // feature 56/R18/R19: snapshot agregado
         solicitadoAt: new Date("2026-07-12T10:00:00.000Z"),
         resueltoAt: new Date("2026-07-12T12:00:00.000Z"),
         motivoRechazo: null,
@@ -211,6 +220,7 @@ describe("CierreBodegaRepository.findCierresBodegaByZona (F1.4-h)", () => {
       estado: "aprobado",
       totales: { efectivo: "10.00", simpe: "0.00", transferencia: "5.50", general: "15.50" },
       totalPagoMensajero: "7.50", // feature 39/R19/R20: snapshot money-safe STRING
+      totalIngresoBodegaRechazos: "6.50", // feature 56/R18/R19: snapshot money-safe STRING
       cantidadCierres: 3,
       solicitadoAt: "2026-07-12T10:00:00.000Z",
       resueltoAt: "2026-07-12T12:00:00.000Z",

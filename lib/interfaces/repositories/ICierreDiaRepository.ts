@@ -34,6 +34,12 @@ export interface CierreGestionPendienteRow {
   // en gestiones aun sin cerrar / cierres pre-migracion (R22). En la vista EN VIVO (37)
   // el service lo DERIVA; en el detalle admin (38/40) es el snapshot leido de la columna.
   pagoMensajero: string | null;
+  // Feature 56: ingreso de bodega por rechazo SNAPSHOTEADO de la gestion (money-safe
+  // STRING). `null` en gestiones aun sin cerrar / cierres pre-migracion (R21/R22). Solo
+  // `rechazada` con tarifa que aplica es != 0.00. Concepto INDEPENDIENTE de pagoMensajero
+  // (R7b) y del dinero recibido (R20). En vivo (37) el service lo DERIVA; en admin (38/40)
+  // es el snapshot leido de la columna.
+  ingresoBodegaRechazo: string | null;
 }
 
 // Datos para crear la solicitud de cierre (R13/R14). Totales snapshot como STRING.
@@ -46,6 +52,11 @@ export interface CrearCierreInput {
   // + total del cierre (STRING). Se persisten en la MISMA tx que crea el cierre.
   pagoByGestionId: Record<string, string>;
   totalPagoMensajero: string;
+  // Feature 56/R11/R12/R13: ingreso de bodega por rechazo snapshoteado por gestion
+  // (gestionId -> STRING) + total del cierre (STRING). Se persisten en la MISMA tx que
+  // crea el cierre, en paralelo al pago al mensajero.
+  ingresoByGestionId: Record<string, string>;
+  totalIngresoBodegaRechazos: string;
 }
 
 // Fila cruda de un cierre pasado (R18); el repo la mapea a CierrePasadoDTO.

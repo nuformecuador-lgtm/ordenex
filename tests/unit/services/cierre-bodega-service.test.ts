@@ -29,6 +29,7 @@ function consolidableRow(
     mensajeroNombre: "Ana Mensajera",
     totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
     totalPagoMensajero: "0.00", // feature 39/R18: snapshot del pago (override en tests R18/R19)
+    totalIngresoBodegaRechazos: "0.00", // feature 56/R17: snapshot del ingreso (override en tests R17/R18)
     ...overrides,
   };
 }
@@ -280,5 +281,47 @@ describe("CierreBodegaService — pago a mensajeros agregado (R18/R19)", () => {
     expect(r.status).toBe("ok");
     const arg = (repo.crearCierreBodega as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.totalPagoMensajero).toBe("10.75"); // R19: snapshot agregado en la tx
+  });
+});
+
+// --- Feature 56: ingreso de bodega por rechazos agregado (R17/R18) ---
+
+describe("CierreBodegaService — ingreso de bodega por rechazos agregado (R17/R18)", () => {
+  it("R17: listarConsolidacion expone totalIngresoBodegaRechazosAgregado = suma snapshot de los consolidables", async () => {
+    const repo = fakeRepo({
+      findCierresDiaConsolidables: vi.fn(async () => [
+        consolidableRow({ cierreDiaId: "cd1", totalIngresoBodegaRechazos: "6.00" }),
+        consolidableRow({ cierreDiaId: "cd2", totalIngresoBodegaRechazos: "0.50" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarConsolidacion(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalIngresoBodegaRechazosAgregado).toBe("6.50"); // suma exacta al centavo
+    expect(typeof r.totalIngresoBodegaRechazosAgregado).toBe("string"); // R22
+    // R20: separado del dinero recibido y del pago a mensajeros (no altera esos agregados).
+    expect(r.totalesAgregados.general).toBe("30.00");
+    expect(r.totalPagoMensajeroAgregado).toBe("0.00");
+  });
+
+  it("R17: sin zona -> totalIngresoBodegaRechazosAgregado 0.00", async () => {
+    const { service } = newService({ zonaSatelite: null });
+    const r = await service.listarConsolidacion(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalIngresoBodegaRechazosAgregado).toBe("0.00");
+  });
+
+  it("R18: solicitarCierreBodega congela en crearCierreBodega el ingreso agregado snapshoteado (misma tx)", async () => {
+    const repo = fakeRepo({
+      findCierresDiaConsolidables: vi.fn(async () => [
+        consolidableRow({ cierreDiaId: "cd1", totalIngresoBodegaRechazos: "6.00" }),
+        consolidableRow({ cierreDiaId: "cd2", totalIngresoBodegaRechazos: "0.50" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.solicitarCierreBodega(ADMIN_SATELITE);
+    expect(r.status).toBe("ok");
+    const arg = (repo.crearCierreBodega as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.totalIngresoBodegaRechazos).toBe("6.50"); // R18: snapshot agregado en la tx
   });
 });

@@ -71,6 +71,7 @@ function makeResumen(
     destinoZonaNombre: "GAM",
     totales: ZERO_TOTALES,
     totalPagoMensajero: "0.00", // feature 39/R17
+    totalIngresoBodegaRechazos: "0.00", // feature 56/R16
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
@@ -102,6 +103,8 @@ function makeGestion(
     fechaReprogramacion: null,
     evidenciaUrl: null,
     pagoMensajero: null, // feature 39
+    ingresoBodegaRechazo: null, // feature 56
+    tarifaFaltante: false, // feature 56/R23
     ...over,
   };
 }

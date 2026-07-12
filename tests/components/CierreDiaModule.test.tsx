@@ -65,6 +65,8 @@ function makeGestion(
     fechaReprogramacion: null,
     evidenciaUrl: null,
     pagoMensajero: null, // feature 39
+    ingresoBodegaRechazo: null, // feature 56
+    tarifaFaltante: false, // feature 56/R23
     ...over,
   };
 }
@@ -323,6 +325,7 @@ describe("CierreDiaModule", () => {
           general: "300.00",
         },
         totalPagoMensajero: "0.00", // feature 39/R13
+        totalIngresoBodegaRechazos: "0.00", // feature 56/R12
         solicitadoAt: "2026-07-11T10:00:00.000Z",
       },
     ];
