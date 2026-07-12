@@ -55,10 +55,10 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     ).toBeInTheDocument();
     // ...con los ítems visibles para maestro...
     expect(
-      screen.getByRole("link", { name: "Configuración" }),
+      screen.getByRole("button", { name: /configuración/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Perfil" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /órdenes/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Órdenes" })).toBeInTheDocument();
     // ...junto con los children del layout.
     expect(screen.getByTestId("page-children")).toBeInTheDocument();
     expect(screen.getByText("Contenido de la página")).toBeInTheDocument();
@@ -71,9 +71,9 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
 
     expect(screen.getByRole("link", { name: "Perfil" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Configuración" }),
+      screen.queryByRole("button", { name: /configuración/i }),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: /órdenes/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Órdenes" })).toBeNull();
   });
 
   it("expone el control de alternado del sidebar para móvil (off-canvas)", async () => {

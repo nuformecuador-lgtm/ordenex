@@ -122,7 +122,13 @@ export function Sidebar({
 
                     return (
                       <Collapsible
-                        key={item.href}
+                        // El estado activo entra en el key: al cambiar de ruta,
+                        // childActive puede pasar de false a true (o viceversa) y
+                        // defaultOpen es no-controlado. Sin remontar, Base UI avisa
+                        // "changing the default open state after being initialized".
+                        // Incluir childActive fuerza una instancia nueva por estado,
+                        // manteniendo el submenu no-controlado sin el warning.
+                        key={`${item.href}:${childActive}`}
                         defaultOpen={childActive}
                         className="group/collapsible"
                         render={<SidebarMenuItem />}
