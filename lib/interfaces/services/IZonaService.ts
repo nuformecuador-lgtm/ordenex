@@ -1,78 +1,57 @@
-import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { RolValue } from "@prisma/client";
 import type {
   ActualizarZonaInput,
-  CantonLightDTO,
+  ArbolZonas,
   CrearZonaInput,
-  DistritoCatalogoDTO,
   ListarZonasInput,
-  ProvinciaLightDTO,
   ZonaDTO,
-  ZonaLightDTO,
 } from "@/lib/types/zona";
 
-// Feature 24. Se reutiliza el `Actor` (`{ usuarioId, rol }`) resuelto desde la
-// sesion (R13). Resultados de dominio discriminados por `status`; el borde (Server
-// Action) los pasa tal cual (R25/R26).
-export type { Actor };
-
-type ValidationResult = { status: "validation_error"; fieldErrors: Record<string, string[]> };
-type Forbidden = { status: "forbidden" };
-type NotFound = { status: "not_found" };
-// R20/R21: el conflicto identifica su causa.
-type Conflict = { status: "conflict"; reason: "nombre" | "distrito"; distritoIds?: string[] };
+// Actor autenticado. El CRUD de zonas es exclusivo del rol maestro (feature 24).
+export interface Actor {
+  usuarioId: string;
+  rol: RolValue;
+}
 
 export type CrearZonaServiceResult =
   | { status: "ok"; zona: ZonaDTO }
-  | ValidationResult
-  | Forbidden
-  | Conflict;
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "forbidden" };
 
 export type ObtenerZonaServiceResult =
   | { status: "ok"; zona: ZonaDTO }
-  | Forbidden
-  | NotFound;
+  | { status: "forbidden" }
+  | { status: "not_found" };
 
 export type ListarZonasServiceResult =
   | { status: "ok"; items: ZonaDTO[]; page: number; pageSize: number; total: number }
-  | Forbidden;
+  | { status: "forbidden" };
 
 export type ActualizarZonaServiceResult =
   | { status: "ok"; zona: ZonaDTO }
-  | ValidationResult
-  | Forbidden
-  | NotFound
-  | Conflict;
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "forbidden" }
+  | { status: "not_found" };
 
-export type MarcarZonaGamServiceResult =
+export type BorrarZonaServiceResult =
   | { status: "ok" }
-  | Forbidden
-  | NotFound;
+  | { status: "forbidden" }
+  | { status: "not_found" }
+  | { status: "conflict" };
 
-export type ListarZonasLightServiceResult =
-  | { status: "ok"; items: ZonaLightDTO[] }
-  | Forbidden;
-
-export type ListarProvinciasServiceResult =
-  | { status: "ok"; items: ProvinciaLightDTO[] }
-  | Forbidden;
-
-export type ListarCantonesServiceResult =
-  | { status: "ok"; items: CantonLightDTO[] }
-  | Forbidden;
-
-export type ListarDistritosServiceResult =
-  | { status: "ok"; items: DistritoCatalogoDTO[] }
-  | Forbidden;
+export type ArbolZonasServiceResult =
+  | { status: "ok"; arbol: ArbolZonas }
+  | { status: "forbidden" };
 
 export interface IZonaService {
   crear(input: CrearZonaInput, actor: Actor): Promise<CrearZonaServiceResult>;
   obtener(id: string, actor: Actor): Promise<ObtenerZonaServiceResult>;
   listar(input: ListarZonasInput, actor: Actor): Promise<ListarZonasServiceResult>;
-  actualizar(input: ActualizarZonaInput, actor: Actor): Promise<ActualizarZonaServiceResult>;
-  marcarGam(id: string, actor: Actor): Promise<MarcarZonaGamServiceResult>;
-  listarLight(actor: Actor): Promise<ListarZonasLightServiceResult>;
-  // Catalogo geografico global (R14).
-  listarProvincias(actor: Actor): Promise<ListarProvinciasServiceResult>;
-  listarCantones(provinciaId: string, actor: Actor): Promise<ListarCantonesServiceResult>;
-  listarDistritos(cantonId: string, actor: Actor): Promise<ListarDistritosServiceResult>;
+  actualizar(
+    id: string,
+    input: ActualizarZonaInput,
+    actor: Actor,
+  ): Promise<ActualizarZonaServiceResult>;
+  borrar(id: string, actor: Actor): Promise<BorrarZonaServiceResult>;
+  arbol(actor: Actor): Promise<ArbolZonasServiceResult>;
 }

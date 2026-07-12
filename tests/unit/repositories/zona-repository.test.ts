@@ -1,234 +1,201 @@
 import { describe, it, expect, vi } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
-import {
-  DistritosInexistentesError,
-  DistritosYaAsignadosError,
-} from "@/lib/interfaces/repositories/IZonaRepository";
 
-// Feature 24. Solo Prisma; se mockea el cliente y se hace que $transaction ejecute
-// el callback con el propio mock (tx === prisma).
-
-function zonaRow(over: Record<string, unknown> = {}) {
+// tx mock que reciben las operaciones dentro de $transaction.
+function buildTx() {
   return {
-    id: "z1",
-    nombre: "Zona Sur",
-    pagoEntrega: { toNumber: () => 1000 },
-    pagoRechazo: { toNumber: () => 500 },
-    esGam: false,
-    _count: { distritos: 2 },
-    ...over,
-  };
-}
-
-function buildPrisma(over: Record<string, ReturnType<typeof vi.fn>> = {}) {
-  const zonaFindUnique = over.zonaFindUnique ?? vi.fn().mockResolvedValue(zonaRow());
-  const zonaFindFirst = over.zonaFindFirst ?? vi.fn().mockResolvedValue(null);
-  const zonaFindMany = over.zonaFindMany ?? vi.fn().mockResolvedValue([zonaRow()]);
-  const zonaCreate = over.zonaCreate ?? vi.fn().mockResolvedValue({ id: "z1" });
-  const zonaUpdate = over.zonaUpdate ?? vi.fn().mockResolvedValue({ id: "z1" });
-  const zonaUpdateMany = over.zonaUpdateMany ?? vi.fn().mockResolvedValue({ count: 0 });
-  const zonaCount = over.zonaCount ?? vi.fn().mockResolvedValue(1);
-  const distritoFindMany =
-    over.distritoFindMany ?? vi.fn().mockResolvedValue([
-      { id: "d1", zonaId: null },
-      { id: "d2", zonaId: null },
-    ]);
-  const distritoUpdateMany = over.distritoUpdateMany ?? vi.fn().mockResolvedValue({ count: 2 });
-
-  const prisma = {
     zona: {
-      findUnique: zonaFindUnique,
-      findFirst: zonaFindFirst,
-      findMany: zonaFindMany,
-      create: zonaCreate,
-      update: zonaUpdate,
-      updateMany: zonaUpdateMany,
-      count: zonaCount,
+      create: vi.fn(),
+      update: vi.fn(),
+      findUnique: vi.fn(),
+      delete: vi.fn(),
     },
-    distrito: { findMany: distritoFindMany, updateMany: distritoUpdateMany },
-    $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
-  } as unknown as Pick<PrismaClient, "zona" | "distrito" | "$transaction">;
-
-  return {
-    prisma,
-    zonaFindUnique,
-    zonaFindFirst,
-    zonaFindMany,
-    zonaCreate,
-    zonaUpdate,
-    zonaUpdateMany,
-    zonaCount,
-    distritoFindMany,
-    distritoUpdateMany,
+    zonaDistrito: { createMany: vi.fn(), deleteMany: vi.fn() },
+    tarifaZonaMensajero: { createMany: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn() },
   };
 }
 
-const crearData = {
-  nombre: "Zona Sur",
-  pagoEntrega: 1000,
-  pagoRechazo: 500,
-  esGam: false,
-  distritoIds: ["d1", "d2"],
-};
+function buildPrisma(tx: ReturnType<typeof buildTx>, overrides: Record<string, unknown> = {}) {
+  return {
+    $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+    zona: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+    tarifaZonaMensajero: { findMany: vi.fn() },
+    distrito: { count: vi.fn() },
+    vehiculo: { count: vi.fn() },
+    ...overrides,
+  };
+}
 
-describe("ZonaRepository.create (R17/R18/R20)", () => {
-  it("R17: crea la zona y asigna distrito.zona_id a los distritos seleccionados", async () => {
-    const m = buildPrisma();
-    const repo = new ZonaRepository(m.prisma);
-    const dto = await repo.create(crearData);
+function repoOf(prisma: unknown) {
+  return new ZonaRepository(prisma as unknown as PrismaClient);
+}
 
-    expect(m.zonaCreate).toHaveBeenCalled();
-    expect(m.distritoUpdateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["d1", "d2"] } },
-      data: { zonaId: "z1" },
+describe("ZonaRepository.create", () => {
+  it("crea zona + N:M + tarifas en transaccion y devuelve el DTO", async () => {
+    const tx = buildTx();
+    tx.zona.create.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: false });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    const dto = await repoOf(prisma).create({
+      nombre: "GAM",
+      cobroVehiculo: false,
+      distritoIds: ["d1", "d2"],
+      tarifas: [],
+    });
+
+    expect(tx.zona.create).toHaveBeenCalledWith({ data: { nombre: "GAM", cobroVehiculo: false } });
+    expect(tx.zonaDistrito.createMany).toHaveBeenCalledWith({
+      data: [
+        { zonaId: "z1", distritoId: "d1" },
+        { zonaId: "z1", distritoId: "d2" },
+      ],
     });
     expect(dto.distritosCount).toBe(2);
-    expect(dto.pagoEntrega).toBe(1000);
+    expect(dto.tarifas).toEqual([]);
   });
 
-  it("R18: un distrito inexistente aborta sin crear la zona (rollback)", async () => {
-    const m = buildPrisma({
-      distritoFindMany: vi.fn().mockResolvedValue([{ id: "d1", zonaId: null }]), // falta d2
+  it("persiste tarifas con Decimal y vehiculoId", async () => {
+    const tx = buildTx();
+    tx.zona.create.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: true });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([
+      {
+        id: "t1",
+        cobroEntregado: new Prisma.Decimal("10.00"),
+        cobroRechazado: new Prisma.Decimal("5.00"),
+        vehiculoId: "v1",
+      },
+    ]);
+    const prisma = buildPrisma(tx);
+
+    const dto = await repoOf(prisma).create({
+      nombre: "GAM",
+      cobroVehiculo: true,
+      distritoIds: ["d1"],
+      tarifas: [{ cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" }],
     });
-    const repo = new ZonaRepository(m.prisma);
 
-    await expect(repo.create(crearData)).rejects.toBeInstanceOf(DistritosInexistentesError);
-    expect(m.zonaCreate).not.toHaveBeenCalled();
-    expect(m.distritoUpdateMany).not.toHaveBeenCalled();
-  });
-
-  it("R20: un distrito ya asignado a otra zona -> DistritosYaAsignadosError sin persistir", async () => {
-    const m = buildPrisma({
-      distritoFindMany: vi.fn().mockResolvedValue([
-        { id: "d1", zonaId: null },
-        { id: "d2", zonaId: "otra-zona" },
-      ]),
-    });
-    const repo = new ZonaRepository(m.prisma);
-
-    await expect(repo.create(crearData)).rejects.toBeInstanceOf(DistritosYaAsignadosError);
-    expect(m.zonaCreate).not.toHaveBeenCalled();
-  });
-
-  it("R23: crear una zona GAM desmarca cualquier otra en la misma transaccion", async () => {
-    const m = buildPrisma();
-    const repo = new ZonaRepository(m.prisma);
-    await repo.create({ ...crearData, esGam: true });
-    expect(m.zonaUpdateMany).toHaveBeenCalledWith({ where: { esGam: true }, data: { esGam: false } });
+    const arg = tx.tarifaZonaMensajero.createMany.mock.calls[0][0];
+    expect(arg.data[0].cobroEntregado).toBeInstanceOf(Prisma.Decimal);
+    expect(arg.data[0].vehiculoId).toBe("v1");
+    expect(dto.tarifas).toEqual([
+      { id: "t1", cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" },
+    ]);
   });
 });
 
-describe("ZonaRepository.update (R22)", () => {
-  it("libera los distritos removidos (zona_id NULL) y asigna el nuevo conjunto", async () => {
-    const m = buildPrisma();
-    const repo = new ZonaRepository(m.prisma);
-    await repo.update("z1", { distritoIds: ["d1"] });
-
-    // libera los que ya no estan
-    expect(m.distritoUpdateMany).toHaveBeenCalledWith({
-      where: { zonaId: "z1", id: { notIn: ["d1"] } },
-      data: { zonaId: null },
-    });
-    // asigna el conjunto nuevo
-    expect(m.distritoUpdateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["d1"] } },
-      data: { zonaId: "z1" },
-    });
+describe("ZonaRepository.hardDelete", () => {
+  it("borra tarifas + N:M + zona y devuelve ok", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    const prisma = buildPrisma(tx);
+    const res = await repoOf(prisma).hardDelete("z1");
+    expect(res).toBe("ok");
+    expect(tx.tarifaZonaMensajero.deleteMany).toHaveBeenCalledWith({ where: { zonaId: "z1" } });
+    expect(tx.zona.delete).toHaveBeenCalledWith({ where: { id: "z1" } });
   });
 
-  it("devuelve null si la zona no existe (not_found)", async () => {
-    const m = buildPrisma({ zonaFindUnique: vi.fn().mockResolvedValue(null) });
-    const repo = new ZonaRepository(m.prisma);
-    const r = await repo.update("zX", { nombre: "N" });
-    expect(r).toBeNull();
+  it("zona inexistente -> not_found", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue(null);
+    const prisma = buildPrisma(tx);
+    expect(await repoOf(prisma).hardDelete("zX")).toBe("not_found");
+    expect(tx.zona.delete).not.toHaveBeenCalled();
   });
 
-  it("R23: marcar esGam=true en update desmarca las demas", async () => {
-    const m = buildPrisma();
-    const repo = new ZonaRepository(m.prisma);
-    await repo.update("z1", { esGam: true });
-    expect(m.zonaUpdateMany).toHaveBeenCalledWith({
-      where: { esGam: true, NOT: { id: "z1" } },
-      data: { esGam: false },
-    });
+  it("FK RESTRICT (P2003) -> referenced", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.delete.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "x" }),
+    );
+    const prisma = buildPrisma(tx);
+    expect(await repoOf(prisma).hardDelete("z1")).toBe("referenced");
   });
 });
 
-describe("ZonaRepository.setGam (R23)", () => {
-  it("desmarca la GAM previa y marca la nueva; false si no existe", async () => {
-    const m = buildPrisma();
-    const repo = new ZonaRepository(m.prisma);
-    const ok = await repo.setGam("z1");
-    expect(ok).toBe(true);
-    expect(m.zonaUpdateMany).toHaveBeenCalledWith({
-      where: { esGam: true, NOT: { id: "z1" } },
-      data: { esGam: false },
+describe("ZonaRepository.arbol", () => {
+  it("indexa por nombre normalizado con id + value", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma(tx, {
+      zona: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "z1",
+            nombre: "GUANACASTE",
+            distritos: [
+              {
+                distrito: {
+                  id: "d1",
+                  nombre: "Liberia",
+                  canton: { id: "c1", nombre: "Liberia" },
+                },
+              },
+              {
+                distrito: {
+                  id: "d2",
+                  nombre: "Cañas Dulces",
+                  canton: { id: "c1", nombre: "Liberia" },
+                },
+              },
+            ],
+          },
+        ]),
+      },
     });
-    expect(m.zonaUpdate).toHaveBeenCalledWith({ where: { id: "z1" }, data: { esGam: true } });
 
-    const m2 = buildPrisma({ zonaFindUnique: vi.fn().mockResolvedValue(null) });
-    const repo2 = new ZonaRepository(m2.prisma);
-    expect(await repo2.setGam("zX")).toBe(false);
+    const arbol = await repoOf(prisma).arbol();
+    expect(Object.keys(arbol)).toEqual(["guanacaste"]);
+    expect(arbol["guanacaste"].value).toBe("GUANACASTE");
+    const liberia = arbol["guanacaste"].cantones["liberia"];
+    expect(liberia.id).toBe("c1");
+    expect(Object.keys(liberia.distritos).sort()).toEqual(["canas dulces", "liberia"]);
+    expect(liberia.distritos["liberia"]).toEqual({ id: "d1", value: "Liberia" });
   });
 });
 
-describe("ZonaRepository.list / listLight / findByNombreKey (R24/R15/R21)", () => {
-  it("R24: list devuelve items con distritosCount + total", async () => {
-    const m = buildPrisma({ zonaCount: vi.fn().mockResolvedValue(3) });
-    const repo = new ZonaRepository(m.prisma);
-    const r = await repo.list({ skip: 0, take: 25 });
-    expect(r.total).toBe(3);
-    expect(r.items[0].distritosCount).toBe(2);
+describe("ZonaRepository.list", () => {
+  it("mapea distritosCount y NO incluye tarifas sin include", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma(tx, {
+      zona: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ id: "z1", nombre: "GAM", cobroVehiculo: false, _count: { distritos: 3 } }]),
+        count: vi.fn().mockResolvedValue(1),
+      },
+    });
+    const { items, total } = await repoOf(prisma).list({ skip: 0, take: 25, includeTarifas: false });
+    expect(total).toBe(1);
+    expect(items[0].distritosCount).toBe(3);
+    expect(items[0].tarifas).toBeUndefined();
   });
 
-  it("R15: listLight proyecta id/nombre/esGam", async () => {
-    const m = buildPrisma({
-      zonaFindMany: vi.fn().mockResolvedValue([{ id: "z1", nombre: "GAM", esGam: true }]),
+  it("con includeTarifas agrupa tarifas por zona", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma(tx, {
+      zona: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ id: "z1", nombre: "GAM", cobroVehiculo: true, _count: { distritos: 1 } }]),
+        count: vi.fn().mockResolvedValue(1),
+      },
+      tarifaZonaMensajero: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "t1",
+            zonaId: "z1",
+            cobroEntregado: new Prisma.Decimal("10"),
+            cobroRechazado: new Prisma.Decimal("5"),
+            vehiculoId: "v1",
+          },
+        ]),
+      },
     });
-    const repo = new ZonaRepository(m.prisma);
-    const r = await repo.listLight();
-    expect(r).toEqual([{ id: "z1", nombre: "GAM", esGam: true }]);
-  });
-
-  it("R21: findByNombreKey compara por clave normalizada y excluye la propia zona", async () => {
-    const m = buildPrisma({
-      zonaFindMany: vi.fn().mockResolvedValue([
-        { id: "z1", nombre: "Zona Sur" },
-        { id: "z2", nombre: "GAM" },
-      ]),
-    });
-    const repo = new ZonaRepository(m.prisma);
-    // "ZONA SUR" normaliza a "zona sur" -> coincide con z1
-    expect(await repo.findByNombreKey("zona sur")).toEqual({ id: "z1" });
-    // excluyendo z1, no hay match
-    expect(await repo.findByNombreKey("zona sur", "z1")).toBeNull();
-    // clave inexistente
-    expect(await repo.findByNombreKey("otra")).toBeNull();
-  });
-});
-
-// Feature 30/R3: identificacion de la zona GAM por el flag esGam (unica fuente de
-// verdad); el indice unico parcial garantiza a lo sumo una.
-describe("ZonaRepository.findGamZonaId (feature 30/R3)", () => {
-  it("devuelve el id de la zona con esGam = true", async () => {
-    const m = buildPrisma({
-      zonaFindFirst: vi.fn().mockResolvedValue({ id: "z-gam" }),
-    });
-    const repo = new ZonaRepository(m.prisma);
-
-    expect(await repo.findGamZonaId()).toBe("z-gam");
-    const arg = m.zonaFindFirst.mock.calls[0][0];
-    expect(arg.where).toEqual({ esGam: true });
-    expect(arg.select).toEqual({ id: true });
-  });
-
-  it("devuelve null cuando ninguna zona esta marcada como GAM (dispara guardia R4)", async () => {
-    const m = buildPrisma({
-      zonaFindFirst: vi.fn().mockResolvedValue(null),
-    });
-    const repo = new ZonaRepository(m.prisma);
-
-    expect(await repo.findGamZonaId()).toBeNull();
+    const { items } = await repoOf(prisma).list({ skip: 0, take: 25, includeTarifas: true });
+    expect(items[0].tarifas).toEqual([
+      { id: "t1", cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" },
+    ]);
   });
 });

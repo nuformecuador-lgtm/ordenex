@@ -4,9 +4,12 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
+import { RolValue } from "@prisma/client";
+
 import OrdenesPage from "@/app/(app)/ordenes/page";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { listarOrdenes } from "@/lib/actions/ordenes";
+import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type {
   ListarOrdenesResult,
   OrdenListItemDTO,
@@ -18,16 +21,14 @@ vi.mock("@/lib/actions/ordenes", () => ({
   listarOrdenes: vi.fn(),
 }));
 
-// Feature 17: page.tsx ramifica por rol server-side (resuelto SOLO en el
-// servidor). Estos tests cubren el listado plano previo (rol sin sesión / no
-// maestro-admin), no la vista de revisión (cubierta en OrdenesRevisionMaestro
-// .test.tsx); se resuelve a null para mantener la rama SIN regresión (R15-R18
-// no aplican aquí).
+// La página resuelve el actor server-side para decidir si ofrece la carga masiva.
+// Devuelve null por defecto: sin adminTienda no hay botón, igual que antes.
 vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
 }));
 
 const listarOrdenesMock = vi.mocked(listarOrdenes);
+const resolveActorMock = vi.mocked(resolveActorFromSession);
 
 /** Construye un `OrdenListItemDTO` completo con overrides legibles por test. */
 function makeOrden(
@@ -56,17 +57,15 @@ function makeOrden(
 }
 
 /**
- * Renderiza la página REAL con cache de SWR aislada por render (sin fugas
- * entre tests). `OrdenesPage` es un Server Component async (feature 17): se
- * resuelve su árbol con `await` (patrón `HomePageRol.test.tsx`) antes de
- * pasarlo al render síncrono de Testing Library.
+ * Renderiza la página REAL con cache de SWR aislada por render (sin fugas entre
+ * tests). `OrdenesPage` es un Server Component async: se resuelve su elemento con
+ * `await` antes de montarlo (patrón para async server components en RTL).
  */
 async function renderPage(): Promise<ReactElement> {
-  const page = await OrdenesPage();
   const ui = (
     <ToastProvider>
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        {page}
+        {await OrdenesPage()}
       </SWRConfig>
     </ToastProvider>
   );
@@ -286,6 +285,52 @@ describe("OrdenesPage", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
     // La tabla solo rinde la fila recibida.
     expect(bodyRows()).toHaveLength(1);
+  });
+
+  it("carga masiva: el botón se ofrece SOLO al adminTienda", async () => {
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      page: 1,
+      pageSize: 25,
+      total: 0,
+    });
+    resolveActorMock.mockResolvedValueOnce({
+      usuarioId: "tienda-1",
+      rol: RolValue.adminTienda,
+    });
+
+    await renderPage();
+
+    expect(
+      screen.getByRole("button", { name: /carga masiva/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("carga masiva: NO se ofrece a otros roles ni sin sesión", async () => {
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      page: 1,
+      pageSize: 25,
+      total: 0,
+    });
+
+    for (const rol of [RolValue.maestro, RolValue.admin, RolValue.mensajero]) {
+      resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
+      await renderPage();
+      expect(
+        screen.queryByRole("button", { name: /carga masiva/i }),
+      ).toBeNull();
+      cleanup();
+    }
+
+    // Sin sesión (actor null): tampoco.
+    resolveActorMock.mockResolvedValueOnce(null);
+    await renderPage();
+    expect(
+      screen.queryByRole("button", { name: /carga masiva/i }),
+    ).toBeNull();
   });
 
   it("D7: el fetcher invoca la Server Action con { page, pageSize } y NO hace fetch a rutas API (R18, R20, R31)", async () => {

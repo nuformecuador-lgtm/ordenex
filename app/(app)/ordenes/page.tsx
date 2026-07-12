@@ -1,3 +1,4 @@
+import { RolValue } from "@prisma/client";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 
@@ -14,16 +15,17 @@ import { OrdenesRevisionMaestro } from "./_components/OrdenesRevisionMaestro";
  */
 export default async function OrdenesPage() {
   const actor = await resolveActorFromSession();
+  const puedeCargarMasiva = actor?.rol === RolValue.adminTienda;
   const esMaestroOAdmin = actor?.rol === "maestro" || actor?.rol === "admin";
 
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
-      <PageHeader title="Órdenes" description="Listado y gestión de órdenes" />
-      {esMaestroOAdmin ? (
-        <OrdenesRevisionMaestro readOnly={actor?.rol === "admin"} />
-      ) : (
-        <OrdenesModule />
-      )}
-    </section>
-  );
-}
+      <section className="flex flex-1 flex-col gap-6 p-6">
+        <PageHeader title="Órdenes" description="Listado y gestión de órdenes" />
+        {esMaestroOAdmin ? (
+          <OrdenesRevisionMaestro readOnly={actor?.rol === "admin"} />
+        ) : (
+          <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} />
+        )}
+      </section>
+    );
+  }

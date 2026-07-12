@@ -216,15 +216,15 @@ model OrderStatus {
 // ya no cuelga de la provincia); la carga masiva (feature 15) deriva `orden.zona_id`
 // del DISTRITO de la orden (`distrito.zona_id`), no de la provincia.
 model Zona {
-  id          String  @id @default(uuid())
-  nombre      String  @unique // feature 24/R2: unico (comparado normalizado en el service/seed)
-  pagoEntrega Decimal @default(0) @db.Decimal(12, 2) @map("pago_entrega") // feature 24/R1
-  pagoRechazo Decimal @default(0) @db.Decimal(12, 2) @map("pago_rechazo") // feature 24/R1
-  esGam       Boolean @default(false) @map("es_gam") // feature 24/R3: a lo sumo una true (indice parcial en SQL)
+  id            String  @id @default(uuid())
+  nombre        String
+  cobroVehiculo Boolean @default(false) @map("cobro_vehiculo") // feature 24: cobro extra por vehiculo en esta zona
 
-  distritos  Distrito[] // feature 24/R5: distritos asignados a esta zona
-  usuarios   Usuario[] // feature 24/R6: mensajero/adminSatelite asignados a esta zona
-  ordenes    Orden[]
+  provincias           Provincia[]
+  ordenes              Orden[]
+  tarifas              Tarifa[]
+  tarifaZonaMensajeros TarifaZonaMensajero[]
+  distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
 
   @@map("zona")
 }
@@ -232,7 +232,9 @@ model Zona {
 model Provincia {
   id     String  @id @default(uuid())
   nombre String
+  zonaId String? @map("zona_id") // nullable: la geografia se puede sembrar sin zona asignada
 
+  zona     Zona?    @relation(fields: [zonaId], references: [id])
   cantones Canton[]
   ordenes  Orden[]
 
@@ -258,13 +260,29 @@ model Distrito {
   cantonId String  @map("canton_id")
   zonaId   String? @map("zona_id") // feature 24/R5: nullable; NULL = distrito sin zona asignada
 
-  canton  Canton  @relation(fields: [cantonId], references: [id])
-  zona    Zona?   @relation(fields: [zonaId], references: [id]) // feature 24/R5/R8: ON DELETE RESTRICT
+  canton  Canton         @relation(fields: [cantonId], references: [id])
   ordenes Orden[]
+  zonas   ZonaDistrito[] // feature 24: relacion N:M con zona
 
   @@index([cantonId])
   @@index([zonaId]) // feature 24/R5
   @@map("distrito")
+}
+
+// Feature 24 (redefinida): tabla puente N:M zona <-> distrito. Par (zona, distrito)
+// unico. ON DELETE CASCADE en ambas FKs (ver migracion zona_distrito_nm).
+model ZonaDistrito {
+  id         String @id @default(uuid())
+  zonaId     String @map("zona_id")
+  distritoId String @map("distrito_id")
+
+  zona     Zona     @relation(fields: [zonaId], references: [id], onDelete: Cascade)
+  distrito Distrito @relation(fields: [distritoId], references: [id], onDelete: Cascade)
+
+  @@unique([zonaId, distritoId])
+  @@index([zonaId])
+  @@index([distritoId])
+  @@map("zona_distrito")
 }
 
 // Orden de negocio (R7-R14a). Borrado logico via deleted_at (soft delete).
@@ -359,10 +377,11 @@ model GestionOrden {
   @@map("gestion_orden")
 }
 
-// Cobro: tarifas de flete/comision, tabla multi-fila con `nombre` para
-// distinguirlas (feature 18, D1). Sin FK a zona/orden/tienda en esta feature
-// (la relacion por zona es la feature 24). Borrado logico via deleted_at.
-model Cobro {
+// Tarifa: tarifas de flete/comision, tabla multi-fila con `nombre` para
+// distinguirlas (feature 18, D1). zona_id NOT NULL: cada tarifa pertenece a una
+// zona (feature 24). Se agrego via la migracion de rename cuando la tabla estaba
+// vacia. Borrado logico via deleted_at.
+model Tarifa {
   id                    String    @id @default(uuid())
   nombre                String // D1: distingue tarifas (NOT NULL, no unico)
   valorFlete            Decimal   @map("valor_flete") @db.Decimal(12, 2) // R2 (monto)
@@ -373,12 +392,40 @@ model Cobro {
   comisionCod           Decimal   @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
   ivaFlete              Decimal   @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
   ivaComisionCod        Decimal   @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
+  zonaId                String    @map("zona_id") // feature 24: NOT NULL (tabla vacia al migrar)
   deletedAt             DateTime? @map("deleted_at") // soft delete (R19/R24)
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
+  zona Zona @relation(fields: [zonaId], references: [id])
+
   @@index([createdAt])
-  @@map("cobro")
+  @@index([zonaId])
+  @@map("tarifas")
+}
+
+// TarifaZonaMensajero: tarifa de comision por zona pagada al mensajero
+// (feature 24). vehiculo_id nullable (tarifa general de la zona si no aplica
+// por tipo de vehiculo); zona_id obligatoria.
+model TarifaZonaMensajero {
+  id             String  @id @default(uuid())
+  cobroEntregado Decimal @map("cobro_entregado") @db.Decimal(12, 2)
+  cobroRechazado Decimal @map("cobro_rechazado") @db.Decimal(12, 2)
+  vehiculoId     String? @map("vehiculo_id")
+  zonaId         String  @map("zona_id")
+
+  vehiculo Vehiculo? @relation(fields: [vehiculoId], references: [id])
+  zona     Zona      @relation(fields: [zonaId], references: [id])
+
+  // feature 24: una sola tarifa por (zona, vehiculo). El indice en SQL usa
+  // NULLS NOT DISTINCT (PG15+), de modo que a lo sumo exista UNA tarifa por
+  // defecto (vehiculo_id NULL) por zona, haciendo determinista la resolucion
+  // "sin vehiculo -> tarifa por defecto de la zona". Prisma no expresa
+  // NULLS NOT DISTINCT: ver la migracion tarifa_zona_mensajero_zona_vehiculo_unique.
+  @@unique([zonaId, vehiculoId])
+  @@index([vehiculoId])
+  @@index([zonaId])
+  @@map("tarifa_zona_mensajero")
 }
 
 // Catalogo de tipos de vehiculo (feature 50). Backed por enum Postgres
@@ -389,7 +436,8 @@ model Vehiculo {
   id   String        @id @default(uuid())
   name VehiculoValue @unique // seed (3): moto, carro, camion
 
-  usuarios Usuario[] // feature 21: mensajeros que declararon este vehiculo
+  usuarios             Usuario[] // feature 21: mensajeros que declararon este vehiculo
+  tarifaZonaMensajeros TarifaZonaMensajero[] // feature 24
 
   @@map("vehiculos")
 }

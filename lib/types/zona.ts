@@ -1,98 +1,155 @@
 import { z } from "zod";
 import { zonasConfig } from "@/lib/config/zonas";
 
-// Feature 24. Zod en el borde (R19/R25/R26). Montos como number >= 0 (patron
-// cobro.ts); el repo los convierte a Prisma.Decimal(12,2).
+// Feature 24 (redefinida). Zod en el borde. Montos >= 0 (patron tarifa.ts).
 const montoSchema = z.number().nonnegative();
 const nombreSchema = z.string().min(1);
 const idSchema = z.string().min(1);
 
-// R17/R19: campos de una zona. `distritoIds` = conjunto de distritos del catalogo
-// global que componen la zona (al menos uno en creacion).
+// Elemento de tarifa_zona_mensajero en el input de crear/actualizar. vehiculoId
+// opcional: su obligatoriedad depende de cobroVehiculo (ver reglas abajo).
+export const tarifaZonaMensajeroInputSchema = z
+  .object({
+    cobroEntregado: montoSchema,
+    cobroRechazado: montoSchema,
+    vehiculoId: idSchema.optional(),
+  })
+  .strict();
+export type TarifaZonaMensajeroInput = z.infer<typeof tarifaZonaMensajeroInputSchema>;
+
+// Campos de una zona: datos propios + distritos (N:M) + tarifas por mensajero.
 const zonaFields = {
   nombre: nombreSchema,
-  pagoEntrega: montoSchema,
-  pagoRechazo: montoSchema,
-  esGam: z.boolean(),
+  cobroVehiculo: z.boolean(),
+  // distritoIds: conjunto de distritos que componen la zona (N:M). Al menos uno.
   distritoIds: z.array(idSchema).min(1),
+  // tarifas: filas de tarifa_zona_mensajero. Su cardinalidad/forma depende de
+  // cobroVehiculo (regla en applyTarifaRules). Default [] para poder omitirlo.
+  tarifas: z.array(tarifaZonaMensajeroInputSchema).default([]),
 };
 
-// R17/R19: creacion; strict rechaza campos desconocidos.
-export const crearZonaSchema = z.object(zonaFields).strict();
+// Regla condicional cobroVehiculo <-> tarifas:
+// - cobroVehiculo=true: >= 1 tarifa, TODAS con vehiculoId, sin vehiculos repetidos.
+// - cobroVehiculo=false: a lo sumo 1 tarifa (la "por defecto" de la zona), SIN vehiculoId.
+function applyTarifaRules(
+  data: { cobroVehiculo: boolean; tarifas: TarifaZonaMensajeroInput[] },
+  ctx: z.RefinementCtx,
+): void {
+  if (data.cobroVehiculo) {
+    if (data.tarifas.length < 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["tarifas"],
+        message: "con cobroVehiculo=true se requiere al menos una tarifa",
+      });
+    }
+    const vistos = new Set<string>();
+    data.tarifas.forEach((t, i) => {
+      if (t.vehiculoId === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tarifas", i, "vehiculoId"],
+          message: "vehiculoId es obligatorio con cobroVehiculo=true",
+        });
+        return;
+      }
+      if (vistos.has(t.vehiculoId)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tarifas", i, "vehiculoId"],
+          message: "vehiculoId repetido: una sola tarifa por vehiculo",
+        });
+      }
+      vistos.add(t.vehiculoId);
+    });
+  } else {
+    if (data.tarifas.length > 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["tarifas"],
+        message: "con cobroVehiculo=false se permite a lo sumo una tarifa",
+      });
+    }
+    data.tarifas.forEach((t, i) => {
+      if (t.vehiculoId !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tarifas", i, "vehiculoId"],
+          message: "no se permite vehiculoId con cobroVehiculo=false",
+        });
+      }
+    });
+  }
+}
+
+// Crear: strict rechaza campos desconocidos; superRefine aplica la regla condicional.
+export const crearZonaSchema = z.object(zonaFields).strict().superRefine(applyTarifaRules);
 export type CrearZonaInput = z.infer<typeof crearZonaSchema>;
 
-// R22: edicion; `id` obligatorio y el resto de campos opcionales (se aplican solo
-// los provistos). `distritoIds`, si viene, es el conjunto COMPLETO deseado (puede
-// ser vacio para liberar todos). strict rechaza campos desconocidos.
-export const actualizarZonaSchema = z
-  .object({
-    nombre: nombreSchema,
-    pagoEntrega: montoSchema,
-    pagoRechazo: montoSchema,
-    esGam: z.boolean(),
-    distritoIds: z.array(idSchema),
-  })
-  .partial()
-  .extend({ id: idSchema })
-  .strict();
+// Actualizar: mismo payload que crear (reemplazo completo de datos + N:M + tarifas).
+// El `id` viaja aparte en la Server Action.
+export const actualizarZonaSchema = crearZonaSchema;
 export type ActualizarZonaInput = z.infer<typeof actualizarZonaSchema>;
 
-// R24: parametros del listado. page/pageSize enteros positivos; pageSize acotado a
-// MAX_PAGE_SIZE via clamp (patron cobro.ts).
-export const listarZonasSchema = z.object({
-  page: z.number().int().positive().default(1),
-  pageSize: z
-    .number()
-    .int()
-    .positive()
-    .default(zonasConfig.DEFAULT_PAGE_SIZE)
-    .transform((n) => Math.min(n, zonasConfig.MAX_PAGE_SIZE)),
-});
+// Listado: paginacion + include opcional acotado a ["tarifas"].
+export const listarZonasSchema = z
+  .object({
+    page: z.number().int().positive().default(1),
+    pageSize: z
+      .number()
+      .int()
+      .positive()
+      .default(zonasConfig.DEFAULT_PAGE_SIZE)
+      .transform((n) => Math.min(n, zonasConfig.MAX_PAGE_SIZE)),
+    include: z.array(z.enum(["tarifas"])).optional(),
+  })
+  .strict();
 export type ListarZonasInput = z.infer<typeof listarZonasSchema>;
 
-// R26: DTO expuesto por las Server Actions. Montos Decimal -> number; incluye el
-// numero de distritos asignados (R24). Nunca expone campos internos.
+// --- DTOs expuestos por las Server Actions ---
+
+export interface TarifaZonaMensajeroDTO {
+  id: string;
+  cobroEntregado: number;
+  cobroRechazado: number;
+  vehiculoId: string | null;
+}
+
 export interface ZonaDTO {
   id: string;
   nombre: string;
-  pagoEntrega: number;
-  pagoRechazo: number;
-  esGam: boolean;
+  cobroVehiculo: boolean;
   distritosCount: number;
+  // Presente en crear/actualizar/obtener; en listar solo si include incluye "tarifas".
+  tarifas?: TarifaZonaMensajeroDTO[];
 }
 
-// R15: proyeccion ligera reutilizable por otras features (selectores).
-export interface ZonaLightDTO {
+// --- Arbol de zonas indexado por nombre normalizado (get) ---
+// Cada nivel es un objeto cuya clave es el nombre normalizado (minuscula, sin
+// acentos); el valor lleva el id, el `value` (nombre original) y sus hijos.
+export interface ArbolDistritoNode {
   id: string;
-  nombre: string;
-  esGam: boolean;
+  value: string;
 }
+export interface ArbolCantonNode {
+  id: string;
+  value: string;
+  distritos: Record<string, ArbolDistritoNode>;
+}
+export interface ArbolZonaNode {
+  id: string;
+  value: string;
+  cantones: Record<string, ArbolCantonNode>;
+}
+export type ArbolZonas = Record<string, ArbolZonaNode>;
 
-// R14: catalogo geografico global (lectura).
-export interface ProvinciaLightDTO {
-  id: string;
-  nombre: string;
-}
-export interface CantonLightDTO {
-  id: string;
-  nombre: string;
-}
-export interface DistritoCatalogoDTO {
-  id: string;
-  nombre: string;
-  zonaId: string | null;
-  zonaNombre: string | null;
-}
-
-// R25/R26: resultado discriminado por `status`. El conflicto identifica su causa:
-// `nombre` (unicidad normalizada, R21) o `distrito` (ya asignado a otra zona, R20;
-// `distritoIds` lleva los distritos en conflicto).
+// --- Resultados discriminados ---
 export type ZonaActionError =
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R19
-  | { status: "unauthenticated" } // R13
-  | { status: "forbidden" } // R16
-  | { status: "not_found" } // R22
-  | { status: "conflict"; reason: "nombre" | "distrito"; distritoIds?: string[] }; // R20/R21
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" }
+  | { status: "not_found" }
+  | { status: "conflict" }; // borrar una zona referenciada por provincia/orden/tarifas
 
 export type CrearZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
 export type ObtenerZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
@@ -100,8 +157,5 @@ export type ActualizarZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionE
 export type ListarZonasResult =
   | { status: "ok"; items: ZonaDTO[]; page: number; pageSize: number; total: number }
   | ZonaActionError;
-export type MarcarZonaGamResult = { status: "ok" } | ZonaActionError;
-export type ListarZonasLightResult = { status: "ok"; items: ZonaLightDTO[] } | ZonaActionError;
-export type ListarProvinciasResult = { status: "ok"; items: ProvinciaLightDTO[] } | ZonaActionError;
-export type ListarCantonesResult = { status: "ok"; items: CantonLightDTO[] } | ZonaActionError;
-export type ListarDistritosResult = { status: "ok"; items: DistritoCatalogoDTO[] } | ZonaActionError;
+export type BorrarZonaResult = { status: "ok" } | ZonaActionError;
+export type ArbolZonasResult = { status: "ok"; arbol: ArbolZonas } | ZonaActionError;

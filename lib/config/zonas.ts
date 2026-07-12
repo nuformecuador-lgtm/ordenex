@@ -1,6 +1,5 @@
-// Feature 24. Configuracion del CRUD de zonas. Sobreescribible por variable de
-// entorno para no hardcodear cotas de negocio (docs/architecture.md: "Sin hardcode
-// de contexto"), patron de lib/config/cobros.ts.
+// Configuracion del CRUD de zonas (feature 24). Sobreescribible por variable de
+// entorno, patron de lib/config/tarifas.ts.
 
 function readPositiveInt(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -12,7 +11,7 @@ function readPositiveInt(name: string, fallback: number): number {
 export interface ZonasConfig {
   /** Tamano de pagina por defecto del listado. */
   DEFAULT_PAGE_SIZE: number;
-  /** Cota maxima del tamano de pagina, evita consultas sin limite (R24). */
+  /** Cota maxima del tamano de pagina, evita consultas sin limite. */
   MAX_PAGE_SIZE: number;
 }
 

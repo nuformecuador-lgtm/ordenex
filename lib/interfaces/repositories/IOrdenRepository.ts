@@ -117,6 +117,7 @@ export interface GenerarGuiaResultRow {
 export interface ProvinciaRow {
   id: string;
   nombre: string;
+  zonaId: string | null; // nullable: la provincia puede no tener zona asignada aun
 }
 
 export interface CantonRow {

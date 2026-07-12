@@ -6,20 +6,16 @@ import {
   crearZonaSchema,
   listarZonasSchema,
   type ActualizarZonaResult,
+  type ArbolZonasResult,
+  type BorrarZonaResult,
   type CrearZonaResult,
-  type ListarCantonesResult,
-  type ListarDistritosResult,
-  type ListarProvinciasResult,
-  type ListarZonasLightResult,
   type ListarZonasResult,
-  type MarcarZonaGamResult,
   type ObtenerZonaResult,
   type ZonaActionError,
 } from "@/lib/types/zona";
 import type { Actor, IZonaService } from "@/lib/interfaces/services/IZonaService";
 import { ZonaService } from "@/lib/services/ZonaService";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
-import { GeoRepository } from "@/lib/repositories/GeoRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
@@ -30,24 +26,39 @@ import {
   MSG,
   type AppErrorShape,
 } from "@/lib/errors";
-import { toActionError } from "@/lib/actions/_shared/to-action-error";
 
 const idSchema = z.string().min(1);
 
-// R25: adapta el AppErrorShape del manejador global al ActionError propio. Los
-// conflictos de dominio (nombre/distrito) los produce el service como resultado
-// discriminado, no el manejador global; un `conflict` por esta via seria un bug.
+// Traduce el AppErrorShape del manejador global al ZonaActionError tipado. A
+// diferencia de tarifas, el dominio de zonas SI produce `conflict` (borrar una
+// zona referenciada). Switch exhaustivo sobre los 6 AppErrorCode.
 function toZonaActionError(shape: AppErrorShape): ZonaActionError {
-  const err = toActionError(shape);
-  if (err.status === "conflict") {
-    throw new Error(`unexpected conflict status in zonas action: ${shape.code}`);
+  switch (shape.code) {
+    case "VALIDATION_ERROR":
+      return {
+        status: "validation_error",
+        fieldErrors: (shape.details?.fieldErrors as Record<string, string[]> | undefined) ?? {},
+      };
+    case "UNAUTHORIZED":
+      return { status: "unauthenticated" };
+    case "FORBIDDEN":
+      return { status: "forbidden" };
+    case "NOT_FOUND":
+      return { status: "not_found" };
+    case "CONFLICT":
+      return { status: "conflict" };
+    case "INTERNAL":
+      throw new Error("internal");
+    default: {
+      const _exhaustive: never = shape.code;
+      throw new Error(`Unhandled AppErrorCode: ${String(_exhaustive)}`);
+    }
   }
-  return err;
 }
 
 function buildZonaService(): IZonaService {
   const prisma = getPrismaClient();
-  return new ZonaService(new ZonaRepository(prisma), new GeoRepository(prisma));
+  return new ZonaService(new ZonaRepository(prisma));
 }
 
 export interface ZonaActionDeps {
@@ -55,29 +66,29 @@ export interface ZonaActionDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
-/** R13/R25/R26: crear zona. */
+/** Crear zona (solo maestro). */
 export async function crearZona(
   input: unknown,
   deps: ZonaActionDeps = {},
 ): Promise<CrearZonaResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R13: antes de tocar el service
-    const data = crearZonaSchema.parse(input); // ZodError -> VALIDATION_ERROR (R19)
+    if (!actor) throw new UnauthenticatedError();
+    const data = crearZonaSchema.parse(input);
     const service = deps.zonaService ?? buildZonaService();
     return service.crear(data, actor);
   });
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }
 
-/** R13: obtener zona por id. */
+/** Obtener zona por id (solo maestro). */
 export async function obtenerZona(
   id: unknown,
   deps: ZonaActionDeps = {},
 ): Promise<ObtenerZonaResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R13
+    if (!actor) throw new UnauthenticatedError();
     const parsedId = idSchema.safeParse(id);
     if (!parsedId.success) {
       throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
@@ -88,114 +99,66 @@ export async function obtenerZona(
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }
 
-/** R13/R24: listar zonas paginadas. */
+/** Listar zonas paginadas; include opcional ["tarifas"] (solo maestro). */
 export async function listarZonas(
   input: unknown,
   deps: ZonaActionDeps = {},
 ): Promise<ListarZonasResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R13
-    const data = listarZonasSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarZonasSchema.parse(input ?? {});
     const service = deps.zonaService ?? buildZonaService();
     return service.listar(data, actor);
   });
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }
 
-/** R13/R22/R25/R26: actualizar zona (el `id` viaja en el input). */
+/** Actualizar zona por id (reemplazo completo; solo maestro). */
 export async function actualizarZona(
+  id: unknown,
   input: unknown,
   deps: ZonaActionDeps = {},
 ): Promise<ActualizarZonaResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R13
-    const data = actualizarZonaSchema.parse(input); // ZodError -> VALIDATION_ERROR (R19)
+    if (!actor) throw new UnauthenticatedError();
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success) {
+      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
+    }
+    const data = actualizarZonaSchema.parse(input);
     const service = deps.zonaService ?? buildZonaService();
-    return service.actualizar(data, actor);
+    return service.actualizar(parsedId.data, data, actor);
   });
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }
 
-/** R13/R23: marcar una zona como GAM (desmarca la anterior). */
-export async function marcarZonaGam(
+/** Borrado FISICO de zona por id (solo maestro). */
+export async function borrarZona(
   id: unknown,
   deps: ZonaActionDeps = {},
-): Promise<MarcarZonaGamResult> {
+): Promise<BorrarZonaResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R13
+    if (!actor) throw new UnauthenticatedError();
     const parsedId = idSchema.safeParse(id);
     if (!parsedId.success) {
       throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
     }
     const service = deps.zonaService ?? buildZonaService();
-    return service.marcarGam(parsedId.data, actor);
+    return service.borrar(parsedId.data, actor);
   });
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }
 
-/** R13/R15: listado ligero de zonas para selectores de otras features. */
-export async function listarZonasLight(
-  deps: ZonaActionDeps = {},
-): Promise<ListarZonasLightResult> {
+/** Arbol zona -> canton -> distrito indexado por nombre normalizado (solo maestro). */
+export async function arbolZonas(deps: ZonaActionDeps = {}): Promise<ArbolZonasResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R13
+    if (!actor) throw new UnauthenticatedError();
     const service = deps.zonaService ?? buildZonaService();
-    return service.listarLight(actor);
-  });
-  return isAppErrorShape(r) ? toZonaActionError(r) : r;
-}
-
-/** R13/R14: catalogo geografico global — provincias. */
-export async function listarProvincias(
-  deps: ZonaActionDeps = {},
-): Promise<ListarProvinciasResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R13
-    const service = deps.zonaService ?? buildZonaService();
-    return service.listarProvincias(actor);
-  });
-  return isAppErrorShape(r) ? toZonaActionError(r) : r;
-}
-
-/** R13/R14: catalogo geografico global — cantones de una provincia. */
-export async function listarCantones(
-  provinciaId: unknown,
-  deps: ZonaActionDeps = {},
-): Promise<ListarCantonesResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R13
-    const parsedId = idSchema.safeParse(provinciaId);
-    if (!parsedId.success) {
-      throw new ValidationError(MSG.VALIDATION_ERROR, {
-        fieldErrors: { provinciaId: ["id invalido"] },
-      });
-    }
-    const service = deps.zonaService ?? buildZonaService();
-    return service.listarCantones(parsedId.data, actor);
-  });
-  return isAppErrorShape(r) ? toZonaActionError(r) : r;
-}
-
-/** R13/R14: catalogo geografico global — distritos de un canton (con marca de zona). */
-export async function listarDistritos(
-  cantonId: unknown,
-  deps: ZonaActionDeps = {},
-): Promise<ListarDistritosResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R13
-    const parsedId = idSchema.safeParse(cantonId);
-    if (!parsedId.success) {
-      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { cantonId: ["id invalido"] } });
-    }
-    const service = deps.zonaService ?? buildZonaService();
-    return service.listarDistritos(parsedId.data, actor);
+    return service.arbol(actor);
   });
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }

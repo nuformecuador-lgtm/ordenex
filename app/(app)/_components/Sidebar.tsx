@@ -1,119 +1,201 @@
 "use client";
 
-import { useState } from "react";
+import type { ComponentType } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Package,
+  Settings,
+  User,
+  type LucideProps,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  SIDEBAR_ITEMS,
+  type IconKey,
+  type MenuItem,
+} from "@/lib/auth/menu-visibility";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Sidebar as SidebarRoot,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
 
-export interface SidebarItem {
-  label: string;
-  href: string;
-}
+type SidebarIcon = ComponentType<LucideProps>;
 
-export const SIDEBAR_ITEMS: readonly SidebarItem[] = [
-  { label: "Configuración", href: "/configuracion" },
-  { label: "Perfil", href: "/perfil" },
-  { label: "Órdenes", href: "/ordenes" },
-] as const;
-
-// Feature 36 (T18/R9): entradas visibles solo para ciertos roles. "Mis
-// asignaciones" es exclusivo del rol `mensajero`; la página igual valida el rol
-// server-side como defensa real (design §6).
-const MIS_ASIGNACIONES_ITEM: SidebarItem = {
-  label: "Mis asignaciones",
-  href: "/mis-asignaciones",
-};
-
-// Feature 33 (R3): "Recepción satélite" es exclusiva del rol `adminSatelite`; la
-// página igual valida el rol server-side como defensa real (design §6).
-const RECEPCION_SATELITE_ITEM: SidebarItem = {
-  label: "Recepción satélite",
-  href: "/recepcion-satelite",
-};
-
-/** Deriva los ítems del sidebar según el rol del actor (o base si no hay rol). */
-export function sidebarItemsForRol(rol?: string): readonly SidebarItem[] {
-  if (rol === "mensajero") return [...SIDEBAR_ITEMS, MIS_ASIGNACIONES_ITEM];
-  if (rol === "adminSatelite") return [...SIDEBAR_ITEMS, RECEPCION_SATELITE_ITEM];
-  return SIDEBAR_ITEMS;
-}
-
-export interface SidebarProps {
-  /**
-   * Rol del actor autenticado (resuelto server-side por el layout). Determina
-   * las entradas visibles por rol (feature 36/R9). `undefined` → solo las base.
-   */
-  rol?: string;
-}
-
-export function Sidebar({ rol }: SidebarProps = {}) {
-  const pathname = usePathname();
-  const [isOpen, setIsOpen] = useState(false);
-  const items = sidebarItemsForRol(rol);
-
-  const renderItem = (item: SidebarItem, onNavigate?: () => void) => {
-    const isActive = pathname === item.href;
-    return (
-      <li key={item.href}>
-        <Link
-          href={item.href}
-          aria-current={isActive ? "page" : undefined}
-          onClick={onNavigate}
-          className={cn(
-            "block rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            isActive &&
-              "border-sidebar-primary bg-sidebar-primary/15 text-sidebar-accent-foreground",
-          )}
-        >
-          {item.label}
-        </Link>
-      </li>
-    );
-  };
+/**
+ * Botón circular de colapsar/expandir del sidebar en desktop. Va montado sobre
+ * el borde derecho (patrón "rail"): mitad dentro, mitad fuera. Vive dentro del
+ * <SidebarProvider> (se renderiza desde el layout), por lo que useSidebar()
+ * tiene contexto. Se oculta en móvil: allí el off-canvas se controla con el
+ * <SidebarTrigger>/Sheet de la cabecera.
+ *
+ * Color: mismo naranja que el <Button> por defecto ("Carga masiva") vía tokens
+ * bg-primary / text-primary-foreground (--primary), sin hex hardcodeado.
+ */
+function SidebarCollapseToggle() {
+  const { toggleSidebar, state } = useSidebar();
+  const expanded = state === "expanded";
+  // Expandido: el chevron apunta "hacia dentro" (izquierda) = acción colapsar.
+  // Colapsado: apunta "hacia fuera" (derecha) = acción expandir.
+  const Chevron = expanded ? ChevronLeft : ChevronRight;
 
   return (
-    <nav
-      aria-label="Navegación principal"
-      className="flex flex-col gap-2 border-b border-sidebar-border bg-sidebar p-4 text-sidebar-foreground md:h-full md:w-60 md:border-r md:border-b-0"
-    >
-      {/* Control hamburguesa: visible solo en móvil (R7, R11, R16) */}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        aria-label={isOpen ? "Cerrar menú" : "Abrir menú"}
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((prev) => !prev)}
-        className="md:hidden"
-      >
-        {isOpen ? <X /> : <Menu />}
-      </Button>
-
-      {/*
-        Listado de escritorio: siempre montado en el DOM; oculto en móvil vía
-        Tailwind (hidden md:flex). Cubre R6 (visible sin acción en desktop).
-      */}
-      <ul
-        data-testid="sidebar-desktop-list"
-        className="hidden flex-col gap-1 md:flex"
-      >
-        {items.map((item) => renderItem(item))}
-      </ul>
-
-      {/*
-        Listado móvil: montado únicamente cuando isOpen === true, de modo que su
-        aparición/desaparición sea observable en el DOM (R8, R9, R10).
-      */}
-      {isOpen && (
-        <ul
-          data-testid="sidebar-mobile-list"
-          className="flex flex-col gap-1 md:hidden"
-        >
-          {items.map((item) => renderItem(item, () => setIsOpen(false)))}
-        </ul>
+    <button
+      type="button"
+      onClick={toggleSidebar}
+      aria-label={expanded ? "Colapsar menú" : "Expandir menú"}
+      // top-full + -translate-y-1/2 → centrado sobre la línea header/content.
+      // right-0 (arista de padding del header sin borde = borde del sidebar) +
+      // translate-x-1/2 → mitad del botón sobresale fuera. hidden md:flex → solo
+      // desktop. z-20 para quedar sobre el sidebar-container (z-10).
+      className={cn(
+        "absolute top-full right-0 z-20 hidden size-7 -translate-y-1/2 translate-x-1/2",
+        "md:flex items-center justify-center rounded-full cursor-pointer",
+        "bg-primary text-primary-foreground shadow-sm",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
-    </nav>
+    >
+      <Chevron className="size-5" aria-hidden="true" />
+    </button>
+  );
+}
+
+// Mapa iconKey -> componente de lucide. Vive en el cliente porque los datos que
+// cruzan el borde RSC (menu-visibility) solo traen la clave string serializable;
+// aqui la resolvemos al render.
+const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
+  settings: Settings,
+  user: User,
+  package: Package,
+};
+
+// El Sidebar reexporta los tipos de dominio del menu para consumidores/tests.
+export type SidebarItem = MenuItem;
+export type { MenuChild as SidebarChild } from "@/lib/auth/menu-visibility";
+export { SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
+
+export function Sidebar({
+  items = SIDEBAR_ITEMS,
+}: {
+  items?: readonly MenuItem[];
+}) {
+  const pathname = usePathname();
+
+  return (
+    <SidebarRoot collapsible="icon">
+      {/* min-h-14 conserva el alto del logo al colapsar sin recortar el botón
+          (que sobresale del borde); por eso NO se usa overflow-hidden aquí. */}
+      <SidebarHeader className="px-3 py-4 relative min-h-14 justify-center">
+        <span className="text-base font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+          Ordenex
+        </span>
+        <SidebarCollapseToggle />
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <nav aria-label="Navegación principal">
+              <SidebarMenu>
+                {items.map((item) => {
+                  const Icon = ICON_BY_KEY[item.iconKey];
+                  if (item.children && item.children.length > 0) {
+                    const childActive = item.children.some(
+                      (child) => pathname === child.href,
+                    );
+
+                    return (
+                      <Collapsible
+                        // El estado activo entra en el key: al cambiar de ruta,
+                        // childActive puede pasar de false a true (o viceversa) y
+                        // defaultOpen es no-controlado. Sin remontar, Base UI avisa
+                        // "changing the default open state after being initialized".
+                        // Incluir childActive fuerza una instancia nueva por estado,
+                        // manteniendo el submenu no-controlado sin el warning.
+                        key={`${item.href}:${childActive}`}
+                        defaultOpen={childActive}
+                        className="group/collapsible"
+                        render={<SidebarMenuItem />}
+                      >
+                        <CollapsibleTrigger
+                          render={
+                            <SidebarMenuButton
+                              isActive={childActive}
+                              tooltip={item.label}
+                            />
+                          }
+                        >
+                          <Icon aria-hidden="true" />
+                          <span>{item.label}</span>
+                          <ChevronRight className="ml-auto transition-transform duration-200 group-data-[open]/collapsible:rotate-90" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {item.children.map((child) => {
+                              const isActive = pathname === child.href;
+                              return (
+                                <SidebarMenuSubItem key={child.href}>
+                                  <SidebarMenuSubButton
+                                    isActive={isActive}
+                                    render={
+                                      <Link
+                                        href={child.href}
+                                        aria-current={
+                                          isActive ? "page" : undefined
+                                        }
+                                      />
+                                    }
+                                  >
+                                    <span>{child.label}</span>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              );
+                            })}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  }
+                  const isActive = pathname === item.href;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        tooltip={item.label}
+                        render={
+                          <Link
+                            href={item.href}
+                            aria-current={isActive ? "page" : undefined}
+                          />
+                        }
+                      >
+                        <Icon aria-hidden="true" />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </nav>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </SidebarRoot>
   );
 }

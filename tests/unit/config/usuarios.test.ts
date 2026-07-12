@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { loadUsuariosConfig } from "@/lib/config/usuarios";
 
-// R13: config sobreescribible por entorno (patron lib/config/cobros.ts).
+// R13: config sobreescribible por entorno (patron lib/config/tarifas.ts).
 const ENV_KEYS = ["USUARIOS_DEFAULT_PAGE_SIZE", "USUARIOS_MAX_PAGE_SIZE"] as const;
 
 afterEach(() => {

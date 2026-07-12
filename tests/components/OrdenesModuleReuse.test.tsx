@@ -21,9 +21,7 @@ vi.mock("@/app/(app)/ordenes/_components/OrdenesModule", () => ({
   },
 }));
 
-// Feature 17: page.tsx ramifica por rol server-side; se resuelve a null para
-// mantener la rama del listado plano que monta `OrdenesModule` (R10) SIN
-// regresión.
+// La página /ordenes resuelve el actor server-side para gatear la carga masiva.
 vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
 }));

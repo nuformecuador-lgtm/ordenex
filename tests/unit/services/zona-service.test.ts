@@ -1,205 +1,144 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { RolValue } from "@prisma/client";
 import { ZonaService } from "@/lib/services/ZonaService";
-import {
-  DistritosInexistentesError,
-  DistritosYaAsignadosError,
-  type IZonaRepository,
-} from "@/lib/interfaces/repositories/IZonaRepository";
-import type { IGeoRepository } from "@/lib/interfaces/repositories/IGeoRepository";
+import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IZonaService";
-import type { ZonaDTO } from "@/lib/types/zona";
+import type { CrearZonaInput, ZonaDTO } from "@/lib/types/zona";
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
-const MENSAJERO: Actor = { usuarioId: "msg1", rol: "mensajero" };
-const DESCONOCIDO: Actor = { usuarioId: "x", rol: "invitado" as RolValue };
+const MENSAJERO: Actor = { usuarioId: "x", rol: "mensajero" };
+const TIENDA: Actor = { usuarioId: "t", rol: "adminTienda" };
+const DESCONOCIDO: Actor = { usuarioId: "z", rol: "invitado" as RolValue };
+const NO_MAESTROS = [ADMIN, MENSAJERO, TIENDA, DESCONOCIDO];
 
-function dto(over: Partial<ZonaDTO> = {}): ZonaDTO {
-  return {
-    id: "z1",
-    nombre: "Zona Sur",
-    pagoEntrega: 1000,
-    pagoRechazo: 500,
-    esGam: false,
-    distritosCount: 2,
-    ...over,
-  };
+function dto(overrides: Partial<ZonaDTO> = {}): ZonaDTO {
+  return { id: "z1", nombre: "GAM", cobroVehiculo: false, distritosCount: 1, ...overrides };
 }
 
-function buildRepo(over: Partial<IZonaRepository> = {}): IZonaRepository {
+function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
   return {
     create: vi.fn().mockResolvedValue(dto()),
     findById: vi.fn().mockResolvedValue(dto()),
-    findByNombreKey: vi.fn().mockResolvedValue(null),
     list: vi.fn().mockResolvedValue({ items: [dto()], total: 1 }),
     update: vi.fn().mockResolvedValue(dto()),
-    setGam: vi.fn().mockResolvedValue(true),
-    listLight: vi.fn().mockResolvedValue([{ id: "z1", nombre: "Zona Sur", esGam: false }]),
-    findGamZonaId: vi.fn().mockResolvedValue(null),
-    ...over,
+    hardDelete: vi.fn().mockResolvedValue("ok"),
+    arbol: vi.fn().mockResolvedValue({}),
+    // por defecto: todos los ids existen.
+    countExistingDistritos: vi.fn(async (ids: string[]) => ids.length),
+    countExistingVehiculos: vi.fn(async (ids: string[]) => ids.length),
+    ...overrides,
   };
 }
 
-function buildGeo(over: Partial<IGeoRepository> = {}): IGeoRepository {
+function crearInput(overrides: Partial<CrearZonaInput> = {}): CrearZonaInput {
   return {
-    listProvincias: vi.fn().mockResolvedValue([{ id: "p1", nombre: "San Jose" }]),
-    listCantones: vi.fn().mockResolvedValue([{ id: "c1", nombre: "Central" }]),
-    listDistritos: vi
-      .fn()
-      .mockResolvedValue([{ id: "d1", nombre: "Carmen", zonaId: null, zonaNombre: null }]),
-    ...over,
+    nombre: "GAM",
+    cobroVehiculo: false,
+    distritoIds: ["d1"],
+    tarifas: [],
+    ...overrides,
   };
 }
 
-const crearInput = {
-  nombre: "Zona Sur",
-  pagoEntrega: 1000,
-  pagoRechazo: 500,
-  esGam: false,
-  distritoIds: ["d1", "d2"],
-};
+let repo: IZonaRepository;
+let service: ZonaService;
 
-describe("ZonaService — autorizacion (R16)", () => {
-  it("mensajero/desconocido -> forbidden en escritura y lectura", async () => {
-    const svc = new ZonaService(buildRepo(), buildGeo());
-    for (const actor of [MENSAJERO, DESCONOCIDO]) {
-      expect((await svc.crear(crearInput, actor)).status).toBe("forbidden");
-      expect((await svc.actualizar({ id: "z1", nombre: "N" }, actor)).status).toBe("forbidden");
-      expect((await svc.marcarGam("z1", actor)).status).toBe("forbidden");
-      expect((await svc.listar({ page: 1, pageSize: 25 }, actor)).status).toBe("forbidden");
-      expect((await svc.listarProvincias(actor)).status).toBe("forbidden");
-    }
-  });
-
-  it("admin lee (listar/catalogo/light) pero NO escribe (crear/actualizar/marcarGam)", async () => {
-    const svc = new ZonaService(buildRepo(), buildGeo());
-    expect((await svc.listar({ page: 1, pageSize: 25 }, ADMIN)).status).toBe("ok");
-    expect((await svc.listarLight(ADMIN)).status).toBe("ok");
-    expect((await svc.listarProvincias(ADMIN)).status).toBe("ok");
-    expect((await svc.listarDistritos("c1", ADMIN)).status).toBe("ok");
-    expect((await svc.crear(crearInput, ADMIN)).status).toBe("forbidden");
-    expect((await svc.actualizar({ id: "z1", nombre: "N" }, ADMIN)).status).toBe("forbidden");
-    expect((await svc.marcarGam("z1", ADMIN)).status).toBe("forbidden");
-  });
+beforeEach(() => {
+  repo = buildRepo();
+  service = new ZonaService(repo);
 });
 
-describe("ZonaService.crear (R17/R19/R20/R21)", () => {
-  it("R17: crea con nombre valido -> ok con la zona", async () => {
-    const repo = buildRepo();
-    const svc = new ZonaService(repo, buildGeo());
-    const r = await svc.crear(crearInput, MAESTRO);
+describe("autorizacion — solo maestro (feature 24)", () => {
+  it("crear: maestro OK", async () => {
+    const r = await service.crear(crearInput(), MAESTRO);
     expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.zona.nombre).toBe("Zona Sur");
-    // el nombre se persiste en forma canonica
-    expect((repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0].nombre).toBe("Zona Sur");
   });
 
-  it("R21: nombre duplicado por clave normalizada -> conflict(nombre)", async () => {
-    const repo = buildRepo({ findByNombreKey: vi.fn().mockResolvedValue({ id: "otra" }) });
-    const svc = new ZonaService(repo, buildGeo());
-    const r = await svc.crear({ ...crearInput, nombre: "ZONA SUR" }, MAESTRO);
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.reason).toBe("nombre");
+  it.each(NO_MAESTROS)("crear: rol %o -> forbidden y no persiste", async (actor) => {
+    const r = await service.crear(crearInput(), actor);
+    expect(r.status).toBe("forbidden");
     expect(repo.create).not.toHaveBeenCalled();
   });
 
-  it("R20: distrito ya asignado a otra zona -> conflict(distrito) con los ids", async () => {
-    const repo = buildRepo({
-      create: vi.fn().mockRejectedValue(new DistritosYaAsignadosError(["d2"])),
-    });
-    const svc = new ZonaService(repo, buildGeo());
-    const r = await svc.crear(crearInput, MAESTRO);
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") {
-      expect(r.reason).toBe("distrito");
-      expect(r.distritoIds).toEqual(["d2"]);
-    }
+  it("listar/obtener/actualizar/borrar/arbol: no-maestro -> forbidden", async () => {
+    expect((await service.listar({ page: 1, pageSize: 25 }, ADMIN)).status).toBe("forbidden");
+    expect((await service.obtener("z1", ADMIN)).status).toBe("forbidden");
+    expect((await service.actualizar("z1", crearInput(), ADMIN)).status).toBe("forbidden");
+    expect((await service.borrar("z1", ADMIN)).status).toBe("forbidden");
+    expect((await service.arbol(ADMIN)).status).toBe("forbidden");
+    expect(repo.hardDelete).not.toHaveBeenCalled();
   });
+});
 
-  it("R19: distrito inexistente -> validation_error", async () => {
-    const repo = buildRepo({
-      create: vi.fn().mockRejectedValue(new DistritosInexistentesError(["d9"])),
-    });
-    const svc = new ZonaService(repo, buildGeo());
-    const r = await svc.crear(crearInput, MAESTRO);
+describe("crear — validacion de existencia", () => {
+  it("distritoId inexistente -> validation_error", async () => {
+    repo = buildRepo({ countExistingDistritos: vi.fn().mockResolvedValue(0) });
+    service = new ZonaService(repo);
+    const r = await service.crear(crearInput({ distritoIds: ["dX"] }), MAESTRO);
     expect(r.status).toBe("validation_error");
     if (r.status === "validation_error") expect(r.fieldErrors).toHaveProperty("distritoIds");
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+
+  it("vehiculoId inexistente -> validation_error", async () => {
+    repo = buildRepo({ countExistingVehiculos: vi.fn().mockResolvedValue(0) });
+    service = new ZonaService(repo);
+    const input = crearInput({
+      cobroVehiculo: true,
+      tarifas: [{ cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "vX" }],
+    });
+    const r = await service.crear(input, MAESTRO);
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(r.fieldErrors).toHaveProperty("tarifas");
+  });
+
+  it("deduplica distritoIds antes de crear", async () => {
+    await service.crear(crearInput({ distritoIds: ["d1", "d1", "d2"] }), MAESTRO);
+    const arg = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.distritoIds).toEqual(["d1", "d2"]);
+  });
+
+  it("mapea vehiculoId undefined -> null hacia el repo", async () => {
+    await service.crear(crearInput({ cobroVehiculo: false, tarifas: [{ cobroEntregado: 1, cobroRechazado: 2 }] }), MAESTRO);
+    const arg = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.tarifas[0].vehiculoId).toBeNull();
   });
 });
 
-describe("ZonaService.actualizar (R22)", () => {
-  it("edita una zona existente -> ok", async () => {
-    const svc = new ZonaService(buildRepo(), buildGeo());
-    const r = await svc.actualizar({ id: "z1", pagoEntrega: 2000 }, MAESTRO);
-    expect(r.status).toBe("ok");
+describe("borrar", () => {
+  it("hardDelete ok -> ok", async () => {
+    expect((await service.borrar("z1", MAESTRO)).status).toBe("ok");
   });
-
-  it("zona inexistente -> not_found", async () => {
-    const repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
-    const svc = new ZonaService(repo, buildGeo());
-    const r = await svc.actualizar({ id: "zX", nombre: "N" }, MAESTRO);
-    expect(r.status).toBe("not_found");
+  it("hardDelete not_found -> not_found", async () => {
+    repo = buildRepo({ hardDelete: vi.fn().mockResolvedValue("not_found") });
+    service = new ZonaService(repo);
+    expect((await service.borrar("zX", MAESTRO)).status).toBe("not_found");
   });
-
-  it("R21: renombrar a un nombre ya usado -> conflict(nombre)", async () => {
-    const repo = buildRepo({ findByNombreKey: vi.fn().mockResolvedValue({ id: "otra" }) });
-    const svc = new ZonaService(repo, buildGeo());
-    const r = await svc.actualizar({ id: "z1", nombre: "GAM" }, MAESTRO);
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.reason).toBe("nombre");
+  it("hardDelete referenced -> conflict", async () => {
+    repo = buildRepo({ hardDelete: vi.fn().mockResolvedValue("referenced") });
+    service = new ZonaService(repo);
+    expect((await service.borrar("z1", MAESTRO)).status).toBe("conflict");
   });
 });
 
-describe("ZonaService.marcarGam (R23)", () => {
-  it("marca la zona -> ok", async () => {
-    const repo = buildRepo();
-    const svc = new ZonaService(repo, buildGeo());
-    const r = await svc.marcarGam("z1", MAESTRO);
-    expect(r.status).toBe("ok");
-    expect(repo.setGam).toHaveBeenCalledWith("z1");
+describe("listar — include", () => {
+  it("include ['tarifas'] -> pide includeTarifas=true al repo", async () => {
+    await service.listar({ page: 1, pageSize: 25, include: ["tarifas"] }, MAESTRO);
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.includeTarifas).toBe(true);
   });
-
-  it("zona inexistente -> not_found", async () => {
-    const repo = buildRepo({ setGam: vi.fn().mockResolvedValue(false) });
-    const svc = new ZonaService(repo, buildGeo());
-    expect((await svc.marcarGam("zX", MAESTRO)).status).toBe("not_found");
+  it("sin include -> includeTarifas=false", async () => {
+    await service.listar({ page: 1, pageSize: 25 }, MAESTRO);
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.includeTarifas).toBe(false);
   });
 });
 
-describe("ZonaService.listar (R24) y catalogo (R14/R15)", () => {
-  it("R24: listar paginado -> items + total + page/pageSize", async () => {
-    const svc = new ZonaService(buildRepo(), buildGeo());
-    const r = await svc.listar({ page: 2, pageSize: 10 }, MAESTRO);
-    expect(r.status).toBe("ok");
-    if (r.status === "ok") {
-      expect(r.total).toBe(1);
-      expect(r.page).toBe(2);
-      expect(r.items[0].distritosCount).toBe(2);
-    }
-  });
-
-  it("R24: calcula skip = (page-1)*pageSize", async () => {
-    const repo = buildRepo();
-    const svc = new ZonaService(repo, buildGeo());
-    await svc.listar({ page: 3, pageSize: 20 }, MAESTRO);
-    expect((repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0]).toEqual({ skip: 40, take: 20 });
-  });
-
-  it("R14: catalogo geografico (provincias/cantones/distritos) -> ok", async () => {
-    const geo = buildGeo();
-    const svc = new ZonaService(buildRepo(), geo);
-    expect((await svc.listarCantones("p1", MAESTRO)).status).toBe("ok");
-    expect(geo.listCantones).toHaveBeenCalledWith("p1");
-    const d = await svc.listarDistritos("c1", MAESTRO);
-    expect(d.status).toBe("ok");
-    if (d.status === "ok") expect(d.items[0]).toHaveProperty("zonaId");
-  });
-
-  it("R15: listado ligero -> id/nombre/esGam", async () => {
-    const svc = new ZonaService(buildRepo(), buildGeo());
-    const r = await svc.listarLight(MAESTRO);
-    expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.items[0]).toEqual({ id: "z1", nombre: "Zona Sur", esGam: false });
+describe("actualizar", () => {
+  it("update devuelve null -> not_found", async () => {
+    repo = buildRepo({ update: vi.fn().mockResolvedValue(null) });
+    service = new ZonaService(repo);
+    expect((await service.actualizar("zX", crearInput(), MAESTRO)).status).toBe("not_found");
   });
 });

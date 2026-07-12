@@ -1,159 +1,129 @@
-import { canonicalZonaNombre, normalizeZonaKey } from "@/lib/geo/normalize";
-import {
-  DistritosInexistentesError,
-  DistritosYaAsignadosError,
-  type IZonaRepository,
+import type {
+  CreateZonaData,
+  IZonaRepository,
 } from "@/lib/interfaces/repositories/IZonaRepository";
-import type { IGeoRepository } from "@/lib/interfaces/repositories/IGeoRepository";
 import type {
   Actor,
   ActualizarZonaServiceResult,
+  ArbolZonasServiceResult,
+  BorrarZonaServiceResult,
   CrearZonaServiceResult,
   IZonaService,
-  ListarCantonesServiceResult,
-  ListarDistritosServiceResult,
-  ListarProvinciasServiceResult,
-  ListarZonasLightServiceResult,
   ListarZonasServiceResult,
-  MarcarZonaGamServiceResult,
   ObtenerZonaServiceResult,
 } from "@/lib/interfaces/services/IZonaService";
 import type { ActualizarZonaInput, CrearZonaInput, ListarZonasInput } from "@/lib/types/zona";
 
-// D2: escritura de zonas SOLO `maestro`; lectura del catalogo geografico y del
-// listado ligero de zonas `maestro` + `admin`. Un rol no reconocido no pertenece a
-// ningun conjunto -> forbidden (R16).
-const WRITE_ROLES = new Set<string>(["maestro"]);
-const READ_ROLES = new Set<string>(["maestro", "admin"]);
+// Feature 24: el CRUD de zonas es EXCLUSIVO del rol maestro.
+function esMaestro(actor: Actor): boolean {
+  return actor.rol === "maestro";
+}
 
-// Resultado del mapeo de errores de distrito (compartido por crear/actualizar).
-type DistritoErrorResult =
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "conflict"; reason: "distrito"; distritoIds: string[] };
+function distinct(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+type PrepararResult =
+  | { ok: true; data: CreateZonaData }
+  | { ok: false; fieldErrors: Record<string, string[]> };
 
 export class ZonaService implements IZonaService {
-  constructor(
-    private readonly repo: IZonaRepository,
-    private readonly geoRepo: IGeoRepository,
-  ) {}
+  constructor(private readonly repo: IZonaRepository) {}
+
+  // Valida existencia de distritos y vehiculos y deduplica distritoIds. La regla
+  // cobroVehiculo<->tarifas ya la garantizo Zod en el borde; aqui solo integridad
+  // referencial (para errores de dominio limpios en vez de fallos de FK).
+  private async prepararDatos(
+    input: CrearZonaInput | ActualizarZonaInput,
+  ): Promise<PrepararResult> {
+    const fieldErrors: Record<string, string[]> = {};
+
+    const distritoIds = distinct(input.distritoIds);
+    const distritosExistentes = await this.repo.countExistingDistritos(distritoIds);
+    if (distritosExistentes !== distritoIds.length) {
+      fieldErrors.distritoIds = ["uno o mas distritoIds no existen"];
+    }
+
+    const vehiculoIds = distinct(
+      input.tarifas
+        .map((t) => t.vehiculoId)
+        .filter((v): v is string => v !== undefined),
+    );
+    if (vehiculoIds.length > 0) {
+      const vehiculosExistentes = await this.repo.countExistingVehiculos(vehiculoIds);
+      if (vehiculosExistentes !== vehiculoIds.length) {
+        fieldErrors.tarifas = ["uno o mas vehiculoId no existen"];
+      }
+    }
+
+    if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
+
+    return {
+      ok: true,
+      data: {
+        nombre: input.nombre,
+        cobroVehiculo: input.cobroVehiculo,
+        distritoIds,
+        tarifas: input.tarifas.map((t) => ({
+          cobroEntregado: t.cobroEntregado,
+          cobroRechazado: t.cobroRechazado,
+          vehiculoId: t.vehiculoId ?? null,
+        })),
+      },
+    };
+  }
 
   async crear(input: CrearZonaInput, actor: Actor): Promise<CrearZonaServiceResult> {
-    if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" }; // R16
-
-    const canonical = canonicalZonaNombre(input.nombre);
-    const key = normalizeZonaKey(input.nombre);
-    if (canonical === null || key === null) {
-      return { status: "validation_error", fieldErrors: { nombre: ["El nombre no puede estar vacio"] } }; // R19
-    }
-
-    const dup = await this.repo.findByNombreKey(key); // R21
-    if (dup) return { status: "conflict", reason: "nombre" };
-
-    try {
-      const zona = await this.repo.create({
-        nombre: canonical,
-        pagoEntrega: input.pagoEntrega,
-        pagoRechazo: input.pagoRechazo,
-        esGam: input.esGam,
-        distritoIds: input.distritoIds,
-      });
-      return { status: "ok", zona }; // R17
-    } catch (error) {
-      return this.mapDistritoError(error);
-    }
+    if (!esMaestro(actor)) return { status: "forbidden" };
+    const prep = await this.prepararDatos(input);
+    if (!prep.ok) return { status: "validation_error", fieldErrors: prep.fieldErrors };
+    const zona = await this.repo.create(prep.data);
+    return { status: "ok", zona };
   }
 
   async obtener(id: string, actor: Actor): Promise<ObtenerZonaServiceResult> {
-    if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R16
-    const zona = await this.repo.findById(id);
+    if (!esMaestro(actor)) return { status: "forbidden" };
+    const zona = await this.repo.findById(id, true);
     if (!zona) return { status: "not_found" };
     return { status: "ok", zona };
   }
 
   async listar(input: ListarZonasInput, actor: Actor): Promise<ListarZonasServiceResult> {
-    if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R16
+    if (!esMaestro(actor)) return { status: "forbidden" };
+    const includeTarifas = input.include?.includes("tarifas") ?? false;
     const skip = (input.page - 1) * input.pageSize;
-    const { items, total } = await this.repo.list({ skip, take: input.pageSize }); // R24
+    const { items, total } = await this.repo.list({
+      skip,
+      take: input.pageSize,
+      includeTarifas,
+    });
     return { status: "ok", items, page: input.page, pageSize: input.pageSize, total };
   }
 
   async actualizar(
+    id: string,
     input: ActualizarZonaInput,
     actor: Actor,
   ): Promise<ActualizarZonaServiceResult> {
-    if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" }; // R16
-
-    const { id, ...rest } = input;
-    const existente = await this.repo.findById(id);
-    if (!existente) return { status: "not_found" }; // R22
-
-    let nombreCanonical: string | undefined;
-    if (rest.nombre !== undefined) {
-      const canonical = canonicalZonaNombre(rest.nombre);
-      const key = normalizeZonaKey(rest.nombre);
-      if (canonical === null || key === null) {
-        return { status: "validation_error", fieldErrors: { nombre: ["El nombre no puede estar vacio"] } }; // R19
-      }
-      const dup = await this.repo.findByNombreKey(key, id); // R21 (excluye la propia)
-      if (dup) return { status: "conflict", reason: "nombre" };
-      nombreCanonical = canonical;
-    }
-
-    try {
-      const zona = await this.repo.update(id, {
-        nombre: nombreCanonical,
-        pagoEntrega: rest.pagoEntrega,
-        pagoRechazo: rest.pagoRechazo,
-        esGam: rest.esGam,
-        distritoIds: rest.distritoIds,
-      });
-      if (!zona) return { status: "not_found" }; // carrera: borrada entre medias
-      return { status: "ok", zona }; // R22
-    } catch (error) {
-      return this.mapDistritoError(error);
-    }
+    if (!esMaestro(actor)) return { status: "forbidden" };
+    const prep = await this.prepararDatos(input);
+    if (!prep.ok) return { status: "validation_error", fieldErrors: prep.fieldErrors };
+    const zona = await this.repo.update(id, prep.data);
+    if (!zona) return { status: "not_found" };
+    return { status: "ok", zona };
   }
 
-  async marcarGam(id: string, actor: Actor): Promise<MarcarZonaGamServiceResult> {
-    if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" }; // R16
-    const ok = await this.repo.setGam(id); // R23
-    if (!ok) return { status: "not_found" };
+  async borrar(id: string, actor: Actor): Promise<BorrarZonaServiceResult> {
+    if (!esMaestro(actor)) return { status: "forbidden" };
+    const res = await this.repo.hardDelete(id);
+    if (res === "not_found") return { status: "not_found" };
+    if (res === "referenced") return { status: "conflict" };
     return { status: "ok" };
   }
 
-  async listarLight(actor: Actor): Promise<ListarZonasLightServiceResult> {
-    if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R15/R16
-    const items = await this.repo.listLight();
-    return { status: "ok", items };
-  }
-
-  async listarProvincias(actor: Actor): Promise<ListarProvinciasServiceResult> {
-    if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R14/R16
-    const items = await this.geoRepo.listProvincias();
-    return { status: "ok", items };
-  }
-
-  async listarCantones(provinciaId: string, actor: Actor): Promise<ListarCantonesServiceResult> {
-    if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R14/R16
-    const items = await this.geoRepo.listCantones(provinciaId);
-    return { status: "ok", items };
-  }
-
-  async listarDistritos(cantonId: string, actor: Actor): Promise<ListarDistritosServiceResult> {
-    if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R14/R16
-    const items = await this.geoRepo.listDistritos(cantonId);
-    return { status: "ok", items };
-  }
-
-  // R19/R20: traduce los errores de dominio del repositorio. Distrito inexistente
-  // -> validation_error; distrito ya en otra zona -> conflict(reason: distrito).
-  private mapDistritoError(error: unknown): DistritoErrorResult {
-    if (error instanceof DistritosInexistentesError) {
-      return { status: "validation_error", fieldErrors: { distritoIds: ["Uno o mas distritos no existen en el catalogo"] } };
-    }
-    if (error instanceof DistritosYaAsignadosError) {
-      return { status: "conflict", reason: "distrito", distritoIds: error.distritoIds };
-    }
-    throw error;
+  async arbol(actor: Actor): Promise<ArbolZonasServiceResult> {
+    if (!esMaestro(actor)) return { status: "forbidden" };
+    const arbol = await this.repo.arbol();
+    return { status: "ok", arbol };
   }
 }

@@ -1,29 +1,26 @@
-import type { ZonaDTO, ZonaLightDTO } from "@/lib/types/zona";
+import type { ArbolZonas, ZonaDTO } from "@/lib/types/zona";
 
-// Feature 24. Datos listos para persistir una zona (numbers; el repo convierte a
-// Prisma.Decimal). `nombre` llega ya en forma canonica desde el service (R2/R21).
-// `distritoIds` = conjunto de distritos que componen la zona.
+// Datos listos para persistir una fila de tarifa_zona_mensajero (numbers; el repo
+// convierte a Prisma.Decimal). vehiculoId ya normalizado a string | null.
+export interface TarifaZonaMensajeroData {
+  cobroEntregado: number;
+  cobroRechazado: number;
+  vehiculoId: string | null;
+}
+
+// Crear/actualizar comparten forma: reemplazo completo de datos + N:M + tarifas.
 export interface CreateZonaData {
   nombre: string;
-  pagoEntrega: number;
-  pagoRechazo: number;
-  esGam: boolean;
+  cobroVehiculo: boolean;
   distritoIds: string[];
+  tarifas: TarifaZonaMensajeroData[];
 }
-
-// Campos actualizables a nivel de datos; todos opcionales (R22). `distritoIds`, si
-// se provee, es el conjunto COMPLETO deseado (asignar nuevos y liberar removidos).
-export interface UpdateZonaData {
-  nombre?: string;
-  pagoEntrega?: number;
-  pagoRechazo?: number;
-  esGam?: boolean;
-  distritoIds?: string[];
-}
+export type UpdateZonaData = CreateZonaData;
 
 export interface ListZonasParams {
   skip: number;
   take: number;
+  includeTarifas: boolean;
 }
 
 export interface ListZonasResult {
@@ -31,55 +28,25 @@ export interface ListZonasResult {
   total: number;
 }
 
-/** R19: alguno de los distritos del conjunto no existe en el catalogo global. */
-export class DistritosInexistentesError extends Error {
-  constructor(public readonly distritoIds: string[]) {
-    super(`Distritos inexistentes: ${distritoIds.join(", ")}`);
-    this.name = "DistritosInexistentesError";
-  }
-}
-
-/** R20: alguno de los distritos ya pertenece a OTRA zona (un distrito, una zona). */
-export class DistritosYaAsignadosError extends Error {
-  constructor(public readonly distritoIds: string[]) {
-    super(`Distritos ya asignados a otra zona: ${distritoIds.join(", ")}`);
-    this.name = "DistritosYaAsignadosError";
-  }
-}
+// Resultado del borrado fisico: `referenced` = la zona esta referenciada por
+// provincia/orden/tarifas (FK RESTRICT), no se puede borrar.
+export type DeleteZonaResult = "ok" | "not_found" | "referenced";
 
 export interface IZonaRepository {
-  /**
-   * R17/R18: crea la fila zona y asigna atomicamente `distrito.zona_id` a cada
-   * distrito. Lanza `DistritosInexistentesError`/`DistritosYaAsignadosError` sin
-   * persistir (transaccion todo-o-nada). Si `esGam`, desmarca la GAM previa (R23).
-   */
+  /** Crea la zona + su N:M de distritos + sus tarifas, en una transaccion. */
   create(data: CreateZonaData): Promise<ZonaDTO>;
-  /** null si la zona no existe. Incluye `distritosCount` (R24). */
-  findById(id: string): Promise<ZonaDTO | null>;
-  /**
-   * R2/R21: busca una zona cuyo `nombre` normalizado (clave de dedup) coincida con
-   * `key`, excluyendo opcionalmente `excludeId` (edicion). null si no hay match.
-   */
-  findByNombreKey(key: string, excludeId?: string): Promise<{ id: string } | null>;
-  /** R24: listado paginado (skip/take) + total; cada item con `distritosCount`. */
+  /** null si no existe. Carga tarifas solo si includeTarifas. */
+  findById(id: string, includeTarifas: boolean): Promise<ZonaDTO | null>;
+  /** Listado paginado (orden por nombre asc). include tarifas opcional. */
   list(params: ListZonasParams): Promise<ListZonasResult>;
-  /**
-   * R22: aplica solo los campos provistos y, si viene `distritoIds`, reasigna el
-   * conjunto (libera los removidos con NULL). null si la zona no existe. Atomico.
-   */
+  /** Reemplaza datos + N:M + tarifas; null si la zona no existe. */
   update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null>;
-  /**
-   * R23: marca `es_gam = true` en la zona dada y desmarca cualquier otra en la
-   * misma transaccion. false si la zona no existe.
-   */
-  setGam(id: string): Promise<boolean>;
-  /** R15: proyeccion ligera `{ id, nombre, esGam }` ordenada por nombre. */
-  listLight(): Promise<ZonaLightDTO[]>;
-  /**
-   * Feature 30/R3: resuelve el `id` de la zona GAM (bodega central), identificada
-   * por el flag `esGam = true` (unica fuente de verdad; el indice unico parcial
-   * `zona_es_gam_unico` garantiza a lo sumo una). `null` si aun no hay ninguna
-   * zona marcada como GAM (dispara el guardia R4 en el service).
-   */
-  findGamZonaId(): Promise<string | null>;
+  /** Borrado FISICO (cascade de zona_distrito y tarifas). */
+  hardDelete(id: string): Promise<DeleteZonaResult>;
+  /** Arbol zona -> canton -> distrito indexado por nombre normalizado. */
+  arbol(): Promise<ArbolZonas>;
+  /** Cuenta cuantos de `ids` existen como distrito (validacion de existencia). */
+  countExistingDistritos(ids: string[]): Promise<number>;
+  /** Cuenta cuantos de `ids` existen como vehiculo (validacion de existencia). */
+  countExistingVehiculos(ids: string[]): Promise<number>;
 }
