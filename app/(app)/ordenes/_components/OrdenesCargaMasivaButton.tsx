@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useSWRConfig } from "swr";
-import { Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { Modal } from "@/components/shared/Modal";
@@ -183,20 +181,6 @@ export function OrdenesCargaMasivaButton() {
       >
         {step === "upload" ? (
           <div className="flex flex-col gap-4">
-            {/*
-              Aviso del acoplamiento distrito↔zona (feature 24, R4/R11): se
-              comunica ANTES de cargar para que el usuario lo anticipe, en vez de
-              enterarse solo por el error fila a fila (feature 51).
-            */}
-            <Alert>
-              <Info aria-hidden="true" />
-              <AlertTitle>El distrito es obligatorio</AlertTitle>
-              <AlertDescription>
-                Cada orden debe indicar un distrito, y ese distrito debe tener
-                una zona asignada. Si el distrito falta o no tiene zona, esa fila
-                se rechazará al cargar.
-              </AlertDescription>
-            </Alert>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="carga-mensajero-sugerido">
                 Mensajero sugerido (opcional)

@@ -273,16 +273,6 @@ describe("OrdenesCargaMasivaButton — feature 51 (CR + acoplamiento distrito/zo
     expect(fieldByKey("notas").required).toBeFalsy();
   });
 
-  it("renderiza el aviso del acoplamiento distrito↔zona antes de cargar", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(screen.getByText(/el distrito es obligatorio/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/debe tener\s+una zona asignada/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/se rechazará al cargar/i)).toBeInTheDocument();
-  });
-
   it("usa ejemplos de Costa Rica y no de Ecuador", async () => {
     render(<OrdenesCargaMasivaButton />);
     await openModal();
