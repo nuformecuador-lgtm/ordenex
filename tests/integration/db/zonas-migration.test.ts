@@ -133,7 +133,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_provincia_zona_id_nullable") && // PR #40: apendida despues
         !d.endsWith("_zona_distrito_nm") && // PR #40: apendida despues
         !d.endsWith("_zona_es_central_rename") && // feature 54: apendida despues
-        !d.endsWith("_cierre_dia"), // feature 37: apendida despues
+        !d.endsWith("_cierre_dia") && // feature 37: apendida despues
+        !d.endsWith("_cierre_dia_resolucion"), // feature 38: apendida despues
     );
     expect(thisDir > previas[previas.length - 1]).toBe(true);
   });

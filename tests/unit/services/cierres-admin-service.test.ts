@@ -1,0 +1,381 @@
+import { describe, it, expect, vi } from "vitest";
+import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import type {
+  Alcance,
+  CierreAdminResumenRow,
+  ICierresAdminRepository,
+} from "@/lib/interfaces/repositories/ICierresAdminRepository";
+import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
+import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+
+// Feature 38 — tests unit del CierresAdminService (dobles de repo/zona/orden/
+// signedUrls, sin DB/red). Cubre R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11,R12,R13,R16.
+
+const MAESTRO: Actor = { usuarioId: "adm-maestro", rol: "maestro" };
+const ADMIN_SATELITE: Actor = { usuarioId: "adm-sat", rol: "adminSatelite" };
+const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
+
+const ZONA_SAT = "z-cartago";
+
+function resumenRow(overrides: Partial<CierreAdminResumenRow> = {}): CierreAdminResumenRow {
+  return {
+    cierreId: "c1",
+    mensajeroId: "m1",
+    mensajeroNombre: "Ana Mensajera",
+    estado: "solicitado",
+    destinoTipo: "bodega_central",
+    destinoZonaId: "z-central",
+    destinoZonaNombre: "Central",
+    totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
+    solicitadoAt: "2026-07-12T10:00:00.000Z",
+    resueltoAt: null,
+    motivoRechazo: null,
+    ...overrides,
+  };
+}
+
+function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendienteRow {
+  return {
+    gestionId: "g1",
+    ordenId: "o1",
+    numGuia: 10,
+    numRemision: "REM-1",
+    destinatario: "Ana",
+    direccion: "Av 1",
+    zonaNombre: "Cartago",
+    provinciaNombre: "Cartago",
+    cantonNombre: "Central",
+    distritoNombre: "Oriental",
+    producto: "Caja",
+    tiendaNombre: "Tienda X",
+    resultado: "entregada",
+    montoRecibido: "12.50",
+    metodoPago: "efectivo",
+    motivo: null,
+    fechaReprogramacion: null,
+    evidenciaStoragePath: null,
+    ...overrides,
+  };
+}
+
+type Repo = ICierresAdminRepository;
+
+function fakeRepo(overrides: Partial<Repo> = {}): Repo {
+  return {
+    findCierresByAlcance: vi.fn(async () => [] as CierreAdminResumenRow[]),
+    findCierreByIdEnAlcance: vi.fn(async () => null),
+    resolverCierre: vi.fn(async () => "updated" as const),
+    ...overrides,
+  };
+}
+
+function fakeSignedUrls(overrides: Partial<ISignedUrlProvider> = {}): ISignedUrlProvider {
+  return {
+    createSignedUrl: vi.fn(async (p: string) => `https://signed/${p}`),
+    createSignedUrls: vi.fn(async (paths: string[]) =>
+      Object.fromEntries(paths.map((p) => [p, `https://signed/${p}`])),
+    ),
+    ...overrides,
+  };
+}
+
+function newService(
+  opts: { repo?: Repo; zonaSatelite?: string | null; signedUrls?: ISignedUrlProvider } = {},
+) {
+  const repo = opts.repo ?? fakeRepo();
+  const zonaRepo = {
+    findCentralZonaId: vi.fn(async () => "z-central"),
+  } as unknown as Pick<IZonaRepository, "findCentralZonaId">;
+  const ordenRepo = {
+    findUsuarioZonaId: vi.fn(async () =>
+      opts.zonaSatelite === undefined ? ZONA_SAT : opts.zonaSatelite,
+    ),
+  } as unknown as Pick<IOrdenRepository, "findUsuarioZonaId">;
+  const signedUrls = opts.signedUrls ?? fakeSignedUrls();
+  const service = new CierresAdminService(
+    repo,
+    zonaRepo as IZonaRepository,
+    ordenRepo as IOrdenRepository,
+    signedUrls,
+  );
+  return { service, repo, zonaRepo, ordenRepo, signedUrls };
+}
+
+// --- resolveAlcance / autorizacion (R1/R2/R3) ---
+
+describe("CierresAdminService — autorizacion y alcance (R1/R2/R3)", () => {
+  it("R1: rol invalido (mensajero) -> forbidden, sin consultar el repo", async () => {
+    const { service, repo } = newService();
+    const r = await service.listarCierresAdmin(MENSAJERO);
+    expect(r.status).toBe("forbidden");
+    expect(repo.findCierresByAlcance).not.toHaveBeenCalled();
+  });
+
+  it("R2: maestro -> alcance bodega_central sin zona pasado al repo", async () => {
+    const { service, repo } = newService();
+    await service.listarCierresAdmin(MAESTRO);
+    const alcance = (repo.findCierresByAlcance as ReturnType<typeof vi.fn>).mock.calls[0][0] as Alcance;
+    expect(alcance).toEqual({ destinoTipo: "bodega_central", destinoZonaId: null });
+  });
+
+  it("R2: adminSatelite -> alcance bodega_satelite acotado a SU zona (ajeno excluido via el WHERE)", async () => {
+    const { service, repo, ordenRepo } = newService();
+    await service.listarCierresAdmin(ADMIN_SATELITE);
+    expect(ordenRepo.findUsuarioZonaId).toHaveBeenCalledWith("adm-sat");
+    const alcance = (repo.findCierresByAlcance as ReturnType<typeof vi.fn>).mock.calls[0][0] as Alcance;
+    expect(alcance).toEqual({ destinoTipo: "bodega_satelite", destinoZonaId: ZONA_SAT });
+  });
+
+  it("R3: adminSatelite sin zona -> sinZona true, listas vacias, sin tocar el repo", async () => {
+    const { service, repo } = newService({ zonaSatelite: null });
+    const r = await service.listarCierresAdmin(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.sinZona).toBe(true);
+    expect(r.pendientes).toEqual([]);
+    expect(r.historico).toEqual([]);
+    expect(repo.findCierresByAlcance).not.toHaveBeenCalled();
+  });
+});
+
+// --- listarCierresAdmin — particion + totales (R4/R5/R8/R9) ---
+
+describe("CierresAdminService.listarCierresAdmin — particion y totales (R4/R5/R8/R9)", () => {
+  it("R4/R5: parte pendientes (solicitado) del historico (aprobado/rechazado)", async () => {
+    const repo = fakeRepo({
+      findCierresByAlcance: vi.fn(async () => [
+        resumenRow({ cierreId: "a", estado: "solicitado" }),
+        resumenRow({ cierreId: "b", estado: "aprobado", resueltoAt: "2026-07-12T12:00:00.000Z" }),
+        resumenRow({ cierreId: "c", estado: "rechazado", motivoRechazo: "cuadre erroneo" }),
+        resumenRow({ cierreId: "d", estado: "solicitado" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarCierresAdmin(MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.pendientes.map((c) => c.cierreId)).toEqual(["a", "d"]);
+    expect(r.historico.map((c) => c.cierreId)).toEqual(["b", "c"]);
+    expect(r.sinZona).toBe(false);
+  });
+
+  it("R8/R9: los totales del resumen son el snapshot en STRING escala 2 (no recomputa)", async () => {
+    const repo = fakeRepo({
+      findCierresByAlcance: vi.fn(async () => [
+        resumenRow({
+          cierreId: "a",
+          totales: { efectivo: "100.50", simpe: "0.00", transferencia: "9.99", general: "110.49" },
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarCierresAdmin(MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    const c = r.pendientes[0];
+    expect(c.totales).toEqual({
+      efectivo: "100.50",
+      simpe: "0.00",
+      transferencia: "9.99",
+      general: "110.49",
+    });
+    expect(typeof c.totales.general).toBe("string");
+  });
+
+  it("R16: listar NO muta (nunca invoca resolverCierre)", async () => {
+    const repo = fakeRepo({
+      findCierresByAlcance: vi.fn(async () => [resumenRow()]),
+    });
+    const { service } = newService({ repo });
+    await service.listarCierresAdmin(MAESTRO);
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+});
+
+// --- verCierreDetalle — detalle + evidencia firmada (R6/R7/R9/R13/R16) ---
+
+describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9/R13/R16)", () => {
+  it("R6/R9: agrupa las gestiones por resultado con montos string escala 2", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(),
+        gestiones: [
+          gestionRow({ gestionId: "a", resultado: "entregada", montoRecibido: "30.00", metodoPago: "SIMPE" }),
+          gestionRow({
+            gestionId: "b",
+            resultado: "reprogramada",
+            montoRecibido: null,
+            metodoPago: null,
+            motivo: "ausente",
+            fechaReprogramacion: "2026-07-20",
+          }),
+          gestionRow({ gestionId: "c", resultado: "devuelta", montoRecibido: null, metodoPago: null }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.entregada.map((g) => g.gestionId)).toEqual(["a"]);
+    expect(r.grupos.reprogramada.map((g) => g.gestionId)).toEqual(["b"]);
+    expect(r.grupos.devuelta.map((g) => g.gestionId)).toEqual(["c"]);
+    expect(r.grupos.rechazada).toEqual([]);
+    expect(r.grupos.entregada[0].montoRecibido).toBe("30.00"); // string escala 2
+    expect(typeof r.grupos.entregada[0].montoRecibido).toBe("string");
+    expect(r.grupos.reprogramada[0].fechaReprogramacion).toBe("2026-07-20");
+  });
+
+  it("R7: firma la evidencia en lote y expone SOLO la URL firmada, nunca el storage_path", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(),
+        gestiones: [
+          gestionRow({
+            gestionId: "a",
+            resultado: "rechazada",
+            montoRecibido: null,
+            metodoPago: null,
+            evidenciaStoragePath: "o1/rechazo.jpg",
+          }),
+        ],
+      })),
+    });
+    const signedUrls = fakeSignedUrls();
+    const { service } = newService({ repo, signedUrls });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(signedUrls.createSignedUrls).toHaveBeenCalledWith(["o1/rechazo.jpg"], expect.any(Number));
+    const rechazada = r.grupos.rechazada[0];
+    expect(rechazada.evidenciaUrl).toBe("https://signed/o1/rechazo.jpg");
+    expect(rechazada).not.toHaveProperty("evidenciaStoragePath");
+  });
+
+  it("R8: la cabecera del detalle mantiene los totales snapshot del cierre", async () => {
+    const cierre = resumenRow({
+      totales: { efectivo: "1.00", simpe: "2.00", transferencia: "3.00", general: "6.00" },
+    });
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({ cierre, gestiones: [] })),
+    });
+    const { service } = newService({ repo });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.cierre.totales).toEqual({ efectivo: "1.00", simpe: "2.00", transferencia: "3.00", general: "6.00" });
+  });
+
+  it("R13: cierre fuera de alcance (repo devuelve null) -> no_encontrada", async () => {
+    const repo = fakeRepo({ findCierreByIdEnAlcance: vi.fn(async () => null) });
+    const { service } = newService({ repo });
+    const r = await service.verCierreDetalle("c-ajeno", MAESTRO);
+    expect(r.status).toBe("no_encontrada");
+  });
+
+  it("R1: rol invalido -> forbidden, sin consultar el repo", async () => {
+    const { service, repo } = newService();
+    const r = await service.verCierreDetalle("c1", MENSAJERO);
+    expect(r.status).toBe("forbidden");
+    expect(repo.findCierreByIdEnAlcance).not.toHaveBeenCalled();
+  });
+
+  it("R13: adminSatelite sin zona -> no_encontrada, sin leakear (no consulta el repo)", async () => {
+    const { service, repo } = newService({ zonaSatelite: null });
+    const r = await service.verCierreDetalle("c1", ADMIN_SATELITE);
+    expect(r.status).toBe("no_encontrada");
+    expect(repo.findCierreByIdEnAlcance).not.toHaveBeenCalled();
+  });
+
+  it("R16: ver detalle NO muta (nunca invoca resolverCierre)", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({ cierre: resumenRow(), gestiones: [gestionRow()] })),
+    });
+    const { service } = newService({ repo });
+    await service.verCierreDetalle("c1", MAESTRO);
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+});
+
+// --- aprobar / rechazar (R10/R11/R12/R13/R14) ---
+
+describe("CierresAdminService.aprobarCierre (R10/R12/R13)", () => {
+  it("R10: aprobar cierre solicitado del alcance -> ok/aprobado; pasa alcance + resueltoPor", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
+    const { service } = newService({ repo });
+    const r = await service.aprobarCierre("c1", MAESTRO);
+    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({
+      cierreId: "c1",
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-maestro", // R14
+      motivoRechazo: null,
+      alcance: { destinoTipo: "bodega_central", destinoZonaId: null },
+    });
+  });
+
+  it("R12: repo devuelve conflict -> conflict", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "conflict" as const) });
+    const { service } = newService({ repo });
+    const r = await service.aprobarCierre("c1", MAESTRO);
+    expect(r.status).toBe("conflict");
+  });
+
+  it("R13: repo devuelve fuera_de_alcance -> no_encontrada", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "fuera_de_alcance" as const) });
+    const { service } = newService({ repo });
+    const r = await service.aprobarCierre("c1", MAESTRO);
+    expect(r.status).toBe("no_encontrada");
+  });
+
+  it("R1: rol invalido -> forbidden, sin resolver", async () => {
+    const { service, repo } = newService();
+    const r = await service.aprobarCierre("c1", MENSAJERO);
+    expect(r.status).toBe("forbidden");
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+});
+
+describe("CierresAdminService.rechazarCierre (R11/R12/R13/R14)", () => {
+  it("R11: rechazo sin motivo (vacio/espacios) -> validation_error, sin resolver", async () => {
+    const repo = fakeRepo();
+    const { service } = newService({ repo });
+    const r = await service.rechazarCierre("c1", "   ", MAESTRO);
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("esperaba validation_error");
+    expect(r.fieldErrors.motivo).toBeDefined();
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+
+  it("R11/R14: rechazo con motivo -> ok/rechazado; persiste motivo trim + resueltoPor", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
+    const { service } = newService({ repo });
+    const r = await service.rechazarCierre("c1", "  cuadre no coincide  ", MAESTRO);
+    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "rechazado" });
+    const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({
+      nuevoEstado: "rechazado",
+      resueltoPor: "adm-maestro", // R14
+      motivoRechazo: "cuadre no coincide", // trim aplicado
+    });
+  });
+
+  it("R12: repo devuelve conflict -> conflict", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "conflict" as const) });
+    const { service } = newService({ repo });
+    const r = await service.rechazarCierre("c1", "motivo", MAESTRO);
+    expect(r.status).toBe("conflict");
+  });
+
+  it("R13: repo devuelve fuera_de_alcance -> no_encontrada", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "fuera_de_alcance" as const) });
+    const { service } = newService({ repo });
+    const r = await service.rechazarCierre("c1", "motivo", MAESTRO);
+    expect(r.status).toBe("no_encontrada");
+  });
+
+  it("R1: rol invalido -> forbidden, sin resolver", async () => {
+    const { service, repo } = newService();
+    const r = await service.rechazarCierre("c1", "motivo", MENSAJERO);
+    expect(r.status).toBe("forbidden");
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+});

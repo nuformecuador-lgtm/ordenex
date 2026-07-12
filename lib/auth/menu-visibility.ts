@@ -68,6 +68,14 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     roles: ["mensajero"],
   },
   {
+    // Feature 38: cola de cierres del admin de bodega. Ruta y roles distintos del
+    // ítem del mensajero ("/cierre-dia"); la defensa real es el notFound de la página.
+    label: "Cierres del día",
+    href: "/cierres-admin",
+    iconKey: "clipboardCheck",
+    roles: ["maestro", "adminSatelite"],
+  },
+  {
     label: "Perfil",
     href: "/perfil",
     iconKey: "user",

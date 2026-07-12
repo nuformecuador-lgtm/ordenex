@@ -7,7 +7,11 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Features 37 y 55 CERRADAS 2026-07-12 (abajo). La 37 ya está en `dev` (**PR #42 mergeado**); el **PR #43** (55) se mergea tras esta reconciliación de bookkeeping. |
+| (ninguna en curso) | — | — | Feature 38 CERRADA 2026-07-12 (abajo). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** |
+
+> Feature 38 (admin: cierres del día, aprobar/rechazar) CERRADA 2026-07-12: **impl COMPLETA (R1–R17+E2E) + reviewer APROBADO 0 bloqueantes** (verde REAL verificado por el reviewer: `prisma validate` OK, `typecheck` 0, `lint` 0, **1739/1739 tests (+116)**, `init.sh` OK, migración round-trip OK). Fullstack un ciclo; F1.4 aprobada 2026-07-12 (todas recomendadas). Estado `done` + `history.md` + `review_38`. Módulo `/cierres-admin` (cola `solicitado` + histórico + detalle completo con evidencias firmadas + aprobar/rechazar de a uno). Migración ADITIVA `20260712110000_cierre_dia_resolucion` (`resuelto_por`/`resuelto_at`/`motivo_rechazo` + `down.sql`). Alcance por rol+zona en el WHERE (maestro→`bodega_central`, adminSatelite→`bodega_satelite`+su zona); rechazo inmutable; concurrencia sin TOCTOU. Commit `0418a1a`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** **DESBLOQUEA 40** (cierre satélite→central) y complementa 39/41.
+
+> Features 37 y 55 CERRADAS y **MERGEADAS a `dev`** 2026-07-12 (PRs #42 y #43). Ver `history.md`.
 
 > Feature 55 (completar ZonaForm: `esCentral` + drift `provincia.zonaId`) CERRADA 2026-07-12: **impl COMPLETA (R1–R14) + reviewer APROBADO 0 bloqueantes** (verde REAL verificado por el reviewer: `prisma validate` valid, `migrate status` up-to-date 0 migraciones nuevas, `typecheck` 0, `lint` 0, **1614/1614 tests (+49)**, `init.sh` OK). Fullstack un ciclo; F1.4 aprobada 2026-07-12 (todo recomendado). Estado `done` + `history.md` + `review_55`. Reconstruyó `ZonaForm` (crear/editar + distritos N:M + `cobroVehiculo` + toggle `esCentral`), reasignación central transaccional (`P2002`→`conflict`), `GeoService`/`GeoActions` para el catálogo geo, drift `provincia.zonaId` reconciliado **solo-schema** (sin migración). **DESBLOQUEA el runtime de `bodega_central` en 30/34/37** (`findCentralZonaId` deja de ser null al marcar zona). **PR #43** abierto a `dev` (en merge). Deuda menor: `conflict` sin payload por-campo; confirmación de reasignación vía checkbox inline (reviewer: menor).
 
