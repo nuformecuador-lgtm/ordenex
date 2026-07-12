@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 38 CERRADA 2026-07-12 (abajo). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** |
+| feature/40-cierre-bodega-satelite | fullstack | F1 done / **F2 en impl** | ▶️ **EN CURSO 2026-07-12** (rama ← `origin/dev` e8a9df1, con 37+55+38). **F1 (spec R1–R25+E2E en `specs/40-cierre-bodega-satelite/`) COMPLETA + F1.4 APROBADA 2026-07-12** (todas recomendadas). Segundo nivel de cierre (doble espejo 37/38): tabla nueva `CierreBodega` (agrega `cierre_dia` `aprobado` de la zona; totales snapshot agregados; índice único parcial ≤1 `solicitado` por zona) + FK `cierre_bodega_id` en `cierre_dia`. Decisiones: (d) precondición = sin `cierre_dia` `solicitado` pendientes; (f) pago al mensajero **omitido/placeholder** (feature 39); (j) rechazo inmutable; (l) **extender `/cierres-admin` role-aware** (adminSatélite solicita, maestro aprueba/rechaza). Migración aditiva + `down.sql` + RLS. **SIGUIENTE: `implementer`.** |
+
+> Feature 38 CERRADA 2026-07-12 y **MERGEADA a `dev`** (PR #44). Ver `history.md`. Features 37 y 55 también mergeadas (PRs #42/#43).
 
 > Feature 38 (admin: cierres del día, aprobar/rechazar) CERRADA 2026-07-12: **impl COMPLETA (R1–R17+E2E) + reviewer APROBADO 0 bloqueantes** (verde REAL verificado por el reviewer: `prisma validate` OK, `typecheck` 0, `lint` 0, **1739/1739 tests (+116)**, `init.sh` OK, migración round-trip OK). Fullstack un ciclo; F1.4 aprobada 2026-07-12 (todas recomendadas). Estado `done` + `history.md` + `review_38`. Módulo `/cierres-admin` (cola `solicitado` + histórico + detalle completo con evidencias firmadas + aprobar/rechazar de a uno). Migración ADITIVA `20260712110000_cierre_dia_resolucion` (`resuelto_por`/`resuelto_at`/`motivo_rechazo` + `down.sql`). Alcance por rol+zona en el WHERE (maestro→`bodega_central`, adminSatelite→`bodega_satelite`+su zona); rechazo inmutable; concurrencia sin TOCTOU. Commit `0418a1a`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** **DESBLOQUEA 40** (cierre satélite→central) y complementa 39/41.
 
