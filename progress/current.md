@@ -7,7 +7,11 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | Feature 40 CERRADA 2026-07-12 (abajo). **PENDIENTE: abrir PR a `dev` + merge (OK humano).** |
+| feature/39-pago-mensajero-zona | fullstack | F1 done / **F2 en impl** | ▶️ **EN CURSO 2026-07-12** (rama ← `origin/dev` ec8f8d7, con 37/55/38/40). **F1 (spec R1–R23+R7b en `specs/39-pago-mensajero-zona/`) COMPLETA + F1.4 APROBADA 2026-07-12.** Money-critical. Pago vía **`TarifaZonaMensajero`** (la descripción vieja "zona almacena pago" está desfasada por el #40). Decisiones: **SNAPSHOT** al solicitar (migración aditiva `gestion_orden.pago_mensajero` + `cierre_dia`/`cierre_bodega.total_pago_mensajero` + `down.sql`); **SOLO `entregada` paga** (→`cobroEntregado`); rechazada/reprog/devuelta = 0.00; **`cobroRechazado`→bodega FUERA DE ALCANCE → feature 56 (nueva, `pending`)**; resolución por zona+vehículo del mensajero (fallback tarifa por defecto); tarifa faltante = 0.00 no bloquea + aviso; snapshot 3 niveles + DTOs de 37/38/40 sin pantallas nuevas. **SIGUIENTE: `implementer`.** |
+
+> Feature 56 (ingreso de bodega por rechazos, `cobroRechazado`) REGISTRADA `pending` 2026-07-12 (`depends_on: 39`): separada de la 39 por decisión del humano — el pago por rechazo va a la bodega, no al mensajero.
+
+> Feature 40 CERRADA y **MERGEADA a `dev`** (PR #45) 2026-07-12. Features 37/55/38 también mergeadas (#42/#43/#44). Ver `history.md`.
 
 > Feature 40 (cierre de bodega satélite → central) CERRADA 2026-07-12: **impl COMPLETA (R1–R25+E2E) + reviewer APROBADO 0 bloqueantes** (verde REAL con verificación en DB VIVA: `init.sh` OK, typecheck 0, lint 0, **1797/1797 tests (+58)**, build pasa, migración round-trip real, RLS `cierre_bodega` sin policies, índice único parcial y FK verificados). Fullstack un ciclo; F1.4 aprobada 2026-07-12 (todas recomendadas). Estado `done` + `history.md` + `review_40`. Segundo nivel de cierre (doble espejo 37/38): tabla nueva `CierreBodega` (agrega `cierre_dia` `aprobado` de la zona, totales snapshot agregados, auditoría, índice único parcial ≤1 `solicitado`/zona) + FK `cierre_bodega_id` en `cierre_dia`. adminSatélite solicita / maestro aprueba-rechaza, en `/cierres-admin` extendido role-aware (regresión 37/38 intacta). Migración `20260712120000_cierre_bodega`. Commit `105689d`. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** **DESBLOQUEA 41** (reglas/bloqueos/vencidos).
 

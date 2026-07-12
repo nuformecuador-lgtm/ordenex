@@ -401,12 +401,13 @@
       "id": 39,
       "name": "pago al mensajero por zona en el cierre",
       "description": "Cada orden que llega a un cierre del dia debe traer el monto a PAGAR AL MENSAJERO segun la ZONA: la zona almacena cuanto se le paga por la ENTREGA y cuanto por el RECHAZO (feature 24), y como cada mensajero esta atado a una zona ese pago sale de su zona. Cada orden en el cierre expone el pago al mensajero segun su zona y su resultado de gestion (entrega o rechazo), y el modulo de cierre totaliza lo que se le debe pagar. Es distinto de lo que se COBRA al cliente/tienda (feature 18 cobros: valor_flete, comision_cod, etc.), concepto aparte. Backend principalmente; se integra en los modulos de cierre (features 37/38). Depende de las features 24 (pago por zona) y 37 (cierre del mensajero).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 24
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/39-pago-mensajero-zona",
+      "depends_on": 24,
+      "status_note": "F1 (spec R1-R23+R7b en specs/39-pago-mensajero-zona/) COMPLETA + F1.4 APROBADA 2026-07-12. Money-critical. Pago via TarifaZonaMensajero (cobroEntregado/cobroRechazado por zona+vehiculo, fallback tarifa por defecto vehiculoId NULL). Decisiones: (1) SNAPSHOT al solicitar (migracion aditiva gestion_orden.pago_mensajero + cierre_dia/cierre_bodega.total_pago_mensajero + down.sql; vista viva deriva para preview); (2) SOLO entregada paga al mensajero (->cobroEntregado); rechazada/reprogramada/devuelta = 0.00; (3) cobroRechazado->bodega FUERA DE ALCANCE -> feature 56 nueva; (4) resolver por usuario.zonaId+vehiculoId con fallback; (5) tarifa faltante = 0.00 NO bloquea + aviso admin; (6) snapshot 3 niveles + exponer en DTOs 37/38/40 sin pantallas nuevas. NOTA: modelo real es TarifaZonaMensajero (la descripcion vieja 'zona almacena pago' esta desfasada por el #40). F2 (impl) EN CURSO."
     },
     {
       "id": 40,
@@ -586,6 +587,17 @@
       "branch": "feature/55-zonaform-escentral",
       "depends_on": 54,
       "status_note": "done 2026-07-12; F1.4 APROBADA (A reasignar central en misma tx; B reconstruccion COMPLETA ZonaForm; C drift provincia.zonaId SOLO-SCHEMA sin migracion; D seed intacto). Impl COMPLETA (R1-R14) + reviewer APROBADO 0 bloqueantes. VERDE: prisma valid, migrate status up-to-date (0 migraciones nuevas), typecheck 0, lint 0, 1614/1614 tests (+49), init.sh OK. ZonaForm reconstruido (crear/editar + selector distritos N:M + cobroVehiculo + toggle esCentral); reasignacion central transaccional (P2002->conflict); GeoService/GeoActions para catalogo geo; drift schema-only (borrados Provincia.zonaId/zona + Zona.provincias). DESBLOQUEA runtime bodega_central en 30/34/37 (findCentralZonaId deja de ser null al marcar). Confirmacion reasignacion via checkbox inline (reviewer: menor, cumple F1.4-A). PENDIENTE PR a dev + merge (OK humano)."
+    },
+    {
+      "id": 56,
+      "name": "ingreso de bodega por rechazos (cobroRechazado)",
+      "description": "SEPARADA de la feature 39 por decision del humano (2026-07-12): al resolver el pago por zona (TarifaZonaMensajero), el `cobroRechazado` (pago por RECHAZO) NO va al mensajero sino a la BODEGA (satelite o central) que corresponda a la orden rechazada. La feature 39 quedo acotada a pago al MENSAJERO = solo `entregada`->cobroEntregado. Esta feature modela y registra el INGRESO DE LA BODEGA por rechazos: por cada gestion `rechazada` en un cierre, calcula `cobroRechazado` (via TarifaZonaMensajero, misma resolucion por zona+vehiculo con fallback que la 39) y lo ATRIBUYE a la bodega responsable, snapshoteado en el flujo de cierre (probablemente en cierre_dia y agregado en cierre_bodega, espejo del pago-al-mensajero de la 39). Es un concepto de INGRESO de la bodega, distinto de: el pago al mensajero (39), lo que se COBRA al cliente/tienda (18), y la caja central de Ordenex (42). ABIERTO en spec: la regla exacta 'siempre y cuando aplique el pago a las rechazadas' (el humano indico que el pago por rechazo aplica condicionalmente); definir cuando aplica. Fullstack, money-critical. Depende de 39 (patron de snapshot del pago por zona) y 40 (cierre de bodega, donde se agrega el ingreso).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 39
     }
   ]
 }
