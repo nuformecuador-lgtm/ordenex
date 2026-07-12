@@ -17,6 +17,7 @@ import {
   cobroVacio,
   type ZonaFormInitial,
 } from "./CrearZonaForm";
+import { AdminTiendasList } from "./AdminTiendasList";
 import type { CobroVehiculoValue } from "./CobroVehiculoTarifas";
 
 const PAGE_SIZE = 100;
@@ -110,6 +111,8 @@ export function ZonasTarifasModule({
 
   return (
     <section className="flex flex-col gap-4 border-t border-border pt-6">
+      <AdminTiendasList />
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 className="text-base font-semibold">
