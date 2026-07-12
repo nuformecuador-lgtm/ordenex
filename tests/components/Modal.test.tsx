@@ -458,13 +458,23 @@ describe("Modal — Escape, overlay y dismissible (R25, R26, R27)", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("R26: cierra al hacer clic en el overlay en las mismas condiciones", async () => {
+  it("R26: NO cierra al hacer clic en el overlay (nunca se cierra por click fuera)", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
     renderModal({ onOpenChange });
     await screen.findByRole("dialog");
 
     await user.click(screen.getByTestId("modal-backdrop"));
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("cierra al hacer clic en el botón X", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderModal({ onOpenChange });
+    await screen.findByRole("dialog");
+
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
