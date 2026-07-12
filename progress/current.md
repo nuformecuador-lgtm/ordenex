@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| (ninguna en curso) | — | — | **`dev` REPARADO** por la feature 54 (reconciliación del #40); PR pendiente de merge. La feature 37 (pausada) se retoma al mergear. |
+| feature/55-zonaform-escentral | fullstack | F1 done / **F2 en impl** | ▶️ **EN CURSO 2026-07-12** (rama ← `origin/dev` a3af913). **F1 (spec R1–R14 en `specs/55-zonaform-escentral/`) COMPLETA + F1.4 APROBADA 2026-07-12** (todo recomendado): (A) reasignar central con confirmación en misma tx; (B) **reconstrucción COMPLETA** de `ZonaForm` (nombre + provincia/cantón/distritos N:M + `cobroVehiculo` + toggle `esCentral`); (C) drift `provincia.zonaId` = reconciliación **SOLO-SCHEMA** sin migración (borrar `Provincia.zonaId`/`zona` + `Zona.provincias` huérfanos); (D) seed NO toca `es_central`. **SIGUIENTE: `implementer`.** Desbloquea el runtime de `bodega_central` en 30/34/37. |
+
+> NOTA: la feature 37 (cierre del día) está CERRADA `done` 2026-07-12 con **PR #42** abierto a `dev` (sin mergear, decisión del humano); su cierre completo vive en ese PR, no en esta rama.
 
 > Feature 54 (reconciliación del refactor #40 → dev verde + `esCentral`) CERRADA 2026-07-12: **impl COMPLETA + reviewer APROBADO 0 bloqueantes** (verde REAL: `prisma validate` OK, `typecheck` 0, **1565/1565 tests**, `init.sh` OK, `pnpm build` OK). Fix-feature ágil. Repuso `esCentral`/`findCentralZonaId` (17/30 actualizadas), recableó ZonaRepository/TarifaRepository/GeoRepository, arregló schema (`Zona.usuarios`) + migración #40 rota, restauró la feature 51 (el #40 la había revertido a Ecuador), reconció los tests de menú/migración. Se conservó la intención del #40 (tarifas/N:M/menú). Estado `done` + `history.md` + `review_54`. **PENDIENTE: PR a `dev` + merge (OK humano)** → con eso `dev` sano y se retoma la 37. FOLLOW-UP feature 55: completar `ZonaForm` (setear `esCentral`) — sin eso `findCentralZonaId`=null y el maestro no asigna en runtime.
 

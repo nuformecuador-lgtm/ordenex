@@ -576,12 +576,13 @@
       "id": 55,
       "name": "completar ZonaForm: setear esCentral + reconciliar drift provincia.zonaId",
       "description": "FOLLOW-UP de la feature 54 (deuda #40): `app/(app)/configuracion/_components/ZonaForm.tsx` quedo STUBBEADO por el refactor #40 (solo el campo `nombre`). NO hay UI para marcar una zona como CENTRAL (`esCentral`), aunque el schema/DTO/repo ya lo soportan tras la feature 54. IMPACTO OPERATIVO: sin poder marcar la zona central desde configuracion, `IZonaRepository.findCentralZonaId()` devuelve null y el maestro (feature 30) no puede asignar mensajeros ni rutear (guardia R4 'no hay zona GAM/central'); tambien bloquea el runtime de 34/37. Alcance: (1) completar `ZonaForm` para crear/editar zona con el toggle `esCentral` (a lo sumo una true, validado); reconstruir los campos que el #40 stubbeo si aplica (provincias/cantones/distritos N:M, cobroVehiculo); (2) reconciliar el drift schema/DB de `provincia.zonaId` (la migracion #40 `provincia_zona_id_nullable` quedo como no-op guardado en la 54; verificar el estado real de la columna y alinear schema<->DB). Frontend principal + posible ajuste backend/migracion. Depende de la 54.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
-      "branch": null,
-      "depends_on": 54
+      "branch": "feature/55-zonaform-escentral",
+      "depends_on": 54,
+      "status_note": "F1 (spec R1-R14 en specs/55-zonaform-escentral/) COMPLETA + F1.4 APROBADA 2026-07-12 (todo recomendado): (A) reasignar central con confirmacion en misma tx; (B) reconstruccion COMPLETA de ZonaForm (nombre+provincia/canton/distritos N:M+cobroVehiculo+toggle esCentral); (C) drift provincia.zonaId = reconciliacion SOLO-SCHEMA sin migracion (borrar Provincia.zonaId/zona + Zona.provincias huerfanos); (D) seed NO toca es_central. F2 (impl) EN CURSO."
     }
   ]
 }
