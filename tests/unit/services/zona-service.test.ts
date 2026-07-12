@@ -13,7 +13,7 @@ const DESCONOCIDO: Actor = { usuarioId: "z", rol: "invitado" as RolValue };
 const NO_MAESTROS = [ADMIN, MENSAJERO, TIENDA, DESCONOCIDO];
 
 function dto(overrides: Partial<ZonaDTO> = {}): ZonaDTO {
-  return { id: "z1", nombre: "GAM", cobroVehiculo: false, distritosCount: 1, ...overrides };
+  return { id: "z1", nombre: "GAM", cobroVehiculo: false, distritosCount: 1, esCentral: false, ...overrides };
 }
 
 function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
@@ -27,6 +27,7 @@ function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
     // por defecto: todos los ids existen.
     countExistingDistritos: vi.fn(async (ids: string[]) => ids.length),
     countExistingVehiculos: vi.fn(async (ids: string[]) => ids.length),
+    findCentralZonaId: vi.fn().mockResolvedValue(null), // feature 54
     ...overrides,
   };
 }
@@ -35,6 +36,7 @@ function crearInput(overrides: Partial<CrearZonaInput> = {}): CrearZonaInput {
   return {
     nombre: "GAM",
     cobroVehiculo: false,
+    esCentral: false, // feature 54
     distritoIds: ["d1"],
     tarifas: [],
     ...overrides,

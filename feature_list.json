@@ -560,6 +560,29 @@
       "zone": "backend",
       "branch": "chore/deuda-despliegue-migraciones",
       "depends_on": null
+    },
+    {
+      "id": 54,
+      "name": "reconciliar refactor zonas/tarifas (dev verde) + reponer identificacion GAM como esCentral",
+      "description": "FIX-FEATURE de reconciliacion: el PR #40 'Adjustments' (mergeado a dev 2026-07-12) fue un refactor grande dejado A MEDIAS que rompio el baseline (prisma validate invalido + 86 errores de typecheck, init.sh rojo). El refactor: (a) renombro cobros->tarifas (modelo `tarifas` por zona con valorFlete/valorFleteGam/IVA/comision + `TarifaZonaMensajero` pago-por-zona), (b) remodelo zona<->distrito a N:M (`ZonaDistrito`), (c) reescribio IZonaRepository/lib/types/zona.ts, (d) agrego sidebar/menu shadcn nuevo. PERO quito de `Zona` los campos `esGam`/`pagoEntrega`/`pagoRechazo` y ELIMINO `IZonaRepository.findGamZonaId()` sin actualizar a sus consumidores (features 17/30/34: lib/actions/ordenes-guia.ts, lib/services/GuiaAsignacionService.ts) y dejo el schema invalido (modelo `Zona` sin la relacion opuesta `usuarios Usuario[]`). DECISIONES DEL HUMANO (2026-07-12): (1) arreglar HACIA ADELANTE conservando el refactor (no revertir); (2) reponer la identificacion de la zona central con un flag NUEVO `esCentral` (renombrado desde el viejo `esGam`) en `Zona` (a lo sumo una true) + su resolver (findGamZonaId -> renombrar a findCentralZonaId, o equivalente) y actualizar los llamadores 17/30/34; los pagos ya viven en tarifas/TarifaZonaMensajero (no vuelven a zona). Alcance: arreglar schema.prisma (relacion `Zona.usuarios`), recablear ZonaRepository/TarifaRepository/GeoRepository al nuevo modelo, reponer `esCentral`+resolver (migracion + down.sql), corregir zonas-columns.tsx (usar esCentral; quitar columnas pagoEntrega/pagoRechazo que se movieron a tarifas), y actualizar TODOS los tests. CRITERIO DE ACEPTACION: `npx prisma validate` OK + `pnpm typecheck` 0 errores + `./init.sh` VERDE + `pnpm build` pasa. Fullstack de reconciliacion. DESBLOQUEA la feature 37 (pausada) y repara 17/30/34 en dev.",
+      "status": "done",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/54-reconciliar-zonas-tarifas",
+      "depends_on": null,
+      "status_note": "done 2026-07-12; fix-feature agil (spec inline, sin specs/54 dir, precedente 51/52/53). Reviewer APROBADO 0 bloqueantes; dev VERDE (prisma OK, typecheck 0, 1565 tests, build OK)."
+    },
+    {
+      "id": 55,
+      "name": "completar ZonaForm: setear esCentral + reconciliar drift provincia.zonaId",
+      "description": "FOLLOW-UP de la feature 54 (deuda #40): `app/(app)/configuracion/_components/ZonaForm.tsx` quedo STUBBEADO por el refactor #40 (solo el campo `nombre`). NO hay UI para marcar una zona como CENTRAL (`esCentral`), aunque el schema/DTO/repo ya lo soportan tras la feature 54. IMPACTO OPERATIVO: sin poder marcar la zona central desde configuracion, `IZonaRepository.findCentralZonaId()` devuelve null y el maestro (feature 30) no puede asignar mensajeros ni rutear (guardia R4 'no hay zona GAM/central'); tambien bloquea el runtime de 34/37. Alcance: (1) completar `ZonaForm` para crear/editar zona con el toggle `esCentral` (a lo sumo una true, validado); reconstruir los campos que el #40 stubbeo si aplica (provincias/cantones/distritos N:M, cobroVehiculo); (2) reconciliar el drift schema/DB de `provincia.zonaId` (la migracion #40 `provincia_zona_id_nullable` quedo como no-op guardado en la 54; verificar el estado real de la columna y alinear schema<->DB). Frontend principal + posible ajuste backend/migracion. Depende de la 54.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 54
     }
   ]
 }

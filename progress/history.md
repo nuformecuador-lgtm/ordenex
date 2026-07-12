@@ -831,3 +831,30 @@
   detalle de carrera R14, motivo `conflict` vs `estado_invalido` (cosmético).
 - **Desbloquea/completa**: cierra la cadena satelital operativa. Consumió 33 (`en_bodega_satelite`), 17 (asignación/
   `en_espera_aceptacion`) y 30 (filtro de mensajeros por zona, ahora `...ByZona`).
+
+## 2026-07-12 — reconciliación del refactor PR #40: dev verde + esCentral (feature 54, FULLSTACK/FIX)
+- FIX-FEATURE de emergencia: el PR #40 "Adjustments" (refactor cobros→tarifas, zona↔distrito N:M, `TarifaZonaMensajero`
+  pago-por-zona, sidebar/menú shadcn nuevo) se mergeó A MEDIAS a `dev` y lo dejó ROJO: `prisma validate` inválido + 86
+  errores de typecheck + 11 tests fallando. Decisión del humano (2026-07-12): arreglar HACIA ADELANTE (conservar el
+  refactor) + reponer la identificación de la zona central con flag NUEVO `esCentral` (renombrado desde `esGam`).
+- Reconciliación (backend_dev + frontend_dev, model opus): (1) schema — repone `Zona.usuarios Usuario[]` (P1012);
+  renombra `Zona.esGam`→`esCentral` (`@map("es_central")`, índice único parcial) vía migración
+  `20260712000000_zona_es_central_rename` (+down.sql); convierte la migración #40 rota
+  `20260711200000_provincia_zona_id_nullable` (ALTER sobre columna inexistente, 42703) en no-op idempotente guardado.
+  (2) resolver — `IZonaRepository.findGamZonaId`→`findCentralZonaId` (devuelve la zona `esCentral=true`); actualiza los
+  llamadores 17/30 (`GuiaAsignacionService`, `ordenes-guia.ts`) manteniendo la semántica (maestro asigna a mensajeros
+  de la zona central). (3) recablea `ZonaRepository`/`TarifaRepository`/`GeoRepository` al nuevo modelo. (4)
+  `zonas-columns.tsx` usa `esCentral` y quita las columnas de pagos (movidos a tarifas/`TarifaZonaMensajero`).
+- Loose-ends del #40 también corregidos (2do pase): (a) `menu-visibility.test.ts` obsoleto (desestructuraba por
+  posición; el #40 reordenó el menú) → referencia por LABEL; (b) el #40 REVIRTIÓ la feature 51 (ejemplos de la
+  plantilla volvieron a Ecuador) → RESTAURADO Costa Rica (San José/San José/Carmen) + distrito `required` en
+  `OrdenesCargaMasivaButton`; (c) tests de invariante de migración (frágiles ante la migración retro-fechada
+  `20260711000000_seed_roles_catalogo` del #40) → comparación contra predecesor real fijo (no tautológico).
+- Verificación (reviewer + leader, ambos corrieron): `npx prisma validate` OK, `pnpm typecheck` **0**, `pnpm test`
+  **1565/1565**, `./init.sh` verde, `pnpm build` OK, `migrate status` up-to-date. Reviewer **APROBADO** 0 bloqueantes.
+- Ciclo ágil (fix-feature, spec inline en `feature_list.json` id 54 con criterios de aceptación; sin `specs/54-` dir,
+  precedente 51/52/53). Se conservó la intención del #40 (no se revirtió nada del refactor).
+- DEUDA/FOLLOW-UP (feature 55): `ZonaForm.tsx` sigue STUBBEADO (solo `nombre`) → NO hay UI para marcar la zona
+  `esCentral`, así que `findCentralZonaId` devuelve null y el maestro (30) no puede asignar en runtime hasta
+  completarla. También: limpieza cosmética de nombres `esGam` legacy; drift schema/DB en `provincia.zonaId`.
+- **DESBLOQUEA**: `dev` vuelve a estar verde → repara 17/30/34 y destraba la feature 37 (pausada, spec intacto).

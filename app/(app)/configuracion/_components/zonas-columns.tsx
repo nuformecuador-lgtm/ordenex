@@ -4,18 +4,11 @@ import { cn } from "@/lib/utils";
 import type { ZonaDTO } from "@/lib/types/zona";
 
 /**
- * Formatea un monto de pago para mostrarlo con dos decimales. El DTO ya entrega
- * los montos como `number` (R26); aquí solo se les da forma para la tabla.
+ * Chip legible del flag `esCentral` (feature 54, renombrado del viejo `esGam`).
+ * Marca visualmente la zona central/GAM. Cuando la zona no es central se muestra
+ * un guion neutro para no dejar la celda vacía.
  */
-function formatMonto(value: number): string {
-  return value.toFixed(2);
-}
-
-/**
- * Chip legible del flag `esGam` (R24/R31). Marca visualmente la zona central/GAM.
- * Cuando la zona no es GAM se muestra un guion neutro para no dejar la celda vacía.
- */
-export function ZonaGamBadge({ value }: { value: boolean }) {
+export function ZonaCentralBadge({ value }: { value: boolean }) {
   if (!value) {
     return <span className="text-muted-foreground">—</span>;
   }
@@ -38,9 +31,10 @@ export interface ZonasColumnsActions {
 
 /**
  * Columnas del listado de zonas (patrón `usuarios-columns`): nombre, número de
- * distritos asignados (`distritosCount`), pago por entrega, pago por rechazo,
- * badge GAM (`esGam`) y acciones. Mapea directamente el `ZonaDTO` que exponen las
- * Server Actions (R24/R30) sin proyectar campos internos.
+ * distritos asignados (`distritosCount`), badge central (`esCentral`) y acciones.
+ * Mapea directamente el `ZonaDTO` que exponen las Server Actions (feature 54;
+ * los pagos al mensajero viven ahora en `tarifa_zona_mensajero`, fuera de esta
+ * tabla) sin proyectar campos internos.
  */
 export function buildZonasColumns({
   onEditar,
@@ -53,19 +47,9 @@ export function buildZonasColumns({
       render: (row) => row.distritosCount,
     },
     {
-      id: "pagoEntrega",
-      value: "Pago entrega",
-      render: (row) => formatMonto(row.pagoEntrega),
-    },
-    {
-      id: "pagoRechazo",
-      value: "Pago rechazo",
-      render: (row) => formatMonto(row.pagoRechazo),
-    },
-    {
-      id: "gam",
-      value: "GAM",
-      render: (row) => <ZonaGamBadge value={row.esGam} />,
+      id: "central",
+      value: "Central",
+      render: (row) => <ZonaCentralBadge value={row.esCentral} />,
     },
     {
       id: "acciones",

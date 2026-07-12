@@ -53,23 +53,21 @@ describe("estructura up/down y orden temporal (R2, convencion del repo)", () => 
     expect(fs.existsSync(path.join(migrationDir, "down.sql"))).toBe(true);
   });
 
-  it("tiene timestamp posterior a toda migracion previa", () => {
+  // Invariante: cada migracion conserva su orden relativo respecto de sus
+  // predecesoras; nuevas migraciones apendidas despues NO la afectan. Comparamos
+  // contra el predecesor inmediato conocido (postulacion_mensajero), no contra el
+  // maximo del repo (que crece con features futuras). Falla si alguien re-fechara
+  // fulfillment antes de su predecesor.
+  it("se ordena despues de su predecesor inmediato (postulacion_mensajero)", () => {
     const dirs = fs
       .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       .sort();
-    const fulfillmentDir = dirs.find((d) => d.endsWith("_usuario_fulfillment"))!;
-    const previos = dirs.filter(
-      (d) =>
-        !d.endsWith("_usuario_fulfillment") &&
-        !d.endsWith("_rename_cobro_tarifas") && // feature 24: apendida despues con timestamp posterior
-        !d.endsWith("_seed_roles_catalogo") && // seed roles: apendida despues
-        !d.endsWith("_tarifa_zona_mensajero_zona_vehiculo_unique") && // feature 24: apendida despues
-        !d.endsWith("_provincia_zona_id_nullable") && // geografia sin zona: apendida despues
-        !d.endsWith("_zona_distrito_nm"), // feature 24 N:M: apendida despues
-    );
-    const maxPrevio = previos[previos.length - 1];
-    expect(fulfillmentDir > maxPrevio).toBe(true);
+    const fulfillmentDir = dirs.find((d) => d.endsWith("_usuario_fulfillment"));
+    const postulacionDir = dirs.find((d) => d.endsWith("_postulacion_mensajero"));
+    expect(fulfillmentDir).toBeDefined();
+    expect(postulacionDir).toBeDefined();
+    expect(fulfillmentDir! > postulacionDir!).toBe(true);
   });
 });

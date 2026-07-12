@@ -89,12 +89,14 @@ function fakeZonaRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository
   return {
     create: vi.fn(),
     findById: vi.fn(),
-    findByNombreKey: vi.fn(),
     list: vi.fn(),
     update: vi.fn(),
-    setGam: vi.fn(),
-    listLight: vi.fn(),
-    findGamZonaId: vi.fn(async () => GAM_ZONA_ID),
+    hardDelete: vi.fn(),
+    arbol: vi.fn(),
+    countExistingDistritos: vi.fn(),
+    countExistingVehiculos: vi.fn(),
+    // Feature 54: la zona central se resuelve por findCentralZonaId (antes findGamZonaId).
+    findCentralZonaId: vi.fn(async () => GAM_ZONA_ID),
     ...overrides,
   } as unknown as IZonaRepository;
 }
@@ -496,7 +498,7 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
 describe("Feature 30 — guardia zona GAM no configurada (R4)", () => {
   it("R4: generarGuia sin zona GAM -> validation_error 'zona GAM no configurada', sin efectos", async () => {
     const repo = fakeRepo();
-    const service = newService(repo, fakeZonaRepo({ findGamZonaId: vi.fn(async () => null) }));
+    const service = newService(repo, fakeZonaRepo({ findCentralZonaId: vi.fn(async () => null) }));
 
     const r = await service.generarGuia(
       { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
@@ -513,7 +515,7 @@ describe("Feature 30 — guardia zona GAM no configurada (R4)", () => {
 
   it("R4: asignarDesdeBodega sin zona GAM -> validation_error, sin efectos", async () => {
     const repo = fakeRepo();
-    const service = newService(repo, fakeZonaRepo({ findGamZonaId: vi.fn(async () => null) }));
+    const service = newService(repo, fakeZonaRepo({ findCentralZonaId: vi.fn(async () => null) }));
 
     const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, MAESTRO);
 
@@ -523,7 +525,7 @@ describe("Feature 30 — guardia zona GAM no configurada (R4)", () => {
 
   it("R4: rutearABodegaSatelite sin zona GAM -> validation_error, sin efectos", async () => {
     const repo = fakeRepo();
-    const service = newService(repo, fakeZonaRepo({ findGamZonaId: vi.fn(async () => null) }));
+    const service = newService(repo, fakeZonaRepo({ findCentralZonaId: vi.fn(async () => null) }));
 
     const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
 

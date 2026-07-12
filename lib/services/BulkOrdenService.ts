@@ -88,16 +88,6 @@ function resolveGeo(
   }
   const provincia = provinciaResult.row;
 
-  // La zona de la orden se deriva de la provincia (orden.zona_id es NOT NULL).
-  // Si la provincia aun no tiene zona asignada, la fila no se puede resolver.
-  const zonaId = provincia.zonaId;
-  if (zonaId === null) {
-    return {
-      ok: false,
-      fieldErrors: { provincia: ["la provincia no tiene zona asignada"] },
-    };
-  }
-
   const cantonResult = lookup(cantonIndex, `${provincia.id}::${normalize(raw.canton)}`);
   if (cantonResult.status !== "found") {
     return {
@@ -138,6 +128,8 @@ function resolveGeo(
     };
   }
   const distrito = distritoResult.row;
+  // Feature 24/R4/R11 (reconciliacion feature 54): la zona de la orden se deriva
+  // del DISTRITO (orden.zona_id es NOT NULL). Un distrito sin zona -> error de fila.
   if (distrito.zonaId === null) {
     return {
       ok: false,
@@ -149,7 +141,7 @@ function resolveGeo(
     ok: true,
     geo: {
       provinciaId: provincia.id,
-      zonaId,
+      zonaId: distrito.zonaId,
       cantonId: canton.id,
       distritoId: distrito.id,
     },

@@ -187,8 +187,8 @@ export async function seedGeografia(prisma: GeoPrisma, rows: GeoRow[]): Promise<
 
 /**
  * R35/R37/R39: pre-crea las zonas deducidas de la columna `Zona`, deduplicadas por
- * clave normalizada, con pagos 0 y es_gam=false (defaults). En re-corridas el
- * `update: {}` NO pisa pagos/es_gam editados por el maestro. Devuelve key -> zonaId.
+ * clave normalizada, con es_central=false (default). En re-corridas el
+ * `update: {}` NO pisa es_central editado por el maestro. Devuelve key -> zonaId.
  */
 export async function seedZonas(prisma: ZonaPrisma, hints: ZonaHintRow[]): Promise<Map<string, string>> {
   const zonaByKey = new Map<string, string>();
@@ -200,8 +200,8 @@ export async function seedZonas(prisma: ZonaPrisma, hints: ZonaHintRow[]): Promi
     if (canonical === null) continue;
     const zona = await prisma.zona.upsert({
       where: { nombre: canonical },
-      update: {}, // R39: no sobrescribe pagos/es_gam ya editados
-      create: { nombre: canonical }, // R35/R37: pagos 0 y es_gam false por default
+      update: {}, // R39: no sobrescribe es_central ya editado
+      create: { nombre: canonical }, // R35/R37: es_central false por default
       select: { id: true },
     });
     zonaByKey.set(key, zona.id);
@@ -218,7 +218,7 @@ export interface CruceResult {
 /**
  * R36/R38: por cada terna del Excel original, resuelve el distrito del mapa
  * completo (clave normalizada prov+canton+distrito) y le asigna la zona. Ternas sin
- * distrito o con zona vacia se reportan/omiten sin fallar. NUNCA toca es_gam (R37).
+ * distrito o con zona vacia se reportan/omiten sin fallar. NUNCA toca es_central (R37).
  */
 export async function cruzarZonas(
   prisma: DistritoPrisma,

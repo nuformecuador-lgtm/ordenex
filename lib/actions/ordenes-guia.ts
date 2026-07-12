@@ -32,7 +32,7 @@ function buildOrdenRepo(): Pick<IOrdenRepository, "findMensajerosByZona"> {
   return new OrdenRepository(getPrismaClient());
 }
 
-function buildZonaRepoParaMensajeros(): Pick<IZonaRepository, "findGamZonaId"> {
+function buildZonaRepoParaMensajeros(): Pick<IZonaRepository, "findCentralZonaId"> {
   return new ZonaRepository(getPrismaClient());
 }
 
@@ -47,7 +47,7 @@ export interface GuiaActionDeps {
 
 export interface ListarMensajerosDeps {
   ordenRepo?: Pick<IOrdenRepository, "findMensajerosByZona">;
-  zonaRepo?: Pick<IZonaRepository, "findGamZonaId">;
+  zonaRepo?: Pick<IZonaRepository, "findCentralZonaId">;
   getActor?: () => Promise<Actor | null>;
 }
 
@@ -110,7 +110,7 @@ export async function asignarDesdeBodega(
 
 /**
  * Feature 30/R5/R18: SOLO los usuarios rol mensajero de la zona GAM (firma y tipo
- * `MensajeroLiteDTO[]` intactos respecto a la feature 17). Resuelve `gamZonaId` y
+ * `MensajeroLiteDTO[]` intactos respecto a la feature 17). Resuelve `centralZonaId` y
  * filtra por zona en el repo; si aun no hay zona GAM configurada -> lista vacia
  * (la UI ya maneja lista vacia; la escritura falla con R4 en el service, mensaje
  * claro). `maestro` escribe y `admin` es solo-lectura (R16); ambos pueden listar
@@ -126,13 +126,13 @@ export async function listarMensajerosParaAsignacion(
       return { status: "forbidden" as const };
     }
     const zonaRepo = deps.zonaRepo ?? buildZonaRepoParaMensajeros();
-    const gamZonaId = await zonaRepo.findGamZonaId();
-    if (gamZonaId === null) {
+    const centralZonaId = await zonaRepo.findCentralZonaId();
+    if (centralZonaId === null) {
       // R5: sin zona GAM configurada, no hay mensajeros GAM que listar.
       return { status: "ok" as const, mensajeros: [] };
     }
     const repo = deps.ordenRepo ?? buildOrdenRepo();
-    const mensajeros = await repo.findMensajerosByZona(gamZonaId);
+    const mensajeros = await repo.findMensajerosByZona(centralZonaId);
     return { status: "ok" as const, mensajeros };
   });
   // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el

@@ -10,7 +10,16 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 const actor = (rol: RolValue): Actor => ({ usuarioId: "u1", rol });
 
-const [config, perfil, ordenes] = SIDEBAR_ITEMS;
+// Referencias por LABEL (no por posicion): el orden de SIDEBAR_ITEMS puede
+// cambiar sin romper estas pruebas mientras las etiquetas se mantengan.
+const byLabel = (label: string): MenuItem => {
+  const it = SIDEBAR_ITEMS.find((i) => i.label === label);
+  if (!it) throw new Error(`sin item ${label}`);
+  return it;
+};
+const ordenes = byLabel("Órdenes");
+const config = byLabel("Configuración");
+const perfil = byLabel("Perfil");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -37,29 +46,29 @@ describe("puedeVer", () => {
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve los 3 ítems (Configuración, Perfil, Órdenes)", () => {
+  it("maestro ve los 3 ítems en el orden real (Órdenes, Configuración, Perfil)", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
+      "Órdenes",
       "Configuración",
       "Perfil",
-      "Órdenes",
     ]);
   });
 
-  it("admin ve Perfil + Órdenes, NO Configuración", () => {
+  it("admin ve Órdenes + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("admin")));
-    expect(visibles).toEqual(["Perfil", "Órdenes"]);
+    expect(visibles).toEqual(["Órdenes", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Perfil + Órdenes, NO Configuración", () => {
+  it("adminTienda ve Órdenes + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
-    expect(visibles).toEqual(["Perfil", "Órdenes"]);
+    expect(visibles).toEqual(["Órdenes", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("mensajero ve Perfil + Órdenes, NO Configuración", () => {
+  it("mensajero ve Órdenes + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
-    expect(visibles).toEqual(["Perfil", "Órdenes"]);
+    expect(visibles).toEqual(["Órdenes", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
   });
 
