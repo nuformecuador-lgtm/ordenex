@@ -1222,6 +1222,27 @@
   **2330/2330 (260 archivos)**, focalizado 17/17. Menores no bloqueantes: focus-ring cosmético en borde de scroll (tradeoff
   estándar de modal scrolleable). **Un PR (2 commits: fix plantilla + fix modal) `feature/58 → dev`.** MERGEADA (PR #56).
 
+## Feature 48 — rechazo: devolución a la tienda de origen (2026-07-13)
+
+- **CUARTA y ÚLTIMA de la Fase 2 del flujo del mensajero** → cierra el grupo **46/47/48/49**. Fullstack/high, un ciclo.
+  Rama desde el tip de la 47 (`dev`+58+47). F1.4 APROBADA (todas las recomendaciones). Impl R1–R19 + reviewer APROBADO
+  0 bloqueantes. Commit `5467b94`.
+- **Retorno por ACCIÓN MANUAL de la bodega responsable** (`DevolucionOrigenService.devolverATienda`): `rechazada →
+  devuelta_origen`. Elegible CUALQUIER orden en `rechazada` — ambos caminos (rechazo directo del mensajero -36- y
+  escalado -47-); la elegibilidad es por ESTADO, no por camino. Idempotente.
+- **Transición ATÓMICA y trazada** vía el choke point de la 49 reutilizando el punto #11 (`OrdenRepository.update`,
+  `origen_tipo=ajuste_estado`): `updateMany` + `appendCambioEstado` en la MISMA `$transaction` (revierte si el append
+  falla). `orden-historial-cobertura.test.ts` SIGUE en 11 puntos (enum sin `devolucion_origen`).
+- **Autz rol+zona SERVER-SIDE**: `bodega_central`→maestro/admin; `bodega_satelite`→adminSatélite de la zona; resto
+  forbidden. Sub-riesgo F1.4-d respetado (`OrdenService.KNOWN_ROLES` sigue sin `adminSatelite`; la superficie del
+  satélite vive en `RecepcionSateliteService` acotada por zona). **Tienda de origen** = `orden.tienda_id` (nada nuevo);
+  el adminTienda VE sus `rechazada`/`devuelta_origen` por scope server-side. UI: botón "Devolver a tienda" en la bodega
+  + apartado de devueltas del adminTienda.
+- **SIN migración** (los estatus y el `tienda_id` ya existían). Verde: typecheck 0, lint 0, **2405/2405 (+44)**,
+  `init.sh` OK, SIN regresión 36/47/49. DEUDA menor: authz corre tras la guarda de estado → un actor no responsable
+  puede recibir `ok`/conocer estado vía el `motivo` del conflict sin modificar datos (follow-up authz-first); E2E
+  diferido. **PENDIENTE: PR a `dev` + merge (OK humano).**
+
 ## 2026-07-13 — feature 57: botón cerrar sesión (logout) para todos los roles
 - Fullstack/low, `sdd:true`. Corrió **EN PARALELO con la feature 47** (otra sesión, fase spec) en **worktree aislado** `../ordenex-f57`
   desde `dev`, archivos disjuntos (shell/auth vs. máquina de estados de la 47). Ciclo SDD completo (spec_author → F1.4 →

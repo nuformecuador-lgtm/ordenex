@@ -11,6 +11,7 @@ function buildService(overrides: Partial<IRecepcionSateliteService> = {}): IRece
       status: "ok" as const,
       porRecibir: [],
       recibidas: [],
+      porDevolver: [],
       zonaNombre: "Limon",
       sinZona: false,
     })),

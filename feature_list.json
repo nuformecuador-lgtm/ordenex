@@ -508,11 +508,12 @@
       "id": 48,
       "name": "rechazo: devolucion a la tienda de origen",
       "description": "(FASE 2 / detalle.) Cuando una orden llega a RECHAZO (estado final, tras 3 intentos fallidos o rechazo directo, features 47/36), la orden debe VOLVER a la tienda (admin de tienda) que la cargo originalmente en la carga masiva. Incluye el flujo y la visibilidad del retorno a la tienda de origen (la tienda ve sus ordenes rechazadas devueltas). Depende de la feature 47 (escalado a rechazo) y 36.",
-      "status": "pending",
+      "status": "done",
+      "status_note": "done 2026-07-13; F1.4 APROBADA (todas recomendadas). CUARTA y ULTIMA de la Fase 2 flujo mensajero (grupo 46/47/48/49 COMPLETO). Impl COMPLETA (R1-R19) + reviewer APROBADO 0 bloqueantes. VERDE: typecheck 0, lint 0, 2405/2405 tests (+44), init.sh OK, SIN migracion (rechazada/devuelta_origen ya sembrados; tienda origen = orden.tienda_id FK NOT NULL). Rama nace del tip de la 47 (dev+58+47). RETORNO por ACCION MANUAL de la bodega responsable (DevolucionOrigenService.devolverATienda): rechazada->devuelta_origen, elegible cualquier orden en rechazada (ambos caminos: rechazo directo 36 y escalado 47; elegibilidad por ESTADO no por camino), idempotente. Transicion ATOMICA y trazada via el choke point de la 49 reutilizando el punto #11 (OrdenRepository.update origen_tipo=ajuste_estado: updateMany + appendCambioEstado en la MISMA $transaction; revierte si el append falla); orden-historial-cobertura.test.ts SIGUE en 11 puntos (enum sin devolucion_origen). Autz rol+zona SERVER-SIDE (bodega_central->maestro/admin; bodega_satelite->adminSatelite de la zona; resto forbidden). Visibilidad: el adminTienda VE sus rechazada/devuelta_origen via OrdenService.listar scope por tienda_id (server-side); sub-riesgo F1.4-d respetado (KNOWN_ROLES sin adminSatelite; su superficie vive en RecepcionSateliteService acotada por zona). UI: boton 'Devolver a tienda' en la bodega + apartado devueltas del adminTienda. Commit 5467b94 + cierre chore(state). DEUDA menor: authz corre tras la guarda de estado -> un actor no responsable puede recibir ok/conocer estado via motivo del conflict sin modificar datos (diseno aprobado §2.2; follow-up authz-first); E2E e2e/devolucion-origen.spec.ts diferido (patron 46/47). PENDIENTE: sync con dev + PR + merge (OK humano). CIERRA el grupo Fase 2 mensajero (46/47/48/49).",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/48-rechazo-devolucion-tienda-origen",
       "depends_on": 47
     },
     {

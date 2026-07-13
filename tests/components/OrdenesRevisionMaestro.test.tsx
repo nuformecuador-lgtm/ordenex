@@ -16,6 +16,7 @@ import {
 } from "@/lib/actions/ordenes-guia";
 import { generarEtiquetas } from "@/lib/actions/etiquetas-guia";
 import { obtenerHistorialOrden } from "@/lib/actions/orden-historial";
+import { devolverATienda } from "@/lib/actions/devolucion-origen";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { EstatusLiteDTO, MensajeroLiteDTO } from "@/lib/types/orden-guia";
 import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
@@ -49,6 +50,12 @@ vi.mock("@/lib/actions/etiquetas-guia", () => ({
 vi.mock("@/lib/actions/orden-historial", () => ({
   obtenerHistorialOrden: vi.fn(),
 }));
+
+// Feature 48 (T8): el apartado "Rechazadas" monta `DevolverATiendaModal`, que
+// consume la Server Action del retorno. Se mockea para verificar la composición.
+vi.mock("@/lib/actions/devolucion-origen", () => ({
+  devolverATienda: vi.fn(),
+}));
 vi.mock("@/app/(app)/ordenes/_components/etiquetas-pdf", () => ({
   descargarEtiquetasPdf: vi.fn(),
 }));
@@ -69,6 +76,7 @@ const asignarDesdeBodegaMock = vi.mocked(asignarDesdeBodega);
 const rutearABodegaSateliteMock = vi.mocked(rutearABodegaSatelite);
 const generarEtiquetasMock = vi.mocked(generarEtiquetas);
 const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
+const devolverATiendaMock = vi.mocked(devolverATienda);
 
 const HISTORIAL_ENTRADA: OrdenHistorialEntradaDTO = {
   estatusOrigenValue: "en_reparto",
@@ -85,6 +93,9 @@ const ESTATUS: EstatusLiteDTO[] = [
   { id: "id-espera", value: "en_espera_aceptacion" },
   { id: "id-bodega", value: "en_bodega" },
   { id: "id-satelite", value: "en_ruta_bodega_satelite" },
+  // Feature 48 (T8): apartados "Rechazadas" y "Devueltas a origen".
+  { id: "id-rechazada", value: "rechazada" },
+  { id: "id-devuelta-origen", value: "devuelta_origen" },
 ];
 
 const MENSAJEROS: MensajeroLiteDTO[] = [{ id: "m1", nombre: "Juan Mensajero" }];
@@ -162,6 +173,7 @@ beforeEach(() => {
     intentos: 0,
     umbral: 3,
   });
+  devolverATiendaMock.mockResolvedValue({ status: "ok" });
   listarOrdenesMock.mockImplementation(async (input) => {
     const { estatusId, page, pageSize } = input as {
       estatusId?: string;
@@ -460,5 +472,121 @@ describe("OrdenesRevisionMaestro", () => {
     expect(rutearABodegaSateliteMock).toHaveBeenCalledWith({
       ordenIds: ["no-gam-1"],
     });
+  });
+
+  // ---------- Feature 48 (T8) — retorno a la tienda de origen ----------
+
+  it("Feature 48/R4/R14: monta los apartados 'Rechazadas' y 'Devueltas a origen'", async () => {
+    renderComponent();
+
+    await screen.findByText("REM-F1");
+    expect(
+      screen.getByRole("region", { name: "Rechazadas" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Devueltas a origen" }),
+    ).toBeInTheDocument();
+  });
+
+  it("Feature 48/R4/R10: 'Devolver a la tienda' abre el modal SOLO con las órdenes de zona central (zonaEsGam=true)", async () => {
+    const user = userEvent.setup();
+    // En rechazada: una orden de zona central (devolvible por el maestro) y una de
+    // zona satélite (NO debe ir al lote del maestro; su bodega la devuelve).
+    listarOrdenesMock.mockImplementation(async (input) => {
+      const { estatusId, page, pageSize } = input as {
+        estatusId?: string;
+        page: number;
+        pageSize: number;
+      };
+      const items =
+        estatusId === "id-rechazada"
+          ? [
+              makeOrden({
+                id: "central-1",
+                numRemision: "REM-CENTRAL",
+                estatusId: "id-rechazada",
+                zonaEsGam: true,
+                zonaNombre: "GAM",
+              }),
+              makeOrden({
+                id: "satelite-1",
+                numRemision: "REM-SATELITE",
+                estatusId: "id-rechazada",
+                zonaEsGam: false,
+                zonaNombre: "Limón",
+              }),
+            ]
+          : [];
+      return { status: "ok", items, page, pageSize, total: items.length };
+    });
+
+    renderComponent();
+
+    await screen.findByText("REM-CENTRAL");
+    const rechazadas = screen.getByRole("region", { name: "Rechazadas" });
+    // Selecciona AMBAS órdenes; solo la de zona central debe pasar al modal.
+    const checkboxes = within(rechazadas).getAllByRole("checkbox");
+    await user.click(checkboxes[0]);
+    await user.click(checkboxes[1]);
+
+    await user.click(
+      within(rechazadas).getByRole("button", { name: "Devolver a la tienda" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Devolver a la tienda",
+    });
+    // El modal lista SOLO la orden de zona central.
+    expect(within(dialog).getByText(/REM-CENTRAL/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/REM-SATELITE/)).toBeNull();
+    // Confirmar → una única llamada, con el ordenId de la orden central.
+    await user.click(
+      within(dialog).getByRole("button", { name: "Devolver a la tienda" }),
+    );
+    await vi.waitFor(() =>
+      expect(devolverATiendaMock).toHaveBeenCalledTimes(1),
+    );
+    expect(devolverATiendaMock).toHaveBeenCalledWith({ ordenId: "central-1" });
+  });
+
+  it("Feature 48/R10 (readOnly/admin): no se muestra la acción 'Devolver a la tienda'", async () => {
+    renderComponent(true);
+
+    await screen.findByText("REM-F1");
+    expect(
+      screen.queryByRole("button", { name: "Devolver a la tienda" }),
+    ).toBeNull();
+  });
+
+  it("Feature 48/R14: el apartado 'Devueltas a origen' es de solo lectura (sin acción de escritura)", async () => {
+    listarOrdenesMock.mockImplementation(async (input) => {
+      const { estatusId, page, pageSize } = input as {
+        estatusId?: string;
+        page: number;
+        pageSize: number;
+      };
+      const items =
+        estatusId === "id-devuelta-origen"
+          ? [
+              makeOrden({
+                id: "dev-1",
+                numRemision: "REM-DEVUELTA",
+                estatusId: "id-devuelta-origen",
+              }),
+            ]
+          : [];
+      return { status: "ok", items, page, pageSize, total: items.length };
+    });
+
+    renderComponent();
+
+    const region = await screen.findByRole("region", {
+      name: "Devueltas a origen",
+    });
+    await within(region).findByText("REM-DEVUELTA");
+    // Sin botón de acción (no re-transiciona); solo listado + "Ver historial".
+    expect(
+      within(region).queryByRole("button", { name: "Devolver a la tienda" }),
+    ).toBeNull();
   });
 });
