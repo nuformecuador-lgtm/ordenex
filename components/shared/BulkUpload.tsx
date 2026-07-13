@@ -18,8 +18,11 @@ export interface TemplateField {
   /** Valor de ejemplo opcional para la fila de muestra (R6). */
   example?: string;
   /**
-   * Marca la columna como obligatoria. Se propaga a la plantilla XLSX, cuya
-   * cabecera se sufija con " *" para anticiparlo al usuario (feature 51).
+   * Marca SEMÁNTICA de columna obligatoria. NO altera el texto de la cabecera de
+   * la plantilla: el header SIEMPRE es la clave máquina (`label ?? key`) para
+   * preservar el round-trip descargar→subir (el parser identifica las columnas
+   * por esa clave exacta). La obligatoriedad se comunica en la UI —p. ej. el
+   * `Alert` del botón de carga—, no en el header del archivo (feature 58).
    */
   required?: boolean;
 }
