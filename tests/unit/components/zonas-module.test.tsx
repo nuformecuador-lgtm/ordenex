@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { forwardRef, useImperativeHandle } from "react";
 import {
   render,
   screen,
@@ -13,22 +14,39 @@ import type { ReactElement } from "react";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { ZonaDTO } from "@/lib/types/zona";
+import type {
+  CentralActual,
+  ZonaFormHandle,
+} from "@/app/(app)/configuracion/_components/ZonaForm";
 
 const listarZonasMock = vi.fn();
 const obtenerZonaMock = vi.fn();
 const crearZonaMock = vi.fn();
 const actualizarZonaMock = vi.fn();
-const listarProvinciasMock = vi.fn();
-const listarCantonesMock = vi.fn();
-const listarDistritosMock = vi.fn();
 vi.mock("@/lib/actions/zonas", () => ({
   listarZonas: (...a: unknown[]) => listarZonasMock(...a),
   obtenerZona: (...a: unknown[]) => obtenerZonaMock(...a),
   crearZona: (...a: unknown[]) => crearZonaMock(...a),
   actualizarZona: (...a: unknown[]) => actualizarZonaMock(...a),
-  listarProvincias: (...a: unknown[]) => listarProvinciasMock(...a),
-  listarCantones: (...a: unknown[]) => listarCantonesMock(...a),
-  listarDistritos: (...a: unknown[]) => listarDistritosMock(...a),
+}));
+
+// El ZonaForm real se ejercita en zona-form.test.tsx. Aquí se stubbea para probar
+// EN AISLAMIENTO el cableado del módulo (submit imperativo → mutate+toast+cierre) y
+// que se le pase la prop `centralActual` derivada del listado (R6-UI/R12).
+const submitMock = vi.fn();
+let lastFormProps: {
+  mode: string;
+  zona?: ZonaDTO | null;
+  centralActual?: CentralActual | null;
+} = { mode: "crear" };
+vi.mock("@/app/(app)/configuracion/_components/ZonaForm", () => ({
+  ZonaForm: forwardRef<ZonaFormHandle, Record<string, unknown>>(
+    function ZonaFormStub(props, ref) {
+      lastFormProps = props as typeof lastFormProps;
+      useImperativeHandle(ref, () => ({ submit: () => submitMock() }));
+      return <div data-testid="zona-form-stub">form</div>;
+    },
+  ),
 }));
 
 import { ZonasModule } from "@/app/(app)/configuracion/_components/ZonasModule";
@@ -36,10 +54,17 @@ import { ZonasModule } from "@/app/(app)/configuracion/_components/ZonasModule";
 const ITEM: ZonaDTO = {
   id: "z1",
   nombre: "Zona Sur",
-  pagoEntrega: 1500,
-  pagoRechazo: 750,
-  esGam: false,
+  cobroVehiculo: false,
   distritosCount: 7,
+  esCentral: false,
+};
+
+const CENTRAL: ZonaDTO = {
+  id: "z2",
+  nombre: "Zona Central",
+  cobroVehiculo: false,
+  distritosCount: 4,
+  esCentral: true,
 };
 
 const INITIAL = { items: [ITEM], total: 1, pageSize: 25 };
@@ -54,6 +79,7 @@ function renderModule(ui: ReactElement) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  lastFormProps = { mode: "crear" };
   listarZonasMock.mockResolvedValue({
     status: "ok",
     items: [ITEM],
@@ -62,9 +88,6 @@ beforeEach(() => {
     total: 1,
   });
   obtenerZonaMock.mockResolvedValue({ status: "ok", zona: ITEM });
-  listarProvinciasMock.mockResolvedValue({ status: "ok", items: [] });
-  listarCantonesMock.mockResolvedValue({ status: "ok", items: [] });
-  listarDistritosMock.mockResolvedValue({ status: "ok", items: [] });
 });
 
 afterEach(() => {
@@ -77,11 +100,17 @@ describe("ZonasModule — listado y paginación (R30)", () => {
 
     expect(screen.getByRole("table", { name: "Zonas" })).toBeInTheDocument();
     expect(await screen.findByText("Zona Sur")).toBeInTheDocument();
-    // distritosCount visible.
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(
       screen.getByRole("navigation", { name: "Paginación" }),
     ).toBeInTheDocument();
+  });
+
+  it("muestra la columna Central con el guion cuando esCentral es false", async () => {
+    renderModule(<ZonasModule initialData={INITIAL} />);
+
+    const fila = await screen.findByRole("row", { name: /Zona Sur/ });
+    expect(within(fila).getByText("—")).toBeInTheDocument();
   });
 });
 
@@ -94,10 +123,11 @@ describe("ZonasModule — crear/editar en Modal (R31)", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Crear zona")).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Nombre")).toBeInTheDocument();
+    expect(within(dialog).getByTestId("zona-form-stub")).toBeInTheDocument();
+    expect(lastFormProps.mode).toBe("crear");
   });
 
-  it("Editar carga la zona y abre el Modal en modo edición", async () => {
+  it("Editar carga la zona y abre el Modal en modo edición pasando la zona", async () => {
     const user = userEvent.setup();
     renderModule(<ZonasModule initialData={INITIAL} />);
 
@@ -106,97 +136,78 @@ describe("ZonasModule — crear/editar en Modal (R31)", () => {
     await waitFor(() => expect(obtenerZonaMock).toHaveBeenCalledWith("z1"));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Editar zona")).toBeInTheDocument();
+    expect(lastFormProps.mode).toBe("editar");
+    expect(lastFormProps.zona?.id).toBe("z1");
   });
 });
 
-describe("ZonasModule — feedback y refresco (R32)", () => {
-  it("crear con éxito muestra toast de éxito y refresca el listado", async () => {
+describe("ZonasModule — feedback del submit (R12)", () => {
+  it("éxito al crear: refresca listado (mutate) + toast + cierra el modal", async () => {
     const user = userEvent.setup();
-    crearZonaMock.mockResolvedValue({ status: "ok", zona: ITEM });
-    listarProvinciasMock.mockResolvedValue({
-      status: "ok",
-      items: [{ id: "p1", nombre: "San José" }],
-    });
-    listarCantonesMock.mockResolvedValue({
-      status: "ok",
-      items: [{ id: "c1", nombre: "Central" }],
-    });
-    listarDistritosMock.mockResolvedValue({
-      status: "ok",
-      items: [{ id: "d1", nombre: "Carmen", zonaId: null, zonaNombre: null }],
-    });
-
+    submitMock.mockResolvedValue({ status: "ok", zona: { id: "z9" } });
     renderModule(<ZonasModule initialData={INITIAL} />);
 
     await user.click(screen.getByRole("button", { name: "Crear zona" }));
     const dialog = await screen.findByRole("dialog");
 
-    await user.type(within(dialog).getByLabelText("Nombre"), "Zona Nueva");
-    await user.click(within(dialog).getByRole("combobox", { name: "Provincia" }));
-    await user.click(
-      within(await screen.findByRole("listbox")).getByRole("option", {
-        name: "San José",
-      }),
-    );
-    await user.click(within(dialog).getByRole("combobox", { name: "Cantón" }));
-    await user.click(
-      within(await screen.findByRole("listbox")).getByRole("option", {
-        name: "Central",
-      }),
-    );
-    await user.click(await within(dialog).findByLabelText("Carmen"));
-
+    const callsBefore = listarZonasMock.mock.calls.length;
     await user.click(within(dialog).getByRole("button", { name: "Guardar" }));
 
-    await waitFor(() => expect(crearZonaMock).toHaveBeenCalledTimes(1));
+    // Toast de éxito.
     expect(await screen.findByText("Zona creada")).toBeInTheDocument();
-    // Refresco: listarZonas se vuelve a invocar tras el éxito (mutate).
+    // mutate() revalida el listado (nueva llamada a listarZonas).
     await waitFor(() =>
-      expect(listarZonasMock.mock.calls.length).toBeGreaterThanOrEqual(1),
+      expect(listarZonasMock.mock.calls.length).toBeGreaterThan(callsBefore),
     );
-  }, 25000);
+    // Modal cerrado.
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
 
-  it("un error del backend al crear muestra toast de error (R32)", async () => {
+  it("error de validación: toast de error y el modal permanece abierto", async () => {
     const user = userEvent.setup();
-    crearZonaMock.mockResolvedValue({ status: "forbidden" });
-    listarProvinciasMock.mockResolvedValue({
-      status: "ok",
-      items: [{ id: "p1", nombre: "San José" }],
+    submitMock.mockResolvedValue({
+      status: "validation_error",
+      fieldErrors: { nombre: ["x"] },
     });
-    listarCantonesMock.mockResolvedValue({
-      status: "ok",
-      items: [{ id: "c1", nombre: "Central" }],
-    });
-    listarDistritosMock.mockResolvedValue({
-      status: "ok",
-      items: [{ id: "d1", nombre: "Carmen", zonaId: null, zonaNombre: null }],
-    });
-
     renderModule(<ZonasModule initialData={INITIAL} />);
 
     await user.click(screen.getByRole("button", { name: "Crear zona" }));
     const dialog = await screen.findByRole("dialog");
-
-    await user.type(within(dialog).getByLabelText("Nombre"), "Zona Nueva");
-    await user.click(within(dialog).getByRole("combobox", { name: "Provincia" }));
-    await user.click(
-      within(await screen.findByRole("listbox")).getByRole("option", {
-        name: "San José",
-      }),
-    );
-    await user.click(within(dialog).getByRole("combobox", { name: "Cantón" }));
-    await user.click(
-      within(await screen.findByRole("listbox")).getByRole("option", {
-        name: "Central",
-      }),
-    );
-    await user.click(await within(dialog).findByLabelText("Carmen"));
-
     await user.click(within(dialog).getByRole("button", { name: "Guardar" }));
 
-    await waitFor(() => expect(crearZonaMock).toHaveBeenCalledTimes(1));
     expect(
-      (await screen.findAllByText("No tienes permiso para esta acción.")).length,
+      (await screen.findAllByText("Revisa los datos e inténtalo de nuevo."))
+        .length,
     ).toBeGreaterThan(0);
-  }, 25000);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(crearZonaMock).not.toHaveBeenCalled();
+  }, 15000);
+});
+
+describe("ZonasModule — central derivada (R6-UI)", () => {
+  it("pasa centralActual al form cuando el listado tiene una zona central", async () => {
+    const user = userEvent.setup();
+    listarZonasMock.mockResolvedValue({
+      status: "ok",
+      items: [ITEM, CENTRAL],
+      page: 1,
+      pageSize: 25,
+      total: 2,
+    });
+    renderModule(
+      <ZonasModule
+        initialData={{ items: [ITEM, CENTRAL], total: 2, pageSize: 25 }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Crear zona" }));
+    await screen.findByRole("dialog");
+
+    expect(lastFormProps.centralActual).toEqual({
+      id: "z2",
+      nombre: "Zona Central",
+    });
+  });
 });

@@ -125,24 +125,22 @@ describe("postulacion down.sql — revierte exactamente (R4/R5)", () => {
 });
 
 describe("no se modifico ninguna migracion previa", () => {
-  it("la migracion de postulacion tiene timestamp posterior al ultimo previo", () => {
+  // Invariante: cada migracion conserva su orden relativo respecto de sus
+  // predecesoras; nuevas migraciones apendidas despues NO la afectan. Aqui la
+  // dependencia es REAL y estable: postulacion crea el FK usuario.vehiculo_id ->
+  // vehiculos(id), asi que DEBE ordenarse despues de la migracion de vehiculos.
+  // La asercion falla si alguien re-fechara postulacion antes de vehiculos.
+  it("postulacion se ordena despues de vehiculos (dependencia FK vehiculo_id)", () => {
     const dirs = fs
       .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       .sort();
-    const postulacionDir = dirs.find((d) => d.endsWith("_postulacion_mensajero"))!;
-    const previos = dirs.filter(
-      (d) =>
-        !d.endsWith("_postulacion_mensajero") &&
-        !d.endsWith("_usuario_fulfillment") && // feature 27: apendida despues con timestamp posterior
-        !d.endsWith("_rename_cobro_tarifas") && // feature 24: apendida despues con timestamp posterior
-        !d.endsWith("_seed_roles_catalogo") && // seed roles: apendida despues
-        !d.endsWith("_tarifa_zona_mensajero_zona_vehiculo_unique") && // feature 24: apendida despues
-        !d.endsWith("_provincia_zona_id_nullable") && // geografia sin zona: apendida despues
-        !d.endsWith("_zona_distrito_nm"), // feature 24 N:M: apendida despues
-    );
-    const maxPrevio = previos[previos.length - 1];
-    expect(postulacionDir > maxPrevio).toBe(true);
+    const postulacionDir = dirs.find((d) => d.endsWith("_postulacion_mensajero"));
+    const vehiculosDir = dirs.find((d) => d.endsWith("_vehiculos"));
+    expect(postulacionDir).toBeDefined();
+    expect(vehiculosDir).toBeDefined();
+    // El FK exige que vehiculos exista antes: timestamp de postulacion > vehiculos.
+    expect(postulacionDir! > vehiculosDir!).toBe(true);
   });
 });

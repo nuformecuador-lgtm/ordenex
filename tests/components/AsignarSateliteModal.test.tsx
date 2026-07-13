@@ -135,6 +135,56 @@ describe("AsignarSateliteModal", () => {
     );
   });
 
+  it("R22 (41): resultado 'bodega_bloqueada' por mensajeros → toast con la causa (i)", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "bodega_bloqueada",
+      causa: { porMensajeros: true, porCierreBodega: false },
+    });
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
+
+    const select = screen.getByRole("combobox", {
+      name: "Mensajero para el lote",
+    });
+    await user.click(select);
+    const listbox = await screen.findByRole("listbox");
+    await user.click(
+      within(listbox).getByRole("option", { name: "Ana Mensajera" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith(
+        expect.stringMatching(/resuelve los cierres pendientes de tus mensajeros/i),
+      ),
+    );
+  });
+
+  it("R22 (41): resultado 'bodega_bloqueada' por cierre de bodega → toast con la causa (ii)", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "bodega_bloqueada",
+      causa: { porMensajeros: false, porCierreBodega: true },
+    });
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
+
+    const select = screen.getByRole("combobox", {
+      name: "Mensajero para el lote",
+    });
+    await user.click(select);
+    const listbox = await screen.findByRole("listbox");
+    await user.click(
+      within(listbox).getByRole("option", { name: "Ana Mensajera" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith(
+        expect.stringMatching(/cierre de bodega hacia la central está pendiente de aprobación/i),
+      ),
+    );
+  });
+
   it("R6: zona sin mensajeros → estado vacío accionable y 'Asignar' deshabilitado", async () => {
     const user = userEvent.setup();
     renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })], []);

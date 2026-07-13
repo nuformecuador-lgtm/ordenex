@@ -117,7 +117,8 @@ export interface GenerarGuiaResultRow {
 export interface ProvinciaRow {
   id: string;
   nombre: string;
-  zonaId: string | null; // nullable: la provincia puede no tener zona asignada aun
+  // feature 54: la zona de la orden ya NO se deriva de la provincia (provincia.zona_id
+  // fue eliminada en la migracion de zonas); se deriva del distrito. Ver BulkOrdenService.
 }
 
 export interface CantonRow {
@@ -178,6 +179,18 @@ export interface RecepcionSateliteRow {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+}
+
+// Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite. Regla
+// ESTRICTA (F1.4-Q4): `bloqueada = porMensajeros || porCierreBodega`. `porMensajeros` =
+// existe un cierre_dia de sus mensajeros (destino satelite de su zona) en
+// `solicitado`/`vencido` (causa i). `porCierreBodega` = existe su propio CierreBodega
+// hacia la central en `solicitado` (causa ii). Ambos flags viajan para que el borde
+// (feature 34) distinga el motivo accionable de R22.
+export interface BodegaBloqueoResult {
+  bloqueada: boolean;
+  porMensajeros: boolean;
+  porCierreBodega: boolean;
 }
 
 export interface IOrdenRepository {
@@ -329,6 +342,13 @@ export interface IOrdenRepository {
    */
   findUsuarioZonaId(usuarioId: string): Promise<string | null>;
   /**
+   * Feature 39/R1/R4: `usuario.vehiculoId` del mensajero, resuelto server-side por
+   * `usuarioId` (espejo de `findUsuarioZonaId`). `null` si el usuario no resuelve o no
+   * tiene vehiculo asignado -> el resolver de tarifa cae a la tarifa por defecto de la
+   * zona (vehiculo_id IS NULL). Solo la query, sin logica de negocio.
+   */
+  findUsuarioVehiculoId(usuarioId: string): Promise<string | null>;
+  /**
    * Feature 33/R6/R8/R9: ordenes NO borradas (`deletedAt: null`) de `zonaId`
    * cuyo `estatus.value` esta en `estatusValues` (["en_ruta_bodega_satelite",
    * "en_bodega_satelite"]), con los nombres legibles de tienda/geografia (patron
@@ -373,4 +393,23 @@ export interface IOrdenRepository {
     destinoEstatusId: string,
     origenEstatusId: string,
   ): Promise<number>;
+
+  // --- Feature 41: bloqueo derivado en asignacion (R12/R16/R17/R23) ---
+
+  /**
+   * R12/R16: de `ids`, subconjunto de mensajeros BLOQUEADOS = tienen al menos un
+   * `cierre_dia` en estado bloqueante (`solicitado` o `vencido`). `rechazado`/`aprobado`
+   * NO bloquean (R16). Usa el indice (mensajero_id, estado). Vacio si `ids` esta vacio.
+   */
+  findMensajerosBloqueados(ids: string[]): Promise<Set<string>>;
+  /**
+   * R17 (regla estricta F1.4-Q4): la bodega satelite de `zonaId` esta BLOQUEADA para
+   * asignar a sus mensajeros si existe CUALQUIERA de: (i) un `cierre_dia`
+   * `destino_tipo='bodega_satelite'`, `destino_zona_id=zonaId`, `estado IN
+   * ('solicitado','vencido')`; O (ii) un `cierre_bodega` `zona_id=zonaId`,
+   * `estado='solicitado'` (su propio cierre hacia la central pendiente; mismo criterio
+   * que la guardia de unicidad de la feature 40, respaldado por su indice unico parcial).
+   * Devuelve los dos flags + `bloqueada = i || ii` para que el borde distinga el motivo.
+   */
+  existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult>;
 }

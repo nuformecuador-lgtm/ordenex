@@ -13,8 +13,11 @@ import { listarZonas, obtenerZona } from "@/lib/actions/zonas";
 import type { ZonaDTO } from "@/lib/types/zona";
 
 import { buildZonasColumns } from "./zonas-columns";
-import { ZonaForm, type ZonaFormHandle } from "./ZonaForm";
-import { Plus } from "lucide-react";
+import {
+  ZonaForm,
+  type CentralActual,
+  type ZonaFormHandle,
+} from "./ZonaForm";
 
 // Opciones acotadas por MAX_PAGE_SIZE del backend (R24).
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
@@ -103,6 +106,15 @@ export function ZonasModule({ initialData }: ZonasModuleProps) {
     },
   });
 
+  // R6-UI: la central actual, derivada del listado cargado, para advertir de la
+  // reasignación al marcar otra zona como central. Limitación conocida: sólo es
+  // fiable si la central está en la página cargada; el backend garantiza la
+  // invariante igualmente.
+  const centralActual: CentralActual | null = (() => {
+    const c = (data?.items ?? []).find((z) => z.esCentral);
+    return c ? { id: c.id, nombre: c.nombre } : null;
+  })();
+
   return (
     <section className="flex flex-col gap-4">
       <div className="flex justify-end">
@@ -151,6 +163,7 @@ export function ZonasModule({ initialData }: ZonasModuleProps) {
           ref={formRef}
           mode={formMode}
           zona={editZona}
+          centralActual={centralActual}
         />
       </Modal>
     </section>

@@ -8,7 +8,7 @@ import { ROLES_SEED } from "@/lib/types/roles";
  * Client Component Sidebar) y las funciones/componentes no son serializables.
  * El Sidebar resuelve `iconKey -> componente` en el cliente al renderizar.
  */
-export type IconKey = "settings" | "user" | "package";
+export type IconKey = "settings" | "user" | "package" | "clipboardCheck";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -60,6 +60,20 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       { label: "Tarifas", href: "/configuracion/tarifas" },
       { label: "API", href: "/configuracion/api" },
     ],
+  },
+  {
+    label: "Cierre del día",
+    href: "/cierre-dia",
+    iconKey: "clipboardCheck",
+    roles: ["mensajero"],
+  },
+  {
+    // Feature 38: cola de cierres del admin de bodega. Ruta y roles distintos del
+    // ítem del mensajero ("/cierre-dia"); la defensa real es el notFound de la página.
+    label: "Cierres del día",
+    href: "/cierres-admin",
+    iconKey: "clipboardCheck",
+    roles: ["maestro", "adminSatelite"],
   },
   {
     label: "Perfil",

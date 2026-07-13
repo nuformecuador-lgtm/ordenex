@@ -10,7 +10,18 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 const actor = (rol: RolValue): Actor => ({ usuarioId: "u1", rol });
 
-const [config, perfil, ordenes] = SIDEBAR_ITEMS;
+// Referencias por LABEL (no por posicion): el orden de SIDEBAR_ITEMS puede
+// cambiar sin romper estas pruebas mientras las etiquetas se mantengan.
+const byLabel = (label: string): MenuItem => {
+  const it = SIDEBAR_ITEMS.find((i) => i.label === label);
+  if (!it) throw new Error(`sin item ${label}`);
+  return it;
+};
+const ordenes = byLabel("Órdenes");
+const config = byLabel("Configuración");
+const perfil = byLabel("Perfil");
+const cierreDia = byLabel("Cierre del día");
+const cierresAdmin = byLabel("Cierres del día");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -20,6 +31,10 @@ describe("puedeVer", () => {
     expect(puedeVer(config, actor("maestro"))).toBe(true);
     expect(puedeVer(ordenes, actor("mensajero"))).toBe(true);
     expect(puedeVer(perfil, actor("adminSatelite"))).toBe(true);
+    expect(puedeVer(cierreDia, actor("mensajero"))).toBe(true);
+    // "Cierres del día" (admin) es visible para maestro y adminSatelite (R1).
+    expect(puedeVer(cierresAdmin, actor("maestro"))).toBe(true);
+    expect(puedeVer(cierresAdmin, actor("adminSatelite"))).toBe(true);
   });
 
   it("oculta el item cuando el rol no está autorizado", () => {
@@ -27,6 +42,13 @@ describe("puedeVer", () => {
     expect(puedeVer(config, actor("adminTienda"))).toBe(false);
     expect(puedeVer(config, actor("adminSatelite"))).toBe(false);
     expect(puedeVer(ordenes, actor("adminSatelite"))).toBe(false);
+    // "Cierre del día" es exclusivo del mensajero (R1).
+    expect(puedeVer(cierreDia, actor("maestro"))).toBe(false);
+    expect(puedeVer(cierreDia, actor("adminSatelite"))).toBe(false);
+    // "Cierres del día" (admin) NO lo ve el mensajero ni otros roles.
+    expect(puedeVer(cierresAdmin, actor("mensajero"))).toBe(false);
+    expect(puedeVer(cierresAdmin, actor("admin"))).toBe(false);
+    expect(puedeVer(cierresAdmin, actor("adminTienda"))).toBe(false);
   });
 
   it("oculta todo cuando no hay actor (sesión ausente o inválida)", () => {
@@ -37,35 +59,36 @@ describe("puedeVer", () => {
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve los 3 ítems (Configuración, Perfil, Órdenes)", () => {
+  it("maestro ve Órdenes, Configuración, Cierres del día y Perfil en orden real", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
-      "Configuración",
-      "Perfil",
       "Órdenes",
+      "Configuración",
+      "Cierres del día",
+      "Perfil",
     ]);
   });
 
-  it("admin ve Perfil + Órdenes, NO Configuración", () => {
+  it("admin ve Órdenes + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("admin")));
-    expect(visibles).toEqual(["Perfil", "Órdenes"]);
+    expect(visibles).toEqual(["Órdenes", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Perfil + Órdenes, NO Configuración", () => {
+  it("adminTienda ve Órdenes + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
-    expect(visibles).toEqual(["Perfil", "Órdenes"]);
+    expect(visibles).toEqual(["Órdenes", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("mensajero ve Perfil + Órdenes, NO Configuración", () => {
+  it("mensajero ve Órdenes + Cierre del día + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
-    expect(visibles).toEqual(["Perfil", "Órdenes"]);
+    expect(visibles).toEqual(["Órdenes", "Cierre del día", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminSatelite ve solo Perfil", () => {
+  it("adminSatelite ve Cierres del día + Perfil", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Perfil"],
+      ["Cierres del día", "Perfil"],
     );
   });
 

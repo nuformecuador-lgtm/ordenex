@@ -128,16 +128,12 @@ function resolveGeo(
     };
   }
   const distrito = distritoResult.row;
-  // La zona de la orden se obtiene de la tabla intermedia distrito<->zona
-  // (zona_distrito). Si el distrito no pertenece a ninguna zona -> sin cobertura.
+  // Feature 24/R4/R11 (reconciliacion feature 54): la zona de la orden se deriva
+  // del DISTRITO (orden.zona_id es NOT NULL). Un distrito sin zona -> error de fila.
   if (distrito.zonaId === null) {
     return {
       ok: false,
-      fieldErrors: {
-        distrito: [
-          `sin cobertura: el distrito '${raw.distrito.trim()}' no pertenece a ninguna zona`,
-        ],
-      },
+      fieldErrors: { distrito: [`el distrito '${raw.distrito.trim()}' no tiene zona asignada`] },
     };
   }
 

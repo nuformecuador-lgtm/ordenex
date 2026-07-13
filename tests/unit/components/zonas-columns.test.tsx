@@ -15,10 +15,9 @@ afterEach(() => {
 const ROW: ZonaDTO = {
   id: "z1",
   nombre: "Zona Sur",
-  pagoEntrega: 1500,
-  pagoRechazo: 750.5,
-  esGam: false,
+  cobroVehiculo: false,
   distritosCount: 7,
+  esCentral: false,
 };
 
 function build() {
@@ -27,21 +26,14 @@ function build() {
   return { columns, onEditar };
 }
 
-describe("zonas-columns — define columnas del listado (R24/R30)", () => {
-  it("define columnas nombre/distritos/pagos/gam/acciones", () => {
+describe("zonas-columns — define columnas del listado (feature 54)", () => {
+  it("define columnas nombre/distritos/central/acciones (sin columnas de pago)", () => {
     const { columns } = build();
     const ids = columns.map((c) => c.id);
-    expect(ids).toEqual([
-      "nombre",
-      "distritos",
-      "pagoEntrega",
-      "pagoRechazo",
-      "gam",
-      "acciones",
-    ]);
+    expect(ids).toEqual(["nombre", "distritos", "central", "acciones"]);
   });
 
-  it("mapea el DTO: nombre, distritosCount y montos (R24)", () => {
+  it("mapea el DTO: nombre y distritosCount", () => {
     const { columns } = build();
     render(
       <DataTable columns={columns} data={[ROW]} rowKey="id" ariaLabel="Zonas" />,
@@ -50,24 +42,26 @@ describe("zonas-columns — define columnas del listado (R24/R30)", () => {
     expect(screen.getByText("Zona Sur")).toBeInTheDocument();
     // distritosCount se muestra tal cual.
     expect(screen.getByText("7")).toBeInTheDocument();
-    // Montos con dos decimales.
-    expect(screen.getByText("1500.00")).toBeInTheDocument();
-    expect(screen.getByText("750.50")).toBeInTheDocument();
   });
 
-  it("renderiza el badge GAM cuando esGam es true y un guion cuando es false (R24)", () => {
+  it("renderiza el badge central cuando esCentral es true y un guion cuando es false", () => {
     const { columns } = build();
-    const gam: ZonaDTO = { ...ROW, id: "z2", nombre: "GAM", esGam: true };
+    const central: ZonaDTO = {
+      ...ROW,
+      id: "z2",
+      nombre: "Central",
+      esCentral: true,
+    };
     render(
       <DataTable
         columns={columns}
-        data={[ROW, gam]}
+        data={[ROW, central]}
         rowKey="id"
         ariaLabel="Zonas"
       />,
     );
 
-    // La fila GAM muestra el chip; la fila no-GAM muestra el guion.
+    // La fila central muestra el chip; la fila no-central muestra el guion.
     expect(screen.getByText("Central / GAM")).toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument();
   });

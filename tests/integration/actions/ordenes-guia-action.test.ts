@@ -47,11 +47,11 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
 
   it("listarMensajerosParaAsignacion", async () => {
     const ordenRepo = { findMensajerosByZona: vi.fn() };
-    const zonaRepo = { findGamZonaId: vi.fn() };
+    const zonaRepo = { findCentralZonaId: vi.fn() };
     const r = await listarMensajerosParaAsignacion({ ordenRepo, zonaRepo, getActor: getActor(null) });
 
     expect(r.status).toBe("unauthenticated");
-    expect(zonaRepo.findGamZonaId).not.toHaveBeenCalled();
+    expect(zonaRepo.findCentralZonaId).not.toHaveBeenCalled();
     expect(ordenRepo.findMensajerosByZona).not.toHaveBeenCalled();
   });
 
@@ -148,14 +148,14 @@ describe("generarGuia — camino ok delega al service con el actor resuelto", ()
 
 describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros de la zona GAM", () => {
   it("maestro: resuelve gamZonaId y llama findMensajerosByZona con esa zona", async () => {
-    const findGamZonaId = vi.fn().mockResolvedValue("z-gam");
+    const findCentralZonaId = vi.fn().mockResolvedValue("z-gam");
     const findMensajerosByZona = vi.fn().mockResolvedValue([
       { id: "m1", nombre: "Ana" },
       { id: "m2", nombre: "Beto" },
     ]);
     const r = await listarMensajerosParaAsignacion({
       ordenRepo: { findMensajerosByZona },
-      zonaRepo: { findGamZonaId },
+      zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
     });
 
@@ -170,11 +170,11 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
   });
 
   it("R5: sin zona GAM configurada -> lista vacia, sin consultar mensajeros", async () => {
-    const findGamZonaId = vi.fn().mockResolvedValue(null);
+    const findCentralZonaId = vi.fn().mockResolvedValue(null);
     const findMensajerosByZona = vi.fn();
     const r = await listarMensajerosParaAsignacion({
       ordenRepo: { findMensajerosByZona },
-      zonaRepo: { findGamZonaId },
+      zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
     });
 
@@ -183,11 +183,11 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
   });
 
   it("admin (solo-lectura del modulo) tambien puede listar", async () => {
-    const findGamZonaId = vi.fn().mockResolvedValue("z-gam");
+    const findCentralZonaId = vi.fn().mockResolvedValue("z-gam");
     const findMensajerosByZona = vi.fn().mockResolvedValue([]);
     const r = await listarMensajerosParaAsignacion({
       ordenRepo: { findMensajerosByZona },
-      zonaRepo: { findGamZonaId },
+      zonaRepo: { findCentralZonaId },
       getActor: getActor(ADMIN),
     });
 
@@ -195,16 +195,16 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
   });
 
   it("mensajero/adminTienda -> forbidden", async () => {
-    const findGamZonaId = vi.fn();
+    const findCentralZonaId = vi.fn();
     const findMensajerosByZona = vi.fn();
     const r = await listarMensajerosParaAsignacion({
       ordenRepo: { findMensajerosByZona },
-      zonaRepo: { findGamZonaId },
+      zonaRepo: { findCentralZonaId },
       getActor: getActor({ usuarioId: "u-msg", rol: "mensajero" }),
     });
 
     expect(r).toEqual({ status: "forbidden" });
-    expect(findGamZonaId).not.toHaveBeenCalled();
+    expect(findCentralZonaId).not.toHaveBeenCalled();
     expect(findMensajerosByZona).not.toHaveBeenCalled();
   });
 });

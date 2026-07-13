@@ -64,7 +64,7 @@ function ordenListRow(overrides: Record<string, unknown> = {}) {
       tarifasTienda: [tarifaRow()],
     },
     // Feature 30/R14: el listado incluye la zona (nombre + flag GAM).
-    zona: { id: "z1", nombre: "GAM", esGam: true },
+    zona: { id: "z1", nombre: "GAM", esCentral: true },
     provincia: { id: "p1", nombre: "San José" },
     canton: { id: "c1", nombre: "Central" },
     distrito: null,
@@ -280,7 +280,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
       ordenListRow(),
-      ordenListRow({ id: "ord-2", zona: { id: "z2", nombre: "Limón", esGam: false } }),
+      ordenListRow({ id: "ord-2", zona: { id: "z2", nombre: "Limón", esCentral: false } }),
     ]);
     prisma.orden.count.mockResolvedValue(2);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -301,7 +301,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(res.items[0].tiendaNombre).toBe("Tienda Uno");
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
-    expect(arg.include).toMatchObject({ zona: { select: { nombre: true, esGam: true } } });
+    expect(arg.include).toMatchObject({ zona: { select: { nombre: true, esCentral: true } } });
   });
 
   // El listado trae los datos de TODAS las relaciones directas (FK) via joins, y

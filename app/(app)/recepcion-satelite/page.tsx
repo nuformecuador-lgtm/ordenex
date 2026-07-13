@@ -6,6 +6,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   listarRecepcionSatelite,
   listarMensajerosSatelite,
+  estadoBloqueoBodegaSatelite,
 } from "@/lib/actions/recepcion-satelite";
 
 import { RecepcionSateliteModule } from "./_components/RecepcionSateliteModule";
@@ -34,6 +35,15 @@ export default async function RecepcionSatelitePage() {
   const mensajeros =
     mensajerosResult.status === "ok" ? mensajerosResult.mensajeros : [];
 
+  // Feature 41 (R22): flag DERIVADO server-side del bloqueo de la bodega satélite
+  // (regla estricta R17). Si la acción degrada (forbidden/unauthenticated), se pasa
+  // no-bloqueada (defensa suave: no se bloquea la asignación por un fallo de lectura).
+  const bloqueoResult = await estadoBloqueoBodegaSatelite();
+  const bloqueoBodega =
+    bloqueoResult.status === "ok"
+      ? bloqueoResult.bloqueo
+      : { bloqueada: false, porMensajeros: false, porCierreBodega: false };
+
   return (
     <>
       <PageHeader
@@ -47,6 +57,7 @@ export default async function RecepcionSatelitePage() {
           zonaNombre={result.zonaNombre}
           sinZona={result.sinZona}
           mensajeros={mensajeros}
+          bloqueoBodega={bloqueoBodega}
         />
       </Container>
     </>

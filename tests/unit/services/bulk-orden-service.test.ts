@@ -56,9 +56,17 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 33: recepcion en bodega satelite, no ejercitada aqui pero exigida
     // por la interfaz IOrdenRepository.
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
+    findUsuarioVehiculoId: vi.fn().mockResolvedValue(null), // feature 39: exigido por IOrdenRepository
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
+    // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
+    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    existeBodegaSateliteBloqueada: vi.fn(async () => ({
+      bloqueada: false,
+      porMensajeros: false,
+      porCierreBodega: false,
+    })),
     ...overrides,
   };
 }
@@ -208,9 +216,9 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     expect(repo.createManyOrdenes).not.toHaveBeenCalled();
   });
 
-  it("distrito sin zona en zona_distrito -> sin cobertura (error de fila)", async () => {
+  it("distrito sin zona asignada -> error de fila", async () => {
     const repo = buildRepo({
-      // Sin registro en la tabla intermedia zona_distrito -> zonaId null.
+      // distrito.zona_id null -> sin zona asignada.
       findDistritosByCantonIds: vi.fn().mockResolvedValue([
         { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: null },
       ]),
@@ -224,7 +232,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
       expect(r.summary.filas[0].resultado).toBe("error");
       const errores = r.summary.filas[0].errores as Record<string, string[]>;
       expect(errores).toHaveProperty("distrito");
-      expect(errores.distrito.join(" ")).toContain("sin cobertura");
+      expect(errores.distrito.join(" ")).toContain("no tiene zona asignada");
     }
     expect(repo.createManyOrdenes).not.toHaveBeenCalled();
   });

@@ -64,7 +64,7 @@ export class ZonaService implements IZonaService {
       data: {
         nombre: input.nombre,
         cobroVehiculo: input.cobroVehiculo,
-        esGam: input.esGam, // feature 24/R3: prop opcional; el repo mantiene 1 sola GAM
+        esCentral: input.esCentral, // feature 54: flag de zona central
         distritoIds,
         tarifas: input.tarifas.map((t) => ({
           cobroEntregado: t.cobroEntregado,

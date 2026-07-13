@@ -13,7 +13,7 @@ const DESCONOCIDO: Actor = { usuarioId: "z", rol: "invitado" as RolValue };
 const NO_MAESTROS = [ADMIN, MENSAJERO, TIENDA, DESCONOCIDO];
 
 function dto(overrides: Partial<ZonaDTO> = {}): ZonaDTO {
-  return { id: "z1", nombre: "GAM", cobroVehiculo: false, esGam: false, distritosCount: 1, ...overrides };
+  return { id: "z1", nombre: "GAM", cobroVehiculo: false, distritosCount: 1, esCentral: false, ...overrides };
 }
 
 function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
@@ -28,6 +28,7 @@ function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
     // por defecto: todos los ids existen.
     countExistingDistritos: vi.fn(async (ids: string[]) => ids.length),
     countExistingVehiculos: vi.fn(async (ids: string[]) => ids.length),
+    findCentralZonaId: vi.fn().mockResolvedValue(null), // feature 54
     ...overrides,
   };
 }
@@ -36,7 +37,7 @@ function crearInput(overrides: Partial<CrearZonaInput> = {}): CrearZonaInput {
   return {
     nombre: "GAM",
     cobroVehiculo: false,
-    esGam: false,
+    esCentral: false, // feature 54
     distritoIds: ["d1"],
     tarifas: [],
     ...overrides,
@@ -145,23 +146,42 @@ describe("actualizar", () => {
   });
 });
 
-describe("marcarGam (feature 24/R3)", () => {
-  it("maestro -> ok y delega en repo.marcarGam", async () => {
-    const r = await service.marcarGam("z1", true, MAESTRO);
-    expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.zona.esGam).toBe(true);
-    expect(repo.marcarGam).toHaveBeenCalledWith("z1", true);
-  });
-
-  it.each(NO_MAESTROS)("rol %o -> forbidden sin tocar el repo", async (actor) => {
-    const r = await service.marcarGam("z1", true, actor);
-    expect(r.status).toBe("forbidden");
-    expect(repo.marcarGam).not.toHaveBeenCalled();
-  });
-
-  it("zona inexistente -> not_found", async () => {
-    repo = buildRepo({ marcarGam: vi.fn().mockResolvedValue(null) });
+describe("esCentral — invariante 'una central' (feature 55/R3/R4/R6)", () => {
+  it("crear segunda central: el repo reasigna y el service devuelve ok (sin filtrar P2002/500)", async () => {
+    // ya existe otra central; el repo reasigna en su transaccion y devuelve la nueva central
+    repo = buildRepo({
+      findCentralZonaId: vi.fn().mockResolvedValue("z-old"),
+      create: vi.fn().mockResolvedValue(dto({ id: "z-new", esCentral: true })),
+    });
     service = new ZonaService(repo);
-    expect((await service.marcarGam("zX", true, MAESTRO)).status).toBe("not_found");
+
+    const r = await service.crear(crearInput({ esCentral: true }), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.zona.esCentral).toBe(true); // R3
+    // el flag esCentral=true se propaga tal cual al repo
+    const arg = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.esCentral).toBe(true);
+  });
+
+  it("editar a central existiendo otra: el repo reasigna y el service devuelve ok", async () => {
+    repo = buildRepo({
+      findCentralZonaId: vi.fn().mockResolvedValue("z-old"),
+      update: vi.fn().mockResolvedValue(dto({ id: "z1", esCentral: true })),
+    });
+    service = new ZonaService(repo);
+
+    const r = await service.actualizar("z1", crearInput({ esCentral: true }), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.zona.esCentral).toBe(true); // R3
+  });
+
+  it("crear con esCentral=false persiste false (R4)", async () => {
+    repo = buildRepo({ create: vi.fn().mockResolvedValue(dto({ esCentral: false })) });
+    service = new ZonaService(repo);
+    const r = await service.crear(crearInput({ esCentral: false }), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.zona.esCentral).toBe(false);
+    const arg = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.esCentral).toBe(false);
   });
 });

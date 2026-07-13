@@ -3,7 +3,7 @@
 // por estado de origen + secuencia de num_guia + transaccion por lote no encajan
 // en el `actualizar` generico (design.md, alternativa D descartada).
 // Feature 30 — extiende el cuerpo (no las firmas, R18): resuelve la zona GAM
-// (guardia R4), clasifica cada orden GAM/no-GAM por `zonaId === gamZonaId`, valida
+// (guardia R4), clasifica cada orden GAM/no-GAM por `zonaId === centralZonaId`, valida
 // el mensajero contra la zona GAM (R6), rechaza mensajero en ordenes no-GAM (R8),
 // rutea las no-GAM a `en_ruta_bodega_satelite` con num_guia (R9/R10/R11) y agrega
 // la accion dedicada `rutearABodegaSatelite` (R13). Inyecta `IZonaRepository`.
@@ -40,6 +40,10 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
   zona: ["zona GAM no configurada"],
 };
 
+// Feature 41/R13: motivo accionable cuando un mensajero destino esta bloqueado por un
+// cierre pendiente (solicitado/vencido). No se le asignan nuevas ordenes hasta resolverlo.
+const MSG_MENSAJERO_BLOQUEADO = "mensajero bloqueado por cierre pendiente";
+
 function distinct(values: string[]): string[] {
   return [...new Set(values)];
 }
@@ -58,8 +62,8 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     if (decisiones.length === 0) return { status: "ok", resultados: [] };
 
     // --- Guardia R4: la zona GAM debe estar configurada ---
-    const gamZonaId = await this.zonaRepo.findGamZonaId();
-    if (gamZonaId === null) {
+    const centralZonaId = await this.zonaRepo.findCentralZonaId();
+    if (centralZonaId === null) {
       return { status: "validation_error", fieldErrors: GAM_NO_CONFIGURADA };
     }
 
@@ -71,7 +75,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     // --- Precarga: ordenes (con zona/GAM) + mensajeros validos de la zona GAM (R6) ---
     const [ordenes, mensajerosValidos] = await Promise.all([
       this.repo.findByIdsForTransicion(ordenIds),
-      this.repo.findMensajeroIdsValidosByZona(mensajeroIds, gamZonaId),
+      this.repo.findMensajeroIdsValidosByZona(mensajeroIds, centralZonaId),
     ]);
     const ordenMap = new Map(ordenes.map((o) => [o.id, o]));
 
@@ -94,7 +98,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         });
         continue;
       }
-      const esGam = orden.zonaId === gamZonaId;
+      const esGam = orden.zonaId === centralZonaId;
       if (esGam) {
         // R6: mensajero (sugerido confirmado u override) debe ser de la zona GAM.
         if (d.mensajeroId !== null && !mensajerosValidos.has(d.mensajeroId)) {
@@ -113,10 +117,24 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
     if (detalle.length > 0) return { status: "conflict", detalle };
 
+    // --- Feature 41/R13/R23: guarda de mensajero bloqueado, ANTES de persistir ---
+    // Un mensajero con cierre `solicitado`/`vencido` no recibe nuevas asignaciones. El
+    // ruteo a satelite (ordenes sin mensajero) NO se bloquea (no asigna mensajero).
+    const bloqueados = await this.repo.findMensajerosBloqueados(mensajeroIds);
+    if (bloqueados.size > 0) {
+      const detalleBloqueo: DetalleConflicto[] = [];
+      for (const d of decisiones) {
+        if (d.mensajeroId !== null && bloqueados.has(d.mensajeroId)) {
+          detalleBloqueo.push({ ordenId: d.ordenId, motivo: MSG_MENSAJERO_BLOQUEADO });
+        }
+      }
+      if (detalleBloqueo.length > 0) return { status: "conflict", detalle: detalleBloqueo };
+    }
+
     // --- Resolver estatus destino por value (guarda defensiva si falta el seed) ---
     const hayNoGam = decisiones.some((d) => {
       const orden = ordenMap.get(d.ordenId);
-      return orden !== undefined && orden.zonaId !== gamZonaId;
+      return orden !== undefined && orden.zonaId !== centralZonaId;
     });
     const [estatusEsperaId, estatusBodegaId, estatusRutaSateliteId] = await Promise.all([
       this.repo.findEstatusIdByValue(ESTATUS_EN_ESPERA_ACEPTACION),
@@ -141,7 +159,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       estado: string;
     } {
       const orden = ordenMap.get(ordenId);
-      const esGam = orden !== undefined && orden.zonaId === gamZonaId;
+      const esGam = orden !== undefined && orden.zonaId === centralZonaId;
       if (!esGam) {
         // R9/R10: no-GAM -> en_ruta_bodega_satelite, sin mensajero, con num_guia.
         return {
@@ -197,15 +215,15 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     if (ordenIds.length === 0) return { status: "ok", resultados: [] };
 
     // --- Guardia R4 ---
-    const gamZonaId = await this.zonaRepo.findGamZonaId();
-    if (gamZonaId === null) {
+    const centralZonaId = await this.zonaRepo.findCentralZonaId();
+    if (centralZonaId === null) {
       return { status: "validation_error", fieldErrors: GAM_NO_CONFIGURADA };
     }
 
     // --- R6: mensajeroId debe ser un usuario rol mensajero de la zona GAM ---
     const mensajerosValidos = await this.repo.findMensajeroIdsValidosByZona(
       [input.mensajeroId],
-      gamZonaId,
+      centralZonaId,
     );
     if (!mensajerosValidos.has(input.mensajeroId)) {
       return {
@@ -237,11 +255,20 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         continue;
       }
       // R12: por construccion en_bodega solo tiene ordenes GAM, pero se valida.
-      if (orden.zonaId !== gamZonaId) {
+      if (orden.zonaId !== centralZonaId) {
         detalle.push({ ordenId: id, motivo: "orden de zona no-GAM" });
       }
     }
     if (detalle.length > 0) return { status: "conflict", detalle }; // R29/R17: aborta sin efectos
+
+    // --- Feature 41/R13/R23: guarda de mensajero bloqueado, ANTES de persistir ---
+    const bloqueados = await this.repo.findMensajerosBloqueados([input.mensajeroId]);
+    if (bloqueados.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_MENSAJERO_BLOQUEADO })),
+      };
+    }
 
     const estatusEsperaId = await this.repo.findEstatusIdByValue(ESTATUS_EN_ESPERA_ACEPTACION);
     if (estatusEsperaId === null) {
@@ -272,8 +299,8 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     if (ordenIds.length === 0) return { status: "ok", resultados: [] };
 
     // --- Guardia R4 ---
-    const gamZonaId = await this.zonaRepo.findGamZonaId();
-    if (gamZonaId === null) {
+    const centralZonaId = await this.zonaRepo.findCentralZonaId();
+    if (centralZonaId === null) {
       return { status: "validation_error", fieldErrors: GAM_NO_CONFIGURADA };
     }
 
@@ -300,7 +327,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         continue;
       }
       // Solo no-GAM: una orden GAM aqui es un error del maestro.
-      if (orden.zonaId === gamZonaId) {
+      if (orden.zonaId === centralZonaId) {
         detalle.push({ ordenId: id, motivo: "orden GAM no se rutea a satelite" });
       }
     }

@@ -377,78 +377,85 @@
       "id": 37,
       "name": "mensajero - cierre del dia",
       "description": "Modulo 'Cierre del dia' del mensajero. Cada vez que el mensajero gestiona una orden en 'Mis asignaciones' (feature 36), esa orden pasa a ESPERAR en el modulo de cierre del dia. El mensajero SOLO puede cerrar el dia cuando haya gestionado TODAS sus ordenes asignadas. Al terminar, el modulo muestra el detalle exacto de lo que hizo: cuales entrego, cuales reprogramo, cuales devolvio y cuales fueron rechazadas, con el detalle total de cada orden. Muestra ademas el dinero recogido por cada orden y los TOTALES por metodo de pago: total en efectivo, total en SIMPE y total en transferencia. Tras revisar, un boton 'Solicitar cierre' envia la solicitud al administrador de la bodega a la que pertenece el mensajero segun su zona (bodega central/admin maestro si es GAM, o el adminSatelite de su zona). Fullstack. Depende de la feature 36 (gestion de ordenes).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 36
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/37-cierre-dia-mensajero",
+      "depends_on": 36,
+      "status_note": "done 2026-07-12; F1.4 APROBADA 2026-07-11; F2 retomada al reparar dev (54). Impl COMPLETA (R1-R20+E2E) + reviewer APROBADO 0 bloqueantes. VERDE: prisma OK, typecheck 0, lint 0, 1623/1623 tests (+58), init.sh OK, rollback round-trip OK. Modulo /cierre-dia (tabla cierre_dia + enums + FK cierre_id + RLS, totales Decimal snapshot, ruteo findCentralZonaId con fallback null->satelite hasta la 55). Commit 59d5b23. Resolver renombrado findGamZonaId->findCentralZonaId por la 54. PENDIENTE PR a dev + merge (OK humano)."
     },
     {
       "id": 38,
       "name": "admin - cierres del dia (aprobar/rechazar)",
       "description": "Modulo 'Cierres del dia' para el administrador de una bodega (admin maestro para la bodega central/GAM y adminSatelite para su bodega). Muestra TODAS las solicitudes de cierre que le han hecho sus mensajeros (feature 37, boton 'Solicitar cierre'), para que el administrador pueda APROBAR o RECHAZAR cada cierre segun sea necesario. El administrador puede ver absolutamente TODO el detalle de cada orden del cierre (gestion, evidencias en foto, montos, metodos de pago, motivos) y los totales de dinero por metodo. Fullstack. Depende de la feature 37 (solicitud de cierre del mensajero).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 37
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/38-cierres-admin",
+      "depends_on": 37,
+      "status_note": "done 2026-07-12; F1.4 APROBADA (a rechazo INMUTABLE; b reusa CierreDetalleGestion de la 37; c cola+historico por alcance; d concurrencia updateMany sin TOCTOU; e migracion ADITIVA resuelto_por/resuelto_at/motivo_rechazo obligatorio + down.sql; f E2E escrito; g de a uno). Impl COMPLETA (R1-R17+E2E) + reviewer APROBADO 0 bloqueantes. VERDE: prisma OK, typecheck 0, lint 0, 1739/1739 tests (+116), init.sh OK, migracion round-trip OK. Modulo /cierres-admin (cola solicitado + historico + detalle + aprobar/rechazar). Alcance por rol+zona en el WHERE (maestro->bodega_central, adminSatelite->bodega_satelite+su zona). Commit 0418a1a. PENDIENTE PR a dev + merge (OK humano). Deuda menor: tests de transicion/migracion unit-mock (no integracion DB real); E2E ejecucion diferida."
     },
     {
       "id": 39,
       "name": "pago al mensajero por zona en el cierre",
       "description": "Cada orden que llega a un cierre del dia debe traer el monto a PAGAR AL MENSAJERO segun la ZONA: la zona almacena cuanto se le paga por la ENTREGA y cuanto por el RECHAZO (feature 24), y como cada mensajero esta atado a una zona ese pago sale de su zona. Cada orden en el cierre expone el pago al mensajero segun su zona y su resultado de gestion (entrega o rechazo), y el modulo de cierre totaliza lo que se le debe pagar. Es distinto de lo que se COBRA al cliente/tienda (feature 18 cobros: valor_flete, comision_cod, etc.), concepto aparte. Backend principalmente; se integra en los modulos de cierre (features 37/38). Depende de las features 24 (pago por zona) y 37 (cierre del mensajero).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 24
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/39-pago-mensajero-zona",
+      "depends_on": 24,
+      "status_note": "done 2026-07-12; F1.4 APROBADA. Money-critical. Impl COMPLETA (R1-R23+R7b) + reviewer APROBADO 0 bloqueantes (verificacion round-trip real). VERDE: prisma OK, typecheck 0, lint 0, 1829/1829 tests, init.sh OK, build OK, SIN regresion 37/38/40. Pago via TarifaZonaMensajero (por zona+vehiculo del mensajero, fallback tarifa por defecto). SNAPSHOT al solicitar (migracion aditiva 20260712130000_pago_mensajero_cierre: gestion_orden.pago_mensajero + cierre_dia/cierre_bodega.total_pago_mensajero + down.sql; snapshot inmutable verificado). SOLO entregada paga (->cobroEntregado); rechazada/reprog/devuelta = 0.00. cobroRechazado->bodega FUERA DE ALCANCE (feature 56). Tarifa faltante = 0.00 no bloquea. Nuevos: ITarifaZonaMensajeroRepository/repo, lib/utils/pago-mensajero.ts. Commit 941ea7c. PENDIENTE PR a dev + merge (OK humano). DEUDA menor: aviso tarifa-faltante por heuristica frontend (falso positivo en entrega legitima de 0.00) -> candidato flag server-side (feature 56/follow-up)."
     },
     {
       "id": 40,
       "name": "cierre de bodega satelite -> bodega principal",
       "description": "Segundo nivel de cierre: la bodega satelite, como entidad, debe SOLICITAR su cierre a la bodega principal, y la bodega principal lo APRUEBA o RECHAZA. Complementa el cierre mensajero->bodega (features 37/38): el adminSatelite primero aprueba los cierres de SUS mensajeros y luego consolida y solicita el cierre de su bodega a la central. La bodega principal (admin maestro) aprueba tanto los cierres de sus propios mensajeros del GAM como los cierres de las bodegas satelite. Muy detallado: el cierre de la bodega satelite agrega el detalle de los cierres de sus mensajeros (ordenes, resultados, dinero por metodo de pago, pagos a mensajeros). Fullstack. Depende de las features 37 y 38 (cierres mensajero/admin).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 38
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/40-cierre-bodega-satelite",
+      "depends_on": 38,
+      "status_note": "done 2026-07-12; F1.4 APROBADA (todas recomendadas). Segundo nivel de cierre (doble espejo 37/38): solicitar (adminSatelite) + aprobar/rechazar (maestro). Impl COMPLETA (R1-R25+E2E) + reviewer APROBADO 0 bloqueantes (verificacion en DB viva: round-trip migracion, RLS cierre_bodega sin policies, indice unico parcial, FK). VERDE: prisma OK, typecheck 0, lint 0, 1797/1797 tests (+58), init.sh OK, build pasa. Modelo tabla nueva CierreBodega (estado reusa CierreEstado, totales snapshot AGREGADOS, auditoria resuelto_por/at/motivo_rechazo, indice unico parcial (zona_id) WHERE estado=solicitado) + FK cierre_bodega_id en cierre_dia. (c) solo cierre_dia aprobado+FK null; (d) precondicion sin solicitado pendientes; (f) pago mensajero OMITIDO (feature 39); (j) rechazo inmutable; (l) /cierres-admin extendido role-aware. Migracion 20260712120000_cierre_bodega. Commit 105689d. Regresion 37/38 intacta. PENDIENTE PR a dev + merge (OK humano). Deuda menor: R8/R16/R18/R20-22 unit-mock (defensas DB verificadas live por reviewer); R24 sin test automatizado; E2E diferido. DESBLOQUEA 41."
     },
     {
       "id": 41,
       "name": "reglas y bloqueos de cierre (obligatoriedad, vencidos)",
       "description": "Reglas de negocio de los cierres (son OBLIGATORIOS y criticos: reflejan el ingreso de dinero de la empresa) y bloqueos asociados. (1) JERARQUIA/RESPONSABLE: cada mensajero cierra ante su bodega responsable = la bodega de su zona (bodega principal si es GAM, o su bodega satelite); cada bodega satelite cierra ante la bodega principal (feature 40). (2) OBLIGATORIEDAD + VENCIDOS: si un mensajero termina el dia y NO solicita cierre, ese cierre se marca como VENCIDO y se evidencia en la bodega responsable del mensajero. (3) BLOQUEO DEL MENSAJERO: cuando el mensajero solicita cierre queda BLOQUEADO y no se le pueden asignar mas ordenes hasta que su cierre sea APROBADO. (4) BLOQUEO DE BODEGA SATELITE: una bodega satelite con cierres pendientes queda BLOQUEADA y no puede asignar ordenes a sus mensajeros hasta hacer los cierres necesarios. DISPARADOR DE VENCIDO (decision del humano 2026-07-10): a las 00:00 (medianoche) de cada dia se ejecuta AUTOMATICAMENTE el corte diario -job programado/cron-: los cierres que el mensajero no solicito quedan VENCIDOS y se evidencian en su bodega responsable. Backend principalmente (job de corte, estados de cierre, flags de bloqueo, reglas que impiden asignar) + reflejo en la UI. Depende de las features 37, 38 y 40 (flujo de cierres) y afecta las asignaciones (17/34), que deben respetar los bloqueos.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 40
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/41-reglas-bloqueos-cierre",
+      "depends_on": 40,
+      "status_note": "done 2026-07-12; F1.4 APROBADA. Impl COMPLETA (R1-R24) + reviewer APROBADO 0 bloqueantes (round-trip de migracion REAL contra Postgres, incl. recreacion del uq de la 40). VERDE: prisma OK, typecheck 0, lint 0, 1931/1931 tests (+64), init.sh OK, SIN regresion 37/38/39/40/56. Q1 Vercel Cron Jobs (/api/cron/corte-diario + CRON_SECRET, 0 6 * * *=00:00 CR, idempotente, hora CR); Q2 fila real cierre_dia estado='vencido' (snapshot+gestiones); Q3 bloqueo mensajero DERIVADO (solicitado/vencido; rechazado no); Q5 vencido resoluble por la bodega via feature 38 (guardia extendida), resolver desbloquea, sin recalcular; Q6 sin pantallas nuevas; Q4 REGLA ESTRICTA: satelite bloqueada si (i) cierres de mensajeros solicitado/vencido O (ii) su propio CierreBodega solicitado (test por cada causa). Enum 'vencido' anadido (migracion aditiva + down). Commit dde6fba. DEUDA menor: TOCTOU residual en el lote del maestro (pre-check sin NOT EXISTS; el path satelite si lo integra; justificado/no bloqueante) -> follow-up; R23 sin test de carrera real; E2E diferido. PENDIENTE PR a dev + merge (OK humano)."
     },
     {
       "id": 42,
       "name": "wallet - caja principal de ordenex",
       "description": "Nuevo modulo WALLET. Caja PRINCIPAL de Ordenex donde ENTRAN los ingresos y SALEN los gastos, conectada con los cierres (cada cierre aprobado alimenta la caja). Ingresos de Ordenex por cada orden: (a) el FLETE que cobra Ordenex, (b) la COMISION por el COD, (c) el IVA del flete y (d) el IVA de la comision. Estos valores provienen del CRUD de cobros (feature 18: valor_flete, valor_flete_GAM, comision_cod, iva_flete, iva_comision_cod, etc.). La caja registra ingresos y egresos (p.ej. pagos a tiendas -feature 43-, pagos a mensajeros -feature 44- y gastos/sueldos -feature 45-). MODELO (decision del humano 2026-07-10): la wallet es un LIBRO DE MOVIMIENTOS (entradas/salidas con saldo), no un tablero de saldos calculados. Debe mostrar ademas el BALANCE general de la empresa (si esta en positivo o negativo) comparando ingresos vs. gastos. ABIERTO a decidir en spec: como se modela el cobro (por orden vs. por zona/config). Fullstack de alta complejidad. Depende de la feature 18 (cobros) y de los cierres (37/38/40).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 18
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/42-wallet-caja-principal",
+      "depends_on": 18,
+      "status_note": "done 2026-07-12; F1.4 APROBADA. Impl COMPLETA (R1-R26) + reviewer APROBADO 0 bloqueantes tras 1 ciclo (rechazo por falta de E2E -> anadido e2e/wallet.spec.ts commit 1f9124b). VERDE: prisma OK, typecheck 0, lint 0, 2008/2008 tests (+77), init.sh OK, round-trip de migracion REAL contra Postgres local (incl. drop de orden.cobra_comision y 3 enums), idempotencia por constraint DB verificada viva, SIN regresion 37/38/39/40/56/41. Modulo WALLET = caja principal: LIBRO append-only inmutable wallet_movimiento (tipo/categoria/origen polimorfico), balance DERIVADO (suma Decimal), UI /wallet rol maestro + movimiento manual. Q1 derivar de la tarifa AL APROBAR (movimiento=snapshot) + NUEVA columna orden.cobra_comision (Boolean NOT NULL DEFAULT true); A1 entregada=flete normal+comision solo si cobra_comision+IVAs, devuelta/rechazada=flete de devolucion+su IVA sin comision, reprogramada=sin ingreso (6 categorias); Q3 solo CierreDia alimenta (CierreBodega no re-cuenta, vencido->aprobado una vez); Q4 tabla unica polimorfica para 43/44/45; Q6 manuales minimos. Enganche idempotente+atomico (ON CONFLICT DO NOTHING) en CierresAdminRepository.resolverCierre. Commits a9769ea+f85ee42+1f9124b. RAIZ de la cadena de pagos: DESBLOQUEA 43/44/45. DEUDA menor: captura editable de cobra_comision por-orden (A5, features 14/15/16/17); test de idempotencia unit usa mock (constraint real verificado por reviewer); E2E diferido. PENDIENTE PR a dev + merge (OK humano)."
     },
     {
       "id": 43,
       "name": "wallet por tienda (saldo a favor de la tienda)",
       "description": "Cada tienda (admin de tienda) tiene su PROPIA wallet con su informacion: cuanto le debe ENTREGAR Ordenex. Ordenex recibe el dinero total de la venta (COD total recaudado) y parte le pertenece a la tienda: COD total MENOS el flete, MENOS la comision del COD, MENOS el IVA del flete y MENOS el IVA de la comision. La tienda debe poder VER cuanto le debe Ordenex (su saldo a favor). Se alimenta de los cierres aprobados y del calculo de la caja principal (feature 42). Fullstack. Depende de la feature 42 (wallet/caja) y 18 (cobros).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 42
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/43-wallet-por-tienda",
+      "depends_on": 42,
+      "status_note": "done 2026-07-12; F1.4 APROBADA. Impl COMPLETA (R1-R29) + reviewer APROBADO 0 bloqueantes. VERDE: prisma OK, typecheck 0, lint 0, 2092/2092 tests (+84), init.sh OK, round-trip de migracion REAL por introspeccion (drop de tabla+2 enums propios sin tocar el de la 42), invariante de cuadre verificado a mano en AMBOS estados del flag, idempotencia por constraint DB viva, SIN regresion 37/38/39/40/56/41/42. Wallet POR TIENDA (saldo a favor) = complemento del ingreso de Ordenex de la 42. Q1 LEDGER propio wallet_tienda_movimiento congelado al aprobar (mismo enganche resolverCierre, reutiliza derivarIngresoOrden); Q2 credito sobre COD recaudado (montoRecibido), debitos tal cual de la 42; Q3 tienda DEBE el flete de devolucion (saldo negativo) REVERSIBLE via flag TIENDA_DEBITA_FLETE_DEVOLUCION (lib/config/wallet-tienda.ts, default true; reversion historica por ajuste compensatorio append-only); Q4 modelo+VISIBILIDAD (pago = follow-up); Q5 /mi-wallet adminTienda + /wallet/tiendas maestro; Q6 un movimiento por concepto por (tienda,cierre), espejo 1:1 de la 42. E2E e2e/mi-wallet.spec.ts. Commit 6923a7b. DESBLOQUEA el pago a tiendas (follow-up). DEUDA menor: E2E diferido; test de migracion unit estatico (round-trip real por el reviewer). PENDIENTE PR a dev + merge (OK humano)."
     },
     {
       "id": 44,
@@ -559,6 +566,42 @@
       "zone": "backend",
       "branch": "chore/deuda-despliegue-migraciones",
       "depends_on": null
+    },
+    {
+      "id": 54,
+      "name": "reconciliar refactor zonas/tarifas (dev verde) + reponer identificacion GAM como esCentral",
+      "description": "FIX-FEATURE de reconciliacion: el PR #40 'Adjustments' (mergeado a dev 2026-07-12) fue un refactor grande dejado A MEDIAS que rompio el baseline (prisma validate invalido + 86 errores de typecheck, init.sh rojo). El refactor: (a) renombro cobros->tarifas (modelo `tarifas` por zona con valorFlete/valorFleteGam/IVA/comision + `TarifaZonaMensajero` pago-por-zona), (b) remodelo zona<->distrito a N:M (`ZonaDistrito`), (c) reescribio IZonaRepository/lib/types/zona.ts, (d) agrego sidebar/menu shadcn nuevo. PERO quito de `Zona` los campos `esGam`/`pagoEntrega`/`pagoRechazo` y ELIMINO `IZonaRepository.findGamZonaId()` sin actualizar a sus consumidores (features 17/30/34: lib/actions/ordenes-guia.ts, lib/services/GuiaAsignacionService.ts) y dejo el schema invalido (modelo `Zona` sin la relacion opuesta `usuarios Usuario[]`). DECISIONES DEL HUMANO (2026-07-12): (1) arreglar HACIA ADELANTE conservando el refactor (no revertir); (2) reponer la identificacion de la zona central con un flag NUEVO `esCentral` (renombrado desde el viejo `esGam`) en `Zona` (a lo sumo una true) + su resolver (findGamZonaId -> renombrar a findCentralZonaId, o equivalente) y actualizar los llamadores 17/30/34; los pagos ya viven en tarifas/TarifaZonaMensajero (no vuelven a zona). Alcance: arreglar schema.prisma (relacion `Zona.usuarios`), recablear ZonaRepository/TarifaRepository/GeoRepository al nuevo modelo, reponer `esCentral`+resolver (migracion + down.sql), corregir zonas-columns.tsx (usar esCentral; quitar columnas pagoEntrega/pagoRechazo que se movieron a tarifas), y actualizar TODOS los tests. CRITERIO DE ACEPTACION: `npx prisma validate` OK + `pnpm typecheck` 0 errores + `./init.sh` VERDE + `pnpm build` pasa. Fullstack de reconciliacion. DESBLOQUEA la feature 37 (pausada) y repara 17/30/34 en dev.",
+      "status": "done",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/54-reconciliar-zonas-tarifas",
+      "depends_on": null,
+      "status_note": "done 2026-07-12; fix-feature agil (spec inline, sin specs/54 dir, precedente 51/52/53). Reviewer APROBADO 0 bloqueantes; dev VERDE (prisma OK, typecheck 0, 1565 tests, build OK)."
+    },
+    {
+      "id": 55,
+      "name": "completar ZonaForm: setear esCentral + reconciliar drift provincia.zonaId",
+      "description": "FOLLOW-UP de la feature 54 (deuda #40): `app/(app)/configuracion/_components/ZonaForm.tsx` quedo STUBBEADO por el refactor #40 (solo el campo `nombre`). NO hay UI para marcar una zona como CENTRAL (`esCentral`), aunque el schema/DTO/repo ya lo soportan tras la feature 54. IMPACTO OPERATIVO: sin poder marcar la zona central desde configuracion, `IZonaRepository.findCentralZonaId()` devuelve null y el maestro (feature 30) no puede asignar mensajeros ni rutear (guardia R4 'no hay zona GAM/central'); tambien bloquea el runtime de 34/37. Alcance: (1) completar `ZonaForm` para crear/editar zona con el toggle `esCentral` (a lo sumo una true, validado); reconstruir los campos que el #40 stubbeo si aplica (provincias/cantones/distritos N:M, cobroVehiculo); (2) reconciliar el drift schema/DB de `provincia.zonaId` (la migracion #40 `provincia_zona_id_nullable` quedo como no-op guardado en la 54; verificar el estado real de la columna y alinear schema<->DB). Frontend principal + posible ajuste backend/migracion. Depende de la 54.",
+      "status": "done",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": "feature/55-zonaform-escentral",
+      "depends_on": 54,
+      "status_note": "done 2026-07-12; F1.4 APROBADA (A reasignar central en misma tx; B reconstruccion COMPLETA ZonaForm; C drift provincia.zonaId SOLO-SCHEMA sin migracion; D seed intacto). Impl COMPLETA (R1-R14) + reviewer APROBADO 0 bloqueantes. VERDE: prisma valid, migrate status up-to-date (0 migraciones nuevas), typecheck 0, lint 0, 1614/1614 tests (+49), init.sh OK. ZonaForm reconstruido (crear/editar + selector distritos N:M + cobroVehiculo + toggle esCentral); reasignacion central transaccional (P2002->conflict); GeoService/GeoActions para catalogo geo; drift schema-only (borrados Provincia.zonaId/zona + Zona.provincias). DESBLOQUEA runtime bodega_central en 30/34/37 (findCentralZonaId deja de ser null al marcar). Confirmacion reasignacion via checkbox inline (reviewer: menor, cumple F1.4-A). PENDIENTE PR a dev + merge (OK humano)."
+    },
+    {
+      "id": 56,
+      "name": "ingreso de bodega por rechazos (cobroRechazado)",
+      "description": "SEPARADA de la feature 39 por decision del humano (2026-07-12): al resolver el pago por zona (TarifaZonaMensajero), el `cobroRechazado` (pago por RECHAZO) NO va al mensajero sino a la BODEGA (satelite o central) que corresponda a la orden rechazada. La feature 39 quedo acotada a pago al MENSAJERO = solo `entregada`->cobroEntregado. Esta feature modela y registra el INGRESO DE LA BODEGA por rechazos: por cada gestion `rechazada` en un cierre, calcula `cobroRechazado` (via TarifaZonaMensajero, misma resolucion por zona+vehiculo con fallback que la 39) y lo ATRIBUYE a la bodega responsable, snapshoteado en el flujo de cierre (probablemente en cierre_dia y agregado en cierre_bodega, espejo del pago-al-mensajero de la 39). Es un concepto de INGRESO de la bodega, distinto de: el pago al mensajero (39), lo que se COBRA al cliente/tienda (18), y la caja central de Ordenex (42). ABIERTO en spec: la regla exacta 'siempre y cuando aplique el pago a las rechazadas' (el humano indico que el pago por rechazo aplica condicionalmente); definir cuando aplica. Fullstack, money-critical. Depende de 39 (patron de snapshot del pago por zona) y 40 (cierre de bodega, donde se agrega el ingreso).",
+      "status": "done",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/56-ingreso-bodega-rechazos",
+      "depends_on": 39,
+      "status_note": "done 2026-07-12; F1.4 APROBADA. Money-critical, espejo de la 39. Impl COMPLETA (R1-R22+R7b+R23) + reviewer APROBADO 0 bloqueantes (verificacion round-trip real, snapshot inmutable probado). VERDE: prisma OK, typecheck 0, lint 0, 1867 tests (1 flaky ajeno LoginForm, pasa aislado), init.sh OK, migracion round-trip OK, SIN regresion 37/38/39/40. Q1 aplica si cobroRechazado>0 (condicion en la tarifa; reusa resolvePagoTarifa); Q2 SOLO rechazada; Q3 SNAPSHOT; Q4 migracion aditiva 20260712140000_ingreso_bodega_rechazos (3 niveles); Q5 bodega=destino del cierre; Q6 flag tarifaFaltante SERVER-SIDE (RESUELVE deuda m1 de la 39, elimina heuristica frontend); Q7 mostrado en las 3 vistas de cierre. IMPL EN 2 COMMITS: backend 6a0153d (el implementer murio por bug opus-4.8[1m] tras el backend) + UI 40d99e2 (frontend_dev). Cierra el par pago-por-zona (mensajero 39 + bodega 56). PENDIENTE PR a dev + merge (OK humano)."
     }
   ]
 }

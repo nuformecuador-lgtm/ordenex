@@ -4,14 +4,16 @@ import {
   obtenerZona,
   listarZonas,
   actualizarZona,
-  marcarZonaGam,
-  listarZonasLight,
-  listarProvincias,
-  listarCantones,
-  listarDistritos,
+  borrarZona,
+  arbolZonas,
 } from "@/lib/actions/zonas";
 import type { Actor, IZonaService } from "@/lib/interfaces/services/IZonaService";
 import type { ZonaDTO } from "@/lib/types/zona";
+
+// Feature 54 (reconciliacion PR #40): prueba las Server Actions VIGENTES de zonas
+// contra el ZonaDTO nuevo { id, nombre, cobroVehiculo, distritosCount, esCentral,
+// tarifas? } y el ZonaActionError (conflict SIN payload). Las actions/DTO viejos
+// (marcarZonaGam, listarZonasLight, listarProvincias, pagoEntrega/esGam) ya no existen.
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 const getActor = (a: Actor) => async (): Promise<Actor | null> => a;
@@ -21,10 +23,9 @@ function dto(over: Partial<ZonaDTO> = {}): ZonaDTO {
   return {
     id: "z1",
     nombre: "Zona Sur",
-    pagoEntrega: 1000,
-    pagoRechazo: 500,
-    esGam: false,
+    cobroVehiculo: false,
     distritosCount: 2,
+    esCentral: false,
     ...over,
   };
 }
@@ -35,121 +36,117 @@ function fakeService(over: Partial<IZonaService> = {}): IZonaService {
     obtener: vi.fn().mockResolvedValue({ status: "ok", zona: dto() }),
     listar: vi.fn().mockResolvedValue({ status: "ok", items: [dto()], page: 1, pageSize: 25, total: 1 }),
     actualizar: vi.fn().mockResolvedValue({ status: "ok", zona: dto() }),
-    marcarGam: vi.fn().mockResolvedValue({ status: "ok" }),
-    listarLight: vi.fn().mockResolvedValue({ status: "ok", items: [{ id: "z1", nombre: "Zona Sur", esGam: false }] }),
-    listarProvincias: vi.fn().mockResolvedValue({ status: "ok", items: [{ id: "p1", nombre: "San Jose" }] }),
-    listarCantones: vi.fn().mockResolvedValue({ status: "ok", items: [{ id: "c1", nombre: "Central" }] }),
-    listarDistritos: vi
-      .fn()
-      .mockResolvedValue({ status: "ok", items: [{ id: "d1", nombre: "Carmen", zonaId: null, zonaNombre: null }] }),
+    borrar: vi.fn().mockResolvedValue({ status: "ok" }),
+    arbol: vi.fn().mockResolvedValue({ status: "ok", arbol: {} }),
     ...over,
   };
 }
 
 const validCrear = {
   nombre: "Zona Sur",
-  pagoEntrega: 1000,
-  pagoRechazo: 500,
-  esGam: false,
+  cobroVehiculo: false,
+  esCentral: false,
   distritoIds: ["d1"],
+  tarifas: [],
 };
 
-describe("R13: sin sesion -> unauthenticated sin tocar el service", () => {
+describe("sin sesion -> unauthenticated sin tocar el service", () => {
   it("todas las acciones rechazan sin sesion", async () => {
     const service = fakeService();
     const deps = { zonaService: service, getActor: noActor };
     expect((await crearZona(validCrear, deps)).status).toBe("unauthenticated");
     expect((await obtenerZona("z1", deps)).status).toBe("unauthenticated");
     expect((await listarZonas({}, deps)).status).toBe("unauthenticated");
-    expect((await actualizarZona({ id: "z1" }, deps)).status).toBe("unauthenticated");
-    expect((await marcarZonaGam("z1", deps)).status).toBe("unauthenticated");
-    expect((await listarZonasLight(deps)).status).toBe("unauthenticated");
-    expect((await listarProvincias(deps)).status).toBe("unauthenticated");
-    expect((await listarCantones("p1", deps)).status).toBe("unauthenticated");
-    expect((await listarDistritos("c1", deps)).status).toBe("unauthenticated");
+    expect((await actualizarZona("z1", validCrear, deps)).status).toBe("unauthenticated");
+    expect((await borrarZona("z1", deps)).status).toBe("unauthenticated");
+    expect((await arbolZonas(deps)).status).toBe("unauthenticated");
     expect(service.crear).not.toHaveBeenCalled();
     expect(service.listar).not.toHaveBeenCalled();
-    expect(service.listarProvincias).not.toHaveBeenCalled();
+    expect(service.borrar).not.toHaveBeenCalled();
   });
 });
 
-describe("R19/R25: validation_error del schema sin llamar al service", () => {
+describe("validation_error del schema sin llamar al service", () => {
   it("crear con nombre vacio -> validation_error", async () => {
     const service = fakeService();
-    const r = await crearZona({ ...validCrear, nombre: "" }, { zonaService: service, getActor: getActor(MAESTRO) });
+    const r = await crearZona(
+      { ...validCrear, nombre: "" },
+      { zonaService: service, getActor: getActor(MAESTRO) },
+    );
     expect(r.status).toBe("validation_error");
     expect(service.crear).not.toHaveBeenCalled();
   });
 
   it("crear con distritoIds vacio -> validation_error", async () => {
     const service = fakeService();
-    const r = await crearZona({ ...validCrear, distritoIds: [] }, { zonaService: service, getActor: getActor(MAESTRO) });
+    const r = await crearZona(
+      { ...validCrear, distritoIds: [] },
+      { zonaService: service, getActor: getActor(MAESTRO) },
+    );
     expect(r.status).toBe("validation_error");
   });
 });
 
-describe("R25: contrato discriminado por status (pass-through del service)", () => {
+describe("contrato discriminado por status (pass-through del service)", () => {
   it("forbidden se propaga", async () => {
     const service = fakeService({ crear: vi.fn().mockResolvedValue({ status: "forbidden" }) });
     const r = await crearZona(validCrear, { zonaService: service, getActor: getActor(MAESTRO) });
     expect(r.status).toBe("forbidden");
   });
 
-  it("conflict(nombre) se propaga con su reason", async () => {
-    const service = fakeService({
-      crear: vi.fn().mockResolvedValue({ status: "conflict", reason: "nombre" }),
-    });
-    const r = await crearZona(validCrear, { zonaService: service, getActor: getActor(MAESTRO) });
+  it("conflict al borrar se propaga (sin payload)", async () => {
+    const service = fakeService({ borrar: vi.fn().mockResolvedValue({ status: "conflict" }) });
+    const r = await borrarZona("z1", { zonaService: service, getActor: getActor(MAESTRO) });
     expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.reason).toBe("nombre");
-  });
-
-  it("conflict(distrito) se propaga con los distritoIds", async () => {
-    const service = fakeService({
-      crear: vi.fn().mockResolvedValue({ status: "conflict", reason: "distrito", distritoIds: ["d2"] }),
-    });
-    const r = await crearZona(validCrear, { zonaService: service, getActor: getActor(MAESTRO) });
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.distritoIds).toEqual(["d2"]);
+    expect(Object.keys(r)).toEqual(["status"]);
   });
 
   it("not_found en actualizar se propaga", async () => {
     const service = fakeService({ actualizar: vi.fn().mockResolvedValue({ status: "not_found" }) });
-    const r = await actualizarZona({ id: "zX", nombre: "N" }, { zonaService: service, getActor: getActor(MAESTRO) });
+    const r = await actualizarZona("zX", validCrear, {
+      zonaService: service,
+      getActor: getActor(MAESTRO),
+    });
+    expect(r.status).toBe("not_found");
+  });
+
+  it("not_found en obtener se propaga", async () => {
+    const service = fakeService({ obtener: vi.fn().mockResolvedValue({ status: "not_found" }) });
+    const r = await obtenerZona("zX", { zonaService: service, getActor: getActor(MAESTRO) });
     expect(r.status).toBe("not_found");
   });
 });
 
-describe("R26: DTO con montos number, sin campos internos", () => {
-  it("crear ok expone solo status/zona y montos como number", async () => {
-    const service = fakeService();
+describe("DTO nuevo (esCentral, sin campos internos)", () => {
+  it("crear ok expone solo status/zona con esCentral y sin deletedAt", async () => {
+    const service = fakeService({ crear: vi.fn().mockResolvedValue({ status: "ok", zona: dto({ esCentral: true }) }) });
     const r = await crearZona(validCrear, { zonaService: service, getActor: getActor(MAESTRO) });
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
       expect(Object.keys(r)).toEqual(["status", "zona"]);
-      expect(typeof r.zona.pagoEntrega).toBe("number");
+      expect(r.zona.esCentral).toBe(true);
+      expect(typeof r.zona.cobroVehiculo).toBe("boolean");
       expect(r.zona).not.toHaveProperty("deletedAt");
+      expect(r.zona).not.toHaveProperty("pagoEntrega");
+    }
+  });
+
+  it("listar ok devuelve items con distritosCount y esCentral", async () => {
+    const service = fakeService();
+    const r = await listarZonas({}, { zonaService: service, getActor: getActor(MAESTRO) });
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.items[0].distritosCount).toBe(2);
+      expect(r.items[0].esCentral).toBe(false);
     }
   });
 });
 
-describe("R15: listarZonasLight", () => {
-  it("devuelve items {id,nombre,esGam}", async () => {
+describe("arbolZonas", () => {
+  it("maestro -> ok con arbol", async () => {
     const service = fakeService();
-    const r = await listarZonasLight({ zonaService: service, getActor: getActor(MAESTRO) });
+    const r = await arbolZonas({ zonaService: service, getActor: getActor(MAESTRO) });
     expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.items[0]).toEqual({ id: "z1", nombre: "Zona Sur", esGam: false });
-  });
-});
-
-describe("R14: catalogo geografico via acciones", () => {
-  it("listarProvincias/Cantones/Distritos -> ok", async () => {
-    const service = fakeService();
-    const deps = { zonaService: service, getActor: getActor(MAESTRO) };
-    expect((await listarProvincias(deps)).status).toBe("ok");
-    expect((await listarCantones("p1", deps)).status).toBe("ok");
-    const d = await listarDistritos("c1", deps);
-    expect(d.status).toBe("ok");
-    if (d.status === "ok") expect(d.items[0]).toHaveProperty("zonaNombre");
+    if (r.status === "ok") expect(r.arbol).toEqual({});
   });
 });

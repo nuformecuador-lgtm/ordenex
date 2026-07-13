@@ -16,6 +16,10 @@ const ESTADO_ASIGNADA = "en_espera_aceptacion";
 // a su propia zona (R2), resuelta server-side por `findUsuarioZonaId`.
 const ROL_AUTORIZADO = "adminSatelite";
 
+// Feature 41/R14: motivo accionable cuando el mensajero destino esta bloqueado por un
+// cierre pendiente (solicitado/vencido).
+const MSG_MENSAJERO_BLOQUEADO = "mensajero_bloqueado_por_cierre";
+
 // Metodos de repo que consume el service (inyeccion por constructor). Se declara
 // como Pick para dobles de test sin DB/HTTP (patron RecepcionSateliteService).
 type AsignacionSateliteRepo = Pick<
@@ -25,6 +29,8 @@ type AsignacionSateliteRepo = Pick<
   | "findByIdsForTransicion"
   | "findEstatusIdByValue"
   | "asignarSateliteLote"
+  | "existeBodegaSateliteBloqueada" // feature 41/R18
+  | "findMensajerosBloqueados" // feature 41/R14
 >;
 
 /**
@@ -48,6 +54,21 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId);
     if (zonaId === null) return { status: "sin_zona" };
 
+    // 2b. Feature 41/R18 (regla estricta R17): ANTES de cualquier escritura, si la bodega
+    // esta bloqueada por CUALQUIERA de las dos causas (cierres de sus mensajeros O su
+    // propio CierreBodega pendiente), aborta el lote completo (todo-o-nada). La causa
+    // viaja al borde para el mensaje accionable de R22.
+    const bloqueo = await this.repo.existeBodegaSateliteBloqueada(zonaId);
+    if (bloqueo.bloqueada) {
+      return {
+        status: "bodega_bloqueada",
+        causa: {
+          porMensajeros: bloqueo.porMensajeros,
+          porCierreBodega: bloqueo.porCierreBodega,
+        },
+      };
+    }
+
     // 3. R9: el mensajeroId debe ser un usuario rol mensajero de la zona del actor
     // (defensa en profundidad sobre R5), sin efectos si no.
     const mensajerosValidos = await this.repo.findMensajeroIdsValidosByZona(
@@ -58,6 +79,16 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       return {
         status: "validation_error",
         fieldErrors: { mensajeroId: ["mensajero_invalido"] },
+      };
+    }
+
+    // 3b. Feature 41/R14: mensajero bloqueado por un cierre pendiente (solicitado/vencido)
+    // -> sin efectos. Antes de cualquier escritura del lote.
+    const mensajerosBloqueados = await this.repo.findMensajerosBloqueados([input.mensajeroId]);
+    if (mensajerosBloqueados.has(input.mensajeroId)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { mensajeroId: [MSG_MENSAJERO_BLOQUEADO] },
       };
     }
 

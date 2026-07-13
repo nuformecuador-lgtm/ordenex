@@ -21,9 +21,9 @@ export type TarifaZonaMensajeroInput = z.infer<typeof tarifaZonaMensajeroInputSc
 const zonaFields = {
   nombre: nombreSchema,
   cobroVehiculo: z.boolean(),
-  // esGam: flag de zona GAM. Opcional en el borde (default false); a lo sumo una
-  // zona puede quedar en true (lo garantiza el indice unico parcial y el service).
-  esGam: z.boolean().default(false),
+  // feature 54: flag de zona central (renombrado del viejo esGam). default lo hace
+  // opcional en el payload de crear/actualizar.
+  esCentral: z.boolean().default(false),
   // distritoIds: conjunto de distritos que componen la zona (N:M). Al menos uno.
   distritoIds: z.array(idSchema).min(1),
   // tarifas: filas de tarifa_zona_mensajero. Su cardinalidad/forma depende de
@@ -124,8 +124,26 @@ export interface ZonaDTO {
   cobroVehiculo: boolean;
   esGam: boolean; // feature 24/R3: flag zona GAM (a lo sumo una en true)
   distritosCount: number;
+  esCentral: boolean; // feature 54: flag de zona central (antes esGam)
   // Presente en crear/actualizar/obtener; en listar solo si include incluye "tarifas".
   tarifas?: TarifaZonaMensajeroDTO[];
+}
+
+// Feature 24/R14: DTOs del catalogo geografico global (los usa GeoRepository/
+// IGeoRepository). Reintroducidos en feature 54 (reconciliacion PR #40).
+export interface ProvinciaLightDTO {
+  id: string;
+  nombre: string;
+}
+export interface CantonLightDTO {
+  id: string;
+  nombre: string;
+}
+export interface DistritoCatalogoDTO {
+  id: string;
+  nombre: string;
+  zonaId: string | null;
+  zonaNombre: string | null;
 }
 
 // --- Arbol de zonas indexado por nombre normalizado (get) ---
@@ -164,3 +182,17 @@ export type ListarZonasResult =
   | ZonaActionError;
 export type BorrarZonaResult = { status: "ok" } | ZonaActionError;
 export type ArbolZonasResult = { status: "ok"; arbol: ArbolZonas } | ZonaActionError;
+
+// Feature 55/R10: resultados de las Server Actions del catalogo geografico. Reusan
+// el shape ZonaActionError (superset: geo solo produce validation_error/
+// unauthenticated/forbidden) para no duplicar el manejo tipado de errores.
+export type GeoActionError = ZonaActionError;
+export type ListarProvinciasResult =
+  | { status: "ok"; items: ProvinciaLightDTO[] }
+  | GeoActionError;
+export type ListarCantonesResult =
+  | { status: "ok"; items: CantonLightDTO[] }
+  | GeoActionError;
+export type ListarDistritosResult =
+  | { status: "ok"; items: DistritoCatalogoDTO[] }
+  | GeoActionError;

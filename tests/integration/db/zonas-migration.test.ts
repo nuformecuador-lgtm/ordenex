@@ -127,7 +127,20 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_orden_num_guia_deferred_mensajero_asignado_espera_aceptacion") && // feature 17: apendida despues
         !d.endsWith("_order_status_en_ruta_bodega_satelite") && // feature 30: apendida despues
         !d.endsWith("_gestion_orden_estados_metodo_pago") && // feature 36: apendida despues
-        !d.endsWith("_order_status_en_bodega_satelite"), // feature 33: apendida despues
+        !d.endsWith("_order_status_en_bodega_satelite") && // feature 33: apendida despues
+        !d.endsWith("_rename_cobro_tarifas") && // PR #40: apendida despues
+        !d.endsWith("_tarifa_zona_mensajero_zona_vehiculo_unique") && // PR #40: apendida despues
+        !d.endsWith("_provincia_zona_id_nullable") && // PR #40: apendida despues
+        !d.endsWith("_zona_distrito_nm") && // PR #40: apendida despues
+        !d.endsWith("_zona_es_central_rename") && // feature 54: apendida despues
+        !d.endsWith("_cierre_dia") && // feature 37: apendida despues
+        !d.endsWith("_cierre_dia_resolucion") && // feature 38: apendida despues
+        !d.endsWith("_cierre_bodega") && // feature 40: apendida despues
+        !d.endsWith("_pago_mensajero_cierre") && // feature 39: apendida despues
+        !d.endsWith("_ingreso_bodega_rechazos") && // feature 56: apendida despues
+        !d.endsWith("_cierre_estado_vencido") && // feature 41: apendida despues
+        !d.endsWith("_wallet_movimiento") && // feature 42: apendida despues
+        !d.endsWith("_wallet_tienda_movimiento"), // feature 43: apendida despues
     );
     expect(thisDir > previas[previas.length - 1]).toBe(true);
   });
@@ -146,15 +159,40 @@ describe("R12 — RLS de la geografia permanece habilitado", () => {
   });
 });
 
-describe("schema.prisma refleja el modelo", () => {
-  it("Zona lleva pagoEntrega/pagoRechazo/esGam y nombre unico", () => {
-    expect(schema).toMatch(/pagoEntrega Decimal .*@map\("pago_entrega"\)/);
-    expect(schema).toMatch(/pagoRechazo Decimal .*@map\("pago_rechazo"\)/);
-    expect(schema).toMatch(/esGam\s+Boolean .*@map\("es_gam"\)/);
+describe("schema.prisma refleja el modelo (feature 54)", () => {
+  it("Zona lleva esCentral (es_central) y nombre unico; ya no lleva pagos", () => {
+    expect(schema).toMatch(/esCentral\s+Boolean .*@map\("es_central"\)/);
+    expect(schema).not.toMatch(/@map\("pago_entrega"\)/);
+    expect(schema).not.toMatch(/@map\("pago_rechazo"\)/);
     expect(schema).toMatch(/nombre\s+String\s+@unique/);
   });
 
   it("Distrito y Usuario tienen zonaId nullable con relacion e indice", () => {
     expect(schema).toMatch(/zonaId\s+String\?\s+@map\("zona_id"\)/);
+  });
+});
+
+// Feature 54 (reconciliacion PR #40): migracion que renombra es_gam -> es_central
+// y elimina las columnas muertas pago_entrega/pago_rechazo de zona.
+describe("feature 54 — migracion zona_es_central_rename", () => {
+  const renameDir = migrationDirFor("_zona_es_central_rename");
+  const renameUp = fs.readFileSync(path.join(renameDir, "migration.sql"), "utf8");
+  const renameDown = fs.readFileSync(path.join(renameDir, "down.sql"), "utf8");
+
+  it("UP renombra la columna es_gam -> es_central y el indice unico parcial", () => {
+    expect(renameUp).toMatch(/ALTER TABLE "zona" RENAME COLUMN "es_gam" TO "es_central"/);
+    expect(renameUp).toMatch(/ALTER INDEX "zona_es_gam_unico" RENAME TO "zona_es_central_unico"/);
+  });
+
+  it("UP elimina las columnas muertas pago_entrega/pago_rechazo", () => {
+    expect(renameUp).toMatch(/ALTER TABLE "zona" DROP COLUMN "pago_entrega"/);
+    expect(renameUp).toMatch(/ALTER TABLE "zona" DROP COLUMN "pago_rechazo"/);
+  });
+
+  it("DOWN revierte el rename y restaura los pagos", () => {
+    expect(renameDown).toMatch(/ALTER TABLE "zona" RENAME COLUMN "es_central" TO "es_gam"/);
+    expect(renameDown).toMatch(/ALTER INDEX "zona_es_central_unico" RENAME TO "zona_es_gam_unico"/);
+    expect(renameDown).toMatch(/ADD COLUMN "pago_entrega"/);
+    expect(renameDown).toMatch(/ADD COLUMN "pago_rechazo"/);
   });
 });

@@ -65,6 +65,13 @@ function renderModule(
       zonaNombre={props?.zonaNombre ?? "Limón"}
       sinZona={props?.sinZona ?? false}
       mensajeros={props?.mensajeros ?? [{ id: "m1", nombre: "Ana Mensajera" }]}
+      bloqueoBodega={
+        props?.bloqueoBodega ?? {
+          bloqueada: false,
+          porMensajeros: false,
+          porCierreBodega: false,
+        }
+      }
     />,
   );
 }
@@ -217,5 +224,103 @@ describe("RecepcionSateliteModule", () => {
     expect(
       within(porRecibir).queryByRole("button", { name: /asignar/i }),
     ).toBeNull();
+  });
+
+  // ---------- Feature 41 (F3, R22) ----------
+
+  it("R22: bodega bloqueada por SUS MENSAJEROS (i) muestra el aviso de esa causa y deshabilita 'Asignar'", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+      bloqueoBodega: {
+        bloqueada: true,
+        porMensajeros: true,
+        porCierreBodega: false,
+      },
+    });
+
+    const region = screen.getByRole("region", { name: "Recibidas" });
+    const alerta = within(region).getByRole("alert");
+    expect(alerta).toHaveTextContent(/resuelve los cierres pendientes de tus mensajeros/i);
+    expect(alerta).not.toHaveTextContent(/cierre de bodega hacia la central/i);
+
+    // Aun seleccionando una orden, "Asignar" queda deshabilitado por el bloqueo.
+    const checkbox = within(region).getByRole("checkbox", {
+      name: "Seleccionar REM-B1",
+    });
+    await user.click(checkbox);
+    expect(within(region).getByRole("button", { name: "Asignar" })).toBeDisabled();
+  });
+
+  it("R22: bodega bloqueada por CIERRE DE BODEGA (ii) muestra el aviso de esa causa", () => {
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+      bloqueoBodega: {
+        bloqueada: true,
+        porMensajeros: false,
+        porCierreBodega: true,
+      },
+    });
+
+    const region = screen.getByRole("region", { name: "Recibidas" });
+    const alerta = within(region).getByRole("alert");
+    expect(alerta).toHaveTextContent(/cierre de bodega hacia la central está pendiente de aprobación/i);
+    expect(alerta).not.toHaveTextContent(/resuelve los cierres pendientes de tus mensajeros/i);
+    expect(within(region).getByRole("button", { name: "Asignar" })).toBeDisabled();
+  });
+
+  it("R22: bloqueada por AMBAS causas lista las dos líneas accionables", () => {
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+      bloqueoBodega: {
+        bloqueada: true,
+        porMensajeros: true,
+        porCierreBodega: true,
+      },
+    });
+
+    const alerta = within(
+      screen.getByRole("region", { name: "Recibidas" }),
+    ).getByRole("alert");
+    expect(alerta).toHaveTextContent(/resuelve los cierres pendientes de tus mensajeros/i);
+    expect(alerta).toHaveTextContent(/cierre de bodega hacia la central/i);
+  });
+
+  it("R22: sin bloqueo NO muestra aviso y 'Asignar' se habilita al seleccionar", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Recibidas" });
+    expect(within(region).queryByRole("alert")).toBeNull();
+    await user.click(
+      within(region).getByRole("checkbox", { name: "Seleccionar REM-B1" }),
+    );
+    expect(within(region).getByRole("button", { name: "Asignar" })).toBeEnabled();
   });
 });

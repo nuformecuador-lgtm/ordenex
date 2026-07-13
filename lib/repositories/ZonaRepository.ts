@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { ConflictError } from "@/lib/errors";
 import { normalizeName } from "@/lib/utils/normalize";
 import type {
   ArbolCantonNode,
@@ -38,7 +39,7 @@ function tarifaToDTO(row: TarifaRow): TarifaZonaMensajeroDTO {
 }
 
 function toDTO(
-  zona: { id: string; nombre: string; cobroVehiculo: boolean; esGam: boolean },
+  zona: { id: string; nombre: string; cobroVehiculo: boolean; esCentral: boolean },
   distritosCount: number,
   tarifas: TarifaRow[] | undefined,
 ): ZonaDTO {
@@ -48,9 +49,30 @@ function toDTO(
     cobroVehiculo: zona.cobroVehiculo,
     esGam: zona.esGam, // feature 24/R3
     distritosCount,
+    esCentral: zona.esCentral,
   };
   if (tarifas !== undefined) dto.tarifas = tarifas.map(tarifaToDTO);
   return dto;
+}
+
+// Feature 55/R6: el indice unico parcial `zona_es_central_unico` garantiza <=1
+// central a nivel DB. Si por una carrera se colara un segundo `es_central=true`,
+// Prisma lanzaria P2002; lo traducimos a un ConflictError de dominio (no un 500)
+// SOLO cuando el conflicto es sobre la constraint de es_central.
+function isEsCentralUniqueViolation(e: unknown): boolean {
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") {
+    return false;
+  }
+  const target = e.meta?.target;
+  const asText = Array.isArray(target) ? target.join(",") : String(target ?? "");
+  return asText.includes("es_central") || asText.includes("zona_es_central_unico");
+}
+
+function translateEsCentralConflict(e: unknown): never {
+  if (isEsCentralUniqueViolation(e)) {
+    throw new ConflictError("Ya existe una zona central");
+  }
+  throw e;
 }
 
 function tarifaCreateRows(zonaId: string, tarifas: CreateZonaData["tarifas"]) {
@@ -66,26 +88,30 @@ export class ZonaRepository implements IZonaRepository {
   constructor(private readonly prisma: ZonaPrismaClient) {}
 
   async create(data: CreateZonaData): Promise<ZonaDTO> {
-    return this.prisma.$transaction(async (tx) => {
-      // R3: si nace GAM, desmarca cualquier otra en true antes de insertar (evita
-      // violar el indice unico parcial y mantiene la invariante de 1 sola GAM).
-      if (data.esGam) {
-        await tx.zona.updateMany({ where: { esGam: true }, data: { esGam: false } });
-      }
-      const zona = await tx.zona.create({
-        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esGam: data.esGam },
-      });
-      if (data.distritoIds.length > 0) {
-        await tx.zonaDistrito.createMany({
-          data: data.distritoIds.map((distritoId) => ({ zonaId: zona.id, distritoId })),
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Feature 55/R5/R6 (F1.4-A = reasignar): si esta zona sera central, desmarca
+        // cualquier central previa ANTES de crear, para no violar el indice unico parcial.
+        if (data.esCentral === true) {
+          await tx.zona.updateMany({ where: { esCentral: true }, data: { esCentral: false } });
+        }
+        const zona = await tx.zona.create({
+          data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esCentral: data.esCentral },
         });
-      }
-      if (data.tarifas.length > 0) {
-        await tx.tarifaZonaMensajero.createMany({ data: tarifaCreateRows(zona.id, data.tarifas) });
-      }
-      const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: zona.id } });
-      return toDTO(zona, data.distritoIds.length, tarifas);
-    });
+        if (data.distritoIds.length > 0) {
+          await tx.zonaDistrito.createMany({
+            data: data.distritoIds.map((distritoId) => ({ zonaId: zona.id, distritoId })),
+          });
+        }
+        if (data.tarifas.length > 0) {
+          await tx.tarifaZonaMensajero.createMany({ data: tarifaCreateRows(zona.id, data.tarifas) });
+        }
+        const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: zona.id } });
+        return toDTO(zona, data.distritoIds.length, tarifas);
+      });
+    } catch (e) {
+      translateEsCentralConflict(e);
+    }
   }
 
   async findById(id: string, includeTarifas: boolean): Promise<ZonaDTO | null> {
@@ -135,35 +161,41 @@ export class ZonaRepository implements IZonaRepository {
   }
 
   async update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null> {
-    return this.prisma.$transaction(async (tx) => {
-      const exists = await tx.zona.findUnique({ where: { id }, select: { id: true } });
-      if (!exists) return null;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const exists = await tx.zona.findUnique({ where: { id }, select: { id: true } });
+        if (!exists) return null;
 
-      // R3: si pasa a GAM, desmarca las demas antes de fijarla (invariante de 1 GAM).
-      if (data.esGam) {
-        await tx.zona.updateMany({
-          where: { esGam: true, NOT: { id } },
-          data: { esGam: false },
+        // Feature 55/R5/R6 (F1.4-A = reasignar): si esta zona pasa a central, desmarca
+        // cualquier OTRA central antes de actualizar, para no violar el indice unico parcial.
+        if (data.esCentral === true) {
+          await tx.zona.updateMany({
+            where: { esCentral: true, NOT: { id } },
+            data: { esCentral: false },
+          });
+        }
+
+        const zona = await tx.zona.update({
+          where: { id },
+          data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esCentral: data.esCentral },
         });
-      }
-      const zona = await tx.zona.update({
-        where: { id },
-        data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esGam: data.esGam },
+        // Reemplazo completo del N:M y de las tarifas.
+        await tx.zonaDistrito.deleteMany({ where: { zonaId: id } });
+        if (data.distritoIds.length > 0) {
+          await tx.zonaDistrito.createMany({
+            data: data.distritoIds.map((distritoId) => ({ zonaId: id, distritoId })),
+          });
+        }
+        await tx.tarifaZonaMensajero.deleteMany({ where: { zonaId: id } });
+        if (data.tarifas.length > 0) {
+          await tx.tarifaZonaMensajero.createMany({ data: tarifaCreateRows(id, data.tarifas) });
+        }
+        const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: id } });
+        return toDTO(zona, data.distritoIds.length, tarifas);
       });
-      // Reemplazo completo del N:M y de las tarifas.
-      await tx.zonaDistrito.deleteMany({ where: { zonaId: id } });
-      if (data.distritoIds.length > 0) {
-        await tx.zonaDistrito.createMany({
-          data: data.distritoIds.map((distritoId) => ({ zonaId: id, distritoId })),
-        });
-      }
-      await tx.tarifaZonaMensajero.deleteMany({ where: { zonaId: id } });
-      if (data.tarifas.length > 0) {
-        await tx.tarifaZonaMensajero.createMany({ data: tarifaCreateRows(id, data.tarifas) });
-      }
-      const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: id } });
-      return toDTO(zona, data.distritoIds.length, tarifas);
-    });
+    } catch (e) {
+      translateEsCentralConflict(e);
+    }
   }
 
   async marcarGam(id: string, esGam: boolean): Promise<ZonaDTO | null> {
@@ -242,5 +274,13 @@ export class ZonaRepository implements IZonaRepository {
   async countExistingVehiculos(ids: string[]): Promise<number> {
     if (ids.length === 0) return 0;
     return this.prisma.vehiculo.count({ where: { id: { in: ids } } });
+  }
+
+  async findCentralZonaId(): Promise<string | null> {
+    const z = await this.prisma.zona.findFirst({
+      where: { esCentral: true },
+      select: { id: true },
+    });
+    return z?.id ?? null;
   }
 }
