@@ -482,12 +482,13 @@
       "id": 46,
       "name": "reprogramacion: bloqueo y liberacion programada",
       "description": "(FASE 2 / detalle del flujo del mensajero, feature 36.) Cuando el mensajero REPROGRAMA una orden (estado reprogramada) con una fecha, la orden queda BLOQUEADA hasta esa fecha de reprogramacion (no reasignable/enviable antes). Al llegar la fecha, la orden se LIBERA automaticamente de vuelta a la bodega responsable para ser enviada ese dia, y se AVISA de la liberacion. Requiere un disparador temporal (job diario, en linea con el corte de las 00:00 de la feature 41) y una notificacion/aviso al liberar. Depende de la feature 36 (gestion: reprogramar con fecha y motivo).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/46-reprogramacion-bloqueo-liberacion",
-      "depends_on": 36
+      "depends_on": 36,
+      "status_note": "done 2026-07-13; F1.4 APROBADA (todas recomendadas). Primera de la Fase 2 flujo mensajero (grupo 46/47/49 elegido por el humano). Impl COMPLETA (R1-R21) + reviewer APROBADO 0 bloqueantes. VERDE: typecheck 0, lint 0, 2056/2056 tests (+48: 39 backend + 9 frontend), init.sh OK, round-trip de migracion verificado por SQL directo contra Postgres local. BLOQUEO server-side real: GuiaAsignacionService (generarGuia + asignarDesdeBodega) y AsignacionSateliteService.asignar rechazan orden reprogramada con fechaReprogramacion>hoy(CR) via MSG_ORDEN_REPROGRAMADA_BLOQUEADA (antes del check de origen, todo-o-nada); envio bloqueado por origen en MisAsignacionesService. LIBERACION: cron NUEVO /api/cron/liberar-reprogramadas (auth CRON_SECRET antes de efectos, schedule 0 6 diario en vercel.json=00:00 CR, hora CR UTC-6 con fronteras testeadas) devuelve la orden a en_bodega/en_bodega_satelite derivado de zona (findCentralZonaId, reusa ruteo 30/33) para re-asignar via 17/34; idempotencia DERIVADA del estatus (UPDATE guardado por estatusId=reprogramada) + columna orden.liberada_reprogramada_at. AVISO = visibilidad derivada 'liberadas hoy' en ambas bodegas (sin tabla de notificaciones). Migracion aditiva 20260713100000_orden_liberada_reprogramada_at (solo columna nullable + indice parcial + down.sql inverso exacto; NO columnas de intentos/historial => R21 fuera de alcance, eso es 47/49). Commit a9fa3c8 + cierre chore(state). DEUDA menor: E2E e2e/reprogramacion-liberacion.spec.ts escrito pero diferido (sin CRON_SECRET/seed, convencion del repo); round-trip de migracion por test estatico+SQL manual (no CI). NOTA AMBIENTAL (ajena a la 46): el Postgres local arrastra la migracion de la feature 43 (20260712170000_wallet_tienda_movimiento, no en dev) => prisma migrate status falla; reconciliar el historial local (o migrate reset) antes del despliegue. PENDIENTE: abrir PR a dev + merge (OK humano). Siguiente del grupo: 49 (trazabilidad, base) -> 47 -> 48."
     },
     {
       "id": 47,
