@@ -1002,3 +1002,32 @@
   0 bloqueantes (verificación round-trip real, snapshot inmutable probado, deuda m1 de la 39 RESUELTA).
 - **CIERRA el par pago-por-zona** (mensajero 39 + bodega 56). Deuda menor: R21 test de migración estático (round-trip
   real corrido por el reviewer); E2E ejecución diferida.
+
+## 2026-07-12 — feature 41 (reglas y bloqueos de cierre: obligatoriedad, vencidos)
+- Reglas de negocio críticas de los cierres (reflejan el ingreso de dinero de la empresa): (1) jerarquía/bodega
+  responsable por zona (central si `esCentral`, si no la satélite); (2) OBLIGATORIEDAD + VENCIDOS por corte diario
+  automático; (3) BLOQUEO del mensajero con cierre pendiente; (4) BLOQUEO de la bodega satélite con cierres pendientes.
+- Requisitos cubiertos: R1–R24 (cada uno con test concreto; reviewer verificó trazabilidad + round-trip real).
+- **Decisiones F1.4 (aprobadas por el humano 2026-07-12):** (Q1) **Vercel Cron Jobs** — route handler
+  `/api/cron/corte-diario` protegido con `CRON_SECRET` (401 sin secreto), `vercel.json` `crons "0 6 * * *"` = 00:00
+  hora Costa Rica (UTC-6); idempotente por vinculación de gestiones (segunda corrida no duplica), jornada calculada
+  en hora local CR. (Q2) el corte CREA una **fila real** `cierre_dia estado='vencido'` para cada mensajero que "debía
+  cerrar y no solicitó" (≥1 `gestion_orden` con `cierre_id IS NULL` y sin `solicitado`), con destino a su bodega
+  responsable, gestiones vinculadas y snapshot money-safe (`Prisma.Decimal`); no recalcula cierres resueltos. (Q3)
+  bloqueo del mensajero **DERIVADO** (sin flag): bloqueado ⇔ existe cierre `solicitado`∨`vencido`; `rechazado` no
+  bloquea; se desbloquea al resolver. (Q5) el `vencido` es resoluble por la bodega responsable reutilizando la
+  feature 38 (guardia de transición extendida para aceptar `vencido` como origen), resolver desbloquea, totales no se
+  recalculan. (Q6) SIN pantallas nuevas. (Q4 — **REGLA ESTRICTA elegida por el humano, no la recomendada**): la bodega
+  satélite queda bloqueada para asignar si (i) tiene cierres de sus mensajeros en `solicitado`/`vencido` de su zona
+  **O** (ii) su propio `CierreBodega` está en `solicitado` (único estado pendiente de `CierreBodega`, feature 40); test
+  por cada causa.
+- Guardas de asignación: maestro (17/30, `GuiaAsignacionService`) y adminSatélite (34, `AsignacionSateliteService`)
+  rechazan asignar a mensajero bloqueado / con bodega bloqueada, todo-o-nada, motivo accionable. UI: vencidos
+  diferenciados en `/cierres-admin` role-aware, avisos de bloqueo (mensajero + satélite por causa) en vistas existentes.
+- Nuevos: enum `vencido` (migración aditiva up/down, round-trip real verificado incl. recreación del uq de la 40),
+  route handler del cron + `lib/config/cron.ts`, `vercel.json` `crons`. Verde: prisma OK, typecheck 0, lint 0,
+  **1931/1931 (+64)**, `init.sh` OK, SIN regresión 37/38/39/40/56. Reviewer APROBADO 0 bloqueantes. Commit `dde6fba`.
+- **DESBLOQUEA** la fase de wallet/pagos (42-45) que se apoya en cierres aprobados. DEUDA menor: TOCTOU residual en el
+  lote del maestro (pre-check sin `NOT EXISTS`; el path satélite sí lo integra; justificado/no bloqueante) → follow-up;
+  R23 sin test de carrera real contra DB; `CRON_SECRET` documentado en `lib/config/cron.ts` (el `.env.example` está
+  gitignored); E2E `e2e/reglas-bloqueos-cierre.spec.ts` escrito pero no ejecutado (patrón del arnés).
