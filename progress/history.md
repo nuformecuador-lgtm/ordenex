@@ -1166,3 +1166,37 @@
 - Verde: prisma OK, typecheck 0, lint 0, **2191 tests**, `init.sh` OK; migración verificada ESTÁTICAMENTE (Postgres
   local compartido con la 49 en paralelo). Corrió en PARALELO con la 49 en worktree aislado `../ordenex-f44`.
   Sincronizada con `dev` (46 + 49). **PR #53 → `dev`**. DESBLOQUEA la 45 (gastos/sueldos), último eslabón wallet.
+
+## 2026-07-13 — feature 58: plantilla carga masiva, fila de ejemplo re-subible (+ follow-up modal)
+- Fix ágil (frontend/low, `sdd:false`, sin `specs/58/`). Rama `feature/58-plantilla-ejemplos-cr` desde el revert del #54
+  (`12a67cc`, ya en `dev` vía PR #55). Criterio de aceptación: descargar la plantilla y subirla sin editar debe crear
+  las órdenes de ejemplo. **Cumplido y verificado por el humano en la app.**
+- **Diagnóstico (la premisa registrada era incorrecta):** los valores de ejemplo `San José/San José/Carmen` **SÍ** son
+  válidos — existen en el catálogo geo sembrado y Carmen tiene zona **GAM** (verificado contra la DB local real, no solo
+  el XLSX). El fallo real tenía dos capas encadenadas:
+  1. **500** al cargar → **cliente Prisma OBSOLETO** (fechado Jul-9, anterior a las migraciones 42/43/44/46/49). El dev
+     server corría contra él → cualquier query con campos nuevos reventaba. Resuelto con `prisma generate` + reinicio del
+     server. (Esto también explicaba los "68 typecheck / 60 tests rojos" que reportó una entrega previa.)
+  2. **«distrito requerido»** → el generador de plantilla **XLSX** (`lib/utils/xlsx-template.ts`) sufijaba con `" *"` la
+     cabecera de los campos `required`. `distrito` es el ÚNICO `required:true` del repo → header `"distrito *"`. El parser
+     (`spreadsheet.ts`) identifica columnas por el TEXTO del header → clave `"distrito *"` ≠ `"distrito"` que espera
+     `filaCargaSchema` → el valor "Carmen" queda huérfano y `distrito` llega vacío. El CSV no tenía el sufijo (por eso solo
+     fallaba el XLSX, que es el default). El roundtrip test previo no lo cazó porque solo validaba `REQUIRED_HEADERS`
+     (5 columnas de cabecera), y `distrito` es obligatorio por-FILA, no por-cabecera.
+- **Fix:** `headerFor` devuelve siempre `label ?? key` (eliminado `REQUIRED_SUFFIX`); el texto de la cabecera no puede
+  divergir de la clave que el parser usa como identificador. La obligatoriedad se comunica en la UI (Alert del botón), no
+  en el archivo. Comentario del campo `required` en `BulkUpload.tsx` actualizado al nuevo contrato.
+- **Blindaje:** `carga-masiva-plantilla-roundtrip.test.ts` reforzado — asserta que CADA clave de columna aparece VERBATIM
+  en los headers reparseados (caza `"distrito *"`) y que la fila de ejemplo expone `distrito="Carmen"` pasando por
+  `filaCargaSchema`. `xlsx-template.test.ts` reescrito (antes exigía el sufijo `" *"` = codificaba el bug; ahora exige que
+  `required` NO altere la cabecera). Borrado código muerto (`carga-masiva-fields.ts`, duplicado de una entrega defectuosa)
+  y repuntado el guard de geo a la constante viva `ORDENES_BULK_FIELDS`.
+- **Follow-up UI (mismo PR):** el `Modal` compartido no crecía con la tabla ancha (8 columnas) del paso "resumen" de la
+  carga (features 14/16/29): estaba capado a `max-w-md` sin `max-height`/overflow. Fix en `Modal.tsx` — Popup
+  `max-h-[calc(100dvh-2rem)]`; cuerpo `min-h-0 flex-1 overflow-auto` (único bloque scrolleable); header/footer `shrink-0`
+  (fijos). `OrdenesCargaMasivaButton.tsx` pasa `max-w-4xl sm:max-w-5xl` sólo en `step==="resumen"`. El `Select` de la tabla
+  portalea (`SelectPrimitive.Portal`) → el overflow no lo recorta. Sin cambios de lógica/API; `DataTable`/`OrdenesCargaResumen`
+  intactos; 18 consumidores del Modal verdes.
+- **Reviewer APROBADO 0 bloqueantes** (`review_58`), corrió la verificación él mismo. VERDE: typecheck **0**, `npx vitest run`
+  **2330/2330 (260 archivos)**, focalizado 17/17. Menores no bloqueantes: focus-ring cosmético en borde de scroll (tradeoff
+  estándar de modal scrolleable). **Un PR (2 commits: fix plantilla + fix modal) `feature/58 → dev`.** PENDIENTE merge (OK humano).
