@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import {
@@ -30,8 +31,17 @@ type OrdenPrismaClient = Pick<
   | "canton"
   | "distrito"
   | "usuario"
+  | "cierreDia" // feature 41: bloqueo derivado del mensajero / bodega (R12/R17)
+  | "cierreBodega" // feature 41: causa (ii) del bloqueo de bodega (R17)
   | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
+  | "$executeRaw" // feature 41/R23: anti-TOCTOU (NOT EXISTS cierre bloqueante en el lote)
 >;
+
+// Feature 41 (R12/R16/R17): estados de cierre que BLOQUEAN. `rechazado`/`aprobado` NO
+// bloquean (dinero conciliado o descartado). Fuente de verdad en lib/types/cierre.ts.
+const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido"];
+const DESTINO_BODEGA_SATELITE: CierreDestinoTipo = "bodega_satelite";
+const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
 
 // Feature 17/R3: nombre CONSTANTE de la secuencia (nunca interpolar entrada de
 // usuario en el SQL crudo). Es la misma secuencia que el SERIAL de la feature 6
@@ -761,16 +771,71 @@ export class OrdenRepository implements IOrdenRepository {
     origenEstatusId: string,
   ): Promise<number> {
     if (ordenIds.length === 0) return 0;
-    const result = await this.prisma.orden.updateMany({
-      where: {
-        id: { in: ordenIds },
-        estatusId: origenEstatusId,
-        zonaId,
-        deletedAt: null,
-      },
-      data: { mensajeroAsignadoId: mensajeroId, estatusId: destinoEstatusId },
+    // Feature 41/R23 (anti-TOCTOU): la guardia de bloqueo del mensajero va en el MISMO
+    // UPDATE via `NOT EXISTS` sobre cierre_dia (estado solicitado/vencido). Si un cierre
+    // bloqueante aparece entre el pre-check del service y esta escritura, el NOT EXISTS es
+    // falso -> 0 filas transicionadas -> el service detecta count != lote -> conflict SIN
+    // efectos parciales. El resto de la guardia (estado de origen + zona + no borrada) se
+    // conserva igual (patron `recibirEnSatelite`). NO toca num_guia (R8). `updated_at` se
+    // fija a mano (raw no dispara el @updatedAt de Prisma).
+    const count = await this.prisma.$executeRaw`
+      UPDATE "orden"
+      SET "mensajero_asignado_id" = ${mensajeroId},
+          "estatus_id" = ${destinoEstatusId},
+          "updated_at" = NOW()
+      WHERE "id" IN (${Prisma.join(ordenIds)})
+        AND "estatus_id" = ${origenEstatusId}
+        AND "zona_id" = ${zonaId}
+        AND "deleted_at" IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "cierre_dia" c
+          WHERE c."mensajero_id" = ${mensajeroId}
+            AND c."estado" IN ('solicitado', 'vencido')
+        )`;
+    return count;
+  }
+
+  // --- Feature 41: bloqueo derivado en asignacion (R12/R16/R17) ---
+
+  /** R12/R16: de `ids`, los mensajeros con un cierre_dia en `solicitado`/`vencido`. */
+  async findMensajerosBloqueados(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.cierreDia.findMany({
+      where: { mensajeroId: { in: ids }, estado: { in: ESTADOS_CIERRE_BLOQUEANTES } },
+      select: { mensajeroId: true },
+      distinct: ["mensajeroId"], // usa el indice (mensajero_id, estado)
     });
-    return result.count;
+    return new Set(rows.map((r) => r.mensajeroId));
+  }
+
+  /**
+   * R17 (regla estricta F1.4-Q4): `bloqueada = (i) || (ii)`. (i) cierre_dia de sus
+   * mensajeros (destino satelite de su zona) en `solicitado`/`vencido`; (ii) su propio
+   * CierreBodega hacia la central en `solicitado`. Dos EXISTS en paralelo.
+   */
+  async existeBodegaSateliteBloqueada(zonaId: string): Promise<{
+    bloqueada: boolean;
+    porMensajeros: boolean;
+    porCierreBodega: boolean;
+  }> {
+    const [countMensajeros, countCierreBodega] = await Promise.all([
+      // (i) usa el indice (destino_tipo, destino_zona_id) + filtro por estado.
+      this.prisma.cierreDia.count({
+        where: {
+          destinoTipo: DESTINO_BODEGA_SATELITE,
+          destinoZonaId: zonaId,
+          estado: { in: ESTADOS_CIERRE_BLOQUEANTES },
+        },
+      }),
+      // (ii) mismo criterio que la guardia de unicidad de la feature 40 (indice unico
+      // parcial WHERE estado='solicitado'): a lo sumo uno por zona.
+      this.prisma.cierreBodega.count({
+        where: { zonaId, estado: ESTADO_CIERRE_BODEGA_PENDIENTE },
+      }),
+    ]);
+    const porMensajeros = countMensajeros > 0;
+    const porCierreBodega = countCierreBodega > 0;
+    return { bloqueada: porMensajeros || porCierreBodega, porMensajeros, porCierreBodega };
   }
 }
 

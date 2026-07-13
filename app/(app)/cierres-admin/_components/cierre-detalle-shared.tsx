@@ -48,7 +48,31 @@ export const ESTADO_LABEL: Record<CierreEstado, string> = {
   solicitado: "Solicitado",
   aprobado: "Aprobado",
   rechazado: "Rechazado",
+  vencido: "Vencido", // feature 41: etiqueta minima; el tratamiento diferenciado (R20) lo hace frontend_dev
 };
+
+// Feature 41 (R20): variante de badge por estado para diferenciar VISUALMENTE el
+// `vencido` (generado por el corte diario: dinero sin conciliar mas alla del plazo)
+// del `solicitado` en la misma cola de pendientes. `vencido` -> destructive (rojo,
+// atencion); `solicitado` -> secondary (neutro). Los resueltos conservan su color.
+export const ESTADO_BADGE_VARIANT: Record<
+  CierreEstado,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  solicitado: "secondary",
+  aprobado: "outline",
+  rechazado: "destructive",
+  vencido: "destructive",
+};
+
+/**
+ * Feature 41 (R20): badge del estado de un cierre, con estilo diferenciado por
+ * estado (ver `ESTADO_BADGE_VARIANT`). El `vencido` queda visualmente separado del
+ * `solicitado` en la cola de pendientes de `/cierres-admin`. Texto i18n-ready.
+ */
+export function EstadoCierreBadge({ estado }: { estado: CierreEstado }) {
+  return <Badge variant={ESTADO_BADGE_VARIANT[estado]}>{ESTADO_LABEL[estado]}</Badge>;
+}
 
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
 export const PAGO_MENSAJERO_LABEL = "Pago al mensajero";

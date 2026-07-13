@@ -47,6 +47,10 @@ export interface CrearCierreInput {
   mensajeroId: string;
   destinoTipo: CierreDestinoTipo;
   destinoZonaId: string;
+  // Feature 41/C1 (R8): estado con el que se crea el cierre. La 37 crea `solicitado`
+  // (default); el corte diario crea `vencido` reusando la MISMA tx de vinculacion +
+  // snapshot. Solo estos dos valores son validos como estado de creacion.
+  estado?: Extract<CierreEstado, "solicitado" | "vencido">;
   totales: CierreTotales;
   // Feature 39/R12/R14: pago al mensajero snapshoteado por gestion (gestionId -> STRING)
   // + total del cierre (STRING). Se persisten en la MISMA tx que crea el cierre.
@@ -77,11 +81,14 @@ export interface ICierreDiaRepository {
   existeCierreSolicitado(mensajeroId: string): Promise<boolean>;
   /**
    * R13/R14: bajo prisma.$transaction (todo-o-nada): (a) INSERT cierre_dia con el
-   * destino derivado + los totales snapshot, (b) UPDATE gestion_orden SET cierre_id
-   * = <nuevo> WHERE mensajero_id = actor AND cierre_id IS NULL (guardia de
-   * propiedad + no-cerradas; concurrencia-segura). Devuelve el id del cierre.
+   * destino derivado + los totales snapshot (estado `solicitado` por defecto, o
+   * `vencido` para el corte diario, feature 41/C1), (b) UPDATE gestion_orden SET
+   * cierre_id = <nuevo> WHERE mensajero_id = actor AND cierre_id IS NULL (guardia de
+   * propiedad + no-cerradas; concurrencia-segura). Devuelve el id del cierre, o `null`
+   * si el UPDATE guardado vincula 0 gestiones (carrera: otra solicitud/corte las vinculo
+   * primero) -> rollback de la tx, sin efectos (R8/R9/R23).
    */
-  crearCierre(input: CrearCierreInput): Promise<string>;
+  crearCierre(input: CrearCierreInput): Promise<string | null>;
   /** R18: cierres del mensajero (mas reciente primero) con estado + totales. */
   findCierresByMensajero(mensajeroId: string): Promise<CierrePasadoDTO[]>;
 }

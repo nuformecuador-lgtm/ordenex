@@ -11,6 +11,7 @@ import { gestionConfig } from "@/lib/config/gestion";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ICierreDiaService } from "@/lib/interfaces/services/ICierreDiaService";
+import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { ListarCierreDiaResult, SolicitarCierreResult } from "@/lib/types/cierre";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 
@@ -39,6 +40,38 @@ function buildService(): ICierreDiaService {
 export interface CierreDiaDeps {
   service?: ICierreDiaService;
   getActor?: () => Promise<Actor | null>;
+}
+
+// Feature 41 (R21): deps del flag de bloqueo derivado del mensajero. Inyecta el repo
+// (solo el metodo de bloqueo) y el actor en tests, sin tocar el service backend.
+export interface EstadoBloqueoMensajeroDeps {
+  ordenRepo?: Pick<IOrdenRepository, "findMensajerosBloqueados">;
+  getActor?: () => Promise<Actor | null>;
+}
+
+/** Resultado del flag de bloqueo del mensajero (R21). `unauthenticated` = sin sesion. */
+export type EstadoBloqueoMensajeroResult =
+  | { status: "ok"; bloqueado: boolean }
+  | { status: "unauthenticated" };
+
+/**
+ * Feature 41 (R21): deriva SERVER-SIDE si el mensajero (el actor) esta BLOQUEADO para
+ * recibir nuevas asignaciones = tiene al menos un cierre en estado bloqueante
+ * (`solicitado`/`vencido`), reutilizando `findMensajerosBloqueados` del backend (sin
+ * flag persistido). El dato viaja por props a la vista del mensajero, que muestra el
+ * aviso accionable. No muta nada; solo lectura.
+ */
+export async function estadoBloqueoMensajero(
+  deps: EstadoBloqueoMensajeroDeps = {},
+): Promise<EstadoBloqueoMensajeroResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1: antes de tocar el repo
+    const repo = deps.ordenRepo ?? new OrdenRepository(getPrismaClient());
+    const bloqueados = await repo.findMensajerosBloqueados([actor.usuarioId]);
+    return { status: "ok" as const, bloqueado: bloqueados.has(actor.usuarioId) };
+  });
+  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
 /** R1-R11/R17/R18: detalle del dia + totales + gate + historico; solo `mensajero`. */

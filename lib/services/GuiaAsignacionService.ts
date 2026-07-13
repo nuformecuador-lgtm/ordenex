@@ -40,6 +40,10 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
   zona: ["zona GAM no configurada"],
 };
 
+// Feature 41/R13: motivo accionable cuando un mensajero destino esta bloqueado por un
+// cierre pendiente (solicitado/vencido). No se le asignan nuevas ordenes hasta resolverlo.
+const MSG_MENSAJERO_BLOQUEADO = "mensajero bloqueado por cierre pendiente";
+
 function distinct(values: string[]): string[] {
   return [...new Set(values)];
 }
@@ -112,6 +116,20 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       }
     }
     if (detalle.length > 0) return { status: "conflict", detalle };
+
+    // --- Feature 41/R13/R23: guarda de mensajero bloqueado, ANTES de persistir ---
+    // Un mensajero con cierre `solicitado`/`vencido` no recibe nuevas asignaciones. El
+    // ruteo a satelite (ordenes sin mensajero) NO se bloquea (no asigna mensajero).
+    const bloqueados = await this.repo.findMensajerosBloqueados(mensajeroIds);
+    if (bloqueados.size > 0) {
+      const detalleBloqueo: DetalleConflicto[] = [];
+      for (const d of decisiones) {
+        if (d.mensajeroId !== null && bloqueados.has(d.mensajeroId)) {
+          detalleBloqueo.push({ ordenId: d.ordenId, motivo: MSG_MENSAJERO_BLOQUEADO });
+        }
+      }
+      if (detalleBloqueo.length > 0) return { status: "conflict", detalle: detalleBloqueo };
+    }
 
     // --- Resolver estatus destino por value (guarda defensiva si falta el seed) ---
     const hayNoGam = decisiones.some((d) => {
@@ -242,6 +260,15 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       }
     }
     if (detalle.length > 0) return { status: "conflict", detalle }; // R29/R17: aborta sin efectos
+
+    // --- Feature 41/R13/R23: guarda de mensajero bloqueado, ANTES de persistir ---
+    const bloqueados = await this.repo.findMensajerosBloqueados([input.mensajeroId]);
+    if (bloqueados.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_MENSAJERO_BLOQUEADO })),
+      };
+    }
 
     const estatusEsperaId = await this.repo.findEstatusIdByValue(ESTATUS_EN_ESPERA_ACEPTACION);
     if (estatusEsperaId === null) {

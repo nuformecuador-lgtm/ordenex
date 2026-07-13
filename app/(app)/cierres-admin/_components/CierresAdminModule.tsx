@@ -19,6 +19,7 @@ import type { CierreDestinoTipo } from "@/lib/types/cierre";
 import {
   money,
   ESTADO_LABEL,
+  EstadoCierreBadge,
   ORDEN_RESULTADOS,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
@@ -185,7 +186,11 @@ export function CierresAdminModule({
   }
 
   const cierreAbierto = detalle?.cierre ?? null;
-  const esPendiente = cierreAbierto?.estado === "solicitado";
+  // Feature 41 (R20): los dos estados RESOLUBLES (`solicitado` y `vencido`) exponen
+  // los botones aprobar/rechazar; el backend permite resolver un `vencido` igual que
+  // un `solicitado` (guardia de transicion extendida). El histórico es solo lectura.
+  const esPendiente =
+    cierreAbierto?.estado === "solicitado" || cierreAbierto?.estado === "vencido";
 
   return (
     <div className="flex flex-col gap-8">
@@ -423,6 +428,12 @@ function columnasPendientes(
   abrir: (cierreId: string) => void,
 ): Column<CierreAdminResumen>[] {
   return [
+    // Feature 41 (R20): estado diferenciado (`solicitado` vs `vencido`) en la cola.
+    {
+      id: "estado",
+      value: "Estado",
+      render: (c) => <EstadoCierreBadge estado={c.estado} />,
+    },
     { id: "mensajero", value: "Mensajero", render: (c) => c.mensajeroNombre },
     {
       id: "fecha",

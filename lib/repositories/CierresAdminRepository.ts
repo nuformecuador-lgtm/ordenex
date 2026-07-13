@@ -7,10 +7,14 @@ import type {
   ResolverCierreResult,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type { CierreEstado } from "@/lib/types/cierre";
 import { WITH_DETALLE, toPendienteRow } from "@/lib/repositories/CierreDiaRepository";
 
-// Solo el estado que la 38 puede transicionar (R12): la guardia del updateMany.
-const ESTADO_SOLICITADO = "solicitado";
+// Estados de ORIGEN que la resolucion puede transicionar (R12). Feature 41/E1 (R19):
+// ademas de `solicitado`, un `vencido` (creado por el corte diario) es resoluble por la
+// bodega responsable reusando la auditoria existente; resolverlo desbloquea (R15). Los
+// totales NO se recalculan (R4).
+const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado", "vencido"];
 
 type CierresAdminPrismaClient = Pick<PrismaClient, "cierreDia" | "gestionOrden">;
 
@@ -110,9 +114,10 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     const { cierreId, alcance, nuevoEstado, resueltoPor, motivoRechazo } = input;
     const alcanceGuard = alcanceWhere(alcance);
 
-    // R12/R13: aplica SOLO si sigue `solicitado` Y casa el alcance (guardia en WHERE).
+    // R12/R13 + feature 41/E1 (R19): aplica SOLO si sigue en un estado resoluble
+    // (`solicitado` o `vencido`) Y casa el alcance (guardia en WHERE).
     const res = await this.prisma.cierreDia.updateMany({
-      where: { id: cierreId, estado: ESTADO_SOLICITADO, ...alcanceGuard },
+      where: { id: cierreId, estado: { in: ESTADOS_RESOLUBLES }, ...alcanceGuard },
       data: {
         estado: nuevoEstado,
         resueltoPor,

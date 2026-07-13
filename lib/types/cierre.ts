@@ -9,10 +9,14 @@ import type {
 // METODO_PAGO_SEED). La 37 SOLO produce `solicitado`; `aprobado`/`rechazado` se
 // reservan para la feature 38. El `satisfies` rompe el build si el SEED tuviera un
 // valor que el enum Prisma NO tiene.
+// Feature 41 (R2): AÑADE `vencido` como cuarto estado. Lo crea el corte diario para
+// el mensajero que "debia cerrar y no solicito" (fila real con snapshot congelado); es
+// bloqueante como `solicitado` y resoluble por la bodega responsable (feature 38 ext).
 export const CIERRE_ESTADO_SEED = [
   "solicitado",
   "aprobado",
   "rechazado",
+  "vencido", // feature 41
 ] as const satisfies readonly PrismaCierreEstado[];
 
 export type CierreEstado = (typeof CIERRE_ESTADO_SEED)[number];

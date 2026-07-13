@@ -181,6 +181,18 @@ export interface RecepcionSateliteRow {
   distritoNombre: string | null;
 }
 
+// Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite. Regla
+// ESTRICTA (F1.4-Q4): `bloqueada = porMensajeros || porCierreBodega`. `porMensajeros` =
+// existe un cierre_dia de sus mensajeros (destino satelite de su zona) en
+// `solicitado`/`vencido` (causa i). `porCierreBodega` = existe su propio CierreBodega
+// hacia la central en `solicitado` (causa ii). Ambos flags viajan para que el borde
+// (feature 34) distinga el motivo accionable de R22.
+export interface BodegaBloqueoResult {
+  bloqueada: boolean;
+  porMensajeros: boolean;
+  porCierreBodega: boolean;
+}
+
 export interface IOrdenRepository {
   create(data: CreateOrdenData): Promise<OrdenDTO>;
   /** Excluye borradas (deleted_at IS NOT NULL); null si no existe o esta borrada (R34). */
@@ -381,4 +393,23 @@ export interface IOrdenRepository {
     destinoEstatusId: string,
     origenEstatusId: string,
   ): Promise<number>;
+
+  // --- Feature 41: bloqueo derivado en asignacion (R12/R16/R17/R23) ---
+
+  /**
+   * R12/R16: de `ids`, subconjunto de mensajeros BLOQUEADOS = tienen al menos un
+   * `cierre_dia` en estado bloqueante (`solicitado` o `vencido`). `rechazado`/`aprobado`
+   * NO bloquean (R16). Usa el indice (mensajero_id, estado). Vacio si `ids` esta vacio.
+   */
+  findMensajerosBloqueados(ids: string[]): Promise<Set<string>>;
+  /**
+   * R17 (regla estricta F1.4-Q4): la bodega satelite de `zonaId` esta BLOQUEADA para
+   * asignar a sus mensajeros si existe CUALQUIERA de: (i) un `cierre_dia`
+   * `destino_tipo='bodega_satelite'`, `destino_zona_id=zonaId`, `estado IN
+   * ('solicitado','vencido')`; O (ii) un `cierre_bodega` `zona_id=zonaId`,
+   * `estado='solicitado'` (su propio cierre hacia la central pendiente; mismo criterio
+   * que la guardia de unicidad de la feature 40, respaldado por su indice unico parcial).
+   * Devuelve los dos flags + `bloqueada = i || ii` para que el borde distinga el motivo.
+   */
+  existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult>;
 }

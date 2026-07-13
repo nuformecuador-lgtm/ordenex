@@ -78,12 +78,15 @@ export class CierresAdminService implements ICierresAdminService {
     // R2: el filtro por alcance vive en el repo (WHERE), nunca en memoria.
     const rows = await this.repo.findCierresByAlcance(scope.alcance);
 
-    // R4/R5: partir por estado. `solicitado` -> pendientes; resueltos -> historico.
+    // R4/R5 + feature 41/E2 (R20): partir por estado. Los estados RESOLUBLES
+    // (`solicitado` y `vencido`) van a la cola de pendientes; los resueltos
+    // (`aprobado`/`rechazado`) al historico. El `vencido` viaja con su `estado` en el
+    // resumen, para que el frontend lo etiquete diferenciado dentro de la cola (R20).
     const pendientes: CierreAdminResumen[] = [];
     const historico: CierreAdminResumen[] = [];
     for (const row of rows) {
       const resumen = toResumen(row); // R8/R9: totales snapshot (string) sin recomputar
-      if (row.estado === "solicitado") pendientes.push(resumen);
+      if (row.estado === "solicitado" || row.estado === "vencido") pendientes.push(resumen);
       else historico.push(resumen);
     }
     return { status: "ok", pendientes, historico, sinZona: false };

@@ -29,6 +29,8 @@ type RepoMethods = Pick<
   | "findByIdsForTransicion"
   | "findEstatusIdByValue"
   | "asignarSateliteLote"
+  | "existeBodegaSateliteBloqueada" // feature 41/R18
+  | "findMensajerosBloqueados" // feature 41/R14
 >;
 
 function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
@@ -50,6 +52,14 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
     findByIdsForTransicion: vi.fn(async () => [transicionRow()]),
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
     asignarSateliteLote: vi.fn(async () => 1),
+    // Feature 41: por defecto bodega libre y mensajero no bloqueado (los tests de
+    // bloqueo overridean estos dobles).
+    existeBodegaSateliteBloqueada: vi.fn(async () => ({
+      bloqueada: false,
+      porMensajeros: false,
+      porCierreBodega: false,
+    })),
+    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
     ...overrides,
   };
 }
@@ -221,5 +231,91 @@ describe("AsignacionSateliteService.asignar", () => {
     });
     // Re-lee para armar el detalle de la carrera.
     expect(findByIds).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("AsignacionSateliteService.asignar — bloqueo (feature 41/R14/R18)", () => {
+  it("R18 (i): bodega bloqueada por cierres de sus mensajeros -> bodega_bloqueada, sin escribir", async () => {
+    const repo = fakeRepo({
+      existeBodegaSateliteBloqueada: vi.fn(async () => ({
+        bloqueada: true,
+        porMensajeros: true,
+        porCierreBodega: false,
+      })),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "bodega_bloqueada",
+      causa: { porMensajeros: true, porCierreBodega: false },
+    });
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+    // R18: aborta ANTES de validar mensajero/ordenes.
+    expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
+  });
+
+  it("R18 (ii): bodega bloqueada por su propio CierreBodega pendiente -> bodega_bloqueada", async () => {
+    const repo = fakeRepo({
+      existeBodegaSateliteBloqueada: vi.fn(async () => ({
+        bloqueada: true,
+        porMensajeros: false,
+        porCierreBodega: true,
+      })),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "bodega_bloqueada",
+      causa: { porMensajeros: false, porCierreBodega: true },
+    });
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("R18: bloqueada por AMBAS causas -> los dos flags viajan", async () => {
+    const repo = fakeRepo({
+      existeBodegaSateliteBloqueada: vi.fn(async () => ({
+        bloqueada: true,
+        porMensajeros: true,
+        porCierreBodega: true,
+      })),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "bodega_bloqueada",
+      causa: { porMensajeros: true, porCierreBodega: true },
+    });
+  });
+
+  it("R14: mensajero destino bloqueado por cierre pendiente -> validation_error, sin escribir", async () => {
+    const repo = fakeRepo({
+      // bodega libre, pero el mensajero elegido esta bloqueado.
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set([MENSAJERO])),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "validation_error",
+      fieldErrors: { mensajeroId: ["mensajero_bloqueado_por_cierre"] },
+    });
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("camino feliz sin bloqueo -> ok (los dobles por defecto no bloquean)", async () => {
+    const repo = fakeRepo();
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res.status).toBe("ok");
+    expect(repo.existeBodegaSateliteBloqueada).toHaveBeenCalledWith(ZONA);
   });
 });

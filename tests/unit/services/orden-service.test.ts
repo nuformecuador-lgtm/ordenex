@@ -82,6 +82,13 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findMensajerosByZona: vi.fn().mockResolvedValue([]),
     findMensajeroIdsValidosByZona: vi.fn().mockResolvedValue(new Set()),
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
+    // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
+    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    existeBodegaSateliteBloqueada: vi.fn(async () => ({
+      bloqueada: false,
+      porMensajeros: false,
+      porCierreBodega: false,
+    })),
     // Feature 32: etiqueta de guia, no ejercitada por el CRUD (feature 6) pero
     // exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),

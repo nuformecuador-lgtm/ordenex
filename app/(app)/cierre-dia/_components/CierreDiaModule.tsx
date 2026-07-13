@@ -36,7 +36,17 @@ export interface CierreDiaModuleProps {
   puedesSolicitar: boolean;
   motivoBloqueo: string | null;
   cierresPasados: CierrePasadoDTO[];
+  /**
+   * Feature 41/R21: `true` si el mensajero está BLOQUEADO (tiene un cierre
+   * `solicitado`/`vencido` pendiente) para recibir nuevas asignaciones. Derivado
+   * server-side y pasado por props; el módulo solo muestra el aviso accionable.
+   */
+  bloqueado: boolean;
 }
+
+// Feature 41/R21: aviso accionable de bloqueo (texto separado, i18n-ready).
+const BLOQUEO_AVISO =
+  "No puedes recibir nuevas asignaciones hasta que tu cierre pendiente sea resuelto por tu bodega.";
 
 /** Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready). */
 const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
@@ -70,6 +80,7 @@ const ESTADO_LABEL: Record<CierreEstado, string> = {
   solicitado: "Solicitado",
   aprobado: "Aprobado",
   rechazado: "Rechazado",
+  vencido: "Vencido", // feature 41: etiqueta minima; el aviso de bloqueo (R21) lo hace frontend_dev
 };
 
 const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
@@ -108,6 +119,7 @@ export function CierreDiaModule({
   puedesSolicitar,
   motivoBloqueo,
   cierresPasados,
+  bloqueado,
 }: CierreDiaModuleProps) {
   const router = useRouter();
   const toast = useToast();
@@ -137,6 +149,16 @@ export function CierreDiaModule({
 
   return (
     <div className="flex flex-col gap-8">
+      {/* ---------- Aviso de bloqueo del mensajero (feature 41/R21) ---------- */}
+      {bloqueado ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          {BLOQUEO_AVISO}
+        </p>
+      ) : null}
+
       {/* ---------- Panel de totales por método de pago (R7) ---------- */}
       <section aria-label="Totales del día" className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Totales del día</h2>
