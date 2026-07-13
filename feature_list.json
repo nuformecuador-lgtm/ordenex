@@ -517,12 +517,13 @@
       "id": 49,
       "name": "trazabilidad / historial de estados de la orden",
       "description": "(FASE 2 / detalle, transversal.) Registrar la TRAZABILIDAD COMPLETA de cada orden: el historial de todos los estados por los que paso, CUANDO ocurrio cada cambio (timestamp) y cuando ESCALA de un estado a otro, mas el contador de intentos de entrega. Debe poder consultarse como LINEA DE TIEMPO en el detalle de la orden. Es la base para saber cuando una orden escala a rechazo, cuantos intentos lleva, etc. Aplica a toda la maquina de estados (features 17, 30, 33, 34, 36, 46, 47). Fullstack (tabla de historial de estados + UI de linea de tiempo). Se relaciona con el tiempo real (feature 35). Depende de la feature 36.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 36
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/49-trazabilidad-historial-estados",
+      "depends_on": 36,
+      "status_note": "done 2026-07-13; F1.4 APROBADA (todas recomendadas). Segunda de la Fase 2 flujo mensajero (grupo 46/47/49). Transversal. Impl COMPLETA (R1-R34) + reviewer APROBADO 0 bloqueantes (el reviewer reprodujo el grep de cobertura y el round-trip de migracion, no solo por bitacora). VERDE: typecheck 0, lint 0, 2225/2225 tests (+85), init.sh OK, round-trip de migracion REAL (rollback->pending->deploy->up-to-date). CHOKE POINT unico registrar-cambio-estado.ts (OrdenEstadoService): append inmutable a orden_historial_estado en la MISMA $transaction que el cambio de estado. Los 11 PUNTOS de escritura de estado instrumentados atomicamente (CONFIRMADO 11/11, sin 12o escapado): OrdenRepository #1 createManyOrdenes/#2 create/#3 generarGuiaLote/#4 asignarBodegaLote/#5 rutearBodegaSateliteLote/#6 recibirEnSatelite/#11 update; #7 asignarSateliteLote (SQL crudo: $executeRaw->$queryRaw...RETURNING id en la tx, conserva anti-TOCTOU NOT EXISTS, registra solo filas transicionadas R8); GestionOrdenRepository #8 recogerLote/#9 crearGestionYTransicionar; LiberacionReprogramadaRepository #10 liberarOrden (actor NULL/cron, append solo si count>0). Contador de intentos DERIVADO del historial (sin columna materializada; la regla 3->rechazo es de la 47). Estado INICIAL (creacion) = primera linea (post-deploy). SIN backfill. UI drawer 'Ver historial' desde la lista (no habia pagina de detalle), visibilidad por rol server-side (maestro/admin todas, adminTienda su tienda, mensajero sus asignadas via nuevo OrdenDTO.mensajeroAsignadoId opcional sin migracion, adminSatelite su zona). Migracion aditiva 20260713120000_orden_historial_estado (tabla append-only + RLS sin policies + indice (orden_id,created_at) + down.sql inverso). Realtime (35) fuera de alcance (punto de extension). Commit faeeb2a + cierre chore(state). RAMA nace del tip de la 46 (contiene 43+46) para instrumentar la liberacion de la 46. DEUDA menor: test de cobertura T5.2 estatico (compensado por grep del reviewer, conjunto de 11 cerrado); test RLS estatico; E2E diferido. PENDIENTE: sync con dev + PR + merge (OK humano). Siguiente del grupo: 47 (reintentos/escalado, consume el derivador de intentos) -> 48."
     },
     {
       "id": 50,
@@ -625,6 +626,17 @@
       "zone": null,
       "branch": null,
       "depends_on": 51
+    },
+    {
+      "id": 59,
+      "name": "zonas: seleccionar distritos de VARIOS cantones",
+      "description": "Mejora de UX en la creacion/edicion de zonas (ZonaForm, features 24/55): hoy el maestro navega provincia -> UN canton -> marca distritos de ESE canton; aunque la seleccion interna (`selected`) ya se ACUMULA al cambiar de canton, la UI solo muestra los distritos del canton actualmente elegido, por lo que NO se ven ni se gestionan los distritos elegidos de OTROS cantones y parece que se pierden. Objetivo: permitir elegir distritos de VARIOS cantones (analogo a elegir varios distritos de un solo canton) y hacer la seleccion cruzada VISIBLE y editable. Alcance: reconstruir la seccion 'Distritos de la zona' del ZonaForm para (a) poder ir agregando distritos de multiples cantones (misma o distinta provincia) sin perder los ya marcados al cambiar de canton, y (b) mostrar un resumen/lista de TODOS los distritos seleccionados agrupados por provincia/canton, con opcion de quitar cualquiera desde ese resumen (hoy solo existe el contador 'Distritos seleccionados: N', data-testid distritos-seleccionados). Se mantiene el contrato backend intacto: crearZona/actualizarZona ya reciben el conjunto COMPLETO de distritoIds (N:M ZonaDistrito) sin importar de cuantos cantones vengan, y siguen vigentes las reglas R10 (deshabilitar distritos ya asignados a OTRA zona) y el pre-marcado en edicion. Frontend puro (ZonaForm + acciones geo listarCantones/listarDistritos ya existentes); no toca migraciones ni el backend de zonas. Depende de la feature 55 (ZonaForm reconstruido).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 55
     }
   ]
 }

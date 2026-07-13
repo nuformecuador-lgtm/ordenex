@@ -1120,3 +1120,29 @@
   introspección, SIN regresión 37/38/39/40/56/41/42. Reviewer APROBADO 0 bloqueantes. Commit `6923a7b`.
 - DEUDA menor: E2E escrito pero no ejecutado (patrón del arnés); test de migración unit estático (el round-trip real
   lo corrió el reviewer). El PAGO efectivo a la tienda queda como follow-up sobre el modelo ya probado.
+
+## Feature 49 — trazabilidad / historial de estados de la orden (2026-07-13)
+
+- **Segunda de la Fase 2 del flujo del mensajero** (grupo 46/47/49). Fullstack/high, TRANSVERSAL, un ciclo.
+  Rama `feature/49-trazabilidad-historial-estados` desde el TIP de la 46 (contiene 43+46, para instrumentar la
+  liberación de la 46). F1.4 APROBADA (todas las recomendaciones). Impl R1–R34 + reviewer APROBADO 0 bloqueantes
+  (el reviewer reprodujo el grep de cobertura y el round-trip de migración, no solo por bitácora). Commit `faeeb2a`.
+- **Choke point único** `registrar-cambio-estado.ts` (`OrdenEstadoService`): append INMUTABLE a
+  `orden_historial_estado` en la MISMA `$transaction` que el cambio de estado (nunca un estado sin su línea).
+- **Los 11 puntos de escritura de estado instrumentados atómicamente (11/11, sin 12º escapado):**
+  `OrdenRepository` #1 `createManyOrdenes` / #2 `create` / #3 `generarGuiaLote` / #4 `asignarBodegaLote` /
+  #5 `rutearBodegaSateliteLote` / #6 `recibirEnSatelite` / #11 `update`; #7 `asignarSateliteLote` (SQL crudo:
+  `$executeRaw`→`$queryRaw ... RETURNING id` en la tx, CONSERVA el anti-TOCTOU `NOT EXISTS`, registra solo las
+  filas realmente transicionadas — R8); `GestionOrdenRepository` #8 `recogerLote` / #9 `crearGestionYTransicionar`;
+  `LiberacionReprogramadaRepository` #10 `liberarOrden` (actor NULL/cron, append solo si `count>0`).
+- **Contador de intentos DERIVADO** del historial (sin columna materializada); la regla "≥3 intentos → escala a
+  `rechazada`" queda para la feature 47 (que consume el derivador). Estado INICIAL (creación) = primera línea
+  (órdenes post-deploy). SIN backfill retroactivo.
+- **UI**: drawer "Ver historial" desde la lista de órdenes (no había página de detalle), con visibilidad por rol
+  enforced SERVER-SIDE (maestro/admin todas, adminTienda su tienda, mensajero sus asignadas —vía nuevo
+  `OrdenDTO.mensajeroAsignadoId` opcional, sin migración—, adminSatélite su zona). Realtime (35) fuera de alcance
+  (solo punto de extensión).
+- **Migración** aditiva `20260713120000_orden_historial_estado` (tabla append-only + RLS sin policies + índice
+  `(orden_id, created_at)` + `down.sql` inverso). Verde: typecheck 0, lint 0, **2225/2225 (+85)**, `init.sh` OK,
+  round-trip REAL. DEUDA menor: test de cobertura estático (compensado por el grep del reviewer, conjunto de 11
+  cerrado); test RLS estático; E2E diferido. **PENDIENTE: sync con `dev` + PR + merge (OK humano).**
