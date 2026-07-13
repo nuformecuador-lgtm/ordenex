@@ -16,6 +16,28 @@ vi.mock("next/navigation", () => ({
   usePathname: () => currentPathname,
 }));
 
+// El SidebarFooter monta el LogoutButton, que importa la Server Action `logout`
+// de @/lib/actions/auth (código server). Se mockea para aislar la UI del sidebar
+// del backend; el comportamiento del botón (invocar logout + push) se cubre en
+// LogoutButton.test.tsx.
+vi.mock("@/lib/actions/auth", () => ({
+  logout: vi.fn(),
+}));
+
+// El LogoutButton usa useToast() (feature 11) para el feedback de error (R10).
+// Fuera de un ToastProvider el hook lanza; se mockea para aislar la UI del
+// sidebar del sistema de toasts (su comportamiento se cubre en LogoutButton.test.tsx).
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    show: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
+
 // next/link se reemplaza por un <a> real. El Sidebar de shadcn lo pasa vía la
 // prop `render` de SidebarMenuButton (variante base-ui), por lo que el <a>
 // recibe className, data-* y children ya mergeados por useRender.
@@ -240,6 +262,36 @@ describe("Sidebar colapso (desktop)", () => {
     expect(
       screen.getByRole("button", { name: /colapsar menú/i }),
     ).toBeInTheDocument();
+  });
+});
+
+// Feature 57 — control "Cerrar sesión" en el footer del shell autenticado.
+describe("Sidebar — control Cerrar sesión (feature 57)", () => {
+  it("muestra el control Cerrar sesión en el footer (R1)", () => {
+    renderSidebar();
+
+    expect(
+      screen.getByRole("button", { name: "Cerrar sesión" }),
+    ).toBeInTheDocument();
+  });
+
+  it("el control Cerrar sesión se muestra aunque no haya items visibles (independiente del rol) (R2)", () => {
+    // items=[] simula un rol sin ningún ítem de nav visible: el control de
+    // logout NO depende de la prop `items`, así que sigue presente.
+    renderSidebar([]);
+
+    expect(
+      screen.getByRole("button", { name: "Cerrar sesión" }),
+    ).toBeInTheDocument();
+  });
+
+  it("el control Cerrar sesión es un botón con nombre accesible y operable por teclado (R12)", () => {
+    renderSidebar();
+
+    const logout = screen.getByRole("button", { name: "Cerrar sesión" });
+    // Elemento nativo <button>: enfocable y activable por teclado sin tabindex extra.
+    expect(logout.tagName).toBe("BUTTON");
+    expect(logout).not.toBeDisabled();
   });
 });
 

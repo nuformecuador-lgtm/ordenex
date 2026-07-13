@@ -26,6 +26,7 @@ import {
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -37,6 +38,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { LogoutButton } from "@/app/_components/LogoutButton";
 
 type SidebarIcon = ComponentType<LucideProps>;
 
@@ -198,6 +200,17 @@ export function Sidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      {/* Footer con "Cerrar sesión" (feature 57): se reutiliza el LogoutButton
+          existente TAL CUAL (logout() + router.push("/login") + estado
+          "Cerrando sesión…"). Va fuera de <SidebarContent> y no depende de la
+          prop `items`, por lo que aparece para todos los roles en cualquier
+          página protegida (R1, R2). El shell solo se monta bajo sesión ⇒ no
+          aparece en público (R3). El botón se estira a todo el ancho del footer
+          (flex-col => align stretch); `overflow-hidden` evita que su texto se
+          desborde fuera del sidebar en estado colapsado (collapsible="icon"). */}
+      <SidebarFooter className="overflow-hidden">
+        <LogoutButton />
+      </SidebarFooter>
     </SidebarRoot>
   );
 }
