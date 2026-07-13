@@ -243,6 +243,19 @@ describe("Sidebar colapso (desktop)", () => {
   });
 });
 
+// Feature 57 — el control de logout ("Salir") vive ahora en el topbar del
+// PageHeader compartido, NO en el sidebar. Su presencia se cubre en
+// PageHeader.test.tsx y su comportamiento en LogoutButton.test.tsx; el sidebar
+// ya no renderiza ningún control de logout.
+it("el sidebar NO renderiza ningún control de logout (movido al PageHeader)", () => {
+  renderSidebar();
+
+  expect(screen.queryByRole("button", { name: "Salir" })).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Cerrar sesión" }),
+  ).toBeNull();
+});
+
 // Guard: el submenú se agrupa dentro de un SidebarMenuItem del nav principal.
 describe("Sidebar estructura", () => {
   it("el submenú vive dentro del landmark de navegación", async () => {

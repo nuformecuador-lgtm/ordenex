@@ -43,6 +43,12 @@ vi.mock("@/app/(app)/mi-wallet/_components/MiWalletModule", () => ({
   },
 }));
 
+// Feature 57: el PageHeader del topbar monta el LogoutButton (client:
+// useToast). Se stubbea para aislar el pre-fetch/props de la página.
+vi.mock("@/app/_components/LogoutButton", () => ({
+  LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
+}));
+
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   listarMisMovimientosAction,

@@ -34,8 +34,11 @@ vi.mock("@/lib/db/prisma-client", () => ({
   getPrismaClient: vi.fn(() => ({})),
 }));
 
+// Feature 57: el LogoutButton (client: useRouter/useToast) lo monta ahora el
+// PageHeader compartido (topbar) que usan tanto los dashboards como el
+// placeholder. Se stubbea para aislar la ramificación por rol de la home.
 vi.mock("@/app/_components/LogoutButton", () => ({
-  LogoutButton: () => <button data-testid="logout-button-stub">Cerrar sesión</button>,
+  LogoutButton: () => <button data-testid="logout-button-stub">Salir</button>,
 }));
 
 // El dashboard monta OrdenesModule (cliente), que consume esta action.
@@ -144,7 +147,8 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
 
     expect(screen.queryByRole("heading", { name: "Panel de tienda" })).toBeNull();
     expect(screen.getByText("Bienvenido")).toBeInTheDocument();
-    // Sin sesión, tampoco el botón de logout.
-    expect(screen.queryByTestId("logout-button-stub")).toBeNull();
+    // El placeholder usa el PageHeader compartido, cuyo topbar aporta el control
+    // de logout (feature 57): el stub está presente.
+    expect(screen.getByTestId("logout-button-stub")).toBeInTheDocument();
   });
 });

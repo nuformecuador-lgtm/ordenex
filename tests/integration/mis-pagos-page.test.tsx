@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Feature 57: el PageHeader del topbar monta el LogoutButton (client:
+// useRouter/useToast). Se stubbea para aislar el pre-fetch/props de la página.
+vi.mock("@/app/_components/LogoutButton", () => ({
+  LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
+}));
 import { render, screen, cleanup } from "@testing-library/react";
 import type { RolValue } from "@prisma/client";
 

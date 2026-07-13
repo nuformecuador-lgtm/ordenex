@@ -18,6 +18,13 @@ vi.mock("@/lib/actions/ordenes", () => ({
   listarOrdenes: vi.fn(),
 }));
 
+// Feature 57: el PageHeader del dashboard monta el LogoutButton (client:
+// useRouter/useToast). Se stubbea para aislar el dashboard; su comportamiento
+// se cubre en LogoutButton.test.tsx.
+vi.mock("@/app/_components/LogoutButton", () => ({
+  LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
+}));
+
 const listarOrdenesMock = vi.mocked(listarOrdenes);
 
 function makeOrden(

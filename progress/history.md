@@ -1242,3 +1242,36 @@
   `init.sh` OK, SIN regresión 36/47/49. DEUDA menor: authz corre tras la guarda de estado → un actor no responsable
   puede recibir `ok`/conocer estado vía el `motivo` del conflict sin modificar datos (follow-up authz-first); E2E
   diferido. **PENDIENTE: PR a `dev` + merge (OK humano).**
+
+## 2026-07-13 — feature 57: botón cerrar sesión (logout) para todos los roles
+- Fullstack/low, `sdd:true`. Corrió **EN PARALELO con la feature 47** (otra sesión, fase spec) en **worktree aislado** `../ordenex-f57`
+  desde `dev`, archivos disjuntos (shell/auth vs. máquina de estados de la 47). Ciclo SDD completo (spec_author → F1.4 →
+  frontend_dev → reviewer).
+- **Problema operativo resuelto:** no había forma de cerrar sesión en roles como `tienda`. El único botón de logout vivía a mano
+  en la rama genérica "Bienvenido" de la home (`app/(app)/page.tsx`), a la que `tienda`/`maestro` ni llegan (retornan su dashboard).
+- **Hallazgo clave:** el **backend de logout YA EXISTÍA** — `logout` (`lib/actions/auth.ts`) → `AuthService.logout` →
+  `SessionRepository.deleteById` (idempotente, borra la cookie `session`; con tests en `auth-action`/`auth-service`/`session-repository`).
+  El guard de rutas es `middleware.ts` (redirige a `/login` sin cookie). Así que la feature fue **puro frontend**.
+- **F1.4 APROBADA (humano):** (a) REUTILIZAR el `LogoutButton` existente TAL CUAL (un click, sin cambiarle el comportamiento:
+  `logout()` + `router.push("/login")` + estado "Cerrando sesión…"), colocado en un **`SidebarFooter`** de
+  `app/(app)/_components/Sidebar.tsx`. Como el layout compartido `app/(app)/layout.tsx` monta el `Sidebar` para CUALQUIER rol y el
+  footer NO depende de `items`, el botón queda visible para **todos los roles**. (b) SIN modal de confirmación.
+- **Cambios:** `Sidebar.tsx` (+`SidebarFooter`+`LogoutButton`), `page.tsx` (retirado el botón ad-hoc + lógica muerta
+  `hasValidSession`/cookies/repo/imports). Backend/middleware/DB/`LogoutButton` (comportamiento) intactos.
+- **Reviewer: RECHAZADO en el 1.er ciclo** por trazabilidad — R10/R11 con mapeo *hollow* (sin test que los ejerciera) y R10 exigía
+  feedback de error al usuario, pero el botón solo hacía `console.error`. **RESUELTO:** el humano eligió **añadir
+  `toast.error("No se pudo cerrar sesión")`** en el `catch` (sistema de toasts, feature 11) + tests dedicados de R10 (camino de
+  error: no navega, re-habilita, toast) y R11 (estado pendiente) + trazabilidad corregida y `tasks.md` marcado. R8 (no-back) cubierto
+  por el `middleware.ts` existente; NO se endureció `push`→`replace` (el humano pidió "tal cual").
+- **Verde:** typecheck 0, eslint 0, `npx vitest run` **2333/2333** (baseline 2331 + 2 tests nuevos), objetivo 19/19. Reviewer re-verificado
+  por el leader (diffs leídos, tests reales). Estado `done` + `review_57`. **Un PR `feature/57 → dev`.** PENDIENTE merge (OK humano).
+- **REUBICACIÓN (misma feature, 2026-07-13):** al probar en la app, el humano detectó un topbar con "Salir" + campana de notificaciones que NO
+  estaba en `origin/dev`. **Diagnóstico:** su `dev` LOCAL estaba en `1dd0c0d` = el PR **#54 "adjustments" REVERTIDO** (que tenía ese topbar en
+  `PageHeader.tsx` con `<NotificationsBell/> <LogoutButton/>` "Salir", pero también la **wallet 42/43/44 y trazabilidad 49 ROTAS** — por eso se
+  revirtió con el PR #55); `origin/dev` está en `b3ed545`. El humano prefirió el logout en el **topbar del `PageHeader`** (como el #54) en vez del
+  sidebar. **Rework:** movido del `SidebarFooter` al `PageHeader` compartido (botón "Salir" + icono `LogOut`, contraste sobre navy; se conservó el
+  toast de error y los tests R10/R11 con labels "Salir"/"Saliendo…"); `Sidebar` revertido a `origin/dev`. `PageHeader` es solo-autenticado (16 usos,
+  todos bajo `app/(app)/`), así que el logout sale en toda página. Radio de impacto: como el `PageHeader` monta un client-component, 11 tests que
+  renderizan páginas stubbean `LogoutButton` para aislar (patrón estándar); `PageHeader.test.tsx` (nuevo) prueba el logout REAL en el topbar. VERDE:
+  typecheck 0, eslint 0, **2335/2335**. **Se registró la feature 60** (recuperar la campana `NotificationsBell` del #54 sobre el dev real, sin lo roto;
+  depende de la 57, se relaciona con la 35 realtime). **PENDIENTE (humano):** sincronizar `dev` local con `origin/dev` (dejar de correr el #54 stale) + merge del PR #57.
