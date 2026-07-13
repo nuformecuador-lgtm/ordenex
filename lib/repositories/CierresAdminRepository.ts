@@ -11,6 +11,8 @@ import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/
 import type { IWalletFeedService } from "@/lib/interfaces/services/IWalletFeedService";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWalletTiendaFeedService";
+import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
+import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
 import { WITH_DETALLE, toPendienteRow } from "@/lib/repositories/CierreDiaRepository";
 
@@ -96,6 +98,12 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     // tienda los inserta idempotentemente EN LA MISMA tx que la 42 (atomico, R5/R7/R12/R13).
     private readonly walletTiendaMovimientoRepo: IWalletTiendaMovimientoRepository,
     private readonly walletTiendaFeedService: IWalletTiendaFeedService,
+    // Feature 44/T10: enganche al LIBRO del pago por mensajero (por inyeccion, misma tx). El
+    // feed construye los movimientos (devengo + pago) Y el egreso egreso_pago_mensajero de la
+    // caja 42 (F1.4-Qa=SI, R17); el repo del libro los inserta idempotentemente y el egreso se
+    // inserta con el repo de la 42, TODO en la MISMA tx que 42/43 (atomico, R5/R7/R11/R12).
+    private readonly pagoMensajeroMovimientoRepo: IPagoMensajeroMovimientoRepository,
+    private readonly walletMensajeroFeedService: IWalletMensajeroFeedService,
   ) {}
 
   /** R2/R4/R5/R8/R9: cierres del alcance, mas reciente primero, totales -> string. */
@@ -166,6 +174,20 @@ export class CierresAdminRepository implements ICierresAdminRepository {
           tx,
         );
         await this.walletTiendaMovimientoRepo.crearMovimientos(tx, movsTienda); // R6/R13: idempotente
+        // Feature 44/T10 (R5/R7/R11/R12/R17): TRAS 42 y 43, alimenta el LIBRO del pago por
+        // mensajero EN LA MISMA tx (todo-o-nada). El feed lee el cierre una vez y devuelve el
+        // libro (devengo + pago) Y el egreso egreso_pago_mensajero=P para la caja 42 (Qa=SI).
+        const movsMensajero = await this.walletMensajeroFeedService.construirMovimientosDePago(
+          cierreId,
+          tx,
+        );
+        await this.pagoMensajeroMovimientoRepo.crearMovimientos(tx, movsMensajero.libro); // R6/R12: idempotente
+        // Qa (R17): el egreso del costo total P se inserta con el repo de la 42, idempotente por
+        // el constraint existente (origen_tipo, origen_id, categoria) -> un egreso por cierre. Se
+        // toca la caja 42 SOLO si hay egreso (P>0); si P=0 el feed no lo emite y no se re-inserta.
+        if (movsMensajero.egresoCaja.length > 0) {
+          await this.walletMovimientoRepo.crearMovimientos(tx, movsMensajero.egresoCaja);
+        }
       }
       return res.count;
     });

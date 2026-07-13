@@ -1146,3 +1146,23 @@
   `(orden_id, created_at)` + `down.sql` inverso). Verde: typecheck 0, lint 0, **2225/2225 (+85)**, `init.sh` OK,
   round-trip REAL. DEUDA menor: test de cobertura estático (compensado por el grep del reviewer, conjunto de 11
   cerrado); test RLS estático; E2E diferido. **PENDIENTE: sync con `dev` + PR + merge (OK humano).**
+
+## 2026-07-13 — feature 44: wallet, pago a mensajeros y cuentas por pagar
+- Qué se construyó: tercer eslabón de la cadena wallet (42 caja → 43 tienda → **44 mensajeros**). Al aprobar un
+  `CierreDia` se congela el pago al mensajero contra el efectivo que recaudó: `pago_devengado = P`
+  (`total_pago_mensajero`, snapshot 39), `pago_efectivo = min(P, total_efectivo)` (snapshot 37), y la **cuenta por
+  pagar** (lo pendiente) es el saldo DERIVADO `Σdevengo − Σpago` (sin saldo almacenado).
+- Requisitos cubiertos: R1–R27 (fullstack, money-critical).
+- F1.4 APROBADA: Qa=SÍ (además del libro propio, EGRESO `egreso_pago_mensajero = P` en la caja 42, cuadrado);
+  Qb=append-only + cuenta por pagar derivada; Qc=automático al aprobar; Qd=`min(P,E)`, `P=0` sin movimiento;
+  Qe=vista maestro `/wallet/mensajeros` + self-view mensajero `/mis-pagos` (adminSatélite NO); Qf=liquidación manual
+  como FOLLOW-UP (categoría `liquidacion` + `origen_tipo=pago_mensajero` reservados).
+- Modelo: tabla `pago_mensajero_movimiento` (libro append-only INMUTABLE; RLS sin policies; idempotencia por índice
+  único parcial `(origen_tipo, origen_id, mensajero_id, categoria) WHERE origen_id IS NOT NULL`; migración aditiva
+  `20260712180000_pago_mensajero_movimiento` + `down.sql`; reutiliza `wallet_origen_tipo` de la 42).
+- Enganche ATÓMICO en `CierresAdminRepository.resolverCierre` (misma `$transaction`, tras 42/43; solo `CierreDia`).
+- Reviewer: RECHAZADO en el 1.er ciclo por R18 (desglose por cierre del maestro) y R22 (filtros server-side del
+  maestro); corregido (capa service+action del maestro) + re-review APROBADO 0 bloqueantes.
+- Verde: prisma OK, typecheck 0, lint 0, **2191 tests**, `init.sh` OK; migración verificada ESTÁTICAMENTE (Postgres
+  local compartido con la 49 en paralelo). Corrió en PARALELO con la 49 en worktree aislado `../ordenex-f44`.
+  Sincronizada con `dev` (46 + 49). **PR #53 → `dev`**. DESBLOQUEA la 45 (gastos/sueldos), último eslabón wallet.

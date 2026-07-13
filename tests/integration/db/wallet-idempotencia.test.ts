@@ -88,6 +88,10 @@ describe("wallet idempotencia (R6/R13)", () => {
       // de la caja principal 42; el ledger por tienda tiene su propio test de idempotencia).
       { crearMovimientos: vi.fn().mockResolvedValue(0), listarPorTienda: vi.fn(), agregarSaldoPorTienda: vi.fn(), listarSaldosTodasTiendas: vi.fn() },
       { construirMovimientosPorTienda: vi.fn().mockResolvedValue([]) },
+      // Feature 44: dobles no-op del libro del pago por mensajero (feed devuelve libro/egreso
+      // vacios; el pago por mensajero tiene su propio test de idempotencia).
+      { crearMovimientos: vi.fn().mockResolvedValue(0), listarPorMensajero: vi.fn(), agregarCuentaPorPagar: vi.fn(), listarCuentasPorPagarTodos: vi.fn(), obtenerNombreMensajero: vi.fn() },
+      { construirMovimientosDePago: vi.fn().mockResolvedValue({ libro: [], egresoCaja: [] }) },
     );
 
     const aprobar = () =>

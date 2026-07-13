@@ -461,12 +461,13 @@
       "id": 44,
       "name": "wallet - pago a mensajeros y cuentas por pagar",
       "description": "Pago a los mensajeros dentro de la wallet. En los cierres se ve cuanto se le debe pagar a cada mensajero segun su zona (feature 39). Normalmente ese pago se toma del EFECTIVO que el propio mensajero recaudo; si el mensajero NO recaudo efectivo (todo fue por SIMPE o transferencia), el pago queda como CUENTA POR PAGAR y se evidencia en la wallet. La wallet refleja lo ya pagado (descontado del efectivo recaudado) y lo pendiente (cuentas por pagar a mensajeros). Fullstack. Depende de las features 39 (pago por zona), 42 (wallet/caja) y 37 (cierre del mensajero con montos por metodo de pago).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 42
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/44-wallet-pago-mensajeros",
+      "depends_on": 42,
+      "status_note": "done 2026-07-13; F1.4 APROBADA (Qa=SI egreso caja 42, Qb append-only+saldo derivado, Qc automatico al aprobar, Qd min(P,E), Qe self-view /mis-pagos + adminSatelite NO, Qf liquidacion=follow-up). Impl COMPLETA (R1-R27) + reviewer APROBADO 0 bloqueantes tras 1 ciclo (rechazo por R18/R22 -> anadida capa service+action del maestro para desglose por cierre paginado + filtros server-side fecha/cierre; re-review APROBADO). VERDE: prisma OK, typecheck 0, lint 0, 2191 tests, init.sh OK; migracion verificada ESTATICAMENTE (Postgres local compartido con la 49 en paralelo, no aplicada). Money-critical: libro append-only pago_mensajero_movimiento (RLS sin policies, idempotencia por constraint parcial (origen_tipo,origen_id,mensajero_id,categoria) WHERE origen_id NOT NULL), feed que CONSUME snapshots 39 (total_pago_mensajero=P) y 37 (total_efectivo=E) al aprobar el CierreDia: pago_devengado=P, pago_efectivo=min(P,E), cuenta por pagar = saldo DERIVADO (Sigma devengo - Sigma pago, sin saldo almacenado). Enganche ATOMICO e idempotente en CierresAdminRepository.resolverCierre (misma tx, tras 42/43) + EGRESO egreso_pago_mensajero=P en la caja 42 (Qa; cuadrado Sigma egreso = Sigma devengado = Sigma snapshot; la liquidacion futura NO re-emite egreso). Solo CierreDia alimenta (CierreBodega no). Vistas /wallet/mensajeros (maestro: resumen por mensajero + desglose por cierre paginado + filtros fecha/cierre, saldo del conjunto filtrado) y /mis-pagos (mensajero acotado a su mensajero_id). Liquidacion (Qf) RESERVADA (categoria liquidacion + origen_tipo=pago_mensajero, sin cambio de esquema futuro). Nuevos: lib/types/wallet-mensajero.ts, lib/utils/cuenta-por-pagar.ts, I/PagoMensajeroMovimientoRepository, I/WalletMensajeroFeedService, I/WalletMensajeroService, lib/actions/wallet-mensajero.ts, migracion 20260712180000_pago_mensajero_movimiento (+down). Worktree ../ordenex-f44 desde dev; sincronizada con dev (46, PR #51). DESBLOQUEA la 45. DEUDA menor: E2E e2e/wallet-mensajeros.spec.ts escrito no ejecutado; migracion no aplicada contra Postgres real. PENDIENTE: merge del PR a dev (OK humano)."
     },
     {
       "id": 45,

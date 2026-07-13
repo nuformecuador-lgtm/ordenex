@@ -6,6 +6,8 @@ import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/
 import type { IWalletFeedService } from "@/lib/interfaces/services/IWalletFeedService";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWalletTiendaFeedService";
+import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
+import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 
 // Feature 38 — tests unit del CierresAdminRepository (mockea Prisma, sin DB real,
 // patron cierre-dia-repository.test.ts). Cubre R2/R4/R5 (findCierresByAlcance con
@@ -35,7 +37,26 @@ function buildWalletDeps() {
   const walletTiendaFeedService: IWalletTiendaFeedService = {
     construirMovimientosPorTienda: vi.fn().mockResolvedValue([]),
   };
-  return { walletMovimientoRepo, walletFeedService, walletTiendaMovimientoRepo, walletTiendaFeedService };
+  // Feature 44/T10: dobles del libro del pago por mensajero (misma tx que 42/43). El feed
+  // devuelve { libro, egresoCaja } (por defecto vacios); el egreso va con el repo de la 42.
+  const pagoMensajeroMovimientoRepo: IPagoMensajeroMovimientoRepository = {
+    crearMovimientos: vi.fn().mockResolvedValue(0),
+    listarPorMensajero: vi.fn(),
+    agregarCuentaPorPagar: vi.fn(),
+    listarCuentasPorPagarTodos: vi.fn(),
+    obtenerNombreMensajero: vi.fn(),
+  };
+  const walletMensajeroFeedService: IWalletMensajeroFeedService = {
+    construirMovimientosDePago: vi.fn().mockResolvedValue({ libro: [], egresoCaja: [] }),
+  };
+  return {
+    walletMovimientoRepo,
+    walletFeedService,
+    walletTiendaMovimientoRepo,
+    walletTiendaFeedService,
+    pagoMensajeroMovimientoRepo,
+    walletMensajeroFeedService,
+  };
 }
 
 // Construye el repo con los dobles de wallet y un $transaction que ejecuta el callback
@@ -54,6 +75,8 @@ function makeRepo(
     wallet.walletFeedService,
     wallet.walletTiendaMovimientoRepo,
     wallet.walletTiendaFeedService,
+    wallet.pagoMensajeroMovimientoRepo,
+    wallet.walletMensajeroFeedService,
   );
   return { repo, wallet };
 }
@@ -547,5 +570,126 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
     ).rejects.toThrow("insert wallet tienda fallo");
     // La 42 alcanzo a construirse/insertarse, pero el fallo del 43 revierte TODA la tx.
     expect(wallet.walletMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (feature 44/T10: R5/R7/R11/R12/R17)", () => {
+  it("R5/R17: aprobar (count=1) construye e inserta el LIBRO por mensajero + el EGRESO en la caja 42, tras 42/43", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const libro = [
+      { mensajeroId: "m1", tipo: "devengo", categoria: "pago_devengado", monto: "1000.00", origenTipo: "cierre_dia", origenId: "c1", descripcion: null, registradoPor: null },
+      { mensajeroId: "m1", tipo: "pago", categoria: "pago_efectivo", monto: "300.00", origenTipo: "cierre_dia", origenId: "c1", descripcion: null, registradoPor: null },
+    ];
+    const egresoCaja = [
+      { tipo: "egreso", categoria: "egreso_pago_mensajero", monto: "1000.00", origenTipo: "cierre_dia", origenId: "c1", descripcion: null, registradoPor: null },
+    ];
+    (wallet.walletMensajeroFeedService.construirMovimientosDePago as ReturnType<typeof vi.fn>).mockResolvedValue({ libro, egresoCaja });
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_MAESTRO,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-maestro",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("updated");
+    // El feed del pago se invoca con el cierreId + un cliente de tx.
+    expect(wallet.walletMensajeroFeedService.construirMovimientosDePago).toHaveBeenCalledTimes(1);
+    expect(wallet.walletMensajeroFeedService.construirMovimientosDePago).toHaveBeenCalledWith("c1", expect.anything());
+    // el LIBRO se inserta con el repo del pago por mensajero.
+    expect(wallet.pagoMensajeroMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+    expect((wallet.pagoMensajeroMovimientoRepo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(libro);
+    // R17 (Qa): el EGRESO se inserta con el repo de la 42 (segunda llamada: la 1a es el ingreso).
+    expect(wallet.walletMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(2);
+    expect((wallet.walletMovimientoRepo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[1][1]).toEqual(egresoCaja);
+  });
+
+  it("rechazar NO alimenta el pago al mensajero (solo aprobado)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "rechazado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: "cuadre erroneo",
+    });
+
+    expect(wallet.walletMensajeroFeedService.construirMovimientosDePago).not.toHaveBeenCalled();
+    expect(wallet.pagoMensajeroMovimientoRepo.crearMovimientos).not.toHaveBeenCalled();
+    // R11: sin aprobacion, la caja 42 tampoco recibe el egreso.
+    expect(wallet.walletMovimientoRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("count=0 (conflict) NO alimenta el pago al mensajero aunque el destino sea aprobado", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
+    prisma.cierreDia.count.mockResolvedValue(1);
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("conflict");
+    expect(wallet.walletMensajeroFeedService.construirMovimientosDePago).not.toHaveBeenCalled();
+    expect(wallet.pagoMensajeroMovimientoRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("R12: vencido->aprobado (count=1) alimenta el pago al mensajero exactamente una vez", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c-vencido",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("updated");
+    expect(wallet.pagoMensajeroMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+  });
+
+  it("R7: si el insert del LIBRO por mensajero falla, el $transaction propaga (rollback de TODO, incl. 42 y 43)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    (wallet.walletMensajeroFeedService.construirMovimientosDePago as ReturnType<typeof vi.fn>).mockResolvedValue({
+      libro: [{ mensajeroId: "m1", tipo: "devengo", categoria: "pago_devengado", monto: "1.00", origenTipo: "cierre_dia", origenId: "c1", descripcion: null, registradoPor: null }],
+      egresoCaja: [],
+    });
+    (wallet.pagoMensajeroMovimientoRepo.crearMovimientos as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("insert pago mensajero fallo"),
+    );
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    await expect(
+      repo.resolverCierre({
+        cierreId: "c1",
+        alcance: ALCANCE_MAESTRO,
+        nuevoEstado: "aprobado",
+        resueltoPor: "adm-maestro",
+        motivoRechazo: null,
+      }),
+    ).rejects.toThrow("insert pago mensajero fallo");
+    // 42 y 43 alcanzaron a insertarse, pero el fallo del 44 revierte TODA la tx (todo-o-nada).
+    expect(wallet.walletMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1); // solo el ingreso 42
+    expect(wallet.walletTiendaMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
   });
 });

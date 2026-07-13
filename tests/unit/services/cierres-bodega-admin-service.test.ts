@@ -435,4 +435,22 @@ describe("CierresBodegaAdminService — R11: aprobar bodega NO genera ingresos d
     expect((service as unknown as Record<string, unknown>).walletTiendaMovimientoRepo).toBeUndefined();
     expect((repo as unknown as Record<string, unknown>).construirMovimientosPorTienda).toBeUndefined();
   });
+
+  it("feature 44/R11: aprobar un CierreBodega NO genera movimientos del PAGO AL MENSAJERO", async () => {
+    // El libro del pago por mensajero (44) se alimenta EXCLUSIVAMENTE desde CierreDia aprobado
+    // (misma tx que 42/43). El CierresBodegaAdminService no tiene ninguna dependencia del
+    // feed/repo del pago por mensajero; aprobar bodega solo transiciona su estado -> no re-cuenta
+    // (evita doble conteo). Tampoco emite el egreso egreso_pago_mensajero en la caja 42.
+    const resolver = vi.fn(async () => "updated" as const);
+    const repo = fakeRepo({ resolverCierreBodega: resolver });
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierreBodega("cb1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect((service as unknown as Record<string, unknown>).walletMensajeroFeedService).toBeUndefined();
+    expect((service as unknown as Record<string, unknown>).pagoMensajeroMovimientoRepo).toBeUndefined();
+    expect((repo as unknown as Record<string, unknown>).construirMovimientosDePago).toBeUndefined();
+  });
 });
