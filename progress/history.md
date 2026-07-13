@@ -1063,3 +1063,35 @@
 - **DESBLOQUEA** 43 (pagos a tiendas), 44 (pagos a mensajeros), 45 (gastos/sueldos), que insertan sus egresos en el
   libro. DEUDA menor: captura editable de `cobra_comision` por-orden (A5, features 14/15/16/17); test de idempotencia
   unit usa mock en memoria (el constraint real lo verificó el reviewer); E2E escrito pero no ejecutado (patrón del arnés).
+
+## 2026-07-12 — feature 43 (wallet por tienda: saldo a favor de la tienda)
+- Money-critical. Cada TIENDA (rol `adminTienda`) tiene su wallet con su SALDO A FAVOR = cuánto le debe entregar
+  Ordenex = COD recaudado − (flete + comisión COD + IVA flete + IVA comisión) por orden. Es el **COMPLEMENTO EXACTO**
+  del ingreso de Ordenex de la feature 42: reutiliza `derivarIngresoOrden` (42) para los débitos y `montoRecibido`
+  para el crédito COD, sin fórmula nueva.
+- Requisitos cubiertos: R1–R29 (cada uno con test concreto; reviewer verificó trazabilidad, round-trip real,
+  invariante de cuadre en ambos estados del flag e idempotencia por constraint DB viva).
+- **Decisiones F1.4 (aprobadas por el humano 2026-07-12):** (Q1) **LEDGER propio** `wallet_tienda_movimiento`
+  (append-only inmutable, espejo de la 42 con dimensión `tienda_id`), alimentado en el MISMO enganche del cierre
+  aprobado (`CierresAdminRepository.resolverCierre`, misma `$transaction`, tras la 42), congelando los montos al
+  aprobar (evita divergencia con el snapshot de la 42 ante cambios de tarifa). (Q2) el crédito usa el COD REALMENTE
+  recaudado (`gestion_orden.montoRecibido`); los débitos se toman tal cual de la 42 (la comisión sigue sobre
+  `montoCobrar`). (Q3) `devuelta`/`rechazada` → la tienda **DEBE el flete de devolución** (`flete_devolucion` +
+  `iva_flete_devolucion` como débitos → saldo negativo), **PERO REVERSIBLE** vía flag
+  `TIENDA_DEBITA_FLETE_DEVOLUCION` (`lib/config/wallet-tienda.ts`, única fuente de verdad, **default true**,
+  sobreescribible por env): en `false` el feed NO emite esos débitos a la tienda (la 42 no cambia; Ordenex absorbe),
+  y la reversión de lo histórico va por ajuste compensatorio append-only, sin migración. (Q4) alcance = MODELO +
+  VISIBILIDAD; el PAGO/liquidación a la tienda queda como follow-up (`pago_tienda`/`egreso_pago_tienda` reservados).
+  (Q5) pantalla nueva `/mi-wallet` (adminTienda, acotada a su `usuarioId`=`tiendaId`) + `/wallet/tiendas` (maestro ve
+  todas). (Q6) un movimiento por CONCEPTO agregado por (tienda, cierre), categorías espejo 1:1 de la 42.
+- **Invariante de cuadre (R15) CONDICIONAL al flag:** con flag TRUE, `crédito COD − Σ débitos tienda = COD recaudado
+  − ingreso Ordenex (42)` cuadra exacto; con flag FALSE, para devoluciones la diferencia es exactamente el flete de
+  devolución + su IVA (absorbido por Ordenex). Test en ambos estados.
+- Nuevos: tabla `wallet_tienda_movimiento` (migración aditiva up/down real, RLS sin policies, unique parcial de
+  idempotencia `(origen_tipo, origen_id, tienda_id, categoria)`), `WalletTiendaFeedService`, config `wallet-tienda.ts`,
+  service/actions role-aware, `/mi-wallet` + `/wallet/tiendas`, `e2e/mi-wallet.spec.ts`. Money-safe: `Prisma.Decimal`,
+  STRING `toFixed(2)`, cero `parseFloat`/`Number(`; saldo derivado (puede ser negativo).
+- Verde: prisma OK, typecheck 0, lint 0, **2092/2092 (+84)**, `init.sh` OK, round-trip de migración REAL por
+  introspección, SIN regresión 37/38/39/40/56/41/42. Reviewer APROBADO 0 bloqueantes. Commit `6923a7b`.
+- DEUDA menor: E2E escrito pero no ejecutado (patrón del arnés); test de migración unit estático (el round-trip real
+  lo corrió el reviewer). El PAGO efectivo a la tienda queda como follow-up sobre el modelo ya probado.
