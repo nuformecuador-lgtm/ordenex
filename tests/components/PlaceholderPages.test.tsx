@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import PerfilPage from "@/app/(app)/perfil/page";
+
+// Feature 57: el PageHeader del topbar (que estas páginas usan) monta el
+// LogoutButton (client: useRouter/useToast). Se stubbea para aislar el título.
+vi.mock("@/app/_components/LogoutButton", () => ({
+  LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
+}));
 
 // Nota: `/ordenes` ya NO es placeholder — tiene vista real (DataTable + SWR),
 // cubierta por `tests/components/OrdenesPage.test.tsx`. `/configuracion` tampoco:

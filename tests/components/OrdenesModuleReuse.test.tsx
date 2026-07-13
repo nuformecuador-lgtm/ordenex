@@ -26,6 +26,12 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
 }));
 
+// Feature 57: el PageHeader del topbar monta el LogoutButton (client:
+// useRouter/useToast). Se stubbea para aislar el reuso estructural.
+vi.mock("@/app/_components/LogoutButton", () => ({
+  LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
+}));
+
 beforeEach(() => {
   moduleCalls.length = 0;
 });

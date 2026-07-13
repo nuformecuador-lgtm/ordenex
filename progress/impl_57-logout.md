@@ -1,8 +1,93 @@
-# impl_57-logout — Botón "Cerrar sesión" (logout)
+# impl_57-logout — Control de logout ("Salir")
 
 > Feature PURO FRONTEND. El backend de logout YA EXISTÍA (`logout` en
 > `lib/actions/auth.ts` → `AuthService.logout` → `SessionRepository.deleteById`,
 > R24 de la feature 6). No se tocó backend, DB ni rutas de API.
+
+## REWORK (2026-07-13) — reubicación al topbar del PageHeader
+
+**Qué cambió y por qué.** La primera versión puso el logout en un `SidebarFooter`
+del `Sidebar`. El humano revisó el **PR #54 ("adjustments")** —que tenía el logout
+en un topbar dentro del `PageHeader` compartido y luego fue revertido— y prefirió
+esa ubicación. Decisión: **recuperar SOLO el logout de #54** (etiqueta "Salir" +
+icono `LogOut`, esquina superior derecha del `PageHeader`); NO se recupera la
+campana de notificaciones (queda como feature aparte) ni el restyle global
+navy→claro de #54. El `PageHeader` conserva su estilo actual (`bg-navy text-white
+rounded-lg`); el botón lleva clases de contraste (border/texto claros) para leerse
+sobre navy.
+
+**Reversión del sidebar.** `app/(app)/_components/Sidebar.tsx` vuelve EXACTO a
+`origin/dev` (verificado con `diff`): se quitaron el `<SidebarFooter>` con el
+`<LogoutButton/>` y los imports de `SidebarFooter` y `LogoutButton`. El sidebar ya
+no tiene logout.
+
+**Botón (final).** `app/_components/LogoutButton.tsx`: `<Button variant="outline"
+className="cursor-pointer border-white/40 bg-transparent text-white
+hover:bg-white/10 hover:text-white"><LogOut aria-hidden/>{isPending ? "Saliendo…"
+: "Salir"}</Button>`. Camino feliz `logout()` + `router.push("/login")`; estado
+pendiente deshabilitado con "Saliendo…" (R11); `catch` conserva
+`toast.error("No se pudo cerrar sesión")` (R10, decisión previa del humano, mejor
+que el console-only del #54).
+
+**PageHeader (server) monta el LogoutButton (client).** En
+`components/shared/PageHeader.tsx` se añadió una zona derecha `flex items-center
+gap-3` (header con `sm:justify-between`) que contiene `{actions}` + `<LogoutButton
+/>`. Verificado que el `PageHeader` se usa SOLO bajo `app/(app)` (autenticado): las
+páginas públicas (login/postulación/recuperar-contraseña) viven fuera de `(app)` y
+no lo usan ⇒ el logout no aparece en público (R3). Válido que un Server Component
+renderice un client component.
+
+**Radio de impacto en tests (colateral obligado).** Como el `PageHeader` ahora
+monta un client component que usa `useRouter()` (lanza sin AppRouterContext:
+"invariant expected app router to be mounted") y `useToast()` (lanza sin
+`ToastProvider`), TODO test que renderiza una página/dashboard con `PageHeader`
+rompía. Se aisló stubbeando `@/app/_components/LogoutButton` en esos tests (patrón
+ya usado en `HomePageRol`/`HomePageMaestro`); el comportamiento del botón se cubre
+en `LogoutButton.test.tsx`. Sin cambios de producto por esto.
+
+### Archivos del rework
+
+| Archivo | Cambio |
+| --- | --- |
+| `app/(app)/_components/Sidebar.tsx` | REVERTIDO a `origin/dev`: − `<SidebarFooter><LogoutButton/></SidebarFooter>` y sus imports |
+| `app/_components/LogoutButton.tsx` | etiqueta "Cerrar sesión"→"Salir", "Cerrando sesión…"→"Saliendo…"; + icono `LogOut`; clases de contraste para navy; conserva `toast.error` (R10) y `push` |
+| `components/shared/PageHeader.tsx` | + import y render de `<LogoutButton/>` en zona derecha (`flex items-center gap-3`, header `justify-between`); estilo navy conservado |
+| `tests/components/LogoutButton.test.tsx` | asserts "Cerrar sesión"→"Salir", "Cerrando sesión…"→"Saliendo…"; conserva R11 y R10 |
+| `tests/components/PageHeader.test.tsx` | NUEVO: título/descr + presencia del control "Salir" (R1/R2/R12), coexiste con `actions` |
+| `tests/components/Sidebar.test.tsx` | − casos de logout en el footer + mocks de `@/lib/actions/auth` y `@/hooks/useToast`; + caso "el sidebar NO renderiza ningún control de logout" |
+| `tests/components/HomePage.test.tsx` | R14 reformulado: la home no añade logout ad-hoc; el único control es el del `PageHeader` (stub, exactamente 1) |
+| `tests/components/HomePageRol.test.tsx` | stub `LogoutButton` label→"Salir"; caso actor-null: el placeholder ahora incluye el logout del `PageHeader` (presente, no ausente) |
+| `tests/components/HomePageMaestro.test.tsx` | stub `LogoutButton` label→"Salir" (cosmético) |
+| `tests/components/{OrdenesPage,OrdenesPagination,OrdenesModuleReuse,AdminTiendaDashboard,PlaceholderPages}.test.tsx` | + stub de `@/app/_components/LogoutButton` (aísla el client montado por `PageHeader`) |
+| `tests/integration/{mi-wallet-page,wallet-page,wallet-mensajeros-page,mis-pagos-page,configuracion/usuarios-page,configuracion/zonas-page}.test.tsx` | + stub de `@/app/_components/LogoutButton` |
+| `e2e/auth.spec.ts` | selectores/comentarios: "Cerrar sesión"/sidebar → "Salir"/topbar del `PageHeader` |
+| `specs/57-logout/{requirements,design,tasks}.md` | ubicación final = topbar del `PageHeader`; label "Salir"/"Saliendo…"; trazabilidad R1/R2/R12 → `PageHeader.test.tsx`; R8 = solo guard |
+
+### Trazabilidad tras el rework
+
+- **R1, R2, R12** → `tests/components/PageHeader.test.tsx` (presencia del control
+  "Salir" en el topbar, para toda página autenticada, botón nativo operable por
+  teclado) + `Sidebar.test.tsx` (el sidebar ya NO tiene logout).
+- **R3** → `e2e/auth.spec.ts` (tras logout, en `/login` no hay control "Salir").
+- **R7, R10, R11** → `tests/components/LogoutButton.test.tsx` (push a `/login`;
+  error no navega + toast + re-habilita; pendiente disabled + "Saliendo…").
+- **R14** → `tests/components/HomePage.test.tsx` (único logout = el del `PageHeader`).
+- **R4/R5/R6/R9** → backend existente (auth-action / auth-service / session-repo).
+- **R8** → guard `middleware.ts` + `e2e/auth.spec.ts`.
+
+### Verificación del rework (números)
+
+- `npx tsc --noEmit` → **0 errores** (tras `npx prisma generate` en el worktree).
+- `npx vitest run` (suite completa) → **2335 passed / 2335** (261 files),
+  **0 fallos**. Incluye el nuevo `PageHeader.test.tsx` (4 casos) y los page/
+  dashboard tests aislados con el stub del `LogoutButton`.
+- `npx eslint` sobre los 20 archivos tocados → **0 errores**.
+
+---
+
+> Lo que sigue documenta la PRIMERA versión (logout en el `SidebarFooter`), ya
+> **revertida**. Se conserva como historia; la ubicación vigente es el topbar del
+> `PageHeader` (ver rework arriba).
 
 ## Decisiones F1.4 aplicadas (aprobadas por el humano, REFINAN el design)
 

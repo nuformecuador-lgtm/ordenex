@@ -7,7 +7,7 @@ import { test, expect } from "@playwright/test";
  * (a) Successful login: valid credentials, no challenge, redirects out of /login
  * (b) Invalid credentials: generic error message, remains on /login
  * (c) Account locked: error message with retry wait time
- * (d) Logout: using the "Cerrar sesión" button in the sidebar shell (feature 57);
+ * (d) Logout: using the "Salir" button in the topbar of the shared PageHeader (feature 57);
  *     after logout, accessing a protected route redirects back to /login
  *
  * EXECUTION NOTE:
@@ -54,8 +54,8 @@ test.describe("Auth E2E Flow", () => {
       await page.waitForURL("/", { timeout: 5000 });
       expect(page.url()).toBe("http://localhost:3000/");
 
-      // Verify logout button is visible in the sidebar shell (feature 57, R1/R2)
-      const logoutButton = page.getByRole("button", { name: "Cerrar sesión" });
+      // Verify logout button is visible in the PageHeader topbar (feature 57, R1/R2)
+      const logoutButton = page.getByRole("button", { name: "Salir" });
       await expect(logoutButton).toBeVisible();
     });
 
@@ -141,7 +141,7 @@ test.describe("Auth E2E Flow", () => {
     });
   });
 
-  test.describe("(d) Logout using sidebar button", () => {
+  test.describe("(d) Logout using PageHeader topbar button", () => {
     test("should logout and redirect to /login", async ({ page }) => {
       // First, login
       await page.goto("/login");
@@ -156,8 +156,8 @@ test.describe("Auth E2E Flow", () => {
       // Wait to land on home
       await page.waitForURL("/", { timeout: 5000 });
 
-      // Find and click the logout button in the sidebar shell (feature 57, R4/R7)
-      const logoutButton = page.getByRole("button", { name: "Cerrar sesión" });
+      // Find and click the logout button in the PageHeader topbar (feature 57, R4/R7)
+      const logoutButton = page.getByRole("button", { name: "Salir" });
       await expect(logoutButton).toBeVisible();
       await logoutButton.click();
 
@@ -166,9 +166,9 @@ test.describe("Auth E2E Flow", () => {
       expect(page.url()).toContain("/login");
 
       // Verify logout button is no longer visible: /login is public, so the
-      // authenticated shell (sidebar) is not mounted (R3).
+      // authenticated shell (PageHeader topbar) is not mounted (R3).
       const shellLogoutButton = page.getByRole("button", {
-        name: "Cerrar sesión",
+        name: "Salir",
       });
       await expect(shellLogoutButton).not.toBeVisible();
     });
@@ -187,8 +187,8 @@ test.describe("Auth E2E Flow", () => {
       await page.click('button[type="submit"]');
       await page.waitForURL("/", { timeout: 5000 });
 
-      // Logout via the sidebar control (feature 57)
-      const logoutButton = page.getByRole("button", { name: "Cerrar sesión" });
+      // Logout via the PageHeader topbar control (feature 57)
+      const logoutButton = page.getByRole("button", { name: "Salir" });
       await logoutButton.click();
       await page.waitForURL("/login", { timeout: 5000 });
 

@@ -16,9 +16,9 @@
 | **Backend de logout (YA EXISTE)** | `lib/actions/auth.ts` → `logout(deps)` | lee `session` de la cookie; si hay id llama `authService.logout(sessionId)`; siempre `clearSessionCookie()` (`cookies().delete("session")`). Idempotente (R24) |
 | Servicio de logout | `lib/services/AuthService.ts` → `logout(sessionId)` | `sessionRepo.deleteById(sessionId)` (R24) |
 | Contrato | `lib/interfaces/services/IAuthService.ts` | `logout(sessionId: string): Promise<void>` |
-| Botón ad-hoc previo | `app/_components/LogoutButton.tsx` (usado en `app/(app)/page.tsx`) | client, `useTransition` → `await logout(); router.push("/login")`; muestra "Cerrando sesión…"; el comentario del `page.tsx` dice explícitamente que debe moverse/reemplazarse cuando exista el shell definitivo |
-| Shell autenticado | `app/(app)/layout.tsx` + `app/(app)/_components/Sidebar.tsx` | `<SidebarProvider><Sidebar items={…}/><SidebarInset>{children}</SidebarInset></SidebarProvider>`; items filtrados por rol vía `itemsVisibles(SIDEBAR_ITEMS, actor)` |
-| Footer del sidebar | `components/ui/sidebar.tsx` → `SidebarFooter` | primitiva ya exportada, **hoy sin usar** |
+| Botón de logout | `app/_components/LogoutButton.tsx` (montado por `PageHeader`) | client, `useTransition` → `await logout(); router.push("/login")`; icono `LogOut` + "Salir" ("Saliendo…" mientras `isPending`); en error `toast.error(...)` |
+| Shell autenticado | `app/(app)/layout.tsx` + `app/(app)/_components/Sidebar.tsx` | `<SidebarProvider><Sidebar items={…}/><SidebarInset>{children}</SidebarInset></SidebarProvider>`; items filtrados por rol vía `itemsVisibles(SIDEBAR_ITEMS, actor)`. El sidebar NO tiene logout. |
+| Topbar del header | `components/shared/PageHeader.tsx` | Server Component usado por TODA página de `app/(app)`; renderiza el `LogoutButton` en su zona superior derecha (fondo navy) |
 | Roles | `lib/types/roles.ts` `ROLES_SEED` | `maestro, admin, mensajero, adminTienda, adminSatelite` |
 
 **Conclusión:** la pieza backend (Server Action que invalida la sesión y expira la
@@ -35,32 +35,41 @@ cerrar el flujo de redirección/no-back y unificar el control (quitar el ad-hoc)
   `Session` de forma idempotente). No se crea Server Action nueva, ni servicio, ni
   repo, ni migración (R13). El "trabajo" backend es asegurar cobertura de R5/R6/R9
   sobre la action existente (ya cubierta) y no romperla.
-- **Frontend (el trabajo real):** montar el control en el `SidebarFooter`, cablear
-  el flujo click → [¿confirmación?] → `logout()` → redirección con invalidación de
-  caché, y retirar el botón ad-hoc de `page.tsx`.
+- **Frontend (el trabajo real):** montar el control en el topbar del `PageHeader`,
+  cablear el flujo click → `logout()` → redirección a `/login`, y retirar el botón
+  ad-hoc de `page.tsx`.
 - **Orden:** backend (verificar) → frontend (construir). Un solo ciclo; el
   implementer delega backend_dev (verificación/no-op) → frontend_dev (UI+flujo).
 
 ## 3. Diseño frontend
 
-### 3.1 Ubicación del control (F1.4-a → recomendación: sidebar footer)
+### 3.1 Ubicación del control (F1.4-a → DECISIÓN FINAL: topbar del PageHeader)
 
-Añadir un `SidebarFooter` al final de `app/(app)/_components/Sidebar.tsx` con un
-`SidebarMenu` de un solo `SidebarMenuItem`: el control "Cerrar sesión" con icono
-`LogOut` de `lucide-react` (mismo patrón de iconos que el resto del sidebar).
-El control **no** depende de la prop `items` (que se filtra por rol): se renderiza
-siempre que el shell autenticado esté montado ⇒ visible para todos los roles
-(R1, R2). El shell solo se monta bajo sesión (middleware) ⇒ no aparece en público
-(R3).
+Montar el `LogoutButton` en la **zona superior derecha del `PageHeader` compartido**
+(`components/shared/PageHeader.tsx`): etiqueta "Salir" + icono `LogOut` de
+`lucide-react`, dentro de un contenedor `flex items-center gap-3` a la derecha del
+título (header con `justify-between`). El `PageHeader` es un Server Component usado
+por TODA página del grupo `app/(app)`, por lo que el control aparece para todos los
+roles en toda página protegida (R1, R2), sin depender de ningún filtrado por rol.
+El `PageHeader` solo se usa bajo sesión (nunca en rutas públicas, que viven fuera de
+`(app)`) ⇒ no aparece en público (R3). El `PageHeader` (server) renderiza el
+`LogoutButton` (client); esa mezcla server→client es válida.
+
+Esta ubicación **recupera el logout del PR #54** (que lo tenía en el topbar del
+`PageHeader` y fue revertido). Se recupera SOLO el logout; NO la campana de
+notificaciones ni el restyle global de #54. El estilo del `PageHeader` se conserva
+(`bg-navy text-white rounded-lg`) y el botón usa clases de contraste (border/texto
+claros) para leerse sobre el fondo navy.
+
+> **Historia:** una primera versión colocó el control en un `SidebarFooter` del
+> `Sidebar`. El humano cambió la decisión a favor del topbar del `PageHeader`
+> (visto en #54). El `SidebarFooter` se revirtió: el sidebar vuelve a header + nav.
 
 Reutilización del comportamiento: la lógica de `app/_components/LogoutButton.tsx`
-(useTransition → `logout()` → redirección, estado "Cerrando sesión…", bloqueo) se
-conserva. Opciones equivalentes para el implementer (a elegir, sin sobre-diseñar):
-(i) renderizar el `LogoutButton` existente dentro del `SidebarFooter`; o
-(ii) presentar un `SidebarMenuButton` con icono que dispare la misma lógica. Se
-prefiere (ii) por consistencia visual con el resto de ítems del sidebar, moviendo
-la lógica de logout a un componente cliente pequeño (p. ej.
-`SidebarLogoutButton`) que reusa la Server Action `logout` (sin duplicar backend).
+(useTransition → `logout()` → `router.push("/login")`, estado "Saliendo…", bloqueo
+anti-doble-click, `toast.error` en el catch) se conserva; solo cambian su etiqueta
+("Cerrar sesión" → "Salir") y su lugar de montaje (del `SidebarFooter` al
+`PageHeader`).
 
 ### 3.2 Flujo click → invalidación → redirección → no-back (R4–R9)
 
@@ -68,41 +77,28 @@ la lógica de logout a un componente cliente pequeño (p. ej.
 onClick
   → startTransition(async () => {
         try {
-          await logout();            // Server Action existente: borra fila Session + expira cookie "session"
-          router.replace("/login");  // R7: va a /login y saca la ruta protegida del history
-          router.refresh();          // R8: invalida el Router Cache (RSC) de páginas protegidas
+          await logout();          // Server Action existente: borra fila Session + expira cookie "session"
+          router.push("/login");   // R7: va a /login tras completar el logout
         } catch (e) {
-          // R10: NO navegar; feedback (toast de la feature 11) + control accionable
+          // R10: NO navegar; toast.error(...) (feature 11) + control accionable
         }
      })
 ```
 
-**Por qué `router.replace` + `router.refresh` (R8, no-back):** el `middleware.ts`
-ya es el guard server-side: una vez borrada la cookie `session`, cualquier
-navegación real a una ruta protegida se redirige a `/login`. El punto fino es el
-**Router Cache** de App Router: tras el logout, el payload RSC de la página
-protegida previa podría servirse desde caché de cliente al pulsar "Atrás".
-`router.refresh()` invalida ese caché ⇒ pulsar "Atrás" fuerza una nueva petición
-que el middleware intercepta. `router.replace("/login")` (en vez de `push`)
-sustituye la entrada de la ruta protegida en el history, de modo que "Atrás" no
-retrocede a ella. Combinados satisfacen R8 sin nuclearizar. Las navegaciones
-client-side de App Router son mismo-documento, por lo que el bfcache del navegador
-no restaura snapshots de la SPA; no hace falta `no-store` global.
-
-> **Cambio respecto al botón ad-hoc:** el `LogoutButton` actual usa
-> `router.push("/login")` sin `refresh()`. Feature 57 cambia a
-> `router.replace("/login") + router.refresh()`. Esto implica **actualizar** el
-> test existente `tests/components/LogoutButton.test.tsx` (hoy afirma `push`) para
-> afirmar `replace` + `refresh` (queda mapeado en tasks/trazabilidad).
+**No-back (R8) vía guard:** el `middleware.ts` es el guard server-side: una vez
+borrada la cookie `session`, cualquier navegación real a una ruta protegida se
+redirige a `/login`. Por decisión del humano se conserva `router.push("/login")`
+del botón existente (NO se endurece con `replace`/`refresh`/`no-store`). No se
+detectó hueco real: el guard cubre el intento de acceso a rutas protegidas
+—incluido pulsar "Atrás"— tras el logout.
 
 ### 3.3 Unificar el control (R14)
 
 Retirar el botón ad-hoc de `app/(app)/page.tsx` (el bloque `hasValidSession && …`
-con `<LogoutButton/>`) para que solo exista el control del sidebar y no aparezcan
-dos "Cerrar sesión" (los tests que buscan `getByText("Cerrar sesión")` fallarían
-por match múltiple). El E2E `e2e/auth.spec.ts` (bloque "(d) Logout using home
-button") seguirá encontrando "Cerrar sesión" porque el sidebar está en el layout
-que envuelve la home; se ajusta el comentario/selector si hiciera falta.
+con `<LogoutButton/>`) para que solo exista el control del `PageHeader` (topbar) y
+no queden dos controles de logout. El E2E `e2e/auth.spec.ts` (bloque "(d) Logout
+using PageHeader topbar button") encuentra el botón "Salir" porque el `PageHeader`
+está en toda página autenticada; se ajustan comentario/selector a "Salir".
 
 ### 3.4 Impacto de F1.4(b) — confirmación
 
@@ -129,21 +125,26 @@ que envuelve la home; se ajusta el comentario/selector si hiciera falta.
    feature aparte; el botón podría migrar sin tocar backend.
 4. **Navegación dura `window.location.href = "/login"` para el no-back.**
    DESCARTADA: aunque garantiza descartar todo el estado de cliente, es más pesada
-   de lo necesario; `middleware` (guard) + `router.replace` + `router.refresh`
-   satisfacen R8 con menor coste y mejor UX (sin recarga completa).
-5. **Cabeceras `Cache-Control: no-store` en el layout autenticado.** DESCARTADA
-   como solución primaria: el guard de `middleware` ya rechaza sin cookie y
-   `router.refresh()` invalida el Router Cache; añadir `no-store` global sería
-   sobre-ingeniería. Se deja como nota, no como requisito.
+   de lo necesario; el `middleware` (guard) satisface R8 al redirigir cualquier
+   acceso a ruta protegida sin cookie de sesión.
+5. **Endurecer el no-back con `router.replace` + `router.refresh` +
+   `Cache-Control: no-store`.** DESCARTADA por decisión del humano ("tal cual el
+   botón existente"): el guard de `middleware` ya rechaza sin cookie. Se conserva
+   `router.push("/login")`. Reevaluable como follow-up si se quisiera blindar el
+   Router Cache de App Router al pulsar "Atrás".
+6. **Ubicación en el `SidebarFooter`.** DESCARTADA tras implementarse: el humano
+   prefirió el topbar del `PageHeader` (recuperado de #54). Ver §3.1.
 
 ## 5. Contratos I/O
 
 - **Server Action** `logout(deps?: LogoutDeps): Promise<void>` — sin argumentos en
   runtime (los `deps` son solo para inyección en tests). Efectos: elimina la fila
   `Session` (si hay id) y borra la cookie `session`. No retorna payload.
-- **Componente** `SidebarLogoutButton` (o reuso de `LogoutButton`): sin props;
-  cliente; consume `logout` de `@/lib/actions/auth` y `useRouter` de
-  `next/navigation`. Nombre accesible: "Cerrar sesión" (R12).
+- **Componente** `LogoutButton` (`app/_components/LogoutButton.tsx`): sin props;
+  cliente; consume `logout` de `@/lib/actions/auth`, `useRouter` de
+  `next/navigation` y `useToast` de `@/hooks/useToast`. Nombre accesible: "Salir"
+  ("Saliendo…" mientras
+  `isPending`) (R12). Montado por el `PageHeader` compartido en su zona derecha.
 
 ## 6. Datos / migraciones / RLS
 
