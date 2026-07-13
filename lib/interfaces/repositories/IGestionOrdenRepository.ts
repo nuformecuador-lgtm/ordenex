@@ -38,6 +38,12 @@ export interface OrdenGestionRow {
   deletedAt: Date | null;
   mensajeroAsignadoId: string | null;
   montoCobrar: number | null;
+  /**
+   * Feature 47/R5 (insumo): zona de la orden para derivar la bodega responsable de un
+   * reintento (`en_bodega`/`en_bodega_satelite` via `resolverDestinoCierre`). `null` =
+   * orden sin zona -> el service cae al fallback central (`en_bodega`).
+   */
+  zonaId: string | null;
 }
 
 // Datos de la gestion a insertar (R23/R26/R28/R30). Campos nullable segun el
@@ -106,11 +112,21 @@ export interface IGestionOrdenRepository {
    * `nuevoEstatusId`, (c) UPDATE usuario.orden_en_gestion_id = NULL (libera el
    * bloqueo 1-a-1, R19). Sin logica de negocio: el service valida propiedad/origen
    * y sube la evidencia ANTES de invocar. Devuelve el id de la gestion creada.
+   *
+   * Feature 47/R6/R7/R10/R11: `seguimiento` opcional. Cuando el resultado es `devuelta`,
+   * el service resuelve la transicion de SEGUIMIENTO (destino `en_bodega`/
+   * `en_bodega_satelite` para reintentar, o `rechazada` para escalar) y este metodo la
+   * aplica en la MISMA transaccion, tras registrar la transicion a `devuelta`: un segundo
+   * `orden.update` (limpiando `mensajeroAsignadoId` si `limpiaMensajero`) + un segundo
+   * append por el choke point (actor = null/sistema, `origen_tipo = gestion`). Sin
+   * `seguimiento` (las otras 3 ramas), el metodo se comporta EXACTAMENTE como sin este
+   * parametro (R19). Atomico: si el append de seguimiento falla, revierte todo (R10).
    */
   crearGestionYTransicionar(input: {
     ordenId: string;
     mensajeroId: string;
     gestion: GestionOrdenData;
     nuevoEstatusId: string;
+    seguimiento?: { destinoEstatusId: string; limpiaMensajero: boolean };
   }): Promise<string>;
 }

@@ -55,6 +55,55 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
   });
 });
 
+describe("GestionOrdenRepository.findByIdsParaGestion (feature 47/R5 · zonaId)", () => {
+  it("proyecta y devuelve zonaId (insumo del ruteo a bodega en un reintento)", async () => {
+    const findMany = vi.fn(async () => [
+      {
+        id: "o1",
+        deletedAt: null,
+        mensajeroAsignadoId: "m1",
+        montoCobrar: new Prisma.Decimal(100),
+        zonaId: "z-satelite",
+        estatus: { value: "en_reparto" },
+      },
+    ]);
+    const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
+
+    const rows = await repo.findByIdsParaGestion(["o1"]);
+
+    // La proyeccion pide zonaId al select...
+    const arg = (findMany.mock.calls[0] as unknown[])[0] as { select: Record<string, unknown> };
+    expect(arg.select.zonaId).toBe(true);
+    // ...y lo mapea a la fila.
+    expect(rows[0].zonaId).toBe("z-satelite");
+    expect(rows[0].estatusValue).toBe("en_reparto");
+    expect(rows[0].montoCobrar).toBe(100);
+  });
+
+  it("zonaId null (orden sin zona) se preserva", async () => {
+    const findMany = vi.fn(async () => [
+      {
+        id: "o1",
+        deletedAt: null,
+        mensajeroAsignadoId: "m1",
+        montoCobrar: null,
+        zonaId: null,
+        estatus: { value: "en_reparto" },
+      },
+    ]);
+    const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
+    const rows = await repo.findByIdsParaGestion(["o1"]);
+    expect(rows[0].zonaId).toBeNull();
+  });
+
+  it("ids vacios -> no consulta y devuelve []", async () => {
+    const findMany = vi.fn();
+    const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
+    expect(await repo.findByIdsParaGestion([])).toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
 describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
   // Feature 49/#8: recogerLote pasa a `$queryRaw ... RETURNING "id"` en un `$transaction`;
   // el count = rows.length y el append cubre EXACTAMENTE los ids retornados (R8).
@@ -177,12 +226,14 @@ describe("GestionOrdenRepository.liberarOrdenEnGestion (R35)", () => {
 });
 
 describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · feature 49/#9)", () => {
-  function buildTxRepo(origenEstatusId = "os-reparto") {
+  function buildTxRepo(
+    origenEstatusId = "os-reparto",
+    historialCreateMany: ReturnType<typeof vi.fn> = vi.fn(),
+  ) {
     const gestionCreate = vi.fn(async () => ({ id: "g1" }));
     const ordenUpdate = vi.fn(async () => ({}));
     const ordenFindFirst = vi.fn(async () => ({ estatusId: origenEstatusId }));
     const usuarioUpdate = vi.fn(async () => ({}));
-    const historialCreateMany = vi.fn();
     const tx = {
       gestionOrden: { create: gestionCreate },
       orden: { update: ordenUpdate, findFirst: ordenFindFirst },
@@ -290,5 +341,119 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(arg.data[0].motivo).toBe("cliente ausente");
     expect(arg.data[0].origenTipo).toBe("gestion");
     expect(arg.data[0].gestionOrdenId).toBe("g1");
+  });
+
+  // --- Feature 47: transicion de SEGUIMIENTO en la misma tx (R5/R6/R8/R9/R10/R11) ---
+
+  // T2.2 (R5/R6/R11): devuelta bajo umbral -> reintento a bodega. DOS appends
+  // (devuelta + seguimiento), la orden queda en la bodega y se limpia el mensajero;
+  // num_guia NO se toca.
+  it("R5/R6/R11: devuelta con seguimiento (reintento) -> en_bodega, limpia mensajero, DOS appends", async () => {
+    const historialCreateMany = vi.fn();
+    const { repo, ordenUpdate } = buildTxRepo("os-reparto", historialCreateMany);
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "devuelta", motivo: "ausente" },
+      nuevoEstatusId: "os-devuelta",
+      seguimiento: { destinoEstatusId: "os-en-bodega-satelite", limpiaMensajero: true },
+    });
+
+    // Primer orden.update = devuelta; segundo = destino de seguimiento + mensajero null.
+    expect((ordenUpdate.mock.calls[0] as unknown[])[0]).toMatchObject({
+      where: { id: "o1" },
+      data: { estatusId: "os-devuelta" },
+    });
+    const segUpdate = (ordenUpdate.mock.calls[1] as unknown[])[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(segUpdate.data.estatusId).toBe("os-en-bodega-satelite");
+    expect(segUpdate.data.mensajeroAsignadoId).toBeNull(); // R6: handoff limpio a la bodega
+    expect(segUpdate.data).not.toHaveProperty("numGuia"); // R6: conserva num_guia (no lo toca)
+
+    // DOS appends por el choke point: en_reparto->devuelta (actor m1) y devuelta->bodega (actor null).
+    expect(historialCreateMany).toHaveBeenCalledTimes(2);
+    const primer = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
+    const segundo = (historialCreateMany.mock.calls[1] as unknown[])[0] as { data: Record<string, unknown>[] };
+    expect(primer.data[0]).toMatchObject({
+      estatusDestinoId: "os-devuelta",
+      actorUsuarioId: "m1",
+      origenTipo: "gestion",
+    });
+    expect(segundo.data[0]).toEqual({
+      ordenId: "o1",
+      estatusOrigenId: "os-devuelta", // origen del seguimiento = destino de la 1a (devuelta)
+      estatusDestinoId: "os-en-bodega-satelite",
+      actorUsuarioId: null, // R10: sistema
+      origenTipo: "gestion", // R14: reutiliza el enum existente
+      motivo: null,
+      gestionOrdenId: "g1",
+    });
+  });
+
+  // T2.3 (R8/R9/R10): N-esima devolucion (escalado) -> rechazada final, actor null en el
+  // seguimiento, y el mensajero se CONSERVA (limpiaMensajero=false).
+  it("R8/R9/R10: devuelta con seguimiento (escalado) -> rechazada, conserva mensajero, actor null", async () => {
+    const historialCreateMany = vi.fn();
+    const { repo, ordenUpdate } = buildTxRepo("os-reparto", historialCreateMany);
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "devuelta", motivo: "3er intento" },
+      nuevoEstatusId: "os-devuelta",
+      seguimiento: { destinoEstatusId: "os-rechazada", limpiaMensajero: false },
+    });
+
+    const segUpdate = (ordenUpdate.mock.calls[1] as unknown[])[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(segUpdate.data.estatusId).toBe("os-rechazada");
+    expect(segUpdate.data).not.toHaveProperty("mensajeroAsignadoId"); // conserva el ultimo mensajero
+
+    const segundo = (historialCreateMany.mock.calls[1] as unknown[])[0] as { data: Record<string, unknown>[] };
+    expect(segundo.data[0]).toMatchObject({
+      estatusOrigenId: "os-devuelta",
+      estatusDestinoId: "os-rechazada",
+      actorUsuarioId: null,
+      origenTipo: "gestion",
+    });
+  });
+
+  // T2.4 (R10): si el 2o appendCambioEstado (seguimiento) lanza, la tx propaga el error
+  // (nada persiste; el $transaction real revierte).
+  it("R10 atomicidad: si el append del seguimiento falla, la tx propaga el error", async () => {
+    const historialCreateMany = vi
+      .fn()
+      .mockResolvedValueOnce(undefined) // append de devuelta: ok
+      .mockRejectedValueOnce(new Error("append seguimiento falla")); // append de seguimiento: rompe
+    const { repo } = buildTxRepo("os-reparto", historialCreateMany);
+
+    await expect(
+      repo.crearGestionYTransicionar({
+        ordenId: "o1",
+        mensajeroId: "m1",
+        gestion: { resultado: "devuelta", motivo: "x" },
+        nuevoEstatusId: "os-devuelta",
+        seguimiento: { destinoEstatusId: "os-en-bodega", limpiaMensajero: true },
+      }),
+    ).rejects.toThrow("append seguimiento falla");
+  });
+
+  // R19: sin seguimiento (las otras 3 ramas), UNA sola transicion y UN solo append (como hoy).
+  it("R19: sin seguimiento -> un solo orden.update y un solo append (comportamiento actual)", async () => {
+    const historialCreateMany = vi.fn();
+    const { repo, ordenUpdate } = buildTxRepo("os-reparto", historialCreateMany);
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo" },
+      nuevoEstatusId: "os-entregada",
+    });
+
+    expect(ordenUpdate).toHaveBeenCalledTimes(1);
+    expect(historialCreateMany).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,3 +1,4 @@
+import { reintentosConfig } from "@/lib/config/reintentos";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IOrdenHistorialRepository } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { OrdenDTO } from "@/lib/types/orden";
@@ -43,7 +44,13 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     if (decision !== "ok") return { status: decision };
 
     const entradas = await this.historialRepo.findHistorialByOrden(ordenId); // R26 cronologico
-    return { status: "ok", entradas };
+    // Feature 47 (R15/R17): junto a la linea de tiempo, el conteo de intentos DERIVADO
+    // (consume el derivador de la 49) y el umbral configurable, para que la UI muestre
+    // "intento X de N" sin fetchear datos sensibles en el cliente. La autz NO cambia: esta
+    // lectura ya paso la visibilidad de la orden (R27/R17).
+    const intentos = await this.contarIntentos(ordenId); // R1/R2
+    const umbral = reintentosConfig.MIN_INTENTOS_ENTREGA; // R3
+    return { status: "ok", entradas, intentos, umbral };
   }
 
   async contarIntentos(ordenId: string): Promise<number> {

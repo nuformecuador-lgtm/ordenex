@@ -496,11 +496,12 @@
       "id": 47,
       "name": "reintentos de entrega y escalado a rechazo",
       "description": "(FASE 2 / detalle.) Una DEVOLUCION (estado devuelta) hace que la orden vuelva a la bodega para cumplir OTRO intento de entrega. Por ley se hacen MINIMO 3 intentos de entrega; la orden lleva un CONTADOR DE INTENTOS. Al 3er intento fallido, la orden ESCALA automaticamente a RECHAZO (estado final). Las devoluciones deben mostrar cuantos intentos lleva la orden. ABIERTO a decidir en spec: si el minimo de 3 es fijo o configurable, y la relacion exacta entre 'devuelta' (intermedia, reintentable), 'devuelta_origen' y 'rechazada' (finales). Depende de la feature 36 (gestion) y se apoya en la trazabilidad (feature 49).",
-      "status": "pending",
+      "status": "done",
+      "status_note": "done 2026-07-13; F1.4 APROBADA (todas recomendadas). Tercera de la Fase 2 flujo mensajero (grupo 46/47/49 -> 48). Impl COMPLETA (R1-R22) + reviewer APROBADO 0 bloqueantes. VERDE: typecheck 0, lint 0, 2355/2355 tests (+31), init.sh OK, SIN migracion (estatus ya sembrados; contador DERIVADO del historial 49). Rama nace de dev verde POST-REVERT #55 (el PR #54 'adjustments' habia revertido la 49 + roto wallet 42/43/44; revert #55 lo restauro). CAMBIO CENTRAL: hoy 'devuelta' era TERMINAL; la 47 la vuelve REINTENTABLE. En GestionOrdenRepository.crearGestionYTransicionar, en la MISMA $transaction que la gestion: en_reparto->devuelta (actor=mensajero) + seguimiento devuelta->rechazada (si intentos>=umbral) o devuelta->en_bodega/en_bodega_satelite (reintento, ruteo por zona via findCentralZonaId reusando 30/33/46), cada uno con su appendCambioEstado (choke point 49 registrar-cambio-estado.ts, actor=null sistema, origen_tipo=gestion). Atomico: si el 2o append falla, revierte todo. Contador DERIVADO via contarPorDestino sobre orden_historial_estado (sin columna nueva; SOLO devuelta cuenta, reprogramada NO); umbral CONFIGURABLE lib/config/reintentos.ts default 3. devuelta_origen/retorno a tienda = FUERA DE ALCANCE (feature 48). Anadido zonaId a la proyeccion findByIdsParaGestion (OrdenGestionRow). Test de cobertura de la 49 sigue cerrado (11 puntos, enum sin valores nuevos). UI badge 'intento X de N' en lista + sheet de historial 49, visibilidad por rol. Commit 68eb8fd + cierre chore(state). DEUDA menor: E2E escrito no ejecutado (convencion); TOCTOU teorico en el conteo mitigado por guardia origen en_reparto + puntero 1-a-1 (F1.4 aprobado); R12 sin test nominal. PENDIENTE: sync con dev + PR + merge (OK humano). Siguiente/ultima del grupo: 48 (rechazo -> devolucion a la tienda de origen, depende de 47).",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/47-reintentos-escalado-rechazo",
       "depends_on": 36
     },
     {

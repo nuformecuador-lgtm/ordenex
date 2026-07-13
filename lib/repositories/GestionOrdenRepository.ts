@@ -86,6 +86,7 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         deletedAt: true,
         mensajeroAsignadoId: true,
         montoCobrar: true,
+        zonaId: true, // feature 47/R5: insumo del ruteo a bodega responsable en un reintento
         estatus: { select: { value: true } },
       },
     });
@@ -95,6 +96,7 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
       deletedAt: r.deletedAt,
       mensajeroAsignadoId: r.mensajeroAsignadoId,
       montoCobrar: r.montoCobrar ? r.montoCobrar.toNumber() : null,
+      zonaId: r.zonaId,
     }));
   }
 
@@ -186,8 +188,9 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     mensajeroId: string;
     gestion: GestionOrdenData;
     nuevoEstatusId: string;
+    seguimiento?: { destinoEstatusId: string; limpiaMensajero: boolean };
   }): Promise<string> {
-    const { ordenId, mensajeroId, gestion, nuevoEstatusId } = input;
+    const { ordenId, mensajeroId, gestion, nuevoEstatusId, seguimiento } = input;
     return this.prisma.$transaction(async (tx) => {
       // Feature 49/#9 (R20): estatus de ORIGEN (en_reparto) pre-leido dentro de la tx.
       const actual = await tx.orden.findFirst({
@@ -234,6 +237,31 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           gestionOrdenId: creada.id,
         },
       ]);
+      // Feature 47/#9 (R6/R7/R10/R11): transicion de SEGUIMIENTO de una gestion `devuelta`,
+      // en la MISMA tx. La orden NUNCA reposa en `devuelta`: se resuelve hacia la bodega
+      // responsable (reintento, limpiando el mensajero, R6) o hacia `rechazada` (escalado,
+      // conservando el mensajero). El actor es NULL (sistema, no una persona): la dispara el
+      // sistema como consecuencia sincrona de la devolucion. Origen = `nuevoEstatusId` (= id
+      // de `devuelta`), reutilizando `origen_tipo = gestion` (sin enum nuevo, sin migracion).
+      if (seguimiento) {
+        await tx.orden.update({
+          where: { id: ordenId },
+          data: {
+            estatusId: seguimiento.destinoEstatusId,
+            ...(seguimiento.limpiaMensajero ? { mensajeroAsignadoId: null } : {}),
+          },
+        });
+        await appendCambioEstado(tx, [
+          {
+            ordenId,
+            estatusOrigenId: nuevoEstatusId, // = id de `devuelta` (la fila que el derivador cuenta)
+            estatusDestinoId: seguimiento.destinoEstatusId,
+            actorUsuarioId: null, // R10: sistema, no una persona
+            origenTipo: "gestion", // R14/R21: reutiliza el enum existente (sin migracion)
+            gestionOrdenId: creada.id,
+          },
+        ]);
+      }
       return creada.id;
     });
   }

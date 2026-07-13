@@ -29,6 +29,11 @@ const PUNTOS_DE_ESCRITURA = [
   { n: 6, repo: "OrdenRepository", simbolo: "recibirEnSatelite", origenTipo: "recepcion_satelite" },
   { n: 7, repo: "OrdenRepository", simbolo: "asignarSateliteLote", origenTipo: "asignacion_satelite" },
   { n: 8, repo: "GestionOrdenRepository", simbolo: "recogerLote", origenTipo: "recoleccion" },
+  // #9: feature 47 lo convierte en una transicion COMPUESTA cuando el resultado es `devuelta`:
+  // ademas del append de la gestion (en_reparto->devuelta, actor=mensajero), emite en la MISMA
+  // tx un SEGUIMIENTO automatico (actor=null/sistema) hacia la bodega responsable
+  // (en_bodega/en_bodega_satelite, reintento) o hacia rechazada (escalado). Reutiliza el mismo
+  // `origen_tipo=gestion` (sin enum nuevo, sin migracion, R14/R21): sigue siendo UN punto.
   { n: 9, repo: "GestionOrdenRepository", simbolo: "crearGestionYTransicionar", origenTipo: "gestion" },
   {
     n: 10,
@@ -84,5 +89,19 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
       const simbolos: string[] = PUNTOS_DE_ESCRITURA.map((p) => p.simbolo);
       expect(simbolos.includes(m.simbolo)).toBe(false);
     }
+  });
+
+  // Feature 47 (R14/R21): el seguimiento del reintento/escalado REUTILIZA `origen_tipo=gestion`.
+  // El diseno recomendado (design 47 §6/§7) NO agrega valores al enum, asi que NO hubo migracion
+  // de enum y el recuento sigue siendo EXACTAMENTE 11. Este test guarda esa decision: si alguien
+  // introdujera `reintento_devolucion`/`escalado_rechazo`, deberia venir con su migracion + down.
+  it("feature 47 (R14/R21): el enum NO gana valores nuevos; el seguimiento reutiliza `gestion`", () => {
+    const tipos = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED] as string[];
+    expect(tipos).not.toContain("reintento_devolucion");
+    expect(tipos).not.toContain("escalado_rechazo");
+    // El seguimiento se emite con el mismo origen_tipo que la gestion (sin enum nuevo).
+    expect(tipos).toContain("gestion");
+    // Y el conjunto sigue cerrado en 11 (sin migracion de enum).
+    expect(tipos).toHaveLength(11);
   });
 });
