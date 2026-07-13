@@ -37,7 +37,7 @@ vi.mock("@/lib/db/prisma-client", () => ({
 }));
 
 vi.mock("@/app/_components/LogoutButton", () => ({
-  LogoutButton: () => <button data-testid="logout-button-stub">Cerrar sesión</button>,
+  LogoutButton: () => <button data-testid="logout-button-stub">Salir</button>,
 }));
 
 // El dashboard adminTienda monta OrdenesModule (consume listarOrdenes).

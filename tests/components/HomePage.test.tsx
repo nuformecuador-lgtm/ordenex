@@ -2,78 +2,36 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-const cookieGetMock = vi.fn();
-vi.mock("next/headers", () => ({
-  cookies: vi.fn(async () => ({ get: cookieGetMock })),
+// Feature 57 (R14): el control de logout ("Salir") vive en el topbar del
+// PageHeader compartido, que la home usa vía su placeholder. La home ya NO
+// renderiza un botón de logout ad-hoc propio: el único control lo aporta el
+// PageHeader. Se stubbea el LogoutButton (client: useRouter/useToast) para
+// aislar la home; su comportamiento se cubre en LogoutButton.test.tsx.
+vi.mock("@/app/_components/LogoutButton", () => ({
+  LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
 }));
 
-const findValidByIdMock = vi.fn();
-vi.mock("@/lib/repositories/SessionRepository", () => ({
-  // Debe ser una funcion "normal" (no arrow) para poder invocarse con `new`,
-  // igual que hace app/page.tsx.
-  SessionRepository: vi.fn().mockImplementation(function SessionRepositoryMock(this: {
-    findValidById: typeof findValidByIdMock;
-  }) {
-    this.findValidById = findValidByIdMock;
-  }),
-}));
-
-vi.mock("@/lib/db/prisma-client", () => ({
-  getPrismaClient: vi.fn(() => ({})),
-}));
-
-// Feature 26: page.tsx ramifica por rol server-side. Estos tests cubren el
-// placeholder de sesión (R25), no el dashboard: el actor se resuelve a null para
-// mantener la rama de placeholder. La ramificación por rol vive en HomePageRol.test.
+// Con actor null la home muestra únicamente el placeholder "Bienvenido". La
+// ramificación por rol vive en HomePageRol.test.tsx / HomePageMaestro.test.tsx.
 vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
-}));
-
-// El boton en si (invocacion de logout, R26) se cubre en LogoutButton.test.tsx;
-// aqui se aisla la logica de visibilidad condicional de app/page.tsx (R25).
-vi.mock("@/app/_components/LogoutButton", () => ({
-  LogoutButton: () => <button data-testid="logout-button-stub">Cerrar sesión</button>,
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("app/page.tsx — boton de cerrar sesion (R25)", () => {
-  it("muestra el boton 'Cerrar sesión' cuando hay una sesion valida", async () => {
+describe("app/(app)/page.tsx — sin botón de logout ad-hoc propio (feature 57, R14)", () => {
+  it("la home muestra el placeholder y el único logout es el del PageHeader (sin botón ad-hoc)", async () => {
     const { default: Home } = await import("@/app/(app)/page");
-    cookieGetMock.mockReturnValue({ value: "session-abc" });
-    findValidByIdMock.mockResolvedValue({
-      id: "session-abc",
-      userId: "user-1",
-      expiresAt: new Date(Date.now() + 1000 * 60),
-      createdAt: new Date(),
-    });
 
     const element = await Home();
     render(element);
 
-    expect(screen.getByTestId("logout-button-stub")).toBeInTheDocument();
-  });
-
-  it("NO muestra el boton cuando no hay sesion valida", async () => {
-    const { default: Home } = await import("@/app/(app)/page");
-    cookieGetMock.mockReturnValue(undefined);
-
-    const element = await Home();
-    render(element);
-
-    expect(screen.queryByTestId("logout-button-stub")).not.toBeInTheDocument();
-  });
-
-  it("NO muestra el boton cuando la sesion de la cookie esta expirada/invalida", async () => {
-    const { default: Home } = await import("@/app/(app)/page");
-    cookieGetMock.mockReturnValue({ value: "session-expired" });
-    findValidByIdMock.mockResolvedValue(null);
-
-    const element = await Home();
-    render(element);
-
-    expect(screen.queryByTestId("logout-button-stub")).not.toBeInTheDocument();
+    // El placeholder autenticado sigue presente…
+    expect(screen.getByText("Bienvenido")).toBeInTheDocument();
+    // …y hay EXACTAMENTE un control de logout, el que aporta el PageHeader
+    // (topbar): la home no añade un botón ad-hoc adicional en su cuerpo (R14).
+    expect(screen.getAllByTestId("logout-stub")).toHaveLength(1);
   });
 });

@@ -14,21 +14,83 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
 }));
 
+const { errorToastMock } = vi.hoisted(() => ({
+  errorToastMock: vi.fn(),
+}));
+
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: errorToastMock,
+    warning: vi.fn(),
+    info: vi.fn(),
+    show: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
+
 const mockedLogout = vi.mocked(logout);
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("LogoutButton (R26)", () => {
-  it("al hacer click invoca la Server Action logout y luego navega a /login", async () => {
+describe("LogoutButton — topbar 'Salir' (feature 57)", () => {
+  it("al hacer click invoca la Server Action logout y luego navega a /login (R7)", async () => {
     mockedLogout.mockResolvedValue(undefined);
     const user = userEvent.setup();
     render(<LogoutButton />);
 
-    await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+    await user.click(screen.getByRole("button", { name: "Salir" }));
 
     await waitFor(() => expect(mockedLogout).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/login"));
+  });
+
+  it("R11: mientras logout está en curso el botón queda disabled y muestra 'Saliendo…'", async () => {
+    // Deferred: controlamos manualmente cuándo resuelve `logout()` para observar
+    // el estado pendiente (progreso + anti-doble-click) ANTES de que termine.
+    let resolveLogout: () => void = () => {};
+    mockedLogout.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLogout = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    render(<LogoutButton />);
+
+    await user.click(screen.getByRole("button", { name: "Salir" }));
+
+    // Estado pendiente: el botón queda deshabilitado con el texto de progreso.
+    const pendingButton = await screen.findByRole("button", {
+      name: "Saliendo…",
+    });
+    expect(pendingButton).toBeDisabled();
+    // Aún no ha navegado porque el logout sigue en curso.
+    expect(pushMock).not.toHaveBeenCalled();
+
+    // Resolvemos el logout: el flujo debe completar la navegación.
+    resolveLogout();
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/login"));
+  });
+
+  it("R10: si logout rechaza, NO navega, re-habilita el botón y muestra toast de error", async () => {
+    mockedLogout.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    render(<LogoutButton />);
+
+    await user.click(screen.getByRole("button", { name: "Salir" }));
+
+    // (a) No se navega a /login.
+    await waitFor(() => expect(mockedLogout).toHaveBeenCalledTimes(1));
+    expect(pushMock).not.toHaveBeenCalled();
+    // (c) Feedback visible del error (toast, feature 11).
+    await waitFor(() =>
+      expect(errorToastMock).toHaveBeenCalledWith("No se pudo cerrar sesión"),
+    );
+    // (b) El control vuelve a estar accionable (no queda disabled).
+    const button = await screen.findByRole("button", { name: "Salir" });
+    expect(button).not.toBeDisabled();
   });
 });
