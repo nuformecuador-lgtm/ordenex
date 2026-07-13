@@ -8,6 +8,8 @@ import {
   listarMensajerosParaAsignacion,
 } from "@/lib/actions/ordenes-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
+import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
+import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 
 import { OrdenesApartado } from "./OrdenesApartado";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
@@ -18,6 +20,12 @@ import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 export interface OrdenesRevisionMaestroProps {
   /** R12-UI: `admin` es solo-lectura (sin checkboxes ni botones/modales de acción). */
   readOnly?: boolean;
+  /**
+   * Feature 46 (R15/R16): órdenes liberadas HOY (CR) por el cron para la bodega
+   * central (`en_bodega`), pre-resueltas server-side por el Server Component padre.
+   * Alimentan el aviso derivado "Liberadas hoy (reprogramación)". Vacío = sin aviso.
+   */
+  liberadasHoy?: LiberadaHoyRow[];
 }
 
 type ModalAbierto =
@@ -64,6 +72,7 @@ async function mensajerosFetcher() {
  */
 export function OrdenesRevisionMaestro({
   readOnly = false,
+  liberadasHoy = [],
 }: OrdenesRevisionMaestroProps) {
   const { mutate } = useSWRConfig();
 
@@ -185,6 +194,9 @@ export function OrdenesRevisionMaestro({
         tertiaryActionLabel={readOnly ? undefined : "Imprimir etiquetas"}
         onTertiaryAction={readOnly ? undefined : abrirEtiquetas}
       />
+      {/* Feature 46 (R15/R16): aviso derivado "Liberadas hoy (reprogramación)" de la
+          bodega central (en_bodega). Datos por props; se oculta si no hay. */}
+      <BodegaLiberadasHoy liberadas={liberadasHoy} />
       {/* Feature 30/R15: 5.º apartado. Feature 32/R13/F1.4(f): sus órdenes ya
           tienen `num_guia`, así que el maestro puede "Imprimir etiquetas"
           (selección por checkbox); sigue sin acciones de escritura. */}

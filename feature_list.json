@@ -482,11 +482,11 @@
       "id": 46,
       "name": "reprogramacion: bloqueo y liberacion programada",
       "description": "(FASE 2 / detalle del flujo del mensajero, feature 36.) Cuando el mensajero REPROGRAMA una orden (estado reprogramada) con una fecha, la orden queda BLOQUEADA hasta esa fecha de reprogramacion (no reasignable/enviable antes). Al llegar la fecha, la orden se LIBERA automaticamente de vuelta a la bodega responsable para ser enviada ese dia, y se AVISA de la liberacion. Requiere un disparador temporal (job diario, en linea con el corte de las 00:00 de la feature 41) y una notificacion/aviso al liberar. Depende de la feature 36 (gestion: reprogramar con fecha y motivo).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/46-reprogramacion-bloqueo-liberacion",
       "depends_on": 36
     },
     {
@@ -601,6 +601,28 @@
       "branch": "feature/56-ingreso-bodega-rechazos",
       "depends_on": 39,
       "status_note": "done 2026-07-12; F1.4 APROBADA. Money-critical, espejo de la 39. Impl COMPLETA (R1-R22+R7b+R23) + reviewer APROBADO 0 bloqueantes (verificacion round-trip real, snapshot inmutable probado). VERDE: prisma OK, typecheck 0, lint 0, 1867 tests (1 flaky ajeno LoginForm, pasa aislado), init.sh OK, migracion round-trip OK, SIN regresion 37/38/39/40. Q1 aplica si cobroRechazado>0 (condicion en la tarifa; reusa resolvePagoTarifa); Q2 SOLO rechazada; Q3 SNAPSHOT; Q4 migracion aditiva 20260712140000_ingreso_bodega_rechazos (3 niveles); Q5 bodega=destino del cierre; Q6 flag tarifaFaltante SERVER-SIDE (RESUELVE deuda m1 de la 39, elimina heuristica frontend); Q7 mostrado en las 3 vistas de cierre. IMPL EN 2 COMMITS: backend 6a0153d (el implementer murio por bug opus-4.8[1m] tras el backend) + UI 40d99e2 (frontend_dev). Cierra el par pago-por-zona (mensajero 39 + bodega 56). PENDIENTE PR a dev + merge (OK humano)."
+    },
+    {
+      "id": 57,
+      "name": "boton cerrar sesion (logout)",
+      "description": "Agrega un boton 'Cerrar sesion' (logout) en la UI autenticada (p.ej. en el sidebar de la feature 5 o en un menu de usuario/perfil), visible para todos los roles logueados. Al pulsarlo, se invalida la sesion del login RBA (features 1/2): se destruye/expira la cookie de sesion en el servidor (Server Action de logout) y se redirige al usuario a /login, sin dejar acceso a rutas protegidas al volver atras. Reusa la infraestructura de sesion existente del login; no crea tablas nuevas. ABIERTO a decidir en spec: ubicacion exacta del boton (sidebar vs. menu de perfil) y si se pide confirmacion (modal, feature 13) antes de cerrar. Fullstack menor (Server Action de logout + boton en UI).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": null
+    },
+    {
+      "id": 58,
+      "name": "plantilla carga masiva - datos de ejemplo validos (fix 'provincia no encontrada')",
+      "description": "CORRECCION de los DATOS DE EJEMPLO de la plantilla descargable de carga masiva de ordenes. Aunque la feature 51 cambio los ejemplos de Ecuador a Costa Rica, una carga de ejemplo con la plantilla actual sigue fallando con el error de validacion 'provincia: provincia no encontrada': los valores de provincia/canton/distrito de las filas de ejemplo NO coinciden con el catalogo de geografia REALMENTE sembrado en la DB (seed CR de la feature 24), por lo que el backend de carga (feature 15) los rechaza. Objetivo: que la plantilla traiga filas de ejemplo VALIDAS y cargables tal cual (demo), usando provincia + canton + distrito que EXISTAN en el catalogo sembrado y cuyo distrito TENGA zona asignada (acoplamiento distrito.zona_id de las features 24/51, para que orden.zona_id se derive y no se rechace la fila). Criterio de aceptacion: descargar la plantilla y subirla sin editar debe pasar la validacion y crear las ordenes de ejemplo. Toca el generador de plantilla del componente de carga masiva (BulkUpload / OrdenesCargaMasivaButton, features 9/31/51); verificar los valores contra el seed real de geografia antes de fijarlos (no inventar nombres). Frontend; no toca la logica de carga (feature 15). Depende de las features 51, 24 y 15.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 51
     }
   ]
 }

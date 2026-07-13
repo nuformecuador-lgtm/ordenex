@@ -178,6 +178,19 @@ describe("recogerAsignaciones (R14-R17)", () => {
     expect(r.status).toBe("conflict");
     expect(repo.recogerLote).not.toHaveBeenCalled();
   });
+
+  // Feature 46/R4: una orden reprogramada NO es origen valido de "recoger"; el bloqueo de
+  // envio es inherente a la maquina de estados (se verifica explicitamente, sin codigo nuevo).
+  it("feature 46/R4: recoger una orden reprogramada -> conflict por origen, sin efectos", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [
+        gestionRow({ id: "o1", estatusValue: "reprogramada", mensajeroAsignadoId: "m1" }),
+      ]),
+    });
+    const r = await newService(repo).recogerAsignaciones({ ordenIds: ["o1"] }, MENSAJERO);
+    expect(r.status).toBe("conflict");
+    expect(repo.recogerLote).not.toHaveBeenCalled();
+  });
 });
 
 // --- escogerParaGestion (R19-R21) ---
@@ -251,6 +264,22 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
 
   it("R21: otra orden activa distinta -> conflict, sin persistir", async () => {
     const repo = fakeRepo({ getOrdenEnGestion: vi.fn(async () => "o-otra") });
+    const r = await newService(repo).gestionar(
+      { ordenId: "o1", resultado: "devuelta", motivo: "x" },
+      MENSAJERO,
+    );
+    expect(r.status).toBe("conflict");
+    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+  });
+
+  // Feature 46/R4: gestionar exige origen en_reparto; una orden reprogramada se rechaza
+  // por origen (bloqueo de "envio" inherente a la maquina de estados).
+  it("feature 46/R4: gestionar una orden reprogramada -> conflict por origen, sin persistir", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [
+        gestionRow({ id: "o1", estatusValue: "reprogramada", mensajeroAsignadoId: "m1" }),
+      ]),
+    });
     const r = await newService(repo).gestionar(
       { ordenId: "o1", resultado: "devuelta", motivo: "x" },
       MENSAJERO,

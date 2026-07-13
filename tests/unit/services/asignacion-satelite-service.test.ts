@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
+import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
 import type {
   IOrdenRepository,
   OrdenTransicionRow,
@@ -231,6 +232,27 @@ describe("AsignacionSateliteService.asignar", () => {
     });
     // Re-lee para armar el detalle de la carrera.
     expect(findByIds).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("AsignacionSateliteService.asignar — bloqueo por reprogramacion (feature 46/R1/R3/R5)", () => {
+  it("R3: orden reprogramada en el lote -> conflict con motivo tipado, sin efectos", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        transicionRow({ id: "o1" }),
+        transicionRow({ id: "o2", estatusValue: "reprogramada" }),
+      ]),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1", "o2"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "conflict",
+      detalle: [{ ordenId: "o2", motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA }],
+    });
+    // R5/R3: todo-o-nada, no escribe.
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
   });
 });
 
