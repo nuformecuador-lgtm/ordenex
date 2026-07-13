@@ -120,6 +120,13 @@
   verificar STRING `toFixed(2)` en toda la frontera; confirmar RLS sin policies y `down.sql`
   reversible. **Hecho:** checklist de `CHECKPOINTS.md` y `docs/verification.md` satisfecho.
 
+- [x] **T17 — E2E de `/wallet` (loose-end del review, R18–R21).** `e2e/wallet.spec.ts`: acceso
+  `maestro` (balance derivado + libro + filtro por tipo + movimiento manual con descripción
+  obligatoria) y bloqueo del rol NO autorizado (`mensajero` → `notFound`, sin balance ni
+  movimientos). **Hecho:** typecheck 0, lint 0 errores, vitest 2008/2008 (los `.spec.ts` de
+  Playwright NO los corre vitest → conteo intacto). Escrito y DIFERIDO como el resto de la cadena
+  de cierres (mismo patrón de deferral de `e2e/cierres-admin.spec.ts`).
+
 ## Notas de partición para el implementer
 
 - **Backend primero** (T1–T9, T14–T16 core), **frontend después** (T10–T13, `depends_on` backend).

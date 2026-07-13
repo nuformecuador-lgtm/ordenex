@@ -26,6 +26,17 @@ db:migrate/db:rollback REAL contra Postgres (ver Riesgos / deuda). El reviewer d
 - a9769ea feat(42): backend wallet (modelo, migracion, utils, repos, services, enganche cierre, server actions)
 - f85ee42 feat(42): frontend wallet (pagina /wallet, libro, balance, filtros, movimiento manual)
 
+## Loose-end del review — E2E de /wallet (R18-R21)
+
+Se anadio `e2e/wallet.spec.ts` (unico bloqueante del review). Cubre los dos flujos pedidos:
+(1) acceso del `maestro` -> balance derivado + libro de movimientos + filtro por tipo +
+registro de movimiento manual con descripcion obligatoria (R18/R20/R21/R15); (2) bloqueo del
+rol NO autorizado (`mensajero`) -> `notFound()`, sin exponer balance ni movimientos (R19).
+Escrito y DIFERIDO como el resto de la cadena de cierres (emails/usuarios placeholder; requiere
+dev server + DB seed) — NO corre bajo `pnpm test` (vitest ignora `e2e/*.spec.ts`). Suite tras el
+cambio: typecheck 0, lint 0 errores, vitest 2008/2008 (conteo intacto: los .spec.ts de Playwright
+no los ejecuta vitest).
+
 ## Archivos creados / modificados
 
 Backend: db/schema.prisma (3 enums WalletMovimientoTipo/Categoria/OrigenTipo, modelo
