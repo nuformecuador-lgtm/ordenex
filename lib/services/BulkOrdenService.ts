@@ -88,16 +88,6 @@ function resolveGeo(
   }
   const provincia = provinciaResult.row;
 
-  // La zona de la orden se deriva de la provincia (orden.zona_id es NOT NULL).
-  // Si la provincia aun no tiene zona asignada, la fila no se puede resolver.
-  const zonaId = provincia.zonaId;
-  if (zonaId === null) {
-    return {
-      ok: false,
-      fieldErrors: { provincia: ["la provincia no tiene zona asignada"] },
-    };
-  }
-
   const cantonResult = lookup(cantonIndex, `${provincia.id}::${normalize(raw.canton)}`);
   if (cantonResult.status !== "found") {
     return {
@@ -138,10 +128,16 @@ function resolveGeo(
     };
   }
   const distrito = distritoResult.row;
+  // La zona de la orden se obtiene de la tabla intermedia distrito<->zona
+  // (zona_distrito). Si el distrito no pertenece a ninguna zona -> sin cobertura.
   if (distrito.zonaId === null) {
     return {
       ok: false,
-      fieldErrors: { distrito: [`el distrito '${raw.distrito.trim()}' no tiene zona asignada`] },
+      fieldErrors: {
+        distrito: [
+          `sin cobertura: el distrito '${raw.distrito.trim()}' no pertenece a ninguna zona`,
+        ],
+      },
     };
   }
 
@@ -149,7 +145,7 @@ function resolveGeo(
     ok: true,
     geo: {
       provinciaId: provincia.id,
-      zonaId,
+      zonaId: distrito.zonaId,
       cantonId: canton.id,
       distritoId: distrito.id,
     },
@@ -187,7 +183,11 @@ interface PreloadedContext {
 export class BulkOrdenService implements IBulkOrdenService {
   constructor(private readonly repo: IOrdenRepository) {}
 
-  async cargarMasiva(rows: RawRow[], actor: Actor): Promise<BulkOrdenResult> {
+  async cargarMasiva(
+    rows: RawRow[],
+    actor: Actor,
+    options: { dryRun?: boolean } = {},
+  ): Promise<BulkOrdenResult> {
     // R11: SOLO adminTienda, sin tocar datos ni pre-cargar nada para otros roles.
     if (actor.rol !== "adminTienda") return { status: "forbidden" };
 
@@ -245,7 +245,9 @@ export class BulkOrdenService implements IBulkOrdenService {
       });
     });
 
-    if (toCreate.length > 0) {
+    // Dry-run (validación previa): se omite la persistencia; el summary ya lleva
+    // la clasificación completa (creadas/duplicadas/error) para el preview.
+    if (!options.dryRun && toCreate.length > 0) {
       await this.repo.createManyOrdenes(toCreate, cargaMasivaConfig.BATCH_SIZE); // R27
     }
 

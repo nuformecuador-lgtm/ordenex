@@ -82,7 +82,7 @@ export interface OrdenTransicionRow {
   numGuia: number | null;
   deletedAt: Date | null;
   zonaId: string;
-  zonaEsGam: boolean;
+  esGam?: boolean;
 }
 
 // Feature 17/T15 — fila liviana de mensajero para el loader del modal (R28).

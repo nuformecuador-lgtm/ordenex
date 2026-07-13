@@ -35,13 +35,21 @@ interface SeleccionData {
 
 export function GeografiaSelector({
   provincias,
-}: {
+  onSelectedChange,
+  initialSelected,
+}: Readonly<{
   provincias: ProvinciaArbolDTO[];
-}) {
+  /** Reporta al padre los distritos (hojas) seleccionados en cada cambio. */
+  onSelectedChange?: (distritoIds: string[]) => void;
+  /** Distritos pre-seleccionados (edición de zona). Se lee al montar. */
+  initialSelected?: string[];
+}>) {
   const [query, setQuery] = useState("");
   // Fuente de verdad UNICA: distritos (hojas) seleccionados. Provincia y canton
   // derivan su estado (marcado / indeterminado / vacio) de estos.
-  const [selDist, setSelDist] = useState<Set<string>>(new Set());
+  const [selDist, setSelDist] = useState<Set<string>>(
+    () => new Set(initialSelected ?? []),
+  );
 
   // Mapas id -> distritos hoja de cada grupo (sobre el arbol COMPLETO, no el
   // filtrado, para que la cascada abarque también lo oculto por la búsqueda).
@@ -149,6 +157,13 @@ export function GeografiaSelector({
   useEffect(() => {
     if (selDist.size > 0) console.log("[Tarifas] Seleccion actual:", seleccion);
   }, [seleccion, selDist]);
+
+  // Reporta la selección de distritos al formulario contenedor (crear zona).
+  useEffect(() => {
+    onSelectedChange?.([...selDist]);
+    // onSelectedChange se toma fresco en cada corrida; dep solo en selDist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selDist]);
 
   return (
     <div className="flex flex-col gap-4">

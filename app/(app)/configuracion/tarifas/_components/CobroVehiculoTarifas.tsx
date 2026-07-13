@@ -61,53 +61,102 @@ function MontoBlock({
  * bloque de "Monto". Al activar el toggle (sólo posible si hay vehículos en la
  * DB), la etiqueta cambia y se lista un bloque de monto por cada vehículo.
  */
+/**
+ * Valor normalizado (números) con la forma de `tarifas` que consume el esquema
+ * de crear zona: cobroVehiculo + filas de tarifa_zona_mensajero.
+ */
+export interface CobroVehiculoValue {
+  cobroVehiculo: boolean;
+  tarifas: {
+    cobroEntregado: number;
+    cobroRechazado: number;
+    vehiculoId?: string;
+  }[];
+}
+
 export function CobroVehiculoTarifas({
   vehiculos,
+  onChange,
+  initial,
 }: {
   vehiculos: VehiculoDTO[];
+  /** Reporta al formulario contenedor el valor normalizado en cada cambio. */
+  onChange?: (value: CobroVehiculoValue) => void;
+  /** Valores pre-cargados (edición de zona). Se leen al montar. */
+  initial?: CobroVehiculoValue;
 }) {
   const sinVehiculos = vehiculos.length === 0;
 
-  const [cobroVehiculo, setCobroVehiculo] = useState(false);
+  const [cobroVehiculo, setCobroVehiculo] = useState(
+    initial?.cobroVehiculo ?? false,
+  );
   // Monto único (cobroVehiculo=false).
-  const [montoDefault, setMontoDefault] = useState<Monto>(montoVacio);
+  const [montoDefault, setMontoDefault] = useState<Monto>(() => {
+    if (initial && !initial.cobroVehiculo && initial.tarifas[0]) {
+      return {
+        entregado: String(initial.tarifas[0].cobroEntregado),
+        noEntregado: String(initial.tarifas[0].cobroRechazado),
+      };
+    }
+    return montoVacio();
+  });
   // Monto por vehículo (cobroVehiculo=true): vehiculoId -> Monto.
   const [montosPorVehiculo, setMontosPorVehiculo] = useState<
     Record<string, Monto>
-  >({});
+  >(() => {
+    const r: Record<string, Monto> = {};
+    if (initial?.cobroVehiculo) {
+      for (const t of initial.tarifas) {
+        if (t.vehiculoId) {
+          r[t.vehiculoId] = {
+            entregado: String(t.cobroEntregado),
+            noEntregado: String(t.cobroRechazado),
+          };
+        }
+      }
+    }
+    return r;
+  });
 
   function setMontoVehiculo(id: string, next: Monto) {
     setMontosPorVehiculo((prev) => ({ ...prev, [id]: next }));
   }
 
-  // Datos de tarifa listos para consumir (y para inspeccionar en consola).
-  const tarifaData = useMemo(() => {
+  // Valor normalizado (números) con la forma de `tarifas` de crear zona.
+  const payload = useMemo<CobroVehiculoValue>(() => {
+    const num = (v: string) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
     if (cobroVehiculo) {
       return {
-        cobroVehiculo: true as const,
+        cobroVehiculo: true,
         tarifas: vehiculos.map((v) => {
           const m = montosPorVehiculo[v.id] ?? montoVacio();
           return {
+            cobroEntregado: num(m.entregado),
+            cobroRechazado: num(m.noEntregado),
             vehiculoId: v.id,
-            vehiculo: v.name,
-            cobroEntregado: m.entregado,
-            cobroRechazado: m.noEntregado,
           };
         }),
       };
     }
+    // cobroVehiculo=false: una sola tarifa "por defecto", sin vehiculoId.
     return {
-      cobroVehiculo: false as const,
-      tarifa: {
-        cobroEntregado: montoDefault.entregado,
-        cobroRechazado: montoDefault.noEntregado,
-      },
+      cobroVehiculo: false,
+      tarifas: [
+        {
+          cobroEntregado: num(montoDefault.entregado),
+          cobroRechazado: num(montoDefault.noEntregado),
+        },
+      ],
     };
   }, [cobroVehiculo, vehiculos, montosPorVehiculo, montoDefault]);
 
   useEffect(() => {
-    console.log("[Tarifas] Cobro/monto:", tarifaData);
-  }, [tarifaData]);
+    onChange?.(payload);
+    console.log("[Tarifas] Cobro/monto:", payload);
+  }, [payload]);
 
   const label = cobroVehiculo ? "Monto por vehículo" : "Monto";
 

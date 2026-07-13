@@ -208,8 +208,9 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     expect(repo.createManyOrdenes).not.toHaveBeenCalled();
   });
 
-  it("distrito sin zona asignada -> error de fila", async () => {
+  it("distrito sin zona en zona_distrito -> sin cobertura (error de fila)", async () => {
     const repo = buildRepo({
+      // Sin registro en la tabla intermedia zona_distrito -> zonaId null.
       findDistritosByCantonIds: vi.fn().mockResolvedValue([
         { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: null },
       ]),
@@ -221,7 +222,9 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
       expect(r.summary.filas[0].resultado).toBe("error");
-      expect(r.summary.filas[0].errores).toHaveProperty("distrito");
+      const errores = r.summary.filas[0].errores as Record<string, string[]>;
+      expect(errores).toHaveProperty("distrito");
+      expect(errores.distrito.join(" ")).toContain("sin cobertura");
     }
     expect(repo.createManyOrdenes).not.toHaveBeenCalled();
   });
@@ -479,5 +482,70 @@ describe("BulkOrdenService.cargarMasiva — exito parcial (R29)", () => {
     const arg = createManyArg(repo);
     expect(arg).toHaveLength(1);
     expect(arg[0].numRemision).toBe("REM-A");
+  });
+});
+
+describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () => {
+  it("dryRun=true clasifica todas las filas SIN persistir", async () => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo);
+
+    const rows = [
+      row({ num_remision: "REM-A" }), // válida -> creada
+      row({ num_remision: "REM-B", destinatario: "" }), // inválida -> error
+      row({ num_remision: "REM-A" }), // duplicada intra-archivo
+    ];
+    const r = await service.cargarMasiva(rows, TIENDA, { dryRun: true });
+
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.summary.total).toBe(3);
+      expect(r.summary.creadas).toBe(1);
+      expect(r.summary.conError).toBe(1);
+      expect(r.summary.duplicadas).toBe(1);
+    }
+    // La validación previa NO escribe en la DB (esencia del dry-run).
+    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+  });
+
+  it("dryRun devuelve el MISMO summary que la carga real (misma clasificación)", async () => {
+    const rows = [
+      row({ num_remision: "REM-A" }),
+      row({ num_remision: "REM-B", provincia: "Inexistente" }),
+    ];
+
+    const repoReal = buildRepo({
+      findProvinciasByNombres: vi
+        .fn()
+        .mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
+    });
+    const real = await new BulkOrdenService(repoReal).cargarMasiva(rows, TIENDA);
+
+    const repoDry = buildRepo({
+      findProvinciasByNombres: vi
+        .fn()
+        .mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
+    });
+    const dry = await new BulkOrdenService(repoDry).cargarMasiva(rows, TIENDA, {
+      dryRun: true,
+    });
+
+    expect(real.status).toBe("ok");
+    expect(dry.status).toBe("ok");
+    if (real.status === "ok" && dry.status === "ok") {
+      expect(dry.summary).toEqual(real.summary);
+    }
+    // La real persiste la válida; la dry-run no.
+    expect(repoReal.createManyOrdenes).toHaveBeenCalledTimes(1);
+    expect(repoDry.createManyOrdenes).not.toHaveBeenCalled();
+  });
+
+  it("dryRun=false persiste con normalidad (no-regresión)", async () => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo);
+
+    await service.cargarMasiva([row()], TIENDA, { dryRun: false });
+
+    expect(repo.createManyOrdenes).toHaveBeenCalledTimes(1);
   });
 });
