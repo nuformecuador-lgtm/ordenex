@@ -148,6 +148,10 @@ export function OrdenesCargaMasivaButton() {
         title="Carga masiva de órdenes"
         hideCancel
         confirmLabel="Cerrar"
+        // El paso "upload" cabe en el ancho por defecto (max-w-md). El paso
+        // "resumen" renderiza una tabla ancha (8 columnas) que necesita más
+        // espacio; tailwind-merge hace que este ancho override al default.
+        className={step === "resumen" ? "max-w-4xl sm:max-w-5xl" : undefined}
       >
         {step === "upload" ? (
           <div className="flex flex-col gap-4">
