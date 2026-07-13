@@ -201,6 +201,8 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
           mensajeroAsignadoId: destino.mensajeroAsignadoId,
         };
       }),
+      // Feature 49/#3 (R11): actor = el maestro; origen leido por-orden dentro de la tx.
+      { actorUsuarioId: actor.usuarioId, origenTipo: "generacion_guia" },
     );
     const numGuiaByOrden = new Map(resultadosRaw.map((r) => [r.ordenId, r.numGuia]));
 
@@ -293,7 +295,11 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
 
     // R26/R5: NO reasigna num_guia, ya lo tienen de "Generar guia".
-    await this.repo.asignarBodegaLote(ordenIds, input.mensajeroId, estatusEsperaId);
+    // Feature 49/#4 (R12): actor = el maestro; destino en_espera_aceptacion.
+    await this.repo.asignarBodegaLote(ordenIds, input.mensajeroId, estatusEsperaId, {
+      actorUsuarioId: actor.usuarioId,
+      origenTipo: "asignacion_bodega",
+    });
 
     const resultados: AsignarBodegaResultadoItem[] = ordenIds.map((ordenId) => ({
       ordenId,
@@ -358,7 +364,11 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
 
     // R10: num_guia idempotente + estado + mensajero NULL (transaccional).
-    await this.repo.rutearBodegaSateliteLote(ordenIds, estatusRutaSateliteId);
+    // Feature 49/#5 (R13): actor = el maestro; destino en_ruta_bodega_satelite.
+    await this.repo.rutearBodegaSateliteLote(ordenIds, estatusRutaSateliteId, {
+      actorUsuarioId: actor.usuarioId,
+      origenTipo: "ruteo_satelite",
+    });
 
     const resultados: RutearSateliteResultadoItem[] = ordenIds.map((ordenId) => ({
       ordenId,

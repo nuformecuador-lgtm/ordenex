@@ -15,8 +15,10 @@ import {
   rutearABodegaSatelite,
 } from "@/lib/actions/ordenes-guia";
 import { generarEtiquetas } from "@/lib/actions/etiquetas-guia";
+import { obtenerHistorialOrden } from "@/lib/actions/orden-historial";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { EstatusLiteDTO, MensajeroLiteDTO } from "@/lib/types/orden-guia";
+import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
 
 // Feature 17 (T16/T17) — orquestador de la vista de revisión del maestro. Se
 // mockean las Server Actions consumidas (catálogo, mensajeros, listado por
@@ -40,6 +42,13 @@ vi.mock("@/lib/actions/ordenes-guia", () => ({
 vi.mock("@/lib/actions/etiquetas-guia", () => ({
   generarEtiquetas: vi.fn(),
 }));
+
+// Feature 49 (R27/R29): los apartados montan `HistorialOrdenSheet` ("Ver historial"),
+// que importa esta Server Action de forma perezosa al abrir el drawer. Se mockea para
+// que el import dinámico no arrastre `next/headers`/prisma en jsdom.
+vi.mock("@/lib/actions/orden-historial", () => ({
+  obtenerHistorialOrden: vi.fn(),
+}));
 vi.mock("@/app/(app)/ordenes/_components/etiquetas-pdf", () => ({
   descargarEtiquetasPdf: vi.fn(),
 }));
@@ -59,6 +68,16 @@ const generarGuiaMock = vi.mocked(generarGuia);
 const asignarDesdeBodegaMock = vi.mocked(asignarDesdeBodega);
 const rutearABodegaSateliteMock = vi.mocked(rutearABodegaSatelite);
 const generarEtiquetasMock = vi.mocked(generarEtiquetas);
+const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
+
+const HISTORIAL_ENTRADA: OrdenHistorialEntradaDTO = {
+  estatusOrigenValue: "en_reparto",
+  estatusDestinoValue: "en_bodega",
+  origenTipo: "liberacion_reprogramada",
+  actorNombre: null,
+  motivo: null,
+  createdAt: new Date("2026-01-03T08:00:00Z"),
+};
 
 const ESTATUS: EstatusLiteDTO[] = [
   { id: "id-fulfillment", value: "en_fulfillment" },
@@ -134,6 +153,10 @@ beforeEach(() => {
     etiquetas: [],
     omitidas: [],
   });
+  obtenerHistorialMock.mockResolvedValue({
+    status: "ok",
+    entradas: [HISTORIAL_ENTRADA],
+  });
   listarOrdenesMock.mockImplementation(async (input) => {
     const { estatusId, page, pageSize } = input as {
       estatusId?: string;
@@ -174,7 +197,7 @@ describe("OrdenesRevisionMaestro", () => {
     expect(screen.getByRole("region", { name: "En bodega" })).toBeInTheDocument();
   });
 
-  it("R12-UI: readOnly (admin) no muestra checkboxes ni botones de acción", async () => {
+  it("R12-UI: readOnly (admin) no muestra checkboxes ni botones de ESCRITURA", async () => {
     renderComponent(true);
 
     await screen.findByText("REM-F1");
@@ -187,6 +210,52 @@ describe("OrdenesRevisionMaestro", () => {
     expect(
       screen.queryByRole("button", { name: "Imprimir etiquetas" }),
     ).toBeNull();
+    // Feature 49 (R27): la acción de solo LECTURA "Ver historial" SÍ está, pese a readOnly.
+    expect(
+      screen.getAllByRole("button", { name: /Ver historial de la orden/i })
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("Feature 49/R27: el maestro tiene 'Ver historial' por fila en un apartado y abre el drawer", async () => {
+    const user = userEvent.setup();
+    renderComponent();
+
+    await screen.findByText("REM-F1");
+    const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
+    // Un disparador por fila del apartado (2 órdenes en_fulfillment).
+    const triggers = within(fulfillment).getAllByRole("button", {
+      name: /Ver historial de la orden/i,
+    });
+    expect(triggers).toHaveLength(2);
+
+    await user.click(
+      within(fulfillment).getByRole("button", {
+        name: "Ver historial de la orden REM-F1",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    // R29/R30: la línea de tiempo con la etiqueta legible del estado destino.
+    expect(await within(dialog).findByText("En bodega")).toBeInTheDocument();
+    expect(obtenerHistorialMock).toHaveBeenCalledWith("of1");
+  });
+
+  it("Feature 49/R27: el admin (readOnly) también tiene 'Ver historial' por fila y abre el drawer", async () => {
+    const user = userEvent.setup();
+    renderComponent(true);
+
+    await screen.findByText("REM-B1");
+    const bodega = screen.getByRole("region", { name: "En bodega" });
+    await user.click(
+      within(bodega).getByRole("button", {
+        name: "Ver historial de la orden REM-B1",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("En bodega")).toBeInTheDocument();
+    expect(obtenerHistorialMock).toHaveBeenCalledWith("ob1");
   });
 
   it("R17: permite seleccionar por checkbox varias órdenes de un mismo apartado", async () => {

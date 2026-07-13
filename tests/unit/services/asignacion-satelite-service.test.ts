@@ -129,12 +129,14 @@ describe("AsignacionSateliteService.asignar", () => {
       ],
     });
     // R8: escribe con estatus origen/destino resueltos, sin num_guia.
+    // Feature 49/#7: pasa ademas el contexto de historial (actor = adminSatelite).
     expect(repo.asignarSateliteLote).toHaveBeenCalledWith(
       ["o1", "o2"],
       MENSAJERO,
       ZONA,
       "os-espera",
       "os-bodega-satelite",
+      { actorUsuarioId: "as1", origenTipo: "asignacion_satelite" },
     );
   });
 

@@ -12,6 +12,7 @@ import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { ordenesColumns } from "./ordenes-columns";
+import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
   (s) => s <= ordenesConfig.MAX_PAGE_SIZE,
@@ -56,6 +57,15 @@ export interface OrdenesApartadoProps {
   tertiaryActionLabel?: string;
   /** Se invoca con las órdenes seleccionadas (snapshot) al pulsar la acción terciaria. */
   onTertiaryAction?: (seleccionadas: OrdenListItemDTO[]) => void;
+  /**
+   * Feature 49 (R27/R29): con `true` añade una acción "Ver historial" POR FILA que
+   * abre el drawer `HistorialOrdenSheet` (mismo componente/aria-labels que el listado
+   * plano de `OrdenesModule`). Es de solo LECTURA (no muta), por lo que se ofrece
+   * también cuando el apartado NO es `selectable` y en modo `readOnly` (admin): el
+   * maestro/admin ven el historial de cualquier orden (R27). Por defecto `false` para
+   * no alterar el contrato de columnas de las superficies que no lo piden.
+   */
+  mostrarHistorial?: boolean;
 }
 
 interface ApartadoPageData {
@@ -92,6 +102,7 @@ export function OrdenesApartado({
   onSecondaryAction,
   tertiaryActionLabel,
   onTertiaryAction,
+  mostrarHistorial = false,
 }: OrdenesApartadoProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -116,24 +127,42 @@ export function OrdenesApartado({
   }
 
   const columns = useMemo<Column<OrdenListItemDTO>[]>(() => {
-    if (!selectable) return ordenesColumns;
+    // Columna de selección (R17) SOLO cuando el apartado es seleccionable.
+    const base: Column<OrdenListItemDTO>[] = selectable
+      ? [
+          {
+            id: "seleccionar",
+            value: "Seleccionar",
+            render: (row: OrdenListItemDTO) => (
+              <Checkbox
+                checked={seleccionIds.has(row.id)}
+                onCheckedChange={(checked) =>
+                  toggleSeleccion(row.id, checked === true)
+                }
+                aria-label={`Seleccionar orden ${row.numRemision}`}
+              />
+            ),
+          },
+          ...ordenesColumns,
+        ]
+      : [...ordenesColumns];
+
+    // Feature 49 (R27/R29): acción "Ver historial" por fila. Reusa EXACTAMENTE el
+    // montaje del listado plano (`OrdenesModule`): mismo `HistorialOrdenSheet`,
+    // mismos aria-labels. Es de solo lectura, por eso convive con la selección y
+    // con `readOnly` (admin) sin gatearse por `selectable`.
+    if (!mostrarHistorial) return base;
     return [
+      ...base,
       {
-        id: "seleccionar",
-        value: "Seleccionar",
+        id: "acciones",
+        value: "Acciones",
         render: (row: OrdenListItemDTO) => (
-          <Checkbox
-            checked={seleccionIds.has(row.id)}
-            onCheckedChange={(checked) =>
-              toggleSeleccion(row.id, checked === true)
-            }
-            aria-label={`Seleccionar orden ${row.numRemision}`}
-          />
+          <HistorialOrdenSheet ordenId={row.id} referencia={row.numRemision} />
         ),
       },
-      ...ordenesColumns,
     ];
-  }, [selectable, seleccionIds]);
+  }, [selectable, seleccionIds, mostrarHistorial]);
 
   const seleccionadas = items.filter((item) => seleccionIds.has(item.id));
 

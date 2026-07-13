@@ -5,6 +5,7 @@ import type {
   MiAsignacionRow,
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
+import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 
 type GestionPrismaClient = Pick<
   PrismaClient,
@@ -149,16 +150,34 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     destinoEstatusId: string,
   ): Promise<number> {
     if (ordenIds.length === 0) return 0;
-    const result = await this.prisma.orden.updateMany({
-      where: {
-        id: { in: ordenIds },
-        mensajeroAsignadoId: mensajeroId, // guardia de propiedad (R17)
-        estatusId: origenEstatusId, // guardia de origen en_espera_aceptacion (R17)
-        deletedAt: null,
-      },
-      data: { estatusId: destinoEstatusId },
+    // Feature 49/#8 (R7/R8/R16): UPDATE guardado por propiedad + origen, con `RETURNING id`
+    // dentro de un `$transaction` -> el append cubre EXACTAMENTE las ordenes que ganaron la
+    // guarda (una que perdio la carrera / no era del mensajero / no estaba en el origen no
+    // aparece en el RETURNING, no deja rastro). El actor es el propio mensajero (`mensajeroId`
+    // ya es `actor.usuarioId`); origen = `origenEstatusId` (fijado por la guarda). `updated_at`
+    // se fija a mano (el raw no dispara el @updatedAt de Prisma). Devuelve el count de filas.
+    return this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE "orden"
+        SET "estatus_id" = ${destinoEstatusId},
+            "updated_at" = NOW()
+        WHERE "id" IN (${Prisma.join(ordenIds)})
+          AND "mensajero_asignado_id" = ${mensajeroId}
+          AND "estatus_id" = ${origenEstatusId}
+          AND "deleted_at" IS NULL
+        RETURNING "id"`;
+      await appendCambioEstado(
+        tx,
+        rows.map((r) => ({
+          ordenId: r.id,
+          estatusOrigenId: origenEstatusId, // en_espera_aceptacion (fijado por la guarda)
+          estatusDestinoId: destinoEstatusId, // en_reparto
+          actorUsuarioId: mensajeroId, // R21: el mensajero que recoge
+          origenTipo: "recoleccion", // R23
+        })),
+      );
+      return rows.length;
     });
-    return result.count;
   }
 
   /** R23/R26/R28/R30: INSERT gestion + UPDATE estatus + limpiar puntero, atomico. */
@@ -170,6 +189,11 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
   }): Promise<string> {
     const { ordenId, mensajeroId, gestion, nuevoEstatusId } = input;
     return this.prisma.$transaction(async (tx) => {
+      // Feature 49/#9 (R20): estatus de ORIGEN (en_reparto) pre-leido dentro de la tx.
+      const actual = await tx.orden.findFirst({
+        where: { id: ordenId },
+        select: { estatusId: true },
+      });
       const creada = await tx.gestionOrden.create({
         data: {
           ordenId,
@@ -196,6 +220,20 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         where: { id: mensajeroId },
         data: { ordenEnGestionId: null },
       });
+      // Feature 49/#9 (R17/R22/R20): registra la transicion (destino = resultado, actor = el
+      // mensajero, `origenTipo` = gestion, `gestion_orden_id` = la gestion recien creada,
+      // `motivo` = motivo de la gestion si aplica) en la MISMA tx que crea la gestion.
+      await appendCambioEstado(tx, [
+        {
+          ordenId,
+          estatusOrigenId: actual?.estatusId ?? null,
+          estatusDestinoId: nuevoEstatusId,
+          actorUsuarioId: mensajeroId, // R21
+          origenTipo: "gestion", // R23
+          motivo: gestion.motivo ?? null, // R22
+          gestionOrdenId: creada.id,
+        },
+      ]);
       return creada.id;
     });
   }

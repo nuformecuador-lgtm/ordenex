@@ -6,6 +6,7 @@ import type {
   LiberarOrdenInput,
   OrdenLiberableRow,
 } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
+import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 
 // Estatus de ORIGEN de la liberacion (una orden reprogramada) y `resultado` de la
 // gestion que fija la fecha de reprogramacion (feature 36). Valores de catalogo ya
@@ -15,7 +16,9 @@ const RESULTADO_REPROGRAMADA = "reprogramada";
 
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 
-type LiberacionPrismaClient = Pick<PrismaClient, "orden">;
+// Feature 49/#10: `$transaction` para que el UPDATE guardado y el append del historial
+// compartan tx (R7). El `tx` del callback expone `ordenHistorialEstado` (choke point).
+type LiberacionPrismaClient = Pick<PrismaClient, "orden" | "$transaction">;
 
 /**
  * Feature 46 — repositorio de la liberacion programada. SOLO queries Prisma (sin logica
@@ -65,19 +68,36 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
    * (idempotencia derivada del estado). NO toca `num_guia`.
    */
   async liberarOrden(input: LiberarOrdenInput): Promise<boolean> {
-    const result = await this.prisma.orden.updateMany({
-      where: {
-        id: input.ordenId,
-        estatusId: input.estatusReprogramadaId, // R17: guarda de idempotencia/carrera
-        deletedAt: null,
-      },
-      data: {
-        estatusId: input.destinoEstatusId, // R12 (destino ya resuelto por el service)
-        mensajeroAsignadoId: null, // R13: handoff limpio a la bodega
-        liberadaReprogramadaAt: input.corridaAt, // R13: marca de auditoria/aviso
-      },
+    // Feature 49/#10 (R7/R8/R18/R21): UPDATE guardado + append en la MISMA tx. El actor es
+    // NULL (la origina el cron/sistema, no una persona) y `origenTipo` = liberacion_reprogramada;
+    // origen = `reprogramada` (fijado por la guarda), destino = en_bodega/en_bodega_satelite.
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.orden.updateMany({
+        where: {
+          id: input.ordenId,
+          estatusId: input.estatusReprogramadaId, // R17: guarda de idempotencia/carrera
+          deletedAt: null,
+        },
+        data: {
+          estatusId: input.destinoEstatusId, // R12 (destino ya resuelto por el service)
+          mensajeroAsignadoId: null, // R13: handoff limpio a la bodega
+          liberadaReprogramadaAt: input.corridaAt, // R13: marca de auditoria/aviso
+        },
+      });
+      // R8: SOLO si libero (count 1); una segunda corrida idempotente (count 0) no duplica.
+      if (result.count > 0) {
+        await appendCambioEstado(tx, [
+          {
+            ordenId: input.ordenId,
+            estatusOrigenId: input.estatusReprogramadaId, // R18: origen reprogramada
+            estatusDestinoId: input.destinoEstatusId,
+            actorUsuarioId: null, // R21: sistema/cron
+            origenTipo: "liberacion_reprogramada", // R23
+          },
+        ]);
+      }
+      return result.count > 0;
     });
-    return result.count > 0;
   }
 
   /**

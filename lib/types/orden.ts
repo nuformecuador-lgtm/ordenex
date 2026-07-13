@@ -82,6 +82,11 @@ export interface OrdenDTO {
   producto: string;
   peso: number | null; // feature 15/R4: nullable (carga masiva no trae peso)
   notas: string | null;
+  // Feature 49/R27: mensajero ASIGNADO de la orden, para autorizar la lectura del
+  // historial (el mensajero ve las que le fueron/estan asignadas). Opcional (`?`) por el
+  // mismo motivo que en OrdenListItemDTO: no romper mocks/fixtures que construyen OrdenDTO
+  // sin el; `findById`/`toDTO` SIEMPRE lo envian (string|null desde la columna orden).
+  mensajeroAsignadoId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

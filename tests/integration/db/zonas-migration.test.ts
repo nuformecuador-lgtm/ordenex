@@ -141,7 +141,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_cierre_estado_vencido") && // feature 41: apendida despues
         !d.endsWith("_wallet_movimiento") && // feature 42: apendida despues
         !d.endsWith("_wallet_tienda_movimiento") && // feature 43: apendida despues
-        !d.endsWith("_orden_liberada_reprogramada_at"), // feature 46: apendida despues
+        !d.endsWith("_orden_liberada_reprogramada_at") && // feature 46: apendida despues
+        !d.endsWith("_orden_historial_estado"), // feature 49: apendida despues
     );
     expect(thisDir > previas[previas.length - 1]).toBe(true);
   });
