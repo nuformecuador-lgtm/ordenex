@@ -27,6 +27,12 @@ vi.mock("@/lib/actions/usuarios", () => ({
   listarRoles: (...args: unknown[]) => listarRolesMock(...args),
 }));
 
+// Feature 24/R27: el select de zona lee la acción `listarZonas` (módulo aparte).
+const listarZonasMock = vi.fn();
+vi.mock("@/lib/actions/zonas", () => ({
+  listarZonas: (...args: unknown[]) => listarZonasMock(...args),
+}));
+
 import {
   UsuarioForm,
   type UsuarioFormHandle,
@@ -42,6 +48,12 @@ const TIPOS = [
 const ROLES = [
   { id: "rol-maestro", value: "maestro" },
   { id: "rol-mensajero", value: "mensajero" },
+] as const;
+
+// Feature 24/R27: item de `listarZonas` (ZonaDTO); el form solo lee id + nombre.
+const ZONAS = [
+  { id: "z1", nombre: "Central" },
+  { id: "z2", nombre: "Norte" },
 ] as const;
 
 const USUARIO: UsuarioPublico = {
@@ -71,6 +83,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   listarTiposIdentificacionMock.mockResolvedValue({ status: "ok", tipos: TIPOS });
   listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES] });
+  listarZonasMock.mockResolvedValue({
+    status: "ok",
+    items: [...ZONAS],
+    page: 1,
+    pageSize: 100,
+    total: ZONAS.length,
+  });
 });
 
 afterEach(() => {
@@ -355,5 +374,174 @@ describe("UsuarioForm — fulfillment (feature 27)", () => {
       fulfillment?: boolean;
     };
     expect(enviado.fulfillment).toBe(false);
+  }, 15000);
+});
+
+// Feature 24/R27: el select "Zona" aparece solo para `mensajero`/`adminSatelite`
+// (mismo patrón que el switch de fulfillment para `adminTienda`). Sin zona el
+// mensajero queda inasignable, por eso el campo se ofrece en creación/edición.
+const ROLES_ZONA = [
+  { id: "rol-maestro", value: "maestro" },
+  { id: "rol-mensajero", value: "mensajero" },
+  { id: "rol-admin-satelite", value: "adminSatelite" },
+  { id: "rol-admin-tienda", value: "adminTienda" },
+] as const;
+
+const USUARIO_ZONA: UsuarioPublico = {
+  ...USUARIO,
+  rolId: "rol-mensajero",
+  zonaId: "z2",
+};
+
+describe("UsuarioForm — zona (feature 24/R27)", () => {
+  it("muestra el select Zona para mensajero/adminSatelite y lo oculta para maestro/adminTienda (R27)", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    renderIsolated(<UsuarioForm mode="crear" />);
+
+    // Sin rol seleccionado, el select de zona no está presente.
+    expect(
+      screen.queryByRole("combobox", { name: "Zona" }),
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => expect(listarRolesMock).toHaveBeenCalled());
+
+    // maestro: rol sin zona -> oculto.
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "maestro",
+      }),
+    );
+    expect(
+      screen.queryByRole("combobox", { name: "Zona" }),
+    ).not.toBeInTheDocument();
+
+    // mensajero: aparece.
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "mensajero",
+      }),
+    );
+    expect(screen.getByRole("combobox", { name: "Zona" })).toBeInTheDocument();
+
+    // adminSatelite: aparece.
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "adminSatelite",
+      }),
+    );
+    expect(screen.getByRole("combobox", { name: "Zona" })).toBeInTheDocument();
+
+    // adminTienda: rol sin zona -> oculto (aunque muestre el switch fulfillment).
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "adminTienda",
+      }),
+    );
+    expect(
+      screen.queryByRole("combobox", { name: "Zona" }),
+    ).not.toBeInTheDocument();
+  }, 20000);
+
+  it("envía zonaId con el id elegido al crear un mensajero (R27)", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    crearUsuarioMock.mockResolvedValue({ status: "ok", usuario: { ...USUARIO } });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(<UsuarioForm ref={ref} mode="crear" />);
+
+    await user.type(screen.getByLabelText("Nombre"), "Nuevo Mensajero");
+    await user.type(screen.getByLabelText("Email"), "mensajero@example.com");
+    await user.type(screen.getByLabelText("Teléfono"), "0988888888");
+    await user.type(screen.getByLabelText("Número de documento"), "1712345678");
+    await user.type(screen.getByLabelText("Contraseña"), "Abcd1234$xy");
+
+    await user.click(screen.getByRole("combobox", { name: "Tipo de documento" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "cedula",
+      }),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "mensajero",
+      }),
+    );
+
+    // Elige una zona del catálogo (Norte -> z2).
+    await user.click(screen.getByRole("combobox", { name: "Zona" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "Norte",
+      }),
+    );
+
+    await act(async () => {
+      await ref.current!.submit();
+    });
+
+    expect(crearUsuarioMock).toHaveBeenCalledTimes(1);
+    const enviado = crearUsuarioMock.mock.calls[0][0] as {
+      zonaId?: string | null;
+    };
+    expect(enviado.zonaId).toBe("z2");
+  }, 20000);
+
+  it("no incluye zonaId cuando el rol no lleva zona (maestro) (R27)", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    crearUsuarioMock.mockResolvedValue({ status: "ok", usuario: { ...USUARIO } });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(<UsuarioForm ref={ref} mode="crear" />);
+
+    await user.type(screen.getByLabelText("Nombre"), "Nuevo Maestro");
+    await user.type(screen.getByLabelText("Email"), "maestro@example.com");
+    await user.type(screen.getByLabelText("Teléfono"), "0988888888");
+    await user.type(screen.getByLabelText("Número de documento"), "1712345678");
+    await user.type(screen.getByLabelText("Contraseña"), "Abcd1234$xy");
+
+    await user.click(screen.getByRole("combobox", { name: "Tipo de documento" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "cedula",
+      }),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "maestro",
+      }),
+    );
+
+    // maestro no ofrece el select de zona.
+    expect(
+      screen.queryByRole("combobox", { name: "Zona" }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      await ref.current!.submit();
+    });
+
+    expect(crearUsuarioMock).toHaveBeenCalledTimes(1);
+    const enviado = crearUsuarioMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(enviado).not.toHaveProperty("zonaId");
+  }, 20000);
+
+  it("prefilla el select de zona con usuario.zonaId al editar un mensajero (R27)", async () => {
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    renderIsolated(<UsuarioForm mode="editar" usuario={USUARIO_ZONA} />);
+
+    // El trigger muestra el nombre de la zona cuyo id coincide con usuario.zonaId.
+    const zonaTrigger = await screen.findByRole("combobox", { name: "Zona" });
+    await waitFor(() => expect(zonaTrigger).toHaveTextContent("Norte"));
   }, 15000);
 });
