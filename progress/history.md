@@ -1031,3 +1031,35 @@
   lote del maestro (pre-check sin `NOT EXISTS`; el path satélite sí lo integra; justificado/no bloqueante) → follow-up;
   R23 sin test de carrera real contra DB; `CRON_SECRET` documentado en `lib/config/cron.ts` (el `.env.example` está
   gitignored); E2E `e2e/reglas-bloqueos-cierre.spec.ts` escrito pero no ejecutado (patrón del arnés).
+
+## 2026-07-12 — feature 42 (wallet: caja principal de Ordenex)
+- Money-critical. Módulo WALLET = caja PRINCIPAL de Ordenex: **LIBRO append-only INMUTABLE** `wallet_movimiento`
+  (`tipo` ingreso/egreso + `categoria` + `monto` Decimal + `origen_tipo`/`origen_id` polimórfico), **balance general
+  DERIVADO** (Σingreso − Σegreso con `Prisma.Decimal`, sin saldo mutable — "libro de movimientos, no tablero de
+  saldos", decisión humano 2026-07-10). RAÍZ de la cadena de pagos: deja el modelo de egresos genérico listo para
+  43/44/45. Módulo nuevo `/wallet` (rol maestro) con libro paginado + balance + filtros + movimiento manual.
+- Requisitos cubiertos: R1–R26 (cada uno con test concreto; reviewer verificó trazabilidad, round-trip real e
+  idempotencia por constraint DB contra Postgres vivo).
+- **Decisiones F1.4 (aprobadas por el humano 2026-07-12):** (Q1) el ingreso de Ordenex se DERIVA de la tarifa vigente
+  de la zona AL APROBAR el cierre y el movimiento append-only ES el snapshot (sin tocar la feature 37) **+ NUEVA
+  columna `orden.cobra_comision`** (`Boolean NOT NULL DEFAULT true`, retro-compatible): la comisión COD solo se cobra
+  en órdenes `entregada` con `cobra_comision=true`; la 42 la añade y la LEE, poblarla editable por-orden queda como
+  deuda A5. (A1) `entregada` → flete (`valorFleteGam`/`valorFlete` por `esCentral`) + comisión COD (si aplica) + IVA
+  flete + IVA comisión; `devuelta`/`rechazada` → **flete de DEVOLUCIÓN** (`valorFleteDevueltoGam`/`valorFleteDevuelto`)
+  + su IVA, SIN comisión; `reprogramada` → sin ingreso. (Q2) un movimiento por CONCEPTO agregado por cierre — 6
+  categorías (`ingreso_flete`, `ingreso_flete_devolucion`, `ingreso_comision_cod`, `ingreso_iva_flete`,
+  `ingreso_iva_flete_devolucion`, `ingreso_iva_comision_cod`); no emite concepto en 0.00. (Q3) SOLO `CierreDia`
+  aprobados alimentan; `CierreBodega` (40) no re-cuenta; `vencido`→`aprobado` (41) alimenta una sola vez. (Q4) tabla
+  única polimórfica reservada para egresos de 43/44/45. (Q5) `/wallet` rol maestro. (Q6) movimientos manuales mínimos
+  (ajuste ingreso/egreso, inmutables, descripción obligatoria).
+- Enganche money-critical: en `CierresAdminRepository.resolverCierre`, en la MISMA `$transaction` que la aprobación,
+  IDEMPOTENTE por constraint DB `(origen_tipo, origen_id, categoria)` con `ON CONFLICT DO NOTHING` (sin TOCTOU) y
+  ATÓMICO (todo-o-nada). Nuevos: `lib/utils/ingreso-ordenex.ts` + `wallet-balance.ts`, repos/services de wallet, migración
+  aditiva (tabla + enums + índices + RLS sin policies + columna en `orden`). Money-safe: `Prisma.Decimal`, STRING
+  `toFixed(2)`, cero `parseFloat`/`Number(`.
+- Verde: prisma OK, typecheck 0, lint 0, **2008/2008 (+77)**, `init.sh` OK, round-trip de migración REAL (incl. drop de
+  `orden.cobra_comision` y 3 enums), SIN regresión 37/38/39/40/56/41. Reviewer APROBADO 0 bloqueantes tras 1 ciclo (el
+  rechazo inicial fue por falta del E2E → añadido `e2e/wallet.spec.ts`, commit `1f9124b`). Commits `a9769ea`+`f85ee42`+`1f9124b`.
+- **DESBLOQUEA** 43 (pagos a tiendas), 44 (pagos a mensajeros), 45 (gastos/sueldos), que insertan sus egresos en el
+  libro. DEUDA menor: captura editable de `cobra_comision` por-orden (A5, features 14/15/16/17); test de idempotencia
+  unit usa mock en memoria (el constraint real lo verificó el reviewer); E2E escrito pero no ejecutado (patrón del arnés).
