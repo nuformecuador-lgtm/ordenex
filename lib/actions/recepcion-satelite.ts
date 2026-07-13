@@ -8,7 +8,10 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IRecepcionSateliteService } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { IAsignacionSateliteService } from "@/lib/interfaces/services/IAsignacionSateliteService";
-import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type {
+  IOrdenRepository,
+  BodegaBloqueoResult,
+} from "@/lib/interfaces/repositories/IOrdenRepository";
 import {
   recibirSchema,
   asignarSateliteSchema,
@@ -84,6 +87,27 @@ export interface ListarMensajerosSateliteDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
+// Feature 41/T F3 (R22): deps del flag de bloqueo de la bodega satelite (inyecta el
+// repo minimo + actor en tests, sin tocar services/repos del backend).
+export interface EstadoBloqueoBodegaSateliteDeps {
+  ordenRepo?: Pick<
+    IOrdenRepository,
+    "findUsuarioZonaId" | "existeBodegaSateliteBloqueada"
+  >;
+  getActor?: () => Promise<Actor | null>;
+}
+
+/**
+ * Feature 41/R22: resultado del flag de bloqueo de la bodega satelite del actor.
+ * `bloqueo` trae `bloqueada` + las dos causas (porMensajeros / porCierreBodega) para
+ * que la UI muestre el mensaje accionable diferenciado (R17 regla estricta). Sin zona
+ * -> `bloqueada=false` (no hay bodega que bloquear).
+ */
+export type EstadoBloqueoBodegaSateliteResult =
+  | { status: "ok"; bloqueo: BodegaBloqueoResult }
+  | { status: "forbidden" }
+  | { status: "unauthenticated" };
+
 /** R3/R4/R5/R6/R8: lista "Por recibir" / "Recibidas" de la zona del adminSatelite. */
 export async function listarRecepcionSatelite(
   deps: RecepcionSateliteDeps = {},
@@ -154,5 +178,40 @@ export async function listarMensajerosSatelite(
     return { status: "ok" as const, mensajeros };
   });
   // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
+  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * Feature 41/R22: deriva SERVER-SIDE si la bodega satelite del actor esta BLOQUEADA
+ * para asignar a sus mensajeros (regla estricta R17: (i) cierres de sus mensajeros en
+ * `solicitado`/`vencido` O (ii) su propio `CierreBodega` `solicitado`). Reutiliza
+ * `existeBodegaSateliteBloqueada` del backend. El flag + causas viajan por props a la
+ * vista de asignacion, que muestra el aviso diferenciado y deshabilita "Asignar". Solo
+ * lectura. Sin zona -> no bloqueada (no hay bodega). Rol != adminSatelite -> forbidden.
+ */
+export async function estadoBloqueoBodegaSatelite(
+  deps: EstadoBloqueoBodegaSateliteDeps = {},
+): Promise<EstadoBloqueoBodegaSateliteResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    if (actor.rol !== "adminSatelite") return { status: "forbidden" as const };
+    const repo =
+      deps.ordenRepo ??
+      (new OrdenRepository(getPrismaClient()) as Pick<
+        IOrdenRepository,
+        "findUsuarioZonaId" | "existeBodegaSateliteBloqueada"
+      >);
+    const zonaId = await repo.findUsuarioZonaId(actor.usuarioId);
+    if (zonaId === null) {
+      // Sin zona no hay bodega que bloquear (la vista ya avisa `sinZona`).
+      return {
+        status: "ok" as const,
+        bloqueo: { bloqueada: false, porMensajeros: false, porCierreBodega: false },
+      };
+    }
+    const bloqueo = await repo.existeBodegaSateliteBloqueada(zonaId);
+    return { status: "ok" as const, bloqueo };
+  });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }

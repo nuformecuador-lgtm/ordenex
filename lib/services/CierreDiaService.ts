@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { cierreConfig } from "@/lib/config/cierre";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type {
@@ -15,14 +14,16 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
-  CierreTotales,
   ICierreDiaService,
   ListarCierreDiaServiceResult,
   SolicitarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierreDiaService";
-import type { CierreDestinoTipo } from "@/lib/types/cierre";
-import { pagoPorResultado } from "@/lib/utils/pago-mensajero";
-import { ingresoBodegaPorResultado } from "@/lib/utils/ingreso-bodega";
+import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
+import {
+  computeTotales,
+  derivarPagos,
+  derivarIngresoBodega,
+} from "@/lib/utils/cierre-totales";
 
 // Solo el rol autorizado en el modulo (R1/R2): el mensajero, SIEMPRE acotado a su
 // propio `usuario.id` (el filtro por mensajero vive en el repo, en el WHERE).
@@ -177,10 +178,10 @@ export class CierreDiaService implements ICierreDiaService {
     // R15 + design §6 (feature 55 pendiente): si findCentralZonaId() devuelve null,
     // NINGUN mensajero clasifica como central -> fallback SEGURO a bodega_satelite
     // con su propia zona (no lanzar). La clasificacion a central empieza a funcionar
-    // en runtime cuando la 55 marque la zona central.
+    // en runtime cuando la 55 marque la zona central. Feature 41/B1: derivacion UNICA
+    // compartida con el corte diario (resolverDestinoCierre).
     const centralZonaId = await this.zonaRepo.findCentralZonaId();
-    const destinoTipo: CierreDestinoTipo =
-      centralZonaId !== null && zonaId === centralZonaId ? "bodega_central" : "bodega_satelite";
+    const { destinoTipo } = resolverDestinoCierre(zonaId, centralZonaId);
 
     // R14: snapshot de totales calculado en este instante (mismo calculo que 3.1.4).
     const totales = computeTotales(gestiones);
@@ -202,6 +203,9 @@ export class CierreDiaService implements ICierreDiaService {
     );
 
     // R13/R14: transaccion todo-o-nada (INSERT + vincular gestiones + snapshot pago + ingreso).
+    // Feature 41/C1: `crearCierre` devuelve null si el UPDATE guardado vincula 0 gestiones
+    // (una solicitud/corte concurrente ya las vinculo entre la lectura y la escritura); se
+    // reporta como conflicto sin efectos (todo-o-nada), como el duplicado (R12).
     const cierreId = await this.repo.crearCierre({
       mensajeroId: actor.usuarioId,
       destinoTipo,
@@ -212,6 +216,7 @@ export class CierreDiaService implements ICierreDiaService {
       ingresoByGestionId, // feature 56/R11: ingreso snapshoteado por gestion
       totalIngresoBodegaRechazos, // feature 56/R12: total snapshoteado del ingreso de bodega
     });
+    if (cierreId === null) return { status: "conflict", motivo: MSG_VACIO };
 
     return { status: "ok", cierreId, totales, destinoTipo };
   }
@@ -261,72 +266,3 @@ export function toDetalleDTO(
   };
 }
 
-// Feature 39/R10-R13: pago al mensajero por gestion (DERIVADO/snapshot segun uso) + total,
-// con la tarifa ya resuelta. Solo `entregada` paga `cobroEntregado`; el resto 0.00 (F1.4).
-// Suma money-safe con Prisma.Decimal (R9). Reuso por listarCierreDia (en vivo) y
-// solicitarCierre (congela el snapshot). Separado del dinero recibido (R21).
-function derivarPagos(
-  gestiones: CierreGestionPendienteRow[],
-  tarifa: PagoTarifa | null,
-): { pagoByGestionId: Record<string, string>; total: string } {
-  const pagoByGestionId: Record<string, string> = {};
-  let total = new Prisma.Decimal(0);
-  for (const g of gestiones) {
-    const pago = pagoPorResultado(g.resultado, tarifa);
-    pagoByGestionId[g.gestionId] = pago;
-    total = total.plus(pago);
-  }
-  return { pagoByGestionId, total: total.toFixed(2) };
-}
-
-// Feature 56/R9-R12: ingreso de BODEGA por rechazo por gestion (DERIVADO/snapshot segun
-// uso) + total, con la MISMA tarifa ya resuelta para el pago (sin query extra). ESPEJO de
-// `derivarPagos`: solo `rechazada` con tarifa que aplica genera ingreso; el resto 0.00
-// (F1.4-Q1/Q2). Suma money-safe con Prisma.Decimal (R7). Reuso por listarCierreDia (en
-// vivo, R9/R10) y solicitarCierre (congela el snapshot, R11/R12). Concepto INDEPENDIENTE
-// del pago al mensajero (R7b) y del dinero recibido (R20).
-function derivarIngresoBodega(
-  gestiones: CierreGestionPendienteRow[],
-  tarifa: PagoTarifa | null,
-): { ingresoByGestionId: Record<string, string>; total: string } {
-  const ingresoByGestionId: Record<string, string> = {};
-  let total = new Prisma.Decimal(0);
-  for (const g of gestiones) {
-    const ingreso = ingresoBodegaPorResultado(g.resultado, tarifa);
-    ingresoByGestionId[g.gestionId] = ingreso;
-    total = total.plus(ingreso);
-  }
-  return { ingresoByGestionId, total: total.toFixed(2) };
-}
-
-// R7/R8/R9: suma con Prisma.Decimal (exacto). Solo `entregada` con montoRecibido
-// aporta; reprogramada/devuelta/rechazada cuentan $0 (R8). Serializa a STRING (R9).
-function computeTotales(gestiones: CierreGestionPendienteRow[]): CierreTotales {
-  let efectivo = new Prisma.Decimal(0);
-  let simpe = new Prisma.Decimal(0);
-  let transferencia = new Prisma.Decimal(0);
-  for (const g of gestiones) {
-    if (g.resultado !== "entregada" || g.montoRecibido === null) continue; // R8
-    const monto = new Prisma.Decimal(g.montoRecibido);
-    switch (g.metodoPago) {
-      case "efectivo":
-        efectivo = efectivo.plus(monto);
-        break;
-      case "SIMPE":
-        simpe = simpe.plus(monto);
-        break;
-      case "transferencia":
-        transferencia = transferencia.plus(monto);
-        break;
-      default:
-        break; // entregada sin metodo (dato inconsistente): no suma (defensivo)
-    }
-  }
-  const general = efectivo.plus(simpe).plus(transferencia);
-  return {
-    efectivo: efectivo.toFixed(2),
-    simpe: simpe.toFixed(2),
-    transferencia: transferencia.toFixed(2),
-    general: general.toFixed(2),
-  };
-}

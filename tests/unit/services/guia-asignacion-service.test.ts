@@ -80,6 +80,13 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
       async (ids: string[]): Promise<Set<string>> => new Set(ids),
     ),
     rutearBodegaSateliteLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
+    // Feature 41/R13: por defecto nadie bloqueado (los tests de bloqueo lo overridean).
+    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    existeBodegaSateliteBloqueada: vi.fn(async () => ({
+      bloqueada: false,
+      porMensajeros: false,
+      porCierreBodega: false,
+    })),
     ...overrides,
   } as unknown as IOrdenRepository;
 }
@@ -105,6 +112,66 @@ function fakeZonaRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository
 function newService(repo: IOrdenRepository, zonaRepo: IZonaRepository = fakeZonaRepo()) {
   return new GuiaAsignacionService(repo, zonaRepo);
 }
+
+describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", () => {
+  it("R13: generarGuia hacia un mensajero bloqueado -> conflict, sin persistir", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1" })]),
+      findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
+      // m-bloq esta bloqueado por un cierre pendiente.
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia(
+      { decisiones: [{ ordenId: "o1", mensajeroId: "m-bloq" }] },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("conflict");
+    if (r.status === "conflict") {
+      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: "mensajero bloqueado por cierre pendiente" }]);
+    }
+    // R23: no se persiste nada (todo-o-nada).
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+
+  it("R13: el ruteo a satelite (ordenes SIN mensajero) NO se bloquea", async () => {
+    const repo = fakeRepo({
+      // orden no-GAM sin mensajero -> se rutea a satelite; no toca el bloqueo.
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia(
+      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    expect(repo.generarGuiaLote).toHaveBeenCalled();
+  });
+
+  it("R13: asignarDesdeBodega hacia mensajero bloqueado -> conflict, sin persistir", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega" })]),
+      findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
+    });
+    const service = newService(repo);
+
+    const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m-bloq" }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status === "conflict") {
+      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: "mensajero bloqueado por cierre pendiente" }]);
+    }
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+});
 
 describe("GuiaAsignacionService.generarGuia — autorizacion (R11-R13)", () => {
   it("R11: maestro puede generar guia", async () => {

@@ -6,9 +6,14 @@ import type {
 } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 
-// El estado que representa una solicitud viva de cierre (R12) y el que crea la 37
-// (R13). La 37 SOLO escribe `solicitado`.
+// El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
+// defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
 const ESTADO_SOLICITADO = "solicitado";
+
+// Feature 41/C1: sentinela interno para forzar el rollback de la tx cuando el UPDATE
+// guardado vincula 0 gestiones (carrera). Se captura fuera de la tx -> `crearCierre`
+// devuelve null (sin efectos), NO se propaga como error real.
+class SinGestionesVinculadas extends Error {}
 
 type CierrePrismaClient = Pick<PrismaClient, "gestionOrden" | "orden" | "cierreDia" | "$transaction">;
 
@@ -124,75 +129,90 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     return count > 0;
   }
 
-  /** R13/R14: INSERT cierre_dia + vincular gestiones pendientes + snapshot pago, atomico. */
-  async crearCierre(input: CrearCierreInput): Promise<string> {
+  /**
+   * R13/R14 + feature 41/C1 (R8/R9/R23): INSERT cierre_dia (estado `solicitado` por
+   * defecto o `vencido` para el corte) + vincular gestiones pendientes + snapshot pago,
+   * atomico. Devuelve null (rollback) si el UPDATE guardado vincula 0 gestiones.
+   */
+  async crearCierre(input: CrearCierreInput): Promise<string | null> {
     const {
       mensajeroId,
       destinoTipo,
       destinoZonaId,
+      estado = ESTADO_SOLICITADO,
       totales,
       pagoByGestionId,
       totalPagoMensajero,
       ingresoByGestionId,
       totalIngresoBodegaRechazos,
     } = input;
-    return this.prisma.$transaction(async (tx) => {
-      const cierre = await tx.cierreDia.create({
-        data: {
-          mensajeroId,
-          estado: ESTADO_SOLICITADO,
-          destinoTipo,
-          destinoZonaId,
-          totalEfectivo: new Prisma.Decimal(totales.efectivo),
-          totalSimpe: new Prisma.Decimal(totales.simpe),
-          totalTransferencia: new Prisma.Decimal(totales.transferencia),
-          totalGeneral: new Prisma.Decimal(totales.general),
-          // Feature 39/R13/R14: total snapshot del pago al mensajero, en la misma tx.
-          totalPagoMensajero: new Prisma.Decimal(totalPagoMensajero),
-          // Feature 56/R12/R13: total snapshot del ingreso de bodega por rechazos, en la misma tx.
-          totalIngresoBodegaRechazos: new Prisma.Decimal(totalIngresoBodegaRechazos),
-        },
-        select: { id: true },
-      });
-      // R13: consume las gestiones pendientes con guardia de propiedad + no-cerradas
-      // en el WHERE (concurrencia-segura: solo las cierre_id IS NULL del actor).
-      await tx.gestionOrden.updateMany({
-        where: { mensajeroId, cierreId: null },
-        data: { cierreId: cierre.id },
-      });
-      // Feature 39/R12/R14: puebla pago_mensajero por gestion AGRUPADO por valor de pago
-      // (F1.4: a lo sumo 2 valores distintos — cobroEntregado para `entregada`, "0.00" para
-      // el resto). Guardia por cierreId=nuevo (las que acabamos de vincular). Todo en la tx.
-      const idsByPago = new Map<string, string[]>();
-      for (const [gestionId, pago] of Object.entries(pagoByGestionId)) {
-        const arr = idsByPago.get(pago);
-        if (arr) arr.push(gestionId);
-        else idsByPago.set(pago, [gestionId]);
-      }
-      for (const [pago, ids] of idsByPago) {
-        await tx.gestionOrden.updateMany({
-          where: { id: { in: ids }, cierreId: cierre.id },
-          data: { pagoMensajero: new Prisma.Decimal(pago) },
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const cierre = await tx.cierreDia.create({
+          data: {
+            mensajeroId,
+            estado,
+            destinoTipo,
+            destinoZonaId,
+            totalEfectivo: new Prisma.Decimal(totales.efectivo),
+            totalSimpe: new Prisma.Decimal(totales.simpe),
+            totalTransferencia: new Prisma.Decimal(totales.transferencia),
+            totalGeneral: new Prisma.Decimal(totales.general),
+            // Feature 39/R13/R14: total snapshot del pago al mensajero, en la misma tx.
+            totalPagoMensajero: new Prisma.Decimal(totalPagoMensajero),
+            // Feature 56/R12/R13: total snapshot del ingreso de bodega por rechazos, en la misma tx.
+            totalIngresoBodegaRechazos: new Prisma.Decimal(totalIngresoBodegaRechazos),
+          },
+          select: { id: true },
         });
-      }
-      // Feature 56/R11/R13: puebla ingreso_bodega_rechazo por gestion AGRUPADO por valor
-      // (a lo sumo 2 valores distintos — cobroRechazado para `rechazada` que aplica, "0.00"
-      // para el resto). Guardia por cierreId=nuevo (las que acabamos de vincular). Todo en
-      // la MISMA tx que el INSERT y el pago al mensajero (atomico, R13).
-      const idsByIngreso = new Map<string, string[]>();
-      for (const [gestionId, ingreso] of Object.entries(ingresoByGestionId)) {
-        const arr = idsByIngreso.get(ingreso);
-        if (arr) arr.push(gestionId);
-        else idsByIngreso.set(ingreso, [gestionId]);
-      }
-      for (const [ingreso, ids] of idsByIngreso) {
-        await tx.gestionOrden.updateMany({
-          where: { id: { in: ids }, cierreId: cierre.id },
-          data: { ingresoBodegaRechazo: new Prisma.Decimal(ingreso) },
+        // R13: consume las gestiones pendientes con guardia de propiedad + no-cerradas
+        // en el WHERE (concurrencia-segura: solo las cierre_id IS NULL del actor).
+        // Feature 41/C1 (R8/R9/R23): si vincula 0 (otra solicitud/corte concurrente las
+        // vinculo primero), fuerza el rollback -> crearCierre devuelve null (sin efectos).
+        const vinculadas = await tx.gestionOrden.updateMany({
+          where: { mensajeroId, cierreId: null },
+          data: { cierreId: cierre.id },
         });
-      }
-      return cierre.id;
-    });
+        if (vinculadas.count === 0) throw new SinGestionesVinculadas();
+        // Feature 39/R12/R14: puebla pago_mensajero por gestion AGRUPADO por valor de pago
+        // (F1.4: a lo sumo 2 valores distintos — cobroEntregado para `entregada`, "0.00" para
+        // el resto). Guardia por cierreId=nuevo (las que acabamos de vincular). Todo en la tx.
+        const idsByPago = new Map<string, string[]>();
+        for (const [gestionId, pago] of Object.entries(pagoByGestionId)) {
+          const arr = idsByPago.get(pago);
+          if (arr) arr.push(gestionId);
+          else idsByPago.set(pago, [gestionId]);
+        }
+        for (const [pago, ids] of idsByPago) {
+          await tx.gestionOrden.updateMany({
+            where: { id: { in: ids }, cierreId: cierre.id },
+            data: { pagoMensajero: new Prisma.Decimal(pago) },
+          });
+        }
+        // Feature 56/R11/R13: puebla ingreso_bodega_rechazo por gestion AGRUPADO por valor
+        // (a lo sumo 2 valores distintos — cobroRechazado para `rechazada` que aplica, "0.00"
+        // para el resto). Guardia por cierreId=nuevo (las que acabamos de vincular). Todo en
+        // la MISMA tx que el INSERT y el pago al mensajero (atomico, R13).
+        const idsByIngreso = new Map<string, string[]>();
+        for (const [gestionId, ingreso] of Object.entries(ingresoByGestionId)) {
+          const arr = idsByIngreso.get(ingreso);
+          if (arr) arr.push(gestionId);
+          else idsByIngreso.set(ingreso, [gestionId]);
+        }
+        for (const [ingreso, ids] of idsByIngreso) {
+          await tx.gestionOrden.updateMany({
+            where: { id: { in: ids }, cierreId: cierre.id },
+            data: { ingresoBodegaRechazo: new Prisma.Decimal(ingreso) },
+          });
+        }
+        return cierre.id;
+      });
+    } catch (err) {
+      // Feature 41/C1: 0 gestiones vinculadas -> null (sin efectos). Cualquier otro
+      // error se propaga (no se traga; convenciones de manejo de errores).
+      if (err instanceof SinGestionesVinculadas) return null;
+      throw err;
+    }
   }
 
   /** R18: cierres del mensajero (mas reciente primero) con totales snapshot. */

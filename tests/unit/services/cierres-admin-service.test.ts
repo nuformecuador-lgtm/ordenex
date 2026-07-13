@@ -164,6 +164,25 @@ describe("CierresAdminService.listarCierresAdmin — particion y totales (R4/R5/
     expect(r.sinZona).toBe(false);
   });
 
+  it("feature 41/R20: el vencido va a la cola de pendientes, diferenciado por su estado", async () => {
+    const repo = fakeRepo({
+      findCierresByAlcance: vi.fn(async () => [
+        resumenRow({ cierreId: "s", estado: "solicitado" }),
+        resumenRow({ cierreId: "v", estado: "vencido" }), // creado por el corte
+        resumenRow({ cierreId: "ap", estado: "aprobado", resueltoAt: "2026-07-12T12:00:00.000Z" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarCierresAdmin(MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // R20: solicitado y vencido en la cola (resolubles); aprobado al historico.
+    expect(r.pendientes.map((c) => c.cierreId).sort()).toEqual(["s", "v"]);
+    expect(r.historico.map((c) => c.cierreId)).toEqual(["ap"]);
+    // el estado viaja en el resumen para que el frontend etiquete el vencido (R20).
+    const vencido = r.pendientes.find((c) => c.cierreId === "v");
+    expect(vencido?.estado).toBe("vencido");
+  });
+
   it("R8/R9: los totales del resumen son el snapshot en STRING escala 2 (no recomputa)", async () => {
     const repo = fakeRepo({
       findCierresByAlcance: vi.fn(async () => [

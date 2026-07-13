@@ -400,6 +400,7 @@ enum CierreEstado {
   solicitado
   aprobado
   rechazado
+  vencido // feature 41 (R2): lo crea el corte diario; bloqueante y resoluble como solicitado
 
   @@map("cierre_estado")
 }
@@ -452,6 +453,7 @@ model CierreDia {
   @@index([estado])
   @@index([resueltoPor]) // feature 38/R14: auditoria de quien resolvio
   @@index([cierreBodegaId]) // feature 40: listar consolidables (cierre_bodega_id IS NULL)
+  @@index([mensajeroId, estado]) // feature 41 (R12/R23): bloqueo derivado del mensajero (ruta caliente de asignacion)
   @@map("cierre_dia")
 }
 

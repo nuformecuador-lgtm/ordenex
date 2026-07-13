@@ -92,6 +92,7 @@ function renderModule(props?: Partial<Parameters<typeof CierreDiaModule>[0]>) {
       puedesSolicitar={props?.puedesSolicitar ?? true}
       motivoBloqueo={props?.motivoBloqueo ?? null}
       cierresPasados={props?.cierresPasados ?? []}
+      bloqueado={props?.bloqueado ?? false}
     />,
   );
 }
@@ -374,5 +375,23 @@ describe("CierreDiaModule", () => {
     expect(
       within(region).getByText("Aún no has solicitado ningún cierre."),
     ).toBeInTheDocument();
+  });
+
+  // ---------- Feature 41 (F2, R21) ----------
+
+  it("R21: bloqueado muestra el aviso accionable de que no puede recibir nuevas asignaciones", () => {
+    renderModule({ bloqueado: true });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /no puedes recibir nuevas asignaciones hasta que tu cierre pendiente sea resuelto/i,
+    );
+  });
+
+  it("R21: sin bloqueo NO muestra el aviso de asignaciones", () => {
+    renderModule({ bloqueado: false });
+
+    expect(
+      screen.queryByText(/no puedes recibir nuevas asignaciones/i),
+    ).not.toBeInTheDocument();
   });
 });

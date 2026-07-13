@@ -226,6 +226,91 @@ describe("CierreDiaRepository.crearCierre (R13/R14)", () => {
   });
 });
 
+describe("CierreDiaRepository.crearCierre — feature 41/C1 (R8/R9/R23)", () => {
+  it("R8: estado='vencido' se propaga al INSERT (mismo snapshot que solicitado)", async () => {
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "cv1" })) },
+      gestionOrden: { updateMany: vi.fn(async () => ({ count: 2 })) },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    const id = await repo.crearCierre({
+      mensajeroId: "m1",
+      estado: "vencido",
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z1",
+      totales: { efectivo: "10.00", simpe: "0.00", transferencia: "0.00", general: "10.00" },
+      pagoByGestionId: { g1: "5.00", g2: "0.00" },
+      totalPagoMensajero: "5.00",
+      ingresoByGestionId: { g1: "0.00", g2: "0.00" },
+      totalIngresoBodegaRechazos: "0.00",
+    });
+
+    expect(id).toBe("cv1");
+    const createArg = (tx.cierreDia.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(createArg.data.estado).toBe("vencido"); // C1: estado parametrizado
+    // vincula las gestiones sin cierre del mensajero (misma tx que solicitado).
+    const calls = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls[0][0].where).toMatchObject({ mensajeroId: "m1", cierreId: null });
+  });
+
+  it("default estado='solicitado' cuando no se pasa (retrocompatible con la 37)", async () => {
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
+      gestionOrden: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.crearCierre({
+      mensajeroId: "m1",
+      destinoTipo: "bodega_central",
+      destinoZonaId: "z1",
+      totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+      pagoByGestionId: { g1: "0.00" },
+      totalPagoMensajero: "0.00",
+      ingresoByGestionId: { g1: "0.00" },
+      totalIngresoBodegaRechazos: "0.00",
+    });
+
+    const createArg = (tx.cierreDia.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(createArg.data.estado).toBe("solicitado");
+  });
+
+  it("R9/R23: si el UPDATE guardado vincula 0 gestiones -> null (rollback), sin poblar snapshot", async () => {
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "cx" })) },
+      // vinculacion devuelve 0 (otra solicitud/corte las vinculo primero) -> throw interno.
+      gestionOrden: { updateMany: vi.fn(async () => ({ count: 0 })) },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    const id = await repo.crearCierre({
+      mensajeroId: "m1",
+      estado: "vencido",
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z1",
+      totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+      pagoByGestionId: { g1: "0.00" },
+      totalPagoMensajero: "0.00",
+      ingresoByGestionId: { g1: "0.00" },
+      totalIngresoBodegaRechazos: "0.00",
+    });
+
+    expect(id).toBeNull();
+    // Solo la vinculacion se intento; los updateMany de snapshot NO se ejecutaron.
+    expect((tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+});
+
 describe("CierreDiaRepository.findCierresByMensajero (R18)", () => {
   it("mapea cada cierre con totales STRING toFixed(2) y solicitadoAt ISO, mas reciente primero", async () => {
     const prisma = buildPrisma();

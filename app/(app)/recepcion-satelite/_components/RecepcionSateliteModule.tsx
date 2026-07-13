@@ -12,6 +12,11 @@ import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { RecepcionDetalle } from "./RecepcionDetalle";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
+import {
+  BODEGA_BLOQUEADA_TITULO,
+  bodegaBloqueadaLineas,
+  type BodegaBloqueoCausa,
+} from "./asignacion-satelite-bloqueo";
 
 // Feature 33 (T12, R6/R7/R8/R9): módulo de la bodega satélite. Recibe los DOS
 // grupos ya resueltos por el Server Component padre (datos sensibles por props,
@@ -34,6 +39,12 @@ export interface RecepcionSateliteModuleProps {
    * asignación (ya scoped server-side; el módulo no fetchea datos sensibles).
    */
   mensajeros: { id: string; nombre: string }[];
+  /**
+   * Feature 41 (R22): bloqueo DERIVADO server-side de la bodega satélite (regla
+   * estricta R17). Si `bloqueada`, se muestra el aviso con la causa diferenciada y
+   * se deshabilita "Asignar". Llega por props desde el Server Component.
+   */
+  bloqueoBodega: BodegaBloqueoCausa & { bloqueada: boolean };
 }
 
 /**
@@ -140,6 +151,7 @@ export function RecepcionSateliteModule({
   zonaNombre,
   sinZona,
   mensajeros,
+  bloqueoBodega,
 }: RecepcionSateliteModuleProps) {
   const router = useRouter();
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
@@ -199,12 +211,28 @@ export function RecepcionSateliteModule({
         aria-label="Recibidas"
         className="flex flex-col gap-3 border-t pt-6"
       >
+        {/* Feature 41 (R22): aviso de bodega bloqueada con causa diferenciada. */}
+        {bloqueoBodega.bloqueada ? (
+          <div
+            role="alert"
+            className="flex flex-col gap-1 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            <span className="font-medium">{BODEGA_BLOQUEADA_TITULO}</span>
+            <ul className="list-disc pl-5">
+              {bodegaBloqueadaLineas(bloqueoBodega).map((linea) => (
+                <li key={linea}>{linea}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Recibidas</h2>
           <Button
             type="button"
             onClick={() => setModalOpen(true)}
-            disabled={ordenesSeleccionadas.length === 0}
+            disabled={
+              ordenesSeleccionadas.length === 0 || bloqueoBodega.bloqueada
+            }
           >
             Asignar
           </Button>

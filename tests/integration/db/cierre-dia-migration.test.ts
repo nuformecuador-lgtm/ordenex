@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
-import { CIERRE_ESTADO_SEED, CIERRE_DESTINO_TIPO_SEED } from "@/lib/types/cierre";
+import { CIERRE_DESTINO_TIPO_SEED } from "@/lib/types/cierre";
 
 // Feature 37 — cobertura ESTATICA de la migracion `*_cierre_dia` (patron
 // gestion-orden-migration/zonas-migration): lee migration.sql/down.sql por regex.
@@ -26,11 +26,14 @@ const upSql = fs.readFileSync(path.join(migrationDir, "migration.sql"), "utf8");
 const downSql = fs.readFileSync(path.join(migrationDir, "down.sql"), "utf8");
 
 describe("UP — enums cierre_estado / cierre_destino_tipo (R13/R15/R18)", () => {
-  it("crea el enum cierre_estado con solicitado/aprobado/rechazado (SEED)", () => {
+  it("crea el enum cierre_estado con los 3 valores originales de la feature 37", () => {
     const match = upSql.match(/CREATE TYPE "cierre_estado" AS ENUM \(([^)]*)\);/);
     expect(match).not.toBeNull();
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-    expect(new Set(valores)).toEqual(new Set(CIERRE_ESTADO_SEED));
+    // La 37 creo SOLO los 3 estados base; `vencido` (feature 41) lo añade una migracion
+    // posterior (`*_cierre_estado_vencido`), por lo que aqui NO debe aparecer.
+    expect(new Set(valores)).toEqual(new Set(["solicitado", "aprobado", "rechazado"]));
+    expect(valores).not.toContain("vencido");
   });
 
   it("crea el enum cierre_destino_tipo con bodega_central/bodega_satelite (SEED)", () => {

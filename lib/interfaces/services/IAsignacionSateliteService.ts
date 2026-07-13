@@ -23,11 +23,21 @@ export interface AsignarSateliteInput {
 // y el catalogo de estados incompleto (seed pendiente). `conflict` cubre las
 // guardias por orden (R10-R12) y la carrera de escritura (R14); el motivo por
 // orden usa los literales `no_encontrada` / `zona_ajena` / `estado_invalido: <estado>`.
+// Feature 41/R18: causa del bloqueo de la bodega satelite (regla estricta R17). Al menos
+// una de las dos es `true`. El borde (Server Action feature 34) la traduce al mensaje
+// accionable de R22: (i) "resuelve los cierres de tus mensajeros" / (ii) "tu cierre de
+// bodega hacia la central esta pendiente de aprobacion".
+export interface BodegaBloqueadaCausa {
+  porMensajeros: boolean;
+  porCierreBodega: boolean;
+}
+
 export type AsignarSateliteServiceResult =
   | { status: "ok"; resultados: { ordenId: string; estado: "en_espera_aceptacion" }[] } // R7
   | { status: "forbidden" } // R13
   | { status: "sin_zona" } // R3
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R9 / catalogo
+  | { status: "bodega_bloqueada"; causa: BodegaBloqueadaCausa } // feature 41/R18: bodega bloqueada (i)||(ii)
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R9 / catalogo / feature 41 mensajero bloqueado
   | { status: "conflict"; detalle: { ordenId: string; motivo: string }[] }; // R10-R12 / R14
 
 export interface IAsignacionSateliteService {

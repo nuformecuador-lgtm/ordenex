@@ -177,7 +177,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
     const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
     expect(arg.where).toEqual({
       id: "c1",
-      estado: "solicitado", // R12: guardia de estado
+      estado: { in: ["solicitado", "vencido"] }, // R12 + feature 41/R19: origenes resolubles
       destinoTipo: "bodega_satelite", // R13: guardia de alcance
       destinoZonaId: "z-cartago",
     });
@@ -209,7 +209,34 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
     expect(arg.data.estado).toBe("aprobado");
     expect(arg.data.motivoRechazo).toBeNull();
     // el maestro no se acota por zona en el WHERE.
-    expect(arg.where).toEqual({ id: "c1", estado: "solicitado", destinoTipo: "bodega_central" });
+    expect(arg.where).toEqual({
+      id: "c1",
+      estado: { in: ["solicitado", "vencido"] },
+      destinoTipo: "bodega_central",
+    });
+  });
+
+  it("feature 41/R19/R15: un vencido es origen resoluble; aprobar/rechazar transiciona y desbloquea", async () => {
+    const prisma = buildPrisma();
+    // El vencido sigue en un estado resoluble -> updateMany afecta 1 fila.
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c-vencido",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("updated"); // R15: resolverlo lo saca de los estados bloqueantes
+    const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
+    // R19: la guardia acepta solicitado O vencido como origen.
+    expect(arg.where.estado).toEqual({ in: ["solicitado", "vencido"] });
+    // R4: la transicion NO recalcula totales (solo estado + auditoria).
+    expect(arg.data).not.toHaveProperty("totalGeneral");
+    expect(arg.data).not.toHaveProperty("totalEfectivo");
   });
 
   it("R12: count=0 pero existe en alcance -> conflict, sin efectos", async () => {

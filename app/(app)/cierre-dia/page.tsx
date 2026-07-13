@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
-import { listarCierreDia } from "@/lib/actions/cierre-dia";
+import { listarCierreDia, estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 
 import { CierreDiaModule } from "./_components/CierreDiaModule";
 
@@ -21,6 +21,13 @@ export default async function CierreDiaPage() {
   const result = await listarCierreDia();
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
+  // Feature 41 (R21): flag DERIVADO server-side de si el mensajero está bloqueado
+  // (cierre `solicitado`/`vencido` pendiente) para recibir nuevas asignaciones. Se
+  // pasa por props al componente cliente, que muestra el aviso accionable. Si la
+  // acción degrada (unauthenticated), no se muestra el aviso (defensa suave).
+  const bloqueo = await estadoBloqueoMensajero();
+  const bloqueado = bloqueo.status === "ok" && bloqueo.bloqueado;
+
   return (
     <section className="flex flex-1 flex-col gap-6 p-6">
       <PageHeader
@@ -35,6 +42,7 @@ export default async function CierreDiaPage() {
         puedesSolicitar={result.puedesSolicitar}
         motivoBloqueo={result.motivoBloqueo}
         cierresPasados={result.cierresPasados}
+        bloqueado={bloqueado}
       />
     </section>
   );

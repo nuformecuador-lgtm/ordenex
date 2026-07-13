@@ -61,6 +61,9 @@ export type AsignarSateliteResult =
   | { status: "ok"; resultados: { ordenId: string; estado: "en_espera_aceptacion" }[] }
   | { status: "forbidden" }
   | { status: "sin_zona" }
+  // Feature 41/R18: bodega bloqueada (regla estricta R17). La causa (porMensajeros /
+  // porCierreBodega) permite al frontend mostrar el mensaje accionable diferenciado (R22).
+  | { status: "bodega_bloqueada"; causa: { porMensajeros: boolean; porCierreBodega: boolean } }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "conflict"; detalle: { ordenId: string; motivo: string }[] }
   | { status: "unauthenticated" };

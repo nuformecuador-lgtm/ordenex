@@ -1,27 +1,26 @@
 import { describe, it, expect, vi } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 
-// Feature 34 — repo de la asignacion satelite. `asignarSateliteLote` es un
-// `updateMany` guardado por estado de origen + zona (patron `recibirEnSatelite`);
-// aqui se verifica el WHERE (guardia) y el data (sin tocar num_guia), y que el
-// `count` refleja lo transicionado.
+// Feature 34 — repo de la asignacion satelite. `asignarSateliteLote` es un UPDATE
+// guardado por estado de origen + zona (patron `recibirEnSatelite`). Feature 41/R23:
+// ahora es un `$executeRaw` con `NOT EXISTS` de cierre bloqueante (anti-TOCTOU) en el
+// MISMO UPDATE; el `count` refleja lo transicionado (0 si el mensajero quedo bloqueado
+// o si las ordenes ya cambiaron de estado/zona).
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   const prisma = {
-    orden: {
-      updateMany: vi.fn(),
-    },
+    $executeRaw: vi.fn(),
     ...overrides,
   };
   return { prisma };
 }
 
-describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14)", () => {
-  it("updateMany guardado por estado de origen + zona + no borrada; fija mensajero/estatus sin tocar num_guia", async () => {
+describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R23)", () => {
+  it("ejecuta un UPDATE raw con guardia de estado+zona+NOT EXISTS; count = filas transicionadas", async () => {
     const { prisma } = buildPrisma();
-    // La DB solo transiciona las que siguen en el origen de la zona: 2 de 3.
-    prisma.orden.updateMany.mockResolvedValue({ count: 2 });
+    // La DB solo transiciona las que siguen en el origen de la zona y sin bloqueo: 2 de 3.
+    prisma.$executeRaw.mockResolvedValue(2);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const count = await repo.asignarSateliteLote(
@@ -32,25 +31,28 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14)", () => {
       "os-bodega-satelite",
     );
 
-    // R14: count refleja solo lo transicionado (o3 quedo en otro estado/zona).
+    // R14/R23: count refleja solo lo transicionado.
     expect(count).toBe(2);
-    const arg = prisma.orden.updateMany.mock.calls[0][0];
-    // Guardia en el WHERE: id IN lote AND estatusId = origen AND zona AND no borrada.
-    expect(arg.where).toEqual({
-      id: { in: ["o1", "o2", "o3"] },
-      estatusId: "os-bodega-satelite",
-      zonaId: "z-satelite",
-      deletedAt: null,
-    });
-    // R7/R8: fija mensajero + estatus destino; NUNCA toca numGuia.
-    expect(arg.data).toEqual({ mensajeroAsignadoId: "m-1", estatusId: "os-espera" });
-    expect(arg.data).not.toHaveProperty("numGuia");
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    // `$executeRaw` se invoca como tagged template: call[0] = fragmentos de texto (SQL),
+    // call[1..] = valores interpolados. Se verifica el SQL y los parametros.
+    const call = prisma.$executeRaw.mock.calls[0] as unknown[];
+    const strings = (call[0] as string[]).join(" ");
+    const values = call.slice(1);
+    expect(values).toContain("m-1");
+    expect(values).toContain("os-espera");
+    expect(values).toContain("os-bodega-satelite");
+    expect(values).toContain("z-satelite");
+    // R8: la sentencia NO menciona num_guia.
+    expect(strings).not.toMatch(/num_guia/);
+    // R23: el NOT EXISTS de cierre bloqueante sobre cierre_dia esta presente.
+    expect(strings).toMatch(/NOT EXISTS/);
+    expect(strings).toMatch(/cierre_dia/);
   });
 
-  it("una orden en otro estado o de otra zona no se toca (guardia por estatusId+zona)", async () => {
+  it("count 0 cuando ninguna orden matchea (o el mensajero quedo bloqueado)", async () => {
     const { prisma } = buildPrisma();
-    // Ninguna matchea el origen/zona -> count 0 (todas ya movidas o de otra zona).
-    prisma.orden.updateMany.mockResolvedValue({ count: 0 });
+    prisma.$executeRaw.mockResolvedValue(0);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const count = await repo.asignarSateliteLote(
@@ -71,6 +73,6 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14)", () => {
     expect(
       await repo.asignarSateliteLote([], "m-1", "z-satelite", "os-espera", "os-bodega-satelite"),
     ).toBe(0);
-    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
   });
 });

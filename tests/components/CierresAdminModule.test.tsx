@@ -580,4 +580,76 @@ describe("CierresAdminModule", () => {
       screen.queryByRole("dialog", { name: "Detalle del cierre" }),
     ).not.toBeInTheDocument();
   });
+
+  // ---------- Feature 41 (F1, R20) ----------
+
+  it("R20: un cierre 'vencido' se muestra en la cola con badge DIFERENCIADO del 'solicitado'", () => {
+    renderModule({
+      pendientes: [
+        makeResumen({
+          cierreId: "cv",
+          estado: "vencido",
+          mensajeroNombre: "Eva Vencida",
+        }),
+        makeResumen({
+          cierreId: "cs",
+          estado: "solicitado",
+          mensajeroNombre: "Sol Solicita",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Pendientes de decisión" });
+    // Ambos estados quedan visibles y diferenciados en la misma cola.
+    expect(within(region).getByText("Vencido")).toBeInTheDocument();
+    expect(within(region).getByText("Solicitado")).toBeInTheDocument();
+    expect(within(region).getByText("Eva Vencida")).toBeInTheDocument();
+  });
+
+  it("R20: un 'vencido' es RESOLUBLE — su detalle expone aprobar/rechazar", async () => {
+    const user = userEvent.setup();
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),
+      grupos: emptyGrupos(),
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "Aprobar" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Rechazar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R20: aprobar un 'vencido' llama a aprobarCierre y refresca", async () => {
+    const user = userEvent.setup();
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),
+      grupos: emptyGrupos(),
+    });
+    aprobarMock.mockResolvedValue({
+      status: "ok",
+      cierreId: "cv",
+      estado: "aprobado",
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Aprobar" }));
+
+    await vi.waitFor(() =>
+      expect(aprobarMock).toHaveBeenCalledWith({ cierreId: "cv" }),
+    );
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
 });

@@ -8,6 +8,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   listarRecepcionSatelite,
   listarMensajerosSatelite,
+  estadoBloqueoBodegaSatelite,
 } from "@/lib/actions/recepcion-satelite";
 
 // Feature 33 (T11) — la página resuelve el rol SOLO server-side; rol ≠
@@ -20,6 +21,7 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   listarRecepcionSatelite: vi.fn(),
   listarMensajerosSatelite: vi.fn(),
+  estadoBloqueoBodegaSatelite: vi.fn(),
   recibirPorQr: vi.fn(),
 }));
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
@@ -51,6 +53,7 @@ vi.mock("@/hooks/useToast", () => ({
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarRecepcionSatelite);
 const listarMensajerosMock = vi.mocked(listarMensajerosSatelite);
+const bloqueoMock = vi.mocked(estadoBloqueoBodegaSatelite);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -64,6 +67,10 @@ beforeEach(() => {
   listarMensajerosMock.mockResolvedValue({
     status: "ok",
     mensajeros: [{ id: "m1", nombre: "Ana Mensajera" }],
+  });
+  bloqueoMock.mockResolvedValue({
+    status: "ok",
+    bloqueo: { bloqueada: false, porMensajeros: false, porCierreBodega: false },
   });
 });
 

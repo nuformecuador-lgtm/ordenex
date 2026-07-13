@@ -5,7 +5,7 @@ import type { RolValue } from "@prisma/client";
 
 import CierreDiaPage from "@/app/(app)/cierre-dia/page";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
-import { listarCierreDia } from "@/lib/actions/cierre-dia";
+import { listarCierreDia, estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 
 // Feature 37 (T14, R1) — la página resuelve el rol SOLO server-side; rol ≠
 // mensajero (o sin sesión) → `notFound`. Se mockea el resolver, la action de
@@ -15,6 +15,7 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
 }));
 vi.mock("@/lib/actions/cierre-dia", () => ({
   listarCierreDia: vi.fn(),
+  estadoBloqueoMensajero: vi.fn(),
   solicitarCierre: vi.fn(),
 }));
 
@@ -44,9 +45,11 @@ vi.mock("@/hooks/useToast", () => ({
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarCierreDia);
+const bloqueoMock = vi.mocked(estadoBloqueoMensajero);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: false });
   listarMock.mockResolvedValue({
     status: "ok",
     grupos: { entregada: [], reprogramada: [], devuelta: [], rechazada: [] },
