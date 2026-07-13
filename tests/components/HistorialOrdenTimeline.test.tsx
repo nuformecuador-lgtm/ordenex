@@ -99,4 +99,43 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     expect(screen.getByText(/Sin historial todavía/)).toBeInTheDocument();
     expect(screen.queryByRole("listitem")).toBeNull();
   });
+
+  // ---------- Feature 48 (T11.1, R15) — retorno a la tienda de origen ----------
+
+  it("R15: incluye la transición 'rechazada → devuelta_origen' como una entrada más, con su actor y timestamp", () => {
+    const entradas: OrdenHistorialEntradaDTO[] = [
+      {
+        estatusOrigenValue: "en_reparto",
+        estatusDestinoValue: "rechazada",
+        origenTipo: "gestion",
+        actorNombre: "Ana Mensajera",
+        motivo: null,
+        createdAt: new Date("2026-01-04T09:00:00Z"),
+      },
+      {
+        estatusOrigenValue: "rechazada",
+        estatusDestinoValue: "devuelta_origen",
+        origenTipo: "ajuste_estado",
+        actorNombre: "Bodega Central",
+        motivo: null,
+        createdAt: new Date("2026-01-05T12:30:00Z"),
+      },
+    ];
+
+    render(<HistorialOrdenTimeline entradas={entradas} />);
+
+    const items = screen.getAllByRole("listitem");
+    // La última entrada es el retorno a la tienda de origen.
+    const retorno = items[items.length - 1];
+    // Etiqueta legible del destino (R15/R30), NUNCA el value crudo.
+    expect(within(retorno).getByText("Devuelta a origen")).toBeInTheDocument();
+    expect(within(retorno).queryByText("devuelta_origen")).toBeNull();
+    // Origen legible "Rechazada" y actor de la bodega que ejecutó el retorno.
+    expect(within(retorno).getByText("Rechazada")).toBeInTheDocument();
+    expect(within(retorno).getByText(/Bodega Central/)).toBeInTheDocument();
+    // Timestamp presente como <time>.
+    expect(
+      within(retorno).getByText((_, el) => el?.tagName.toLowerCase() === "time"),
+    ).toBeInTheDocument();
+  });
 });

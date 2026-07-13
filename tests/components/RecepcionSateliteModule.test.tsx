@@ -4,6 +4,7 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
+import { devolverATienda } from "@/lib/actions/devolucion-origen";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 // Feature 33 (T12) — módulo de la bodega satélite. Se mockean la Server Action de
@@ -13,6 +14,14 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
 }));
+
+// Feature 48 (T9): la sección "Por devolver a tienda" ejecuta el retorno vía esta
+// Server Action; se mockea para verificar la invocación por fila.
+vi.mock("@/lib/actions/devolucion-origen", () => ({
+  devolverATienda: vi.fn(),
+}));
+
+const devolverATiendaMock = vi.mocked(devolverATienda);
 
 const { refreshMock } = vi.hoisted(() => ({ refreshMock: vi.fn() }));
 
@@ -62,6 +71,7 @@ function renderModule(
     <RecepcionSateliteModule
       porRecibir={props?.porRecibir ?? []}
       recibidas={props?.recibidas ?? []}
+      porDevolver={props?.porDevolver ?? []}
       zonaNombre={props?.zonaNombre ?? "Limón"}
       sinZona={props?.sinZona ?? false}
       mensajeros={props?.mensajeros ?? [{ id: "m1", nombre: "Ana Mensajera" }]}
@@ -322,5 +332,94 @@ describe("RecepcionSateliteModule", () => {
       within(region).getByRole("checkbox", { name: "Seleccionar REM-B1" }),
     );
     expect(within(region).getByRole("button", { name: "Asignar" })).toBeEnabled();
+  });
+
+  // ---------- Feature 48 (T9) — devolución a la tienda de origen ----------
+
+  it("R10/R14: 'Por devolver a tienda' lista las órdenes rechazada de la zona con su botón", () => {
+    renderModule({
+      porDevolver: [
+        makeOrden({
+          id: "d1",
+          numRemision: "REM-RECHAZADA",
+          destinatario: "Caro Díaz",
+          estatusValue: "rechazada",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", {
+      name: "Por devolver a tienda",
+    });
+    expect(within(region).getAllByText(/REM-RECHAZADA/).length).toBeGreaterThan(0);
+    expect(within(region).getAllByText(/Caro Díaz/).length).toBeGreaterThan(0);
+    expect(
+      within(region).getByRole("button", { name: "Devolver a la tienda" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R4/R10: el botón 'Devolver a la tienda' dispara devolverATienda con el ordenId y en éxito refresca", async () => {
+    const user = userEvent.setup();
+    devolverATiendaMock.mockResolvedValue({ status: "ok" });
+    renderModule({
+      porDevolver: [
+        makeOrden({
+          id: "d1",
+          numRemision: "REM-RECHAZADA",
+          estatusValue: "rechazada",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", {
+      name: "Por devolver a tienda",
+    });
+    await user.click(
+      within(region).getByRole("button", { name: "Devolver a la tienda" }),
+    );
+
+    expect(devolverATiendaMock).toHaveBeenCalledTimes(1);
+    expect(devolverATiendaMock).toHaveBeenCalledWith({ ordenId: "d1" });
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("R4: un resultado no-ok muestra el error por fila y NO refresca", async () => {
+    const user = userEvent.setup();
+    devolverATiendaMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
+    renderModule({
+      porDevolver: [
+        makeOrden({
+          id: "d1",
+          numRemision: "REM-RECHAZADA",
+          estatusValue: "rechazada",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", {
+      name: "Por devolver a tienda",
+    });
+    await user.click(
+      within(region).getByRole("button", { name: "Devolver a la tienda" }),
+    );
+
+    await vi.waitFor(() =>
+      expect(within(region).getByRole("alert")).toBeInTheDocument(),
+    );
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("sin órdenes por devolver muestra el vacío", () => {
+    renderModule({ porDevolver: [] });
+
+    const region = screen.getByRole("region", {
+      name: "Por devolver a tienda",
+    });
+    expect(
+      within(region).getByText("No hay órdenes por devolver."),
+    ).toBeInTheDocument();
+    expect(
+      within(region).queryByRole("button", { name: "Devolver a la tienda" }),
+    ).toBeNull();
   });
 });

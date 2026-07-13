@@ -35,6 +35,13 @@ export type ListarRecepcionSateliteServiceResult =
       status: "ok";
       porRecibir: RecepcionSateliteDTO[];
       recibidas: RecepcionSateliteDTO[];
+      // Feature 48/T9/R14: ordenes en estado `rechazada` de la MISMA zona del
+      // adminSatelite, elegibles para la accion "Devolver a la tienda"
+      // (transicion rechazada -> devuelta_origen la ejecuta DevolucionOrigenService).
+      // Acotado server-side por zona (findRecepcionSateliteByZona(zonaId, ...)); un
+      // adminSatelite NO ve rechazadas de otra zona. Solo listado, la autz de
+      // ejecutar el retorno la impone DevolucionOrigenService (rol + zona).
+      porDevolver: RecepcionSateliteDTO[];
       zonaNombre: string | null;
       sinZona: boolean;
     }

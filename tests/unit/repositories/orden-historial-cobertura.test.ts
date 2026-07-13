@@ -41,6 +41,10 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "liberarOrden",
     origenTipo: "liberacion_reprogramada",
   },
+  // #11: feature 48 (F1.4-e) DOCUMENTA que este punto (`OrdenRepository.update`/`ajuste_estado`)
+  // TAMBIEN sirve el RETORNO a la tienda de origen (`rechazada -> devuelta_origen` via
+  // `DevolucionOrigenService`), igual que la 47 documento que #9 sirve el seguimiento. NO se
+  // agrega un call-site nuevo ni un `origen_tipo` nuevo: sigue siendo UN punto `ajuste_estado`.
   { n: 11, repo: "OrdenRepository", simbolo: "update", origenTipo: "ajuste_estado" },
 ] as const;
 
@@ -102,6 +106,19 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     // El seguimiento se emite con el mismo origen_tipo que la gestion (sin enum nuevo).
     expect(tipos).toContain("gestion");
     // Y el conjunto sigue cerrado en 11 (sin migracion de enum).
+    expect(tipos).toHaveLength(11);
+  });
+
+  // Feature 48 (R9/F1.4-e recomendada): el retorno a la tienda (`rechazada -> devuelta_origen`)
+  // REUTILIZA `origen_tipo=ajuste_estado` (#11), NO agrega un `origen_tipo` dedicado. Este test
+  // guarda esa decision: si alguien introdujera `devolucion_origen`, deberia venir con su
+  // migracion de enum + down y el mapa creceria a 12 puntos (F1.4-e alternativa).
+  it("feature 48 (R9): el enum NO gana `devolucion_origen`; el retorno reutiliza `ajuste_estado`", () => {
+    const tipos = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED] as string[];
+    expect(tipos).not.toContain("devolucion_origen");
+    // El retorno se emite con el mismo origen_tipo del ajuste de estado generico (#11).
+    expect(tipos).toContain("ajuste_estado");
+    // Y el conjunto sigue cerrado en 11 (sin 12.º punto, sin migracion de enum).
     expect(tipos).toHaveLength(11);
   });
 });

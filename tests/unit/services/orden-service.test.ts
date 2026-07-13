@@ -313,6 +313,59 @@ describe("listar", () => {
   });
 });
 
+// Feature 48/T10.1 (R12/R14): la tienda de origen ve sus ordenes `rechazada`/`devuelta_origen`
+// reutilizando el scope server-side ya existente (where.tiendaId = actor.usuarioId). NO cambia
+// la autz de las features 6/26; solo verifica que las ordenes retornadas viajan por ese filtro.
+describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", () => {
+  it("adminTienda ve sus ordenes rechazada/devuelta_origen acotadas por where.tiendaId", async () => {
+    repo = buildRepo({
+      list: vi.fn().mockResolvedValue({
+        items: [
+          listItem({ id: "o-rech", estatusValue: "rechazada", tiendaId: "store1" }),
+          listItem({ id: "o-dev", estatusValue: "devuelta_origen", tiendaId: "store1" }),
+        ],
+        total: 2,
+      }),
+    });
+    service = new OrdenService(repo);
+
+    const r = await service.listar(
+      { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" },
+      TIENDA,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.items.map((i) => i.estatusValue)).toEqual(["rechazada", "devuelta_origen"]);
+    }
+    // R12: el alcance server-side es la propia tienda (no un parametro del cliente).
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.tiendaId).toBe("store1");
+  });
+
+  it("orden de otra tienda no aparece: el where fuerza la tienda del actor (R12)", async () => {
+    // La query se acota SIEMPRE a la tienda del actor; una orden de OTRA tienda queda fuera
+    // del where y por tanto no puede aparecer, sin importar su estado.
+    await service.listar(
+      { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" },
+      TIENDA,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.tiendaId).toBe("store1");
+    expect(arg.where.tiendaId).not.toBe(OTRA_TIENDA_ID);
+  });
+
+  it("filtro por estado devuelta_origen se pasa al where junto con el scope de la tienda", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, estatusId: "os-devuelta-origen", sortBy: "created_at", sortDir: "desc" },
+      TIENDA,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBe("os-devuelta-origen");
+    expect(arg.where.tiendaId).toBe("store1");
+  });
+});
+
 describe("actualizar", () => {
   it("R37: maestro aplica solo los campos presentes y delega", async () => {
     const r = await service.actualizar("ord-1", { producto: "Nuevo", notas: "x" }, MAESTRO);
