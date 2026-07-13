@@ -18,9 +18,15 @@ import type {
   BulkOrdenResult,
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
+import { normalizeName } from "@/lib/utils/normalize";
 
+// La resolucion geografica compara nombres del archivo contra los de la DB con el
+// MISMO normalizador que indexa el arbol de zonas (lib/utils/normalize): minusculas,
+// sin acentos, sin caracteres especiales y con espacios colapsados. Aplicarlo a
+// AMBOS lados evita rechazar filas por erratas tipograficas (mayusculas, acentos,
+// "San  Pedro" con doble espacio, puntuacion).
 function normalize(value: string): string {
-  return value.trim().toLowerCase();
+  return normalizeName(value);
 }
 
 function distinct(values: string[]): string[] {
@@ -179,7 +185,11 @@ interface PreloadedContext {
 export class BulkOrdenService implements IBulkOrdenService {
   constructor(private readonly repo: IOrdenRepository) {}
 
-  async cargarMasiva(rows: RawRow[], actor: Actor): Promise<BulkOrdenResult> {
+  async cargarMasiva(
+    rows: RawRow[],
+    actor: Actor,
+    options: { dryRun?: boolean } = {},
+  ): Promise<BulkOrdenResult> {
     // R11: SOLO adminTienda, sin tocar datos ni pre-cargar nada para otros roles.
     if (actor.rol !== "adminTienda") return { status: "forbidden" };
 
@@ -237,14 +247,10 @@ export class BulkOrdenService implements IBulkOrdenService {
       });
     });
 
-    if (toCreate.length > 0) {
-      // R27 + feature 49/#1 (R9/R21/R23): el actor de la carga masiva es la tienda que
-      // carga (el adminTienda autenticado); cada orden creada deja su primera fila de
-      // historial (origen null -> estado inicial, origenTipo carga_masiva) en la MISMA tx.
-      await this.repo.createManyOrdenes(toCreate, cargaMasivaConfig.BATCH_SIZE, {
-        actorUsuarioId: tiendaId,
-        origenTipo: "carga_masiva",
-      });
+    // Dry-run (validación previa): se omite la persistencia; el summary ya lleva
+    // la clasificación completa (creadas/duplicadas/error) para el preview.
+    if (!options.dryRun && toCreate.length > 0) {
+      await this.repo.createManyOrdenes(toCreate, cargaMasivaConfig.BATCH_SIZE); // R27
     }
 
     return { status: "ok", summary: this.buildSummary(rows.length, filas) };

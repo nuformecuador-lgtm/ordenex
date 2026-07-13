@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 
 import { PostulacionesPendientesPanel } from "./PostulacionesPendientesPanel";
 
@@ -11,12 +12,14 @@ import { PostulacionesPendientesPanel } from "./PostulacionesPendientesPanel";
  */
 export function AdminMaestroDashboard() {
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
+    <>
       <PageHeader
         title="Panel maestro"
         description="Postulaciones de mensajeros pendientes"
       />
-      <PostulacionesPendientesPanel />
-    </section>
+      <Container>
+        <PostulacionesPendientesPanel />
+      </Container>
+    </>
   );
 }

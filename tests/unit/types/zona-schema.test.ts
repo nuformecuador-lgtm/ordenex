@@ -7,7 +7,7 @@ import {
 
 // Feature 24 / feature 54 (reconciliacion PR #40). Validacion en el borde (R19) y
 // clamp de paginacion (R24). El schema nuevo lleva cobroVehiculo + tarifas + esCentral
-// (default false), SIN pagoEntrega/pagoRechazo/esGam.
+// (default false), SIN pagoEntrega/pagoRechazo/esCentral.
 
 const validCrear = {
   nombre: "Zona Sur",

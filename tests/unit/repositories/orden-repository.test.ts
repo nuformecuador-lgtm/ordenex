@@ -29,14 +29,47 @@ function ordenRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-// R25/R26: fila del LISTADO, que ademas del estatus trae la relacion tienda con
-// su nombre legible (Usuario.nombre). create/findById/update NO requieren tienda.
+// Tarifa anidada de la tienda (Decimal en las 8 columnas numericas, patron real
+// de Prisma). El helper permite overrides para variar montos por caso.
+function tarifaRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "tar-1",
+    tiendaId: "t1",
+    status: "activo",
+    valorFlete: new Prisma.Decimal("3.50"),
+    valorFleteDevuelto: new Prisma.Decimal("2.00"),
+    valorFleteGam: new Prisma.Decimal("4.00"),
+    valorFleteDevueltoGam: new Prisma.Decimal("2.50"),
+    fulfillment: new Prisma.Decimal("1.00"),
+    comisionCod: new Prisma.Decimal("5.00"),
+    ivaFlete: new Prisma.Decimal("13.00"),
+    ivaComisionCod: new Prisma.Decimal("13.00"),
+    createdAt: new Date("2026-01-01"),
+    updatedAt: new Date("2026-01-01"),
+    ...overrides,
+  };
+}
+
+// Fila del LISTADO: ademas del estatus trae los datos de TODAS las relaciones
+// directas (FK) de la orden, y la tienda incluye sus tarifas (Usuario.tarifasTienda).
 function ordenListRow(overrides: Record<string, unknown> = {}) {
   return {
     ...ordenRow(),
-    tienda: { nombre: "Tienda Uno" },
+    estatus: { id: "os-bodega", value: "en_bodega" },
+    tienda: {
+      id: "t1",
+      nombre: "Tienda Uno",
+      email: "tienda1@ordenex.co",
+      telefono: "0990000001",
+      tarifasTienda: [tarifaRow()],
+    },
     // Feature 30/R14: el listado incluye la zona (nombre + flag GAM).
-    zona: { nombre: "GAM", esCentral: true },
+    zona: { id: "z1", nombre: "GAM", esCentral: true },
+    provincia: { id: "p1", nombre: "San José" },
+    canton: { id: "c1", nombre: "Central" },
+    distrito: null,
+    mensajeroSugerido: null,
+    mensajeroAsignado: null,
     ...overrides,
   };
 }
@@ -232,7 +265,16 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
       ordenListRow(),
-      ordenListRow({ id: "ord-2", tienda: { nombre: "Tienda Dos" } }),
+      ordenListRow({
+        id: "ord-2",
+        tienda: {
+          id: "t2",
+          nombre: "Tienda Dos",
+          email: "tienda2@ordenex.co",
+          telefono: "0990000002",
+          tarifasTienda: [],
+        },
+      }),
     ]);
     prisma.orden.count.mockResolvedValue(2);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -279,13 +321,13 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(res.items[1].mensajeroAsignadoId).toBeNull();
   });
 
-  // Feature 30/R14/R19: el listado suma zonaNombre/zonaEsGam (columna de zona),
+  // Feature 30/R14/R19: el listado suma zonaNombre/zonaEsCentral (columna de zona),
   // sin romper el contrato del listado (tiendaNombre/mensajero* siguen presentes).
-  it("R14: incluye zona.{nombre,esGam} en el select y mapea zonaNombre/zonaEsGam por item", async () => {
+  it("R14: incluye zona.{nombre,esCentral} en el select y mapea zonaNombre/zonaEsCentral por item", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
       ordenListRow(),
-      ordenListRow({ id: "ord-2", zona: { nombre: "Limón", esCentral: false } }),
+      ordenListRow({ id: "ord-2", zona: { id: "z2", nombre: "Limón", esCentral: false } }),
     ]);
     prisma.orden.count.mockResolvedValue(2);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -299,14 +341,59 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     });
 
     expect(res.items[0].zonaNombre).toBe("GAM");
-    expect(res.items[0].zonaEsGam).toBe(true);
+    expect(res.items[0].zonaEsCentral).toBe(true);
     expect(res.items[1].zonaNombre).toBe("Limón");
-    expect(res.items[1].zonaEsGam).toBe(false);
+    expect(res.items[1].zonaEsCentral).toBe(false);
     // R19: no rompe los campos previos del listado.
     expect(res.items[0].tiendaNombre).toBe("Tienda Uno");
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.include).toMatchObject({ zona: { select: { nombre: true, esCentral: true } } });
+  });
+
+  // El listado trae los datos de TODAS las relaciones directas (FK) via joins, y
+  // la tienda incluye sus tarifas (Decimal -> number) sin exponer deletedAt.
+  it("expone `relaciones` con las relaciones directas y las tarifas de la tienda", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow({
+        distrito: { id: "d1", nombre: "Carmen" },
+        mensajeroSugerido: { id: "msj-1", nombre: "Luis" },
+        mensajeroAsignado: null,
+      }),
+    ]);
+    prisma.orden.count.mockResolvedValue(1);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.list({
+      where: {},
+      sortBy: "created_at",
+      sortDir: "desc",
+      skip: 0,
+      take: 20,
+    });
+
+    const rel = res.items[0].relaciones!;
+    expect(rel.estatus).toEqual({ id: "os-bodega", value: "en_bodega" });
+    expect(rel.zona).toEqual({ id: "z1", nombre: "GAM", esCentral: true });
+    expect(rel.provincia).toEqual({ id: "p1", nombre: "San José" });
+    expect(rel.canton).toEqual({ id: "c1", nombre: "Central" });
+    expect(rel.distrito).toEqual({ id: "d1", nombre: "Carmen" });
+    expect(rel.mensajeroSugerido).toEqual({ id: "msj-1", nombre: "Luis" });
+    expect(rel.mensajeroAsignado).toBeNull();
+    // La tienda trae sus datos + tarifas anidadas (Decimal -> number).
+    expect(rel.tienda).toMatchObject({
+      id: "t1",
+      nombre: "Tienda Uno",
+      email: "tienda1@ordenex.co",
+      telefono: "0990000001",
+    });
+    expect(rel.tienda!.tarifa).toMatchObject({ id: "tar-1", valorFlete: 3.5, comisionCod: 5 });
+    expect(rel.tienda!.tarifa).not.toHaveProperty("deletedAt");
+
+    // El include filtra las tarifas borradas y selecciona la relacion tienda.tarifasTienda.
+    const arg = prisma.orden.findMany.mock.calls[0][0];
+    expect(arg.include.tienda.select.tarifasTienda.where).toEqual({ deletedAt: null });
   });
 
   it("inyecta tiendaId en el where cuando se pasa (alcance adminTienda)", async () => {

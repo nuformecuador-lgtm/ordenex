@@ -7,6 +7,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { AdminTiendaDashboard } from "@/app/(app)/_components/AdminTiendaDashboard";
 import { AdminMaestroDashboard } from "@/app/(app)/_components/AdminMaestroDashboard";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 
 export default async function Home() {
   // Ramificación por rol resuelta SOLO server-side (feature 26, R5): el
@@ -54,9 +55,9 @@ export default async function Home() {
       {/* It is not part of a full dashboard feature; if a full authenticated home exists */}
       {/* in the future, this button should be moved/replaced there. */}
       {hasValidSession && (
-        <div className="px-16">
+        <Container>
           <LogoutButton />
-        </div>
+        </Container>
       )}
     </div>
   );

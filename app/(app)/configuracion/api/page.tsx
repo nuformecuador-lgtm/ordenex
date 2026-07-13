@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 
 /**
@@ -11,21 +12,21 @@ export default async function ApiPage() {
 
   if (actor?.rol !== "maestro") {
     return (
-      <section className="flex flex-1 flex-col gap-6 p-6">
+      <>
         <PageHeader title="API" />
-        <p role="alert" className="text-sm text-muted-foreground">
-          No tienes permiso para acceder a esta sección.
-        </p>
-      </section>
+        <Container>
+          <p role="alert" className="text-sm text-muted-foreground">
+            No tienes permiso para acceder a esta sección.
+          </p>
+        </Container>
+      </>
     );
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
       <PageHeader
         title="API"
         description="Credenciales e integraciones de API"
       />
-    </section>
   );
 }

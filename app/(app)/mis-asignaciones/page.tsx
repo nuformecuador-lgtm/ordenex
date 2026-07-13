@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
 
@@ -22,16 +23,18 @@ export default async function MisAsignacionesPage() {
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
+    <>
       <PageHeader
         title="Mis asignaciones"
         description="Órdenes por recoger y en reparto"
       />
-      <MisAsignacionesModule
-        porRecoger={result.porRecoger}
-        porGestionar={result.porGestionar}
-        ordenEnGestionId={result.ordenEnGestionId}
-      />
-    </section>
+      <Container>
+        <MisAsignacionesModule
+          porRecoger={result.porRecoger}
+          porGestionar={result.porGestionar}
+          ordenEnGestionId={result.ordenEnGestionId}
+        />
+      </Container>
+    </>
   );
 }

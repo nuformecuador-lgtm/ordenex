@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Container } from "@/components/shared/Container";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   listarRecepcionSatelite,
@@ -53,11 +54,12 @@ export default async function RecepcionSatelitePage() {
     liberadasResult.status === "ok" ? liberadasResult.liberadas : [];
 
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
+    <>
       <PageHeader
         title="Mis asignaciones"
         description="Recepción de órdenes de tu bodega satélite por escaneo de QR"
       />
+      <Container>
       <RecepcionSateliteModule
         porRecibir={result.porRecibir}
         recibidas={result.recibidas}
@@ -67,6 +69,7 @@ export default async function RecepcionSatelitePage() {
         bloqueoBodega={bloqueoBodega}
         liberadasHoy={liberadasHoy}
       />
-    </section>
+      </Container>
+    </>
   );
 }

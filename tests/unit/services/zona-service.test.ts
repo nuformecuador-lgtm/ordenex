@@ -22,6 +22,7 @@ function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
     findById: vi.fn().mockResolvedValue(dto()),
     list: vi.fn().mockResolvedValue({ items: [dto()], total: 1 }),
     update: vi.fn().mockResolvedValue(dto()),
+    marcarCentral: vi.fn().mockResolvedValue(dto({ esCentral: true })),
     hardDelete: vi.fn().mockResolvedValue("ok"),
     arbol: vi.fn().mockResolvedValue({}),
     // por defecto: todos los ids existen.

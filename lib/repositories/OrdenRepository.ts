@@ -1,12 +1,12 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
-import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
-import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import type {
-  CambioEstadoEntrada,
-  HistorialContexto,
-} from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
-import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+  OrdenDTO,
+  OrdenListItemDTO,
+  OrdenListItemRelaciones,
+} from "@/lib/types/orden";
+import type { TarifaDTO } from "@/lib/types/tarifa";
+import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import {
   NumRemisionDuplicadoError,
   type CantonRow,
@@ -74,28 +74,54 @@ const WITH_ESTATUS = {
   include: { estatus: { select: { value: true } } },
 } as const;
 
-// R25/R26: solo el LISTADO incluye el nombre legible de la tienda
-// (relacion Orden.tienda -> Usuario.nombre). No requiere migracion: es un include
-// sobre una relacion ya existente en el esquema.
-// Feature 30/R14: el listado ademas incluye el nombre de la zona (`zona.nombre`)
-// y su flag GAM (`zona.esGam`) — relacion Orden.zona ya existente (zonaId NOT
-// NULL, feature 24). Aditivo: no requiere migracion.
+// El LISTADO trae, en el MISMO query (via joins de Prisma `include`), los datos
+// de TODAS las relaciones DIRECTAS (FK) de la orden: estatus, tienda, zona,
+// provincia, canton, distrito, mensajeroSugerido y mensajeroAsignado. La relacion
+// `tienda` (Orden.tienda -> Usuario) trae ademas sus tarifas (Usuario.tarifasTienda),
+// filtrando las borradas. NO requiere migracion: son includes sobre relaciones ya
+// existentes. Seleccion explicita de campos: NUNCA se traen columnas sensibles del
+// usuario (passwordHash, etc.) ni `deletedAt` de las tarifas.
+const TARIFA_SELECT = {
+  id: true,
+  tiendaId: true,
+  status: true,
+  valorFlete: true,
+  valorFleteDevuelto: true,
+  valorFleteGam: true,
+  valorFleteDevueltoGam: true,
+  fulfillment: true,
+  comisionCod: true,
+  ivaFlete: true,
+  ivaComisionCod: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 const WITH_ESTATUS_Y_TIENDA = {
   include: {
-    estatus: { select: { value: true } },
-    tienda: { select: { nombre: true } },
-    zona: { select: { nombre: true, esCentral: true } },
+    estatus: { select: { id: true, value: true } },
+    tienda: {
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        telefono: true,
+        // Relacion tienda–tarifa 1:1: a lo sumo UNA tarifa activa (`take: 1`),
+        // excluyendo las borradas.
+        tarifasTienda: { where: { deletedAt: null }, select: TARIFA_SELECT, take: 1 },
+      },
+    },
+    zona: { select: { id: true, nombre: true, esCentral: true } },
+    provincia: { select: { id: true, nombre: true } },
+    canton: { select: { id: true, nombre: true } },
+    distrito: { select: { id: true, nombre: true } },
+    mensajeroSugerido: { select: { id: true, nombre: true } },
+    mensajeroAsignado: { select: { id: true, nombre: true } },
   },
 } as const;
 
-// Fila de orden del listado: estatus.value + tienda.nombre + zona.{nombre,esGam}.
-type OrdenListRow = Prisma.OrdenGetPayload<{
-  include: {
-    estatus: { select: { value: true } };
-    tienda: { select: { nombre: true } };
-    zona: { select: { nombre: true; esCentral: true } };
-  };
-}>;
+// Fila de orden del listado con todas las relaciones directas resueltas.
+type OrdenListRow = Prisma.OrdenGetPayload<typeof WITH_ESTATUS_Y_TIENDA>;
 
 // Serializa la fila de Prisma a OrdenDTO: peso Decimal -> number (o null,
 // feature 15/R4), nunca expone deletedAt (R42/N3).
@@ -116,9 +142,59 @@ function toDTO(row: OrdenRow): OrdenDTO {
     producto: row.producto,
     peso: row.peso ? row.peso.toNumber() : null,
     notas: row.notas,
-    mensajeroAsignadoId: row.mensajeroAsignadoId, // feature 49/R27: autoriza al mensajero asignado
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+// Serializa una tarifa anidada de la tienda: Decimal -> number en las 8 columnas
+// numericas (patron TarifaRepository). No expone `deletedAt` (ya filtrado en el
+// include).
+function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): TarifaDTO {
+  return {
+    id: t.id,
+    tiendaId: t.tiendaId,
+    status: t.status,
+    valorFlete: t.valorFlete.toNumber(),
+    valorFleteDevuelto: t.valorFleteDevuelto.toNumber(),
+    valorFleteGam: t.valorFleteGam.toNumber(),
+    valorFleteDevueltoGam: t.valorFleteDevueltoGam.toNumber(),
+    fulfillment: t.fulfillment.toNumber(),
+    comisionCod: t.comisionCod.toNumber(),
+    ivaFlete: t.ivaFlete.toNumber(),
+    ivaComisionCod: t.ivaComisionCod.toNumber(),
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  };
+}
+
+// Arma el bloque `relaciones` con los datos de las relaciones directas (FK) de la
+// orden, resueltas por el include del listado. `tienda` incluye sus tarifas.
+function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
+  return {
+    estatus: row.estatus ? { id: row.estatus.id, value: row.estatus.value } : null,
+    tienda: row.tienda
+      ? {
+          id: row.tienda.id,
+          nombre: row.tienda.nombre,
+          email: row.tienda.email,
+          telefono: row.tienda.telefono,
+          // 1:1: la tienda tiene a lo sumo una tarifa activa (o null).
+          tarifa: row.tienda.tarifasTienda[0] ? toTarifaDTO(row.tienda.tarifasTienda[0]) : null,
+        }
+      : null,
+    zona: row.zona
+      ? { id: row.zona.id, nombre: row.zona.nombre, esCentral: row.zona.esCentral }
+      : null,
+    provincia: row.provincia ? { id: row.provincia.id, nombre: row.provincia.nombre } : null,
+    canton: row.canton ? { id: row.canton.id, nombre: row.canton.nombre } : null,
+    distrito: row.distrito ? { id: row.distrito.id, nombre: row.distrito.nombre } : null,
+    mensajeroSugerido: row.mensajeroSugerido
+      ? { id: row.mensajeroSugerido.id, nombre: row.mensajeroSugerido.nombre }
+      : null,
+    mensajeroAsignado: row.mensajeroAsignado
+      ? { id: row.mensajeroAsignado.id, nombre: row.mensajeroAsignado.nombre }
+      : null,
   };
 }
 
@@ -126,16 +202,19 @@ function toDTO(row: OrdenRow): OrdenDTO {
 // legible de la tienda. Solo el listado usa este mapeo; el resto del CRUD usa toDTO.
 // Feature 17/R20: agrega mensajeroSugeridoId/mensajeroAsignadoId (ya vienen en el
 // row via WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
+// Ademas expone en `relaciones` los datos de TODAS las relaciones directas (FK),
+// con las tarifas anidadas dentro de `tienda` (resueltas via joins en el listado).
 function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
   return {
     ...toDTO(row),
     tiendaNombre: row.tienda.nombre,
     mensajeroSugeridoId: row.mensajeroSugeridoId,
     mensajeroAsignadoId: row.mensajeroAsignadoId,
-    // Feature 30/R14/R19: nombre de zona (columna del listado) + flag GAM (la UI
+    // Feature 30/R14/R19: nombre de zona (columna del listado) + flag central (la UI
     // decide por fila si muestra select de mensajero o "-> bodega satelite").
     zonaNombre: row.zona.nombre,
-    zonaEsGam: row.zona.esCentral,
+    zonaEsCentral: row.zona.esCentral,
+    relaciones: toRelaciones(row),
   };
 }
 
@@ -272,42 +351,29 @@ function toRecepcionSateliteRow(row: OrdenRecepcionSateliteRow): RecepcionSateli
 export class OrdenRepository implements IOrdenRepository {
   constructor(private readonly prisma: OrdenPrismaClient) {}
 
-  async create(data: CreateOrdenData, historial: HistorialContexto): Promise<OrdenDTO> {
+  async create(data: CreateOrdenData): Promise<OrdenDTO> {
     try {
-      // Feature 49/#2 (R7/R10): create + append del historial en la MISMA transaccion.
-      return await this.prisma.$transaction(async (tx) => {
-        const row = await tx.orden.create({
-          data: {
-            numRemision: data.numRemision,
-            estatusId: data.estatusId,
-            destinatario: data.destinatario,
-            telefonoDest: data.telefonoDest,
-            tiendaId: data.tiendaId,
-            zonaId: data.zonaId,
-            provinciaId: data.provinciaId,
-            cantonId: data.cantonId,
-            distritoId: data.distritoId ?? null,
-            producto: data.producto,
-            peso: data.peso !== null ? new Prisma.Decimal(data.peso) : null,
-            notas: data.notas ?? null,
-            direccion: data.direccion ?? null,
-            montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
-            mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
-          },
-          ...WITH_ESTATUS,
-        });
-        // R10/R20: la creacion es la transicion `vacio -> estado inicial`.
-        await appendCambioEstado(tx, [
-          {
-            ordenId: row.id,
-            estatusOrigenId: null, // creacion (R1/R20)
-            estatusDestinoId: data.estatusId,
-            actorUsuarioId: historial.actorUsuarioId,
-            origenTipo: historial.origenTipo, // creacion_manual
-          },
-        ]);
-        return toDTO(row);
+      const row = await this.prisma.orden.create({
+        data: {
+          numRemision: data.numRemision,
+          estatusId: data.estatusId,
+          destinatario: data.destinatario,
+          telefonoDest: data.telefonoDest,
+          tiendaId: data.tiendaId,
+          zonaId: data.zonaId,
+          provinciaId: data.provinciaId,
+          cantonId: data.cantonId,
+          distritoId: data.distritoId ?? null,
+          producto: data.producto,
+          peso: data.peso !== null ? new Prisma.Decimal(data.peso) : null,
+          notas: data.notas ?? null,
+          direccion: data.direccion ?? null,
+          montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
+          mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
+        },
+        ...WITH_ESTATUS,
       });
+      return toDTO(row);
     } catch (error) {
       throw mapCreateError(error, data.numRemision);
     }
@@ -343,51 +409,18 @@ export class OrdenRepository implements IOrdenRepository {
     return { items: items.map(toListItemDTO), total };
   }
 
-  async update(
-    id: string,
-    data: UpdateOrdenData,
-    historial: HistorialContexto,
-  ): Promise<OrdenDTO | null> {
-    // Feature 49/#11 (R7/R19): update + append (si cambia estatus) en la MISMA tx.
-    return this.prisma.$transaction(async (tx) => {
-      // R20: estatus de ORIGEN pre-leido dentro de la tx, SOLO si el update podria cambiarlo.
-      let origenEstatusId: string | null = null;
-      if (data.estatusId !== undefined) {
-        const actual = await tx.orden.findFirst({
-          where: { id, deletedAt: null },
-          select: { estatusId: true },
-        });
-        origenEstatusId = actual?.estatusId ?? null;
-      }
-      // Solo aplica si existe y no esta borrada (R36); updateMany no lanza si 0 filas.
-      const result = await tx.orden.updateMany({
-        where: { id, deletedAt: null },
-        data: this.toUpdateData(data),
-      });
-      if (result.count === 0) return null;
-      // R19/R20: registra SOLO cuando el update EFECTIVAMENTE cambia el `estatus_id`
-      // (nuevo != previo). Si el update no toca estatus, o lo deja igual, no deja rastro.
-      if (
-        data.estatusId !== undefined &&
-        origenEstatusId !== null &&
-        data.estatusId !== origenEstatusId
-      ) {
-        await appendCambioEstado(tx, [
-          {
-            ordenId: id,
-            estatusOrigenId: origenEstatusId,
-            estatusDestinoId: data.estatusId,
-            actorUsuarioId: historial.actorUsuarioId,
-            origenTipo: historial.origenTipo, // ajuste_estado
-          },
-        ]);
-      }
-      const row = await tx.orden.findFirst({
-        where: { id, deletedAt: null },
-        ...WITH_ESTATUS,
-      });
-      return row ? toDTO(row) : null;
+  async update(id: string, data: UpdateOrdenData): Promise<OrdenDTO | null> {
+    // Solo aplica si existe y no esta borrada (R36); updateMany no lanza si 0 filas.
+    const result = await this.prisma.orden.updateMany({
+      where: { id, deletedAt: null },
+      data: this.toUpdateData(data),
     });
+    if (result.count === 0) return null;
+    const row = await this.prisma.orden.findFirst({
+      where: { id, deletedAt: null },
+      ...WITH_ESTATUS,
+    });
+    return row ? toDTO(row) : null;
   }
 
   async softDelete(id: string): Promise<boolean> {
@@ -494,9 +527,20 @@ export class OrdenRepository implements IOrdenRepository {
     if (cantonIds.length === 0) return [];
     const rows = await this.prisma.distrito.findMany({
       where: { cantonId: { in: cantonIds } },
-      select: { id: true, nombre: true, cantonId: true, zonaId: true },
+      // La zona del distrito vive en la N:M `zona_distrito` (feature 24): es ahi donde
+      // la UI/ZonaForm asigna distritos a zonas, NO en la columna escalar distrito.zona_id
+      // (que quedo sin poblar). La carga masiva deriva orden.zona_id de esta relacion.
+      select: { id: true, nombre: true, cantonId: true, zonas: { select: { zonaId: true } } },
     });
-    return rows;
+    // Un distrito con EXACTAMENTE una zona resuelve orden.zona_id; con 0 zonas -> sin zona
+    // asignada (error de fila); con >1 -> ambiguo/no derivable -> null (mismo trato seguro:
+    // no se inventa una zona). El caso normal de negocio es 1 zona por distrito.
+    return rows.map((d) => ({
+      id: d.id,
+      nombre: d.nombre,
+      cantonId: d.cantonId,
+      zonaId: d.zonas.length === 1 ? d.zonas[0].zonaId : null,
+    }));
   }
 
   /** R22: subconjunto de `ids` con rol `mensajero`. */
@@ -510,48 +554,15 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /** R27: insercion masiva en lotes de `batchSize`, tolerando carreras de num_remision. */
-  async createManyOrdenes(
-    data: CreateOrdenData[],
-    batchSize: number,
-    historial: HistorialContexto,
-  ): Promise<number> {
+  async createManyOrdenes(data: CreateOrdenData[], batchSize: number): Promise<number> {
     let inserted = 0;
     for (let i = 0; i < data.length; i += batchSize) {
       const chunk = data.slice(i, i + batchSize);
-      const chunkNums = chunk.map((d) => d.numRemision);
-      // Feature 49/#1 (R7): cada chunk hace su createMany + append en la MISMA tx.
-      const chunkInserted = await this.prisma.$transaction(async (tx) => {
-        // R8/R9: para registrar SOLO las EFECTIVAMENTE insertadas (skipDuplicates puede
-        // saltar duplicadas), se comparan las filas con esos num_remision antes/despues:
-        // las nuevas son las que no existian antes del insert.
-        const before = await tx.orden.findMany({
-          where: { numRemision: { in: chunkNums } },
-          select: { id: true },
-        });
-        const beforeIds = new Set(before.map((r) => r.id));
-        const result = await tx.orden.createMany({
-          data: chunk.map((d) => this.toCreateManyInput(d)),
-          skipDuplicates: true,
-        });
-        const after = await tx.orden.findMany({
-          where: { numRemision: { in: chunkNums } },
-          select: { id: true, estatusId: true },
-        });
-        const nuevas = after.filter((r) => !beforeIds.has(r.id));
-        // R9/R20: por cada orden creada, origen null (creacion) -> destino estado inicial.
-        await appendCambioEstado(
-          tx,
-          nuevas.map((r) => ({
-            ordenId: r.id,
-            estatusOrigenId: null,
-            estatusDestinoId: r.estatusId,
-            actorUsuarioId: historial.actorUsuarioId,
-            origenTipo: historial.origenTipo, // carga_masiva
-          })),
-        );
-        return result.count;
+      const result = await this.prisma.orden.createMany({
+        data: chunk.map((d) => this.toCreateManyInput(d)),
+        skipDuplicates: true,
       });
-      inserted += chunkInserted;
+      inserted += result.count;
     }
     return inserted;
   }
@@ -625,7 +636,7 @@ export class OrdenRepository implements IOrdenRepository {
         numGuia: true,
         deletedAt: true,
         estatus: { select: { value: true } },
-        // Feature 30/R8/R9/R11/R12: zona de la orden + flag GAM de esa zona.
+        // Feature 30/R8/R9/R11/R12: zona de la orden + flag central de esa zona.
         zonaId: true,
         zona: { select: { esCentral: true } },
       },
@@ -636,7 +647,7 @@ export class OrdenRepository implements IOrdenRepository {
       numGuia: r.numGuia,
       deletedAt: r.deletedAt,
       zonaId: r.zonaId,
-      zonaEsGam: r.zona.esCentral,
+      zonaEsCentral: r.zona.esCentral,
     }));
   }
 
@@ -692,22 +703,10 @@ export class OrdenRepository implements IOrdenRepository {
    * fija `estatusId`/`mensajeroAsignadoId`. El nombre de la secuencia es la
    * constante del modulo (nunca se interpola entrada de usuario en el SQL).
    */
-  async generarGuiaLote(
-    decisiones: GenerarGuiaDecisionData[],
-    historial: HistorialContexto,
-  ): Promise<GenerarGuiaResultRow[]> {
+  async generarGuiaLote(decisiones: GenerarGuiaDecisionData[]): Promise<GenerarGuiaResultRow[]> {
     if (decisiones.length === 0) return [];
     return this.prisma.$transaction(async (tx) => {
-      // Feature 49/#3 (R20): estatus de ORIGEN por orden, leido dentro de la tx antes de
-      // escribir (cada orden puede venir de en_fulfillment/en_preparacion/en_bodega).
-      const origenRows = await tx.orden.findMany({
-        where: { id: { in: decisiones.map((d) => d.ordenId) } },
-        select: { id: true, estatusId: true },
-      });
-      const origenById = new Map(origenRows.map((r) => [r.id, r.estatusId]));
-
       const resultados: GenerarGuiaResultRow[] = [];
-      const entradas: CambioEstadoEntrada[] = [];
       for (const d of decisiones) {
         // R5: idempotente — solo consume nextval() si num_guia es NULL.
         await tx.$executeRawUnsafe(
@@ -725,17 +724,7 @@ export class OrdenRepository implements IOrdenRepository {
           throw new Error(`num_guia no asignado para la orden ${d.ordenId}`);
         }
         resultados.push({ ordenId: d.ordenId, numGuia: updated.numGuia });
-        // R11: destino real por orden (en_espera_aceptacion/en_bodega/en_ruta_bodega_satelite).
-        entradas.push({
-          ordenId: d.ordenId,
-          estatusOrigenId: origenById.get(d.ordenId) ?? null,
-          estatusDestinoId: d.estatusId,
-          actorUsuarioId: historial.actorUsuarioId,
-          origenTipo: historial.origenTipo, // generacion_guia
-        });
       }
-      // R7: el append comparte la tx del lote; si falla, se revierten guias y estados.
-      await appendCambioEstado(tx, entradas);
       return resultados;
     });
   }
@@ -745,34 +734,13 @@ export class OrdenRepository implements IOrdenRepository {
     ordenIds: string[],
     mensajeroId: string,
     estatusId: string,
-    historial: HistorialContexto,
   ): Promise<number> {
     if (ordenIds.length === 0) return 0;
-    // Feature 49/#4 (R7/R8/R12): updateMany + append en la MISMA tx. La guarda del
-    // updateMany (`id IN`) no depende de estado mutable, asi que el conjunto que
-    // transiciona = las filas existentes de `ordenIds`, pre-leidas para su origen.
-    return this.prisma.$transaction(async (tx) => {
-      const origenRows = await tx.orden.findMany({
-        where: { id: { in: ordenIds } },
-        select: { id: true, estatusId: true },
-      });
-      const result = await tx.orden.updateMany({
-        where: { id: { in: ordenIds } },
-        data: { mensajeroAsignadoId: mensajeroId, estatusId },
-      });
-      // R8: registra SOLO las filas efectivamente afectadas (las existentes).
-      await appendCambioEstado(
-        tx,
-        origenRows.map((r) => ({
-          ordenId: r.id,
-          estatusOrigenId: r.estatusId,
-          estatusDestinoId: estatusId,
-          actorUsuarioId: historial.actorUsuarioId,
-          origenTipo: historial.origenTipo, // asignacion_bodega
-        })),
-      );
-      return result.count;
+    const result = await this.prisma.orden.updateMany({
+      where: { id: { in: ordenIds } },
+      data: { mensajeroAsignadoId: mensajeroId, estatusId },
     });
+    return result.count;
   }
 
   /**
@@ -783,19 +751,9 @@ export class OrdenRepository implements IOrdenRepository {
    * `mensajeroAsignadoId = NULL` (R9). El nombre de la secuencia es la constante
    * del modulo (nunca se interpola entrada de usuario en el SQL).
    */
-  async rutearBodegaSateliteLote(
-    ordenIds: string[],
-    estatusId: string,
-    historial: HistorialContexto,
-  ): Promise<number> {
+  async rutearBodegaSateliteLote(ordenIds: string[], estatusId: string): Promise<number> {
     if (ordenIds.length === 0) return 0;
     return this.prisma.$transaction(async (tx) => {
-      // Feature 49/#5 (R20): estatus de ORIGEN por orden, leido dentro de la tx.
-      const origenRows = await tx.orden.findMany({
-        where: { id: { in: ordenIds } },
-        select: { id: true, estatusId: true },
-      });
-      const origenById = new Map(origenRows.map((r) => [r.id, r.estatusId]));
       for (const id of ordenIds) {
         // R10: idempotente — solo consume nextval() si num_guia es NULL.
         await tx.$executeRawUnsafe(
@@ -807,17 +765,6 @@ export class OrdenRepository implements IOrdenRepository {
           data: { estatusId, mensajeroAsignadoId: null }, // R9
         });
       }
-      // R13: destino en_ruta_bodega_satelite; append en la MISMA tx (R7).
-      await appendCambioEstado(
-        tx,
-        ordenIds.map((id) => ({
-          ordenId: id,
-          estatusOrigenId: origenById.get(id) ?? null,
-          estatusDestinoId: estatusId,
-          actorUsuarioId: historial.actorUsuarioId,
-          origenTipo: historial.origenTipo, // ruteo_satelite
-        })),
-      );
       return ordenIds.length;
     });
   }
@@ -889,43 +836,17 @@ export class OrdenRepository implements IOrdenRepository {
     ordenId: string,
     zonaId: string,
     destinoEstatusId: string,
-    historial: HistorialContexto,
   ): Promise<boolean> {
-    // Feature 49/#6 (R7/R8/R14): updateMany guardado + append en la MISMA tx.
-    return this.prisma.$transaction(async (tx) => {
-      // R20: origen pre-leido con la MISMA guarda (estado en_ruta_bodega_satelite + zona).
-      const actual = await tx.orden.findFirst({
-        where: {
-          id: ordenId,
-          zonaId,
-          deletedAt: null,
-          estatus: { value: ORIGEN_RECEPCION_SATELITE },
-        },
-        select: { estatusId: true },
-      });
-      const result = await tx.orden.updateMany({
-        where: {
-          id: ordenId,
-          zonaId,
-          deletedAt: null,
-          estatus: { value: ORIGEN_RECEPCION_SATELITE },
-        },
-        data: { estatusId: destinoEstatusId },
-      });
-      // R8: SOLO si transiciono (count 1); una orden que perdio la carrera no deja rastro.
-      if (result.count === 1 && actual !== null) {
-        await appendCambioEstado(tx, [
-          {
-            ordenId,
-            estatusOrigenId: actual.estatusId,
-            estatusDestinoId: destinoEstatusId,
-            actorUsuarioId: historial.actorUsuarioId,
-            origenTipo: historial.origenTipo, // recepcion_satelite
-          },
-        ]);
-      }
-      return result.count === 1;
+    const result = await this.prisma.orden.updateMany({
+      where: {
+        id: ordenId,
+        zonaId,
+        deletedAt: null,
+        estatus: { value: ORIGEN_RECEPCION_SATELITE },
+      },
+      data: { estatusId: destinoEstatusId },
     });
+    return result.count === 1;
   }
 
   // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
@@ -944,7 +865,6 @@ export class OrdenRepository implements IOrdenRepository {
     zonaId: string,
     destinoEstatusId: string,
     origenEstatusId: string,
-    historial: HistorialContexto,
   ): Promise<number> {
     if (ordenIds.length === 0) return 0;
     // Feature 41/R23 (anti-TOCTOU): la guardia de bloqueo del mensajero va en el MISMO
@@ -954,40 +874,21 @@ export class OrdenRepository implements IOrdenRepository {
     // efectos parciales. El resto de la guardia (estado de origen + zona + no borrada) se
     // conserva igual (patron `recibirEnSatelite`). NO toca num_guia (R8). `updated_at` se
     // fija a mano (raw no dispara el @updatedAt de Prisma).
-    //
-    // Feature 49/#7 (R7/R8/R15): el UPDATE crudo pasa a `RETURNING "id"` DENTRO de un
-    // `$transaction`, y con los ids retornados (EXACTAMENTE las ordenes que ganaron la
-    // guarda anti-TOCTOU) hace el append del historial en la MISMA tx. Una orden que
-    // pierde la guarda (bloqueo/estado/zona) NO aparece en el RETURNING -> no deja rastro.
-    // El contrato de retorno sigue siendo el count de filas transicionadas (`rows.length`).
-    return this.prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<{ id: string }[]>`
-        UPDATE "orden"
-        SET "mensajero_asignado_id" = ${mensajeroId},
-            "estatus_id" = ${destinoEstatusId},
-            "updated_at" = NOW()
-        WHERE "id" IN (${Prisma.join(ordenIds)})
-          AND "estatus_id" = ${origenEstatusId}
-          AND "zona_id" = ${zonaId}
-          AND "deleted_at" IS NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM "cierre_dia" c
-            WHERE c."mensajero_id" = ${mensajeroId}
-              AND c."estado" IN ('solicitado', 'vencido')
-          )
-        RETURNING "id"`;
-      await appendCambioEstado(
-        tx,
-        rows.map((r) => ({
-          ordenId: r.id,
-          estatusOrigenId: origenEstatusId, // la guarda garantiza este origen (R20)
-          estatusDestinoId: destinoEstatusId,
-          actorUsuarioId: historial.actorUsuarioId,
-          origenTipo: historial.origenTipo, // asignacion_satelite
-        })),
-      );
-      return rows.length;
-    });
+    const count = await this.prisma.$executeRaw`
+      UPDATE "orden"
+      SET "mensajero_asignado_id" = ${mensajeroId},
+          "estatus_id" = ${destinoEstatusId},
+          "updated_at" = NOW()
+      WHERE "id" IN (${Prisma.join(ordenIds)})
+        AND "estatus_id" = ${origenEstatusId}
+        AND "zona_id" = ${zonaId}
+        AND "deleted_at" IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "cierre_dia" c
+          WHERE c."mensajero_id" = ${mensajeroId}
+            AND c."estado" IN ('solicitado', 'vencido')
+        )`;
+    return count;
   }
 
   // --- Feature 41: bloqueo derivado en asignacion (R12/R16/R17) ---

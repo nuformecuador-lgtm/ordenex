@@ -50,7 +50,9 @@ function buildRepo(over: Partial<IUserRepository> = {}): IUserRepository {
     findByEmail: vi.fn(),
     create: vi.fn().mockResolvedValue(usuario()),
     updatePasswordHash: vi.fn(),
+    listByRol: vi.fn().mockResolvedValue([]),
     listMensajeros: vi.fn(),
+    listAdminTiendas: vi.fn().mockResolvedValue([]),
     list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     count: vi.fn().mockResolvedValue(0),
     update: vi.fn().mockResolvedValue(usuario()),
@@ -76,6 +78,7 @@ function buildZonaRepo(exists: boolean): IZonaRepository {
     arbol: vi.fn(),
     countExistingDistritos: vi.fn(),
     countExistingVehiculos: vi.fn(),
+    marcarCentral: vi.fn(),
     findCentralZonaId: vi.fn().mockResolvedValue(null),
   };
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ordenesConfig } from "@/lib/config/ordenes";
+import type { TarifaDTO } from "@/lib/types/tarifa";
 
 // Campos ordenables permitidos (lista blanca, evita inyeccion de columnas; R31).
 export const SORT_FIELDS = ["created_at", "num_guia", "num_remision"] as const;
@@ -109,8 +110,8 @@ export type ActionError =
 // (`?`) para no romper mocks/fixtures de UI existentes que construyen
 // OrdenListItemDTO sin estos campos; el repositorio SIEMPRE los envia (string|null).
 // Feature 30/R14/R19: agrega `zonaNombre` (columna de zona del listado) y
-// `zonaEsGam` (la UI decide por fila si muestra select de mensajero (GAM) o
-// "-> bodega satelite" (no-GAM)). Opcionales (`?`) por el mismo motivo que los
+// `zonaEsCentral` (la UI decide por fila si muestra select de mensajero (central) o
+// "-> bodega satelite" (no-central)). Opcionales (`?`) por el mismo motivo que los
 // campos de mensajero (feature 17): no romper mocks/fixtures de UI existentes que
 // construyen OrdenListItemDTO sin ellos (R19, cambio aditivo); el repositorio
 // SIEMPRE los envia (string/boolean concretos desde la relacion Orden.zona).
@@ -119,8 +120,44 @@ export type OrdenListItemDTO = OrdenDTO & {
   mensajeroSugeridoId?: string | null;
   mensajeroAsignadoId?: string | null;
   zonaNombre?: string;
-  zonaEsGam?: boolean;
+  zonaEsCentral?: boolean;
+  // Datos de las relaciones DIRECTAS (FK) de la orden, resueltos via joins
+  // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
+  // que solo usa los escalares/`*Nombre` sigue funcionando. La relacion `tienda`
+  // trae ademas su `tarifa` 1:1 (relacion Usuario.tarifasTienda). Cada relacion es
+  // nullable porque el `include` puede no resolver (FK opcional o dato ausente).
+  relaciones?: OrdenListItemRelaciones;
 };
+
+// Referencia liviana (id + nombre) para relaciones a catalogos/usuarios.
+export interface RefNombre {
+  id: string;
+  nombre: string;
+}
+
+// Tienda de la orden (Usuario con rol adminTienda) con su tarifa anidada. La
+// relacion tienda–tarifa es 1:1: `tarifa` es un unico objeto (o `null` si la
+// tienda aun no tiene tarifa activa). NUNCA expone campos sensibles del usuario
+// (passwordHash, etc.): solo datos de contacto e identidad legibles.
+export interface OrdenTiendaRef {
+  id: string;
+  nombre: string;
+  email: string;
+  telefono: string;
+  tarifa: TarifaDTO | null;
+}
+
+// Relaciones directas (FK) de la orden, expuestas por el listado.
+export interface OrdenListItemRelaciones {
+  estatus: { id: string; value: string } | null;
+  tienda: OrdenTiendaRef | null;
+  zona: { id: string; nombre: string; esCentral: boolean } | null;
+  provincia: RefNombre | null;
+  canton: RefNombre | null;
+  distrito: RefNombre | null;
+  mensajeroSugerido: RefNombre | null;
+  mensajeroAsignado: RefNombre | null;
+}
 
 export type CrearOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type ObtenerOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;

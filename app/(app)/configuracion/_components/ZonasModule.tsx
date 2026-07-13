@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import useSWR from "swr";
 
 import { DataTable } from "@/components/shared/DataTable";
@@ -119,7 +120,7 @@ export function ZonasModule({ initialData }: ZonasModuleProps) {
     <section className="flex flex-col gap-4">
       <div className="flex justify-end">
         <Button type="button" onClick={abrirCrear}>
-          Crear zona
+          <Plus /> Crear zona
         </Button>
       </div>
 
