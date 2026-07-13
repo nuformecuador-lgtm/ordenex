@@ -119,6 +119,8 @@ model Usuario {
   walletMovimientosRegistrados WalletMovimiento[] @relation("WalletMovimientoRegistrador") // feature 42/R2/R15: movimientos manuales que este usuario (maestro) registro
   walletTiendaMovimientos      WalletTiendaMovimiento[] @relation("WalletTiendaMovimientoTienda") // feature 43/R1/R2: movimientos del ledger de ESTA tienda (rol adminTienda)
   walletTiendaMovimientosRegistrados WalletTiendaMovimiento[] @relation("WalletTiendaMovimientoRegistrador") // feature 43/R2: movimientos manuales del ledger de tienda que este usuario registro
+  pagoMensajeroMovimientos           PagoMensajeroMovimiento[] @relation("PagoMensajeroMovimientoMensajero") // feature 44/R1/R2: movimientos del libro del pago a ESTE mensajero (rol mensajero)
+  pagoMensajeroMovimientosRegistrados PagoMensajeroMovimiento[] @relation("PagoMensajeroMovimientoRegistrador") // feature 44/R2: movimientos manuales del libro del pago que este usuario registro
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -704,4 +706,65 @@ model WalletTiendaMovimiento {
   @@index([tiendaId, categoria]) // R26: filtro por concepto por tienda
   @@index([origenTipo, origenId]) // R26: movimientos de un origen (cierre)
   @@map("wallet_tienda_movimiento")
+}
+
+// Feature 44 (design §1.1): tipo del movimiento del LIBRO del pago al mensajero. `devengo` =
+// Ordenex le debe al mensajero (aumenta la cuenta por pagar); `pago` = Ordenex ya le entrego
+// (tomado del efectivo recaudado, o una liquidacion posterior; reduce la cuenta por pagar). El
+// signo del saldo lo da `tipo`; `monto` es SIEMPRE positivo. Enum Postgres nativo (patron
+// WalletMovimientoTipo).
+enum PagoMensajeroMovimientoTipo {
+  devengo
+  pago
+
+  @@map("pago_mensajero_movimiento_tipo")
+}
+
+// Feature 44 (design §1.1): categoria (concepto) del movimiento del pago al mensajero.
+// `pago_devengado` = cierre_dia.total_pago_mensajero (snapshot 39). `pago_efectivo` = min(P,E):
+// parte tomada del efectivo recaudado AL APROBAR ("lo ya pagado"). `liquidacion` queda RESERVADO
+// para el follow-up de saldar la cuenta por pagar (F1.4-Qf; sin migracion futura).
+// `ajuste_devengo`/`ajuste_pago` = correccion compensatoria inmutable (R3).
+enum PagoMensajeroMovimientoCategoria {
+  // devengo (Ordenex le debe al mensajero)
+  pago_devengado
+  // pago (lo ya entregado)
+  pago_efectivo
+  // liquidacion posterior de la cuenta por pagar (F1.4-Qf; RESERVADO)
+  liquidacion
+  // ajustes manuales (inmutables, correccion compensatoria R3)
+  ajuste_devengo
+  ajuste_pago
+
+  @@map("pago_mensajero_movimiento_categoria")
+}
+
+// Feature 44 (design §1.2): LIBRO append-only del pago POR MENSAJERO (lo que Ordenex le debe y
+// lo que ya le pago). Fila INMUTABLE (R1/R3): SIN updatedAt/deletedAt; una correccion es un
+// movimiento de ajuste compensatorio, nunca alterando el original. La cuenta por pagar se DERIVA
+// (SUM devengo - SUM pago), no se almacena (R14/R16). Idempotencia por indice unico parcial
+// (origen_tipo, origen_id, mensajero_id, categoria) WHERE origen_id IS NOT NULL — va a mano en la
+// migracion (Prisma no expresa indice parcial). Reutiliza el enum wallet_origen_tipo de la 42
+// (cierre_dia | pago_mensajero | manual). RLS habilitada sin policies (solo service role, patron
+// wallet_movimiento/cierre_dia), acotado por mensajero en el WHERE (R20/R24).
+model PagoMensajeroMovimiento {
+  id              String                           @id @default(uuid())
+  mensajeroId     String                           @map("mensajero_id") // FK -> usuario (rol mensajero)
+  tipo            PagoMensajeroMovimientoTipo
+  categoria       PagoMensajeroMovimientoCategoria
+  monto           Decimal                          @db.Decimal(12, 2) // > 0 (el signo lo da `tipo`)
+  origenTipo      WalletOrigenTipo                 @map("origen_tipo") // cierre_dia | pago_mensajero | manual
+  origenId        String?                          @map("origen_id") // NULL solo en manual
+  descripcion     String?
+  registradoPor   String?                          @map("registrado_por") // FK usuario (actor) en manual; NULL en automaticos
+  fechaMovimiento DateTime                         @default(now()) @map("fecha_movimiento")
+  createdAt       DateTime                         @default(now()) @map("created_at")
+  // SIN updatedAt / deletedAt: la fila es INMUTABLE (R3). No hay soft-delete.
+
+  mensajero   Usuario  @relation("PagoMensajeroMovimientoMensajero", fields: [mensajeroId], references: [id])
+  registrador Usuario? @relation("PagoMensajeroMovimientoRegistrador", fields: [registradoPor], references: [id])
+
+  @@index([mensajeroId, fechaMovimiento]) // R26: saldo/listado por mensajero por fecha (desc)
+  @@index([origenTipo, origenId]) // R26: movimientos de un origen (cierre)
+  @@map("pago_mensajero_movimiento")
 }

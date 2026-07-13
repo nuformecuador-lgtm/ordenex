@@ -1095,3 +1095,33 @@
   introspección, SIN regresión 37/38/39/40/56/41/42. Reviewer APROBADO 0 bloqueantes. Commit `6923a7b`.
 - DEUDA menor: E2E escrito pero no ejecutado (patrón del arnés); test de migración unit estático (el round-trip real
   lo corrió el reviewer). El PAGO efectivo a la tienda queda como follow-up sobre el modelo ya probado.
+
+## 2026-07-13 — feature 44: wallet, pago a mensajeros y cuentas por pagar
+- Qué se construyó: tercer eslabón de la cadena wallet (42 caja → 43 tienda → **44 mensajeros**). Al aprobar un
+  `CierreDia` se congela el pago al mensajero contra el efectivo que recaudó: `pago_devengado = P`
+  (`total_pago_mensajero`, snapshot 39), `pago_efectivo = min(P, total_efectivo)` (snapshot 37), y la **cuenta por
+  pagar** (lo pendiente cuando no hubo efectivo) es el saldo DERIVADO `Σdevengo − Σpago` (sin saldo almacenado).
+- Requisitos cubiertos: R1–R27 (fullstack, money-critical).
+- F1.4 APROBADA: Qa=SÍ (además del libro propio, EGRESO `egreso_pago_mensajero = P` en la caja 42, cuadrado);
+  Qb=append-only + cuenta por pagar derivada; Qc=automático al aprobar; Qd=`min(P,E)`, `P=0` sin movimiento;
+  Qe=vista maestro `/wallet/mensajeros` + self-view mensajero `/mis-pagos` (adminSatélite NO); Qf=liquidación manual
+  como FOLLOW-UP (categoría `liquidacion` + `origen_tipo=pago_mensajero` reservados, sin migración futura).
+- Modelo: tabla `pago_mensajero_movimiento` (libro append-only, INMUTABLE; RLS habilitada sin policies; idempotencia
+  por índice único parcial `(origen_tipo, origen_id, mensajero_id, categoria) WHERE origen_id IS NOT NULL`; migración
+  aditiva `20260712180000_pago_mensajero_movimiento` + `down.sql` reversible; reutiliza `wallet_origen_tipo` de la 42).
+- Enganche: en `CierresAdminRepository.resolverCierre`, DENTRO de la misma `$transaction` y TRAS 42/43 (todo-o-nada),
+  `WalletMensajeroFeedService.construirMovimientosDePago` (un solo `findUnique`, `min(P,E)`) inserta el libro + el
+  egreso de la caja 42; idempotente por constraint; solo `CierreDia` aprobado alimenta (`CierreBodega` no re-cuenta).
+- Vistas: `/wallet/mensajeros` (maestro: resumen por mensajero + desglose por cierre paginado, más reciente primero,
+  + filtros server-side fecha/cierre con saldo del conjunto filtrado) y `/mis-pagos` (mensajero, acotado a su
+  `mensajero_id` en el WHERE). Money-safe: `Prisma.Decimal`, STRING `toFixed(2)`, cero `parseFloat`/`Number(`.
+- Reviewer: RECHAZADO en el 1.er ciclo por R18 (desglose por cierre del maestro) y R22 (filtros server-side del
+  maestro) — misma raíz: faltaba la capa service+action del maestro (`listarPagosDeMensajero`/`…Action`). Corregido
+  (el repo y el schema zod ya lo soportaban) + re-review APROBADO 0 bloqueantes.
+- Verde: prisma OK, typecheck 0, lint 0, **2191 tests**, `init.sh` OK; migración verificada ESTÁTICAMENTE (Postgres
+  local compartido con la feature 49 en paralelo → no aplicada). Sin regresión 37/38/40/41/56 ni wallet 42/43.
+- Proceso: corrió en PARALELO con la feature 49 (trazabilidad) en un worktree aislado `../ordenex-f44` desde
+  `origin/dev`; el humano OK'd bendecir la regla #1 (una-feature-por-zona) por footprints disjuntos (caja vs máquina
+  de estados). Sincronizada con `dev` (46, PR #51) antes del PR.
+- DEUDA menor: E2E `e2e/wallet-mensajeros.spec.ts` escrito no ejecutado (convención del arnés); migración no aplicada
+  contra Postgres real. DESBLOQUEA la 45 (gastos/sueldos), último eslabón de la cadena wallet.

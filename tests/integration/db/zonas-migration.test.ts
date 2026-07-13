@@ -140,7 +140,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_ingreso_bodega_rechazos") && // feature 56: apendida despues
         !d.endsWith("_cierre_estado_vencido") && // feature 41: apendida despues
         !d.endsWith("_wallet_movimiento") && // feature 42: apendida despues
-        !d.endsWith("_wallet_tienda_movimiento"), // feature 43: apendida despues
+        !d.endsWith("_wallet_tienda_movimiento") && // feature 43: apendida despues
+        !d.endsWith("_pago_mensajero_movimiento"), // feature 44: apendida despues
     );
     expect(thisDir > previas[previas.length - 1]).toBe(true);
   });
