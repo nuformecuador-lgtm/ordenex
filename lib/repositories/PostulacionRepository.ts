@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import {
   UsuarioDuplicadoError,
   type CreateUsuarioInput,
@@ -88,12 +89,18 @@ export class PostulacionRepository implements IPostulacionRepository {
   }
 }
 
-/** R19/R20/R21: traduce la violacion de unicidad de Postgres a error de dominio. */
+/**
+ * R19/R20/R21: traduce la violacion de unicidad de Postgres a error de dominio.
+ * Usa `textoConstraintP2002` para disambiguar el campo violado de forma robusta
+ * en el motor nativo (`meta.target`) y bajo el driver adapter
+ * (`meta.driverAdapterError.cause.originalMessage`). Las constraints reales
+ * `usuario_email_key` / `usuario_cedula_key` contienen los substrings buscados.
+ */
 function mapDuplicadoError(error: unknown): unknown {
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-    const target = Array.isArray(error.meta?.target) ? (error.meta.target as string[]) : [];
-    if (target.includes("email")) return new UsuarioDuplicadoError("email");
-    if (target.includes("cedula")) return new UsuarioDuplicadoError("cedula");
+  const texto = textoConstraintP2002(error);
+  if (texto) {
+    if (texto.includes("email")) return new UsuarioDuplicadoError("email");
+    if (texto.includes("cedula")) return new UsuarioDuplicadoError("cedula");
   }
   return error;
 }
