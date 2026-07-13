@@ -437,12 +437,13 @@
       "id": 42,
       "name": "wallet - caja principal de ordenex",
       "description": "Nuevo modulo WALLET. Caja PRINCIPAL de Ordenex donde ENTRAN los ingresos y SALEN los gastos, conectada con los cierres (cada cierre aprobado alimenta la caja). Ingresos de Ordenex por cada orden: (a) el FLETE que cobra Ordenex, (b) la COMISION por el COD, (c) el IVA del flete y (d) el IVA de la comision. Estos valores provienen del CRUD de cobros (feature 18: valor_flete, valor_flete_GAM, comision_cod, iva_flete, iva_comision_cod, etc.). La caja registra ingresos y egresos (p.ej. pagos a tiendas -feature 43-, pagos a mensajeros -feature 44- y gastos/sueldos -feature 45-). MODELO (decision del humano 2026-07-10): la wallet es un LIBRO DE MOVIMIENTOS (entradas/salidas con saldo), no un tablero de saldos calculados. Debe mostrar ademas el BALANCE general de la empresa (si esta en positivo o negativo) comparando ingresos vs. gastos. ABIERTO a decidir en spec: como se modela el cobro (por orden vs. por zona/config). Fullstack de alta complejidad. Depende de la feature 18 (cobros) y de los cierres (37/38/40).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 18
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/42-wallet-caja-principal",
+      "depends_on": 18,
+      "status_note": "done 2026-07-12; F1.4 APROBADA. Impl COMPLETA (R1-R26) + reviewer APROBADO 0 bloqueantes tras 1 ciclo (rechazo por falta de E2E -> anadido e2e/wallet.spec.ts commit 1f9124b). VERDE: prisma OK, typecheck 0, lint 0, 2008/2008 tests (+77), init.sh OK, round-trip de migracion REAL contra Postgres local (incl. drop de orden.cobra_comision y 3 enums), idempotencia por constraint DB verificada viva, SIN regresion 37/38/39/40/56/41. Modulo WALLET = caja principal: LIBRO append-only inmutable wallet_movimiento (tipo/categoria/origen polimorfico), balance DERIVADO (suma Decimal), UI /wallet rol maestro + movimiento manual. Q1 derivar de la tarifa AL APROBAR (movimiento=snapshot) + NUEVA columna orden.cobra_comision (Boolean NOT NULL DEFAULT true); A1 entregada=flete normal+comision solo si cobra_comision+IVAs, devuelta/rechazada=flete de devolucion+su IVA sin comision, reprogramada=sin ingreso (6 categorias); Q3 solo CierreDia alimenta (CierreBodega no re-cuenta, vencido->aprobado una vez); Q4 tabla unica polimorfica para 43/44/45; Q6 manuales minimos. Enganche idempotente+atomico (ON CONFLICT DO NOTHING) en CierresAdminRepository.resolverCierre. Commits a9769ea+f85ee42+1f9124b. RAIZ de la cadena de pagos: DESBLOQUEA 43/44/45. DEUDA menor: captura editable de cobra_comision por-orden (A5, features 14/15/16/17); test de idempotencia unit usa mock (constraint real verificado por reviewer); E2E diferido. PENDIENTE PR a dev + merge (OK humano)."
     },
     {
       "id": 43,

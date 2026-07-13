@@ -394,3 +394,28 @@ describe("CierresBodegaAdminService.rechazarCierreBodega (R17/R18/R19/R20)", () 
     expect((await service.rechazarCierreBodega("cb1", "motivo", MAESTRO)).status).toBe("no_encontrada");
   });
 });
+
+// --- feature 42/R11: la bodega NO alimenta la wallet (evita doble conteo) ---
+
+describe("CierresBodegaAdminService — R11: aprobar bodega NO genera ingresos de wallet", () => {
+  it("R11: aprobar un CierreBodega solo transiciona su estado; NO invoca ningun feed de wallet", async () => {
+    // El CierresBodegaAdminService NO tiene NINGUNA dependencia de wallet (constructor =
+    // repo + signedUrls). Aprobar solo llama resolverCierreBodega (transicion de estado del
+    // agregado, feature 40). La fuente unica de ingresos de Ordenex es CierreDia (feature
+    // 42/T8): la bodega agrega cierre_dia ya contados, por eso NO re-cuenta (F1.4-Q3).
+    const resolver = vi.fn(async () => "updated" as const);
+    const repo = fakeRepo({ resolverCierreBodega: resolver });
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierreBodega("cb1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    // R11: la unica escritura es la transicion del cierre de bodega; ninguna otra tabla.
+    expect(resolver).toHaveBeenCalledTimes(1);
+    // El service no expone ni referencia ningun feed/movimiento de wallet (fuente unica = CierreDia).
+    expect((service as unknown as Record<string, unknown>).walletFeedService).toBeUndefined();
+    expect((service as unknown as Record<string, unknown>).walletMovimientoRepo).toBeUndefined();
+    expect((repo as unknown as Record<string, unknown>).construirMovimientosDeIngreso).toBeUndefined();
+    expect((repo as unknown as Record<string, unknown>).crearMovimientos).toBeUndefined();
+  });
+});

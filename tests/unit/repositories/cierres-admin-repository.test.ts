@@ -2,11 +2,47 @@ import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
+import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
+import type { IWalletFeedService } from "@/lib/interfaces/services/IWalletFeedService";
 
 // Feature 38 — tests unit del CierresAdminRepository (mockea Prisma, sin DB real,
 // patron cierre-dia-repository.test.ts). Cubre R2/R4/R5 (findCierresByAlcance con
 // alcance en el WHERE), R10/R14 (resolverCierre aprobar/rechazar -> updated + audit),
 // R12 (conflict), R13 (fuera_de_alcance), R15 (no toca gestion_orden).
+// Feature 42/T8: el constructor gana el repo de movimientos + el feed de wallet, y
+// resolverCierre corre en $transaction alimentando la wallet al APROBAR (R5/R7/R12).
+
+// Dobles de wallet + un $transaction que ejecuta el callback con el mismo doble de tx
+// (misma superficie que la tx real: cierreDia.updateMany + gestionOrden + walletMovimiento).
+function buildWalletDeps() {
+  const walletMovimientoRepo: IWalletMovimientoRepository = {
+    crearMovimientos: vi.fn().mockResolvedValue(0),
+    listar: vi.fn(),
+    agregarBalance: vi.fn(),
+  };
+  const walletFeedService: IWalletFeedService = {
+    construirMovimientosDeIngreso: vi.fn().mockResolvedValue([]),
+  };
+  return { walletMovimientoRepo, walletFeedService };
+}
+
+// Construye el repo con los dobles de wallet y un $transaction que ejecuta el callback
+// contra el propio `prisma` doble (tx === prisma en las pruebas).
+function makeRepo(
+  prisma: Record<string, unknown>,
+  wallet = buildWalletDeps(),
+): { repo: CierresAdminRepository; wallet: ReturnType<typeof buildWalletDeps> } {
+  const withTx = {
+    ...prisma,
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)),
+  };
+  const repo = new CierresAdminRepository(
+    withTx as unknown as PrismaClient,
+    wallet.walletMovimientoRepo,
+    wallet.walletFeedService,
+  );
+  return { repo, wallet };
+}
 
 const ALCANCE_MAESTRO: Alcance = { destinoTipo: "bodega_central", destinoZonaId: null };
 const ALCANCE_SAT: Alcance = { destinoTipo: "bodega_satelite", destinoZonaId: "z-cartago" };
@@ -45,7 +81,7 @@ describe("CierresAdminRepository.findCierresByAlcance (R2/R4/R5)", () => {
   it("R2: maestro -> WHERE solo destino_tipo=bodega_central (SIN destinoZonaId); orderBy solicitadoAt desc", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.findMany.mockResolvedValue([]);
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     await repo.findCierresByAlcance(ALCANCE_MAESTRO);
 
@@ -58,7 +94,7 @@ describe("CierresAdminRepository.findCierresByAlcance (R2/R4/R5)", () => {
   it("R2: adminSatelite -> WHERE destino_tipo=bodega_satelite AND destino_zona_id=su zona", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.findMany.mockResolvedValue([]);
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     await repo.findCierresByAlcance(ALCANCE_SAT);
 
@@ -76,7 +112,7 @@ describe("CierresAdminRepository.findCierresByAlcance (R2/R4/R5)", () => {
         resueltoAt: new Date("2026-07-12T12:00:00.000Z"),
       }),
     ]);
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     const rows = await repo.findCierresByAlcance(ALCANCE_MAESTRO);
 
@@ -105,7 +141,7 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
   it("R13: cierre WHERE id + alcance; si no casa -> null, sin cargar gestiones", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.findFirst.mockResolvedValue(null);
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     const r = await repo.findCierreByIdEnAlcance("c-ajeno", ALCANCE_SAT);
 
@@ -144,7 +180,7 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
         },
       },
     ]);
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
 
@@ -163,7 +199,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
   it("R10/R14: updateMany count=1 -> updated; WHERE guarda estado=solicitado + alcance; data lleva audit", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     const r = await repo.resolverCierre({
       cierreId: "c1",
@@ -195,7 +231,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
   it("R14: aprobar pasa motivoRechazo null en el data", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     await repo.resolverCierre({
       cierreId: "c1",
@@ -220,7 +256,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
     const prisma = buildPrisma();
     // El vencido sigue en un estado resoluble -> updateMany afecta 1 fila.
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     const r = await repo.resolverCierre({
       cierreId: "c-vencido",
@@ -243,7 +279,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
     prisma.cierreDia.count.mockResolvedValue(1); // existe en alcance pero ya no `solicitado`
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     const r = await repo.resolverCierre({
       cierreId: "c1",
@@ -263,7 +299,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
     prisma.cierreDia.count.mockResolvedValue(0);
-    const repo = new CierresAdminRepository(prisma as unknown as PrismaClient);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     const r = await repo.resolverCierre({
       cierreId: "c-ajeno",
@@ -274,5 +310,117 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
     });
 
     expect(r).toBe("fuera_de_alcance");
+  });
+});
+
+describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/T8: R5/R7/R12)", () => {
+  it("R5: aprobar (count=1) construye e inserta los movimientos de ingreso EN LA TX", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const movs = [
+      { tipo: "ingreso", categoria: "ingreso_flete", monto: "1000.00", origenTipo: "cierre_dia", origenId: "c1", descripcion: null, registradoPor: null },
+    ];
+    (wallet.walletFeedService.construirMovimientosDeIngreso as ReturnType<typeof vi.fn>).mockResolvedValue(movs);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_MAESTRO,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-maestro",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("updated");
+    // R5: el feed se invoca con el cierreId y un cliente de tx; el repo inserta esos movs.
+    expect(wallet.walletFeedService.construirMovimientosDeIngreso).toHaveBeenCalledTimes(1);
+    expect(wallet.walletFeedService.construirMovimientosDeIngreso).toHaveBeenCalledWith("c1", expect.anything());
+    expect(wallet.walletMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+    expect((wallet.walletMovimientoRepo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(movs);
+  });
+
+  it("rechazar NO alimenta la wallet (solo aprobado)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "rechazado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: "cuadre erroneo",
+    });
+
+    expect(wallet.walletFeedService.construirMovimientosDeIngreso).not.toHaveBeenCalled();
+    expect(wallet.walletMovimientoRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("count=0 (conflict) NO alimenta la wallet aunque el destino sea aprobado", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
+    prisma.cierreDia.count.mockResolvedValue(1);
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("conflict");
+    expect(wallet.walletFeedService.construirMovimientosDeIngreso).not.toHaveBeenCalled();
+    expect(wallet.walletMovimientoRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("R12: vencido->aprobado (count=1) alimenta la wallet exactamente una vez", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c-vencido",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("updated");
+    // R12: una sola alimentacion por la transicion (la idempotencia DB evita duplicar en
+    // re-aprobaciones; aqui se verifica que se invoca una unica vez por transicion).
+    expect(wallet.walletMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+  });
+
+  it("R7: si el insert de movimientos falla, el $transaction propaga y NO queda 'updated'", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    (wallet.walletFeedService.construirMovimientosDeIngreso as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { tipo: "ingreso", categoria: "ingreso_flete", monto: "1.00", origenTipo: "cierre_dia", origenId: "c1", descripcion: null, registradoPor: null },
+    ]);
+    // El insert falla dentro de la tx -> el callback rechaza -> $transaction propaga
+    // (rollback de la aprobacion en la tx real; aqui verificamos que el error se propaga).
+    (wallet.walletMovimientoRepo.crearMovimientos as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("insert wallet fallo"),
+    );
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    await expect(
+      repo.resolverCierre({
+        cierreId: "c1",
+        alcance: ALCANCE_MAESTRO,
+        nuevoEstado: "aprobado",
+        resueltoPor: "adm-maestro",
+        motivoRechazo: null,
+      }),
+    ).rejects.toThrow("insert wallet fallo");
+    // NO se alcanzo el retorno "updated": el error atraviesa el $transaction (todo-o-nada).
   });
 });
