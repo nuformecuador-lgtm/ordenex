@@ -36,7 +36,9 @@ export default async function OrdenesPage() {
             liberadasHoy={liberadasHoy}
           />
         ) : (
-          <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} />
+          // Feature 49 (T6.2): el listado plano ofrece "Ver historial" por fila
+          // (adminTienda/mensajero/adminSatelite ven solo las ordenes autorizadas, R27).
+          <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} mostrarHistorial />
         )}
       </section>
     );

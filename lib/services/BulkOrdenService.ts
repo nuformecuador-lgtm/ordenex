@@ -238,7 +238,13 @@ export class BulkOrdenService implements IBulkOrdenService {
     });
 
     if (toCreate.length > 0) {
-      await this.repo.createManyOrdenes(toCreate, cargaMasivaConfig.BATCH_SIZE); // R27
+      // R27 + feature 49/#1 (R9/R21/R23): el actor de la carga masiva es la tienda que
+      // carga (el adminTienda autenticado); cada orden creada deja su primera fila de
+      // historial (origen null -> estado inicial, origenTipo carga_masiva) en la MISMA tx.
+      await this.repo.createManyOrdenes(toCreate, cargaMasivaConfig.BATCH_SIZE, {
+        actorUsuarioId: tiendaId,
+        origenTipo: "carga_masiva",
+      });
     }
 
     return { status: "ok", summary: this.buildSummary(rows.length, filas) };

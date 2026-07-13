@@ -67,6 +67,11 @@ async function mensajerosFetcher() {
  * botones ni modales de acción; el backend igual rechaza escrituras (R12,
  * defensa en profundidad).
  *
+ * Feature 49 (R27/R29): TODOS los apartados reciben `mostrarHistorial` para ofrecer
+ * la acción de solo lectura "Ver historial" por fila (mismo `HistorialOrdenSheet`
+ * que el listado plano de `OrdenesModule`). Se pasa también en `readOnly` porque el
+ * maestro Y el admin ven el historial de cualquier orden (R27) y la acción no muta.
+ *
  * Límites (fuera de alcance): la lista de mensajeros no filtra por zona/GAM
  * (feature 30 restringirá el cuerpo del loader sin cambiar este componente).
  */
@@ -160,6 +165,7 @@ export function OrdenesRevisionMaestro({
         onAction={readOnly ? undefined : abrirGenerarGuia}
         secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
         onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
+        mostrarHistorial
       />
       <OrdenesApartado
         titulo="En preparación"
@@ -170,6 +176,7 @@ export function OrdenesRevisionMaestro({
         onAction={readOnly ? undefined : abrirGenerarGuia}
         secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
         onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
+        mostrarHistorial
       />
       {/* Feature 32/R13/F1.4(f): órdenes con `num_guia`. La respuesta del
           mensajero sigue fuera de alcance (feature 36); la única acción del
@@ -181,6 +188,7 @@ export function OrdenesRevisionMaestro({
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Imprimir etiquetas"}
         onAction={readOnly ? undefined : abrirEtiquetas}
+        mostrarHistorial
       />
       <OrdenesApartado
         titulo="En bodega"
@@ -193,6 +201,7 @@ export function OrdenesRevisionMaestro({
         onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
         tertiaryActionLabel={readOnly ? undefined : "Imprimir etiquetas"}
         onTertiaryAction={readOnly ? undefined : abrirEtiquetas}
+        mostrarHistorial
       />
       {/* Feature 46 (R15/R16): aviso derivado "Liberadas hoy (reprogramación)" de la
           bodega central (en_bodega). Datos por props; se oculta si no hay. */}
@@ -207,6 +216,7 @@ export function OrdenesRevisionMaestro({
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Imprimir etiquetas"}
         onAction={readOnly ? undefined : abrirEtiquetas}
+        mostrarHistorial
       />
 
       {!readOnly ? (

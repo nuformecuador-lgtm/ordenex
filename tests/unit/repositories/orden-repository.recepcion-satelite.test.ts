@@ -6,18 +6,29 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 // Feature 33 — repo de la bodega satelite. Prisma se mockea con dobles simples
 // (patron orden-repository.guia.test.ts): sin DB real, se verifica la forma de la
 // query (where/select) y el mapeo de filas.
+// Feature 49/#6: recibirEnSatelite envuelve el updateMany guardado en `$transaction`
+// (pre-lectura del origen + append en la misma tx). El fake `$transaction` pasa el
+// propio prisma como `tx`.
 function buildPrisma(overrides: Record<string, unknown> = {}) {
-  return {
+  const prisma = {
     orden: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
       updateMany: vi.fn(),
     },
     usuario: {
       findUnique: vi.fn(),
     },
+    ordenHistorialEstado: { createMany: vi.fn() },
+    $transaction: vi.fn(),
     ...overrides,
   };
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
+  return prisma;
 }
+
+// Feature 49/#6: contexto de historial (actor = el adminSatelite que recibe por QR).
+const HIST_RECEPCION = { actorUsuarioId: "adminsat-1", origenTipo: "recepcion_satelite" } as const;
 
 describe("OrdenRepository.findUsuarioZonaId (R4/R5)", () => {
   it("R4: devuelve la zona del adminSatelite (select zonaId por usuarioId)", async () => {
@@ -118,13 +129,14 @@ describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
   });
 });
 
-describe("OrdenRepository.recibirEnSatelite (R11/R18)", () => {
+describe("OrdenRepository.recibirEnSatelite (R11/R18 · feature 49/#6)", () => {
   it("R11/R18: UPDATE guardado por id+zona+deletedAt+origen; true si afecto 1 fila", async () => {
     const prisma = buildPrisma();
+    prisma.orden.findFirst.mockResolvedValue({ estatusId: "os-ruta" });
     prisma.orden.updateMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const ok = await repo.recibirEnSatelite("o1", "z-limon", "os-recibida");
+    const ok = await repo.recibirEnSatelite("o1", "z-limon", "os-recibida", HIST_RECEPCION);
 
     expect(ok).toBe(true);
     const arg = prisma.orden.updateMany.mock.calls[0][0];
@@ -141,11 +153,38 @@ describe("OrdenRepository.recibirEnSatelite (R11/R18)", () => {
     expect(arg.data).not.toHaveProperty("numGuia");
   });
 
-  it("R18: false si el UPDATE no afecto filas (origen/zona ya no cuadran -> race)", async () => {
+  // Feature 49/#6 (R14/R7): al recibir, 1 historial (origen en_ruta -> en_bodega_satelite).
+  it("R14: recepcion deja 1 historial con origen pre-leido y tipo recepcion_satelite", async () => {
     const prisma = buildPrisma();
+    prisma.orden.findFirst.mockResolvedValue({ estatusId: "os-ruta" });
+    prisma.orden.updateMany.mockResolvedValue({ count: 1 });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.recibirEnSatelite("o1", "z-limon", "os-recibida", HIST_RECEPCION);
+
+    expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
+    expect(arg.data).toEqual([
+      {
+        ordenId: "o1",
+        estatusOrigenId: "os-ruta",
+        estatusDestinoId: "os-recibida",
+        actorUsuarioId: "adminsat-1",
+        origenTipo: "recepcion_satelite",
+        motivo: null,
+        gestionOrdenId: null,
+      },
+    ]);
+  });
+
+  it("R18/R8: false si el UPDATE no afecto filas (race); NO deja rastro", async () => {
+    const prisma = buildPrisma();
+    // Perdio la carrera: la pre-lectura ya no encuentra la orden en el origen (o cambio).
+    prisma.orden.findFirst.mockResolvedValue(null);
     prisma.orden.updateMany.mockResolvedValue({ count: 0 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.recibirEnSatelite("o1", "z-limon", "os-recibida")).toBe(false);
+    expect(await repo.recibirEnSatelite("o1", "z-limon", "os-recibida", HIST_RECEPCION)).toBe(false);
+    expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 });

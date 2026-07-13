@@ -10,11 +10,18 @@ import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionR
 // hoy CR = medianoche UTC del dia calendario CR.
 const HOY = new Date("2026-07-15T00:00:00.000Z");
 
+// Feature 49/#10: liberarOrden envuelve el updateMany guardado en `$transaction`; el fake
+// pasa el propio prisma como `tx` (tiene orden.updateMany + el choke point
+// ordenHistorialEstado.createMany).
 function buildPrisma(overrides: Record<string, unknown> = {}) {
-  return {
+  const prisma = {
     orden: { findMany: vi.fn(), updateMany: vi.fn() },
+    ordenHistorialEstado: { createMany: vi.fn() },
+    $transaction: vi.fn(),
     ...overrides,
   };
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
+  return prisma;
 }
 
 function repoWith(prisma: ReturnType<typeof buildPrisma>) {
@@ -66,7 +73,7 @@ describe("findOrdenesLiberables (R10/R11)", () => {
   });
 });
 
-describe("liberarOrden (R13/R17)", () => {
+describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
   it("R13: UPDATE guardado por estatus=reprogramada, fija destino + limpia mensajero + marca", async () => {
     const prisma = buildPrisma();
     prisma.orden.updateMany.mockResolvedValue({ count: 1 });
@@ -89,7 +96,35 @@ describe("liberarOrden (R13/R17)", () => {
     });
   });
 
-  it("R17: si la orden ya no esta en reprogramada -> 0 filas -> false (idempotente)", async () => {
+  // Feature 49/#10 (R18/R21): al liberar, 1 historial con origen reprogramada -> destino,
+  // ACTOR NULL (sistema/cron) y tipo liberacion_reprogramada.
+  it("R18/R21: liberar deja historial con actor NULL (sistema) y origen reprogramada", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.updateMany.mockResolvedValue({ count: 1 });
+
+    await repoWith(prisma).liberarOrden({
+      ordenId: "o1",
+      destinoEstatusId: "os-en-bodega-satelite",
+      estatusReprogramadaId: "os-reprogramada",
+      corridaAt: new Date("2026-07-15T06:00:00.000Z"),
+    });
+
+    expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
+    expect(arg.data).toEqual([
+      {
+        ordenId: "o1",
+        estatusOrigenId: "os-reprogramada",
+        estatusDestinoId: "os-en-bodega-satelite",
+        actorUsuarioId: null, // R21: sistema/cron
+        origenTipo: "liberacion_reprogramada",
+        motivo: null,
+        gestionOrdenId: null,
+      },
+    ]);
+  });
+
+  it("R17/R8: si la orden ya no esta en reprogramada -> 0 filas -> false; no duplica rastro", async () => {
     const prisma = buildPrisma();
     prisma.orden.updateMany.mockResolvedValue({ count: 0 });
 
@@ -101,6 +136,7 @@ describe("liberarOrden (R13/R17)", () => {
     });
 
     expect(ok).toBe(false);
+    expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 });
 

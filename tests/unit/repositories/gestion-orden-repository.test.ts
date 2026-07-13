@@ -55,29 +55,62 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
   });
 });
 
-describe("GestionOrdenRepository.recogerLote (R15)", () => {
-  it("guardia propiedad + origen en el WHERE; devuelve filas afectadas", async () => {
-    const updateMany = vi.fn(async () => ({ count: 2 }));
-    const repo = new GestionOrdenRepository({ orden: { updateMany } } as never);
+describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
+  // Feature 49/#8: recogerLote pasa a `$queryRaw ... RETURNING "id"` en un `$transaction`;
+  // el count = rows.length y el append cubre EXACTAMENTE los ids retornados (R8).
+  function buildRecogerRepo(queryResult: { id: string }[]) {
+    const $queryRaw = vi.fn(async () => queryResult);
+    const createMany = vi.fn();
+    const tx = { $queryRaw, ordenHistorialEstado: { createMany } };
+    const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<number>) => cb(tx));
+    const repo = new GestionOrdenRepository({ $transaction } as never);
+    return { repo, $queryRaw, createMany, $transaction };
+  }
+
+  it("guardia propiedad + origen en el SQL; devuelve filas afectadas (rows.length)", async () => {
+    const { repo, $queryRaw } = buildRecogerRepo([{ id: "o1" }, { id: "o2" }]);
 
     const n = await repo.recogerLote(["o1", "o2"], "m1", "os-espera", "os-reparto");
 
     expect(n).toBe(2);
-    const arg = (updateMany.mock.calls[0] as unknown[])[0] as {
-      where: Record<string, unknown>;
-      data: Record<string, unknown>;
-    };
-    expect(arg.where.mensajeroAsignadoId).toBe("m1"); // propiedad
-    expect(arg.where.estatusId).toBe("os-espera"); // origen
-    expect(arg.where.deletedAt).toBeNull();
-    expect(arg.data.estatusId).toBe("os-reparto"); // destino en_reparto
+    const call = $queryRaw.mock.calls[0] as unknown[];
+    const strings = (call[0] as string[]).join(" ");
+    const values = call.slice(1);
+    // Guardia por propiedad + origen + no borrada en el propio UPDATE.
+    expect(strings).toMatch(/mensajero_asignado_id/);
+    expect(strings).toMatch(/estatus_id/);
+    expect(strings).toMatch(/deleted_at" IS NULL/);
+    expect(strings).toMatch(/RETURNING "id"/);
+    expect(values).toContain("m1"); // propiedad
+    expect(values).toContain("os-espera"); // origen
+    expect(values).toContain("os-reparto"); // destino en_reparto
   });
 
-  it("lista vacia -> no consulta y devuelve 0", async () => {
-    const updateMany = vi.fn();
-    const repo = new GestionOrdenRepository({ orden: { updateMany } } as never);
+  // Feature 49/#8 (R16/R8): 1 historial por orden recogida (actor = el mensajero); una
+  // que perdio la guarda no aparece en el RETURNING -> no deja rastro.
+  it("R16/R8: registra historial (recoleccion) solo de los ids retornados", async () => {
+    const { repo, createMany } = buildRecogerRepo([{ id: "o1" }]); // solo 1 de 2 gano la guarda
+
+    await repo.recogerLote(["o1", "o2"], "m1", "os-espera", "os-reparto");
+
+    const arg = (createMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
+    expect(arg.data).toEqual([
+      {
+        ordenId: "o1",
+        estatusOrigenId: "os-espera",
+        estatusDestinoId: "os-reparto",
+        actorUsuarioId: "m1", // el mensajero que recoge
+        origenTipo: "recoleccion",
+        motivo: null,
+        gestionOrdenId: null,
+      },
+    ]);
+  });
+
+  it("lista vacia -> no abre transaccion y devuelve 0", async () => {
+    const { repo, $transaction } = buildRecogerRepo([]);
     expect(await repo.recogerLote([], "m1", "a", "b")).toBe(0);
-    expect(updateMany).not.toHaveBeenCalled();
+    expect($transaction).not.toHaveBeenCalled();
   });
 });
 
@@ -143,19 +176,22 @@ describe("GestionOrdenRepository.liberarOrdenEnGestion (R35)", () => {
   });
 });
 
-describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30)", () => {
-  function buildTxRepo() {
+describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · feature 49/#9)", () => {
+  function buildTxRepo(origenEstatusId = "os-reparto") {
     const gestionCreate = vi.fn(async () => ({ id: "g1" }));
     const ordenUpdate = vi.fn(async () => ({}));
+    const ordenFindFirst = vi.fn(async () => ({ estatusId: origenEstatusId }));
     const usuarioUpdate = vi.fn(async () => ({}));
+    const historialCreateMany = vi.fn();
     const tx = {
       gestionOrden: { create: gestionCreate },
-      orden: { update: ordenUpdate },
+      orden: { update: ordenUpdate, findFirst: ordenFindFirst },
       usuario: { update: usuarioUpdate },
+      ordenHistorialEstado: { createMany: historialCreateMany },
     };
     const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<string>) => cb(tx));
     const repo = new GestionOrdenRepository({ $transaction } as never);
-    return { repo, gestionCreate, ordenUpdate, usuarioUpdate };
+    return { repo, gestionCreate, ordenUpdate, usuarioUpdate, historialCreateMany };
   }
 
   it("INSERT gestion + UPDATE estatus + limpiar puntero, todo bajo la misma tx", async () => {
@@ -202,5 +238,57 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30)", (
     expect(gArg.data.fechaReprogramacion).toBeInstanceOf(Date);
     expect(gArg.data.evidenciaStoragePath).toBeNull();
     expect(gArg.data.montoRecibido).toBeNull();
+  });
+
+  // Feature 49/#9 (R17/R20/R22): entregada (sin motivo) deja historial con destino,
+  // gestion_orden_id, origen pre-leido y actor = el mensajero; motivo null.
+  it("R17/R20: entregada deja historial con destino, gestionOrdenId y motivo null", async () => {
+    const { repo, historialCreateMany } = buildTxRepo("os-reparto");
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: {
+        resultado: "entregada",
+        montoRecibido: 100,
+        metodoPago: "efectivo",
+        evidenciaStoragePath: "o1/entregada-1.jpg",
+        evidenciaContentType: "image/jpeg",
+      },
+      nuevoEstatusId: "os-entregada",
+    });
+
+    const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
+    expect(arg.data).toEqual([
+      {
+        ordenId: "o1",
+        estatusOrigenId: "os-reparto",
+        estatusDestinoId: "os-entregada",
+        actorUsuarioId: "m1",
+        origenTipo: "gestion",
+        motivo: null,
+        gestionOrdenId: "g1",
+      },
+    ]);
+  });
+
+  // R22: una gestion con motivo (devuelta) registra ese motivo en el historial.
+  it("R22: devuelta registra el motivo de la gestion en el historial", async () => {
+    const { repo, historialCreateMany } = buildTxRepo("os-reparto");
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "devuelta", motivo: "cliente ausente" },
+      nuevoEstatusId: "os-devuelta",
+    });
+
+    const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as {
+      data: Record<string, unknown>[];
+    };
+    expect(arg.data[0].estatusDestinoId).toBe("os-devuelta");
+    expect(arg.data[0].motivo).toBe("cliente ausente");
+    expect(arg.data[0].origenTipo).toBe("gestion");
+    expect(arg.data[0].gestionOrdenId).toBe("g1");
   });
 });

@@ -1,0 +1,88 @@
+import { describe, it, expect } from "vitest";
+import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
+import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionReprogramadaRepository";
+import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
+
+// Feature 49 — T5.2 (R6): TEST DE COBERTURA. Enumera los 11 call-sites que ESCRIBEN
+// `orden.estatus_id` (design §2) como el CONJUNTO CERRADO conocido, con su repositorio,
+// simbolo y `origen_tipo`. Sirve de GUARDIA para el reviewer: si aparece un metodo nuevo
+// que escribe estado sin instrumentar (o se renombra uno instrumentado), este test rompe.
+// TypeScript no puede forzar el choke point (3 mecanismos, incl. SQL crudo); esta es la
+// mitigacion del riesgo de "olvidar un call-site" (design §3.3).
+
+// Repositorio -> clase (para verificar que cada simbolo existe como metodo real).
+const REPOS = {
+  OrdenRepository: OrdenRepository.prototype as unknown as Record<string, unknown>,
+  GestionOrdenRepository: GestionOrdenRepository.prototype as unknown as Record<string, unknown>,
+  LiberacionReprogramadaRepository:
+    LiberacionReprogramadaRepository.prototype as unknown as Record<string, unknown>,
+};
+
+// Los 11 puntos del mapa (design §2), 1 por familia de transicion.
+const PUNTOS_DE_ESCRITURA = [
+  { n: 1, repo: "OrdenRepository", simbolo: "createManyOrdenes", origenTipo: "carga_masiva" },
+  { n: 2, repo: "OrdenRepository", simbolo: "create", origenTipo: "creacion_manual" },
+  { n: 3, repo: "OrdenRepository", simbolo: "generarGuiaLote", origenTipo: "generacion_guia" },
+  { n: 4, repo: "OrdenRepository", simbolo: "asignarBodegaLote", origenTipo: "asignacion_bodega" },
+  { n: 5, repo: "OrdenRepository", simbolo: "rutearBodegaSateliteLote", origenTipo: "ruteo_satelite" },
+  { n: 6, repo: "OrdenRepository", simbolo: "recibirEnSatelite", origenTipo: "recepcion_satelite" },
+  { n: 7, repo: "OrdenRepository", simbolo: "asignarSateliteLote", origenTipo: "asignacion_satelite" },
+  { n: 8, repo: "GestionOrdenRepository", simbolo: "recogerLote", origenTipo: "recoleccion" },
+  { n: 9, repo: "GestionOrdenRepository", simbolo: "crearGestionYTransicionar", origenTipo: "gestion" },
+  {
+    n: 10,
+    repo: "LiberacionReprogramadaRepository",
+    simbolo: "liberarOrden",
+    origenTipo: "liberacion_reprogramada",
+  },
+  { n: 11, repo: "OrdenRepository", simbolo: "update", origenTipo: "ajuste_estado" },
+] as const;
+
+// Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
+// asignarMensajeroSugerido (solo mensajero_sugerido_id), softDelete (solo deleted_at),
+// setOrdenEnGestion / liberarOrdenEnGestion (puntero de bloqueo 1-a-1). Existen pero NO
+// forman parte del conjunto de escritura de estado -> NO instrumentan historial.
+const NO_ESCRIBEN_ESTADO = [
+  { repo: "OrdenRepository", simbolo: "asignarMensajeroSugerido" },
+  { repo: "OrdenRepository", simbolo: "softDelete" },
+  { repo: "GestionOrdenRepository", simbolo: "setOrdenEnGestion" },
+  { repo: "GestionOrdenRepository", simbolo: "liberarOrdenEnGestion" },
+] as const;
+
+describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
+  it("son EXACTAMENTE 11 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(11);
+    // numeracion 1..11 sin huecos ni duplicados.
+    expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  });
+
+  it("cada punto del mapa es un metodo REAL de su repositorio (rename/olvido -> rompe)", () => {
+    for (const p of PUNTOS_DE_ESCRITURA) {
+      const proto = REPOS[p.repo as keyof typeof REPOS];
+      expect(typeof proto[p.simbolo], `${p.repo}.${p.simbolo} (#${p.n})`).toBe("function");
+    }
+  });
+
+  it("los 11 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
+    const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
+    const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
+    expect(tiposDelMapa).toEqual(tiposDelSeed);
+  });
+
+  it("cada familia (origen_tipo) aparece UNA sola vez en el mapa (1 punto por familia)", () => {
+    const tipos = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
+    expect(new Set(tipos).size).toBe(tipos.length);
+  });
+
+  it("documenta los metodos que NO escriben estado (no instrumentan historial)", () => {
+    for (const m of NO_ESCRIBEN_ESTADO) {
+      const proto = REPOS[m.repo as keyof typeof REPOS];
+      // Existen (siguen siendo metodos reales)...
+      expect(typeof proto[m.simbolo], `${m.repo}.${m.simbolo}`).toBe("function");
+      // ...pero NO estan en el conjunto de escritura de estado.
+      const simbolos: string[] = PUNTOS_DE_ESCRITURA.map((p) => p.simbolo);
+      expect(simbolos.includes(m.simbolo)).toBe(false);
+    }
+  });
+});

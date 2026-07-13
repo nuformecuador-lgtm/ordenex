@@ -91,7 +91,11 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     }
 
     // R11/R18: transicion atomica guardada por estado de origen + zona.
-    const ok = await this.repo.recibirEnSatelite(ordenId, zonaId, destinoId);
+    // Feature 49/#6 (R14): actor = el adminSatelite; destino en_bodega_satelite.
+    const ok = await this.repo.recibirEnSatelite(ordenId, zonaId, destinoId, {
+      actorUsuarioId: actor.usuarioId,
+      origenTipo: "recepcion_satelite",
+    });
     if (ok) return { status: "ok", ordenId, estado: ESTADO_RECIBIDA };
 
     // R18: race — otro escaneo la movio entre la lectura y la escritura. Re-lee y
