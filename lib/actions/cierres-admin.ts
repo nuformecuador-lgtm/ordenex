@@ -6,10 +6,12 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { TarifaVigentePorZonaRepository } from "@/lib/repositories/TarifaVigentePorZonaRepository";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
+import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { gestionConfig } from "@/lib/config/gestion";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -70,6 +72,11 @@ function buildService(): ICierresAdminService {
       // singleton walletTiendaConfig (default true).
       new WalletTiendaMovimientoRepository(prisma),
       new WalletTiendaFeedService(new TarifaVigentePorZonaRepository(prisma)),
+      // Feature 44/T10: alimenta el LIBRO del pago por mensajero al aprobar (misma tx que 42/43).
+      // El feed consume los snapshots del cierre (P/E), emite el libro (devengo + pago) y el
+      // egreso egreso_pago_mensajero=P en la caja 42 (F1.4-Qa=SI). Sin dependencias externas.
+      new PagoMensajeroMovimientoRepository(prisma),
+      new WalletMensajeroFeedService(),
     ),
     new ZonaRepository(prisma),
     new OrdenRepository(prisma),

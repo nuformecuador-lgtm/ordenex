@@ -461,12 +461,13 @@
       "id": 44,
       "name": "wallet - pago a mensajeros y cuentas por pagar",
       "description": "Pago a los mensajeros dentro de la wallet. En los cierres se ve cuanto se le debe pagar a cada mensajero segun su zona (feature 39). Normalmente ese pago se toma del EFECTIVO que el propio mensajero recaudo; si el mensajero NO recaudo efectivo (todo fue por SIMPE o transferencia), el pago queda como CUENTA POR PAGAR y se evidencia en la wallet. La wallet refleja lo ya pagado (descontado del efectivo recaudado) y lo pendiente (cuentas por pagar a mensajeros). Fullstack. Depende de las features 39 (pago por zona), 42 (wallet/caja) y 37 (cierre del mensajero con montos por metodo de pago).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 42
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/44-wallet-pago-mensajeros",
+      "depends_on": 42,
+      "status_note": "done 2026-07-13; F1.4 APROBADA (Qa=SI egreso caja 42, Qb append-only+saldo derivado, Qc automatico al aprobar, Qd min(P,E), Qe self-view /mis-pagos + adminSatelite NO, Qf liquidacion=follow-up). Impl COMPLETA (R1-R27) + reviewer APROBADO 0 bloqueantes tras 1 ciclo (rechazo por R18/R22 -> anadida capa service+action del maestro para desglose por cierre paginado + filtros server-side fecha/cierre; re-review APROBADO). VERDE: prisma OK, typecheck 0, lint 0, 2191 tests, init.sh OK; migracion verificada ESTATICAMENTE (Postgres local compartido con la 49 en paralelo, no aplicada). Money-critical: libro append-only pago_mensajero_movimiento (RLS sin policies, idempotencia por constraint parcial (origen_tipo,origen_id,mensajero_id,categoria) WHERE origen_id NOT NULL), feed que CONSUME snapshots 39 (total_pago_mensajero=P) y 37 (total_efectivo=E) al aprobar el CierreDia: pago_devengado=P, pago_efectivo=min(P,E), cuenta por pagar = saldo DERIVADO (Sigma devengo - Sigma pago, sin saldo almacenado). Enganche ATOMICO e idempotente en CierresAdminRepository.resolverCierre (misma tx, tras 42/43) + EGRESO egreso_pago_mensajero=P en la caja 42 (Qa; cuadrado Sigma egreso = Sigma devengado = Sigma snapshot; la liquidacion futura NO re-emite egreso). Solo CierreDia alimenta (CierreBodega no). Vistas /wallet/mensajeros (maestro: resumen por mensajero + desglose por cierre paginado + filtros fecha/cierre, saldo del conjunto filtrado) y /mis-pagos (mensajero acotado a su mensajero_id). Liquidacion (Qf) RESERVADA (categoria liquidacion + origen_tipo=pago_mensajero, sin cambio de esquema futuro). Nuevos: lib/types/wallet-mensajero.ts, lib/utils/cuenta-por-pagar.ts, I/PagoMensajeroMovimientoRepository, I/WalletMensajeroFeedService, I/WalletMensajeroService, lib/actions/wallet-mensajero.ts, migracion 20260712180000_pago_mensajero_movimiento (+down). Worktree ../ordenex-f44 desde dev; sincronizada con dev (46, PR #51). DESBLOQUEA la 45. DEUDA menor: E2E e2e/wallet-mensajeros.spec.ts escrito no ejecutado; migracion no aplicada contra Postgres real. PENDIENTE: merge del PR a dev (OK humano)."
     },
     {
       "id": 45,
@@ -483,12 +484,13 @@
       "id": 46,
       "name": "reprogramacion: bloqueo y liberacion programada",
       "description": "(FASE 2 / detalle del flujo del mensajero, feature 36.) Cuando el mensajero REPROGRAMA una orden (estado reprogramada) con una fecha, la orden queda BLOQUEADA hasta esa fecha de reprogramacion (no reasignable/enviable antes). Al llegar la fecha, la orden se LIBERA automaticamente de vuelta a la bodega responsable para ser enviada ese dia, y se AVISA de la liberacion. Requiere un disparador temporal (job diario, en linea con el corte de las 00:00 de la feature 41) y una notificacion/aviso al liberar. Depende de la feature 36 (gestion: reprogramar con fecha y motivo).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 36
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/46-reprogramacion-bloqueo-liberacion",
+      "depends_on": 36,
+      "status_note": "done 2026-07-13; F1.4 APROBADA (todas recomendadas). Primera de la Fase 2 flujo mensajero (grupo 46/47/49 elegido por el humano). Impl COMPLETA (R1-R21) + reviewer APROBADO 0 bloqueantes. VERDE: typecheck 0, lint 0, 2056/2056 tests (+48: 39 backend + 9 frontend), init.sh OK, round-trip de migracion verificado por SQL directo contra Postgres local. BLOQUEO server-side real: GuiaAsignacionService (generarGuia + asignarDesdeBodega) y AsignacionSateliteService.asignar rechazan orden reprogramada con fechaReprogramacion>hoy(CR) via MSG_ORDEN_REPROGRAMADA_BLOQUEADA (antes del check de origen, todo-o-nada); envio bloqueado por origen en MisAsignacionesService. LIBERACION: cron NUEVO /api/cron/liberar-reprogramadas (auth CRON_SECRET antes de efectos, schedule 0 6 diario en vercel.json=00:00 CR, hora CR UTC-6 con fronteras testeadas) devuelve la orden a en_bodega/en_bodega_satelite derivado de zona (findCentralZonaId, reusa ruteo 30/33) para re-asignar via 17/34; idempotencia DERIVADA del estatus (UPDATE guardado por estatusId=reprogramada) + columna orden.liberada_reprogramada_at. AVISO = visibilidad derivada 'liberadas hoy' en ambas bodegas (sin tabla de notificaciones). Migracion aditiva 20260713100000_orden_liberada_reprogramada_at (solo columna nullable + indice parcial + down.sql inverso exacto; NO columnas de intentos/historial => R21 fuera de alcance, eso es 47/49). Commit a9fa3c8 + cierre chore(state). DEUDA menor: E2E e2e/reprogramacion-liberacion.spec.ts escrito pero diferido (sin CRON_SECRET/seed, convencion del repo); round-trip de migracion por test estatico+SQL manual (no CI). NOTA AMBIENTAL (ajena a la 46): el Postgres local arrastra la migracion de la feature 43 (20260712170000_wallet_tienda_movimiento, no en dev) => prisma migrate status falla; reconciliar el historial local (o migrate reset) antes del despliegue. PENDIENTE: abrir PR a dev + merge (OK humano). Siguiente del grupo: 49 (trazabilidad, base) -> 47 -> 48."
     },
     {
       "id": 47,
@@ -516,12 +518,13 @@
       "id": 49,
       "name": "trazabilidad / historial de estados de la orden",
       "description": "(FASE 2 / detalle, transversal.) Registrar la TRAZABILIDAD COMPLETA de cada orden: el historial de todos los estados por los que paso, CUANDO ocurrio cada cambio (timestamp) y cuando ESCALA de un estado a otro, mas el contador de intentos de entrega. Debe poder consultarse como LINEA DE TIEMPO en el detalle de la orden. Es la base para saber cuando una orden escala a rechazo, cuantos intentos lleva, etc. Aplica a toda la maquina de estados (features 17, 30, 33, 34, 36, 46, 47). Fullstack (tabla de historial de estados + UI de linea de tiempo). Se relaciona con el tiempo real (feature 35). Depende de la feature 36.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 36
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/49-trazabilidad-historial-estados",
+      "depends_on": 36,
+      "status_note": "done 2026-07-13; F1.4 APROBADA (todas recomendadas). Segunda de la Fase 2 flujo mensajero (grupo 46/47/49). Transversal. Impl COMPLETA (R1-R34) + reviewer APROBADO 0 bloqueantes (el reviewer reprodujo el grep de cobertura y el round-trip de migracion, no solo por bitacora). VERDE: typecheck 0, lint 0, 2225/2225 tests (+85), init.sh OK, round-trip de migracion REAL (rollback->pending->deploy->up-to-date). CHOKE POINT unico registrar-cambio-estado.ts (OrdenEstadoService): append inmutable a orden_historial_estado en la MISMA $transaction que el cambio de estado. Los 11 PUNTOS de escritura de estado instrumentados atomicamente (CONFIRMADO 11/11, sin 12o escapado): OrdenRepository #1 createManyOrdenes/#2 create/#3 generarGuiaLote/#4 asignarBodegaLote/#5 rutearBodegaSateliteLote/#6 recibirEnSatelite/#11 update; #7 asignarSateliteLote (SQL crudo: $executeRaw->$queryRaw...RETURNING id en la tx, conserva anti-TOCTOU NOT EXISTS, registra solo filas transicionadas R8); GestionOrdenRepository #8 recogerLote/#9 crearGestionYTransicionar; LiberacionReprogramadaRepository #10 liberarOrden (actor NULL/cron, append solo si count>0). Contador de intentos DERIVADO del historial (sin columna materializada; la regla 3->rechazo es de la 47). Estado INICIAL (creacion) = primera linea (post-deploy). SIN backfill. UI drawer 'Ver historial' desde la lista (no habia pagina de detalle), visibilidad por rol server-side (maestro/admin todas, adminTienda su tienda, mensajero sus asignadas via nuevo OrdenDTO.mensajeroAsignadoId opcional sin migracion, adminSatelite su zona). Migracion aditiva 20260713120000_orden_historial_estado (tabla append-only + RLS sin policies + indice (orden_id,created_at) + down.sql inverso). Realtime (35) fuera de alcance (punto de extension). Commit faeeb2a + cierre chore(state). RAMA nace del tip de la 46 (contiene 43+46) para instrumentar la liberacion de la 46. DEUDA menor: test de cobertura T5.2 estatico (compensado por grep del reviewer, conjunto de 11 cerrado); test RLS estatico; E2E diferido. PENDIENTE: sync con dev + PR + merge (OK humano). Siguiente del grupo: 47 (reintentos/escalado, consume el derivador de intentos) -> 48."
     },
     {
       "id": 50,
@@ -602,6 +605,39 @@
       "branch": "feature/56-ingreso-bodega-rechazos",
       "depends_on": 39,
       "status_note": "done 2026-07-12; F1.4 APROBADA. Money-critical, espejo de la 39. Impl COMPLETA (R1-R22+R7b+R23) + reviewer APROBADO 0 bloqueantes (verificacion round-trip real, snapshot inmutable probado). VERDE: prisma OK, typecheck 0, lint 0, 1867 tests (1 flaky ajeno LoginForm, pasa aislado), init.sh OK, migracion round-trip OK, SIN regresion 37/38/39/40. Q1 aplica si cobroRechazado>0 (condicion en la tarifa; reusa resolvePagoTarifa); Q2 SOLO rechazada; Q3 SNAPSHOT; Q4 migracion aditiva 20260712140000_ingreso_bodega_rechazos (3 niveles); Q5 bodega=destino del cierre; Q6 flag tarifaFaltante SERVER-SIDE (RESUELVE deuda m1 de la 39, elimina heuristica frontend); Q7 mostrado en las 3 vistas de cierre. IMPL EN 2 COMMITS: backend 6a0153d (el implementer murio por bug opus-4.8[1m] tras el backend) + UI 40d99e2 (frontend_dev). Cierra el par pago-por-zona (mensajero 39 + bodega 56). PENDIENTE PR a dev + merge (OK humano)."
+    },
+    {
+      "id": 57,
+      "name": "boton cerrar sesion (logout)",
+      "description": "Agrega un boton 'Cerrar sesion' (logout) en la UI autenticada (p.ej. en el sidebar de la feature 5 o en un menu de usuario/perfil), visible para todos los roles logueados. Al pulsarlo, se invalida la sesion del login RBA (features 1/2): se destruye/expira la cookie de sesion en el servidor (Server Action de logout) y se redirige al usuario a /login, sin dejar acceso a rutas protegidas al volver atras. Reusa la infraestructura de sesion existente del login; no crea tablas nuevas. ABIERTO a decidir en spec: ubicacion exacta del boton (sidebar vs. menu de perfil) y si se pide confirmacion (modal, feature 13) antes de cerrar. Fullstack menor (Server Action de logout + boton en UI).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": null
+    },
+    {
+      "id": 58,
+      "name": "plantilla carga masiva - datos de ejemplo validos (fix 'provincia no encontrada')",
+      "description": "CORRECCION de los DATOS DE EJEMPLO de la plantilla descargable de carga masiva de ordenes. Aunque la feature 51 cambio los ejemplos de Ecuador a Costa Rica, una carga de ejemplo con la plantilla actual sigue fallando con el error de validacion 'provincia: provincia no encontrada': los valores de provincia/canton/distrito de las filas de ejemplo NO coinciden con el catalogo de geografia REALMENTE sembrado en la DB (seed CR de la feature 24), por lo que el backend de carga (feature 15) los rechaza. Objetivo: que la plantilla traiga filas de ejemplo VALIDAS y cargables tal cual (demo), usando provincia + canton + distrito que EXISTAN en el catalogo sembrado y cuyo distrito TENGA zona asignada (acoplamiento distrito.zona_id de las features 24/51, para que orden.zona_id se derive y no se rechace la fila). Criterio de aceptacion: descargar la plantilla y subirla sin editar debe pasar la validacion y crear las ordenes de ejemplo. Toca el generador de plantilla del componente de carga masiva (BulkUpload / OrdenesCargaMasivaButton, features 9/31/51); verificar los valores contra el seed real de geografia antes de fijarlos (no inventar nombres). Frontend; no toca la logica de carga (feature 15). Depende de las features 51, 24 y 15.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 51
+    },
+    {
+      "id": 59,
+      "name": "zonas: seleccionar distritos de VARIOS cantones",
+      "description": "Mejora de UX en la creacion/edicion de zonas (ZonaForm, features 24/55): hoy el maestro navega provincia -> UN canton -> marca distritos de ESE canton; aunque la seleccion interna (`selected`) ya se ACUMULA al cambiar de canton, la UI solo muestra los distritos del canton actualmente elegido, por lo que NO se ven ni se gestionan los distritos elegidos de OTROS cantones y parece que se pierden. Objetivo: permitir elegir distritos de VARIOS cantones (analogo a elegir varios distritos de un solo canton) y hacer la seleccion cruzada VISIBLE y editable. Alcance: reconstruir la seccion 'Distritos de la zona' del ZonaForm para (a) poder ir agregando distritos de multiples cantones (misma o distinta provincia) sin perder los ya marcados al cambiar de canton, y (b) mostrar un resumen/lista de TODOS los distritos seleccionados agrupados por provincia/canton, con opcion de quitar cualquiera desde ese resumen (hoy solo existe el contador 'Distritos seleccionados: N', data-testid distritos-seleccionados). Se mantiene el contrato backend intacto: crearZona/actualizarZona ya reciben el conjunto COMPLETO de distritoIds (N:M ZonaDistrito) sin importar de cuantos cantones vengan, y siguen vigentes las reglas R10 (deshabilitar distritos ya asignados a OTRA zona) y el pre-marcado en edicion. Frontend puro (ZonaForm + acciones geo listarCantones/listarDistritos ya existentes); no toca migraciones ni el backend de zonas. Depende de la feature 55 (ZonaForm reconstruido).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 55
     }
   ]
 }

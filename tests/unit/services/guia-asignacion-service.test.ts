@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
+import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
 import type {
   GenerarGuiaDecisionData,
   IOrdenRepository,
@@ -173,6 +174,50 @@ describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", 
   });
 });
 
+describe("GuiaAsignacionService — bloqueo por reprogramacion (feature 46/R1/R2/R5)", () => {
+  it("R2: generarGuia con una orden reprogramada en el lote -> conflict con motivo tipado, 0 escrituras", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
+        ordenRow({ id: "o2", estatusValue: "reprogramada" }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia(
+      {
+        decisiones: [
+          { ordenId: "o1", mensajeroId: null },
+          { ordenId: "o2", mensajeroId: null },
+        ],
+      },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([{ ordenId: "o2", motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA }]);
+    // R5/R2: aborta el lote completo sin persistir (todo-o-nada).
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+
+  it("R2: asignarDesdeBodega con una orden reprogramada -> conflict con motivo tipado, sin efectos", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "reprogramada" }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([{ ordenId: "o1", motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA }]);
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+});
+
 describe("GuiaAsignacionService.generarGuia — autorizacion (R11-R13)", () => {
   it("R11: maestro puede generar guia", async () => {
     const repo = fakeRepo();
@@ -273,9 +318,10 @@ describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R2
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_espera_aceptacion" });
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith([
-      { ordenId: "o1", estatusId: "os-espera", mensajeroAsignadoId: "m-sugerido" },
-    ]);
+    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
+      [{ ordenId: "o1", estatusId: "os-espera", mensajeroAsignadoId: "m-sugerido" }],
+      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
+    );
   });
 
   it("R22: override a otro mensajero -> mensajero_asignado_id=elegido, en_espera_aceptacion", async () => {
@@ -290,9 +336,10 @@ describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R2
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_espera_aceptacion" });
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith([
-      { ordenId: "o1", estatusId: "os-espera", mensajeroAsignadoId: "m-override" },
-    ]);
+    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
+      [{ ordenId: "o1", estatusId: "os-espera", mensajeroAsignadoId: "m-override" }],
+      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
+    );
   });
 
   it("R23: sin mensajero -> mensajero_asignado_id NULL, en_bodega, con num_guia igual", async () => {
@@ -308,9 +355,10 @@ describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R2
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_bodega" });
     expect(typeof r.resultados[0].numGuia).toBe("number");
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith([
-      { ordenId: "o1", estatusId: "os-bodega", mensajeroAsignadoId: null },
-    ]);
+    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
+      [{ ordenId: "o1", estatusId: "os-bodega", mensajeroAsignadoId: null }],
+      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
+    );
   });
 });
 
@@ -515,7 +563,10 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.resultados).toEqual([{ ordenId: "o1", estado: "en_espera_aceptacion" }]);
-    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(["o1"], "m1", "os-espera");
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(["o1"], "m1", "os-espera", {
+      actorUsuarioId: "u-maestro",
+      origenTipo: "asignacion_bodega",
+    });
     // R5/R26: NUNCA toca num_guia; el metodo dedicado ni siquiera lo recibe como parametro.
     expect(repo.generarGuiaLote).not.toHaveBeenCalled();
   });
@@ -660,9 +711,10 @@ describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () =>
     expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_ruta_bodega_satelite" });
     expect(typeof r.resultados[0].numGuia).toBe("number");
     // R9/R10: se rutea con estatus satelite y mensajeroAsignadoId NULL (num_guia via lote).
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith([
-      { ordenId: "o1", estatusId: "os-ruta-satelite", mensajeroAsignadoId: null },
-    ]);
+    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
+      [{ ordenId: "o1", estatusId: "os-ruta-satelite", mensajeroAsignadoId: null }],
+      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
+    );
   });
 
   it("R11: lote mixto GAM/no-GAM se resuelve en UNA sola llamada (GAM regla 17, no-GAM a satelite)", async () => {
@@ -689,11 +741,14 @@ describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () =>
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
     expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1); // R11: una sola transaccion
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith([
-      { ordenId: "o-gam-msg", estatusId: "os-espera", mensajeroAsignadoId: "m1" },
-      { ordenId: "o-gam-sin", estatusId: "os-bodega", mensajeroAsignadoId: null },
-      { ordenId: "o-nogam", estatusId: "os-ruta-satelite", mensajeroAsignadoId: null },
-    ]);
+    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
+      [
+        { ordenId: "o-gam-msg", estatusId: "os-espera", mensajeroAsignadoId: "m1" },
+        { ordenId: "o-gam-sin", estatusId: "os-bodega", mensajeroAsignadoId: null },
+        { ordenId: "o-nogam", estatusId: "os-ruta-satelite", mensajeroAsignadoId: null },
+      ],
+      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
+    );
     const estados = r.resultados.map((x) => x.estado);
     expect(estados).toEqual(["en_espera_aceptacion", "en_bodega", "en_ruta_bodega_satelite"]);
   });
@@ -763,6 +818,7 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
     expect(repo.rutearBodegaSateliteLote).toHaveBeenCalledWith(
       ["o1", "o2", "o3"],
       "os-ruta-satelite",
+      { actorUsuarioId: "u-maestro", origenTipo: "ruteo_satelite" },
     );
   });
 

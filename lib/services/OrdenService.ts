@@ -86,20 +86,24 @@ export class OrdenService implements IOrdenService {
 
     // --- Persistencia ---
     try {
-      const orden = await this.repo.create({
-        numRemision: input.numRemision,
-        estatusId,
-        destinatario: input.destinatario,
-        telefonoDest: input.telefonoDest,
-        tiendaId,
-        zonaId: input.zonaId,
-        provinciaId: input.provinciaId,
-        cantonId: input.cantonId,
-        distritoId: input.distritoId ?? null,
-        producto: input.producto,
-        peso: input.peso,
-        notas: input.notas ?? null,
-      });
+      const orden = await this.repo.create(
+        {
+          numRemision: input.numRemision,
+          estatusId,
+          destinatario: input.destinatario,
+          telefonoDest: input.telefonoDest,
+          tiendaId,
+          zonaId: input.zonaId,
+          provinciaId: input.provinciaId,
+          cantonId: input.cantonId,
+          distritoId: input.distritoId ?? null,
+          producto: input.producto,
+          peso: input.peso,
+          notas: input.notas ?? null,
+        },
+        // Feature 49/#2 (R10/R21/R23): la crea el usuario autenticado; origen null.
+        { actorUsuarioId: actor.usuarioId, origenTipo: "creacion_manual" },
+      );
       return { status: "ok", orden };
     } catch (error) {
       if (error instanceof NumRemisionDuplicadoError) {
@@ -185,7 +189,12 @@ export class OrdenService implements IOrdenService {
 
     // R37: aplica solo los campos permitidos por rol; no toca inmutables.
     const data = this.buildUpdateData(input, actor.rol);
-    const actualizada = await this.repo.update(id, data);
+    // Feature 49/#11 (R19/R20/R23): si el update cambia `estatus_id`, deja rastro
+    // (origenTipo ajuste_estado, actor = usuario autenticado); si no, no registra nada.
+    const actualizada = await this.repo.update(id, data, {
+      actorUsuarioId: actor.usuarioId,
+      origenTipo: "ajuste_estado",
+    });
     if (!actualizada) return { status: "not_found" }; // carrera: borrada entre medias
     return { status: "ok", orden: actualizada };
   }

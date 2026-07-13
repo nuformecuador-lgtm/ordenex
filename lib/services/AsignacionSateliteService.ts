@@ -5,12 +5,16 @@ import type {
   AsignarSateliteServiceResult,
   IAsignacionSateliteService,
 } from "@/lib/interfaces/services/IAsignacionSateliteService";
+import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
 
 // Estado de ORIGEN de la asignacion satelite (feature 33) y destino tras asignar
 // (feature 17). Esta feature NO agrega estados ni `num_guia` (R8): usa exclusivamente
 // estos dos valores de catalogo, ya sembrados.
 const ORIGEN_ASIGNACION = "en_bodega_satelite";
 const ESTADO_ASIGNADA = "en_espera_aceptacion";
+
+// Feature 46/R3: estatus bloqueado por reprogramacion (guardia explicito y tipado).
+const ESTATUS_REPROGRAMADA = "reprogramada";
 
 // Solo el rol autorizado en el modulo (R1/R13): el adminSatelite, SIEMPRE acotado
 // a su propia zona (R2), resuelta server-side por `findUsuarioZonaId`.
@@ -109,6 +113,11 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
         detalle.push({ ordenId: id, motivo: "zona_ajena" }); // R11
         continue;
       }
+      // Feature 46/R3: orden reprogramada -> bloqueada; motivo tipado (antes del origen).
+      if (orden.estatusValue === ESTATUS_REPROGRAMADA) {
+        detalle.push({ ordenId: id, motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA });
+        continue;
+      }
       if (orden.estatusValue !== ORIGEN_ASIGNACION) {
         detalle.push({ ordenId: id, motivo: `estado_invalido: ${orden.estatusValue}` }); // R12
       }
@@ -128,12 +137,15 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     }
 
     // 6. R7/R14: escritura guardada por estado de origen + zona. NO toca num_guia (R8).
+    // Feature 49/#7 (R15): actor = el adminSatelite; el append cubre solo las ordenes que
+    // ganaron la guarda anti-TOCTOU (RETURNING id en la misma tx).
     const count = await this.repo.asignarSateliteLote(
       ordenIds,
       input.mensajeroId,
       zonaId,
       destinoId,
       origenId,
+      { actorUsuarioId: actor.usuarioId, origenTipo: "asignacion_satelite" },
     );
 
     // R14: si alguna orden cambio de estado/zona entre la lectura y la escritura, el

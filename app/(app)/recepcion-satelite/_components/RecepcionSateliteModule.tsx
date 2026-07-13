@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { EscanerRecepcion } from "./EscanerRecepcion";
@@ -45,6 +47,12 @@ export interface RecepcionSateliteModuleProps {
    * se deshabilita "Asignar". Llega por props desde el Server Component.
    */
   bloqueoBodega: BodegaBloqueoCausa & { bloqueada: boolean };
+  /**
+   * Feature 46 (R15/R16): órdenes liberadas HOY (CR) por el cron para esta bodega
+   * satélite (`en_bodega_satelite`), pre-resueltas server-side. Alimentan el aviso
+   * derivado "Liberadas hoy (reprogramación)". Vacío = sin aviso.
+   */
+  liberadasHoy?: LiberadaHoyRow[];
 }
 
 /**
@@ -152,6 +160,7 @@ export function RecepcionSateliteModule({
   sinZona,
   mensajeros,
   bloqueoBodega,
+  liberadasHoy = [],
 }: RecepcionSateliteModuleProps) {
   const router = useRouter();
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
@@ -244,6 +253,10 @@ export function RecepcionSateliteModule({
           onToggle={toggleSeleccion}
         />
       </section>
+
+      {/* Feature 46 (R15/R16): aviso derivado "Liberadas hoy (reprogramación)" de la
+          bodega satélite (en_bodega_satelite). Datos por props; se oculta si no hay. */}
+      <BodegaLiberadasHoy liberadas={liberadasHoy} />
 
       <AsignarSateliteModal
         open={modalOpen}

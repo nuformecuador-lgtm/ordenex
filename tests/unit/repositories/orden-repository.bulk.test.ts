@@ -3,25 +3,36 @@ import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
 
+// Feature 49/#1: createManyOrdenes envuelve cada chunk en `$transaction`; el fake
+// invoca el callback con el propio `prisma` como `tx` (tiene orden.* + el choke point
+// ordenHistorialEstado.createMany). `orden.findMany` sirve para el pre/post SELECT por
+// num_remision (before/after) que detecta las filas EFECTIVAMENTE insertadas (R8).
 function buildPrisma(overrides: Record<string, unknown> = {}) {
-  return {
+  const prisma = {
     orden: {
       create: vi.fn(),
       findFirst: vi.fn(),
-      findMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn(),
       updateMany: vi.fn(),
       createMany: vi.fn(),
     },
     orderStatus: { findUnique: vi.fn() },
-    zona: { findUnique: vi.fn() },
+    zona: { findUnique: vi.fn(), findMany: vi.fn() },
     provincia: { findUnique: vi.fn(), findMany: vi.fn() },
     canton: { findUnique: vi.fn(), findMany: vi.fn() },
     distrito: { findUnique: vi.fn(), findMany: vi.fn() },
     usuario: { findMany: vi.fn() },
+    ordenHistorialEstado: { createMany: vi.fn() },
+    $transaction: vi.fn(),
     ...overrides,
   };
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
+  return prisma;
 }
+
+// Feature 49/#1: contexto de historial de carga masiva (actor = la tienda que carga).
+const HIST_CARGA = { actorUsuarioId: "tienda-1", origenTipo: "carga_masiva" } as const;
 
 function baseCreateData(overrides: Partial<CreateOrdenData> = {}): CreateOrdenData {
   return {
@@ -162,7 +173,7 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
       baseCreateData({ numRemision: "REM-3" }),
     ];
 
-    const total = await repo.createManyOrdenes(data, 2);
+    const total = await repo.createManyOrdenes(data, 2, HIST_CARGA);
 
     expect(total).toBe(3);
     expect(prisma.orden.createMany).toHaveBeenCalledTimes(2);
@@ -178,7 +189,7 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     prisma.orden.createMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.createManyOrdenes([baseCreateData({ peso: null })], 500);
+    await repo.createManyOrdenes([baseCreateData({ peso: null })], 500, HIST_CARGA);
 
     const arg = prisma.orden.createMany.mock.calls[0][0];
     expect(arg.data[0].peso).toBeNull();
@@ -193,10 +204,61 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     prisma.orden.createMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.createManyOrdenes([baseCreateData()], 500);
+    await repo.createManyOrdenes([baseCreateData()], 500, HIST_CARGA);
 
     const arg = prisma.orden.createMany.mock.calls[0][0];
     expect(arg.data[0]).not.toHaveProperty("numGuia");
     expect(arg.data[0]).not.toHaveProperty("mensajeroAsignadoId");
+  });
+
+  // Feature 49/#1 (R9/R8/R20): deja 1 historial por orden EFECTIVAMENTE insertada; una
+  // duplicada (que ya existia antes del insert) NO deja rastro.
+  it("R9/R8: 1 historial por orden creada (origen null); las duplicadas no dejan rastro", async () => {
+    const prisma = buildPrisma();
+    // REM-2 ya existia (before); tras el insert existen ambas (after) -> solo REM-1 es nueva.
+    prisma.orden.findMany
+      .mockResolvedValueOnce([{ id: "ord-existing" }]) // before: REM-2 preexiste
+      .mockResolvedValueOnce([
+        { id: "ord-existing", estatusId: "os-prep" },
+        { id: "ord-new", estatusId: "os-prep" },
+      ]); // after
+    prisma.orden.createMany.mockResolvedValue({ count: 1 });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const total = await repo.createManyOrdenes(
+      [baseCreateData({ numRemision: "REM-1" }), baseCreateData({ numRemision: "REM-2" })],
+      500,
+      HIST_CARGA,
+    );
+
+    expect(total).toBe(1);
+    expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
+    // Solo la nueva (ord-new) deja rastro; origen null (creacion), tipo carga_masiva.
+    expect(arg.data).toEqual([
+      {
+        ordenId: "ord-new",
+        estatusOrigenId: null,
+        estatusDestinoId: "os-prep",
+        actorUsuarioId: "tienda-1",
+        origenTipo: "carga_masiva",
+        motivo: null,
+        gestionOrdenId: null,
+      },
+    ]);
+  });
+
+  // R8: si TODAS las del chunk ya existian (todo duplicado), no se registra historial.
+  it("R8: chunk 100% duplicado no registra historial", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany
+      .mockResolvedValueOnce([{ id: "dup-1" }]) // before
+      .mockResolvedValueOnce([{ id: "dup-1", estatusId: "os-prep" }]); // after: sin nuevas
+    prisma.orden.createMany.mockResolvedValue({ count: 0 });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.createManyOrdenes([baseCreateData({ numRemision: "REM-DUP" })], 500, HIST_CARGA);
+
+    expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 });

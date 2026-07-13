@@ -89,7 +89,7 @@ afterEach(() => {
 });
 
 describe("OrdenesPage", () => {
-  it("D1: renderiza las 6 columnas y una fila por orden mapeando cada celda; Tienda muestra el nombre, no el uuid (R18, R19, R24, R26, R6, R7, R8; feature 30/R14: Zona)", async () => {
+  it("D1: renderiza las 7 columnas y una fila por orden mapeando cada celda; Tienda muestra el nombre, no el uuid (R18, R19, R24, R26, R6, R7, R8; feature 30/R14: Zona; feature 49/R29: Acciones)", async () => {
     const items: OrdenListItemDTO[] = [
       makeOrden({
         id: "o1",
@@ -136,7 +136,7 @@ describe("OrdenesPage", () => {
     // Espera la resolución async de SWR.
     await screen.findByText("Tienda Uno");
 
-    // 6 cabeceras en orden (feature 30/R14 añade "Zona").
+    // 7 cabeceras en orden (feature 30/R14 añade "Zona"; feature 49/R29 añade "Acciones").
     const headers = screen.getAllByRole("columnheader");
     expect(headers.map((h) => h.textContent)).toEqual([
       "Nº Guía",
@@ -145,6 +145,7 @@ describe("OrdenesPage", () => {
       "Destinatario",
       "Tienda",
       "Zona",
+      "Acciones",
     ]);
 
     // 3 filas de datos.
@@ -202,8 +203,8 @@ describe("OrdenesPage", () => {
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent("No hay órdenes");
-    // La cabecera sigue presente (6 columnas con "Zona", feature 30/R14).
-    expect(screen.getAllByRole("columnheader")).toHaveLength(6);
+    // La cabecera sigue presente (7 columnas: "Zona" feature 30/R14 + "Acciones" feature 49/R29).
+    expect(screen.getAllByRole("columnheader")).toHaveLength(7);
   });
 
   it("D4: cualquier resultado no-ok o throw del transporte muestra error accesible genérico, sin tabla de datos ni internals (R21)", async () => {
@@ -258,7 +259,7 @@ describe("OrdenesPage", () => {
     expect(screen.getByText("2002")).toBeInTheDocument();
   });
 
-  it("D6: sin acciones por fila (solo lectura de filas); la paginación server-side sí aporta sus controles (R23, feature paginación)", async () => {
+  it("D6: la única acción por fila es 'Ver historial' (botón, no enlace ni filtro); la paginación server-side sí aporta sus controles (R23, feature paginación; feature 49/R29)", async () => {
     listarOrdenesMock.mockResolvedValue({
       status: "ok",
       items: [makeOrden({ id: "o1", numGuia: 3001, destinatario: "Sol" })],
@@ -280,7 +281,11 @@ describe("OrdenesPage", () => {
     expect(
       screen.getByRole("combobox", { name: "Elementos por página" }),
     ).toBeInTheDocument();
-    // Sigue sin acciones por fila: ningún enlace ni input de filtro.
+    // La acción por fila es un botón "Ver historial" (feature 49); no hay enlaces ni
+    // inputs de filtro sobre las filas.
+    expect(
+      screen.getByRole("button", { name: /Ver historial de la orden/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
     // La tabla solo rinde la fila recibida.

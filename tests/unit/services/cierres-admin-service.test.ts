@@ -6,6 +6,8 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
+import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
+import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
 import type { TarifaVigentePorZona } from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
 import type {
   Alcance,
@@ -448,17 +450,47 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
     ivaComisionCod: "13.00",
   };
 
-  // Prisma doble: cierreDia.updateMany + gestionOrden.findMany + createMany de ambos ledgers
-  // + $transaction (tx === prisma). Store del ledger por tienda para inspeccionar lo insertado.
-  function buildStack(gestiones: unknown[]) {
+  // Prisma doble: cierreDia.updateMany/count/findUnique + gestionOrden.findMany + createMany de
+  // los 3 libros (42/43/44) + $transaction (tx === prisma). Stores para inspeccionar lo insertado
+  // en el ledger por tienda, en el libro del pago por mensajero y en la caja 42.
+  // `cierre`: snapshots 39/37 que consume el feed del pago al mensajero (feature 44).
+  function buildStack(
+    gestiones: unknown[],
+    cierre: { mensajeroId: string; totalPagoMensajero: string; totalEfectivo: string } = {
+      mensajeroId: "m1",
+      totalPagoMensajero: "1000.00",
+      totalEfectivo: "300.00",
+    },
+  ) {
     const tiendaRows: Array<Record<string, unknown>> = [];
+    const mensajeroRows: Array<Record<string, unknown>> = [];
+    const caja42Rows: Array<Record<string, unknown>> = [];
     const prisma = {
-      cierreDia: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(1) },
+      cierreDia: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        count: vi.fn().mockResolvedValue(1),
+        findUnique: vi.fn(async () => ({
+          mensajeroId: cierre.mensajeroId,
+          totalPagoMensajero: new Prisma.Decimal(cierre.totalPagoMensajero),
+          totalEfectivo: new Prisma.Decimal(cierre.totalEfectivo),
+        })),
+      },
       gestionOrden: { findMany: vi.fn().mockResolvedValue(gestiones) },
-      walletMovimiento: { createMany: vi.fn(async () => ({ count: 0 })) },
+      walletMovimiento: {
+        createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
+          caja42Rows.push(...data);
+          return { count: data.length };
+        }),
+      },
       walletTiendaMovimiento: {
         createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
           tiendaRows.push(...data);
+          return { count: data.length };
+        }),
+      },
+      pagoMensajeroMovimiento: {
+        createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
+          mensajeroRows.push(...data);
           return { count: data.length };
         }),
       },
@@ -471,8 +503,10 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
       new WalletFeedService(tarifaRepo),
       new WalletTiendaMovimientoRepository(withTx as unknown as PrismaClient),
       new WalletTiendaFeedService(tarifaRepo, { TIENDA_DEBITA_FLETE_DEVOLUCION: true }),
+      new PagoMensajeroMovimientoRepository(withTx as unknown as PrismaClient),
+      new WalletMensajeroFeedService(),
     );
-    return { repo, prisma, tiendaRows };
+    return { repo, prisma, tiendaRows, mensajeroRows, caja42Rows };
   }
 
   function gestion(resultado: string, tiendaId: string, montoRecibido: string | null) {
@@ -525,6 +559,111 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
     expect(r.status).toBe("ok");
     expect(prisma.walletTiendaMovimiento.createMany).toHaveBeenCalledTimes(1); // una sola alimentacion
     expect(tiendaRows.some((m) => m.categoria === "cod_recaudado" && m.tiendaId === "t1")).toBe(true);
+  });
+});
+
+// --- feature 44/T11: aprobar CierreDia genera el pago al mensajero + el egreso en la caja 42 ---
+
+describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (feature 44: R5/R12/R17)", () => {
+  const TARIFA: TarifaVigentePorZona = {
+    valorFlete: "1000.00",
+    valorFleteGam: "1500.00",
+    valorFleteDevuelto: "400.00",
+    valorFleteDevueltoGam: "600.00",
+    comisionCod: "5.00",
+    ivaFlete: "13.00",
+    ivaComisionCod: "13.00",
+  };
+
+  function buildStack(cierre: { mensajeroId: string; totalPagoMensajero: string; totalEfectivo: string }) {
+    const mensajeroRows: Array<Record<string, unknown>> = [];
+    const caja42Rows: Array<Record<string, unknown>> = [];
+    const prisma = {
+      cierreDia: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        count: vi.fn().mockResolvedValue(1),
+        findUnique: vi.fn(async () => ({
+          mensajeroId: cierre.mensajeroId,
+          totalPagoMensajero: new Prisma.Decimal(cierre.totalPagoMensajero),
+          totalEfectivo: new Prisma.Decimal(cierre.totalEfectivo),
+        })),
+      },
+      gestionOrden: { findMany: vi.fn().mockResolvedValue([]) }, // el pago no depende de gestiones (snapshot)
+      walletMovimiento: {
+        createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
+          caja42Rows.push(...data);
+          return { count: data.length };
+        }),
+      },
+      walletTiendaMovimiento: { createMany: vi.fn(async () => ({ count: 0 })) },
+      pagoMensajeroMovimiento: {
+        createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
+          mensajeroRows.push(...data);
+          return { count: data.length };
+        }),
+      },
+    };
+    const withTx = { ...prisma, $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)) };
+    const tarifaRepo = { resolveTarifaPorZona: vi.fn().mockResolvedValue(TARIFA) };
+    const repo = new CierresAdminRepository(
+      withTx as unknown as PrismaClient,
+      new WalletMovimientoRepository(withTx as unknown as PrismaClient),
+      new WalletFeedService(tarifaRepo),
+      new WalletTiendaMovimientoRepository(withTx as unknown as PrismaClient),
+      new WalletTiendaFeedService(tarifaRepo, { TIENDA_DEBITA_FLETE_DEVOLUCION: true }),
+      new PagoMensajeroMovimientoRepository(withTx as unknown as PrismaClient),
+      new WalletMensajeroFeedService(),
+    );
+    return { repo, prisma, mensajeroRows, caja42Rows };
+  }
+
+  it("R5/R17: E<P -> devengo=P + pago=E en el libro; egreso egreso_pago_mensajero=P en la caja 42", async () => {
+    const { repo, mensajeroRows, caja42Rows } = buildStack({ mensajeroId: "m1", totalPagoMensajero: "1000.00", totalEfectivo: "300.00" });
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierre("c1", MAESTRO);
+
+    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    // Libro del pago por mensajero (via el repo real): devengo=1000, pago=300.
+    const byCat = Object.fromEntries(mensajeroRows.map((m) => [m.categoria, m]));
+    expect((byCat.pago_devengado.monto as Prisma.Decimal).toFixed(2)).toBe("1000.00");
+    expect((byCat.pago_efectivo.monto as Prisma.Decimal).toFixed(2)).toBe("300.00");
+    for (const m of mensajeroRows) {
+      expect(m.mensajeroId).toBe("m1");
+      expect(m.origenTipo).toBe("cierre_dia");
+      expect(m.origenId).toBe("c1");
+      expect(m.monto).toBeInstanceOf(Prisma.Decimal);
+    }
+    // R17 (Qa): egreso egreso_pago_mensajero=P (1000) en la caja 42.
+    const egreso = caja42Rows.find((m) => m.categoria === "egreso_pago_mensajero");
+    expect(egreso).toBeDefined();
+    expect((egreso!.monto as Prisma.Decimal).toFixed(2)).toBe("1000.00");
+    expect(egreso!.tipo).toBe("egreso");
+    expect(egreso!.origenTipo).toBe("cierre_dia");
+    expect(egreso!.origenId).toBe("c1");
+  });
+
+  it("R10: P=0 (cierre sin entregas que paguen) -> NI libro NI egreso en la caja 42", async () => {
+    const { repo, mensajeroRows, caja42Rows } = buildStack({ mensajeroId: "m1", totalPagoMensajero: "0.00", totalEfectivo: "5000.00" });
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierre("c1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(mensajeroRows).toEqual([]);
+    expect(caja42Rows.some((m) => m.categoria === "egreso_pago_mensajero")).toBe(false);
+  });
+
+  it("R12: vencido->aprobado alimenta el pago al mensajero una sola vez", async () => {
+    const { repo, prisma, mensajeroRows } = buildStack({ mensajeroId: "m1", totalPagoMensajero: "800.00", totalEfectivo: "800.00" });
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierre("c-vencido", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(prisma.pagoMensajeroMovimiento.createMany).toHaveBeenCalledTimes(1); // una sola alimentacion
+    // E=P -> pagado=P, pendiente=0 (solo devengo + pago, sin cuenta por pagar).
+    expect(mensajeroRows.map((m) => m.categoria).sort()).toEqual(["pago_devengado", "pago_efectivo"]);
   });
 });
 

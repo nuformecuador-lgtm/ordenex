@@ -191,7 +191,11 @@ describe("recibir (R11-R18)", () => {
     const r = await newService(repo).recibir("o1", ADMIN);
     expect(r).toEqual({ status: "ok", ordenId: "o1", estado: "en_bodega_satelite" });
     // R11/R18: escritura guardada con la zona del actor y el estatus destino.
-    expect(repo.recibirEnSatelite).toHaveBeenCalledWith("o1", ZONA, "os-recibida");
+    // Feature 49/#6: pasa ademas el contexto de historial (actor = adminSatelite, tipo).
+    expect(repo.recibirEnSatelite).toHaveBeenCalledWith("o1", ZONA, "os-recibida", {
+      actorUsuarioId: "as1",
+      origenTipo: "recepcion_satelite",
+    });
   });
 
   it("R18: race — UPDATE no afecta y al re-leer esta recibida -> ya_recibida", async () => {

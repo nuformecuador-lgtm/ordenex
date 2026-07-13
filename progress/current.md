@@ -9,7 +9,17 @@
 |--------|------|------|--------|
 | _(ninguna en curso)_ | — | — | — |
 
-> Feature 43 (wallet por tienda: saldo a favor) CERRADA 2026-07-12: **impl COMPLETA (R1–R29) + reviewer APROBADO 0 bloqueantes**. Verde REAL: prisma OK, typecheck 0, lint 0, **2092/2092 tests (+84)**, `init.sh` OK, **round-trip de migración REAL por introspección**, **invariante de cuadre verificado a mano en AMBOS estados del flag**, idempotencia por constraint DB viva, SIN regresión 37/38/39/40/56/41/42. Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Wallet POR TIENDA = complemento del ingreso de Ordenex de la 42: **ledger propio** `wallet_tienda_movimiento` congelado al aprobar (reutiliza `derivarIngresoOrden`), crédito sobre COD recaudado (`montoRecibido`); `devuelta`/`rechazada` → la tienda debe el flete de devolución (saldo negativo) **REVERSIBLE** vía flag `TIENDA_DEBITA_FLETE_DEVOLUCION` (default true); alcance = modelo + visibilidad (`/mi-wallet` adminTienda + `/wallet/tiendas` maestro); pago a la tienda = follow-up. Estado `done` + `history.md` + `review_43`. Commit `6923a7b`. **DESBLOQUEA el pago a tiendas (follow-up).** **PENDIENTE: abrir PR a `dev` + merge (OK humano).**
+> **Feature 44 (wallet: pago a mensajeros y cuentas por pagar) CERRADA 2026-07-13**: **impl COMPLETA (R1–R27) + reviewer APROBADO 0 bloqueantes** tras 1 ciclo (rechazo por R18/R22 —desglose por cierre + filtros server-side de la vista del maestro— corregido y re-aprobado). VERDE: `prisma validate` OK, typecheck 0, lint 0, **2191 tests**, `init.sh` OK; migración verificada de forma ESTÁTICA (Postgres local compartido con la 49 en paralelo). Fullstack un ciclo; money-critical; F1.4 aprobada (Qa=SÍ egreso caja 42, Qb append-only+derivado, Qc automático al aprobar, Qd `min(P,E)`, Qe self-view `/mis-pagos` + adminSatélite NO, Qf liquidación=follow-up). Libro append-only `pago_mensajero_movimiento` (RLS sin policies, idempotencia por constraint parcial), feed que **consume los snapshots 39/37** al aprobar el `CierreDia` (`pago_devengado=P`, `pago_efectivo=min(P,efectivo)`, **cuenta por pagar = saldo derivado**), enganche **atómico** en `resolverCierre` tras 42/43 + **egreso `egreso_pago_mensajero=P` en la caja 42** (Qa, cuadrado). Vistas `/wallet/mensajeros` (maestro, desglose por cierre + filtros) y `/mis-pagos` (mensajero). Liquidación (Qf) RESERVADA. Commits `552ea7b` (feat) + merges de sync con `dev` (46 + 49). **PR #53 abierto a `dev`**, re-sincronizado con `dev` (46+49) tras el avance del PR #52. Estado `done` + `history.md` + `review_44`. **PENDIENTE: merge del PR #53 (OK humano).** DESBLOQUEA la 45 (último eslabón wallet).
+
+> Feature 49 (trazabilidad / historial de estados) CERRADA 2026-07-13: **impl COMPLETA (R1–R34) + reviewer APROBADO 0 bloqueantes** (el reviewer reprodujo el grep de cobertura y el round-trip de migración). Segunda de la **Fase 2 flujo mensajero** (grupo 46/47/49), TRANSVERSAL. Verde: typecheck 0, lint 0, **2225/2225 tests (+85)**, `init.sh` OK, round-trip REAL. **CHOKE POINT único** `registrar-cambio-estado.ts` (`OrdenEstadoService`): append inmutable a `orden_historial_estado` en la MISMA `$transaction` que el cambio de estado. **11/11 puntos** de escritura de estado instrumentados (OrdenRepository #1–#6/#11, `asignarSateliteLote` #7 con `$queryRaw...RETURNING` conservando anti-TOCTOU, GestionOrdenRepository #8/#9, LiberacionReprogramadaRepository #10). Contador de intentos **DERIVADO** (la regla 3→rechazo es de la 47). UI drawer "Ver historial" por rol server-side (mensajero vía nuevo `OrdenDTO.mensajeroAsignadoId` opcional). Migración aditiva `20260713120000_orden_historial_estado` (+ RLS + down.sql). Rama nace del tip de la 46. Commit `faeeb2a` + cierre. Estado `done` + `history.md` + `review_49`. **DEUDA menor**: test de cobertura/RLS estáticos; E2E diferido. **PR #52 abierto a `dev`** (sync OK, solo el delta de la 49, mergeable); PENDIENTE merge (OK humano). Siguiente del grupo (NO arrancada, el humano paró): **47** (reintentos/escalado, consume el derivador de intentos de la 49) → 48.
+
+> Feature 46 (reprogramación: bloqueo + liberación programada) CERRADA 2026-07-13: **impl COMPLETA (R1–R21) + reviewer APROBADO 0 bloqueantes**. Primera de la **Fase 2 flujo mensajero** (grupo 46/47/49 elegido por el humano). Fullstack/high, un ciclo, rama desde `origin/dev`. Verde: typecheck 0, lint 0, **2056/2056 tests (+48)**, `init.sh` OK, round-trip de migración por SQL directo. **BLOQUEO server-side real** (`MSG_ORDEN_REPROGRAMADA_BLOQUEADA` en `GuiaAsignacionService`+`AsignacionSateliteService`, antes del check de origen; envío por origen en `MisAsignacionesService`): orden `reprogramada` con `fechaReprogramacion>hoy(CR)` no reasignable/enviable. **LIBERACIÓN**: cron NUEVO `/api/cron/liberar-reprogramadas` (auth `CRON_SECRET`, `0 6` diario=00:00 CR, hora CR UTC−6) → `en_bodega`/`en_bodega_satelite` derivado de zona (`findCentralZonaId`, reúsa 30/33); idempotencia DERIVADA del estatus + `orden.liberada_reprogramada_at`. **AVISO** = visibilidad derivada "liberadas hoy" en ambas bodegas (sin tabla). Migración aditiva `20260713100000_orden_liberada_reprogramada_at` (+ down.sql). R21 (contador/historial) FUERA DE ALCANCE = 47/49. Commit `a9fa3c8` + cierre. Estado `done` + `history.md` + `review_46`. **MERGEADA a `dev` (PR #51)** 2026-07-13. Siguiente del grupo: **49** (trazabilidad, base) → 47 → 48.
+
+> Feature 46 (reprogramación: bloqueo + liberación programada) CERRADA 2026-07-13: **impl COMPLETA (R1–R21) + reviewer APROBADO 0 bloqueantes**. Primera de la **Fase 2 flujo mensajero** (grupo 46/47/49 elegido por el humano). Fullstack/high, un ciclo, rama desde `origin/dev`. Verde: typecheck 0, lint 0, **2056/2056 tests (+48)**, `init.sh` OK, round-trip de migración por SQL directo. **BLOQUEO server-side real** (`MSG_ORDEN_REPROGRAMADA_BLOQUEADA` en `GuiaAsignacionService`+`AsignacionSateliteService`, antes del check de origen; envío por origen en `MisAsignacionesService`): orden `reprogramada` con `fechaReprogramacion>hoy(CR)` no reasignable/enviable. **LIBERACIÓN**: cron NUEVO `/api/cron/liberar-reprogramadas` (auth `CRON_SECRET`, `0 6` diario=00:00 CR, hora CR UTC−6) → `en_bodega`/`en_bodega_satelite` derivado de zona (`findCentralZonaId`, reúsa 30/33); idempotencia DERIVADA del estatus + `orden.liberada_reprogramada_at`. **AVISO** = visibilidad derivada "liberadas hoy" en ambas bodegas (sin tabla). Migración aditiva `20260713100000_orden_liberada_reprogramada_at` (+ down.sql). R21 (contador/historial) FUERA DE ALCANCE = 47/49. Commit `a9fa3c8` + cierre. Estado `done` + `history.md` + `review_46`. **DEUDA menor**: E2E diferido; round-trip por test estático+SQL manual. Con la 43 ya mergeada a `dev` (PR #50), el drift ambiental del Postgres local queda resuelto. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** Siguiente del grupo: **49** (trazabilidad, base) → 47 → 48.
+
+> Feature 43 CERRADA y **MERGEADA a `dev`** (PR #50) 2026-07-13. Ver `history.md`.
+
+> Feature 43 (wallet por tienda: saldo a favor) CERRADA 2026-07-12: **impl COMPLETA (R1–R29) + reviewer APROBADO 0 bloqueantes**. Verde REAL: prisma OK, typecheck 0, lint 0, **2092/2092 tests (+84)**, `init.sh` OK, **round-trip de migración REAL por introspección**, **invariante de cuadre verificado a mano en AMBOS estados del flag**, idempotencia por constraint DB viva, SIN regresión 37/38/39/40/56/41/42. Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Wallet POR TIENDA = complemento del ingreso de Ordenex de la 42: **ledger propio** `wallet_tienda_movimiento` congelado al aprobar (reutiliza `derivarIngresoOrden`), crédito sobre COD recaudado (`montoRecibido`); `devuelta`/`rechazada` → la tienda debe el flete de devolución (saldo negativo) **REVERSIBLE** vía flag `TIENDA_DEBITA_FLETE_DEVOLUCION` (default true); alcance = modelo + visibilidad (`/mi-wallet` adminTienda + `/wallet/tiendas` maestro); pago a la tienda = follow-up. Estado `done` + `history.md` + `review_43`. Commit `6923a7b`. **DESBLOQUEA el pago a tiendas (follow-up).**
 
 > Feature 42 (wallet: caja principal de Ordenex) CERRADA 2026-07-12: **impl COMPLETA (R1–R26) + reviewer APROBADO 0 bloqueantes** tras 1 ciclo (rechazo inicial por falta de E2E → añadido `e2e/wallet.spec.ts`). Verde REAL: prisma OK, typecheck 0, lint 0, **2008/2008 tests (+77)**, `init.sh` OK, **round-trip de migración REAL** contra Postgres local (incl. drop de `orden.cobra_comision` y 3 enums), **idempotencia por constraint DB verificada viva**, SIN regresión 37/38/39/40/56/41. Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Módulo WALLET = caja principal: **libro append-only inmutable** `wallet_movimiento`, **balance DERIVADO** (suma `Decimal`, sin saldo mutable), UI `/wallet` rol maestro + movimiento manual. Ingresos derivados de la tarifa AL APROBAR el `CierreDia` (movimiento=snapshot; enganche idempotente+atómico en `CierresAdminRepository.resolverCierre`), split `entregada`/devolución + **nueva columna `orden.cobra_comision`** (default true; poblarla por-orden = deuda A5); 6 categorías de ingreso; `CierreBodega` no re-cuenta. Estado `done` + `history.md` + `review_42`. Commits `a9769ea`+`f85ee42`+`1f9124b`. **RAÍZ de la cadena de pagos → DESBLOQUEA 43/44/45.** **PENDIENTE: abrir PR a `dev` + merge (OK humano).**
 
@@ -123,6 +133,55 @@
 ## Evaluaciones
 
 > El leader documenta aca cada evaluacion de zone/complexity/particion.
+
+- `trazabilidad / historial de estados de la orden` (id 49): **zone=fullstack, complexity=high,
+  branch=feature/49-trazabilidad-historial-estados, depends_on=36 (done, en dev).** Evaluada 2026-07-13.
+  Segunda del grupo "Fase 2 flujo mensajero" (46 -> **49** -> 47 -> 48); es la BASE TRANSVERSAL en la que
+  se apoya la 47 (contador de intentos / escalado a rechazo). Fullstack (backend — tabla nueva de historial
+  de estados + append en CADA transicion de la maquina de estados 17/30/33/34/36/46 + RLS + migracion;
+  frontend — linea de tiempo en el detalle de la orden). complexity=high por ser TRANSVERSAL (instrumenta
+  todos los puntos de escritura de estado del sistema). DECISION DE PROCESO (leader): NO se parte el entry;
+  un ciclo fullstack (implementer delega backend_dev -> frontend_dev, un PR), precedente 16/24/30/41/46.
+  **BASE DE RAMA (desviacion justificada de 'nacer de dev'):** la 49 se branquea desde el TIP de la
+  feature/46 (= dev + 43 + 46), NO desde dev pelado, porque la 49 debe instrumentar TAMBIEN la transicion de
+  liberacion que introdujo la 46 (`reprogramada -> en_bodega/en_bodega_satelite` via el cron), y la 46 aun no
+  esta en dev (esta en PR #51). Consistente con el stacking de la cadena 37->43. Cuando el humano mergee #51,
+  el PR de la 49 quedara limpio (git ya vera la 46 en dev). Preguntas ABIERTAS para F1.4 (el spec_author las
+  formaliza): (a) DONDE vive el contador de intentos -> DERIVARLO del historial (contar transiciones de
+  intento fallido/`devuelta`) sin columna nueva (recomendado; la 47 lo lee y aplica la regla de 3) vs. columna
+  materializada en `orden`; (b) MECANISMO de captura -> helper/transicion CENTRALIZADA que toda escritura de
+  estado invoca para append atomico al historial (recomendado, en la MISMA tx que el cambio de estado) vs.
+  instrumentar cada call-site a mano; (c) FORMA de la tabla -> `orden_historial_estado` (orden_id, estatus_id
+  origen/destino, actor/usuario_id, motivo?, created_at) append-only inmutable vs. reusar/extender algo
+  existente; (d) BACKFILL de ordenes existentes -> sin backfill retroactivo (el historial arranca desde la
+  feature; recomendado) vs. sembrar el estado actual como fila inicial; (e) ALCANCE del contador de intentos
+  como concepto de la 49 vs. dejarlo integramente a la 47 (la 49 solo da el historial y la 47 deriva/aplica);
+  (f) linea de tiempo -> UI en el detalle de la orden reusando patrones existentes, alcance de quien la ve
+  (maestro/adminSatelite/tienda/mensajero) a definir. Insumos YA presentes en la rama: catalogo `order_status`,
+  `gestion_orden`, servicios de transicion `GuiaAsignacionService`/`AsignacionSateliteService`/
+  `MisAsignacionesService` + el cron `liberar-reprogramadas` (46).
+
+- `reprogramacion: bloqueo y liberacion programada` (id 46): **zone=fullstack, complexity=high,
+  branch=feature/46-reprogramacion-bloqueo-liberacion, depends_on=36 (done, en dev).** Evaluada
+  2026-07-13. Seleccionada por el humano dentro del grupo "Fase 2 flujo mensajero (46/47/49)"; se
+  arranca por la 46 (menor id, INDEPENDIENTE de 47/49). Fullstack (backend — job cron diario de
+  liberacion en linea con `/api/cron/corte-diario` de la 41, guardas de bloqueo en las rutas de
+  asignacion/envio 17/34, transicion de liberacion; frontend — reflejo "bloqueada hasta <fecha>" +
+  aviso de liberacion). Insumos YA en dev: `gestion_orden.fechaReprogramacion` (Date) + `motivo` +
+  `GestionResultado.reprogramada` + estado `reprogramada` (feature 36), infra Vercel Cron + `CRON_SECRET`
+  (feature 41). DECISION DE PROCESO (leader): NO se parte el entry; por precedente (16/24/27/30/41) se
+  corre como UN ciclo fullstack (implementer delega backend_dev -> frontend_dev, un PR). Rama creada
+  desde `origin/dev` (f25f4a8, contiene 36/41/42). Orden previsto del grupo: 46 -> 49 (trazabilidad,
+  base) -> 47 (reintentos, se apoya en 49) -> 48 (rechazo->tienda, depends 47). Preguntas ABIERTAS
+  para F1.4 (el spec_author las formaliza): (a) estado destino de la LIBERACION -> volver a
+  `en_bodega`/`en_bodega_satelite` segun la bodega responsable de la orden (recomendado, reusar el
+  resolver de zona `findCentralZonaId`) vs. re-`en_espera_aceptacion` con el mismo mensajero; (b)
+  DISPARADOR -> endpoint cron nuevo `/api/cron/liberar-reprogramadas` con el mismo schedule `0 6 * * *`
+  (00:00 CR) de la 41 (recomendado) vs. plegarlo dentro de `corte-diario`; (c) alcance del BLOQUEO -> la
+  orden `reprogramada` con `fechaReprogramacion > hoy` no reasignable/enviable (guarda server-side en
+  17/34); (d) mecanismo del AVISO -> visibilidad derivada (seccion/badge "liberadas hoy" en la bodega
+  responsable, sin tabla de notificaciones nueva) vs. registro persistente; (e) idempotencia del job
+  (reejecucion no doble-libera) por diseno, patron de la 41.
 
 - `paginacion` (id 8): **zone=frontend, complexity=medium, branch=feature/8-paginacion,
   depends_on=null.** Evaluada como frontend puro (compone con DataTable de feature 7;

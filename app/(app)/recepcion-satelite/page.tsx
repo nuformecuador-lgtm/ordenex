@@ -8,6 +8,7 @@ import {
   listarMensajerosSatelite,
   estadoBloqueoBodegaSatelite,
 } from "@/lib/actions/recepcion-satelite";
+import { listarLiberadasHoy } from "@/lib/actions/liberacion-reprogramada";
 
 import { RecepcionSateliteModule } from "./_components/RecepcionSateliteModule";
 
@@ -44,6 +45,14 @@ export default async function RecepcionSatelitePage() {
       ? bloqueoResult.bloqueo
       : { bloqueada: false, porMensajeros: false, porCierreBodega: false };
 
+  // Feature 46 (R15/R16): pre-fetch server-side del aviso derivado "Liberadas hoy
+  // (reprogramación)" de la bodega satélite del actor (estatus `en_bodega_satelite` +
+  // su zona + `liberada_reprogramada_at::date = hoy` CR). Datos por props al módulo
+  // (componente privado); degradación suave a lista vacía si la acción no responde ok.
+  const liberadasResult = await listarLiberadasHoy();
+  const liberadasHoy =
+    liberadasResult.status === "ok" ? liberadasResult.liberadas : [];
+
   return (
     <>
       <PageHeader
@@ -51,14 +60,15 @@ export default async function RecepcionSatelitePage() {
         description="Recepción de órdenes de tu bodega satélite por escaneo de QR"
       />
       <Container>
-        <RecepcionSateliteModule
-          porRecibir={result.porRecibir}
-          recibidas={result.recibidas}
-          zonaNombre={result.zonaNombre}
-          sinZona={result.sinZona}
-          mensajeros={mensajeros}
-          bloqueoBodega={bloqueoBodega}
-        />
+      <RecepcionSateliteModule
+        porRecibir={result.porRecibir}
+        recibidas={result.recibidas}
+        zonaNombre={result.zonaNombre}
+        sinZona={result.sinZona}
+        mensajeros={mensajeros}
+        bloqueoBodega={bloqueoBodega}
+        liberadasHoy={liberadasHoy}
+      />
       </Container>
     </>
   );

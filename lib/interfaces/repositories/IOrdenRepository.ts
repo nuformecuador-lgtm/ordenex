@@ -1,5 +1,6 @@
 import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
+import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 
 // Datos listos para persistir una orden. `estatusId` y `tiendaId` ya resueltos
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
@@ -194,12 +195,26 @@ export interface BodegaBloqueoResult {
 }
 
 export interface IOrdenRepository {
-  create(data: CreateOrdenData): Promise<OrdenDTO>;
+  /**
+   * Feature 49/#2 (R10/R20): crea la orden y su primera fila de historial (origen null =
+   * creacion, destino = estado inicial) en la MISMA transaccion (R7). `historial` aporta el
+   * actor (usuario que crea) y `origenTipo` = `creacion_manual`.
+   */
+  create(data: CreateOrdenData, historial: HistorialContexto): Promise<OrdenDTO>;
   /** Excluye borradas (deleted_at IS NOT NULL); null si no existe o esta borrada (R34). */
   findById(id: string): Promise<OrdenDTO | null>;
   list(params: ListOrdenesParams): Promise<ListOrdenesResult>;
-  /** Aplica cambios solo si la orden existe y no esta borrada; null si no (R36). */
-  update(id: string, data: UpdateOrdenData): Promise<OrdenDTO | null>;
+  /**
+   * Aplica cambios solo si la orden existe y no esta borrada; null si no (R36).
+   * Feature 49/#11 (R19/R20): SI el update cambia `estatus_id`, registra la transicion en
+   * el historial (origen = estatus previo pre-leido, destino = nuevo, `origenTipo` =
+   * `ajuste_estado`) en la MISMA tx; si el update NO toca `estatus_id`, no deja rastro.
+   */
+  update(
+    id: string,
+    data: UpdateOrdenData,
+    historial: HistorialContexto,
+  ): Promise<OrdenDTO | null>;
   /** Fija deleted_at; false si no existe o ya estaba borrada (R39/R40). */
   softDelete(id: string): Promise<boolean>;
   existsEstatus(estatusId: string): Promise<boolean>;
@@ -232,8 +247,17 @@ export interface IOrdenRepository {
   findDistritosByCantonIds(cantonIds: string[]): Promise<DistritoRow[]>;
   /** R22: subconjunto de `ids` que corresponde a un usuario con rol `mensajero`. */
   findMensajerosByIds(ids: string[]): Promise<Set<string>>;
-  /** R27: inserta en lotes de `batchSize` con `skipDuplicates`; devuelve el total insertado. */
-  createManyOrdenes(data: CreateOrdenData[], batchSize: number): Promise<number>;
+  /**
+   * R27: inserta en lotes de `batchSize` con `skipDuplicates`; devuelve el total insertado.
+   * Feature 49/#1 (R9/R8/R20): por cada orden EFECTIVAMENTE insertada (no las duplicadas que
+   * `skipDuplicates` saltó) registra una fila de historial (origen null, destino = estado
+   * inicial, `origenTipo` = `carga_masiva`, actor = la tienda) en la MISMA tx del chunk.
+   */
+  createManyOrdenes(
+    data: CreateOrdenData[],
+    batchSize: number,
+    historial: HistorialContexto,
+  ): Promise<number>;
 
   // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
 
@@ -299,13 +323,23 @@ export interface IOrdenRepository {
    * llamador DEBE haber validado el lote completo antes de invocar este metodo
    * (sin validaciones de negocio aqui, solo persistencia).
    */
-  generarGuiaLote(decisiones: GenerarGuiaDecisionData[]): Promise<GenerarGuiaResultRow[]>;
+  generarGuiaLote(
+    decisiones: GenerarGuiaDecisionData[],
+    historial: HistorialContexto,
+  ): Promise<GenerarGuiaResultRow[]>;
   /**
    * R26: fija `mensajeroAsignadoId`/`estatusId` en lote; NUNCA toca `numGuia`
    * (idempotencia R5, esas ordenes ya lo tienen). Devuelve el numero de filas
    * afectadas.
+   * Feature 49/#4 (R12/R7/R8): registra la transicion (destino `en_espera_aceptacion`,
+   * `origenTipo` = `asignacion_bodega`) SOLO de las ordenes afectadas, en la MISMA tx.
    */
-  asignarBodegaLote(ordenIds: string[], mensajeroId: string, estatusId: string): Promise<number>;
+  asignarBodegaLote(
+    ordenIds: string[],
+    mensajeroId: string,
+    estatusId: string,
+    historial: HistorialContexto,
+  ): Promise<number>;
 
   // --- Feature 30: ruteo a bodega satelite (R10/R13) ---
 
@@ -318,7 +352,11 @@ export interface IOrdenRepository {
    * zona no-GAM) antes de invocar (sin logica de negocio aqui). Devuelve el
    * numero de ordenes ruteadas.
    */
-  rutearBodegaSateliteLote(ordenIds: string[], estatusId: string): Promise<number>;
+  rutearBodegaSateliteLote(
+    ordenIds: string[],
+    estatusId: string,
+    historial: HistorialContexto,
+  ): Promise<number>;
 
   // --- Feature 32: etiqueta de guia (READ derivado, R1/R3) ---
 
@@ -370,6 +408,7 @@ export interface IOrdenRepository {
     ordenId: string,
     zonaId: string,
     destinoEstatusId: string,
+    historial: HistorialContexto,
   ): Promise<boolean>;
 
   // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
@@ -392,6 +431,7 @@ export interface IOrdenRepository {
     zonaId: string,
     destinoEstatusId: string,
     origenEstatusId: string,
+    historial: HistorialContexto,
   ): Promise<number>;
 
   // --- Feature 41: bloqueo derivado en asignacion (R12/R16/R17/R23) ---
