@@ -527,9 +527,20 @@ export class OrdenRepository implements IOrdenRepository {
     if (cantonIds.length === 0) return [];
     const rows = await this.prisma.distrito.findMany({
       where: { cantonId: { in: cantonIds } },
-      select: { id: true, nombre: true, cantonId: true, zonaId: true },
+      // La zona del distrito vive en la N:M `zona_distrito` (feature 24): es ahi donde
+      // la UI/ZonaForm asigna distritos a zonas, NO en la columna escalar distrito.zona_id
+      // (que quedo sin poblar). La carga masiva deriva orden.zona_id de esta relacion.
+      select: { id: true, nombre: true, cantonId: true, zonas: { select: { zonaId: true } } },
     });
-    return rows;
+    // Un distrito con EXACTAMENTE una zona resuelve orden.zona_id; con 0 zonas -> sin zona
+    // asignada (error de fila); con >1 -> ambiguo/no derivable -> null (mismo trato seguro:
+    // no se inventa una zona). El caso normal de negocio es 1 zona por distrito.
+    return rows.map((d) => ({
+      id: d.id,
+      nombre: d.nombre,
+      cantonId: d.cantonId,
+      zonaId: d.zonas.length === 1 ? d.zonas[0].zonaId : null,
+    }));
   }
 
   /** R22: subconjunto de `ids` con rol `mensajero`. */

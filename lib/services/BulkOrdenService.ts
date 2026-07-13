@@ -18,9 +18,15 @@ import type {
   BulkOrdenResult,
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
+import { normalizeName } from "@/lib/utils/normalize";
 
+// La resolucion geografica compara nombres del archivo contra los de la DB con el
+// MISMO normalizador que indexa el arbol de zonas (lib/utils/normalize): minusculas,
+// sin acentos, sin caracteres especiales y con espacios colapsados. Aplicarlo a
+// AMBOS lados evita rechazar filas por erratas tipograficas (mayusculas, acentos,
+// "San  Pedro" con doble espacio, puntuacion).
 function normalize(value: string): string {
-  return value.trim().toLowerCase();
+  return normalizeName(value);
 }
 
 function distinct(values: string[]): string[] {

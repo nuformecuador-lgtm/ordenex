@@ -219,13 +219,14 @@ model OrderStatus {
 }
 
 // Geografia jerarquica (feature 6 la creo vacia). Feature 24: la zona pasa a ser un
-// catalogo global con pagos al mensajero y flag `es_gam`. Feature 24/R4: la zona ya
-// NO cuelga de la provincia; la asignacion vive en `distrito.zona_id` (escalar) mas
-// la relacion N:M `ZonaDistrito`. La columna `provincia.zona_id` fue ELIMINADA en la
-// DB por la migracion 20260711120000_zonas_catalogo_global_pagos y nunca re-creada;
-// feature 55 (F1.4-C) reconcilia el schema removiendo los simbolos huerfanos
-// (`Provincia.zonaId`/`Provincia.zona`/`Zona.provincias`). La carga masiva (feature
-// 15) deriva `orden.zona_id` del DISTRITO de la orden (`distrito.zona_id`).
+// catalogo global con pagos al mensajero y flag `es_central`. Feature 24/R4: la zona ya
+// NO cuelga de la provincia; la asignacion vive UNICAMENTE en la relacion N:M
+// `ZonaDistrito`. La columna escalar `distrito.zona_id` (agregada en 20260711120000 y
+// nunca poblada tras la redefinicion a N:M) fue ELIMINADA en 20260713000000. La columna
+// `provincia.zona_id` tambien fue ELIMINADA (20260711120000) y nunca re-creada; feature
+// 55 (F1.4-C) reconcilia el schema removiendo los simbolos huerfanos
+// (`Provincia.zonaId`/`Provincia.zona`/`Zona.provincias`). La carga masiva (feature 15)
+// deriva `orden.zona_id` del DISTRITO de la orden via `zona_distrito`.
 model Zona {
   id            String  @id @default(uuid())
   nombre        String  @unique // feature 24: nombre unico (indice zona_nombre_key); feature 54 restaura el @unique perdido en el refactor
@@ -268,17 +269,15 @@ model Canton {
 }
 
 model Distrito {
-  id       String  @id @default(uuid())
+  id       String @id @default(uuid())
   nombre   String
-  cantonId String  @map("canton_id")
-  zonaId   String? @map("zona_id") // feature 24/R5: nullable; NULL = distrito sin zona asignada
+  cantonId String @map("canton_id")
 
   canton  Canton         @relation(fields: [cantonId], references: [id])
   ordenes Orden[]
-  zonas   ZonaDistrito[] // feature 24: relacion N:M con zona
+  zonas   ZonaDistrito[] // feature 24: relacion N:M con zona (unica fuente de verdad; la columna escalar zona_id se elimino en 20260713000000)
 
   @@index([cantonId])
-  @@index([zonaId]) // feature 24/R5
   @@map("distrito")
 }
 
