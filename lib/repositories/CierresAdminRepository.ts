@@ -7,6 +7,8 @@ import type {
   ResolverCierreResult,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
+import type { IWalletFeedService } from "@/lib/interfaces/services/IWalletFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
 import { WITH_DETALLE, toPendienteRow } from "@/lib/repositories/CierreDiaRepository";
 
@@ -16,7 +18,9 @@ import { WITH_DETALLE, toPendienteRow } from "@/lib/repositories/CierreDiaReposi
 // totales NO se recalculan (R4).
 const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado", "vencido"];
 
-type CierresAdminPrismaClient = Pick<PrismaClient, "cierreDia" | "gestionOrden">;
+// Feature 42/T8: la resolucion del cierre ahora orquesta una transaccion (para alimentar
+// la wallet atomicamente al aprobar, R5/R7) -> el cliente necesita `$transaction`.
+type CierresAdminPrismaClient = Pick<PrismaClient, "cierreDia" | "gestionOrden" | "$transaction">;
 
 // Proyeccion de la cabecera de un cierre (join a mensajero/zona para nombres).
 const CIERRE_RESUMEN_SELECT = {
@@ -78,7 +82,14 @@ function alcanceWhere(alcance: Alcance): { destinoTipo: Alcance["destinoTipo"]; 
  * WITH_DETALLE / toPendienteRow de la feature 37 para el detalle de gestiones.
  */
 export class CierresAdminRepository implements ICierresAdminRepository {
-  constructor(private readonly prisma: CierresAdminPrismaClient) {}
+  constructor(
+    private readonly prisma: CierresAdminPrismaClient,
+    // Feature 42/T8: dependencias del enganche a la wallet (por inyeccion, no logica en el
+    // repo: el repo orquesta la tx, el feed construye los movimientos, el repo de wallet
+    // los inserta idempotentemente).
+    private readonly walletMovimientoRepo: IWalletMovimientoRepository,
+    private readonly walletFeedService: IWalletFeedService,
+  ) {}
 
   /** R2/R4/R5/R8/R9: cierres del alcance, mas reciente primero, totales -> string. */
   async findCierresByAlcance(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
@@ -109,23 +120,43 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     return { cierre: toResumenRow(cierre), gestiones: gestiones.map(toPendienteRow) };
   }
 
-  /** R10-R15: transicion atomica guardada; un solo statement, no toca otras tablas. */
+  /**
+   * R10-R15 + feature 42/T8 (R5/R7): transicion atomica guardada. Envuelta en
+   * `$transaction`: mantiene el `updateMany` guardado (estado resoluble + alcance) y, SOLO
+   * si la aprobacion se aplico (count===1 Y nuevoEstado==='aprobado'), alimenta la wallet
+   * con los movimientos de ingreso del cierre en la MISMA tx (atomico: si el insert falla,
+   * la aprobacion hace rollback). La alimentacion es IDEMPOTENTE (skipDuplicates -> ON
+   * CONFLICT DO NOTHING, R6/R13): re-aprobar o un vencido->aprobado no duplica (R12). Un
+   * `rechazado` NO alimenta. La distincion count===0 (conflict vs fuera_de_alcance) queda
+   * igual.
+   */
   async resolverCierre(input: ResolverCierreInput): Promise<ResolverCierreResult> {
     const { cierreId, alcance, nuevoEstado, resueltoPor, motivoRechazo } = input;
     const alcanceGuard = alcanceWhere(alcance);
 
-    // R12/R13 + feature 41/E1 (R19): aplica SOLO si sigue en un estado resoluble
-    // (`solicitado` o `vencido`) Y casa el alcance (guardia en WHERE).
-    const res = await this.prisma.cierreDia.updateMany({
-      where: { id: cierreId, estado: { in: ESTADOS_RESOLUBLES }, ...alcanceGuard },
-      data: {
-        estado: nuevoEstado,
-        resueltoPor,
-        resueltoAt: new Date(),
-        motivoRechazo,
-      },
+    const count = await this.prisma.$transaction(async (tx) => {
+      // R12/R13 + feature 41/E1 (R19): aplica SOLO si sigue en un estado resoluble
+      // (`solicitado` o `vencido`) Y casa el alcance (guardia en WHERE).
+      const res = await tx.cierreDia.updateMany({
+        where: { id: cierreId, estado: { in: ESTADOS_RESOLUBLES }, ...alcanceGuard },
+        data: {
+          estado: nuevoEstado,
+          resueltoPor,
+          resueltoAt: new Date(),
+          motivoRechazo,
+        },
+      });
+
+      // R5/R7: solo al APROBAR y si se aplico, construir e insertar los movimientos de
+      // ingreso EN LA MISMA TX (todo-o-nada). `rechazado` no toca la wallet.
+      if (res.count === 1 && nuevoEstado === "aprobado") {
+        const movs = await this.walletFeedService.construirMovimientosDeIngreso(cierreId, tx);
+        await this.walletMovimientoRepo.crearMovimientos(tx, movs); // R6/R13: idempotente
+      }
+      return res.count;
     });
-    if (res.count === 1) return "updated";
+
+    if (count === 1) return "updated";
 
     // count 0: distinguir "ya resuelto" (existe en alcance) de "fuera de alcance".
     const enAlcance = await this.prisma.cierreDia.count({

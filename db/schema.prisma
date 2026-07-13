@@ -116,6 +116,7 @@ model Usuario {
   cierresResueltos    CierreDia[]          @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
   cierresBodegaSolicitados CierreBodega[]  @relation("CierreBodegaSolicitadoPor") // feature 40: cierres de bodega solicitados por este adminSatelite
   cierresBodegaResueltos   CierreBodega[]  @relation("CierreBodegaResueltoPor") // feature 40: cierres de bodega que este maestro aprobo/rechazo
+  walletMovimientosRegistrados WalletMovimiento[] @relation("WalletMovimientoRegistrador") // feature 42/R2/R15: movimientos manuales que este usuario (maestro) registro
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -315,6 +316,7 @@ model Orden {
   montoCobrar         Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
   mensajeroSugeridoId String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
   mensajeroAsignadoId String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
+  cobraComision       Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
   deletedAt           DateTime? @map("deleted_at") // soft delete
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
@@ -564,4 +566,76 @@ enum VehiculoValue {
   camion
 
   @@map("vehiculo_value")
+}
+
+// Feature 42 (design §1.1): tipo del movimiento de la wallet. El signo del balance lo
+// da `tipo`; el `monto` es SIEMPRE positivo. Enum Postgres nativo (patron RolValue).
+enum WalletMovimientoTipo {
+  ingreso
+  egreso
+
+  @@map("wallet_movimiento_tipo")
+}
+
+// Feature 42 (design §1.1): categoria (concepto) del movimiento. La 42 SOLO EMITE
+// categorias `ingreso_*` (los 6 conceptos de Ordenex + `ingreso_ajuste` manual). Las
+// `egreso_*` quedan RESERVADAS para 43/44/45 (patron "reservar valores del enum" de la
+// feature 37), disponibles sin nueva migracion de enum.
+enum WalletMovimientoCategoria {
+  ingreso_flete // entregada: valorFlete[Gam]
+  ingreso_flete_devolucion // devuelta/rechazada: valorFleteDevuelto[Gam] (A1)
+  ingreso_comision_cod // entregada + orden.cobraComision (Q1)
+  ingreso_iva_flete // ivaFlete% sobre flete
+  ingreso_iva_flete_devolucion // ivaFlete% sobre flete de devolucion (A1)
+  ingreso_iva_comision_cod // ivaComisionCod% sobre comision (solo si hubo comision)
+  ingreso_ajuste // manual (F1.4-Q6)
+  egreso_pago_tienda // reservado feature 43
+  egreso_pago_mensajero // reservado feature 44
+  egreso_gasto // reservado feature 45
+  egreso_sueldo // reservado feature 45
+  egreso_ajuste // manual (F1.4-Q6)
+
+  @@map("wallet_movimiento_categoria")
+}
+
+// Feature 42 (design §1.1): tipo de origen polimorfico. `cierre_dia` = ingreso por
+// cierre aprobado (42); `manual` = ajuste del maestro (origen_id NULL). El resto queda
+// RESERVADO para 43/44/45.
+enum WalletOrigenTipo {
+  cierre_dia
+  gestion_orden
+  manual
+  pago_tienda
+  pago_mensajero
+  gasto
+
+  @@map("wallet_origen_tipo")
+}
+
+// Feature 42 (design §1.2): LIBRO append-only de movimientos de la wallet (caja
+// PRINCIPAL de Ordenex). Fila INMUTABLE (R1/R3): SIN updatedAt/deletedAt, sin soft
+// delete; una correccion se hace con un movimiento de ajuste compensatorio, nunca
+// alterando el original. El balance se DERIVA (SUM ingreso - SUM egreso), no se almacena
+// (R16). Idempotencia por indice unico parcial (origen_tipo, origen_id, categoria) WHERE
+// origen_id IS NOT NULL — va a mano en la migracion (Prisma no expresa indice parcial).
+// RLS habilitada sin policies (solo service role, patron gestion_orden/cierre_dia).
+model WalletMovimiento {
+  id              String                    @id @default(uuid())
+  tipo            WalletMovimientoTipo
+  categoria       WalletMovimientoCategoria
+  monto           Decimal                   @db.Decimal(12, 2) // > 0 (siempre positivo; el signo lo da `tipo`)
+  origenTipo      WalletOrigenTipo          @map("origen_tipo")
+  origenId        String?                   @map("origen_id") // NULL solo para origen_tipo = manual
+  descripcion     String? // obligatoria en manual (validacion en service/zod)
+  registradoPor   String?                   @map("registrado_por") // FK usuario (actor) en manual; NULL en automaticos
+  fechaMovimiento DateTime                  @default(now()) @map("fecha_movimiento")
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  // SIN updatedAt / deletedAt: la fila es INMUTABLE (R3). No hay soft-delete.
+
+  registrador Usuario? @relation("WalletMovimientoRegistrador", fields: [registradoPor], references: [id])
+
+  @@index([fechaMovimiento]) // R24: listado del libro por fecha (desc)
+  @@index([tipo, categoria]) // R24: filtros por tipo/categoria
+  @@index([origenTipo, origenId]) // R24: buscar movimientos de un origen
+  @@map("wallet_movimiento")
 }

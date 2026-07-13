@@ -4,7 +4,10 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { TarifaVigentePorZonaRepository } from "@/lib/repositories/TarifaVigentePorZonaRepository";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { gestionConfig } from "@/lib/config/gestion";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -54,7 +57,13 @@ function toCierresAdminActionError(
 function buildService(): ICierresAdminService {
   const prisma = getPrismaClient();
   return new CierresAdminService(
-    new CierresAdminRepository(prisma),
+    // Feature 42/T8: el repo de cierres alimenta la wallet al aprobar (R5/R7), por
+    // inyeccion del repo de movimientos + el feed que resuelve tarifas por zona.
+    new CierresAdminRepository(
+      prisma,
+      new WalletMovimientoRepository(prisma),
+      new WalletFeedService(new TarifaVigentePorZonaRepository(prisma)),
+    ),
     new ZonaRepository(prisma),
     new OrdenRepository(prisma),
     // Evidencias: mismo bucket privado de gestion_orden (feature 36).
