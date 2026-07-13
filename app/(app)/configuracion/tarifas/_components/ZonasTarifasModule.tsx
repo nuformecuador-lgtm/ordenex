@@ -98,7 +98,7 @@ export function ZonasTarifasModule({
       nombre: full.nombre,
       distritoIds,
       cobro,
-      esGam: full.esGam,
+      esCentral: full.esCentral,
     });
     setFormKey((k) => k + 1);
     setView("form");

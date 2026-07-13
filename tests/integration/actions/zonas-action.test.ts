@@ -13,7 +13,7 @@ import type { ZonaDTO } from "@/lib/types/zona";
 // Feature 54 (reconciliacion PR #40): prueba las Server Actions VIGENTES de zonas
 // contra el ZonaDTO nuevo { id, nombre, cobroVehiculo, distritosCount, esCentral,
 // tarifas? } y el ZonaActionError (conflict SIN payload). Las actions/DTO viejos
-// (marcarZonaGam, listarZonasLight, listarProvincias, pagoEntrega/esGam) ya no existen.
+// (marcarZonaGam, listarZonasLight, listarProvincias, pagoEntrega/esCentral) ya no existen.
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 const getActor = (a: Actor) => async (): Promise<Actor | null> => a;
@@ -38,6 +38,7 @@ function fakeService(over: Partial<IZonaService> = {}): IZonaService {
     actualizar: vi.fn().mockResolvedValue({ status: "ok", zona: dto() }),
     borrar: vi.fn().mockResolvedValue({ status: "ok" }),
     arbol: vi.fn().mockResolvedValue({ status: "ok", arbol: {} }),
+    marcarCentral: vi.fn().mockResolvedValue({ status: "ok", zona: dto({ esCentral: true }) }),
     ...over,
   };
 }

@@ -11,8 +11,8 @@ import { guiaDecisionErrorMessage } from "./guia-decision-error-messages";
 export interface RutearSateliteModalProps {
   open: boolean;
   /**
-   * Órdenes NO-GAM seleccionadas al abrir (snapshot). El padre ya filtró a
-   * `zonaEsGam === false` (R13); una orden GAM aquí sería rechazada por el
+   * Órdenes NO-central seleccionadas al abrir (snapshot). El padre ya filtró a
+   * `zonaEsCentral === false` (R13); una orden central aquí sería rechazada por el
    * service (defensa en profundidad), pero no se ofrece en la UI.
    */
   ordenes: OrdenListItemDTO[];

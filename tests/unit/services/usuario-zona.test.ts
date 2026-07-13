@@ -78,6 +78,7 @@ function buildZonaRepo(exists: boolean): IZonaRepository {
     arbol: vi.fn(),
     countExistingDistritos: vi.fn(),
     countExistingVehiculos: vi.fn(),
+    marcarCentral: vi.fn(),
     findCentralZonaId: vi.fn().mockResolvedValue(null),
   };
 }

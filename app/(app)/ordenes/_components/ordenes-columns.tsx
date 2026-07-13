@@ -95,10 +95,10 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     // Flete GAM o estándar según la zona de la orden; PriceLabel formatea a ₡ y
     // resuelve el caso sin tarifa (undefined → ₡0).
     render: (row) => {
-      const esGam = row.relaciones?.zona?.esGam;
+      const esCentral = row.relaciones?.zona?.esCentral;
       const tarifa = row.relaciones?.tienda?.tarifa;
       return (
-        <PriceLabel value={esGam ? tarifa?.valorFleteGam : tarifa?.valorFlete} />
+        <PriceLabel value={esCentral ? tarifa?.valorFleteGam : tarifa?.valorFlete} />
       );
     },
   },

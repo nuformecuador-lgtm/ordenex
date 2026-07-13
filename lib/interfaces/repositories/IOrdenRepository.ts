@@ -73,8 +73,8 @@ export class NumRemisionDuplicadoError extends Error {
 // service necesita distinguir "no existe" de "borrada" para reportar el motivo
 // exacto en `conflict.detalle` (R29).
 // Feature 30/R8/R9/R11/R12 — la fila de transicion suma la zona de la orden
-// (`zonaId` NOT NULL) y el flag GAM de esa zona (`zonaEsGam`), para que el
-// service clasifique cada orden GAM/no-GAM por `zonaId === gamZonaId` sin una
+// (`zonaId` NOT NULL) y el flag central de esa zona (`zonaEsCentral`), para que el
+// service clasifique cada orden central/no-central por `zonaId === centralZonaId` sin una
 // consulta extra.
 export interface OrdenTransicionRow {
   id: string;
@@ -82,7 +82,7 @@ export interface OrdenTransicionRow {
   numGuia: number | null;
   deletedAt: Date | null;
   zonaId: string;
-  esGam?: boolean;
+  zonaEsCentral: boolean;
 }
 
 // Feature 17/T15 — fila liviana de mensajero para el loader del modal (R28).

@@ -235,8 +235,7 @@ model Zona {
   ordenes              Orden[]
   tarifaZonaMensajeros TarifaZonaMensajero[]
   distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
-  usuarios             Usuario[] // feature 24/R6: lado inverso de Usuario.zona (mensajero/adminSatelite)
-  usuarios             Usuario[] // feature 54: lado opuesto de Usuario.zona (mensajero/adminSatelite)
+  usuarios             Usuario[] // feature 24/R6 + 54: lado inverso de Usuario.zona (mensajero/adminSatelite)
   cierresDestino       CierreDia[] // feature 37: cierres cuyo destino_zona_id apunta a esta zona
   cierresBodega        CierreBodega[] // feature 40: cierres de bodega de esta zona satelite
 

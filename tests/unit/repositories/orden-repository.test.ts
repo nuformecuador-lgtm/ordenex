@@ -274,9 +274,9 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(res.items[1].mensajeroAsignadoId).toBeNull();
   });
 
-  // Feature 30/R14/R19: el listado suma zonaNombre/zonaEsGam (columna de zona),
+  // Feature 30/R14/R19: el listado suma zonaNombre/zonaEsCentral (columna de zona),
   // sin romper el contrato del listado (tiendaNombre/mensajero* siguen presentes).
-  it("R14: incluye zona.{nombre,esGam} en el select y mapea zonaNombre/zonaEsGam por item", async () => {
+  it("R14: incluye zona.{nombre,esCentral} en el select y mapea zonaNombre/zonaEsCentral por item", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
       ordenListRow(),
@@ -294,9 +294,9 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     });
 
     expect(res.items[0].zonaNombre).toBe("GAM");
-    expect(res.items[0].zonaEsGam).toBe(true);
+    expect(res.items[0].zonaEsCentral).toBe(true);
     expect(res.items[1].zonaNombre).toBe("Limón");
-    expect(res.items[1].zonaEsGam).toBe(false);
+    expect(res.items[1].zonaEsCentral).toBe(false);
     // R19: no rompe los campos previos del listado.
     expect(res.items[0].tiendaNombre).toBe("Tienda Uno");
 
@@ -328,7 +328,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
 
     const rel = res.items[0].relaciones!;
     expect(rel.estatus).toEqual({ id: "os-bodega", value: "en_bodega" });
-    expect(rel.zona).toEqual({ id: "z1", nombre: "GAM", esGam: true });
+    expect(rel.zona).toEqual({ id: "z1", nombre: "GAM", esCentral: true });
     expect(rel.provincia).toEqual({ id: "p1", nombre: "San José" });
     expect(rel.canton).toEqual({ id: "c1", nombre: "Central" });
     expect(rel.distrito).toEqual({ id: "d1", nombre: "Carmen" });

@@ -105,8 +105,8 @@ export type ActionError =
 // (`?`) para no romper mocks/fixtures de UI existentes que construyen
 // OrdenListItemDTO sin estos campos; el repositorio SIEMPRE los envia (string|null).
 // Feature 30/R14/R19: agrega `zonaNombre` (columna de zona del listado) y
-// `zonaEsGam` (la UI decide por fila si muestra select de mensajero (GAM) o
-// "-> bodega satelite" (no-GAM)). Opcionales (`?`) por el mismo motivo que los
+// `zonaEsCentral` (la UI decide por fila si muestra select de mensajero (central) o
+// "-> bodega satelite" (no-central)). Opcionales (`?`) por el mismo motivo que los
 // campos de mensajero (feature 17): no romper mocks/fixtures de UI existentes que
 // construyen OrdenListItemDTO sin ellos (R19, cambio aditivo); el repositorio
 // SIEMPRE los envia (string/boolean concretos desde la relacion Orden.zona).
@@ -115,7 +115,7 @@ export type OrdenListItemDTO = OrdenDTO & {
   mensajeroSugeridoId?: string | null;
   mensajeroAsignadoId?: string | null;
   zonaNombre?: string;
-  zonaEsGam?: boolean;
+  zonaEsCentral?: boolean;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltos via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
   // que solo usa los escalares/`*Nombre` sigue funcionando. La relacion `tienda`
@@ -146,7 +146,7 @@ export interface OrdenTiendaRef {
 export interface OrdenListItemRelaciones {
   estatus: { id: string; value: string } | null;
   tienda: OrdenTiendaRef | null;
-  zona: { id: string; nombre: string; esGam: boolean } | null;
+  zona: { id: string; nombre: string; esCentral: boolean } | null;
   provincia: RefNombre | null;
   canton: RefNombre | null;
   distrito: RefNombre | null;

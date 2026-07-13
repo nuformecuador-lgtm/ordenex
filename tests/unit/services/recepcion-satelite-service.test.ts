@@ -34,7 +34,7 @@ function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransi
     numGuia: 10,
     deletedAt: null,
     zonaId: ZONA,
-    zonaEsGam: false,
+    zonaEsCentral: false,
     ...overrides,
   };
 }

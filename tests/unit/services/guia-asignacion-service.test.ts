@@ -30,7 +30,7 @@ function ordenRow(overrides: Partial<{
   numGuia: number | null;
   deletedAt: Date | null;
   zonaId: string;
-  zonaEsGam: boolean;
+  zonaEsCentral: boolean;
 }> = {}) {
   return {
     id: "o1",
@@ -38,7 +38,7 @@ function ordenRow(overrides: Partial<{
     numGuia: null,
     deletedAt: null,
     zonaId: GAM_ZONA_ID,
-    zonaEsGam: true,
+    zonaEsCentral: true,
     ...overrides,
   };
 }
@@ -140,7 +140,7 @@ describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", 
     const repo = fakeRepo({
       // orden no-GAM sin mensajero -> se rutea a satelite; no toca el bloqueo.
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
       ]),
       findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
     });
@@ -626,7 +626,7 @@ describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () =>
   it("R8: orden no-GAM con mensajeroId != null -> rechazo por orden, sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
       ]),
     });
     const service = newService(repo);
@@ -645,7 +645,7 @@ describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () =>
   it("R9/R10: orden no-GAM (sin mensajero) -> en_ruta_bodega_satelite, mensajeroAsignadoId NULL, con num_guia", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
       ]),
     });
     const service = newService(repo);
@@ -670,7 +670,7 @@ describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () =>
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o-gam-msg", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
         ordenRow({ id: "o-gam-sin", estatusValue: "en_preparacion", zonaId: GAM_ZONA_ID }),
-        ordenRow({ id: "o-nogam", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o-nogam", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
       ]),
     });
     const service = newService(repo);
@@ -702,7 +702,7 @@ describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () =>
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o-gam", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
-        ordenRow({ id: "o-nogam", estatusValue: "entregada", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o-nogam", estatusValue: "entregada", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
       ]),
     });
     const service = newService(repo);
@@ -726,7 +726,7 @@ describe("Feature 30 — asignarDesdeBodega rechaza no-GAM (R12)", () => {
   it("R12: orden no-GAM en el lote (origen en_bodega) -> conflict, sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", numGuia: 10, zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega", numGuia: 10, zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
       ]),
     });
     const service = newService(repo);
@@ -744,9 +744,9 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
   it("R13: rutea N ordenes no-GAM desde origen permitido -> en_ruta_bodega_satelite", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-        ordenRow({ id: "o2", estatusValue: "en_preparacion", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-        ordenRow({ id: "o3", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
+        ordenRow({ id: "o2", estatusValue: "en_preparacion", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
+        ordenRow({ id: "o3", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
       ]),
     });
     const service = newService(repo);
@@ -769,7 +769,7 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
   it("una orden GAM en el lote -> conflict 'orden GAM no se rutea a satelite', sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
         ordenRow({ id: "o2", estatusValue: "en_bodega", zonaId: GAM_ZONA_ID }),
       ]),
     });
@@ -786,8 +786,8 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
   it("R17: origen invalido / orden borrada -> conflict sin transaccion a medias", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "entregada", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-        ordenRow({ id: "o2", estatusValue: "en_bodega", deletedAt: new Date(), zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "entregada", zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega", deletedAt: new Date(), zonaId: NO_GAM_ZONA_ID, zonaEsCentral: false }),
       ]),
     });
     const service = newService(repo);

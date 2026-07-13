@@ -47,9 +47,8 @@ function toDTO(
     id: zona.id,
     nombre: zona.nombre,
     cobroVehiculo: zona.cobroVehiculo,
-    esGam: zona.esGam, // feature 24/R3
     distritosCount,
-    esCentral: zona.esCentral,
+    esCentral: zona.esCentral, // feature 54/R3: flag de zona central (antes esGam)
   };
   if (tarifas !== undefined) dto.tarifas = tarifas.map(tarifaToDTO);
   return dto;
@@ -198,21 +197,21 @@ export class ZonaRepository implements IZonaRepository {
     }
   }
 
-  async marcarGam(id: string, esGam: boolean): Promise<ZonaDTO | null> {
+  async marcarCentral(id: string, esCentral: boolean): Promise<ZonaDTO | null> {
     return this.prisma.$transaction(async (tx) => {
       const exists = await tx.zona.findUnique({ where: { id }, select: { id: true } });
       if (!exists) return null;
 
-      // R3: al marcar GAM, desmarca cualquier otra en true (a lo sumo una GAM).
-      if (esGam) {
+      // R3: al marcar central, desmarca cualquier otra en true (a lo sumo una central).
+      if (esCentral) {
         await tx.zona.updateMany({
-          where: { esGam: true, NOT: { id } },
-          data: { esGam: false },
+          where: { esCentral: true, NOT: { id } },
+          data: { esCentral: false },
         });
       }
       const zona = await tx.zona.update({
         where: { id },
-        data: { esGam },
+        data: { esCentral },
         include: { _count: { select: { distritos: true } } },
       });
       return toDTO(zona, zona._count.distritos, undefined);

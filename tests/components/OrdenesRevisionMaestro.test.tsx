@@ -339,14 +339,14 @@ describe("OrdenesRevisionMaestro", () => {
                 id: "no-gam-1",
                 numRemision: "REM-NOGAM",
                 estatusId: "id-fulfillment",
-                zonaEsGam: false,
+                zonaEsCentral: false,
                 zonaNombre: "Limón",
               }),
               makeOrden({
                 id: "gam-1",
                 numRemision: "REM-GAM",
                 estatusId: "id-fulfillment",
-                zonaEsGam: true,
+                zonaEsCentral: true,
                 zonaNombre: "GAM",
               }),
             ]

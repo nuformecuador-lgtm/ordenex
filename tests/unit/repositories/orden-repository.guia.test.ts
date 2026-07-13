@@ -58,7 +58,7 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
 
     const rows = await repo.findByIdsForTransicion(["o1", "o2"]);
 
-    // Feature 30/R8/R9: la fila de transicion suma zonaId + zonaEsGam.
+    // Feature 30/R8/R9: la fila de transicion suma zonaId + zonaEsCentral.
     expect(rows).toEqual([
       {
         id: "o1",
@@ -66,7 +66,7 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
         numGuia: null,
         deletedAt: null,
         zonaId: "z-gam",
-        zonaEsGam: true,
+        zonaEsCentral: true,
       },
       {
         id: "o2",
@@ -74,13 +74,13 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
         numGuia: 5,
         deletedAt: new Date("2026-01-01"),
         zonaId: "z-limon",
-        zonaEsGam: false,
+        zonaEsCentral: false,
       },
     ]);
     const arg = prisma.orden.findMany.mock.calls[0][0];
     // R29: NO filtra deletedAt — el service es quien reporta "orden borrada".
     expect(arg.where).toEqual({ id: { in: ["o1", "o2"] } });
-    // Feature 30: proyecta zonaId + zona.esGam.
+    // Feature 30: proyecta zonaId + zona.esCentral.
     expect(arg.select.zonaId).toBe(true);
     expect(arg.select.zona).toEqual({ select: { esCentral: true } });
   });

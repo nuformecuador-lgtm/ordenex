@@ -32,8 +32,8 @@ export interface ZonaFormInitial {
   nombre: string;
   distritoIds: string[];
   cobro: CobroVehiculoValue;
-  /** Marca de zona GAM (a lo sumo una en true). */
-  esGam?: boolean;
+  /** Marca de zona central (a lo sumo una en true). */
+  esCentral?: boolean;
 }
 
 export const cobroVacio = (): CobroVehiculoValue => ({
@@ -60,7 +60,7 @@ export function CrearZonaForm({
   mode: "crear" | "editar";
   provincias: ProvinciaArbolDTO[];
   vehiculos: VehiculoDTO[];
-  /** Zonas existentes, para verificar si ya hay una marcada como GAM. */
+  /** Zonas existentes, para verificar si ya hay una marcada como central. */
   zonas: ZonaDTO[];
   initial?: ZonaFormInitial;
   /** Se invoca tras crear/actualizar con éxito (el padre refresca y cierra). */
@@ -77,20 +77,20 @@ export function CrearZonaForm({
   const [cobro, setCobro] = useState<CobroVehiculoValue>(
     initial?.cobro ?? cobroVacio(),
   );
-  const [esGam, setEsGam] = useState<boolean>(initial?.esGam ?? false);
+  const [esCentral, setEsCentral] = useState<boolean>(initial?.esCentral ?? false);
 
   const [errors, setErrors] = useState<FieldErrors>({});
   const [guardando, setGuardando] = useState(false);
-  // Zona GAM en conflicto (ya marcada); si !== null, se muestra el modal de
+  // Zona central en conflicto (ya marcada); si !== null, se muestra el modal de
   // confirmación antes de reestablecer la marca a esta zona.
-  const [gamConflicto, setGamConflicto] = useState<ZonaDTO | null>(null);
+  const [centralConflicto, setCentralConflicto] = useState<ZonaDTO | null>(null);
 
   /** Arma el candidato y lo valida contra el mismo schema que la action. */
   function validar() {
     const candidate = {
       nombre,
       cobroVehiculo: cobro.cobroVehiculo,
-      esGam,
+      esCentral,
       distritoIds,
       tarifas: cobro.tarifas,
     };
@@ -139,14 +139,14 @@ export function CrearZonaForm({
     }
     setErrors({});
 
-    // Si se marca como GAM, verifica que ninguna otra zona ya lo esté. Si la hay,
+    // Si se marca como central, verifica que ninguna otra zona ya lo esté. Si la hay,
     // se pide confirmación (reestablecerá la marca a esta zona).
-    if (esGam) {
+    if (esCentral) {
       const conflicto = zonas.find(
-        (z) => z.esGam && z.id !== initial?.zonaId,
+        (z) => z.esCentral && z.id !== initial?.zonaId,
       );
       if (conflicto) {
-        setGamConflicto(conflicto);
+        setCentralConflicto(conflicto);
         return;
       }
     }
@@ -178,12 +178,12 @@ export function CrearZonaForm({
 
       <div className="flex items-center gap-2">
         <Checkbox
-          id="es-gam-zona"
-          checked={esGam}
-          onCheckedChange={(checked) => setEsGam(checked === true)}
+          id="es-central-zona"
+          checked={esCentral}
+          onCheckedChange={(checked) => setEsCentral(checked === true)}
         />
-        <Label htmlFor="es-gam-zona" className="cursor-pointer">
-          Zona Gam
+        <Label htmlFor="es-central-zona" className="cursor-pointer">
+          Zona Central
         </Label>
       </div>
 
@@ -224,20 +224,20 @@ export function CrearZonaForm({
       </div>
 
       <Modal
-        open={gamConflicto !== null}
+        open={centralConflicto !== null}
         onOpenChange={(o) => {
-          if (!o) setGamConflicto(null); // Cancelar cierra y no envía.
+          if (!o) setCentralConflicto(null); // Cancelar cierra y no envía.
         }}
-        title="Zona GAM ya asignada"
+        title="Zona central ya asignada"
         description={
-          gamConflicto
-            ? `La zona ${gamConflicto.nombre} ya está marcada como Gam. Esta acción reestablecerá la zona Gam. ¿Desea continuar?`
+          centralConflicto
+            ? `La zona ${centralConflicto.nombre} ya está marcada como Central. Esta acción reestablecerá la zona Central. ¿Desea continuar?`
             : ""
         }
         confirmLabel="Continuar"
         cancelLabel="Cancelar"
         onConfirm={async () => {
-          setGamConflicto(null);
+          setCentralConflicto(null);
           await enviar();
         }}
       />

@@ -98,14 +98,14 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         });
         continue;
       }
-      const esGam = orden.zonaId === centralZonaId;
-      if (esGam) {
-        // R6: mensajero (sugerido confirmado u override) debe ser de la zona GAM.
+      const esCentral = orden.zonaId === centralZonaId;
+      if (esCentral) {
+        // R6: mensajero (sugerido confirmado u override) debe ser de la zona central.
         if (d.mensajeroId !== null && !mensajerosValidos.has(d.mensajeroId)) {
           detalle.push({ ordenId: d.ordenId, motivo: "mensajeroId no valido (no GAM)" });
         }
       } else {
-        // R8: una orden no-GAM NO puede recibir mensajero; su unica transicion es
+        // R8: una orden no-central NO puede recibir mensajero; su unica transicion es
         // el ruteo a satelite (mensajeroId debe venir null).
         if (d.mensajeroId !== null) {
           detalle.push({
@@ -132,7 +132,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
 
     // --- Resolver estatus destino por value (guarda defensiva si falta el seed) ---
-    const hayNoGam = decisiones.some((d) => {
+    const hayNoCentral = decisiones.some((d) => {
       const orden = ordenMap.get(d.ordenId);
       return orden !== undefined && orden.zonaId !== centralZonaId;
     });
@@ -144,7 +144,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     if (
       estatusEsperaId === null ||
       estatusBodegaId === null ||
-      (hayNoGam && estatusRutaSateliteId === null)
+      (hayNoCentral && estatusRutaSateliteId === null)
     ) {
       return {
         status: "validation_error",
@@ -152,16 +152,16 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
-    // --- Construir decisiones del lote: GAM por regla 17, no-GAM a satelite (R11) ---
+    // --- Construir decisiones del lote: central por regla 17, no-central a satelite (R11) ---
     function estatusDestino(ordenId: string, mensajeroId: string | null): {
       estatusId: string;
       mensajeroAsignadoId: string | null;
       estado: string;
     } {
       const orden = ordenMap.get(ordenId);
-      const esGam = orden !== undefined && orden.zonaId === centralZonaId;
-      if (!esGam) {
-        // R9/R10: no-GAM -> en_ruta_bodega_satelite, sin mensajero, con num_guia.
+      const esCentral = orden !== undefined && orden.zonaId === centralZonaId;
+      if (!esCentral) {
+        // R9/R10: no-central -> en_ruta_bodega_satelite, sin mensajero, con num_guia.
         return {
           estatusId: estatusRutaSateliteId as string,
           mensajeroAsignadoId: null,
