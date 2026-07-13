@@ -84,6 +84,10 @@ describe("wallet idempotencia (R6/R13)", () => {
       prisma as unknown as PrismaClient,
       new WalletMovimientoRepository(prisma as unknown as PrismaClient),
       new WalletFeedService(buildTarifaRepo()),
+      // Feature 43: dobles no-op del ledger por tienda (este test cubre SOLO la idempotencia
+      // de la caja principal 42; el ledger por tienda tiene su propio test de idempotencia).
+      { crearMovimientos: vi.fn().mockResolvedValue(0), listarPorTienda: vi.fn(), agregarSaldoPorTienda: vi.fn(), listarSaldosTodasTiendas: vi.fn() },
+      { construirMovimientosPorTienda: vi.fn().mockResolvedValue([]) },
     );
 
     const aprobar = () =>

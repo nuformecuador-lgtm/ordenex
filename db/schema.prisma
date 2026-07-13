@@ -117,6 +117,8 @@ model Usuario {
   cierresBodegaSolicitados CierreBodega[]  @relation("CierreBodegaSolicitadoPor") // feature 40: cierres de bodega solicitados por este adminSatelite
   cierresBodegaResueltos   CierreBodega[]  @relation("CierreBodegaResueltoPor") // feature 40: cierres de bodega que este maestro aprobo/rechazo
   walletMovimientosRegistrados WalletMovimiento[] @relation("WalletMovimientoRegistrador") // feature 42/R2/R15: movimientos manuales que este usuario (maestro) registro
+  walletTiendaMovimientos      WalletTiendaMovimiento[] @relation("WalletTiendaMovimientoTienda") // feature 43/R1/R2: movimientos del ledger de ESTA tienda (rol adminTienda)
+  walletTiendaMovimientosRegistrados WalletTiendaMovimiento[] @relation("WalletTiendaMovimientoRegistrador") // feature 43/R2: movimientos manuales del ledger de tienda que este usuario registro
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -639,4 +641,68 @@ model WalletMovimiento {
   @@index([tipo, categoria]) // R24: filtros por tipo/categoria
   @@index([origenTipo, origenId]) // R24: buscar movimientos de un origen
   @@map("wallet_movimiento")
+}
+
+// Feature 43 (design §1.1): tipo del movimiento del ledger POR TIENDA. `credito` = a favor
+// de la tienda (COD recaudado); `debito` = descuento de Ordenex (flete/comision/IVAs) o pago
+// a la tienda. El signo del saldo lo da `tipo`; `monto` es SIEMPRE positivo. Enum Postgres
+// nativo (patron WalletMovimientoTipo).
+enum WalletTiendaMovimientoTipo {
+  credito
+  debito
+
+  @@map("wallet_tienda_movimiento_tipo")
+}
+
+// Feature 43 (design §1.1): categoria (concepto) del movimiento por tienda. Los 6 debitos
+// son ESPEJO 1:1 de los 6 conceptos de ingreso de la 42 (R8). `cod_recaudado` es el credito
+// (Q2). `pago_tienda` queda RESERVADO para el follow-up de pago/liquidacion (F1.4-Q4).
+// `ajuste_credito`/`ajuste_debito` = correccion compensatoria inmutable (R3/R29).
+enum WalletTiendaMovimientoCategoria {
+  // credito (a favor de la tienda)
+  cod_recaudado
+  // debitos (espejo 1:1 de los 6 conceptos de ingreso de la 42, R8)
+  flete
+  flete_devolucion
+  comision_cod
+  iva_flete
+  iva_flete_devolucion
+  iva_comision_cod
+  // pago/liquidacion (F1.4-Q4; RESERVADO aunque el pago sea follow-up)
+  pago_tienda
+  // ajustes manuales (inmutables, correccion compensatoria R3/R29)
+  ajuste_credito
+  ajuste_debito
+
+  @@map("wallet_tienda_movimiento_categoria")
+}
+
+// Feature 43 (design §1.2): LEDGER append-only del saldo POR TIENDA (cuanto le debe ENTREGAR
+// Ordenex a cada tienda). Fila INMUTABLE (R1/R3): SIN updatedAt/deletedAt; una correccion es
+// un movimiento de ajuste compensatorio, nunca alterando el original. El saldo se DERIVA
+// (SUM credito - SUM debito), no se almacena (R16). Idempotencia por indice unico parcial
+// (origen_tipo, origen_id, tienda_id, categoria) WHERE origen_id IS NOT NULL — va a mano en
+// la migracion (Prisma no expresa indice parcial). RLS habilitada sin policies (solo service
+// role, patron wallet_movimiento/cierre_dia), acotado por tienda en el WHERE (R19/R24).
+model WalletTiendaMovimiento {
+  id              String                          @id @default(uuid())
+  tiendaId        String                          @map("tienda_id") // FK -> usuario (rol adminTienda)
+  tipo            WalletTiendaMovimientoTipo
+  categoria       WalletTiendaMovimientoCategoria
+  monto           Decimal                         @db.Decimal(12, 2) // > 0 (el signo lo da `tipo`)
+  origenTipo      WalletOrigenTipo                @map("origen_tipo") // cierre_dia | pago_tienda | manual
+  origenId        String?                         @map("origen_id") // NULL solo en manual
+  descripcion     String?
+  registradoPor   String?                         @map("registrado_por") // FK usuario (actor) en manual; NULL en automaticos
+  fechaMovimiento DateTime                        @default(now()) @map("fecha_movimiento")
+  createdAt       DateTime                        @default(now()) @map("created_at")
+  // SIN updatedAt / deletedAt: la fila es INMUTABLE (R3). No hay soft-delete.
+
+  tienda      Usuario  @relation("WalletTiendaMovimientoTienda", fields: [tiendaId], references: [id])
+  registrador Usuario? @relation("WalletTiendaMovimientoRegistrador", fields: [registradoPor], references: [id])
+
+  @@index([tiendaId, fechaMovimiento]) // R26: saldo/listado por tienda por fecha (desc)
+  @@index([tiendaId, categoria]) // R26: filtro por concepto por tienda
+  @@index([origenTipo, origenId]) // R26: movimientos de un origen (cierre)
+  @@map("wallet_tienda_movimiento")
 }

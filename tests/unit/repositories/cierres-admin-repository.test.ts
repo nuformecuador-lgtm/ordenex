@@ -4,6 +4,8 @@ import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepositor
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { IWalletFeedService } from "@/lib/interfaces/services/IWalletFeedService";
+import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
+import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWalletTiendaFeedService";
 
 // Feature 38 — tests unit del CierresAdminRepository (mockea Prisma, sin DB real,
 // patron cierre-dia-repository.test.ts). Cubre R2/R4/R5 (findCierresByAlcance con
@@ -23,7 +25,17 @@ function buildWalletDeps() {
   const walletFeedService: IWalletFeedService = {
     construirMovimientosDeIngreso: vi.fn().mockResolvedValue([]),
   };
-  return { walletMovimientoRepo, walletFeedService };
+  // Feature 43/T10: dobles del ledger por tienda (misma tx que la 42).
+  const walletTiendaMovimientoRepo: IWalletTiendaMovimientoRepository = {
+    crearMovimientos: vi.fn().mockResolvedValue(0),
+    listarPorTienda: vi.fn(),
+    agregarSaldoPorTienda: vi.fn(),
+    listarSaldosTodasTiendas: vi.fn(),
+  };
+  const walletTiendaFeedService: IWalletTiendaFeedService = {
+    construirMovimientosPorTienda: vi.fn().mockResolvedValue([]),
+  };
+  return { walletMovimientoRepo, walletFeedService, walletTiendaMovimientoRepo, walletTiendaFeedService };
 }
 
 // Construye el repo con los dobles de wallet y un $transaction que ejecuta el callback
@@ -40,6 +52,8 @@ function makeRepo(
     withTx as unknown as PrismaClient,
     wallet.walletMovimientoRepo,
     wallet.walletFeedService,
+    wallet.walletTiendaMovimientoRepo,
+    wallet.walletTiendaFeedService,
   );
   return { repo, wallet };
 }
@@ -422,5 +436,116 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       }),
     ).rejects.toThrow("insert wallet fallo");
     // NO se alcanzo el retorno "updated": el error atraviesa el $transaction (todo-o-nada).
+  });
+});
+
+describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (feature 43/T10: R5/R7/R12/R13)", () => {
+  it("R5: aprobar (count=1) construye e inserta los movimientos POR TIENDA en la MISMA tx, tras la 42", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const movsTienda = [
+      { tiendaId: "t1", tipo: "credito", categoria: "cod_recaudado", monto: "10000.00", origenTipo: "cierre_dia", origenId: "c1", descripcion: null, registradoPor: null },
+      { tiendaId: "t1", tipo: "debito", categoria: "flete", monto: "1000.00", origenTipo: "cierre_dia", origenId: "c1", descripcion: null, registradoPor: null },
+    ];
+    (wallet.walletTiendaFeedService.construirMovimientosPorTienda as ReturnType<typeof vi.fn>).mockResolvedValue(movsTienda);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_MAESTRO,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-maestro",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("updated");
+    // La 42 se alimenta primero; luego el ledger por tienda con el mismo cierreId + tx.
+    expect(wallet.walletMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+    expect(wallet.walletTiendaFeedService.construirMovimientosPorTienda).toHaveBeenCalledTimes(1);
+    expect(wallet.walletTiendaFeedService.construirMovimientosPorTienda).toHaveBeenCalledWith("c1", expect.anything());
+    expect(wallet.walletTiendaMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+    expect((wallet.walletTiendaMovimientoRepo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual(movsTienda);
+  });
+
+  it("rechazar NO alimenta el ledger por tienda (solo aprobado)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "rechazado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: "cuadre erroneo",
+    });
+
+    expect(wallet.walletTiendaFeedService.construirMovimientosPorTienda).not.toHaveBeenCalled();
+    expect(wallet.walletTiendaMovimientoRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("count=0 (conflict) NO alimenta el ledger por tienda aunque el destino sea aprobado", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
+    prisma.cierreDia.count.mockResolvedValue(1);
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("conflict");
+    expect(wallet.walletTiendaFeedService.construirMovimientosPorTienda).not.toHaveBeenCalled();
+    expect(wallet.walletTiendaMovimientoRepo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("R13: vencido->aprobado (count=1) alimenta el ledger por tienda exactamente una vez", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    const r = await repo.resolverCierre({
+      cierreId: "c-vencido",
+      alcance: ALCANCE_SAT,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-sat",
+      motivoRechazo: null,
+    });
+
+    expect(r).toBe("updated");
+    expect(wallet.walletTiendaMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+  });
+
+  it("R7: si el insert del ledger por tienda falla, el $transaction propaga (rollback de TODO, incluida la 42)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    (wallet.walletTiendaFeedService.construirMovimientosPorTienda as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { tiendaId: "t1", tipo: "debito", categoria: "flete", monto: "1.00", origenTipo: "cierre_dia", origenId: "c1", descripcion: null, registradoPor: null },
+    ]);
+    (wallet.walletTiendaMovimientoRepo.crearMovimientos as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("insert wallet tienda fallo"),
+    );
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    await expect(
+      repo.resolverCierre({
+        cierreId: "c1",
+        alcance: ALCANCE_MAESTRO,
+        nuevoEstado: "aprobado",
+        resueltoPor: "adm-maestro",
+        motivoRechazo: null,
+      }),
+    ).rejects.toThrow("insert wallet tienda fallo");
+    // La 42 alcanzo a construirse/insertarse, pero el fallo del 43 revierte TODA la tx.
+    expect(wallet.walletMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
   });
 });

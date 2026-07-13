@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { WalletFeedService } from "@/lib/services/WalletFeedService";
+import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
+import type { TarifaVigentePorZona } from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
 import type {
   Alcance,
   CierreAdminResumenRow,
@@ -425,6 +432,99 @@ describe("CierresAdminService.aprobarCierre (R10/R12/R13)", () => {
     const r = await service.aprobarCierre("c1", MENSAJERO);
     expect(r.status).toBe("forbidden");
     expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+});
+
+// --- feature 43/T11: aprobar CierreDia genera movimientos por tienda (end-to-end con el repo real) ---
+
+describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (feature 43: R5/R13)", () => {
+  const TARIFA: TarifaVigentePorZona = {
+    valorFlete: "1000.00",
+    valorFleteGam: "1500.00",
+    valorFleteDevuelto: "400.00",
+    valorFleteDevueltoGam: "600.00",
+    comisionCod: "5.00",
+    ivaFlete: "13.00",
+    ivaComisionCod: "13.00",
+  };
+
+  // Prisma doble: cierreDia.updateMany + gestionOrden.findMany + createMany de ambos ledgers
+  // + $transaction (tx === prisma). Store del ledger por tienda para inspeccionar lo insertado.
+  function buildStack(gestiones: unknown[]) {
+    const tiendaRows: Array<Record<string, unknown>> = [];
+    const prisma = {
+      cierreDia: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(1) },
+      gestionOrden: { findMany: vi.fn().mockResolvedValue(gestiones) },
+      walletMovimiento: { createMany: vi.fn(async () => ({ count: 0 })) },
+      walletTiendaMovimiento: {
+        createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
+          tiendaRows.push(...data);
+          return { count: data.length };
+        }),
+      },
+    };
+    const withTx = { ...prisma, $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)) };
+    const tarifaRepo = { resolveTarifaPorZona: vi.fn().mockResolvedValue(TARIFA) };
+    const repo = new CierresAdminRepository(
+      withTx as unknown as PrismaClient,
+      new WalletMovimientoRepository(withTx as unknown as PrismaClient),
+      new WalletFeedService(tarifaRepo),
+      new WalletTiendaMovimientoRepository(withTx as unknown as PrismaClient),
+      new WalletTiendaFeedService(tarifaRepo, { TIENDA_DEBITA_FLETE_DEVOLUCION: true }),
+    );
+    return { repo, prisma, tiendaRows };
+  }
+
+  function gestion(resultado: string, tiendaId: string, montoRecibido: string | null) {
+    return {
+      resultado,
+      montoRecibido: montoRecibido === null ? null : new Prisma.Decimal(montoRecibido),
+      orden: {
+        tiendaId,
+        zonaId: "z1",
+        montoCobrar: new Prisma.Decimal("10000.00"),
+        cobraComision: true,
+        zona: { esCentral: false },
+      },
+    };
+  }
+
+  it("R5: aprobar un CierreDia inserta el credito COD + debitos por tienda (via el repo real)", async () => {
+    const { repo, tiendaRows } = buildStack([
+      gestion("entregada", "t1", "10000.00"),
+      gestion("devuelta", "t2", null),
+    ]);
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierre("c1", MAESTRO);
+
+    expect(r).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    // t1 (entregada): credito cod_recaudado + debitos flete/iva_flete/comision/iva_comision.
+    const t1 = tiendaRows.filter((m) => m.tiendaId === "t1");
+    const t1cats = t1.map((m) => m.categoria);
+    expect(t1cats).toEqual(expect.arrayContaining(["cod_recaudado", "flete", "iva_flete", "comision_cod", "iva_comision_cod"]));
+    // t2 (devuelta, flag on): debitos de devolucion SIN credito (saldo negativo).
+    const t2 = tiendaRows.filter((m) => m.tiendaId === "t2");
+    const t2cats = t2.map((m) => m.categoria);
+    expect(t2cats).toEqual(expect.arrayContaining(["flete_devolucion", "iva_flete_devolucion"]));
+    expect(t2cats).not.toContain("cod_recaudado");
+    // origen cierre_dia con el id del cierre; montos Prisma.Decimal en la fila.
+    for (const m of tiendaRows) {
+      expect(m.origenTipo).toBe("cierre_dia");
+      expect(m.origenId).toBe("c1");
+      expect(m.monto).toBeInstanceOf(Prisma.Decimal);
+    }
+  });
+
+  it("R13: vencido->aprobado alimenta el ledger por tienda una sola vez", async () => {
+    const { repo, prisma, tiendaRows } = buildStack([gestion("entregada", "t1", "5000.00")]);
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierre("c-vencido", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(prisma.walletTiendaMovimiento.createMany).toHaveBeenCalledTimes(1); // una sola alimentacion
+    expect(tiendaRows.some((m) => m.categoria === "cod_recaudado" && m.tiendaId === "t1")).toBe(true);
   });
 });
 

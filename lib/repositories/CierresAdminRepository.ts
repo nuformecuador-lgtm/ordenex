@@ -9,6 +9,8 @@ import type {
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { IWalletFeedService } from "@/lib/interfaces/services/IWalletFeedService";
+import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
+import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWalletTiendaFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
 import { WITH_DETALLE, toPendienteRow } from "@/lib/repositories/CierreDiaRepository";
 
@@ -89,6 +91,11 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     // los inserta idempotentemente).
     private readonly walletMovimientoRepo: IWalletMovimientoRepository,
     private readonly walletFeedService: IWalletFeedService,
+    // Feature 43/T10: enganche al LEDGER por tienda (por inyeccion, misma tx). El feed
+    // construye los movimientos por tienda (credito COD + debitos por concepto) y el repo de
+    // tienda los inserta idempotentemente EN LA MISMA tx que la 42 (atomico, R5/R7/R12/R13).
+    private readonly walletTiendaMovimientoRepo: IWalletTiendaMovimientoRepository,
+    private readonly walletTiendaFeedService: IWalletTiendaFeedService,
   ) {}
 
   /** R2/R4/R5/R8/R9: cierres del alcance, mas reciente primero, totales -> string. */
@@ -152,6 +159,13 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       if (res.count === 1 && nuevoEstado === "aprobado") {
         const movs = await this.walletFeedService.construirMovimientosDeIngreso(cierreId, tx);
         await this.walletMovimientoRepo.crearMovimientos(tx, movs); // R6/R13: idempotente
+        // Feature 43/T10 (R5/R7/R12/R13): TRAS alimentar la 42, alimenta el LEDGER por tienda
+        // en la MISMA tx (todo-o-nada: si falla, rollback de la aprobacion Y de la 42).
+        const movsTienda = await this.walletTiendaFeedService.construirMovimientosPorTienda(
+          cierreId,
+          tx,
+        );
+        await this.walletTiendaMovimientoRepo.crearMovimientos(tx, movsTienda); // R6/R13: idempotente
       }
       return res.count;
     });
