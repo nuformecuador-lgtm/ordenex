@@ -1166,3 +1166,24 @@
 - Verde: prisma OK, typecheck 0, lint 0, **2191 tests**, `init.sh` OK; migración verificada ESTÁTICAMENTE (Postgres
   local compartido con la 49 en paralelo). Corrió en PARALELO con la 49 en worktree aislado `../ordenex-f44`.
   Sincronizada con `dev` (46 + 49). **PR #53 → `dev`**. DESBLOQUEA la 45 (gastos/sueldos), último eslabón wallet.
+
+## Feature 47 — reintentos de entrega y escalado a rechazo (2026-07-13)
+
+- **Tercera de la Fase 2 del flujo del mensajero** (grupo 46/47/49 → 48). Fullstack/high, un ciclo. Rama desde `dev`
+  verde POST-REVERT #55 (el PR #54 "adjustments" había revertido la 49 y roto la cadena wallet 42/43/44; el revert #55
+  lo restauró). F1.4 APROBADA (todas las recomendaciones). Impl R1–R22 + reviewer APROBADO 0 bloqueantes. Commit `68eb8fd`.
+- **Cambio central:** hoy una gestión `devuelta` dejaba la orden TERMINAL; la 47 la vuelve REINTENTABLE. En
+  `GestionOrdenRepository.crearGestionYTransicionar`, en la MISMA `$transaction` que la gestión: `en_reparto→devuelta`
+  (actor=mensajero) + una transición de seguimiento — `devuelta→rechazada` si `intentos>=umbral` (escalado final) o
+  `devuelta→en_bodega/en_bodega_satelite` si no (reintento, ruteo por zona vía `findCentralZonaId` reusando 30/33/46) —
+  cada una con su `appendCambioEstado` (choke point de la 49, `actor=null` sistema, `origen_tipo=gestion`). **Atómico:**
+  si el 2º append falla, revierte todo.
+- **Contador DERIVADO** del historial de la 49 (`contarPorDestino` sobre `orden_historial_estado`, sin columna nueva;
+  SOLO `devuelta` cuenta, `reprogramada` NO). **Umbral CONFIGURABLE** `lib/config/reintentos.ts` (default 3, "mínimo por
+  ley"). `devuelta_origen`/retorno a la tienda = FUERA DE ALCANCE (feature 48).
+- **SIN migración** (los estatus ya existían; `origen_tipo=gestion` reutilizado). Añadido `zonaId` a la proyección
+  `findByIdsParaGestion` (`OrdenGestionRow`) para rutear el reintento. Test de cobertura de la 49 sigue cerrado (11
+  puntos, enum sin valores nuevos). UI badge "intento X de N" en la lista + el sheet de historial de la 49.
+- Verde: typecheck 0, lint 0, **2355/2355 (+31)**, `init.sh` OK, SIN regresión 36/49. DEUDA menor: E2E diferido; TOCTOU
+  teórico del conteo mitigado por la guardia de origen `en_reparto` + puntero 1-a-1 (aprobado en F1.4); R12 sin test
+  nominal. **PENDIENTE: sync con `dev` + PR + merge (OK humano).**
