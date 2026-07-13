@@ -6,14 +6,19 @@ import type {
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const OTRO: Actor = { usuarioId: "m2", rol: "mensajero" };
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
+
+// Feature 47: zona central (para clasificar bodega_central) usada por el doble de zonaRepo.
+const ZONA_CENTRAL = "z-central";
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_espera_aceptacion: "os-espera",
@@ -22,6 +27,9 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   reprogramada: "os-reprogramada",
   devuelta: "os-devuelta",
   rechazada: "os-rechazada",
+  // Feature 47: destinos de la transicion de seguimiento (reintento a bodega).
+  en_bodega: "os-en-bodega",
+  en_bodega_satelite: "os-en-bodega-satelite",
 };
 
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
@@ -31,6 +39,7 @@ function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
     deletedAt: null,
     mensajeroAsignadoId: "m1",
     montoCobrar: 100,
+    zonaId: "z-satelite", // feature 47: por defecto una zona satelite (no la central)
     ...overrides,
   };
 }
@@ -76,6 +85,27 @@ function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue"> {
   };
 }
 
+// Feature 47: derivador de intentos (49). Por defecto 0 previos -> intento actual 1 (< umbral
+// default 3 -> reintento). Los tests de escalado inyectan un conteo mayor.
+function fakeHistorial(
+  overrides: Partial<Pick<IOrdenHistorialService, "contarIntentos">> = {},
+): Pick<IOrdenHistorialService, "contarIntentos"> {
+  return {
+    contarIntentos: vi.fn(async () => 0),
+    ...overrides,
+  };
+}
+
+// Feature 47: zona central para la bodega responsable (54). Por defecto ZONA_CENTRAL.
+function fakeZonaRepo(
+  overrides: Partial<Pick<IZonaRepository, "findCentralZonaId">> = {},
+): Pick<IZonaRepository, "findCentralZonaId"> {
+  return {
+    findCentralZonaId: vi.fn(async () => ZONA_CENTRAL),
+    ...overrides,
+  };
+}
+
 function fakeStorage(overrides: Partial<IFileStorage> = {}): IFileStorage {
   return {
     upload: vi.fn(async (input: { path: string }) => input.path),
@@ -95,8 +125,10 @@ function newService(
   repo: IGestionOrdenRepository = fakeRepo(),
   storage: IFileStorage = fakeStorage(),
   signed: ISignedUrlProvider = fakeSignedUrls(),
+  historial: Pick<IOrdenHistorialService, "contarIntentos"> = fakeHistorial(),
+  zonaRepo: Pick<IZonaRepository, "findCentralZonaId"> = fakeZonaRepo(),
 ) {
-  return new MisAsignacionesService(repo, fakeOrdenRepo(), storage, signed);
+  return new MisAsignacionesService(repo, fakeOrdenRepo(), storage, signed, historial, zonaRepo);
 }
 
 function evidencia() {
@@ -438,6 +470,169 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
       ),
     ).rejects.toThrow("db caida");
     expect(storage.remove).toHaveBeenCalledTimes(1);
+  });
+});
+
+// --- FEATURE 47: reintento vs escalado en la rama DEVUELTA (R1/R2/R4/R5/R8/R9/R13/R19) ---
+
+describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
+  const devolucion: GestionarInput = { ordenId: "o1", resultado: "devuelta", motivo: "ausente" };
+
+  function repoCall(repo: IGestionOrdenRepository) {
+    return (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      nuevoEstatusId: string;
+      seguimiento?: { destinoEstatusId: string; limpiaMensajero: boolean };
+    };
+  }
+
+  it("R1/R5: bajo umbral + zona satelite -> seguimiento en_bodega_satelite, limpia mensajero", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
+    });
+    const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 0) }); // intento actual = 1
+    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+      devolucion,
+      MENSAJERO,
+    );
+    expect(r.status).toBe("ok");
+    const call = repoCall(repo);
+    expect(call.nuevoEstatusId).toBe("os-devuelta"); // la orden pasa por devuelta (derivador la cuenta)
+    expect(call.seguimiento).toEqual({ destinoEstatusId: "os-en-bodega-satelite", limpiaMensajero: true });
+    expect(historial.contarIntentos).toHaveBeenCalledWith("o1"); // R1: consume el derivador
+  });
+
+  it("R5: bajo umbral + zona CENTRAL -> seguimiento en_bodega (central), limpia mensajero", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: ZONA_CENTRAL })]),
+    });
+    const zonaRepo = fakeZonaRepo({ findCentralZonaId: vi.fn(async () => ZONA_CENTRAL) });
+    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), fakeHistorial(), zonaRepo).gestionar(
+      devolucion,
+      MENSAJERO,
+    );
+    expect(r.status).toBe("ok");
+    expect(repoCall(repo).seguimiento).toEqual({ destinoEstatusId: "os-en-bodega", limpiaMensajero: true });
+  });
+
+  it("R5 edge: zonaId null -> fallback en_bodega (central), sin consultar la zona central", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: null })]),
+    });
+    const zonaRepo = fakeZonaRepo();
+    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), fakeHistorial(), zonaRepo).gestionar(
+      devolucion,
+      MENSAJERO,
+    );
+    expect(r.status).toBe("ok");
+    expect(repoCall(repo).seguimiento).toEqual({ destinoEstatusId: "os-en-bodega", limpiaMensajero: true });
+    expect(zonaRepo.findCentralZonaId).not.toHaveBeenCalled();
+  });
+
+  it("R8/R9: la N-esima devolucion (N = umbral 3) ESCALA a rechazada, NO limpia mensajero", async () => {
+    const repo = fakeRepo();
+    // 2 previos -> intento actual 3 == umbral default 3 -> escalado.
+    const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 2) });
+    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+      devolucion,
+      MENSAJERO,
+    );
+    expect(r.status).toBe("ok");
+    expect(repoCall(repo).seguimiento).toEqual({ destinoEstatusId: "os-rechazada", limpiaMensajero: false });
+  });
+
+  it("R9: la (N-1)-esima devolucion NO escala -> vuelve a la bodega para reintentar", async () => {
+    const repo = fakeRepo();
+    // 1 previo -> intento actual 2 < umbral default 3 -> reintento (no rechazada).
+    const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 1) });
+    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+      devolucion,
+      MENSAJERO,
+    );
+    expect(r.status).toBe("ok");
+    const seg = repoCall(repo).seguimiento;
+    expect(seg?.destinoEstatusId).toBe("os-en-bodega-satelite"); // no os-rechazada
+    expect(seg?.limpiaMensajero).toBe(true);
+  });
+
+  it("R2: catalogo incompleto (sin el estado de bodega) -> validation_error, sin persistir", async () => {
+    const repo = fakeRepo();
+    // ordenRepo que resuelve devuelta pero NO en_bodega_satelite (seed pendiente).
+    const ordenRepo = {
+      findEstatusIdByValue: vi.fn(async (v: string) =>
+        v === "en_bodega_satelite" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
+      ),
+    };
+    const service = new MisAsignacionesService(
+      repo,
+      ordenRepo,
+      fakeStorage(),
+      fakeSignedUrls(),
+      fakeHistorial(),
+      fakeZonaRepo(),
+    );
+    const r = await service.gestionar(devolucion, MENSAJERO);
+    expect(r.status).toBe("validation_error");
+    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+  });
+
+  it("R13: la 47 NO escribe devuelta_origen (reservado a la feature 48)", async () => {
+    const repo = fakeRepo();
+    const ordenRepo = {
+      findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
+    };
+    const service = new MisAsignacionesService(
+      repo,
+      ordenRepo,
+      fakeStorage(),
+      fakeSignedUrls(),
+      fakeHistorial(),
+      fakeZonaRepo(),
+    );
+    await service.gestionar(devolucion, MENSAJERO);
+    expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devuelta_origen");
+  });
+
+  it("R4/R19: reprogramada NO cuenta ni computa seguimiento (rama intacta)", async () => {
+    const repo = fakeRepo();
+    const historial = fakeHistorial();
+    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+      { ordenId: "o1", resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
+      MENSAJERO,
+    );
+    expect(r.status).toBe("ok");
+    expect(historial.contarIntentos).not.toHaveBeenCalled();
+    const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      seguimiento?: unknown;
+    };
+    expect(call.seguimiento).toBeUndefined(); // R19: sin transicion de seguimiento
+  });
+
+  it("R19: entregada NO computa seguimiento (una sola transicion)", async () => {
+    const repo = fakeRepo();
+    const historial = fakeHistorial();
+    await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+      { ordenId: "o1", resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencia: evidencia() },
+      MENSAJERO,
+    );
+    const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      seguimiento?: unknown;
+    };
+    expect(call.seguimiento).toBeUndefined();
+    expect(historial.contarIntentos).not.toHaveBeenCalled();
+  });
+
+  it("R19: rechazada DIRECTA NO computa seguimiento (una sola transicion)", async () => {
+    const repo = fakeRepo();
+    const historial = fakeHistorial();
+    await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+      { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencia: evidencia() },
+      MENSAJERO,
+    );
+    const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      seguimiento?: unknown;
+    };
+    expect(call.seguimiento).toBeUndefined();
+    expect(historial.contarIntentos).not.toHaveBeenCalled();
   });
 });
 

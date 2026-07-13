@@ -23,7 +23,13 @@ function entrada(): OrdenHistorialEntradaDTO {
 
 function fakeService(overrides: Partial<IOrdenHistorialService> = {}): IOrdenHistorialService {
   return {
-    obtenerHistorial: vi.fn(async () => ({ status: "ok" as const, entradas: [entrada()] })),
+    // Feature 47 (R15): el ok trae ademas intentos (derivado) y umbral, propagados por props.
+    obtenerHistorial: vi.fn(async () => ({
+      status: "ok" as const,
+      entradas: [entrada()],
+      intentos: 0,
+      umbral: 3,
+    })),
     contarIntentos: vi.fn(async () => 0),
     ...overrides,
   };
@@ -43,6 +49,9 @@ describe("obtenerHistorialOrden (R28)", () => {
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.entradas).toHaveLength(1);
+    // Feature 47 (R15): el borde propaga intentos/umbral tal cual del service (por props).
+    expect(r.intentos).toBe(0);
+    expect(r.umbral).toBe(3);
     expect(service.obtenerHistorial).toHaveBeenCalledWith("o1", MAESTRO);
   });
 

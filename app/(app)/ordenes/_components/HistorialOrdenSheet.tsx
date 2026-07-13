@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -139,9 +140,33 @@ function HistorialOrdenBody({ estado }: { estado: CargaState }) {
           <Skeleton className="h-14 w-full" />
         </div>
       );
-    case "ok":
+    case "ok": {
       // R29: datos por props al timeline de presentacion.
-      return <HistorialOrdenTimeline entradas={estado.entradas} />;
+      // Feature 47 (T4.2, R15/R16/R17): junto al timeline, el conteo de intentos
+      // de entrega DERIVADO ("Intento X de N", N = umbral configurable). SOLO se
+      // muestra cuando la orden lleva >= 1 devolucion (R16); con `intentos === 0`
+      // no se pinta el badge. La VISIBILIDAD se hereda del propio `ok`: la Server
+      // Action ya autorizo por visibilidad de la orden (R17), asi que un
+      // forbidden/not_found/unauthenticated nunca llega aqui y el badge no aparece
+      // para quien no tiene visibilidad; no se añade regla de permisos nueva.
+      const { intentos, umbral } = estado;
+      const intentosLabel = `Intento ${intentos} de ${umbral}`;
+      return (
+        <div className="flex flex-col gap-4">
+          {intentos >= 1 ? (
+            <Badge
+              variant="secondary"
+              role="status"
+              aria-label={`Intentos de entrega: ${intentos} de ${umbral}`}
+              className="self-start"
+            >
+              {intentosLabel}
+            </Badge>
+          ) : null}
+          <HistorialOrdenTimeline entradas={estado.entradas} />
+        </div>
+      );
+    }
     case "forbidden":
       // R27: sin visibilidad de la orden, sin filtrar datos.
       return (

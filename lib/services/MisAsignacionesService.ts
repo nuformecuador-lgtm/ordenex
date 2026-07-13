@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { GESTION_MIME_EXTENSION, gestionConfig, type GestionMimeType } from "@/lib/config/gestion";
+import { reintentosConfig } from "@/lib/config/reintentos";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type {
@@ -9,7 +10,9 @@ import type {
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   DetalleConflicto,
   EscogerServiceResult,
@@ -22,12 +25,19 @@ import type {
   RecogerInput,
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "en_espera_aceptacion";
 const ESTADO_EN_REPARTO = "en_reparto";
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
 const ORIGEN_GESTION = "en_reparto";
+
+// Feature 47 — destinos de la transicion de SEGUIMIENTO de una gestion `devuelta` (valores
+// de catalogo YA sembrados en ORDER_STATUS_SEED; esta feature NO agrega estados, R21).
+const ESTATUS_RECHAZADA = "rechazada"; // escalado (final) al alcanzar el umbral
+const ESTATUS_EN_BODEGA = "en_bodega"; // reintento -> bodega central
+const ESTATUS_EN_BODEGA_SATELITE = "en_bodega_satelite"; // reintento -> bodega satelite
 
 // El `value` de order_status destino coincide 1:1 con el `resultado` de la
 // gestion (entregada/reprogramada/devuelta/rechazada).
@@ -47,6 +57,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     private readonly ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue">,
     private readonly storage: IFileStorage,
     private readonly signedUrls: ISignedUrlProvider,
+    // Feature 47: deps añadidas al FINAL (no rompe el orden existente). El derivador de
+    // intentos (49) y la zona central para la bodega responsable (41/54). Solo se consumen
+    // en la rama `devuelta`.
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentos">,
+    private readonly zonaRepo: Pick<IZonaRepository, "findCentralZonaId">,
   ) {}
 
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
@@ -178,13 +193,28 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
     const gestion = buildGestionData(input, storagePath, contentType);
 
+    // Feature 47 (R1/R4/R5/R8/R9): SOLO la rama `devuelta` gana una transicion de
+    // SEGUIMIENTO (las otras 3 ramas quedan intactas -> R19). La decision (reintento a
+    // bodega vs escalado a rechazada) se toma ANTES de la tx con el conteo derivado de la
+    // 49; el puntero de bloqueo 1-a-1 del mensajero evita TOCTOU (design §2.3). El repo solo
+    // escribe: la REGLA vive aqui.
+    let seguimiento: { destinoEstatusId: string; limpiaMensajero: boolean } | undefined;
+    if (input.resultado === "devuelta") {
+      const decision = await this.resolverSeguimientoDevuelta(orden);
+      if (decision.status !== "ok") return decision;
+      seguimiento = decision.seguimiento;
+    }
+
     try {
       // R23/R26/R28/R30: INSERT gestion + UPDATE estatus + limpiar puntero, atomico.
+      // Feature 47 (R6/R7/R10/R11): + transicion de seguimiento (reintento/escalado) en la
+      // MISMA tx cuando hay `seguimiento` (rama devuelta).
       await this.repo.crearGestionYTransicionar({
         ordenId: input.ordenId,
         mensajeroId: actor.usuarioId,
         gestion,
         nuevoEstatusId,
+        seguimiento,
       });
     } catch (error) {
       // R23/R30: si la transaccion falla tras subir, limpiar el objeto (best-effort).
@@ -231,6 +261,60 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       return { status: "conflict", motivo: `solo se gestiona desde ${ORIGEN_GESTION}` }; // R18
     }
     return { status: "ok", orden };
+  }
+
+  /**
+   * Feature 47 (R1/R2/R5/R8/R9) — REGLA de reintento vs escalado de una gestion `devuelta`.
+   * Lee el conteo de intentos previos (derivador de la 49), calcula el intento actual y lo
+   * compara con el umbral configurable (R3). `intentoActual >= umbral` -> ESCALADO a
+   * `rechazada` (final, conserva el mensajero). `intentoActual < umbral` -> REINTENTO a la
+   * bodega responsable derivada de la zona (`en_bodega`/`en_bodega_satelite`, limpia el
+   * mensajero, R6). `zonaId` null -> fallback central `en_bodega` (R5 edge). Resuelve el id
+   * del destino via `findEstatusIdByValue`; catalogo incompleto -> validation_error (mismo
+   * patron que ya usa `gestionar`). El actor del seguimiento lo fija el repo (null, sistema).
+   */
+  private async resolverSeguimientoDevuelta(
+    orden: OrdenGestionRow,
+  ): Promise<
+    | { status: "ok"; seguimiento: { destinoEstatusId: string; limpiaMensajero: boolean } }
+    | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  > {
+    const intentosPrevios = await this.historial.contarIntentos(orden.id); // R1/R2 (derivador 49)
+    const intentoActual = intentosPrevios + 1;
+    const umbral = reintentosConfig.MIN_INTENTOS_ENTREGA; // R3
+
+    if (intentoActual >= umbral) {
+      // R8/R9: la N-esima devolucion (N = umbral) escala a `rechazada` (final). NO limpia el
+      // mensajero: deja el rastro del ultimo (mismo trato que un rechazo directo, para la 48).
+      const destinoEstatusId = await this.ordenRepo.findEstatusIdByValue(ESTATUS_RECHAZADA);
+      if (destinoEstatusId === null) return this.catalogoIncompleto();
+      return { status: "ok", seguimiento: { destinoEstatusId, limpiaMensajero: false } };
+    }
+
+    // R5: reintento -> bodega responsable derivada de la zona (reusa el ruteo 30/33/46).
+    // `zonaId` null -> fallback central (`en_bodega`), sin consultar la zona central.
+    let value: string;
+    if (orden.zonaId === null) {
+      value = ESTATUS_EN_BODEGA;
+    } else {
+      const centralZonaId = await this.zonaRepo.findCentralZonaId();
+      const { destinoTipo } = resolverDestinoCierre(orden.zonaId, centralZonaId);
+      value = destinoTipo === "bodega_central" ? ESTATUS_EN_BODEGA : ESTATUS_EN_BODEGA_SATELITE;
+    }
+    const destinoEstatusId = await this.ordenRepo.findEstatusIdByValue(value);
+    if (destinoEstatusId === null) return this.catalogoIncompleto();
+    // R6: reintento limpia el mensajero (handoff a la bodega, patron liberacion 46).
+    return { status: "ok", seguimiento: { destinoEstatusId, limpiaMensajero: true } };
+  }
+
+  private catalogoIncompleto(): {
+    status: "validation_error";
+    fieldErrors: Record<string, string[]>;
+  } {
+    return {
+      status: "validation_error",
+      fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
+    };
   }
 }
 

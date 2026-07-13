@@ -116,6 +116,27 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     if (r.status === "ok") expect(r.entradas).toHaveLength(1);
   });
 
+  // Feature 47 (R15/R17): el ok expone el conteo de intentos DERIVADO y el umbral, con la
+  // MISMA autorizacion de la orden (no se añade regla nueva). Aqui hay 2 destinos `devuelta`.
+  it("R15/R17: el ok incluye intentos (derivado) y umbral, tras autorizar la orden", async () => {
+    const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
+    const h = historialRepo({ contarPorDestino: vi.fn(async () => 2) });
+    const r = await newService(o, h).obtenerHistorial("o1", MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.intentos).toBe(2); // consume el derivador de la 49 (contarPorDestino a `devuelta`)
+    expect(r.umbral).toBe(3); // default por ley (reintentosConfig, env no seteado en test)
+    expect(h.contarPorDestino).toHaveBeenCalledWith("o1", "s-devuelta");
+  });
+
+  it("R15: sin devoluciones -> intentos 0 (no bloquea el ok)", async () => {
+    const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
+    const h = historialRepo({ contarPorDestino: vi.fn(async () => 0) });
+    const r = await newService(o, h).obtenerHistorial("o1", MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.intentos).toBe(0);
+  });
+
   it("admin -> ok con las entradas (cualquier orden)", async () => {
     const r = await newService().obtenerHistorial("o1", ADMIN);
     expect(r.status).toBe("ok");
