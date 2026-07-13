@@ -5,9 +5,11 @@ import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepositor
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { TarifaVigentePorZonaRepository } from "@/lib/repositories/TarifaVigentePorZonaRepository";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
+import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { gestionConfig } from "@/lib/config/gestion";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -63,6 +65,11 @@ function buildService(): ICierresAdminService {
       prisma,
       new WalletMovimientoRepository(prisma),
       new WalletFeedService(new TarifaVigentePorZonaRepository(prisma)),
+      // Feature 43/T10: alimenta el LEDGER por tienda al aprobar (misma tx que la 42). El
+      // feed reutiliza el mismo resolver de tarifas por zona y lee el interruptor Q3 del
+      // singleton walletTiendaConfig (default true).
+      new WalletTiendaMovimientoRepository(prisma),
+      new WalletTiendaFeedService(new TarifaVigentePorZonaRepository(prisma)),
     ),
     new ZonaRepository(prisma),
     new OrdenRepository(prisma),
