@@ -1,6 +1,7 @@
 import { RolValue } from "@prisma/client";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { listarLiberadasHoy } from "@/lib/actions/liberacion-reprogramada";
 
 import { OrdenesModule } from "./_components/OrdenesModule";
 import { OrdenesRevisionMaestro } from "./_components/OrdenesRevisionMaestro";
@@ -18,11 +19,22 @@ export default async function OrdenesPage() {
   const puedeCargarMasiva = actor?.rol === RolValue.adminTienda;
   const esMaestroOAdmin = actor?.rol === "maestro" || actor?.rol === "admin";
 
+  // Feature 46 (R15/R16): pre-fetch server-side del aviso derivado "Liberadas hoy
+  // (reprogramación)" para el maestro (bodega central, `en_bodega`). El loader
+  // devuelve `forbidden` para roles no destinatarios (p. ej. `admin`), que degrada a
+  // lista vacía. Datos por props al componente cliente (no fetch de datos sensibles).
+  const liberadasResult = esMaestroOAdmin ? await listarLiberadasHoy() : null;
+  const liberadasHoy =
+    liberadasResult?.status === "ok" ? liberadasResult.liberadas : [];
+
   return (
       <section className="flex flex-1 flex-col gap-6 p-6">
         <PageHeader title="Órdenes" description="Listado y gestión de órdenes" />
         {esMaestroOAdmin ? (
-          <OrdenesRevisionMaestro readOnly={actor?.rol === "admin"} />
+          <OrdenesRevisionMaestro
+            readOnly={actor?.rol === "admin"}
+            liberadasHoy={liberadasHoy}
+          />
         ) : (
           <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} />
         )}

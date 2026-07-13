@@ -22,6 +22,7 @@ import type {
   RutearSateliteResultadoItem,
   RutearSateliteServiceResult,
 } from "@/lib/interfaces/services/IGuiaAsignacionService";
+import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
 
 // R27: unicos estados de origen validos para "Generar guia".
 const ORIGEN_GENERAR_GUIA = new Set(["en_fulfillment", "en_preparacion"]);
@@ -29,6 +30,9 @@ const ORIGEN_GENERAR_GUIA = new Set(["en_fulfillment", "en_preparacion"]);
 const ORIGEN_BODEGA = "en_bodega";
 // Feature 30/R13 (decision (d)): origenes validos para rutear a satelite.
 const ORIGEN_RUTEO_SATELITE = new Set(["en_fulfillment", "en_preparacion", "en_bodega"]);
+
+// Feature 46/R2: estatus bloqueado por reprogramacion (guardia explicito y tipado).
+const ESTATUS_REPROGRAMADA = "reprogramada";
 
 const ESTATUS_EN_ESPERA_ACEPTACION = "en_espera_aceptacion"; // R21/R22/R26
 const ESTATUS_EN_BODEGA = "en_bodega"; // R23
@@ -89,6 +93,11 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       }
       if (orden.deletedAt !== null) {
         detalle.push({ ordenId: d.ordenId, motivo: "orden borrada" });
+        continue;
+      }
+      // Feature 46/R2: orden reprogramada -> bloqueada hasta su fecha; motivo tipado.
+      if (orden.estatusValue === ESTATUS_REPROGRAMADA) {
+        detalle.push({ ordenId: d.ordenId, motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA });
         continue;
       }
       if (!ORIGEN_GENERAR_GUIA.has(orden.estatusValue)) {
@@ -245,6 +254,11 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       }
       if (orden.deletedAt !== null) {
         detalle.push({ ordenId: id, motivo: "orden borrada" });
+        continue;
+      }
+      // Feature 46/R2: orden reprogramada -> bloqueada; motivo tipado (antes del origen).
+      if (orden.estatusValue === ESTATUS_REPROGRAMADA) {
+        detalle.push({ ordenId: id, motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA });
         continue;
       }
       if (orden.estatusValue !== ORIGEN_BODEGA) {

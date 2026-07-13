@@ -321,6 +321,7 @@ model Orden {
   mensajeroSugeridoId String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
   mensajeroAsignadoId String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
   cobraComision       Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
+  liberadaReprogramadaAt DateTime? @map("liberada_reprogramada_at") // feature 46/R13/R18: instante de liberacion programada (NULL = nunca liberada por reprogramacion); auditoria + fuente del aviso derivado
   deletedAt           DateTime? @map("deleted_at") // soft delete
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
