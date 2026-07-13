@@ -1,22 +1,21 @@
 import { z } from "zod";
-import type { EstadoTarifa } from "@prisma/client";
 import { tarifasConfig } from "@/lib/config/tarifas";
 
 // R2/R5: montos >= 0, precision fija (nunca punto flotante ni texto en DB).
 const montoSchema = z.number().nonnegative();
 // R3/R5/D2/D3: porcentaje 0..100.
 const porcentajeSchema = z.number().min(0).max(100);
-// id de la tienda (usuario) duena de la tarifa (FK obligatoria).
+// D1/R5: nombre no vacio, distingue tarifas.
+const nombreSchema = z.string().min(1);
+// feature 24: id de la zona a la que pertenece la tarifa (FK obligatoria).
 const idSchema = z.string().min(1);
-// Estado de la tarifa: solo activo|inactivo.
-export const estadoTarifaSchema = z.enum(["activo", "inactivo"]);
 
-// Validacion de creacion en el borde: tienda + las 8 columnas numericas
-// obligatorias (D5); strict para rechazar campos desconocidos. La invariante
-// "la tienda debe ser adminTienda" la valida el service (no el schema).
+// R14/R15: validacion de creacion en el borde. nombre + zona + las 8 columnas
+// numericas obligatorias (D5); strict para rechazar campos desconocidos.
 export const crearTarifaSchema = z
   .object({
-    tiendaId: idSchema, // FK a usuario (adminTienda; validado en el service)
+    nombre: nombreSchema,
+    zonaId: idSchema, // feature 24: cada tarifa pertenece a una zona
     valorFlete: montoSchema,
     valorFleteDevuelto: montoSchema,
     valorFleteGam: montoSchema,
@@ -29,12 +28,9 @@ export const crearTarifaSchema = z
   .strict();
 export type CrearTarifaInput = z.infer<typeof crearTarifaSchema>;
 
-// R20/R23: actualizacion; todos los campos opcionales + `status` (activo/inactivo);
-// mismas reglas de rango que en creacion; strict rechaza campos desconocidos.
-export const actualizarTarifaSchema = crearTarifaSchema
-  .partial()
-  .extend({ status: estadoTarifaSchema.optional() })
-  .strict();
+// R20/R23: actualizacion; todos los campos opcionales, mismas reglas de rango
+// que en creacion; strict rechaza campos desconocidos.
+export const actualizarTarifaSchema = crearTarifaSchema.partial().strict();
 export type ActualizarTarifaInput = z.infer<typeof actualizarTarifaSchema>;
 
 // R18: parametros del listado. page/pageSize enteros positivos; pageSize se
@@ -54,8 +50,8 @@ export type ListarTarifasInput = z.infer<typeof listarTarifasSchema>;
 // columnas numericas. NUNCA expone deletedAt.
 export interface TarifaDTO {
   id: string;
-  tiendaId: string; // usuario (adminTienda) duena de la tarifa
-  status: EstadoTarifa; // activo | inactivo
+  nombre: string;
+  zonaId: string; // feature 24: zona a la que pertenece la tarifa
   valorFlete: number;
   valorFleteDevuelto: number;
   valorFleteGam: number;

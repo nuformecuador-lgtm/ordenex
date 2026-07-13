@@ -1,4 +1,4 @@
-import { Prisma, type EstadoUsuario, type PrismaClient, type RolValue } from "@prisma/client";
+import { Prisma, type EstadoUsuario, type PrismaClient } from "@prisma/client";
 import {
   CatalogoInvalidoError,
   UsuarioDuplicadoError,
@@ -14,7 +14,6 @@ import {
   type UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
 import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
-import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
 
 type UserPrismaClient = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;
 
@@ -99,27 +98,13 @@ export class UserRepository implements IUserRepository {
     });
   }
 
-  /**
-   * Estrategia generica: usuarios `activo` del rol pasado, proyectados a id/nombre
-   * (sin PII/hash), ordenados por nombre. Fuente unica de la query; los helpers por
-   * rol (`listMensajeros`/`listAdminTiendas`) solo fijan el `rolValue`.
-   */
-  async listByRol(rolValue: RolValue): Promise<UsuarioPorRolDTO[]> {
+  /** Feature 16/R1/R2/R3: solo mensajeros activos, proyectados a id/nombre. */
+  async listMensajeros(): Promise<MensajeroDTO[]> {
     return this.prisma.usuario.findMany({
-      where: { rol: { value: rolValue }, estado: "activo" },
+      where: { rol: { value: "mensajero" }, estado: "activo" },
       select: { id: true, nombre: true },
       orderBy: { nombre: "asc" },
     });
-  }
-
-  /** Feature 16/R1/R2/R3: solo mensajeros activos, via `listByRol("mensajero")`. */
-  async listMensajeros(): Promise<MensajeroDTO[]> {
-    return this.listByRol("mensajero");
-  }
-
-  /** adminTienda activos, misma estrategia via `listByRol("adminTienda")`. */
-  async listAdminTiendas(): Promise<UsuarioPorRolDTO[]> {
-    return this.listByRol("adminTienda");
   }
 
   /** Feature 25/R13/R14/R15: listado paginado con `rolValue`, sin hash. */

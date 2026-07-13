@@ -19,7 +19,6 @@ import type { Actor, IUsuarioService } from "@/lib/interfaces/services/IUsuarioS
 import { UsuarioService } from "@/lib/services/UsuarioService";
 import { UserRepository } from "@/lib/repositories/UserRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
-import { TarifaRepository } from "@/lib/repositories/TarifaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
@@ -47,13 +46,8 @@ function toUsuarioActionError(shape: AppErrorShape): ActionError {
 
 function buildUsuarioService(): IUsuarioService {
   const prisma = getPrismaClient();
-  // Feature 24/R28: repo de zonas para validar `usuario.zona_id`. TarifaRepository:
-  // al degradar un adminTienda de rol, sus tarifas pasan a `inactivo`.
-  return new UsuarioService(
-    new UserRepository(prisma),
-    new ZonaRepository(prisma),
-    new TarifaRepository(prisma),
-  );
+  // Feature 24/R28: se inyecta el repo de zonas para validar `usuario.zona_id`.
+  return new UsuarioService(new UserRepository(prisma), new ZonaRepository(prisma));
 }
 
 export interface UsuarioActionDeps {

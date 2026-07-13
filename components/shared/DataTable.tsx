@@ -1,6 +1,6 @@
 "use client";
 
-import { isValidElement, type CSSProperties, type ReactNode } from "react";
+import { isValidElement, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -19,21 +19,6 @@ export interface Column<T> {
   value: string;
   /** Cómo renderizar la celda. Ver descripción del contrato arriba. */
   render?: ((row: T) => ReactNode) | keyof T | string;
-  /** Ancho fijo de la columna (px o cualquier unidad CSS). */
-  width?: number | string;
-  /** Ancho mínimo de la columna (px o cualquier unidad CSS). */
-  minWidth?: number | string;
-  /** Ancho máximo de la columna (px o cualquier unidad CSS). */
-  maxWidth?: number | string;
-}
-
-/** Deriva los estilos de ancho de una columna (width/minWidth/maxWidth). */
-function columnWidthStyle<T>(column: Column<T>): CSSProperties | undefined {
-  const { width, minWidth, maxWidth } = column;
-  if (width === undefined && minWidth === undefined && maxWidth === undefined) {
-    return undefined;
-  }
-  return { width, minWidth, maxWidth };
 }
 
 export interface DataTableProps<T> {
@@ -157,11 +142,7 @@ export function DataTable<T>({
     body = data.map((row, index) => (
       <tr key={resolveRowKey(rowKey, row, index)} className="border-b">
         {columns.map((column) => (
-          <td
-            key={column.id}
-            className="px-3 py-2 align-middle"
-            style={columnWidthStyle(column)}
-          >
+          <td key={column.id} className="px-3 py-2 align-middle">
             {resolveCell(column, row)}
           </td>
         ))}
@@ -170,32 +151,29 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="w-full overflow-x-auto">
-      <table
-        aria-label={ariaLabel}
-        className={cn("w-full border-collapse text-left text-sm")}
-      >
-        {caption ? (
-          <caption className="mb-2 text-sm text-muted-foreground">
-            {caption}
-          </caption>
-        ) : null}
-        <thead>
-          <tr className="border-b">
-            {columns.map((column) => (
-              <th
-                key={column.id}
-                scope="col"
-                className="px-3 py-2 font-medium text-muted-foreground"
-                style={columnWidthStyle(column)}
-              >
-                {column.value}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{body}</tbody>
-      </table>
-    </div>
+    <table
+      aria-label={ariaLabel}
+      className={cn("w-full border-collapse text-left text-sm")}
+    >
+      {caption ? (
+        <caption className="mb-2 text-sm text-muted-foreground">
+          {caption}
+        </caption>
+      ) : null}
+      <thead>
+        <tr className="border-b">
+          {columns.map((column) => (
+            <th
+              key={column.id}
+              scope="col"
+              className="px-3 py-2 font-medium text-muted-foreground"
+            >
+              {column.value}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>{body}</tbody>
+    </table>
   );
 }

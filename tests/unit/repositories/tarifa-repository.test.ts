@@ -5,8 +5,8 @@ import { TarifaRepository } from "@/lib/repositories/TarifaRepository";
 function tarifaRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "cob-1",
-    tiendaId: "store1",
-    status: "activo",
+    nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: new Prisma.Decimal("10.00"),
     valorFleteDevuelto: new Prisma.Decimal("5.00"),
     valorFleteGam: new Prisma.Decimal("8.00"),
@@ -24,7 +24,8 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
 
 function baseCreateData() {
   return {
-    tiendaId: "store1",
+    nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -45,9 +46,6 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       count: vi.fn(),
       updateMany: vi.fn(),
     },
-    usuario: {
-      findFirst: vi.fn(),
-    },
     ...overrides,
   };
 }
@@ -63,11 +61,10 @@ describe("TarifaRepository.create (R16/R27)", () => {
     const arg = prisma.tarifa.create.mock.calls[0][0];
     expect(arg.data.valorFlete).toBeInstanceOf(Prisma.Decimal);
     expect(arg.data.valorFlete.toString()).toBe("10");
-    expect(arg.data.tiendaId).toBe("store1"); // FK a usuario (tienda)
-    expect(arg.data).not.toHaveProperty("status"); // status nace por default de DB
+    expect(arg.data.zonaId).toBe("zona-1"); // feature 24: FK a zona
 
-    expect(dto.tiendaId).toBe("store1");
-    expect(dto.status).toBe("activo");
+    expect(dto.nombre).toBe("Tarifa GAM");
+    expect(dto.zonaId).toBe("zona-1");
     expect(dto.valorFlete).toBe(10);
     expect(dto.ivaComisionCod).toBe(15);
     expect(dto).not.toHaveProperty("deletedAt");
@@ -106,7 +103,7 @@ describe("TarifaRepository.list (R18/R19/R27)", () => {
 
     expect(res.total).toBe(2);
     expect(res.items).toHaveLength(2);
-    expect(res.items[0].tiendaId).toBe("store1");
+    expect(res.items[0].nombre).toBe("Tarifa GAM");
     expect(res.items[0]).not.toHaveProperty("deletedAt");
 
     const arg = prisma.tarifa.findMany.mock.calls[0][0];
@@ -124,15 +121,15 @@ describe("TarifaRepository.update (R21/R22)", () => {
   it("aplica cambios solo sobre no borrados y devuelve el DTO", async () => {
     const prisma = buildPrisma();
     prisma.tarifa.updateMany.mockResolvedValue({ count: 1 });
-    prisma.tarifa.findFirst.mockResolvedValue(tarifaRow({ status: "inactivo" }));
+    prisma.tarifa.findFirst.mockResolvedValue(tarifaRow({ nombre: "Nueva" }));
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.update("cob-1", { status: "inactivo" });
+    const dto = await repo.update("cob-1", { nombre: "Nueva" });
 
     const arg = prisma.tarifa.updateMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ id: "cob-1", deletedAt: null });
-    expect(arg.data.status).toBe("inactivo");
-    expect(dto?.status).toBe("inactivo");
+    expect(arg.data.nombre).toBe("Nueva");
+    expect(dto?.nombre).toBe("Nueva");
   });
 
   it("convierte montos/porcentajes provistos a Prisma.Decimal", async () => {
@@ -153,37 +150,7 @@ describe("TarifaRepository.update (R21/R22)", () => {
     prisma.tarifa.updateMany.mockResolvedValue({ count: 0 });
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.update("x", { status: "inactivo" })).toBeNull();
-  });
-});
-
-describe("TarifaRepository.esTiendaAdminTienda / inactivarPorTienda", () => {
-  it("esTiendaAdminTienda: true si el usuario existe con rol adminTienda", async () => {
-    const prisma = buildPrisma();
-    prisma.usuario.findFirst.mockResolvedValue({ id: "store1" });
-    const repo = new TarifaRepository(prisma as unknown as PrismaClient);
-
-    expect(await repo.esTiendaAdminTienda("store1")).toBe(true);
-    const arg = prisma.usuario.findFirst.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ id: "store1", rol: { value: "adminTienda" } });
-  });
-
-  it("esTiendaAdminTienda: false si no hay fila (no existe o no es adminTienda)", async () => {
-    const prisma = buildPrisma();
-    prisma.usuario.findFirst.mockResolvedValue(null);
-    const repo = new TarifaRepository(prisma as unknown as PrismaClient);
-    expect(await repo.esTiendaAdminTienda("x")).toBe(false);
-  });
-
-  it("inactivarPorTienda: pasa a inactivo las tarifas activas no borradas de la tienda", async () => {
-    const prisma = buildPrisma();
-    prisma.tarifa.updateMany.mockResolvedValue({ count: 3 });
-    const repo = new TarifaRepository(prisma as unknown as PrismaClient);
-
-    expect(await repo.inactivarPorTienda("store1")).toBe(3);
-    const arg = prisma.tarifa.updateMany.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ tiendaId: "store1", deletedAt: null, status: "activo" });
-    expect(arg.data).toEqual({ status: "inactivo" });
+    expect(await repo.update("x", { nombre: "Otro" })).toBeNull();
   });
 });
 

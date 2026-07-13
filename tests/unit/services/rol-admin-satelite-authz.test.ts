@@ -122,8 +122,8 @@ function crearOrdenInput(overrides: Record<string, unknown> = {}) {
 function tarifaDto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
-    tiendaId: "store1",
-    status: "activo",
+    nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -145,15 +145,14 @@ function buildTarifaRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRep
     list: vi.fn().mockResolvedValue({ items: [tarifaDto()], total: 1 }),
     update: vi.fn().mockResolvedValue(tarifaDto()),
     softDelete: vi.fn().mockResolvedValue(true),
-    esTiendaAdminTienda: vi.fn().mockResolvedValue(true),
-    inactivarPorTienda: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
 
 function crearTarifaInput(overrides: Record<string, unknown> = {}) {
   return {
-    tiendaId: "store1",
+    nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -172,9 +171,7 @@ function buildUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepositor
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
-    listByRol: vi.fn().mockResolvedValue([]),
     listMensajeros: vi.fn().mockResolvedValue([{ id: "msg-1", nombre: "Ana" }]),
-    listAdminTiendas: vi.fn().mockResolvedValue([]),
     updatePasswordHash: vi.fn(),
     list: vi.fn(),
     count: vi.fn(),

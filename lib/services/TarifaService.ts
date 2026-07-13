@@ -19,20 +19,12 @@ const WRITE_ROLES = new Set<string>(["maestro"]); // R10/R11/D4: solo maestro es
 export class TarifaService implements ITarifaService {
   constructor(private readonly repo: ITarifaRepository) {}
 
-  // La tienda referenciada debe ser un usuario con rol adminTienda (invariante
-  // de negocio; patron `fulfillment` de la feature 27).
-  private readonly TIENDA_NO_ADMIN = {
-    status: "validation_error" as const,
-    fieldErrors: { tiendaId: ["la tienda debe ser un usuario adminTienda"] },
-  };
-
   async crear(input: CrearTarifaInput, actor: Actor): Promise<CrearTarifaServiceResult> {
     if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" }; // R11/R12/R13
 
-    if (!(await this.repo.esTiendaAdminTienda(input.tiendaId))) return this.TIENDA_NO_ADMIN;
-
     const tarifa = await this.repo.create({
-      tiendaId: input.tiendaId,
+      nombre: input.nombre,
+      zonaId: input.zonaId,
       valorFlete: input.valorFlete,
       valorFleteDevuelto: input.valorFleteDevuelto,
       valorFleteGam: input.valorFleteGam,
@@ -81,13 +73,6 @@ export class TarifaService implements ITarifaService {
     const existente = await this.repo.findById(id); // excluye borrados (R19)
     if (!existente) return { status: "not_found" }; // R21
 
-    // Si se reasigna la tienda o se reactiva la tarifa, la tienda efectiva DEBE
-    // seguir siendo adminTienda (no se reactiva una tarifa de una tienda degradada).
-    if (input.tiendaId !== undefined || input.status === "activo") {
-      const tiendaEfectiva = input.tiendaId ?? existente.tiendaId;
-      if (!(await this.repo.esTiendaAdminTienda(tiendaEfectiva))) return this.TIENDA_NO_ADMIN;
-    }
-
     // R22: aplica solo los campos provistos, no toca id/created_at.
     const data = this.buildUpdateData(input);
     const actualizado = await this.repo.update(id, data);
@@ -108,8 +93,8 @@ export class TarifaService implements ITarifaService {
 
   private buildUpdateData(input: ActualizarTarifaInput): UpdateTarifaData {
     const data: UpdateTarifaData = {};
-    if (input.tiendaId !== undefined) data.tiendaId = input.tiendaId;
-    if (input.status !== undefined) data.status = input.status;
+    if (input.nombre !== undefined) data.nombre = input.nombre;
+    if (input.zonaId !== undefined) data.zonaId = input.zonaId;
     if (input.valorFlete !== undefined) data.valorFlete = input.valorFlete;
     if (input.valorFleteDevuelto !== undefined) data.valorFleteDevuelto = input.valorFleteDevuelto;
     if (input.valorFleteGam !== undefined) data.valorFleteGam = input.valorFleteGam;

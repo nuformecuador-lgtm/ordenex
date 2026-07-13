@@ -169,7 +169,7 @@ describe("GenerarGuiaModal", () => {
       makeOrden({
         id: "o1",
         numRemision: "REM-GAM",
-        zonaEsCentral: true,
+        zonaEsGam: true,
         zonaNombre: "GAM",
         mensajeroSugeridoId: "m1",
       }),
@@ -177,7 +177,7 @@ describe("GenerarGuiaModal", () => {
       makeOrden({
         id: "o2",
         numRemision: "REM-NOGAM",
-        zonaEsCentral: false,
+        zonaEsGam: false,
         zonaNombre: "Limón",
       }),
     ];

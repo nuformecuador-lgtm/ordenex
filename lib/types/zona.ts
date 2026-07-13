@@ -123,7 +123,7 @@ export interface ZonaDTO {
   nombre: string;
   cobroVehiculo: boolean;
   distritosCount: number;
-  esCentral: boolean; // feature 54: flag de zona central (a lo sumo una en true; antes esGam)
+  esCentral: boolean; // feature 54: flag de zona central (antes esGam)
   // Presente en crear/actualizar/obtener; en listar solo si include incluye "tarifas".
   tarifas?: TarifaZonaMensajeroDTO[];
 }
@@ -172,7 +172,6 @@ export type ZonaActionError =
   | { status: "not_found" }
   | { status: "conflict" }; // borrar una zona referenciada por provincia/orden/tarifas
 
-export type MarcarZonaCentralResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
 export type CrearZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
 export type ObtenerZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
 export type ActualizarZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;

@@ -111,11 +111,11 @@ export function OrdenesRevisionMaestro({
     setModalAbierto("asignar-bodega");
   }
 
-  // Feature 30/R13: "Rutear a bodega satélite" solo aplica a órdenes NO-central
-  // (`zonaEsCentral === false`). Se filtra el snapshot seleccionado antes de abrir el
+  // Feature 30/R13: "Rutear a bodega satélite" solo aplica a órdenes NO-GAM
+  // (`zonaEsGam === false`). Se filtra el snapshot seleccionado antes de abrir el
   // modal; el service revalida (defensa en profundidad).
   function abrirRutearSatelite(seleccionadas: OrdenListItemDTO[]) {
-    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsCentral === false));
+    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === false));
     setModalAbierto("rutear-satelite");
   }
 

@@ -5,7 +5,7 @@ import type { ZonaDTO } from "@/lib/types/zona";
 
 /**
  * Chip legible del flag `esCentral` (feature 54, renombrado del viejo `esGam`).
- * Marca visualmente la zona central. Cuando la zona no es central se muestra
+ * Marca visualmente la zona central/GAM. Cuando la zona no es central se muestra
  * un guion neutro para no dejar la celda vacía.
  */
 export function ZonaCentralBadge({ value }: { value: boolean }) {
@@ -19,7 +19,7 @@ export function ZonaCentralBadge({ value }: { value: boolean }) {
         "bg-success-soft text-[#065f46] dark:bg-success/15 dark:text-success",
       )}
     >
-      Central
+      Central / GAM
     </span>
   );
 }

@@ -4,7 +4,6 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -14,6 +13,7 @@ export function LogoutButton() {
     startTransition(async () => {
       try {
         await logout();
+        // R26: after logout completes, redirect to /login
         router.push("/login");
       } catch (error) {
         console.error("Logout failed:", error);
@@ -22,8 +22,8 @@ export function LogoutButton() {
   };
 
   return (
-    <Button onClick={handleLogout} disabled={isPending} variant="outline" className={'cursor-pointer'}>
-      <LogOut />Salir
+    <Button onClick={handleLogout} disabled={isPending} variant="outline">
+      {isPending ? "Cerrando sesión..." : "Cerrar sesión"}
     </Button>
   );
 }
