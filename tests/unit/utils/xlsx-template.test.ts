@@ -101,15 +101,20 @@ describe("buildXlsxTemplate", () => {
     expect(rowValues(worksheet, 1, 2)).toEqual(["a", "b"]);
   });
 
-  it("feature 51: sufija con ' *' la cabecera de un campo obligatorio y deja intactos los opcionales", async () => {
+  it("feature 58: `required` NO altera la cabecera (sigue siendo la clave/label, sin sufijo)", async () => {
+    // Regresión del bug 58: la feature 51 sufijaba la cabecera de un campo
+    // `required` con ' *', lo que rompía el round-trip descargar→subir (el parser
+    // identifica cada columna por su clave exacta y "distrito *" no casa con
+    // "distrito"). El header debe ser SIEMPRE `label ?? key`, sin marca alguna.
     const fields: XlsxTemplateField[] = [
       { key: "distrito", label: "Distrito", required: true },
       { key: "notas", label: "Notas" },
+      { key: "provincia", required: true },
     ];
 
     const worksheet = await loadFirstWorksheet(await buildXlsxTemplate(fields));
 
-    expect(rowValues(worksheet, 1, 2)).toEqual(["Distrito *", "Notas"]);
+    expect(rowValues(worksheet, 1, 3)).toEqual(["Distrito", "Notas", "provincia"]);
   });
 
   it("R5: rechaza si se invoca sin campos (contrato de uso)", async () => {

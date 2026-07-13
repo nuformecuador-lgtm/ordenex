@@ -193,11 +193,11 @@ export function Modal({
           aria-modal="true"
           aria-busy={pending || undefined}
           className={cn(
-            "fixed top-1/2 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-lg border border-border bg-background p-6 shadow-lg outline-none",
+            "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-lg border border-border bg-background p-6 shadow-lg outline-none",
             className,
           )}
         >
-          <div className="flex flex-col gap-1.5">
+          <div className="flex shrink-0 flex-col gap-1.5">
             <Dialog.Title className="text-lg font-semibold">
               {title}
             </Dialog.Title>
@@ -208,9 +208,11 @@ export function Modal({
             ) : null}
           </div>
 
-          {children ? <div>{children}</div> : null}
+          {children ? (
+            <div className="min-h-0 flex-1 overflow-auto">{children}</div>
+          ) : null}
 
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
             {!hideCancel ? (
               <Button
                 type="button"
