@@ -56,8 +56,12 @@ function baseCreateData() {
   };
 }
 
+// Feature 49: create/update ahora corren en `$transaction`; el fake `$transaction`
+// invoca el callback con el propio `prisma` como `tx` (tiene los modelos + el choke
+// point `ordenHistorialEstado.createMany`), asi las aserciones sobre `prisma.orden.*`
+// siguen viendo las llamadas hechas dentro de la tx.
 function buildPrisma(overrides: Record<string, unknown> = {}) {
-  return {
+  const prisma = {
     orden: {
       create: vi.fn(),
       findFirst: vi.fn(),
@@ -71,9 +75,18 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     canton: { findUnique: vi.fn() },
     distrito: { findUnique: vi.fn() },
     usuario: { findUnique: vi.fn() },
+    ordenHistorialEstado: { createMany: vi.fn() },
+    $transaction: vi.fn(),
     ...overrides,
   };
+  // El `$transaction` fake ejecuta el callback con el propio prisma como `tx`.
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
+  return prisma;
 }
+
+// Feature 49/#2/#10/#20: contexto de historial que el service inyecta al repo.
+const HIST_CREACION = { actorUsuarioId: "u-actor", origenTipo: "creacion_manual" } as const;
+const HIST_AJUSTE = { actorUsuarioId: "u-actor", origenTipo: "ajuste_estado" } as const;
 
 describe("OrdenRepository.create", () => {
   it("serializa peso Decimal a number y arma OrdenDTO sin deletedAt", async () => {
@@ -81,7 +94,7 @@ describe("OrdenRepository.create", () => {
     prisma.orden.create.mockResolvedValue(ordenRow());
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.create(baseCreateData());
+    const dto = await repo.create(baseCreateData(), HIST_CREACION);
 
     expect(dto.peso).toBe(1.5);
     expect(dto.estatusValue).toBe("en_bodega");
@@ -95,7 +108,7 @@ describe("OrdenRepository.create", () => {
     prisma.orden.create.mockResolvedValue(ordenRow({ numGuia: null }));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.create(baseCreateData());
+    await repo.create(baseCreateData(), HIST_CREACION);
 
     const arg = prisma.orden.create.mock.calls[0][0];
     expect(arg.data).not.toHaveProperty("numGuia");
@@ -108,7 +121,7 @@ describe("OrdenRepository.create", () => {
     prisma.orden.create.mockResolvedValue(ordenRow({ numGuia: null }));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.create(baseCreateData());
+    const dto = await repo.create(baseCreateData(), HIST_CREACION);
 
     expect(dto.numGuia).toBeNull();
   });
@@ -123,9 +136,43 @@ describe("OrdenRepository.create", () => {
     prisma.orden.create.mockRejectedValue(p2002);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await expect(repo.create(baseCreateData())).rejects.toBeInstanceOf(
+    await expect(repo.create(baseCreateData(), HIST_CREACION)).rejects.toBeInstanceOf(
       NumRemisionDuplicadoError,
     );
+  });
+
+  // Feature 49/#2 (R10/R20/R7): la creacion deja 1 fila de historial con origen null
+  // (creacion) -> destino estado inicial, actor y tipo creacion_manual, en la misma tx.
+  it("R10/R20: registra 1 historial con origen null, destino=estado inicial, tipo creacion_manual", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.create.mockResolvedValue(ordenRow({ id: "ord-1", estatusId: "os-bodega" }));
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.create(baseCreateData(), HIST_CREACION);
+
+    expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
+    expect(arg.data).toEqual([
+      {
+        ordenId: "ord-1",
+        estatusOrigenId: null,
+        estatusDestinoId: "os-bodega",
+        actorUsuarioId: "u-actor",
+        origenTipo: "creacion_manual",
+        motivo: null,
+        gestionOrdenId: null,
+      },
+    ]);
+  });
+
+  // R7: si el append del historial falla, el create se revierte (nada persiste).
+  it("R7: fallo del append propaga y aborta la tx (atomicidad)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.create.mockResolvedValue(ordenRow());
+    prisma.ordenHistorialEstado.createMany.mockRejectedValue(new Error("append boom"));
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await expect(repo.create(baseCreateData(), HIST_CREACION)).rejects.toThrow("append boom");
   });
 });
 
@@ -307,10 +354,13 @@ describe("OrdenRepository.update (R36/R37)", () => {
   it("aplica cambios solo sobre no borradas y devuelve el DTO", async () => {
     const prisma = buildPrisma();
     prisma.orden.updateMany.mockResolvedValue({ count: 1 });
-    prisma.orden.findFirst.mockResolvedValue(ordenRow({ estatusId: "os-entregada" }));
+    // pre-lectura del origen (call 1) + relectura final para el DTO (call 2).
+    prisma.orden.findFirst
+      .mockResolvedValueOnce({ estatusId: "os-bodega" })
+      .mockResolvedValueOnce(ordenRow({ estatusId: "os-entregada" }));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.update("ord-1", { estatusId: "os-entregada" });
+    const dto = await repo.update("ord-1", { estatusId: "os-entregada" }, HIST_AJUSTE);
 
     const arg = prisma.orden.updateMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ id: "ord-1", deletedAt: null });
@@ -322,7 +372,60 @@ describe("OrdenRepository.update (R36/R37)", () => {
     prisma.orden.updateMany.mockResolvedValue({ count: 0 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.update("x", { producto: "Otro" })).toBeNull();
+    expect(await repo.update("x", { producto: "Otro" }, HIST_AJUSTE)).toBeNull();
+  });
+
+  // Feature 49/#11 (R19/R20): cuando el update CAMBIA estatus_id, deja 1 historial con
+  // origen = estatus previo, destino = nuevo, tipo ajuste_estado.
+  it("R19/R20: registra historial cuando cambia estatus_id (origen previo -> nuevo)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.updateMany.mockResolvedValue({ count: 1 });
+    prisma.orden.findFirst
+      .mockResolvedValueOnce({ estatusId: "os-bodega" }) // origen pre-leido
+      .mockResolvedValueOnce(ordenRow({ estatusId: "os-entregada" }));
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.update("ord-1", { estatusId: "os-entregada" }, HIST_AJUSTE);
+
+    expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
+    expect(arg.data).toEqual([
+      {
+        ordenId: "ord-1",
+        estatusOrigenId: "os-bodega",
+        estatusDestinoId: "os-entregada",
+        actorUsuarioId: "u-actor",
+        origenTipo: "ajuste_estado",
+        motivo: null,
+        gestionOrdenId: null,
+      },
+    ]);
+  });
+
+  // R19: un update que NO toca estatus_id no deja rastro.
+  it("R19: actualizar otro campo (sin estatus) no registra historial", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.updateMany.mockResolvedValue({ count: 1 });
+    prisma.orden.findFirst.mockResolvedValueOnce(ordenRow());
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.update("ord-1", { producto: "Otro" }, HIST_AJUSTE);
+
+    expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+  });
+
+  // R20: un update a estatus_id IGUAL al actual (no-op de estado) no deja rastro.
+  it("R20: estatus_id igual al previo no registra historial (no hubo transicion)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.updateMany.mockResolvedValue({ count: 1 });
+    prisma.orden.findFirst
+      .mockResolvedValueOnce({ estatusId: "os-bodega" }) // origen
+      .mockResolvedValueOnce(ordenRow({ estatusId: "os-bodega" }));
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.update("ord-1", { estatusId: "os-bodega" }, HIST_AJUSTE);
+
+    expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
 
 import { DataTable } from "@/components/shared/DataTable";
@@ -12,6 +12,7 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { ordenesColumns } from "./ordenes-columns";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
+import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
 
 // R33: opciones firmes acotadas por MAX_PAGE_SIZE del backend; ninguna opción
 // ofrecida supera el máximo permitido.
@@ -42,16 +43,37 @@ async function ordenesFetcher(
  * de `/ordenes`; el dashboard del admin de tienda la sustituye por la variante
  * sin "Tienda" (R11). Sin la prop, el comportamiento es idéntico al `/ordenes`
  * previo.
+ *
+ * Feature 49 (T6.2, R28/R29): con `mostrarHistorial` se añade una columna de acción
+ * "Ver historial" por fila que abre el drawer `HistorialOrdenSheet` (datos por props via
+ * Server Action). Por defecto `false` para NO alterar el contrato de columnas de otras
+ * superficies (p. ej. el dashboard del adminTienda, feature 26).
  */
 export function OrdenesModule({
   columns = ordenesColumns,
   puedeCargarMasiva = false,
+  mostrarHistorial = false,
 }: {
   columns?: Column<OrdenListItemDTO>[];
   puedeCargarMasiva?: boolean;
+  mostrarHistorial?: boolean;
 } = {}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
+
+  const columnasEfectivas = useMemo<Column<OrdenListItemDTO>[]>(() => {
+    if (!mostrarHistorial) return columns;
+    return [
+      ...columns,
+      {
+        id: "acciones",
+        value: "Acciones",
+        render: (row) => (
+          <HistorialOrdenSheet ordenId={row.id} referencia={row.numRemision} />
+        ),
+      },
+    ];
+  }, [columns, mostrarHistorial]);
 
   const { data, error, isLoading } = useSWR(
     ["ordenes:list", page, pageSize],
@@ -66,7 +88,7 @@ export function OrdenesModule({
         </div>
       )}
       <DataTable
-        columns={columns}
+        columns={columnasEfectivas}
         data={data?.items ?? []}
         rowKey="id"
         ariaLabel="Órdenes"

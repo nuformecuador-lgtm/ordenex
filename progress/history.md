@@ -1121,32 +1121,48 @@
 - DEUDA menor: E2E escrito pero no ejecutado (patrón del arnés); test de migración unit estático (el round-trip real
   lo corrió el reviewer). El PAGO efectivo a la tienda queda como follow-up sobre el modelo ya probado.
 
+## Feature 49 — trazabilidad / historial de estados de la orden (2026-07-13)
+
+- **Segunda de la Fase 2 del flujo del mensajero** (grupo 46/47/49). Fullstack/high, TRANSVERSAL, un ciclo.
+  Rama `feature/49-trazabilidad-historial-estados` desde el TIP de la 46 (contiene 43+46, para instrumentar la
+  liberación de la 46). F1.4 APROBADA (todas las recomendaciones). Impl R1–R34 + reviewer APROBADO 0 bloqueantes
+  (el reviewer reprodujo el grep de cobertura y el round-trip de migración, no solo por bitácora). Commit `faeeb2a`.
+- **Choke point único** `registrar-cambio-estado.ts` (`OrdenEstadoService`): append INMUTABLE a
+  `orden_historial_estado` en la MISMA `$transaction` que el cambio de estado (nunca un estado sin su línea).
+- **Los 11 puntos de escritura de estado instrumentados atómicamente (11/11, sin 12º escapado):**
+  `OrdenRepository` #1 `createManyOrdenes` / #2 `create` / #3 `generarGuiaLote` / #4 `asignarBodegaLote` /
+  #5 `rutearBodegaSateliteLote` / #6 `recibirEnSatelite` / #11 `update`; #7 `asignarSateliteLote` (SQL crudo:
+  `$executeRaw`→`$queryRaw ... RETURNING id` en la tx, CONSERVA el anti-TOCTOU `NOT EXISTS`, registra solo las
+  filas realmente transicionadas — R8); `GestionOrdenRepository` #8 `recogerLote` / #9 `crearGestionYTransicionar`;
+  `LiberacionReprogramadaRepository` #10 `liberarOrden` (actor NULL/cron, append solo si `count>0`).
+- **Contador de intentos DERIVADO** del historial (sin columna materializada); la regla "≥3 intentos → escala a
+  `rechazada`" queda para la feature 47 (que consume el derivador). Estado INICIAL (creación) = primera línea
+  (órdenes post-deploy). SIN backfill retroactivo.
+- **UI**: drawer "Ver historial" desde la lista de órdenes (no había página de detalle), con visibilidad por rol
+  enforced SERVER-SIDE (maestro/admin todas, adminTienda su tienda, mensajero sus asignadas —vía nuevo
+  `OrdenDTO.mensajeroAsignadoId` opcional, sin migración—, adminSatélite su zona). Realtime (35) fuera de alcance
+  (solo punto de extensión).
+- **Migración** aditiva `20260713120000_orden_historial_estado` (tabla append-only + RLS sin policies + índice
+  `(orden_id, created_at)` + `down.sql` inverso). Verde: typecheck 0, lint 0, **2225/2225 (+85)**, `init.sh` OK,
+  round-trip REAL. DEUDA menor: test de cobertura estático (compensado por el grep del reviewer, conjunto de 11
+  cerrado); test RLS estático; E2E diferido. **PENDIENTE: sync con `dev` + PR + merge (OK humano).**
+
 ## 2026-07-13 — feature 44: wallet, pago a mensajeros y cuentas por pagar
 - Qué se construyó: tercer eslabón de la cadena wallet (42 caja → 43 tienda → **44 mensajeros**). Al aprobar un
   `CierreDia` se congela el pago al mensajero contra el efectivo que recaudó: `pago_devengado = P`
   (`total_pago_mensajero`, snapshot 39), `pago_efectivo = min(P, total_efectivo)` (snapshot 37), y la **cuenta por
-  pagar** (lo pendiente cuando no hubo efectivo) es el saldo DERIVADO `Σdevengo − Σpago` (sin saldo almacenado).
+  pagar** (lo pendiente) es el saldo DERIVADO `Σdevengo − Σpago` (sin saldo almacenado).
 - Requisitos cubiertos: R1–R27 (fullstack, money-critical).
 - F1.4 APROBADA: Qa=SÍ (además del libro propio, EGRESO `egreso_pago_mensajero = P` en la caja 42, cuadrado);
   Qb=append-only + cuenta por pagar derivada; Qc=automático al aprobar; Qd=`min(P,E)`, `P=0` sin movimiento;
   Qe=vista maestro `/wallet/mensajeros` + self-view mensajero `/mis-pagos` (adminSatélite NO); Qf=liquidación manual
-  como FOLLOW-UP (categoría `liquidacion` + `origen_tipo=pago_mensajero` reservados, sin migración futura).
-- Modelo: tabla `pago_mensajero_movimiento` (libro append-only, INMUTABLE; RLS habilitada sin policies; idempotencia
-  por índice único parcial `(origen_tipo, origen_id, mensajero_id, categoria) WHERE origen_id IS NOT NULL`; migración
-  aditiva `20260712180000_pago_mensajero_movimiento` + `down.sql` reversible; reutiliza `wallet_origen_tipo` de la 42).
-- Enganche: en `CierresAdminRepository.resolverCierre`, DENTRO de la misma `$transaction` y TRAS 42/43 (todo-o-nada),
-  `WalletMensajeroFeedService.construirMovimientosDePago` (un solo `findUnique`, `min(P,E)`) inserta el libro + el
-  egreso de la caja 42; idempotente por constraint; solo `CierreDia` aprobado alimenta (`CierreBodega` no re-cuenta).
-- Vistas: `/wallet/mensajeros` (maestro: resumen por mensajero + desglose por cierre paginado, más reciente primero,
-  + filtros server-side fecha/cierre con saldo del conjunto filtrado) y `/mis-pagos` (mensajero, acotado a su
-  `mensajero_id` en el WHERE). Money-safe: `Prisma.Decimal`, STRING `toFixed(2)`, cero `parseFloat`/`Number(`.
+  como FOLLOW-UP (categoría `liquidacion` + `origen_tipo=pago_mensajero` reservados).
+- Modelo: tabla `pago_mensajero_movimiento` (libro append-only INMUTABLE; RLS sin policies; idempotencia por índice
+  único parcial `(origen_tipo, origen_id, mensajero_id, categoria) WHERE origen_id IS NOT NULL`; migración aditiva
+  `20260712180000_pago_mensajero_movimiento` + `down.sql`; reutiliza `wallet_origen_tipo` de la 42).
+- Enganche ATÓMICO en `CierresAdminRepository.resolverCierre` (misma `$transaction`, tras 42/43; solo `CierreDia`).
 - Reviewer: RECHAZADO en el 1.er ciclo por R18 (desglose por cierre del maestro) y R22 (filtros server-side del
-  maestro) — misma raíz: faltaba la capa service+action del maestro (`listarPagosDeMensajero`/`…Action`). Corregido
-  (el repo y el schema zod ya lo soportaban) + re-review APROBADO 0 bloqueantes.
+  maestro); corregido (capa service+action del maestro) + re-review APROBADO 0 bloqueantes.
 - Verde: prisma OK, typecheck 0, lint 0, **2191 tests**, `init.sh` OK; migración verificada ESTÁTICAMENTE (Postgres
-  local compartido con la feature 49 en paralelo → no aplicada). Sin regresión 37/38/40/41/56 ni wallet 42/43.
-- Proceso: corrió en PARALELO con la feature 49 (trazabilidad) en un worktree aislado `../ordenex-f44` desde
-  `origin/dev`; el humano OK'd bendecir la regla #1 (una-feature-por-zona) por footprints disjuntos (caja vs máquina
-  de estados). Sincronizada con `dev` (46, PR #51) antes del PR.
-- DEUDA menor: E2E `e2e/wallet-mensajeros.spec.ts` escrito no ejecutado (convención del arnés); migración no aplicada
-  contra Postgres real. DESBLOQUEA la 45 (gastos/sueldos), último eslabón de la cadena wallet.
+  local compartido con la 49 en paralelo). Corrió en PARALELO con la 49 en worktree aislado `../ordenex-f44`.
+  Sincronizada con `dev` (46 + 49). **PR #53 → `dev`**. DESBLOQUEA la 45 (gastos/sueldos), último eslabón wallet.

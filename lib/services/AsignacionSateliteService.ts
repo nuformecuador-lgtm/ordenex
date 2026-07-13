@@ -137,12 +137,15 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     }
 
     // 6. R7/R14: escritura guardada por estado de origen + zona. NO toca num_guia (R8).
+    // Feature 49/#7 (R15): actor = el adminSatelite; el append cubre solo las ordenes que
+    // ganaron la guarda anti-TOCTOU (RETURNING id en la misma tx).
     const count = await this.repo.asignarSateliteLote(
       ordenIds,
       input.mensajeroId,
       zonaId,
       destinoId,
       origenId,
+      { actorUsuarioId: actor.usuarioId, origenTipo: "asignacion_satelite" },
     );
 
     // R14: si alguna orden cambio de estado/zona entre la lectura y la escritura, el
