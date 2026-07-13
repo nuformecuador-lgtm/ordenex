@@ -616,7 +616,7 @@
       "zone": "fullstack",
       "branch": "feature/57-logout",
       "depends_on": null,
-      "status_note": "done 2026-07-13. Corrio EN PARALELO con la feature 47 (otra sesion) en worktree aislado ../ordenex-f57 desde dev. F1.4 APROBADA por el humano: (a) REUTILIZAR el LogoutButton existente TAL CUAL colocado en el SidebarFooter (visible para TODOS los roles via el layout compartido app/(app)/layout.tsx, que renderiza el Sidebar sin importar el rol; antes el logout solo vivia en la rama generica de la home y el rol tienda no lo alcanzaba); (b) SIN modal (un click). HALLAZGO CLAVE: el backend de logout YA EXISTIA (logout en lib/actions/auth.ts -> AuthService.logout -> SessionRepository.deleteById, con tests), asi que fue puro frontend: mover el boton + retirar el ad-hoc de la home. Reviewer RECHAZO 1.er ciclo por trazabilidad (R10/R11 sin test real + R10 pedia feedback de error y el boton solo hacia console.error); RESUELTO: toast.error('No se pudo cerrar sesion') en el catch (decision del humano) + tests dedicados R10 (camino de error) y R11 (estado pendiente) + trazabilidad corregida. VERDE: typecheck 0, eslint 0, 2333/2333 tests. R8 (no-back) cubierto por el guard middleware.ts existente; NO se endurecio push->replace (el humano pidio tal cual). Estado done + history.md + review_57. Un PR feature/57 -> dev."
+      "status_note": "done 2026-07-13. Corrio EN PARALELO con la feature 47 (otra sesion) en worktree aislado ../ordenex-f57 desde dev. F1.4 APROBADA por el humano: (a) REUTILIZAR el LogoutButton existente TAL CUAL colocado en el SidebarFooter (visible para TODOS los roles via el layout compartido app/(app)/layout.tsx, que renderiza el Sidebar sin importar el rol; antes el logout solo vivia en la rama generica de la home y el rol tienda no lo alcanzaba); (b) SIN modal (un click). HALLAZGO CLAVE: el backend de logout YA EXISTIA (logout en lib/actions/auth.ts -> AuthService.logout -> SessionRepository.deleteById, con tests), asi que fue puro frontend: mover el boton + retirar el ad-hoc de la home. Reviewer RECHAZO 1.er ciclo por trazabilidad (R10/R11 sin test real + R10 pedia feedback de error y el boton solo hacia console.error); RESUELTO: toast.error('No se pudo cerrar sesion') en el catch (decision del humano) + tests dedicados R10 (camino de error) y R11 (estado pendiente) + trazabilidad corregida. VERDE: typecheck 0, eslint 0, 2333/2333 tests. R8 (no-back) cubierto por el guard middleware.ts existente; NO se endurecio push->replace (el humano pidio tal cual). Estado done + history.md + review_57. Un PR feature/57 -> dev. REUBICADO 2026-07-13: tras ver que el #54 (revertido) tenia el logout en el TOPBAR del PageHeader, el humano lo prefirio ahi. Movido del SidebarFooter al PageHeader compartido (boton 'Salir' + icono LogOut, contraste sobre navy; toast de error conservado); Sidebar revertido a origin/dev. Radio de impacto: PageHeader se usa en toda pagina autenticada -> 11 tests stubbean LogoutButton para aislar (patron estandar) + PageHeader.test.tsx (nuevo) prueba el logout real. VERDE: typecheck 0, eslint 0, 2335/2335. Feature 60 (recuperar la campana NotificationsBell del #54 sobre dev real) registrada, depende de la 57."
     },
     {
       "id": 58,
@@ -640,6 +640,17 @@
       "zone": null,
       "branch": null,
       "depends_on": 55
+    },
+    {
+      "id": 60,
+      "name": "campana de notificaciones (recuperar NotificationsBell del #54 sobre dev real)",
+      "description": "RECUPERAR la campana de notificaciones que traia el PR #54 'adjustments'. Contexto: el #54 anadio `components/shared/NotificationsBell.tsx` y lo renderizaba en el topbar del `PageHeader` (junto al logout 'Salir'), pero el #54 fue REVERTIDO de dev (PR #55) porque ademas rompia la cadena wallet (42/43/44) y la trazabilidad (49); con el revert se perdio tambien esta UI. El humano quiere la campana de vuelta, reconstruida SOBRE el dev real (origin/dev post-revert), SIN arrastrar nada de lo roto. El codigo original vive en `origin/adjustments`/`dev` local (=1dd0c0d): `components/shared/NotificationsBell.tsx` (revisar si era funcional o un stub de UI) + su uso en `PageHeader.tsx`. Alcance ABIERTO para spec: (a) que notifica exactamente (cambios de estado de orden? cierres? postulaciones?) — se relaciona con la feature 35 'estados de orden en tiempo real', decidir si 60 depende de/absorbe parte de 35; (b) fuente de datos (polling vs realtime/supabase); (c) modelo de notificacion (tabla nueva? derivado?); (d) ubicacion: en el topbar del PageHeader, a la izquierda del logout de la feature 57 (que ya lo pone ahi). Requiere revisar el NotificationsBell del #54 antes de fijar alcance (no reintroducir dependencias del refactor de zonas/tarifas revertido). Fullstack probable (bell UI + backend de notificaciones). Depende de la feature 57 (logout en el PageHeader, comparten el topbar) y se relaciona con la 35.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 57
     }
   ]
 }

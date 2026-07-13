@@ -19,6 +19,16 @@ y suite) está correcto y en verde.
 > Verificado por el leader (diffs leídos, tests reales no-hollow): typecheck 0, eslint 0,
 > **2333/2333** tests. Trazabilidad R1..R14 → test COMPLETA. → **APROBADO de facto**.
 
+> **REUBICACIÓN (misma feature 57), 2026-07-13 — leader-verificado.** El humano cambió
+> la ubicación: de `SidebarFooter` al **topbar del `PageHeader`** (botón "Salir" + `LogOut`,
+> como el #54 revertido pero sobre el dev sano). Rework verificado por el leader:
+> `Sidebar.tsx` idéntico a `origin/dev` (sin logout); `PageHeader.tsx` monta el `LogoutButton`
+> arriba-derecha; `PageHeader` es solo-autenticado (16 usos bajo `app/(app)/`); toast de error
+> y R10/R11 conservados con labels "Salir"/"Saliendo…". `PageHeader.test.tsx` (nuevo) prueba el
+> logout real; 11 tests colaterales stubbean `LogoutButton` (aislamiento estándar, sin debilitar
+> asserts). VERDE: typecheck 0, eslint 0, **2335/2335**. Riesgo residual: SOLO visual (aspecto del
+> botón en el header de cada página) — a validar por el humano en la app.
+
 ## Verificación ejecutable (corrida por el reviewer)
 
 - `npx prisma generate` → OK (el worktree no traía cliente generado).

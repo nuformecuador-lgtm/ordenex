@@ -1223,3 +1223,13 @@
   por el `middleware.ts` existente; NO se endureció `push`→`replace` (el humano pidió "tal cual").
 - **Verde:** typecheck 0, eslint 0, `npx vitest run` **2333/2333** (baseline 2331 + 2 tests nuevos), objetivo 19/19. Reviewer re-verificado
   por el leader (diffs leídos, tests reales). Estado `done` + `review_57`. **Un PR `feature/57 → dev`.** PENDIENTE merge (OK humano).
+- **REUBICACIÓN (misma feature, 2026-07-13):** al probar en la app, el humano detectó un topbar con "Salir" + campana de notificaciones que NO
+  estaba en `origin/dev`. **Diagnóstico:** su `dev` LOCAL estaba en `1dd0c0d` = el PR **#54 "adjustments" REVERTIDO** (que tenía ese topbar en
+  `PageHeader.tsx` con `<NotificationsBell/> <LogoutButton/>` "Salir", pero también la **wallet 42/43/44 y trazabilidad 49 ROTAS** — por eso se
+  revirtió con el PR #55); `origin/dev` está en `b3ed545`. El humano prefirió el logout en el **topbar del `PageHeader`** (como el #54) en vez del
+  sidebar. **Rework:** movido del `SidebarFooter` al `PageHeader` compartido (botón "Salir" + icono `LogOut`, contraste sobre navy; se conservó el
+  toast de error y los tests R10/R11 con labels "Salir"/"Saliendo…"); `Sidebar` revertido a `origin/dev`. `PageHeader` es solo-autenticado (16 usos,
+  todos bajo `app/(app)/`), así que el logout sale en toda página. Radio de impacto: como el `PageHeader` monta un client-component, 11 tests que
+  renderizan páginas stubbean `LogoutButton` para aislar (patrón estándar); `PageHeader.test.tsx` (nuevo) prueba el logout REAL en el topbar. VERDE:
+  typecheck 0, eslint 0, **2335/2335**. **Se registró la feature 60** (recuperar la campana `NotificationsBell` del #54 sobre el dev real, sin lo roto;
+  depende de la 57, se relaciona con la 35 realtime). **PENDIENTE (humano):** sincronizar `dev` local con `origin/dev` (dejar de correr el #54 stale) + merge del PR #57.
