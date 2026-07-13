@@ -16,7 +16,7 @@ import { CierreDiaModule } from "./_components/CierreDiaModule";
  */
 export default async function CierreDiaPage() {
   const actor = await resolveActorFromSession();
-  if (actor?.rol !== "mensajero") notFound(); // R1
+  if (!actor || actor.rol !== "mensajero") notFound(); // R1
 
   const result = await listarCierreDia();
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo

@@ -1,6 +1,5 @@
 import { RolValue } from "@prisma/client";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { Container } from "@/components/shared/Container";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarLiberadasHoy } from "@/lib/actions/liberacion-reprogramada";
 
@@ -29,18 +28,18 @@ export default async function OrdenesPage() {
     liberadasResult?.status === "ok" ? liberadasResult.liberadas : [];
 
   return (
-      <>
+      <section className="flex flex-1 flex-col gap-6 p-6">
         <PageHeader title="Órdenes" description="Listado y gestión de órdenes" />
-        <Container>
-          {esMaestroOAdmin ? (
-            <OrdenesRevisionMaestro
-              readOnly={actor?.rol === "admin"}
-              liberadasHoy={liberadasHoy}
-            />
-          ) : (
-        <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} mostrarHistorial />
-          )}
-        </Container>
-      </>
+        {esMaestroOAdmin ? (
+          <OrdenesRevisionMaestro
+            readOnly={actor?.rol === "admin"}
+            liberadasHoy={liberadasHoy}
+          />
+        ) : (
+          // Feature 49 (T6.2): el listado plano ofrece "Ver historial" por fila
+          // (adminTienda/mensajero/adminSatelite ven solo las ordenes autorizadas, R27).
+          <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} mostrarHistorial />
+        )}
+      </section>
     );
   }

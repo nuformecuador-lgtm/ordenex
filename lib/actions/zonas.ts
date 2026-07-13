@@ -10,7 +10,6 @@ import {
   type BorrarZonaResult,
   type CrearZonaResult,
   type ListarZonasResult,
-  type MarcarZonaCentralResult,
   type ObtenerZonaResult,
   type ZonaActionError,
 } from "@/lib/types/zona";
@@ -131,27 +130,6 @@ export async function actualizarZona(
     const data = actualizarZonaSchema.parse(input);
     const service = deps.zonaService ?? buildZonaService();
     return service.actualizar(parsedId.data, data, actor);
-  });
-  return isAppErrorShape(r) ? toZonaActionError(r) : r;
-}
-
-/**
- * Marca una zona como la central (feature 24/R3). Designa esta zona como la unica en
- * true: el service/repo desmarca cualquier otra. Solo maestro.
- */
-export async function marcarZonaGam(
-  id: unknown,
-  deps: ZonaActionDeps = {},
-): Promise<MarcarZonaCentralResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const parsedId = idSchema.safeParse(id);
-    if (!parsedId.success) {
-      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
-    }
-    const service = deps.zonaService ?? buildZonaService();
-    return service.marcarCentral(parsedId.data, true, actor);
   });
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }

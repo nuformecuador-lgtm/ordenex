@@ -53,11 +53,6 @@ export interface BulkUploadProps {
   /** Nombre del campo multipart bajo el que viaja el archivo (R12). Por defecto "file". */
   fieldName?: string;
   /**
-   * Campos extra a adjuntar al `FormData` del POST (p. ej. `mensajeroSugeridoId`).
-   * Los valores vacíos se omiten. El componente no los interpreta: solo los envía.
-   */
-  extraFields?: Record<string, string>;
-  /**
    * Límite de tamaño en bytes validado en cliente (R23). Si se omite, NO se valida
    * tamaño en cliente; el backend sigue siendo la autoridad final.
    */
@@ -149,7 +144,6 @@ export function BulkUpload({
   fields,
   templateFileName,
   fieldName = DEFAULT_FIELD_NAME,
-  extraFields,
   maxSizeBytes,
   onSuccess,
   onError,
@@ -229,11 +223,6 @@ export function BulkUpload({
 
     const formData = new FormData();
     formData.append(fieldName, file);
-    if (extraFields) {
-      for (const [key, value] of Object.entries(extraFields)) {
-        if (value) formData.append(key, value); // omite vacíos
-      }
-    }
 
     try {
       const response = await fetch(endpoint, {

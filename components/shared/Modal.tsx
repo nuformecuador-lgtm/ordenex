@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Dialog } from "@base-ui/react/dialog";
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -55,9 +55,8 @@ export interface ModalProps {
    */
   closeOnConfirm?: boolean;
   /**
-   * El click fuera (overlay) nunca cierra el modal: sólo la X o los botones.
-   * Si `dismissible` es false, además se deshabilita el cierre por Escape (R27).
-   * Default true. Independiente del bloqueo temporal durante "pendiente" (R19).
+   * Si false, deshabilita cierre por Escape y overlay (R27). Default true.
+   * Independiente del bloqueo temporal durante "pendiente" (R19).
    */
   dismissible?: boolean;
 
@@ -129,11 +128,11 @@ export function Modal({
       return; // R19: no cerrar mientras corre la operación
     }
     const { reason } = details;
-    if (reason === "outside-press") {
-      return; // Nunca se cierra por click fuera: sólo la X o los botones.
-    }
-    if (!dismissible && reason === "escape-key") {
-      return; // R27: no cerrar por Escape
+    if (
+      !dismissible &&
+      (reason === "escape-key" || reason === "outside-press")
+    ) {
+      return; // R27: no cerrar por Escape/overlay
     }
     onOpenChange(false); // R3, R25, R26
   }
@@ -183,7 +182,7 @@ export function Modal({
     <Dialog.Root
       open={open}
       onOpenChange={handleRootOpenChange}
-      disablePointerDismissal
+      disablePointerDismissal={!dismissible || pending}
     >
       <Dialog.Portal>
         <Dialog.Backdrop
@@ -198,17 +197,7 @@ export function Modal({
             className,
           )}
         >
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={pending}
-            aria-label="Cerrar"
-            className="absolute top-4 right-4 cursor-pointer rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-
-          <div className="flex flex-col gap-1.5 pr-8">
+          <div className="flex flex-col gap-1.5">
             <Dialog.Title className="text-lg font-semibold">
               {title}
             </Dialog.Title>

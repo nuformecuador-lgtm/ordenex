@@ -112,7 +112,6 @@ model Usuario {
   ordenesMensajeria   Orden[]              @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
   ordenesAsignadas    Orden[]              @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
   gestionesRealizadas GestionOrden[]       @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
-  tarifasTienda       Tarifa[]             @relation("TarifaTienda") // tarifas cuya tienda es este usuario (adminTienda)
   cierresRealizados   CierreDia[]          @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
   cierresResueltos    CierreDia[]          @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
   cierresBodegaSolicitados CierreBodega[]  @relation("CierreBodegaSolicitadoPor") // feature 40: cierres de bodega solicitados por este adminSatelite
@@ -225,14 +224,13 @@ model OrderStatus {
 }
 
 // Geografia jerarquica (feature 6 la creo vacia). Feature 24: la zona pasa a ser un
-// catalogo global con pagos al mensajero y flag `es_central`. Feature 24/R4: la zona ya
-// NO cuelga de la provincia; la asignacion vive UNICAMENTE en la relacion N:M
-// `ZonaDistrito`. La columna escalar `distrito.zona_id` (agregada en 20260711120000 y
-// nunca poblada tras la redefinicion a N:M) fue ELIMINADA en 20260713000000. La columna
-// `provincia.zona_id` tambien fue ELIMINADA (20260711120000) y nunca re-creada; feature
-// 55 (F1.4-C) reconcilia el schema removiendo los simbolos huerfanos
-// (`Provincia.zonaId`/`Provincia.zona`/`Zona.provincias`). La carga masiva (feature 15)
-// deriva `orden.zona_id` del DISTRITO de la orden via `zona_distrito`.
+// catalogo global con pagos al mensajero y flag `es_gam`. Feature 24/R4: la zona ya
+// NO cuelga de la provincia; la asignacion vive en `distrito.zona_id` (escalar) mas
+// la relacion N:M `ZonaDistrito`. La columna `provincia.zona_id` fue ELIMINADA en la
+// DB por la migracion 20260711120000_zonas_catalogo_global_pagos y nunca re-creada;
+// feature 55 (F1.4-C) reconcilia el schema removiendo los simbolos huerfanos
+// (`Provincia.zonaId`/`Provincia.zona`/`Zona.provincias`). La carga masiva (feature
+// 15) deriva `orden.zona_id` del DISTRITO de la orden (`distrito.zona_id`).
 model Zona {
   id            String  @id @default(uuid())
   nombre        String  @unique // feature 24: nombre unico (indice zona_nombre_key); feature 54 restaura el @unique perdido en el refactor
@@ -240,9 +238,10 @@ model Zona {
   esCentral     Boolean @default(false) @map("es_central") // feature 54: flag de zona central (renombrado del viejo es_gam); a lo sumo una via indice unico parcial
 
   ordenes              Orden[]
+  tarifas              Tarifa[]
   tarifaZonaMensajeros TarifaZonaMensajero[]
   distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
-  usuarios             Usuario[] // feature 24/R6 + 54: lado inverso de Usuario.zona (mensajero/adminSatelite)
+  usuarios             Usuario[] // feature 54: lado opuesto de Usuario.zona (mensajero/adminSatelite)
   cierresDestino       CierreDia[] // feature 37: cierres cuyo destino_zona_id apunta a esta zona
   cierresBodega        CierreBodega[] // feature 40: cierres de bodega de esta zona satelite
 
@@ -275,15 +274,17 @@ model Canton {
 }
 
 model Distrito {
-  id       String @id @default(uuid())
+  id       String  @id @default(uuid())
   nombre   String
-  cantonId String @map("canton_id")
+  cantonId String  @map("canton_id")
+  zonaId   String? @map("zona_id") // feature 24/R5: nullable; NULL = distrito sin zona asignada
 
   canton  Canton         @relation(fields: [cantonId], references: [id])
   ordenes Orden[]
-  zonas   ZonaDistrito[] // feature 24: relacion N:M con zona (unica fuente de verdad; la columna escalar zona_id se elimino en 20260713000000)
+  zonas   ZonaDistrito[] // feature 24: relacion N:M con zona
 
   @@index([cantonId])
+  @@index([zonaId]) // feature 24/R5
   @@map("distrito")
 }
 
@@ -510,33 +511,26 @@ model CierreBodega {
 // zona (feature 24). Se agrego via la migracion de rename cuando la tabla estaba
 // vacia. Borrado logico via deleted_at.
 model Tarifa {
-  id                    String       @id @default(uuid())
-  valorFlete            Decimal      @map("valor_flete") @db.Decimal(12, 2) // R2 (monto)
-  valorFleteDevuelto    Decimal      @map("valor_flete_devuelto") @db.Decimal(12, 2) // R2 (monto)
-  valorFleteGam         Decimal      @map("valor_flete_gam") @db.Decimal(12, 2) // R2/R4 (GAM -> gam)
-  valorFleteDevueltoGam Decimal      @map("valor_flete_devuelto_gam") @db.Decimal(12, 2) // R2/R4
-  fulfillment           Decimal      @db.Decimal(12, 2) // R2/D3 (monto)
-  comisionCod           Decimal      @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
-  ivaFlete              Decimal      @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
-  ivaComisionCod        Decimal      @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
-  tiendaId              String       @map("tienda_id") // FK -> usuario (tienda duena; el service exige rol adminTienda)
-  status                EstadoTarifa @default(activo) // activo/inactivo; pasa a inactivo si la tienda deja de ser adminTienda
-  deletedAt             DateTime?    @map("deleted_at") // soft delete (R19/R24)
-  createdAt             DateTime     @default(now()) @map("created_at")
-  updatedAt             DateTime     @updatedAt @map("updated_at")
+  id                    String    @id @default(uuid())
+  nombre                String // D1: distingue tarifas (NOT NULL, no unico)
+  valorFlete            Decimal   @map("valor_flete") @db.Decimal(12, 2) // R2 (monto)
+  valorFleteDevuelto    Decimal   @map("valor_flete_devuelto") @db.Decimal(12, 2) // R2 (monto)
+  valorFleteGam         Decimal   @map("valor_flete_gam") @db.Decimal(12, 2) // R2/R4 (GAM -> gam)
+  valorFleteDevueltoGam Decimal   @map("valor_flete_devuelto_gam") @db.Decimal(12, 2) // R2/R4
+  fulfillment           Decimal   @db.Decimal(12, 2) // R2/D3 (monto)
+  comisionCod           Decimal   @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
+  ivaFlete              Decimal   @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
+  ivaComisionCod        Decimal   @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
+  zonaId                String    @map("zona_id") // feature 24: NOT NULL (tabla vacia al migrar)
+  deletedAt             DateTime? @map("deleted_at") // soft delete (R19/R24)
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  tienda Usuario @relation("TarifaTienda", fields: [tiendaId], references: [id])
+  zona Zona @relation(fields: [zonaId], references: [id])
 
   @@index([createdAt])
-  @@index([tiendaId])
+  @@index([zonaId])
   @@map("tarifas")
-}
-
-enum EstadoTarifa {
-  activo
-  inactivo
-
-  @@map("estado_tarifa")
 }
 
 // TarifaZonaMensajero: tarifa de comision por zona pagada al mensajero

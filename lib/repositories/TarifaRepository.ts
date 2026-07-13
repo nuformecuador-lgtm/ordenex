@@ -8,17 +8,17 @@ import type {
   UpdateTarifaData,
 } from "@/lib/interfaces/repositories/ITarifaRepository";
 
-type TarifaPrismaClient = Pick<PrismaClient, "tarifa" | "usuario">;
+type TarifaPrismaClient = Pick<PrismaClient, "tarifa">;
 
 type TarifaRow = Tarifa;
 
 // Serializa la fila de Prisma a TarifaDTO: las 8 columnas Decimal -> number
-// (R27), incluye tiendaId + status, nunca expone deletedAt.
+// (R27), incluye nombre, nunca expone deletedAt.
 function toDTO(row: TarifaRow): TarifaDTO {
   return {
     id: row.id,
-    tiendaId: row.tiendaId,
-    status: row.status,
+    nombre: row.nombre,
+    zonaId: row.zonaId,
     valorFlete: row.valorFlete.toNumber(),
     valorFleteDevuelto: row.valorFleteDevuelto.toNumber(),
     valorFleteGam: row.valorFleteGam.toNumber(),
@@ -38,7 +38,8 @@ export class TarifaRepository implements ITarifaRepository {
   async create(data: CreateTarifaData): Promise<TarifaDTO> {
     const row = await this.prisma.tarifa.create({
       data: {
-        tiendaId: data.tiendaId,
+        nombre: data.nombre,
+        zonaId: data.zonaId,
         valorFlete: new Prisma.Decimal(data.valorFlete),
         valorFleteDevuelto: new Prisma.Decimal(data.valorFleteDevuelto),
         valorFleteGam: new Prisma.Decimal(data.valorFleteGam),
@@ -94,26 +95,10 @@ export class TarifaRepository implements ITarifaRepository {
     return result.count > 0;
   }
 
-  async esTiendaAdminTienda(tiendaId: string): Promise<boolean> {
-    const row = await this.prisma.usuario.findFirst({
-      where: { id: tiendaId, rol: { value: "adminTienda" } },
-      select: { id: true },
-    });
-    return row !== null;
-  }
-
-  async inactivarPorTienda(tiendaId: string): Promise<number> {
-    const result = await this.prisma.tarifa.updateMany({
-      where: { tiendaId, deletedAt: null, status: "activo" },
-      data: { status: "inactivo" },
-    });
-    return result.count;
-  }
-
   private toUpdateData(data: UpdateTarifaData): Prisma.TarifaUncheckedUpdateManyInput {
     const out: Prisma.TarifaUncheckedUpdateManyInput = {};
-    if (data.tiendaId !== undefined) out.tiendaId = data.tiendaId;
-    if (data.status !== undefined) out.status = data.status;
+    if (data.nombre !== undefined) out.nombre = data.nombre;
+    if (data.zonaId !== undefined) out.zonaId = data.zonaId;
     if (data.valorFlete !== undefined) out.valorFlete = new Prisma.Decimal(data.valorFlete);
     if (data.valorFleteDevuelto !== undefined) {
       out.valorFleteDevuelto = new Prisma.Decimal(data.valorFleteDevuelto);

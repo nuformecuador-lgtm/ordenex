@@ -13,16 +13,6 @@ export interface IBulkOrdenService {
    * (R25/R26), persiste en lotes (R27) con exito parcial (R29) y arma el
    * resumen (R30). Nunca lanza por autorizacion; SI puede lanzar por fallos
    * inesperados de infraestructura (el borde los normaliza a INTERNAL).
-   *
-   * `options.dryRun` (validación previa): ejecuta TODA la resolución/validación
-   * y clasificación de filas (geografía, duplicados, mensajero) SIN persistir
-   * ninguna orden. Devuelve el mismo `BulkSummary` que la carga real, para que
-   * la UI muestre los hallazgos (errores de geografía, num_remision duplicados)
-   * ANTES de escribir en la DB. La carga real re-valida (es la autoridad final).
    */
-  cargarMasiva(
-    rows: RawRow[],
-    actor: Actor,
-    options?: { dryRun?: boolean },
-  ): Promise<BulkOrdenResult>;
+  cargarMasiva(rows: RawRow[], actor: Actor): Promise<BulkOrdenResult>;
 }

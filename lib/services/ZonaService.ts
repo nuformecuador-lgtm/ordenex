@@ -10,7 +10,6 @@ import type {
   CrearZonaServiceResult,
   IZonaService,
   ListarZonasServiceResult,
-  MarcarCentralServiceResult,
   ObtenerZonaServiceResult,
 } from "@/lib/interfaces/services/IZonaService";
 import type { ActualizarZonaInput, CrearZonaInput, ListarZonasInput } from "@/lib/types/zona";
@@ -127,16 +126,5 @@ export class ZonaService implements IZonaService {
     if (!esMaestro(actor)) return { status: "forbidden" };
     const arbol = await this.repo.arbol();
     return { status: "ok", arbol };
-  }
-
-  async marcarCentral(
-    id: string,
-    esCentral: boolean,
-    actor: Actor,
-  ): Promise<MarcarCentralServiceResult> {
-    if (!esMaestro(actor)) return { status: "forbidden" };
-    const zona = await this.repo.marcarCentral(id, esCentral);
-    if (!zona) return { status: "not_found" };
-    return { status: "ok", zona };
   }
 }

@@ -42,12 +42,6 @@ export interface IZonaRepository {
   list(params: ListZonasParams): Promise<ListZonasResult>;
   /** Reemplaza datos + N:M + tarifas; null si la zona no existe. */
   update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null>;
-  /**
-   * Feature 24/R3: fija `es_central` de la zona. Si `esCentral` es true, desmarca las demas
-   * en la misma transaccion para garantizar que a lo sumo una quede en true.
-   * `null` si la zona no existe.
-   */
-  marcarCentral(id: string, esCentral: boolean): Promise<ZonaDTO | null>;
   /** Borrado FISICO (cascade de zona_distrito y tarifas). */
   hardDelete(id: string): Promise<DeleteZonaResult>;
   /** Arbol zona -> canton -> distrito indexado por nombre normalizado. */

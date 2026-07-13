@@ -14,8 +14,8 @@ const DESCONOCIDO: Actor = { usuarioId: "x", rol: "invitado" as RolValue };
 function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
-    tiendaId: "store1",
-    status: "activo",
+    nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -37,15 +37,14 @@ function buildRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRepositor
     list: vi.fn().mockResolvedValue({ items: [dto()], total: 1 }),
     update: vi.fn().mockResolvedValue(dto()),
     softDelete: vi.fn().mockResolvedValue(true),
-    esTiendaAdminTienda: vi.fn().mockResolvedValue(true), // por defecto: la tienda es adminTienda
-    inactivarPorTienda: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
 
 function crearInput(overrides: Record<string, unknown> = {}) {
   return {
-    tiendaId: "store1",
+    nombre: "Tarifa GAM",
+    zonaId: "zona-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -101,37 +100,6 @@ describe("crear — matriz de autorizacion (R9-R13/R16)", () => {
     const r = await service.crear(crearInput(), MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.tarifa).toEqual(dto());
-  });
-});
-
-describe("invariante: la tienda debe ser adminTienda", () => {
-  it("crear con tienda no adminTienda -> validation_error(tiendaId), sin persistir", async () => {
-    repo = buildRepo({ esTiendaAdminTienda: vi.fn().mockResolvedValue(false) });
-    service = new TarifaService(repo);
-    const r = await service.crear(crearInput(), MAESTRO);
-    expect(r.status).toBe("validation_error");
-    if (r.status === "validation_error") expect(r.fieldErrors).toHaveProperty("tiendaId");
-    expect(repo.create).not.toHaveBeenCalled();
-  });
-
-  it("actualizar reactivando (status=activo) con tienda no adminTienda -> validation_error", async () => {
-    repo = buildRepo({ esTiendaAdminTienda: vi.fn().mockResolvedValue(false) });
-    service = new TarifaService(repo);
-    const r = await service.actualizar("cob-1", { status: "activo" }, MAESTRO);
-    expect(r.status).toBe("validation_error");
-    expect(repo.update).not.toHaveBeenCalled();
-  });
-
-  it("actualizar solo montos NO valida la tienda", async () => {
-    const r = await service.actualizar("cob-1", { fulfillment: 9 }, MAESTRO);
-    expect(r.status).toBe("ok");
-    expect(repo.esTiendaAdminTienda).not.toHaveBeenCalled();
-  });
-
-  it("actualizar a inactivo NO valida la tienda", async () => {
-    const r = await service.actualizar("cob-1", { status: "inactivo" }, MAESTRO);
-    expect(r.status).toBe("ok");
-    expect(repo.esTiendaAdminTienda).not.toHaveBeenCalled();
   });
 });
 
@@ -215,42 +183,42 @@ describe("listar (R9-R13/R18/R19)", () => {
 
 describe("actualizar (R9-R13/R20-R23)", () => {
   it("R10: maestro aplica solo los campos presentes y delega", async () => {
-    const r = await service.actualizar("cob-1", { valorFlete: 12, fulfillment: 9 }, MAESTRO);
+    const r = await service.actualizar("cob-1", { nombre: "Nueva", fulfillment: 9 }, MAESTRO);
     expect(r.status).toBe("ok");
     const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect(data).toEqual({ valorFlete: 12, fulfillment: 9 });
+    expect(data).toEqual({ nombre: "Nueva", fulfillment: 9 });
   });
 
   it("R22: no toca id/created_at (no estan en UpdateTarifaData)", async () => {
-    await service.actualizar("cob-1", { fulfillment: 9 }, MAESTRO);
+    await service.actualizar("cob-1", { nombre: "Nueva" }, MAESTRO);
     const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(data).not.toHaveProperty("id");
     expect(data).not.toHaveProperty("createdAt");
   });
 
   it("R11: admin no puede actualizar -> forbidden", async () => {
-    const r = await service.actualizar("cob-1", { fulfillment: 9 }, ADMIN);
+    const r = await service.actualizar("cob-1", { nombre: "Nueva" }, ADMIN);
     expect(r.status).toBe("forbidden");
     expect(repo.update).not.toHaveBeenCalled();
   });
 
   it("R12: adminTienda/mensajero no pueden actualizar -> forbidden", async () => {
     for (const actor of [TIENDA, MENSAJERO]) {
-      const r = await service.actualizar("cob-1", { fulfillment: 9 }, actor);
+      const r = await service.actualizar("cob-1", { nombre: "Nueva" }, actor);
       expect(r.status).toBe("forbidden");
     }
     expect(repo.update).not.toHaveBeenCalled();
   });
 
   it("R13: rol no reconocido -> forbidden", async () => {
-    const r = await service.actualizar("cob-1", { fulfillment: 9 }, DESCONOCIDO);
+    const r = await service.actualizar("cob-1", { nombre: "Nueva" }, DESCONOCIDO);
     expect(r.status).toBe("forbidden");
   });
 
   it("R21: inexistente o borrado -> not_found", async () => {
     repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
     service = new TarifaService(repo);
-    const r = await service.actualizar("x", { fulfillment: 9 }, MAESTRO);
+    const r = await service.actualizar("x", { nombre: "Nueva" }, MAESTRO);
     expect(r.status).toBe("not_found");
     expect(repo.update).not.toHaveBeenCalled();
   });

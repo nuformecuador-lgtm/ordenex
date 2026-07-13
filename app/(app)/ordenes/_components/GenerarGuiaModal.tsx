@@ -37,18 +37,18 @@ function seleccionInicial(ordenes: OrdenListItemDTO[]): Record<string, string> {
 }
 
 /**
- * ¿La orden es central? Feature 30/R7/R8: `zonaEsCentral === false` → NO-central (se rutea a
+ * ¿La orden es GAM? Feature 30/R7/R8: `zonaEsGam === false` → NO-GAM (se rutea a
  * satélite, sin mensajero). `true` o `undefined` (mocks/fixtures previos a la
- * feature 30 que no traen el flag) → se trata como central: conserva el camino de la
+ * feature 30 que no traen el flag) → se trata como GAM: conserva el camino de la
  * feature 17 sin regresión.
  */
-function esCentral(orden: OrdenListItemDTO): boolean {
-  return orden.zonaEsCentral !== false;
+function esGam(orden: OrdenListItemDTO): boolean {
+  return orden.zonaEsGam !== false;
 }
 
 const SATELITE_ZONA_DESCONOCIDA = "su zona";
 
-/** Agrupa las órdenes NO-central por nombre de zona para titular cada bodega satélite destino. */
+/** Agrupa las órdenes NO-GAM por nombre de zona para titular cada bodega satélite destino. */
 function groupByZona(
   ordenes: OrdenListItemDTO[],
 ): { zonaNombre: string; ordenes: OrdenListItemDTO[] }[] {
@@ -73,7 +73,7 @@ function groupByZona(
  * UNA sola llamada a `generarGuia` (R19/R21-R24), con independencia de que la
  * orden termine en `en_espera_aceptacion` o `en_bodega` (R23).
  *
- * Feature 30 (T17, R7/R8/R9/R11): las órdenes NO-central (`zonaEsCentral === false`) NO
+ * Feature 30 (T17, R7/R8/R9/R11): las órdenes NO-GAM (`zonaEsGam === false`) NO
  * pueden llevar mensajero. Se listan en un grupo aparte "Se enviarán a la bodega
  * satélite de <zona>" SIN select; al confirmar su `mensajeroId` va SIEMPRE `null`
  * y el service las rutea a `en_ruta_bodega_satelite` en la misma transacción del
@@ -103,14 +103,14 @@ export function GenerarGuiaModal({
   }
 
   const mensajeroOptions = toMensajeroOptions(mensajeros);
-  // Feature 30/R8: primero se separa central (con select) de NO-central (a satélite, sin
-  // select). Dentro de central se conserva el subgrupo sugerido/sin-sugerido (feat 17).
-  const centralOrdenes = ordenes.filter(esCentral);
-  const noCentralOrdenes = ordenes.filter((o) => !esCentral(o));
-  const conSugerido = centralOrdenes.filter((o) => o.mensajeroSugeridoId != null);
-  const sinSugerido = centralOrdenes.filter((o) => o.mensajeroSugeridoId == null);
-  // Grupos NO-central por zona: cada zona informa su bodega satélite destino (R8/R15).
-  const noCentralPorZona = groupByZona(noCentralOrdenes);
+  // Feature 30/R8: primero se separa GAM (con select) de NO-GAM (a satélite, sin
+  // select). Dentro de GAM se conserva el subgrupo sugerido/sin-sugerido (feat 17).
+  const gamOrdenes = ordenes.filter(esGam);
+  const noGamOrdenes = ordenes.filter((o) => !esGam(o));
+  const conSugerido = gamOrdenes.filter((o) => o.mensajeroSugeridoId != null);
+  const sinSugerido = gamOrdenes.filter((o) => o.mensajeroSugeridoId == null);
+  // Grupos NO-GAM por zona: cada zona informa su bodega satélite destino (R8/R15).
+  const noGamPorZona = groupByZona(noGamOrdenes);
 
   function handleRowChange(ordenId: string, mensajeroId: string) {
     setSeleccion((prev) => ({ ...prev, [ordenId]: mensajeroId }));
@@ -134,18 +134,18 @@ export function GenerarGuiaModal({
     },
   ];
 
-  // R8: las órdenes NO-central NO ofrecen columna de mensajero (a satélite, sin select).
-  const noCentralColumns: Column<OrdenListItemDTO>[] = [
+  // R8: las órdenes NO-GAM NO ofrecen columna de mensajero (a satélite, sin select).
+  const noGamColumns: Column<OrdenListItemDTO>[] = [
     { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
     { id: "destinatario", value: "Destinatario", render: "destinatario" },
   ];
 
   async function handleConfirm() {
-    // R9/R11: NO-central → `mensajeroId` null siempre (el service las rutea a
-    // satélite); central → la selección del maestro (o null = "sin mensajero").
+    // R9/R11: NO-GAM → `mensajeroId` null siempre (el service las rutea a
+    // satélite); GAM → la selección del maestro (o null = "sin mensajero").
     const decisiones = ordenes.map((orden) => ({
       ordenId: orden.id,
-      mensajeroId: esCentral(orden)
+      mensajeroId: esGam(orden)
         ? seleccion[orden.id]
           ? seleccion[orden.id]
           : null
@@ -212,13 +212,13 @@ export function GenerarGuiaModal({
             />
           </div>
         ) : null}
-        {noCentralPorZona.map((grupo) => {
+        {noGamPorZona.map((grupo) => {
           const titulo = `Se enviarán a la bodega satélite de ${grupo.zonaNombre}`;
           return (
             <div key={grupo.zonaNombre} className="flex flex-col gap-2">
               <h3 className="text-sm font-medium">{titulo}</h3>
               <DataTable
-                columns={noCentralColumns}
+                columns={noGamColumns}
                 data={grupo.ordenes}
                 rowKey="id"
                 ariaLabel={titulo}

@@ -128,10 +128,10 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
     expect(arg.where).toMatchObject({ provinciaId: { in: ["p1"] } });
   });
 
-  it("findDistritosByCantonIds deriva zonaId de la N:M zona_distrito (1 zona)", async () => {
+  it("findDistritosByCantonIds filtra por cantonId in", async () => {
     const prisma = buildPrisma();
     prisma.distrito.findMany.mockResolvedValue([
-      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonas: [{ zonaId: "z1" }] },
+      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
@@ -140,22 +140,6 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
     expect(rows).toEqual([{ id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" }]);
     const arg = prisma.distrito.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ cantonId: { in: ["c1"] } });
-  });
-
-  it("findDistritosByCantonIds: 0 zonas -> zonaId null; >1 zonas -> null (ambiguo)", async () => {
-    const prisma = buildPrisma();
-    prisma.distrito.findMany.mockResolvedValue([
-      { id: "d0", nombre: "Sin Zona", cantonId: "c1", zonas: [] },
-      { id: "d2", nombre: "Ambigua", cantonId: "c1", zonas: [{ zonaId: "z1" }, { zonaId: "z2" }] },
-    ]);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const rows = await repo.findDistritosByCantonIds(["c1"]);
-
-    expect(rows).toEqual([
-      { id: "d0", nombre: "Sin Zona", cantonId: "c1", zonaId: null },
-      { id: "d2", nombre: "Ambigua", cantonId: "c1", zonaId: null },
-    ]);
   });
 });
 
