@@ -27,6 +27,7 @@ import {
   listarRoles,
   listarTiposIdentificacion,
 } from "@/lib/actions/usuarios";
+import { listarZonas } from "@/lib/actions/zonas";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
 
 /** Modo de contraseña inicial (R30/R36). */
@@ -57,6 +58,9 @@ interface FormState {
   rolId: string;
   password: string;
   fulfillment: boolean;
+  // Feature 24/R27: zona del usuario. "" = sin zona (permitido para
+  // mensajero/adminSatelite; el maestro puede asignarla luego).
+  zonaId: string;
 }
 
 function initialState(usuario?: UsuarioPublico | null): FormState {
@@ -69,6 +73,7 @@ function initialState(usuario?: UsuarioPublico | null): FormState {
     rolId: usuario?.rolId ?? "",
     password: "",
     fulfillment: usuario?.fulfillment ?? false,
+    zonaId: usuario?.zonaId ?? "",
   };
 }
 
@@ -113,12 +118,32 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
       [roles],
     );
 
+    // Feature 24/R27: catálogo de zonas para el select (solo aplica a
+    // mensajero/adminSatelite). Hay ~7 zonas; pedimos el máximo permitido
+    // (ZONAS_MAX_PAGE_SIZE = 100) para traerlas todas en una página.
+    const { data: zonas } = useSWR("usuarios:zonas", async () => {
+      const res = await listarZonas({ page: 1, pageSize: 100 });
+      return res.status === "ok" ? res.items : [];
+    });
+
+    // `value` = id de la zona (lo que espera el backend en `zonaId`);
+    // `label` = nombre legible de la zona.
+    const zonaOptions: SelectOption[] = useMemo(
+      () => (zonas ?? []).map((z) => ({ value: z.id, label: z.nombre })),
+      [zonas],
+    );
+
     const isEditar = mode === "editar";
 
     // El switch de fulfillment aplica solo al rol `adminTienda` (R5/R6, decisión P3).
     // `roles` mapea cada `RolItem` como `{ id, value }`; `form.rolId` guarda el UUID.
     const esAdminTienda =
       (roles ?? []).find((r) => r.id === form.rolId)?.value === "adminTienda";
+
+    // Feature 24/R27: la zona solo aplica a `mensajero`/`adminSatelite`; para el
+    // resto de roles el service la fuerza a null. Mismo patrón que `esAdminTienda`.
+    const rolValue = (roles ?? []).find((r) => r.id === form.rolId)?.value;
+    const esRolConZona = rolValue === "mensajero" || rolValue === "adminSatelite";
 
     function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
       setForm((prev) => ({ ...prev, [key]: value }));
@@ -134,6 +159,10 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
           // Solo se envía cuando el rol es `adminTienda` (R6/R12); el backend
           // fuerza `false` para otros roles (R4a).
           ...(esAdminTienda ? { fulfillment: form.fulfillment } : {}),
+          // Feature 24/R27: zona solo para mensajero/adminSatelite. "" -> null
+          // libera la zona; no enviarla la deja intacta. Se omite para el resto
+          // de roles (el service la fuerza a null igualmente).
+          ...(esRolConZona ? { zonaId: form.zonaId || null } : {}),
         });
         if (!parsed.success) {
           const fieldErrors = parsed.error.flatten().fieldErrors as FieldErrors;
@@ -151,6 +180,9 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
         rolId: form.rolId,
         // Solo se envía para rol `adminTienda` (R6); si no, se omite (R6).
         ...(esAdminTienda ? { fulfillment: form.fulfillment } : {}),
+        // Feature 24/R27: zona solo para mensajero/adminSatelite. "" -> null
+        // (permitido; el maestro puede asignarla luego). Se omite para el resto.
+        ...(esRolConZona ? { zonaId: form.zonaId || null } : {}),
       };
       const candidate =
         passwordMode === "manual"
@@ -310,6 +342,19 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
               onCheckedChange={(next) => setField("fulfillment", next)}
             />
           </div>
+        ) : null}
+
+        {/* Feature 24/R27: la zona solo se muestra (y se envía) para
+            mensajero/adminSatelite; sin ella el mensajero queda inasignable. */}
+        {esRolConZona ? (
+          <Field id="zonaId" label="Zona" errors={errors.zonaId}>
+            <Select
+              aria-label="Zona"
+              value={form.zonaId}
+              options={zonaOptions}
+              onValueChange={(v) => setField("zonaId", v)}
+            />
+          </Field>
         ) : null}
 
         {!isEditar ? (
