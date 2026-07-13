@@ -10,7 +10,10 @@ import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 
+import { devolverATienda } from "@/lib/actions/devolucion-origen";
+
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import { devolucionOrigenErrorMessage } from "@/app/(app)/ordenes/_components/devolucion-origen-error-messages";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { RecepcionDetalle } from "./RecepcionDetalle";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
@@ -32,6 +35,13 @@ export interface RecepcionSateliteModuleProps {
   porRecibir: RecepcionSateliteDTO[];
   /** Órdenes ya en `en_bodega_satelite` de la zona (base de la feature 34). */
   recibidas: RecepcionSateliteDTO[];
+  /**
+   * Feature 48/T9 (R10/R14): órdenes en `rechazada` de la zona del adminSatelite,
+   * elegibles para la acción "Devolver a la tienda" (transición
+   * `rechazada → devuelta_origen`). Acotadas server-side por zona; vacío = sin
+   * órdenes por devolver.
+   */
+  porDevolver?: RecepcionSateliteDTO[];
   /** Nombre de la zona del adminSatelite (para el display, R9); `null` si no tiene. */
   zonaNombre: string | null;
   /** `true` si el adminSatelite no tiene zona asignada (R5). */
@@ -153,9 +163,75 @@ function ListaRecibidas({
   );
 }
 
+/**
+ * Feature 48 (T9, R10/R14): fila de la sección "Por devolver a tienda". Cada orden
+ * `rechazada` de la zona ofrece la acción "Devolver a la tienda", que ejecuta el
+ * retorno `rechazada → devuelta_origen` vía la Server Action `devolverATienda`. El
+ * estado de carga y el error son POR FILA (aislados): el botón se deshabilita
+ * mientras procesa y un `status != ok` muestra el aviso sin afectar a las demás
+ * filas. En éxito, el padre releé el estado del servidor (`router.refresh`).
+ */
+function FilaPorDevolver({
+  orden,
+  zonaNombre,
+  onDevuelta,
+}: {
+  orden: RecepcionSateliteDTO;
+  zonaNombre: string | null;
+  onDevuelta: () => void;
+}) {
+  const [procesando, setProcesando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDevolver() {
+    setProcesando(true);
+    setError(null);
+    const result = await devolverATienda({ ordenId: orden.id });
+    if (result.status !== "ok") {
+      setError(devolucionOrigenErrorMessage(result.status));
+      setProcesando(false);
+      return;
+    }
+    onDevuelta(); // relee el estado del servidor; la fila desaparece del listado
+  }
+
+  return (
+    <li className="flex flex-col gap-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {orden.numRemision} · {orden.destinatario}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <RecepcionDetalle
+            orden={orden}
+            estadoLegible={estadoLegible(orden, zonaNombre)}
+          />
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              onClick={handleDevolver}
+              disabled={procesando}
+            >
+              {procesando ? "Devolviendo…" : "Devolver a la tienda"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </li>
+  );
+}
+
 export function RecepcionSateliteModule({
   porRecibir,
   recibidas,
+  porDevolver = [],
   zonaNombre,
   sinZona,
   mensajeros,
@@ -252,6 +328,33 @@ export function RecepcionSateliteModule({
           seleccionados={seleccionados}
           onToggle={toggleSeleccion}
         />
+      </section>
+
+      {/* ---------- Sección: Por devolver a tienda (rechazada) ---------- */}
+      {/* Feature 48 (R10/R14): órdenes `rechazada` de la zona; cada una ofrece
+          "Devolver a la tienda" (rechazada → devuelta_origen) con estado/error por
+          fila. Tras el éxito se releé el estado del servidor. */}
+      <section
+        aria-label="Por devolver a tienda"
+        className="flex flex-col gap-3 border-t pt-6"
+      >
+        <h2 className="text-lg font-semibold">Por devolver a tienda</h2>
+        {porDevolver.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hay órdenes por devolver.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {porDevolver.map((orden) => (
+              <FilaPorDevolver
+                key={orden.id}
+                orden={orden}
+                zonaNombre={zonaNombre}
+                onDevuelta={() => router.refresh()}
+              />
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* Feature 46 (R15/R16): aviso derivado "Liberadas hoy (reprogramación)" de la

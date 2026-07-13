@@ -61,6 +61,7 @@ beforeEach(() => {
     status: "ok",
     porRecibir: [],
     recibidas: [],
+    porDevolver: [],
     zonaNombre: "Limón",
     sinZona: false,
   });

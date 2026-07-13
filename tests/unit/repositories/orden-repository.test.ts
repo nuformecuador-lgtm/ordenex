@@ -429,6 +429,55 @@ describe("OrdenRepository.update (R36/R37)", () => {
   });
 });
 
+// Feature 48/T4.1 (R7/R8): el retorno a la tienda (`rechazada -> devuelta_origen`) NO tiene
+// call-site propio; reutiliza el punto #11 (`OrdenRepository.update`, `ajuste_estado`) que ya
+// escribe estado + appendCambioEstado en la MISMA tx. Estas aserciones cierran la traza de la
+// 48 sobre el choke point de la 49 (el actor es el admin de la bodega responsable).
+describe("OrdenRepository.update — retorno a tienda rechazada->devuelta_origen (feature 48, R7/R8)", () => {
+  const HIST_DEVOLUCION = {
+    actorUsuarioId: "admin-bodega",
+    origenTipo: "ajuste_estado",
+  } as const;
+
+  it("deja UNA fila de historial con actorUsuarioId=admin y origenTipo=ajuste_estado por el choke point", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.updateMany.mockResolvedValue({ count: 1 });
+    prisma.orden.findFirst
+      .mockResolvedValueOnce({ estatusId: "os-rechazada" }) // origen pre-leido
+      .mockResolvedValueOnce(ordenRow({ estatusId: "os-devuelta-origen" }));
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.update("ord-1", { estatusId: "os-devuelta-origen" }, HIST_DEVOLUCION);
+
+    expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
+    expect(arg.data).toEqual([
+      {
+        ordenId: "ord-1",
+        estatusOrigenId: "os-rechazada",
+        estatusDestinoId: "os-devuelta-origen",
+        actorUsuarioId: "admin-bodega",
+        origenTipo: "ajuste_estado",
+        motivo: null,
+        gestionOrdenId: null,
+      },
+    ]);
+  });
+
+  it("si el append del historial falla, revierte el cambio de estado (atomico, R7)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.updateMany.mockResolvedValue({ count: 1 });
+    prisma.orden.findFirst.mockResolvedValueOnce({ estatusId: "os-rechazada" });
+    prisma.ordenHistorialEstado.createMany.mockRejectedValue(new Error("append boom"));
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    // El fallo del append propaga y aborta la $transaction: nada persiste (atomicidad).
+    await expect(
+      repo.update("ord-1", { estatusId: "os-devuelta-origen" }, HIST_DEVOLUCION),
+    ).rejects.toThrow("append boom");
+  });
+});
+
 describe("OrdenRepository.existsGeo / existsEstatus / findEstatusIdByValue", () => {
   it("existsGeo marca distrito=true cuando no se consulta (opcional)", async () => {
     const prisma = buildPrisma();

@@ -89,6 +89,7 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
       status: "ok",
       porRecibir: [],
       recibidas: [],
+      porDevolver: [], // Feature 48/T9/R14: sin zona -> tampoco hay por devolver
       zonaNombre: null,
       sinZona: true,
     });
@@ -108,13 +109,58 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.porRecibir.map((o) => o.id)).toEqual(["a", "c"]);
     expect(r.recibidas.map((o) => o.id)).toEqual(["b"]);
+    // Feature 48/T9/R14: ninguna fila rechazada -> porDevolver vacio.
+    expect(r.porDevolver).toEqual([]);
     expect(r.sinZona).toBe(false);
     expect(r.zonaNombre).toBe("Limon"); // R9: derivado de orden.zonaId
-    // R4: consulta acotada a la zona del actor con los dos estados relevantes.
+    // R4 + R14: consulta acotada a la zona del actor con los TRES estados relevantes
+    // (por recibir, recibidas y las rechazada elegibles para devolver a tienda).
     expect(repo.findRecepcionSateliteByZona).toHaveBeenCalledWith(ZONA, [
       "en_ruta_bodega_satelite",
       "en_bodega_satelite",
+      "rechazada",
     ]);
+  });
+
+  // Feature 48/T9/R14: bucket `porDevolver` (rechazada de la zona del adminSatelite).
+  it("R14: clasifica en porDevolver las ordenes rechazada de SU zona (y NO en porRecibir/recibidas)", async () => {
+    const repo = fakeRepo({
+      findRecepcionSateliteByZona: vi.fn(async () => [
+        recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
+        recepcionRow({ id: "b", estatusValue: "en_bodega_satelite" }),
+        recepcionRow({ id: "r1", estatusValue: "rechazada" }),
+        recepcionRow({ id: "r2", estatusValue: "rechazada" }),
+      ]),
+    });
+    const r = await newService(repo).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // Las rechazada caen SOLO en porDevolver.
+    expect(r.porDevolver.map((o) => o.id)).toEqual(["r1", "r2"]);
+    // ... y NO se filtran a los otros buckets.
+    expect(r.porRecibir.map((o) => o.id)).toEqual(["a"]);
+    expect(r.recibidas.map((o) => o.id)).toEqual(["b"]);
+    expect(r.sinZona).toBe(false);
+  });
+
+  it("R14: una fila rechazada de la MISMA zona aparece en porDevolver; otros estados NO", async () => {
+    const repo = fakeRepo({
+      findRecepcionSateliteByZona: vi.fn(async () => [
+        recepcionRow({ id: "r1", estatusValue: "rechazada" }),
+      ]),
+    });
+    const r = await newService(repo).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porDevolver.map((o) => o.id)).toEqual(["r1"]);
+    expect(r.porRecibir).toEqual([]);
+    expect(r.recibidas).toEqual([]);
+  });
+
+  it("R14: adminSatelite sin zona -> porDevolver vacio (sin consultar ordenes)", async () => {
+    const repo = fakeRepo({ findUsuarioZonaId: vi.fn(async () => null) });
+    const r = await newService(repo).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porDevolver).toEqual([]);
+    expect(repo.findRecepcionSateliteByZona).not.toHaveBeenCalled();
   });
 });
 

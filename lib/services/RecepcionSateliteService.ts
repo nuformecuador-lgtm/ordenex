@@ -13,6 +13,9 @@ import type {
 // para el display (R9/R20).
 const ORIGEN_RECEPCION = "en_ruta_bodega_satelite";
 const ESTADO_RECIBIDA = "en_bodega_satelite";
+// Feature 48/T9/R14: estado de las ordenes elegibles para "Devolver a la tienda"
+// (retorno a la tienda de origen). Se listan acotadas a la zona del adminSatelite.
+const ESTADO_RECHAZADA = "rechazada";
 
 // Solo el rol autorizado en el modulo (R3/R17): el adminSatelite, SIEMPRE acotado
 // a su propia zona (R4/R12).
@@ -44,24 +47,37 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R4
     if (zonaId === null) {
       // R5: adminSatelite sin zona -> modulo vacio + aviso accionable (sinZona).
-      return { status: "ok", porRecibir: [], recibidas: [], zonaNombre: null, sinZona: true };
+      // Feature 48/T9/R14: sin zona tampoco hay ordenes por devolver.
+      return {
+        status: "ok",
+        porRecibir: [],
+        recibidas: [],
+        porDevolver: [],
+        zonaNombre: null,
+        sinZona: true,
+      };
     }
 
+    // Feature 48/T9/R14: se anade el 3er estado `rechazada` para listar las ordenes
+    // elegibles para "Devolver a la tienda", SIEMPRE acotadas a la zona del actor.
     const rows = await this.repo.findRecepcionSateliteByZona(zonaId, [
       ORIGEN_RECEPCION,
       ESTADO_RECIBIDA,
-    ]); // R6/R8
+      ESTADO_RECHAZADA,
+    ]); // R6/R8 + R14
 
     const porRecibir: RecepcionSateliteDTO[] = [];
     const recibidas: RecepcionSateliteDTO[] = [];
+    const porDevolver: RecepcionSateliteDTO[] = []; // Feature 48/T9/R14
     let zonaNombre: string | null = null;
     for (const row of rows) {
       zonaNombre = row.zonaNombre; // derivado de orden.zonaId (misma zona para todas)
       const dto = toDTO(row);
       if (row.estatusValue === ORIGEN_RECEPCION) porRecibir.push(dto);
       else if (row.estatusValue === ESTADO_RECIBIDA) recibidas.push(dto);
+      else if (row.estatusValue === ESTADO_RECHAZADA) porDevolver.push(dto);
     }
-    return { status: "ok", porRecibir, recibidas, zonaNombre, sinZona: false };
+    return { status: "ok", porRecibir, recibidas, porDevolver, zonaNombre, sinZona: false };
   }
 
   async recibir(ordenId: string, actor: Actor): Promise<RecibirServiceResult> {

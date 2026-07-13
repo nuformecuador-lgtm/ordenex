@@ -25,6 +25,10 @@ export type ListarRecepcionSateliteResult =
       status: "ok";
       porRecibir: RecepcionSateliteDTO[];
       recibidas: RecepcionSateliteDTO[];
+      // Feature 48/T9/R14: ordenes `rechazada` de la zona del adminSatelite,
+      // elegibles para "Devolver a la tienda". El campo viaja tal cual desde el
+      // service result (la action solo reenvia); acotado server-side por zona.
+      porDevolver: RecepcionSateliteDTO[];
       zonaNombre: string | null;
       sinZona: boolean;
     }
