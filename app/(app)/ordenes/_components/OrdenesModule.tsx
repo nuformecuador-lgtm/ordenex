@@ -57,6 +57,7 @@ export function OrdenesModule({
     ["ordenes:list", page, pageSize],
     () => ordenesFetcher(page, pageSize),
   );
+  console.log(data?.items)
 
   return (
     <section className="flex flex-col gap-4">

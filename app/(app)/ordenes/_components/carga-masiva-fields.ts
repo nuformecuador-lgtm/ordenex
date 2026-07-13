@@ -13,9 +13,8 @@ export const ORDENES_BULK_FIELDS: TemplateField[] = [
   { key: "direccion", example: "Av. Amazonas N34-451" },
   { key: "producto", example: "Camiseta talla M" },
   { key: "peso", example: "1.5" },
-  { key: "notas", example: "Entregar en la tarde" },
   { key: "monto_cobrar", example: "25.90" },
-  { key: "mensajero_sugerido_id", example: "" },
+  { key: "notas", example: "Entregar en la tarde" },
 ];
 
 export const ORDENES_BULK_TEMPLATE_NAME = "plantilla-ordenes-carga-masiva.xlsx";
