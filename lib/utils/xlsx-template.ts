@@ -22,19 +22,24 @@ export interface XlsxTemplateField {
   /** Valor de ejemplo opcional para la fila de muestra (R4). */
   example?: string;
   /**
-   * Marca la columna como obligatoria: la cabecera se sufija con " *" para que
-   * el usuario lo anticipe al abrir la plantilla (feature 51).
+   * Marca SEMÁNTICA de columna obligatoria. YA NO altera el texto de la cabecera:
+   * el header SIEMPRE es la clave máquina (`label ?? key`). Sufijarlo con " *"
+   * (como hacía la feature 51) rompía el round-trip descargar→subir, porque el
+   * parser identifica cada columna por su clave exacta y "distrito *" ya no casa
+   * con "distrito" (feature 58). La obligatoriedad se comunica en la UI (el
+   * `Alert` del botón de carga), no en el archivo.
    */
   required?: boolean;
 }
 
-/** Sufijo visible que marca una columna obligatoria en la cabecera (feature 51). */
-const REQUIRED_SUFFIX = " *";
-
-/** Cabecera mostrada para una columna: `label ?? key`, con marca de obligatorio. */
+/**
+ * Cabecera de una columna: SIEMPRE la clave máquina (`label ?? key`), sin marca
+ * de obligatorio. El texto de la celda de cabecera NUNCA puede diferir de la
+ * clave que el parser usa como identificador, o el archivo descargado deja de
+ * poder re-subirse (feature 58).
+ */
 function headerFor(field: XlsxTemplateField): string {
-  const base = field.label ?? field.key;
-  return field.required ? `${base}${REQUIRED_SUFFIX}` : base;
+  return field.label ?? field.key;
 }
 
 /** Ancho mínimo legible de columna, en caracteres (R3). */

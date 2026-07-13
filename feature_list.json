@@ -621,12 +621,13 @@
       "id": 58,
       "name": "plantilla carga masiva - datos de ejemplo validos (fix 'provincia no encontrada')",
       "description": "CORRECCION de los DATOS DE EJEMPLO de la plantilla descargable de carga masiva de ordenes. Aunque la feature 51 cambio los ejemplos de Ecuador a Costa Rica, una carga de ejemplo con la plantilla actual sigue fallando con el error de validacion 'provincia: provincia no encontrada': los valores de provincia/canton/distrito de las filas de ejemplo NO coinciden con el catalogo de geografia REALMENTE sembrado en la DB (seed CR de la feature 24), por lo que el backend de carga (feature 15) los rechaza. Objetivo: que la plantilla traiga filas de ejemplo VALIDAS y cargables tal cual (demo), usando provincia + canton + distrito que EXISTAN en el catalogo sembrado y cuyo distrito TENGA zona asignada (acoplamiento distrito.zona_id de las features 24/51, para que orden.zona_id se derive y no se rechace la fila). Criterio de aceptacion: descargar la plantilla y subirla sin editar debe pasar la validacion y crear las ordenes de ejemplo. Toca el generador de plantilla del componente de carga masiva (BulkUpload / OrdenesCargaMasivaButton, features 9/31/51); verificar los valores contra el seed real de geografia antes de fijarlos (no inventar nombres). Frontend; no toca la logica de carga (feature 15). Depende de las features 51, 24 y 15.",
-      "status": "pending",
-      "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 51
+      "status": "done",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": "feature/58-plantilla-ejemplos-cr",
+      "depends_on": 51,
+      "status_note": "done 2026-07-13. REGISTRADA como fix agil (SIN specs/58/, sdd:false). El bug REAL no eran los valores de ejemplo (San Jose/San Jose/Carmen SON validos: existen en el catalogo geo sembrado y Carmen tiene zona GAM, verificado contra la DB real), sino que el generador de plantilla XLSX (lib/utils/xlsx-template.ts) sufijaba con ' *' la cabecera de los campos required (unico: distrito) -> header 'distrito *' != clave 'distrito' que espera el parser -> valor huerfano -> 'distrito requerido'. FIX: headerFor devuelve siempre label??key (sin sufijo); el round-trip descargar->subir vuelve a funcionar. Ademas: un 500 previo se debia al cliente Prisma OBSOLETO (regenerado, no es del fix). Blindaje: roundtrip test reforzado (cada clave verbatim + valor distrito=Carmen por filaCargaSchema) + xlsx-template.test reescrito al nuevo contrato; borrado codigo muerto de una entrega defectuosa previa. FOLLOW-UP UI incluido: el Modal compartido acota altura (max-h dvh) y scrollea solo el cuerpo, y el paso resumen se ensancha (max-w-4xl/5xl) para su tabla de 8 columnas. Reviewer APROBADO 0 bloqueantes (review_58). VERDE: typecheck 0, 2330/2330 tests. Un PR (2 commits) feature/58 -> dev."
     },
     {
       "id": 59,
