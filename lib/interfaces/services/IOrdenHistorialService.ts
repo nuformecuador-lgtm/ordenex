@@ -4,8 +4,12 @@ import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
 // Feature 49 (design §4.1) — contrato del servicio de LECTURA del historial. La
 // autorizacion por visibilidad de la orden vive aqui (R27), no en el repo. Resultado de
 // dominio (sin acoplarse a HTTP); el borde (Server Action) le suma `unauthenticated`.
+//
+// Feature 47 (R15/R17): el `ok` ademas expone el conteo de intentos DERIVADO (`intentos`,
+// consume `contarIntentos`) y el `umbral` configurable (R3), para que la UI muestre
+// "intento X de N" con la MISMA autorizacion de la orden (no se añade regla nueva, R17).
 export type ObtenerHistorialServiceResult =
-  | { status: "ok"; entradas: OrdenHistorialEntradaDTO[] }
+  | { status: "ok"; entradas: OrdenHistorialEntradaDTO[]; intentos: number; umbral: number }
   | { status: "forbidden" }
   | { status: "not_found" };
 

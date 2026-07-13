@@ -86,7 +86,15 @@ beforeEach(() => {
     const { page, pageSize } = input as { page: number; pageSize: number };
     return { status: "ok", items: ORDENES, page, pageSize, total: ORDENES.length };
   });
-  obtenerHistorialMock.mockResolvedValue({ status: "ok", entradas: [ENTRADA] });
+  // Feature 47 (R15): el `ok` incluye ahora el conteo de intentos derivado y el
+  // umbral. Con `intentos: 0` no se pinta el badge (R16) → estos tests del apartado
+  // conservan su comportamiento observable.
+  obtenerHistorialMock.mockResolvedValue({
+    status: "ok",
+    entradas: [ENTRADA],
+    intentos: 0,
+    umbral: 3,
+  });
 });
 
 afterEach(() => {
