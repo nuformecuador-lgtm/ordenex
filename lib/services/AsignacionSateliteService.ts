@@ -5,12 +5,16 @@ import type {
   AsignarSateliteServiceResult,
   IAsignacionSateliteService,
 } from "@/lib/interfaces/services/IAsignacionSateliteService";
+import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
 
 // Estado de ORIGEN de la asignacion satelite (feature 33) y destino tras asignar
 // (feature 17). Esta feature NO agrega estados ni `num_guia` (R8): usa exclusivamente
 // estos dos valores de catalogo, ya sembrados.
 const ORIGEN_ASIGNACION = "en_bodega_satelite";
 const ESTADO_ASIGNADA = "en_espera_aceptacion";
+
+// Feature 46/R3: estatus bloqueado por reprogramacion (guardia explicito y tipado).
+const ESTATUS_REPROGRAMADA = "reprogramada";
 
 // Solo el rol autorizado en el modulo (R1/R13): el adminSatelite, SIEMPRE acotado
 // a su propia zona (R2), resuelta server-side por `findUsuarioZonaId`.
@@ -107,6 +111,11 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       }
       if (orden.zonaId !== zonaId) {
         detalle.push({ ordenId: id, motivo: "zona_ajena" }); // R11
+        continue;
+      }
+      // Feature 46/R3: orden reprogramada -> bloqueada; motivo tipado (antes del origen).
+      if (orden.estatusValue === ESTATUS_REPROGRAMADA) {
+        detalle.push({ ordenId: id, motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA });
         continue;
       }
       if (orden.estatusValue !== ORIGEN_ASIGNACION) {

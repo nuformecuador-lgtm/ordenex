@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
+import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
 import type {
   GenerarGuiaDecisionData,
   IOrdenRepository,
@@ -169,6 +170,50 @@ describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", 
     if (r.status === "conflict") {
       expect(r.detalle).toEqual([{ ordenId: "o1", motivo: "mensajero bloqueado por cierre pendiente" }]);
     }
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+});
+
+describe("GuiaAsignacionService — bloqueo por reprogramacion (feature 46/R1/R2/R5)", () => {
+  it("R2: generarGuia con una orden reprogramada en el lote -> conflict con motivo tipado, 0 escrituras", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
+        ordenRow({ id: "o2", estatusValue: "reprogramada" }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia(
+      {
+        decisiones: [
+          { ordenId: "o1", mensajeroId: null },
+          { ordenId: "o2", mensajeroId: null },
+        ],
+      },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([{ ordenId: "o2", motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA }]);
+    // R5/R2: aborta el lote completo sin persistir (todo-o-nada).
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+
+  it("R2: asignarDesdeBodega con una orden reprogramada -> conflict con motivo tipado, sin efectos", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "reprogramada" }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([{ ordenId: "o1", motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA }]);
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
   });
 });

@@ -1064,6 +1064,31 @@
   libro. DEUDA menor: captura editable de `cobra_comision` por-orden (A5, features 14/15/16/17); test de idempotencia
   unit usa mock en memoria (el constraint real lo verificó el reviewer); E2E escrito pero no ejecutado (patrón del arnés).
 
+## Feature 46 — reprogramación: bloqueo y liberación programada (2026-07-13)
+
+- **Primera de la Fase 2 del flujo del mensajero** (grupo 46/47/49 elegido por el humano). Fullstack/high, un ciclo.
+  Rama `feature/46-reprogramacion-bloqueo-liberacion` desde `origin/dev` (que ya tiene 36/41/42/56). F1.4 APROBADA
+  (todas las recomendadas). Impl COMPLETA R1–R21 + reviewer APROBADO 0 bloqueantes. Commit `a9fa3c8` + cierre chore(state).
+- **BLOQUEO server-side real:** una orden con gestión `reprogramada` cuya `fechaReprogramacion > hoy (CR)` NO es
+  reasignable/enviable. Guarda tipada `MSG_ORDEN_REPROGRAMADA_BLOQUEADA` en `GuiaAsignacionService` (`generarGuia` +
+  `asignarDesdeBodega`) y `AsignacionSateliteService.asignar`, ANTES del check de origen, todo-o-nada; envío bloqueado
+  por origen en `MisAsignacionesService`.
+- **LIBERACIÓN programada:** cron NUEVO `/api/cron/liberar-reprogramadas` (auth `CRON_SECRET` antes de cualquier efecto,
+  `schedule 0 6` diario en `vercel.json` = 00:00 CR, hora CR UTC−6 con fronteras testeadas) devuelve la orden a
+  `en_bodega`/`en_bodega_satelite` derivado de la zona (`findCentralZonaId`, reúsa el ruteo de 30/33) para que la bodega
+  la re-asigne vía 17/34. Idempotencia DERIVADA del estatus (UPDATE guardado por `estatusId=reprogramada`) + columna
+  `orden.liberada_reprogramada_at`. **AVISO** = visibilidad derivada "liberadas hoy" en ambas bodegas (sin tabla nueva).
+- **Migración** aditiva `20260713100000_orden_liberada_reprogramada_at` (columna nullable + índice parcial + `down.sql`
+  inverso exacto). NO añade columnas de intentos/historial → R21 (contador de intentos / trazabilidad) FUERA DE ALCANCE
+  = features 47/49.
+- Verde: typecheck 0, lint 0, **2056/2056 (+48)**, `init.sh` OK, round-trip de migración verificado por SQL directo
+  contra el Postgres local. DEUDA menor: E2E `e2e/reprogramacion-liberacion.spec.ts` escrito pero diferido (convención
+  del arnés); round-trip por test estático + SQL manual (no CI).
+- **NOTA AMBIENTAL (ajena a la 46):** el Postgres local arrastra la migración de la feature 43
+  (`20260712170000_wallet_tienda_movimiento`, no en `dev`) → `prisma migrate status` falla; reconciliar el historial
+  local (o `migrate reset`) antes del despliegue. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** NOTA: con la
+  feature 43 ya mergeada a `dev` (PR #50, 2026-07-13) este drift ambiental queda resuelto al reconciliar la rama.
+
 ## 2026-07-12 — feature 43 (wallet por tienda: saldo a favor de la tienda)
 - Money-critical. Cada TIENDA (rol `adminTienda`) tiene su wallet con su SALDO A FAVOR = cuánto le debe entregar
   Ordenex = COD recaudado − (flete + comisión COD + IVA flete + IVA comisión) por orden. Es el **COMPLEMENTO EXACTO**

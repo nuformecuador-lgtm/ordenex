@@ -9,7 +9,11 @@
 |--------|------|------|--------|
 | _(ninguna en curso)_ | — | — | — |
 
-> Feature 43 (wallet por tienda: saldo a favor) CERRADA 2026-07-12: **impl COMPLETA (R1–R29) + reviewer APROBADO 0 bloqueantes**. Verde REAL: prisma OK, typecheck 0, lint 0, **2092/2092 tests (+84)**, `init.sh` OK, **round-trip de migración REAL por introspección**, **invariante de cuadre verificado a mano en AMBOS estados del flag**, idempotencia por constraint DB viva, SIN regresión 37/38/39/40/56/41/42. Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Wallet POR TIENDA = complemento del ingreso de Ordenex de la 42: **ledger propio** `wallet_tienda_movimiento` congelado al aprobar (reutiliza `derivarIngresoOrden`), crédito sobre COD recaudado (`montoRecibido`); `devuelta`/`rechazada` → la tienda debe el flete de devolución (saldo negativo) **REVERSIBLE** vía flag `TIENDA_DEBITA_FLETE_DEVOLUCION` (default true); alcance = modelo + visibilidad (`/mi-wallet` adminTienda + `/wallet/tiendas` maestro); pago a la tienda = follow-up. Estado `done` + `history.md` + `review_43`. Commit `6923a7b`. **DESBLOQUEA el pago a tiendas (follow-up).** **PENDIENTE: abrir PR a `dev` + merge (OK humano).**
+> Feature 46 (reprogramación: bloqueo + liberación programada) CERRADA 2026-07-13: **impl COMPLETA (R1–R21) + reviewer APROBADO 0 bloqueantes**. Primera de la **Fase 2 flujo mensajero** (grupo 46/47/49 elegido por el humano). Fullstack/high, un ciclo, rama desde `origin/dev`. Verde: typecheck 0, lint 0, **2056/2056 tests (+48)**, `init.sh` OK, round-trip de migración por SQL directo. **BLOQUEO server-side real** (`MSG_ORDEN_REPROGRAMADA_BLOQUEADA` en `GuiaAsignacionService`+`AsignacionSateliteService`, antes del check de origen; envío por origen en `MisAsignacionesService`): orden `reprogramada` con `fechaReprogramacion>hoy(CR)` no reasignable/enviable. **LIBERACIÓN**: cron NUEVO `/api/cron/liberar-reprogramadas` (auth `CRON_SECRET`, `0 6` diario=00:00 CR, hora CR UTC−6) → `en_bodega`/`en_bodega_satelite` derivado de zona (`findCentralZonaId`, reúsa 30/33); idempotencia DERIVADA del estatus + `orden.liberada_reprogramada_at`. **AVISO** = visibilidad derivada "liberadas hoy" en ambas bodegas (sin tabla). Migración aditiva `20260713100000_orden_liberada_reprogramada_at` (+ down.sql). R21 (contador/historial) FUERA DE ALCANCE = 47/49. Commit `a9fa3c8` + cierre. Estado `done` + `history.md` + `review_46`. **DEUDA menor**: E2E diferido; round-trip por test estático+SQL manual. Con la 43 ya mergeada a `dev` (PR #50), el drift ambiental del Postgres local queda resuelto. **PENDIENTE: abrir PR a `dev` + merge (OK humano).** Siguiente del grupo: **49** (trazabilidad, base) → 47 → 48.
+
+> Feature 43 CERRADA y **MERGEADA a `dev`** (PR #50) 2026-07-13. Ver `history.md`.
+
+> Feature 43 (wallet por tienda: saldo a favor) CERRADA 2026-07-12: **impl COMPLETA (R1–R29) + reviewer APROBADO 0 bloqueantes**. Verde REAL: prisma OK, typecheck 0, lint 0, **2092/2092 tests (+84)**, `init.sh` OK, **round-trip de migración REAL por introspección**, **invariante de cuadre verificado a mano en AMBOS estados del flag**, idempotencia por constraint DB viva, SIN regresión 37/38/39/40/56/41/42. Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Wallet POR TIENDA = complemento del ingreso de Ordenex de la 42: **ledger propio** `wallet_tienda_movimiento` congelado al aprobar (reutiliza `derivarIngresoOrden`), crédito sobre COD recaudado (`montoRecibido`); `devuelta`/`rechazada` → la tienda debe el flete de devolución (saldo negativo) **REVERSIBLE** vía flag `TIENDA_DEBITA_FLETE_DEVOLUCION` (default true); alcance = modelo + visibilidad (`/mi-wallet` adminTienda + `/wallet/tiendas` maestro); pago a la tienda = follow-up. Estado `done` + `history.md` + `review_43`. Commit `6923a7b`. **DESBLOQUEA el pago a tiendas (follow-up).**
 
 > Feature 42 (wallet: caja principal de Ordenex) CERRADA 2026-07-12: **impl COMPLETA (R1–R26) + reviewer APROBADO 0 bloqueantes** tras 1 ciclo (rechazo inicial por falta de E2E → añadido `e2e/wallet.spec.ts`). Verde REAL: prisma OK, typecheck 0, lint 0, **2008/2008 tests (+77)**, `init.sh` OK, **round-trip de migración REAL** contra Postgres local (incl. drop de `orden.cobra_comision` y 3 enums), **idempotencia por constraint DB verificada viva**, SIN regresión 37/38/39/40/56/41. Fullstack un ciclo; money-critical; F1.4 aprobada 2026-07-12. Módulo WALLET = caja principal: **libro append-only inmutable** `wallet_movimiento`, **balance DERIVADO** (suma `Decimal`, sin saldo mutable), UI `/wallet` rol maestro + movimiento manual. Ingresos derivados de la tarifa AL APROBAR el `CierreDia` (movimiento=snapshot; enganche idempotente+atómico en `CierresAdminRepository.resolverCierre`), split `entregada`/devolución + **nueva columna `orden.cobra_comision`** (default true; poblarla por-orden = deuda A5); 6 categorías de ingreso; `CierreBodega` no re-cuenta. Estado `done` + `history.md` + `review_42`. Commits `a9769ea`+`f85ee42`+`1f9124b`. **RAÍZ de la cadena de pagos → DESBLOQUEA 43/44/45.** **PENDIENTE: abrir PR a `dev` + merge (OK humano).**
 
@@ -123,6 +127,28 @@
 ## Evaluaciones
 
 > El leader documenta aca cada evaluacion de zone/complexity/particion.
+
+- `reprogramacion: bloqueo y liberacion programada` (id 46): **zone=fullstack, complexity=high,
+  branch=feature/46-reprogramacion-bloqueo-liberacion, depends_on=36 (done, en dev).** Evaluada
+  2026-07-13. Seleccionada por el humano dentro del grupo "Fase 2 flujo mensajero (46/47/49)"; se
+  arranca por la 46 (menor id, INDEPENDIENTE de 47/49). Fullstack (backend — job cron diario de
+  liberacion en linea con `/api/cron/corte-diario` de la 41, guardas de bloqueo en las rutas de
+  asignacion/envio 17/34, transicion de liberacion; frontend — reflejo "bloqueada hasta <fecha>" +
+  aviso de liberacion). Insumos YA en dev: `gestion_orden.fechaReprogramacion` (Date) + `motivo` +
+  `GestionResultado.reprogramada` + estado `reprogramada` (feature 36), infra Vercel Cron + `CRON_SECRET`
+  (feature 41). DECISION DE PROCESO (leader): NO se parte el entry; por precedente (16/24/27/30/41) se
+  corre como UN ciclo fullstack (implementer delega backend_dev -> frontend_dev, un PR). Rama creada
+  desde `origin/dev` (f25f4a8, contiene 36/41/42). Orden previsto del grupo: 46 -> 49 (trazabilidad,
+  base) -> 47 (reintentos, se apoya en 49) -> 48 (rechazo->tienda, depends 47). Preguntas ABIERTAS
+  para F1.4 (el spec_author las formaliza): (a) estado destino de la LIBERACION -> volver a
+  `en_bodega`/`en_bodega_satelite` segun la bodega responsable de la orden (recomendado, reusar el
+  resolver de zona `findCentralZonaId`) vs. re-`en_espera_aceptacion` con el mismo mensajero; (b)
+  DISPARADOR -> endpoint cron nuevo `/api/cron/liberar-reprogramadas` con el mismo schedule `0 6 * * *`
+  (00:00 CR) de la 41 (recomendado) vs. plegarlo dentro de `corte-diario`; (c) alcance del BLOQUEO -> la
+  orden `reprogramada` con `fechaReprogramacion > hoy` no reasignable/enviable (guarda server-side en
+  17/34); (d) mecanismo del AVISO -> visibilidad derivada (seccion/badge "liberadas hoy" en la bodega
+  responsable, sin tabla de notificaciones nueva) vs. registro persistente; (e) idempotencia del job
+  (reejecucion no doble-libera) por diseno, patron de la 41.
 
 - `paginacion` (id 8): **zone=frontend, complexity=medium, branch=feature/8-paginacion,
   depends_on=null.** Evaluada como frontend puro (compone con DataTable de feature 7;
