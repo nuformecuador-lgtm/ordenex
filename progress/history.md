@@ -1200,3 +1200,26 @@
 - **Reviewer APROBADO 0 bloqueantes** (`review_58`), corrió la verificación él mismo. VERDE: typecheck **0**, `npx vitest run`
   **2330/2330 (260 archivos)**, focalizado 17/17. Menores no bloqueantes: focus-ring cosmético en borde de scroll (tradeoff
   estándar de modal scrolleable). **Un PR (2 commits: fix plantilla + fix modal) `feature/58 → dev`.** PENDIENTE merge (OK humano).
+
+## 2026-07-13 — feature 57: botón cerrar sesión (logout) para todos los roles
+- Fullstack/low, `sdd:true`. Corrió **EN PARALELO con la feature 47** (otra sesión, fase spec) en **worktree aislado** `../ordenex-f57`
+  desde `dev`, archivos disjuntos (shell/auth vs. máquina de estados de la 47). Ciclo SDD completo (spec_author → F1.4 →
+  frontend_dev → reviewer).
+- **Problema operativo resuelto:** no había forma de cerrar sesión en roles como `tienda`. El único botón de logout vivía a mano
+  en la rama genérica "Bienvenido" de la home (`app/(app)/page.tsx`), a la que `tienda`/`maestro` ni llegan (retornan su dashboard).
+- **Hallazgo clave:** el **backend de logout YA EXISTÍA** — `logout` (`lib/actions/auth.ts`) → `AuthService.logout` →
+  `SessionRepository.deleteById` (idempotente, borra la cookie `session`; con tests en `auth-action`/`auth-service`/`session-repository`).
+  El guard de rutas es `middleware.ts` (redirige a `/login` sin cookie). Así que la feature fue **puro frontend**.
+- **F1.4 APROBADA (humano):** (a) REUTILIZAR el `LogoutButton` existente TAL CUAL (un click, sin cambiarle el comportamiento:
+  `logout()` + `router.push("/login")` + estado "Cerrando sesión…"), colocado en un **`SidebarFooter`** de
+  `app/(app)/_components/Sidebar.tsx`. Como el layout compartido `app/(app)/layout.tsx` monta el `Sidebar` para CUALQUIER rol y el
+  footer NO depende de `items`, el botón queda visible para **todos los roles**. (b) SIN modal de confirmación.
+- **Cambios:** `Sidebar.tsx` (+`SidebarFooter`+`LogoutButton`), `page.tsx` (retirado el botón ad-hoc + lógica muerta
+  `hasValidSession`/cookies/repo/imports). Backend/middleware/DB/`LogoutButton` (comportamiento) intactos.
+- **Reviewer: RECHAZADO en el 1.er ciclo** por trazabilidad — R10/R11 con mapeo *hollow* (sin test que los ejerciera) y R10 exigía
+  feedback de error al usuario, pero el botón solo hacía `console.error`. **RESUELTO:** el humano eligió **añadir
+  `toast.error("No se pudo cerrar sesión")`** en el `catch` (sistema de toasts, feature 11) + tests dedicados de R10 (camino de
+  error: no navega, re-habilita, toast) y R11 (estado pendiente) + trazabilidad corregida y `tasks.md` marcado. R8 (no-back) cubierto
+  por el `middleware.ts` existente; NO se endureció `push`→`replace` (el humano pidió "tal cual").
+- **Verde:** typecheck 0, eslint 0, `npx vitest run` **2333/2333** (baseline 2331 + 2 tests nuevos), objetivo 19/19. Reviewer re-verificado
+  por el leader (diffs leídos, tests reales). Estado `done` + `review_57`. **Un PR `feature/57 → dev`.** PENDIENTE merge (OK humano).
