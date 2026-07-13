@@ -449,12 +449,13 @@
       "id": 43,
       "name": "wallet por tienda (saldo a favor de la tienda)",
       "description": "Cada tienda (admin de tienda) tiene su PROPIA wallet con su informacion: cuanto le debe ENTREGAR Ordenex. Ordenex recibe el dinero total de la venta (COD total recaudado) y parte le pertenece a la tienda: COD total MENOS el flete, MENOS la comision del COD, MENOS el IVA del flete y MENOS el IVA de la comision. La tienda debe poder VER cuanto le debe Ordenex (su saldo a favor). Se alimenta de los cierres aprobados y del calculo de la caja principal (feature 42). Fullstack. Depende de la feature 42 (wallet/caja) y 18 (cobros).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 42
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/43-wallet-por-tienda",
+      "depends_on": 42,
+      "status_note": "done 2026-07-12; F1.4 APROBADA. Impl COMPLETA (R1-R29) + reviewer APROBADO 0 bloqueantes. VERDE: prisma OK, typecheck 0, lint 0, 2092/2092 tests (+84), init.sh OK, round-trip de migracion REAL por introspeccion (drop de tabla+2 enums propios sin tocar el de la 42), invariante de cuadre verificado a mano en AMBOS estados del flag, idempotencia por constraint DB viva, SIN regresion 37/38/39/40/56/41/42. Wallet POR TIENDA (saldo a favor) = complemento del ingreso de Ordenex de la 42. Q1 LEDGER propio wallet_tienda_movimiento congelado al aprobar (mismo enganche resolverCierre, reutiliza derivarIngresoOrden); Q2 credito sobre COD recaudado (montoRecibido), debitos tal cual de la 42; Q3 tienda DEBE el flete de devolucion (saldo negativo) REVERSIBLE via flag TIENDA_DEBITA_FLETE_DEVOLUCION (lib/config/wallet-tienda.ts, default true; reversion historica por ajuste compensatorio append-only); Q4 modelo+VISIBILIDAD (pago = follow-up); Q5 /mi-wallet adminTienda + /wallet/tiendas maestro; Q6 un movimiento por concepto por (tienda,cierre), espejo 1:1 de la 42. E2E e2e/mi-wallet.spec.ts. Commit 6923a7b. DESBLOQUEA el pago a tiendas (follow-up). DEUDA menor: E2E diferido; test de migracion unit estatico (round-trip real por el reviewer). PENDIENTE PR a dev + merge (OK humano)."
     },
     {
       "id": 44,
