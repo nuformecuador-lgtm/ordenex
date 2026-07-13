@@ -222,6 +222,76 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
+  // --- Fix P2002 driver adapter (PrismaPg): meta.target === undefined; el nombre
+  // del indice (zona_es_central_unico) vive en driverAdapterError.cause.originalMessage.
+  function p2002Adapter(constraint: string) {
+    return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+      code: "P2002",
+      clientVersion: "7.8.0",
+      meta: {
+        modelName: "Zona",
+        driverAdapterError: {
+          name: "DriverAdapterError",
+          cause: {
+            originalCode: "23505",
+            originalMessage: `llave duplicada viola restriccion de unicidad «${constraint}»`,
+            kind: "UniqueConstraintViolation",
+          },
+        },
+      },
+    });
+  }
+
+  it("adapter: create con P2002 de es_central (sin meta.target) -> ConflictError", async () => {
+    const tx = buildTx();
+    tx.zona.create.mockRejectedValue(p2002Adapter("zona_es_central_unico"));
+    const prisma = buildPrisma(tx);
+
+    await expect(
+      repoOf(prisma).create({
+        nombre: "NUEVA",
+        cobroVehiculo: false,
+        esCentral: true,
+        distritoIds: ["d1"],
+        tarifas: [],
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("adapter: update con P2002 de es_central (sin meta.target) -> ConflictError", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.update.mockRejectedValue(p2002Adapter("zona_es_central_unico"));
+    const prisma = buildPrisma(tx);
+
+    await expect(
+      repoOf(prisma).update("z1", {
+        nombre: "GAM",
+        cobroVehiculo: false,
+        esCentral: true,
+        distritoIds: ["d1"],
+        tarifas: [],
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("adapter: P2002 de OTRA constraint (nombre) NO se traduce a ConflictError: re-lanza tal cual", async () => {
+    const tx = buildTx();
+    const original = p2002Adapter("zona_nombre_key");
+    tx.zona.create.mockRejectedValue(original);
+    const prisma = buildPrisma(tx);
+
+    await expect(
+      repoOf(prisma).create({
+        nombre: "DUP",
+        cobroVehiculo: false,
+        esCentral: false,
+        distritoIds: ["d1"],
+        tarifas: [],
+      }),
+    ).rejects.toBe(original);
+  });
+
   it("P2002 sobre OTRA constraint (nombre) NO se traduce a ConflictError de central: re-lanza tal cual", async () => {
     const tx = buildTx();
     const original = new Prisma.PrismaClientKnownRequestError("unique", {

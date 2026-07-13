@@ -112,6 +112,52 @@ describe("UserRepository", () => {
     expect((error as UsuarioDuplicadoError).campo).toBe("cedula");
   });
 
+  // --- Fix P2002 driver adapter (PrismaPg): meta.target === undefined; el
+  // nombre de la constraint vive en meta.driverAdapterError.cause.originalMessage.
+  function p2002Adapter(constraint: string) {
+    return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+      code: "P2002",
+      clientVersion: "7.8.0",
+      meta: {
+        modelName: "Usuario",
+        driverAdapterError: {
+          name: "DriverAdapterError",
+          cause: {
+            originalCode: "23505",
+            originalMessage: `llave duplicada viola restriccion de unicidad «${constraint}»`,
+            kind: "UniqueConstraintViolation",
+          },
+        },
+      },
+    });
+  }
+
+  it("adapter: P2002 de email (sin meta.target) -> UsuarioDuplicadoError('email') (R4)", async () => {
+    const usuarioCreate = vi.fn().mockRejectedValue(p2002Adapter("usuario_email_key"));
+    const repo = new UserRepository(buildMockPrisma({ usuarioCreate }));
+
+    const error = await repo.create(CREATE_INPUT).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(UsuarioDuplicadoError);
+    expect((error as UsuarioDuplicadoError).campo).toBe("email");
+  });
+
+  it("adapter: P2002 de cedula (sin meta.target) -> UsuarioDuplicadoError('cedula') (R5)", async () => {
+    const usuarioCreate = vi.fn().mockRejectedValue(p2002Adapter("usuario_cedula_key"));
+    const repo = new UserRepository(buildMockPrisma({ usuarioCreate }));
+
+    const error = await repo.create(CREATE_INPUT).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(UsuarioDuplicadoError);
+    expect((error as UsuarioDuplicadoError).campo).toBe("cedula");
+  });
+
+  it("P2002 de constraint desconocida -> re-lanza el error original (no traduce)", async () => {
+    const original = p2002Adapter("usuario_otra_constraint_key");
+    const usuarioCreate = vi.fn().mockRejectedValue(original);
+    const repo = new UserRepository(buildMockPrisma({ usuarioCreate }));
+
+    await expect(repo.create(CREATE_INPUT)).rejects.toBe(original);
+  });
+
   it("findByEmailWithHash expone passwordHash (unico metodo autorizado)", async () => {
     const usuarioFindUnique = vi.fn().mockResolvedValue({
       id: "usr-1",

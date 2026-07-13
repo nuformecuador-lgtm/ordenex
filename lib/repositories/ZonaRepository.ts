@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { ConflictError } from "@/lib/errors";
+import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { normalizeName } from "@/lib/utils/normalize";
 import type {
   ArbolCantonNode,
@@ -58,13 +59,14 @@ function toDTO(
 // central a nivel DB. Si por una carrera se colara un segundo `es_central=true`,
 // Prisma lanzaria P2002; lo traducimos a un ConflictError de dominio (no un 500)
 // SOLO cuando el conflicto es sobre la constraint de es_central.
+// `textoConstraintP2002` disambigua de forma robusta tanto en el motor nativo
+// (`meta.target`) como bajo el driver adapter
+// (`meta.driverAdapterError.cause.originalMessage`, donde vive el nombre real del
+// indice `zona_es_central_unico`).
 function isEsCentralUniqueViolation(e: unknown): boolean {
-  if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") {
-    return false;
-  }
-  const target = e.meta?.target;
-  const asText = Array.isArray(target) ? target.join(",") : String(target ?? "");
-  return asText.includes("es_central") || asText.includes("zona_es_central_unico");
+  const texto = textoConstraintP2002(e);
+  if (!texto) return false;
+  return texto.includes("es_central") || texto.includes("zona_es_central_unico");
 }
 
 function translateEsCentralConflict(e: unknown): never {
