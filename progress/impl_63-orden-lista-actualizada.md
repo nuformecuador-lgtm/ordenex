@@ -213,3 +213,103 @@ NO se tocó ningún componente: solo se alinearon expectativas de tests al layou
 Verificación: 7/7 archivos de test verde (36 tests). `pnpm typecheck` sin errores en los
 archivos tocados (baseline con rojos ajenos de tarifa/zona/usuario). NO se quitó, renombró
 ni reordenó ninguna columna del componente.
+
+---
+
+## Recepción en lote adminSatelite (paridad con "Recoger" del mensajero)
+
+Añade una recepción EN LOTE para el rol `adminSatelite`, análoga al "Recoger todas" del
+mensajero. Solo backend (action + service + repo + tests); NO toca UI. Es ADITIVO: NO
+altera el flujo por-QR `recibir`/`recibirPorQr`.
+
+### Firma pública
+- Action: `recibirLote(input: unknown, deps?) -> Promise<RecibirLoteResult>`
+  (`lib/actions/recepcion-satelite.ts`). El borde valida con `recibirLoteSchema`
+  (`{ ordenIds: z.array(string.trim.min(1)).min(1) }`) y delega
+  `service.recibirLote({ ordenIds }, actor)`. `unauthenticated` en el borde;
+  `forbidden`/`sin_zona`/`validation_error` de dominio los devuelve el service.
+- Service: `RecepcionSateliteService.recibirLote(input, actor) -> RecibirLoteServiceResult`
+  (`ok`+`recibidas` | `forbidden` | `sin_zona` | `validation_error`). Autz por rol,
+  resuelve zona con `findUsuarioZonaId`, dedupe de ids, pre-resuelve origen/destino y
+  delega en el repo. Transición `en_ruta_bodega_satelite -> en_bodega_satelite`.
+- Repo: `OrdenRepository.recibirLoteEnSatelite(ordenIds, zonaId, origenEstatusId,
+  destinoEstatusId, historial) -> Promise<number>`. UPDATE raw guardado por
+  `id IN (...) AND zona_id AND estatus_id = origen AND deleted_at IS NULL RETURNING "id"`
+  dentro de `$transaction`, + append de historial (`recepcion_satelite`) de EXACTAMENTE
+  los ids retornados (choke point feature 49). Alcance por zona + estado impuesto
+  server-side (ajenas OMITIDAS), idempotente (re-ejecutar no dobla), atómico.
+
+### Archivos
+- Modificados: `lib/interfaces/repositories/IOrdenRepository.ts`,
+  `lib/repositories/OrdenRepository.ts`,
+  `lib/interfaces/services/IRecepcionSateliteService.ts`,
+  `lib/services/RecepcionSateliteService.ts`,
+  `lib/types/recepcion-satelite.ts`, `lib/actions/recepcion-satelite.ts`.
+- Tests: `tests/unit/services/recepcion-satelite-service.test.ts` (+8 lote),
+  `tests/unit/repositories/orden-repository.recepcion-satelite.test.ts` (+4 lote),
+  `tests/unit/actions/recepcion-satelite-action.test.ts` (+5 lote). Ajuste de mocks
+  full-`IOrdenRepository` (nuevo método) en bulk/orden/asignacion-mensajero/rol-admin
+  service tests.
+
+### Cobertura
+- Autz por rol (adminSatelite -> ok; maestro/mensajero -> forbidden).
+- Alcance por zona server-side (conteo refleja solo lo transicionado; ajenas omitidas).
+- Transición correcta (en_ruta_bodega_satelite -> en_bodega_satelite, guarda origen+zona).
+- Idempotencia (re-ejecutar sin nada en el origen -> 0 recibidas, sin rastro).
+- Append de historial preservado SOLO de los ids retornados (trazabilidad 49).
+
+### Verificación
+- `pnpm typecheck`: 0 errores en los archivos tocados (baseline conserva rojos ajenos de
+  tarifa/usuario/zona).
+- Tests: recepcion-satelite service/repo/action + asignacion-satelite verdes. El único
+  rojo en la corrida (`rol-admin-satelite-authz` > TarifaService.esTiendaAdminTienda) es
+  baseline pre-existente (verificado con `git stash`: falla igual sin mis cambios).
+
+Veredicto: verde — typecheck 0 en lo mío + tests nuevos y de recepción-satélite pasan; el
+único rojo es baseline ajeno (tarifa).
+
+---
+
+## Reuse mensajero → adminSatelite (PorAceptarSection + banner)
+
+FRONTEND. El adminSatelite "Por recibir" ahora usa el MISMO componente que el
+mensajero "Por recoger": banner con contador de nuevas + acción en lote + acción
+por-orden. No se duplicó UI.
+
+### Componente compartido (nuevo)
+- `app/(app)/_components/PorAceptarSection.tsx` — sección REUTILIZABLE "por aceptar"
+  (presentación pura, sin Server Actions ni estado de negocio). Props: `titulo`,
+  `nuevasLabel(n)` (banner de contador, i18n-ready), `ordenes`, `onAceptarTodas(ids)`,
+  `onAceptarUna(id)`, `textoBotonTodas`, `textoBotonUna`, `vacio`, `renderDetalle?`,
+  `mostrarAcciones?` (oculta botones sin zona). Banner `<p role="status">` sólo si hay
+  órdenes.
+
+### Wiring
+- Mensajero (`MisAsignacionesModule.tsx`): "Por recoger" consume `PorAceptarSection`
+  con banner "N Órdenes nuevas asignadas"; misma lógica de confirmación (Modal +
+  `recogerAsignaciones`) vía `setRecogerIds`. "En reparto" intacta.
+- AdminSatelite (`RecepcionSateliteModule.tsx`): "Por recibir" consume
+  `PorAceptarSection` con banner "N Órdenes nuevas por recibir", "Aceptar todas"
+  (lote → `recibirLote({ordenIds: todos})`) y "Aceptar" por-orden
+  (`recibirLote({ordenIds:[id]})`); tras éxito `router.refresh()` + toast, en error
+  toast (`sin_zona` diferenciado). `mostrarAcciones={!sinZona}`. Escáner QR,
+  "Recibidas" (Asignar) y "Por devolver" intactos. Se eliminó el helper local
+  `ListaOrdenes` (ya no se usa).
+
+### Archivos tocados
+- Creados: `app/(app)/_components/PorAceptarSection.tsx`,
+  `tests/components/PorAceptarSection.test.tsx` (8 tests).
+- Modificados: `app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx`,
+  `app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx`,
+  `tests/components/MisAsignacionesModule.test.tsx` (+1 banner),
+  `tests/components/RecepcionSateliteModule.test.tsx` (mock `recibirLote`, R7
+  actualizado a la nueva conducta, +4 wiring: banner/lote/por-orden/sin-zona).
+
+### Verificación
+- `pnpm typecheck`: 0 errores en lo tocado (baseline conserva rojos ajenos
+  tarifa/zona/usuario).
+- Tests afectados verdes: PorAceptarSection + MisAsignacionesModule +
+  RecepcionSateliteModule = 44/44; pages (MisAsignaciones/RecepcionSatelite) 9/9.
+
+Veredicto: verde — reuse real (PorAceptarSection compartido) + banner; typecheck 0 en
+lo mío; 44/44 tests de componentes afectados + 9/9 de pages.

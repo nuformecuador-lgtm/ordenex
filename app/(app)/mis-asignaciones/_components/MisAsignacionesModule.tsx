@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
+import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
 import {
   escogerParaGestion,
@@ -104,49 +105,21 @@ export function MisAsignacionesModule({
   return (
     <div className="flex flex-col gap-8">
       {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
-      <section aria-label="Por recoger" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Por recoger</h2>
-          {/* R16: "Recoger todas" (lote), única acción de este paso (R14). */}
-          <Button
-            type="button"
-            onClick={() => setRecogerIds(porRecoger.map((o) => o.id))}
-            disabled={porRecoger.length === 0}
-          >
-            Recoger todas
-          </Button>
-        </div>
-        {porRecoger.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay órdenes por recoger.</p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {porRecoger.map((orden) => (
-              <li key={orden.id}>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      {orden.numRemision} · {orden.destinatario}
-                    </CardTitle>
-                    <CardAction>
-                      {/* R14: única acción "Recoger" (no hay "rechazar"). */}
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => setRecogerIds([orden.id])}
-                      >
-                        Recoger
-                      </Button>
-                    </CardAction>
-                  </CardHeader>
-                  <CardContent>
-                    <AsignacionDetalle orden={orden} />
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* Reutiliza la sección compartida "por aceptar": banner con contador de
+          nuevas + "Recoger todas" (lote, R16) + "Recoger" por-orden (R14, única
+          acción). La confirmación en Modal y la action `recogerAsignaciones` se
+          disparan igual que antes, vía `setRecogerIds`. */}
+      <PorAceptarSection
+        titulo="Por recoger"
+        nuevasLabel={(n) => `${n} Órdenes nuevas asignadas`}
+        ordenes={porRecoger}
+        onAceptarTodas={(ids) => setRecogerIds(ids)}
+        onAceptarUna={(id) => setRecogerIds([id])}
+        textoBotonTodas="Recoger todas"
+        textoBotonUna="Recoger"
+        vacio="No hay órdenes por recoger."
+        renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
+      />
 
       {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
       <section

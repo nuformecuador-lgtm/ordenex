@@ -77,10 +77,7 @@ export function EtiquetaGuia({ etiqueta, qrCanvasRef }: EtiquetaGuiaProps) {
           <p className="text-[10px] uppercase tracking-wide text-neutral-500">
             Guía
           </p>
-          {/* Sin guía asignada aún -> "Pendiente" (patrón de la columna Nº Guía). */}
-          <p className="text-lg font-bold leading-tight">
-            {numGuia ?? "Pendiente"}
-          </p>
+          <p className="text-lg font-bold leading-tight">{numGuia}</p>
         </div>
         <div className="text-right">
           <p className="text-[10px] uppercase tracking-wide text-neutral-500">
@@ -124,22 +121,19 @@ export function EtiquetaGuia({ etiqueta, qrCanvasRef }: EtiquetaGuiaProps) {
           data-qr-value={qrUrl}
           style={{ width: "26mm", height: "26mm" }}
         />
-        {/* Sin guía no hay código de barras (barcodeValue null): se omite. */}
-        {barcodeValue !== null ? (
-          <div
-            className="min-w-0 flex-1 overflow-hidden"
-            data-testid="etiqueta-barcode"
-            data-barcode-value={barcodeValue}
-          >
-            <Barcode
-              value={barcodeValue}
-              format="CODE128"
-              height={40}
-              fontSize={12}
-              margin={0}
-            />
-          </div>
-        ) : null}
+        <div
+          className="min-w-0 flex-1 overflow-hidden"
+          data-testid="etiqueta-barcode"
+          data-barcode-value={barcodeValue}
+        >
+          <Barcode
+            value={barcodeValue}
+            format="CODE128"
+            height={40}
+            fontSize={12}
+            margin={0}
+          />
+        </div>
       </div>
     </article>
   );

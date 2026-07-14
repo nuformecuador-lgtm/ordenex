@@ -74,8 +74,7 @@ function drawEtiqueta(
   doc.setFontSize(8);
   doc.text("GUÍA", MARGIN, MARGIN + 2);
   doc.setFontSize(22);
-  // Sin guía asignada aún -> "Pendiente" (patrón de la vista previa / columna).
-  doc.text(etiqueta.numGuia === null ? "Pendiente" : String(etiqueta.numGuia), MARGIN, MARGIN + 10);
+  doc.text(String(etiqueta.numGuia), MARGIN, MARGIN + 10);
 
   doc.setFontSize(8);
   doc.text("REMISIÓN", SIZE_MM - MARGIN, MARGIN + 2, { align: "right" });
@@ -107,19 +106,16 @@ function drawEtiqueta(
       qrSize,
     );
   }
-  // Sin guía no hay código de barras (barcodeValue null): se omite en el PDF.
-  if (etiqueta.barcodeValue !== null) {
-    const barcodeX = MARGIN + qrSize + 4;
-    const barcodeWidth = SIZE_MM - MARGIN - barcodeX;
-    doc.addImage(
-      barcodeDataUrl(etiqueta.barcodeValue),
-      "PNG",
-      barcodeX,
-      qrY + 6,
-      barcodeWidth,
-      16,
-    );
-  }
+  const barcodeX = MARGIN + qrSize + 4;
+  const barcodeWidth = SIZE_MM - MARGIN - barcodeX;
+  doc.addImage(
+    barcodeDataUrl(etiqueta.barcodeValue),
+    "PNG",
+    barcodeX,
+    qrY + 6,
+    barcodeWidth,
+    16,
+  );
 }
 
 /**

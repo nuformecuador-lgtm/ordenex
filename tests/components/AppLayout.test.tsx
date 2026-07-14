@@ -34,6 +34,15 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: () => resolveActorMock(),
 }));
 
+// El layout también resuelve el NOMBRE del usuario (para el footer del sidebar) vía
+// UserRepository.findById; se mockea el repo y el cliente Prisma para no tocar la BD.
+vi.mock("@/lib/db/prisma-client", () => ({ getPrismaClient: () => ({}) }));
+vi.mock("@/lib/repositories/UserRepository", () => ({
+  UserRepository: class {
+    findById = vi.fn().mockResolvedValue({ id: "u1", nombre: "Ada Lovelace" });
+  },
+}));
+
 // Como el layout es async, se invoca y se espera su árbol antes de renderizar.
 async function renderLayout(children: ReactNode) {
   const ui = await AppLayout({ children });
@@ -62,6 +71,10 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     // ...junto con los children del layout.
     expect(screen.getByTestId("page-children")).toBeInTheDocument();
     expect(screen.getByText("Contenido de la página")).toBeInTheDocument();
+    // Footer del sidebar: nombre, rol legible e iniciales (máx 2) del avatar.
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("Maestro")).toBeInTheDocument();
+    expect(screen.getByText("AL")).toBeInTheDocument();
   });
 
   it("filtra el sidebar según el rol del actor (adminSatelite solo ve Perfil)", async () => {

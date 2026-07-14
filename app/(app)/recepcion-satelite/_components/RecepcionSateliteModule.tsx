@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
+import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
+import { useToast } from "@/hooks/useToast";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 
 import { devolverATienda } from "@/lib/actions/devolucion-origen";
+import { recibirLote } from "@/lib/actions/recepcion-satelite";
 
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { devolucionOrigenErrorMessage } from "@/app/(app)/ordenes/_components/devolucion-origen-error-messages";
@@ -73,41 +76,6 @@ function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): 
   const base = estatusLabel(orden.estatusValue);
   const zona = orden.zonaNombre || zonaNombre;
   return zona ? `${base} de ${zona}` : base;
-}
-
-function ListaOrdenes({
-  ordenes,
-  zonaNombre,
-  vacio,
-}: {
-  ordenes: RecepcionSateliteDTO[];
-  zonaNombre: string | null;
-  vacio: string;
-}) {
-  if (ordenes.length === 0) {
-    return <p className="text-sm text-muted-foreground">{vacio}</p>;
-  }
-  return (
-    <ul className="flex flex-col gap-3">
-      {ordenes.map((orden) => (
-        <li key={orden.id}>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {orden.numRemision} · {orden.destinatario}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RecepcionDetalle
-                orden={orden}
-                estadoLegible={estadoLegible(orden, zonaNombre)}
-              />
-            </CardContent>
-          </Card>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 /**
@@ -239,8 +207,27 @@ export function RecepcionSateliteModule({
   liberadasHoy = [],
 }: RecepcionSateliteModuleProps) {
   const router = useRouter();
+  const toast = useToast();
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [modalOpen, setModalOpen] = useState(false);
+
+  // Feature 63: recepción EN LOTE ("Aceptar todas" / "Aceptar" por-orden), análoga
+  // al "Recoger" del mensajero. Cablea la Server Action `recibirLote`; tras éxito
+  // releé el estado del servidor (patrón feature 33) y da feedback por toast.
+  async function aceptarRecepcion(ordenIds: string[]) {
+    if (ordenIds.length === 0) return;
+    const result = await recibirLote({ ordenIds });
+    if (result.status === "ok") {
+      toast.success(`${result.recibidas} orden(es) recibida(s).`);
+      router.refresh();
+      return;
+    }
+    toast.error(
+      result.status === "sin_zona"
+        ? "No tienes una zona asignada para recibir órdenes."
+        : "No se pudieron recibir las órdenes.",
+    );
+  }
 
   function toggleSeleccion(id: string, checked: boolean) {
     setSeleccionados((prev) => {
@@ -280,15 +267,27 @@ export function RecepcionSateliteModule({
       )}
 
       {/* ---------- Sección: Por recibir (en_ruta_bodega_satelite) ---------- */}
-      {/* R7: NO expone ninguna acción de asignar/gestionar; solo se listan. */}
-      <section aria-label="Por recibir" className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Por recibir</h2>
-        <ListaOrdenes
-          ordenes={porRecibir}
-          zonaNombre={zonaNombre}
-          vacio="No hay órdenes por recibir."
-        />
-      </section>
+      {/* Feature 63: REUTILIZA la sección compartida "por aceptar" del mensajero:
+          banner con contador de nuevas + "Aceptar todas" (lote -> recibirLote con
+          todos los ids) + "Aceptar" por-orden (recibirLote con uno). Sin zona no se
+          muestran los botones (solo se listan). Escáner QR y demás secciones intactos. */}
+      <PorAceptarSection
+        titulo="Por recibir"
+        nuevasLabel={(n) => `${n} Órdenes nuevas por recibir`}
+        ordenes={porRecibir}
+        onAceptarTodas={(ids) => void aceptarRecepcion(ids)}
+        onAceptarUna={(id) => void aceptarRecepcion([id])}
+        textoBotonTodas="Aceptar todas"
+        textoBotonUna="Aceptar"
+        vacio="No hay órdenes por recibir."
+        mostrarAcciones={!sinZona}
+        renderDetalle={(orden) => (
+          <RecepcionDetalle
+            orden={orden}
+            estadoLegible={estadoLegible(orden, zonaNombre)}
+          />
+        )}
+      />
 
       {/* ---------- Sección: Recibidas (en_bodega_satelite) ---------- */}
       {/* Feature 34 (R4): lista seleccionable + acción "Asignar". */}

@@ -9,13 +9,25 @@
 export const PAQUETE_BASE_PATH = "/paquete";
 
 /**
- * Construye la URL absoluta del paquete. `origin` por defecto se toma de
- * `window.location.origin` (la etiqueta se renderiza client-side); se puede inyectar
- * en tests o en contextos sin `window`. Sin origin resoluble cae a una ruta relativa.
+ * Origin base de la app. Se toma de `NEXT_PUBLIC_APP_URL` (inlineada por Next tanto
+ * en server como en cliente); si no está configurada, cae a `window.location.origin`
+ * (client-side) y, en último caso, a cadena vacía (ruta relativa). Se normaliza sin
+ * barra final para no duplicarla al concatenar el path.
+ */
+function resolveAppOrigin(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL;
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+  if (typeof window !== "undefined") return window.location.origin;
+  return "";
+}
+
+/**
+ * Construye la URL absoluta del paquete. `origin` por defecto se resuelve del env
+ * `NEXT_PUBLIC_APP_URL` (ver `resolveAppOrigin`); se puede inyectar en tests o en
+ * contextos donde se quiera forzar un origin distinto.
  */
 export function buildPaqueteUrl(ordenId: string, origin?: string): string {
-  const base =
-    origin ?? (typeof window !== "undefined" ? window.location.origin : "");
+  const base = origin ?? resolveAppOrigin();
   return `${base}${PAQUETE_BASE_PATH}/${ordenId}`;
 }
 

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/useToast";
 import { recibirPorQr } from "@/lib/actions/recepcion-satelite";
+import { extractOrdenIdFromScan } from "@/lib/utils/paquete-url";
 import type { RecibirResult } from "@/lib/types/recepcion-satelite";
 
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
@@ -79,10 +80,15 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
     [toast, onRecibida],
   );
 
-  /** Camino común: dado el texto escaneado (orden.id), recibe la orden. */
+  /**
+   * Camino común: dado el texto escaneado, recibe la orden. El QR de la etiqueta
+   * ahora codifica la URL del paquete (`<origin>/paquete/<ordenId>`), así que se
+   * extrae el ordenId del último segmento; sigue aceptando el UUID pelado de
+   * etiquetas ya impresas (`extractOrdenIdFromScan`).
+   */
   const procesar = useCallback(
-    async (ordenId: string) => {
-      const limpio = ordenId.trim();
+    async (escaneado: string) => {
+      const limpio = extractOrdenIdFromScan(escaneado);
       if (!limpio || procesando) return;
       setProcesando(true);
       try {

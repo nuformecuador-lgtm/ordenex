@@ -64,6 +64,25 @@ export type RecibirServiceResult =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> } // catalogo incompleto
   | { status: "conflict" }; // R18 (race irresoluble)
 
+// Feature 63 — input de la recepcion EN LOTE (paridad con "Recoger todas" del
+// mensajero): la lista de ids de orden que el adminSatelite acepta de una vez.
+export interface RecibirLoteInput {
+  ordenIds: string[];
+}
+
+// Feature 63 — resultado de dominio de la recepcion en lote. El alcance por zona y
+// el estado de origen se imponen server-side (WHERE guardado): las ordenes ajenas a
+// la zona / fuera de `en_ruta_bodega_satelite` se OMITEN (no cuentan), asi que el
+// resultado normal es `ok` con el conteo de las efectivamente recibidas. `forbidden`
+// (rol != adminSatelite) y `sin_zona` (adminSatelite sin zona) espejan a `recibir`.
+// `validation_error` cubre el catalogo de estados incompleto (seed pendiente).
+// `unauthenticated` NO vive aqui: lo agrega el borde (Server Action).
+export type RecibirLoteServiceResult =
+  | { status: "ok"; recibidas: number }
+  | { status: "forbidden" }
+  | { status: "sin_zona" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
 export interface IRecepcionSateliteService {
   /**
    * R3/R4/R5/R6/R8: lista los dos grupos de la zona del adminSatelite (por
@@ -77,4 +96,12 @@ export interface IRecepcionSateliteService {
    * del actor; idempotente si ya estaba recibida (R14).
    */
   recibir(ordenId: string, actor: Actor): Promise<RecibirServiceResult>;
+  /**
+   * Feature 63: recibe EN LOTE las ordenes indicadas que sigan en
+   * `en_ruta_bodega_satelite` y sean de la zona del adminSatelite, pasandolas a
+   * `en_bodega_satelite` (paridad con "Recoger todas" del mensajero). El alcance por
+   * zona + estado de origen se impone server-side; las ajenas se omiten. Idempotente
+   * (re-ejecutar no dobla) y atomico (una sola tx con append de historial).
+   */
+  recibirLote(input: RecibirLoteInput, actor: Actor): Promise<RecibirLoteServiceResult>;
 }

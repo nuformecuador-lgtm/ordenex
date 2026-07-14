@@ -5,15 +5,21 @@ import userEvent from "@testing-library/user-event";
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 import { devolverATienda } from "@/lib/actions/devolucion-origen";
+import { recibirLote } from "@/lib/actions/recepcion-satelite";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 // Feature 33 (T12) — módulo de la bodega satélite. Se mockean la Server Action de
 // recepción, el toast, el router (refresh) y la lib de cámara (sin hardware en CI).
+// Feature 63: se mockea también `recibirLote` (recepción en lote "Aceptar todas"/
+// "Aceptar") que consume la sección compartida "Por recibir".
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
+  recibirLote: vi.fn(),
 }));
+
+const recibirLoteMock = vi.mocked(recibirLote);
 
 // Feature 48 (T9): la sección "Por devolver a tienda" ejecuta el retorno vía esta
 // Server Action; se mockea para verificar la invocación por fila.
@@ -113,7 +119,7 @@ describe("RecepcionSateliteModule", () => {
     expect(screen.getByRole("region", { name: "Recibidas" })).toBeInTheDocument();
   });
 
-  it("R7: la sección 'Por recibir' NO expone acción de asignar/gestionar", () => {
+  it("Feature 63: la sección 'Por recibir' expone 'Aceptar todas' + 'Aceptar' por-orden, pero NO asignar/gestionar", () => {
     renderModule({
       porRecibir: [
         makeOrden({ id: "r1", numRemision: "REM-R1" }),
@@ -122,8 +128,15 @@ describe("RecepcionSateliteModule", () => {
     });
 
     const region = screen.getByRole("region", { name: "Por recibir" });
-    // La única acción del módulo es la recepción por escaneo (fuera de esta región).
-    expect(within(region).queryByRole("button")).toBeNull();
+    // La recepción en lote reutiliza la sección del mensajero: acción en lote…
+    expect(
+      within(region).getByRole("button", { name: "Aceptar todas" }),
+    ).toBeInTheDocument();
+    // …y una acción por-orden por cada tarjeta.
+    expect(
+      within(region).getAllByRole("button", { name: "Aceptar" }),
+    ).toHaveLength(2);
+    // Sigue SIN exponer asignar/gestionar en esta sección.
     expect(
       within(region).queryByRole("button", { name: /asignar|gestionar/i }),
     ).toBeNull();
@@ -421,5 +434,76 @@ describe("RecepcionSateliteModule", () => {
     expect(
       within(region).queryByRole("button", { name: "Devolver a la tienda" }),
     ).toBeNull();
+  });
+
+  // ---------- Feature 63 — recepción en lote (reuse "Por recoger" del mensajero) ----------
+
+  it("Feature 63: 'Por recibir' muestra el banner con el contador de nuevas por recibir", () => {
+    renderModule({
+      porRecibir: [
+        makeOrden({ id: "r1", numRemision: "REM-R1" }),
+        makeOrden({ id: "r2", numRemision: "REM-R2" }),
+        makeOrden({ id: "r3", numRemision: "REM-R3" }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Por recibir" });
+    expect(
+      within(region).getByText("3 Órdenes nuevas por recibir"),
+    ).toBeInTheDocument();
+  });
+
+  it("Feature 63: 'Aceptar todas' llama recibirLote con TODOS los ids y en éxito refresca", async () => {
+    const user = userEvent.setup();
+    recibirLoteMock.mockResolvedValue({ status: "ok", recibidas: 2 });
+    renderModule({
+      porRecibir: [
+        makeOrden({ id: "r1", numRemision: "REM-R1" }),
+        makeOrden({ id: "r2", numRemision: "REM-R2" }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Por recibir" });
+    await user.click(within(region).getByRole("button", { name: "Aceptar todas" }));
+
+    await vi.waitFor(() => expect(recibirLoteMock).toHaveBeenCalledTimes(1));
+    expect(recibirLoteMock).toHaveBeenCalledWith({ ordenIds: ["r1", "r2"] });
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  it("Feature 63: 'Aceptar' de una fila envía solo ese ordenId", async () => {
+    const user = userEvent.setup();
+    recibirLoteMock.mockResolvedValue({ status: "ok", recibidas: 1 });
+    renderModule({
+      porRecibir: [
+        makeOrden({ id: "r1", numRemision: "REM-R1" }),
+        makeOrden({ id: "r2", numRemision: "REM-R2" }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Por recibir" });
+    await user.click(within(region).getAllByRole("button", { name: "Aceptar" })[1]);
+
+    await vi.waitFor(() =>
+      expect(recibirLoteMock).toHaveBeenCalledWith({ ordenIds: ["r2"] }),
+    );
+  });
+
+  it("Feature 63: sin zona NO muestra los botones de aceptar (solo se listan)", () => {
+    renderModule({
+      sinZona: true,
+      zonaNombre: null,
+      porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],
+    });
+
+    const region = screen.getByRole("region", { name: "Por recibir" });
+    expect(
+      within(region).queryByRole("button", { name: "Aceptar todas" }),
+    ).toBeNull();
+    expect(
+      within(region).queryByRole("button", { name: "Aceptar" }),
+    ).toBeNull();
+    // La orden sigue listándose aunque no se pueda aceptar.
+    expect(within(region).getAllByText(/REM-R1/).length).toBeGreaterThan(0);
   });
 });

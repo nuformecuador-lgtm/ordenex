@@ -81,6 +81,22 @@ describe("EscanerRecepcion (keyboard-wedge)", () => {
     expect((input as HTMLInputElement).value).toBe("");
   });
 
+  it("QR con URL del paquete → extrae el ordenId del último segmento y llama recibirPorQr", async () => {
+    const user = userEvent.setup();
+    recibirMock.mockResolvedValue({
+      status: "ok",
+      ordenId: "ord-1",
+      estado: "en_bodega_satelite",
+    });
+    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+
+    await escanear(user, "https://ordenex.app/paquete/ord-1");
+
+    await vi.waitFor(() =>
+      expect(recibirMock).toHaveBeenCalledWith({ ordenId: "ord-1" }),
+    );
+  });
+
   it("R10: resultado ok → toast de éxito y dispara onRecibida", async () => {
     const user = userEvent.setup();
     const onRecibida = vi.fn();

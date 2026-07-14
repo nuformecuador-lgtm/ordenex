@@ -88,7 +88,7 @@ describe("generarEtiquetas — passthrough del resultado de dominio del service"
             barcodeValue: "501",
           },
         ],
-        omitidas: [{ ordenId: "o2", motivo: "no_encontrada" }],
+        omitidas: [{ ordenId: "o2", motivo: "sin_guia" }],
       }),
     });
 
@@ -100,7 +100,7 @@ describe("generarEtiquetas — passthrough del resultado de dominio del service"
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.etiquetas).toHaveLength(1);
-    expect(r.omitidas).toEqual([{ ordenId: "o2", motivo: "no_encontrada" }]);
+    expect(r.omitidas).toEqual([{ ordenId: "o2", motivo: "sin_guia" }]);
     expect(service.generarEtiquetas).toHaveBeenCalledWith({ ordenIds: ["o1", "o2"] }, MAESTRO);
   });
 

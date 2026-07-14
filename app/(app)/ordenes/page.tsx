@@ -37,6 +37,10 @@ export default async function OrdenesPage() {
   const rol = actor?.rol;
   const puedeCargarMasiva = rol === RolValue.adminTienda;
   const usaTabs = rol ? ROLES_CON_TABS.has(rol) : false;
+  // Selección por checkbox + acciones por lote (asignar mensajero, rutear a bodega
+  // satélite, etc.) SOLO para `maestro`: las Server Actions son maestro-only. `admin`
+  // es solo-lectura y `adminTienda` no opera estas transiciones.
+  const accionesLote = rol === RolValue.maestro;
 
   return (
     <>
@@ -47,6 +51,7 @@ export default async function OrdenesPage() {
             exclude={EXCLUDE_POR_ROL[rol as string] ?? ["pendiente"]}
             puedeCargarMasiva={puedeCargarMasiva}
             mostrarHistorial
+            accionesLote={accionesLote}
           />
         ) : (
           // adminSatelite / mensajero / sin sesión: listado plano previo, SIN

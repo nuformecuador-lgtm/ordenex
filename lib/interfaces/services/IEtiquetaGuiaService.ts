@@ -22,12 +22,12 @@ export type GenerarEtiquetasServiceResult =
 export interface IEtiquetaGuiaService {
   /**
    * R1-R8: dado un conjunto de ids de orden, arma el payload de etiqueta de cada
-   * orden EXISTENTE, tenga o no `num_guia` (nombres de tienda/geografia resueltos,
+   * orden con `num_guia` asignado (nombres de tienda/geografia resueltos,
    * `montoCobrar` Decimal->number, `qrValue = ordenId`, `barcodeValue =
-   * String(numGuia)` o null sin guia). Reporta como `omitidas` solo las que no
-   * existen/estan borradas (`no_encontrada`, R3), sin abortar el lote. Disponible
-   * para cualquier rol autenticado (la sesion se exige en el borde); no filtra por
-   * visibilidad de la orden.
+   * String(numGuia)`) y reporta como `omitidas` las que no tienen guia (`sin_guia`,
+   * R2, sin QR disponible) o no existen/estan borradas (`no_encontrada`, R3), sin
+   * abortar el lote. Disponible para cualquier rol autenticado (la sesion se exige
+   * en el borde); no filtra por visibilidad de la orden.
    */
   generarEtiquetas(
     input: GenerarEtiquetasInput,

@@ -175,6 +175,20 @@ describe("MisAsignacionesModule", () => {
     ).toBeInTheDocument();
   });
 
+  it("Feature 63: 'Por recoger' muestra el banner con el contador de órdenes nuevas asignadas", () => {
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-R1" }),
+        makeAsignacion({ id: "r2", numRemision: "REM-R2" }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Por recoger" });
+    expect(
+      within(region).getByText("2 Órdenes nuevas asignadas"),
+    ).toBeInTheDocument();
+  });
+
   it("R14: 'Por recoger' ofrece ÚNICAMENTE la acción 'Recoger' (no existe 'Rechazar')", () => {
     renderModule({
       porRecoger: [
