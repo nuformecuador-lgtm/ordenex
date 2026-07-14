@@ -34,7 +34,6 @@ type Estado =
   | { fase: "error"; mensaje: string };
 
 const MOTIVO_TEXTO: Record<EtiquetaOmitidaDTO["motivo"], string> = {
-  sin_guia: "sin guía",
   no_encontrada: "no encontrada",
 };
 
@@ -142,7 +141,7 @@ export function EtiquetasGuiaModal({
       open={open}
       onOpenChange={onOpenChange}
       title="Imprimir etiquetas"
-      description="Vista previa de las etiquetas de las órdenes con guía. Cada etiqueta se descarga como una página de 100 × 100 mm."
+      description="Vista previa de las etiquetas de las órdenes. Cada etiqueta se descarga como una página de 100 × 100 mm."
       confirmLabel={hayImprimibles ? "Descargar etiquetas" : "Cerrar"}
       onConfirm={hayImprimibles ? handleDescargar : cerrar}
       closeOnConfirm={!hayImprimibles}
@@ -174,8 +173,8 @@ export function EtiquetasGuiaModal({
         {estado.fase === "listo" && !hayImprimibles ? (
           <Alert>
             <AlertDescription>
-              Ninguna de las órdenes seleccionadas tiene guía; no hay etiquetas
-              para imprimir.
+              No se encontraron las órdenes seleccionadas; no hay etiquetas para
+              imprimir.
             </AlertDescription>
           </Alert>
         ) : null}

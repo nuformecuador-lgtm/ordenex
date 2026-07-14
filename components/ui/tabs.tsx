@@ -29,7 +29,9 @@ function TabsList({
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        "scrollbar-on-hover flex w-full items-center gap-2 overflow-x-auto rounded-lg border border-border bg-muted p-1 text-muted-foreground",
+        // Contenedor con fondo TRANSPARENTE (sin bg-muted/borde): el color vive en
+        // los tabs, no en el contenedor.
+        "scrollbar-on-hover flex w-full items-center gap-2 overflow-x-auto rounded-lg bg-transparent p-1",
         className,
       )}
       {...props}
@@ -45,11 +47,14 @@ function TabsTrigger({
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-transparent px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none",
+        "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none",
         "focus-visible:ring-3 focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
-        // Tab activa: naranja de marca (--primary) con texto de contraste + sombra.
-        "data-[selected]:border-primary data-[selected]:bg-primary data-[selected]:text-primary-foreground data-[selected]:shadow-sm",
+        // Tabs = botones NARANJAS (--primary). Inactiva: naranja con borde/outline y
+        // fondo transparente (hover rellena suave). Activa: naranja SÓLIDO con texto
+        // de contraste + sombra, para distinguir la seleccionada.
+        "border border-primary bg-transparent text-primary hover:bg-primary/10",
+        "data-[selected]:border-primary data-[selected]:bg-primary data-[selected]:text-primary-foreground data-[selected]:shadow-sm data-[selected]:hover:bg-primary",
         className,
       )}
       {...props}

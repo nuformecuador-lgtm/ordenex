@@ -5,15 +5,16 @@
 // se exponen (patron lib/types/orden-guia.ts).
 import { z } from "zod";
 
-// Payload por orden imprimible (R1). Solo ordenes con `num_guia` producen etiqueta
-// (R2), por eso `numGuia` es `number` garantizado. `montoCobrar` es number|null
-// (Decimal->number, R5, sin moneda hardcodeada). `distritoNombre` nullable (R4).
-// `qrValue`/`barcodeValue` los resuelve el backend (decisiones F1.4 (a)/(b)) para
-// que el frontend NO decida que codificar y la feature 33 lea el mismo contrato.
-// NUNCA incluye `deletedAt` ni campos internos (R6).
+// Payload por orden etiquetable (R1). La etiqueta se genera para TODA orden
+// existente, tenga o no `num_guia`: `numGuia` es `number | null` (null = aun sin
+// guia asignada) y `barcodeValue` es `string | null` (null si no hay guia -> la UI
+// omite el codigo de barras). El QR (`qrValue = ordenId`) SIEMPRE esta disponible,
+// por eso funciona incluso sin guia (decision del usuario). `montoCobrar` es
+// number|null (Decimal->number, R5, sin moneda hardcodeada). `distritoNombre`
+// nullable (R4). NUNCA incluye `deletedAt` ni campos internos (R6).
 export interface EtiquetaGuiaDTO {
   ordenId: string;
-  numGuia: number; // garantizado: solo ordenes con guia (R2)
+  numGuia: number | null; // null = orden sin guia asignada aun
   numRemision: string;
   destinatario: string;
   telefonoDest: string;
@@ -25,16 +26,16 @@ export interface EtiquetaGuiaDTO {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null; // R4
-  qrValue: string; // = ordenId (decision F1.4 (a), R7)
-  barcodeValue: string; // = String(numGuia) (decision F1.4 (b), R8)
+  qrValue: string; // = ordenId (decision F1.4 (a), R7): siempre presente
+  barcodeValue: string | null; // = String(numGuia) o null si aun no hay guia
 }
 
-// Ordenes solicitadas que NO produjeron etiqueta (R2/R3), para el aviso de UI
-// (R11): `sin_guia` = existe pero sin `num_guia`; `no_encontrada` = no existe o
-// esta borrada (`deleted_at` no nulo).
+// Ordenes solicitadas que NO produjeron etiqueta (R3), para el aviso de UI (R11):
+// `no_encontrada` = no existe o esta borrada (`deleted_at` no nulo). Ya NO se omite
+// por falta de guia: la etiqueta ahora se genera incluso sin `num_guia`.
 export interface EtiquetaOmitidaDTO {
   ordenId: string;
-  motivo: "sin_guia" | "no_encontrada"; // R2 / R3
+  motivo: "no_encontrada"; // R3
 }
 
 // R15: lista NO vacia de identificadores de orden con formato valido.

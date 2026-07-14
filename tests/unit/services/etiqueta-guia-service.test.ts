@@ -65,16 +65,18 @@ function fakeRepo(rows: EtiquetaRow[] = [etiquetaRow()]): IOrdenRepository {
   } as unknown as IOrdenRepository;
 }
 
-describe("EtiquetaGuiaService — autorizacion (R13)", () => {
-  it("R13: rol no maestro (admin/adminTienda/mensajero) -> forbidden, sin tocar datos", async () => {
+describe("EtiquetaGuiaService — autorizacion (cualquier rol autenticado)", () => {
+  it("cualquier rol (admin/adminTienda/mensajero/maestro) genera etiqueta, sin forbidden", async () => {
     const repo = fakeRepo();
     const service = new EtiquetaGuiaService(repo);
 
-    for (const actor of [ADMIN, ADMIN_TIENDA, MENSAJERO]) {
+    for (const actor of [ADMIN, ADMIN_TIENDA, MENSAJERO, MAESTRO]) {
       const r = await service.generarEtiquetas({ ordenIds: ["o1"] }, actor);
-      expect(r).toEqual({ status: "forbidden" });
+      expect(r.status).toBe("ok");
+      if (r.status !== "ok") throw new Error("unreachable");
+      expect(r.etiquetas).toHaveLength(1);
     }
-    expect(repo.findEtiquetasByIds).not.toHaveBeenCalled();
+    expect(repo.findEtiquetasByIds).toHaveBeenCalled();
   });
 });
 
@@ -109,8 +111,8 @@ describe("EtiquetaGuiaService — armado del DTO de etiqueta (R1)", () => {
   });
 });
 
-describe("EtiquetaGuiaService — orden sin guia (R2)", () => {
-  it("R2: orden existente sin num_guia -> omitida 'sin_guia', sin etiqueta", async () => {
+describe("EtiquetaGuiaService — orden sin guia (etiqueta con QR, sin barcode)", () => {
+  it("orden existente sin num_guia -> etiqueta con numGuia null y barcodeValue null (QR sigue = ordenId)", async () => {
     const repo = fakeRepo([etiquetaRow({ id: "o1", numGuia: null })]);
     const service = new EtiquetaGuiaService(repo);
 
@@ -118,8 +120,11 @@ describe("EtiquetaGuiaService — orden sin guia (R2)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.etiquetas).toEqual([]);
-    expect(r.omitidas).toEqual([{ ordenId: "o1", motivo: "sin_guia" }]);
+    expect(r.omitidas).toEqual([]);
+    expect(r.etiquetas).toHaveLength(1);
+    expect(r.etiquetas[0].numGuia).toBeNull();
+    expect(r.etiquetas[0].barcodeValue).toBeNull();
+    expect(r.etiquetas[0].qrValue).toBe("o1");
   });
 });
 

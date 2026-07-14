@@ -22,11 +22,12 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
 
   async generarEtiquetas(
     input: GenerarEtiquetasInput,
-    actor: Actor,
+    _actor: Actor,
   ): Promise<GenerarEtiquetasServiceResult> {
-    // --- Autorizacion (R13), antes de tocar datos: solo maestro ---
-    if (actor.rol !== "maestro") return { status: "forbidden" };
-
+    // Autorizacion: la etiqueta es un READ derivado disponible para cualquier rol
+    // autenticado (decision del usuario). La sesion ya se exige en el borde
+    // (Server Action -> `unauthenticated` sin sesion); aqui no se restringe por rol
+    // ni se filtra por visibilidad de la orden.
     const ordenIds = distinct(input.ordenIds);
     if (ordenIds.length === 0) return { status: "ok", etiquetas: [], omitidas: [] };
 
@@ -46,26 +47,23 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
         omitidas.push({ ordenId, motivo: "no_encontrada" });
         continue;
       }
-      if (row.numGuia === null) {
-        // Existe pero aun sin guia asignada: no se genera etiqueta (R2).
-        omitidas.push({ ordenId, motivo: "sin_guia" });
-        continue;
-      }
-      etiquetas.push(this.toEtiquetaDTO(row, row.numGuia));
+      // La orden existe: se genera etiqueta tenga o no guia. Sin guia, el QR
+      // (=ordenId) sigue siendo valido; el barcode queda null y la UI lo omite.
+      etiquetas.push(this.toEtiquetaDTO(row));
     }
 
     return { status: "ok", etiquetas, omitidas };
   }
 
-  // R1/R4/R5/R6/R7/R8: arma el DTO de una orden con guia. `numGuia` se recibe ya
-  // estrechado a `number` (el llamador descarto el caso null, R2). montoCobrar es
-  // number|null sin moneda (R5); distritoNombre null si no hay (R4); qrValue =
-  // ordenId (R7); barcodeValue = String(numGuia) (R8). No expone deletedAt (R6):
-  // la fila ni siquiera lo trae.
-  private toEtiquetaDTO(row: EtiquetaRow, numGuia: number): EtiquetaGuiaDTO {
+  // R1/R4/R5/R6/R7: arma el DTO de una orden. `numGuia` puede ser null (orden aun
+  // sin guia). montoCobrar es number|null sin moneda (R5); distritoNombre null si no
+  // hay (R4); qrValue = ordenId (R7, siempre presente); barcodeValue = String(numGuia)
+  // o null si no hay guia (la UI omite el barcode). No expone deletedAt (R6): la fila
+  // ni siquiera lo trae.
+  private toEtiquetaDTO(row: EtiquetaRow): EtiquetaGuiaDTO {
     return {
       ordenId: row.id,
-      numGuia,
+      numGuia: row.numGuia,
       numRemision: row.numRemision,
       destinatario: row.destinatario,
       telefonoDest: row.telefonoDest,
@@ -78,7 +76,7 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
       cantonNombre: row.cantonNombre,
       distritoNombre: row.distritoNombre,
       qrValue: row.id, // R7: QR codifica orden.id (UUID estable, feature 33)
-      barcodeValue: String(numGuia), // R8: barcode codifica num_guia
+      barcodeValue: row.numGuia === null ? null : String(row.numGuia),
     };
   }
 }
