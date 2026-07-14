@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| _(ninguna en curso)_ | — | — | — |
+| _(ninguna del leader en curso)_ | — | — | 0 features `in_progress` en `feature_list.json` (feature 60 = pista del otro agente) |
+
+> **Feature 59 (zonas: seleccionar distritos de VARIOS cantones) CERRADA 2026-07-13**: **FRONTEND PURO** (sin backend, migraciones ni cambios de contrato; `crearZona`/`actualizarZona` intactos; `arbolZonas()` SOLO lectura). Ciclo SDD completo (spec_author → **F1.4 aprobada, todas las recomendadas** → frontend_dev → reviewer). `selected` migrado a `Record<string,DistritoSeleccionado>` como **fuente de verdad única** → cambiar de provincia/cantón NO resetea la selección; **resumen agrupado provincia→cantón** (`data-testid="resumen-distritos"`, `role="group"`) con **"Quitar"** por distrito (`aria-label="Quitar <distrito>"`); **sync bidireccional** resumen↔checkbox; contador `distritos-seleccionados` conservado; R10 heredada (distritos de otra zona `disabled`, fuera del conjunto); **pre-marcado multi-cantón en edición** vía SWR `["zonas:arbol",zona.id]` sobre `arbolZonas()` (siembra `selected` para TODOS los cantones/distritos de la zona, merge idempotente); envío intacto `distritoIds=Object.keys(selected)`. Trazabilidad **R1–R12 → test** (mapa en `progress/impl_59-zonas-distritos-multicanton.md`). Reviewer **APROBADO 0 bloqueantes de código** (el RECHAZADO inicial fue SOLO por gates documentales del leader, ya cerrados). Verde REAL: typecheck 0, eslint 0, **`zona-form.test.tsx` 22/22** (+6 casos), suite **2551 passed** (2 flakes ambientales aislados verdes). F1.4-e aprobó `arbolZonas` → **T9-alt = N/A**. Solo cambiaron `ZonaForm.tsx` y su test. Orquestada DIRECTO por el leader (`frontend_dev → reviewer`, bug opus-4.8[1m]). Estado `done` + `history.md` + `impl_59`/`review_59`. **DEUDA menor** (reviewer, no bloqueante): numeración "R" mezclada entre features 55 y 59 en algún docstring/test; sin test del enriquecimiento perezoso de provincia al navegar en edición. **PENDIENTE: PR a `dev` + merge (OK humano).**
 
 > **Feature 45 (wallet: gastos fijos/variables y sueldos) CERRADA 2026-07-13**: **impl COMPLETA (R1–R33) + reviewer APROBADO 0 bloqueantes**. **ÚLTIMO eslabón de la cadena wallet (42→43→44→45).** Money-critical; F1.4 aprobada (c: sueldos texto libre; **b: gastos fijos por CRON mensual** —override de la recomendación manual—; resto recomendadas). Orquestada DIRECTO por el leader (`backend_dev → frontend_dev → reviewer`, evita el implementer monolítico/bug opus-4.8[1m], precedente 56). Verde REAL: typecheck 0, lint 0, **2545/2545 tests**, `init.sh` OK, round-trip de AMBAS migraciones verificado. Egresos = filas `tipo=egreso` en el libro polimórfico `wallet_movimiento` (42): enum +`egreso_gasto_fijo`/`egreso_gasto_variable` (migración `20260713140000` +down). VARIABLES/SUELDOS = registro **manual** (`origen_id` NULL; sueldo=texto libre F1.4-c; rechaza `gasto_fijo` manual). GASTOS FIJOS = tabla nueva **`gasto_fijo_plantilla`** (CRUD sin borrado, RLS sin policies; migración `20260713150000` +down) + **CRON** `/api/cron/generar-gastos-fijos` (auth `CRON_SECRET` antes de efectos, `0 6 1 * *`=día1 00:00 CR, clon 41/46), **idempotente** por `origen_id="<plantillaId>:<YYYY-MM>"` bajo el índice único parcial EXISTENTE (reejecutar mismo mes → 0 filas). Reversa compensatoria append-only idempotente (aplica a egresos del cron). Balance DERIVADO resta, sin doble conteo. UI `/wallet`: dialog egreso manual + panel CRUD plantillas + desglose por tipo + reversa por fila. Cambio compartido auditado sin regresión: blindaje `montoPositivoSchema` (monto vacío→`validation_error`, no 500). Commit + `impl_45.md`/`review_45`. Estado `done` + `history.md`. **DEUDA menor**: E2E diferido; tests migración/DB estáticos/in-memory. **PENDIENTE: PR a `dev` + merge (OK humano).**
 
@@ -145,6 +147,26 @@
 ## Evaluaciones
 
 > El leader documenta aca cada evaluacion de zone/complexity/particion.
+
+- `zonas: seleccionar distritos de VARIOS cantones` (id 59): **zone=frontend, complexity=medium,
+  branch=feature/59-zonas-distritos-multicanton, depends_on=55 (done, en dev).** Evaluada 2026-07-13.
+  Seleccionada por el humano (backlog restante 35/59/60; recomendada por ser contenida y NO pista del otro
+  agente). **FRONTEND PURO**: mejora UX de `ZonaForm` (features 24/55). Hoy el maestro navega provincia ->
+  UN canton -> marca distritos de ESE canton; la seleccion interna (`selected`) YA se acumula al cambiar de
+  canton, PERO la UI solo muestra los distritos del canton actual, asi que los de otros cantones no se ven
+  ni se pueden quitar (parece que se pierden; solo hay el contador `data-testid=distritos-seleccionados`).
+  Objetivo: (a) agregar distritos de VARIOS cantones (misma o distinta provincia) sin perder los marcados
+  al cambiar de canton; (b) resumen/lista VISIBLE de TODOS los seleccionados agrupados por provincia/canton,
+  con quitar por item. **Backend INTACTO** (`crearZona`/`actualizarZona` ya reciben el set COMPLETO de
+  `distritoIds` N:M `ZonaDistrito`; vigentes R10 -deshabilitar distritos de OTRA zona- y el pre-marcado en
+  edicion; acciones geo `listarCantones`/`listarDistritos` ya existen). DECISION DE PROCESO (leader): un
+  ciclo frontend puro (no partir; sin backend/migracion), precedente 29/51. Rama desde `origin/dev`
+  (a4298d8, incluye la 45 ya mergeada -> sin drift). Preguntas ABIERTAS para F1.4 (el spec_author las
+  formaliza): (a) FORMA del resumen de seleccion cruzada -> lista agrupada provincia->canton con boton
+  quitar por distrito (RECOMENDADO) vs. chips/tags; (b) el contador `distritos-seleccionados` -> conservarlo
+  junto al resumen (RECOMENDADO, no romper el test existente) vs. reemplazarlo; (c) quitar desde el resumen
+  desmarca tambien el checkbox si el usuario esta viendo ese canton; (d) R10 (distritos ya en otra zona)
+  deshabilitados tambien reflejado en el resumen; (e) alcance responsive/accesibilidad del nuevo bloque.
 
 - `wallet - gastos fijos/variables y sueldos` (id 45): **zone=fullstack, complexity=high,
   branch=feature/45-wallet-gastos-sueldos, depends_on=42 (done, en dev).** Evaluada 2026-07-13.

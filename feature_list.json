@@ -637,12 +637,13 @@
       "id": 59,
       "name": "zonas: seleccionar distritos de VARIOS cantones",
       "description": "Mejora de UX en la creacion/edicion de zonas (ZonaForm, features 24/55): hoy el maestro navega provincia -> UN canton -> marca distritos de ESE canton; aunque la seleccion interna (`selected`) ya se ACUMULA al cambiar de canton, la UI solo muestra los distritos del canton actualmente elegido, por lo que NO se ven ni se gestionan los distritos elegidos de OTROS cantones y parece que se pierden. Objetivo: permitir elegir distritos de VARIOS cantones (analogo a elegir varios distritos de un solo canton) y hacer la seleccion cruzada VISIBLE y editable. Alcance: reconstruir la seccion 'Distritos de la zona' del ZonaForm para (a) poder ir agregando distritos de multiples cantones (misma o distinta provincia) sin perder los ya marcados al cambiar de canton, y (b) mostrar un resumen/lista de TODOS los distritos seleccionados agrupados por provincia/canton, con opcion de quitar cualquiera desde ese resumen (hoy solo existe el contador 'Distritos seleccionados: N', data-testid distritos-seleccionados). Se mantiene el contrato backend intacto: crearZona/actualizarZona ya reciben el conjunto COMPLETO de distritoIds (N:M ZonaDistrito) sin importar de cuantos cantones vengan, y siguen vigentes las reglas R10 (deshabilitar distritos ya asignados a OTRA zona) y el pre-marcado en edicion. Frontend puro (ZonaForm + acciones geo listarCantones/listarDistritos ya existentes); no toca migraciones ni el backend de zonas. Depende de la feature 55 (ZonaForm reconstruido).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 55
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/59-zonas-distritos-multicanton",
+      "depends_on": 55,
+      "status_note": "done 2026-07-13. FRONTEND PURO: sin backend, migraciones ni cambios de contrato (crearZona/actualizarZona intactos; arbolZonas() usado SOLO como lectura para pre-cargar edicion). Ciclo SDD completo (spec_author -> F1.4 aprobada TODAS las recomendadas -> frontend_dev -> reviewer). Solucion: `selected` migrado de Record<string,string> a Record<string,DistritoSeleccionado> ({distritoNombre,cantonId,cantonNombre,provinciaId,provinciaNombre}) como fuente de verdad unica -> cambiar de provincia/canton NO resetea la seleccion; resumen agrupado provincia->canton (data-testid resumen-distritos, role=group) con boton 'Quitar' por distrito (aria-label 'Quitar <distrito>'); sync bidireccional resumen<->checkbox; contador distritos-seleccionados conservado; R10 heredada (distritos de otra zona disabled, no entran al conjunto); pre-marcado multi-canton en edicion via SWR ['zonas:arbol',zona.id] sobre arbolZonas() (siembra selected para TODOS los cantones/distritos de la zona, merge idempotente); envio intacto distritoIds=Object.keys(selected). Trazabilidad R1-R12 -> test (mapa en progress/impl_59-zonas-distritos-multicanton.md). Reviewer APROBADO 0 bloqueantes de codigo (el RECHAZADO inicial fue SOLO por gates documentales del leader, ya cerrados). VERDE REAL: typecheck 0, eslint 0, zona-form.test.tsx 22/22 (+6 casos), suite completa 2551 passed (2 flakes ambientales HomePage/LoginForm que pasan aislados, NO regresion). F1.4-e aprobo la ruta arbolZonas -> T9-alt (fallback perezoso) = N/A. DEUDA menor (reviewer, no bloqueante): numeracion 'R' mezclada entre features 55 y 59 en algun docstring/test (cosmetico); sin test del enriquecimiento perezoso de provincia al navegar en edicion. PENDIENTE: PR a dev + merge (OK humano); frontend puro -> sin accion de despliegue/migracion."
     },
     {
       "id": 60,
