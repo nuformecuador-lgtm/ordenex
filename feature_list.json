@@ -473,12 +473,13 @@
       "id": 45,
       "name": "wallet - gastos fijos/variables y sueldos",
       "description": "Gestion de EGRESOS administrativos en la wallet (feature 42): crear GASTOS FIJOS y GASTOS VARIABLES, y registrar los SUELDOS de los trabajadores. Todos estos egresos SALEN de la caja principal de Ordenex y se reflejan en el libro de movimientos y en el BALANCE general (ingresos vs. gastos). Fullstack. Depende de la feature 42 (wallet/caja - libro de movimientos).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
-      "complexity": null,
-      "zone": null,
-      "branch": null,
-      "depends_on": 42
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/45-wallet-gastos-sueldos",
+      "depends_on": 42,
+      "status_note": "done 2026-07-13; F1.4 APROBADA (c sueldos texto libre; b gastos fijos por CRON mensual -override de la recomendacion manual-; resto recomendadas). ULTIMO eslabon wallet (42->43->44->45). Money-critical. Impl COMPLETA (R1-R33) + reviewer APROBADO 0 bloqueantes (review_45; leader verifico tsc 0, eslint 0, 2545/2545, init.sh, trazabilidad abriendo tests). Orquestada DIRECTO por el leader backend_dev->frontend_dev->reviewer (evita implementer monolitico/bug opus-4.8[1m], precedente 56). Egresos = filas tipo=egreso en wallet_movimiento (42, polimorfico), SIN tabla de egresos. Enum +egreso_gasto_fijo/+egreso_gasto_variable (egreso_sueldo ya existia); migracion 20260713140000 (+down). VARIABLES/SUELDOS manuales (origen_id NULL; sueldo=texto libre F1.4-c; rechaza gasto_fijo manual R19). GASTOS FIJOS = tabla nueva gasto_fijo_plantilla (concepto/monto/activa, RLS sin policies, sin borrado; migracion 20260713150000 +down) + CRON GET /api/cron/generar-gastos-fijos (auth CRON_SECRET antes de efectos, schedule '0 6 1 * *' = dia1 00:00 CR en vercel.json, clon 41/46). IDEMPOTENCIA por origen_id='<plantillaId>:<YYYY-MM>' bajo el indice unico parcial EXISTENTE (sin indice nuevo; sin colision con reversa ingreso_ajuste ni manuales origen_id NULL; reejecutar mismo mes -> 0 filas). Reversa compensatoria append-only idempotente (aplica a egresos del cron). Balance DERIVADO resta, sin doble conteo. UI /wallet: dialog egreso manual, panel CRUD plantillas, desglose por tipo, reversa por fila. Cambio compartido: blindaje montoPositivoSchema try/catch (monto vacio->validation_error no 500; sin regresion 42). Rama desde origin/dev (f74c68f, incluye #60/#61). DEUDA menor: E2E diferido; tests migracion/DB estaticos/in-memory (round-trip real verificado). PENDIENTE: PR a dev + merge (OK humano)."
     },
     {
       "id": 46,

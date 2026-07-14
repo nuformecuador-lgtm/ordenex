@@ -23,6 +23,8 @@ function buildWalletDeps() {
     crearMovimientos: vi.fn().mockResolvedValue(0),
     listar: vi.fn(),
     agregarBalance: vi.fn(),
+    obtenerPorId: vi.fn(),
+    agregarPorCategoria: vi.fn(),
   };
   const walletFeedService: IWalletFeedService = {
     construirMovimientosDeIngreso: vi.fn().mockResolvedValue([]),

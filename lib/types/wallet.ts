@@ -37,6 +37,8 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   "egreso_gasto",
   "egreso_sueldo",
   "egreso_ajuste",
+  "egreso_gasto_fijo", // feature 45: gasto fijo (lo emite el CRON, no el form manual)
+  "egreso_gasto_variable", // feature 45: gasto variable (manual)
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -110,16 +112,37 @@ export type ListarMovimientosResult = {
   pageSize: number;
 };
 
+// Feature 45 (R11) — desglose de egresos administrativos por tipo para el conjunto
+// filtrado. Derivado por agregacion (no almacenado). Montos SIEMPRE STRING (R12).
+export type DesgloseEgresosDTO = {
+  gastoFijo: string; // total egreso_gasto_fijo
+  gastoVariable: string; // total egreso_gasto_variable
+  sueldo: string; // total egreso_sueldo
+  total: string; // suma de los tres
+};
+
 // ── Schemas zod de borde ──
 
-// Un monto de dinero como STRING con hasta 2 decimales, > 0 (R2/R15). Se valida como
-// STRING (nunca number) para no perder precision en la frontera money-critical.
-const montoPositivoSchema = z
+// Un monto de dinero como STRING con hasta 2 decimales, > 0 (R2/R15; feature 45 R4/R24).
+// Se valida como STRING (nunca number) para no perder precision en la frontera
+// money-critical. Se EXPORTA para reutilizarlo en los schemas de la feature 45 (egresos
+// administrativos y plantillas de gasto fijo).
+export const montoPositivoSchema = z
   .string()
   .trim()
   .regex(/^\d+(\.\d{1,2})?$/, "El monto debe ser un numero con hasta 2 decimales.")
-  // Money-safe: comparacion con Prisma.Decimal (nunca parseFloat/Number sobre montos).
-  .refine((v) => new Prisma.Decimal(v).gt(0), "El monto debe ser mayor que 0.");
+  // Money-safe: comparacion con Prisma.Decimal (nunca parseFloat/Number sobre montos). Zod v4
+  // corre este refine AUNQUE el regex ya haya fallado (p. ej. monto vacio/no numerico), y
+  // `new Prisma.Decimal("")` lanza -> el borde veria un error INTERNAL en vez de validation.
+  // Se blinda con try/catch: un formato invalido devuelve false (su propio issue) y el regex
+  // emite el suyo -> ZodError limpio -> validation_error (R4: vacio/no numerico se rechaza).
+  .refine((v) => {
+    try {
+      return new Prisma.Decimal(v).gt(0);
+    } catch {
+      return false;
+    }
+  }, "El monto debe ser mayor que 0.");
 
 // Manual (R15/F1.4-Q6): ingreso/egreso de AJUSTE, descripcion obligatoria, monto > 0.
 // Solo las categorias de ajuste; el tipo debe casar con la categoria (ingreso<->ingreso_ajuste).
@@ -150,3 +173,37 @@ export const listarMovimientosSchema = z.object({
 });
 
 export type ListarMovimientosInput = z.infer<typeof listarMovimientosSchema>;
+
+// ── Feature 45 — egresos administrativos (manual) + reversa ──
+
+// Los DOS tipos de egreso administrativo que se registran A MANO (R2/R19). El gasto FIJO
+// NO entra aqui: lo EMITE el cron mensual (R27), no el formulario manual.
+export const TIPO_EGRESO_MANUAL_SEED = ["gasto_variable", "sueldo"] as const;
+export type TipoEgresoManual = (typeof TIPO_EGRESO_MANUAL_SEED)[number];
+
+// Mapa tipo de egreso manual -> categoria del libro (R2). Se reutiliza `egreso_sueldo`
+// (existente en la 42) para el sueldo; `egreso_gasto_variable` (nuevo, R21) para el gasto
+// variable. `gasto_fijo` NO se mapea aqui (lo emite el cron con `egreso_gasto_fijo`).
+export const TIPO_EGRESO_MANUAL_A_CATEGORIA = {
+  gasto_variable: "egreso_gasto_variable",
+  sueldo: "egreso_sueldo",
+} as const satisfies Record<TipoEgresoManual, WalletMovimientoCategoria>;
+
+// R2/R4/R5/R19 (borde): egreso manual = tipo del conjunto {gasto_variable, sueldo}, monto
+// STRING > 0 con hasta 2 decimales, descripcion no vacia. `gasto_fijo` u otro valor cae
+// fuera del enum -> ZodError -> validation_error (R19).
+export const registrarEgresoAdministrativoSchema = z.object({
+  tipoEgreso: z.enum(TIPO_EGRESO_MANUAL_SEED),
+  monto: montoPositivoSchema,
+  descripcion: z.string().trim().min(1, "La descripcion es obligatoria."),
+});
+
+export type RegistrarEgresoAdministrativoInput = z.infer<
+  typeof registrarEgresoAdministrativoSchema
+>;
+
+// R13: reversa de un egreso administrativo por su id (el monto se lee server-side, no lo
+// provee el cliente).
+export const reversarEgresoSchema = z.object({ movimientoId: z.string().uuid() });
+
+export type ReversarEgresoInput = z.infer<typeof reversarEgresoSchema>;

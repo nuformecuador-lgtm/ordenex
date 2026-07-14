@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/liberar-reprogramadas",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/generar-gastos-fijos",
+      "schedule": "0 6 1 * *"
     }
   ]
 }

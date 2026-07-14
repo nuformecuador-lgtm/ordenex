@@ -26,6 +26,14 @@ vi.mock("@/lib/actions/wallet", () => ({
   registrarMovimientoManualAction: vi.fn(),
 }));
 
+// Feature 45: la página también pre-obtiene el desglose de egresos y las plantillas.
+vi.mock("@/lib/actions/wallet-egresos", () => ({
+  verDesgloseEgresosAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
+  listarPlantillasAction: vi.fn(),
+}));
+
 class NotFoundError extends Error {
   constructor() {
     super("NEXT_NOT_FOUND");
@@ -50,10 +58,14 @@ vi.mock("@/app/(app)/wallet/_components/WalletModule", () => ({
 
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMovimientosAction, verBalanceAction } from "@/lib/actions/wallet";
+import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
+import { listarPlantillasAction } from "@/lib/actions/gasto-fijo-plantilla";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarMovimientosAction);
 const balanceMock = vi.mocked(verBalanceAction);
+const desgloseMock = vi.mocked(verDesgloseEgresosAction);
+const plantillasMock = vi.mocked(listarPlantillasAction);
 
 const MOVIMIENTOS_OK = {
   status: "ok" as const,
@@ -87,11 +99,37 @@ const BALANCE_OK = {
   },
 };
 
+const DESGLOSE_OK = {
+  status: "ok" as const,
+  desglose: {
+    gastoFijo: "0.00",
+    gastoVariable: "0.00",
+    sueldo: "0.00",
+    total: "0.00",
+  },
+};
+
+const PLANTILLAS_OK = {
+  status: "ok" as const,
+  plantillas: [
+    {
+      id: "p1",
+      concepto: "Alquiler",
+      monto: "300.00",
+      activa: true,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   moduleCalls.length = 0;
   listarMock.mockResolvedValue(MOVIMIENTOS_OK);
   balanceMock.mockResolvedValue(BALANCE_OK);
+  desgloseMock.mockResolvedValue(DESGLOSE_OK);
+  plantillasMock.mockResolvedValue(PLANTILLAS_OK);
 });
 
 afterEach(() => {
@@ -142,6 +180,9 @@ describe("WalletPage — pre-fetch del maestro (R18/R21)", () => {
     // Pre-fetch server-side con filtros por defecto (page 1).
     expect(listarMock).toHaveBeenCalledTimes(1);
     expect(balanceMock).toHaveBeenCalledTimes(1);
+    // Feature 45: también pre-obtiene desglose de egresos y plantillas.
+    expect(desgloseMock).toHaveBeenCalledTimes(1);
+    expect(plantillasMock).toHaveBeenCalledTimes(1);
 
     // R21: los datos sensibles cruzan como props ya serializados (STRING), sin Decimal.
     expect(moduleCalls).toHaveLength(1);
@@ -156,5 +197,12 @@ describe("WalletPage — pre-fetch del maestro (R18/R21)", () => {
     expect(props.total).toBe(1);
     expect(props.page).toBe(1);
     expect(props.pageSize).toBe(20);
+
+    // Feature 45 (R11/R12/R26): desglose y plantillas cruzan por props como STRING.
+    expect(typeof props.desglose.total).toBe("string");
+    expect(props.desglose.total).toBe("0.00");
+    expect(props.plantillas).toHaveLength(1);
+    expect(props.plantillas[0].concepto).toBe("Alquiler");
+    expect(typeof props.plantillas[0].monto).toBe("string");
   });
 });

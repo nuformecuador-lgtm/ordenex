@@ -143,7 +143,9 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_wallet_tienda_movimiento") && // feature 43: apendida despues
         !d.endsWith("_pago_mensajero_movimiento") && // feature 44: apendida despues
         !d.endsWith("_orden_liberada_reprogramada_at") && // feature 46: apendida despues
-        !d.endsWith("_orden_historial_estado"), // feature 49: apendida despues
+        !d.endsWith("_orden_historial_estado") && // feature 49: apendida despues
+        !d.endsWith("_wallet_egreso_gasto_fijo_variable") && // feature 45: apendida despues
+        !d.endsWith("_gasto_fijo_plantilla"), // feature 45: apendida despues
     );
     expect(thisDir > previas[previas.length - 1]).toBe(true);
   });

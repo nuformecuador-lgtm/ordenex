@@ -53,6 +53,14 @@ export interface BalanceAgregado {
   egresos: string;
 }
 
+// Feature 45 (R11) — desglose de egresos administrativos por tipo, ya como STRING
+// (money-safe). Deriva de un groupBy(categoria) acotado a las 3 categorias administrativas.
+export interface DesgloseEgresosAgregado {
+  gastoFijo: string; // SUM(egreso_gasto_fijo)
+  gastoVariable: string; // SUM(egreso_gasto_variable)
+  sueldo: string; // SUM(egreso_sueldo)
+}
+
 export interface IWalletMovimientoRepository {
   /**
    * R6/R13: inserta las filas de forma IDEMPOTENTE en la transaccion `tx`. Usa
@@ -65,4 +73,15 @@ export interface IWalletMovimientoRepository {
   listar(filtros: ListarMovimientosFiltros): Promise<ListarMovimientosPage>;
   /** R16: SUM(monto) FILTER por ingreso/egreso con los mismos filtros. STRING (money-safe). */
   agregarBalance(filtros: BalanceFiltros): Promise<BalanceAgregado>;
+  /**
+   * Feature 45 (R13): lee un movimiento por id para la reversa (monto server-side; evita
+   * que el cliente falsee el monto). null si no existe.
+   */
+  obtenerPorId(id: string): Promise<WalletMovimientoDTO | null>;
+  /**
+   * Feature 45 (R11): desglose de egresos administrativos por tipo (gasto fijo / variable /
+   * sueldo) del conjunto filtrado (mismos filtros que el libro). groupBy(categoria) +
+   * SUM(monto), STRING (money-safe).
+   */
+  agregarPorCategoria(filtros: BalanceFiltros): Promise<DesgloseEgresosAgregado>;
 }
