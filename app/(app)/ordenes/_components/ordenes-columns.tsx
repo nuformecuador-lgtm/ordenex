@@ -2,7 +2,6 @@ import type { Column } from "@/components/shared/DataTable";
 import { PriceLabel } from "@/components/shared/PriceLabel";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { EstatusBadge } from "./EstatusBadge";
-import { toValidNumber } from "@/lib/utils/number";
 
 // Placeholder para valores ausentes (relación opcional no resuelta).
 const SIN_DATO = "—";
@@ -59,7 +58,7 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
   {
     id: "estatus",
-    value: "Estado",
+    value: "Estatus",
     render: (row) => (
       <EstatusBadge
         value={row.relaciones?.estatus?.value ?? row.estatusValue ?? SIN_DATO}
@@ -73,11 +72,6 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     value: "Tienda",
     // Nombre legible de la tienda, no el uuid `tiendaId`.
     render: (row) => row.relaciones?.tienda?.nombre ?? row.tiendaNombre,
-  },
-  {
-    id: "zona",
-    value: "Zona",
-    render: (row) => row.relaciones?.zona?.nombre ?? SIN_DATO,
   },
   {
     id: "provincia",
@@ -97,17 +91,15 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   },
   {
     id: "flete",
-    value: "Flete + IVA",
+    value: "Flete",
     // Flete GAM o estándar según la zona de la orden; PriceLabel formatea a ₡ y
     // resuelve el caso sin tarifa (undefined → ₡0).
     render: (row) => {
       const esCentral = row.relaciones?.zona?.esCentral;
       const tarifa = row.relaciones?.tienda?.tarifa;
-      if (!tarifa) return <PriceLabel value={0} />;
-      const value = toValidNumber(
-        esCentral ? tarifa?.valorFleteGam : tarifa?.valorFlete,
+      return (
+        <PriceLabel value={esCentral ? tarifa?.valorFleteGam : tarifa?.valorFlete} />
       );
-      return <PriceLabel value={value} />;
     },
   },
   {

@@ -221,6 +221,11 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // decide por fila si muestra select de mensajero o "-> bodega satelite").
     zonaNombre: row.zona.nombre,
     zonaEsGam: row.zona.esCentral,
+    // Escalares para las columnas de detalle/dinero del listado (dirección, valor
+    // de cobro COD, flag de comisión). Decimal montoCobrar -> number|null.
+    direccion: row.direccion,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    cobraComision: row.cobraComision,
     relaciones: toRelaciones(row),
   };
 }

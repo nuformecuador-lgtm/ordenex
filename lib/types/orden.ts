@@ -141,6 +141,15 @@ export type OrdenListItemDTO = OrdenDTO & {
   mensajeroAsignadoId?: string | null;
   zonaNombre?: string;
   zonaEsGam?: boolean;
+  // Escalares de la orden que el listado muestra en columnas de dinero/detalle
+  // (dirección, valor de cobro COD y si la orden cobra comisión). Ya vienen en la
+  // fila (el `include` del listado no restringe escalares); se exponen aquí de
+  // forma ADITIVA para las columnas de flete+IVA/fulfillment/comisión. Opcionales
+  // (`?`) por el mismo motivo que los campos previos: no romper mocks/fixtures de
+  // UI que construyen OrdenListItemDTO sin ellos. `montoCobrar` Decimal -> number.
+  direccion?: string | null;
+  montoCobrar?: number | null;
+  cobraComision?: boolean;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
   // que solo usa los escalares/`*Nombre` sigue funcionando. La relacion `tienda`
