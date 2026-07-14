@@ -1,9 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { History } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Sheet,
   SheetContent,
@@ -98,15 +104,22 @@ export function HistorialOrdenSheet({
 
   return (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => setOpen(true)}
-        aria-label={`Ver historial de la orden ${referencia ?? ordenId}`}
-      >
-        {triggerLabel}
-      </Button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setOpen(true)}
+              aria-label={`Ver historial de la orden ${referencia ?? ordenId}`}
+            >
+              <History className="size-4" />
+            </Button>
+          }
+        />
+        <TooltipContent>{triggerLabel}</TooltipContent>
+      </Tooltip>
       <Sheet open={open} onOpenChange={(next) => setOpen(next)}>
         <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
           <SheetHeader>

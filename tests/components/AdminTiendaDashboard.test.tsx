@@ -129,7 +129,7 @@ describe("AdminTiendaDashboard (feature 26)", () => {
     ).toBeInTheDocument();
   });
 
-  it("R11: NO incluye las columnas 'Tienda' ni 'Zona'; muestra el resto del listado del maestro", async () => {
+  it("R11: NO incluye la columna 'Tienda' (redundante), pero SÍ 'Zona'; muestra el resto del listado del maestro", async () => {
     listarOrdenesMock.mockResolvedValue({
       status: "ok",
       items: [
@@ -144,24 +144,33 @@ describe("AdminTiendaDashboard (feature 26)", () => {
 
     await screen.findByText("6001");
     const headers = screen.getAllByRole("columnheader");
-    // Se ocultan Tienda/Zona (redundantes para la tienda); geografía y mensajero
-    // se muestran igual que en el listado del maestro, independientes del rol.
+    // Se oculta SOLO "Tienda" (redundante: todas las órdenes son de la misma
+    // tienda). "Zona" SÍ se muestra al adminTienda (decisión del humano
+    // 2026-07-14). El resto —geografía, dinero (monto/flete/fulfillment/comisión)
+    // y mensajero— se muestra igual que al maestro, independiente del rol.
     expect(headers.map((h) => h.textContent)).toEqual([
       "Nº Guía",
       "Nº Remisión",
-      "Estatus",
+      "Estado",
       "Destinatario",
+      "Producto",
+      "Dirección",
+      "Zona",
       "Provincia",
       "Cantón",
       "Distrito",
-      "Flete",
+      "Monto a cobrar",
+      "Flete + IVA",
+      "Fulfillment",
+      "Comisión + IVA",
       "Mensajero",
       "Fecha de creación",
       "Tiempo",
     ]);
     // El nombre de la tienda no se renderiza en ninguna cabecera ni celda.
     expect(headers.map((h) => h.textContent)).not.toContain("Tienda");
-    expect(headers.map((h) => h.textContent)).not.toContain("Zona");
+    // La columna "Zona" SÍ está presente para el adminTienda.
+    expect(headers.map((h) => h.textContent)).toContain("Zona");
     expect(screen.queryByText("Tienda Secreta")).toBeNull();
   });
 

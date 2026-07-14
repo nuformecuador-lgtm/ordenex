@@ -4,13 +4,14 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { ordenesColumns } from "@/app/(app)/ordenes/_components/ordenes-columns";
 
 /**
- * Columnas ocultas en el dashboard del `adminTienda`. Solo se omiten `tienda` y
- * `zona`: todas las órdenes son de la misma tienda (nombre redundante) y la zona
- * es un concern del LISTADO DEL MAESTRO (feature 26/R11, 30/R14). El resto de
- * columnas del listado del maestro —incluidas geografía y mensajero, resueltas por
- * la nueva estructura de respuesta— se muestran igual, independientes del rol.
+ * Columnas ocultas en el dashboard del `adminTienda`. Solo se omite `tienda`:
+ * todas las órdenes son de la misma tienda (nombre redundante). La columna `zona`
+ * SÍ se muestra al adminTienda (decisión del humano 2026-07-14). El resto de
+ * columnas del listado del maestro —geografía, dinero (flete/fulfillment/comisión)
+ * y mensajero, resueltas por la nueva estructura de respuesta— se muestran igual,
+ * independientes del rol.
  */
-const COLUMNAS_OCULTAS_ADMIN_TIENDA = new Set(["tienda", "zona"]);
+const COLUMNAS_OCULTAS_ADMIN_TIENDA = new Set(["tienda"]);
 
 /**
  * Columnas del módulo de órdenes para el dashboard del `adminTienda` (feature 26,

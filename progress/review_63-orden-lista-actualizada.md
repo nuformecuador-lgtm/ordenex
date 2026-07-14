@@ -113,3 +113,25 @@ Todas las tasks tienen test verde, pero no marcadas [x].
 
 Veredicto: RECHAZADO. Vuelve al implementer para revertir el drift de columnas
 fuera de alcance y restaurar los 3 tests a verde.
+
+---
+
+## Resolución del bloqueante (leader, 2026-07-14)
+
+El ÚNICO bloqueante (drift de columnas fuera de alcance en
+`app/(app)/ordenes/_components/ordenes-columns.tsx` colado en `4b7e0a8`+`4a23991`:
+columna `zona`, headers `Estado`/`Flete + IVA`, helpers de IVA) se RESOLVIÓ
+restaurando el archivo a su versión base de la rama (`0337c4d`) en el commit
+`fix(63): revertir drift de columnas fuera de alcance`. La 63 NO toca las columnas.
+
+Verificación tras el revert:
+- `tests/components/OrdenesPage.test.tsx` + `tests/components/AdminTiendaDashboard.test.tsx`
+  → **14/14 verde** (los 3 tests regresados —D1, D3, R11— vuelven a verde).
+- Tests propios de la 63: `order-status` + `orden-filter` + `ordenes-tabs` +
+  `ordenes-module` → **28/28 verde**; service/repo (R5/R8–R10) verdes (backend).
+- `tests/unit/components/ordenes-columns.test.tsx` (feature 30, columna Zona) sigue
+  ROJO, pero es un rojo **PRE-EXISTENTE del baseline** (estaba entre los 30 rojos de
+  `0337c4d`, drift de la feature 30 vs el resto de tests de columnas); NO lo introduce
+  ni lo debe reconciliar la 63.
+
+**Neto: la feature 63 introduce CERO rojos nuevos.** Bloqueante cerrado → APROBADO.

@@ -155,3 +155,61 @@ importan `OrdenesModule`):
 
 R12-R20 hechos; primitiva Tabs agregada MANUAL (base-ui, no CLI/Radix por el stack
 del repo); typecheck 0 en lo propio; 14 tests nuevos verdes.
+
+## Re-adición de columnas (pedido humano)
+
+El humano pidió volver a agregar los campos quitados de `/ordenes`. El archivo
+`app/(app)/ordenes/_components/ordenes-columns.tsx` (ya restaurado por el humano)
+re-agrega la columna `zona` y renombra `Estatus→Estado` y `Flete→Flete + IVA`
+(con guarda `toValidNumber` en el flete). Nota: `producto/direccion/fulfillment/
+comision` y `calcularFleteConIva/calcularComisionConIva` NO existen en el repo;
+el set real re-agregado es únicamente `Zona` + los dos renames.
+
+Set nuevo de `ordenesColumns` (orden real): Nº Guía, Nº Remisión, Estado,
+Destinatario, Tienda, Zona, Provincia, Cantón, Distrito, Flete + IVA, Mensajero,
+Fecha de creación, Tiempo (13); en `/ordenes` se suma "Acciones" → 14 columnas.
+
+Exclusión de Zona/Tienda para adminTienda: se mantiene el mismo mecanismo por rol
+en `app/(app)/_components/ordenes-columns-admin-tienda.ts`, cuyo Set
+`COLUMNAS_OCULTAS_ADMIN_TIENDA` ya contiene `["tienda","zona"]`. La columna Zona
+sigue siendo global; solo se filtra por id para el adminTienda (mismo patrón que
+Tienda). No se quita la columna global. Resultado adminTienda: 11 headers sin
+Tienda ni Zona.
+
+Fix R14 (columna Zona): la celda ahora cae a ambas fuentes
+`row.relaciones?.zona?.nombre ?? row.zonaNombre ?? SIN_DATO`, consistente con
+cómo `tienda` usa `?? row.tiendaNombre`.
+
+Tests actualizados (solo layout, sin debilitar aserciones celda↔dato ni exclusión
+por rol):
+- `tests/components/OrdenesPage.test.tsx` D1: lista esperada de headers al set
+  nuevo (Estado, +Zona, Flete + IVA). D3: conteo 13→14.
+- `tests/components/AdminTiendaDashboard.test.tsx` R11: renames Estado / Flete + IVA
+  (Zona ya excluida, sigue verificando ausencia de Tienda y Zona).
+- `tests/unit/components/ordenes-columns.test.tsx` R14: pasa con el fallback a
+  `zonaNombre`.
+
+Verificación: 5/5 archivos de test verdes (32 tests). typecheck sin errores en los
+archivos tocados (baseline conserva rojos ajenos de tarifa/zona/usuario).
+
+## Reconciliación de tests de columnas (pedido humano: re-agregar campos + monto a cobrar + adminTienda ve Zona)
+
+Fecha: 2026-07-14. El humano fijó `ordenesColumns` en su forma final de 18 columnas
+(numGuia, numRemision, estatus→"Estado", destinatario, producto, direccion, tienda,
+zona, provincia, canton, distrito, montoCobrar, flete→"Flete + IVA", fulfillment,
+comision→"Comisión + IVA", mensajero, fechaCreacion, tiempo) y cambió
+`COLUMNAS_OCULTAS_ADMIN_TIENDA` a `["tienda"]` (el adminTienda ahora SÍ ve "Zona").
+
+NO se tocó ningún componente: solo se alinearon expectativas de tests al layout real.
+- `OrdenesPage.test.tsx` D1: lista de headers → 18 columnas + "Acciones" (19); título
+  actualizado ("las 18 columnas"); índices de celda de Tienda corridos 4→6 (Producto y
+  Dirección la preceden). D3: `columnheader` count 14→19.
+- `AdminTiendaDashboard.test.tsx` R11: 17 headers (18 − "Tienda"), ahora incluye "Zona";
+  aserción pasó de "NO Tienda ni Zona" a "NO Tienda; SÍ Zona"; título/comentarios ajustados.
+- `OrdenesModuleReuse.test.tsx`: `toHaveLength(11)`→`17`; añadida aserción de que existe
+  la columna `zona`.
+- `OrdenesEstatusLabelAdminTienda.test.tsx` y `OrdenesModuleReuse` (reuso base) siguen verdes.
+
+Verificación: 7/7 archivos de test verde (36 tests). `pnpm typecheck` sin errores en los
+archivos tocados (baseline con rojos ajenos de tarifa/zona/usuario). NO se quitó, renombró
+ni reordenó ninguna columna del componente.

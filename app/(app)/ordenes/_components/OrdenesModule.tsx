@@ -13,6 +13,7 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { ordenesColumns } from "./ordenes-columns";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
+import { EtiquetaOrdenAccion } from "./EtiquetaOrdenAccion";
 
 // R33: opciones firmes acotadas por MAX_PAGE_SIZE del backend; ninguna opción
 // ofrecida supera el máximo permitido.
@@ -80,8 +81,13 @@ export function OrdenesModule({
       {
         id: "acciones",
         value: "Acciones",
+        // Acciones por fila del listado: ver historial (drawer) + ver etiqueta
+        // (vista previa de QR + datos y descarga del PDF 100×100 mm, feature 32).
         render: (row) => (
-          <HistorialOrdenSheet ordenId={row.id} referencia={row.numRemision} />
+          <div className="flex items-center gap-1">
+            <HistorialOrdenSheet ordenId={row.id} referencia={row.numRemision} />
+            <EtiquetaOrdenAccion orden={row} />
+          </div>
         ),
       },
     ];

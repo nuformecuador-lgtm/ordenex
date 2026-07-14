@@ -61,11 +61,15 @@ describe("Reuso de OrdenesModule (R10)", () => {
     // Reutiliza el módulo compartido pasando las columnas de presentación (R11),
     // sin una segunda DataTable/fetch propios.
     expect(moduleCalls[0].columns).toBe(ordenesColumnsAdminTienda);
-    // 12 columnas del listado del maestro, menos "tienda" (no existe columna
-    // "zona" separada: la zona se resuelve dentro de Estatus/Flete).
-    expect(moduleCalls[0].columns).toHaveLength(11);
+    // 18 columnas del listado del maestro, menos "tienda" = 17. La columna
+    // "zona" SÍ se muestra al adminTienda (decisión del humano 2026-07-14).
+    expect(moduleCalls[0].columns).toHaveLength(17);
     expect(
       moduleCalls[0].columns?.some((c) => c.id === "tienda"),
     ).toBe(false);
+    // La columna "zona" está presente (ya NO se oculta al adminTienda).
+    expect(
+      moduleCalls[0].columns?.some((c) => c.id === "zona"),
+    ).toBe(true);
   });
 });
