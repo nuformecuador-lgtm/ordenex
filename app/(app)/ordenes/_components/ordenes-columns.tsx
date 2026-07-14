@@ -74,6 +74,11 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     render: (row) => row.relaciones?.tienda?.nombre ?? row.tiendaNombre,
   },
   {
+    id: "zona",
+    value: "ZOna",
+    render: (row) => row.relaciones?.zona?.nombre ?? SIN_DATO,
+  },
+  {
     id: "provincia",
     value: "Provincia",
     render: (row) => row.relaciones?.provincia?.nombre ?? SIN_DATO,

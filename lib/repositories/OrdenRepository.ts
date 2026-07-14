@@ -775,10 +775,16 @@ export class OrdenRepository implements IOrdenRepository {
     return new Set(rows.map((r) => r.id));
   }
 
-  /** R15/R16: catalogo completo `order_status` (id, value), solo lectura. */
+  /**
+   * R15/R16 + feature 63/R5: catalogo completo `order_status` (id, value), solo
+   * lectura. `orderBy: { value: "asc" }` garantiza un orden determinista y estable
+   * entre renders (tabs de la feature 63); `value` es UNIQUE, asi que el orden es
+   * total (sin empates que rompan la estabilidad).
+   */
   async listOrderStatus(): Promise<OrderStatusLiteRow[]> {
     return this.prisma.orderStatus.findMany({
       select: { id: true, value: true },
+      orderBy: { value: "asc" },
     });
   }
 

@@ -313,6 +313,63 @@ describe("listar", () => {
   });
 });
 
+// Feature 63/B2 (R8/R9/R10): filtro generico `filter.status_id` -> where.estatusId.
+describe("listar — filtro generico filter.status_id (feature 63, R8/R9/R10)", () => {
+  it("R8: filter.status_id se traduce a where.estatusId", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, filter: { status_id: "os-entregada" }, sortBy: "created_at", sortDir: "desc" },
+      MAESTRO,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBe("os-entregada");
+  });
+
+  it("R9: filter.status_id compone con el alcance por rol de adminTienda", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, filter: { status_id: "os-entregada" }, sortBy: "created_at", sortDir: "desc" },
+      TIENDA,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBe("os-entregada");
+    expect(arg.where.tiendaId).toBe("store1"); // acotamiento por tienda intacto
+    expect(arg.where.tiendaId).not.toBe(OTRA_TIENDA_ID);
+  });
+
+  it("R8: filter.status_id tiene precedencia sobre el estatusId escalar", async () => {
+    await service.listar(
+      {
+        page: 1,
+        pageSize: 20,
+        estatusId: "os-escalar",
+        filter: { status_id: "os-filter" },
+        sortBy: "created_at",
+        sortDir: "desc",
+      },
+      MAESTRO,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBe("os-filter");
+  });
+
+  it("R10: sin filter, el estatusId escalar sigue funcionando (sin regresion)", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, estatusId: "os-entregada", sortBy: "created_at", sortDir: "desc" },
+      MAESTRO,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBe("os-entregada");
+  });
+
+  it("R10: sin filter ni estatusId, where no fija estatusId (comportamiento previo)", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" },
+      MAESTRO,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBeUndefined();
+  });
+});
+
 // Feature 48/T10.1 (R12/R14): la tienda de origen ve sus ordenes `rechazada`/`devuelta_origen`
 // reutilizando el scope server-side ya existente (where.tiendaId = actor.usuarioId). NO cambia
 // la autz de las features 6/26; solo verifica que las ordenes retornadas viajan por ese filtro.

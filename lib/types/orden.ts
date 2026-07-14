@@ -46,8 +46,27 @@ export const actualizarOrdenSchema = z
   .strict();
 export type ActualizarOrdenInput = z.infer<typeof actualizarOrdenSchema>;
 
+// Feature 63/B1 (R6/R7/R8/R11): filtro generico `filter` del listado. WHITELIST
+// v1 = solo `status_id` (clave PUBLICA que se mapea a la FK `estatusId` en el
+// service, ver FILTER_TO_COLUMN). `.strict()` es la clave de R7/R11: una clave
+// fuera de la whitelist produce un ZodError (validation_error) ANTES de construir
+// el `where`, de modo que ningun nombre de columna arbitrario llega a Prisma. Se
+// mantiene deliberadamente estrecha (un solo campo) y se amplia por demanda.
+export const ORDEN_FILTER_FIELDS = ["status_id"] as const;
+export type OrdenFilterField = (typeof ORDEN_FILTER_FIELDS)[number];
+
+export const ordenFilterSchema = z
+  .object({
+    status_id: z.string().min(1).optional(),
+  })
+  .strict();
+export type OrdenFilterInput = z.infer<typeof ordenFilterSchema>;
+
 // R30/R31/R32/R33: parametros del listado. page/pageSize enteros positivos (R32);
 // pageSize se acota a MAX_PAGE_SIZE (R33) via clamp. sortBy/sortDir por lista blanca.
+// Feature 63/R6/R10: suma `filter` opcional (whitelist arriba); ausente u objeto
+// vacio = comportamiento previo intacto, y el `estatusId` escalar preexistente se
+// conserva (R10, sin regresion del contrato de 6/7/8).
 export const listarOrdenesSchema = z.object({
   page: z.number().int().positive().default(1),
   pageSize: z
@@ -57,6 +76,7 @@ export const listarOrdenesSchema = z.object({
     .default(ordenesConfig.DEFAULT_PAGE_SIZE)
     .transform((n) => Math.min(n, ordenesConfig.MAX_PAGE_SIZE)),
   estatusId: z.string().min(1).optional(),
+  filter: ordenFilterSchema.optional(),
   sortBy: z.enum(SORT_FIELDS).default("created_at"),
   sortDir: z.enum(SORT_DIRS).default("desc"),
 });
