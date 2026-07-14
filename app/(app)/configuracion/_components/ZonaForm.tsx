@@ -18,11 +18,12 @@ import { Switch } from "@/components/ui/switch";
 import {
   crearZonaSchema,
   type ActualizarZonaResult,
+  type ArbolZonas,
   type CrearZonaResult,
   type DistritoCatalogoDTO,
   type ZonaDTO,
 } from "@/lib/types/zona";
-import { actualizarZona, crearZona } from "@/lib/actions/zonas";
+import { actualizarZona, arbolZonas, crearZona } from "@/lib/actions/zonas";
 import {
   listarCantones,
   listarDistritos,
@@ -70,6 +71,38 @@ interface TarifaRow {
   cobroEntregado: string;
   cobroRechazado: string;
   vehiculoId: string;
+}
+
+/**
+ * Contexto geográfico de un distrito seleccionado (tipo INTERNO de UI; NO cruza la
+ * frontera cliente↔servidor ni vive en `lib/types/zona.ts`). Guardar la geografía en el
+ * propio `selected` permite derivar el resumen agrupado provincia→cantón desde una única
+ * fuente de verdad (F1.4-c), sin un segundo estado que sincronizar.
+ * `provinciaId/provinciaNombre` pueden ser `null` cuando el distrito se pre-carga en edición
+ * vía `arbolZonas` (que no trae provincia): se enriquecen perezosamente al navegar (F1.4-e).
+ */
+interface DistritoSeleccionado {
+  distritoNombre: string;
+  cantonId: string;
+  cantonNombre: string;
+  provinciaId: string | null;
+  provinciaNombre: string | null;
+}
+
+/** Grupo del resumen: distritos seleccionados agrupados provincia → cantón (R4). */
+interface ResumenDistrito {
+  id: string;
+  nombre: string;
+}
+interface ResumenCanton {
+  cantonId: string;
+  cantonNombre: string;
+  distritos: ResumenDistrito[];
+}
+interface ResumenProvincia {
+  provinciaId: string | null;
+  provinciaNombre: string | null;
+  cantones: ResumenCanton[];
 }
 
 function initialState(zona?: ZonaDTO | null): FormState {
@@ -131,8 +164,10 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
     const [tarifas, setTarifas] = useState<TarifaRow[]>(() =>
       initialTarifas(zona),
     );
-    // Distritos seleccionados: id -> nombre (para armar el conjunto COMPLETO).
-    const [selected, setSelected] = useState<Record<string, string>>({});
+    // Distritos seleccionados: id -> contexto geográfico. Fuente de verdad ÚNICA de la
+    // selección; checkboxes del cantón abierto y resumen agrupado derivan/mutan este mapa
+    // (F1.4-c). El conjunto COMPLETO enviado al backend es `Object.keys(selected)`.
+    const [selected, setSelected] = useState<Record<string, DistritoSeleccionado>>({});
     const [errors, setErrors] = useState<FieldErrors>({});
     // Mensaje de conflicto de dominio a nivel formulario (sin campo concreto).
     const [formError, setFormError] = useState<string | null>(null);
@@ -156,17 +191,69 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
       },
     );
 
-    // R10 (edición): a medida que se cargan los distritos de un cantón, los que ya
-    // pertenecen a ESTA zona se pre-marcan. Se hace en el `onSuccess` de SWR (callback
-    // de evento), no en un efecto en cascada, para no re-renderizar de más.
+    // R9/R10 (edición): a medida que se cargan los distritos de un cantón, los que ya
+    // pertenecen a ESTA zona se pre-marcan Y se enriquece su provincia/cantón (los
+    // pre-cargados vía `arbolZonas` llegan con provincia `null`). Se hace en el `onSuccess`
+    // de SWR (callback de evento), no en un efecto en cascada, para no re-renderizar de más.
     function seedSeleccionEdicion(items: DistritoCatalogoDTO[]) {
       if (!isEditar || !zona) return;
+      const provinciaNombre =
+        (provincias ?? []).find((p) => p.id === provinciaId)?.nombre ?? null;
+      const cantonNombre =
+        (cantones ?? []).find((c) => c.id === cantonId)?.nombre ?? cantonId;
       setSelected((prev) => {
         let changed = false;
         const next = { ...prev };
         for (const d of items) {
-          if (d.zonaId === zona.id && !(d.id in next)) {
-            next[d.id] = d.nombre;
+          if (d.zonaId !== zona.id) continue;
+          const existing = next[d.id];
+          if (!existing) {
+            next[d.id] = {
+              distritoNombre: d.nombre,
+              cantonId,
+              cantonNombre,
+              provinciaId: provinciaId || null,
+              provinciaNombre,
+            };
+            changed = true;
+          } else if (existing.provinciaId === null && provinciaId) {
+            // Enriquecer provincia del distrito pre-cargado sin geografía completa.
+            next[d.id] = {
+              ...existing,
+              cantonId,
+              cantonNombre,
+              provinciaId,
+              provinciaNombre,
+            };
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }
+
+    // R9 (edición): siembra TODOS los distritos pre-asignados de la zona desde el árbol de
+    // lectura `arbolZonas` (frontend-puro; el backend no cambia). El árbol NO trae provincia,
+    // así que se siembra con `provinciaId: null` y se agrupa por cantón hasta que el maestro
+    // navegue la provincia (entonces `seedSeleccionEdicion` la enriquece). Merge idempotente:
+    // NO pisa lo ya presente/enriquecido.
+    function seedDesdeArbol(arbol: ArbolZonas | null) {
+      if (!isEditar || !zona || !arbol) return;
+      const node = Object.values(arbol).find((z) => z.id === zona.id);
+      if (!node) return;
+      setSelected((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const canton of Object.values(node.cantones)) {
+          for (const distrito of Object.values(canton.distritos)) {
+            if (distrito.id in next) continue;
+            next[distrito.id] = {
+              distritoNombre: distrito.value,
+              cantonId: canton.id,
+              cantonNombre: canton.value,
+              provinciaId: null,
+              provinciaNombre: null,
+            };
             changed = true;
           }
         }
@@ -188,6 +275,18 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
       return res.status === "ok" ? res.items : [];
     });
 
+    // R9: en edición, lee el árbol de zonas (solo maestro, gate en la acción) para
+    // pre-cargar TODOS los distritos de la zona desde el inicio, no solo los del cantón
+    // navegado. Lectura pura; no se toca el backend.
+    useSWR(
+      isEditar && zona ? ["zonas:arbol", zona.id] : null,
+      async () => {
+        const res = await arbolZonas();
+        return res.status === "ok" ? res.arbol : null;
+      },
+      { onSuccess: seedDesdeArbol },
+    );
+
     const provinciaOptions: SelectOption[] = useMemo(
       () => (provincias ?? []).map((p) => ({ value: p.id, label: p.nombre })),
       [provincias],
@@ -205,6 +304,53 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
 
     const selectedIds = Object.keys(selected);
 
+    // Resumen agrupado provincia → cantón derivado de `selected` (R3/R4). Los distritos con
+    // provincia aún desconocida (pre-carga edición) caen en un grupo sin encabezado de
+    // provincia, agrupados por cantón (F1.4-e). Sin estado extra: se deriva de la fuente única.
+    const resumen = useMemo<ResumenProvincia[]>(() => {
+      const SIN_PROVINCIA = " sin-provincia";
+      const provMap = new Map<string, ResumenProvincia>();
+      for (const [id, info] of Object.entries(selected)) {
+        const provKey = info.provinciaId ?? SIN_PROVINCIA;
+        let prov = provMap.get(provKey);
+        if (!prov) {
+          prov = {
+            provinciaId: info.provinciaId,
+            provinciaNombre: info.provinciaNombre,
+            cantones: [],
+          };
+          provMap.set(provKey, prov);
+        }
+        let canton = prov.cantones.find((c) => c.cantonId === info.cantonId);
+        if (!canton) {
+          canton = {
+            cantonId: info.cantonId,
+            cantonNombre: info.cantonNombre,
+            distritos: [],
+          };
+          prov.cantones.push(canton);
+        }
+        canton.distritos.push({ id, nombre: info.distritoNombre });
+      }
+      const groups = [...provMap.values()];
+      for (const prov of groups) {
+        prov.cantones.sort((a, b) => a.cantonNombre.localeCompare(b.cantonNombre));
+        for (const c of prov.cantones) {
+          c.distritos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        }
+      }
+      groups.sort((a, b) => {
+        // Provincias conocidas primero (alfabético); el grupo sin provincia al final.
+        if (a.provinciaNombre && b.provinciaNombre) {
+          return a.provinciaNombre.localeCompare(b.provinciaNombre);
+        }
+        if (a.provinciaNombre) return -1;
+        if (b.provinciaNombre) return 1;
+        return 0;
+      });
+      return groups;
+    }, [selected]);
+
     // R6-UI: hay que reasignar la central si el usuario la marca y ya existe OTRA.
     const reasignaCentral =
       form.esCentral &&
@@ -215,11 +361,36 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
       setForm((prev) => ({ ...prev, [key]: value }));
     }
 
-    function toggleDistrito(id: string, nombre: string) {
+    // Marca/desmarca desde el checkbox del cantón abierto capturando su geografía al vuelo.
+    function toggleDistrito(distrito: DistritoCatalogoDTO) {
       setSelected((prev) => {
         const next = { ...prev };
-        if (id in next) delete next[id];
-        else next[id] = nombre;
+        if (distrito.id in next) {
+          delete next[distrito.id];
+          return next;
+        }
+        const provinciaNombre =
+          (provincias ?? []).find((p) => p.id === provinciaId)?.nombre ?? null;
+        const cantonNombre =
+          (cantones ?? []).find((c) => c.id === cantonId)?.nombre ?? cantonId;
+        next[distrito.id] = {
+          distritoNombre: distrito.nombre,
+          cantonId,
+          cantonNombre,
+          provinciaId: provinciaId || null,
+          provinciaNombre,
+        };
+        return next;
+      });
+    }
+
+    // Quita un distrito desde el resumen (R5). Comparte estado con los checkboxes: si el
+    // distrito pertenece al cantón abierto, su checkbox se desmarca solo (R6).
+    function removeDistrito(id: string) {
+      setSelected((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
         return next;
       });
     }
@@ -427,7 +598,7 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
                         checked={checked}
                         disabled={enOtraZona}
                         aria-label={d.nombre}
-                        onChange={() => toggleDistrito(d.id, d.nombre)}
+                        onChange={() => toggleDistrito(d)}
                       />
                       <span>{d.nombre}</span>
                       {enOtraZona ? (
@@ -439,6 +610,64 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
                   );
                 })
               )}
+            </div>
+          ) : null}
+
+          {resumen.length > 0 ? (
+            <div
+              role="group"
+              aria-label="Distritos seleccionados de la zona"
+              data-testid="resumen-distritos"
+              className="flex flex-col gap-2 overflow-x-hidden rounded-lg border border-border bg-muted/30 p-2"
+            >
+              {resumen.map((prov) => (
+                <div
+                  key={prov.provinciaId ?? "sin-provincia"}
+                  className="flex flex-col gap-1.5"
+                  role={prov.provinciaNombre ? "group" : undefined}
+                  aria-label={prov.provinciaNombre ?? undefined}
+                >
+                  {prov.provinciaNombre ? (
+                    <p className="text-sm font-medium break-words">
+                      {prov.provinciaNombre}
+                    </p>
+                  ) : null}
+                  {prov.cantones.map((canton) => (
+                    <div
+                      key={canton.cantonId}
+                      role="group"
+                      aria-label={canton.cantonNombre}
+                      className="flex flex-col gap-1 pl-2"
+                    >
+                      <p className="text-xs font-medium text-muted-foreground break-words">
+                        {canton.cantonNombre}
+                      </p>
+                      <ul className="flex flex-col gap-1">
+                        {canton.distritos.map((d) => (
+                          <li
+                            key={d.id}
+                            className="flex items-center justify-between gap-2 pl-2"
+                          >
+                            <span className="min-w-0 break-words text-sm">
+                              {d.nombre}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="shrink-0"
+                              aria-label={`Quitar ${d.nombre}`}
+                              onClick={() => removeDistrito(d.id)}
+                            >
+                              Quitar
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           ) : null}
 

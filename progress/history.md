@@ -1301,5 +1301,31 @@
   numérico → `validation_error` en vez de INTERNAL/500; robustece también el ajuste manual de la 42).
   Orquestada DIRECTO por el leader (`backend_dev → frontend_dev → reviewer`) para evitar el implementer
   monolítico y el bug opus-4.8[1m] (precedente 56). **DEUDA menor**: E2E del flujo de egresos diferido;
-  tests de migración/DB estáticos o en memoria (round-trip real verificado a mano). **PENDIENTE**: PR a
-  `dev` + merge (OK humano); tras el merge, reiniciar el dev server local (schema nuevo → cliente Prisma).
+  tests de migración/DB estáticos o en memoria (round-trip real verificado a mano). **PR #62 mergeado
+  (OK humano)**; tras el merge se sincronizó `dev` local y se reinició el dev server (schema nuevo → cliente Prisma).
+
+## 2026-07-13 — zonas: seleccionar distritos de VARIOS cantones en una zona (feature 59)
+- **FRONTEND PURO** (frontend/medium, `sdd:true`). Sin backend, migraciones ni cambios de contrato:
+  `crearZona`/`actualizarZona` intactos; `arbolZonas()` usado SOLO como lectura para pre-cargar edición.
+  Ciclo SDD completo (spec_author → **F1.4 aprobada (todas las recomendadas)** → frontend_dev → reviewer).
+- **Problema:** el `ZonaForm` solo dejaba marcar distritos del cantón/provincia abierto en ese momento;
+  cambiar de cantón "perdía de vista" lo ya elegido y no había forma de ver/quitar el conjunto acumulado.
+- **Solución:** `selected` migrado de `Record<string,string>` a `Record<string, DistritoSeleccionado>`
+  (`{distritoNombre, cantonId, cantonNombre, provinciaId, provinciaNombre}`) como **fuente de verdad única**
+  → cambiar de provincia/cantón NO resetea la selección. **Resumen agrupado provincia→cantón**
+  (`data-testid="resumen-distritos"`, `role="group"`) con botón **"Quitar"** por distrito
+  (`aria-label="Quitar <distrito>"`); **sync bidireccional** resumen↔checkbox (mismo `selected`). Contador
+  `data-testid="distritos-seleccionados"` conservado. **R10 heredada:** distritos de otra zona siguen
+  `disabled` y nunca entran al conjunto. **Pre-marcado multi-cantón en edición** vía SWR
+  `["zonas:arbol", zona.id]` sobre `arbolZonas()` (siembra `selected` para TODOS los cantones/distritos de
+  la zona; merge idempotente). Envío intacto: `distritoIds: Object.keys(selected)`.
+- Requisitos cubiertos: **R1–R12** (trazabilidad completa R→test en `progress/impl_59-...md`, verificada por
+  el reviewer abriendo cada caso). Reviewer **APROBADO 0 bloqueantes de código**; el "RECHAZADO" inicial fue
+  SOLO por gates documentales del leader (impl/tasks/history), ya cerrados. Verde REAL: typecheck 0, eslint 0,
+  **`zona-form.test.tsx` 22/22** (+6 casos), suite completa **2551 passed** (2 flakes ambientales
+  `HomePage`/`LoginForm` que pasan aislados; NO regresión). Solo cambiaron `ZonaForm.tsx` y su test.
+- Decisiones/deuda: **F1.4-e** aprobó la ruta recomendada `arbolZonas` → **T9-alt (fallback perezoso) = N/A**.
+  Orquestada DIRECTO por el leader (`frontend_dev → reviewer`) por el bug opus-4.8[1m]. **DEUDA menor**
+  (reviewer, no bloqueante): numeración "R" mezclada entre features 55 y 59 en algún docstring/test
+  (cosmético); sin test del enriquecimiento perezoso de provincia al navegar en edición. **PENDIENTE**: PR a
+  `dev` + merge (OK humano). Frontend puro → sin acción de despliegue/migración.

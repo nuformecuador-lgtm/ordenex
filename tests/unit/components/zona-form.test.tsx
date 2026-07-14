@@ -17,9 +17,11 @@ import type { ZonaDTO } from "@/lib/types/zona";
 // --- Server Actions mockeadas (no se toca el backend real) ---------------------
 const crearZonaMock = vi.fn();
 const actualizarZonaMock = vi.fn();
+const arbolZonasMock = vi.fn();
 vi.mock("@/lib/actions/zonas", () => ({
   crearZona: (...a: unknown[]) => crearZonaMock(...a),
   actualizarZona: (...a: unknown[]) => actualizarZonaMock(...a),
+  arbolZonas: (...a: unknown[]) => arbolZonasMock(...a),
 }));
 
 const listarProvinciasMock = vi.fn();
@@ -73,6 +75,9 @@ beforeEach(() => {
       { id: "v2", name: "carro" },
     ],
   });
+  // Por defecto el árbol de zonas (pre-carga en edición) viene vacío; cada test que
+  // ejerce R9 lo sobreescribe con el nodo de la zona en edición.
+  arbolZonasMock.mockResolvedValue({ status: "ok", arbol: {} });
 });
 
 afterEach(() => {
@@ -501,5 +506,277 @@ describe("ZonaForm — reasignación de central (R6-UI)", () => {
       await ref.current!.submit();
     });
     expect(crearZonaMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Feature 59 — Selección de distritos de VARIOS cantones (R1..R11)
+// -----------------------------------------------------------------------------
+
+/** Elige una provincia por su nombre en el navegador de distritos. */
+async function elegirProvincia(
+  user: ReturnType<typeof userEvent.setup>,
+  nombre: string,
+) {
+  await user.click(screen.getByRole("combobox", { name: "Provincia" }));
+  await user.click(await screen.findByRole("option", { name: nombre }));
+}
+
+/** Elige un cantón por su nombre en el navegador de distritos. */
+async function elegirCanton(
+  user: ReturnType<typeof userEvent.setup>,
+  nombre: string,
+) {
+  await user.click(screen.getByRole("combobox", { name: "Cantón" }));
+  await user.click(await screen.findByRole("option", { name: nombre }));
+}
+
+/** Prepara un catálogo con 2 cantones (misma provincia) y sus distritos. */
+function mockDosCantonesMismaProvincia() {
+  listarCantonesMock.mockResolvedValue({
+    status: "ok",
+    items: [
+      { id: "c1", nombre: "Central" },
+      { id: "c2", nombre: "Escazú" },
+    ],
+  });
+  listarDistritosMock.mockImplementation(async (cantonId: string) =>
+    cantonId === "c1"
+      ? {
+          status: "ok",
+          items: [{ id: "d1", nombre: "Carmen", zonaId: null, zonaNombre: null }],
+        }
+      : {
+          status: "ok",
+          items: [
+            { id: "d3", nombre: "San Rafael", zonaId: null, zonaNombre: null },
+          ],
+        },
+  );
+}
+
+describe("ZonaForm — selección multi-cantón (R1/R2)", () => {
+  it("R1: conserva la selección del cantón A al cambiar a B y volver", async () => {
+    const user = userEvent.setup();
+    mockDosCantonesMismaProvincia();
+    renderIsolated(<ZonaForm mode="crear" />);
+
+    await elegirProvincia(user, "San José");
+    await elegirCanton(user, "Central");
+    await user.click(await screen.findByRole("checkbox", { name: "Carmen" }));
+
+    await elegirCanton(user, "Escazú");
+    await user.click(await screen.findByRole("checkbox", { name: "San Rafael" }));
+
+    expect(screen.getByTestId("distritos-seleccionados")).toHaveTextContent(
+      "Distritos seleccionados: 2",
+    );
+
+    // Volver a A: Carmen sigue marcado y el total no baja.
+    await elegirCanton(user, "Central");
+    expect(await screen.findByRole("checkbox", { name: "Carmen" })).toBeChecked();
+    expect(screen.getByTestId("distritos-seleccionados")).toHaveTextContent(
+      "Distritos seleccionados: 2",
+    );
+  });
+
+  it("R2/R10: agrega distritos de cantones de provincias distintas y los envía todos", async () => {
+    const user = userEvent.setup();
+    listarProvinciasMock.mockResolvedValue({
+      status: "ok",
+      items: [
+        { id: "p1", nombre: "San José" },
+        { id: "p2", nombre: "Alajuela" },
+      ],
+    });
+    listarCantonesMock.mockImplementation(async (provinciaId: string) =>
+      provinciaId === "p1"
+        ? { status: "ok", items: [{ id: "c1", nombre: "Central" }] }
+        : { status: "ok", items: [{ id: "c3", nombre: "Grecia" }] },
+    );
+    listarDistritosMock.mockImplementation(async (cantonId: string) =>
+      cantonId === "c1"
+        ? {
+            status: "ok",
+            items: [
+              { id: "d1", nombre: "Carmen", zonaId: null, zonaNombre: null },
+            ],
+          }
+        : {
+            status: "ok",
+            items: [
+              { id: "d5", nombre: "San Isidro", zonaId: null, zonaNombre: null },
+            ],
+          },
+    );
+    crearZonaMock.mockResolvedValue({ status: "ok", zona: { id: "z9" } });
+    const ref = createRef<ZonaFormHandle>();
+    renderIsolated(<ZonaForm ref={ref} mode="crear" />);
+
+    await user.type(screen.getByLabelText("Nombre"), "Z");
+    await elegirProvincia(user, "San José");
+    await elegirCanton(user, "Central");
+    await user.click(await screen.findByRole("checkbox", { name: "Carmen" }));
+
+    await elegirProvincia(user, "Alajuela");
+    await elegirCanton(user, "Grecia");
+    await user.click(await screen.findByRole("checkbox", { name: "San Isidro" }));
+
+    await act(async () => {
+      await ref.current!.submit();
+    });
+
+    const input = crearZonaMock.mock.calls[0][0] as { distritoIds: string[] };
+    expect([...input.distritoIds].sort()).toEqual(["d1", "d5"]);
+  });
+});
+
+describe("ZonaForm — resumen agrupado (R3/R4/R5)", () => {
+  it("R3/R4: el resumen lista y agrupa por provincia/cantón los distritos de 2 cantones", async () => {
+    const user = userEvent.setup();
+    mockDosCantonesMismaProvincia();
+    renderIsolated(<ZonaForm mode="crear" />);
+
+    await elegirProvincia(user, "San José");
+    await elegirCanton(user, "Central");
+    await user.click(await screen.findByRole("checkbox", { name: "Carmen" }));
+    await elegirCanton(user, "Escazú");
+    await user.click(await screen.findByRole("checkbox", { name: "San Rafael" }));
+
+    // R3: ambos aparecen aunque solo un cantón esté abierto.
+    const resumen = screen.getByTestId("resumen-distritos");
+    expect(within(resumen).getByText("San José")).toBeInTheDocument();
+
+    // R4: cada distrito bajo el grupo de su cantón.
+    const grupoCentral = within(resumen).getByRole("group", { name: "Central" });
+    expect(within(grupoCentral).getByText("Carmen")).toBeInTheDocument();
+    const grupoEscazu = within(resumen).getByRole("group", { name: "Escazú" });
+    expect(within(grupoEscazu).getByText("San Rafael")).toBeInTheDocument();
+  });
+
+  it("R5: quitar un distrito desde el resumen lo elimina y baja el total", async () => {
+    const user = userEvent.setup();
+    mockDosCantonesMismaProvincia();
+    renderIsolated(<ZonaForm mode="crear" />);
+
+    await elegirProvincia(user, "San José");
+    await elegirCanton(user, "Central");
+    await user.click(await screen.findByRole("checkbox", { name: "Carmen" }));
+    await elegirCanton(user, "Escazú");
+    await user.click(await screen.findByRole("checkbox", { name: "San Rafael" }));
+
+    let resumen = screen.getByTestId("resumen-distritos");
+    await user.click(within(resumen).getByRole("button", { name: "Quitar San Rafael" }));
+
+    resumen = screen.getByTestId("resumen-distritos");
+    expect(within(resumen).queryByText("San Rafael")).not.toBeInTheDocument();
+    expect(screen.getByTestId("distritos-seleccionados")).toHaveTextContent(
+      "Distritos seleccionados: 1",
+    );
+  });
+});
+
+describe("ZonaForm — sincronización resumen↔checkbox (R6)", () => {
+  it("quitar desde el resumen desmarca el checkbox del cantón abierto; y desmarcar el checkbox lo saca del resumen", async () => {
+    const user = userEvent.setup();
+    renderIsolated(<ZonaForm mode="crear" />);
+
+    await navegarADistritos(user);
+    await user.click(await screen.findByRole("checkbox", { name: "Carmen" }));
+
+    const resumen = screen.getByTestId("resumen-distritos");
+    expect(within(resumen).getByText("Carmen")).toBeInTheDocument();
+
+    // Quitar desde el resumen ⇒ el checkbox del cantón abierto se desmarca.
+    await user.click(within(resumen).getByRole("button", { name: "Quitar Carmen" }));
+    expect(screen.getByRole("checkbox", { name: "Carmen" })).not.toBeChecked();
+    expect(screen.queryByTestId("resumen-distritos")).not.toBeInTheDocument();
+
+    // Marcar de nuevo y luego desmarcar el checkbox ⇒ desaparece del resumen.
+    await user.click(screen.getByRole("checkbox", { name: "Carmen" }));
+    expect(
+      within(screen.getByTestId("resumen-distritos")).getByText("Carmen"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Carmen" }));
+    expect(screen.queryByTestId("resumen-distritos")).not.toBeInTheDocument();
+  });
+});
+
+describe("ZonaForm — R10 heredada en el resumen (R8)", () => {
+  it("un distrito de otra zona sigue deshabilitado y nunca aparece en el resumen", async () => {
+    const user = userEvent.setup();
+    renderIsolated(<ZonaForm mode="crear" />);
+
+    await navegarADistritos(user);
+    expect(await screen.findByRole("checkbox", { name: "Merced" })).toBeDisabled();
+
+    await user.click(await screen.findByRole("checkbox", { name: "Carmen" }));
+    const resumen = screen.getByTestId("resumen-distritos");
+    expect(within(resumen).getByText("Carmen")).toBeInTheDocument();
+    expect(within(resumen).queryByText("Merced")).not.toBeInTheDocument();
+  });
+});
+
+describe("ZonaForm — pre-carga multi-cantón en edición (R9)", () => {
+  it("lista TODOS los distritos de la zona (varios cantones) desde el inicio vía arbolZonas", async () => {
+    arbolZonasMock.mockResolvedValue({
+      status: "ok",
+      arbol: {
+        "zona sur": {
+          id: "z1",
+          value: "Zona Sur",
+          cantones: {
+            central: {
+              id: "c1",
+              value: "Central",
+              distritos: { carmen: { id: "d1", value: "Carmen" } },
+            },
+            escazu: {
+              id: "c2",
+              value: "Escazú",
+              distritos: { "san rafael": { id: "d3", value: "San Rafael" } },
+            },
+          },
+        },
+      },
+    });
+    const zona: ZonaDTO = {
+      id: "z1",
+      nombre: "Zona Sur",
+      cobroVehiculo: false,
+      distritosCount: 2,
+      esCentral: false,
+    };
+    renderIsolated(<ZonaForm mode="editar" zona={zona} />);
+
+    // Sin navegar ningún cantón, el resumen ya lista los distritos de ambos.
+    const resumen = await screen.findByTestId("resumen-distritos");
+    expect(within(resumen).getByText("Carmen")).toBeInTheDocument();
+    expect(within(resumen).getByText("San Rafael")).toBeInTheDocument();
+    expect(
+      within(resumen).getByRole("group", { name: "Central" }),
+    ).toBeInTheDocument();
+    expect(
+      within(resumen).getByRole("group", { name: "Escazú" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("distritos-seleccionados")).toHaveTextContent(
+      "Distritos seleccionados: 2",
+    );
+  });
+});
+
+describe("ZonaForm — accesibilidad del resumen (R11)", () => {
+  it("cada distrito del resumen tiene un botón 'Quitar' accesible por nombre y el contenedor no desborda", async () => {
+    const user = userEvent.setup();
+    renderIsolated(<ZonaForm mode="crear" />);
+
+    await navegarADistritos(user);
+    await user.click(await screen.findByRole("checkbox", { name: "Carmen" }));
+
+    const resumen = screen.getByTestId("resumen-distritos");
+    expect(
+      within(resumen).getByRole("button", { name: "Quitar Carmen" }),
+    ).toBeInTheDocument();
+    expect(resumen.className).toMatch(/overflow/);
   });
 });
