@@ -5,6 +5,7 @@ import { QRCodeCanvas } from "qrcode.react";
 import Barcode from "react-barcode";
 
 import { formatMonto } from "@/lib/config/moneda";
+import { buildPaqueteUrl } from "@/lib/utils/paquete-url";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 
 export interface EtiquetaGuiaProps {
@@ -47,6 +48,7 @@ function geografiaLegible(etiqueta: EtiquetaGuiaDTO): string {
  */
 export function EtiquetaGuia({ etiqueta, qrCanvasRef }: EtiquetaGuiaProps) {
   const {
+    ordenId,
     numGuia,
     numRemision,
     destinatario,
@@ -55,9 +57,13 @@ export function EtiquetaGuia({ etiqueta, qrCanvasRef }: EtiquetaGuiaProps) {
     producto,
     montoCobrar,
     tiendaNombre,
-    qrValue,
     barcodeValue,
   } = etiqueta;
+
+  // El QR codifica la URL pública del paquete (`<origin>/paquete/<ordenId>`), no el
+  // id pelado: una cámara externa la abre y la ruta valida sesión y muestra el
+  // detalle. El escáner in-app (feature 33) extrae el ordenId del path.
+  const qrUrl = buildPaqueteUrl(ordenId);
 
   return (
     <article
@@ -109,13 +115,13 @@ export function EtiquetaGuia({ etiqueta, qrCanvasRef }: EtiquetaGuiaProps) {
 
       <div className="mt-auto flex items-end justify-between gap-2">
         <QRCodeCanvas
-          value={qrValue}
+          value={qrUrl}
           size={QR_RASTER_SIZE}
           marginSize={2}
           ref={qrCanvasRef}
           title={`Código QR de la orden ${numRemision}`}
           data-testid="etiqueta-qr"
-          data-qr-value={qrValue}
+          data-qr-value={qrUrl}
           style={{ width: "26mm", height: "26mm" }}
         />
         {/* Sin guía no hay código de barras (barcodeValue null): se omite. */}
