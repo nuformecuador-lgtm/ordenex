@@ -1,5 +1,6 @@
 import type { EstadoUsuario, RolValue } from "@prisma/client";
 import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
+import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
 
 /** Usuario sin datos sensibles: nunca incluye el hash de la contrasena (R7). */
 export interface UsuarioPublico {
@@ -135,6 +136,11 @@ export interface IUserRepository {
    * proyectados a `{ id, nombre }` (nunca PII/hash), ordenados por `nombre`.
    */
   listMensajeros(): Promise<MensajeroDTO[]>;
+  /**
+   * Estrategia generica: usuarios `activo` del rol pasado, proyectados a
+   * `{ id, nombre }` (nunca PII/hash), ordenados por `nombre`.
+   */
+  listByRol(rolValue: RolValue): Promise<UsuarioPorRolDTO[]>;
   /**
    * Feature 25/R13/R14/R15: listado paginado con `rolValue`, ordenado por una
    * columna de lista blanca. Nunca proyecta `passwordHash` (R24).

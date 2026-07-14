@@ -4,17 +4,20 @@ import { render, screen, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { OrdenesCargaMasivaButton } from "@/app/(app)/ordenes/_components/OrdenesCargaMasivaButton";
-import type { BulkUploadProps } from "@/components/shared/BulkUpload";
-import type { OrdenesCargaResumenPasoProps } from "@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso";
+import type { OrdenesCargaUploadProps } from "@/app/(app)/ordenes/_components/OrdenesCargaUpload";
+import type { OrdenesCargaPreviewProps } from "@/app/(app)/ordenes/_components/OrdenesCargaPreview";
+import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
+import type { RowResult } from "@/lib/types/carga-masiva";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-const { successMock, errorMock, warningMock } = vi.hoisted(() => ({
+const { successMock, errorMock, warningMock, infoMock } = vi.hoisted(() => ({
   successMock: vi.fn(),
   errorMock: vi.fn(),
   warningMock: vi.fn(),
+  infoMock: vi.fn(),
 }));
 
 vi.mock("@/hooks/useToast", () => ({
@@ -22,45 +25,59 @@ vi.mock("@/hooks/useToast", () => ({
     success: successMock,
     error: errorMock,
     warning: warningMock,
-    info: vi.fn(),
+    info: infoMock,
     show: vi.fn(),
     dismiss: vi.fn(),
   }),
 }));
 
-const bulk = vi.hoisted(() => ({
-  props: null as BulkUploadProps | null,
-}));
-
-vi.mock("@/components/shared/BulkUpload", () => ({
-  BulkUpload: (props: BulkUploadProps) => {
-    bulk.props = props;
-    return <div data-testid="bulk-upload-double" />;
+const upload = vi.hoisted(() => ({ props: null as OrdenesCargaUploadProps | null }));
+vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaUpload", () => ({
+  OrdenesCargaUpload: (props: OrdenesCargaUploadProps) => {
+    upload.props = props;
+    return <div data-testid="upload-double" />;
   },
 }));
 
-// R11/R21: se aísla `OrdenesCargaResumenPaso` (probado en su propia suite) para
-// que esta suite solo verifique el enrutamiento de pasos del botón/modal y la
-// clasificación que se le pasa.
-const resumen = vi.hoisted(() => ({
-  props: null as OrdenesCargaResumenPasoProps | null,
-}));
-
-vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso", () => ({
-  OrdenesCargaResumenPaso: (props: OrdenesCargaResumenPasoProps) => {
-    resumen.props = props;
-    return <div data-testid="resumen-paso-double" />;
+const preview = vi.hoisted(() => ({ props: null as OrdenesCargaPreviewProps | null }));
+vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaPreview", () => ({
+  OrdenesCargaPreview: (props: OrdenesCargaPreviewProps) => {
+    preview.props = props;
+    return (
+      <div data-testid="preview-double">
+        <button type="button" onClick={() => props.onConfirmar()}>
+          confirmar-double
+        </button>
+      </div>
+    );
   },
 }));
+
+const asignacion = vi.hoisted(() => ({ props: null as { numRemisiones: string[] } | null }));
+vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumen", () => ({
+  OrdenesCargaResumen: (props: { numRemisiones: string[] }) => {
+    asignacion.props = props;
+    return <div data-testid="asignacion-double" />;
+  },
+}));
+
+// Orquestación de chunks: se espía `procesarEnChunks`; el resto (combinar, error)
+// se conserva del módulo real para que la clasificación sea la de producción.
+const { procesarEnChunksMock } = vi.hoisted(() => ({ procesarEnChunksMock: vi.fn() }));
+vi.mock("@/app/(app)/ordenes/_components/carga-masiva-chunks", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("@/app/(app)/ordenes/_components/carga-masiva-chunks")
+  >();
+  return { ...actual, procesarEnChunks: procesarEnChunksMock };
+});
+
+const { listarMensajerosMock } = vi.hoisted(() => ({ listarMensajerosMock: vi.fn() }));
+vi.mock("@/lib/actions/mensajeros", () => ({ listarMensajeros: listarMensajerosMock }));
 
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
-
 vi.mock("swr", async (importOriginal) => {
   const actual = await importOriginal<typeof import("swr")>();
-  return {
-    ...actual,
-    useSWRConfig: () => ({ mutate: mutateMock }),
-  };
+  return { ...actual, useSWRConfig: () => ({ mutate: mutateMock }) };
 });
 
 // ---------------------------------------------------------------------------
@@ -69,16 +86,22 @@ vi.mock("swr", async (importOriginal) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  bulk.props = null;
-  resumen.props = null;
+  upload.props = null;
+  preview.props = null;
+  asignacion.props = null;
+  listarMensajerosMock.mockResolvedValue({ status: "ok", mensajeros: [] });
 });
 
-afterEach(() => {
-  cleanup();
-});
+afterEach(() => cleanup());
 
-const openButton = () =>
-  screen.getByRole("button", { name: /carga masiva/i });
+function footerCerrarButton(): HTMLElement {
+  const botones = screen.getAllByRole("button", { name: /cerrar/i });
+  const footer = botones.find((b) => b.textContent?.trim() === "Cerrar");
+  if (!footer) throw new Error("No se encontró el botón 'Cerrar' del pie");
+  return footer;
+}
+
+const openButton = () => screen.getByRole("button", { name: /carga masiva/i });
 
 async function openModal() {
   const user = userEvent.setup();
@@ -86,479 +109,157 @@ async function openModal() {
   return screen.findByRole("dialog");
 }
 
-/** Props reales capturadas del doble de `BulkUpload` (no-null tras abrir el modal). */
-function bulkProps(): BulkUploadProps {
-  if (!bulk.props) throw new Error("BulkUpload aún no fue montado");
-  return bulk.props;
+const fila = (numRemision: string, linea: number): FilaParseada => ({
+  row: { num_remision: numRemision },
+  linea,
+});
+
+function validar(payload: {
+  numRemisionesNuevas?: string[];
+  existentes?: { numRemision: string; estatus: string | null }[];
+  errores?: RowResult[];
+  filasUnicas?: FilaParseada[];
+}) {
+  act(() => {
+    upload.props?.onValidated({
+      clasificacion: {
+        numRemisionesNuevas: payload.numRemisionesNuevas ?? [],
+        existentes: payload.existentes ?? [],
+        errores:
+          (payload.errores as unknown as {
+            fila: number | null;
+            numRemision: string;
+            errores: Record<string, string[]>;
+          }[]) ?? [],
+      },
+      filasUnicas: payload.filasUnicas ?? [fila("REM-A", 1)],
+    });
+  });
 }
 
-const EXPECTED_FIELD_KEYS = [
-  "num_remision",
-  "destinatario",
-  "telefono",
-  "provincia",
-  "canton",
-  "distrito",
-  "direccion",
-  "producto",
-  "notas",
-  "monto_cobrar",
-  "mensajero_sugerido_id",
-];
-
 // ---------------------------------------------------------------------------
-// R1, R2 — Disparador (botón)
+// Estructura básica
 // ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — disparador (R1, R2)", () => {
-  it("R1: renderiza el botón 'Carga masiva'", () => {
-    render(<OrdenesCargaMasivaButton />);
-    expect(openButton()).toBeInTheDocument();
-  });
-
-  it("R2: el botón es type=button", () => {
+describe("OrdenesCargaMasivaButton — estructura", () => {
+  it("renderiza el botón 'Carga masiva' type=button", () => {
     render(<OrdenesCargaMasivaButton />);
     expect(openButton()).toHaveAttribute("type", "button");
   });
-});
 
-// ---------------------------------------------------------------------------
-// R3, R4, R5 — Apertura del modal
-// ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — apertura del modal (R3, R4, R5)", () => {
-  it("R3: al hacer clic aparece el dialog", async () => {
+  it("al abrir muestra el modal con el paso de subida", async () => {
     render(<OrdenesCargaMasivaButton />);
     const dialog = await openModal();
     expect(dialog).toBeInTheDocument();
+    expect(screen.getByTestId("upload-double")).toBeInTheDocument();
   });
 
-  it("R4: el modal muestra el título 'Carga masiva de órdenes'", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    const dialog = await openModal();
-    const labelId = dialog.getAttribute("aria-labelledby");
-    expect(labelId).toBeTruthy();
-    expect(document.getElementById(labelId!)?.textContent).toBe(
-      "Carga masiva de órdenes",
-    );
-  });
-
-  it("R5: el cuerpo del modal contiene BulkUpload", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(screen.getByTestId("bulk-upload-double")).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// R6, R7, R18 — Modal como contenedor puro, cierre y accesibilidad delegada
-// ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — contenedor puro y cierre (R6, R7, R18)", () => {
-  it("R6: el pie tiene un único botón 'Cerrar' y no 'Confirmar'", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(screen.getByRole("button", { name: /cerrar/i })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /confirmar/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("R7a: clic en 'Cerrar' cierra el modal", async () => {
+  it("Escape cierra el modal", async () => {
     const user = userEvent.setup();
     render(<OrdenesCargaMasivaButton />);
     await openModal();
-
-    await user.click(screen.getByRole("button", { name: /cerrar/i }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("R7b: Escape cierra el modal", async () => {
-    const user = userEvent.setup();
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
-
-  it("R18: el dialog abierto expone aria-modal", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    const dialog = await openModal();
-    expect(dialog).toHaveAttribute("aria-modal", "true");
-  });
 });
 
 // ---------------------------------------------------------------------------
-// R8-R12 — Props pasadas a BulkUpload
+// Fase 1 — validación (dry-run por chunks, en el hijo de subida)
 // ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — props de BulkUpload (R8-R12)", () => {
-  it("R8: endpoint = /api/ordenes/carga-masiva", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(bulkProps().endpoint).toBe("/api/ordenes/carga-masiva");
-  });
-
-  it("R9: accept = ['csv','xlsx']", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(bulkProps().accept).toEqual(["csv", "xlsx"]);
-  });
-
-  it("R10: fieldName = 'file'", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(bulkProps().fieldName).toBe("file");
-  });
-
-  it("R11: fields tiene las 11 keys en orden", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(bulkProps().fields.map((f: { key: string }) => f.key)).toEqual(
-      EXPECTED_FIELD_KEYS,
-    );
-  });
-
-  it("R12: templateFileName = 'plantilla-ordenes-carga-masiva.xlsx'", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(bulkProps().templateFileName).toBe(
-      "plantilla-ordenes-carga-masiva.xlsx",
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Feature 51 — Distrito obligatorio, aviso distrito↔zona y ejemplos de CR
-// ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — feature 51 (CR + acoplamiento distrito/zona)", () => {
-  function fieldByKey(key: string) {
-    const field = bulkProps().fields.find((f) => f.key === key);
-    if (!field) throw new Error(`no existe el campo ${key}`);
-    return field;
-  }
-
-  it("marca 'Distrito' como campo obligatorio en la plantilla", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(fieldByKey("distrito").required).toBe(true);
-  });
-
-  it("no marca como obligatorio un campo opcional (ej. notas)", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(fieldByKey("notas").required).toBeFalsy();
-  });
-
-  it("renderiza el aviso del acoplamiento distrito↔zona antes de cargar", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    expect(screen.getByText(/el distrito es obligatorio/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/debe tener\s+una zona asignada/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/se rechazará al cargar/i)).toBeInTheDocument();
-  });
-
-  it("usa ejemplos de Costa Rica y no de Ecuador", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-    const examples = bulkProps()
-      .fields.map((f) => f.example ?? "")
-      .join(" | ");
-
-    // Ecuador fuera.
-    expect(examples).not.toMatch(/pichincha/i);
-    expect(examples).not.toMatch(/quito/i);
-    expect(examples).not.toMatch(/iñaquito/i);
-    expect(examples).not.toMatch(/amazonas/i);
-
-    // Costa Rica dentro.
-    expect(fieldByKey("provincia").example).toBe("San José");
-    expect(fieldByKey("canton").example).toBe("San José");
-    expect(fieldByKey("distrito").example).toBe("Carmen");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// R13-R15, R17 — onSuccess: refresh + toast, sin cerrar el modal
-// ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — onSuccess (R13, R14, R15, R17)", () => {
-  it("R13: onSuccess llama a mutate con matcher de 'ordenes:list'", async () => {
+describe("OrdenesCargaMasivaButton — validación", () => {
+  it("onValidated → avanza al preview con la clasificación e informa por toast", async () => {
     render(<OrdenesCargaMasivaButton />);
     await openModal();
 
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: { total: 3, creadas: 2, duplicadas: 1, conError: 0, filas: [] },
-      });
+    validar({
+      numRemisionesNuevas: ["REM-A", "REM-B"],
+      existentes: [{ numRemision: "REM-C", estatus: "en_bodega" }],
     });
+
+    expect(screen.getByTestId("preview-double")).toBeInTheDocument();
+    expect(screen.queryByTestId("upload-double")).not.toBeInTheDocument();
+    expect(preview.props?.clasificacion.numRemisionesNuevas).toEqual(["REM-A", "REM-B"]);
+    expect(infoMock).toHaveBeenCalledTimes(1);
+    // Validar NO persiste: sin mutate ni carga real.
+    expect(mutateMock).not.toHaveBeenCalled();
+    expect(procesarEnChunksMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 2 — confirmar (carga real por chunks)
+// ---------------------------------------------------------------------------
+describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
+  it("confirma → procesarEnChunks(dryRun:false), mutate, toast y asignación", async () => {
+    const user = userEvent.setup();
+    procesarEnChunksMock.mockResolvedValue([
+      { fila: 1, numRemision: "REM-A", resultado: "creada" },
+    ] satisfies RowResult[]);
+
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+    validar({ numRemisionesNuevas: ["REM-A"], filasUnicas: [fila("REM-A", 1)] });
+
+    await user.click(screen.getByRole("button", { name: "confirmar-double" }));
+
+    expect(procesarEnChunksMock).toHaveBeenCalledTimes(1);
+    const [, opts] = procesarEnChunksMock.mock.calls[0];
+    expect(opts.dryRun).toBe(false);
 
     expect(mutateMock).toHaveBeenCalledTimes(1);
-    const matcher = mutateMock.mock.calls[0][0];
-    expect(matcher(["ordenes:list", 1, 10])).toBe(true);
-    expect(matcher(["otra:key"])).toBe(false);
-  });
-
-  it("R14: onSuccess conError=0 → toast.success con conteos", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: { total: 3, creadas: 2, duplicadas: 1, conError: 0, filas: [] },
-      });
-    });
-
     expect(successMock).toHaveBeenCalledTimes(1);
-    const message = successMock.mock.calls[0][0] as string;
-    expect(message).toContain("2");
-    expect(message).toContain("1");
-    expect(message).toContain("0");
-    expect(warningMock).not.toHaveBeenCalled();
+
+    expect(await screen.findByTestId("asignacion-double")).toBeInTheDocument();
+    expect(asignacion.props?.numRemisiones).toEqual(["REM-A"]);
   });
 
-  it("R15a: onSuccess conError>0 → toast.warning", async () => {
+  it("si la carga real no crea nada → cierra el modal", async () => {
+    const user = userEvent.setup();
+    procesarEnChunksMock.mockResolvedValue([
+      { fila: 1, numRemision: "REM-A", resultado: "duplicada", estatus: "x" },
+    ] satisfies RowResult[]);
+
     render(<OrdenesCargaMasivaButton />);
     await openModal();
+    validar({ filasUnicas: [fila("REM-A", 1)] });
 
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: { total: 3, creadas: 1, duplicadas: 0, conError: 2, filas: [] },
-      });
-    });
+    await user.click(screen.getByRole("button", { name: "confirmar-double" }));
 
-    expect(warningMock).toHaveBeenCalledTimes(1);
-    expect(successMock).not.toHaveBeenCalled();
+    expect(mutateMock).toHaveBeenCalledTimes(1);
+    await screen.findByRole("button", { name: /carga masiva/i });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("R15b: onSuccess con data no parseable → toast.warning", async () => {
+  it("error en la carga → toast.error y permanece en el preview", async () => {
+    const user = userEvent.setup();
+    procesarEnChunksMock.mockRejectedValue(new Error("boom"));
+
     render(<OrdenesCargaMasivaButton />);
     await openModal();
+    validar({ numRemisionesNuevas: ["REM-A"], filasUnicas: [fila("REM-A", 1)] });
 
-    act(() => {
-      bulkProps().onSuccess?.({ status: 200, data: undefined });
-    });
+    await user.click(screen.getByRole("button", { name: "confirmar-double" }));
 
-    expect(warningMock).toHaveBeenCalledTimes(1);
-    expect(successMock).not.toHaveBeenCalled();
-  });
-
-  it("R17: onSuccess NO cierra el modal", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: { total: 3, creadas: 2, duplicadas: 1, conError: 0, filas: [] },
-      });
-    });
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(errorMock).toHaveBeenCalledTimes(1);
+    expect(mutateMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("preview-double")).toBeInTheDocument();
   });
 });
 
 // ---------------------------------------------------------------------------
-// R11, R12, R13 — paso "resumen" con clasificación (feature 29)
+// Reset — al cerrar, el siguiente open vuelve a 'upload'
 // ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — paso de resumen (R11, R12, R13)", () => {
-  it("R11a: creadas>0 y duplicadas>0 → avanza a resumen con la clasificación esperada", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: {
-          total: 3,
-          creadas: 2,
-          duplicadas: 1,
-          conError: 0,
-          filas: [
-            { fila: 1, numRemision: "REM-0001", resultado: "creada" },
-            {
-              fila: 2,
-              numRemision: "REM-0002",
-              resultado: "duplicada",
-              estatus: "en_bodega",
-            },
-            { fila: 3, numRemision: "REM-0003", resultado: "creada" },
-          ],
-        },
-      });
-    });
-
-    expect(screen.getByTestId("resumen-paso-double")).toBeInTheDocument();
-    expect(screen.queryByTestId("bulk-upload-double")).not.toBeInTheDocument();
-    expect(resumen.props?.clasificacion.numRemisionesNuevas).toEqual([
-      "REM-0001",
-      "REM-0003",
-    ]);
-    expect(resumen.props?.clasificacion.existentes).toEqual([
-      { numRemision: "REM-0002", estatus: "en_bodega" },
-    ]);
-    expect(resumen.props?.clasificacion.errores).toEqual([]);
-  });
-
-  it("R11b: creadas===0 y duplicadas>0 con fila real → avanza al resumen y muestra solo las existentes sin nuevas", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: {
-          total: 1,
-          creadas: 0,
-          duplicadas: 1,
-          conError: 0,
-          filas: [
-            {
-              fila: 1,
-              numRemision: "REM-0002",
-              resultado: "duplicada",
-              estatus: "en_bodega",
-            },
-          ],
-        },
-      });
-    });
-
-    expect(screen.getByTestId("resumen-paso-double")).toBeInTheDocument();
-    expect(screen.queryByTestId("bulk-upload-double")).not.toBeInTheDocument();
-    expect(resumen.props?.clasificacion.numRemisionesNuevas).toEqual([]);
-    expect(resumen.props?.clasificacion.existentes).toEqual([
-      { numRemision: "REM-0002", estatus: "en_bodega" },
-    ]);
-  });
-
-  it("R12: creadas===0, duplicadas===0, conError===0 (filas:[]) → no muestra secciones vacias cuando no hay filas", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: { total: 0, creadas: 0, duplicadas: 0, conError: 0, filas: [] },
-      });
-    });
-
-    expect(screen.getByTestId("bulk-upload-double")).toBeInTheDocument();
-    expect(screen.queryByTestId("resumen-paso-double")).not.toBeInTheDocument();
-  });
-
-  it("R12b: conError>0 con fila de error real → avanza al resumen con los errores", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: {
-          total: 1,
-          creadas: 0,
-          duplicadas: 0,
-          conError: 1,
-          filas: [
-            {
-              fila: 1,
-              numRemision: "REM-0009",
-              resultado: "error",
-              errores: { telefono: ["obligatorio"] },
-            },
-          ],
-        },
-      });
-    });
-
-    expect(screen.getByTestId("resumen-paso-double")).toBeInTheDocument();
-    expect(resumen.props?.clasificacion.errores).toEqual([
-      { fila: 1, numRemision: "REM-0009", errores: { telefono: ["obligatorio"] } },
-    ]);
-    expect(warningMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("R13: revalida la lista tras la carga (toast + mutate ordenes:list)", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: { total: 3, creadas: 2, duplicadas: 1, conError: 0, filas: [] },
-      });
-    });
-
-    expect(mutateMock).toHaveBeenCalledTimes(1);
-    const matcher = mutateMock.mock.calls[0][0];
-    expect(matcher(["ordenes:list", 1, 10])).toBe(true);
-    expect(successMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("R11c: al cerrar el modal tras mostrar el resumen, el siguiente open vuelve a 'upload'", async () => {
+describe("OrdenesCargaMasivaButton — reset del flujo", () => {
+  it("al cerrar tras el preview, el siguiente open vuelve a 'upload'", async () => {
     const user = userEvent.setup();
     render(<OrdenesCargaMasivaButton />);
     await openModal();
+    validar({ numRemisionesNuevas: ["REM-A"] });
+    expect(screen.getByTestId("preview-double")).toBeInTheDocument();
 
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: {
-          total: 1,
-          creadas: 1,
-          duplicadas: 0,
-          conError: 0,
-          filas: [{ fila: 1, numRemision: "REM-0001", resultado: "creada" }],
-        },
-      });
-    });
-    expect(screen.getByTestId("resumen-paso-double")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /cerrar/i }));
+    await user.click(footerCerrarButton());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     await openModal();
-    expect(screen.getByTestId("bulk-upload-double")).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// R16 — onError: toast de error, sin refresh
-// ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — onError (R16)", () => {
-  it("R16: onError → toast.error con message, sin mutate", async () => {
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
-    act(() => {
-      bulkProps().onError?.({ message: "boom" });
-    });
-
-    expect(errorMock).toHaveBeenCalledTimes(1);
-    const message = errorMock.mock.calls[0][0] as string;
-    expect(message).toContain("boom");
-    expect(mutateMock).not.toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Sin llamadas reales al endpoint (composición pura, sin fetch)
-// ---------------------------------------------------------------------------
-describe("OrdenesCargaMasivaButton — sin llamadas reales al backend", () => {
-  it("no invoca fetch global", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    render(<OrdenesCargaMasivaButton />);
-    await openModal();
-
-    act(() => {
-      bulkProps().onSuccess?.({
-        status: 200,
-        data: { total: 1, creadas: 1, duplicadas: 0, conError: 0, filas: [] },
-      });
-    });
-
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
+    expect(screen.getByTestId("upload-double")).toBeInTheDocument();
   });
 });

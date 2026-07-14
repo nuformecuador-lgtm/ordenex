@@ -26,14 +26,26 @@ export interface MiAsignacionDTO {
   distritoNombre: string | null;
 }
 
+// Feature 61: KPIs del portal del mensajero, calculados SERVER-SIDE (autoritativos).
+export interface MisAsignacionesKpis {
+  /** # de ordenes en `en_reparto` (aceptadas/recogidas, en camino). */
+  pendientes: number;
+  /** # de ordenes `entregada` del mensajero. */
+  entregadas: number;
+  /** Suma de `montoCobrar` (COD) de las ordenes en `en_reparto`; null cuenta 0. */
+  porCobrar: number;
+}
+
 // R9/R10/R20: dos grupos separados (por recoger vs por gestionar) + el puntero de
 // bloqueo del actor (para que la UI marque la orden activa y bloquee las demas).
+// Feature 61: + `kpis` para la fila de indicadores del portal.
 export type ListarMisAsignacionesServiceResult =
   | {
       status: "ok";
       porRecoger: MiAsignacionDTO[];
       porGestionar: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
+      kpis: MisAsignacionesKpis;
     }
   | { status: "forbidden" };
 

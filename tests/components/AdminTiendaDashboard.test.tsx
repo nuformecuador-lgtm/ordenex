@@ -18,11 +18,10 @@ vi.mock("@/lib/actions/ordenes", () => ({
   listarOrdenes: vi.fn(),
 }));
 
-// Feature 57: el PageHeader del dashboard monta el LogoutButton (client:
-// useRouter/useToast). Se stubbea para aislar el dashboard; su comportamiento
-// se cubre en LogoutButton.test.tsx.
-vi.mock("@/app/_components/LogoutButton", () => ({
-  LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
+// El dashboard monta LogoutButton, que usa useRouter; se mockea igual que en el
+// resto de tests de componentes (patrón Sidebar/AppLayout).
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
 const listarOrdenesMock = vi.mocked(listarOrdenes);
@@ -130,7 +129,7 @@ describe("AdminTiendaDashboard (feature 26)", () => {
     ).toBeInTheDocument();
   });
 
-  it("R11: NO incluye la columna 'Tienda'; exactamente 4 columnas sin nombre de tienda", async () => {
+  it("R11: NO incluye las columnas 'Tienda' ni 'Zona'; muestra el resto del listado del maestro", async () => {
     listarOrdenesMock.mockResolvedValue({
       status: "ok",
       items: [
@@ -145,15 +144,24 @@ describe("AdminTiendaDashboard (feature 26)", () => {
 
     await screen.findByText("6001");
     const headers = screen.getAllByRole("columnheader");
+    // Se ocultan Tienda/Zona (redundantes para la tienda); geografía y mensajero
+    // se muestran igual que en el listado del maestro, independientes del rol.
     expect(headers.map((h) => h.textContent)).toEqual([
       "Nº Guía",
       "Nº Remisión",
       "Estatus",
       "Destinatario",
+      "Provincia",
+      "Cantón",
+      "Distrito",
+      "Flete",
+      "Mensajero",
+      "Fecha de creación",
+      "Tiempo",
     ]);
-    expect(headers).toHaveLength(4);
-    // El nombre de la tienda no se renderiza en ninguna celda.
-    expect(screen.queryByText("Tienda")).toBeNull();
+    // El nombre de la tienda no se renderiza en ninguna cabecera ni celda.
+    expect(headers.map((h) => h.textContent)).not.toContain("Tienda");
+    expect(headers.map((h) => h.textContent)).not.toContain("Zona");
     expect(screen.queryByText("Tienda Secreta")).toBeNull();
   });
 

@@ -55,17 +55,18 @@ describe("Carga masiva — round-trip de la plantilla de órdenes", () => {
     }
   });
 
-  it("XLSX: el VALOR obligatorio de ejemplo (distrito=Carmen) llega bajo su clave correcta", async () => {
+  it("XLSX: el VALOR obligatorio de ejemplo (distrito) llega bajo su clave correcta", async () => {
     // Cierra el bug de raíz: no basta con que la fila exista; el valor obligatorio
     // debe reparsearse bajo la clave 'distrito' y sobrevivir a la validación de fila.
+    const distritoField = ORDENES_BULK_FIELDS.find((f) => f.key === "distrito");
     const buffer = await buildXlsxTemplate(ORDENES_BULK_FIELDS);
     const { rows } = await parseSpreadsheet(Buffer.from(buffer), "xlsx");
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.["distrito"]).toBe("Carmen");
+    expect(rows[0]?.["distrito"]).toBe(distritoField?.example);
 
     // La fila de ejemplo pasa el schema por-fila con su distrito intacto.
     const parsed = filaCargaSchema.parse(rows[0]);
-    expect(parsed.distrito).toBe("Carmen");
+    expect(parsed.distrito).toBe(distritoField?.example);
   });
 
   it("CSV: la plantilla descargada se re-parsea sin cabeceras obligatorias ausentes", async () => {

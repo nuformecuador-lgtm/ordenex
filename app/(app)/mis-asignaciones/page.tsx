@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
 
+import { KpisMensajero } from "./_components/KpisMensajero";
 import { MisAsignacionesModule } from "./_components/MisAsignacionesModule";
 
 /**
@@ -27,6 +28,8 @@ export default async function MisAsignacionesPage() {
         title="Mis asignaciones"
         description="Órdenes por recoger y en reparto"
       />
+      {/* Feature 61: KPIs del portal del mensajero sobre la lista de asignaciones. */}
+      <KpisMensajero kpis={result.kpis} />
       <MisAsignacionesModule
         porRecoger={result.porRecoger}
         porGestionar={result.porGestionar}

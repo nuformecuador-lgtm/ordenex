@@ -54,6 +54,7 @@ beforeEach(() => {
     porRecoger: [],
     porGestionar: [],
     ordenEnGestionId: null,
+    kpis: { pendientes: 0, entregadas: 0, porCobrar: 0 },
   });
 });
 
@@ -75,6 +76,32 @@ describe("MisAsignacionesPage — control de acceso por rol (R9/R12)", () => {
     expect(
       screen.getByRole("region", { name: "En reparto / por gestionar" }),
     ).toBeInTheDocument();
+    // Feature 61: fila de KPIs del portal.
+    expect(
+      screen.getByRole("region", { name: "Indicadores de mis asignaciones" }),
+    ).toBeInTheDocument();
+  });
+
+  it("Feature 61: la fila de KPIs muestra pendientes, entregadas y por cobrar", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
+    listarMock.mockResolvedValue({
+      status: "ok",
+      porRecoger: [],
+      porGestionar: [],
+      ordenEnGestionId: null,
+      kpis: { pendientes: 3, entregadas: 7, porCobrar: 350 },
+    });
+
+    const page = await MisAsignacionesPage();
+    render(page);
+
+    const kpis = screen.getByRole("region", { name: "Indicadores de mis asignaciones" });
+    expect(kpis).toHaveTextContent("Pendientes");
+    expect(kpis).toHaveTextContent("3");
+    expect(kpis).toHaveTextContent("Entregadas");
+    expect(kpis).toHaveTextContent("7");
+    expect(kpis).toHaveTextContent("Por cobrar");
+    expect(kpis).toHaveTextContent("350");
   });
 
   it("R12: cualquier rol distinto de mensajero NO ve el módulo (notFound)", async () => {
