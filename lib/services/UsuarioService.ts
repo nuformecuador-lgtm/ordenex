@@ -30,9 +30,16 @@ import { generateStrongPassword } from "@/lib/utils/password-generator";
 // rol (incluido uno no reconocido) -> forbidden (R3/R4).
 const ALLOWED_ROLES = new Set<string>(["maestro"]);
 
-// Feature 24/R27: roles que pueden llevar una zona asignada. Para el resto el
-// `zonaId` se fuerza a null (misma politica que el `fulfillment` de adminTienda).
+// Feature 24/R27: roles que pueden (y DEBEN) llevar una zona asignada. Para el
+// resto el `zonaId` se fuerza a null (misma politica que el `fulfillment` de adminTienda).
 const ZONA_ROLES = new Set<string>(["mensajero", "adminSatelite"]);
+
+// Mensaje de error de zona segun el motivo (obligatoria para el rol vs inexistente).
+function zonaErrorMessage(reason: "required" | "not_found"): string {
+  return reason === "required"
+    ? "La zona es obligatoria para este rol"
+    : "La zona indicada no existe";
+}
 
 export class UsuarioService implements IUsuarioService {
   // Feature 24/R28: `zonaRepo` opcional para validar la existencia de la zona. Se
@@ -54,10 +61,11 @@ export class UsuarioService implements IUsuarioService {
     // confia en la UI. Solo `adminTienda` puede quedar con `fulfillment = true`.
     const fulfillment = await this.resolverFulfillment(input.rolId, input.fulfillment ?? false);
 
-    // Feature 24/R27/R28: resuelve la zona segun el rol y valida su existencia.
+    // Feature 24/R27/R28: resuelve la zona segun el rol (obligatoria para
+    // mensajero/adminSatelite) y valida su existencia.
     const zona = await this.resolverZona(input.rolId, input.zonaId);
     if (!zona.ok) {
-      return { status: "validation_error", fieldErrors: { zonaId: ["La zona indicada no existe"] } };
+      return { status: "validation_error", fieldErrors: { zonaId: [zonaErrorMessage(zona.reason)] } };
     }
 
     try {
@@ -124,7 +132,7 @@ export class UsuarioService implements IUsuarioService {
       const rolIdResultante = input.rolId ?? actual.rolId;
       const zona = await this.resolverZona(rolIdResultante, input.zonaId);
       if (!zona.ok) {
-        return { status: "validation_error", fieldErrors: { zonaId: ["La zona indicada no existe"] } };
+        return { status: "validation_error", fieldErrors: { zonaId: [zonaErrorMessage(zona.reason)] } };
       }
       data.zonaId = zona.zonaId;
     }
@@ -217,24 +225,33 @@ export class UsuarioService implements IUsuarioService {
   }
 
   // Feature 24/R27/R28: resuelve el `zonaId` efectivo. Solo mensajero/adminSatelite
-  // lo conservan; para otros roles se fuerza null (ignora el valor recibido, R27).
-  // Cuando aplica y se provee una zona, valida su existencia (R28) -> `ok: false`.
+  // lo conservan (y para ellos la zona es OBLIGATORIA); para otros roles se fuerza
+  // null (ignora el valor recibido, R27). Cuando aplica y se provee una zona, valida
+  // su existencia (R28). Distingue el fallo por zona ausente (`required`) del de zona
+  // inexistente (`not_found`) para reportar el mensaje correcto.
   private async resolverZona(
     rolId: string,
     deseado: string | null | undefined,
-  ): Promise<{ ok: true; zonaId: string | null } | { ok: false }> {
-    if (deseado === undefined || deseado === null) return { ok: true, zonaId: null };
-
+  ): Promise<
+    | { ok: true; zonaId: string | null }
+    | { ok: false; reason: "required" | "not_found" }
+  > {
     const roles = await this.repo.listRoles();
     const rolValue = roles.find((r) => r.id === rolId)?.value;
-    if (rolValue === undefined || !ZONA_ROLES.has(rolValue)) {
-      return { ok: true, zonaId: null }; // R27: rol no aplicable -> null
+    const esRolConZona = rolValue !== undefined && ZONA_ROLES.has(rolValue);
+
+    // R27: rol no aplicable -> null (ignora el valor recibido).
+    if (!esRolConZona) return { ok: true, zonaId: null };
+
+    // Feature 24/R27: mensajero/adminSatelite REQUIEREN una zona asignada.
+    if (deseado === undefined || deseado === null) {
+      return { ok: false, reason: "required" };
     }
 
     // R28: valida existencia si hay repo de zonas inyectado.
     if (this.zonaRepo) {
       const zona = await this.zonaRepo.findById(deseado, false);
-      if (!zona) return { ok: false };
+      if (!zona) return { ok: false, reason: "not_found" };
     }
     return { ok: true, zonaId: deseado };
   }

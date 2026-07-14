@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Package,
   Settings,
+  Truck,
   User,
   type LucideProps,
 } from "lucide-react";
@@ -86,6 +87,7 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   user: User,
   package: Package,
   clipboardCheck: ClipboardCheck,
+  truck: Truck,
 };
 
 // El Sidebar reexporta los tipos de dominio del menu para consumidores/tests.

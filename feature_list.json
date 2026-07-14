@@ -678,6 +678,17 @@
       "zone": null,
       "branch": null,
       "depends_on": 57
+    },
+    {
+      "id": 63,
+      "name": "Orden lista actualizada",
+      "description": "genera un nuevo endpoint para traer la lista de order_status, tambien en la lista de ordenes agrega una porp que permita filtrar al backend por campo por ejemplo filter: {[campo]: value}, y consulta el listado de ordenes filtrado por status_id, adicional cambia el componente de orden para todos excepto el mensajero, al iterar por los status deja una prop exlcude en el front, para pasarle que status debe excluir y no mostrar, con shadcn, implementa el componente Tabs, en cada tab debe mostrar las ordenes con el estado correspondiente, implementa lazy loading para evitar que se renderice de forma innecesaria, y la consulta solo debe hacerse al estar en la tab activa, las no visibles no deben hacer query directamente",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 57
     }
   ]
 }

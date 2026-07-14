@@ -140,26 +140,11 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       if (detalleBloqueo.length > 0) return { status: "conflict", detalle: detalleBloqueo };
     }
 
-    // --- Resolver estatus destino por value (guarda defensiva si falta el seed) ---
-    const hayNoGam = decisiones.some((d) => {
-      const orden = ordenMap.get(d.ordenId);
-      return orden !== undefined && orden.zonaId !== centralZonaId;
-    });
     const [estatusEsperaId, estatusBodegaId, estatusRutaSateliteId] = await Promise.all([
       this.repo.findEstatusIdByValue(ESTATUS_EN_ESPERA_ACEPTACION),
       this.repo.findEstatusIdByValue(ESTATUS_EN_BODEGA),
       this.repo.findEstatusIdByValue(ESTATUS_EN_RUTA_BODEGA_SATELITE),
     ]);
-    if (
-      estatusEsperaId === null ||
-      estatusBodegaId === null ||
-      (hayNoGam && estatusRutaSateliteId === null)
-    ) {
-      return {
-        status: "validation_error",
-        fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
-      };
-    }
 
     // --- Construir decisiones del lote: GAM por regla 17, no-GAM a satelite (R11) ---
     function estatusDestino(ordenId: string, mensajeroId: string | null): {

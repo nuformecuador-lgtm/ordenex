@@ -17,11 +17,14 @@ import { MisAsignacionesModule } from "./_components/MisAsignacionesModule";
  */
 export default async function MisAsignacionesPage() {
   const actor = await resolveActorFromSession();
-  if (!actor || actor.rol !== "mensajero") notFound(); // R9/R12
+  if (actor?.rol !== "mensajero") notFound(); // R9/R12
+  console.log("xyz")
 
   const result = await listarMisAsignaciones();
+  console.log("xyz 1", result)
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
+  console.log("xyz 2")
   return (
     <section className="flex flex-1 flex-col gap-6 p-6">
       <PageHeader

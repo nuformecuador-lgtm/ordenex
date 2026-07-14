@@ -98,9 +98,11 @@ export async function listarMisAsignaciones(
 ): Promise<ListarMisAsignacionesResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
+    console.log("xyz AAA*", actor, Boolean(actor))
     if (!actor) throw new UnauthenticatedError(); // R12: antes de tocar el service
     const service = deps.service ?? buildService();
-    return service.listarMisAsignaciones(actor);
+    console.log("xyz AAA*1", actor)
+    return service.listarMisAsignaciones(actor!);
   });
   // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;

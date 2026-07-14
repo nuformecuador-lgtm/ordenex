@@ -27,13 +27,21 @@ export interface SignedUrlClientLike {
 
 export class SupabaseSignedUrlProvider implements ISignedUrlProvider {
   private readonly bucket: string;
+  private storageClient: SignedUrlClientLike | undefined;
 
-  constructor(
-    private readonly storage: SignedUrlClientLike = createServerClient()
-      .storage as unknown as SignedUrlClientLike,
-    bucket: string = postulacionConfig.BUCKET,
-  ) {
+  constructor(storage?: SignedUrlClientLike, bucket: string = postulacionConfig.BUCKET) {
+    // Igual que SupabaseFileStorage: cliente PEREZOSO. Construir este provider para
+    // un flujo de solo lectura (que nunca firma URLs) NO exige la config de Supabase.
+    this.storageClient = storage;
     this.bucket = bucket;
+  }
+
+  /** Cliente Storage perezoso: crea (y lee env via createServerClient) al 1er uso. */
+  private get storage(): SignedUrlClientLike {
+    if (!this.storageClient) {
+      this.storageClient = createServerClient().storage as unknown as SignedUrlClientLike;
+    }
+    return this.storageClient;
   }
 
   async createSignedUrl(path: string, expiresInSeconds: number): Promise<string> {

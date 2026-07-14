@@ -8,7 +8,7 @@ import { ROLES_SEED } from "@/lib/types/roles";
  * Client Component Sidebar) y las funciones/componentes no son serializables.
  * El Sidebar resuelve `iconKey -> componente` en el cliente al renderizar.
  */
-export type IconKey = "settings" | "user" | "package" | "clipboardCheck";
+export type IconKey = "settings" | "user" | "package" | "clipboardCheck" | "truck";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -48,7 +48,16 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     label: "Órdenes",
     href: "/ordenes",
     iconKey: "package",
-    roles: ["maestro", "admin", "adminTienda", "mensajero"],
+    roles: ["maestro", "admin", "adminTienda"],
+  },
+  {
+    // Feature 61: portal del mensajero (KPIs + asignaciones por recoger/gestionar).
+    // Exclusivo del rol `mensajero`; la defensa real es el `notFound` de la página
+    // `/mis-asignaciones` (resuelve el rol server-side).
+    label: "Entregas",
+    href: "/mis-asignaciones",
+    iconKey: "truck",
+    roles: ["mensajero"],
   },
   {
     label: "Configuración",
