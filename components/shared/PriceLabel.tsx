@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { toValidNumber } from "@/lib/utils/number";
 
 // Símbolo del colón (₡), moneda de la app. Se antepone SIEMPRE al valor.
 const SIMBOLO = "₡";
@@ -13,19 +14,6 @@ export interface PriceLabelProps {
   /** Nº máximo de decimales a mostrar (default 2; enteros no fuerzan decimales). */
   maxDecimals?: number;
   className?: string;
-}
-
-/**
- * Normaliza la entrada a un número finito. Devuelve 0 si el valor no existe, es
- * cadena vacía/en blanco o no representa un número válido (contrato: fallback a 0).
- */
-function toValidNumber(value: PriceLabelProps["value"]): number {
-  if (value === null || value === undefined) return 0;
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  const trimmed = value.trim();
-  if (trimmed === "") return 0;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 /**

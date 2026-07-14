@@ -29,8 +29,12 @@ interface OrdenesPageData {
 async function ordenesFetcher(
   page: number,
   pageSize: number,
+  filter?: { status_id: string },
 ): Promise<OrdenesPageData> {
-  const res = await listarOrdenes({ page, pageSize });
+  // Feature 63/C2 (R15/R19): con `filter` se inyecta el `status_id` a la action
+  // (whitelist server-side -> where.estatusId). Sin `filter`, el input es
+  // idéntico al previo (R10, sin regresión).
+  const res = await listarOrdenes(filter ? { page, pageSize, filter } : { page, pageSize });
   if (res.status !== "ok") throw new Error("list_failed");
   // items incluyen tiendaNombre; total viene del backend (R25).
   return { items: res.items, total: res.total, pageSize: res.pageSize };
@@ -53,10 +57,18 @@ export function OrdenesModule({
   columns = ordenesColumns,
   puedeCargarMasiva = false,
   mostrarHistorial = false,
+  filter,
 }: {
   columns?: Column<OrdenListItemDTO>[];
   puedeCargarMasiva?: boolean;
   mostrarHistorial?: boolean;
+  /**
+   * Feature 63/C2 (R15): filtro opcional por estado de orden. Se inyecta a
+   * `listarOrdenes` y entra en la key SWR, de modo que cada estado (tab) tiene
+   * su propia caché y paginación independiente (R17). Sin la prop, el módulo se
+   * comporta idéntico al listado plano previo (R10/R19, sin regresión).
+   */
+  filter?: { status_id: string };
 } = {}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -75,11 +87,13 @@ export function OrdenesModule({
     ];
   }, [columns, mostrarHistorial]);
 
+  // Feature 63/C2 (R17): el `status_id` entra en la key SWR para que la caché y
+  // la paginación sean por-tab. Sin `filter`, `statusId` es `undefined`.
+  const statusId = filter?.status_id;
   const { data, error, isLoading } = useSWR(
-    ["ordenes:list", page, pageSize],
-    () => ordenesFetcher(page, pageSize),
+    ["ordenes:list", statusId, page, pageSize],
+    () => ordenesFetcher(page, pageSize, filter),
   );
-  console.log(data);
 
   return (
     <section className="flex flex-col gap-4">

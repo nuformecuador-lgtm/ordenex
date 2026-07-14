@@ -1,45 +1,59 @@
 import { RolValue } from "@prisma/client";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
-import { listarLiberadasHoy } from "@/lib/actions/liberacion-reprogramada";
 
 import { OrdenesModule } from "./_components/OrdenesModule";
-import { OrdenesRevisionMaestro } from "./_components/OrdenesRevisionMaestro";
+import { OrdenesTabs } from "./_components/OrdenesTabs";
+import { Container } from "@/components/shared/Container";
 
 /**
- * Feature 17 (R15/R16, design.md §4): el rol se resuelve SOLO server-side vía
- * `resolveActorFromSession` (patrón `app/(app)/page.tsx`, feature 23/26).
- * `maestro`/`admin` ven la vista de revisión con los 4 apartados por estado;
- * `admin` en solo-lectura (R12-UI, sin checkboxes ni botones). Cualquier otro
- * rol (incl. `adminTienda`, `mensajero`) conserva el listado plano previo
- * (feature 6/7/8), SIN regresión.
+ * Feature 63/C5 (R12/R20, design.md §4.3, F1.4-h): el rol se resuelve SOLO
+ * server-side vía `resolveActorFromSession` (patrón `app/(app)/page.tsx`). Los
+ * roles ≠ mensajero que operan en `/ordenes` — `maestro`, `admin`, `adminTienda`
+ * — ven las órdenes agrupadas por estado en `OrdenesTabs` (R12), con `exclude`
+ * por rol. `adminSatelite` queda FUERA del v1 (opera en `/mis-asignaciones`,
+ * feature 33) y `mensajero` NO usa este componente: su experiencia sigue siendo
+ * `/mis-asignaciones` (R20). Cualquier otro caso conserva el listado plano previo
+ * (features 6/7/8), SIN regresión.
  */
+
+// Roles que ven las tabs en `/ordenes` (F1.4-h). `adminSatelite` NO está aquí.
+const ROLES_CON_TABS = new Set<string>([
+  RolValue.maestro,
+  RolValue.admin,
+  RolValue.adminTienda,
+]);
+
+// F1.4-c (R13): `exclude` por rol, por `value` del estado. Default `["pendiente"]`
+// (borrador transitorio recién sembrado). Un rol sin override cae al default.
+const EXCLUDE_POR_ROL: Record<string, string[]> = {
+  [RolValue.maestro]: ["pendiente"],
+  [RolValue.admin]: ["pendiente"],
+  [RolValue.adminTienda]: ["pendiente"],
+};
+
 export default async function OrdenesPage() {
   const actor = await resolveActorFromSession();
-  const puedeCargarMasiva = actor?.rol === RolValue.adminTienda;
-  const esMaestroOAdmin = actor?.rol === "maestro" || actor?.rol === "admin";
-
-  // Feature 46 (R15/R16): pre-fetch server-side del aviso derivado "Liberadas hoy
-  // (reprogramación)" para el maestro (bodega central, `en_bodega`). El loader
-  // devuelve `forbidden` para roles no destinatarios (p. ej. `admin`), que degrada a
-  // lista vacía. Datos por props al componente cliente (no fetch de datos sensibles).
-  const liberadasResult = esMaestroOAdmin ? await listarLiberadasHoy() : null;
-  const liberadasHoy =
-    liberadasResult?.status === "ok" ? liberadasResult.liberadas : [];
+  const rol = actor?.rol;
+  const puedeCargarMasiva = rol === RolValue.adminTienda;
+  const usaTabs = rol ? ROLES_CON_TABS.has(rol) : false;
 
   return (
-      <section className="flex flex-1 flex-col gap-6 p-6">
-        <PageHeader title="Órdenes" description="Listado y gestión de órdenes" />
-        {esMaestroOAdmin ? (
-          <OrdenesRevisionMaestro
-            readOnly={actor?.rol === "admin"}
-            liberadasHoy={liberadasHoy}
+    <>
+      <PageHeader title="Órdenes" description="Listado y gestión de órdenes" />
+      <Container>
+        {usaTabs ? (
+          <OrdenesTabs
+            exclude={EXCLUDE_POR_ROL[rol as string] ?? ["pendiente"]}
+            puedeCargarMasiva={puedeCargarMasiva}
+            mostrarHistorial
           />
         ) : (
-          // Feature 49 (T6.2): el listado plano ofrece "Ver historial" por fila
-          // (adminTienda/mensajero/adminSatelite ven solo las ordenes autorizadas, R27).
+          // adminSatelite / mensajero / sin sesión: listado plano previo, SIN
+          // regresión (R20). Feature 49: "Ver historial" por fila.
           <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} mostrarHistorial />
         )}
-      </section>
-    );
-  }
+      </Container>
+    </>
+  );
+}
