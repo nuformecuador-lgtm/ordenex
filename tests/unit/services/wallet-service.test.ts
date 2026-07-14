@@ -33,6 +33,10 @@ function buildRepo(): IWalletMovimientoRepository {
     crearMovimientos: vi.fn().mockResolvedValue(1),
     listar: vi.fn().mockResolvedValue({ movimientos: [mov()], total: 1 }),
     agregarBalance: vi.fn().mockResolvedValue({ ingresos: "1000.00", egresos: "300.00" }),
+    obtenerPorId: vi.fn().mockResolvedValue(null),
+    agregarPorCategoria: vi
+      .fn()
+      .mockResolvedValue({ gastoFijo: "0.00", gastoVariable: "0.00", sueldo: "0.00" }),
   };
 }
 

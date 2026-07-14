@@ -23,3 +23,17 @@ export function startOfDayCR(now: Date = new Date()): Date {
     Date.UTC(crWall.getUTCFullYear(), crWall.getUTCMonth(), crWall.getUTCDate(), 0, 0, 0, 0),
   );
 }
+
+/**
+ * Feature 45 (R30) — periodo mensual `YYYY-MM` de la fecha CALENDARIO de Costa Rica (UTC-6)
+ * correspondiente a `now`. Consistente con `startOfDayCR` (mismo offset). Se usa como parte
+ * de la clave de idempotencia del cron de gastos fijos (`<plantillaId>:<YYYY-MM>`). Ejemplos:
+ * `2026-07-01T06:00:00Z` (00:00 CR del 1 jul) -> `"2026-07"`; `2026-07-01T05:59:00Z` (23:59 CR
+ * del 30 jun) -> `"2026-06"`.
+ */
+export function periodoMensualCR(now: Date = new Date()): string {
+  const crWall = new Date(now.getTime() - CR_OFFSET_MS);
+  const anio = crWall.getUTCFullYear();
+  const mes = String(crWall.getUTCMonth() + 1).padStart(2, "0");
+  return `${anio}-${mes}`;
+}

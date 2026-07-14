@@ -3,6 +3,7 @@ import type {
   BalanceAgregado,
   BalanceFiltros,
   CrearMovimientoInput,
+  DesgloseEgresosAgregado,
   IWalletMovimientoRepository,
   ListarMovimientosFiltros,
   ListarMovimientosPage,
@@ -101,5 +102,30 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       else egresos = new Prisma.Decimal(suma);
     }
     return { ingresos: ingresos.toFixed(2), egresos: egresos.toFixed(2) };
+  }
+
+  /** Feature 45 (R13): lee un movimiento por id (para la reversa). null si no existe. */
+  async obtenerPorId(id: string): Promise<WalletMovimientoDTO | null> {
+    const row = await this.prisma.walletMovimiento.findUnique({ where: { id } });
+    return row === null ? null : toDTO(row);
+  }
+
+  /** Feature 45 (R11): SUM(monto) por categoria administrativa, con los mismos filtros. STRING. */
+  async agregarPorCategoria(filtros: BalanceFiltros): Promise<DesgloseEgresosAgregado> {
+    const where = buildWhere(filtros);
+    const grupos = await this.prisma.walletMovimiento.groupBy({
+      by: ["categoria"],
+      where,
+      _sum: { monto: true },
+    });
+    const sumaDe = (categoria: string): string => {
+      const g = grupos.find((x) => x.categoria === categoria);
+      return (g?._sum.monto ?? new Prisma.Decimal(0)).toFixed(2);
+    };
+    return {
+      gastoFijo: sumaDe("egreso_gasto_fijo"),
+      gastoVariable: sumaDe("egreso_gasto_variable"),
+      sueldo: sumaDe("egreso_sueldo"),
+    };
   }
 }

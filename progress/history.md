@@ -1275,3 +1275,31 @@
   renderizan páginas stubbean `LogoutButton` para aislar (patrón estándar); `PageHeader.test.tsx` (nuevo) prueba el logout REAL en el topbar. VERDE:
   typecheck 0, eslint 0, **2335/2335**. **Se registró la feature 60** (recuperar la campana `NotificationsBell` del #54 sobre el dev real, sin lo roto;
   depende de la 57, se relaciona con la 35 realtime). **PENDIENTE (humano):** sincronizar `dev` local con `origin/dev` (dejar de correr el #54 stale) + merge del PR #57.
+
+## 2026-07-13 — wallet: gastos fijos/variables y sueldos (feature 45)
+- **Último eslabón de la cadena wallet (42→43→44→45): egresos administrativos** que salen de la caja
+  principal (42) y restan del balance derivado. Money-critical. Los egresos son filas `tipo=egreso` en
+  el libro append-only polimórfico `wallet_movimiento` (42), SIN tabla de egresos nueva. **Gastos
+  VARIABLES y SUELDOS = registro manual** (`origen_id` NULL; el sueldo lleva el nombre del trabajador +
+  período como texto libre en la descripción; la vía manual rechaza `gasto_fijo`). **Gastos FIJOS = tabla
+  nueva `gasto_fijo_plantilla`** (concepto/monto/activa, RLS sin policies, sin borrado —se desactiva—) que
+  el maestro administra, y un **cron mensual** `/api/cron/generar-gastos-fijos` (auth `CRON_SECRET` antes
+  de efectos, schedule `0 6 1 * *`=día 1 00:00 CR, clon de 41/46) que genera un egreso por plantilla activa,
+  **idempotente por período** (`origen_id="<plantillaId>:<YYYY-MM>"` bajo el índice único parcial
+  EXISTENTE; reejecutar el mismo mes → 0 filas). Reversa compensatoria append-only idempotente (aplica
+  también a egresos del cron). UI `/wallet` (rol maestro): dialog de egreso manual, panel CRUD de
+  plantillas, desglose de egresos por tipo y "Reversar" por fila.
+- Requisitos cubiertos: **R1–R33** (trazabilidad completa R→test, verificada por el reviewer abriendo los
+  tests). Reviewer **APROBADO 0 bloqueantes**. Verde REAL: typecheck 0, lint 0, **2545/2545 tests**,
+  `init.sh` OK, round-trip de AMBAS migraciones (`20260713140000_wallet_egreso_gasto_fijo_variable` enum
+  aditivo +down; `20260713150000_gasto_fijo_plantilla` tabla +down) contra el Postgres local.
+- Decisiones/deuda: **F1.4** — sueldos texto libre (c); **gastos fijos por CRON** (b, el humano eligió la
+  opción auto sobre la recomendación manual); resto recomendadas. Enum extendido con `egreso_gasto_fijo`/
+  `egreso_gasto_variable` (`egreso_sueldo` ya existía en la 42). Idempotencia por la clave de período bajo
+  el índice único parcial ya presente (sin índice nuevo, sin colisión con reversa/manuales). Cambio en
+  código compartido auditado sin regresión: blindaje `montoPositivoSchema` con try/catch (monto vacío/no
+  numérico → `validation_error` en vez de INTERNAL/500; robustece también el ajuste manual de la 42).
+  Orquestada DIRECTO por el leader (`backend_dev → frontend_dev → reviewer`) para evitar el implementer
+  monolítico y el bug opus-4.8[1m] (precedente 56). **DEUDA menor**: E2E del flujo de egresos diferido;
+  tests de migración/DB estáticos o en memoria (round-trip real verificado a mano). **PENDIENTE**: PR a
+  `dev` + merge (OK humano); tras el merge, reiniciar el dev server local (schema nuevo → cliente Prisma).

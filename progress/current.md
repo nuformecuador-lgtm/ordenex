@@ -9,6 +9,8 @@
 |--------|------|------|--------|
 | _(ninguna en curso)_ | — | — | — |
 
+> **Feature 45 (wallet: gastos fijos/variables y sueldos) CERRADA 2026-07-13**: **impl COMPLETA (R1–R33) + reviewer APROBADO 0 bloqueantes**. **ÚLTIMO eslabón de la cadena wallet (42→43→44→45).** Money-critical; F1.4 aprobada (c: sueldos texto libre; **b: gastos fijos por CRON mensual** —override de la recomendación manual—; resto recomendadas). Orquestada DIRECTO por el leader (`backend_dev → frontend_dev → reviewer`, evita el implementer monolítico/bug opus-4.8[1m], precedente 56). Verde REAL: typecheck 0, lint 0, **2545/2545 tests**, `init.sh` OK, round-trip de AMBAS migraciones verificado. Egresos = filas `tipo=egreso` en el libro polimórfico `wallet_movimiento` (42): enum +`egreso_gasto_fijo`/`egreso_gasto_variable` (migración `20260713140000` +down). VARIABLES/SUELDOS = registro **manual** (`origen_id` NULL; sueldo=texto libre F1.4-c; rechaza `gasto_fijo` manual). GASTOS FIJOS = tabla nueva **`gasto_fijo_plantilla`** (CRUD sin borrado, RLS sin policies; migración `20260713150000` +down) + **CRON** `/api/cron/generar-gastos-fijos` (auth `CRON_SECRET` antes de efectos, `0 6 1 * *`=día1 00:00 CR, clon 41/46), **idempotente** por `origen_id="<plantillaId>:<YYYY-MM>"` bajo el índice único parcial EXISTENTE (reejecutar mismo mes → 0 filas). Reversa compensatoria append-only idempotente (aplica a egresos del cron). Balance DERIVADO resta, sin doble conteo. UI `/wallet`: dialog egreso manual + panel CRUD plantillas + desglose por tipo + reversa por fila. Cambio compartido auditado sin regresión: blindaje `montoPositivoSchema` (monto vacío→`validation_error`, no 500). Commit + `impl_45.md`/`review_45`. Estado `done` + `history.md`. **DEUDA menor**: E2E diferido; tests migración/DB estáticos/in-memory. **PENDIENTE: PR a `dev` + merge (OK humano).**
+
 > Feature 48 (rechazo: devolución a la tienda de origen) CERRADA 2026-07-13: **impl COMPLETA (R1–R19) + reviewer APROBADO 0 bloqueantes**. **CUARTA y ÚLTIMA de la Fase 2 flujo mensajero → cierra el grupo 46/47/48/49.** Verde: typecheck 0, lint 0, **2405/2405 tests (+44)**, `init.sh` OK, **SIN migración** (`rechazada`/`devuelta_origen` ya sembrados; tienda origen = `orden.tienda_id`). Rama desde el tip de la 47. **Retorno por ACCIÓN MANUAL de la bodega** (`DevolucionOrigenService`): `rechazada → devuelta_origen`, elegible cualquier orden en `rechazada` (ambos caminos: directo 36 + escalado 47), idempotente. Transición **atómica** vía choke point 49 reutilizando #11 (`origen_tipo=ajuste_estado`); cobertura sigue en 11 puntos. Autz rol+zona server-side (bodega responsable); adminTienda solo VE sus devueltas por scope `tienda_id`. UI botón "Devolver a tienda" + apartado devueltas de la tienda. Commit `5467b94` + cierre. Estado `done` + `history.md` + `review_48`. **DEUDA menor**: authz tras la guarda de estado (posible fuga de estado vía `motivo` del conflict, follow-up authz-first); E2E diferido. **PENDIENTE: PR a `dev` + merge (OK humano).**
 
 > **Feature 57 (botón cerrar sesión / logout) CERRADA 2026-07-13**: **impl + reviewer** tras 1 ciclo (RECHAZO por trazabilidad R10/R11 → RESUELTO). Fullstack/low, corrió **EN PARALELO con la 47** (otra sesión) en worktree aislado `../ordenex-f57` desde `dev`. F1.4 APROBADA por el humano: (a) REUTILIZAR el `LogoutButton` existente TAL CUAL en el **`SidebarFooter`** → visible para **TODOS los roles** (el layout `app/(app)/layout.tsx` monta el `Sidebar` sin importar el rol; el footer no depende de `items`). Resuelve el bug operativo: antes el logout solo vivía en la rama genérica de la home y **el rol `tienda` no lo alcanzaba**. (b) SIN modal (un click). HALLAZGO: el **backend de logout YA EXISTÍA** (`logout`→`AuthService.logout`→`SessionRepository.deleteById`, con tests) → puro frontend (mover botón + retirar ad-hoc de la home). Reviewer rechazó por R10/R11 sin test real + R10 exigía feedback de error; RESUELTO con **`toast.error("No se pudo cerrar sesión")`** (decisión del humano) + tests dedicados. R8 (no-back) cubierto por `middleware.ts`; `push` conservado (tal cual). VERDE: typecheck 0, eslint 0, **2333/2333**. Estado `done` + `history.md` + `review_57`. **Un PR `feature/57 → dev`.** PENDIENTE merge (OK humano).
@@ -143,6 +145,29 @@
 ## Evaluaciones
 
 > El leader documenta aca cada evaluacion de zone/complexity/particion.
+
+- `wallet - gastos fijos/variables y sueldos` (id 45): **zone=fullstack, complexity=high,
+  branch=feature/45-wallet-gastos-sueldos, depends_on=42 (done, en dev).** Evaluada 2026-07-13.
+  Seleccionada por el humano. **ULTIMO eslabon de la cadena wallet (42->43->44->45).** Egresos
+  administrativos (gastos fijos, gastos variables, sueldos) que SALEN de la caja principal (42) y se
+  reflejan en el libro de movimientos + el BALANCE general. Money-critical (toca la caja). Insumos YA en
+  dev (feature 42): libro append-only `wallet_movimiento` (POLIMORFICO, disenado en la Q4 de la 42 como
+  tabla UNICA para 43/44/45), balance DERIVADO (suma Decimal), UI `/wallet` rol maestro + movimiento
+  manual. DECISION DE PROCESO (leader): NO se parte el entry; un ciclo fullstack (implementer delega
+  backend_dev -> frontend_dev, un PR), precedente 42/43/44. **NOTA de coordinacion:** la pista wallet la
+  ha llevado el OTRO agente; al arrancar, el arbol estaba limpio y NADIE habia empujado `feature/45`
+  (verificado). Rama desde `origin/dev` (f74c68f). Preguntas ABIERTAS para F1.4 (el spec_author las
+  formaliza, confirmando contra el esquema real de la 42): (a) MODELO -> los egresos como MOVIMIENTOS en
+  `wallet_movimiento` existente (categorias nuevas gasto_fijo/gasto_variable/sueldo, `origen_tipo` nuevo;
+  REUSA la tabla polimorfica de la 42, RECOMENDADO) vs. entidad(es) propia(s); (b) GASTOS FIJOS y
+  recurrencia -> registro manual por periodo (RECOMENDADO v1) vs. auto-generacion por cron mensual (en
+  linea con `corte-diario` de la 41; follow-up); (c) SUELDOS -> ligados a un `Usuario`/trabajador (FK) vs.
+  campo libre de nombre (definir si los trabajadores son usuarios del sistema o entidad aparte); (d)
+  CATEGORIZACION -> extender el enum de categorias de `wallet_movimiento` de la 42 (RECOMENDADO) vs. enum
+  nuevo; (e) UI -> seccion en `/wallet` (rol maestro) crear/listar egresos (form unificado con selector de
+  tipo vs. separados); (f) INMUTABILIDAD -> append-only como el resto, correccion via movimiento
+  compensatorio (patron de la 43) vs. edicion; (g) BALANCE -> reutiliza el balance derivado de la 42 (el
+  egreso resta), confirmar SIN doble conteo ni regresion de 42/43/44.
 
 - `trazabilidad / historial de estados de la orden` (id 49): **zone=fullstack, complexity=high,
   branch=feature/49-trazabilidad-historial-estados, depends_on=36 (done, en dev).** Evaluada 2026-07-13.

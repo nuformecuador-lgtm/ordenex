@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMovimientosAction, verBalanceAction } from "@/lib/actions/wallet";
+import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
+import { listarPlantillasAction } from "@/lib/actions/gasto-fijo-plantilla";
 
 import { WalletModule } from "./_components/WalletModule";
 
@@ -21,15 +23,25 @@ export default async function WalletPage() {
     notFound(); // R19: rol no autorizado / sin sesión → sin exponer datos
   }
 
-  // Pre-fetch server-side con los filtros por defecto (page 1, sin filtros).
-  const [movimientosResult, balanceResult] = await Promise.all([
-    listarMovimientosAction({}),
-    verBalanceAction({}),
-  ]);
+  // Pre-fetch server-side con los filtros por defecto (page 1, sin filtros). Feature 45:
+  // además del libro + balance, se pre-obtienen el desglose de egresos administrativos y las
+  // plantillas de gasto fijo (datos sensibles → props, nunca fetch cliente).
+  const [movimientosResult, balanceResult, desgloseResult, plantillasResult] =
+    await Promise.all([
+      listarMovimientosAction({}),
+      verBalanceAction({}),
+      verDesgloseEgresosAction({}),
+      listarPlantillasAction(),
+    ]);
 
-  // Defensa en profundidad: si el service niega (forbidden/unauthenticated) o valida
+  // Defensa en profundidad: si algún service niega (forbidden/unauthenticated) o valida
   // mal, no renderizamos el módulo (no expone nada).
-  if (movimientosResult.status !== "ok" || balanceResult.status !== "ok") {
+  if (
+    movimientosResult.status !== "ok" ||
+    balanceResult.status !== "ok" ||
+    desgloseResult.status !== "ok" ||
+    plantillasResult.status !== "ok"
+  ) {
     notFound();
   }
 
@@ -46,6 +58,8 @@ export default async function WalletPage() {
         page={movimientosResult.data.page}
         pageSize={movimientosResult.data.pageSize}
         balance={balanceResult.balance}
+        desglose={desgloseResult.desglose}
+        plantillas={plantillasResult.plantillas}
       />
     </section>
   );

@@ -1,14 +1,33 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { Modal } from "@/components/shared/Modal";
+import { useToast } from "@/hooks/useToast";
+import { reversarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 
-import { CATEGORIA_LABEL, ORIGEN_LABEL, TIPO_LABEL, money } from "./wallet-labels";
+import {
+  CATEGORIA_LABEL,
+  ORIGEN_LABEL,
+  TIPO_LABEL,
+  esEgresoAdministrativo,
+  money,
+} from "./wallet-labels";
 
 // Feature 42 (T12, R18/R21) — libro de movimientos (tabla, más reciente primero: el
 // backend ya lo devuelve ordenado). Datos por props desde el módulo. Money-safe: la
 // columna monto renderiza el STRING tal cual con `money`, sin parseFloat/Number.
+//
+// Feature 45 (T11, R13/R14/R22c/R32) — se añade la acción "Reversar" por fila SOLO sobre
+// egresos administrativos (`origen_tipo=gasto` ∧ `tipo=egreso`, incluye los generados por
+// el cron). La reversa se confirma con un `Modal` y dispara la Server Action
+// `reversarEgresoAdministrativoAction`; el backend crea el `ingreso_ajuste` compensatorio
+// (append-only, idempotente) — la UI solo dispara y refresca. No hay editar/borrar (R14).
 
 /** Badge de color por tipo: ingreso (verde/entra) vs egreso (rojo/sale). */
 function TipoBadge({ tipo }: { tipo: WalletMovimientoDTO["tipo"] }) {
@@ -25,50 +44,116 @@ function origenTexto(m: WalletMovimientoDTO): string {
   return m.descripcion ? `${base} · ${m.descripcion}` : base;
 }
 
-const COLUMNS: Column<WalletMovimientoDTO>[] = [
-  {
-    id: "fecha",
-    value: "Fecha",
-    render: (m) => m.fechaMovimiento.slice(0, 10),
-  },
-  {
-    id: "tipo",
-    value: "Tipo",
-    render: (m) => <TipoBadge tipo={m.tipo} />,
-  },
-  {
-    id: "categoria",
-    value: "Categoría",
-    render: (m) => CATEGORIA_LABEL[m.categoria],
-  },
-  {
-    id: "monto",
-    value: "Monto",
-    // Money-safe (R21/R25): STRING tal cual, sin parseFloat/Number.
-    render: (m) => money(m.monto),
-  },
-  {
-    id: "origen",
-    value: "Origen",
-    render: (m) => origenTexto(m),
-  },
-];
-
 export interface WalletLedgerProps {
   movimientos: WalletMovimientoDTO[];
   isLoading?: boolean;
+  /** Callback tras reversar con éxito (para que el módulo recargue libro + balance + desglose). */
+  onReversado?: () => void;
 }
 
-export function WalletLedger({ movimientos, isLoading = false }: WalletLedgerProps) {
+export function WalletLedger({
+  movimientos,
+  isLoading = false,
+  onReversado,
+}: WalletLedgerProps) {
+  const router = useRouter();
+  const toast = useToast();
+
+  // Egreso administrativo elegido para reversar (abre el modal de confirmación).
+  const [objetivo, setObjetivo] = useState<WalletMovimientoDTO | null>(null);
+
+  async function confirmarReversa() {
+    if (!objetivo) return;
+    const result = await reversarEgresoAdministrativoAction({ movimientoId: objetivo.id });
+
+    if (result.status === "ok") {
+      toast.success("Egreso reversado. Se registró el ajuste compensatorio.");
+      setObjetivo(null);
+      onReversado?.();
+      router.refresh();
+      return;
+    }
+    if (result.status === "already_reversed") {
+      toast.info("Este egreso ya tenía su reversa.");
+      setObjetivo(null);
+      onReversado?.();
+      return;
+    }
+    if (result.status === "not_found") {
+      toast.error("El egreso ya no existe o no es reversable.");
+      setObjetivo(null);
+      return;
+    }
+    if (result.status === "validation_error") {
+      toast.error("No se pudo reversar el egreso.");
+      return;
+    }
+    if (result.status === "forbidden") {
+      toast.error("No tenés permiso para reversar egresos.");
+      return;
+    }
+    // unauthenticated
+    toast.error("Tu sesión expiró. Iniciá sesión de nuevo.");
+  }
+
+  const columns = useMemo<Column<WalletMovimientoDTO>[]>(
+    () => [
+      { id: "fecha", value: "Fecha", render: (m) => m.fechaMovimiento.slice(0, 10) },
+      { id: "tipo", value: "Tipo", render: (m) => <TipoBadge tipo={m.tipo} /> },
+      { id: "categoria", value: "Categoría", render: (m) => CATEGORIA_LABEL[m.categoria] },
+      {
+        id: "monto",
+        value: "Monto",
+        // Money-safe (R21/R25): STRING tal cual, sin parseFloat/Number.
+        render: (m) => money(m.monto),
+      },
+      { id: "origen", value: "Origen", render: (m) => origenTexto(m) },
+      {
+        id: "acciones",
+        value: "Acciones",
+        // R22c/R32: la reversa se ofrece SOLO en egresos administrativos (incluye los del cron).
+        render: (m) =>
+          esEgresoAdministrativo(m) ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setObjetivo(m)}
+            >
+              Reversar
+            </Button>
+          ) : null,
+      },
+    ],
+    [],
+  );
+
   return (
     <div className="overflow-x-auto">
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={movimientos}
         rowKey="id"
         ariaLabel="Libro de movimientos"
         isLoading={isLoading}
         emptyMessage="No hay movimientos que coincidan con los filtros."
+      />
+
+      <Modal
+        open={objetivo !== null}
+        onOpenChange={(next) => {
+          if (!next) setObjetivo(null);
+        }}
+        title="Reversar egreso"
+        description={
+          objetivo
+            ? `Se creará un ajuste compensatorio por ${money(objetivo.monto)}. El egreso original queda intacto.`
+            : undefined
+        }
+        confirmLabel="Reversar"
+        confirmVariant="destructive"
+        onConfirm={confirmarReversa}
+        closeOnConfirm={false}
       />
     </div>
   );
