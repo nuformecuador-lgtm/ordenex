@@ -229,6 +229,118 @@ describe("RecepcionSateliteModule", () => {
     expect(asignar).toBeEnabled();
   });
 
+  it("Pedido humano: 'Recibidas' se renderiza como TABLA (DataTable) con sus columnas y una fila por orden", () => {
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numGuia: 2002,
+          numRemision: "REM-B1",
+          destinatario: "Beto Ruiz",
+          producto: "Caja grande",
+          direccion: "Av. Central 10",
+          tiendaNombre: "Tienda Z",
+          montoCobrar: 320,
+          estatusValue: "en_bodega_satelite",
+          zonaNombre: "Limón",
+        }),
+      ],
+      zonaNombre: "Limón",
+    });
+
+    const region = screen.getByRole("region", { name: "Recibidas" });
+    // Es una tabla, no una lista de cards.
+    const tabla = within(region).getByRole("table", { name: "Recibidas" });
+    // Cabeceras: la de selección + las de datos espejadas de ordenes-columns.
+    const headers = within(tabla)
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    expect(headers).toEqual([
+      "Seleccionar",
+      "Nº Guía",
+      "Nº Remisión",
+      "Estado",
+      "Destinatario",
+      "Producto",
+      "Dirección",
+      "Tienda",
+      "Zona",
+      "Provincia",
+      "Cantón",
+      "Distrito",
+      "Monto a cobrar",
+    ]);
+    // La fila muestra los datos de la orden en columnas.
+    expect(within(tabla).getByText("REM-B1")).toBeInTheDocument();
+    expect(within(tabla).getByText("Beto Ruiz")).toBeInTheDocument();
+    expect(within(tabla).getByText("Caja grande")).toBeInTheDocument();
+    expect(within(tabla).getByText("Av. Central 10")).toBeInTheDocument();
+    expect(within(tabla).getByText("Tienda Z")).toBeInTheDocument();
+    expect(
+      within(tabla).getByText("En bodega satélite de Limón"),
+    ).toBeInTheDocument();
+    // Una fila de datos (más la de cabecera).
+    expect(within(tabla).getAllByRole("row")).toHaveLength(2);
+  });
+
+  it("Pedido humano: 'Nº Guía' vacía se muestra como 'Pendiente' en la tabla", () => {
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numGuia: null,
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+    });
+
+    const tabla = within(
+      screen.getByRole("region", { name: "Recibidas" }),
+    ).getByRole("table", { name: "Recibidas" });
+    expect(within(tabla).getByText("Pendiente")).toBeInTheDocument();
+  });
+
+  it("Pedido humano: sin órdenes recibidas la tabla muestra el vacío", () => {
+    renderModule({ recibidas: [] });
+
+    const tabla = within(
+      screen.getByRole("region", { name: "Recibidas" }),
+    ).getByRole("table", { name: "Recibidas" });
+    expect(
+      within(tabla).getByText("Aún no has recibido órdenes."),
+    ).toBeInTheDocument();
+  });
+
+  it("Pedido humano: la selección por checkbox en la tabla habilita 'Asignar' y alimenta el modal", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          destinatario: "Beto Ruiz",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Recibidas" });
+    const tabla = within(region).getByRole("table", { name: "Recibidas" });
+    const asignar = within(region).getByRole("button", { name: "Asignar" });
+    expect(asignar).toBeDisabled();
+
+    await user.click(
+      within(tabla).getByRole("checkbox", { name: "Seleccionar REM-B1" }),
+    );
+    expect(asignar).toBeEnabled();
+
+    // Abre el modal de asignación (feature 34) con la orden seleccionada.
+    await user.click(asignar);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getAllByText(/REM-B1/).length).toBeGreaterThan(0);
+  });
+
   it("R7 (33, no regresión): 'Por recibir' NO ofrece seleccionar ni asignar", () => {
     renderModule({
       porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],

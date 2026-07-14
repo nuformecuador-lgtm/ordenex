@@ -313,3 +313,28 @@ por-orden. No se duplicó UI.
 
 Veredicto: verde — reuse real (PorAceptarSection compartido) + banner; typecheck 0 en
 lo mío; 44/44 tests de componentes afectados + 9/9 de pages.
+
+---
+
+## Recibidas del adminSatelite como DataTable (pedido humano)
+
+En `/recepcion-satelite` la sección "Recibidas" (órdenes `en_bodega_satelite`, base
+de la feature 34) dejó de renderizarse como CARDS y ahora usa el `DataTable` genérico
+(`components/shared/DataTable`), mismo estilo que la lista de órdenes del maestro.
+
+- Nuevo `app/(app)/recepcion-satelite/_components/recibidas-columns.tsx`:
+  `recibidasColumns(zonaNombre)` → `Column<RecepcionSateliteDTO>[]` con Nº Guía
+  ("Pendiente" si null), Nº Remisión, Estado ("En bodega satélite de <zona>"),
+  Destinatario, Producto, Dirección, Tienda, Zona, Provincia, Cantón, Distrito y
+  Monto a cobrar (`PriceLabel`). Sin flete/comisión/fulfillment (el DTO no trae tarifa).
+- `RecepcionSateliteModule`: se reemplazó `ListaRecibidas` (cards) por `DataTable`.
+  La columna inicial "Seleccionar" (checkbox `aria-label="Seleccionar <numRemision>"`)
+  se compone en el módulo y cablea el MISMO estado (`seleccionados`/`toggleSeleccion`/
+  `ordenesSeleccionadas`); botón "Asignar" + aviso de bodega bloqueada + `AsignarSateliteModal`
+  intactos. `ListaRecibidas` eliminada; `RecepcionDetalle` se conserva (lo usan "Por
+  recibir" y "Por devolver"). QR, "Por recibir" (PorAceptarSection), `sinZona`, liberadas
+  y "Por devolver" sin cambios.
+- Tests: +4 en `tests/components/RecepcionSateliteModule.test.tsx` (tabla con cabeceras/
+  filas correctas, Nº Guía "Pendiente", vacío, selección→Asignar→modal). 24/24 verde.
+
+Veredicto: verde — typecheck 0 en lo mío; RecepcionSateliteModule 24/24 tests verde.

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DataTable, type Column } from "@/components/shared/DataTable";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
@@ -19,6 +20,7 @@ import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { devolucionOrigenErrorMessage } from "@/app/(app)/ordenes/_components/devolucion-origen-error-messages";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { RecepcionDetalle } from "./RecepcionDetalle";
+import { recibidasColumns } from "./recibidas-columns";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
 import {
   BODEGA_BLOQUEADA_TITULO,
@@ -76,59 +78,6 @@ function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): 
   const base = estatusLabel(orden.estatusValue);
   const zona = orden.zonaNombre || zonaNombre;
   return zona ? `${base} de ${zona}` : base;
-}
-
-/**
- * Feature 34 (T8, R4): lista SELECCIONABLE de órdenes `en_bodega_satelite` de la
- * sección "Recibidas". Cada fila tiene un checkbox accesible; la selección la
- * gobierna el módulo padre (fuente de verdad) para poder abrir el modal de
- * asignación con el lote elegido.
- */
-function ListaRecibidas({
-  ordenes,
-  zonaNombre,
-  seleccionados,
-  onToggle,
-}: {
-  ordenes: RecepcionSateliteDTO[];
-  zonaNombre: string | null;
-  seleccionados: Set<string>;
-  onToggle: (id: string, checked: boolean) => void;
-}) {
-  if (ordenes.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Aún no has recibido órdenes.
-      </p>
-    );
-  }
-  return (
-    <ul className="flex flex-col gap-3">
-      {ordenes.map((orden) => (
-        <li key={orden.id} className="flex items-start gap-3">
-          <Checkbox
-            className="mt-4"
-            checked={seleccionados.has(orden.id)}
-            onCheckedChange={(checked) => onToggle(orden.id, checked === true)}
-            aria-label={`Seleccionar ${orden.numRemision}`}
-          />
-          <Card className="flex-1">
-            <CardHeader>
-              <CardTitle>
-                {orden.numRemision} · {orden.destinatario}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RecepcionDetalle
-                orden={orden}
-                estadoLegible={estadoLegible(orden, zonaNombre)}
-              />
-            </CardContent>
-          </Card>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 /**
@@ -245,6 +194,30 @@ export function RecepcionSateliteModule({
     [recibidas, seleccionados],
   );
 
+  // Feature 63 (pedido humano): "Recibidas" pasa de cards a DataTable. La columna
+  // inicial "Seleccionar" se compone aquí (fuente de verdad de la selección, R4),
+  // igual que `OrdenesApartado` prepende su checkbox a `ordenesColumns`. Las
+  // columnas de datos viven en `recibidas-columns.tsx`.
+  const columnasRecibidas = useMemo<Column<RecepcionSateliteDTO>[]>(
+    () => [
+      {
+        id: "seleccionar",
+        value: "Seleccionar",
+        render: (orden: RecepcionSateliteDTO) => (
+          <Checkbox
+            checked={seleccionados.has(orden.id)}
+            onCheckedChange={(checked) =>
+              toggleSeleccion(orden.id, checked === true)
+            }
+            aria-label={`Seleccionar ${orden.numRemision}`}
+          />
+        ),
+      },
+      ...recibidasColumns(zonaNombre),
+    ],
+    [seleccionados, zonaNombre],
+  );
+
   function handleSuccess() {
     setSeleccionados(new Set());
     setModalOpen(false);
@@ -321,11 +294,12 @@ export function RecepcionSateliteModule({
             Asignar
           </Button>
         </div>
-        <ListaRecibidas
-          ordenes={recibidas}
-          zonaNombre={zonaNombre}
-          seleccionados={seleccionados}
-          onToggle={toggleSeleccion}
+        <DataTable
+          columns={columnasRecibidas}
+          data={recibidas}
+          rowKey="id"
+          ariaLabel="Recibidas"
+          emptyMessage="Aún no has recibido órdenes."
         />
       </section>
 
