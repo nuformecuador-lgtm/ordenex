@@ -65,7 +65,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
       .fn()
       .mockResolvedValue({ zona: true, provincia: true, canton: true, distrito: true }),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
-    findProvinciasByNombres: vi.fn().mockResolvedValue([]),
+    findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set()),

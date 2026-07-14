@@ -60,6 +60,16 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     roles: ["mensajero"],
   },
   {
+    // Portal del adminSatelite (paridad con "Entregas" del mensajero): recepción de
+    // órdenes ruteadas a su bodega (por recibir/recibidas) + asignación a mensajeros
+    // de su zona. Exclusivo de `adminSatelite`; la defensa real es el `notFound` de
+    // la página `/recepcion-satelite` (resuelve el rol server-side).
+    label: "Asignaciones",
+    href: "/recepcion-satelite",
+    iconKey: "package",
+    roles: ["adminSatelite"],
+  },
+  {
     label: "Configuración",
     href: "/configuracion",
     iconKey: "settings",

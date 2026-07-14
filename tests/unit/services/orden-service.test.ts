@@ -61,7 +61,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 15: metodos batch de carga masiva, no ejercitados por el CRUD
     // (feature 6) pero exigidos por la interfaz IOrdenRepository.
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
-    findProvinciasByNombres: vi.fn().mockResolvedValue([]),
+    findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set()),

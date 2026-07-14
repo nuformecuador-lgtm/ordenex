@@ -352,14 +352,15 @@ export class BulkOrdenService implements IBulkOrdenService {
     estatusInicialValue: string,
   ): Promise<PreloadedContext> {
     const numRemisiones = distinct(rows.map((r) => (r.num_remision ?? "").trim()).filter(Boolean));
-    const provinciaNames = distinct(rows.map((r) => (r.provincia ?? "").trim()).filter(Boolean));
     const mensajeroIds = distinct(
       rows.map((r) => (r.mensajero_sugerido_id ?? "").trim()).filter(Boolean),
     );
 
     const [existingMap, provincias, estatusId] = await Promise.all([
       this.repo.findExistingRemisiones(numRemisiones), // R25
-      this.repo.findProvinciasByNombres(provinciaNames), // R19/R21
+      // R19/R21: TODAS las provincias; el match por nombre se hace abajo normalizando
+      // ambos lados (insensible a acentos), no en la query.
+      this.repo.findAllProvincias(),
       this.repo.findEstatusIdByValue(estatusInicialValue), // R7/R20: estatus inicial del lote
     ]);
     const provinciaIndex = indexBy(provincias, (p) => normalize(p.nombre));

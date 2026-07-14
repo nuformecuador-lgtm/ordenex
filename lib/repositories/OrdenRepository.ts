@@ -570,11 +570,9 @@ export class OrdenRepository implements IOrdenRepository {
    * query: el service resuelve el match normalizando en AMBOS lados (`normalizeName`
    * -> minúsculas + sin acentos), que es insensible a tildes/mayúsculas. Un
    * `where { nombre: { in, mode: "insensitive" } }` solo cubre mayúsculas, no
-   * acentos, y descartaría "Bogotá" cuando el archivo trae "Bogota". `nombres` se
-   * conserva solo como corto-circuito: sin provincias referenciadas, no se consulta.
+   * acentos, y descartaría "Bogotá" cuando el archivo trae "Bogota".
    */
-  async findProvinciasByNombres(nombres: string[]): Promise<ProvinciaRow[]> {
-    if (nombres.length === 0) return [];
+  async findAllProvincias(): Promise<ProvinciaRow[]> {
     return this.prisma.provincia.findMany({
       select: { id: true, nombre: true },
     });

@@ -43,7 +43,7 @@ function fakeRepo(rows: EtiquetaRow[] = [etiquetaRow()]): IOrdenRepository {
     findUsuarioFulfillment: vi.fn(),
     existsGeo: vi.fn(),
     findExistingRemisiones: vi.fn(),
-    findProvinciasByNombres: vi.fn(),
+    findAllProvincias: vi.fn(),
     findCantonesByProvinciaIds: vi.fn(),
     findDistritosByCantonIds: vi.fn(),
     findMensajerosByIds: vi.fn(),

@@ -239,8 +239,12 @@ export interface IOrdenRepository {
    * Mapa num_remision -> estatus.value de la orden existente.
    */
   findExistingRemisiones(nums: string[]): Promise<Map<string, string>>;
-  /** R19/R21: provincias candidatas por nombre (comparacion case-insensitive la hace el service). */
-  findProvinciasByNombres(nombres: string[]): Promise<ProvinciaRow[]>;
+  /**
+   * R19/R21: TODAS las provincias (catálogo pequeño). El match por nombre lo hace el
+   * service normalizando ambos lados (`normalizeName`: minúsculas + sin acentos), por
+   * eso NO se filtra por nombre en la query (evita descartar "Bogotá" ante "Bogota").
+   */
+  findAllProvincias(): Promise<ProvinciaRow[]>;
   /** R19: cantones de las provincias resueltas. */
   findCantonesByProvinciaIds(provinciaIds: string[]): Promise<CantonRow[]>;
   /** R19: distritos de los cantones resueltos. */

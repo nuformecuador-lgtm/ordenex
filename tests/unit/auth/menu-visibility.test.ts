@@ -97,9 +97,9 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminSatelite ve Cierres del día + Perfil", () => {
+  it("adminSatelite ve Asignaciones + Cierres del día + Perfil", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Cierres del día", "Perfil"],
+      ["Asignaciones", "Cierres del día", "Perfil"],
     );
   });
 
