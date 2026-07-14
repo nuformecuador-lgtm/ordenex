@@ -417,6 +417,11 @@ export class OrdenRepository implements IOrdenRepository {
       deletedAt: null, // R34
       ...(params.where.tiendaId ? { tiendaId: params.where.tiendaId } : {}),
       ...(params.where.estatusId ? { estatusId: params.where.estatusId } : {}),
+      // Acotamiento por dueño para el rol mensajero: solo sus asignadas (evita fuga
+      // del listado completo en /ordenes). El service lo setea; aqui se traduce al WHERE.
+      ...(params.where.mensajeroAsignadoId
+        ? { mensajeroAsignadoId: params.where.mensajeroAsignadoId }
+        : {}),
     };
     const orderBy = { [SORT_COLUMN[params.sortBy]]: params.sortDir };
 
@@ -560,14 +565,19 @@ export class OrdenRepository implements IOrdenRepository {
     return new Map(rows.map((r) => [r.numRemision, r.estatus.value]));
   }
 
-  /** R19/R21: provincias candidatas por nombre; el service resuelve jerarquia/ambiguedad. */
+  /**
+   * R19/R21: TODAS las provincias (catálogo pequeño). NO se filtra por nombre en la
+   * query: el service resuelve el match normalizando en AMBOS lados (`normalizeName`
+   * -> minúsculas + sin acentos), que es insensible a tildes/mayúsculas. Un
+   * `where { nombre: { in, mode: "insensitive" } }` solo cubre mayúsculas, no
+   * acentos, y descartaría "Bogotá" cuando el archivo trae "Bogota". `nombres` se
+   * conserva solo como corto-circuito: sin provincias referenciadas, no se consulta.
+   */
   async findProvinciasByNombres(nombres: string[]): Promise<ProvinciaRow[]> {
     if (nombres.length === 0) return [];
-    const rows = await this.prisma.provincia.findMany({
-      where: { nombre: { in: nombres, mode: "insensitive" } },
+    return this.prisma.provincia.findMany({
       select: { id: true, nombre: true },
     });
-    return rows;
   }
 
   /** R19: cantones de las provincias resueltas (todo el universo, el service filtra por jerarquia). */

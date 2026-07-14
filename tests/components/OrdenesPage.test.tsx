@@ -344,7 +344,8 @@ describe("OrdenesPage", () => {
       total: 0,
     });
 
-    for (const rol of [RolValue.maestro, RolValue.admin, RolValue.mensajero]) {
+    // mensajero/adminSatelite ya NO alcanzan esta pagina (notFound, ver test aparte).
+    for (const rol of [RolValue.maestro, RolValue.admin]) {
       resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
       await renderPage();
       expect(
@@ -359,6 +360,16 @@ describe("OrdenesPage", () => {
     expect(
       screen.queryByRole("button", { name: /carga masiva/i }),
     ).toBeNull();
+  });
+
+  it("seguridad: mensajero y adminSatelite NO alcanzan /ordenes (notFound)", async () => {
+    // El mensajero opera en /mis-asignaciones y el adminSatelite en /recepcion-satelite;
+    // ninguno debe ver el listado plano de todas las ordenes. La pagina llama notFound()
+    // -> el Server Component async rechaza al renderse.
+    for (const rol of [RolValue.mensajero, RolValue.adminSatelite]) {
+      resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
+      await expect(OrdenesPage()).rejects.toThrow();
+    }
   });
 
   it("D7: el fetcher invoca la Server Action con { page, pageSize } y NO hace fetch a rutas API (R18, R20, R31)", async () => {

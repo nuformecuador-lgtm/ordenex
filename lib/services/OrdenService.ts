@@ -139,7 +139,11 @@ export class OrdenService implements IOrdenService {
   ): Promise<ListarOrdenesServiceResult> {
     if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
 
-    const where: { tiendaId?: string; estatusId?: string } = {};
+    const where: {
+      tiendaId?: string;
+      estatusId?: string;
+      mensajeroAsignadoId?: string;
+    } = {};
     // R10: el `estatusId` escalar preexistente sigue funcionando (sin regresion).
     if (input.estatusId !== undefined) where.estatusId = input.estatusId;
     // Feature 63/R8/R9: traduce `filter.status_id` a la columna `estatusId` via el
@@ -151,6 +155,11 @@ export class OrdenService implements IOrdenService {
     // R9/R21: adminTienda sigue acotado a SUS ordenes; el filtro por estado COMPONE
     // con este alcance por rol (ambas condiciones en el mismo `where`), no lo pisa.
     if (actor.rol === "adminTienda") where.tiendaId = actor.usuarioId;
+    // Seguridad: el mensajero solo puede listar SUS asignadas (mensajeroAsignadoId =
+    // su usuario). Sin esto, `/ordenes` filtraba el listado COMPLETO al mensajero. Su
+    // experiencia normal es /mis-asignaciones; este acotamiento cierra la fuga por si
+    // alcanza el listado plano.
+    if (actor.rol === "mensajero") where.mensajeroAsignadoId = actor.usuarioId;
 
     const skip = (input.page - 1) * input.pageSize;
     const { items, total } = await this.repo.list({

@@ -42,7 +42,7 @@ export interface UpdateOrdenData {
 }
 
 export interface ListOrdenesParams {
-  where: { tiendaId?: string; estatusId?: string };
+  where: { tiendaId?: string; estatusId?: string; mensajeroAsignadoId?: string };
   sortBy: SortField;
   sortDir: SortDir;
   skip: number;

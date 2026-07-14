@@ -1,4 +1,5 @@
 import { RolValue } from "@prisma/client";
+import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 
@@ -35,6 +36,11 @@ const EXCLUDE_POR_ROL: Record<string, string[]> = {
 export default async function OrdenesPage() {
   const actor = await resolveActorFromSession();
   const rol = actor?.rol;
+  // Guardia por rol: `/ordenes` es solo para maestro/admin/adminTienda. El mensajero
+  // opera en `/mis-asignaciones` y el adminSatelite en `/recepcion-satelite`; ninguno
+  // debe alcanzar el listado plano de todas las ordenes aqui (defensa junto al
+  // acotamiento server-side de OrdenService.listar).
+  if (rol === RolValue.mensajero || rol === RolValue.adminSatelite) notFound();
   const puedeCargarMasiva = rol === RolValue.adminTienda;
   const usaTabs = rol ? ROLES_CON_TABS.has(rol) : false;
   // Selección por checkbox + acciones por lote (asignar mensajero, rutear a bodega

@@ -271,6 +271,17 @@ describe("listar", () => {
     expect(arg.where.tiendaId).toBe("store1");
   });
 
+  it("seguridad: mensajero se acota a SUS asignadas (where.mensajeroAsignadoId)", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" },
+      { usuarioId: "msg1", rol: "mensajero" },
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.mensajeroAsignadoId).toBe("msg1");
+    // No se filtra por tienda (eso es de adminTienda).
+    expect(arg.where.tiendaId).toBeUndefined();
+  });
+
   it("R25/R26: propaga tiendaNombre de los items sin re-filtrar (R22 intacto)", async () => {
     repo = buildRepo({
       list: vi.fn().mockResolvedValue({
