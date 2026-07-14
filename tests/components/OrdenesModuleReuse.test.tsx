@@ -26,8 +26,8 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
 }));
 
-// Feature 57: el PageHeader del topbar monta el LogoutButton (client:
-// useRouter/useToast). Se stubbea para aislar el reuso estructural.
+// Feature 57: el PageHeader monta el LogoutButton (client: useRouter/useToast).
+// Se stubbea para aislar el render; su comportamiento se cubre en LogoutButton.test.tsx.
 vi.mock("@/app/_components/LogoutButton", () => ({
   LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
 }));
@@ -61,7 +61,9 @@ describe("Reuso de OrdenesModule (R10)", () => {
     // Reutiliza el módulo compartido pasando las columnas de presentación (R11),
     // sin una segunda DataTable/fetch propios.
     expect(moduleCalls[0].columns).toBe(ordenesColumnsAdminTienda);
-    expect(moduleCalls[0].columns).toHaveLength(4);
+    // 12 columnas del listado del maestro, menos "tienda" (no existe columna
+    // "zona" separada: la zona se resuelve dentro de Estatus/Flete).
+    expect(moduleCalls[0].columns).toHaveLength(11);
     expect(
       moduleCalls[0].columns?.some((c) => c.id === "tienda"),
     ).toBe(false);

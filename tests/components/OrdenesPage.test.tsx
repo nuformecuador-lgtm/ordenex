@@ -143,7 +143,9 @@ describe("OrdenesPage", () => {
     // Espera la resolución async de SWR.
     await screen.findByText("Tienda Uno");
 
-    // 7 cabeceras en orden (feature 30/R14 añade "Zona"; feature 49/R29 añade "Acciones").
+    // Cabeceras en orden: las columnas ricas del listado del maestro (zona
+    // resuelta dentro de Estatus/Flete, sin columna "Zona" separada) + "Acciones"
+    // (feature 49/R29).
     const headers = screen.getAllByRole("columnheader");
     expect(headers.map((h) => h.textContent)).toEqual([
       "Nº Guía",
@@ -151,7 +153,13 @@ describe("OrdenesPage", () => {
       "Estatus",
       "Destinatario",
       "Tienda",
-      "Zona",
+      "Provincia",
+      "Cantón",
+      "Distrito",
+      "Flete",
+      "Mensajero",
+      "Fecha de creación",
+      "Tiempo",
       "Acciones",
     ]);
 
@@ -167,9 +175,10 @@ describe("OrdenesPage", () => {
     expect(c1[3]).toHaveTextContent("Ana Pérez"); // destinatario por column.id (R8)
     expect(c1[4]).toHaveTextContent("Tienda Uno"); // tiendaNombre por render-función (R24)
 
-    // Fila 3: sin estatusValue → estatusId legible por la función de render (R6).
+    // Fila 3: sin estatusValue ni relaciones.estatus → placeholder "—" (nunca
+    // filtra el uuid interno estatusId a la UI).
     const c3 = within(rows[2]).getAllByRole("cell");
-    expect(c3[2]).toHaveTextContent("est-3");
+    expect(c3[2]).toHaveTextContent("—");
     expect(c3[4]).toHaveTextContent("Tienda Tres");
 
     // La celda Tienda muestra el NOMBRE, nunca el uuid tiendaId (R24).
@@ -210,8 +219,8 @@ describe("OrdenesPage", () => {
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent("No hay órdenes");
-    // La cabecera sigue presente (7 columnas: "Zona" feature 30/R14 + "Acciones" feature 49/R29).
-    expect(screen.getAllByRole("columnheader")).toHaveLength(7);
+    // La cabecera sigue presente (12 columnas del listado del maestro + "Acciones" feature 49/R29).
+    expect(screen.getAllByRole("columnheader")).toHaveLength(13);
   });
 
   it("D4: cualquier resultado no-ok o throw del transporte muestra error accesible genérico, sin tabla de datos ni internals (R21)", async () => {

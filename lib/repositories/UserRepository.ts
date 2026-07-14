@@ -1,4 +1,5 @@
-import { Prisma, type EstadoUsuario, type PrismaClient } from "@prisma/client";
+import { Prisma, type EstadoUsuario, type PrismaClient, type RolValue } from "@prisma/client";
+import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import {
   CatalogoInvalidoError,
@@ -96,6 +97,19 @@ export class UserRepository implements IUserRepository {
     await this.prisma.usuario.update({
       where: { id: usuarioId },
       data: { passwordHash },
+    });
+  }
+
+  /**
+   * Estrategia generica: usuarios `activo` del rol pasado, proyectados a id/nombre
+   * (sin PII/hash), ordenados por nombre. Fuente unica de la query; los helpers por
+   * rol solo fijan el `rolValue`.
+   */
+  async listByRol(rolValue: RolValue): Promise<UsuarioPorRolDTO[]> {
+    return this.prisma.usuario.findMany({
+      where: { rol: { value: rolValue }, estado: "activo" },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
     });
   }
 

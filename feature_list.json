@@ -655,6 +655,29 @@
       "zone": null,
       "branch": null,
       "depends_on": 57
+    },
+    {
+      "id": 61,
+      "name": "portal mensajero",
+      "description": "al ingresar con rol de mensajero se deben mostrar solo las ordenes asignadas a dicho mensajero, agrega los kpi segun estado, para pendientes(en_ruta), entregadas(entregadas), por cobrar(suma de flete con valor en_ruta)",
+      "status": "done",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "fullstack",
+      "branch": "adjustments",
+      "depends_on": 57,
+      "status_note": "done 2026-07-14. Orquestada DIRECTO por el leader (subagentes backend_dev/frontend_dev MUEREN por el bug de modelo opus-4.8[1m]; ver memoria). Aclaracion del humano (equivale a la gate F1.4) sobre la descripcion imprecisa: el estado 'en_ruta' NO existe en el catalogo -> KPI 'pendientes' = ordenes en `en_reparto` (aceptadas/recogidas, en camino); 'entregadas' = ordenes en `entregada`; 'por cobrar' = suma de `orden.monto_cobrar` (COD, NO flete) de las ordenes en_reparto (null cuenta 0). Ubicacion: fila de KPIs SOBRE la lista existente en `/mis-asignaciones` (NO en la landing). La lista ya mostraba solo las ordenes del mensajero (feature 36). Cambio minimo: `pendientes`/`porCobrar` se derivan de `porGestionar` (ya devuelto); SOLO faltaba el conteo de `entregada`. Backend: +`contarEntregadas(mensajeroId)` en IGestionOrdenRepository/GestionOrdenRepository (prisma.orden.count, no trae filas), +interface `MisAsignacionesKpis` y campo `kpis` en ListarMisAsignacionesServiceResult (interface) y ListarMisAsignacionesResult (gestion-orden.ts); el service calcula kpis en el Promise.all existente (sin latencia serial); action passthrough sin cambios. Frontend: nuevo componente presentacional `KpisMensajero.tsx` (server-compatible, Card+PriceLabel+lucide, region aria 'Indicadores de mis asignaciones') renderizado en la page sobre el modulo. Tests (+3): service (3 KPIs, montoCobrar null->0), repo (contarEntregadas WHERE), page (region + valores). VERDE de lo tocado: 5 suites / 104 tests passed; typecheck 0 errores en archivos de la feature. NOTA: el arbol `adjustments` ya arrastra errores de tsc PRE-EXISTENTES en Tarifa*/IUserRepository (refactor por-tienda/usuarios-por-rol en curso de otras sesiones), ajenos a esta feature. Sin migracion. PENDIENTE: revision humana + (si aplica) PR/merge segun el flujo de `adjustments`."
+    },
+    {
+      "id": 62,
+      "name": "Orden flete",
+      "description": "al ingresar una nueva orden debe tomar el valor del flete",
+      "status": "pending",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": 57
     }
   ]
 }

@@ -55,6 +55,22 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
   });
 });
 
+describe("GestionOrdenRepository.contarEntregadas (feature 61)", () => {
+  it("cuenta por mensajero + estado entregada + no borradas, en el WHERE", async () => {
+    const count = vi.fn(async () => 5);
+    const repo = new GestionOrdenRepository({ orden: { count } } as never);
+
+    const total = await repo.contarEntregadas("m1");
+
+    expect(total).toBe(5);
+    expect(count).toHaveBeenCalledTimes(1);
+    const arg = (count.mock.calls[0] as unknown[])[0] as { where: Record<string, unknown> };
+    expect(arg.where.mensajeroAsignadoId).toBe("m1");
+    expect(arg.where.deletedAt).toBeNull();
+    expect(arg.where.estatus).toEqual({ value: "entregada" });
+  });
+});
+
 describe("GestionOrdenRepository.findByIdsParaGestion (feature 47/R5 · zonaId)", () => {
   it("proyecta y devuelve zonaId (insumo del ruteo a bodega en un reintento)", async () => {
     const findMany = vi.fn(async () => [

@@ -69,6 +69,7 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
 function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrdenRepository {
   return {
     findMisAsignaciones: vi.fn(async () => []),
+    contarEntregadas: vi.fn(async () => 0),
     findByIdsParaGestion: vi.fn(async () => [gestionRow()]),
     getOrdenEnGestion: vi.fn(async () => null),
     setOrdenEnGestion: vi.fn(async () => true),
@@ -163,6 +164,26 @@ describe("listarMisAsignaciones (R9-R13)", () => {
       "en_espera_aceptacion",
       "en_reparto",
     ]);
+  });
+
+  it("Feature 61: KPIs = pendientes (en_reparto), entregadas (conteo) y porCobrar (suma COD de en_reparto; null=0)", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "a", estatusValue: "en_espera_aceptacion", montoCobrar: 999 }),
+        asignacionRow({ id: "b", estatusValue: "en_reparto", montoCobrar: 100 }),
+        asignacionRow({ id: "c", estatusValue: "en_reparto", montoCobrar: 250 }),
+        asignacionRow({ id: "d", estatusValue: "en_reparto", montoCobrar: null }),
+      ]),
+      contarEntregadas: vi.fn(async () => 7),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    // pendientes = # en_reparto (no cuenta por recoger); porCobrar suma solo en_reparto,
+    // null cuenta 0 (100 + 250 + 0); entregadas viene del conteo del repo.
+    expect(r.kpis).toEqual({ pendientes: 3, entregadas: 7, porCobrar: 350 });
+    expect(repo.contarEntregadas).toHaveBeenCalledWith("m1");
   });
 });
 

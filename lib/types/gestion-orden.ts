@@ -4,6 +4,7 @@ import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
 import type {
   DetalleConflicto,
   MiAsignacionDTO,
+  MisAsignacionesKpis,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 36 — validacion de borde (zod) del flujo del mensajero. Los schemas se
@@ -121,6 +122,7 @@ export type ListarMisAsignacionesResult =
       porRecoger: MiAsignacionDTO[];
       porGestionar: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
+      kpis: MisAsignacionesKpis; // Feature 61
     }
   | { status: "unauthenticated" } // R12
   | { status: "forbidden" }; // R12

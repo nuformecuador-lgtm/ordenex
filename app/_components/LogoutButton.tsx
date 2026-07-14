@@ -15,8 +15,8 @@ import { Button } from "@/components/ui/button";
  * deshabilitado ("Saliendo…") para impedir doble envío (R11). Si `logout()`
  * falla, NO se navega: se rehabilita el control y se avisa con un toast (R10).
  *
- * Las clases de contraste (border/texto claros) lo hacen legible sobre el
- * fondo navy del `PageHeader`.
+ * Las clases de contraste (border/texto navy) lo hacen legible sobre el
+ * fondo claro del `PageHeader`.
  */
 export function LogoutButton() {
   const router = useRouter();
@@ -42,7 +42,7 @@ export function LogoutButton() {
       onClick={handleLogout}
       disabled={isPending}
       variant="outline"
-      className="cursor-pointer border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
+      className="cursor-pointer border-navy/40 bg-transparent text-navy hover:bg-navy/10 hover:text-navy"
     >
       <LogOut aria-hidden="true" />
       {isPending ? "Saliendo…" : "Salir"}

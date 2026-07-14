@@ -7,6 +7,9 @@ import type {
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 
+// Feature 61: estado terminal de entrega para el KPI "entregadas" del portal.
+const ESTATUS_ENTREGADA = "entregada";
+
 type GestionPrismaClient = Pick<
   PrismaClient,
   "orden" | "usuario" | "gestionOrden" | "$transaction"
@@ -74,6 +77,17 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
       ...WITH_ASIGNACION,
     });
     return rows.map(toMiAsignacionRow);
+  }
+
+  /** Feature 61: conteo de entregadas del mensajero (KPI del portal), no borradas. */
+  async contarEntregadas(mensajeroId: string): Promise<number> {
+    return this.prisma.orden.count({
+      where: {
+        mensajeroAsignadoId: mensajeroId,
+        deletedAt: null,
+        estatus: { value: ESTATUS_ENTREGADA },
+      },
+    });
   }
 
   /** R27/R31: filas por id INCLUYENDO borradas (el service distingue el motivo). */

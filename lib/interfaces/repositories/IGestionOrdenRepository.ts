@@ -68,6 +68,13 @@ export interface IGestionOrdenRepository {
   findMisAsignaciones(mensajeroId: string, estados: string[]): Promise<MiAsignacionRow[]>;
 
   /**
+   * Feature 61: # de ordenes ENTREGADAS del mensajero (`mensajero_asignado_id =
+   * mensajeroId`, estado `entregada`, no borradas). Conteo puro para el KPI del
+   * portal; no trae filas.
+   */
+  contarEntregadas(mensajeroId: string): Promise<number>;
+
+  /**
    * R27/R31: filas por id para validar transiciones. INCLUYE borradas; el service
    * decide propiedad/origen. Vacio si `ids` esta vacio.
    */

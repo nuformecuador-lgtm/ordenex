@@ -22,6 +22,7 @@ import type {
   LiberarServiceResult,
   ListarMisAsignacionesServiceResult,
   MiAsignacionDTO,
+  MisAsignacionesKpis,
   RecogerInput,
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
@@ -67,9 +68,10 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    const [ordenEnGestionId, rows] = await Promise.all([
+    const [ordenEnGestionId, rows, entregadas] = await Promise.all([
       this.repo.getOrdenEnGestion(actor.usuarioId), // R20
       this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
+      this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
     ]);
 
     const porRecoger: MiAsignacionDTO[] = [];
@@ -79,7 +81,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       if (row.estatusValue === ORIGEN_RECOGER) porRecoger.push(dto);
       else if (row.estatusValue === ESTADO_EN_REPARTO) porGestionar.push(dto);
     }
-    return { status: "ok", porRecoger, porGestionar, ordenEnGestionId }; // R10
+    // Feature 61: KPIs derivados de las ordenes en_reparto (porGestionar) + el conteo
+    // de entregadas. `pendientes` = en camino; `porCobrar` = COD por recaudar (null = 0).
+    const kpis: MisAsignacionesKpis = {
+      pendientes: porGestionar.length,
+      entregadas,
+      porCobrar: porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0),
+    };
+    return { status: "ok", porRecoger, porGestionar, ordenEnGestionId, kpis }; // R10
   }
 
   async recogerAsignaciones(input: RecogerInput, actor: Actor): Promise<RecogerServiceResult> {

@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
-import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
+import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
+import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import type {
   CambioEstadoEntrada,
@@ -74,28 +75,59 @@ const WITH_ESTATUS = {
   include: { estatus: { select: { value: true } } },
 } as const;
 
-// R25/R26: solo el LISTADO incluye el nombre legible de la tienda
-// (relacion Orden.tienda -> Usuario.nombre). No requiere migracion: es un include
-// sobre una relacion ya existente en el esquema.
-// Feature 30/R14: el listado ademas incluye el nombre de la zona (`zona.nombre`)
-// y su flag GAM (`zona.esGam`) — relacion Orden.zona ya existente (zonaId NOT
-// NULL, feature 24). Aditivo: no requiere migracion.
+// El LISTADO trae, en el MISMO query (via joins de Prisma `include`), los datos
+// de TODAS las relaciones DIRECTAS (FK) de la orden: estatus, tienda, zona,
+// provincia, canton, distrito, mensajeroSugerido y mensajeroAsignado. La relacion
+// `tienda` (Orden.tienda -> Usuario) trae ademas su tarifa ACTIVA (Usuario.
+// tarifasTienda, 1:N por-tienda; se acota a `status: 'activo'`, no borrada,
+// `take: 1`). NO requiere migracion: son includes sobre relaciones ya existentes.
+// Seleccion explicita de campos: NUNCA se traen columnas sensibles del usuario
+// (passwordHash, etc.) ni `deletedAt` de las tarifas.
+const TARIFA_SELECT = {
+  id: true,
+  tiendaId: true,
+  status: true,
+  valorFlete: true,
+  valorFleteDevuelto: true,
+  valorFleteGam: true,
+  valorFleteDevueltoGam: true,
+  fulfillment: true,
+  comisionCod: true,
+  ivaFlete: true,
+  ivaComisionCod: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 const WITH_ESTATUS_Y_TIENDA = {
   include: {
-    estatus: { select: { value: true } },
-    tienda: { select: { nombre: true } },
-    zona: { select: { nombre: true, esCentral: true } },
+    estatus: { select: { id: true, value: true } },
+    tienda: {
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        telefono: true,
+        // Tarifa ACTIVA de la tienda (a lo sumo una, `take: 1`), excluyendo
+        // borradas e inactivas.
+        tarifasTienda: {
+          where: { status: "activo", deletedAt: null },
+          select: TARIFA_SELECT,
+          take: 1,
+        },
+      },
+    },
+    zona: { select: { id: true, nombre: true, esCentral: true } },
+    provincia: { select: { id: true, nombre: true } },
+    canton: { select: { id: true, nombre: true } },
+    distrito: { select: { id: true, nombre: true } },
+    mensajeroSugerido: { select: { id: true, nombre: true } },
+    mensajeroAsignado: { select: { id: true, nombre: true } },
   },
 } as const;
 
-// Fila de orden del listado: estatus.value + tienda.nombre + zona.{nombre,esGam}.
-type OrdenListRow = Prisma.OrdenGetPayload<{
-  include: {
-    estatus: { select: { value: true } };
-    tienda: { select: { nombre: true } };
-    zona: { select: { nombre: true; esCentral: true } };
-  };
-}>;
+// Fila de orden del listado con todas las relaciones directas resueltas.
+type OrdenListRow = Prisma.OrdenGetPayload<typeof WITH_ESTATUS_Y_TIENDA>;
 
 // Serializa la fila de Prisma a OrdenDTO: peso Decimal -> number (o null,
 // feature 15/R4), nunca expone deletedAt (R42/N3).
@@ -122,10 +154,63 @@ function toDTO(row: OrdenRow): OrdenDTO {
   };
 }
 
+// Serializa una tarifa anidada de la tienda: Decimal -> number en las 8 columnas
+// numericas (patron TarifaRepository). No expone `deletedAt` (ya filtrado en el
+// include).
+function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): TarifaDTO {
+  return {
+    id: t.id,
+    tiendaId: t.tiendaId,
+    status: t.status,
+    valorFlete: t.valorFlete.toNumber(),
+    valorFleteDevuelto: t.valorFleteDevuelto.toNumber(),
+    valorFleteGam: t.valorFleteGam.toNumber(),
+    valorFleteDevueltoGam: t.valorFleteDevueltoGam.toNumber(),
+    fulfillment: t.fulfillment.toNumber(),
+    comisionCod: t.comisionCod.toNumber(),
+    ivaFlete: t.ivaFlete.toNumber(),
+    ivaComisionCod: t.ivaComisionCod.toNumber(),
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  };
+}
+
+// Arma el bloque `relaciones` con los datos de las relaciones directas (FK) de la
+// orden, resueltas por el include del listado. `tienda` incluye su tarifa activa.
+function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
+  return {
+    estatus: row.estatus ? { id: row.estatus.id, value: row.estatus.value } : null,
+    tienda: row.tienda
+      ? {
+          id: row.tienda.id,
+          nombre: row.tienda.nombre,
+          email: row.tienda.email,
+          telefono: row.tienda.telefono,
+          // A lo sumo una tarifa activa por tienda (o null).
+          tarifa: row.tienda.tarifasTienda[0] ? toTarifaDTO(row.tienda.tarifasTienda[0]) : null,
+        }
+      : null,
+    zona: row.zona
+      ? { id: row.zona.id, nombre: row.zona.nombre, esCentral: row.zona.esCentral }
+      : null,
+    provincia: row.provincia ? { id: row.provincia.id, nombre: row.provincia.nombre } : null,
+    canton: row.canton ? { id: row.canton.id, nombre: row.canton.nombre } : null,
+    distrito: row.distrito ? { id: row.distrito.id, nombre: row.distrito.nombre } : null,
+    mensajeroSugerido: row.mensajeroSugerido
+      ? { id: row.mensajeroSugerido.id, nombre: row.mensajeroSugerido.nombre }
+      : null,
+    mensajeroAsignado: row.mensajeroAsignado
+      ? { id: row.mensajeroAsignado.id, nombre: row.mensajeroAsignado.nombre }
+      : null,
+  };
+}
+
 // R25/R26: serializa una fila del listado a OrdenListItemDTO, agregando el nombre
 // legible de la tienda. Solo el listado usa este mapeo; el resto del CRUD usa toDTO.
 // Feature 17/R20: agrega mensajeroSugeridoId/mensajeroAsignadoId (ya vienen en el
 // row via WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
+// Ademas expone en `relaciones` los datos de TODAS las relaciones directas (FK),
+// con la tarifa activa anidada dentro de `tienda` (resueltas via joins en el listado).
 function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
   return {
     ...toDTO(row),
@@ -136,6 +221,7 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // decide por fila si muestra select de mensajero o "-> bodega satelite").
     zonaNombre: row.zona.nombre,
     zonaEsGam: row.zona.esCentral,
+    relaciones: toRelaciones(row),
   };
 }
 
@@ -494,9 +580,20 @@ export class OrdenRepository implements IOrdenRepository {
     if (cantonIds.length === 0) return [];
     const rows = await this.prisma.distrito.findMany({
       where: { cantonId: { in: cantonIds } },
-      select: { id: true, nombre: true, cantonId: true, zonaId: true },
+      // La zona del distrito vive en la N:M `zona_distrito` (feature 24): es ahi donde
+      // la UI/ZonaForm asigna distritos a zonas, NO en la columna escalar distrito.zona_id
+      // (que quedo sin poblar). La carga masiva deriva orden.zona_id de esta relacion.
+      select: { id: true, nombre: true, cantonId: true, zonas: { select: { zonaId: true } } },
     });
-    return rows;
+    // Un distrito con EXACTAMENTE una zona resuelve orden.zona_id; con 0 zonas -> sin zona
+    // asignada (error de fila); con >1 -> ambiguo/no derivable -> null (mismo trato seguro:
+    // no se inventa una zona). El caso normal de negocio es 1 zona por distrito.
+    return rows.map((d) => ({
+      id: d.id,
+      nombre: d.nombre,
+      cantonId: d.cantonId,
+      zonaId: d.zonas.length === 1 ? d.zonas[0].zonaId : null,
+    }));
   }
 
   /** R22: subconjunto de `ids` con rol `mensajero`. */
