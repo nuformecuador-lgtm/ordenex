@@ -93,14 +93,14 @@ afterEach(() => {
 });
 
 describe("EtiquetasGuiaModal", () => {
-  it("R11: selección mixta renderiza M etiquetas y avisa de las N−M omitidas", async () => {
+  it("R11: selección mixta renderiza M etiquetas y avisa de las N−M omitidas (no encontradas)", async () => {
     generarEtiquetasMock.mockResolvedValue({
       status: "ok",
       etiquetas: [
         makeEtiqueta({ ordenId: "o1", numGuia: 11 }),
         makeEtiqueta({ ordenId: "o2", numGuia: 12 }),
       ],
-      omitidas: [{ ordenId: "o3", motivo: "sin_guia" }],
+      omitidas: [{ ordenId: "o3", motivo: "no_encontrada" }],
     });
 
     renderModal([makeOrden("o1"), makeOrden("o2"), makeOrden("o3")]);
@@ -108,7 +108,7 @@ describe("EtiquetasGuiaModal", () => {
     const etiquetas = await screen.findAllByTestId("etiqueta-guia");
     expect(etiquetas).toHaveLength(2);
     expect(
-      screen.getByText(/1 orden\(es\) omitida\(s\).*sin guía/),
+      screen.getByText(/1 orden\(es\) omitida\(s\).*no encontrada/),
     ).toBeInTheDocument();
     expect(generarEtiquetasMock).toHaveBeenCalledWith({
       ordenIds: ["o1", "o2", "o3"],
@@ -143,7 +143,7 @@ describe("EtiquetasGuiaModal", () => {
       status: "ok",
       etiquetas: [],
       omitidas: [
-        { ordenId: "o1", motivo: "sin_guia" },
+        { ordenId: "o1", motivo: "no_encontrada" },
         { ordenId: "o2", motivo: "no_encontrada" },
       ],
     });

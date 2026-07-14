@@ -98,6 +98,18 @@ describe("EtiquetaGuia", () => {
     expect(screen.getByText("-")).toBeInTheDocument();
   });
 
+  it("sin guía: muestra 'Pendiente' y omite el código de barras (barcodeValue null)", () => {
+    render(
+      <EtiquetaGuia
+        etiqueta={makeEtiqueta({ numGuia: null, barcodeValue: null })}
+      />,
+    );
+    expect(screen.getByText("Pendiente")).toBeInTheDocument();
+    // El QR sigue presente (codifica el id de la orden); el barcode no.
+    expect(screen.getByTestId("qr-stub")).toBeInTheDocument();
+    expect(screen.queryByTestId("barcode-stub")).toBeNull();
+  });
+
   it("R4: omite el distrito en la ubicación cuando es null", () => {
     render(
       <EtiquetaGuia etiqueta={makeEtiqueta({ distritoNombre: null })} />,

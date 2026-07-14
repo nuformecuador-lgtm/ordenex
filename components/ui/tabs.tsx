@@ -54,7 +54,7 @@ function TabsTrigger({
         // fondo transparente (hover rellena suave). Activa: naranja SÓLIDO con texto
         // de contraste + sombra, para distinguir la seleccionada.
         "border border-primary bg-transparent text-primary hover:bg-primary/10",
-        "data-[selected]:border-primary data-[selected]:bg-primary data-[selected]:text-primary-foreground data-[selected]:shadow-sm data-[selected]:hover:bg-primary",
+        "data-[selected]:border-primary data-[selected]:bg-primary data-[selected]:text-white data-[selected]:shadow-sm data-[selected]:hover:bg-primary data-[selected]:hover:text-white",
         className,
       )}
       {...props}
