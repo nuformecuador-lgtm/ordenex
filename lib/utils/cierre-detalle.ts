@@ -69,16 +69,23 @@ export class CierreDetalleFaltanteError extends Error {
 export function tarifaDe(d: CierreDetalleRow): TarifaVigente | null {
   if (d.tarifaId === null) return null;
   // Las 8 columnas de tarifa se congelan todas o ninguna (R8), asi que con `tarifa_id`
-  // presente el resto no puede ser null. El `?? "0"` no es una politica: es el estrechamiento
-  // del tipo (Decimal | null) sin introducir un fallback silencioso.
+  // presente el resto no puede ser null. El `"0.00"` de `dec2` no es una politica: es el
+  // estrechamiento del tipo (Decimal | null) sin introducir un fallback silencioso.
+  // `toFixed(2)`, no `toString()`: R11 pide escala 2 FIJA al cruzar la frontera y el resolver
+  // de al lado (`TarifaVigentePorTiendaRepository`) ya la emite asi. Con `toString()` un
+  // Decimal("1000.00") salia "1000": mismo valor, distinto texto que el resolver para la misma
+  // tarifa. No movia dinero (`derivarIngresoOrden` re-envuelve en Prisma.Decimal), pero dos
+  // procedencias del MISMO dato con formato distinto es exactamente lo que esta feature existe
+  // para eliminar.
+  const dec2 = (v: Prisma.Decimal | null): string => (v === null ? "0.00" : v.toFixed(2));
   return {
-    valorFlete: (d.tarifaValorFlete ?? "0").toString(),
-    valorFleteGam: (d.tarifaValorFleteGam ?? "0").toString(),
-    valorFleteDevuelto: (d.tarifaValorFleteDevuelto ?? "0").toString(),
-    valorFleteDevueltoGam: (d.tarifaValorFleteDevueltoGam ?? "0").toString(),
-    comisionCod: (d.tarifaComisionCod ?? "0").toString(),
-    ivaFlete: (d.tarifaIvaFlete ?? "0").toString(),
-    ivaComisionCod: (d.tarifaIvaComisionCod ?? "0").toString(),
+    valorFlete: dec2(d.tarifaValorFlete),
+    valorFleteGam: dec2(d.tarifaValorFleteGam),
+    valorFleteDevuelto: dec2(d.tarifaValorFleteDevuelto),
+    valorFleteDevueltoGam: dec2(d.tarifaValorFleteDevueltoGam),
+    comisionCod: dec2(d.tarifaComisionCod),
+    ivaFlete: dec2(d.tarifaIvaFlete),
+    ivaComisionCod: dec2(d.tarifaIvaComisionCod),
   };
 }
 
