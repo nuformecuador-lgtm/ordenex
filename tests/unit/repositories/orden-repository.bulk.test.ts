@@ -130,18 +130,49 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
     expect(arg.where).toMatchObject({ provinciaId: { in: ["p1"] } });
   });
 
-  it("findDistritosByCantonIds filtra por cantonId in", async () => {
+  // Feature 24: la zona del distrito vive en la N:M `zona_distrito`, NO en la columna
+  // escalar distrito.zona_id (que quedo sin poblar). El repo lee la relacion `zonas` y
+  // aplana a `zonaId` solo cuando es inequivoca.
+  it("findDistritosByCantonIds filtra por cantonId in y deriva zonaId de la N:M zona_distrito", async () => {
     const prisma = buildPrisma();
     prisma.distrito.findMany.mockResolvedValue([
-      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonas: [{ zonaId: "z1" }] },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findDistritosByCantonIds(["c1"]);
 
-    expect(rows).toEqual([{ id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" }]);
+    expect(rows).toEqual([{ id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1" }]);
     const arg = prisma.distrito.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ cantonId: { in: ["c1"] } });
+    // La zona se pide por la relacion, no por la columna escalar zona_id.
+    expect(arg.select).toMatchObject({ zonas: { select: { zonaId: true } } });
+    expect(arg.select.zonaId).toBeUndefined();
+  });
+
+  it("findDistritosByCantonIds: distrito sin zonas -> zonaId null (no se inventa zona)", async () => {
+    const prisma = buildPrisma();
+    prisma.distrito.findMany.mockResolvedValue([
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonas: [] },
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDistritosByCantonIds(["c1"]);
+
+    expect(rows).toEqual([{ id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null }]);
+  });
+
+  it("findDistritosByCantonIds: distrito con >1 zonas -> zonaId null (ambiguo, no elige una)", async () => {
+    const prisma = buildPrisma();
+    prisma.distrito.findMany.mockResolvedValue([
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonas: [{ zonaId: "z1" }, { zonaId: "z2" }] },
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDistritosByCantonIds(["c1"]);
+
+    // Ambiguo: ni "z1" (la primera) ni "z2". Null y que la fila falle arriba.
+    expect(rows).toEqual([{ id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null }]);
   });
 });
 

@@ -1,12 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { TarifaRepository } from "@/lib/repositories/TarifaRepository";
+import type { CreateTarifaData } from "@/lib/interfaces/repositories/ITarifaRepository";
 
 function tarifaRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "cob-1",
-    nombre: "Tarifa GAM",
-    zonaId: "zona-1",
+    tiendaId: "tienda-1",
+    status: "activo",
     valorFlete: new Prisma.Decimal("10.00"),
     valorFleteDevuelto: new Prisma.Decimal("5.00"),
     valorFleteGam: new Prisma.Decimal("8.00"),
@@ -22,10 +23,9 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function baseCreateData() {
+function baseCreateData(): CreateTarifaData {
   return {
-    nombre: "Tarifa GAM",
-    zonaId: "zona-1",
+    tiendaId: "tienda-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -46,6 +46,9 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       count: vi.fn(),
       updateMany: vi.fn(),
     },
+    usuario: {
+      findFirst: vi.fn(),
+    },
     ...overrides,
   };
 }
@@ -61,10 +64,12 @@ describe("TarifaRepository.create (R16/R27)", () => {
     const arg = prisma.tarifa.create.mock.calls[0][0];
     expect(arg.data.valorFlete).toBeInstanceOf(Prisma.Decimal);
     expect(arg.data.valorFlete.toString()).toBe("10");
-    expect(arg.data.zonaId).toBe("zona-1"); // feature 24: FK a zona
+    expect(arg.data.tiendaId).toBe("tienda-1"); // FK obligatoria a usuario (adminTienda)
+    // `status` no viaja en create: nace `activo` por default de DB.
+    expect(arg.data).not.toHaveProperty("status");
 
-    expect(dto.nombre).toBe("Tarifa GAM");
-    expect(dto.zonaId).toBe("zona-1");
+    expect(dto.tiendaId).toBe("tienda-1");
+    expect(dto.status).toBe("activo");
     expect(dto.valorFlete).toBe(10);
     expect(dto.ivaComisionCod).toBe(15);
     expect(dto).not.toHaveProperty("deletedAt");
@@ -103,7 +108,8 @@ describe("TarifaRepository.list (R18/R19/R27)", () => {
 
     expect(res.total).toBe(2);
     expect(res.items).toHaveLength(2);
-    expect(res.items[0].nombre).toBe("Tarifa GAM");
+    expect(res.items[0].tiendaId).toBe("tienda-1");
+    expect(res.items[0].status).toBe("activo");
     expect(res.items[0]).not.toHaveProperty("deletedAt");
 
     const arg = prisma.tarifa.findMany.mock.calls[0][0];
@@ -121,15 +127,19 @@ describe("TarifaRepository.update (R21/R22)", () => {
   it("aplica cambios solo sobre no borrados y devuelve el DTO", async () => {
     const prisma = buildPrisma();
     prisma.tarifa.updateMany.mockResolvedValue({ count: 1 });
-    prisma.tarifa.findFirst.mockResolvedValue(tarifaRow({ nombre: "Nueva" }));
+    prisma.tarifa.findFirst.mockResolvedValue(
+      tarifaRow({ tiendaId: "tienda-2", status: "inactivo" }),
+    );
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.update("cob-1", { nombre: "Nueva" });
+    const dto = await repo.update("cob-1", { tiendaId: "tienda-2", status: "inactivo" });
 
     const arg = prisma.tarifa.updateMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ id: "cob-1", deletedAt: null });
-    expect(arg.data.nombre).toBe("Nueva");
-    expect(dto?.nombre).toBe("Nueva");
+    expect(arg.data.tiendaId).toBe("tienda-2");
+    expect(arg.data.status).toBe("inactivo"); // enum: pasa tal cual, no Decimal
+    expect(dto?.tiendaId).toBe("tienda-2");
+    expect(dto?.status).toBe("inactivo");
   });
 
   it("convierte montos/porcentajes provistos a Prisma.Decimal", async () => {
@@ -150,7 +160,7 @@ describe("TarifaRepository.update (R21/R22)", () => {
     prisma.tarifa.updateMany.mockResolvedValue({ count: 0 });
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.update("x", { nombre: "Otro" })).toBeNull();
+    expect(await repo.update("x", { tiendaId: "tienda-2" })).toBeNull();
   });
 });
 
@@ -172,5 +182,28 @@ describe("TarifaRepository.softDelete (R24/R25)", () => {
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
     expect(await repo.softDelete("x")).toBe(false);
+  });
+});
+
+// Metodo nuevo del modelo: respalda la invariante "la tienda debe ser adminTienda"
+// que el service consulta en crear/actualizar.
+describe("TarifaRepository.esTiendaAdminTienda", () => {
+  it("true si el usuario existe y tiene rol adminTienda", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.findFirst.mockResolvedValue({ id: "tienda-1" });
+    const repo = new TarifaRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.esTiendaAdminTienda("tienda-1")).toBe(true);
+
+    const arg = prisma.usuario.findFirst.mock.calls[0][0];
+    expect(arg.where).toMatchObject({ id: "tienda-1", rol: { value: "adminTienda" } });
+  });
+
+  it("false si el usuario no existe o no es adminTienda", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.findFirst.mockResolvedValue(null);
+    const repo = new TarifaRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.esTiendaAdminTienda("x")).toBe(false);
   });
 });

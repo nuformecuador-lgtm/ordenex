@@ -3,7 +3,7 @@ import type { RolValue } from "@prisma/client";
 import { TarifaService } from "@/lib/services/TarifaService";
 import type { ITarifaRepository } from "@/lib/interfaces/repositories/ITarifaRepository";
 import type { Actor } from "@/lib/interfaces/services/ITarifaService";
-import type { TarifaDTO } from "@/lib/types/tarifa";
+import type { CrearTarifaInput, TarifaDTO } from "@/lib/types/tarifa";
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
@@ -14,8 +14,8 @@ const DESCONOCIDO: Actor = { usuarioId: "x", rol: "invitado" as RolValue };
 function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
-    nombre: "Tarifa GAM",
-    zonaId: "zona-1",
+    tiendaId: "tienda-1",
+    status: "activo",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -37,14 +37,15 @@ function buildRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRepositor
     list: vi.fn().mockResolvedValue({ items: [dto()], total: 1 }),
     update: vi.fn().mockResolvedValue(dto()),
     softDelete: vi.fn().mockResolvedValue(true),
+    esTiendaAdminTienda: vi.fn().mockResolvedValue(true),
+    inactivarPorTienda: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
 
-function crearInput(overrides: Record<string, unknown> = {}) {
+function crearInput(overrides: Partial<CrearTarifaInput> = {}): CrearTarifaInput {
   return {
-    nombre: "Tarifa GAM",
-    zonaId: "zona-1",
+    tiendaId: "tienda-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -100,6 +101,20 @@ describe("crear — matriz de autorizacion (R9-R13/R16)", () => {
     const r = await service.crear(crearInput(), MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.tarifa).toEqual(dto());
+  });
+
+  // Invariante del modelo nuevo: la tarifa pertenece a una tienda, y esa tienda
+  // debe ser un usuario con rol adminTienda.
+  it("R15: tienda que no es adminTienda -> validation_error sin persistir", async () => {
+    repo = buildRepo({ esTiendaAdminTienda: vi.fn().mockResolvedValue(false) });
+    service = new TarifaService(repo);
+
+    const r = await service.crear(crearInput({ tiendaId: "no-tienda" }), MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(r.fieldErrors).toHaveProperty("tiendaId");
+    expect(repo.esTiendaAdminTienda).toHaveBeenCalledWith("no-tienda");
+    expect(repo.create).not.toHaveBeenCalled();
   });
 });
 
@@ -183,44 +198,88 @@ describe("listar (R9-R13/R18/R19)", () => {
 
 describe("actualizar (R9-R13/R20-R23)", () => {
   it("R10: maestro aplica solo los campos presentes y delega", async () => {
-    const r = await service.actualizar("cob-1", { nombre: "Nueva", fulfillment: 9 }, MAESTRO);
+    const r = await service.actualizar("cob-1", { tiendaId: "tienda-2", fulfillment: 9 }, MAESTRO);
     expect(r.status).toBe("ok");
     const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect(data).toEqual({ nombre: "Nueva", fulfillment: 9 });
+    expect(data).toEqual({ tiendaId: "tienda-2", fulfillment: 9 });
   });
 
   it("R22: no toca id/created_at (no estan en UpdateTarifaData)", async () => {
-    await service.actualizar("cob-1", { nombre: "Nueva" }, MAESTRO);
+    await service.actualizar("cob-1", { tiendaId: "tienda-2" }, MAESTRO);
     const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(data).not.toHaveProperty("id");
     expect(data).not.toHaveProperty("createdAt");
   });
 
   it("R11: admin no puede actualizar -> forbidden", async () => {
-    const r = await service.actualizar("cob-1", { nombre: "Nueva" }, ADMIN);
+    const r = await service.actualizar("cob-1", { tiendaId: "tienda-2" }, ADMIN);
     expect(r.status).toBe("forbidden");
     expect(repo.update).not.toHaveBeenCalled();
   });
 
   it("R12: adminTienda/mensajero no pueden actualizar -> forbidden", async () => {
     for (const actor of [TIENDA, MENSAJERO]) {
-      const r = await service.actualizar("cob-1", { nombre: "Nueva" }, actor);
+      const r = await service.actualizar("cob-1", { tiendaId: "tienda-2" }, actor);
       expect(r.status).toBe("forbidden");
     }
     expect(repo.update).not.toHaveBeenCalled();
   });
 
   it("R13: rol no reconocido -> forbidden", async () => {
-    const r = await service.actualizar("cob-1", { nombre: "Nueva" }, DESCONOCIDO);
+    const r = await service.actualizar("cob-1", { tiendaId: "tienda-2" }, DESCONOCIDO);
     expect(r.status).toBe("forbidden");
   });
 
   it("R21: inexistente o borrado -> not_found", async () => {
     repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
     service = new TarifaService(repo);
-    const r = await service.actualizar("x", { nombre: "Nueva" }, MAESTRO);
+    const r = await service.actualizar("x", { tiendaId: "tienda-2" }, MAESTRO);
     expect(r.status).toBe("not_found");
     expect(repo.update).not.toHaveBeenCalled();
+  });
+
+  // Invariante del modelo nuevo, lado actualizar: reasignar a una tienda que no
+  // es adminTienda, o reactivar una tarifa de una tienda degradada, se rechaza.
+  it("R23: reasignar a una tienda que no es adminTienda -> validation_error sin update", async () => {
+    repo = buildRepo({ esTiendaAdminTienda: vi.fn().mockResolvedValue(false) });
+    service = new TarifaService(repo);
+
+    const r = await service.actualizar("cob-1", { tiendaId: "no-tienda" }, MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(r.fieldErrors).toHaveProperty("tiendaId");
+    expect(repo.esTiendaAdminTienda).toHaveBeenCalledWith("no-tienda");
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+
+  it("R23: reactivar (status activo) revalida la tienda actual -> validation_error si dejo de ser adminTienda", async () => {
+    repo = buildRepo({
+      findById: vi.fn().mockResolvedValue(dto({ tiendaId: "degradada", status: "inactivo" })),
+      esTiendaAdminTienda: vi.fn().mockResolvedValue(false),
+    });
+    service = new TarifaService(repo);
+
+    const r = await service.actualizar("cob-1", { status: "activo" }, MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    // sin tiendaId en el input, la tienda efectiva es la del registro existente.
+    expect(repo.esTiendaAdminTienda).toHaveBeenCalledWith("degradada");
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+
+  it("R23: solo revalida la tienda si se reasigna o se reactiva", async () => {
+    // cambio numerico puro: no hay motivo para revalidar la tienda.
+    await service.actualizar("cob-1", { fulfillment: 9 }, MAESTRO);
+    expect(repo.esTiendaAdminTienda).not.toHaveBeenCalled();
+    expect(repo.update).toHaveBeenCalled();
+
+    // desactivar tampoco revalida (siempre se puede inactivar).
+    await service.actualizar("cob-1", { status: "inactivo" }, MAESTRO);
+    expect(repo.esTiendaAdminTienda).not.toHaveBeenCalled();
+
+    // reactivar si.
+    await service.actualizar("cob-1", { status: "activo" }, MAESTRO);
+    expect(repo.esTiendaAdminTienda).toHaveBeenCalledWith("tienda-1");
   });
 });
 

@@ -36,6 +36,7 @@ function buildMocks() {
     findByEmail: vi.fn(),
     create: vi.fn(),
     listMensajeros: vi.fn().mockResolvedValue([]),
+    listByRol: vi.fn().mockResolvedValue([]), // exigido por IUserRepository; no ejercitado aqui
     updatePasswordHash: vi.fn(),
     list: vi.fn(),
     count: vi.fn(),

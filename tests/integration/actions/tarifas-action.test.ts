@@ -20,8 +20,8 @@ const noActor = async (): Promise<Actor | null> => null;
 function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
-    nombre: "Tarifa GAM",
-    zonaId: "zona-1",
+    tiendaId: "tienda-1",
+    status: "activo",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -54,8 +54,7 @@ function fakeService(overrides: Partial<ITarifaService> = {}): ITarifaService {
 }
 
 const validCrear = {
-  nombre: "Tarifa GAM",
-  zonaId: "zona-1",
+  tiendaId: "tienda-1",
   valorFlete: 10,
   valorFleteDevuelto: 5,
   valorFleteGam: 8,
@@ -89,15 +88,15 @@ describe("R8: sin sesion valida -> unauthenticated sin tocar el service", () => 
 });
 
 describe("R15/R23: validation_error con fieldErrors sin llamar al service", () => {
-  it("crear con nombre vacio", async () => {
+  it("crear con tiendaId vacio", async () => {
     const service = fakeService();
     const r = await crearTarifa(
-      { ...validCrear, nombre: "" },
+      { ...validCrear, tiendaId: "" },
       { tarifaService: service, getActor: getActor(MAESTRO) },
     );
     expect(r.status).toBe("validation_error");
     if (r.status === "validation_error") {
-      expect(r.fieldErrors).toHaveProperty("nombre");
+      expect(r.fieldErrors).toHaveProperty("tiendaId");
     }
     expect(service.crear).not.toHaveBeenCalled();
   });
@@ -153,7 +152,7 @@ describe("R15/R23: validation_error con fieldErrors sin llamar al service", () =
 });
 
 describe("R16: crear valido (maestro) -> ok con TarifaDTO", () => {
-  it("devuelve el tarifa con nombre y sin deletedAt", async () => {
+  it("devuelve la tarifa con tiendaId/status y sin deletedAt", async () => {
     const service = fakeService();
     const r = await crearTarifa(validCrear, {
       tarifaService: service,
@@ -161,7 +160,8 @@ describe("R16: crear valido (maestro) -> ok con TarifaDTO", () => {
     });
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
-      expect(r.tarifa.nombre).toBe("Tarifa GAM");
+      expect(r.tarifa.tiendaId).toBe("tienda-1");
+      expect(r.tarifa.status).toBe("activo");
       expect(r.tarifa).not.toHaveProperty("deletedAt");
     }
     expect(service.crear).toHaveBeenCalledWith(validCrear, MAESTRO);
@@ -180,7 +180,7 @@ describe("R9-R13: autorizacion end-to-end propagada desde el service", () => {
     expect((await obtenerTarifa("cob-1", deps)).status).toBe("ok");
     expect((await listarTarifas({}, deps)).status).toBe("ok");
     expect((await crearTarifa(validCrear, deps)).status).toBe("forbidden");
-    expect((await actualizarTarifa("cob-1", { nombre: "N" }, deps)).status).toBe("forbidden");
+    expect((await actualizarTarifa("cob-1", { tiendaId: "tienda-2" }, deps)).status).toBe("forbidden");
     expect((await borrarTarifa("cob-1", deps)).status).toBe("forbidden");
   });
 
@@ -197,7 +197,7 @@ describe("R9-R13: autorizacion end-to-end propagada desde el service", () => {
       expect((await obtenerTarifa("cob-1", deps)).status).toBe("forbidden");
       expect((await listarTarifas({}, deps)).status).toBe("forbidden");
       expect((await crearTarifa(validCrear, deps)).status).toBe("forbidden");
-      expect((await actualizarTarifa("cob-1", { nombre: "N" }, deps)).status).toBe("forbidden");
+      expect((await actualizarTarifa("cob-1", { tiendaId: "tienda-2" }, deps)).status).toBe("forbidden");
       expect((await borrarTarifa("cob-1", deps)).status).toBe("forbidden");
     }
   });
@@ -212,7 +212,7 @@ describe("R17/R21/R25: inexistente -> not_found", () => {
     });
     const deps = { tarifaService: service, getActor: getActor(MAESTRO) };
     expect((await obtenerTarifa("x", deps)).status).toBe("not_found");
-    expect((await actualizarTarifa("x", { nombre: "N" }, deps)).status).toBe("not_found");
+    expect((await actualizarTarifa("x", { tiendaId: "tienda-2" }, deps)).status).toBe("not_found");
     expect((await borrarTarifa("x", deps)).status).toBe("not_found");
   });
 });
@@ -259,7 +259,7 @@ describe("R26/R27: resultado tipado sin filtrar internals", () => {
   it("validation_error expone solo status/fieldErrors", async () => {
     const service = fakeService();
     const r = await crearTarifa(
-      { ...validCrear, nombre: "" },
+      { ...validCrear, tiendaId: "" },
       { tarifaService: service, getActor: getActor(MAESTRO) },
     );
     expect(r.status).toBe("validation_error");
@@ -285,7 +285,7 @@ describe("R9: conserva la clave id en fieldErrors", () => {
     const service = fakeService();
     const r = await actualizarTarifa(
       "",
-      { nombre: "N" },
+      { tiendaId: "tienda-2" },
       { tarifaService: service, getActor: getActor(MAESTRO) },
     );
     expect(r.status).toBe("validation_error");
