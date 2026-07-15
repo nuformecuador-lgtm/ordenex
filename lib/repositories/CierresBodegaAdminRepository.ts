@@ -11,14 +11,23 @@ import {
   BODEGA_RESUMEN_SELECT,
   toBodegaResumenRow,
 } from "@/lib/repositories/CierreBodegaRepository";
-import { WITH_DETALLE, toPendienteRow } from "@/lib/repositories/CierreDiaRepository";
+// Feature 69/T23 (R15): se reusan las MISMAS piezas que compone T18 en `CierresAdminRepository`
+// (proyeccion + mapper), no una copia: las dos pantallas de admin muestran el detalle del mismo
+// cierre_dia ya creado y tienen que salir del mismo sitio o divergen.
+import {
+  DETALLE_ADMIN_SELECT,
+  GESTION_ADMIN_SELECT,
+  toPendienteRowDesdeSnapshot,
+} from "@/lib/repositories/CierresAdminRepository";
+import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
 
 // Solo el estado que la 40 puede transicionar (R18): la guardia del updateMany.
 const ESTADO_SOLICITADO = "solicitado";
 
+// Feature 69/T23: el detalle sale del SNAPSHOT -> el cliente necesita `cierreDetail`.
 type CierresBodegaAdminPrismaClient = Pick<
   PrismaClient,
-  "cierreBodega" | "cierreDia" | "gestionOrden"
+  "cierreBodega" | "cierreDia" | "gestionOrden" | "cierreDetail"
 >;
 
 // Proyeccion de la cabecera de un cierre_dia incluido en el detalle (mensajero +
@@ -56,9 +65,12 @@ function toDetalleCierreRow(r: DetalleCierreRow): CierreBodegaDetalleCierreRow {
 /**
  * Feature 40 — repositorio de "Cierres de bodega" del maestro. SOLO queries Prisma. El
  * maestro NO se acota por zona (todo va a la central). Reusa BODEGA_RESUMEN_SELECT /
- * toBodegaResumenRow (cabecera) y WITH_DETALLE / toPendienteRow de la 37 (gestiones).
- * `resolverCierreBodega` es un unico UPDATE guardado por estado; NO toca cierre_dia ni
- * otra tabla (R21/R22).
+ * toBodegaResumenRow (cabecera). `resolverCierreBodega` es un unico UPDATE guardado por
+ * estado; NO toca cierre_dia ni otra tabla (R21/R22).
+ *
+ * Feature 69/T23 (R15): el detalle de las gestiones ya NO reusa WITH_DETALLE / toPendienteRow
+ * de la 37 (que leen la orden VIVA y siguen siendo correctos para la vista EN VIVO de
+ * gestiones sin cierre); sale del SNAPSHOT `cierre_detail` con las mismas piezas que T18.
  */
 export class CierresBodegaAdminRepository implements ICierresBodegaAdminRepository {
   constructor(private readonly prisma: CierresBodegaAdminPrismaClient) {}
@@ -72,7 +84,7 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
     return rows.map(toBodegaResumenRow);
   }
 
-  /** R11: cierre de bodega + cada cierre_dia con sus gestiones (WITH_DETALLE, reuso 37). */
+  /** R11 (+69/R15): cierre de bodega + cada cierre_dia con sus gestiones desde el SNAPSHOT. */
   async findCierreBodegaConDetalle(id: string): Promise<{
     cierre: CierreBodegaResumenRow;
     cierresDia: {
@@ -93,17 +105,36 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
       select: DETALLE_CIERRE_SELECT,
     });
 
-    // Por cada cierre_dia, sus gestiones (WHERE cierre_id = cierre_dia.id).
+    // Por cada cierre_dia, sus gestiones (WHERE cierre_id = cierre_dia.id) compuestas con el
+    // SNAPSHOT de ese cierre. Feature 69/T23 (R15): un cierre_dia consolidado en un
+    // cierre_bodega esta YA CREADO (y normalmente ya aprobado y liquidado), asi que su detalle
+    // son los datos CONGELADOS. Antes esto reusaba `WITH_DETALLE`, que navegaba
+    // `gestion_orden.orden.*` VIVO: esta pantalla y la de `findCierreByIdEnAlcance` mostraban
+    // detalle distinto del MISMO cierre. Mismo DTO que antes -> la UI no cambia.
     const cierresDia = await Promise.all(
       cierresDiaRows.map(async (cd) => {
-        const gestiones = await this.prisma.gestionOrden.findMany({
-          where: { cierreId: cd.id }, // R11: gestiones vinculadas a ESTE cierre_dia
-          orderBy: { createdAt: "desc" },
-          ...WITH_DETALLE,
-        });
+        const [gestiones, detalle] = await Promise.all([
+          this.prisma.gestionOrden.findMany({
+            where: { cierreId: cd.id }, // R11: gestiones vinculadas a ESTE cierre_dia
+            orderBy: { createdAt: "desc" },
+            select: GESTION_ADMIN_SELECT,
+          }),
+          this.prisma.cierreDetail.findMany({
+            where: { cierreId: cd.id }, // el snapshot de ESE cierre_dia
+            select: DETALLE_ADMIN_SELECT,
+          }),
+        ]);
+        // Grano: N gestiones de una orden comparten su UNICA fila congelada.
+        const byOrden = new Map(detalle.map((d) => [d.ordenId, d]));
         return {
           resumen: toDetalleCierreRow(cd),
-          gestiones: gestiones.map(toPendienteRow),
+          // Sin fallback (R14/decision (a)): si falta la fila, error DURO. Igual que T18: un
+          // fallback a datos vivos seria el camino de lectura que esta feature vino a matar.
+          gestiones: gestiones.map((g) => {
+            const d = byOrden.get(g.ordenId);
+            if (d === undefined) throw new CierreDetalleFaltanteError(cd.id, g.ordenId);
+            return toPendienteRowDesdeSnapshot(g, d);
+          }),
         };
       }),
     );

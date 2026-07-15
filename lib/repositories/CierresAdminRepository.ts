@@ -32,7 +32,10 @@ type CierresAdminPrismaClient = Pick<
 
 // Feature 69/T18 (R15) — proyeccion del detalle del cierre YA CREADO: los DESCRIPTIVOS
 // congelados de la orden (`WITH_DETALLE` los navegaba VIVOS via `gestion_orden.orden.*`).
-const DETALLE_ADMIN_SELECT = {
+// Exportado desde T23: `CierresBodegaAdminRepository` (feature 40) muestra el detalle del
+// MISMO cierre_dia ya creado y debe leerlo del MISMO snapshot. Compartir la proyeccion y el
+// mapper (y no re-escribirlos) es lo que impide que las dos pantallas de admin diverjan.
+export const DETALLE_ADMIN_SELECT = {
   ordenId: true,
   numGuia: true,
   numRemision: true,
@@ -47,7 +50,7 @@ const DETALLE_ADMIN_SELECT = {
 } as const;
 
 // Feature 69/T18 — lo que aporta la GESTION (que NO se congela: es suyo, no de la orden).
-const GESTION_ADMIN_SELECT = {
+export const GESTION_ADMIN_SELECT = {
   id: true,
   ordenId: true,
   resultado: true,
@@ -73,7 +76,7 @@ function decimalToString(d: Prisma.Decimal | null): string | null {
  * `toPendienteRow` (la UI no cambia). La gestion aporta lo suyo (`resultado`, `montoRecibido`,
  * evidencia, snapshots 39/56); `cierre_detail` aporta lo de la ORDEN, CONGELADO.
  */
-function toPendienteRowDesdeSnapshot(
+export function toPendienteRowDesdeSnapshot(
   g: GestionAdminRow,
   d: DetalleAdminRow,
 ): CierreGestionPendienteRow {
