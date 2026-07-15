@@ -36,6 +36,8 @@ leen a ella y a nadie más.
 | T20 — este mapa | ✅ | — |
 | T21 — verificación final | ✅ medido (§Puertas) | — |
 | T22 — bookkeeping | ⏸ **del leader, no mío** | — |
+| **T23 — R15 en `CierresBodegaAdminRepository`** (bloqueante 1 del review) | ✅ | `5958ae3` |
+| **T24 — R11: `tarifaDe` a `toFixed(2)`** (menor 2 del review) | ✅ | `ddaabdd` |
 
 ## Puertas (MEDIDO, no estimado)
 
@@ -50,6 +52,18 @@ leen a ella y a nadie más.
 | `./init.sh` | **ROJO sólo por el flaky ambiental** (`✓ typecheck`, `✓ lint`, `✗ test`) → §Flaky |
 
 **Suite: +55 tests** (2787 → 2842), **0 fallos reales**.
+
+### Re-medido tras T23/T24 (2026-07-15, HEAD `ddaabdd`)
+
+| Puerta | Resultado |
+| --- | --- |
+| `pnpm typecheck` | **0 errores**, exit 0 |
+| `pnpm lint` | **0 errores**, 274 warnings (idéntico al baseline), exit 0 |
+| `pnpm build` | **VERDE** — `✓ Compiled successfully in 16.3s`, 25/25 páginas |
+| `pnpm test --testTimeout=30000` | **302/302 archivos · 2849/2849 tests · exit 0** |
+
+**+1 archivo y +7 tests** sobre el baseline del review (301/2842), que es **exactamente** lo añadido:
+5 en `CD` (T24) + 2 en `CBAR` (T23). **Ningún fallo nuevo.**
 
 ## Migración: verificación REAL (no confianza)
 
@@ -66,7 +80,9 @@ leen a ella y a nadie más.
 > Lo que **quedó**, no lo que el spec preveía. `M` = `tests/integration/db/cierre-detail-migration.test.ts` ·
 > `CDR` = `tests/unit/repositories/cierre-dia-repository.test.ts` · `WF` = `tests/unit/services/wallet-feed-service.test.ts` ·
 > `WTF` = `tests/unit/services/wallet-tienda-feed-service.test.ts` · `CAR` = `tests/unit/repositories/cierres-admin-repository.test.ts` ·
-> `CONG` = `tests/integration/db/cierre-detail-congelado.test.ts` · `TAR` = `tests/unit/repositories/tarifa-vigente-por-tienda-repository.test.ts`.
+> `CONG` = `tests/integration/db/cierre-detail-congelado.test.ts` · `TAR` = `tests/unit/repositories/tarifa-vigente-por-tienda-repository.test.ts` ·
+> `CBAR` = `tests/unit/repositories/cierres-bodega-admin-repository.test.ts` (T23) ·
+> `CD` = `tests/unit/utils/cierre-detalle.test.ts` (T24).
 
 | R | Test concreto |
 | --- | --- |
@@ -80,11 +96,11 @@ leen a ella y a nadie más.
 | R8 | `CDR` :: "R8: congela los 7 valores de la tarifa + tarifa_id, resueltos EN LA MISMA tx" · `M` :: "R8: congela los 7 valores de tarifa + tarifa_id" · `TAR` :: "R8: el batch congela tambien `tarifaId`…" |
 | R9 | `CDR` :: "R9: tienda SIN tarifa => fila con las 8 columnas NULL y el cierre se crea igual" · `M` :: "R9: las 8 columnas de tarifa son NULLABLE" · `WF` :: "R9: tarifa congelada ausente … sin lanzar" · `WTF` :: "R9/R14: tarifa congelada ausente → debitos 0.00 … credito COD intacto" · `CONG` :: "R9/(c): una tienda que se queda SIN tarifa vigente al aprobar sigue liquidando la congelada" |
 | R10 | `tests/unit/repositories/cierre-detail-inmutable.test.ts` (3 tests: ningún `update*`/`delete*`/`upsert` en `lib/`; único camino de escritura; el modelo no expone `updated_at`/`deleted_at`) · `M` :: "R10: fila INMUTABLE — sin updated_at ni deleted_at" |
-| R11 | `CDR` :: "R11: montoCobrar viaja como Decimal escala 2 (nunca number/parseFloat)" · `CDR` :: "R8…" (afirma `Decimal` + `toFixed(2)` en los 7 valores) · `TAR` :: "R8: proyecta los 7 campos … como STRING escala 2 (money-safe)" |
+| R11 | `CDR` :: "R11: montoCobrar viaja como Decimal escala 2 (nunca number/parseFloat)" · `CDR` :: "R8…" (afirma `Decimal` + `toFixed(2)` en los 7 valores) · `TAR` :: "R8: proyecta los 7 campos … como STRING escala 2 (money-safe)" · **`CD` :: "R11: los 7 campos salen como STRING escala 2 FIJA (toFixed(2), no toString)"** · **`CD` :: "R11: mismo formato que el resolver vivo para el MISMO valor (no divergen)"** (T24) |
 | R12 | `WF` :: "R12: lee cierre_detail por cierreId y NO consulta orden, zona ni tarifas" · `WF` :: "R12: de gestion_orden solo toma ordenId y resultado" |
 | R13 | `WTF` :: "R13: la TIENDA destinataria sale del SNAPSHOT, no de la orden viva" · `WTF` :: "R13: no consulta orden, zona ni tarifas vivas; de la gestion solo toma lo que ES suyo" |
-| R14 | `WF` :: "R14: lanza CierreDetalleFaltanteError y NO devuelve ningun movimiento" · `WF` :: "R14: el error identifica el cierre y la orden sin snapshot" · `WTF` :: "R14: falta la fila congelada -> lanza y NO emite ningun movimiento" · `CAR` :: "R14: falta la fila congelada de una orden -> error duro (sin fallback a datos vivos)" |
-| R15 | `CAR` :: "R6/R15: cierre en alcance -> compone gestiones (WHERE cierre_id = X) con el SNAPSHOT" · `CAR` :: "R15: los descriptivos salen del SNAPSHOT, no de la orden viva" · ⚠ **cobertura parcial**: ver desviación 1 |
+| R14 | `WF` :: "R14: lanza CierreDetalleFaltanteError y NO devuelve ningun movimiento" · `WF` :: "R14: el error identifica el cierre y la orden sin snapshot" · `WTF` :: "R14: falta la fila congelada -> lanza y NO emite ningun movimiento" · `CAR` :: "R14: falta la fila congelada de una orden -> error duro (sin fallback a datos vivos)" · **`CBAR` :: "69/R14: falta la fila congelada de una orden -> error duro (sin fallback a datos vivos)"** (T23) · **`CD` :: "R14/decision (a): fila ausente -> error DURO, sin fallback a datos vivos"** (T24) |
+| R15 | `CAR` :: "R6/R15: cierre en alcance -> compone gestiones (WHERE cierre_id = X) con el SNAPSHOT" · `CAR` :: "R15: los descriptivos salen del SNAPSHOT, no de la orden viva" · **`CBAR` :: "69/R15: los descriptivos salen del SNAPSHOT, no de la orden viva"** · **`CBAR` :: "R11: por cada cierre_dia … carga gestiones y snapshot WHERE cierre_id=cd.id y mapea"** (T23) — **cobertura COMPLETA: la desviación 1 queda CERRADA** (ver §Cierre del bloqueante 1) |
 | R16 | `CDR` :: describe "Feature 69/R16 — la vista EN VIVO no depende del snapshot" :: "findGestionesPendientes sigue leyendo gestion_orden en vivo, sin tocar cierreDetail" · los describes 37/67 preexistentes siguen verdes **sin editar sus aserciones** |
 | R17 | **`CONG` :: "los movimientos salen con los valores CONGELADOS y cuadran con los total_* del cierre"** |
 | R18 | **`CONG` :: "los movimientos salen con la tarifa CONGELADA, no con la vigente al aprobar"** |
@@ -101,7 +117,7 @@ leen a ella y a nadie más.
 | R29 | §Puertas + §Flaky (evidencia medida) |
 | R30 | `TAR` :: "el fuente contiene un `TODO:` localizable por grep" · "…declara que `status` NO se filtra y que puede liquidar dinero una tarifa inactiva" · "…referencia la feature 69 y la decision (g)" · "…enmarca lo pendiente como la SELECCION de la fila, no como 'migrar a snapshot'" |
 
-**Ningún `R<n>` queda sin test.** (R15 con la salvedad de la desviación 1.)
+**Ningún `R<n>` queda sin test.** (R15 ya **sin salvedad**: la desviación 1 se cerró en T23.)
 
 ## Tests verificados ROJO a mano (no pasan por casualidad)
 
@@ -117,6 +133,54 @@ Un test que nunca se ha visto fallar no prueba nada. Se comprobó invirtiendo el
 2. **(g) en el backfill (`M`).** Añadir `AND ta."status" = 'activo'` al `LATERAL` ⇒ **ROJO**.
 3. **R2, el grano (`CDR`).** Quitar el dedupe por `ordenId` ⇒ **ROJO**.
 4. **R10, inmutabilidad.** Añadir un `cierreDetail.updateMany` en `lib/` ⇒ **ROJO**.
+5. **T23 / R15 en la vista de bodega (`CBAR`).** `git checkout HEAD -- CierresBodegaAdminRepository.ts`
+   (el código de **antes** del arreglo) ⇒ **ROJO 3/9**, y por la razón correcta:
+   `expected "Zona HOY" … to match "Cartago ORIGINAL"` — la **orden viva** atravesando la vista.
+   Con el arreglo: **VERDE 9/9**.
+6. **T24 / R11 en `tarifaDe` (`CD`).** `git checkout HEAD -- cierre-detalle.ts` (el `.toString()`)
+   ⇒ **ROJO 2/5**: `expected '1000' to be '1000.00'`. Con el arreglo: **VERDE 5/5**.
+
+## Cierre del bloqueante 1 (R15) y del menor 2 (R11) — review 2026-07-15
+
+Ambos vienen de `progress/review_69-cierre-detail.md`. Decisión del humano: **se arreglan aquí**.
+
+### T23 — R15 en `CierresBodegaAdminRepository` (feature 40)
+
+La **desviación 1 era correcta y `design.md:238` es falso**: `CierresBodegaAdminRepository:102`
+consumía `WITH_DETALLE` y navegaba `gestion_orden.orden.*` **VIVO** para `cierre_dia` **ya creados**
+(normalmente ya aprobados y liquidados). El texto de R15 es **incondicional** y los alcanza.
+
+**Por qué no era deuda vieja:** la 69 **empeoraba** la coherencia aquí. Antes las dos vistas de admin
+leían vivo (consistentemente mal); con T18 una quedaba congelada y la otra viva ⇒ **dos pantallas
+mostrando detalle distinto del MISMO cierre cerrado**. Divergencia **nueva**, nuestra.
+
+**Arreglo:** se compone el detalle desde `cierre_detail` con **las mismas piezas de T18**
+(`DETALLE_ADMIN_SELECT` / `GESTION_ADMIN_SELECT` / `toPendienteRowDesdeSnapshot`, ahora **exportadas**:
+compartir y no copiar es lo que impide que las dos vistas vuelvan a divergir). **Mismo DTO ⇒ la UI no
+cambia** (es display, no dinero: los feeds ya leían el snapshot). Sin fallback: **fila ausente ⇒
+throw** (R14 / decisión (a)), igual que T18.
+
+**Test (`CBAR`):** el doble de `gestion_orden` devuelve **a propósito** la relación `orden` VIVA con
+valores contradictorios ("Tienda HOY"/"Zona HOY"/guía 999), como haría un JOIN real ⇒ un lector que
+vuelva a mirar datos vivos lo pone **rojo**. Se afirma además que `orden`/`zona`/`tarifas` **nunca**
+se consultan y que el select **no** navega `orden` ni usa `include`.
+
+### T24 — R11 en `tarifaDe`
+
+`.toString()` ⇒ `.toFixed(2)`. **No movía dinero** (`derivarIngresoOrden` re-envuelve en
+`Prisma.Decimal`), pero incumplía la letra de R11 y **divergía del resolver de al lado**: la misma
+tarifa tenía dos textos según su procedencia. `tarifaDe` **no tenía test propio** — por ahí se coló;
+ahora lo tiene (`tests/unit/utils/cierre-detalle.test.ts`, R11/R14/R9).
+
+### Nota de entorno (no es de la feature)
+
+Durante esta sesión `node_modules` estaba **corrupto**: faltaba `node_modules/.bin`, `@adobe/css-tools`
+y el `dist/esm` de `@asamuzakjp/css-color` (dependencia de `jsdom`) estaba **parcialmente extraído** ⇒
+**78 errores** de arranque en todos los tests con entorno jsdom. **No lo causa la 69** (ningún test
+llegaba a ejecutarse: fallaba el worker). Se reparó con `pnpm store prune` + `pnpm install --force
+--frozen-lockfile` + `pnpm db:generate` (el `--force` borra el cliente Prisma generado y **no hay
+postinstall** que lo regenere). **Sin tocar `package.json` ni el lockfile.** Tras reparar, la suite
+sale **302/302 archivos · 2849/2849 tests · exit 0**.
 
 ## Flaky: por qué `./init.sh` sale rojo y por qué NO es de la 69
 
@@ -175,6 +239,21 @@ Un test que nunca se ha visto fallar no prueba nada. Se comprobó invirtiendo el
   `cierres-admin-service.test.ts` y `wallet-idempotencia.test.ts` (dobles) ·
   `gestion-orden-anulacion-migration.test.ts` (desviación 3).
 
+### T23–T24 (cierre del review)
+
+**Producción**
+- `lib/repositories/CierresBodegaAdminRepository.ts` — el detalle sale del **snapshot** (adiós
+  `WITH_DETALLE`/`toPendienteRow`); el cliente gana `cierreDetail`.
+- `lib/repositories/CierresAdminRepository.ts` — se **exportan** `DETALLE_ADMIN_SELECT`,
+  `GESTION_ADMIN_SELECT` y `toPendienteRowDesdeSnapshot` (compartir, no copiar). Sin cambio de lógica.
+- `lib/utils/cierre-detalle.ts` — `tarifaDe`: `.toString()` → `.toFixed(2)` (R11).
+- **La UI no se tocó** (mismo DTO) y **`ingreso-ordenex.ts` sigue intacto** (R21).
+
+**Tests**
+- Nuevo: `tests/unit/utils/cierre-detalle.test.ts` (5).
+- Extendido: `cierres-bodega-admin-repository.test.ts` (7 → 9; el fixture de gestión pierde la relación
+  `orden` salvo donde se usa **a propósito** para probar que la vista ya no la mira).
+
 ## Decisiones F1.4 aplicadas
 
 - **(a)** backfill en el UP, lectores **sin fallback**: falta la fila ⇒ `CierreDetalleFaltanteError`.
@@ -195,9 +274,11 @@ Un test que nunca se ha visto fallar no prueba nada. Se comprobó invirtiendo el
    **`CierresBodegaAdminRepository` (feature 40, `:102`) también lo consume**, para mostrar las gestiones
    de los `cierre_dia` **YA CREADOS** que consolida ⇒ **esa vista sigue mostrando datos VIVOS**, y R15
    ("un administrador consulta el detalle de un cierre ya creado ⇒ datos congelados") **la alcanza por su
-   texto**. **No se corrigió**: T18 acota el alcance a `findCierreByIdEnAlcance`, y tocar una vista de la
-   40 excede lo aprobado. **No mueve dinero** (los feeds ya leen el snapshot; esto es display).
-   **Requiere decisión del humano:** ¿entra en la 69 o va a feature aparte?
+   texto**. **No se corrigió** en su momento: T18 acotaba el alcance a `findCierreByIdEnAlcance`, y tocar
+   una vista de la 40 excedía lo aprobado. **No mueve dinero** (los feeds ya leen el snapshot; esto es
+   display). **Requirió decisión del humano:** ¿entra en la 69 o va a feature aparte?
+   → **RESUELTA (2026-07-15, review + humano): entra en la 69, salida (A).** Arreglada en **T23**
+   (`5958ae3`). La corrección de `design.md:238` la hace otro agente. Ver §Cierre del bloqueante 1.
 2. **`pnpm db:migrate` (`prisma migrate dev`) inutilizable en este repo** — drift de checksum
    **PREEXISTENTE** en `20260714123909_reconcile_fks_drop_order_status_value` (modificada tras aplicarse,
    commit `22cf7a3`): aborta pidiendo reset de la base. El round-trip se hizo con `migrate deploy` +
