@@ -54,12 +54,26 @@ if command -v jq >/dev/null 2>&1 && [ -f feature_list.json ]; then
 fi
 
 # 5. Calidad de codigo (si los scripts existen)
+# Distingue TRES casos que no son lo mismo: (a) pnpm ausente, (b) script no definido
+# en package.json -> se omite, (c) el script CORRIO Y FALLO -> rojo, corta el init.
+#
+# La version previa los confundia: `pnpm run | grep -q ... && { ...; pnpm run "$1"; }
+# || warn "no definido"`. Si el script fallaba, el grupo `&&` devolvia no-cero, se
+# ejecutaba la rama `||` y reportaba "script no definido, se omite" -> la funcion
+# terminaba en `warn` (exit 0), `set -e` no disparaba e init.sh llegaba a "init OK"
+# con la suite roja. El gate del que depende la regla #5 del CLAUDE.md mentia.
 run_if() {
-  if pnpm run --help >/dev/null 2>&1; then
-    pnpm run | grep -q "^  $1" 2>/dev/null && { echo "-> pnpm run $1"; pnpm run "$1"; } || warn "script '$1' no definido, se omite"
-  else
+  if ! pnpm run --help >/dev/null 2>&1; then
     warn "pnpm no disponible para correr script '$1'"
+    return 0
   fi
+  if ! pnpm run 2>/dev/null | grep -q "^  $1"; then
+    warn "script '$1' no definido, se omite"
+    return 0
+  fi
+  echo "-> pnpm run $1"
+  pnpm run "$1" || fail "'pnpm run $1' fallo"
+  ok "$1 paso"
 }
 
 if [ -f package.json ]; then
