@@ -19,7 +19,26 @@
 > **F1.4-i implementada:** la FK `orden_historial_estado.gestion_orden_id` volvió de `SET NULL` a **`RESTRICT`**, completa (modelo + SQL). Nació de un **error del spec** que el leader cazó: afirmaba que el DELETE era imposible por una FK `RESTRICT` cuando la `20260714123909` (PR #66, del día anterior) la había dejado en `SET NULL` — verificado contra la base viva. La decisión de anular seguía bien, pero por el diseño append-only, no por una protección inexistente.
 > VERDE (medido por el leader, **re-medido independientemente por el reviewer**): **2764 tests / 296 archivos / 0 fallos**, typecheck **2 = baseline exacto**, lint 0 errores, `migrate diff` sin drift, round-trip REAL de las 2 migraciones (el reviewer lo repitió en tx con ROLLBACK). Estado vivo: enum 12, FK `confdeltype='r'`, RLS true/0 policies. Estado `done` + `history.md` + `impl_64`/`review_64`. **PENDIENTE: PR a `dev` + merge (OK humano).**
 
-> ### ⚠️ La feature 68 dejó de ser opcional: **`dev` NO COMPILA**
+> ### ⚠️ OJO — el "2764 / 0 fallos" de arriba **CADUCÓ**: `dev` está ROJO también en TESTS (feature 72)
+> Ese número era cierto cuando se midió, pero **el PR #75 lo invalidó** y nadie lo actualizó. Descubierto
+> 2026-07-15 por el `backend_dev` de la feature 69 al **medir el baseline en un worktree limpio en vez de
+> creerle al leader** — que se lo había pasado citando esta bitácora **sin re-medirlo**. Confirmado
+> independientemente por el leader sobre una rama limpia de `origin/dev`.
+> **MEDIDO en `origin/dev` `14f6548`: Test Files 9 failed | 288 passed (297); Tests 17 failed | 2754 passed
+> (2771).** Causa raíz única: el PR #75 aterrizó `recibido_origen` como **14.º** valor de
+> `ORDER_STATUS_SEED` sin actualizar los tests que los cuentan (siguen esperando 13). Arrastra 8 archivos +
+> `zonas-migration.test.ts` (la denylist frágil, deuda (b): se predijo que se rompería con la próxima
+> migración y **se rompió**). → **feature 72** (fix ágil, solo `tests/`) lo devuelve a verde.
+> **LECCIÓN DE ARNÉS:** un baseline citado de la bitácora **no es un baseline medido**. `current.md` es
+> estado vivo y caduca en cuanto entra un PR ajeno (ver la deuda de sesiones paralelas). Medí antes de
+> afirmar; el subagente hizo lo correcto al no creerle al leader.
+
+> ### ⚠️ La feature 68 dejó de ser opcional: **`dev` NO COMPILA** — ✅ RESUELTO por la feature 69 (2026-07-15)
+> **Cerrado:** el bloque 0 de la feature 69 (que absorbió la 68) dejó **typecheck 2 → 0** y **`pnpm build`
+> ROJO → VERDE**, medido. La decisión de diseño que lo bloqueaba está resuelta: tarifa por TIENDA
+> (`orden.tienda_id` → `tarifas.tienda_id`), la zona sigue eligiendo la columna GAM/no-GAM vía
+> `zona.esCentral`. `./init.sh` sigue rojo, pero **ya no por typecheck**: ahora cae en `pnpm test` por los
+> 17 rojos del PR #75 (feature 72, arriba). Se conserva el registro histórico:
 > Descubierto 2026-07-15 al correr `pnpm build` por primera vez en el cierre de la 64, y **confirmado por el reviewer**. `pnpm build` **FALLA** en `lib/repositories/TarifaVigentePorZonaRepository.ts:22` (`'zonaId' does not exist in type 'TarifaWhereInput'`): Next.js corre `tsc` al construir. Cuando el humano aparcó el bug ("aún no llegamos a esa parte del flujo"), ni él ni el leader sabían esto. **No es un bug dormido de runtime: bloquea el despliegue.** Los mismos 2 errores hacen que `./init.sh` (ya honesto, PR #67) corte en typecheck sin llegar a los tests → la verificación de la 64 se hizo con `pnpm test`/`typecheck`/`lint` **directos**, y así se reporta. Sigue necesitando **decisión de diseño del humano**: "tarifa vigente por ZONA" no está definido si la tarifa cuelga de una TIENDA.
 
 > **SANEAMIENTO 2026-07-14/15 (sesión del leader).** `dev` estaba ROJO y nadie lo sabía: **28 tests fallando y 35 errores de typecheck**. Culpable bisectado: **PR #64 "adjustments"** (`2616233`) — `26b6c19` (PR #63) VERDE, `8706032` (PR #64) ROJO. Saldado en 4 PRs, todos mergeados:
