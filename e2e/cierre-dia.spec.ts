@@ -97,3 +97,76 @@ test.describe("Cierre del día — mensajero solicita el cierre", () => {
     ).toBeVisible();
   });
 });
+
+/**
+ * Feature 64 (T21, R35–R38) — el mensajero DESHACE una gestión errónea antes de
+ * solicitar el cierre: la gestión se anula (con rastro) y su orden vuelve a
+ * `en_reparto` con él, lista para re-gestionar.
+ *
+ * Happy path del flujo crítico (toca recaudo: la fila sale de los totales del día):
+ *  mensajero en /cierre-dia → la orden entregada aparece en "Entregadas" y suma al
+ *  total → "Devolver a gestión" en SU fila → confirma en el modal → toast de éxito,
+ *  la fila desaparece de la tabla, el total baja y la orden reaparece en
+ *  /mis-asignaciones como `en_reparto` (lista para "Escoger para gestión": el
+ *  deshacer NO repone el puntero `orden_en_gestion_id`, F1.4-c/R29).
+ *
+ * PRECONDICIÓN (seed), además de la del bloque de arriba: la gestión `entregada` de
+ * la orden ORDEN_A_DESHACER debe seguir DENTRO de la ventana (`cierre_id IS NULL`,
+ * o sea sin cierre solicitado todavía) y ser la más reciente NO anulada de su orden
+ * (R4), con la orden aún en `entregada` (R5: si la bodega ya la movió, el server
+ * responde `conflict` y este test debe fallar, que es lo correcto).
+ *
+ * Mismo diferimiento de ejecución que el bloque de arriba: escrito, NO ejecutado
+ * hasta que exista el entorno con DB real. NO corre bajo `pnpm test`.
+ */
+
+// Nº de remisión y destinatario de la entrega seeded que se va a deshacer: componen
+// el nombre accesible del botón de SU fila (`aria-label`, R35).
+const ORDEN_A_DESHACER = "REM-001";
+const DESTINATARIO_A_DESHACER = "Ana Pérez";
+const BOTON_DESHACER = `Devolver a gestión la orden ${ORDEN_A_DESHACER} · ${DESTINATARIO_A_DESHACER}`;
+
+// Total de efectivo esperado DESPUÉS de deshacer la entrega (R37: los totales se
+// recalculan sin ella). Seed: TOTAL_EFECTIVO menos el monto de esa entrega.
+const TOTAL_EFECTIVO_TRAS_DESHACER = "₡50.00";
+
+test.describe("Cierre del día — mensajero deshace una gestión (feature 64)", () => {
+  test.beforeEach(async ({ page }) => {
+    await loginMensajero(page);
+    await page.goto("/cierre-dia");
+  });
+
+  test("Devolver a gestión → confirma → la fila sale de la tabla, el total baja y la orden vuelve a 'en reparto'", async ({
+    page,
+  }) => {
+    // La entrega errónea está listada en "Entregadas" y suma al total del día.
+    const entregadas = page.getByRole("region", { name: "Entregadas" });
+    await expect(entregadas.getByText(ORDEN_A_DESHACER)).toBeVisible();
+    const totales = page.getByRole("region", { name: "Totales del día" });
+    await expect(totales.getByText(TOTAL_EFECTIVO)).toBeVisible();
+
+    // R35: la acción vive en SU fila, con nombre accesible que identifica la orden.
+    const deshacer = entregadas.getByRole("button", { name: BOTON_DESHACER });
+    await expect(deshacer).toBeEnabled();
+    await deshacer.click();
+
+    // R36: confirmación explícita antes de ejecutar; avisa del rastro que queda.
+    const dialog = page.getByRole("dialog", { name: "Devolver la orden a gestión" });
+    await expect(dialog).toContainText(/quedará anulada/i);
+    await dialog.getByRole("button", { name: "Devolver a gestión" }).click();
+
+    // R37: éxito → la vista relee el servidor (router.refresh()): la fila desaparece
+    // de su tabla y los totales se recalculan SIN ella.
+    await expect(page.getByText(/Gestión deshecha/i)).toBeVisible();
+    await expect(entregadas.getByText(ORDEN_A_DESHACER)).toBeHidden();
+    await expect(totales.getByText(TOTAL_EFECTIVO_TRAS_DESHACER)).toBeVisible();
+
+    // R18/R19/R31: la orden volvió a `en_reparto` asignada al mismo mensajero, así que
+    // reaparece en su lista por gestionar y puede volver a escogerla (guardia 1-a-1).
+    await page.goto("/mis-asignaciones");
+    const porGestionar = page.getByRole("region", {
+      name: "En reparto / por gestionar",
+    });
+    await expect(porGestionar.getByText(ORDEN_A_DESHACER)).toBeVisible();
+  });
+});

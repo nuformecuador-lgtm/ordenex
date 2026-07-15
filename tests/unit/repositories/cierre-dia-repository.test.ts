@@ -37,7 +37,13 @@ function detalleRow(overrides: Record<string, unknown> = {}) {
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   return {
-    gestionOrden: { findMany: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
+    gestionOrden: {
+      findMany: vi.fn(),
+      updateMany: vi.fn(),
+      create: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+    },
     orden: { count: vi.fn() },
     cierreDia: { count: vi.fn(), create: vi.fn(), findMany: vi.fn() },
     $transaction: vi.fn(),
@@ -56,6 +62,20 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
     const arg = prisma.gestionOrden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ mensajeroId: "m1", cierreId: null });
     expect(arg.orderBy).toMatchObject({ createdAt: "desc" });
+  });
+
+  // Feature 64/R13/R14/R15 — ESTA lista alimenta los 4 grupos, `computeTotales`,
+  // `derivarPagos` (39) y `derivarIngresoBodega` (56), en la vista EN VIVO y en el SNAPSHOT
+  // de `solicitarCierre`/corte diario: un solo filtro cubre los tres requisitos.
+  it("64/R13/R14/R15: el WHERE exige `anuladaAt: null` (las gestiones deshechas no se listan)", async () => {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findMany.mockResolvedValue([]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.findGestionesPendientes("m1");
+
+    const arg = prisma.gestionOrden.findMany.mock.calls[0][0];
+    expect(arg.where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
   });
 
   it("R4/R9: mapea el detalle y serializa montoRecibido Decimal -> string toFixed(2)", async () => {
@@ -308,6 +328,358 @@ describe("CierreDiaRepository.crearCierre — feature 41/C1 (R8/R9/R23)", () => 
     expect(id).toBeNull();
     // Solo la vinculacion se intento; los updateMany de snapshot NO se ejecutaron.
     expect((tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+});
+
+// ============================================================================
+// Feature 64 — el deshacer. Bloque money-critical + la escritura atomica.
+// ============================================================================
+
+describe("Feature 64/R16 — crearCierre NO vincula gestiones anuladas (MONEY-CRITICAL)", () => {
+  // design §3-#2 y §8: este `updateMany` es el que VINCULA la gestion al cierre. Los feeds de
+  // wallet (42/43/44) leen `gestionOrden.findMany({ where: { cierreId } })` dentro de la tx de
+  // aprobacion: si una gestion DESHECHA recibiera `cierre_id`, la wallet la cobraria al
+  // aprobar. Sin este test la feature no pasa review.
+  it("el WHERE del updateMany que VINCULA exige `anuladaAt: null` (si no, la wallet cobra una gestion deshecha)", async () => {
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
+      gestionOrden: { updateMany: vi.fn(async () => ({ count: 2 })) },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.crearCierre({
+      mensajeroId: "m1",
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z1",
+      totales: { efectivo: "10.00", simpe: "0.00", transferencia: "0.00", general: "10.00" },
+      pagoByGestionId: { g1: "5.00", g2: "0.00" },
+      totalPagoMensajero: "5.00",
+      ingresoByGestionId: { g1: "0.00", g2: "0.00" },
+      totalIngresoBodegaRechazos: "0.00",
+    });
+
+    const calls = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls;
+    // La PRIMERA escritura de la tx es la vinculacion: propiedad + sin cierre + NO ANULADA.
+    expect(calls[0][0].where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
+    expect(calls[0][0].data).toMatchObject({ cierreId: "c1" });
+  });
+
+  it("R16: la vinculacion NO usa el WHERE viejo (sin `anuladaAt`), que ataria la anulada al cierre", async () => {
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
+      gestionOrden: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.crearCierre({
+      mensajeroId: "m1",
+      destinoTipo: "bodega_central",
+      destinoZonaId: "z1",
+      totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+      pagoByGestionId: { g1: "0.00" },
+      totalPagoMensajero: "0.00",
+      ingresoByGestionId: { g1: "0.00" },
+      totalIngresoBodegaRechazos: "0.00",
+    });
+
+    const where = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where;
+    expect(where).not.toEqual({ mensajeroId: "m1", cierreId: null }); // el WHERE pre-64
+    expect(where.anuladaAt).toBe(null);
+  });
+});
+
+describe("Feature 64 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId (R4/R6)", () => {
+  it("lee la gestion por id con lo que necesitan las guardias (cierre, anulacion, orden)", async () => {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findUnique.mockResolvedValue({
+      id: "g1",
+      ordenId: "o1",
+      mensajeroId: "m1",
+      resultado: "devuelta",
+      cierreId: null,
+      anuladaAt: null,
+      orden: { deletedAt: null, estatusId: "s-bodega", estatus: { value: "en_bodega" } },
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    const row = await repo.findGestionParaDeshacer("g1");
+
+    expect(prisma.gestionOrden.findUnique.mock.calls[0][0].where).toEqual({ id: "g1" });
+    expect(row).toEqual({
+      gestionId: "g1",
+      ordenId: "o1",
+      mensajeroId: "m1", // R9
+      resultado: "devuelta", // R5
+      cierreId: null, // R2
+      anuladaAt: null, // R3
+      orden: { deletedAt: null, estatusId: "s-bodega", estatusValue: "en_bodega" }, // R5/R6
+    });
+  });
+
+  it("R6: propaga `orden.deletedAt` (el service decide; el repo no juzga)", async () => {
+    const prisma = buildPrisma();
+    const borrada = new Date("2026-07-14T10:00:00.000Z");
+    prisma.gestionOrden.findUnique.mockResolvedValue({
+      id: "g1",
+      ordenId: "o1",
+      mensajeroId: "m1",
+      resultado: "entregada",
+      cierreId: null,
+      anuladaAt: null,
+      orden: { deletedAt: borrada, estatusId: "s-entregada", estatus: { value: "entregada" } },
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    const row = await repo.findGestionParaDeshacer("g1");
+    expect(row?.orden.deletedAt).toEqual(borrada);
+  });
+
+  it("gestion inexistente -> null", async () => {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findUnique.mockResolvedValue(null);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    expect(await repo.findGestionParaDeshacer("nope")).toBeNull();
+  });
+
+  it("R4: la ultima NO anulada de la orden = findFirst({ordenId, anuladaAt:null}) desc por createdAt", async () => {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findFirst.mockResolvedValue({ id: "g9" });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    const id = await repo.findUltimaGestionNoAnuladaId("o1");
+
+    expect(id).toBe("g9");
+    const arg = prisma.gestionOrden.findFirst.mock.calls[0][0];
+    expect(arg.where).toEqual({ ordenId: "o1", anuladaAt: null }); // las anuladas no cuentan
+    expect(arg.orderBy).toEqual({ createdAt: "desc" });
+  });
+
+  it("R4: orden sin gestiones vigentes -> null", async () => {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findFirst.mockResolvedValue(null);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    expect(await repo.findUltimaGestionNoAnuladaId("o1")).toBeNull();
+  });
+});
+
+describe("Feature 64 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", () => {
+  const INPUT = {
+    gestionId: "g1",
+    ordenId: "o1",
+    mensajeroId: "m1",
+    actorUsuarioId: "m1",
+    estatusEsperadoId: "s-bodega",
+    estatusEnRepartoId: "s-reparto",
+  };
+
+  function buildTx(counts: { anula?: number; mueve?: number } = {}) {
+    return {
+      gestionOrden: { updateMany: vi.fn(async () => ({ count: counts.anula ?? 1 })) },
+      orden: { updateMany: vi.fn(async () => ({ count: counts.mueve ?? 1 })) },
+      ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
+      usuario: { update: vi.fn(), updateMany: vi.fn() }, // R29: no debe tocarse
+    };
+  }
+
+  it("R22: los 3 pasos (anular + mover + append) ocurren en la MISMA $transaction; devuelve true", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    const ok = await repo.anularGestionYDevolverAGestion(INPUT);
+
+    expect(ok).toBe(true);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    // Los 3 pasos van al `tx` del callback, no al prisma del constructor (atomicidad real).
+    expect(tx.gestionOrden.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.orden.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    expect(prisma.gestionOrden.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("R11: anula con RASTRO (anulada_at + anulada_por = quien deshizo), guardado por cierre/anulacion", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.anularGestionYDevolverAGestion({ ...INPUT, actorUsuarioId: "m1" });
+
+    const arg = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // R2/R3 en la tx: la ventana (sin cierre) y la no-doble-anulacion son guardias del WHERE.
+    expect(arg.where).toEqual({ id: "g1", mensajeroId: "m1", cierreId: null, anuladaAt: null });
+    expect(arg.data.anuladaPor).toBe("m1");
+    expect(arg.data.anuladaAt).toBeInstanceOf(Date);
+  });
+
+  it("R12: el update NO toca resultado/monto/metodo/motivo/fecha/evidencia/mensajero/createdAt", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.anularGestionYDevolverAGestion(INPUT);
+
+    const data = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0].data;
+    // La fila se CONSERVA intacta (decision 2 del humano: anular dejando huella, no borrar):
+    // solo se añaden las dos columnas de anulacion.
+    expect(Object.keys(data).sort()).toEqual(["anuladaAt", "anuladaPor"]);
+    for (const campo of [
+      "resultado",
+      "montoRecibido",
+      "metodoPago",
+      "motivo",
+      "fechaReprogramacion",
+      "evidenciaStoragePath", // R32: la referencia a la evidencia queda intacta
+      "evidenciaContentType",
+      "mensajeroId",
+      "createdAt",
+      "cierreId",
+    ]) {
+      expect(data[campo]).toBeUndefined();
+    }
+    // R34: tampoco se tocan los snapshots de dinero de la gestion.
+    expect(data.pagoMensajero).toBeUndefined();
+    expect(data.ingresoBodegaRechazo).toBeUndefined();
+  });
+
+  it("R18/R19: devuelve la orden a `en_reparto` y REPONE la asignacion al mensajero autor", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.anularGestionYDevolverAGestion(INPUT);
+
+    const arg = (tx.orden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // R5/R6: guardias — la orden sigue en el estado leido y no esta borrada.
+    expect(arg.where).toEqual({ id: "o1", estatusId: "s-bodega", deletedAt: null });
+    // R18: `en_reparto` (unico estado desde el que se puede volver a gestionar).
+    expect(arg.data.estatusId).toBe("s-reparto");
+    // R19: repone la asignacion que el SEGUIMIENTO del reintento (47/R6) habia limpiado.
+    expect(arg.data.mensajeroAsignadoId).toBe("m1");
+  });
+
+  it("R20: appendCambioEstado con origen real, destino en_reparto, actor, enlace y `deshacer_gestion`", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.anularGestionYDevolverAGestion({ ...INPUT, actorUsuarioId: "m1" });
+
+    const arg = (tx.ordenHistorialEstado.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.data).toEqual([
+      {
+        ordenId: "o1",
+        estatusOrigenId: "s-bodega", // origen = estado REAL previo de la orden
+        estatusDestinoId: "s-reparto",
+        actorUsuarioId: "m1", // quien deshizo
+        origenTipo: "deshacer_gestion", // 12.º valor: distinguible de una gestion real
+        motivo: null,
+        gestionOrdenId: "g1", // enlace a la gestion ANULADA
+      },
+    ]);
+  });
+
+  it("R21/R23: el estado se escribe SOLO via el choke point; el append es createMany (sin update/delete de historial)", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.anularGestionYDevolverAGestion(INPUT);
+
+    // R21: el cambio de estado (tx.orden.updateMany) viene acompañado del append en la MISMA tx.
+    expect(tx.orden.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+    // R23: append-only. El tx del historial solo expone createMany en este flujo: ninguna fila
+    // preexistente se modifica ni se borra.
+    expect(Object.keys(tx.ordenHistorialEstado)).toEqual(["createMany"]);
+  });
+
+  it("R29 (F1.4-c): NO toca el puntero `usuario.orden_en_gestion_id`", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.anularGestionYDevolverAGestion(INPUT);
+
+    expect(tx.usuario.update).not.toHaveBeenCalled();
+    expect(tx.usuario.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("R34: no produce ningun movimiento de wallet/tienda/pago (el repo ni los conoce)", async () => {
+    const tx = buildTx();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await repo.anularGestionYDevolverAGestion(INPUT);
+
+    // El dinero solo se asienta al APROBAR el cierre, y los feeds leen por `cierreId`: una
+    // gestion con cierre_id = NULL nunca los alcanza. La tx del deshacer solo toca 3 modelos.
+    const tocados = Object.entries(tx)
+      .filter(([, m]) => Object.values(m).some((f) => (f as ReturnType<typeof vi.fn>).mock?.calls.length))
+      .map(([k]) => k)
+      .sort();
+    expect(tocados).toEqual(["gestionOrden", "orden", "ordenHistorialEstado"]);
+  });
+
+  it("R2/R3/R22: si la ANULACION afecta 0 filas (carrera con solicitarCierre) -> false, sin mover la orden", async () => {
+    const tx = buildTx({ anula: 0 });
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    const ok = await repo.anularGestionYDevolverAGestion(INPUT);
+
+    expect(ok).toBe(false);
+    // Sin efectos parciales: ni la orden se movio ni se escribio historial (rollback).
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
+    expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+  });
+
+  it("R5/R22: si la orden YA se movio (UPDATE afecta 0 filas) -> false, sin escribir historial", async () => {
+    const tx = buildTx({ mueve: 0 });
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    const ok = await repo.anularGestionYDevolverAGestion(INPUT);
+
+    expect(ok).toBe(false);
+    // La anulacion se intento pero la tx hace ROLLBACK: la gestion NO queda anulada (todo-o-nada).
+    expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+  });
+
+  it("un error REAL de la tx se propaga (no se traga como conflicto)", async () => {
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async () => {
+        throw new Error("caida de DB");
+      }),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+
+    await expect(repo.anularGestionYDevolverAGestion(INPUT)).rejects.toThrow("caida de DB");
   });
 });
 

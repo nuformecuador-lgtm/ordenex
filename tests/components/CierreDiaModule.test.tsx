@@ -4,7 +4,7 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaModule";
-import { solicitarCierre } from "@/lib/actions/cierre-dia";
+import { deshacerGestion, solicitarCierre } from "@/lib/actions/cierre-dia";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -19,6 +19,9 @@ import type {
 vi.mock("@/lib/actions/cierre-dia", () => ({
   solicitarCierre: vi.fn(),
   listarCierreDia: vi.fn(),
+  // Feature 64 (T17/T18): la Server Action del deshacer también se mockea (contrato
+  // cerrado por el backend: recibe un OBJETO `{ gestionId }`, no un string).
+  deshacerGestion: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -43,6 +46,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const solicitarMock = vi.mocked(solicitarCierre);
+const deshacerMock = vi.mocked(deshacerGestion);
 
 function makeGestion(
   over: Partial<CierreDetalleGestion> & { gestionId: string; resultado: CierreResultado },
@@ -105,6 +109,7 @@ beforeEach(() => {
     totales: ZERO_TOTALES,
     destinoTipo: "bodega_satelite",
   });
+  deshacerMock.mockResolvedValue({ status: "ok", ordenId: "o-g1" });
 });
 
 afterEach(() => {
@@ -393,5 +398,314 @@ describe("CierreDiaModule", () => {
     expect(
       screen.queryByText(/no puedes recibir nuevas asignaciones/i),
     ).not.toBeInTheDocument();
+  });
+});
+
+// ---------- Feature 64 (T17/T18, R35–R38): deshacer gestión ----------
+//
+// La vista NO decide la elegibilidad: `findGestionesPendientes` ya filtra por la
+// ventana (`cierre_id IS NULL` + `anulada_at IS NULL`) y `/cierre-dia` es exclusivo
+// del mensajero dueño (`page.tsx` → `notFound()`). Por eso toda fila renderizada es
+// deshacible y el botón va en las 4 tablas; una carrera la corta el server con
+// `conflict` + motivo accionable, que la vista muestra tal cual (R38).
+
+const REGIONES: Array<{ resultado: CierreResultado; region: string }> = [
+  { resultado: "entregada", region: "Entregadas" },
+  { resultado: "reprogramada", region: "Reprogramadas" },
+  { resultado: "devuelta", region: "Devueltas" },
+  { resultado: "rechazada", region: "Rechazadas" },
+];
+
+/** Abre el modal de confirmación desde la fila indicada y devuelve el diálogo. */
+async function abrirDeshacer(
+  user: ReturnType<typeof userEvent.setup>,
+  region: string,
+  nombreBoton: string,
+) {
+  await user.click(
+    within(screen.getByRole("region", { name: region })).getByRole("button", {
+      name: nombreBoton,
+    }),
+  );
+  return screen.findByRole("dialog", { name: "Devolver la orden a gestión" });
+}
+
+describe("CierreDiaModule — feature 64: devolver a gestión", () => {
+  it.each(REGIONES)(
+    "R35: ofrece la acción por fila en la tabla de $region",
+    ({ resultado, region }) => {
+      const grupos = emptyGrupos();
+      grupos[resultado] = [
+        makeGestion({ gestionId: "g1", resultado, destinatario: "Ana Pérez", numRemision: "REM-A" }),
+      ];
+      renderModule({ grupos });
+
+      expect(
+        within(screen.getByRole("region", { name: region })).getByRole("button", {
+          name: "Devolver a gestión la orden REM-A · Ana Pérez",
+        }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("R35: hay UN botón por fila y su nombre accesible identifica SU orden", () => {
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+      makeGestion({ gestionId: "g2", resultado: "entregada", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
+    ];
+    renderModule({ grupos });
+
+    const region = screen.getByRole("region", { name: "Entregadas" });
+    expect(
+      within(region).getAllByRole("button", { name: /^Devolver a gestión la orden/ }),
+    ).toHaveLength(2);
+    expect(
+      within(region).getByRole("button", { name: "Devolver a gestión la orden REM-1 · Ana Pérez" }),
+    ).toBeInTheDocument();
+    expect(
+      within(region).getByRole("button", { name: "Devolver a gestión la orden REM-2 · Beto Ruiz" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R35: una tabla vacía no ofrece la acción", () => {
+    renderModule({ grupos: emptyGrupos() });
+
+    expect(
+      screen.queryByRole("button", { name: /^Devolver a gestión la orden/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("R36: pulsar la acción NO ejecuta el deshacer: pide confirmación explícita", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.devuelta = [
+      makeGestion({ gestionId: "g1", resultado: "devuelta", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    ];
+    renderModule({ grupos });
+
+    const dialog = await abrirDeshacer(user, "Devueltas", "Devolver a gestión la orden REM-A · Ana Pérez");
+
+    expect(dialog).toBeInTheDocument();
+    expect(deshacerMock).not.toHaveBeenCalled();
+  });
+
+  it("R36: cancelar la confirmación NO invoca la action ni refresca", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    ];
+    renderModule({ grupos });
+
+    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    expect(deshacerMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("R36: la confirmación nombra la orden y advierte que la gestión queda anulada con rastro", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    ];
+    renderModule({ grupos });
+
+    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+
+    expect(dialog).toHaveTextContent(/Orden REM-A · Ana Pérez/);
+    expect(dialog).toHaveTextContent(/quedará anulada/i);
+    expect(dialog).toHaveTextContent(/volverá a tu lista para gestionar/i);
+  });
+
+  it("R37: al confirmar invoca la action con el gestionId de ESA fila (objeto, no string)", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.reprogramada = [
+      makeGestion({ gestionId: "g-abc", resultado: "reprogramada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+      makeGestion({ gestionId: "g-xyz", resultado: "reprogramada", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
+    ];
+    renderModule({ grupos });
+
+    const dialog = await abrirDeshacer(
+      user,
+      "Reprogramadas",
+      "Devolver a gestión la orden REM-2 · Beto Ruiz",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
+
+    await vi.waitFor(() => expect(deshacerMock).toHaveBeenCalledTimes(1));
+    expect(deshacerMock).toHaveBeenCalledWith({ gestionId: "g-xyz" });
+  });
+
+  it("R37: éxito → toast de éxito y refresh (la vista relee el estado del servidor)", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    ];
+    renderModule({ grupos });
+
+    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
+
+    await vi.waitFor(() => expect(successMock).toHaveBeenCalled());
+    // R37: el nuevo estado (fila fuera + totales recalculados) lo produce el SERVIDOR;
+    // la vista solo revalida la ruta. Nunca muta la tabla ni los totales localmente.
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(errorMock).not.toHaveBeenCalled();
+  });
+
+  it("R38: conflict → muestra el motivo ACCIONABLE del server y NO altera tabla ni totales", async () => {
+    const user = userEvent.setup();
+    deshacerMock.mockResolvedValue({
+      status: "conflict",
+      motivo: "Esta orden ya fue procesada por la bodega; ya no se puede deshacer.",
+    });
+    const grupos = emptyGrupos();
+    grupos.devuelta = [
+      makeGestion({
+        gestionId: "g1",
+        resultado: "devuelta",
+        numRemision: "REM-A",
+        destinatario: "Ana Pérez",
+        pagoMensajero: "1500.00",
+      }),
+    ];
+    const totales: CierreTotales = {
+      efectivo: "150.00",
+      simpe: "0.00",
+      transferencia: "0.00",
+      general: "150.00",
+    };
+    renderModule({ grupos, totales, totalPagoMensajero: "1500.00" });
+
+    const dialog = await abrirDeshacer(user, "Devueltas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith(
+        "Esta orden ya fue procesada por la bodega; ya no se puede deshacer.",
+      ),
+    );
+    expect(successMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
+    // La fila sigue en su tabla y los totales no se movieron (R38).
+    const region = screen.getByRole("region", { name: "Devueltas" });
+    expect(within(region).getByText("REM-A")).toBeInTheDocument();
+    expect(
+      within(region).getByRole("button", { name: "Devolver a gestión la orden REM-A · Ana Pérez" }),
+    ).toBeEnabled();
+    const panel = screen.getByRole("region", { name: "Totales del día" });
+    expect(within(panel).getAllByText("₡150.00")).toHaveLength(2);
+    expect(
+      within(screen.getByRole("region", { name: "Pago al mensajero" })).getByText("₡1500.00"),
+    ).toBeInTheDocument();
+  });
+
+  it("R38: forbidden → mensaje accionable propio (el server no revela motivo) sin refresh", async () => {
+    const user = userEvent.setup();
+    deshacerMock.mockResolvedValue({ status: "forbidden" });
+    const grupos = emptyGrupos();
+    grupos.rechazada = [
+      makeGestion({ gestionId: "g1", resultado: "rechazada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    ];
+    renderModule({ grupos });
+
+    const dialog = await abrirDeshacer(user, "Rechazadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith("No podés deshacer esta gestión."),
+    );
+    expect(refreshMock).not.toHaveBeenCalled();
+    expect(
+      within(screen.getByRole("region", { name: "Rechazadas" })).getByText("REM-A"),
+    ).toBeInTheDocument();
+  });
+
+  it("R38: validation_error → muestra el primer fieldError; unauthenticated → mensaje genérico", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    ];
+
+    deshacerMock.mockResolvedValue({
+      status: "validation_error",
+      fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
+    });
+    renderModule({ grupos });
+    let dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith("catalogo de estados incompleto (seed pendiente)"),
+    );
+
+    cleanup();
+    vi.clearAllMocks();
+    deshacerMock.mockResolvedValue({ status: "unauthenticated" });
+    renderModule({ grupos });
+    dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith("No se pudo deshacer la gestión. Intentá de nuevo."),
+    );
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("R37: tras el éxito, el botón de SU fila queda deshabilitado hasta que el refresh la retire; los demás siguen activos", async () => {
+    // Ventana REAL del anti-doble-submit: mientras el modal está abierto, Base UI deja
+    // el fondo `inert`/`aria-hidden` (la tabla ni siquiera es alcanzable). El único
+    // hueco es entre el `ok` (modal cerrado) y la llegada del `router.refresh()`, que
+    // es el que retira la fila. Ahí un segundo envío recibiría el `conflict` "esta
+    // gestión ya fue deshecha" (R3): el estado `deshaciendo` lo cierra.
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+      makeGestion({ gestionId: "g2", resultado: "entregada", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
+    ];
+    renderModule({ grupos });
+
+    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-1 · Ana Pérez");
+    await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+
+    // El refresh aún no repuso las props (el test las mantiene): la fila sigue visible.
+    const region = screen.getByRole("region", { name: "Entregadas" });
+    await vi.waitFor(() =>
+      expect(
+        within(region).getByRole("button", { name: "Devolver a gestión la orden REM-1 · Ana Pérez" }),
+      ).toBeDisabled(),
+    );
+    expect(
+      within(region).getByRole("button", { name: "Devolver a gestión la orden REM-2 · Beto Ruiz" }),
+    ).toBeEnabled();
+    expect(deshacerMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("R38: tras un error, el botón de la fila vuelve a estar disponible para reintentar", async () => {
+    const user = userEvent.setup();
+    deshacerMock.mockResolvedValue({ status: "conflict", motivo: "Esta gestión ya fue deshecha." });
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+    ];
+    renderModule({ grupos });
+
+    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-1 · Ana Pérez");
+    await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+
+    await vi.waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "Entregadas" })).getByRole("button", {
+          name: "Devolver a gestión la orden REM-1 · Ana Pérez",
+        }),
+      ).toBeEnabled(),
+    );
   });
 });

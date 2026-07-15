@@ -98,6 +98,18 @@ export type SolicitarCierreServiceResult =
   | { status: "conflict"; motivo: string } // R10 pendientes / R11 vacio / R12 duplicado
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }; // R16 sin zona
 
+// Feature 64/R1-R6/R8-R10 — resultado del deshacer. `ok` devuelve el `ordenId` para que la
+// vista sepa que orden volvio a `en_reparto`. `forbidden` cubre R8 (rol != mensajero) y R9
+// (gestion ajena o inexistente: NO se distinguen, para no revelar datos de gestiones ajenas).
+// `conflict` con motivo ACCIONABLE cubre R2 (ya en un cierre), R3 (ya deshecha), R4 (no es la
+// mas reciente), R5 (la orden ya se movio) y R6 (orden borrada). `validation_error` cubre el
+// catalogo de estados incompleto. `unauthenticated` (R7) lo resuelve el borde (Server Action).
+export type DeshacerGestionServiceResult =
+  | { status: "ok"; ordenId: string }
+  | { status: "forbidden" } // R8/R9
+  | { status: "conflict"; motivo: string } // R2/R3/R4/R5/R6
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
 export interface ICierreDiaService {
   /**
    * R2-R11/R17/R18: lista las gestiones del dia del mensajero (cierre_id IS NULL)
@@ -112,4 +124,13 @@ export interface ICierreDiaService {
    * totales snapshot (R14). Todo-o-nada (R13).
    */
   solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult>;
+  /**
+   * Feature 64/R1-R6/R8/R9/R18/R19 — DESHACE una gestion: la ANULA con rastro (no la borra,
+   * decision 2 del humano) y devuelve su orden a `en_reparto` con su mensajero, de forma
+   * atomica. La VENTANA es `cierre_id IS NULL` (decision 1): antes de solicitar el cierre.
+   * Solo el propio mensajero dueño de la gestion (F1.4-f); cualquier otro rol -> `forbidden`.
+   * NO toca el puntero `usuario.orden_en_gestion_id` (R29/R30, F1.4-c): la orden se retoma con
+   * `escogerParaGestion` (36), que ya tiene la guardia 1-a-1.
+   */
+  deshacerGestion(gestionId: string, actor: Actor): Promise<DeshacerGestionServiceResult>;
 }

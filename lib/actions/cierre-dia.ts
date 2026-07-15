@@ -12,8 +12,14 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ICierreDiaService } from "@/lib/interfaces/services/ICierreDiaService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { ListarCierreDiaResult, SolicitarCierreResult } from "@/lib/types/cierre";
+import {
+  deshacerGestionSchema,
+  type DeshacerGestionResult,
+  type ListarCierreDiaResult,
+  type SolicitarCierreResult,
+} from "@/lib/types/cierre";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
+import type { AppErrorShape } from "@/lib/errors";
 
 // Feature 37 — Server Actions del "Cierre del dia" del mensajero (mutaciones y
 // lecturas internas del mismo proyecto; van como Server Action, no como Route API,
@@ -98,4 +104,45 @@ export async function solicitarCierre(
     return service.solicitarCierre(actor);
   });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+// Feature 64 — traduce el AppErrorShape que puede producir ESTE borde: solo ZodError
+// (VALIDATION_ERROR, R10) o falta de sesion (UNAUTHORIZED, R7). `forbidden`/`conflict` los
+// devuelve el service como resultado de dominio, por eso NO aparecen aqui. Espejo EXACTO de
+// `toDevolucionOrigenActionError` (48) / `toMisAsignacionesActionError` (36).
+function toDeshacerGestionActionError(
+  shape: AppErrorShape,
+): { status: "validation_error"; fieldErrors: Record<string, string[]> } | { status: "unauthenticated" } {
+  switch (shape.code) {
+    case "VALIDATION_ERROR":
+      return {
+        status: "validation_error",
+        fieldErrors: (shape.details?.fieldErrors as Record<string, string[]> | undefined) ?? {},
+      };
+    case "UNAUTHORIZED":
+      return { status: "unauthenticated" };
+    default:
+      throw new Error(`cierre-dia: AppErrorCode inesperado ${shape.code}`);
+  }
+}
+
+/**
+ * Feature 64/R1-R10 — DESHACE una gestion (la anula con rastro y devuelve su orden a
+ * `en_reparto`). Mutacion interna del propio proyecto -> Server Action, no Route API
+ * (`docs/architecture.md`). `unauthenticated` (R7, sin sesion) y `validation_error` (R10,
+ * gestionId no-uuid) se resuelven en el borde; `forbidden` (R8/R9) y `conflict` (R2-R6) los
+ * devuelve el service como resultado de dominio.
+ */
+export async function deshacerGestion(
+  input: unknown,
+  deps: CierreDiaDeps = {},
+): Promise<DeshacerGestionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R7: antes de la logica de negocio y de la DB
+    const data = deshacerGestionSchema.parse(input); // R10: ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.deshacerGestion(data.gestionId, actor);
+  });
+  return isAppErrorShape(r) ? toDeshacerGestionActionError(r) : r;
 }

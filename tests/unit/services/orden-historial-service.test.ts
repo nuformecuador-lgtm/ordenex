@@ -59,7 +59,7 @@ type OrdenRepoMethods = Pick<
 >;
 type HistorialRepoMethods = Pick<
   IOrdenHistorialRepository,
-  "findHistorialByOrden" | "existeActuacionDe" | "contarPorDestino"
+  "findHistorialByOrden" | "existeActuacionDe" | "contarPorDestinoVigentes"
 >;
 
 function ordenRepo(overrides: Partial<OrdenRepoMethods> = {}): OrdenRepoMethods {
@@ -75,7 +75,7 @@ function historialRepo(overrides: Partial<HistorialRepoMethods> = {}): Historial
   return {
     findHistorialByOrden: vi.fn(async () => [entrada()]),
     existeActuacionDe: vi.fn(async () => false),
-    contarPorDestino: vi.fn(async () => 0),
+    contarPorDestinoVigentes: vi.fn(async () => 0),
     ...overrides,
   };
 }
@@ -120,21 +120,65 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
   // MISMA autorizacion de la orden (no se añade regla nueva). Aqui hay 2 destinos `devuelta`.
   it("R15/R17: el ok incluye intentos (derivado) y umbral, tras autorizar la orden", async () => {
     const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
-    const h = historialRepo({ contarPorDestino: vi.fn(async () => 2) });
+    const h = historialRepo({ contarPorDestinoVigentes: vi.fn(async () => 2) });
     const r = await newService(o, h).obtenerHistorial("o1", MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.intentos).toBe(2); // consume el derivador de la 49 (contarPorDestino a `devuelta`)
+    expect(r.intentos).toBe(2); // consume el derivador de la 49 (conteo VIGENTE a `devuelta`)
     expect(r.umbral).toBe(3); // default por ley (reintentosConfig, env no seteado en test)
-    expect(h.contarPorDestino).toHaveBeenCalledWith("o1", "s-devuelta");
+    expect(h.contarPorDestinoVigentes).toHaveBeenCalledWith("o1", "s-devuelta");
   });
 
   it("R15: sin devoluciones -> intentos 0 (no bloquea el ok)", async () => {
     const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
-    const h = historialRepo({ contarPorDestino: vi.fn(async () => 0) });
+    const h = historialRepo({ contarPorDestinoVigentes: vi.fn(async () => 0) });
     const r = await newService(o, h).obtenerHistorial("o1", MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.intentos).toBe(0);
+  });
+
+  // Feature 64/R28: la linea de tiempo expone el conteo YA CORREGIDO (sin los anulados), el
+  // MISMO que usa la regla de escalado -> "intento X de N" coincide con la decision real.
+  it("64/R28: `intentos` de la linea de tiempo es el conteo VIGENTE (2 devueltas, 1 anulada -> 1)", async () => {
+    const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
+    // El repo ya excluye la anulada en la LECTURA (design §4.2): de 2 filas destino `devuelta`
+    // devuelve 1 vigente.
+    const h = historialRepo({ contarPorDestinoVigentes: vi.fn(async () => 1) });
+    const r = await newService(o, h).obtenerHistorial("o1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.intentos).toBe(1);
+    // R28: es EXACTAMENTE el mismo derivador que alimenta el escalado (un solo call-site).
+    expect(h.contarPorDestinoVigentes).toHaveBeenCalledWith("o1", "s-devuelta");
+  });
+
+  // Feature 64/R23: el historial es append-only e INMUTABLE. La correccion del contador es un
+  // filtro de LECTURA: la linea de tiempo sigue mostrando TODAS las filas (incluida la de la
+  // gestion anulada y la del propio `deshacer_gestion`). La verdad historica se conserva.
+  it("64/R23: `findHistorialByOrden` devuelve TODAS las filas (no filtra las de gestiones anuladas)", async () => {
+    const eGestion = entrada({
+      estatusOrigenValue: "en_reparto",
+      estatusDestinoValue: "devuelta",
+      origenTipo: "gestion",
+      motivo: "cliente ausente",
+      createdAt: new Date("2026-07-14T12:00:00.000Z"),
+    });
+    const eDeshacer = entrada({
+      estatusOrigenValue: "en_bodega",
+      estatusDestinoValue: "en_reparto",
+      origenTipo: "deshacer_gestion", // 12.º valor del enum (F1.4-b)
+      actorNombre: "Mensajero 1",
+      createdAt: new Date("2026-07-14T13:00:00.000Z"),
+    });
+    const h = historialRepo({ findHistorialByOrden: vi.fn(async () => [eGestion, eDeshacer]) });
+    const r = await newService(ordenRepo(), h).obtenerHistorial("o1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // Las 2 filas siguen ahi: el deshacer NO borro ni modifico el rastro de la gestion.
+    expect(r.entradas).toEqual([eGestion, eDeshacer]);
+    expect(r.entradas.map((e) => e.origenTipo)).toContain("deshacer_gestion");
+    // El service de lectura no muta el historial: no existe API de update/delete que llamar.
+    expect(Object.keys(h)).toEqual(
+      expect.not.arrayContaining(["actualizarHistorial", "borrarHistorial"]),
+    );
   });
 
   it("admin -> ok con las entradas (cualquier orden)", async () => {
@@ -234,16 +278,16 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
 describe("contarIntentos — derivador de intentos (R24/R25)", () => {
   it("N transiciones a `devuelta` -> N", async () => {
     const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
-    const h = historialRepo({ contarPorDestino: vi.fn(async () => 3) });
+    const h = historialRepo({ contarPorDestinoVigentes: vi.fn(async () => 3) });
     const n = await newService(o, h).contarIntentos("o1");
     expect(n).toBe(3);
     expect(o.findEstatusIdByValue).toHaveBeenCalledWith("devuelta");
-    expect(h.contarPorDestino).toHaveBeenCalledWith("o1", "s-devuelta");
+    expect(h.contarPorDestinoVigentes).toHaveBeenCalledWith("o1", "s-devuelta");
   });
 
   it("sin devueltas -> 0", async () => {
     const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
-    const h = historialRepo({ contarPorDestino: vi.fn(async () => 0) });
+    const h = historialRepo({ contarPorDestinoVigentes: vi.fn(async () => 0) });
     expect(await newService(o, h).contarIntentos("o1")).toBe(0);
   });
 
@@ -251,6 +295,18 @@ describe("contarIntentos — derivador de intentos (R24/R25)", () => {
     const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => null) });
     const h = historialRepo();
     expect(await newService(o, h).contarIntentos("o1")).toBe(0);
-    expect(h.contarPorDestino).not.toHaveBeenCalled();
+    expect(h.contarPorDestinoVigentes).not.toHaveBeenCalled();
+  });
+
+  // Feature 64/R24: el derivador consume el conteo VIGENTE, NUNCA el conteo crudo. Este test
+  // guarda la decision: si alguien volviera a un `contarPorDestino` sin filtro, el intento de
+  // una gestion deshecha volveria a contar y la orden escalaria sola a `rechazada` (dinero).
+  it("64/R24: consume `contarPorDestinoVigentes` (el conteo que excluye gestiones anuladas)", async () => {
+    const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
+    const h = historialRepo({ contarPorDestinoVigentes: vi.fn(async () => 1) });
+    expect(await newService(o, h).contarIntentos("o1")).toBe(1);
+    expect(h.contarPorDestinoVigentes).toHaveBeenCalledTimes(1);
+    // El contrato del repo ya no expone un conteo sin filtrar: no hay forma de elegir mal.
+    expect("contarPorDestino" in h).toBe(false);
   });
 });

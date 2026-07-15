@@ -1,10 +1,13 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
+  AnularGestionInput,
   CierreGestionPendienteRow,
   CrearCierreInput,
+  GestionDeshacerRow,
   ICierreDiaRepository,
 } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
+import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
@@ -14,6 +17,12 @@ const ESTADO_SOLICITADO = "solicitado";
 // guardado vincula 0 gestiones (carrera). Se captura fuera de la tx -> `crearCierre`
 // devuelve null (sin efectos), NO se propaga como error real.
 class SinGestionesVinculadas extends Error {}
+
+// Feature 64: sentinela interno del deshacer (mismo patron que SinGestionesVinculadas). Una
+// guardia que afecta 0 filas DENTRO de la tx (carrera con `solicitarCierre` / doble submit /
+// la orden se movio) fuerza el rollback -> `anularGestionYDevolverAGestion` devuelve `false`
+// SIN efectos parciales (R22). NO es un error real: no se propaga.
+class NoAnulable extends Error {}
 
 type CierrePrismaClient = Pick<PrismaClient, "gestionOrden" | "orden" | "cierreDia" | "$transaction">;
 
@@ -102,7 +111,13 @@ export class CierreDiaRepository implements ICierreDiaRepository {
   /** R2/R3: gestiones del mensajero sin cierre (cierre_id IS NULL) + detalle. */
   async findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]> {
     const rows = await this.prisma.gestionOrden.findMany({
-      where: { mensajeroId, cierreId: null }, // R2: nunca gestiones de otro mensajero; R3: solo sin cierre
+      // R2: nunca gestiones de otro mensajero; R3: solo sin cierre.
+      // Feature 64/R13/R14/R15: `anuladaAt: null` = solo gestiones VIGENTES. ESTA lista es la
+      // que consumen los 4 grupos (R13), `computeTotales` (R14), `derivarPagos` (39) y
+      // `derivarIngresoBodega` (56) (R15), tanto en la vista EN VIVO (`listarCierreDia`) como
+      // en el SNAPSHOT (`solicitarCierre` y el corte diario de la 41): un solo filtro cubre
+      // los tres requisitos. Usa el indice parcial `gestion_orden_mensajero_pendiente_idx`.
+      where: { mensajeroId, cierreId: null, anuladaAt: null },
       orderBy: { createdAt: "desc" },
       ...WITH_DETALLE,
     });
@@ -169,8 +184,16 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         // en el WHERE (concurrencia-segura: solo las cierre_id IS NULL del actor).
         // Feature 41/C1 (R8/R9/R23): si vincula 0 (otra solicitud/corte concurrente las
         // vinculo primero), fuerza el rollback -> crearCierre devuelve null (sin efectos).
+        //
+        // Feature 64/R16 — PUNTO MONEY-CRITICAL DE LA FEATURE. `anuladaAt: null` NO es una
+        // optimizacion: este updateMany es el que VINCULA la gestion al cierre, y los feeds de
+        // wallet (`WalletFeedService`/`WalletTiendaFeedService`/`WalletMensajeroFeedService`)
+        // leen `gestionOrden.findMany({ where: { cierreId } })` dentro de la tx de aprobacion
+        // (`CierresAdminRepository`). Sin este filtro, una gestion DESHECHA recibiria
+        // `cierre_id` y la wallet la COBRARIA al aprobar el cierre: exactamente el bug que la
+        // feature 64 viene a evitar. No basta con filtrar la lista de la vista (design §3-#2).
         const vinculadas = await tx.gestionOrden.updateMany({
-          where: { mensajeroId, cierreId: null },
+          where: { mensajeroId, cierreId: null, anuladaAt: null },
           data: { cierreId: cierre.id },
         });
         if (vinculadas.count === 0) throw new SinGestionesVinculadas();
@@ -249,5 +272,108 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R12: snapshot money-safe STRING
       solicitadoAt: r.solicitadoAt.toISOString(),
     }));
+  }
+
+  /**
+   * Feature 64 — gestion candidata a deshacerse + estado real de su orden. Devuelve la fila tal
+   * cual (sin juzgarla: las guardias viven en el service, `docs/architecture.md`). `null` = no
+   * existe -> el service lo trata como `forbidden` (R9: no distingue inexistente de ajena).
+   */
+  async findGestionParaDeshacer(gestionId: string): Promise<GestionDeshacerRow | null> {
+    const row = await this.prisma.gestionOrden.findUnique({
+      where: { id: gestionId },
+      select: {
+        id: true,
+        ordenId: true,
+        mensajeroId: true, // R9
+        resultado: true, // R5
+        cierreId: true, // R2
+        anuladaAt: true, // R3
+        orden: { select: { deletedAt: true, estatusId: true, estatus: { select: { value: true } } } },
+      },
+    });
+    if (row === null) return null;
+    return {
+      gestionId: row.id,
+      ordenId: row.ordenId,
+      mensajeroId: row.mensajeroId,
+      resultado: row.resultado,
+      cierreId: row.cierreId,
+      anuladaAt: row.anuladaAt,
+      orden: {
+        deletedAt: row.orden.deletedAt,
+        estatusId: row.orden.estatusId, // R5: id REAL (guardia del UPDATE, sin re-resolver catalogo)
+        estatusValue: row.orden.estatus.value,
+      },
+    };
+  }
+
+  /** Feature 64/R4: id de la gestion NO anulada mas reciente de la orden (o null). */
+  async findUltimaGestionNoAnuladaId(ordenId: string): Promise<string | null> {
+    const row = await this.prisma.gestionOrden.findFirst({
+      where: { ordenId, anuladaAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    return row?.id ?? null;
+  }
+
+  /**
+   * Feature 64/R11/R18-R23 — UNICA escritura del deshacer, en UNA `$transaction` (R22). Las dos
+   * escrituras van GUARDADAS en su WHERE (concurrencia-segura, patron `crearCierre`/`recogerLote`):
+   * si alguna afecta 0 filas, el sentinela fuerza el rollback -> `false` sin efectos parciales.
+   */
+  async anularGestionYDevolverAGestion(input: AnularGestionInput): Promise<boolean> {
+    const { gestionId, ordenId, mensajeroId, actorUsuarioId, estatusEsperadoId, estatusEnRepartoId } =
+      input;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // 1) R11: ANULA con rastro (quien la deshizo + cuando). Guardias: sigue siendo del
+        // mensajero autor, sigue SIN cierre y sigue SIN anular (carrera con `solicitarCierre`
+        // o doble submit). R12: `data` toca SOLO las dos columnas de anulacion — resultado,
+        // monto, metodo, motivo, fecha, evidencia, mensajero autor y created_at quedan INTACTOS.
+        const anulada = await tx.gestionOrden.updateMany({
+          where: { id: gestionId, mensajeroId, cierreId: null, anuladaAt: null },
+          data: { anuladaAt: new Date(), anuladaPor: actorUsuarioId },
+        });
+        if (anulada.count === 0) throw new NoAnulable();
+
+        // 2) R18/R19: devuelve la orden a `en_reparto` (unico estado desde el que se puede
+        // volver a gestionar) y REPONE la asignacion al mensajero autor. `mensajeroAsignadoId`
+        // incondicional: es idempotente cuando la asignacion ya era ese mensajero
+        // (entregada/reprogramada/rechazada) y repone la que el seguimiento de un reintento
+        // limpio (47/R6, `limpiaMensajero: true`). No puede pisar a otro mensajero: una
+        // reasignacion habria cambiado el estado y esta misma guardia fallaria.
+        // Guardias: la orden sigue EXACTAMENTE en el estado leido (R5) y no esta borrada (R6).
+        const movida = await tx.orden.updateMany({
+          where: { id: ordenId, estatusId: estatusEsperadoId, deletedAt: null },
+          data: { estatusId: estatusEnRepartoId, mensajeroAsignadoId: mensajeroId },
+        });
+        if (movida.count === 0) throw new NoAnulable();
+
+        // 3) R20/R21/R23: CHOKE POINT del historial (49) en la MISMA tx que el cambio de estado.
+        // Origen = estado real previo, destino = `en_reparto`, actor = quien deshizo,
+        // `gestion_orden_id` = la gestion anulada, `origen_tipo` = `deshacer_gestion` (12.º
+        // valor, F1.4-b) para que la linea de tiempo NO lo confunda con una gestion real.
+        // Es un APPEND: ninguna fila previa del historial se modifica ni se borra (R23).
+        await appendCambioEstado(tx, [
+          {
+            ordenId,
+            estatusOrigenId: estatusEsperadoId,
+            estatusDestinoId: estatusEnRepartoId,
+            actorUsuarioId, // R20: el mensajero que deshizo
+            origenTipo: "deshacer_gestion", // R20/R23
+            gestionOrdenId: gestionId, // R20: enlace a la gestion anulada
+          },
+        ]);
+        // R29 (F1.4-c): el puntero `usuario.orden_en_gestion_id` NO se toca. La orden se retoma
+        // con `escogerParaGestion` (36), que ya tiene la guardia 1-a-1 idempotente.
+        return true;
+      });
+    } catch (err) {
+      // Guardia perdida (carrera) -> false (sin efectos). Cualquier otro error se propaga.
+      if (err instanceof NoAnulable) return false;
+      throw err;
+    }
   }
 }

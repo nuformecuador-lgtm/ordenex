@@ -66,6 +66,37 @@ export interface CrearCierreInput {
 // Fila cruda de un cierre pasado (R18); el repo la mapea a CierrePasadoDTO.
 export type CierrePasadoRow = CierrePasadoDTO & { estado: CierreEstado };
 
+// Feature 64 — proyeccion MINIMA de la gestion candidata a deshacerse + el estado real de su
+// orden, con TODO lo que necesitan las guardias del service (design 64 §5.2) y nada mas (no
+// expone montos ni evidencia: la decision no los usa). `anuladaAt` != null = ya deshecha (R3);
+// `cierreId` != null = ya vinculada a un cierre (R2). `orden.estatusId` es el id REAL leido de
+// la fila (no un `value`): se pasa tal cual como guardia del UPDATE, sin re-resolver catalogo.
+export interface GestionDeshacerRow {
+  gestionId: string;
+  ordenId: string;
+  mensajeroId: string; // R9: dueño de la gestion (la autz la decide el service)
+  resultado: GestionResultado; // R5: insumo de la tabla ESTADOS_ESPERADOS
+  cierreId: string | null; // R2
+  anuladaAt: Date | null; // R3
+  orden: {
+    deletedAt: Date | null; // R6
+    estatusId: string; // R5: id real del estado actual (guardia del UPDATE)
+    estatusValue: string; // R5: `value` legible para contrastar con ESTADOS_ESPERADOS
+  };
+}
+
+// Feature 64/R11/R18/R19/R20/R22 — input de la UNICA escritura del deshacer. `estatusEsperadoId`
+// es el `orden.estatusId` REAL leido por `findGestionParaDeshacer` (guardia optimista: si la
+// orden se movio entre la lectura y la escritura, el UPDATE afecta 0 filas -> rollback).
+export interface AnularGestionInput {
+  gestionId: string;
+  ordenId: string;
+  mensajeroId: string; // R19: mensajero AUTOR (al que se repone la asignacion)
+  actorUsuarioId: string; // R11/R20: quien deshace (rastro + actor del historial)
+  estatusEsperadoId: string; // R5: estado en el que la orden DEBE seguir estando
+  estatusEnRepartoId: string; // R18: destino
+}
+
 export interface ICierreDiaRepository {
   /**
    * R2/R3: gestiones del mensajero con `cierre_id IS NULL` + detalle de la orden
@@ -91,4 +122,31 @@ export interface ICierreDiaRepository {
   crearCierre(input: CrearCierreInput): Promise<string | null>;
   /** R18: cierres del mensajero (mas reciente primero) con estado + totales. */
   findCierresByMensajero(mensajeroId: string): Promise<CierrePasadoDTO[]>;
+  /**
+   * Feature 64 — lee la gestion candidata a deshacerse + el estado real de su orden. Devuelve
+   * la fila SIN juzgarla (las guardias de R2/R3/R5/R6/R9 viven en el service); `null` si la
+   * gestion no existe. Solo query.
+   */
+  findGestionParaDeshacer(gestionId: string): Promise<GestionDeshacerRow | null>;
+  /**
+   * Feature 64/R4 — id de la gestion NO anulada mas reciente de la orden (`orderBy created_at
+   * desc`), o `null` si la orden no tiene ninguna vigente. El service exige que coincida con la
+   * gestion a deshacer: solo se deshace la ULTIMA. Se ordena por `gestion_orden.created_at` (una
+   * gestion por tx) y NO por filas de historial, que pueden empatar en `created_at` (design §8).
+   */
+  findUltimaGestionNoAnuladaId(ordenId: string): Promise<string | null>;
+  /**
+   * Feature 64/R11/R18-R23 — UNICA escritura del deshacer, todo-o-nada en UNA `$transaction`
+   * (R22): (1) ANULA la gestion con rastro (`anulada_at`/`anulada_por`) conservando intactos
+   * todos sus datos originales (R11/R12), (2) devuelve la orden a `en_reparto` REPONIENDO la
+   * asignacion al mensajero autor (R18/R19: una gestion `devuelta` con reintento habia limpiado
+   * `mensajero_asignado_id`), (3) registra la transicion por el CHOKE POINT del historial
+   * (`appendCambioEstado`, `origen_tipo = deshacer_gestion`) en la MISMA tx (R20/R21). NO toca
+   * `usuario.orden_en_gestion_id` (R29) ni ninguna fila previa del historial (R23).
+   *
+   * Ambas escrituras van GUARDADAS en su WHERE (concurrencia-segura): si la gestion dejo de ser
+   * deshacible o la orden se movio entre la lectura y la escritura, afecta 0 filas -> rollback
+   * -> `false` SIN efectos parciales (el service lo traduce a `conflict`). `true` = deshecha.
+   */
+  anularGestionYDevolverAGestion(input: AnularGestionInput): Promise<boolean>;
 }

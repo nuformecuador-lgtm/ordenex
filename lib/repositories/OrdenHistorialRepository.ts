@@ -5,7 +5,10 @@ import type {
   OrdenHistorialTxClient,
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
-import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
+import {
+  ORIGEN_TIPOS_CON_GESTION,
+  type OrdenHistorialEntradaDTO,
+} from "@/lib/types/orden-historial";
 
 // Cliente Prisma acotado a lo que este repo necesita para las LECTURAS (patron
 // CierresAdminRepository/WalletMovimientoRepository). Las escrituras van por el `tx`.
@@ -71,10 +74,34 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
     return rows.map(toEntradaDTO);
   }
 
-  /** R24: conteo de transiciones de la orden hacia un destino dado (usa el indice del destino). */
-  async contarPorDestino(ordenId: string, estatusDestinoId: string): Promise<number> {
+  /**
+   * R24 (49) + feature 64/R23-R26: conteo de transiciones VIGENTES de la orden hacia un
+   * destino dado (usa el indice `(orden_id, estatus_destino_id)`; el join a `gestion_orden` es
+   * por PK sobre un punado de filas).
+   *
+   * El historial es append-only e INMUTABLE (49/R2): la exclusion de los intentos anulados es
+   * un filtro de LECTURA, no una escritura (64/R23). El predicado discrimina por `origen_tipo`
+   * y NO por la nulidad del enlace, porque `gestion_orden_id IS NULL` es AMBIGUO (design 64
+   * §4.1): significa a la vez "nunca vino de una gestion" y "la gestion se borro y la FK vacio
+   * el enlace". Ante la duda, la HUERFANA no cuenta: contar de menos = mas intentos que el
+   * minimo legal (inofensivo); contar de mas = escalar antes de tiempo a `rechazada` y cobrar
+   * `cobroRechazado` (56) mal.
+   */
+  async contarPorDestinoVigentes(ordenId: string, estatusDestinoId: string): Promise<number> {
     return this.prisma.ordenHistorialEstado.count({
-      where: { ordenId, estatusDestinoId },
+      where: {
+        ordenId,
+        estatusDestinoId,
+        OR: [
+          // R25: la transicion NUNCA vino de una gestion (p. ej. `ajuste_estado` de un admin)
+          // -> no es anulable por esta feature -> SIEMPRE cuenta.
+          { gestionOrdenId: null, origenTipo: { notIn: [...ORIGEN_TIPOS_CON_GESTION] } },
+          // R24: vino de una gestion -> cuenta SOLO si esa gestion sigue VIGENTE (no anulada).
+          // R26: una fila de la familia gestion SIN enlace es HUERFANA y no casa ninguna de las
+          // dos ramas -> no cuenta.
+          { gestion: { anuladaAt: null } },
+        ],
+      },
     });
   }
 

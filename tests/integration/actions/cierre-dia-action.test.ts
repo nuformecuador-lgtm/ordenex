@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { listarCierreDia, solicitarCierre } from "@/lib/actions/cierre-dia";
+import { deshacerGestion, listarCierreDia, solicitarCierre } from "@/lib/actions/cierre-dia";
 import { CierreDiaService } from "@/lib/services/CierreDiaService";
 import type {
   CierreGestionPendienteRow,
   CrearCierreInput,
+  GestionDeshacerRow,
   ICierreDiaRepository,
 } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { ICierreDiaService } from "@/lib/interfaces/services/ICierreDiaService";
@@ -36,6 +37,18 @@ function fakeSignedUrls(): ISignedUrlProvider {
   };
 }
 
+// Feature 64 — gestion deshacible por defecto en el repo en memoria (del propio MENSAJERO,
+// vigente, sin cierre, con su orden todavia en `entregada`).
+const GESTION_DESHACIBLE: GestionDeshacerRow = {
+  gestionId: "11111111-1111-4111-8111-111111111111",
+  ordenId: "o1",
+  mensajeroId: "m1",
+  resultado: "entregada",
+  cierreId: null,
+  anuladaAt: null,
+  orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
+};
+
 // Repo en memoria: findGestionesPendientes solo devuelve las NO vinculadas;
 // crearCierre las vincula y guarda el cierre; findCierresByMensajero lo lista (R18).
 function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
@@ -45,6 +58,10 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
     findGestionesPendientes: vi.fn(async () => [...pendientes]),
     contarOrdenesPendientesGestion: vi.fn(async () => 0),
     existeCierreSolicitado: vi.fn(async () => false),
+    // Feature 64: el deshacer sobre el repo en memoria (caso feliz).
+    findGestionParaDeshacer: vi.fn(async () => GESTION_DESHACIBLE),
+    findUltimaGestionNoAnuladaId: vi.fn(async () => GESTION_DESHACIBLE.gestionId),
+    anularGestionYDevolverAGestion: vi.fn(async () => true),
     crearCierre: vi.fn(async (input: CrearCierreInput) => {
       const id = `c-${cierres.length + 1}`;
       cierres.push({
@@ -69,6 +86,7 @@ function realService(repo: ICierreDiaRepository): ICierreDiaService {
   const ordenRepo = {
     findUsuarioZonaId: vi.fn(async () => "z-satelite"),
     findUsuarioVehiculoId: vi.fn(async () => null), // feature 39
+    findEstatusIdByValue: vi.fn(async () => "s-reparto"), // feature 64/R18
   } as unknown as IOrdenRepository;
   // Feature 39: tarifa por defecto (cobroEntregado 5.00); resuelve el pago en vivo/snapshot.
   const tarifaZonaRepo = {
@@ -116,6 +134,90 @@ describe("cierre-dia actions — unauthenticated en el borde", () => {
     const r = await solicitarCierre({ service, getActor: noActor });
     expect(r.status).toBe("unauthenticated");
     expect(service.solicitarCierre).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// Feature 64 — Server Action `deshacerGestion`: el BORDE (R7 sesion, R10 zod, R8 rol).
+// ============================================================================
+
+const GESTION_ID = "11111111-1111-4111-8111-111111111111"; // uuid v4 valido
+
+function fakeDeshacerService(): ICierreDiaService {
+  return {
+    listarCierreDia: vi.fn(),
+    solicitarCierre: vi.fn(),
+    deshacerGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),
+  } as unknown as ICierreDiaService;
+}
+
+describe("Feature 64 · deshacerGestion action — R7: sesion", () => {
+  it("R7: sin sesion -> unauthenticated, SIN ejecutar la logica de negocio ni tocar la DB", async () => {
+    const service = fakeDeshacerService();
+    const r = await deshacerGestion({ gestionId: GESTION_ID }, { service, getActor: noActor });
+    expect(r.status).toBe("unauthenticated");
+    expect(service.deshacerGestion).not.toHaveBeenCalled();
+  });
+
+  it("R7: la sesion se resuelve ANTES que zod (sin sesion + id invalido -> unauthenticated)", async () => {
+    const service = fakeDeshacerService();
+    const r = await deshacerGestion({ gestionId: "no-es-uuid" }, { service, getActor: noActor });
+    expect(r.status).toBe("unauthenticated");
+    expect(service.deshacerGestion).not.toHaveBeenCalled();
+  });
+});
+
+describe("Feature 64 · deshacerGestion action — R10: zod en el borde", () => {
+  it("R10: gestionId no-uuid -> validation_error, sin llegar al service", async () => {
+    const service = fakeDeshacerService();
+    const r = await deshacerGestion({ gestionId: "no-es-uuid" }, { service, getActor: actorMensajero });
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("esperaba validation_error");
+    expect(r.fieldErrors.gestionId).toBeDefined();
+    expect(service.deshacerGestion).not.toHaveBeenCalled();
+  });
+
+  it("R10: input sin gestionId / de tipo equivocado -> validation_error, sin ejecutar", async () => {
+    const service = fakeDeshacerService();
+    for (const malo of [{}, { gestionId: 42 }, { gestionId: null }, null, "g1"]) {
+      const r = await deshacerGestion(malo, { service, getActor: actorMensajero });
+      expect(r.status).toBe("validation_error");
+    }
+    expect(service.deshacerGestion).not.toHaveBeenCalled();
+  });
+
+  it("R10: gestionId uuid valido -> pasa el borde y llega al service", async () => {
+    const service = fakeDeshacerService();
+    const r = await deshacerGestion({ gestionId: GESTION_ID }, { service, getActor: actorMensajero });
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    expect(service.deshacerGestion).toHaveBeenCalledWith(GESTION_ID, MENSAJERO);
+  });
+});
+
+describe("Feature 64 · deshacerGestion action — R8: rol", () => {
+  it("R8: rol != mensajero -> forbidden (resultado de dominio del service), sin efectos", async () => {
+    const repo = inMemoryRepo([pendiente()]);
+    const service = realService(repo);
+
+    const r = await deshacerGestion({ gestionId: GESTION_ID }, { service, getActor: actorOtro });
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+    expect(repo.findGestionParaDeshacer).not.toHaveBeenCalled();
+  });
+
+  it("el mensajero dueño deshace su gestion -> ok con el ordenId (service real + repo en memoria)", async () => {
+    const repo = inMemoryRepo([pendiente()]);
+    const service = realService(repo);
+
+    const r = await deshacerGestion({ gestionId: GESTION_ID }, { service, getActor: actorMensajero });
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
+    // R11/R19/R20: el service pasa el rastro (quien deshizo) y repone al mensajero autor.
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledWith(
+      expect.objectContaining({ gestionId: GESTION_ID, actorUsuarioId: "m1", mensajeroId: "m1" }),
+    );
   });
 });
 

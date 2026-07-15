@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { useToast } from "@/hooks/useToast";
-import { solicitarCierre } from "@/lib/actions/cierre-dia";
+import { deshacerGestion, solicitarCierre } from "@/lib/actions/cierre-dia";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -22,9 +22,9 @@ import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 // Feature 37 (T15, R3-R7/R10/R11/R18): módulo cliente del "Cierre del día". Recibe
 // del Server Component padre los grupos ya resueltos (por resultado), los totales
 // snapshot-able, el gate `puedesSolicitar` + su `motivoBloqueo` y el histórico de
-// cierres. La única mutación (Solicitar cierre) va por Server Action y refresca la
-// ruta para releer el estado del servidor. Los montos llegan como STRING
-// (money-safe): se renderizan tal cual, sin `parseFloat`/`Number`.
+// cierres. Las mutaciones (Solicitar cierre; feature 64/R35-R38: Devolver a gestión)
+// van por Server Action y refrescan la ruta para releer el estado del servidor. Los
+// montos llegan como STRING (money-safe): se renderizan tal cual, sin `parseFloat`/`Number`.
 
 export interface CierreDiaModuleProps {
   grupos: CierreGrupos;
@@ -54,6 +54,20 @@ const PAGO_MENSAJERO_COL = "Pago mensajero";
 /** Feature 56: etiquetas del ingreso de bodega por rechazos (texto separado, i18n-ready). */
 const INGRESO_BODEGA_RECHAZOS_LABEL = "Ingreso de bodega por rechazos";
 const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
+
+// Feature 64 (R35-R38): textos del deshacer (separados de la lógica, i18n-ready).
+const DESHACER_COL = "Acciones";
+const DESHACER_LABEL = "Devolver a gestión";
+const DESHACER_TITULO = "Devolver la orden a gestión";
+const DESHACER_DETALLE =
+  "La gestión quedará anulada (queda el registro de quién la hizo y cuándo) y la orden volverá a tu lista para gestionar.";
+const DESHACER_OK = "Gestión deshecha; la orden volvió a tu lista para gestionar.";
+const DESHACER_FORBIDDEN = "No podés deshacer esta gestión.";
+const DESHACER_ERROR = "No se pudo deshacer la gestión. Intentá de nuevo.";
+/** Nombre accesible del botón de la fila (R35): identifica SU orden, no el botón genérico. */
+function deshacerAriaLabel(g: CierreDetalleGestion): string {
+  return `${DESHACER_LABEL} la orden ${g.numRemision} · ${g.destinatario}`;
+}
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
 const RESULTADO_LABEL: Record<CierreResultado, string> = {
@@ -128,6 +142,13 @@ export function CierreDiaModule({
   const [confirmar, setConfirmar] = useState(false);
   // Evidencia (URL firmada, R5) en el visor; null = cerrado.
   const [evidencia, setEvidencia] = useState<string | null>(null);
+  // Feature 64/R36: fila pendiente de confirmar el deshacer; null = modal cerrado.
+  const [deshacerFila, setDeshacerFila] = useState<CierreDetalleGestion | null>(
+    null,
+  );
+  // Feature 64: gestionId del deshacer EN VUELO; deshabilita el botón de ESA fila
+  // (anti-doble-submit en la UI; el WHERE guardado del repo lo cubre igual).
+  const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
 
   async function confirmarSolicitud() {
     const result = await solicitarCierre();
@@ -139,12 +160,44 @@ export function CierreDiaModule({
     }
     const mensaje =
       result.status === "conflict" || result.status === "validation_error"
-        ? mensajeError(result)
+        ? mensajeError(result, "No se pudo solicitar el cierre.")
         : result.status === "forbidden"
           ? "No tenés permiso para solicitar el cierre."
           : "No se pudo solicitar el cierre. Intentá de nuevo.";
     toast.error(mensaje);
     setConfirmar(false);
+  }
+
+  /**
+   * Feature 64/R36-R38: ejecuta el deshacer ya confirmado. `ok` → toast + `router.refresh()`
+   * (R37: la vista releé el estado del SERVIDOR; la fila desaparece y los totales se
+   * recalculan allá, nunca se mutan acá). Error → toast accionable y NI la tabla NI los
+   * totales se tocan (R38): no hay refresh y las filas siguen siendo las props del padre.
+   */
+  async function confirmarDeshacer() {
+    const fila = deshacerFila;
+    if (!fila) return;
+    setDeshaciendo(fila.gestionId);
+    const result = await deshacerGestion({ gestionId: fila.gestionId });
+    if (result.status === "ok") {
+      toast.success(DESHACER_OK);
+      setDeshacerFila(null);
+      // `deshaciendo` NO se limpia: la fila se va con el refresh y su botón se
+      // desmonta; re-habilitarlo solo abriría la ventana a un segundo envío que el
+      // server rechazaría con "esta gestión ya fue deshecha" (R3).
+      router.refresh();
+      return;
+    }
+    const mensaje =
+      result.status === "conflict" || result.status === "validation_error"
+        ? // R38: el `motivo` del conflict YA viene accionable del server (no se reescribe acá).
+          mensajeError(result, DESHACER_ERROR)
+        : result.status === "forbidden"
+          ? DESHACER_FORBIDDEN
+          : DESHACER_ERROR;
+    toast.error(mensaje);
+    setDeshaciendo(null);
+    setDeshacerFila(null);
   }
 
   return (
@@ -228,7 +281,12 @@ export function CierreDiaModule({
             </h2>
             <div className="overflow-x-auto">
               <DataTable
-                columns={columnasPara(resultado, setEvidencia)}
+                columns={columnasPara(
+                  resultado,
+                  setEvidencia,
+                  setDeshacerFila,
+                  deshaciendo,
+                )}
                 data={filas}
                 rowKey="gestionId"
                 ariaLabel={RESULTADO_LABEL[resultado]}
@@ -290,6 +348,24 @@ export function CierreDiaModule({
         closeOnConfirm={false}
       />
 
+      {/* Feature 64/R36: confirmación explícita del deshacer (una sola por módulo,
+          parametrizada con la fila elegida: el Modal ya es un focus-trap accesible). */}
+      <Modal
+        open={deshacerFila !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeshacerFila(null);
+        }}
+        title={DESHACER_TITULO}
+        description={
+          deshacerFila
+            ? `Orden ${deshacerFila.numRemision} · ${deshacerFila.destinatario}. ${DESHACER_DETALLE}`
+            : undefined
+        }
+        confirmLabel={DESHACER_LABEL}
+        onConfirm={confirmarDeshacer}
+        closeOnConfirm={false}
+      />
+
       {/* Visor de evidencia (URL firmada, R5). */}
       <Modal
         open={evidencia !== null}
@@ -314,15 +390,20 @@ export function CierreDiaModule({
   );
 }
 
-/** Devuelve el mensaje accionable de un resultado de dominio de error. */
+/**
+ * Devuelve el mensaje accionable de un resultado de dominio de error. El `motivo` de un
+ * `conflict` lo redacta el SERVER (ya es accionable): acá no se reescribe. `fallback` es
+ * el texto de la operación que llama, para el caso degenerado de `fieldErrors` vacío.
+ */
 function mensajeError(
   result:
     | { status: "conflict"; motivo: string }
     | { status: "validation_error"; fieldErrors: Record<string, string[]> },
+  fallback: string,
 ): string {
   if (result.status === "conflict") return result.motivo;
   const primero = Object.values(result.fieldErrors)[0]?.[0];
-  return primero ?? "No se pudo solicitar el cierre.";
+  return primero ?? fallback;
 }
 
 /** Ítem del panel de totales. */
@@ -367,18 +448,43 @@ const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
 /**
  * Construye las columnas de una sección: las comunes (R4) + las específicas del
  * resultado (monto+método si entregada R6; fecha+motivo si reprogramada; motivo
- * si devuelta; motivo+evidencia si rechazada, R5). El setter del visor de
- * evidencia se inyecta para la columna de la sección "Rechazadas".
+ * si devuelta; motivo+evidencia si rechazada, R5) + la de acciones (64/R35). El
+ * setter del visor de evidencia se inyecta para la columna de la sección
+ * "Rechazadas"; el del deshacer, para la columna de acciones de las 4.
  */
 function columnasPara(
   resultado: CierreResultado,
   verEvidencia: (url: string) => void,
+  pedirDeshacer: (g: CierreDetalleGestion) => void,
+  deshaciendo: string | null,
 ): Column<CierreDetalleGestion>[] {
   // Feature 39/R10: pago al mensajero DERIVADO por orden (money-safe STRING, tal cual).
   const columnaPago: Column<CierreDetalleGestion> = {
     id: "pagoMensajero",
     value: PAGO_MENSAJERO_COL,
     render: (g) => money(g.pagoMensajero),
+  };
+  // Feature 64/R35: "Devolver a gestión" por fila, en las 4 tablas. NO hay estado
+  // "no deshacible" que pintar: la vista solo lista gestiones dentro de la ventana
+  // (`findGestionesPendientes` filtra `cierre_id IS NULL` + `anulada_at IS NULL`) y
+  // son todas del actor (`/cierre-dia` es exclusivo del mensajero dueño, `page.tsx`
+  // hace `notFound()` para el resto). Una gestión que sale de la ventana desaparece
+  // de la tabla; una carrera la corta el server con `conflict` + motivo (R38).
+  const columnaAcciones: Column<CierreDetalleGestion> = {
+    id: "acciones",
+    value: DESHACER_COL,
+    render: (g) => (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        aria-label={deshacerAriaLabel(g)}
+        disabled={deshaciendo === g.gestionId}
+        onClick={() => pedirDeshacer(g)}
+      >
+        {DESHACER_LABEL}
+      </Button>
+    ),
   };
   if (resultado === "entregada") {
     return [
@@ -390,6 +496,7 @@ function columnasPara(
         render: (g) => (g.metodoPago ? METODO_LABEL[g.metodoPago] : "—"),
       },
       columnaPago,
+      columnaAcciones,
     ];
   }
   if (resultado === "reprogramada") {
@@ -402,6 +509,7 @@ function columnasPara(
       },
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
       columnaPago,
+      columnaAcciones,
     ];
   }
   if (resultado === "devuelta") {
@@ -409,6 +517,7 @@ function columnasPara(
       ...COLUMNAS_COMUNES,
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
       columnaPago,
+      columnaAcciones,
     ];
   }
   // rechazada: motivo + evidencia firmada (R5) + ingreso de bodega por rechazos (56/R12)
@@ -439,6 +548,7 @@ function columnasPara(
       value: INGRESO_BODEGA_RECHAZOS_COL,
       render: (g) => money(g.ingresoBodegaRechazo),
     },
+    columnaAcciones,
   ];
 }
 

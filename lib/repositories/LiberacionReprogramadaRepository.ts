@@ -44,7 +44,11 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
         id: true,
         zonaId: true,
         gestiones: {
-          where: { resultado: RESULTADO_REPROGRAMADA }, // gestion vigente = la mas reciente
+          // gestion vigente = la mas reciente. Feature 64 (design §3-#6): `anuladaAt: null`
+          // por DEFENSA, sin cambio funcional — una orden en `reprogramada` no puede tener su
+          // ultima gestion `reprogramada` anulada (deshacerla la devuelve a `en_reparto`, con
+          // lo que ya no casa el filtro de estado de arriba). Explicito > implicito.
+          where: { resultado: RESULTADO_REPROGRAMADA, anuladaAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
           select: { fechaReprogramacion: true },
