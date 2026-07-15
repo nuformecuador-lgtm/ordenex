@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, PackageCheck, RotateCcw, Undo2, XCircle } from "lucide-react";
+import {
+  Loader2,
+  MessageCircle,
+  PackageCheck,
+  Phone,
+  RotateCcw,
+  Undo2,
+  XCircle,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,6 +115,12 @@ function firstError(
   return errors[field]?.[0];
 }
 
+function tomorrowISO(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function GestionarOrdenPanel({
   orden,
   yaActiva,
@@ -121,11 +135,8 @@ export function GestionarOrdenPanel({
   // los 4 botones; si no, en el detalle.
   const [paso, setPaso] = useState<Paso>(yaActiva ? "resultados" : "detalle");
   const [resultado, setResultado] = useState<Resultado>("entregada");
-  const [montoRecibido, setMontoRecibido] = useState(
-    orden.montoCobrar != null ? String(orden.montoCobrar) : "",
-  );
   const [metodoPago, setMetodoPago] = useState("");
-  const [fechaReprogramacion, setFechaReprogramacion] = useState("");
+  const [fechaReprogramacion, setFechaReprogramacion] = useState(tomorrowISO());
   const [motivo, setMotivo] = useState("");
   const [evidencia, setEvidencia] = useState<File | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -139,7 +150,7 @@ export function GestionarOrdenPanel({
       case "entregada":
         return {
           ...base,
-          montoRecibido: montoRecibido === "" ? undefined : Number(montoRecibido),
+          montoRecibido: orden.montoCobrar ?? 0,
           metodoPago: metodoPago || undefined,
           evidencia: evidencia ?? undefined,
         };
@@ -158,7 +169,7 @@ export function GestionarOrdenPanel({
     fd.set("ordenId", orden.id);
     fd.set("resultado", resultado);
     if (resultado === "entregada") {
-      fd.set("montoRecibido", montoRecibido);
+      fd.set("montoRecibido", String(orden.montoCobrar ?? 0));
       fd.set("metodoPago", metodoPago);
       if (evidencia) fd.set("evidencia", evidencia);
     } else if (resultado === "reprogramada") {
@@ -196,9 +207,8 @@ export function GestionarOrdenPanel({
   function elegirResultado(next: Resultado) {
     setResultado(next);
     setFieldErrors({});
-    setMontoRecibido(orden.montoCobrar != null ? String(orden.montoCobrar) : "");
     setMetodoPago("");
-    setFechaReprogramacion("");
+    setFechaReprogramacion(tomorrowISO());
     setMotivo("");
     setEvidencia(null);
     setPaso("formulario");
@@ -243,7 +253,6 @@ export function GestionarOrdenPanel({
     }
   }
 
-  const montoError = firstError(fieldErrors, "montoRecibido");
   const metodoError = firstError(fieldErrors, "metodoPago");
   const evidenciaError = firstError(fieldErrors, "evidencia");
   const fechaError = firstError(fieldErrors, "fechaReprogramacion");
@@ -269,16 +278,43 @@ export function GestionarOrdenPanel({
         <AsignacionDetalle orden={orden} />
       </div>
 
-      {/* Paso 1: botón GRANDE para iniciar la gestión (fija el puntero 1-a-1). */}
+      {/* Paso 1: llamar, whatsapp y gestionar. */}
       {paso === "detalle" ? (
-        <Button
-          type="button"
-          size="lg"
-          onClick={handleGestionarPedido}
-          className="h-14 w-full text-base font-semibold"
-        >
-          Gestionar esta orden
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-14 shrink-0"
+            onClick={() => window.open(`tel:${orden.telefonoDest}`, "_self")}
+            aria-label={`Llamar a ${orden.destinatario}`}
+          >
+            <Phone className="size-5" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-14 shrink-0"
+            onClick={() =>
+              window.open(
+                `https://wa.me/${orden.telefonoDest.replace(/[^\d]/g, "")}`,
+                "_blank",
+              )
+            }
+            aria-label={`WhatsApp a ${orden.destinatario}`}
+          >
+            <MessageCircle className="size-5" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            size="lg"
+            onClick={handleGestionarPedido}
+            className="h-14 flex-1 text-base font-semibold"
+          >
+            Gestionar esta orden
+          </Button>
+        </div>
       ) : null}
 
       {/* Paso 2: 4 botones GRANDES de resultado (entrada suave). */}
@@ -332,25 +368,6 @@ export function GestionarOrdenPanel({
 
           {resultado === "entregada" ? (
             <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="gestion-monto">Monto recibido</Label>
-                <Input
-                  id="gestion-monto"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  value={montoRecibido}
-                  onChange={(e) => setMontoRecibido(e.target.value)}
-                  aria-invalid={montoError ? true : undefined}
-                  aria-label="Monto recibido"
-                />
-                {montoError ? (
-                  <p role="alert" className="text-sm text-destructive">
-                    {montoError}
-                  </p>
-                ) : null}
-              </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="gestion-metodo">Método de pago</Label>
                 <Select

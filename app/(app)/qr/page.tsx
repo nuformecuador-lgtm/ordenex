@@ -1,104 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { useToast } from "@/hooks/useToast";
+import { QrScanner } from "@/components/shared/QrScanner";
+import { useQrNavigate } from "@/hooks/useQrNavigate";
 
 export default function QrPage() {
-  const router = useRouter();
-  const toast = useToast();
-
-  const [camaraAbierta, setCamaraAbierta] = useState(false);
-  const [procesando, setProcesando] = useState(false);
-
-  const regionId = useId().replace(/:/g, "_") + "-camara";
-
-  const procesar = useCallback(
-    async (decodedText: string) => {
-      if (procesando) return;
-      setProcesando(true);
-
-      const appOrigin =
-        process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
-
-      try {
-        const qrUrl = new URL(decodedText);
-        if (qrUrl.origin !== appOrigin) {
-          toast.error("El código QR pertenece a otro sitio.");
-          setProcesando(false);
-          return;
-        }
-        const destino = qrUrl.pathname + qrUrl.search + qrUrl.hash;
-        setCamaraAbierta(false);
-        router.push(destino);
-        return;
-      } catch {
-        if (!decodedText.startsWith("/")) {
-          toast.error("El código QR no contiene una ruta válida de la app.");
-          setProcesando(false);
-          return;
-        }
-        setCamaraAbierta(false);
-        router.push(decodedText);
-      }
-    },
-    [procesando, router, toast],
-  );
-
-  useEffect(() => {
-    if (!camaraAbierta) return;
-    let cancelado = false;
-    let iniciado = false;
-    let instancia: {
-      stop: () => Promise<void>;
-      clear: () => void;
-    } | null = null;
-
-    (async () => {
-      try {
-        const { Html5Qrcode } = await import("html5-qrcode");
-        if (cancelado) return;
-        const scanner = new Html5Qrcode(regionId);
-        instancia = scanner as unknown as typeof instancia;
-        await scanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: 250 },
-          (decodedText: string) => {
-            setCamaraAbierta(false);
-            void procesar(decodedText);
-          },
-          undefined,
-        );
-        iniciado = true;
-      } catch {
-        if (!cancelado) {
-          toast.error(
-            "No se pudo acceder a la cámara. Debes habilitar los permisos de cámara en la configuración del navegador para usar esta función.",
-          );
-          setCamaraAbierta(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelado = true;
-      const s = instancia;
-      if (!s) return;
-      if (iniciado) {
-        s.stop()
-          .then(() => s.clear())
-          .catch(() => {});
-      } else {
-        try {
-          s.clear();
-        } catch {
-          // ignora si clear falla
-        }
-      }
-    };
-  }, [camaraAbierta, regionId, procesar, toast]);
+  const { onDecoded, procesando } = useQrNavigate();
 
   return (
     <>
@@ -109,24 +16,7 @@ export default function QrPage() {
           contiene.
         </p>
 
-        <Button
-          type="button"
-          variant={camaraAbierta ? "outline" : "default"}
-          aria-pressed={camaraAbierta}
-          disabled={procesando}
-          onClick={() => setCamaraAbierta((a) => !a)}
-        >
-          {camaraAbierta ? "Cerrar cámara" : "Escanear con cámara"}
-        </Button>
-
-        {camaraAbierta && !procesando ? (
-          <div
-            id={regionId}
-            role="region"
-            aria-label="Visor de cámara QR"
-            className="w-full max-w-sm overflow-hidden rounded-lg border"
-          />
-        ) : null}
+        <QrScanner onDecoded={onDecoded} disabled={procesando} />
 
         {procesando ? (
           <p className="text-sm text-muted-foreground">

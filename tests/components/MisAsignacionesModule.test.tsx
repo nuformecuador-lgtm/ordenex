@@ -539,11 +539,11 @@ describe("MisAsignacionesModule", () => {
     expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
   });
 
-  it("R22/R24: un validation_error del servidor (p. ej. monto no cuadra) se muestra por campo", async () => {
+  it("R22/R24: un validation_error del servidor se muestra por campo", async () => {
     const user = userEvent.setup();
     gestionarMock.mockResolvedValue({
       status: "validation_error",
-      fieldErrors: { montoRecibido: ["el monto debe cuadrar con el monto a cobrar"] },
+      fieldErrors: { evidencia: ["la evidencia no supera la validacion"] },
     });
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", montoCobrar: 150 })],
@@ -557,7 +557,7 @@ describe("MisAsignacionesModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     expect(
-      await screen.findByText("el monto debe cuadrar con el monto a cobrar"),
+      await screen.findByText("la evidencia no supera la validacion"),
     ).toBeInTheDocument();
   });
 

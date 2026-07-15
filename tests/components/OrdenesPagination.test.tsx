@@ -9,6 +9,12 @@ import { ToastProvider } from "@/providers/ToastProvider";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { ListarOrdenesResult, OrdenListItemDTO } from "@/lib/types/orden";
 
+// `OrdenesTabs` usa `useRouter` (navegación al escanear el QR de una etiqueta),
+// que exige el App Router montado: se mockea como en el resto de la suite.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
+
 // La Server Action se mockea y actúa como fetcher de SWR (server-side): la vista
 // pasa { page, pageSize } y el mock segmenta un dataset en memoria.
 vi.mock("@/lib/actions/ordenes", () => ({

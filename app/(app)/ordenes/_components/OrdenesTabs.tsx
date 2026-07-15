@@ -5,6 +5,8 @@ import useSWR, { useSWRConfig } from "swr";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QrScanner } from "@/components/shared/QrScanner";
+import { useQrNavigate } from "@/hooks/useQrNavigate";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
 import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
@@ -71,11 +73,18 @@ async function catalogoFetcher(): Promise<OrderStatusLiteRow[]> {
 export function OrdenesTabs({
   exclude = DEFAULT_EXCLUDE,
   puedeCargarMasiva = false,
+  puedeEscanearQr = false,
   mostrarHistorial = false,
   accionesLote = false,
-}: {
+}: Readonly<{
   exclude?: string[];
   puedeCargarMasiva?: boolean;
+  /**
+   * Ofrece "Escanear con cámara" junto a la carga masiva: escanea el QR de la
+   * etiqueta de una orden y navega a la ruta que codifica (`/paquete/<ordenId>`,
+   * ver `EtiquetaGuia`), en vez de buscarla a mano entre las tabs.
+   */
+  puedeEscanearQr?: boolean;
   mostrarHistorial?: boolean;
   /**
    * Habilita la selección por checkbox + barra de acciones por lote por estado
@@ -85,12 +94,16 @@ export function OrdenesTabs({
    * (solo-lectura) y `adminTienda` lo reciben en `false`.
    */
   accionesLote?: boolean;
-}) {
+}>) {
   const { mutate } = useSWRConfig();
+  // Escaneo de QR: el decode se traduce a navegación (misma semántica que `/qr`).
+  const { onDecoded: onQrDecoded, procesando: qrProcesando } = useQrNavigate();
   const { data: catalogo, isLoading } = useSWR(
     "order-status:catalogo",
     catalogoFetcher,
   );
+
+  console.log("xyz", catalogo);
 
   // Mensajeros para los modales de asignación (solo si hay acciones por lote).
   const { data: mensajeros } = useSWR(
@@ -225,14 +238,23 @@ export function OrdenesTabs({
     });
   }
 
-  // La carga masiva vive a nivel del contenedor (no por tab): es una acción de
-  // creación de órdenes, independiente del estado activo. Se ofrece solo al
-  // adminTienda (feature 26), vía `puedeCargarMasiva`.
-  const header = puedeCargarMasiva ? (
-    <div className="flex justify-end">
-      <OrdenesCargaMasivaButton />
-    </div>
-  ) : null;
+  // La carga masiva y el escaneo viven a nivel del contenedor (no por tab): son
+  // acciones independientes del estado activo. Se ofrecen solo al adminTienda
+  // (feature 26), vía `puedeCargarMasiva` / `puedeEscanearQr`.
+  const header =
+    puedeCargarMasiva || puedeEscanearQr ? (
+      <div className="flex flex-col items-end gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {puedeEscanearQr ? (
+            <QrScanner onDecoded={onQrDecoded} disabled={qrProcesando} />
+          ) : null}
+          {puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
+        </div>
+        {qrProcesando ? (
+          <p className="text-sm text-muted-foreground">Procesando código QR…</p>
+        ) : null}
+      </div>
+    ) : null;
 
   if (isLoading) {
     return (
