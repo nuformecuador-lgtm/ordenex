@@ -13,6 +13,7 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
+import { ordenesColumnsMensajeroSugerido } from "./ordenes-columns";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { RutearSateliteModal } from "./RutearSateliteModal";
@@ -38,6 +39,10 @@ async function mensajerosFetcher() {
 // `exclude`: `listarOrderStatus()` devuelve el catálogo COMPLETO (R1) y el front
 // filtra antes de mapear a tabs (aclaración del humano, R14).
 const DEFAULT_EXCLUDE = ["pendiente"];
+
+// Estados PREVIOS a la asignación de mensajero: muestran "Mensajero sugerido" en
+// lugar de "Mensajero" (aún no hay asignado; la asignación es en "Generar guía").
+const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"]);
 
 /** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
 function labelDe(value: string): string {
@@ -275,9 +280,14 @@ export function OrdenesTabs({
                 // Selección por checkbox SOLO en estados que tienen alguna acción por
                 // lote (evita checkboxes inertes en estados solo-lectura).
                 const acc = accionesLote ? accionesDe(tab.value) : [];
+                // En_fulfillment/en_preparacion: "Mensajero sugerido" en vez de "Mensajero".
+                const columns = ESTADOS_MENSAJERO_SUGERIDO.has(tab.value)
+                  ? ordenesColumnsMensajeroSugerido
+                  : undefined;
                 return (
                   <OrdenesModule
                     filter={{ status_id: tab.id }}
+                    columns={columns}
                     mostrarHistorial={mostrarHistorial}
                     selectable={acc.length > 0}
                     acciones={acc}

@@ -3,14 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
@@ -49,8 +41,11 @@ export function MisAsignacionesModule({
 
   // Confirmación de recogida (lote o de a una): ids a recoger; null = cerrado.
   const [recogerIds, setRecogerIds] = useState<string[] | null>(null);
-  // Orden con el modal de gestión abierto; null = cerrado.
-  const [gestionOrden, setGestionOrden] = useState<MiAsignacionDTO | null>(null);
+  // Orden seleccionada cuyo detalle grande está abierto; null = cerrado.
+  const [detalleOrden, setDetalleOrden] = useState<MiAsignacionDTO | null>(null);
+  // ¿El puntero 1-a-1 fue fijado en ESTA sesión de detalle? Determina si cerrar
+  // sin guardar debe liberar (R35). Falso mientras solo se ve el detalle.
+  const [punteroFijado, setPunteroFijado] = useState(false);
 
   async function confirmRecoger() {
     if (!recogerIds) return;
@@ -68,35 +63,49 @@ export function MisAsignacionesModule({
     );
   }
 
-  async function abrirGestion(orden: MiAsignacionDTO) {
-    // R17 (T17): fija el puntero de bloqueo 1-a-1 ANTES de abrir el modal.
-    const result = await escogerParaGestion({ ordenId: orden.id });
+  // Seleccionar una card abre su detalle grande. Si ya es la orden activa, el
+  // puntero 1-a-1 ya está fijado (se reanuda la gestión en curso).
+  function seleccionar(orden: MiAsignacionDTO) {
+    setDetalleOrden(orden);
+    setPunteroFijado(ordenEnGestionId === orden.id);
+  }
+
+  // R17 (T17): al pulsar "Gestionar pedido" se fija el puntero de bloqueo 1-a-1.
+  // Devuelve `true` si quedó fijado (el modal revela los 4 botones).
+  async function gestionarPedido(): Promise<boolean> {
+    if (!detalleOrden) return false;
+    const result = await escogerParaGestion({ ordenId: detalleOrden.id });
     if (result.status === "ok") {
-      setGestionOrden(orden);
+      setPunteroFijado(true);
       router.refresh(); // refleja el bloqueo de las demás (ordenEnGestionId)
-      return;
+      return true;
     }
     toast.error(
       result.status === "conflict"
         ? "Ya tienes otra orden activa en gestión."
         : "No puedes gestionar esta orden.",
     );
+    return false;
   }
 
   function handleGestionSuccess() {
     // Path de ÉXITO: el backend YA limpió el puntero dentro de la transacción de
     // `gestionar`. NO se llama a `liberarGestion` aquí (evita doble limpieza).
-    setGestionOrden(null);
+    setDetalleOrden(null);
+    setPunteroFijado(false);
     router.refresh();
   }
 
-  // R35: cancelar/cerrar manual del modal SIN registrar resultado libera el
-  // puntero de bloqueo (`orden_en_gestion_id`) para que las demás vuelvan a ser
-  // gestionables. Limpieza best-effort (idempotente en backend); sin Toast.
-  async function cancelarGestion() {
-    const orden = gestionOrden;
-    setGestionOrden(null);
-    if (orden) {
+  // R35: cerrar el detalle SIN registrar resultado libera el puntero de bloqueo
+  // (`orden_en_gestion_id`) para que las demás vuelvan a ser gestionables — pero
+  // SOLO si llegó a fijarse (se pulsó "Gestionar pedido"). Si solo se miró el
+  // detalle, no hay puntero que soltar. Limpieza best-effort; sin Toast.
+  async function cerrarDetalle() {
+    const orden = detalleOrden;
+    const fijado = punteroFijado;
+    setDetalleOrden(null);
+    setPunteroFijado(false);
+    if (orden && fijado) {
       await liberarGestion({ ordenId: orden.id });
       router.refresh();
     }
@@ -122,6 +131,9 @@ export function MisAsignacionesModule({
       />
 
       {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
+      {/* Cards COMPACTAS en grilla (1/2/3 col). Seleccionar una abre su detalle
+          grande y centrado (GestionarOrdenModal). El bloqueo 1-a-1 (R19/R20)
+          deshabilita las demás mientras hay una gestión activa. */}
       <section
         aria-label="En reparto / por gestionar"
         className="flex flex-col gap-3"
@@ -132,7 +144,7 @@ export function MisAsignacionesModule({
             No hay órdenes en reparto.
           </p>
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {porGestionar.map((orden) => {
               // R19/R20: si hay una orden activa distinta, esta queda bloqueada.
               const bloqueada =
@@ -140,31 +152,49 @@ export function MisAsignacionesModule({
               const esActiva = ordenEnGestionId === orden.id;
               return (
                 <li key={orden.id}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>
-                        {orden.numRemision} · {orden.destinatario}
-                      </CardTitle>
-                      <CardAction>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={bloqueada}
-                          onClick={() => abrirGestion(orden)}
-                        >
-                          {esActiva ? "Continuar gestión" : "Gestionar"}
-                        </Button>
-                      </CardAction>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                      <AsignacionDetalle orden={orden} />
-                      {bloqueada ? (
-                        <p className="text-xs text-muted-foreground">
-                          Termina la gestión en curso para gestionar esta orden.
-                        </p>
+                  <button
+                    type="button"
+                    disabled={bloqueada}
+                    onClick={() => seleccionar(orden)}
+                    aria-label={`Gestionar orden ${orden.numRemision} · ${orden.destinatario}`}
+                    className="group flex h-full w-full flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-semibold text-foreground">
+                        {orden.numRemision}
+                      </span>
+                      {esActiva ? (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          En gestión
+                        </span>
                       ) : null}
-                    </CardContent>
-                  </Card>
+                    </div>
+                    {/* Mientras hay una gestión activa en OTRA orden, esta card
+                        oculta sus detalles (destinatario/producto/teléfono) y solo
+                        muestra el Nº y el aviso: foco en la orden en gestión. */}
+                    {bloqueada ? (
+                      <p className="mt-auto text-xs text-muted-foreground">
+                        Termina la gestión en curso para gestionar esta orden.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex flex-col gap-1 text-sm">
+                          <span className="font-medium text-foreground">
+                            {orden.destinatario}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {orden.producto}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {orden.telefonoDest}
+                          </span>
+                        </div>
+                        <span className="mt-auto text-sm font-medium text-primary">
+                          Ver / Gestionar
+                        </span>
+                      </>
+                    )}
+                  </button>
                 </li>
               );
             })}
@@ -189,12 +219,14 @@ export function MisAsignacionesModule({
         closeOnConfirm={false}
       />
 
-      {/* Gestión 1-a-1 de la orden activa. */}
+      {/* Detalle grande + gestión 1-a-1 de la orden seleccionada. */}
       <GestionarOrdenModal
-        open={gestionOrden !== null}
-        orden={gestionOrden}
+        open={detalleOrden !== null}
+        orden={detalleOrden}
+        yaActiva={detalleOrden !== null && ordenEnGestionId === detalleOrden.id}
+        onGestionarPedido={gestionarPedido}
         onOpenChange={(next) => {
-          if (!next) void cancelarGestion();
+          if (!next) void cerrarDetalle();
         }}
         onSuccess={handleGestionSuccess}
       />

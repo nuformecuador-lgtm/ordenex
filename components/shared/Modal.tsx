@@ -29,6 +29,11 @@ export interface ModalProps {
   /** Oculta el botón cancelar (R10). Default false. */
   hideCancel?: boolean;
   /**
+   * Oculta el botón confirmar (útil en flujos multi-paso donde la acción vive en
+   * el cuerpo). Aditivo; no afecta el comportamiento por defecto. Default false.
+   */
+  hideConfirm?: boolean;
+  /**
    * Deshabilita el botón confirmar por decisión del consumidor (p. ej. sin datos
    * accionables). Aditivo; el bloqueo por fase "pending" es independiente.
    * Default false.
@@ -92,6 +97,7 @@ export function Modal({
   cancelLabel = "Cancelar",
   confirmVariant = "default",
   hideCancel = false,
+  hideConfirm = false,
   confirmDisabled = false,
   onConfirm,
   onCancel,
@@ -223,23 +229,25 @@ export function Modal({
                 {cancelLabel}
               </Button>
             ) : null}
-            <Button
-              type="button"
-              variant={confirmVariant}
-              onClick={handleConfirm}
-              disabled={pending || confirmDisabled}
-            >
-              {pending ? (
-                <span
-                  role="status"
-                  className="flex items-center gap-2"
-                >
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                  <span className="sr-only">Procesando…</span>
-                </span>
-              ) : null}
-              {confirmLabel}
-            </Button>
+            {!hideConfirm ? (
+              <Button
+                type="button"
+                variant={confirmVariant}
+                onClick={handleConfirm}
+                disabled={pending || confirmDisabled}
+              >
+                {pending ? (
+                  <span
+                    role="status"
+                    className="flex items-center gap-2"
+                  >
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                    <span className="sr-only">Procesando…</span>
+                  </span>
+                ) : null}
+                {confirmLabel}
+              </Button>
+            ) : null}
           </div>
         </Dialog.Popup>
       </Dialog.Portal>

@@ -338,3 +338,30 @@ de la feature 34) dejó de renderizarse como CARDS y ahora usa el `DataTable` ge
   filas correctas, Nº Guía "Pendiente", vacío, selección→Asignar→modal). 24/24 verde.
 
 Veredicto: verde — typecheck 0 en lo mío; RecepcionSateliteModule 24/24 tests verde.
+
+## Rediseño gestión mensajero (grilla 3x + detalle grande + 4 botones)
+
+UX de la sección "En reparto / por gestionar" del mensajero rehecha (sin tocar
+backend/actions/schemas ni "Por recoger"):
+
+- **Grilla de cards compactas** (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`):
+  cada card es un `<button>` accesible (aria-label "Gestionar orden <rem> · <dest>")
+  con resumen corto (remisión, destinatario, producto, teléfono). Bloqueo 1-a-1
+  (R19/R20): las demás quedan `disabled` con hint cuando hay una activa; la activa
+  muestra badge "En gestión".
+- **Detalle grande centrado** (`GestionarOrdenModal`, `max-w-2xl`): flujo de 3 pasos.
+  (1) `AsignacionDetalle` completo + botón GRANDE "Gestionar pedido"; al pulsarlo
+  llama `escogerParaGestion` (fija puntero) y, si ok, oculta el botón y revela
+  (2) los **4 botones** grandes de resultado (Entregar/Rechazar/Reprogramar/Devolver,
+  con jerarquía de color e iconos); elegir uno muestra (3) los campos condicionales
+  de ese resultado + "Guardar gestión" (misma `gestionar`/FormData/validación) y un
+  "Atrás" que vuelve a los 4 botones sin soltar el puntero. Entrada suave con
+  `animate-in fade-in slide-in-from-bottom-2` (tw-animate-css, sin libs nuevas).
+- **Contrato preservado**: `escogerParaGestion` al iniciar, `gestionar` al confirmar,
+  `liberarGestion` al cerrar SÓLO si el puntero llegó a fijarse (nuevo estado
+  `punteroFijado`); path de éxito no libera.
+- **Modal compartido**: prop aditiva `hideConfirm` (default false) para ocultar el
+  confirm del footer en los pasos sin envío.
+
+Verificación: `pnpm typecheck` sin errores nuevos en lo tocado (baseline rojo
+tarifa/zona ajeno intacto). Tests `MisAsignacionesModule` + `Modal` → 56/56 verde.

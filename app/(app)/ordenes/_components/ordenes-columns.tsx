@@ -180,3 +180,21 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     render: (row) => tiempoTranscurrido(row.createdAt),
   },
 ];
+
+/** Columna de mensajero SUGERIDO (carga masiva); no el asignado. */
+const mensajeroSugeridoColumn: Column<OrdenListItemDTO> = {
+  id: "mensajeroSugerido",
+  value: "Mensajero sugerido",
+  render: (row) => row.relaciones?.mensajeroSugerido?.nombre ?? SIN_DATO,
+};
+
+/**
+ * Variante de columnas para estados PREVIOS a la asignación (`en_fulfillment`,
+ * `en_preparacion`): reemplaza la columna "Mensajero" (asignado/sugerido) por
+ * "Mensajero sugerido", ya que en esos estados aún no se asignó mensajero (la
+ * asignación ocurre en "Generar guía"). Deriva de `ordenesColumns` para no duplicar.
+ */
+export const ordenesColumnsMensajeroSugerido: Column<OrdenListItemDTO>[] =
+  ordenesColumns.map((col) =>
+    col.id === "mensajero" ? mensajeroSugeridoColumn : col,
+  );
