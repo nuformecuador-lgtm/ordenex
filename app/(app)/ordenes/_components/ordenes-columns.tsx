@@ -39,15 +39,43 @@ function tiempoTranscurrido(value: Date | string): string {
 }
 
 /**
+ * Flete + IVA de la orden. Espeja `derivarIngresoOrden` (lib/utils/ingreso-ordenex.ts):
+ * flete = esCentral ? valorFleteGam : valorFlete; total = flete + IVA del flete, donde
+ * IVA = flete · ivaFlete% (ivaFlete es porcentaje 0..100). Sin tarifa activa → 0 (misma
+ * degradación segura que el backend, R9).
+ */
+function calcularFleteConIva(row: OrdenListItemDTO): number {
+  const tarifa = row.relaciones?.tienda?.tarifa;
+  if (!tarifa) return 0;
+  const esCentral = row.relaciones?.zona?.esCentral;
+  const flete = toValidNumber(esCentral ? tarifa.valorFleteGam : tarifa.valorFlete);
+  return flete * (1 + toValidNumber(tarifa.ivaFlete) / 100);
+}
+
+/**
+ * Comisión COD + su IVA. Espeja `derivarIngresoOrden`: base = `montoCobrar` (valor de
+ * cobro COD de la orden); comisión = base · comisionCod%; total = comisión + su IVA
+ * (comisión · ivaComisionCod%). Si la orden NO cobra comisión (`cobraComision === false`)
+ * o no hay tarifa → 0, igual que el backend, que en ese caso NO emite el concepto.
+ */
+function calcularComisionConIva(row: OrdenListItemDTO): number {
+  const tarifa = row.relaciones?.tienda?.tarifa;
+  if (!tarifa || row.cobraComision === false) return 0;
+  const comision = toValidNumber(row.montoCobrar) * (toValidNumber(tarifa.comisionCod) / 100);
+  return comision * (1 + toValidNumber(tarifa.ivaComisionCod) / 100);
+}
+
+/**
  * Columnas concretas de `/ordenes`. La tabla genérica NO conoce el dominio orden:
  * estas columnas viven junto a la página.
  *
  * Fuente de datos: el bloque `relaciones` del DTO del listado (nueva estructura
  * de respuesta), que resuelve en el mismo query los NOMBRES/VALUES legibles de
  * todas las relaciones directas (estatus, tienda, zona, provincia, cantón,
- * distrito, mensajero). Las celdas muestran SIEMPRE el valor final legible, nunca
- * el id crudo. Se cae a los escalares `*Nombre`/`*Value` de nivel superior o a
- * `SIN_DATO` cuando una relación opcional no resolvió (defensivo).
+ * distrito, mensajero) y la tarifa activa de la tienda. Las celdas muestran
+ * SIEMPRE el valor final legible, nunca el id crudo. Se cae a los escalares
+ * `*Nombre`/`*Value` de nivel superior o a `SIN_DATO` cuando una relación opcional
+ * no resolvió (defensivo).
  */
 export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   {
@@ -68,6 +96,13 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     ),
   },
   { id: "destinatario", value: "Destinatario" },
+  { id: "producto", value: "Producto", render: "producto" },
+  {
+    id: "direccion",
+    value: "Dirección",
+    // Escalar opcional de la orden (carga masiva); ausente → SIN_DATO.
+    render: (row) => row.direccion ?? SIN_DATO,
+  },
   {
     id: "tienda",
     value: "Tienda",
@@ -77,7 +112,9 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   {
     id: "zona",
     value: "Zona",
-    render: (row) => row.relaciones?.zona?.nombre ?? SIN_DATO,
+    // Nombre legible de la zona; cae al escalar `zonaNombre` (misma estrategia que
+    // `tienda`) y a `SIN_DATO` cuando la relación opcional no resolvió.
+    render: (row) => row.relaciones?.zona?.nombre ?? row.zonaNombre ?? SIN_DATO,
   },
   {
     id: "provincia",
@@ -96,21 +133,31 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     render: (row) => row.relaciones?.distrito?.nombre ?? SIN_DATO,
   },
   {
+    id: "montoCobrar",
+    value: "Monto a cobrar",
+    // Valor COD a recaudar de la orden (escalar de la orden; ausente → ₡0).
+    render: (row) => <PriceLabel value={toValidNumber(row.montoCobrar)} />,
+  },
+  {
     id: "flete",
     value: "Flete + IVA",
-    // Flete GAM o estándar según la zona de la orden; PriceLabel formatea a ₡ y
-    // resuelve el caso sin tarifa (undefined → ₡0).
-    render: (row) => {
-      const esCentral = row.relaciones?.zona?.esCentral;
-      const tarifa = row.relaciones?.tienda?.tarifa;
-      if (!tarifa) return <PriceLabel value={0} />;
-      const value = toValidNumber(esCentral ? tarifa?.valorFleteGam : tarifa?.valorFlete);
-      const valueIva = value + (value * tarifa.ivaFlete) / 100;
-      console.log('xyz', tarifa, tarifa.ivaFlete, valueIva)
-      return (
-        <PriceLabel value={valueIva} />
-      );
-    },
+    // Flete GAM o estándar según la zona, RECARGADO con el % de IVA de flete de la
+    // tarifa. PriceLabel formatea a ₡ y resuelve el caso sin tarifa (→ ₡0).
+    render: (row) => <PriceLabel value={calcularFleteConIva(row)} />,
+  },
+  {
+    id: "fulfillment",
+    value: "Fulfillment",
+    // Monto fijo de fulfillment de la tarifa activa de la tienda (sin tarifa → ₡0).
+    render: (row) => (
+      <PriceLabel value={toValidNumber(row.relaciones?.tienda?.tarifa?.fulfillment)} />
+    ),
+  },
+  {
+    id: "comision",
+    value: "Comisión + IVA",
+    // Comisión COD sobre el valor de cobro + su IVA (ver calcularComisionConIva).
+    render: (row) => <PriceLabel value={calcularComisionConIva(row)} />,
   },
   {
     id: "mensajero",
