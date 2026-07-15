@@ -145,36 +145,52 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       this.repo.findEstatusIdByValue(ESTATUS_EN_BODEGA),
       this.repo.findEstatusIdByValue(ESTATUS_EN_RUTA_BODEGA_SATELITE),
     ]);
+    // Guardia de catalogo (mismo criterio que `asignarDesdeBodega`/`rutearABodegaSatelite`):
+    // los tres destinos posibles del lote deben existir en `order_status`. Si falta alguno,
+    // se aborta ANTES de persistir (R11/R17) con un error accionable, en vez de dejar pasar
+    // un null disfrazado de string hasta la escritura.
+    if (estatusEsperaId === null || estatusBodegaId === null || estatusRutaSateliteId === null) {
+      return {
+        status: "validation_error",
+        fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
+      };
+    }
 
     // --- Construir decisiones del lote: GAM por regla 17, no-GAM a satelite (R11) ---
-    function estatusDestino(ordenId: string, mensajeroId: string | null): {
+    // Arrow `const` (no `function`): una declaracion se hoistea y TS descarta el
+    // estrechamiento de la guardia de catalogo de arriba; asi los tres ids entran ya
+    // como `string` y no hace falta ningun cast.
+    const estatusDestino = (
+      ordenId: string,
+      mensajeroId: string | null,
+    ): {
       estatusId: string;
       mensajeroAsignadoId: string | null;
       estado: string;
-    } {
+    } => {
       const orden = ordenMap.get(ordenId);
       const esGam = orden !== undefined && orden.zonaId === centralZonaId;
       if (!esGam) {
         // R9/R10: no-GAM -> en_ruta_bodega_satelite, sin mensajero, con num_guia.
         return {
-          estatusId: estatusRutaSateliteId as string,
+          estatusId: estatusRutaSateliteId,
           mensajeroAsignadoId: null,
           estado: ESTATUS_EN_RUTA_BODEGA_SATELITE,
         };
       }
       if (mensajeroId !== null) {
         return {
-          estatusId: estatusEsperaId as string,
+          estatusId: estatusEsperaId,
           mensajeroAsignadoId: mensajeroId,
           estado: ESTATUS_EN_ESPERA_ACEPTACION,
         };
       }
       return {
-        estatusId: estatusBodegaId as string,
+        estatusId: estatusBodegaId,
         mensajeroAsignadoId: null,
         estado: ESTATUS_EN_BODEGA,
       };
-    }
+    };
 
     // --- Persistencia transaccional (R11/R17): TODAS reciben num_guia (R10/R19) ---
     const resultadosRaw = await this.repo.generarGuiaLote(
