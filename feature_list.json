@@ -689,6 +689,39 @@
       "zone": "fullstack",
       "branch": "feature/63-orden-lista-actualizada",
       "depends_on": null
+    },
+    {
+      "id": 64,
+      "name": "pwa - basic",
+      "description": "genera una pwa basica",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": "feature/64-pwa-basic",
+      "depends_on": null
+    },
+    {
+      "id": 65,
+      "name": "Lestura de qr",
+      "description": "Genera un item en el menu disponible para todos los roles llamado qr, que permita usar la camara del dispositivo, para hacer lectura de un codigo qr, este debe leer una ruta (ya esta configurado), ua vez tome esa ruta redirigelo alli",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": "feature/65-lestura-de-qr",
+      "depends_on": null
+    },
+    {
+      "id": 66,
+      "name": "qr - detalle",
+      "description": "Valida el rol y haz un switch case por cada tipo de rol, de momento deja el mismo componente para todos, los detalles de esa orden",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": null,
+      "zone": null,
+      "branch": null,
+      "depends_on": null
     }
   ]
 }
