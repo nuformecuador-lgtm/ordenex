@@ -1,4 +1,7 @@
-import type { ITarifaVigentePorZonaRepository, TarifaVigentePorZona } from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
+import type {
+  ITarifaVigentePorTiendaRepository,
+  TarifaVigente,
+} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { IWalletFeedService, WalletFeedTxClient } from "@/lib/interfaces/services/IWalletFeedService";
 import {
@@ -15,13 +18,13 @@ import {
  * repo las inserta idempotentemente en la tx (design §2.2). Money-safe: montos STRING.
  */
 export class WalletFeedService implements IWalletFeedService {
-  constructor(private readonly tarifaRepo: ITarifaVigentePorZonaRepository) {}
+  constructor(private readonly tarifaRepo: ITarifaVigentePorTiendaRepository) {}
 
   async construirMovimientosDeIngreso(
     cierreId: string,
     tx: WalletFeedTxClient,
   ): Promise<CrearMovimientoInput[]> {
-    // R5: TODAS las gestiones del cierre, con la orden (zonaId, montoCobrar, cobraComision)
+    // R5: TODAS las gestiones del cierre, con la orden (tiendaId, montoCobrar, cobraComision)
     // y su zona (esCentral). Money-safe: montoCobrar se lee como Decimal -> STRING.
     const gestiones = await tx.gestionOrden.findMany({
       where: { cierreId },
@@ -29,7 +32,7 @@ export class WalletFeedService implements IWalletFeedService {
         resultado: true,
         orden: {
           select: {
-            zonaId: true,
+            tiendaId: true, // feature 69/R20: la tarifa se resuelve por TIENDA
             montoCobrar: true,
             cobraComision: true,
             zona: { select: { esCentral: true } },
@@ -38,19 +41,19 @@ export class WalletFeedService implements IWalletFeedService {
       },
     });
 
-    // Cache de tarifa por zonaId: una zona se resuelve una sola vez por cierre (R9: null si
-    // no hay tarifa vigente -> conceptos 0.00, no bloquea).
-    const cacheTarifa = new Map<string, TarifaVigentePorZona | null>();
-    const resolverTarifa = async (zonaId: string): Promise<TarifaVigentePorZona | null> => {
-      if (cacheTarifa.has(zonaId)) return cacheTarifa.get(zonaId) ?? null;
-      const t = await this.tarifaRepo.resolveTarifaPorZona(zonaId);
-      cacheTarifa.set(zonaId, t);
+    // Cache de tarifa por tiendaId: una tienda se resuelve una sola vez por cierre (R9: null
+    // si no hay tarifa vigente -> conceptos 0.00, no bloquea).
+    const cacheTarifa = new Map<string, TarifaVigente | null>();
+    const resolverTarifa = async (tiendaId: string): Promise<TarifaVigente | null> => {
+      if (cacheTarifa.has(tiendaId)) return cacheTarifa.get(tiendaId) ?? null;
+      const t = await this.tarifaRepo.resolveTarifaPorTienda(tiendaId);
+      cacheTarifa.set(tiendaId, t);
       return t;
     };
 
-    const entradas: Array<{ input: OrdenIngresoInput; tarifa: TarifaVigentePorZona | null }> = [];
+    const entradas: Array<{ input: OrdenIngresoInput; tarifa: TarifaVigente | null }> = [];
     for (const g of gestiones) {
-      const tarifa = await resolverTarifa(g.orden.zonaId);
+      const tarifa = await resolverTarifa(g.orden.tiendaId);
       entradas.push({
         input: {
           resultado: g.resultado,

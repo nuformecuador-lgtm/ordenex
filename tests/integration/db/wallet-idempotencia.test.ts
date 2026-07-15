@@ -4,7 +4,7 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
-import type { ITarifaVigentePorZonaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
+import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 
 // Feature 42/T9 — idempotencia + no-doble-conteo (R6/R13). Simula el constraint unico
@@ -53,8 +53,11 @@ const TARIFA = {
   ivaComisionCod: "13.00",
 };
 
-function buildTarifaRepo(): ITarifaVigentePorZonaRepository {
-  return { resolveTarifaPorZona: vi.fn().mockResolvedValue(TARIFA) };
+function buildTarifaRepo(): ITarifaVigentePorTiendaRepository {
+  return {
+    resolveTarifaPorTienda: vi.fn().mockResolvedValue(TARIFA),
+    resolveTarifasPorTiendas: vi.fn().mockResolvedValue(new Map()),
+  };
 }
 
 // Prisma doble: gestiones del cierre + la tienda de wallet + $transaction (tx === prisma).

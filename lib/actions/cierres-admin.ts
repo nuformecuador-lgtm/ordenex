@@ -7,7 +7,7 @@ import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
-import { TarifaVigentePorZonaRepository } from "@/lib/repositories/TarifaVigentePorZonaRepository";
+import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
@@ -62,16 +62,16 @@ function buildService(): ICierresAdminService {
   const prisma = getPrismaClient();
   return new CierresAdminService(
     // Feature 42/T8: el repo de cierres alimenta la wallet al aprobar (R5/R7), por
-    // inyeccion del repo de movimientos + el feed que resuelve tarifas por zona.
+    // inyeccion del repo de movimientos + el feed que resuelve tarifas por tienda.
     new CierresAdminRepository(
       prisma,
       new WalletMovimientoRepository(prisma),
-      new WalletFeedService(new TarifaVigentePorZonaRepository(prisma)),
+      new WalletFeedService(new TarifaVigentePorTiendaRepository(prisma)),
       // Feature 43/T10: alimenta el LEDGER por tienda al aprobar (misma tx que la 42). El
-      // feed reutiliza el mismo resolver de tarifas por zona y lee el interruptor Q3 del
+      // feed reutiliza el mismo resolver de tarifas por tienda y lee el interruptor Q3 del
       // singleton walletTiendaConfig (default true).
       new WalletTiendaMovimientoRepository(prisma),
-      new WalletTiendaFeedService(new TarifaVigentePorZonaRepository(prisma)),
+      new WalletTiendaFeedService(new TarifaVigentePorTiendaRepository(prisma)),
       // Feature 44/T10: alimenta el LIBRO del pago por mensajero al aprobar (misma tx que 42/43).
       // El feed consume los snapshots del cierre (P/E), emite el libro (devengo + pago) y el
       // egreso egreso_pago_mensajero=P en la caja 42 (F1.4-Qa=SI). Sin dependencias externas.

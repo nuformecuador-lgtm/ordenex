@@ -1,8 +1,8 @@
 import { Prisma } from "@prisma/client";
 import type {
-  ITarifaVigentePorZonaRepository,
-  TarifaVigentePorZona,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
+  ITarifaVigentePorTiendaRepository,
+  TarifaVigente,
+} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { CrearMovimientoTiendaInput } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
   IWalletTiendaFeedService,
@@ -43,7 +43,7 @@ interface Acumulado {
  */
 export class WalletTiendaFeedService implements IWalletTiendaFeedService {
   constructor(
-    private readonly tarifaRepo: ITarifaVigentePorZonaRepository,
+    private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
     // Interruptor Q3 (R28): unico punto de lectura. Default = singleton de config del modulo;
     // se inyecta para poder verificar ambos estados del flag en test sin manipular env.
     private readonly config: WalletTiendaConfig = walletTiendaConfig,
@@ -64,7 +64,6 @@ export class WalletTiendaFeedService implements IWalletTiendaFeedService {
         orden: {
           select: {
             tiendaId: true,
-            zonaId: true,
             montoCobrar: true,
             cobraComision: true,
             zona: { select: { esCentral: true } },
@@ -73,13 +72,13 @@ export class WalletTiendaFeedService implements IWalletTiendaFeedService {
       },
     });
 
-    // Cache de tarifa por zonaId (una zona se resuelve una sola vez por cierre; null si no
-    // hay tarifa vigente -> debitos 0.00, R14, sin bloquear).
-    const cacheTarifa = new Map<string, TarifaVigentePorZona | null>();
-    const resolverTarifa = async (zonaId: string): Promise<TarifaVigentePorZona | null> => {
-      if (cacheTarifa.has(zonaId)) return cacheTarifa.get(zonaId) ?? null;
-      const t = await this.tarifaRepo.resolveTarifaPorZona(zonaId);
-      cacheTarifa.set(zonaId, t);
+    // Cache de tarifa por tiendaId (feature 69/R20: una tienda se resuelve una sola vez por
+    // cierre; null si no hay tarifa vigente -> debitos 0.00, R14, sin bloquear).
+    const cacheTarifa = new Map<string, TarifaVigente | null>();
+    const resolverTarifa = async (tiendaId: string): Promise<TarifaVigente | null> => {
+      if (cacheTarifa.has(tiendaId)) return cacheTarifa.get(tiendaId) ?? null;
+      const t = await this.tarifaRepo.resolveTarifaPorTienda(tiendaId);
+      cacheTarifa.set(tiendaId, t);
       return t;
     };
 
@@ -110,7 +109,7 @@ export class WalletTiendaFeedService implements IWalletTiendaFeedService {
       bump(tiendaId, "credito", "cod_recaudado", codRecaudado);
 
       // DEBITOS: identicos a la 42 (misma funcion), mapeados a categorias de debito.
-      const tarifa = await resolverTarifa(g.orden.zonaId);
+      const tarifa = await resolverTarifa(tiendaId);
       const derivado = derivarIngresoOrden(
         {
           resultado: g.resultado,

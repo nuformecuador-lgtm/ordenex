@@ -3,9 +3,9 @@ import { Prisma } from "@prisma/client";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import type { WalletTiendaFeedTxClient } from "@/lib/interfaces/services/IWalletTiendaFeedService";
 import type {
-  ITarifaVigentePorZonaRepository,
-  TarifaVigentePorZona,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
+  ITarifaVigentePorTiendaRepository,
+  TarifaVigente,
+} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import { agregarIngresosPorConcepto, type OrdenIngresoInput } from "@/lib/utils/ingreso-ordenex";
 
 // Feature 43/T9 — tests unit del WalletTiendaFeedService (CORAZON). Cubre R8/R9/R10/R11/R14/
@@ -13,7 +13,7 @@ import { agregarIngresosPorConcepto, type OrdenIngresoInput } from "@/lib/utils/
 // credito COD. El interruptor Q3 se inyecta por constructor (unico punto de lectura) para
 // verificar AMBOS estados sin manipular env.
 
-const TARIFA: TarifaVigentePorZona = {
+const TARIFA: TarifaVigente = {
   valorFlete: "1000.00",
   valorFleteGam: "1500.00",
   valorFleteDevuelto: "400.00",
@@ -63,9 +63,12 @@ function buildTx(gestiones: unknown[]): WalletTiendaFeedTxClient {
 }
 
 function buildTarifaRepo(
-  tarifa: TarifaVigentePorZona | null = TARIFA,
-): ITarifaVigentePorZonaRepository {
-  return { resolveTarifaPorZona: vi.fn().mockResolvedValue(tarifa) };
+  tarifa: TarifaVigente | null = TARIFA,
+): ITarifaVigentePorTiendaRepository {
+  return {
+    resolveTarifaPorTienda: vi.fn().mockResolvedValue(tarifa),
+    resolveTarifasPorTiendas: vi.fn().mockResolvedValue(new Map()),
+  };
 }
 
 const FLAG_ON = { TIENDA_DEBITA_FLETE_DEVOLUCION: true };
@@ -208,19 +211,19 @@ describe("WalletTiendaFeedService — reprogramada, tarifa null, agregacion (R11
     expect(t2map.flete).toBe("1000.00");
   });
 
-  it("cachea la tarifa por zonaId (misma zona -> 1 sola resolucion)", async () => {
+  it("cachea la tarifa por tiendaId (misma zona -> 1 sola resolucion)", async () => {
     const tx = buildTx([gestion("entregada"), gestion("entregada"), gestion("devuelta", { montoRecibido: null })]);
     const tarifaRepo = buildTarifaRepo();
     const svc = new WalletTiendaFeedService(tarifaRepo, FLAG_ON);
     await svc.construirMovimientosPorTienda("c1", tx);
-    expect(tarifaRepo.resolveTarifaPorZona).toHaveBeenCalledTimes(1);
-    expect(tarifaRepo.resolveTarifaPorZona).toHaveBeenCalledWith("z1");
+    expect(tarifaRepo.resolveTarifaPorTienda).toHaveBeenCalledTimes(1);
+    expect(tarifaRepo.resolveTarifaPorTienda).toHaveBeenCalledWith("t1");
   });
 });
 
 describe("WalletTiendaFeedService — INVARIANTE R15 (cuadre con la 42, ambos estados del flag)", () => {
   // Helper: totales de ingreso de la 42 para las mismas gestiones (fuente de verdad).
-  function ingreso42(entradas: Array<{ input: OrdenIngresoInput; tarifa: TarifaVigentePorZona | null }>) {
+  function ingreso42(entradas: Array<{ input: OrdenIngresoInput; tarifa: TarifaVigente | null }>) {
     return Object.fromEntries(
       agregarIngresosPorConcepto(entradas).map((c) => [c.categoria, c.monto]),
     );

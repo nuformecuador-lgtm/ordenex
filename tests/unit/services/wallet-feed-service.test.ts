@@ -2,15 +2,15 @@ import { describe, it, expect, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import type {
-  ITarifaVigentePorZonaRepository,
-  TarifaVigentePorZona,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
+  ITarifaVigentePorTiendaRepository,
+  TarifaVigente,
+} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { WalletFeedTxClient } from "@/lib/interfaces/services/IWalletFeedService";
 
 // Feature 42 — tests unit del WalletFeedService (R5/R8/R9/R10). Construye hasta 6
-// movimientos por concepto, omite conceptos en 0.00, cachea la tarifa por zona.
+// movimientos por concepto, omite conceptos en 0.00, cachea la tarifa por tienda (feature 69/R20).
 
-const TARIFA: TarifaVigentePorZona = {
+const TARIFA: TarifaVigente = {
   valorFlete: "1000.00",
   valorFleteGam: "1500.00",
   valorFleteDevuelto: "400.00",
@@ -22,12 +22,12 @@ const TARIFA: TarifaVigentePorZona = {
 
 function gestion(
   resultado: string,
-  opts: { esCentral?: boolean; montoCobrar?: string | null; cobraComision?: boolean; zonaId?: string } = {},
+  opts: { esCentral?: boolean; montoCobrar?: string | null; cobraComision?: boolean; tiendaId?: string } = {},
 ) {
   return {
     resultado,
     orden: {
-      zonaId: opts.zonaId ?? "z1",
+      tiendaId: opts.tiendaId ?? "t1",
       montoCobrar: opts.montoCobrar === undefined ? new Prisma.Decimal("10000.00") : opts.montoCobrar === null ? null : new Prisma.Decimal(opts.montoCobrar),
       cobraComision: opts.cobraComision ?? true,
       zona: { esCentral: opts.esCentral ?? false },
@@ -41,8 +41,11 @@ function buildTx(gestiones: unknown[]): WalletFeedTxClient {
   } as unknown as WalletFeedTxClient;
 }
 
-function buildTarifaRepo(tarifa: TarifaVigentePorZona | null = TARIFA): ITarifaVigentePorZonaRepository {
-  return { resolveTarifaPorZona: vi.fn().mockResolvedValue(tarifa) };
+function buildTarifaRepo(tarifa: TarifaVigente | null = TARIFA): ITarifaVigentePorTiendaRepository {
+  return {
+    resolveTarifaPorTienda: vi.fn().mockResolvedValue(tarifa),
+    resolveTarifasPorTiendas: vi.fn().mockResolvedValue(new Map()),
+  };
 }
 
 describe("WalletFeedService.construirMovimientosDeIngreso (R5/R10)", () => {
@@ -99,20 +102,20 @@ describe("WalletFeedService.construirMovimientosDeIngreso (R5/R10)", () => {
     expect(movs).toEqual([]);
   });
 
-  it("R9: zona sin tarifa vigente -> ningun movimiento (todos 0.00), sin lanzar", async () => {
+  it("R9: tienda sin tarifa vigente -> ningun movimiento (todos 0.00), sin lanzar", async () => {
     const tx = buildTx([gestion("entregada"), gestion("devuelta")]);
     const svc = new WalletFeedService(buildTarifaRepo(null));
     const movs = await svc.construirMovimientosDeIngreso("c1", tx);
     expect(movs).toEqual([]);
   });
 
-  it("cachea la tarifa por zonaId: 3 gestiones misma zona -> 1 sola resolucion", async () => {
+  it("cachea la tarifa por tiendaId: 3 gestiones misma tienda -> 1 sola resolucion", async () => {
     const tx = buildTx([gestion("entregada"), gestion("entregada"), gestion("devuelta")]);
     const tarifaRepo = buildTarifaRepo();
     const svc = new WalletFeedService(tarifaRepo);
     await svc.construirMovimientosDeIngreso("c1", tx);
-    expect((tarifaRepo.resolveTarifaPorZona as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1);
-    expect(tarifaRepo.resolveTarifaPorZona).toHaveBeenCalledWith("z1");
+    expect((tarifaRepo.resolveTarifaPorTienda as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1);
+    expect(tarifaRepo.resolveTarifaPorTienda).toHaveBeenCalledWith("t1");
   });
 
   it("central (esCentral) usa flete GAM", async () => {

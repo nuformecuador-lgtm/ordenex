@@ -5,12 +5,12 @@ import {
   agregarIngresosPorConcepto,
   type OrdenIngresoInput,
 } from "@/lib/utils/ingreso-ordenex";
-import type { TarifaVigentePorZona } from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 
 // Feature 42 — tests del util PURO de ingreso de Ordenex (R8/R9/R26). Money-safe: la
 // salida agregada es STRING escala 2; cero number/parseFloat.
 
-const TARIFA: TarifaVigentePorZona = {
+const TARIFA: TarifaVigente = {
   valorFlete: "1000.00",
   valorFleteGam: "1500.00",
   valorFleteDevuelto: "400.00",
@@ -155,7 +155,7 @@ describe("agregarIngresosPorConcepto (R10)", () => {
 
   it("suma Decimal exacta (sin drift de float): 0.10 + 0.20 en montos derivados", () => {
     // tarifa con flete que produce centavos que un float acumularia mal.
-    const t: TarifaVigentePorZona = { ...TARIFA, valorFlete: "0.10", ivaFlete: "0" };
+    const t: TarifaVigente = { ...TARIFA, valorFlete: "0.10", ivaFlete: "0" };
     const agg = agregarIngresosPorConcepto([
       { input: input({ resultado: "entregada", cobraComision: false }), tarifa: t },
       { input: input({ resultado: "entregada", cobraComision: false }), tarifa: { ...t, valorFlete: "0.20" } },

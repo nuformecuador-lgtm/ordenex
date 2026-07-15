@@ -8,7 +8,7 @@ import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiend
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
-import type { TarifaVigentePorZona } from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type {
   Alcance,
   CierreAdminResumenRow,
@@ -440,7 +440,7 @@ describe("CierresAdminService.aprobarCierre (R10/R12/R13)", () => {
 // --- feature 43/T11: aprobar CierreDia genera movimientos por tienda (end-to-end con el repo real) ---
 
 describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (feature 43: R5/R13)", () => {
-  const TARIFA: TarifaVigentePorZona = {
+  const TARIFA: TarifaVigente = {
     valorFlete: "1000.00",
     valorFleteGam: "1500.00",
     valorFleteDevuelto: "400.00",
@@ -496,7 +496,10 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
       },
     };
     const withTx = { ...prisma, $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)) };
-    const tarifaRepo = { resolveTarifaPorZona: vi.fn().mockResolvedValue(TARIFA) };
+    const tarifaRepo = {
+      resolveTarifaPorTienda: vi.fn().mockResolvedValue(TARIFA),
+      resolveTarifasPorTiendas: vi.fn().mockResolvedValue(new Map()),
+    };
     const repo = new CierresAdminRepository(
       withTx as unknown as PrismaClient,
       new WalletMovimientoRepository(withTx as unknown as PrismaClient),
@@ -565,7 +568,7 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
 // --- feature 44/T11: aprobar CierreDia genera el pago al mensajero + el egreso en la caja 42 ---
 
 describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (feature 44: R5/R12/R17)", () => {
-  const TARIFA: TarifaVigentePorZona = {
+  const TARIFA: TarifaVigente = {
     valorFlete: "1000.00",
     valorFleteGam: "1500.00",
     valorFleteDevuelto: "400.00",
@@ -604,7 +607,10 @@ describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (f
       },
     };
     const withTx = { ...prisma, $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)) };
-    const tarifaRepo = { resolveTarifaPorZona: vi.fn().mockResolvedValue(TARIFA) };
+    const tarifaRepo = {
+      resolveTarifaPorTienda: vi.fn().mockResolvedValue(TARIFA),
+      resolveTarifasPorTiendas: vi.fn().mockResolvedValue(new Map()),
+    };
     const repo = new CierresAdminRepository(
       withTx as unknown as PrismaClient,
       new WalletMovimientoRepository(withTx as unknown as PrismaClient),
