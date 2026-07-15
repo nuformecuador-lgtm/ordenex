@@ -607,16 +607,8 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
 // --- feature 44/T11: aprobar CierreDia genera el pago al mensajero + el egreso en la caja 42 ---
 
 describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (feature 44: R5/R12/R17)", () => {
-  const TARIFA: TarifaVigente = {
-    valorFlete: "1000.00",
-    valorFleteGam: "1500.00",
-    valorFleteDevuelto: "400.00",
-    valorFleteDevueltoGam: "600.00",
-    comisionCod: "5.00",
-    ivaFlete: "13.00",
-    ivaComisionCod: "13.00",
-  };
-
+  // Feature 69: este bloque ya no necesita una tarifa. El libro del pago al mensajero (44)
+  // sale de los snapshots del `cierre_dia` y su cierre no lleva gestiones.
   function buildStack(cierre: { mensajeroId: string; totalPagoMensajero: string; totalEfectivo: string }) {
     const mensajeroRows: Array<Record<string, unknown>> = [];
     const caja42Rows: Array<Record<string, unknown>> = [];
