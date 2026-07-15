@@ -38,7 +38,9 @@ export interface SeedZonasSummary {
 // Clientes Prisma acotados (permite mockear en tests sin la conexion real).
 type GeoPrisma = Pick<PrismaClient, "provincia" | "canton" | "distrito">;
 type ZonaPrisma = Pick<PrismaClient, "zona">;
-type DistritoPrisma = Pick<PrismaClient, "distrito">;
+// Feature 69/R28: el cruce escribe la relacion N:M `zona_distrito` (feature 24), NO
+// `distrito.zona_id` — esa columna la dropeo `20260713000000_drop_distrito_zona_id`.
+type DistritoPrisma = Pick<PrismaClient, "zonaDistrito">;
 
 // --- Parsers XLSX (exceljs) ---
 
@@ -254,7 +256,14 @@ export async function cruzarZonas(
       continue;
     }
 
-    await prisma.distrito.update({ where: { id: distritoId }, data: { zonaId } }); // R36
+    // R36 + feature 69/R28: la zona del distrito vive en la N:M `zona_distrito` (feature 24,
+    // `@@unique([zonaId, distritoId])`). Upsert sobre el par => idempotente (R39): re-correr el
+    // seed no duplica la relacion. `update: {}` porque la fila puente no tiene mas datos que el par.
+    await prisma.zonaDistrito.upsert({
+      where: { zonaId_distritoId: { zonaId, distritoId } },
+      update: {},
+      create: { zonaId, distritoId },
+    });
     asignados += 1;
   }
 
@@ -266,7 +275,7 @@ export async function cruzarZonas(
  * (R38). Idempotente (R39). Recibe el cliente Prisma por parametro para testear.
  */
 export async function seedZonasCompleto(
-  prisma: GeoPrisma & ZonaPrisma,
+  prisma: GeoPrisma & ZonaPrisma & DistritoPrisma,
   geoRows: GeoRow[],
   hints: ZonaHintRow[],
 ): Promise<SeedZonasSummary> {
