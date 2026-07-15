@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
+import type {
+  ITarifaVigentePorTiendaRepository,
+  TarifaVigenteResuelta,
+} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 
 // Feature 37 — tests unit del repositorio del cierre (mockea Prisma, sin DB real,
 // patron orden-repository.asignacion.test.ts). Cubre R3 (solo cierre_id IS NULL),
@@ -51,11 +55,27 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// Feature 69/T10 (design §3.1) — doble del resolver de tarifa que `crearCierre` recibe por
+// constructor. Por defecto resuelve `null` para toda tienda (gap R9): los casos que no
+// afirman nada del snapshot no necesitan configurarlo.
+function buildTarifaRepo(
+  tarifas: Record<string, TarifaVigenteResuelta | null> = {},
+): ITarifaVigentePorTiendaRepository {
+  return {
+    resolveTarifaPorTienda: vi.fn(async (tiendaId: string) => tarifas[tiendaId] ?? null),
+    resolveTarifasPorTiendas: vi.fn(async (_tx: unknown, tiendaIds: string[]) => {
+      const out = new Map<string, TarifaVigenteResuelta | null>();
+      for (const id of tiendaIds) out.set(id, tarifas[id] ?? null);
+      return out;
+    }),
+  } as unknown as ITarifaVigentePorTiendaRepository;
+}
+
 describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
   it("R3: filtra por mensajeroId y cierreId:null; ordena por createdAt desc", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findMany.mockResolvedValue([]);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.findGestionesPendientes("m1");
 
@@ -70,7 +90,7 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
   it("67/R13/R14/R15: el WHERE exige `anuladaAt: null` (las gestiones deshechas no se listan)", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findMany.mockResolvedValue([]);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.findGestionesPendientes("m1");
 
@@ -95,7 +115,7 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
         orden: { ...detalleRow().orden, distrito: null },
       }),
     ]);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const rows = await repo.findGestionesPendientes("m1");
 
@@ -131,7 +151,7 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
   it("cuenta ordenes del mensajero, no borradas, con estatus.value en los estados", async () => {
     const prisma = buildPrisma();
     prisma.orden.count.mockResolvedValue(2);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const n = await repo.contarOrdenesPendientesGestion("m1", ["en_espera_aceptacion", "en_reparto"]);
 
@@ -146,7 +166,7 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
 
   it("devuelve 0 sin consultar cuando estados esta vacio", async () => {
     const prisma = buildPrisma();
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const n = await repo.contarOrdenesPendientesGestion("m1", []);
 
@@ -159,7 +179,7 @@ describe("CierreDiaRepository.existeCierreSolicitado (R12)", () => {
   it("true si hay un cierre solicitado del mensajero", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.count.mockResolvedValue(1);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const r = await repo.existeCierreSolicitado("m1");
 
@@ -171,7 +191,7 @@ describe("CierreDiaRepository.existeCierreSolicitado (R12)", () => {
   it("false si no hay ninguno", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.count.mockResolvedValue(0);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     expect(await repo.existeCierreSolicitado("m1")).toBe(false);
   });
@@ -181,12 +201,18 @@ describe("CierreDiaRepository.crearCierre (R13/R14)", () => {
   it("en $transaction: INSERT cierre_dia (Decimal snapshot) + vincular gestiones + snapshot pago; devuelve id", async () => {
     const tx = {
       cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
-      gestionOrden: { updateMany: vi.fn(async () => ({ count: 3 })) },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 3 })),
+        // Feature 69/T10: el snapshot lee las gestiones que la tx VINCULO. Vacio por
+        // defecto: estos casos de la 37/39/41/56/67 no afirman nada del snapshot.
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
     };
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const id = await repo.crearCierre({
       mensajeroId: "m1",
@@ -250,12 +276,18 @@ describe("CierreDiaRepository.crearCierre — feature 41/C1 (R8/R9/R23)", () => 
   it("R8: estado='vencido' se propaga al INSERT (mismo snapshot que solicitado)", async () => {
     const tx = {
       cierreDia: { create: vi.fn(async () => ({ id: "cv1" })) },
-      gestionOrden: { updateMany: vi.fn(async () => ({ count: 2 })) },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 2 })),
+        // Feature 69/T10: el snapshot lee las gestiones que la tx VINCULO. Vacio por
+        // defecto: estos casos de la 37/39/41/56/67 no afirman nada del snapshot.
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
     };
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const id = await repo.crearCierre({
       mensajeroId: "m1",
@@ -280,12 +312,18 @@ describe("CierreDiaRepository.crearCierre — feature 41/C1 (R8/R9/R23)", () => 
   it("default estado='solicitado' cuando no se pasa (retrocompatible con la 37)", async () => {
     const tx = {
       cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
-      gestionOrden: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 1 })),
+        // Feature 69/T10: el snapshot lee las gestiones que la tx VINCULO. Vacio por
+        // defecto: estos casos de la 37/39/41/56/67 no afirman nada del snapshot.
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
     };
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.crearCierre({
       mensajeroId: "m1",
@@ -306,12 +344,18 @@ describe("CierreDiaRepository.crearCierre — feature 41/C1 (R8/R9/R23)", () => 
     const tx = {
       cierreDia: { create: vi.fn(async () => ({ id: "cx" })) },
       // vinculacion devuelve 0 (otra solicitud/corte las vinculo primero) -> throw interno.
-      gestionOrden: { updateMany: vi.fn(async () => ({ count: 0 })) },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 0 })),
+        // Feature 69/T10: el snapshot lee las gestiones que la tx VINCULO. Vacio por
+        // defecto: estos casos de la 37/39/41/56/67 no afirman nada del snapshot.
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
     };
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const id = await repo.crearCierre({
       mensajeroId: "m1",
@@ -343,12 +387,18 @@ describe("Feature 67/R16 — crearCierre NO vincula gestiones anuladas (MONEY-CR
   it("el WHERE del updateMany que VINCULA exige `anuladaAt: null` (si no, la wallet cobra una gestion deshecha)", async () => {
     const tx = {
       cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
-      gestionOrden: { updateMany: vi.fn(async () => ({ count: 2 })) },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 2 })),
+        // Feature 69/T10: el snapshot lee las gestiones que la tx VINCULO. Vacio por
+        // defecto: estos casos de la 37/39/41/56/67 no afirman nada del snapshot.
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
     };
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.crearCierre({
       mensajeroId: "m1",
@@ -370,12 +420,18 @@ describe("Feature 67/R16 — crearCierre NO vincula gestiones anuladas (MONEY-CR
   it("R16: la vinculacion NO usa el WHERE viejo (sin `anuladaAt`), que ataria la anulada al cierre", async () => {
     const tx = {
       cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
-      gestionOrden: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 1 })),
+        // Feature 69/T10: el snapshot lee las gestiones que la tx VINCULO. Vacio por
+        // defecto: estos casos de la 37/39/41/56/67 no afirman nada del snapshot.
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
     };
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.crearCierre({
       mensajeroId: "m1",
@@ -406,7 +462,7 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       anuladaAt: null,
       orden: { deletedAt: null, estatusId: "s-bodega", estatus: { value: "en_bodega" } },
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const row = await repo.findGestionParaDeshacer("g1");
 
@@ -434,7 +490,7 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       anuladaAt: null,
       orden: { deletedAt: borrada, estatusId: "s-entregada", estatus: { value: "entregada" } },
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const row = await repo.findGestionParaDeshacer("g1");
     expect(row?.orden.deletedAt).toEqual(borrada);
@@ -443,14 +499,14 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
   it("gestion inexistente -> null", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findUnique.mockResolvedValue(null);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
     expect(await repo.findGestionParaDeshacer("nope")).toBeNull();
   });
 
   it("R4: la ultima NO anulada de la orden = findFirst({ordenId, anuladaAt:null}) desc por createdAt", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findFirst.mockResolvedValue({ id: "g9" });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const id = await repo.findUltimaGestionNoAnuladaId("o1");
 
@@ -463,7 +519,7 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
   it("R4: orden sin gestiones vigentes -> null", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findFirst.mockResolvedValue(null);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
     expect(await repo.findUltimaGestionNoAnuladaId("o1")).toBeNull();
   });
 });
@@ -492,7 +548,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const ok = await repo.anularGestionYDevolverAGestion(INPUT);
 
@@ -510,7 +566,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.anularGestionYDevolverAGestion({ ...INPUT, actorUsuarioId: "m1" });
 
@@ -526,7 +582,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.anularGestionYDevolverAGestion(INPUT);
 
@@ -558,7 +614,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.anularGestionYDevolverAGestion(INPUT);
 
@@ -576,7 +632,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.anularGestionYDevolverAGestion({ ...INPUT, actorUsuarioId: "m1" });
 
@@ -599,7 +655,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.anularGestionYDevolverAGestion(INPUT);
 
@@ -616,7 +672,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.anularGestionYDevolverAGestion(INPUT);
 
@@ -629,7 +685,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.anularGestionYDevolverAGestion(INPUT);
 
@@ -647,7 +703,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const ok = await repo.anularGestionYDevolverAGestion(INPUT);
 
@@ -662,7 +718,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const ok = await repo.anularGestionYDevolverAGestion(INPUT);
 
@@ -677,7 +733,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
         throw new Error("caida de DB");
       }),
     });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await expect(repo.anularGestionYDevolverAGestion(INPUT)).rejects.toThrow("caida de DB");
   });
@@ -701,7 +757,7 @@ describe("CierreDiaRepository.findCierresByMensajero (R18)", () => {
         solicitadoAt: new Date("2026-07-12T10:00:00.000Z"),
       },
     ]);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const rows = await repo.findCierresByMensajero("m1");
 
