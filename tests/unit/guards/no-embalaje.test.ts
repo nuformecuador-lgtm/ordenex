@@ -18,6 +18,13 @@ const IGNORED_DIRS = new Set([
   "coverage",
   "build",
   "progress",
+  // `.claude/` es estado del harness (worktrees aislados de subagentes,
+  // settings, skills), no fuente del repo. En particular `.claude/worktrees/`
+  // contiene checkouts anidados del propio repo: sin este ignore el guard se
+  // encuentra copias de archivos que SI estan en el whitelist (incluido el
+  // propio guard) pero bajo otra ruta relativa, y falla por su reflejo. El
+  // guard audita el codigo del proyecto, no copias anidadas de si mismo.
+  ".claude",
 ]);
 
 const TEXT_EXTENSIONS = new Set([

@@ -67,39 +67,42 @@ describe("puedeVer", () => {
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve Órdenes, Configuración, Cierres del día y Perfil en orden real", () => {
+  it("maestro ve Órdenes, Configuración, Cierres del día, QR y Perfil en orden real", () => {
+    // PR #75: "QR" (roles: ROLES_SEED) se intercala antes de "Perfil".
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
       "Órdenes",
       "Configuración",
       "Cierres del día",
+      "QR",
       "Perfil",
     ]);
   });
 
-  it("admin ve Órdenes + Perfil, NO Configuración", () => {
+  it("admin ve Órdenes + QR + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("admin")));
-    expect(visibles).toEqual(["Órdenes", "Perfil"]);
+    expect(visibles).toEqual(["Órdenes", "QR", "Perfil"]); // PR #75: QR
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Órdenes + Perfil, NO Configuración", () => {
+  it("adminTienda ve Órdenes + QR + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
-    expect(visibles).toEqual(["Órdenes", "Perfil"]);
+    expect(visibles).toEqual(["Órdenes", "QR", "Perfil"]); // PR #75: QR
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("mensajero ve Entregas + Cierre del día + Perfil, NO Órdenes ni Configuración", () => {
+  it("mensajero ve Entregas + Cierre del día + QR + Perfil, NO Órdenes ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
-    expect(visibles).toEqual(["Entregas", "Cierre del día", "Perfil"]);
+    // PR #75: "QR" es visible para todos los roles (ROLES_SEED).
+    expect(visibles).toEqual(["Entregas", "Cierre del día", "QR", "Perfil"]);
     expect(visibles).not.toContain("Órdenes");
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminSatelite ve Asignaciones + Cierres del día + Perfil", () => {
+  it("adminSatelite ve Asignaciones + Cierres del día + QR + Perfil", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Asignaciones", "Cierres del día", "Perfil"],
+      ["Asignaciones", "Cierres del día", "QR", "Perfil"], // PR #75: QR
     );
   });
 
