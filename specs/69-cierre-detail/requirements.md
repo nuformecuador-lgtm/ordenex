@@ -155,8 +155,46 @@
   `zona_id` del distrito (eliminada por `20260713000000_drop_distrito_zona_id`; la zona del distrito
   vive en la relación N:M `zona_distrito`).
 
-- **R29.** El sistema DEBE terminar con `pnpm test`, `pnpm lint`, `pnpm build` e `./init.sh` en
-  **verde**, sin regresión de la suite baseline (~2764 tests / 296 archivos / 0 fallos).
+- **R29.** El sistema DEBE terminar con `pnpm test`, `pnpm lint` y `pnpm build` en **verde**, sin
+  regresión de la suite baseline (~2764 tests / 296 archivos / 0 fallos). El sistema DEBE dejar
+  `./init.sh` en verde **salvo** por fallos de test que se demuestren **no deterministas y ajenos al
+  alcance de la feature**, en cuyo caso la excepción DEBE registrarse con la evidencia que lo
+  demuestra (ver enmienda R29.1).
+
+- **R29.1 — Enmienda a R29 (2026-07-15, decidida por el humano). Excepción REGISTRADA, no maquillada.**
+
+  R29 exigía `./init.sh` **VERDE** sin matices, y `tasks.md` T21 lo llamaba *"la definición de hecho
+  aquí"*. **`./init.sh` sale ROJO y la feature se cierra igual.** El porqué, con la evidencia y no con
+  una promesa:
+
+  - **Lo medido** (por implementer, leader y **re-medido por el reviewer de forma independiente**):
+    `pnpm test --testTimeout=30000` ⇒ **301/301 archivos · 2842/2842 tests · 0 fallos · exit 0**.
+    `pnpm typecheck` = 0 errores · `pnpm lint` = 0 errores · `pnpm build` VERDE. Las **otras** puertas
+    de `init.sh` (`typecheck`, `lint`) pasan: el rojo es **sólo** el `pnpm test` con el `testTimeout`
+    default de 5000ms (`init.sh:80-82`).
+  - **Por qué es flaky y no un fallo real — la prueba, no la intuición:** el conjunto de archivos que
+    falla **cambia entre corridas del MISMO commit** (el leader midió 1–3, el implementer 12–15).
+    **Eso es no-determinismo demostrado.** Un fallo real es determinista y **no se arregla subiendo el
+    timeout**; éste no lo es y se arregla. Todos los fallos son `Test timed out in 5000ms`.
+  - **Por qué es ajeno a la 69:** los archivos que fallan son de **UI** (`HomePage*`, `LoginForm`,
+    `OrdenesPagination`, `zona-form`, `recuperar-contrasena-form`, `OrdenesModuleReuse`) y **ninguno
+    importa nada que la 69 toque** (verificado por grep). El alcance de la 69 es **backend**.
+  - **Lo que la 69 SÍ aporta al síntoma, dicho sin excusas:** la suite creció (+55 tests) y es más
+    lenta, así que la ventana de 5000ms se desborda **en más sitios**. La 69 **no introduce** el flaky
+    (es preexistente y ambiental), pero **lo hace más visible**. Eso no es regresión de código; es una
+    puerta mal calibrada que ya estaba mal calibrada.
+
+  **Criterio real con el que se cierra la 69** (éste, y no otro): `pnpm typecheck` = 0, `pnpm lint`
+  verde, `pnpm build` verde, y **`pnpm test --testTimeout=30000` = 2842/2842, exit 0**, medido de
+  forma independiente por el reviewer.
+
+  **Lo que esta excepción NO es:** no es una licencia para dar por bueno un `init.sh` rojo. La
+  advertencia del reviewer se acepta tal cual y queda escrita aquí: *"mantener un init.sh rojo 'que ya
+  sabemos por qué es' es cómo se pierde la única puerta que queda."* La calibración del `testTimeout`
+  en la config de vitest **queda como deuda de arnés con dueño** (leader), **fuera del alcance de la
+  69** (su alcance es backend; el flaky es de UI). Mientras no se haga, `init.sh` es **no
+  interpretable** — y ése es el coste que se está aceptando a sabiendas, por esta feature y una sola
+  vez.
 
 ---
 
@@ -181,7 +219,7 @@
 | R12 | `tests/unit/services/wallet-feed-service.test.ts` — deriva desde `cierreDetail`; `orden`/`tarifa` vivas nunca consultadas |
 | R13 | `tests/unit/services/wallet-tienda-feed-service.test.ts` — ídem + `tiendaId` desde el snapshot |
 | R14 | `tests/unit/services/wallet-feed-service.test.ts` + `wallet-tienda-feed-service.test.ts` — falta la fila ⇒ throw, sin movimientos |
-| R15 | `tests/unit/repositories/cierres-admin-repository.test.ts` — el detalle admin sale de `cierre_detail` |
+| R15 | `tests/unit/repositories/cierres-admin-repository.test.ts` — el detalle admin sale de `cierre_detail` · **+ `tests/unit/repositories/cierres-bodega-admin-repository.test.ts` — el detalle de bodega (40) también sale del snapshot** (T23: R15 alcanza **las dos** vistas de admin; el censo de `design.md` §4.4 que lo acotaba a una era falso — ver §4.4.1) |
 | R16 | `tests/unit/repositories/cierre-dia-repository.test.ts` — `findGestionesPendientes` sigue resolviendo en vivo |
 | R17 | `tests/integration/db/cierre-detail-congelado.test.ts` — editar la orden entre solicitar y aprobar NO cambia los movimientos; cuadran con `total_*` |
 | R18 | `tests/integration/db/cierre-detail-congelado.test.ts` — cambiar la tarifa entre solicitar y aprobar NO cambia los movimientos |
@@ -195,7 +233,7 @@
 | R26 | `tests/integration/db/cierre-detail-migration.test.ts` — el UP contiene el `INSERT … SELECT` de backfill |
 | R27 | `tests/integration/db/cierre-detail-migration.test.ts` — backfill sin `WHERE` que excluya cierres; verificación real de round-trip a cargo del implementer (`docs/verification.md`) |
 | R28 | `pnpm typecheck` = 0 errores (evidencia en `progress/impl_69-cierre-detail.md`) + `tests/unit/scripts/seed-zonas.test.ts` (existente) verde |
-| R29 | `pnpm test` / `pnpm lint` / `pnpm build` / `./init.sh` verdes (evidencia en `progress/impl_69-cierre-detail.md`) |
+| R29 | `pnpm typecheck` = 0 · `pnpm lint` verde · `pnpm build` verde · **`pnpm test --testTimeout=30000` = 2842/2842 exit 0** (evidencia en `progress/impl_69-cierre-detail.md`, re-medida por el reviewer). **`./init.sh` ROJO: excepción registrada en R29.1** (flaky ambiental de UI, no determinista y ajeno a la 69) |
 | R30 | `tests/unit/repositories/tarifa-vigente-por-tienda-repository.test.ts` — test estructural: el fuente del resolver contiene un `TODO:` que menciona `status` y la feature 69 (falla si alguien lo borra al refactorizar) |
 
 ---

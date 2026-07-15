@@ -222,7 +222,7 @@ leyendo al aprobar: es **política de la casa**, no un dato de la orden — no s
 **No se toca.** Ya consume sólo snapshots del `cierre_dia` (`WalletMensajeroFeedService.ts:31-33`). Es
 el modelo que las otras dos adoptan.
 
-### 4.4 Detalle del admin (38) — R15/R16/R19
+### 4.4 Detalle del admin (38 y 40) — R15/R16/R19
 
 `CierresAdminRepository.findCierreByIdEnAlcance` (`:130-134`) reusa hoy `WITH_DETALLE` +
 `toPendienteRow` de la 37, que navegan `gestion_orden.orden.*` **vivo**. Pasa a leer
@@ -235,7 +235,68 @@ el modelo que las otras dos adoptan.
 - Efecto colateral que resuelve R19: una orden con `deleted_at` sigue mostrándose (hoy también, por
   otra razón: `WITH_DETALLE` no filtra `deletedAt` y la FK es NOT NULL). Con el snapshot deja de
   depender de ese accidente.
-- Consumidores de `WITH_DETALLE` verificados: sólo `CierreDiaRepository` y `CierresAdminRepository`.
+
+#### Censo de consumidores de `WITH_DETALLE` — CORREGIDO (2026-07-15)
+
+> **La versión anterior de esta línea decía: *"Consumidores de `WITH_DETALLE` verificados: sólo
+> `CierreDiaRepository` y `CierresAdminRepository`."* Era FALSA.** Lo detectó el implementer
+> (desviación 1) y lo confirmó el reviewer (BLOQUEANTE 1). Ver §4.4.1: **no es un erratum tipográfico,
+> es un fallo de método con consecuencia medible.**
+
+Censo **re-verificado por grep** sobre el árbol (`rg "WITH_DETALLE"`, HEAD de
+`feature/69-cierre-detail`), distinguiendo **quién lo consume** de quién sólo lo nombra en un
+comentario:
+
+| Sitio | ¿Consume? | Qué lee | Veredicto R15 |
+| --- | --- | --- | --- |
+| `lib/repositories/CierreDiaRepository.ts:100` | — | **lo define** (más `DetalleRow` `:129` y el mapper `toPendienteRow` `:136`) | n/a |
+| `lib/repositories/CierreDiaRepository.ts:197` | **sí** | `findGestionesPendientes`: gestiones con `cierre_id IS NULL` ⇒ **no existe snapshot que leer** | **Legítimo — es R16**, la vista EN VIVO de la 37. No se toca |
+| `lib/repositories/CierresBodegaAdminRepository.ts:14` (import), `:102` (uso) | **sí** | `findCierreBodegaConDetalle`: por cada `cierre_dia` **YA CREADO** (y ya consolidado en un `cierre_bodega`: típicamente aprobado y liquidado), `findMany({ where: { cierreId: cd.id }, ...WITH_DETALLE })` ⇒ navega `gestion_orden.orden.*` **VIVO** | **INCUMPLE R15.** Entra en el alcance de la 69 |
+| `lib/repositories/CierresAdminRepository.ts` | **NO** | Lo consumía **antes** de la 69; **T18 lo sustituyó** por `toPendienteRowDesdeSnapshot` (`:79`, `:243`). Las menciones que quedan (`:34`, `:169`, `:216`, `:219`) son **comentarios** que documentan el cambio | Cumple R15 desde T18 |
+| `tests/unit/repositories/cierres-bodega-admin-repository.test.ts:129` | test | Fija hoy el comportamiento **vivo** (`WITH_DETALLE` + `WHERE cierreId`) | Se actualiza con T23 |
+
+**Consumidores reales tras la 69: `CierreDiaRepository:197` (vista en vivo, R16) y
+`CierresBodegaAdminRepository:102` (que T23 pasa al snapshot).** `CierresAdminRepository` deja de
+serlo.
+
+#### 4.4.1 Por qué este censo importa — la lección, no el erratum
+
+Ese censo **era el único sitio del proyecto que acotaba R15**. El texto de R15 es **incondicional**
+(*"CUANDO un administrador consulta el detalle de un cierre ya creado…"*): un admin de bodega mirando
+el detalle de un `cierre_dia` ya creado **es exactamente el antecedente**. La acotación a
+`findCierreByIdEnAlcance` no salía del requisito: salía de este párrafo, apoyado en un censo mal hecho.
+
+**Un design no puede estrechar un requisito aprobado.** Si pudiera, cualquier requisito se cumpliría
+por el método de **mirar en menos sitios** — que es literalmente lo que pasó aquí.
+
+**Consecuencia real, sin maquillar:** la feature se aplicó **a medias**. Antes de la 69, las dos
+vistas de admin leían datos vivos: **consistentemente mal, pero consistentes entre sí**. Después de
+T18, una quedó congelada y la otra viva ⇒ **dos pantallas de admin muestran detalle DISTINTO del
+MISMO cierre cerrado**. Esa divergencia **no existía antes: la introdujimos nosotros**. No es "deuda
+vieja que la 69 no tocó".
+
+Atenuante que sí pesa y que hay que decir igual de claro: **no mueve dinero.** Los feeds ya leen el
+snapshot (§4.1/4.2); esto es **display** (guía, destinatario, nombres de zona/tienda/producto). Es
+incumplimiento de **contrato**, no descuadre.
+
+Es exactamente la clase de error que `docs/specs.md` y la **regla 6 del arnés** ("no inventes") quieren
+evitar: un **"hecho verificado"** escrito en un documento aprobado, que la siguiente feature cita sin
+re-medir. Un censo se **re-mide**, no se hereda.
+
+#### 4.4.2 Decisión del humano (2026-07-15): se arregla en la 69 — opción (A)
+
+De las dos salidas que planteó el reviewer, el humano eligió **(A) entra en la 69**. **(B) —
+llevarlo a feature aparte y enmendar el texto de R15 para acotarlo** — queda **descartada**: habría
+que estrechar por escrito un requisito aprobado para hacer encajar un incumplimiento ya existente, y
+habría dejado la divergencia entre las dos pantallas viva en producción durante todo el intervalo.
+**R15 no se toca: se cumple.**
+
+Alcance de la corrección (**T23**), con el patrón **ya probado en T18**:
+`CierresBodegaAdminRepository.findCierreBodegaConDetalle` compone el snapshot
+(`toPendienteRowDesdeSnapshot` + `byOrden`) en vez de `WITH_DETALLE`/`toPendienteRow`, devolviendo el
+**mismo DTO** (`CierreGestionPendienteRow`) ⇒ **la UI no cambia**. Fila ausente ⇒ **throw**
+(`CierreDetalleFaltanteError`), **sin fallback** a datos vivos: mismo criterio que R14 y coherente con
+el invariante del backfill (R27). Test análogo al de `CAR`: los descriptivos salen del snapshot.
 
 ## 5. Backfill (R26/R27) — decisión (a)
 
