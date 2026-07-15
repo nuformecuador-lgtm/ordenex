@@ -475,7 +475,37 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
           totalEfectivo: new Prisma.Decimal(cierre.totalEfectivo),
         })),
       },
-      gestionOrden: { findMany: vi.fn().mockResolvedValue(gestiones) },
+      gestionOrden: {
+        // Feature 69/R12/R13: de la gestion, los feeds solo toman lo que ES de la gestion.
+        findMany: vi.fn().mockResolvedValue(
+          (gestiones as GestionFixture[]).map((g, i) => ({
+            ordenId: `o${i}`,
+            resultado: g.resultado,
+            montoRecibido: g.montoRecibido,
+          })),
+        ),
+      },
+      // Feature 69: el SNAPSHOT congelado de la orden, que es de donde derivan ahora los dos
+      // feeds. Se construye del MISMO fixture: los importes de la 42/43 no cambian.
+      cierreDetail: {
+        findMany: vi.fn().mockResolvedValue(
+          (gestiones as GestionFixture[]).map((g, i) => ({
+            ordenId: `o${i}`,
+            tiendaId: g.orden.tiendaId,
+            montoCobrar: g.orden.montoCobrar,
+            cobraComision: g.orden.cobraComision,
+            esCentral: g.orden.zona.esCentral,
+            tarifaId: "ta1",
+            tarifaValorFlete: new Prisma.Decimal(TARIFA.valorFlete),
+            tarifaValorFleteGam: new Prisma.Decimal(TARIFA.valorFleteGam),
+            tarifaValorFleteDevuelto: new Prisma.Decimal(TARIFA.valorFleteDevuelto),
+            tarifaValorFleteDevueltoGam: new Prisma.Decimal(TARIFA.valorFleteDevueltoGam),
+            tarifaComisionCod: new Prisma.Decimal(TARIFA.comisionCod),
+            tarifaIvaFlete: new Prisma.Decimal(TARIFA.ivaFlete),
+            tarifaIvaComisionCod: new Prisma.Decimal(TARIFA.ivaComisionCod),
+          })),
+        ),
+      },
       walletMovimiento: {
         createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
           caja42Rows.push(...data);
@@ -496,21 +526,30 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
       },
     };
     const withTx = { ...prisma, $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)) };
-    const tarifaRepo = {
-      resolveTarifaPorTienda: vi.fn().mockResolvedValue(TARIFA),
-      resolveTarifasPorTiendas: vi.fn().mockResolvedValue(new Map()),
-    };
     const repo = new CierresAdminRepository(
       withTx as unknown as PrismaClient,
       new WalletMovimientoRepository(withTx as unknown as PrismaClient),
-      new WalletFeedService(tarifaRepo),
+      new WalletFeedService(),
       new WalletTiendaMovimientoRepository(withTx as unknown as PrismaClient),
-      new WalletTiendaFeedService(tarifaRepo, { TIENDA_DEBITA_FLETE_DEVOLUCION: true }),
+      new WalletTiendaFeedService({ TIENDA_DEBITA_FLETE_DEVOLUCION: true }),
       new PagoMensajeroMovimientoRepository(withTx as unknown as PrismaClient),
       new WalletMensajeroFeedService(),
     );
     return { repo, prisma, tiendaRows, mensajeroRows, caja42Rows };
   }
+
+  // Feature 69: forma del fixture que `buildStack` reparte entre gestion y snapshot.
+  type GestionFixture = {
+    resultado: string;
+    montoRecibido: Prisma.Decimal | null;
+    orden: {
+      tiendaId: string;
+      zonaId: string;
+      montoCobrar: Prisma.Decimal;
+      cobraComision: boolean;
+      zona: { esCentral: boolean };
+    };
+  };
 
   function gestion(resultado: string, tiendaId: string, montoRecibido: string | null) {
     return {
@@ -592,6 +631,9 @@ describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (f
         })),
       },
       gestionOrden: { findMany: vi.fn().mockResolvedValue([]) }, // el pago no depende de gestiones (snapshot)
+      // Feature 69: cierre sin gestiones -> snapshot vacio. El libro del pago al mensajero
+      // (44) sale de los snapshots del `cierre_dia`, no de `cierre_detail`: la 69 no lo toca.
+      cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
       walletMovimiento: {
         createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
           caja42Rows.push(...data);
@@ -607,16 +649,12 @@ describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (f
       },
     };
     const withTx = { ...prisma, $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)) };
-    const tarifaRepo = {
-      resolveTarifaPorTienda: vi.fn().mockResolvedValue(TARIFA),
-      resolveTarifasPorTiendas: vi.fn().mockResolvedValue(new Map()),
-    };
     const repo = new CierresAdminRepository(
       withTx as unknown as PrismaClient,
       new WalletMovimientoRepository(withTx as unknown as PrismaClient),
-      new WalletFeedService(tarifaRepo),
+      new WalletFeedService(),
       new WalletTiendaMovimientoRepository(withTx as unknown as PrismaClient),
-      new WalletTiendaFeedService(tarifaRepo, { TIENDA_DEBITA_FLETE_DEVOLUCION: true }),
+      new WalletTiendaFeedService({ TIENDA_DEBITA_FLETE_DEVOLUCION: true }),
       new PagoMensajeroMovimientoRepository(withTx as unknown as PrismaClient),
       new WalletMensajeroFeedService(),
     );
