@@ -161,7 +161,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_seed_order_status_completo") && // PR #64 (fix asignaciones)
         !d.endsWith("_gestion_orden_anulacion") && // feature 67: apendida despues
         !d.endsWith("_orden_historial_gestion_fk_restrict") && // feature 67 (F1.4-i): apendida despues
-        !d.endsWith("_order_status_recibido_origen"), // PR #75: apendida despues
+        !d.endsWith("_order_status_recibido_origen") && // PR #75: apendida despues
+        !d.endsWith("_cierre_detail"), // feature 69: apendida despues
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);
