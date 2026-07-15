@@ -62,16 +62,20 @@ function buildService(): ICierresAdminService {
   const prisma = getPrismaClient();
   return new CierresAdminService(
     // Feature 42/T8: el repo de cierres alimenta la wallet al aprobar (R5/R7), por
-    // inyeccion del repo de movimientos + el feed que resuelve tarifas por tienda.
+    // inyeccion del repo de movimientos + el feed.
     new CierresAdminRepository(
       prisma,
       new WalletMovimientoRepository(prisma),
-      new WalletFeedService(new TarifaVigentePorTiendaRepository(prisma)),
-      // Feature 43/T10: alimenta el LEDGER por tienda al aprobar (misma tx que la 42). El
-      // feed reutiliza el mismo resolver de tarifas por tienda y lee el interruptor Q3 del
-      // singleton walletTiendaConfig (default true).
+      // Feature 69/T16 (R12): el feed YA NO recibe el resolver de tarifa — deriva del
+      // SNAPSHOT (`cierre_detail`), que trae la tarifa congelada por fila. El resolver se
+      // invoca UNA vez por cierre, al SOLICITAR (en `CierreDiaRepository`), nunca al aprobar:
+      // ese es exactamente el cambio que mata el vector R18.
+      new WalletFeedService(),
+      // Feature 43/T10: alimenta el LEDGER por tienda al aprobar (misma tx que la 42). Lee el
+      // interruptor Q3 del singleton walletTiendaConfig (default true) — politica de la casa,
+      // no dato de la orden: por eso no se congela.
       new WalletTiendaMovimientoRepository(prisma),
-      new WalletTiendaFeedService(new TarifaVigentePorTiendaRepository(prisma)),
+      new WalletTiendaFeedService(),
       // Feature 44/T10: alimenta el LIBRO del pago por mensajero al aprobar (misma tx que 42/43).
       // El feed consume los snapshots del cierre (P/E), emite el libro (devengo + pago) y el
       // egreso egreso_pago_mensajero=P en la caja 42 (F1.4-Qa=SI). Sin dependencias externas.

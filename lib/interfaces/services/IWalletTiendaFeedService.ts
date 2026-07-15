@@ -7,8 +7,10 @@ import type { CrearMovimientoTiendaInput } from "@/lib/interfaces/repositories/I
 // + debitos por concepto, por tienda), NO las persiste el mismo (las inserta el repo en la
 // tx). Money-safe: montos STRING.
 
-// Cliente de transaccion que necesita el feed: leer gestiones del cierre con su orden+zona.
-export type WalletTiendaFeedTxClient = Pick<PrismaClient, "gestionOrden">;
+// Cliente de transaccion que necesita el feed. Feature 69/R13: el SNAPSHOT (`cierre_detail`)
+// + las gestiones (que aportan `resultado` y `montoRecibido`). `orden`, `zona` y `tarifas`
+// VIVAS ya NO se consultan al aprobar: incluida `orden.tienda_id`, o sea A QUIEN se acredita.
+export type WalletTiendaFeedTxClient = Pick<PrismaClient, "gestionOrden" | "cierreDetail">;
 
 export interface IWalletTiendaFeedService {
   /**
