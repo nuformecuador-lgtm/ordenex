@@ -7,6 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
+| feature/72-tests-recibido-origen | fullstack | F2.4 (listo para PR) | **DEVUELVE `dev` A VERDE.** Fix ágil (`sdd:false`, patrón 58/#70), rama desde `origin/dev` `14f6548`. 5 commits. **MEDIDO: 18 fallos → 2**, y los 2 restantes **pasan en aislado** (`OrdenesModuleReuse`, `HomePage`: `Test timed out in 5000ms` bajo carga de suite completa) → **flaky preexistentes, NO regresión**. `pnpm lint` 0 errores. `pnpm typecheck` **sigue en 2** (los de la 68 — se arreglan en la rama de la **69**, no acá). **Contenido:** (1) conteos `ORDER_STATUS_SEED` 13→14 + test posicional del 14.º + menú (ítem QR) + `order-status-enum-migration` + denylist de `zonas-migration`; **ningún test borrado ni aflojado** (patrón #70). (2) **RESTAURA las 5 columnas** que el PR #75 borró por drift (revert exacto de `8541498` sobre `ordenes-columns.tsx`, verificado: diff vacío contra el estado pre-drift, conservando `d201f56`) + **elimina el `console.log('xyz')`** que estaba VIVO en `dev`. (3) **arregla el guard `no-embalaje`**: `.claude` a `IGNORED_DIRS` (escaneaba los worktrees del harness y encontraba su propio reflejo) — **verificado con canario**: se metió `embalaje` en `lib/types/order-status.ts`, el guard **falló señalando el archivo**, se quitó y volvió a verde → ignora exactamente lo que debe y **sigue cazando de verdad**. **PENDIENTE: PR a `dev` + merge (OK humano).** **DESBLOQUEA el T5 de la 69.** |
 | feature/63-orden-lista-actualizada | fullstack | F2.4 (PR abierto) | **impl COMPLETA (R1–R20) + reviewer APROBADO 0 bloqueantes.** **PR #65 → `dev`** abierto. + Pedido humano: re-agregadas columnas (producto/dirección/zona/**monto a cobrar**/flete+IVA/fulfillment/comisión+IVA) y **adminTienda ahora VE Zona** (oculta solo Tienda). 50 tests propios/afectados verde; ordenes-columns R14-zona (era rojo baseline) ahora pasa. **PENDIENTE: merge del PR #65 (OK humano).** |
 | feature/64-pwa-basic | frontend | F2.4 (PR abierto) | **impl COMPLETA (T1–T8) + reviewer APROBADO 0 bloqueantes.** **PR #72 → `dev`** abierto. PWA básica: manifest.json, SW vanilla, meta tags, íconos 192/512, página offline. 7 archivos nuevos, 2 modificados. typecheck 0 errores nuevos, build ok. Lighthouse pendiente manual. **PENDIENTE: merge del PR #72 (OK humano).** |
 | feature/65-lestura-de-qr | frontend | F2.4 (PR abierto) | **impl COMPLETA (T1–T7) + reviewer APROBADO 0 bloqueantes.** **PR #73 → `dev`** abierto. Página `/qr` + item menú "QR" para todos los roles. 1 archivo nuevo, 2 modificados. typecheck 0 errores nuevos, lint 0, tests 0 regresiones. **PENDIENTE: merge del PR #73 (OK humano).** |
@@ -18,6 +19,33 @@
 > **Deshacer NO es "volver al estado anterior":** una gestión `devuelta` deja la orden en `en_bodega*` con `mensajero_asignado_id` LIMPIO (47) → hay que reponer la asignación (R19).
 > **F1.4-i implementada:** la FK `orden_historial_estado.gestion_orden_id` volvió de `SET NULL` a **`RESTRICT`**, completa (modelo + SQL). Nació de un **error del spec** que el leader cazó: afirmaba que el DELETE era imposible por una FK `RESTRICT` cuando la `20260714123909` (PR #66, del día anterior) la había dejado en `SET NULL` — verificado contra la base viva. La decisión de anular seguía bien, pero por el diseño append-only, no por una protección inexistente.
 > VERDE (medido por el leader, **re-medido independientemente por el reviewer**): **2764 tests / 296 archivos / 0 fallos**, typecheck **2 = baseline exacto**, lint 0 errores, `migrate diff` sin drift, round-trip REAL de las 2 migraciones (el reviewer lo repitió en tx con ROLLBACK). Estado vivo: enum 12, FK `confdeltype='r'`, RLS true/0 policies. Estado `done` + `history.md` + `impl_64`/`review_64`. **PENDIENTE: PR a `dev` + merge (OK humano).**
+
+> ### 🔴 EL PR #75 METIÓ UN `console.log` DE DEBUG EN PRODUCCIÓN Y BORRÓ 5 COLUMNAS PEDIDAS POR EL HUMANO
+> Descubierto 2026-07-15 (feature 72). **4.º caso documentado del mismo patrón**: PRs que revierten en
+> silencio el trabajo de otros (el #40 revirtió la 51 · el #64 revirtió la 49 · la geografía volvió a Ecuador
+> 3 veces · ahora el #75 sobre la 63). `ordenes-columns.tsx` es un **imán de drift**: la propia 63 ya tuvo que
+> corregirlo (`6b8dd01 fix(63): revertir drift de columnas fuera de alcance`).
+> **QUÉ ES:** el commit `8541498` (mensaje: literalmente `qr`) tocó
+> `app/(app)/ordenes/_components/ordenes-columns.tsx` **sin ninguna relación con QR**. Es **ANDAMIAJE DE
+> DEPURACIÓN COMMITEADO POR ERROR**: alguien depuraba "Flete + IVA", metió el helper inline, dejó
+> **`console.log('xyz', tarifa, tarifa.ivaFlete, valueIva)`** y borró las columnas de alrededor para aislar la
+> que investigaba. **EL LOG SIGUE VIVO EN `origin/dev`, LÍNEA 109**, corriendo en cada render de cada fila y
+> volcando el objeto tarifa a la consola. Nadie deja un log llamado `xyz` a propósito.
+> **QUÉ SE PERDIÓ (era PEDIDO EXPLÍCITO del humano en la 63** — el commit anterior en ese archivo es
+> `81f2105 feat(63): re-agregar columnas de la lista de ordenes (pedido humano)`**):** las 5 columnas
+> **Producto / Dirección / Monto a cobrar / Fulfillment / Comisión + IVA**, los helpers `calcularFleteConIva`
+> y `calcularComisionConIva` (espejo de `derivarIngresoOrden`), y el fallback `?? row.zonaNombre` de Zona.
+> **LO IMPORTANTE, Y ES UNA LECCIÓN DE PROCESO:** los 5 tests que lo cazaban **estaban rojos y nadie los
+> miró**. El `backend_dev` de la 72 **paró** en vez de actualizarlos: bajar la aserción de 18 a 13 columnas
+> habría dado VERDE a la desaparición de los montos del listado (el test D1 se llama literalmente *"renderiza
+> las 18 columnas… (R18, R19, R24, R26)"*). **Una regresión encubierta bajo un test verde es peor que el
+> rojo.** Y el humano preguntó *"¿por qué los borró?"* en vez de aceptar el "fue accidental" del leader — sin
+> esa pregunta no se habría encontrado el `console.log`.
+> **DEUDA registrada, NO saldada** (decisión del humano): **no hay regla `no-console` en el lint** → por eso
+> el debug pasó el gate. Hay **11 `console.log` en 7 archivos de producción** (`GeografiaSelector`,
+> `CobroVehiculoTarifas`, `mis-asignaciones/page.tsx`, `OrdenesTabs`, `ordenes-columns`,
+> `lib/actions/mis-asignaciones.ts`, `OtpChallengeIssuer`); algunos podrían ser intencionales → revisar uno
+> por uno, feature aparte. El `xyz` sí se elimina en la 72.
 
 > ### ⚠️ OJO — el "2764 / 0 fallos" de arriba **CADUCÓ**: `dev` está ROJO también en TESTS (feature 72)
 > Ese número era cierto cuando se midió, pero **el PR #75 lo invalidó** y nadie lo actualizó. Descubierto
@@ -48,6 +76,20 @@
 > - **#70** (reemplaza al #69, que se mergeó contra la rama base ya consumida) — migra los **tests de tarifas** al modelo `tiendaId`/`status`. Solo `tests/`, cero producción; 77→84 tests, ninguno borrado ni aflojado.
 >
 > **Resultado: suite 2652/2652 VERDE** (294/294 archivos). typecheck **35 → 2**. **`init.sh` sigue ROJO y con razón**: corta en typecheck por los 2 errores reales de la **feature 68**. Hasta saldarlos no sirve de semáforo de arranque.
+>
+> **DEUDAS DE ARNÉS NUEVAS (2026-07-15, feature 72):** (e) **SUITE FLAKY → `init.sh` NO DETERMINISTA.**
+> `OrdenesModuleReuse`, `HomePage` y `HomePageRol` fallan con `Test timed out in 5000ms` **bajo carga de suite
+> completa** y **pasan en aislado** (verificado por el leader y por 2 subagentes; el conteo varía entre
+> corridas: 3 en una, 2 en otra, 5 en otra → prueba de que no son determinísticos). **Esto es serio para el
+> arnés, no cosmético:** `./init.sh` corre `pnpm test`, así que **el semáforo de arranque puede dar rojo sin
+> que nada esté roto** — y eso es exactamente lo que entrena a la gente a ignorarlo, que es como se coló el PR
+> #64 (ver #67: "el gate de init.sh MENTÍA"). Un gate que miente por exceso envenena igual que uno que miente
+> por defecto. Candidatos: subir el timeout de vitest, aislar esos 3 en su propio proyecto, o `retry` acotado.
+> **La feature 69 lo va a chocar de frente en T5**, que exige `./init.sh` VERDE. (f) **`.claude/worktrees/`
+> tiene trabajo HUÉRFANO**: `menu-config-submenu` (`b6791c2 feat(menu): submenu en Configuracion; Ordenes sin
+> submenu`) **no está en `dev` ni en ninguna rama**. Nadie lo reclamó; se pierde el día que alguien limpie
+> worktrees. NO se tocó. (g) **`ordenes-columns.tsx` es un IMÁN DE DRIFT** (2 incidentes ya: `6b8dd01` de la
+> propia 63, y ahora el #75) → candidato a que el reviewer lo mire con lupa en todo PR que lo toque.
 >
 > **DEUDAS DE ARNÉS (no saldadas):** (a) **`jq` ausente + regla 4 rota de origen.** `init.sh` trata la falta de `jq` como `warn`, no `fail`, y las reglas 3 (una feature por zona) y 4 (specs presentes) viven dentro de un `if` dependiente de `jq` → **nunca corrieron** acá. Se instaló `jq` (winget; requiere shell nueva) y eso **arma una mina**: la regla 4 busca `specs/<name>/requirements.md`, pero la convención REAL del repo es **`specs/<id>-<slug>/`** (`24-gestion-zonas`, `63-orden-lista-actualizada`). Solo matchean por casualidad las 6 features de nombre de una palabra (`login`, `modal`, `paginacion`, `notificaciones`, `permissions`, `ordenes`) → con `jq` presente, `init.sh` fallaría listando **53** features. Medido: con la convención real (`<id>-<slug>`) quedarían **18** sin spec de verdad (ids 2,4,5,7,9,10,12,14,15,16,18,19,28,51,52,53,54,61 — las tempranas + los fix-features ágiles de spec inline). Opciones: (i) acotar la regla a features NO `done` (su intención real: "si la empezaste, debe tener su spec"; hoy pasaría), (ii) corregir el patrón a `<id>-<slug>` y saldar los 18 históricos, (iii) añadir un campo `spec_path` explícito por feature. (b) `zonas-migration.test.ts` usa **denylist de migraciones apendidas después** → se pondrá rojo con la próxima migración; patrón frágil, es lo que lo rompió. (c) el fake de `IUserRepository` está triplicado y el de `IOrdenRepository` lista ~30 métodos a mano → cada método nuevo del contrato rompe N archivos; un builder en `tests/helpers/` lo mataría de raíz. (d) `cancelled` no pertenece al vocabulario del arnés: las anuladas llevan `sdd:false` para que la regla 4 no les exija spec; el arreglo limpio es enseñarle el estado a `init.sh`.
 
