@@ -50,6 +50,7 @@ export default function QrPage() {
   useEffect(() => {
     if (!camaraAbierta) return;
     let cancelado = false;
+    let iniciado = false;
     let instancia: {
       stop: () => Promise<void>;
       clear: () => void;
@@ -70,9 +71,12 @@ export default function QrPage() {
           },
           undefined,
         );
+        iniciado = true;
       } catch {
         if (!cancelado) {
-          toast.error("No se pudo acceder a la cámara. Verifica los permisos del navegador.");
+          toast.error(
+            "No se pudo acceder a la cámara. Debes habilitar los permisos de cámara en la configuración del navegador para usar esta función.",
+          );
           setCamaraAbierta(false);
         }
       }
@@ -81,12 +85,17 @@ export default function QrPage() {
     return () => {
       cancelado = true;
       const s = instancia;
-      if (s && typeof s.stop === "function") {
-        Promise.resolve(s.stop())
-          .then(() => {
-            if (typeof s.clear === "function") s.clear();
-          })
+      if (!s) return;
+      if (iniciado) {
+        s.stop()
+          .then(() => s.clear())
           .catch(() => {});
+      } else {
+        try {
+          s.clear();
+        } catch {
+          // ignora si clear falla
+        }
       }
     };
   }, [camaraAbierta, regionId, procesar, toast]);
