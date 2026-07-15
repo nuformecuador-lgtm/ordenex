@@ -6,11 +6,11 @@
 import { z } from "zod";
 
 // Payload por orden imprimible (R1). Solo ordenes con `num_guia` producen etiqueta
-// (R2), por eso `numGuia` es `number` garantizado. `montoCobrar` es number|null
-// (Decimal->number, R5, sin moneda hardcodeada). `distritoNombre` nullable (R4).
-// `qrValue`/`barcodeValue` los resuelve el backend (decisiones F1.4 (a)/(b)) para
-// que el frontend NO decida que codificar y la feature 33 lea el mismo contrato.
-// NUNCA incluye `deletedAt` ni campos internos (R6).
+// (R2), por eso `numGuia` es `number` garantizado y `barcodeValue` es `string`. El
+// QR codifica la URL del paquete (`<origin>/paquete/<ordenId>`), resuelta en la UI a
+// partir de `qrValue` (= ordenId). `montoCobrar` es number|null (Decimal->number, R5,
+// sin moneda hardcodeada). `distritoNombre` nullable (R4). NUNCA incluye `deletedAt`
+// ni campos internos (R6).
 export interface EtiquetaGuiaDTO {
   ordenId: string;
   numGuia: number; // garantizado: solo ordenes con guia (R2)
@@ -30,8 +30,8 @@ export interface EtiquetaGuiaDTO {
 }
 
 // Ordenes solicitadas que NO produjeron etiqueta (R2/R3), para el aviso de UI
-// (R11): `sin_guia` = existe pero sin `num_guia`; `no_encontrada` = no existe o
-// esta borrada (`deleted_at` no nulo).
+// (R11): `sin_guia` = existe pero sin `num_guia` (no tiene QR disponible);
+// `no_encontrada` = no existe o esta borrada (`deleted_at` no nulo).
 export interface EtiquetaOmitidaDTO {
   ordenId: string;
   motivo: "sin_guia" | "no_encontrada"; // R2 / R3

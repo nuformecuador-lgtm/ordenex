@@ -18,6 +18,7 @@ const byLabel = (label: string): MenuItem => {
   return it;
 };
 const ordenes = byLabel("Órdenes");
+const entregas = byLabel("Entregas");
 const config = byLabel("Configuración");
 const perfil = byLabel("Perfil");
 const cierreDia = byLabel("Cierre del día");
@@ -29,9 +30,11 @@ const labels = (items: readonly MenuItem[]): string[] =>
 describe("puedeVer", () => {
   it("muestra el item cuando el rol del actor está autorizado", () => {
     expect(puedeVer(config, actor("maestro"))).toBe(true);
-    expect(puedeVer(ordenes, actor("mensajero"))).toBe(true);
+    expect(puedeVer(ordenes, actor("adminTienda"))).toBe(true);
     expect(puedeVer(perfil, actor("adminSatelite"))).toBe(true);
     expect(puedeVer(cierreDia, actor("mensajero"))).toBe(true);
+    // Feature 61: "Entregas" (portal del mensajero) es exclusivo del mensajero.
+    expect(puedeVer(entregas, actor("mensajero"))).toBe(true);
     // "Cierres del día" (admin) es visible para maestro y adminSatelite (R1).
     expect(puedeVer(cierresAdmin, actor("maestro"))).toBe(true);
     expect(puedeVer(cierresAdmin, actor("adminSatelite"))).toBe(true);
@@ -42,6 +45,11 @@ describe("puedeVer", () => {
     expect(puedeVer(config, actor("adminTienda"))).toBe(false);
     expect(puedeVer(config, actor("adminSatelite"))).toBe(false);
     expect(puedeVer(ordenes, actor("adminSatelite"))).toBe(false);
+    // Feature 61: "Entregas" NO lo ven roles distintos del mensajero.
+    expect(puedeVer(entregas, actor("maestro"))).toBe(false);
+    expect(puedeVer(entregas, actor("admin"))).toBe(false);
+    expect(puedeVer(entregas, actor("adminTienda"))).toBe(false);
+    expect(puedeVer(entregas, actor("adminSatelite"))).toBe(false);
     // "Cierre del día" es exclusivo del mensajero (R1).
     expect(puedeVer(cierreDia, actor("maestro"))).toBe(false);
     expect(puedeVer(cierreDia, actor("adminSatelite"))).toBe(false);
@@ -80,15 +88,18 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("mensajero ve Órdenes + Cierre del día + Perfil, NO Configuración", () => {
+  it("mensajero ve Entregas + Cierre del día + Perfil, NO Órdenes ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
-    expect(visibles).toEqual(["Órdenes", "Cierre del día", "Perfil"]);
+    // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
+    // (lista genérica reservada a maestro/admin/adminTienda).
+    expect(visibles).toEqual(["Entregas", "Cierre del día", "Perfil"]);
+    expect(visibles).not.toContain("Órdenes");
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminSatelite ve Cierres del día + Perfil", () => {
+  it("adminSatelite ve Asignaciones + Cierres del día + Perfil", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Cierres del día", "Perfil"],
+      ["Asignaciones", "Cierres del día", "Perfil"],
     );
   });
 
@@ -107,7 +118,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
   });
 
   it("Órdenes ya no tiene submenú (el listado vive en el ítem padre)", () => {
-    const [ordenes] = itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")).filter(
+    const [ordenes] = itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")).filter(
       (i) => i.label === "Órdenes",
     );
     expect(ordenes.children).toBeUndefined();

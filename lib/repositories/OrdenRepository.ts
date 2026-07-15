@@ -221,6 +221,11 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // decide por fila si muestra select de mensajero o "-> bodega satelite").
     zonaNombre: row.zona.nombre,
     zonaEsGam: row.zona.esCentral,
+    // Escalares para las columnas de detalle/dinero del listado (dirección, valor
+    // de cobro COD, flag de comisión). Decimal montoCobrar -> number|null.
+    direccion: row.direccion,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    cobraComision: row.cobraComision,
     relaciones: toRelaciones(row),
   };
 }
@@ -412,6 +417,11 @@ export class OrdenRepository implements IOrdenRepository {
       deletedAt: null, // R34
       ...(params.where.tiendaId ? { tiendaId: params.where.tiendaId } : {}),
       ...(params.where.estatusId ? { estatusId: params.where.estatusId } : {}),
+      // Acotamiento por dueño para el rol mensajero: solo sus asignadas (evita fuga
+      // del listado completo en /ordenes). El service lo setea; aqui se traduce al WHERE.
+      ...(params.where.mensajeroAsignadoId
+        ? { mensajeroAsignadoId: params.where.mensajeroAsignadoId }
+        : {}),
     };
     const orderBy = { [SORT_COLUMN[params.sortBy]]: params.sortDir };
 
@@ -555,14 +565,17 @@ export class OrdenRepository implements IOrdenRepository {
     return new Map(rows.map((r) => [r.numRemision, r.estatus.value]));
   }
 
-  /** R19/R21: provincias candidatas por nombre; el service resuelve jerarquia/ambiguedad. */
-  async findProvinciasByNombres(nombres: string[]): Promise<ProvinciaRow[]> {
-    if (nombres.length === 0) return [];
-    const rows = await this.prisma.provincia.findMany({
-      where: { nombre: { in: nombres, mode: "insensitive" } },
+  /**
+   * R19/R21: TODAS las provincias (catálogo pequeño). NO se filtra por nombre en la
+   * query: el service resuelve el match normalizando en AMBOS lados (`normalizeName`
+   * -> minúsculas + sin acentos), que es insensible a tildes/mayúsculas. Un
+   * `where { nombre: { in, mode: "insensitive" } }` solo cubre mayúsculas, no
+   * acentos, y descartaría "Bogotá" cuando el archivo trae "Bogota".
+   */
+  async findAllProvincias(): Promise<ProvinciaRow[]> {
+    return this.prisma.provincia.findMany({
       select: { id: true, nombre: true },
     });
-    return rows;
   }
 
   /** R19: cantones de las provincias resueltas (todo el universo, el service filtra por jerarquia). */
@@ -775,10 +788,16 @@ export class OrdenRepository implements IOrdenRepository {
     return new Set(rows.map((r) => r.id));
   }
 
-  /** R15/R16: catalogo completo `order_status` (id, value), solo lectura. */
+  /**
+   * R15/R16 + feature 63/R5: catalogo completo `order_status` (id, value), solo
+   * lectura. `orderBy: { value: "asc" }` garantiza un orden determinista y estable
+   * entre renders (tabs de la feature 63); `value` es UNIQUE, asi que el orden es
+   * total (sin empates que rompan la estabilidad).
+   */
   async listOrderStatus(): Promise<OrderStatusLiteRow[]> {
     return this.prisma.orderStatus.findMany({
       select: { id: true, value: true },
+      orderBy: { value: "asc" },
     });
   }
 
@@ -1022,6 +1041,48 @@ export class OrdenRepository implements IOrdenRepository {
         ]);
       }
       return result.count === 1;
+    });
+  }
+
+  /**
+   * Feature 63 — recepcion EN LOTE en la bodega satelite (paridad con `recogerLote`
+   * del mensajero). UPDATE raw guardado por estado de ORIGEN + zona + no borrada, con
+   * `RETURNING "id"` DENTRO de un `$transaction`, y con los ids retornados (EXACTAMENTE
+   * las ordenes que ganaron la guarda) hace el append del historial en la MISMA tx. Una
+   * orden de otra zona, en otro estado o re-ejecutada no aparece en el RETURNING -> no se
+   * toca ni deja rastro (idempotente y concurrencia-segura, patron `asignarSateliteLote`).
+   * NO toca `mensajero_asignado_id` ni `num_guia`. `updated_at` se fija a mano (el raw no
+   * dispara el @updatedAt de Prisma). Devuelve el count de filas recibidas.
+   */
+  async recibirLoteEnSatelite(
+    ordenIds: string[],
+    zonaId: string,
+    origenEstatusId: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<number> {
+    if (ordenIds.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE "orden"
+        SET "estatus_id" = ${destinoEstatusId},
+            "updated_at" = NOW()
+        WHERE "id" IN (${Prisma.join(ordenIds)})
+          AND "zona_id" = ${zonaId}
+          AND "estatus_id" = ${origenEstatusId}
+          AND "deleted_at" IS NULL
+        RETURNING "id"`;
+      await appendCambioEstado(
+        tx,
+        rows.map((r) => ({
+          ordenId: r.id,
+          estatusOrigenId: origenEstatusId, // la guarda garantiza este origen (en_ruta_bodega_satelite)
+          estatusDestinoId: destinoEstatusId, // en_bodega_satelite
+          actorUsuarioId: historial.actorUsuarioId, // el adminSatelite que recibe
+          origenTipo: historial.origenTipo, // recepcion_satelite
+        })),
+      );
+      return rows.length;
     });
   }
 

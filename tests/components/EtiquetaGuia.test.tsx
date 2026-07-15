@@ -66,12 +66,11 @@ describe("EtiquetaGuia", () => {
     expect(screen.getByText("Tienda Central")).toBeInTheDocument();
   });
 
-  it("R7: pasa `qrValue` al código QR", () => {
-    render(<EtiquetaGuia etiqueta={makeEtiqueta({ qrValue: "orden-uuid-1" })} />);
-    expect(screen.getByTestId("qr-stub")).toHaveAttribute(
-      "data-value",
-      "orden-uuid-1",
-    );
+  it("R7: el QR codifica la URL del paquete (`/paquete/<ordenId>`), no el id pelado", () => {
+    render(<EtiquetaGuia etiqueta={makeEtiqueta({ ordenId: "orden-uuid-1" })} />);
+    const qr = screen.getByTestId("qr-stub");
+    // La URL es absoluta (origin de jsdom) y termina en la ruta del paquete.
+    expect(qr.getAttribute("data-value")).toMatch(/\/paquete\/orden-uuid-1$/);
   });
 
   it("R8: pasa `barcodeValue` (num_guia) al código de barras", () => {

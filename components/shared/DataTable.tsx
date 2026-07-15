@@ -151,29 +151,35 @@ export function DataTable<T>({
   }
 
   return (
-    <table
-      aria-label={ariaLabel}
-      className={cn("w-full border-collapse text-left text-sm")}
-    >
-      {caption ? (
-        <caption className="mb-2 text-sm text-muted-foreground">
-          {caption}
-        </caption>
-      ) : null}
-      <thead>
-        <tr className="border-b">
-          {columns.map((column) => (
-            <th
-              key={column.id}
-              scope="col"
-              className="px-3 py-2 font-medium text-muted-foreground"
-            >
-              {column.value}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>{body}</tbody>
-    </table>
+    // Contenedor con scroll horizontal: cuando la tabla excede el ancho
+    // disponible, desborda DENTRO de este contenedor en vez de empujar la página.
+    // Requiere que los ancestros flex (p. ej. SidebarInset) permitan encogerse
+    // (`min-w-0`), si no el overflow nunca se activa.
+    <div className="w-full max-w-full overflow-x-auto">
+      <table
+        aria-label={ariaLabel}
+        className={cn("w-full border-collapse text-left text-sm")}
+      >
+        {caption ? (
+          <caption className="mb-2 text-sm text-muted-foreground">
+            {caption}
+          </caption>
+        ) : null}
+        <thead>
+          <tr className="border-b">
+            {columns.map((column) => (
+              <th
+                key={column.id}
+                scope="col"
+                className="px-3 py-2 font-medium text-muted-foreground"
+              >
+                {column.value}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{body}</tbody>
+      </table>
+    </div>
   );
 }

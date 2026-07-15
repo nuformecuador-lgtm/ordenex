@@ -283,6 +283,20 @@ describe("OrdenRepository.listOrderStatus (R15/R16)", () => {
     const arg = prisma.orderStatus.findMany.mock.calls[0][0];
     expect(arg.select).toEqual({ id: true, value: true });
   });
+
+  it("feature 63/R5: incluye orderBy determinista (value asc) para tabs estables", async () => {
+    const { prisma } = buildPrisma({
+      orderStatus: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.listOrderStatus();
+
+    const arg = prisma.orderStatus.findMany.mock.calls[0][0];
+    expect(arg.orderBy).toEqual({ value: "asc" });
+  });
 });
 
 describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {

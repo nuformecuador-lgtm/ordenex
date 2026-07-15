@@ -14,9 +14,11 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import {
   recibirSchema,
+  recibirLoteSchema,
   asignarSateliteSchema,
   type ListarRecepcionSateliteResult,
   type RecibirResult,
+  type RecibirLoteResult,
   type AsignarSateliteResult,
   type ListarMensajerosSateliteResult,
 } from "@/lib/types/recepcion-satelite";
@@ -133,6 +135,28 @@ export async function recibirPorQr(
     const data = recibirSchema.parse(input); // R16: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.recibir(data.ordenId, actor);
+  });
+  return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
+}
+
+/**
+ * Feature 63 — recibe EN LOTE ("Aceptar/Recibir todas") las ordenes indicadas del
+ * adminSatelite logueado que sigan en `en_ruta_bodega_satelite` de SU zona, pasandolas
+ * a `en_bodega_satelite` (paridad con `recogerAsignaciones` del mensajero). ADITIVO: NO
+ * altera el flujo por-QR `recibirPorQr`. `unauthenticated` (borde) y `validation_error`
+ * de zod se resuelven aqui; `forbidden`/`sin_zona`/`validation_error` de dominio los
+ * devuelve el service. El alcance por zona + estado de origen se impone server-side.
+ */
+export async function recibirLote(
+  input: unknown,
+  deps: RecepcionSateliteDeps = {},
+): Promise<RecibirLoteResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = recibirLoteSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.recibirLote({ ordenIds: data.ordenIds }, actor);
   });
   return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
 }

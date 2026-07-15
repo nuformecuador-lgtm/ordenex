@@ -93,7 +93,7 @@ afterEach(() => {
 });
 
 describe("EtiquetasGuiaModal", () => {
-  it("R11: selección mixta renderiza M etiquetas y avisa de las N−M omitidas", async () => {
+  it("R11: selección mixta renderiza M etiquetas y avisa de las N−M omitidas (sin guía)", async () => {
     generarEtiquetasMock.mockResolvedValue({
       status: "ok",
       etiquetas: [

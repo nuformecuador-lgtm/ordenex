@@ -124,10 +124,12 @@ describe("crear — zona por rol (R27/R28)", () => {
     expect(repo.create).not.toHaveBeenCalled();
   });
 
-  it("sin zonaId -> null (R27)", async () => {
+  it("mensajero sin zonaId -> validation_error (zona obligatoria, R27)", async () => {
     const svc = new UsuarioService(repo, buildZonaRepo(true));
-    await svc.crear({ ...baseCrear, rolId: "rol-msg" }, MAESTRO);
-    expect((repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0].zonaId).toBeNull();
+    const r = await svc.crear({ ...baseCrear, rolId: "rol-msg" }, MAESTRO);
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(r.fieldErrors).toHaveProperty("zonaId");
+    expect(repo.create).not.toHaveBeenCalled();
   });
 });
 

@@ -6,6 +6,8 @@ import useSWR from "swr";
 import { DataTable } from "@/components/shared/DataTable";
 import type { Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
@@ -13,6 +15,19 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { ordenesColumns } from "./ordenes-columns";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
+import { EtiquetaOrdenAccion } from "./EtiquetaOrdenAccion";
+
+/**
+ * Acción por lote ofrecida en la barra contextual cuando hay filas seleccionadas.
+ * `onRun` recibe el snapshot de las órdenes marcadas (el orquestador decide el modal
+ * y el filtrado por zona). El estado (tab) decide qué acciones aplican.
+ */
+export interface AccionLote {
+  key: string;
+  label: string;
+  variant?: "default" | "outline";
+  onRun: (seleccionadas: OrdenListItemDTO[]) => void;
+}
 
 // R33: opciones firmes acotadas por MAX_PAGE_SIZE del backend; ninguna opción
 // ofrecida supera el máximo permitido.
@@ -29,8 +44,12 @@ interface OrdenesPageData {
 async function ordenesFetcher(
   page: number,
   pageSize: number,
+  filter?: { status_id: string },
 ): Promise<OrdenesPageData> {
-  const res = await listarOrdenes({ page, pageSize });
+  // Feature 63/C2 (R15/R19): con `filter` se inyecta el `status_id` a la action
+  // (whitelist server-side -> where.estatusId). Sin `filter`, el input es
+  // idéntico al previo (R10, sin regresión).
+  const res = await listarOrdenes(filter ? { page, pageSize, filter } : { page, pageSize });
   if (res.status !== "ok") throw new Error("list_failed");
   // items incluyen tiendaNombre; total viene del backend (R25).
   return { items: res.items, total: res.total, pageSize: res.pageSize };
@@ -53,32 +72,94 @@ export function OrdenesModule({
   columns = ordenesColumns,
   puedeCargarMasiva = false,
   mostrarHistorial = false,
+  filter,
+  selectable = false,
+  acciones,
 }: {
   columns?: Column<OrdenListItemDTO>[];
   puedeCargarMasiva?: boolean;
   mostrarHistorial?: boolean;
+  /**
+   * Feature 63/C2 (R15): filtro opcional por estado de orden. Se inyecta a
+   * `listarOrdenes` y entra en la key SWR, de modo que cada estado (tab) tiene
+   * su propia caché y paginación independiente (R17). Sin la prop, el módulo se
+   * comporta idéntico al listado plano previo (R10/R19, sin regresión).
+   */
+  filter?: { status_id: string };
+  /** Habilita la columna de checkbox por fila (selección por lote, solo maestro). */
+  selectable?: boolean;
+  /**
+   * Acciones por lote disponibles para este listado/estado. Se muestran en una barra
+   * contextual SOLO cuando hay ≥1 fila marcada. Sin acciones o sin selección, no se
+   * muestra la barra. La columna de checkbox depende de `selectable`.
+   */
+  acciones?: AccionLote[];
 } = {}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
+  const [seleccionIds, setSeleccionIds] = useState<Set<string>>(new Set());
+
+  function toggleSeleccion(id: string, checked: boolean) {
+    setSeleccionIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
 
   const columnasEfectivas = useMemo<Column<OrdenListItemDTO>[]>(() => {
-    if (!mostrarHistorial) return columns;
+    // Columna de selección (checkbox) al frente cuando el listado es seleccionable.
+    const conSeleccion: Column<OrdenListItemDTO>[] = selectable
+      ? [
+          {
+            id: "seleccionar",
+            value: "Seleccionar",
+            render: (row) => (
+              <Checkbox
+                checked={seleccionIds.has(row.id)}
+                onCheckedChange={(checked) =>
+                  toggleSeleccion(row.id, checked === true)
+                }
+                aria-label={`Seleccionar orden ${row.numRemision}`}
+              />
+            ),
+          },
+          ...columns,
+        ]
+      : columns;
+
+    if (!mostrarHistorial) return conSeleccion;
     return [
-      ...columns,
+      ...conSeleccion,
       {
         id: "acciones",
         value: "Acciones",
+        // Acciones por fila del listado: ver historial (drawer) + ver etiqueta
+        // (vista previa de QR + datos y descarga del PDF 100×100 mm, feature 32).
         render: (row) => (
-          <HistorialOrdenSheet ordenId={row.id} referencia={row.numRemision} />
+          <div className="flex items-center gap-1">
+            <HistorialOrdenSheet ordenId={row.id} referencia={row.numRemision} />
+            <EtiquetaOrdenAccion orden={row} />
+          </div>
         ),
       },
     ];
-  }, [columns, mostrarHistorial]);
+  }, [columns, mostrarHistorial, selectable, seleccionIds]);
 
+  // Feature 63/C2 (R17): el `status_id` entra en la key SWR para que la caché y
+  // la paginación sean por-tab. Sin `filter`, `statusId` es `undefined`.
+  const statusId = filter?.status_id;
   const { data, error, isLoading } = useSWR(
-    ["ordenes:list", page, pageSize],
-    () => ordenesFetcher(page, pageSize),
+    ["ordenes:list", statusId, page, pageSize],
+    () => ordenesFetcher(page, pageSize, filter),
   );
+
+  const items = data?.items ?? [];
+  // Snapshot de las filas marcadas PRESENTES en la página actual (la selección se
+  // acota a lo visible, como en la vista de revisión previa).
+  const seleccionadas = items.filter((item) => seleccionIds.has(item.id));
+  const hayAcciones = selectable && !!acciones?.length && seleccionadas.length > 0;
 
   return (
     <section className="flex flex-col gap-4">
@@ -87,9 +168,42 @@ export function OrdenesModule({
           <OrdenesCargaMasivaButton />
         </div>
       )}
+
+      {/* Barra de acciones por lote ("tool"): aparece SOLO con filas marcadas. */}
+      {hayAcciones ? (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-2.5 shadow-sm">
+          <span className="text-sm font-medium">
+            {seleccionadas.length} seleccionada
+            {seleccionadas.length === 1 ? "" : "s"}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {acciones!.map((accion) => (
+              <Button
+                key={accion.key}
+                type="button"
+                size="sm"
+                variant={accion.variant ?? "default"}
+                onClick={() => accion.onRun(seleccionadas)}
+              >
+                {accion.label}
+              </Button>
+            ))}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="ml-auto"
+            onClick={() => setSeleccionIds(new Set())}
+          >
+            Limpiar
+          </Button>
+        </div>
+      ) : null}
+
       <DataTable
         columns={columnasEfectivas}
-        data={data?.items ?? []}
+        data={items}
         rowKey="id"
         ariaLabel="Órdenes"
         isLoading={isLoading}

@@ -157,3 +157,29 @@
     @apply font-sans;
   }
 }
+
+/*
+ * Scrollbar visible SOLO al hacer hover sobre el contenedor. El track se reserva
+ * siempre (alto fijo) para que no haya salto de layout; el thumb queda transparente
+ * hasta el hover, donde toma el color del borde. Usado en TabsList (scroll horizontal
+ * de estados). Degrada bien en Firefox vía `scrollbar-width`.
+ */
+.scrollbar-on-hover {
+  scrollbar-width: none; /* Firefox: oculto por defecto */
+}
+.scrollbar-on-hover::-webkit-scrollbar {
+  height: 6px;
+}
+.scrollbar-on-hover::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-on-hover::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+}
+.scrollbar-on-hover:hover {
+  scrollbar-width: thin; /* Firefox: aparece en hover */
+}
+.scrollbar-on-hover:hover::-webkit-scrollbar-thumb {
+  background: var(--border);
+}

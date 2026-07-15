@@ -61,7 +61,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 15: metodos batch de carga masiva, no ejercitados por el CRUD
     // (feature 6) pero exigidos por la interfaz IOrdenRepository.
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
-    findProvinciasByNombres: vi.fn().mockResolvedValue([]),
+    findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set()),
@@ -98,6 +98,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findUsuarioVehiculoId: vi.fn().mockResolvedValue(null), // feature 39: exigido por IOrdenRepository
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
+    recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
@@ -270,6 +271,17 @@ describe("listar", () => {
     expect(arg.where.tiendaId).toBe("store1");
   });
 
+  it("seguridad: mensajero se acota a SUS asignadas (where.mensajeroAsignadoId)", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" },
+      { usuarioId: "msg1", rol: "mensajero" },
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.mensajeroAsignadoId).toBe("msg1");
+    // No se filtra por tienda (eso es de adminTienda).
+    expect(arg.where.tiendaId).toBeUndefined();
+  });
+
   it("R25/R26: propaga tiendaNombre de los items sin re-filtrar (R22 intacto)", async () => {
     repo = buildRepo({
       list: vi.fn().mockResolvedValue({
@@ -310,6 +322,63 @@ describe("listar", () => {
       DESCONOCIDO,
     );
     expect(r.status).toBe("forbidden");
+  });
+});
+
+// Feature 63/B2 (R8/R9/R10): filtro generico `filter.status_id` -> where.estatusId.
+describe("listar — filtro generico filter.status_id (feature 63, R8/R9/R10)", () => {
+  it("R8: filter.status_id se traduce a where.estatusId", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, filter: { status_id: "os-entregada" }, sortBy: "created_at", sortDir: "desc" },
+      MAESTRO,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBe("os-entregada");
+  });
+
+  it("R9: filter.status_id compone con el alcance por rol de adminTienda", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, filter: { status_id: "os-entregada" }, sortBy: "created_at", sortDir: "desc" },
+      TIENDA,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBe("os-entregada");
+    expect(arg.where.tiendaId).toBe("store1"); // acotamiento por tienda intacto
+    expect(arg.where.tiendaId).not.toBe(OTRA_TIENDA_ID);
+  });
+
+  it("R8: filter.status_id tiene precedencia sobre el estatusId escalar", async () => {
+    await service.listar(
+      {
+        page: 1,
+        pageSize: 20,
+        estatusId: "os-escalar",
+        filter: { status_id: "os-filter" },
+        sortBy: "created_at",
+        sortDir: "desc",
+      },
+      MAESTRO,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBe("os-filter");
+  });
+
+  it("R10: sin filter, el estatusId escalar sigue funcionando (sin regresion)", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, estatusId: "os-entregada", sortBy: "created_at", sortDir: "desc" },
+      MAESTRO,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBe("os-entregada");
+  });
+
+  it("R10: sin filter ni estatusId, where no fija estatusId (comportamiento previo)", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" },
+      MAESTRO,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toBeUndefined();
   });
 });
 

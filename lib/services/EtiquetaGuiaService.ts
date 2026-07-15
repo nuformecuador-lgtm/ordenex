@@ -22,11 +22,12 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
 
   async generarEtiquetas(
     input: GenerarEtiquetasInput,
-    actor: Actor,
+    _actor: Actor,
   ): Promise<GenerarEtiquetasServiceResult> {
-    // --- Autorizacion (R13), antes de tocar datos: solo maestro ---
-    if (actor.rol !== "maestro") return { status: "forbidden" };
-
+    // Autorizacion: la etiqueta es un READ derivado disponible para cualquier rol
+    // autenticado (decision del usuario). La sesion ya se exige en el borde
+    // (Server Action -> `unauthenticated` sin sesion); aqui no se restringe por rol
+    // ni se filtra por visibilidad de la orden.
     const ordenIds = distinct(input.ordenIds);
     if (ordenIds.length === 0) return { status: "ok", etiquetas: [], omitidas: [] };
 
@@ -47,7 +48,7 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
         continue;
       }
       if (row.numGuia === null) {
-        // Existe pero aun sin guia asignada: no se genera etiqueta (R2).
+        // Existe pero aun sin guia asignada: no tiene QR/etiqueta disponible (R2).
         omitidas.push({ ordenId, motivo: "sin_guia" });
         continue;
       }
@@ -60,8 +61,8 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
   // R1/R4/R5/R6/R7/R8: arma el DTO de una orden con guia. `numGuia` se recibe ya
   // estrechado a `number` (el llamador descarto el caso null, R2). montoCobrar es
   // number|null sin moneda (R5); distritoNombre null si no hay (R4); qrValue =
-  // ordenId (R7); barcodeValue = String(numGuia) (R8). No expone deletedAt (R6):
-  // la fila ni siquiera lo trae.
+  // ordenId (R7, la UI construye la URL del paquete); barcodeValue = String(numGuia)
+  // (R8). No expone deletedAt (R6): la fila ni siquiera lo trae.
   private toEtiquetaDTO(row: EtiquetaRow, numGuia: number): EtiquetaGuiaDTO {
     return {
       ordenId: row.id,

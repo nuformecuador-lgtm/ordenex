@@ -337,6 +337,7 @@ function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     telefonoDest: row.telefonoDest,
     direccion: row.direccion,
     producto: row.producto,
+    peso: row.peso,
     montoCobrar: row.montoCobrar,
     notas: row.notas,
     tiendaNombre: row.tiendaNombre,

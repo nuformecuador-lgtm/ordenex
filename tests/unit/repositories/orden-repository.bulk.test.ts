@@ -104,16 +104,18 @@ describe("OrdenRepository.findMensajerosByIds (R22)", () => {
 });
 
 describe("OrdenRepository — resolucion geografica batch (R19)", () => {
-  it("findProvinciasByNombres devuelve id/nombre", async () => {
+  it("findAllProvincias trae TODAS (sin filtrar por nombre; el match normalizado lo hace el service)", async () => {
     const prisma = buildPrisma();
     prisma.provincia.findMany.mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findProvinciasByNombres(["Pichincha"]);
+    const rows = await repo.findAllProvincias();
 
     expect(rows).toEqual([{ id: "p1", nombre: "Pichincha" }]);
+    // No hay `where`: se traen todas y el service resuelve el match normalizando
+    // (insensible a acentos), evitando descartar "Bogotá" cuando llega "Bogota".
     const arg = prisma.provincia.findMany.mock.calls[0][0];
-    expect(arg.where.nombre).toMatchObject({ in: ["Pichincha"], mode: "insensitive" });
+    expect(arg.where).toBeUndefined();
   });
 
   it("findCantonesByProvinciaIds filtra por provinciaId in", async () => {

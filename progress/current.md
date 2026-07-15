@@ -7,7 +7,7 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| _(ninguna del leader en curso)_ | — | — | 0 features `in_progress` en `feature_list.json` (feature 60 = pista del otro agente) |
+| feature/63-orden-lista-actualizada | fullstack | F2.4 (PR abierto) | **impl COMPLETA (R1–R20) + reviewer APROBADO 0 bloqueantes.** **PR #65 → `dev`** abierto. + Pedido humano: re-agregadas columnas (producto/dirección/zona/**monto a cobrar**/flete+IVA/fulfillment/comisión+IVA) y **adminTienda ahora VE Zona** (oculta solo Tienda). 50 tests propios/afectados verde; ordenes-columns R14-zona (era rojo baseline) ahora pasa. **PENDIENTE: merge del PR #65 (OK humano).** |
 
 > **Feature 59 (zonas: seleccionar distritos de VARIOS cantones) CERRADA 2026-07-13**: **FRONTEND PURO** (sin backend, migraciones ni cambios de contrato; `crearZona`/`actualizarZona` intactos; `arbolZonas()` SOLO lectura). Ciclo SDD completo (spec_author → **F1.4 aprobada, todas las recomendadas** → frontend_dev → reviewer). `selected` migrado a `Record<string,DistritoSeleccionado>` como **fuente de verdad única** → cambiar de provincia/cantón NO resetea la selección; **resumen agrupado provincia→cantón** (`data-testid="resumen-distritos"`, `role="group"`) con **"Quitar"** por distrito (`aria-label="Quitar <distrito>"`); **sync bidireccional** resumen↔checkbox; contador `distritos-seleccionados` conservado; R10 heredada (distritos de otra zona `disabled`, fuera del conjunto); **pre-marcado multi-cantón en edición** vía SWR `["zonas:arbol",zona.id]` sobre `arbolZonas()` (siembra `selected` para TODOS los cantones/distritos de la zona, merge idempotente); envío intacto `distritoIds=Object.keys(selected)`. Trazabilidad **R1–R12 → test** (mapa en `progress/impl_59-zonas-distritos-multicanton.md`). Reviewer **APROBADO 0 bloqueantes de código** (el RECHAZADO inicial fue SOLO por gates documentales del leader, ya cerrados). Verde REAL: typecheck 0, eslint 0, **`zona-form.test.tsx` 22/22** (+6 casos), suite **2551 passed** (2 flakes ambientales aislados verdes). F1.4-e aprobó `arbolZonas` → **T9-alt = N/A**. Solo cambiaron `ZonaForm.tsx` y su test. Orquestada DIRECTO por el leader (`frontend_dev → reviewer`, bug opus-4.8[1m]). Estado `done` + `history.md` + `impl_59`/`review_59`. **DEUDA menor** (reviewer, no bloqueante): numeración "R" mezclada entre features 55 y 59 en algún docstring/test; sin test del enriquecimiento perezoso de provincia al navegar en edición. **PENDIENTE: PR a `dev` + merge (OK humano).**
 
@@ -147,6 +147,31 @@
 ## Evaluaciones
 
 > El leader documenta aca cada evaluacion de zone/complexity/particion.
+
+- `Orden lista actualizada` (id 63): **zone=fullstack, complexity=medium,
+  branch=feature/63-orden-lista-actualizada, depends_on=null** (el humano confirmo que NO depende
+  de la 57; el JSON traia 57 por herencia de la tanda 61/62). Evaluada 2026-07-14. Seleccionada por
+  el humano ("sigue con la id 63"). **FULLSTACK**: backend — (a) endpoint/action nuevo para traer la
+  lista de `order_status` (hoy catalogo TABLA tras `20260714123909`, enum eliminado; catalogo completo
+  sembrado por las migraciones sin-commitear `..._order_status_pendiente` + `..._seed_order_status_completo`,
+  auto-commiteadas en `0337c4d` al crear la rama); (b) generalizar `listarOrdenes` para aceptar una prop
+  `filter: {[campo]: value}` que el backend traduzca a WHERE (caso de uso inmediato: `status_id`). Frontend —
+  (c) el componente de lista de ordenes (para TODOS los roles EXCEPTO mensajero) itera por los estados y
+  expone una prop `exclude` para omitir estados; (d) `Tabs` de shadcn, un tab por estado, cada tab lista las
+  ordenes de ese estado; (e) **lazy loading**: solo la tab ACTIVA dispara la query; las inactivas NO consultan.
+  DECISION DE PROCESO (leader): SDD completo (humano eligio el gate F1.4) + NO se parte el entry; un ciclo
+  fullstack. Rama nace de `adjustments` (humano eligio: arrastra el WIP + el enum->tabla + el seed del catalogo
+  que la 63 necesita). **NOTA baseline:** `adjustments` trae 30 tests rojos PRE-EXISTENTES (drift tarifas
+  por-tienda / remodelado de zona vs dev, ver memoria `adjustments-diverge-de-dev`), AJENOS a la 63; no los
+  arregla esta feature (candidatos a fix aparte). Preguntas ABIERTAS para F1.4 (el spec_author las formaliza):
+  (a) FORMA del endpoint de `order_status` -> Server Action `listarOrderStatus()` (recomendado, patron del repo)
+  vs. route handler REST; (b) FIRMA del filtro -> `filter?: Record<string,string>` acotado a una whitelist de
+  campos indexables (recomendado, evita inyeccion de columnas arbitrarias) vs. abierto; (c) EXCLUDE por VALUE
+  del estado vs. por id; que estados excluir por defecto (p.ej. `pendiente`?); (d) fuente de la lista de tabs ->
+  del endpoint de `order_status` menos los `exclude` (recomendado) vs. lista estatica; (e) LAZY: mantener el
+  estado/paginacion de cada tab visitada al volver (cache) vs. re-fetch en cada activacion; (f) alcance de "todos
+  los roles excepto mensajero" -> maestro/admin/adminTienda/adminSatelite comparten el componente con `exclude`
+  distinto por rol vs. uno solo; (g) responsive de los Tabs con ~14 estados (scroll horizontal / overflow).
 
 - `zonas: seleccionar distritos de VARIOS cantones` (id 59): **zone=frontend, complexity=medium,
   branch=feature/59-zonas-distritos-multicanton, depends_on=55 (done, en dev).** Evaluada 2026-07-13.

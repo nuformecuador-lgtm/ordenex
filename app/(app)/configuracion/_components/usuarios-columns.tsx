@@ -1,22 +1,15 @@
-import type { EstadoUsuario, RolValue } from "@prisma/client";
+import type { EstadoUsuario } from "@prisma/client";
 
 import type { Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ROL_LABELS } from "@/lib/auth/rol-label";
 import type { UsuarioListItemDTO } from "@/lib/types/usuario";
 
-/**
- * Etiquetas legibles de rol y estado (R14). Se centralizan aquí para que la
- * tabla y el formulario compartan una única fuente de texto (preparado para
- * i18n futuro: son props/constantes, no cadenas incrustadas en el markup).
- */
-export const ROL_LABELS: Record<RolValue, string> = {
-  maestro: "Maestro",
-  admin: "Administrador",
-  mensajero: "Mensajero",
-  adminTienda: "Admin de tienda",
-  adminSatelite: "Admin satélite",
-};
+// Etiquetas de rol centralizadas en `lib/auth/rol-label`; se reexportan aquí para
+// no romper a los consumidores existentes de este módulo. Las de estado siguen
+// locales a esta superficie.
+export { ROL_LABELS };
 
 export const ESTADO_LABELS: Record<EstadoUsuario, string> = {
   pendiente: "Pendiente",

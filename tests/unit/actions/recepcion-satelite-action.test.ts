@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { listarRecepcionSatelite, recibirPorQr } from "@/lib/actions/recepcion-satelite";
+import { listarRecepcionSatelite, recibirPorQr, recibirLote } from "@/lib/actions/recepcion-satelite";
 import type { IRecepcionSateliteService } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
@@ -20,6 +20,7 @@ function buildService(overrides: Partial<IRecepcionSateliteService> = {}): IRece
       ordenId: "o1",
       estado: "en_bodega_satelite" as const,
     })),
+    recibirLote: vi.fn(async () => ({ status: "ok" as const, recibidas: 0 })),
     ...overrides,
   };
 }
@@ -103,6 +104,48 @@ describe("recibirPorQr — validacion de borde (R16) y delegacion (R10)", () => 
     const service = buildService({ recibir: vi.fn(async () => ({ status: "ya_recibida" as const })) });
     const r = await recibirPorQr({ ordenId: "o1" }, { service, getActor: actorAdmin });
     expect(r.status).toBe("ya_recibida");
+  });
+});
+
+// --- recibirLote: borde (unauthenticated + zod) + delegacion (feature 63) ---
+
+describe("recibirLote — borde y delegacion (feature 63)", () => {
+  it("sin actor -> unauthenticated, sin tocar el service", async () => {
+    const service = buildService();
+    const r = await recibirLote({ ordenIds: ["o1"] }, { service, getActor: noActor });
+    expect(r.status).toBe("unauthenticated");
+    expect(service.recibirLote).not.toHaveBeenCalled();
+  });
+
+  it("lote vacio (min 1) -> validation_error, sin tocar el service", async () => {
+    const service = buildService();
+    const r = await recibirLote({ ordenIds: [] }, { service, getActor: actorAdmin });
+    expect(r.status).toBe("validation_error");
+    expect(service.recibirLote).not.toHaveBeenCalled();
+  });
+
+  it("id vacio en el lote -> validation_error, sin tocar el service", async () => {
+    const service = buildService();
+    const r = await recibirLote({ ordenIds: ["o1", ""] }, { service, getActor: actorAdmin });
+    expect(r.status).toBe("validation_error");
+    expect(service.recibirLote).not.toHaveBeenCalled();
+  });
+
+  it("lote valido delega en el service con ordenIds y actor", async () => {
+    const service = buildService({
+      recibirLote: vi.fn(async () => ({ status: "ok" as const, recibidas: 2 })),
+    });
+    const r = await recibirLote({ ordenIds: ["o1", "o2"] }, { service, getActor: actorAdmin });
+    expect(r).toEqual({ status: "ok", recibidas: 2 });
+    expect(service.recibirLote).toHaveBeenCalledWith({ ordenIds: ["o1", "o2"] }, ADMIN);
+  });
+
+  it("resultados de dominio del service pasan tal cual (forbidden / sin_zona)", async () => {
+    for (const dominio of ["forbidden", "sin_zona"] as const) {
+      const service = buildService({ recibirLote: vi.fn(async () => ({ status: dominio })) });
+      const r = await recibirLote({ ordenIds: ["o1"] }, { service, getActor: actorAdmin });
+      expect(r.status).toBe(dominio);
+    }
   });
 });
 

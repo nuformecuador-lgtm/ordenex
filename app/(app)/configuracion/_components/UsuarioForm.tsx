@@ -150,6 +150,19 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
     }
 
     function validate(): { input: unknown; result?: UsuarioFormResult } {
+      // Feature 24/R27: la zona es OBLIGATORIA para mensajero/adminSatelite. Se
+      // valida en cliente para feedback inmediato; el service la revalida (fuente
+      // de verdad, defensa en profundidad).
+      if (esRolConZona && !form.zonaId) {
+        return {
+          input: null,
+          result: {
+            status: "validation_error",
+            fieldErrors: { zonaId: ["La zona es obligatoria para este rol"] },
+          },
+        };
+      }
+
       if (isEditar) {
         const parsed = actualizarUsuarioSchema.safeParse({
           nombre: form.nombre,
@@ -345,13 +358,14 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
         ) : null}
 
         {/* Feature 24/R27: la zona solo se muestra (y se envía) para
-            mensajero/adminSatelite; sin ella el mensajero queda inasignable. */}
+            mensajero/adminSatelite, y es OBLIGATORIA para esos roles. */}
         {esRolConZona ? (
-          <Field id="zonaId" label="Zona" errors={errors.zonaId}>
+          <Field id="zonaId" label="Zona (obligatoria)" errors={errors.zonaId}>
             <Select
               aria-label="Zona"
               value={form.zonaId}
               options={zonaOptions}
+              placeholder="Selecciona una zona"
               onValueChange={(v) => setField("zonaId", v)}
             />
           </Field>

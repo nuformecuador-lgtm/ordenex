@@ -33,3 +33,15 @@ export const ORDER_STATUS_SEED = [
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];
+
+// Feature 63/A1 (R1-R4): resultado tipado y discriminado de la Server Action
+// `listarOrderStatus()`. Espeja el patron de resultados de dominio del repo
+// (union con `status`): el borde no filtra internals ni PII, solo el catalogo
+// liviano (`id`/`value`, R1). Import type-only (sin costo en runtime del seed).
+// - `ok`: catalogo completo (R1/R2); el orden determinista lo garantiza el repo (R5).
+// - `unauthenticated`: sin sesion valida (R3), sin datos.
+// - `forbidden`: rol `mensajero` u otro no reconocido (R4), sin datos.
+export type ListarOrderStatusResult =
+  | { status: "ok"; estatus: import("@/lib/interfaces/repositories/IOrdenRepository").OrderStatusLiteRow[] }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" };

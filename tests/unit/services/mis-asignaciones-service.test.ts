@@ -54,6 +54,7 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
     telefonoDest: "099",
     direccion: "calle",
     producto: "caja",
+    peso: null,
     montoCobrar: 100,
     notas: null,
     tiendaNombre: "T",

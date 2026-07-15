@@ -24,7 +24,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
     existsGeo: vi.fn(),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
-    findProvinciasByNombres: vi.fn().mockResolvedValue([
+    findAllProvincias: vi.fn().mockResolvedValue([
       { id: "p1", nombre: "Pichincha" },
     ]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([
@@ -59,6 +59,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findUsuarioVehiculoId: vi.fn().mockResolvedValue(null), // feature 39: exigido por IOrdenRepository
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
+    recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
     findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
@@ -103,7 +104,7 @@ describe("BulkOrdenService.cargarMasiva — autorizacion (R11)", () => {
 
       expect(r.status).toBe("forbidden");
       expect(repo.findExistingRemisiones).not.toHaveBeenCalled();
-      expect(repo.findProvinciasByNombres).not.toHaveBeenCalled();
+      expect(repo.findAllProvincias).not.toHaveBeenCalled();
       expect(repo.createManyOrdenes).not.toHaveBeenCalled();
     },
   );
@@ -150,7 +151,7 @@ describe("BulkOrdenService.cargarMasiva — campos obligatorios (R18)", () => {
 
 describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
   it("provincia inexistente -> error de fila con fieldError geografico", async () => {
-    const repo = buildRepo({ findProvinciasByNombres: vi.fn().mockResolvedValue([]) });
+    const repo = buildRepo({ findAllProvincias: vi.fn().mockResolvedValue([]) });
     const service = new BulkOrdenService(repo);
 
     const r = await service.cargarMasiva([row()], TIENDA);
@@ -523,14 +524,14 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
     ];
 
     const repoReal = buildRepo({
-      findProvinciasByNombres: vi
+      findAllProvincias: vi
         .fn()
         .mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
     });
     const real = await new BulkOrdenService(repoReal).cargarMasiva(rows, TIENDA);
 
     const repoDry = buildRepo({
-      findProvinciasByNombres: vi
+      findAllProvincias: vi
         .fn()
         .mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
     });

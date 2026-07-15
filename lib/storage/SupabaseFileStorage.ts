@@ -24,12 +24,23 @@ export interface StorageClientLike {
 
 export class SupabaseFileStorage implements IFileStorage {
   private readonly bucket: string;
+  private storageClient: StorageClientLike | undefined;
 
-  constructor(
-    private readonly storage: StorageClientLike = createServerClient().storage as unknown as StorageClientLike,
-    bucket: string = postulacionConfig.BUCKET,
-  ) {
+  constructor(storage?: StorageClientLike, bucket: string = postulacionConfig.BUCKET) {
+    // El cliente inyectado (tests) se guarda; si no se pasa, se crea PEREZOSAMENTE
+    // en el primer uso real (upload/remove). Asi, construir este repo para un flujo
+    // de SOLO LECTURA (p. ej. listar "mis asignaciones") NO exige la config de
+    // Supabase ni llama a createServerClient() al instanciar.
+    this.storageClient = storage;
     this.bucket = bucket;
+  }
+
+  /** Cliente Storage perezoso: crea (y lee env via createServerClient) al 1er uso. */
+  private get storage(): StorageClientLike {
+    if (!this.storageClient) {
+      this.storageClient = createServerClient().storage as unknown as StorageClientLike;
+    }
+    return this.storageClient;
   }
 
   async upload(input: UploadInput): Promise<string> {

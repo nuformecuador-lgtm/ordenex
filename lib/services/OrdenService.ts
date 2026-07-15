@@ -20,6 +20,13 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 // tienen acceso total (R20); adminTienda/mensajero con restriccion (R21/R23).
 const KNOWN_ROLES = new Set<string>(["maestro", "admin", "adminTienda", "mensajero"]);
 
+// Feature 63/B2 (R8): mapa EXPLICITO clave-publica-del-filtro -> columna Prisma.
+// Es el UNICO punto que conoce el nombre interno de la FK de estado (`estatusId`,
+// columna `estatus_id`); la clave publica `status_id` nunca se usa como nombre de
+// columna. El schema `.strict()` (lib/types/orden.ts) ya garantiza que solo llegan
+// claves de esta whitelist, asi que ninguna columna arbitraria alcanza el `where`.
+const FILTER_TO_COLUMN = { status_id: "estatusId" } as const;
+
 export class OrdenService implements IOrdenService {
   constructor(private readonly repo: IOrdenRepository) {}
 
@@ -132,10 +139,27 @@ export class OrdenService implements IOrdenService {
   ): Promise<ListarOrdenesServiceResult> {
     if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
 
-    const where: { tiendaId?: string; estatusId?: string } = {};
+    const where: {
+      tiendaId?: string;
+      estatusId?: string;
+      mensajeroAsignadoId?: string;
+    } = {};
+    // R10: el `estatusId` escalar preexistente sigue funcionando (sin regresion).
     if (input.estatusId !== undefined) where.estatusId = input.estatusId;
-    // R21: adminTienda solo lista las suyas.
+    // Feature 63/R8/R9: traduce `filter.status_id` a la columna `estatusId` via el
+    // mapa explicito. Precedencia (design.md 3.3): si llegan `filter.status_id` y
+    // `estatusId` escalar, gana `filter.status_id` (fuente explicita de la feature).
+    if (input.filter?.status_id !== undefined) {
+      where[FILTER_TO_COLUMN.status_id] = input.filter.status_id;
+    }
+    // R9/R21: adminTienda sigue acotado a SUS ordenes; el filtro por estado COMPONE
+    // con este alcance por rol (ambas condiciones en el mismo `where`), no lo pisa.
     if (actor.rol === "adminTienda") where.tiendaId = actor.usuarioId;
+    // Seguridad: el mensajero solo puede listar SUS asignadas (mensajeroAsignadoId =
+    // su usuario). Sin esto, `/ordenes` filtraba el listado COMPLETO al mensajero. Su
+    // experiencia normal es /mis-asignaciones; este acotamiento cierra la fuga por si
+    // alcanza el listado plano.
+    if (actor.rol === "mensajero") where.mensajeroAsignadoId = actor.usuarioId;
 
     const skip = (input.page - 1) * input.pageSize;
     const { items, total } = await this.repo.list({

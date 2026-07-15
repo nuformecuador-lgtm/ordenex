@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Package,
   Settings,
+  Truck,
   User,
   type LucideProps,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import {
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -39,6 +41,52 @@ import {
 } from "@/components/ui/sidebar";
 
 type SidebarIcon = ComponentType<LucideProps>;
+
+/** Datos mínimos del usuario para el footer del sidebar. */
+export interface SidebarUsuario {
+  nombre: string;
+  /** Etiqueta legible del rol (p. ej. "Maestro"). */
+  rolLabel: string;
+}
+
+/**
+ * Iniciales del nombre para el avatar: máx 2 letras. Con ≥2 palabras toma la
+ * inicial de las dos primeras; con una sola, sus dos primeras letras. Mayúsculas.
+ */
+function iniciales(nombre: string): string {
+  const palabras = nombre.trim().split(/\s+/).filter(Boolean);
+  if (palabras.length === 0) return "?";
+  if (palabras.length === 1) return palabras[0].slice(0, 2).toUpperCase();
+  return (palabras[0][0] + palabras[1][0]).toUpperCase();
+}
+
+/**
+ * Footer del sidebar (esquina inferior izquierda): avatar con iniciales + nombre y
+ * rol debajo. Al colapsar (`collapsible=icon`) el texto se oculta y queda solo el
+ * avatar, centrado.
+ */
+function SidebarUsuarioFooter({ usuario }: { usuario: SidebarUsuario }) {
+  return (
+    <SidebarFooter className="border-t border-sidebar-border p-2">
+      <div className="flex items-center gap-2 rounded-md p-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
+        <div
+          aria-hidden="true"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreground"
+        >
+          {iniciales(usuario.nombre)}
+        </div>
+        <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
+          <span className="truncate text-sm font-medium text-sidebar-foreground">
+            {usuario.nombre}
+          </span>
+          <span className="truncate text-xs text-sidebar-foreground/70">
+            {usuario.rolLabel}
+          </span>
+        </div>
+      </div>
+    </SidebarFooter>
+  );
+}
 
 /**
  * Botón circular de colapsar/expandir del sidebar en desktop. Va montado sobre
@@ -86,6 +134,7 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   user: User,
   package: Package,
   clipboardCheck: ClipboardCheck,
+  truck: Truck,
 };
 
 // El Sidebar reexporta los tipos de dominio del menu para consumidores/tests.
@@ -95,8 +144,11 @@ export { SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
 
 export function Sidebar({
   items = SIDEBAR_ITEMS,
+  usuario = null,
 }: {
   items?: readonly MenuItem[];
+  /** Usuario autenticado para el footer (nombre + rol). `null` = sin sesión. */
+  usuario?: SidebarUsuario | null;
 }) {
   const pathname = usePathname();
 
@@ -198,6 +250,7 @@ export function Sidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      {usuario ? <SidebarUsuarioFooter usuario={usuario} /> : null}
     </SidebarRoot>
   );
 }

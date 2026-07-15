@@ -96,7 +96,7 @@ afterEach(() => {
 });
 
 describe("OrdenesPage", () => {
-  it("D1: renderiza las 7 columnas y una fila por orden mapeando cada celda; Tienda muestra el nombre, no el uuid (R18, R19, R24, R26, R6, R7, R8; feature 30/R14: Zona; feature 49/R29: Acciones)", async () => {
+  it("D1: renderiza las 18 columnas del listado del maestro y una fila por orden mapeando cada celda; Tienda muestra el nombre, no el uuid (R18, R19, R24, R26, R6, R7, R8; feature 30/R14: Zona; feature 49/R29: Acciones)", async () => {
     const items: OrdenListItemDTO[] = [
       makeOrden({
         id: "o1",
@@ -143,20 +143,26 @@ describe("OrdenesPage", () => {
     // Espera la resolución async de SWR.
     await screen.findByText("Tienda Uno");
 
-    // Cabeceras en orden: las columnas ricas del listado del maestro (zona
-    // resuelta dentro de Estatus/Flete, sin columna "Zona" separada) + "Acciones"
-    // (feature 49/R29).
+    // Cabeceras en orden: las 18 columnas ricas del listado del maestro
+    // (incluye columna "Zona" propia, "Monto a cobrar", "Flete + IVA",
+    // "Fulfillment" y "Comisión + IVA") + "Acciones" (feature 49/R29).
     const headers = screen.getAllByRole("columnheader");
     expect(headers.map((h) => h.textContent)).toEqual([
       "Nº Guía",
       "Nº Remisión",
-      "Estatus",
+      "Estado",
       "Destinatario",
+      "Producto",
+      "Dirección",
       "Tienda",
+      "Zona",
       "Provincia",
       "Cantón",
       "Distrito",
-      "Flete",
+      "Monto a cobrar",
+      "Flete + IVA",
+      "Fulfillment",
+      "Comisión + IVA",
       "Mensajero",
       "Fecha de creación",
       "Tiempo",
@@ -173,13 +179,14 @@ describe("OrdenesPage", () => {
     expect(c1[1]).toHaveTextContent("REM-001"); // numRemision por render-string (R7)
     expect(c1[2]).toHaveTextContent("En bodega"); // estatusValue por render-función (R6)
     expect(c1[3]).toHaveTextContent("Ana Pérez"); // destinatario por column.id (R8)
-    expect(c1[4]).toHaveTextContent("Tienda Uno"); // tiendaNombre por render-función (R24)
+    // Tienda ahora es la columna 7 (índice 6): Producto y Dirección la preceden.
+    expect(c1[6]).toHaveTextContent("Tienda Uno"); // tiendaNombre por render-función (R24)
 
     // Fila 3: sin estatusValue ni relaciones.estatus → placeholder "—" (nunca
     // filtra el uuid interno estatusId a la UI).
     const c3 = within(rows[2]).getAllByRole("cell");
     expect(c3[2]).toHaveTextContent("—");
-    expect(c3[4]).toHaveTextContent("Tienda Tres");
+    expect(c3[6]).toHaveTextContent("Tienda Tres");
 
     // La celda Tienda muestra el NOMBRE, nunca el uuid tiendaId (R24).
     expect(screen.getByText("Tienda Dos")).toBeInTheDocument();
@@ -219,8 +226,8 @@ describe("OrdenesPage", () => {
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent("No hay órdenes");
-    // La cabecera sigue presente (12 columnas del listado del maestro + "Acciones" feature 49/R29).
-    expect(screen.getAllByRole("columnheader")).toHaveLength(13);
+    // La cabecera sigue presente (18 columnas del listado del maestro + "Acciones" feature 49/R29).
+    expect(screen.getAllByRole("columnheader")).toHaveLength(19);
   });
 
   it("D4: cualquier resultado no-ok o throw del transporte muestra error accesible genérico, sin tabla de datos ni internals (R21)", async () => {
@@ -337,7 +344,8 @@ describe("OrdenesPage", () => {
       total: 0,
     });
 
-    for (const rol of [RolValue.maestro, RolValue.admin, RolValue.mensajero]) {
+    // mensajero/adminSatelite ya NO alcanzan esta pagina (notFound, ver test aparte).
+    for (const rol of [RolValue.maestro, RolValue.admin]) {
       resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
       await renderPage();
       expect(
@@ -352,6 +360,16 @@ describe("OrdenesPage", () => {
     expect(
       screen.queryByRole("button", { name: /carga masiva/i }),
     ).toBeNull();
+  });
+
+  it("seguridad: mensajero y adminSatelite NO alcanzan /ordenes (notFound)", async () => {
+    // El mensajero opera en /mis-asignaciones y el adminSatelite en /recepcion-satelite;
+    // ninguno debe ver el listado plano de todas las ordenes. La pagina llama notFound()
+    // -> el Server Component async rechaza al renderse.
+    for (const rol of [RolValue.mensajero, RolValue.adminSatelite]) {
+      resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
+      await expect(OrdenesPage()).rejects.toThrow();
+    }
   });
 
   it("D7: el fetcher invoca la Server Action con { page, pageSize } y NO hace fetch a rutas API (R18, R20, R31)", async () => {

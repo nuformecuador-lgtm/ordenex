@@ -41,7 +41,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27
     existsGeo: vi.fn(),
     findExistingRemisiones: vi.fn(),
-    findProvinciasByNombres: vi.fn(),
+    findAllProvincias: vi.fn(),
     findCantonesByProvinciaIds: vi.fn(),
     findDistritosByCantonIds: vi.fn(),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1", "msg-2"])),
@@ -75,6 +75,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findUsuarioVehiculoId: vi.fn().mockResolvedValue(null), // feature 39: exigido por IOrdenRepository
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
+    recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     ...overrides,
   };

@@ -136,6 +136,12 @@ describe("UsuarioForm — selects (R29)", () => {
     expect(within(rolList).getByRole("option", { name: "maestro" })).toBeInTheDocument();
     await user.click(within(rolList).getByRole("option", { name: "mensajero" }));
 
+    // Feature 24/R27: mensajero requiere zona; se selecciona antes de enviar.
+    await user.click(screen.getByRole("combobox", { name: "Zona" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", { name: "Central" }),
+    );
+
     // Tipo de documento desde la acción listarTiposIdentificacion.
     await waitFor(() => expect(listarTiposIdentificacionMock).toHaveBeenCalled());
     await user.click(screen.getByRole("combobox", { name: "Tipo de documento" }));
@@ -200,6 +206,12 @@ describe("UsuarioForm — modo de contraseña (R36)", () => {
       within(await screen.findByRole("listbox")).getByRole("option", {
         name: "mensajero",
       }),
+    );
+
+    // Feature 24/R27: mensajero requiere zona; se selecciona antes de enviar.
+    await user.click(screen.getByRole("combobox", { name: "Zona" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", { name: "Central" }),
     );
 
     let result: unknown;
@@ -325,6 +337,12 @@ describe("UsuarioForm — fulfillment (feature 27)", () => {
 
     // Rol no-adminTienda: el switch permanece oculto (R6).
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+
+    // Feature 24/R27: mensajero requiere zona; se selecciona antes de enviar.
+    await user.click(screen.getByRole("combobox", { name: "Zona" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", { name: "Central" }),
+    );
 
     await act(async () => {
       await ref.current!.submit();

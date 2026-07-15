@@ -218,7 +218,12 @@ describe("fulfillment — invariante por rol (feature 27/R4/R4a/R8/R9/R12)", () 
 
   it("crear rol != adminTienda ignora fulfillment=true recibido -> false (R4/R4a)", async () => {
     withRoles();
-    await service.crear({ ...crearManual, rolId: "rol-msg", fulfillment: true }, MAESTRO);
+    // mensajero requiere zona (feature 24/R27): se pasa una para aislar la
+    // aserción al invariante de fulfillment.
+    await service.crear(
+      { ...crearManual, rolId: "rol-msg", fulfillment: true, zonaId: "z1" },
+      MAESTRO,
+    );
     expect(createArg().fulfillment).toBe(false);
   });
 
