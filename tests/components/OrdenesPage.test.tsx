@@ -15,6 +15,12 @@ import type {
   OrdenListItemDTO,
 } from "@/lib/types/orden";
 
+// `OrdenesTabs` usa `useRouter` (navegación al escanear el QR de una etiqueta),
+// que exige el App Router montado: se mockea como en el resto de la suite.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
+
 // La Server Action se mockea: los tests afirman el render de SWR (carga/datos/
 // vacío/error) sin DB ni sesión. `listarOrdenes` es el fetcher de la página.
 vi.mock("@/lib/actions/ordenes", () => ({

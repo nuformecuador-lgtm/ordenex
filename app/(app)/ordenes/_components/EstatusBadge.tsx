@@ -22,6 +22,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   en_reparto: "En reparto", // feature 36
   rechazada: "Rechazada", // feature 36
   en_bodega_satelite: "En bodega satélite", // feature 33 (R9: la UI puede derivar la zona)
+  recibido_origen: "Recibido en tienda", // cierre del flujo de devolución: la tienda de origen la recibió
 };
 
 const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
@@ -50,6 +51,10 @@ const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
     "bg-danger-soft text-[#991b1b] dark:bg-danger/15 dark:text-danger", // feature 36
   en_bodega_satelite:
     "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 33
+  // Terminal y NO error: reusa el par de `entregada` (success), el otro cierre
+  // sano del flujo. `devuelta_origen` sigue en danger por ser el tránsito.
+  recibido_origen:
+    "bg-success-soft text-[#065f46] dark:bg-success/15 dark:text-success",
 };
 
 const NEUTRAL_CLASSES =

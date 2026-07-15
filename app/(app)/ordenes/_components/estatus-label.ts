@@ -17,6 +17,7 @@ const ESTATUS_LABELS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   en_reparto: "En reparto", // feature 36/R4: recogida por el mensajero
   rechazada: "Rechazada", // feature 36/R4: resultado RECHAZO
   en_bodega_satelite: "En bodega satélite", // feature 33 (R9: la UI deriva la zona de orden.zonaId)
+  recibido_origen: "Recibido en tienda", // cierre del flujo de devolución: la tienda de origen la recibió
 };
 
 /**

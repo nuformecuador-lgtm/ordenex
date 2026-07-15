@@ -8,6 +8,12 @@ import type { ReactElement } from "react";
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
+// `OrdenesTabs` usa `useRouter` (navegación al escanear el QR de una etiqueta),
+// que exige el App Router montado: se mockea como en el resto de la suite.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
+
 // Catálogo `order_status` (Server Action) mockeado: el front deriva las tabs de
 // aquí menos `exclude` (R14). Orden determinista (R5) preservado en el mock.
 const listarOrderStatusMock = vi.fn();

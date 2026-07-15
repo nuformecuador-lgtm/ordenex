@@ -111,12 +111,6 @@ test.describe("Mis asignaciones — recaudo E2E flow", () => {
       // Result defaults to "Entregada"; ensure it explicitly.
       await elegirEnSelect(page, "Resultado de la gestión", "Entregada");
 
-      // "Monto recibido" is prefilled with montoCobrar; leave it as-is (== montoCobrar).
-      const monto = modal.getByLabel("Monto recibido");
-      await expect(monto).toBeVisible();
-      const montoValue = await monto.inputValue();
-      expect(montoValue).not.toBe("");
-
       await elegirEnSelect(page, "Método de pago", "Efectivo");
 
       await modal

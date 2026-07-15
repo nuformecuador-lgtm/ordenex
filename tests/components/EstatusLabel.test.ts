@@ -17,6 +17,7 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   en_reparto: "En reparto", // feature 36
   rechazada: "Rechazada", // feature 36
   en_bodega_satelite: "En bodega satélite", // feature 33
+  recibido_origen: "Recibido en tienda",
 };
 
 describe("estatusLabel — mapa de presentación value → label (R17)", () => {

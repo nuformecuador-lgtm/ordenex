@@ -30,7 +30,7 @@ const ROLES_CON_TABS = new Set<string>([
 const EXCLUDE_POR_ROL: Record<string, string[]> = {
   [RolValue.maestro]: ["pendiente"],
   [RolValue.admin]: ["pendiente"],
-  [RolValue.adminTienda]: ["pendiente"],
+  [RolValue.adminTienda]: ["pendiente", "devuelta", "en_bodega", "en_bodega_satelite", "en_ruta_bodega_satelite"],
 };
 
 export default async function OrdenesPage() {
@@ -42,6 +42,8 @@ export default async function OrdenesPage() {
   // acotamiento server-side de OrdenService.listar).
   if (rol === RolValue.mensajero || rol === RolValue.adminSatelite) notFound();
   const puedeCargarMasiva = rol === RolValue.adminTienda;
+  // Escaneo del QR de la etiqueta para saltar a la orden: solo adminTienda.
+  const puedeEscanearQr = rol === RolValue.adminTienda;
   const usaTabs = rol ? ROLES_CON_TABS.has(rol) : false;
   // Selección por checkbox + acciones por lote (asignar mensajero, rutear a bodega
   // satélite, etc.) SOLO para `maestro`: las Server Actions son maestro-only. `admin`
@@ -56,6 +58,7 @@ export default async function OrdenesPage() {
           <OrdenesTabs
             exclude={EXCLUDE_POR_ROL[rol as string] ?? ["pendiente"]}
             puedeCargarMasiva={puedeCargarMasiva}
+            puedeEscanearQr={puedeEscanearQr}
             mostrarHistorial
             accionesLote={accionesLote}
           />
