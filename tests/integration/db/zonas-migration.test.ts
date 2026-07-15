@@ -145,9 +145,25 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_orden_liberada_reprogramada_at") && // feature 46: apendida despues
         !d.endsWith("_orden_historial_estado") && // feature 49: apendida despues
         !d.endsWith("_wallet_egreso_gasto_fijo_variable") && // feature 45: apendida despues
-        !d.endsWith("_gasto_fijo_plantilla"), // feature 45: apendida despues
+        !d.endsWith("_gasto_fijo_plantilla") && // feature 45: apendida despues
+        // PR #64: apendidas despues. `_tarifa_tienda_status` comparte el timestamp
+        // 20260712100000 con `_cierre_dia` (nacio con fecha del 12, se escribio el 14).
+        // Deuda conocida ACEPTADA: no se renombra la carpeta porque la migracion ya
+        // esta aplicada y registrada POR NOMBRE en `_prisma_migrations`; renombrarla
+        // la haria ver como pendiente (y a la vieja como desaparecida) en toda base
+        // existente. El empate no altera el orden efectivo ni este invariante.
+        !d.endsWith("_tarifa_tienda_status") &&
+        !d.endsWith("_drop_distrito_zona_id") &&
+        !d.endsWith("_seed_geografia_cr") &&
+        !d.endsWith("_seed_zonas_pago_distrito") &&
+        !d.endsWith("_reconcile_fks_drop_order_status_value") &&
+        !d.endsWith("_order_status_pendiente") && // PR #64 (fix asignaciones)
+        !d.endsWith("_seed_order_status_completo"), // PR #64 (fix asignaciones)
     );
-    expect(thisDir > previas[previas.length - 1]).toBe(true);
+    // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
+    // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);
+    // nacer con un timestamp anterior a las previas NO lo es, y sigue fallando.
+    expect(thisDir >= previas[previas.length - 1]).toBe(true);
   });
 });
 

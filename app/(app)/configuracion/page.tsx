@@ -73,6 +73,12 @@ export default async function ConfiguracionPage() {
           </h2>
           <UsuariosModule initialData={usuariosData} />
         </section>
+        <section aria-labelledby="config-zonas-heading" className="flex flex-col gap-4">
+          <h2 id="config-zonas-heading" className="text-lg font-semibold">
+            Zonas
+          </h2>
+          <ZonasModule initialData={zonasData} />
+        </section>
       </Container>
     </>
   );
