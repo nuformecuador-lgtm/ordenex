@@ -365,3 +365,30 @@ backend/actions/schemas ni "Por recoger"):
 
 Verificación: `pnpm typecheck` sin errores nuevos en lo tocado (baseline rojo
 tarifa/zona ajeno intacto). Tests `MisAsignacionesModule` + `Modal` → 56/56 verde.
+
+## Gestión inline + primera activa por default (pedido humano)
+
+Rediseño de la sección "En reparto / por gestionar" (sin tocar backend/actions/
+schemas ni "Por recoger"):
+
+- **`GestionarOrdenModal.tsx` → `GestionarOrdenPanel.tsx`**: el detalle ahora es un
+  PANEL inline (no `Modal`/overlay), `mx-auto max-w-2xl rounded-xl border bg-card
+  p-6`, centrado bajo la grilla. Se conserva el flujo multi-paso (detalle →
+  "Gestionar pedido" → 4 botones → campos condicionales + "Atrás"), la validación
+  con `gestionarSchema`, el envío `gestionar(FormData)` y el manejo de
+  `validation_error`/`conflict`/`forbidden`/`onSuccess`. Botón propio "Guardar
+  gestión" con spinner (ya no lo aporta el Modal). Se eliminaron props `open`/
+  `onOpenChange`; el reset interno lo garantiza el padre con `key={orden.id}`.
+- **"Cancelar gestión"**: nuevo botón visible solo cuando el puntero está fijado
+  (pasos resultados/formulario); llama `liberarGestion` vía callback del padre y
+  vuelve al paso "detalle" sin cambiar de orden (R35 preservado).
+- **`MisAsignacionesModule`**: `detalleOrden` se DERIVA (`useMemo`) — activa
+  (`ordenEnGestionId`) → elegida (si existe) → PRIMERA de `porGestionar`; nunca
+  `null` si hay órdenes (estable ante `router.refresh()`). Solo la orden del panel
+  es gestionable. Bloqueo/ocultamiento 1-a-1 de las demás cards intacto.
+- **Contrato backend PRESERVADO**: escogerParaGestion / gestionar / liberarGestion /
+  puntero 1-a-1 / `gestionarSchema` / FormData sin cambios.
+
+Verificación: `pnpm typecheck` sin errores en lo tocado (baseline rojo tarifa/
+zona/usuario ajeno intacto). Tests afectados verdes:
+`MisAsignacionesModule` + `PorAceptarSection` + `MisAsignacionesPage` → 35/35.

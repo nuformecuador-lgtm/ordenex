@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Modal } from "@/components/shared/Modal";
@@ -14,13 +14,20 @@ import {
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
-import { GestionarOrdenModal } from "./GestionarOrdenModal";
+import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 
-// Feature 36 (T15-T17): módulo del mensajero. Recibe los DOS grupos ya
-// resueltos por el Server Component padre (datos sensibles por props, sin fetch
-// de cliente) y el puntero de bloqueo `ordenEnGestionId` (backend, robusto a
-// recarga). Las mutaciones van por Server Action (recoger / escoger / gestionar)
-// y refrescan la ruta (router.refresh) para releer el estado del servidor.
+// Feature 36 (T15-T17) / rediseño 63 (pedido humano): módulo del mensajero.
+// Recibe los DOS grupos ya resueltos por el Server Component padre (datos
+// sensibles por props, sin fetch de cliente) y el puntero de bloqueo
+// `ordenEnGestionId` (backend, robusto a recarga). Las mutaciones van por Server
+// Action (recoger / escoger / gestionar / liberar) y refrescan la ruta
+// (router.refresh) para releer el estado del servidor.
+//
+// UX "En reparto": grilla de cards arriba + PANEL de detalle grande e inline
+// debajo (no modal). Siempre hay una orden en el panel de detalle mientras haya
+// órdenes en reparto: por defecto la ACTIVA (si hay puntero fijado) o la PRIMERA.
+// Solo la orden del panel es gestionable. El bloqueo 1-a-1 (R19/R20) deshabilita
+// y oculta los detalles de las demás mientras hay una gestión activa.
 
 export interface MisAsignacionesModuleProps {
   /** Órdenes en `en_espera_aceptacion` (por recoger). */
@@ -41,11 +48,28 @@ export function MisAsignacionesModule({
 
   // Confirmación de recogida (lote o de a una): ids a recoger; null = cerrado.
   const [recogerIds, setRecogerIds] = useState<string[] | null>(null);
-  // Orden seleccionada cuyo detalle grande está abierto; null = cerrado.
-  const [detalleOrden, setDetalleOrden] = useState<MiAsignacionDTO | null>(null);
-  // ¿El puntero 1-a-1 fue fijado en ESTA sesión de detalle? Determina si cerrar
-  // sin guardar debe liberar (R35). Falso mientras solo se ve el detalle.
-  const [punteroFijado, setPunteroFijado] = useState(false);
+  // Orden que el mensajero eligió explícitamente para el panel de detalle. Es
+  // solo una PREFERENCIA: la orden mostrada se DERIVA (ver `detalleOrden`) para
+  // no quedar pegada a una orden que ya no existe tras `router.refresh()`.
+  const [seleccionId, setSeleccionId] = useState<string | null>(null);
+
+  // Orden mostrada en el panel de detalle. Nunca `null` si hay al menos una en
+  // reparto. Prioridad: (1) la ACTIVA (puntero fijado); (2) la elegida por el
+  // mensajero si sigue existiendo; (3) la PRIMERA de la lista. Derivada en cada
+  // render → estable ante cambios de `porGestionar`/`ordenEnGestionId`.
+  const detalleOrden = useMemo<MiAsignacionDTO | null>(() => {
+    if (porGestionar.length === 0) return null;
+    if (ordenEnGestionId !== null) {
+      return (
+        porGestionar.find((o) => o.id === ordenEnGestionId) ?? porGestionar[0]
+      );
+    }
+    if (seleccionId !== null) {
+      const elegida = porGestionar.find((o) => o.id === seleccionId);
+      if (elegida) return elegida;
+    }
+    return porGestionar[0];
+  }, [porGestionar, ordenEnGestionId, seleccionId]);
 
   async function confirmRecoger() {
     if (!recogerIds) return;
@@ -63,20 +87,20 @@ export function MisAsignacionesModule({
     );
   }
 
-  // Seleccionar una card abre su detalle grande. Si ya es la orden activa, el
-  // puntero 1-a-1 ya está fijado (se reanuda la gestión en curso).
+  // Seleccionar una card la lleva al panel de detalle. Bloqueada si hay otra
+  // gestión activa (R19/R20): no se puede cambiar la orden del panel.
   function seleccionar(orden: MiAsignacionDTO) {
-    setDetalleOrden(orden);
-    setPunteroFijado(ordenEnGestionId === orden.id);
+    if (ordenEnGestionId !== null && ordenEnGestionId !== orden.id) return;
+    setSeleccionId(orden.id);
   }
 
-  // R17 (T17): al pulsar "Gestionar pedido" se fija el puntero de bloqueo 1-a-1.
-  // Devuelve `true` si quedó fijado (el modal revela los 4 botones).
+  // R17 (T17): al pulsar "Gestionar pedido" se fija el puntero de bloqueo 1-a-1
+  // sobre la orden del panel de detalle. Devuelve `true` si quedó fijado (el
+  // panel revela los 4 botones).
   async function gestionarPedido(): Promise<boolean> {
     if (!detalleOrden) return false;
     const result = await escogerParaGestion({ ordenId: detalleOrden.id });
     if (result.status === "ok") {
-      setPunteroFijado(true);
       router.refresh(); // refleja el bloqueo de las demás (ordenEnGestionId)
       return true;
     }
@@ -91,24 +115,17 @@ export function MisAsignacionesModule({
   function handleGestionSuccess() {
     // Path de ÉXITO: el backend YA limpió el puntero dentro de la transacción de
     // `gestionar`. NO se llama a `liberarGestion` aquí (evita doble limpieza).
-    setDetalleOrden(null);
-    setPunteroFijado(false);
+    setSeleccionId(null);
     router.refresh();
   }
 
-  // R35: cerrar el detalle SIN registrar resultado libera el puntero de bloqueo
-  // (`orden_en_gestion_id`) para que las demás vuelvan a ser gestionables — pero
-  // SOLO si llegó a fijarse (se pulsó "Gestionar pedido"). Si solo se miró el
-  // detalle, no hay puntero que soltar. Limpieza best-effort; sin Toast.
-  async function cerrarDetalle() {
-    const orden = detalleOrden;
-    const fijado = punteroFijado;
-    setDetalleOrden(null);
-    setPunteroFijado(false);
-    if (orden && fijado) {
-      await liberarGestion({ ordenId: orden.id });
-      router.refresh();
-    }
+  // R35: "Cancelar gestión" libera el puntero de bloqueo (`orden_en_gestion_id`)
+  // para que las demás vuelvan a ser gestionables, sin cambiar de orden en el
+  // panel. Solo se ofrece cuando el puntero está fijado. Best-effort; sin Toast.
+  async function cancelarGestion() {
+    if (!detalleOrden) return;
+    await liberarGestion({ ordenId: detalleOrden.id });
+    router.refresh();
   }
 
   return (
@@ -131,8 +148,8 @@ export function MisAsignacionesModule({
       />
 
       {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
-      {/* Cards COMPACTAS en grilla (1/2/3 col). Seleccionar una abre su detalle
-          grande y centrado (GestionarOrdenModal). El bloqueo 1-a-1 (R19/R20)
+      {/* Cards COMPACTAS en grilla (1/2/3 col). Seleccionar una la lleva al panel
+          de detalle grande e inline (abajo). El bloqueo 1-a-1 (R19/R20)
           deshabilita las demás mientras hay una gestión activa. */}
       <section
         aria-label="En reparto / por gestionar"
@@ -150,14 +167,20 @@ export function MisAsignacionesModule({
               const bloqueada =
                 ordenEnGestionId !== null && ordenEnGestionId !== orden.id;
               const esActiva = ordenEnGestionId === orden.id;
+              const esDetalle = detalleOrden?.id === orden.id;
               return (
                 <li key={orden.id}>
                   <button
                     type="button"
                     disabled={bloqueada}
+                    aria-pressed={esDetalle}
                     onClick={() => seleccionar(orden)}
                     aria-label={`Gestionar orden ${orden.numRemision} · ${orden.destinatario}`}
-                    className="group flex h-full w-full flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60"
+                    className={`group flex h-full w-full flex-col gap-3 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60 ${
+                      esDetalle
+                        ? "border-primary ring-2 ring-primary/40"
+                        : "border-border"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span className="font-semibold text-foreground">
@@ -166,6 +189,10 @@ export function MisAsignacionesModule({
                       {esActiva ? (
                         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                           En gestión
+                        </span>
+                      ) : esDetalle ? (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                          En detalle
                         </span>
                       ) : null}
                     </div>
@@ -190,7 +217,7 @@ export function MisAsignacionesModule({
                           </span>
                         </div>
                         <span className="mt-auto text-sm font-medium text-primary">
-                          Ver / Gestionar
+                          {esDetalle ? "En detalle" : "Ver / Gestionar"}
                         </span>
                       </>
                     )}
@@ -200,6 +227,20 @@ export function MisAsignacionesModule({
             })}
           </ul>
         )}
+
+        {/* Panel de detalle grande e inline: SIEMPRE muestra una orden mientras
+            haya alguna en reparto (la activa o la primera por defecto). Se remonta
+            con `key` al cambiar de orden para reiniciar su estado interno. */}
+        {detalleOrden ? (
+          <GestionarOrdenPanel
+            key={detalleOrden.id}
+            orden={detalleOrden}
+            yaActiva={ordenEnGestionId === detalleOrden.id}
+            onGestionarPedido={gestionarPedido}
+            onCancelarGestion={cancelarGestion}
+            onSuccess={handleGestionSuccess}
+          />
+        ) : null}
       </section>
 
       {/* Confirmación de recogida (lote o de a una). */}
@@ -217,18 +258,6 @@ export function MisAsignacionesModule({
         confirmLabel="Recoger"
         onConfirm={confirmRecoger}
         closeOnConfirm={false}
-      />
-
-      {/* Detalle grande + gestión 1-a-1 de la orden seleccionada. */}
-      <GestionarOrdenModal
-        open={detalleOrden !== null}
-        orden={detalleOrden}
-        yaActiva={detalleOrden !== null && ordenEnGestionId === detalleOrden.id}
-        onGestionarPedido={gestionarPedido}
-        onOpenChange={(next) => {
-          if (!next) void cerrarDetalle();
-        }}
-        onSuccess={handleGestionSuccess}
       />
     </div>
   );

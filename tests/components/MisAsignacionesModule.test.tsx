@@ -18,9 +18,11 @@ import {
 } from "@/lib/actions/mis-asignaciones";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
-// Feature 36 (T15-T17) — módulo del mensajero. Se mockean las Server Actions
-// (recoger / escoger / gestionar / liberar), el toast y el router (refresh) para
-// afirmar la composición y los envíos sin DB ni sesión.
+// Feature 36 (T15-T17) / rediseño 63 (pedido humano) — módulo del mensajero. Se
+// mockean las Server Actions (recoger / escoger / gestionar / liberar), el toast
+// y el router (refresh) para afirmar la composición y los envíos sin DB ni
+// sesión. La sección "En reparto" ya NO usa modal: es un PANEL inline (region
+// "Detalle de la orden") con la PRIMERA orden en detalle por defecto.
 vi.mock("@/lib/actions/mis-asignaciones", () => ({
   recogerAsignaciones: vi.fn(),
   escogerParaGestion: vi.fn(),
@@ -86,6 +88,11 @@ function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0
   );
 }
 
+/** El panel de detalle grande e inline (region con nombre accesible). */
+function panelDetalle() {
+  return screen.getByRole("region", { name: "Detalle de la orden" });
+}
+
 /** Sube un File válido (image/jpeg, size>0) al input de evidencia dado. */
 async function subirEvidencia(user: ReturnType<typeof userEvent.setup>, label: string) {
   const file = new File(["evidencia-bytes"], "evidencia.jpg", {
@@ -107,16 +114,15 @@ async function elegirEnSelect(
 }
 
 /**
- * Abre el detalle grande de una card y avanza hasta los 4 botones de resultado:
- * (1) click en la card → detalle; (2) "Gestionar pedido" → fija el puntero y
- * revela los 4 botones; (3) opcionalmente elige un resultado (muestra sus campos).
+ * Lleva una card al panel de detalle y avanza hasta los 4 botones de resultado:
+ * (1) click en la card → panel; (2) "Gestionar pedido" → fija el puntero y revela
+ * los 4 botones; (3) opcionalmente elige un resultado (muestra sus campos).
  */
 async function iniciarGestion(
   user: ReturnType<typeof userEvent.setup>,
   { card, resultado }: { card: string; resultado?: string },
 ) {
   await user.click(screen.getByRole("button", { name: `Gestionar orden ${card}` }));
-  await screen.findByRole("dialog", { name: "Detalle de la orden" });
   await user.click(screen.getByRole("button", { name: "Gestionar pedido" }));
   if (resultado) {
     await user.click(await screen.findByRole("button", { name: resultado }));
@@ -257,11 +263,21 @@ describe("MisAsignacionesModule", () => {
     await vi.waitFor(() => expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r2"] }));
   });
 
-  it("Rediseño: las cards se muestran en GRILLA y se seleccionan (una card por orden)", () => {
+  it("Sin órdenes en reparto: muestra el aviso y NO renderiza el panel de detalle", () => {
+    renderModule({ porGestionar: [] });
+
+    const region = screen.getByRole("region", { name: "En reparto / por gestionar" });
+    expect(within(region).getByText("No hay órdenes en reparto.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Detalle de la orden" }),
+    ).toBeNull();
+  });
+
+  it("Rediseño: cards en GRILLA y la PRIMERA orden en el PANEL de detalle por default", () => {
     renderModule({
       porGestionar: [
-        makeAsignacion({ id: "g1", numRemision: "REM-G1" }),
-        makeAsignacion({ id: "g2", numRemision: "REM-G2" }),
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Dos" }),
       ],
     });
 
@@ -273,13 +289,34 @@ describe("MisAsignacionesModule", () => {
     expect(
       within(region).getByRole("button", { name: /Gestionar orden REM-G2/ }),
     ).toBeInTheDocument();
-    // Grilla compacta: NO abre ningún detalle hasta seleccionar.
+    // El panel inline muestra por defecto la PRIMERA orden (sin fijar el puntero).
     expect(
-      screen.queryByRole("dialog", { name: "Detalle de la orden" }),
-    ).toBeNull();
+      within(panelDetalle()).getByText("Orden REM-G1 · Uno"),
+    ).toBeInTheDocument();
+    expect(escogerMock).not.toHaveBeenCalled();
+    expect(
+      within(panelDetalle()).getByRole("button", { name: "Gestionar pedido" }),
+    ).toBeInTheDocument();
   });
 
-  it("R19/R20: con una orden activa (ordenEnGestionId), las DEMÁS cards quedan bloqueadas y OCULTAN sus detalles", () => {
+  it("Rediseño: seleccionar otra card la lleva al PANEL de detalle (sin fijar el puntero)", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Dos" }),
+      ],
+    });
+
+    // Por defecto la primera; al seleccionar la segunda, el panel la refleja.
+    expect(within(panelDetalle()).getByText("Orden REM-G1 · Uno")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Gestionar orden REM-G2/ }));
+
+    expect(within(panelDetalle()).getByText("Orden REM-G2 · Dos")).toBeInTheDocument();
+    expect(escogerMock).not.toHaveBeenCalled();
+  });
+
+  it("R19/R20: con una orden activa, las DEMÁS cards quedan bloqueadas y OCULTAN sus detalles", () => {
     renderModule({
       porGestionar: [
         makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Bloqueada Uno" }),
@@ -289,37 +326,19 @@ describe("MisAsignacionesModule", () => {
     });
 
     // g2 es la activa: su card sigue seleccionable y muestra sus detalles.
-    expect(
-      screen.getByRole("button", { name: /Gestionar orden REM-G2/ }),
-    ).toBeEnabled();
-    expect(screen.getByText("Activa Dos")).toBeInTheDocument();
+    const cardActiva = screen.getByRole("button", { name: /Gestionar orden REM-G2/ });
+    expect(cardActiva).toBeEnabled();
+    expect(within(cardActiva).getByText("Activa Dos")).toBeInTheDocument();
     // g1 queda bloqueada.
-    expect(
-      screen.getByRole("button", { name: /Gestionar orden REM-G1/ }),
-    ).toBeDisabled();
+    const cardBloqueada = screen.getByRole("button", { name: /Gestionar orden REM-G1/ });
+    expect(cardBloqueada).toBeDisabled();
     // ...y oculta sus detalles (destinatario), mostrando solo el aviso.
-    expect(screen.queryByText("Bloqueada Uno")).toBeNull();
+    expect(within(cardBloqueada).queryByText("Bloqueada Uno")).toBeNull();
     expect(
-      screen.getByText(/Termina la gestión en curso/),
+      within(cardBloqueada).getByText(/Termina la gestión en curso/),
     ).toBeInTheDocument();
-  });
-
-  it("Rediseño: seleccionar una card abre el DETALLE grande (sin fijar el puntero aún)", async () => {
-    const user = userEvent.setup();
-    renderModule({
-      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
-    });
-
-    await user.click(screen.getByRole("button", { name: /Gestionar orden REM-G1/ }));
-
-    expect(
-      await screen.findByRole("dialog", { name: "Detalle de la orden" }),
-    ).toBeInTheDocument();
-    // El puntero SOLO se fija al pulsar "Gestionar pedido".
-    expect(escogerMock).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: "Gestionar pedido" }),
-    ).toBeInTheDocument();
+    // El panel de detalle muestra la orden ACTIVA (g2).
+    expect(within(panelDetalle()).getByText("Orden REM-G2 · Activa Dos")).toBeInTheDocument();
   });
 
   it("R17: 'Gestionar pedido' fija el puntero (escogerParaGestion) y revela los 4 botones", async () => {
@@ -328,8 +347,6 @@ describe("MisAsignacionesModule", () => {
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
-    await user.click(screen.getByRole("button", { name: /Gestionar orden REM-G1/ }));
-    await screen.findByRole("dialog", { name: "Detalle de la orden" });
     await user.click(screen.getByRole("button", { name: "Gestionar pedido" }));
 
     await vi.waitFor(() =>
@@ -353,8 +370,6 @@ describe("MisAsignacionesModule", () => {
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
-    await user.click(screen.getByRole("button", { name: /Gestionar orden REM-G1/ }));
-    await screen.findByRole("dialog", { name: "Detalle de la orden" });
     await user.click(screen.getByRole("button", { name: "Gestionar pedido" }));
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
@@ -365,17 +380,13 @@ describe("MisAsignacionesModule", () => {
     expect(screen.queryByRole("button", { name: "Entregar" })).toBeNull();
   });
 
-  it("Rediseño: reabrir la orden ACTIVA arranca en los 4 botones (puntero ya fijado)", async () => {
-    const user = userEvent.setup();
+  it("Rediseño: la orden ACTIVA arranca en los 4 botones (puntero ya fijado)", async () => {
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
       ordenEnGestionId: "g1",
     });
 
-    await user.click(screen.getByRole("button", { name: /Gestionar orden REM-G1/ }));
-    await screen.findByRole("dialog", { name: "Detalle de la orden" });
-
-    // No se re-fija el puntero al reabrir; se muestran los 4 botones directamente.
+    // No se re-fija el puntero; se muestran los 4 botones directamente.
     expect(escogerMock).not.toHaveBeenCalled();
     expect(await screen.findByRole("button", { name: "Entregar" })).toBeInTheDocument();
     expect(
@@ -542,19 +553,17 @@ describe("MisAsignacionesModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("R35: cerrar tras 'Gestionar pedido' libera el puntero (liberarGestion) y refresca", async () => {
+  it("R35: 'Cancelar gestión' tras fijar el puntero libera (liberarGestion) y refresca", async () => {
     const user = userEvent.setup();
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
-    await user.click(screen.getByRole("button", { name: /Gestionar orden REM-G1/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Detalle de la orden" });
-    await user.click(within(dialog).getByRole("button", { name: "Gestionar pedido" }));
+    await user.click(screen.getByRole("button", { name: "Gestionar pedido" }));
     await screen.findByRole("button", { name: "Entregar" });
 
-    // Cerrar/cancelar SIN registrar resultado → onOpenChange(false).
-    await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+    // Cancelar la gestión SIN registrar resultado → libera el puntero.
+    await user.click(screen.getByRole("button", { name: "Cancelar gestión" }));
 
     await vi.waitFor(() =>
       expect(liberarMock).toHaveBeenCalledWith({ ordenId: "g1" }),
@@ -565,18 +574,15 @@ describe("MisAsignacionesModule", () => {
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 
-  it("R35: cerrar el detalle SIN pulsar 'Gestionar pedido' NO libera el puntero", async () => {
-    const user = userEvent.setup();
+  it("R35: en el paso de detalle (sin fijar el puntero) NO hay 'Cancelar gestión' ni se libera", () => {
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
-    await user.click(screen.getByRole("button", { name: /Gestionar orden REM-G1/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Detalle de la orden" });
-
-    // Solo se miró el detalle: nunca se fijó el puntero.
-    await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
-
+    // Solo se ve el detalle: no existe el botón de cancelar y no se libera nada.
+    expect(
+      screen.queryByRole("button", { name: "Cancelar gestión" }),
+    ).toBeNull();
     expect(liberarMock).not.toHaveBeenCalled();
     expect(escogerMock).not.toHaveBeenCalled();
   });
