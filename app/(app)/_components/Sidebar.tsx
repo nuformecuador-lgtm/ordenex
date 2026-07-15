@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   Package,
+  QrCode,
   Settings,
   Truck,
   User,
@@ -135,6 +136,7 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   package: Package,
   clipboardCheck: ClipboardCheck,
   truck: Truck,
+  qrCode: QrCode,
 };
 
 // El Sidebar reexporta los tipos de dominio del menu para consumidores/tests.

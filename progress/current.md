@@ -8,6 +8,8 @@
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
 | feature/63-orden-lista-actualizada | fullstack | F2.4 (PR abierto) | **impl COMPLETA (R1–R20) + reviewer APROBADO 0 bloqueantes.** **PR #65 → `dev`** abierto. + Pedido humano: re-agregadas columnas (producto/dirección/zona/**monto a cobrar**/flete+IVA/fulfillment/comisión+IVA) y **adminTienda ahora VE Zona** (oculta solo Tienda). 50 tests propios/afectados verde; ordenes-columns R14-zona (era rojo baseline) ahora pasa. **PENDIENTE: merge del PR #65 (OK humano).** |
+| feature/64-pwa-basic | frontend | F2.4 (PR abierto) | **impl COMPLETA (T1–T8) + reviewer APROBADO 0 bloqueantes.** **PR #72 → `dev`** abierto. PWA básica: manifest.json, SW vanilla, meta tags, íconos 192/512, página offline. 7 archivos nuevos, 2 modificados. typecheck 0 errores nuevos, build ok. Lighthouse pendiente manual. **PENDIENTE: merge del PR #72 (OK humano).** |
+| feature/65-lestura-de-qr | frontend | F2.4 (PR abierto) | **impl COMPLETA (T1–T7) + reviewer APROBADO 0 bloqueantes.** **PR #73 → `dev`** abierto. Página `/qr` + item menú "QR" para todos los roles. 1 archivo nuevo, 2 modificados. typecheck 0 errores nuevos, lint 0, tests 0 regresiones. **PENDIENTE: merge del PR #73 (OK humano).** |
 
 > **Feature 59 (zonas: seleccionar distritos de VARIOS cantones) CERRADA 2026-07-13**: **FRONTEND PURO** (sin backend, migraciones ni cambios de contrato; `crearZona`/`actualizarZona` intactos; `arbolZonas()` SOLO lectura). Ciclo SDD completo (spec_author → **F1.4 aprobada, todas las recomendadas** → frontend_dev → reviewer). `selected` migrado a `Record<string,DistritoSeleccionado>` como **fuente de verdad única** → cambiar de provincia/cantón NO resetea la selección; **resumen agrupado provincia→cantón** (`data-testid="resumen-distritos"`, `role="group"`) con **"Quitar"** por distrito (`aria-label="Quitar <distrito>"`); **sync bidireccional** resumen↔checkbox; contador `distritos-seleccionados` conservado; R10 heredada (distritos de otra zona `disabled`, fuera del conjunto); **pre-marcado multi-cantón en edición** vía SWR `["zonas:arbol",zona.id]` sobre `arbolZonas()` (siembra `selected` para TODOS los cantones/distritos de la zona, merge idempotente); envío intacto `distritoIds=Object.keys(selected)`. Trazabilidad **R1–R12 → test** (mapa en `progress/impl_59-zonas-distritos-multicanton.md`). Reviewer **APROBADO 0 bloqueantes de código** (el RECHAZADO inicial fue SOLO por gates documentales del leader, ya cerrados). Verde REAL: typecheck 0, eslint 0, **`zona-form.test.tsx` 22/22** (+6 casos), suite **2551 passed** (2 flakes ambientales aislados verdes). F1.4-e aprobó `arbolZonas` → **T9-alt = N/A**. Solo cambiaron `ZonaForm.tsx` y su test. Orquestada DIRECTO por el leader (`frontend_dev → reviewer`, bug opus-4.8[1m]). Estado `done` + `history.md` + `impl_59`/`review_59`. **DEUDA menor** (reviewer, no bloqueante): numeración "R" mezclada entre features 55 y 59 en algún docstring/test; sin test del enriquecimiento perezoso de provincia al navegar en edición. **PENDIENTE: PR a `dev` + merge (OK humano).**
 
@@ -147,6 +149,29 @@
 ## Evaluaciones
 
 > El leader documenta aca cada evaluacion de zone/complexity/particion.
+
+- `pwa - basic` (id 64): **zone=frontend, complexity=low,
+  branch=feature/64-pwa-basic, depends_on=null.** Evaluada 2026-07-15. Seleccionada
+  por el humano ("sigue con el flujo y haz la feature de feature_list con id 64").
+  **FRONTEND PURO**: PWA basica (instalable + cache de assets estaticos + manifest +
+  meta tags + iconos). Sin backend, sin migraciones, sin dependencias nuevas. Enfoque
+  MANUAL (sin @serwist/next): riesgo de incompatibilidad con Next.js 16 + Turbopack;
+  un service worker de ~50 lineas es suficiente para el nivel basico. Colores del
+  manifest extraidos de globals.css: theme_color=#0d2444 (sidebar), background_color=#f7f8fc
+  (kraft-canvas), acento=#f26419 (brand). Icono temporal: public/next.svg sobre fondo
+  naranja. Archivos esperados: public/manifest.json, public/sw.js, public/icons/icon-{192,512}.png,
+  app/layout.tsx (meta tags + SW registration). SIN conflicto con feature 63 (fullstack
+  en curso, no toca layout.tsx ni public/). Rama desde origin/dev.
+
+- `Lestura de qr` (id 65): **zone=frontend, complexity=low,
+  branch=feature/65-lestura-de-qr, depends_on=null.** Evaluada 2026-07-15. Seleccionada
+  por el humano ("continua con la feature id 65"). **FRONTEND PURO**: item de menu "QR"
+  visible para TODOS los roles, pagina con lector QR usando la camara del dispositivo,
+  lee una ruta del codigo QR y redirige a esa ruta. Sin backend, sin migraciones, sin
+  dependencias nuevas. Archivos esperados: componente de lector QR (usando html5-qrcode
+  ya presente en el repo via feature 33), pagina /qr, item en el menu (Sidebar).
+  SIN conflicto con feature 64 (frontend en curso, toca layout/public/ SW; la 65 toca
+  Sidebar/menu + una pagina nueva). Rama desde origin/dev.
 
 - `Orden lista actualizada` (id 63): **zone=fullstack, complexity=medium,
   branch=feature/63-orden-lista-actualizada, depends_on=null** (el humano confirmo que NO depende

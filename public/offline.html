@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0d2444" />
+  <title>Ordenex — Sin conexión</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f7f8fc;
+      color: #12233f;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .container {
+      max-width: 360px;
+      padding: 2rem;
+    }
+    svg { display: block; margin: 0 auto 1.5rem; }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #f26419;
+      margin-bottom: 0.75rem;
+    }
+    p {
+      font-size: 0.95rem;
+      color: #4a5368;
+      line-height: 1.5;
+      margin-bottom: 1.5rem;
+    }
+    button {
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+      background: #f26419;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 2rem;
+      cursor: pointer;
+    }
+    button:hover { opacity: 0.92; }
+    button:active { opacity: 0.84; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#8a94ad" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20h.01" stroke-width="2" />
+      <path d="M2 8.82a15 15 0 0 1 20 0" />
+      <path d="M5 12.86a10 10 0 0 1 14 0" />
+      <path d="M8.5 16.43a5 5 0 0 1 7 0" />
+      <line x1="2" y1="2" x2="22" y2="22" />
+    </svg>
+    <h1>Sin conexión</h1>
+    <p>Parece que no tienes conexión a internet. Revisa tu red e inténtalo de nuevo.</p>
+    <button onclick="location.reload()">Reintentar</button>
+  </div>
+</body>
+</html>
