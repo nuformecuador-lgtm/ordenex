@@ -2,10 +2,12 @@ import type { ReactNode } from "react";
 
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
-// Feature 36 (R11): detalle COMPLETO de una orden asignada, presentado como una
-// lista de definición (accesible: <dt>/<dd>). Componente de presentación puro,
-// sin lógica de negocio ni fetch; recibe la orden ya resuelta (nombres, no IDs)
-// por props desde el Server Component padre.
+// Feature 36 (R11) / rediseño 63 (pedido humano): detalle de una orden asignada,
+// presentado en TRES secciones visualmente separadas (Pedido, Entrega, Cobro),
+// cada una como lista de definición accesible (<dt>/<dd>). Componente de
+// presentación puro, sin lógica de negocio ni fetch; recibe la orden ya resuelta
+// (nombres, no IDs) por props desde el Server Component padre. El botón
+// "Gestionar esta orden" NO vive aquí (lo pone el panel de gestión).
 
 /**
  * Formatea el monto a cobrar en colones (₡) con 2 decimales y separador de
@@ -19,16 +21,10 @@ function formatMonto(monto: number | null): string {
   return `₡${conMiles}.${decimales}`;
 }
 
-/** Une la jerarquía geográfica en una línea legible (omite los vacíos). */
-function ubicacion(orden: MiAsignacionDTO): string {
-  return [
-    orden.zonaNombre,
-    orden.provinciaNombre,
-    orden.cantonNombre,
-    orden.distritoNombre,
-  ]
-    .filter((parte): parte is string => Boolean(parte))
-    .join(" · ");
+/** Peso en kilogramos (p. ej. "1.5 kg"), o "—" si es nulo. */
+function formatPeso(peso: number | null): string {
+  if (peso === null) return "—";
+  return `${peso} kg`;
 }
 
 function Campo({ label, children }: { label: string; children: ReactNode }) {
@@ -40,24 +36,67 @@ function Campo({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+function Seccion({
+  titulo,
+  divider,
+  children,
+}: {
+  titulo: string;
+  divider?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className={`flex flex-col gap-2${divider ? " border-t border-border pt-4" : ""}`}
+    >
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {titulo}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
 export interface AsignacionDetalleProps {
   orden: MiAsignacionDTO;
 }
 
-/** Detalle completo de una orden (R11), reutilizado por ambos apartados. */
+/** Detalle de una orden en 3 secciones (R11 / 63), reutilizado por ambos apartados. */
 export function AsignacionDetalle({ orden }: AsignacionDetalleProps) {
   return (
-    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <Campo label="Nº Guía">{orden.numGuia ?? "—"}</Campo>
-      <Campo label="Nº Remisión">{orden.numRemision}</Campo>
-      <Campo label="Tienda">{orden.tiendaNombre}</Campo>
-      <Campo label="Destinatario">{orden.destinatario}</Campo>
-      <Campo label="Teléfono">{orden.telefonoDest}</Campo>
-      <Campo label="Dirección">{orden.direccion ?? "—"}</Campo>
-      <Campo label="Ubicación">{ubicacion(orden) || "—"}</Campo>
-      <Campo label="Producto">{orden.producto}</Campo>
-      <Campo label="Monto a cobrar">{formatMonto(orden.montoCobrar)}</Campo>
-      <Campo label="Notas">{orden.notas ?? "—"}</Campo>
-    </dl>
+    <div className="flex flex-col gap-4">
+      {/* Sección 1 — Pedido */}
+      <Seccion titulo="Pedido">
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Campo label="Nº Guía">{orden.numGuia ?? "—"}</Campo>
+          <Campo label="Nombre">{orden.destinatario}</Campo>
+          <Campo label="Teléfono">{orden.telefonoDest}</Campo>
+          <Campo label="Producto">{orden.producto}</Campo>
+        </dl>
+      </Seccion>
+
+      {/* Sección 2 — Entrega */}
+      <Seccion titulo="Entrega" divider>
+        <dl className="flex flex-col gap-3">
+          <Campo label="Dirección">
+            <span className="font-medium">{orden.direccion ?? "—"}</span>
+          </Campo>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Campo label="Provincia">{orden.provinciaNombre}</Campo>
+            <Campo label="Cantón">{orden.cantonNombre}</Campo>
+            <Campo label="Distrito">{orden.distritoNombre ?? "—"}</Campo>
+          </div>
+          <Campo label="Notas">{orden.notas ?? "—"}</Campo>
+        </dl>
+      </Seccion>
+
+      {/* Sección 3 — Cobro */}
+      <Seccion titulo="Cobro" divider>
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Campo label="Valor a cobrar">{formatMonto(orden.montoCobrar)}</Campo>
+          <Campo label="Peso">{formatPeso(orden.peso)}</Campo>
+        </dl>
+      </Seccion>
+    </div>
   );
 }

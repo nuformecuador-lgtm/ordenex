@@ -67,6 +67,7 @@ function makeAsignacion(
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",
     producto: "Caja mediana",
+    peso: 1.5,
     montoCobrar: 150,
     notas: "Dejar en portería",
     tiendaNombre: "Tienda X",
@@ -115,7 +116,7 @@ async function elegirEnSelect(
 
 /**
  * Lleva una card al panel de detalle y avanza hasta los 4 botones de resultado:
- * (1) click en la card → panel; (2) "Gestionar pedido" → fija el puntero y revela
+ * (1) click en la card → panel; (2) "Gestionar esta orden" → fija el puntero y revela
  * los 4 botones; (3) opcionalmente elige un resultado (muestra sus campos).
  */
 async function iniciarGestion(
@@ -123,7 +124,7 @@ async function iniciarGestion(
   { card, resultado }: { card: string; resultado?: string },
 ) {
   await user.click(screen.getByRole("button", { name: `Gestionar orden ${card}` }));
-  await user.click(screen.getByRole("button", { name: "Gestionar pedido" }));
+  await user.click(screen.getByRole("button", { name: "Gestionar esta orden" }));
   if (resultado) {
     await user.click(await screen.findByRole("button", { name: resultado }));
   }
@@ -160,7 +161,7 @@ describe("MisAsignacionesModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("R11: muestra el detalle completo de la orden (guía, dirección, monto, ubicación, notas...)", () => {
+  it("R11 / 63: muestra el detalle en 3 secciones (pedido, entrega, cobro con peso)", () => {
     renderModule({
       porRecoger: [
         makeAsignacion({
@@ -171,6 +172,7 @@ describe("MisAsignacionesModule", () => {
           telefonoDest: "70001111",
           direccion: "Av. Central 100",
           producto: "Sobre",
+          peso: 1.5,
           montoCobrar: 1250.5,
           notas: "Llamar antes",
           tiendaNombre: "Tienda Norte",
@@ -183,19 +185,25 @@ describe("MisAsignacionesModule", () => {
     });
 
     const region = screen.getByRole("region", { name: "Por recoger" });
+    // Sección 1 — Pedido: guía, nombre, teléfono, producto.
     expect(within(region).getByText("2002")).toBeInTheDocument();
     expect(within(region).getByText("Beto Ruiz")).toBeInTheDocument();
     expect(within(region).getByText("70001111")).toBeInTheDocument();
-    expect(within(region).getByText("Av. Central 100")).toBeInTheDocument();
     expect(within(region).getByText("Sobre")).toBeInTheDocument();
-    expect(within(region).getByText("Tienda Norte")).toBeInTheDocument();
+    // Sección 2 — Entrega: dirección + provincia/cantón/distrito + notas (SIN zona).
+    expect(within(region).getByText("Av. Central 100")).toBeInTheDocument();
+    expect(within(region).getByText("Cartago")).toBeInTheDocument();
+    expect(within(region).getByText("Oreamuno")).toBeInTheDocument();
+    expect(within(region).getByText("San Rafael")).toBeInTheDocument();
     expect(within(region).getByText("Llamar antes")).toBeInTheDocument();
-    // Monto formateado en colones.
+    // Sección 3 — Cobro: valor a cobrar (colones) + peso en kg.
     expect(within(region).getByText("₡1,250.50")).toBeInTheDocument();
-    // Ubicación jerárquica en una línea.
+    expect(within(region).getByText("1.5 kg")).toBeInTheDocument();
+    // Ya NO se muestra la Tienda ni la ubicación con zona.
+    expect(within(region).queryByText("Tienda Norte")).toBeNull();
     expect(
-      within(region).getByText("Cartago · Cartago · Oreamuno · San Rafael"),
-    ).toBeInTheDocument();
+      within(region).queryByText("Cartago · Cartago · Oreamuno · San Rafael"),
+    ).toBeNull();
   });
 
   it("Feature 63: 'Por recoger' muestra el banner con el contador de órdenes nuevas asignadas", () => {
@@ -295,7 +303,7 @@ describe("MisAsignacionesModule", () => {
     ).toBeInTheDocument();
     expect(escogerMock).not.toHaveBeenCalled();
     expect(
-      within(panelDetalle()).getByRole("button", { name: "Gestionar pedido" }),
+      within(panelDetalle()).getByRole("button", { name: "Gestionar esta orden" }),
     ).toBeInTheDocument();
   });
 
@@ -341,24 +349,24 @@ describe("MisAsignacionesModule", () => {
     expect(within(panelDetalle()).getByText("Orden REM-G2 · Activa Dos")).toBeInTheDocument();
   });
 
-  it("R17: 'Gestionar pedido' fija el puntero (escogerParaGestion) y revela los 4 botones", async () => {
+  it("R17: 'Gestionar esta orden' fija el puntero (escogerParaGestion) y revela los 4 botones", async () => {
     const user = userEvent.setup();
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
-    await user.click(screen.getByRole("button", { name: "Gestionar pedido" }));
+    await user.click(screen.getByRole("button", { name: "Gestionar esta orden" }));
 
     await vi.waitFor(() =>
       expect(escogerMock).toHaveBeenCalledWith({ ordenId: "g1" }),
     );
-    // Se revelan los 4 botones de resultado y desaparece "Gestionar pedido".
+    // Se revelan los 4 botones de resultado y desaparece "Gestionar esta orden".
     expect(await screen.findByRole("button", { name: "Entregar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rechazar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reprogramar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Devolver" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Gestionar pedido" }),
+      screen.queryByRole("button", { name: "Gestionar esta orden" }),
     ).toBeNull();
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
@@ -370,12 +378,12 @@ describe("MisAsignacionesModule", () => {
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
-    await user.click(screen.getByRole("button", { name: "Gestionar pedido" }));
+    await user.click(screen.getByRole("button", { name: "Gestionar esta orden" }));
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
-    // Sigue en el paso de detalle: "Gestionar pedido" visible, sin los 4 botones.
+    // Sigue en el paso de detalle: "Gestionar esta orden" visible, sin los 4 botones.
     expect(
-      screen.getByRole("button", { name: "Gestionar pedido" }),
+      screen.getByRole("button", { name: "Gestionar esta orden" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Entregar" })).toBeNull();
   });
@@ -390,7 +398,7 @@ describe("MisAsignacionesModule", () => {
     expect(escogerMock).not.toHaveBeenCalled();
     expect(await screen.findByRole("button", { name: "Entregar" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Gestionar pedido" }),
+      screen.queryByRole("button", { name: "Gestionar esta orden" }),
     ).toBeNull();
   });
 
@@ -559,7 +567,7 @@ describe("MisAsignacionesModule", () => {
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
-    await user.click(screen.getByRole("button", { name: "Gestionar pedido" }));
+    await user.click(screen.getByRole("button", { name: "Gestionar esta orden" }));
     await screen.findByRole("button", { name: "Entregar" });
 
     // Cancelar la gestión SIN registrar resultado → libera el puntero.

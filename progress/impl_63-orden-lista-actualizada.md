@@ -392,3 +392,14 @@ schemas ni "Por recoger"):
 Verificación: `pnpm typecheck` sin errores en lo tocado (baseline rojo tarifa/
 zona/usuario ajeno intacto). Tests afectados verdes:
 `MisAsignacionesModule` + `PorAceptarSection` + `MisAsignacionesPage` → 35/35.
+
+## Detalle en 3 secciones + peso + "Gestionar esta orden"
+
+`AsignacionDetalle` reestructurado en TRES secciones separadas por `border-t`:
+- **Pedido**: Nº Guía, Nombre (destinatario), Teléfono, Producto. (Ya sin Nº Remisión ni Tienda.)
+- **Entrega**: Dirección destacada primero; debajo Provincia/Cantón/Distrito (SIN zona); Notas.
+- **Cobro**: Valor a cobrar (₡, reusa `formatMonto`) y Peso (nuevo `MiAsignacionDTO.peso`, formateado "X kg").
+
+Se elimina la línea de "Ubicación con zona" y el helper `ubicacion`. El botón grande del paso "detalle" en `GestionarOrdenPanel` pasa de "Gestionar pedido" → "Gestionar esta orden" (misma acción `onGestionarPedido`/`escogerParaGestion`).
+
+Tests: `makeAsignacion` ahora incluye `peso: 1.5`; el test R11 verifica las 3 secciones nuevas (guía/nombre/teléfono/producto; dirección/prov/cantón/distrito/notas; ₡ + "1.5 kg") y asegura que Tienda y ubicación-con-zona ya NO aparecen; el helper `iniciarGestion` y todas las referencias del texto del botón actualizadas. `MisAsignacionesModule` + `PorAceptarSection`: 30/30 verde. Backend/actions/schemas intactos.

@@ -18,6 +18,7 @@ export interface MiAsignacionRow {
   telefonoDest: string;
   direccion: string | null;
   producto: string;
+  peso: number | null;
   montoCobrar: number | null;
   notas: string | null;
   tiendaNombre: string;

@@ -277,7 +277,7 @@ export function GestionarOrdenPanel({
           onClick={handleGestionarPedido}
           className="h-14 w-full text-base font-semibold"
         >
-          Gestionar pedido
+          Gestionar esta orden
         </Button>
       ) : null}
 
