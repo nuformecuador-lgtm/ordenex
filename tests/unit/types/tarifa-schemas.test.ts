@@ -4,8 +4,7 @@ import { tarifasConfig } from "@/lib/config/tarifas";
 
 function baseCrear() {
   return {
-    nombre: "Tarifa GAM",
-    zonaId: "zona-1",
+    tiendaId: "tienda-1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -23,26 +22,27 @@ describe("crearTarifaSchema — validacion de creacion (R2/R3/R5/R14/R15)", () =
     expect(r.success).toBe(true);
   });
 
-  it("rechaza nombre vacio (R5/R15)", () => {
-    const r = crearTarifaSchema.safeParse({ ...baseCrear(), nombre: "" });
+  it("rechaza tiendaId vacio (R5/R15)", () => {
+    const r = crearTarifaSchema.safeParse({ ...baseCrear(), tiendaId: "" });
     expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("nombre");
+    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("tiendaId");
   });
 
-  it("rechaza nombre ausente (R5/R15)", () => {
-    const { nombre, ...rest } = baseCrear();
-    void nombre;
+  it("rechaza tiendaId ausente (R5/R15)", () => {
+    const { tiendaId, ...rest } = baseCrear();
+    void tiendaId;
     const r = crearTarifaSchema.safeParse(rest);
     expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("nombre");
+    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("tiendaId");
   });
 
-  it("rechaza zonaId ausente (feature 24)", () => {
-    const { zonaId, ...rest } = baseCrear();
-    void zonaId;
-    const r = crearTarifaSchema.safeParse(rest);
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("zonaId");
+  // La tarifa ya no pertenece a una zona ni se identifica por nombre: es de una
+  // tienda. Los campos del modelo viejo deben quedar rechazados por strict.
+  it("rechaza nombre/zonaId del modelo viejo (strict)", () => {
+    expect(crearTarifaSchema.safeParse({ ...baseCrear(), nombre: "Tarifa GAM" }).success).toBe(
+      false,
+    );
+    expect(crearTarifaSchema.safeParse({ ...baseCrear(), zonaId: "zona-1" }).success).toBe(false);
   });
 
   it("rechaza una columna numerica ausente (R5/R15)", () => {
@@ -85,6 +85,8 @@ describe("crearTarifaSchema — validacion de creacion (R2/R3/R5/R14/R15)", () =
   it("rechaza campos desconocidos (strict)", () => {
     const r = crearTarifaSchema.safeParse({ ...baseCrear(), extra: "x" });
     expect(r.success).toBe(false);
+    // `status` no se acepta en creacion: nace `activo` por default de DB.
+    expect(crearTarifaSchema.safeParse({ ...baseCrear(), status: "inactivo" }).success).toBe(false);
   });
 });
 
@@ -94,13 +96,25 @@ describe("actualizarTarifaSchema — todos opcionales, strict (R20/R23)", () => 
   });
 
   it("acepta cambio de un solo campo", () => {
-    expect(actualizarTarifaSchema.safeParse({ nombre: "Nueva" }).success).toBe(true);
+    expect(actualizarTarifaSchema.safeParse({ tiendaId: "tienda-2" }).success).toBe(true);
   });
 
-  it("rechaza nombre vacio (R20/R23)", () => {
-    const r = actualizarTarifaSchema.safeParse({ nombre: "" });
+  it("rechaza tiendaId vacio (R20/R23)", () => {
+    const r = actualizarTarifaSchema.safeParse({ tiendaId: "" });
     expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("nombre");
+    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("tiendaId");
+  });
+
+  it("acepta status activo|inactivo y rechaza cualquier otro valor (R20/R23)", () => {
+    expect(actualizarTarifaSchema.safeParse({ status: "activo" }).success).toBe(true);
+    expect(actualizarTarifaSchema.safeParse({ status: "inactivo" }).success).toBe(true);
+
+    const r = actualizarTarifaSchema.safeParse({ status: "borrado" });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("status");
+
+    expect(actualizarTarifaSchema.safeParse({ status: "" }).success).toBe(false);
+    expect(actualizarTarifaSchema.safeParse({ status: null }).success).toBe(false);
   });
 
   it("rechaza monto negativo (R20/R23)", () => {
@@ -117,6 +131,9 @@ describe("actualizarTarifaSchema — todos opcionales, strict (R20/R23)", () => 
     expect(actualizarTarifaSchema.safeParse({ id: "x" }).success).toBe(false);
     expect(actualizarTarifaSchema.safeParse({ deletedAt: null }).success).toBe(false);
     expect(actualizarTarifaSchema.safeParse({ createdAt: new Date() }).success).toBe(false);
+    // campos del modelo viejo: ya no existen.
+    expect(actualizarTarifaSchema.safeParse({ nombre: "Nueva" }).success).toBe(false);
+    expect(actualizarTarifaSchema.safeParse({ zonaId: "zona-1" }).success).toBe(false);
   });
 });
 

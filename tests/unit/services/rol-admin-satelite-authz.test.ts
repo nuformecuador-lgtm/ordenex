@@ -123,8 +123,10 @@ function crearOrdenInput(overrides: Record<string, unknown> = {}) {
 function tarifaDto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
-    nombre: "Tarifa GAM",
-    zonaId: "zona-1",
+    // El modelo de tarifa cuelga de la tienda (adminTienda) + status; ya no hay
+    // nombre/zonaId.
+    tiendaId: "store1",
+    status: "activo",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -146,14 +148,17 @@ function buildTarifaRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRep
     list: vi.fn().mockResolvedValue({ items: [tarifaDto()], total: 1 }),
     update: vi.fn().mockResolvedValue(tarifaDto()),
     softDelete: vi.fn().mockResolvedValue(true),
+    // La tienda referenciada debe ser adminTienda: por default valida (true), para
+    // que el camino feliz del maestro dependa solo de su rol, no de este invariante.
+    esTiendaAdminTienda: vi.fn().mockResolvedValue(true),
+    inactivarPorTienda: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
 
 function crearTarifaInput(overrides: Record<string, unknown> = {}) {
   return {
-    nombre: "Tarifa GAM",
-    zonaId: "zona-1",
+    tiendaId: "store1",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -173,6 +178,7 @@ function buildUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepositor
     findByEmail: vi.fn(),
     create: vi.fn(),
     listMensajeros: vi.fn().mockResolvedValue([{ id: "msg-1", nombre: "Ana" }]),
+    listByRol: vi.fn().mockResolvedValue([]), // exigido por IUserRepository; no ejercitado aqui
     updatePasswordHash: vi.fn(),
     list: vi.fn(),
     count: vi.fn(),
@@ -241,6 +247,9 @@ describe("TarifaService — adminSatelite sin permisos nuevos (R9, R11)", () => 
 
     expect(r.status).toBe("forbidden");
     expect(repo.create).not.toHaveBeenCalled();
+    // La puerta de rol corta ANTES de cualquier acceso al repo: un adminSatelite no
+    // debe poder sondear que tiendas son adminTienda via esta ruta.
+    expect(repo.esTiendaAdminTienda).not.toHaveBeenCalled();
   });
 
   it("no-regresion: maestro conserva su resultado exitoso en lectura y escritura (R11)", async () => {
