@@ -148,8 +148,12 @@ describe("Feature 67 · schema.prisma refleja la migracion (sin drift)", () => {
   });
 
   it("la relacion del actor de la anulacion es opcional con onDelete: SetNull", () => {
+    // `\s+` (como las aserciones de arriba): lo que se afirma es que la relacion es OPCIONAL
+    // y con `onDelete: SetNull`, no el ancho de la alineacion. `prisma format` realinea las
+    // columnas del bloque cuando cambia el nombre mas largo del modelo (feature 69 lo hizo);
+    // un espaciado exacto ataba este invariante al formateo, no al esquema.
     expect(schemaPrisma).toMatch(
-      /anuladaPorUsuario Usuario\? @relation\("GestionAnuladaPor", fields: \[anuladaPor\], references: \[id\], onDelete: SetNull\)/,
+      /anuladaPorUsuario\s+Usuario\?\s+@relation\("GestionAnuladaPor", fields: \[anuladaPor\], references: \[id\], onDelete: SetNull\)/,
     );
     expect(schemaPrisma).toMatch(/gestionesAnuladas\s+GestionOrden\[\]\s+@relation\("GestionAnuladaPor"\)/);
   });
