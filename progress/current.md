@@ -7,7 +7,23 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
-| feature/63-orden-lista-actualizada | fullstack | F2.4 (PR abierto) | **impl COMPLETA (R1–R20) + reviewer APROBADO 0 bloqueantes.** **PR #65 → `dev`** abierto. + Pedido humano: re-agregadas columnas (producto/dirección/zona/**monto a cobrar**/flete+IVA/fulfillment/comisión+IVA) y **adminTienda ahora VE Zona** (oculta solo Tienda). 50 tests propios/afectados verde; ordenes-columns R14-zona (era rojo baseline) ahora pasa. **PENDIENTE: merge del PR #65 (OK humano).** |
+| `feature/64-deshacer-gestion` | fullstack | F1 (spec) | Rama desde `origin/dev` (`7cf2393`, con #66/#67/#68/#70 dentro). Bookkeeping hecho; spec_author en curso. **Gate F1.4 pendiente del humano.** |
+
+> **SANEAMIENTO 2026-07-14/15 (sesión del leader).** `dev` estaba ROJO y nadie lo sabía: **28 tests fallando y 35 errores de typecheck**. Culpable bisectado: **PR #64 "adjustments"** (`2616233`) — `26b6c19` (PR #63) VERDE, `8706032` (PR #64) ROJO. Saldado en 4 PRs, todos mergeados:
+> - **#66** — `down.sql` faltante en `20260714123909` (única de 45 sin reversa; round-trip verificado contra Postgres local).
+> - **#67** — **el gate de `init.sh` MENTÍA.** `run_if` usaba `A && { B } || C`: si un script fallaba, caía en el `||`, reportaba "script no definido, se omite" y devolvía 0 → `init.sh` daba **"init OK" con la suite roja**. Por ahí se coló el #64. Ahora distingue pnpm-ausente / script-no-definido / **script-falló → rojo + exit 1**.
+> - **#68** — 4 bugs REALES que los tests rojos cazaban bien: (1) **`<ZonasModule>` borrado del render de `/configuracion`** → el maestro NO podía administrar zonas; encadena con que `esCentral` solo se marca ahí y sin él `findCentralZonaId()`=null y no se asignan órdenes (la feature 59 quedaba inalcanzable). (2) geografía de ejemplo de vuelta a **Ecuador por 3ª vez** (51 arregló → #40 revirtió → 54 restauró → #64 revirtió); ahora San José/San José/Carmen verificado contra los XLSX reales. (3) `GuiaAsignacionService` había perdido la **guarda de catálogo** (casteaba `as string` sin chequear null). (4) `zonas-migration.test.ts`: el #64 apendió 7 migraciones sin extender su denylist.
+> - **#70** (reemplaza al #69, que se mergeó contra la rama base ya consumida) — migra los **tests de tarifas** al modelo `tiendaId`/`status`. Solo `tests/`, cero producción; 77→84 tests, ninguno borrado ni aflojado.
+>
+> **Resultado: suite 2652/2652 VERDE** (294/294 archivos). typecheck **35 → 2**. **`init.sh` sigue ROJO y con razón**: corta en typecheck por los 2 errores reales de la **feature 65**. Hasta saldarlos no sirve de semáforo de arranque.
+>
+> **DEUDAS DE ARNÉS (no saldadas):** (a) **`jq` ausente + regla 4 rota de origen.** `init.sh` trata la falta de `jq` como `warn`, no `fail`, y las reglas 3 (una feature por zona) y 4 (specs presentes) viven dentro de un `if` dependiente de `jq` → **nunca corrieron** acá. Se instaló `jq` (winget; requiere shell nueva) y eso **arma una mina**: la regla 4 busca `specs/<name>/requirements.md`, pero la convención REAL del repo es **`specs/<id>-<slug>/`** (`24-gestion-zonas`, `63-orden-lista-actualizada`). Solo matchean por casualidad las 6 features de nombre de una palabra (`login`, `modal`, `paginacion`, `notificaciones`, `permissions`, `ordenes`) → con `jq` presente, `init.sh` fallaría listando **53** features. Medido: con la convención real (`<id>-<slug>`) quedarían **18** sin spec de verdad (ids 2,4,5,7,9,10,12,14,15,16,18,19,28,51,52,53,54,61 — las tempranas + los fix-features ágiles de spec inline). Opciones: (i) acotar la regla a features NO `done` (su intención real: "si la empezaste, debe tener su spec"; hoy pasaría), (ii) corregir el patrón a `<id>-<slug>` y saldar los 18 históricos, (iii) añadir un campo `spec_path` explícito por feature. (b) `zonas-migration.test.ts` usa **denylist de migraciones apendidas después** → se pondrá rojo con la próxima migración; patrón frágil, es lo que lo rompió. (c) el fake de `IUserRepository` está triplicado y el de `IOrdenRepository` lista ~30 métodos a mano → cada método nuevo del contrato rompe N archivos; un builder en `tests/helpers/` lo mataría de raíz. (d) `cancelled` no pertenece al vocabulario del arnés: las anuladas llevan `sdd:false` para que la regla 4 no les exija spec; el arreglo limpio es enseñarle el estado a `init.sh`.
+
+> **Feature 63 (Orden lista actualizada) CERRADA 2026-07-14** (PR #65 mergeado). **CIERRE CON MATIZ**, verificado antes de marcar `done`: el reviewer la había **RECHAZADO** por 1 bloqueante — sus commits colaron en `ordenes-columns.tsx` cambios FUERA DE ALCANCE (columna `zona`: 14 vs 13; headers `Estatus`→`Estado`, `Flete`→`Flete + IVA`) que regresaron 3 tests VERDES (OrdenesPage D1/D3, AdminTiendaDashboard R11). El reviewer ofrecía revertir **o** ratificar con tests actualizados: se tomó la segunda — el PR #64 actualizó `OrdenesPage.test.tsx` y `AdminTiendaDashboard.test.tsx`. Verificado hoy: **15/15 verde** afirmando `Estado`/`Flete + IVA`/columna `Zona` (tests actualizados, NO borrados). Núcleo R1–R20 verde (92 tests propios).
+
+> **Features 35, 60 y 62 ANULADAS 2026-07-14** por decisión explícita del humano (el flujo tomó otro rumbo). NO se borran: `status: cancelled` + `status_note` con el motivo, por trazabilidad. Nota de la 62 ("Orden flete") por si vuelve: su `depends_on: 57` (logout) parecía error de dato, y el tema tocaba de lleno la **feature 65** (el flete sale de la tarifa, que el #64 remodeló a por-tienda).
+
+> **Feature 65 REGISTRADA `pending` 2026-07-14 — BUG REAL, APARCADO A PROPÓSITO** por el humano ("aún no llegamos a esa parte del flujo"). `TarifaVigentePorZonaRepository:22` consulta `where: { zonaId }` sobre `tarifa`, columna que el #64 borró. **NO es código muerto**: `cierres-admin.ts:69,74` lo inyecta en `WalletFeedService`/`WalletTiendaFeedService` → **aprobar un cierre reventaría en runtime** (`Unknown argument zonaId`). Verde en tests porque TODOS mockean esa interfaz: la implementación real no tiene cobertura. **NO es fix mecánico** `zonaId`→`tiendaId`: "tarifa vigente por ZONA" deja de estar definido si la tarifa cuelga de una TIENDA → decisión de diseño del humano.
 
 > **Feature 59 (zonas: seleccionar distritos de VARIOS cantones) CERRADA 2026-07-13**: **FRONTEND PURO** (sin backend, migraciones ni cambios de contrato; `crearZona`/`actualizarZona` intactos; `arbolZonas()` SOLO lectura). Ciclo SDD completo (spec_author → **F1.4 aprobada, todas las recomendadas** → frontend_dev → reviewer). `selected` migrado a `Record<string,DistritoSeleccionado>` como **fuente de verdad única** → cambiar de provincia/cantón NO resetea la selección; **resumen agrupado provincia→cantón** (`data-testid="resumen-distritos"`, `role="group"`) con **"Quitar"** por distrito (`aria-label="Quitar <distrito>"`); **sync bidireccional** resumen↔checkbox; contador `distritos-seleccionados` conservado; R10 heredada (distritos de otra zona `disabled`, fuera del conjunto); **pre-marcado multi-cantón en edición** vía SWR `["zonas:arbol",zona.id]` sobre `arbolZonas()` (siembra `selected` para TODOS los cantones/distritos de la zona, merge idempotente); envío intacto `distritoIds=Object.keys(selected)`. Trazabilidad **R1–R12 → test** (mapa en `progress/impl_59-zonas-distritos-multicanton.md`). Reviewer **APROBADO 0 bloqueantes de código** (el RECHAZADO inicial fue SOLO por gates documentales del leader, ya cerrados). Verde REAL: typecheck 0, eslint 0, **`zona-form.test.tsx` 22/22** (+6 casos), suite **2551 passed** (2 flakes ambientales aislados verdes). F1.4-e aprobó `arbolZonas` → **T9-alt = N/A**. Solo cambiaron `ZonaForm.tsx` y su test. Orquestada DIRECTO por el leader (`frontend_dev → reviewer`, bug opus-4.8[1m]). Estado `done` + `history.md` + `impl_59`/`review_59`. **DEUDA menor** (reviewer, no bloqueante): numeración "R" mezclada entre features 55 y 59 en algún docstring/test; sin test del enriquecimiento perezoso de provincia al navegar en edición. **PENDIENTE: PR a `dev` + merge (OK humano).**
 
@@ -147,6 +163,40 @@
 ## Evaluaciones
 
 > El leader documenta aca cada evaluacion de zone/complexity/particion.
+
+- `deshacer gestion - devolver una orden a gestion` (id 64): **zone=fullstack, complexity=high,
+  branch=feature/64-deshacer-gestion, depends_on=37 (done, en dev; la 37 a su vez cuelga de la 36).**
+  Evaluada 2026-07-14. Pedida por el humano en el chat (no venia del backlog; se registro al vuelo).
+  **ALCANCE RECORTADO POR EVALUACION, y esto es lo importante:** el pedido literal tenia DOS mitades y
+  **la primera YA EXISTE** -- verificado en el codigo, no supuesto. El humano confirmo que era contexto,
+  no un bug. La gestion nace con `cierre_id = NULL` (feature 36) y `CierreDiaRepository` lista
+  exactamente esas (`where: {mensajeroId, cierreId: null}`, feature 37/R2-R3), asi que las 4 tablas del
+  modulo (`CierreDiaModule.tsx`: Entregadas/Reprogramadas/Devueltas/Rechazadas) YA se llenan en vivo al
+  gestionar; el vinculo formal al `CierreDia` se sella al pulsar "Solicitar cierre" (todo-o-nada). **NO
+  se rehace nada de eso.** La feature es SOLO el DESHACER.
+  **Decisiones del humano (valen como parte de la gate F1.4):** (1) VENTANA = solo con
+  `cierre_id IS NULL`, o sea ANTES de solicitar el cierre -- despues los totales son snapshot, el admin
+  los revisa (38) y al aprobar alimentan la wallet (42/43/44); deshacer ahi obligaria a revertir dinero
+  asentado. (2) RASTRO = la gestion se ANULA dejando huella (quien, cuando, quien deshizo), NO se
+  borra; coherente con el append-only del historial (ADR-004 / feature 49).
+  complexity=high (no medium) por el radio: toca la maquina de estados, el choke point de la 49, el
+  puntero 1-a-1 de la 36 y TRES derivadores (intentos 47, pago mensajero 39, ingreso bodega 56).
+  DECISION DE PROCESO (leader): NO se parte el entry; un ciclo fullstack (backend_dev -> frontend_dev,
+  un PR), precedente 16/24/30/41/46. Rama desde `origin/dev` (`7cf2393`, ya con #66/#67/#68/#70).
+  **HALLAZGO CRITICO para el spec (lo encontro el leader cruzando el pedido con la arquitectura):** el
+  contador de intentos de la feature 47 NO es una columna, se **DERIVA** del historial contando
+  transiciones a `devuelta`, y ese historial es **append-only por diseno**. Si se deshace una gestion
+  `devuelta` erronea, **el intento SEGUIRIA CONTANDO** y a los 3 la orden escala sola a `rechazada`. El
+  spec DEBE resolver como la anulacion excluye ese intento del derivador SIN romper la inmutabilidad
+  del historial. Sin eso, la feature deja un bug silencioso en el camino del dinero.
+  Preguntas ABIERTAS para F1.4 (el spec_author las formaliza; ver la descripcion de la 64 en
+  `feature_list.json` para el detalle a-g): contador de intentos derivado (la de arriba), estado destino
+  al deshacer + registro por `appendCambioEstado`, puntero `usuario.orden_en_gestion_id` (que pasa si ya
+  hay otra orden en gestion), mecanismo de anulacion (`anulada_at`/`anulada_por` + migracion con
+  down.sql?) y su exclusion de los 4 grupos/totales/derivadores 39 y 56, evidencia en el bucket privado
+  (se conserva o se borra), quien puede deshacer (solo el propio mensajero? tambien admin?), y el dinero
+  (una `entregada` con `montoRecibido` deshecha: el efectivo sigue con el mensajero; confirmar que no
+  hay impacto en wallet mientras el cierre no se apruebe).
 
 - `Orden lista actualizada` (id 63): **zone=fullstack, complexity=medium,
   branch=feature/63-orden-lista-actualizada, depends_on=null** (el humano confirmo que NO depende

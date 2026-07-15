@@ -1329,3 +1329,41 @@
   (reviewer, no bloqueante): numeración "R" mezclada entre features 55 y 59 en algún docstring/test
   (cosmético); sin test del enriquecimiento perezoso de provincia al navegar en edición. **PENDIENTE**: PR a
   `dev` + merge (OK humano). Frontend puro → sin acción de despliegue/migración.
+
+## 2026-07-14 — 63 (Orden lista actualizada) + saneamiento de `dev` (PRs #66/#67/#68/#70)
+- **Feature 63** (PR #65 mergeado): endpoint nuevo `listarOrderStatus`, `filter: {[campo]: value}` como
+  whitelist estricta en `listarOrdenes` (mapa `FILTER_TO_COLUMN`, sin inyección; compone con el alcance
+  por rol), y Tabs de shadcn por estado con **montaje diferido real** (una tab no visitada hace 0 queries;
+  `visited.has(id) ? Module : null`, no CSS) y prop `exclude`. Mensajero/adminSatélite fuera del v1.
+- Requisitos cubiertos: R1–R20, todos con test (92 tests propios, 6 archivos).
+- **Cierre con matiz:** el reviewer la había RECHAZADO por 1 bloqueante — sus commits colaron en
+  `ordenes-columns.tsx` cambios FUERA DE ALCANCE (columna `zona`: 14 vs 13; `Estatus`→`Estado`,
+  `Flete`→`Flete + IVA`) que regresaron 3 tests VERDES (OrdenesPage D1/D3, AdminTiendaDashboard R11). El
+  reviewer ofrecía revertir **o** ratificar con tests actualizados; se tomó la segunda: el PR #64 actualizó
+  ambos archivos de test. Verificado antes de cerrar: **15/15 verde**, afirmando las etiquetas nuevas
+  (tests actualizados, NO borrados). El typecheck rojo del review era de baseline, saldado por #68/#70.
+- **Saneamiento de `dev` (misma sesión).** `dev` estaba ROJO sin que nadie lo supiera: 28 tests y 35
+  errores de typecheck. Bisectado: `26b6c19` (PR #63) VERDE → `8706032` (**PR #64 "adjustments"**) ROJO.
+  - **#66**: `down.sql` faltante en `20260714123909` (única de 45 sin reversa). Round-trip verificado
+    contra Postgres local: down → 5 FKs a RESTRICT + enum con sus 13 valores → migration.sql → estado
+    restaurado. El enum era huérfano al borrarse (ninguna columna lo usaba: el ciclo de vida vive como
+    FILA en `order_status`), por eso se recrea solo el tipo. No incluye `pendiente` (es posterior).
+  - **#67**: **el gate mentía.** `run_if` usaba `A && { B } || C`: un script que fallaba caía en el `||`,
+    reportaba "script no definido, se omite" y devolvía 0 → **"init OK" con la suite roja**. Por ahí se
+    coló el #64. Ahora: pnpm-ausente / script-no-definido → warn; **script-falló → rojo + exit 1**.
+  - **#68**: 4 bugs REALES que los tests rojos cazaban bien. El peor: **`<ZonasModule>` borrado del render
+    de `/configuracion`** (import y `zonasData` quedaron como código muerto; ESLint lo avisaba entre 140
+    warnings) → el maestro no podía administrar zonas, y como `esCentral` solo se marca ahí, sin él
+    `findCentralZonaId()`=null y no se asignan órdenes. También: geografía de ejemplo de vuelta a
+    **Ecuador por 3ª vez** (→ San José/San José/Carmen, verificado contra los XLSX reales del seed);
+    guarda de catálogo repuesta en `GuiaAsignacionService` (casteaba `as string` sin chequear null); y la
+    denylist de `zonas-migration.test.ts` (el #64 apendió 7 migraciones sin extenderla).
+  - **#70** (reemplaza al #69, mergeado por error contra la rama base ya consumida): migra los tests de
+    tarifas al modelo `tiendaId`/`status`. Solo `tests/`, cero producción. 77→84 tests; ninguno borrado ni
+    aflojado ("rechaza zonaId ausente" → "rechaza nombre/zonaId del modelo viejo (strict)", más fuerte).
+- Verificación: **suite 2652/2652 VERDE** (294/294 archivos), typecheck **35 → 2**, lint 0 errores.
+- Decisiones/deuda: `init.sh` **sigue ROJO con razón** — corta en typecheck por los 2 errores reales de la
+  **feature 65** (`TarifaVigentePorZonaRepository` rompería aprobar un cierre; `seed-zonas.ts`). Aparcada a
+  propósito por el humano. Features **35/60/62 ANULADAS** (`cancelled` + `status_note`, no borradas).
+  Deudas de arnés registradas en `current.md`: `jq` ausente hacía que las reglas 3 y 4 de `init.sh` nunca
+  corrieran; denylist frágil en `zonas-migration.test.ts`; fakes de repos triplicados a mano.

@@ -356,11 +356,12 @@
       "id": 35,
       "name": "estados de orden en tiempo real",
       "description": "Todos los modulos que muestran ordenes (admin de tienda, admin maestro, admin de bodega satelite y mensajero) deben reflejar en TIEMPO REAL el estado actual de cada orden, sin recargar. A medida que una orden cambia de estado a lo largo del flujo (en_preparacion, en_fulfillment, en_espera_aceptacion, en_bodega, en_ruta_bodega_satelite, en_bodega_satelite, entregada, reprogramada, devuelta, rechazada, etc.), el cambio se ve reflejado en vivo en la vista de cada rol que corresponda. ABIERTO a decidir en spec: mecanismo (Supabase Realtime sobre la tabla orden, recomendado dado el stack, vs. polling/revalidacion con SWR). Fullstack (suscripcion realtime + cableado en las vistas de ordenes). Transversal: afecta las vistas de las features 7, 17, 26, 30, 33, 34 y el modulo del mensajero (feature 36).",
-      "status": "pending",
-      "sdd": true,
+      "status": "cancelled",
+      "sdd": false,
       "complexity": null,
       "zone": null,
-      "branch": null
+      "branch": null,
+      "status_note": "ANULADA 2026-07-14 por decision explicita del humano: el flujo tomo otro rumbo y ya no se hace. NO se borra la entrada: se conserva por trazabilidad (por que se considero y por que se descarto). `sdd` pasa a false porque una feature anulada no tiene obligacion de proceso SDD; ademas init.sh (regla 4) le exigiria carpeta de specs a toda feature sdd:true fuera de `pending`, y marcarla cancelled con sdd:true pondria el init en rojo por un motivo falso. Nota de arnes: `cancelled` NO pertenece al vocabulario de estados original (pending/spec_ready/in_progress/done); el arreglo limpio seria ensenarle el estado a init.sh y quitar el sdd:false, pero eso toca init.sh (PR #67, gate) y se dejo fuera de alcance."
     },
     {
       "id": 36,
@@ -649,12 +650,13 @@
       "id": 60,
       "name": "campana de notificaciones (recuperar NotificationsBell del #54 sobre dev real)",
       "description": "RECUPERAR la campana de notificaciones que traia el PR #54 'adjustments'. Contexto: el #54 anadio `components/shared/NotificationsBell.tsx` y lo renderizaba en el topbar del `PageHeader` (junto al logout 'Salir'), pero el #54 fue REVERTIDO de dev (PR #55) porque ademas rompia la cadena wallet (42/43/44) y la trazabilidad (49); con el revert se perdio tambien esta UI. El humano quiere la campana de vuelta, reconstruida SOBRE el dev real (origin/dev post-revert), SIN arrastrar nada de lo roto. El codigo original vive en `origin/adjustments`/`dev` local (=1dd0c0d): `components/shared/NotificationsBell.tsx` (revisar si era funcional o un stub de UI) + su uso en `PageHeader.tsx`. Alcance ABIERTO para spec: (a) que notifica exactamente (cambios de estado de orden? cierres? postulaciones?) — se relaciona con la feature 35 'estados de orden en tiempo real', decidir si 60 depende de/absorbe parte de 35; (b) fuente de datos (polling vs realtime/supabase); (c) modelo de notificacion (tabla nueva? derivado?); (d) ubicacion: en el topbar del PageHeader, a la izquierda del logout de la feature 57 (que ya lo pone ahi). Requiere revisar el NotificationsBell del #54 antes de fijar alcance (no reintroducir dependencias del refactor de zonas/tarifas revertido). Fullstack probable (bell UI + backend de notificaciones). Depende de la feature 57 (logout en el PageHeader, comparten el topbar) y se relaciona con la 35.",
-      "status": "pending",
-      "sdd": true,
+      "status": "cancelled",
+      "sdd": false,
       "complexity": null,
       "zone": null,
       "branch": null,
-      "depends_on": 57
+      "depends_on": 57,
+      "status_note": "ANULADA 2026-07-14 por decision explicita del humano: el flujo tomo otro rumbo y ya no se hace. Se conserva por trazabilidad (ver la nota de la feature 35 para el porque de `sdd:false` y del estado `cancelled` fuera del vocabulario original)."
     },
     {
       "id": 61,
@@ -672,22 +674,46 @@
       "id": 62,
       "name": "Orden flete",
       "description": "al ingresar una nueva orden debe tomar el valor del flete",
-      "status": "pending",
-      "sdd": true,
+      "status": "cancelled",
+      "sdd": false,
       "complexity": null,
       "zone": null,
       "branch": null,
-      "depends_on": 57
+      "depends_on": 57,
+      "status_note": "ANULADA 2026-07-14 por decision explicita del humano: el flujo tomo otro rumbo y ya no se hace. Se conserva por trazabilidad (ver la nota de la feature 35 para el porque de `sdd:false` y del estado `cancelled` fuera del vocabulario original). Nota de evaluacion del leader (por si el tema vuelve): su `depends_on: 57` (logout) parecia un error de dato -- el flete no tiene relacion con el boton de cerrar sesion. Y el tema tocaba de lleno la deuda registrada en la feature 65: el flete sale de la tarifa, que el PR #64 remodelo de por-zona a por-tienda."
     },
     {
       "id": 63,
       "name": "Orden lista actualizada",
       "description": "genera un nuevo endpoint para traer la lista de order_status, tambien en la lista de ordenes agrega una porp que permita filtrar al backend por campo por ejemplo filter: {[campo]: value}, y consulta el listado de ordenes filtrado por status_id, adicional cambia el componente de orden para todos excepto el mensajero, al iterar por los status deja una prop exlcude en el front, para pasarle que status debe excluir y no mostrar, con shadcn, implementa el componente Tabs, en cada tab debe mostrar las ordenes con el estado correspondiente, implementa lazy loading para evitar que se renderice de forma innecesaria, y la consulta solo debe hacerse al estar en la tab activa, las no visibles no deben hacer query directamente",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/63-orden-lista-actualizada",
+      "depends_on": null,
+      "status_note": "done 2026-07-14. PR #65 MERGEADO a dev (2026-07-15T02:25Z). Nucleo R1-R20 completo y verde (92 tests propios; ver progress/impl_63 y progress/review_63). CIERRE CON MATIZ, verificado por el leader antes de marcar done: el reviewer la habia RECHAZADO por 1 bloqueante -- los commits de la 63 colaron en `ordenes-columns.tsx` cambios FUERA DE ALCANCE (columna `zona` nueva: 14 vs 13; headers Estatus->Estado y Flete->Flete + IVA) que regresaron 3 tests VERDES en la base de rama (OrdenesPage D1/D3, AdminTiendaDashboard R11). El reviewer ofrecia dos salidas: revertir esos cambios, o ratificarlos en un cambio aparte CON sus tests actualizados. Se tomo la SEGUNDA: el PR #64 'adjustments' actualizo tests/components/OrdenesPage.test.tsx y AdminTiendaDashboard.test.tsx a las etiquetas/columnas nuevas. Verificado hoy sobre dev: esos 2 archivos dan 15/15 verde y afirman `Estado`, `Flete + IVA` y la columna `Zona` (tests actualizados, NO borrados). El bloqueante queda resuelto por ratificacion. El typecheck rojo que el reviewer reporto era de BASELINE (adjustments), no de la 63, y quedo saldado por los PRs #68/#70."
+    },
+    {
+      "id": 64,
+      "name": "deshacer gestion - devolver una orden a gestion",
+      "description": "PEDIDO DEL HUMANO (2026-07-14, textual): 'la gestion que el mensajero le haga a sus ordenes debe estar atada al cierre del dia del mismo mensajero, por ende cada que se haga una gestion, esa orden debe relacionarse en las tablas que existen en el modulo cierre del dia, con la opcion de devolverla a la gestion en caso de haberse equivocado a la hora de gestionarla'. ALCANCE ACOTADO POR EL HUMANO tras la evaluacion del leader: la PRIMERA MITAD YA EXISTE y NO se rehace -- el modulo /cierre-dia ya tiene las 4 tablas (Entregadas/Reprogramadas/Devueltas/Rechazadas) y se alimentan en vivo de las gestiones del dia, porque la gestion nace con `cierre_id = NULL` (feature 36) y CierreDiaRepository lista exactamente esas (`where: {mensajeroId, cierreId: null}`, feature 37/R2-R3); el vinculo formal al CierreDia se sella al pulsar 'Solicitar cierre' (todo-o-nada). LA FEATURE ES EL DESHACER: devolver una orden a gestion cuando el mensajero se equivoco al gestionarla. DECISIONES DEL HUMANO (equivalen a parte de la gate F1.4): (1) VENTANA -> solo mientras la gestion tenga `cierre_id IS NULL`, es decir ANTES de solicitar el cierre; una vez solicitado, los totales son snapshot y el admin los revisa (feature 38), y si se aprueba alimenta la wallet (42/43/44) -- deshacer despues obligaria a revertir dinero ya asentado. (2) RASTRO -> la gestion se ANULA dejando rastro (quien la hizo, cuando, quien la deshizo), NO se borra; coherente con el diseno append-only del historial (ADR-004 / feature 49). ABIERTO para el spec_author: (a) CONTADOR DE INTENTOS -- HALLAZGO CRITICO del leader: el contador de la feature 47 NO es columna, se DERIVA del historial contando transiciones a `devuelta`, y el historial es append-only por diseno; si se deshace una gestion `devuelta` erronea el intento SEGUIRIA CONTANDO y a los 3 la orden escala sola a `rechazada`. El spec DEBE resolver como la anulacion excluye ese intento del derivador SIN romper la inmutabilidad del historial. (b) estado destino de la orden al deshacer (volver a `en_reparto`?) y como se registra la transicion por el choke point `appendCambioEstado` (nunca escribir estatus_id directo). (c) puntero `usuario.orden_en_gestion_id` (feature 36/R19-R21, 1-a-1): al deshacer se repone? que pasa si el mensajero ya tiene OTRA orden en gestion. (d) mecanismo de anulacion (columna `anulada_at`/`anulada_por` en gestion_orden + migracion con down.sql, vs. otra forma) y como se excluye de los 4 grupos y de los totales/derivadores (pago mensajero feature 39, ingreso bodega rechazo feature 56). (e) evidencia en el bucket privado: se conserva o se borra al anular. (f) quien puede deshacer (solo el propio mensajero? tambien admin?) y autorizacion server-side por rol. (g) dinero: una `entregada` con montoRecibido que se deshace -- el efectivo sigue fisicamente con el mensajero; confirmar que no hay impacto en wallet mientras el cierre no se aprueba. Fullstack (backend: anulacion + transicion atomica por el choke point + exclusion en derivadores; frontend: accion por fila en las 4 tablas de CierreDiaModule).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/64-deshacer-gestion",
+      "depends_on": 37
+    },
+    {
+      "id": 65,
+      "name": "BUG - tarifa vigente por zona quedo colgada del modelo viejo (rompe aprobar cierre)",
+      "description": "BUG REAL de produccion detectado 2026-07-14 al reconciliar el PR #64 (registrado como feature por la regla del arnes: cada bug de codigo se registra como feature). NO tocar hasta que el humano decida el diseno: lo aparco a proposito ('aun no llegamos a esa parte del flujo'). QUE PASA: `lib/repositories/TarifaVigentePorZonaRepository.ts:22` consulta `where: { zonaId, deletedAt: null }` sobre `tarifa`, pero el PR #64 BORRO la columna `Tarifa.zonaId` al remodelar la tarifa de por-ZONA a por-TIENDA (`tiendaId` + `status`). Typecheck lo grita: TS2353 'zonaId' does not exist in type 'TarifaWhereInput'. NO ES CODIGO MUERTO: `lib/actions/cierres-admin.ts:69,74` lo inyecta en WalletFeedService y WalletTiendaFeedService, que alimentan la wallet AL APROBAR UN CIERRE (features 42/43) -> en runtime Prisma tiraria 'Unknown argument zonaId' y APROBAR UN CIERRE REVENTARIA. Por que la suite no lo ve: TODOS los tests mockean ITarifaVigentePorZonaRepository; la unica implementacion real no tiene cobertura (hueco de test, no solo un bug). NO ES UN FIX MECANICO zonaId->tiendaId: el concepto 'tarifa vigente por ZONA' deja de estar bien definido si la tarifa cuelga de una TIENDA -> requiere DECISION DE DISENO del humano (el cierre resuelve la tarifa por la tienda de la orden? se conserva un concepto por zona en paralelo? que pasa si la tienda no tiene tarifa?). INCLUYE ADEMAS: `scripts/seed-zonas.ts:257` escribe `distrito.zonaId`, columna que dropeo la migracion 20260713000000_drop_distrito_zona_id (la zona del distrito vive hoy en la N:M `zona_distrito`, feature 24); ese seed ya estaba pendiente del Excel de zonas. IMPACTO EN EL ARNES: estos 2 son los UNICOS errores de typecheck de dev, y con el gate de init.sh ya honesto (PR #67) hacen que `./init.sh` corte en ROJO en typecheck sin llegar a correr los tests -- la suite en si esta VERDE (2652/2652). Mientras no se salden, init.sh no sirve de semaforo de arranque. Al cerrar esta feature: cubrir con test la implementacion real (hoy sin red).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": null,
       "depends_on": null
     }
   ]
