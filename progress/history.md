@@ -1329,3 +1329,87 @@
   (reviewer, no bloqueante): numeración "R" mezclada entre features 55 y 59 en algún docstring/test
   (cosmético); sin test del enriquecimiento perezoso de provincia al navegar en edición. **PENDIENTE**: PR a
   `dev` + merge (OK humano). Frontend puro → sin acción de despliegue/migración.
+
+## 2026-07-14 — 63 (Orden lista actualizada) + saneamiento de `dev` (PRs #66/#67/#68/#70)
+- **Feature 63** (PR #65 mergeado): endpoint nuevo `listarOrderStatus`, `filter: {[campo]: value}` como
+  whitelist estricta en `listarOrdenes` (mapa `FILTER_TO_COLUMN`, sin inyección; compone con el alcance
+  por rol), y Tabs de shadcn por estado con **montaje diferido real** (una tab no visitada hace 0 queries;
+  `visited.has(id) ? Module : null`, no CSS) y prop `exclude`. Mensajero/adminSatélite fuera del v1.
+- Requisitos cubiertos: R1–R20, todos con test (92 tests propios, 6 archivos).
+- **Cierre con matiz:** el reviewer la había RECHAZADO por 1 bloqueante — sus commits colaron en
+  `ordenes-columns.tsx` cambios FUERA DE ALCANCE (columna `zona`: 14 vs 13; `Estatus`→`Estado`,
+  `Flete`→`Flete + IVA`) que regresaron 3 tests VERDES (OrdenesPage D1/D3, AdminTiendaDashboard R11). El
+  reviewer ofrecía revertir **o** ratificar con tests actualizados; se tomó la segunda: el PR #64 actualizó
+  ambos archivos de test. Verificado antes de cerrar: **15/15 verde**, afirmando las etiquetas nuevas
+  (tests actualizados, NO borrados). El typecheck rojo del review era de baseline, saldado por #68/#70.
+- **Saneamiento de `dev` (misma sesión).** `dev` estaba ROJO sin que nadie lo supiera: 28 tests y 35
+  errores de typecheck. Bisectado: `26b6c19` (PR #63) VERDE → `8706032` (**PR #64 "adjustments"**) ROJO.
+  - **#66**: `down.sql` faltante en `20260714123909` (única de 45 sin reversa). Round-trip verificado
+    contra Postgres local: down → 5 FKs a RESTRICT + enum con sus 13 valores → migration.sql → estado
+    restaurado. El enum era huérfano al borrarse (ninguna columna lo usaba: el ciclo de vida vive como
+    FILA en `order_status`), por eso se recrea solo el tipo. No incluye `pendiente` (es posterior).
+  - **#67**: **el gate mentía.** `run_if` usaba `A && { B } || C`: un script que fallaba caía en el `||`,
+    reportaba "script no definido, se omite" y devolvía 0 → **"init OK" con la suite roja**. Por ahí se
+    coló el #64. Ahora: pnpm-ausente / script-no-definido → warn; **script-falló → rojo + exit 1**.
+  - **#68**: 4 bugs REALES que los tests rojos cazaban bien. El peor: **`<ZonasModule>` borrado del render
+    de `/configuracion`** (import y `zonasData` quedaron como código muerto; ESLint lo avisaba entre 140
+    warnings) → el maestro no podía administrar zonas, y como `esCentral` solo se marca ahí, sin él
+    `findCentralZonaId()`=null y no se asignan órdenes. También: geografía de ejemplo de vuelta a
+    **Ecuador por 3ª vez** (→ San José/San José/Carmen, verificado contra los XLSX reales del seed);
+    guarda de catálogo repuesta en `GuiaAsignacionService` (casteaba `as string` sin chequear null); y la
+    denylist de `zonas-migration.test.ts` (el #64 apendió 7 migraciones sin extenderla).
+  - **#70** (reemplaza al #69, mergeado por error contra la rama base ya consumida): migra los tests de
+    tarifas al modelo `tiendaId`/`status`. Solo `tests/`, cero producción. 77→84 tests; ninguno borrado ni
+    aflojado ("rechaza zonaId ausente" → "rechaza nombre/zonaId del modelo viejo (strict)", más fuerte).
+- Verificación: **suite 2652/2652 VERDE** (294/294 archivos), typecheck **35 → 2**, lint 0 errores.
+- Decisiones/deuda: `init.sh` **sigue ROJO con razón** — corta en typecheck por los 2 errores reales de la
+  **feature 68** (`TarifaVigentePorZonaRepository` rompería aprobar un cierre; `seed-zonas.ts`). Aparcada a
+  propósito por el humano. Features **35/60/62 ANULADAS** (`cancelled` + `status_note`, no borradas).
+  Deudas de arnés registradas en `current.md`: `jq` ausente hacía que las reglas 3 y 4 de `init.sh` nunca
+  corrieran; denylist frágil en `zonas-migration.test.ts`; fakes de repos triplicados a mano.
+
+## 2026-07-15 — 67 (deshacer gestión: devolver una orden a gestión)
+- El mensajero puede devolver una orden a gestión desde las 4 tablas del cierre del día cuando se
+  equivocó al gestionarla. La gestión se **anula dejando rastro** (`anulada_at`/`anulada_por`), no se
+  borra, y solo mientras no haya solicitado el cierre (`cierre_id IS NULL`).
+- Requisitos cubiertos: **R1–R38**, todos con test real (mapa en `progress/impl_67-deshacer-gestion.md`).
+- **Alcance recortado en la evaluación, y fue lo más valioso del ciclo.** El pedido tenía dos mitades
+  y **la primera ya existía**: la gestión nace con `cierre_id=NULL` (feature 36) y
+  `CierreDiaRepository` lista exactamente esas (37/R2-R3), así que las 4 tablas ya se llenaban en
+  vivo. Verificado en el código, no supuesto; el humano confirmó que era contexto → la feature fue
+  **solo el deshacer**. No se rehízo nada de lo que ya funcionaba.
+- **Lo difícil no fue el botón; fueron dos cosas que ningún test existente cubría:**
+  1. **Los 3 `WHERE`.** La gestión anulada debe quedar fuera de `findGestionesPendientes:120`,
+     **`crearCierre:196`** y `CorteDiario:33`. El segundo es el punto money-critical: su
+     `updateMany({where:{mensajeroId, cierreId:null}})` le habría puesto `cierre_id` a una gestión
+     deshecha y **la wallet la habría cobrado al aprobar** → la feature habría creado justo el bug
+     que viene a evitar. Lo encontró el `spec_author` leyendo el código, no la bitácora.
+  2. **El contador de intentos.** El de la feature 47 no es una columna: se **deriva** del historial
+     contando transiciones a `devuelta`, y el historial es append-only por diseño (49). Sin resolverlo,
+     deshacer una `devuelta` errónea dejaba el intento contando y a los 3 la orden escalaba sola a
+     `rechazada`. Se resolvió filtrando **en lectura**, sin tocar el historial, desambiguando por
+     `origen_tipo` — porque `gestion_orden_id IS NULL` significa dos cosas ("nunca tuvo gestión" vs
+     "se borró y la FK lo vació"). Ante la duda, la huérfana **no** cuenta: contar de menos es
+     inofensivo, contar de más cobra mal.
+- **Deshacer no es "volver al estado anterior":** una gestión `devuelta` deja la orden en `en_bodega*`
+  con `mensajero_asignado_id` limpio (47), o escalada a `rechazada` → hay que reponer la asignación (R19).
+- **F1.4-i:** la FK `orden_historial_estado.gestion_orden_id` volvió de `SET NULL` a **`RESTRICT`**,
+  completa (modelo + SQL, migración `20260714170000`). Nació de un **error del spec** que el leader
+  cazó: afirmaba que el DELETE era imposible por una FK `RESTRICT` cuando la `20260714123909` (PR #66,
+  del día anterior) la había dejado en `SET NULL`. La decisión de anular seguía siendo la correcta,
+  pero por el diseño append-only, no por una protección inexistente. El predicado del contador sigue
+  siendo obligatorio: la FK es defensa en profundidad, no su reemplazo.
+- Verificación: **2764 tests / 296 archivos / 0 fallos** · typecheck **2 = baseline exacto** (0 nuevos)
+  · lint 0 errores · `migrate diff` sin drift · round-trip REAL de las 2 migraciones contra Postgres
+  vivo, repetido por el reviewer en tx con `ROLLBACK` · estado vivo: enum 12, FK `confdeltype='r'`,
+  RLS `gestion_orden` true/0 policies. Reviewer **APROBADO 0 bloqueantes de código** (el RECHAZADO
+  inicial fue solo por 2 gates documentales del leader, ya cerrados; precedente 59).
+- Decisiones/deuda: **HALLAZGO que sube la urgencia de la feature 68** — al correr `pnpm build` por
+  primera vez en el cierre, **falla** en `TarifaVigentePorZonaRepository.ts:22`: Next.js typechequea al
+  construir, así que **`dev` no compila y nada se despliega**. Cuando se aparcó el bug nadie lo sabía;
+  no es runtime dormido, es bloqueo de despliegue. Por lo mismo `./init.sh` corta en typecheck sin
+  llegar a los tests → la verificación se hizo con comandos directos y así se reporta, sin apoyarse en
+  un gate que hoy no llega. Menores (ninguno gatea el PR): E2E de T21 escrito y no ejecutado (sin
+  harness e2e); `db:rollback` no alcanza la 1.ª de las 2 migraciones (limitación preexistente del
+  script); `unauthenticated` con mensaje genérico; tests R13/R14/R15 del service algo tautológicos.
+  El typo "desha" (única cadena que ve el usuario) sí se corrigió antes del PR.

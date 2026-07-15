@@ -14,10 +14,12 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
+  DeshacerGestionServiceResult,
   ICierreDiaService,
   ListarCierreDiaServiceResult,
   SolicitarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierreDiaService";
+import type { GestionResultado } from "@prisma/client";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import {
   computeTotales,
@@ -39,12 +41,45 @@ const MSG_VACIO = "No tenes gestiones pendientes de cierre."; // R11
 const MSG_DUPLICADO = "Ya tenes un cierre solicitado pendiente de aprobacion."; // R12
 const MSG_SIN_ZONA = "No tenes una zona asignada; contacta a tu administrador."; // R16
 
+// Feature 67 — mensajes ACCIONABLES del deshacer (constantes i18n-ready, patron MSG_* de la 37).
+const MSG_YA_EN_CIERRE = "Esta gestion ya esta incluida en un cierre solicitado; no se puede deshacer."; // R2
+const MSG_YA_DESHECHA = "Esta gestion ya fue deshecha."; // R3
+const MSG_NO_ES_LA_ULTIMA = "Esta orden tiene una gestion mas reciente; hay que deshacer esa primero."; // R4
+const MSG_ORDEN_MOVIDA = "Esta orden ya fue procesada por la bodega; ya no se puede deshacer."; // R5
+const MSG_ORDEN_BORRADA = "Esta orden fue eliminada; ya no se puede deshacer su gestion."; // R6
+const MSG_CATALOGO = "catalogo de estados incompleto (seed pendiente)"; // patron `gestionar` (36)
+
+// Feature 67/R18: unico estado desde el que se puede volver a gestionar (`ORIGEN_GESTION` de
+// MisAsignacionesService, guardia `cargarOrdenGestionable`). Destino del deshacer.
+const ESTADO_EN_REPARTO = "en_reparto";
+
+/**
+ * Feature 67/R5 (design §5.3) — REGLA: estado en el que la orden DEBE estar para que su gestion
+ * sea deshacible, derivado del `resultado` de esa gestion. Es la guardia de "la orden no se
+ * movio": si la bodega ya la reasigno/ruteo/recibio, o el cron libero una `reprogramada`, o se
+ * devolvio a la tienda de origen, o un admin ajusto el estado, el deshacer es peligroso -> conflict.
+ * Derivado de `crearGestionYTransicionar` + `resolverSeguimientoDevuelta` (verificado):
+ *   - entregada/reprogramada/rechazada: destino = `resultado`, sin seguimiento.
+ *   - devuelta: la 47 emite un SEGUIMIENTO en la MISMA tx y la orden NUNCA reposa en `devuelta`
+ *     (reintento -> `en_bodega`/`en_bodega_satelite`; escalado -> `rechazada`). `devuelta` se
+ *     acepta SOLO por defensa ante filas anteriores a la 47.
+ */
+const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
+  entregada: ["entregada"],
+  reprogramada: ["reprogramada"],
+  rechazada: ["rechazada"],
+  devuelta: ["en_bodega", "en_bodega_satelite", "rechazada", "devuelta"],
+};
+
 // Metodos de repo que consume el service (inyeccion por constructor). Se declaran
 // como Pick para dobles de test sin DB/red (patron RecepcionSateliteService).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 39: ademas de la zona (37), el service resuelve el vehiculo del mensajero
-// para el resolver de tarifa.
-type OrdenRepo = Pick<IOrdenRepository, "findUsuarioZonaId" | "findUsuarioVehiculoId">;
+// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_reparto`).
+type OrdenRepo = Pick<
+  IOrdenRepository,
+  "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue"
+>;
 
 /**
  * Feature 37 — logica de negocio del "Cierre del dia" del mensajero. Lista el
@@ -219,6 +254,70 @@ export class CierreDiaService implements ICierreDiaService {
     if (cierreId === null) return { status: "conflict", motivo: MSG_VACIO };
 
     return { status: "ok", cierreId, totales, destinoTipo };
+  }
+
+  /**
+   * Feature 67 (design §5.2) — REGLA del deshacer: 8 guardias antes de la UNICA escritura.
+   * Todas devuelven SIN efectos. El orden importa: autz (R8/R9) antes que negocio, y las
+   * lecturas mas baratas primero.
+   */
+  async deshacerGestion(gestionId: string, actor: Actor): Promise<DeshacerGestionServiceResult> {
+    // 1) R8 (F1.4-f): SOLO el rol mensajero, antes de tocar el repo. El admin no tiene ventana
+    // para deshacer (la ventana muere al solicitar el cierre, que es cuando el admin lo ve).
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" };
+
+    // 2) R9: inexistente -> forbidden (NO se distingue de ajena, patron 36/R31: no revela que
+    // la gestion existe).
+    const gestion = await this.repo.findGestionParaDeshacer(gestionId);
+    if (gestion === null) return { status: "forbidden" };
+
+    // 3) R9: gestion de OTRO mensajero -> forbidden, sin exponer ningun dato suyo.
+    if (gestion.mensajeroId !== actor.usuarioId) return { status: "forbidden" };
+
+    // 4) R2 (decision 1 del humano): la VENTANA es `cierre_id IS NULL`. Ya vinculada a un
+    // cierre = sus totales estan snapshoteados y la wallet la cobrara al aprobar -> conflict.
+    if (gestion.cierreId !== null) return { status: "conflict", motivo: MSG_YA_EN_CIERRE };
+
+    // 5) R3: ya anulada -> conflict. Un segundo envio NO vuelve a transicionar la orden.
+    if (gestion.anuladaAt !== null) return { status: "conflict", motivo: MSG_YA_DESHECHA };
+
+    // 6) R6: orden borrada (soft-delete) -> conflict.
+    if (gestion.orden.deletedAt !== null) return { status: "conflict", motivo: MSG_ORDEN_BORRADA };
+
+    // 7) R4: solo se deshace la gestion NO anulada mas reciente de la orden.
+    const ultimaId = await this.repo.findUltimaGestionNoAnuladaId(gestion.ordenId);
+    if (ultimaId !== gestion.gestionId) return { status: "conflict", motivo: MSG_NO_ES_LA_ULTIMA };
+
+    // 8) R5: la orden debe seguir EXACTAMENTE en el estado que dejo esa gestion. Si avanzo por
+    // otra via (bodega, cron de liberacion, devolucion a la tienda de origen, ajuste admin),
+    // arrancarla de ahi es peligroso -> conflict con mensaje accionable.
+    if (!ESTADOS_ESPERADOS[gestion.resultado].includes(gestion.orden.estatusValue)) {
+      return { status: "conflict", motivo: MSG_ORDEN_MOVIDA };
+    }
+
+    // R18: destino del deshacer. Catalogo incompleto -> validation_error (patron `gestionar`).
+    const estatusEnRepartoId = await this.ordenRepo.findEstatusIdByValue(ESTADO_EN_REPARTO);
+    if (estatusEnRepartoId === null) {
+      return { status: "validation_error", fieldErrors: { estatus: [MSG_CATALOGO] } };
+    }
+
+    // R11/R18-R23: UNICA escritura, atomica. `false` = una guardia del WHERE perdio la carrera
+    // dentro de la tx (p. ej. `solicitarCierre` vinculo la gestion primero, o la bodega movio
+    // la orden) -> rollback, sin efectos parciales -> conflict.
+    const ok = await this.repo.anularGestionYDevolverAGestion({
+      gestionId: gestion.gestionId,
+      ordenId: gestion.ordenId,
+      mensajeroId: gestion.mensajeroId, // R19: repone la asignacion al AUTOR de la gestion
+      actorUsuarioId: actor.usuarioId, // R11/R20: rastro de quien deshizo
+      estatusEsperadoId: gestion.orden.estatusId, // R5: id REAL leido (guardia optimista)
+      estatusEnRepartoId,
+    });
+    if (!ok) return { status: "conflict", motivo: MSG_ORDEN_MOVIDA };
+
+    // R32/R34: no se toca la evidencia (ni el objeto del bucket ni `evidencia_storage_path`) ni
+    // se produce movimiento de dinero: la wallet solo se alimenta al APROBAR el cierre, y una
+    // gestion con `cierre_id = NULL` jamas llega a los feeds.
+    return { status: "ok", ordenId: gestion.ordenId };
   }
 }
 

@@ -26,7 +26,11 @@ export class CorteDiarioRepository implements ICorteDiarioRepository {
    */
   async findMensajerosConActividadSinCierre(): Promise<MensajeroSinCierreRow[]> {
     const pendientes = await this.prisma.gestionOrden.findMany({
-      where: { cierreId: null }, // R7: actividad del dia aun sin cerrar
+      // R7: actividad del dia aun sin cerrar.
+      // Feature 67/R17: una gestion ANULADA (deshecha) NO es "actividad pendiente de cierre":
+      // un mensajero cuyas unicas gestiones del dia estan anuladas no debe recibir un cierre
+      // `vencido`. Usa el indice parcial `gestion_orden_mensajero_pendiente_idx`.
+      where: { cierreId: null, anuladaAt: null },
       distinct: ["mensajeroId"],
       select: { mensajeroId: true, mensajero: { select: { zonaId: true } } },
     });

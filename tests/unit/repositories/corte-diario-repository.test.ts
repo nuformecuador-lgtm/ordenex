@@ -61,6 +61,37 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     expect(prisma.cierreDia.findMany).not.toHaveBeenCalled();
   });
 
+  // Feature 67/R17: una gestion ANULADA (deshecha) NO es "actividad del dia pendiente de
+  // cierre". Un mensajero cuyas unicas gestiones del dia estan anuladas NO debe recibir un
+  // cierre `vencido` del corte diario (que ademas lo bloquearia para nuevas asignaciones).
+  it("67/R17: el WHERE exige `anuladaAt: null` (las gestiones deshechas no son actividad pendiente)", async () => {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findMany.mockResolvedValue([]);
+    const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
+
+    await repo.findMensajerosConActividadSinCierre();
+
+    const arg = prisma.gestionOrden.findMany.mock.calls[0][0];
+    expect(arg.where).toEqual({ cierreId: null, anuladaAt: null });
+  });
+
+  it("67/R17: un mensajero cuya unica gestion pendiente esta anulada queda FUERA del corte", async () => {
+    const prisma = buildPrisma();
+    // El WHERE `{ cierreId: null, anuladaAt: null }` no devuelve a m2 (su unica gestion del dia
+    // esta anulada): la query ya lo excluye en la base, no hace falta filtrar en memoria.
+    prisma.gestionOrden.findMany.mockImplementation(async (args: { where: Record<string, unknown> }) => {
+      expect(args.where.anuladaAt).toBe(null); // sin este filtro, m2 entraria al corte
+      return [{ mensajeroId: "m1", mensajero: { zonaId: "z1" } }];
+    });
+    prisma.cierreDia.findMany.mockResolvedValue([]);
+    const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findMensajerosConActividadSinCierre();
+
+    expect(rows).toEqual([{ mensajeroId: "m1", zonaId: "z1" }]);
+    expect(rows.map((r) => r.mensajeroId)).not.toContain("m2");
+  });
+
   it("propaga zonaId null (P2 lo maneja el service, no el repo)", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findMany.mockResolvedValue([

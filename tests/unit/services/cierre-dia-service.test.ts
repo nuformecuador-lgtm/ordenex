@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { CierreDiaService } from "@/lib/services/CierreDiaService";
 import type {
   CierreGestionPendienteRow,
+  GestionDeshacerRow,
   ICierreDiaRepository,
 } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
@@ -61,6 +62,25 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     existeCierreSolicitado: vi.fn(async () => false),
     crearCierre: vi.fn(async () => "c1"),
     findCierresByMensajero: vi.fn(async () => []),
+    // Feature 67: por defecto, una gestion `entregada` vigente del propio mensajero, sin
+    // cierre, que ES la mas reciente y cuya orden sigue en `entregada` -> deshacible (R1).
+    findGestionParaDeshacer: vi.fn(async () => gestionDeshacer()),
+    findUltimaGestionNoAnuladaId: vi.fn(async () => "g1"),
+    anularGestionYDevolverAGestion: vi.fn(async () => true),
+    ...overrides,
+  };
+}
+
+// Feature 67 — fila de la gestion candidata a deshacerse (default: caso feliz).
+function gestionDeshacer(overrides: Partial<GestionDeshacerRow> = {}): GestionDeshacerRow {
+  return {
+    gestionId: "g1",
+    ordenId: "o1",
+    mensajeroId: "m1", // el propio MENSAJERO actor
+    resultado: "entregada",
+    cierreId: null, // R1: dentro de la ventana
+    anuladaAt: null, // R1: vigente
+    orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
     ...overrides,
   };
 }
@@ -82,6 +102,8 @@ function newService(opts: {
   vehiculoMensajero?: string | null;
   tarifa?: PagoTarifa | null; // feature 39: tarifa resuelta (default TARIFA_DEFECTO)
   signedUrls?: ISignedUrlProvider;
+  // Feature 67: id de `en_reparto` en el catalogo (null = seed pendiente -> validation_error).
+  estatusEnRepartoId?: string | null;
 } = {}) {
   const repo = opts.repo ?? fakeRepo();
   const zonaRepo = {
@@ -90,7 +112,14 @@ function newService(opts: {
   const ordenRepo = {
     findUsuarioZonaId: vi.fn(async () => (opts.zonaMensajero === undefined ? ZONA_MENSAJERO : opts.zonaMensajero)),
     findUsuarioVehiculoId: vi.fn(async () => opts.vehiculoMensajero ?? null),
-  } as unknown as Pick<IOrdenRepository, "findUsuarioZonaId" | "findUsuarioVehiculoId">;
+    // Feature 67/R18: resuelve el destino `en_reparto`.
+    findEstatusIdByValue: vi.fn(async () =>
+      opts.estatusEnRepartoId === undefined ? "s-reparto" : opts.estatusEnRepartoId,
+    ),
+  } as unknown as Pick<
+    IOrdenRepository,
+    "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue"
+  >;
   const tarifa = opts.tarifa === undefined ? TARIFA_DEFECTO : opts.tarifa;
   const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
     resolvePagoTarifa: vi.fn(async () => tarifa),
@@ -693,5 +722,347 @@ describe("solicitarCierre — snapshot del ingreso de bodega por rechazos (R8/R1
     const r = await service.listarCierreDia(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.cierresPasados[0].totalIngresoBodegaRechazos).toBe("7.50"); // R14: no re-derivado
+  });
+});
+
+// ============================================================================
+// Feature 67 — deshacerGestion: la REGLA (8 guardias de design §5.2).
+// Cubre R1-R6, R8, R9, R18, R19, R29, R30, R32, R34 con dobles (sin DB/red).
+// ============================================================================
+
+describe("Feature 67 · deshacerGestion — ventana y elegibilidad (R1-R6)", () => {
+  it("R1: gestion vigente (cierreId null, no anulada), la mas reciente, orden en su sitio -> ok", async () => {
+    const { service, repo } = newService();
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
+  });
+
+  it("R2: gestion YA vinculada a un cierre -> conflict accionable, SIN escribir", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () => gestionDeshacer({ cierreId: "c1" })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("esperaba conflict");
+    expect(r.motivo).toMatch(/cierre/i);
+    // La ventana murio: el dinero ya esta snapshoteado y la wallet lo cobrara al aprobar.
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R3: gestion YA anulada -> conflict, sin efectos (un 2.º envio no re-transiciona la orden)", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({ anuladaAt: new Date("2026-07-14T10:00:00.000Z") }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("esperaba conflict");
+    expect(r.motivo).toMatch(/ya fue deshecha/i);
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R4: existe una gestion posterior NO anulada -> conflict, sin efectos", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () => gestionDeshacer({ gestionId: "g1" })),
+      findUltimaGestionNoAnuladaId: vi.fn(async () => "g2"), // hay una mas reciente
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("esperaba conflict");
+    expect(r.motivo).toMatch(/mas reciente/i);
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R6: orden borrada (soft-delete) -> conflict, sin efectos", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          orden: {
+            deletedAt: new Date("2026-07-14T09:00:00.000Z"),
+            estatusId: "s-entregada",
+            estatusValue: "entregada",
+          },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+});
+
+// R5: la guardia de "la orden no se movio" (F1.4-h), un caso por resultado. La tabla
+// ESTADOS_ESPERADOS sale de crearGestionYTransicionar + resolverSeguimientoDevuelta.
+describe("Feature 67 · deshacerGestion — guardia de estado de la orden (R5, F1.4-h)", () => {
+  const CASOS_OK = [
+    { resultado: "entregada" as const, estatusValue: "entregada", nota: "destino = resultado" },
+    { resultado: "reprogramada" as const, estatusValue: "reprogramada", nota: "destino = resultado" },
+    { resultado: "rechazada" as const, estatusValue: "rechazada", nota: "destino = resultado" },
+    { resultado: "devuelta" as const, estatusValue: "en_bodega", nota: "47: reintento a central" },
+    { resultado: "devuelta" as const, estatusValue: "en_bodega_satelite", nota: "47: reintento a satelite" },
+    { resultado: "devuelta" as const, estatusValue: "rechazada", nota: "47: escalado al umbral" },
+  ];
+
+  for (const c of CASOS_OK) {
+    it(`ok: gestion ${c.resultado} con la orden en ${c.estatusValue} (${c.nota})`, async () => {
+      const repo = fakeRepo({
+        findGestionParaDeshacer: vi.fn(async () =>
+          gestionDeshacer({
+            resultado: c.resultado,
+            orden: { deletedAt: null, estatusId: "s-x", estatusValue: c.estatusValue },
+          }),
+        ),
+      });
+      const { service } = newService({ repo });
+      const r = await service.deshacerGestion("g1", MENSAJERO);
+      expect(r.status).toBe("ok");
+    });
+  }
+
+  const CASOS_CONFLICT = [
+    { resultado: "entregada" as const, estatusValue: "en_bodega", nota: "la bodega ya la recibio" },
+    { resultado: "reprogramada" as const, estatusValue: "en_bodega", nota: "el cron de la 46 ya la libero" },
+    { resultado: "rechazada" as const, estatusValue: "devuelta_origen", nota: "48: ya se devolvio a la tienda" },
+    { resultado: "devuelta" as const, estatusValue: "en_reparto", nota: "la bodega la reasigno y ruteo" },
+    { resultado: "entregada" as const, estatusValue: "en_preparacion", nota: "ajuste administrativo" },
+  ];
+
+  for (const c of CASOS_CONFLICT) {
+    it(`conflict: gestion ${c.resultado} pero la orden esta en ${c.estatusValue} (${c.nota})`, async () => {
+      const repo = fakeRepo({
+        findGestionParaDeshacer: vi.fn(async () =>
+          gestionDeshacer({
+            resultado: c.resultado,
+            orden: { deletedAt: null, estatusId: "s-x", estatusValue: c.estatusValue },
+          }),
+        ),
+      });
+      const { service } = newService({ repo });
+
+      const r = await service.deshacerGestion("g1", MENSAJERO);
+
+      expect(r.status).toBe("conflict");
+      if (r.status !== "conflict") throw new Error("esperaba conflict");
+      expect(r.motivo).toMatch(/bodega|no se puede deshacer/i); // accionable (F1.4-h)
+      expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+    });
+  }
+});
+
+describe("Feature 67 · deshacerGestion — autorizacion (R8/R9)", () => {
+  it("R8 (F1.4-f): rol != mensajero -> forbidden, sin tocar el repo", async () => {
+    const repo = fakeRepo();
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", OTRO_ROL);
+
+    expect(r).toEqual({ status: "forbidden" });
+    // El admin NO tiene ventana para deshacer: ni siquiera se lee la gestion.
+    expect(repo.findGestionParaDeshacer).not.toHaveBeenCalled();
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R9: gestion de OTRO mensajero -> forbidden, sin revelar datos ni escribir", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () => gestionDeshacer({ mensajeroId: "m2" })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    // Resultado forbidden PELADO: sin motivo ni ningun dato de la gestion ajena.
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R9: gestion INEXISTENTE -> forbidden (no se distingue de ajena: no revela existencia)", async () => {
+    const repo = fakeRepo({ findGestionParaDeshacer: vi.fn(async () => null) });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("no-existe", MENSAJERO);
+
+    expect(r).toEqual({ status: "forbidden" }); // mismo resultado que la ajena (patron 36/R31)
+  });
+});
+
+describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R30/R32/R34)", () => {
+  it("R18/R19: pide al repo `en_reparto` como destino y el mensajero AUTOR como asignado", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "devuelta",
+          // 47: el seguimiento del reintento habia limpiado `mensajero_asignado_id`.
+          orden: { deletedAt: null, estatusId: "s-bodega", estatusValue: "en_bodega" },
+        }),
+      ),
+    });
+    const { service, ordenRepo } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_reparto"); // R18
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledWith({
+      gestionId: "g1",
+      ordenId: "o1",
+      mensajeroId: "m1", // R19: repone la asignacion al autor, aunque el reintento la limpio
+      actorUsuarioId: "m1", // R11/R20: rastro de quien deshizo
+      estatusEsperadoId: "s-bodega", // R5: id REAL leido (guardia optimista de la escritura)
+      estatusEnRepartoId: "s-reparto", // R18
+    });
+  });
+
+  it("R22: el repo devuelve false (carrera: guardia perdida en la tx) -> conflict", async () => {
+    const repo = fakeRepo({ anularGestionYDevolverAGestion: vi.fn(async () => false) });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict"); // sin efectos parciales: la tx hizo rollback
+  });
+
+  it("catalogo sin `en_reparto` (seed pendiente) -> validation_error, sin escribir", async () => {
+    const repo = fakeRepo();
+    const { service } = newService({ repo, estatusEnRepartoId: null });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("validation_error");
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R29/R30 (F1.4-c): el mensajero con OTRA orden activa en gestion PUEDE deshacer igual", async () => {
+    // El puntero 1-a-1 (`usuario.orden_en_gestion_id`) NO participa del deshacer: el service ni
+    // lo lee ni lo escribe (su Pick del ordenRepo no incluye metodos de puntero). Deshacer no
+    // se bloquea por tener otra orden activa — justo el caso en el que hay que corregir el error.
+    const repo = fakeRepo();
+    const { service, ordenRepo } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    const metodos = Object.keys(ordenRepo);
+    expect(metodos).not.toContain("getOrdenEnGestion");
+    expect(metodos).not.toContain("setOrdenEnGestion");
+    expect(metodos).not.toContain("liberarOrdenEnGestion");
+  });
+
+  it("R32: NUNCA borra la evidencia del bucket (el service no tiene storage de escritura)", async () => {
+    const repo = fakeRepo();
+    const { service, signedUrls } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    // El unico colaborador de storage del service es el firmador de URLs (solo lectura): no
+    // existe `remove`. `evidencia_storage_path` tampoco viaja en el input del repo (R12).
+    expect("remove" in signedUrls).toBe(false);
+    const input = (repo.anularGestionYDevolverAGestion as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(input.evidenciaStoragePath).toBeUndefined();
+  });
+
+  it("R34: deshacer una `entregada` con monto NO produce movimiento de wallet/tienda/pago", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () => gestionDeshacer({ resultado: "entregada" })),
+    });
+    const { service, tarifaZonaRepo } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    // El dinero solo se asienta al APROBAR el cierre (los feeds leen por `cierreId`), y esta
+    // gestion tiene cierre_id = NULL: no hay asiento que compensar (F1.4-g). El deshacer ni
+    // siquiera resuelve tarifas.
+    expect(tarifaZonaRepo.resolvePagoTarifa).not.toHaveBeenCalled();
+    expect(repo.crearCierre).not.toHaveBeenCalled();
+  });
+});
+
+// T19 (R13/R14/R15): una gestion anulada desaparece de la vista Y de los derivados. La
+// exclusion ocurre aguas arriba (el WHERE del repo, T6): aqui se prueba el efecto END-TO-END
+// sobre grupos + totales + pago al mensajero (39) + ingreso de bodega (56).
+describe("Feature 67 · gestion anulada ausente de la vista y los totales (R13/R14/R15)", () => {
+  it("R13/R14/R15: la lista SIN la anulada -> no aparece en los grupos ni suma a ningun total", async () => {
+    // El repo (con `anuladaAt: null` en su WHERE) devuelve SOLO la vigente: una anulada de
+    // 20.00 en efectivo ni se lista ni suma.
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g-vigente", montoRecibido: "12.50", metodoPago: "efectivo" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // R13: un solo grupo con una sola fila; la anulada no esta en ninguno de los 4.
+    expect(r.grupos.entregada).toHaveLength(1);
+    expect(r.grupos.entregada[0].gestionId).toBe("g-vigente");
+    const todas = [
+      ...r.grupos.entregada,
+      ...r.grupos.reprogramada,
+      ...r.grupos.devuelta,
+      ...r.grupos.rechazada,
+    ];
+    expect(todas.map((g) => g.gestionId)).not.toContain("g-anulada");
+    // R14: totales por metodo + general SIN la anulada (12.50, no 32.50).
+    expect(r.totales).toEqual({
+      efectivo: "12.50",
+      simpe: "0.00",
+      transferencia: "0.00",
+      general: "12.50",
+    });
+    // R15: los derivados 39/56 tampoco la cuentan (una sola entregada -> 5.00 de pago).
+    expect(r.totalPagoMensajero).toBe("5.00");
+    expect(r.totalIngresoBodegaRechazos).toBe("0.00");
+  });
+
+  it("R13/R14: si TODAS las gestiones del dia estan anuladas, el dia queda vacio (totales en 0)", async () => {
+    const repo = fakeRepo({ findGestionesPendientes: vi.fn(async () => []) });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.grupos).toEqual({ entregada: [], reprogramada: [], devuelta: [], rechazada: [] });
+    expect(r.totales.general).toBe("0.00");
+    expect(r.totalPagoMensajero).toBe("0.00");
+    expect(r.totalIngresoBodegaRechazos).toBe("0.00");
+    expect(r.puedesSolicitar).toBe(false); // R11: no se cierra un dia vacio
+  });
+
+  it("R15/R16: `solicitarCierre` snapshotea SOLO las vigentes (la anulada no entra al cierre)", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g-vigente", montoRecibido: "12.50", metodoPago: "efectivo" }),
+      ]),
+    });
+    const { service } = newService({ repo, centralZonaId: ZONA_CENTRAL });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+    expect(r.status).toBe("ok");
+
+    // El snapshot consume la MISMA lista filtrada: la anulada no aparece en `pagoByGestionId`
+    // ni en `ingresoByGestionId`, y los totales congelados la excluyen.
+    const input = (repo.crearCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(Object.keys(input.pagoByGestionId)).toEqual(["g-vigente"]);
+    expect(Object.keys(input.ingresoByGestionId)).toEqual(["g-vigente"]);
+    expect(input.totales.general).toBe("12.50");
   });
 });
