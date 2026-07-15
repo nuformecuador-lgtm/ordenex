@@ -181,3 +181,37 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================================
+// Feature 69 / decision (f) — el corte diario queda cubierto POR CONSTRUCCION.
+// ============================================================================
+
+describe("Feature 69/(f) — el corte diario congela cierre_detail por el mismo camino", () => {
+  // El snapshot (`cierre_detail`) se puebla DENTRO de `CierreDiaRepository.crearCierre`
+  // (design §3). Eso cubre los DOS caminos de creacion de cierres — la solicitud del
+  // mensajero (37) y el corte diario (41) — sin tocar ningun service, porque ambos llaman al
+  // MISMO metodo del MISMO repo. Verificado ademas que `CorteDiarioRepository` solo CONSULTA
+  // (`findMensajerosConActividadSinCierre`): no crea cierres.
+  //
+  // Esta es la red de regresion de esa propiedad: si alguien anadiera un TERCER punto de
+  // escritura (p.ej. que el corte insertara `cierre_dia` por su cuenta para "optimizar"), ese
+  // camino NO congelaria el detalle y sus cierres quedarian sin filas -> con R14 (sin
+  // fallback) su aprobacion abortaria en produccion. El test falla si el `vencido` deja de
+  // pasar por `cierreRepo.crearCierre`.
+  it("el cierre `vencido` se crea por cierreRepo.crearCierre (unico punto de escritura, (f))", async () => {
+    const { service, crearCierre, cierreRepo } = build({
+      mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
+    });
+
+    const res = await service.ejecutarCorte();
+
+    expect(res.vencidosCreados).toBe(1);
+    // El corte NO tiene camino propio de INSERT: delega en el repo que congela el snapshot.
+    expect(crearCierre).toHaveBeenCalledTimes(1);
+    expect(crearCierre.mock.calls[0][0]).toMatchObject({ mensajeroId: "m1", estado: "vencido" });
+    // El service del corte no conoce `cierre_detail` ni la tarifa vigente: el snapshot es
+    // asunto del repo, dentro de su tx (design §3.2, `CrearCierreInput` NO se extiende).
+    expect(Object.keys(crearCierre.mock.calls[0][0])).not.toContain("cierreDetail");
+    expect(cierreRepo).not.toHaveProperty("crearCierreDetail");
+  });
+});
