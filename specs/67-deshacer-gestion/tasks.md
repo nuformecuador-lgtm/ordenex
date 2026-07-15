@@ -1,4 +1,4 @@
-# Feature 64 — Deshacer gestión: devolver una orden a gestión · tasks.md
+# Feature 67 — Deshacer gestión: devolver una orden a gestión · tasks.md
 
 > Checklist discreto y verificable. `[P]` = paralelizable (sin dependencia con otras `[P]`
 > de su bloque). Cada task cita los `R<n>` que cubre y su criterio de "hecho".
@@ -178,20 +178,20 @@
   Extender `e2e/cierre-dia.spec.ts`: mensajero gestiona `entregada` → la fila aparece y suma
   al total → "Devolver a gestión" + confirmar → la fila desaparece, el total baja y la orden
   reaparece en `/mis-asignaciones` como `en_reparto`.
-  **Hecho:** E2E ESCRITO (nuevo `describe` "mensajero deshace una gestión (feature 64)") con
+  **Hecho:** E2E ESCRITO (nuevo `describe` "mensajero deshace una gestión (feature 67)") con
   sus precondiciones de seed documentadas. **NO EJECUTADO**: mismo diferimiento explícito que
   el resto del archivo y de `e2e/mis-asignaciones.spec.ts` — los E2E exigen dev server + DB
   real sembrada y **no corren bajo `pnpm test`**. Queda pendiente de ejecución cuando exista
   el entorno E2E (nada que esta feature pueda cerrar por sí sola).
 - [x] **T22. Trazabilidad R→test.** (depende de todo lo anterior) — **COMPLETA.**
-  Mapa **R1–R38 → test** consolidado en `progress/impl_64-deshacer-gestion.md` (R1–R34 backend,
+  Mapa **R1–R38 → test** consolidado en `progress/impl_67-deshacer-gestion.md` (R1–R34 backend,
   R35–R38 frontend en `tests/components/CierreDiaModule.test.tsx`). Cada `R<n>` cita ≥1 test verde.
   El reviewer reprodujo la trazabilidad por su cuenta y la dio por completa.
   **Corrección:** este archivo apuntaba a `tests/unit/components/cierre-dia-module.test.tsx`, que
   **no existe**; el frontend extendió la suite real `tests/components/CierreDiaModule.test.tsx` en
   vez de crear un duplicado. Filas R35–R38 corregidas.
 - [x] **T23. Verificación ejecutable final.** (depende de T22) — **COMPLETA, con 2 criterios
-  IMPOSIBLES por deuda AJENA (feature 65), documentados en vez de maquillados.**
+  IMPOSIBLES por deuda AJENA (feature 68), documentados en vez de maquillados.**
   Medido por el leader y **re-medido de forma independiente por el reviewer**:
   · `pnpm test` → **296 archivos / 2764 tests / 0 fallos** (con `--testTimeout=20000`).
   · `pnpm typecheck` → **2 errores = baseline EXACTO, 0 nuevos**.
@@ -205,7 +205,7 @@
   **Los 2 criterios que NO se pueden cumplir, y por qué NO son de esta feature:**
   1. **`pnpm build` FALLA** — y falla en `lib/repositories/TarifaVigentePorZonaRepository.ts:22`
      (`'zonaId' does not exist in type 'TarifaWhereInput'`). Next.js typechequea al construir, así
-     que **hoy `dev` NO COMPILA**: es la **feature 65**, no la 64. Consecuencia que conviene no
+     que **hoy `dev` NO COMPILA**: es la **feature 68**, no la 64. Consecuencia que conviene no
      perder de vista: ese bug no es solo "runtime al aprobar un cierre" — **bloquea el despliegue**.
   2. **`./init.sh` exit 0 es IMPOSIBLE** — con el gate ya honesto (PR #67), corta en ROJO en
      typecheck por esos mismos 2 errores de la 65, sin llegar a los tests. Por eso la verificación

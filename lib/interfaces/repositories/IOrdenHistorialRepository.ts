@@ -55,13 +55,13 @@ export interface IOrdenHistorialRepository {
    */
   findHistorialByOrden(ordenId: string): Promise<OrdenHistorialEntradaDTO[]>;
   /**
-   * R24 (49) + feature 64/R24-R26: cuenta las transiciones VIGENTES de `ordenId` cuyo destino
+   * R24 (49) + feature 67/R24-R26: cuenta las transiciones VIGENTES de `ordenId` cuyo destino
    * es `estatusDestinoId`. Insumo del derivador de intentos (destinos `devuelta`); usa el
    * indice (orden_id, estatus_destino_id).
    *
-   * "Vigente" EXCLUYE las transiciones causadas por una gestion ANULADA (64/R24) y las
-   * HUERFANAS (64/R26), pero SIGUE contando las que nunca vinieron de una gestion (64/R25).
-   * Es un filtro de LECTURA: el historial NO se modifica jamas (49/R2, 64/R23).
+   * "Vigente" EXCLUYE las transiciones causadas por una gestion ANULADA (67/R24) y las
+   * HUERFANAS (67/R26), pero SIGUE contando las que nunca vinieron de una gestion (67/R25).
+   * Es un filtro de LECTURA: el historial NO se modifica jamas (49/R2, 67/R23).
    *
    * Sustituye a `contarPorDestino` (feature 49): el nombre es explicito para que un futuro
    * call-site no elija por error un conteo que incluya intentos anulados -> escalado a

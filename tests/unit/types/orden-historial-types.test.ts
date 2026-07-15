@@ -6,7 +6,7 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // de `orden.estatus_id` (design §1.2/§2). La exhaustividad frente al enum Prisma es de
 // compile-time (satisfies + chequeo `_EnsureExhaustive` en el modulo); aqui se verifica el
 // contenido en runtime.
-// Feature 64 (F1.4-b): el conjunto pasa a 12 con `deshacer_gestion` (migracion
+// Feature 67 (F1.4-b): el conjunto pasa a 12 con `deshacer_gestion` (migracion
 // `*_gestion_orden_anulacion` + su down.sql). A diferencia de la 47/48 —que reutilizaron
 // `gestion`/`ajuste_estado`—, el deshacer SI necesita valor propio: el proposito de la feature
 // es el RASTRO, y reusar `gestion` haria la linea de tiempo indistinguible de una gestion real.
@@ -23,7 +23,7 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "gestion",
     "liberacion_reprogramada",
     "ajuste_estado",
-    "deshacer_gestion", // feature 64: CierreDiaRepository.anularGestionYDevolverAGestion
+    "deshacer_gestion", // feature 67: CierreDiaRepository.anularGestionYDevolverAGestion
   ];
 
   it("contiene exactamente los 12 tipos de origen esperados (conjunto cerrado)", () => {

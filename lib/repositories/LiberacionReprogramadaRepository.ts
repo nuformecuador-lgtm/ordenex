@@ -44,7 +44,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
         id: true,
         zonaId: true,
         gestiones: {
-          // gestion vigente = la mas reciente. Feature 64 (design §3-#6): `anuladaAt: null`
+          // gestion vigente = la mas reciente. Feature 67 (design §3-#6): `anuladaAt: null`
           // por DEFENSA, sin cambio funcional — una orden en `reprogramada` no puede tener su
           // ultima gestion `reprogramada` anulada (deshacerla la devuelve a `en_reparto`, con
           // lo que ya no casa el filtro de estado de arriba). Explicito > implicito.

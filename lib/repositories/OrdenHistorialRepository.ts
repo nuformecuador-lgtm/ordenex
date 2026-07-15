@@ -75,12 +75,12 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
   }
 
   /**
-   * R24 (49) + feature 64/R23-R26: conteo de transiciones VIGENTES de la orden hacia un
+   * R24 (49) + feature 67/R23-R26: conteo de transiciones VIGENTES de la orden hacia un
    * destino dado (usa el indice `(orden_id, estatus_destino_id)`; el join a `gestion_orden` es
    * por PK sobre un punado de filas).
    *
    * El historial es append-only e INMUTABLE (49/R2): la exclusion de los intentos anulados es
-   * un filtro de LECTURA, no una escritura (64/R23). El predicado discrimina por `origen_tipo`
+   * un filtro de LECTURA, no una escritura (67/R23). El predicado discrimina por `origen_tipo`
    * y NO por la nulidad del enlace, porque `gestion_orden_id IS NULL` es AMBIGUO (design 64
    * §4.1): significa a la vez "nunca vino de una gestion" y "la gestion se borro y la FK vacio
    * el enlace". Ante la duda, la HUERFANA no cuenta: contar de menos = mas intentos que el

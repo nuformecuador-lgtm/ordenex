@@ -6,11 +6,11 @@ import {
   ORIGEN_TIPOS_CON_GESTION,
 } from "@/lib/types/orden-historial";
 
-// Feature 64 (R11/R12/R20, F1.4-b + F1.4-d) — cobertura ESTATICA de la migracion
+// Feature 67 (R11/R12/R20, F1.4-b + F1.4-d) — cobertura ESTATICA de la migracion
 // `*_gestion_orden_anulacion` (patron cierre-estado-vencido-migration.test.ts): lee
 // migration.sql / down.sql por regex. La aplicacion REAL contra Postgres + el round-trip
 // (deploy -> verificar -> down -> verificar -> deploy) los ejecuta el implementer y quedan en
-// la bitacora `progress/impl_64-deshacer-gestion.md`.
+// la bitacora `progress/impl_67-deshacer-gestion.md`.
 
 const MIGRATIONS_DIR = path.join(__dirname, "..", "..", "..", "db", "migrations");
 
@@ -32,7 +32,7 @@ const schemaPrisma = fs.readFileSync(
   "utf8",
 );
 
-describe("Feature 64 · SEED del enum — `deshacer_gestion` es el 12.º valor (F1.4-b)", () => {
+describe("Feature 67 · SEED del enum — `deshacer_gestion` es el 12.º valor (F1.4-b)", () => {
   it("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED incluye deshacer_gestion y cierra en 12", () => {
     expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toContain("deshacer_gestion");
     expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(12);
@@ -44,7 +44,7 @@ describe("Feature 64 · SEED del enum — `deshacer_gestion` es el 12.º valor (
   });
 });
 
-describe("Feature 64 · UP — columnas de anulacion + FK + indices + enum (R11/R12/R20)", () => {
+describe("Feature 67 · UP — columnas de anulacion + FK + indices + enum (R11/R12/R20)", () => {
   it("R11: añade `anulada_at` TIMESTAMP(3) y `anulada_por` TEXT, ambas NULLABLE", () => {
     // NULL = gestion VIGENTE (patron `cierre_id IS NULL` de la 37): sin NOT NULL ni DEFAULT,
     // la migracion es aditiva y no necesita backfill.
@@ -88,7 +88,7 @@ describe("Feature 64 · UP — columnas de anulacion + FK + indices + enum (R11/
   });
 });
 
-describe("Feature 64 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)", () => {
+describe("Feature 67 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)", () => {
   it("recrea el enum SIN `deshacer_gestion`, con los 11 valores originales", () => {
     // Postgres no soporta DROP VALUE: el tipo se recrea y la columna se migra con USING.
     expect(downSql).toMatch(
@@ -141,7 +141,7 @@ describe("Feature 64 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
   });
 });
 
-describe("Feature 64 · schema.prisma refleja la migracion (sin drift)", () => {
+describe("Feature 67 · schema.prisma refleja la migracion (sin drift)", () => {
   it("GestionOrden declara anuladaAt/anuladaPor mapeadas a las columnas nuevas", () => {
     expect(schemaPrisma).toMatch(/anuladaAt\s+DateTime\?\s+@map\("anulada_at"\)/);
     expect(schemaPrisma).toMatch(/anuladaPor\s+String\?\s+@map\("anulada_por"\)/);

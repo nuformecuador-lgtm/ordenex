@@ -19,7 +19,7 @@ import type {
 vi.mock("@/lib/actions/cierre-dia", () => ({
   solicitarCierre: vi.fn(),
   listarCierreDia: vi.fn(),
-  // Feature 64 (T17/T18): la Server Action del deshacer también se mockea (contrato
+  // Feature 67 (T17/T18): la Server Action del deshacer también se mockea (contrato
   // cerrado por el backend: recibe un OBJETO `{ gestionId }`, no un string).
   deshacerGestion: vi.fn(),
 }));
@@ -401,7 +401,7 @@ describe("CierreDiaModule", () => {
   });
 });
 
-// ---------- Feature 64 (T17/T18, R35–R38): deshacer gestión ----------
+// ---------- Feature 67 (T17/T18, R35–R38): deshacer gestión ----------
 //
 // La vista NO decide la elegibilidad: `findGestionesPendientes` ya filtra por la
 // ventana (`cierre_id IS NULL` + `anulada_at IS NULL`) y `/cierre-dia` es exclusivo
@@ -430,7 +430,7 @@ async function abrirDeshacer(
   return screen.findByRole("dialog", { name: "Devolver la orden a gestión" });
 }
 
-describe("CierreDiaModule — feature 64: devolver a gestión", () => {
+describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it.each(REGIONES)(
     "R35: ofrece la acción por fila en la tabla de $region",
     ({ resultado, region }) => {

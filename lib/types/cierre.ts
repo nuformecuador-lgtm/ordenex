@@ -50,13 +50,13 @@ void _destinoExhaustive;
 export type ListarCierreDiaResult = ListarCierreDiaServiceResult | { status: "unauthenticated" };
 export type SolicitarCierreResult = SolicitarCierreServiceResult | { status: "unauthenticated" };
 
-// Feature 64/R10 — validacion de BORDE del deshacer. El input del cliente es el
+// Feature 67/R10 — validacion de BORDE del deshacer. El input del cliente es el
 // `gestion_orden.id` (uuid, ver `GestionOrden.id @default(uuid())` en schema.prisma); un valor
 // mal formado -> ZodError -> validation_error ANTES de llegar al service, sin tocar datos.
 export const deshacerGestionSchema = z.object({
   gestionId: z.string().uuid(),
 });
 
-// Feature 64 — resultado de la Server Action: el resultado de dominio del service + los dos
+// Feature 67 — resultado de la Server Action: el resultado de dominio del service + los dos
 // estados que resuelve el borde (`validation_error` de zod R10, `unauthenticated` sin sesion R7).
 export type DeshacerGestionResult = DeshacerGestionServiceResult | { status: "unauthenticated" };

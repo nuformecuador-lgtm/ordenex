@@ -12,7 +12,7 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // TypeScript no puede forzar el choke point (3 mecanismos, incl. SQL crudo); esta es la
 // mitigacion del riesgo de "olvidar un call-site" (design §3.3).
 //
-// Feature 64: el mapa crece a 12 con el DESHACER (`CierreDiaRepository` /
+// Feature 67: el mapa crece a 12 con el DESHACER (`CierreDiaRepository` /
 // `anularGestionYDevolverAGestion` / `deshacer_gestion`). A diferencia de la 47 y la 48 —que
 // reutilizaron `gestion` y `ajuste_estado`—, esta SI trae valor de enum nuevo + migracion +
 // down: el proposito de la feature es el RASTRO, y reusar `gestion` haria que la linea de
@@ -55,7 +55,7 @@ const PUNTOS_DE_ESCRITURA = [
   // `DevolucionOrigenService`), igual que la 47 documento que #9 sirve el seguimiento. NO se
   // agrega un call-site nuevo ni un `origen_tipo` nuevo: sigue siendo UN punto `ajuste_estado`.
   { n: 11, repo: "OrdenRepository", simbolo: "update", origenTipo: "ajuste_estado" },
-  // #12: feature 64 (F1.4-b). El DESHACER devuelve la orden a `en_reparto` reponiendo la
+  // #12: feature 67 (F1.4-b). El DESHACER devuelve la orden a `en_reparto` reponiendo la
   // asignacion al mensajero autor, en la MISMA tx que anula la gestion (R20/R21/R22). Trae
   // `origen_tipo` NUEVO (`deshacer_gestion`, 12.º valor del enum) para que la auditoria
   // distinga un deshacer de una gestion real: la migracion `*_gestion_orden_anulacion` lo
@@ -72,7 +72,7 @@ const PUNTOS_DE_ESCRITURA = [
 // asignarMensajeroSugerido (solo mensajero_sugerido_id), softDelete (solo deleted_at),
 // setOrdenEnGestion / liberarOrdenEnGestion (puntero de bloqueo 1-a-1). Existen pero NO
 // forman parte del conjunto de escritura de estado -> NO instrumentan historial.
-// Feature 64: las dos LECTURAS del deshacer (`findGestionParaDeshacer`,
+// Feature 67: las dos LECTURAS del deshacer (`findGestionParaDeshacer`,
 // `findUltimaGestionNoAnuladaId`) tampoco escriben estado — solo consultan la gestion y su
 // orden para que el service decida; la UNICA escritura del deshacer es el punto #12.
 // `crearCierre` (37) escribe `gestion_orden.cierre_id`, NO `orden.estatus_id`.
@@ -81,8 +81,8 @@ const NO_ESCRIBEN_ESTADO = [
   { repo: "OrdenRepository", simbolo: "softDelete" },
   { repo: "GestionOrdenRepository", simbolo: "setOrdenEnGestion" },
   { repo: "GestionOrdenRepository", simbolo: "liberarOrdenEnGestion" },
-  { repo: "CierreDiaRepository", simbolo: "findGestionParaDeshacer" }, // feature 64: solo query
-  { repo: "CierreDiaRepository", simbolo: "findUltimaGestionNoAnuladaId" }, // feature 64: solo query
+  { repo: "CierreDiaRepository", simbolo: "findGestionParaDeshacer" }, // feature 67: solo query
+  { repo: "CierreDiaRepository", simbolo: "findUltimaGestionNoAnuladaId" }, // feature 67: solo query
   { repo: "CierreDiaRepository", simbolo: "crearCierre" }, // 37: escribe cierre_id, no estatus_id
 ] as const;
 
@@ -145,11 +145,11 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     expect(tipos).toContain("ajuste_estado");
   });
 
-  // Feature 64 (R21/F1.4-b): el deshacer SI añade el 12.º valor del enum, con su migracion y su
+  // Feature 67 (R21/F1.4-b): el deshacer SI añade el 12.º valor del enum, con su migracion y su
   // down.sql. Este test fija el punto #12 y su origen_tipo dedicado: si alguien lo reimplementara
   // reusando `gestion` (haciendo la auditoria ilegible) o escribiera `orden.estatus_id` fuera del
   // choke point, romperia aqui.
-  it("feature 64 (R20/R21): el punto #12 es el deshacer, con `origen_tipo` dedicado `deshacer_gestion`", () => {
+  it("feature 67 (R20/R21): el punto #12 es el deshacer, con `origen_tipo` dedicado `deshacer_gestion`", () => {
     const tipos = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED] as string[];
     expect(tipos).toContain("deshacer_gestion"); // 12.º valor (migracion *_gestion_orden_anulacion)
     expect(tipos).toHaveLength(12);
@@ -166,12 +166,12 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     expect(PUNTOS_DE_ESCRITURA.filter((p) => p.origenTipo === "deshacer_gestion")).toHaveLength(1);
   });
 
-  // Feature 64 (design §8) — CONVENCION para el reviewer: las gestiones NO se borran, se ANULAN
+  // Feature 67 (design §8) — CONVENCION para el reviewer: las gestiones NO se borran, se ANULAN
   // (`anulada_at`/`anulada_por`). Un `delete`/`deleteMany` sobre `gestion_orden` orfanaria filas
   // del historial y corromperia el derivador de intentos -> es rechazo automatico de review.
   // La FK `orden_historial_estado.gestion_orden_id` volvio a `ON DELETE RESTRICT` (F1.4-i) para
   // que la DB tambien lo impida, pero la convencion es la primera linea de defensa.
-  it("feature 64 (design §8): ningun repo del mapa expone un borrado de gestiones", () => {
+  it("feature 67 (design §8): ningun repo del mapa expone un borrado de gestiones", () => {
     for (const nombre of Object.keys(REPOS)) {
       const proto = REPOS[nombre as keyof typeof REPOS];
       expect(typeof proto.borrarGestion).not.toBe("function");

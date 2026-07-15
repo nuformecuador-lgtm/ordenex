@@ -57,8 +57,8 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     // R24/R25: derivado del historial (conteo de destinos `devuelta`), sin columna
     // materializada. Si el catalogo no tiene el estado (seed pendiente), no hay intentos
     // contables -> 0.
-    // Feature 64/R24/R27/R28: el conteo es de transiciones VIGENTES — excluye las causadas
-    // por gestiones ANULADAS (deshechas) sin tocar el historial (append-only, 64/R23). Este
+    // Feature 67/R24/R27/R28: el conteo es de transiciones VIGENTES — excluye las causadas
+    // por gestiones ANULADAS (deshechas) sin tocar el historial (append-only, 67/R23). Este
     // UNICO punto alimenta a la vez la regla de reintento-vs-escalado
     // (`MisAsignacionesService.resolverSeguimientoDevuelta`, R27) y la linea de tiempo
     // (`obtenerHistorial().intentos`, R28): por construccion no pueden divergir.

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
-// Feature 64 (F1.4-i, APROBADA) — cobertura ESTATICA de la migracion
+// Feature 67 (F1.4-i, APROBADA) — cobertura ESTATICA de la migracion
 // `*_orden_historial_gestion_fk_restrict`: devuelve la FK
 // `orden_historial_estado.gestion_orden_id` a `ON DELETE RESTRICT`, en el SQL **y** en el
 // modelo Prisma. La verificacion viva (`pg_constraint.confdeltype = 'r'`) + el round-trip la
@@ -50,7 +50,7 @@ function soloDDL(sql: string): string {
 const upDDL = soloDDL(upSql);
 const downDDL = soloDDL(downSql);
 
-describe("Feature 64 · F1.4-i UP — la FK vuelve a ON DELETE RESTRICT", () => {
+describe("Feature 67 · F1.4-i UP — la FK vuelve a ON DELETE RESTRICT", () => {
   it("dropea la constraint vieja y la recrea con ON DELETE RESTRICT", () => {
     expect(upDDL).toMatch(
       /ALTER TABLE "orden_historial_estado" DROP CONSTRAINT IF EXISTS "orden_historial_estado_gestion_orden_id_fkey";/,
@@ -72,7 +72,7 @@ describe("Feature 64 · F1.4-i UP — la FK vuelve a ON DELETE RESTRICT", () => 
   });
 });
 
-describe("Feature 64 · F1.4-i DOWN — restaura ON DELETE SET NULL", () => {
+describe("Feature 67 · F1.4-i DOWN — restaura ON DELETE SET NULL", () => {
   it("recrea la FK con el ON DELETE SET NULL que dejo la 20260714123909", () => {
     expect(downDDL).toMatch(
       /ALTER TABLE "orden_historial_estado" DROP CONSTRAINT IF EXISTS "orden_historial_estado_gestion_orden_id_fkey";/,
@@ -91,7 +91,7 @@ describe("Feature 64 · F1.4-i DOWN — restaura ON DELETE SET NULL", () => {
   });
 });
 
-describe("Feature 64 · F1.4-i — el cambio esta TAMBIEN en el modelo (sin drift)", () => {
+describe("Feature 67 · F1.4-i — el cambio esta TAMBIEN en el modelo (sin drift)", () => {
   // El punto de la decision: un RESTRICT escrito SOLO en SQL reintroduce el drift que la
   // 20260714123909 vino a eliminar, y el proximo reconcile lo pisaria en silencio.
   it("schema.prisma declara `onDelete: Restrict` en OrdenHistorialEstado.gestion", () => {

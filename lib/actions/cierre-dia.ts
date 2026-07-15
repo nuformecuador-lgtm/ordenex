@@ -106,7 +106,7 @@ export async function solicitarCierre(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
-// Feature 64 — traduce el AppErrorShape que puede producir ESTE borde: solo ZodError
+// Feature 67 — traduce el AppErrorShape que puede producir ESTE borde: solo ZodError
 // (VALIDATION_ERROR, R10) o falta de sesion (UNAUTHORIZED, R7). `forbidden`/`conflict` los
 // devuelve el service como resultado de dominio, por eso NO aparecen aqui. Espejo EXACTO de
 // `toDevolucionOrigenActionError` (48) / `toMisAsignacionesActionError` (36).
@@ -127,7 +127,7 @@ function toDeshacerGestionActionError(
 }
 
 /**
- * Feature 64/R1-R10 — DESHACE una gestion (la anula con rastro y devuelve su orden a
+ * Feature 67/R1-R10 — DESHACE una gestion (la anula con rastro y devuelve su orden a
  * `en_reparto`). Mutacion interna del propio proyecto -> Server Action, no Route API
  * (`docs/architecture.md`). `unauthenticated` (R7, sin sesion) y `validation_error` (R10,
  * gestionId no-uuid) se resuelven en el borde; `forbidden` (R8/R9) y `conflict` (R2-R6) los

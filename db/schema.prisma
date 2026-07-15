@@ -112,7 +112,7 @@ model Usuario {
   ordenesMensajeria   Orden[]              @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
   ordenesAsignadas    Orden[]              @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
   gestionesRealizadas GestionOrden[]       @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
-  gestionesAnuladas   GestionOrden[]       @relation("GestionAnuladaPor") // feature 64/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
+  gestionesAnuladas   GestionOrden[]       @relation("GestionAnuladaPor") // feature 67/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
   tarifasTienda       Tarifa[]             @relation("TarifaTienda") // tarifas cuya tienda es este usuario (adminTienda)
   cierresRealizados   CierreDia[]          @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
   cierresResueltos    CierreDia[]          @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
@@ -391,14 +391,14 @@ model GestionOrden {
   cierreId             String?          @map("cierre_id") // feature 37/R13: nullable; NULL = gestion del dia aun no cerrada
   pagoMensajero        Decimal?         @map("pago_mensajero") @db.Decimal(12, 2) // feature 39/R12: snapshot del pago al mensajero; NULL mientras no se cierra
   ingresoBodegaRechazo Decimal?         @map("ingreso_bodega_rechazo") @db.Decimal(12, 2) // feature 56/R11: snapshot del ingreso de bodega por rechazo; NULL mientras no se cierra
-  anuladaAt            DateTime?        @map("anulada_at") // feature 64/R11: instante de la anulacion; NULL = gestion VIGENTE (patron cierre_id IS NULL de la 37)
-  anuladaPor           String?          @map("anulada_por") // feature 64/R11: FK -> usuario que la deshizo (espejo de cierre_dia.resuelto_por)
+  anuladaAt            DateTime?        @map("anulada_at") // feature 67/R11: instante de la anulacion; NULL = gestion VIGENTE (patron cierre_id IS NULL de la 37)
+  anuladaPor           String?          @map("anulada_por") // feature 67/R11: FK -> usuario que la deshizo (espejo de cierre_dia.resuelto_por)
   createdAt            DateTime         @default(now()) @map("created_at")
 
   orden     Orden      @relation(fields: [ordenId], references: [id])
   mensajero Usuario    @relation("GestionMensajero", fields: [mensajeroId], references: [id])
   cierre    CierreDia? @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
-  // Feature 64/R11: quien deshizo la gestion. ON DELETE SET NULL como el actor del historial
+  // Feature 67/R11: quien deshizo la gestion. ON DELETE SET NULL como el actor del historial
   // (49/R21): borrar al usuario no borra el rastro de la anulacion.
   anuladaPorUsuario Usuario? @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
   historialEstados OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
@@ -406,8 +406,8 @@ model GestionOrden {
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
   @@index([cierreId]) // feature 37/R3: listar gestiones sin cierre (cierre_id IS NULL)
-  @@index([anuladaPor]) // feature 64: FK del actor de la anulacion
-  // Feature 64 (F1.4-d): el indice PARCIAL de la ruta caliente
+  @@index([anuladaPor]) // feature 67: FK del actor de la anulacion
+  // Feature 67 (F1.4-d): el indice PARCIAL de la ruta caliente
   // `(mensajero_id) WHERE cierre_id IS NULL AND anulada_at IS NULL` (/cierre-dia + corte
   // diario) NO se expresa aqui: Prisma no soporta indices parciales -> vive en el SQL de la
   // migracion `*_gestion_orden_anulacion` (patron orden_liberada_reprogramada_at_idx).
@@ -830,7 +830,7 @@ enum OrdenHistorialOrigenTipo {
   gestion // feature 36: crearGestionYTransicionar
   liberacion_reprogramada // feature 46: liberarOrden (cron)
   ajuste_estado // feature 6: OrdenService.actualizar (CRUD generico)
-  deshacer_gestion // feature 64 (F1.4-b): CierreDiaRepository.anularGestionYDevolverAGestion
+  deshacer_gestion // feature 67 (F1.4-b): CierreDiaRepository.anularGestionYDevolverAGestion
 
   @@map("orden_historial_origen_tipo")
 }
@@ -858,11 +858,11 @@ model OrdenHistorialEstado {
   estatusOrigen  OrderStatus?  @relation("HistorialOrigen", fields: [estatusOrigenId], references: [id])
   estatusDestino OrderStatus   @relation("HistorialDestino", fields: [estatusDestinoId], references: [id])
   actor          Usuario?      @relation("HistorialActor", fields: [actorUsuarioId], references: [id], onDelete: SetNull)
-  // Feature 64 (F1.4-i): ON DELETE **Restrict** EXPLICITO (no el default `SetNull` de una
+  // Feature 67 (F1.4-i): ON DELETE **Restrict** EXPLICITO (no el default `SetNull` de una
   // relacion opcional). Este enlace sostiene el derivador de intentos (47/49), que dispara
   // `rechazada` -> cobroRechazado (56, dinero): un SET NULL silencioso lo corromperia sin
   // error. Declarado en el MODELO (no solo en SQL) para no reintroducir el drift que la
-  // migracion 20260714123909 vino a eliminar. Las gestiones NO se borran: se ANULAN (64/R11).
+  // migracion 20260714123909 vino a eliminar. Las gestiones NO se borran: se ANULAN (67/R11).
   gestion        GestionOrden? @relation(fields: [gestionOrdenId], references: [id], onDelete: Restrict)
 
   @@index([ordenId, createdAt]) // R5: linea de tiempo de UNA orden

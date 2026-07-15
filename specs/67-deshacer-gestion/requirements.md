@@ -1,4 +1,4 @@
-# Feature 64 — Deshacer gestión: devolver una orden a gestión · requirements.md
+# Feature 67 — Deshacer gestión: devolver una orden a gestión · requirements.md
 
 > Zona: fullstack · Complejidad: high · depends_on: 37
 > Notación EARS estricta (ver `docs/specs.md`). Cada `R<n>` es testeable y sin detalle

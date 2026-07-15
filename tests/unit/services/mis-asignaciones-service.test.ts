@@ -578,7 +578,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
 
   // --- FEATURE 64 (R27): un intento ANULADO no cuenta para la decision reintento/escalado ---
 
-  it("64/R27: con 2 devueltas de las cuales 1 esta ANULADA, la siguiente es REINTENTO (no escalado)", async () => {
+  it("67/R27: con 2 devueltas de las cuales 1 esta ANULADA, la siguiente es REINTENTO (no escalado)", async () => {
     const repo = fakeRepo();
     // El historial tiene 2 filas destino `devuelta`, pero una vino de una gestion que el
     // mensajero DESHIZO. `contarIntentos` consume `contarPorDestinoVigentes`, que la excluye en
@@ -598,7 +598,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
     expect(seg?.limpiaMensajero).toBe(true);
   });
 
-  it("64/R27: el escalado sigue disparando cuando los 3 intentos son VIGENTES (sin regresion de la 47)", async () => {
+  it("67/R27: el escalado sigue disparando cuando los 3 intentos son VIGENTES (sin regresion de la 47)", async () => {
     const repo = fakeRepo();
     // Ninguna anulada: 2 previos vigentes -> intento actual 3 == umbral -> escalado (47/R8).
     const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 2) });
@@ -610,7 +610,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
     expect(repoCall(repo).seguimiento?.destinoEstatusId).toBe("os-rechazada");
   });
 
-  it("64/R31: una orden devuelta a `en_reparto` por un deshacer es escogible (guardia 1-a-1 vigente)", async () => {
+  it("67/R31: una orden devuelta a `en_reparto` por un deshacer es escogible (guardia 1-a-1 vigente)", async () => {
     // Tras el deshacer, la orden esta en `en_reparto` y asignada al mensajero (R18/R19): es
     // exactamente la precondicion de `cargarOrdenGestionable`. El flujo existente de la 36
     // funciona sin cambios — el deshacer NO toca el puntero (R29), asi que la retoma normal.
@@ -625,7 +625,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
     expect(repo.setOrdenEnGestion).toHaveBeenCalledWith("m1", "o1"); // guardia 1-a-1 de la 36
   });
 
-  it("64/R30: si el mensajero YA tiene OTRA orden activa, escoger la deshecha da conflict (1-a-1 intacta)", async () => {
+  it("67/R30: si el mensajero YA tiene OTRA orden activa, escoger la deshecha da conflict (1-a-1 intacta)", async () => {
     // El deshacer se completa igual (R30, probado en cierre-dia-service.test.ts); lo que sigue
     // sujeto a la guardia 1-a-1 es RETOMARLA. La invariante de la 36 no se relaja.
     const repo = fakeRepo({

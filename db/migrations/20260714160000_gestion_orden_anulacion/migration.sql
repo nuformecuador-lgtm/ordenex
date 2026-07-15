@@ -1,4 +1,4 @@
--- Feature 64 (R11/R12/R20, F1.4-b + F1.4-d): "deshacer gestion" — anulacion CON RASTRO de
+-- Feature 67 (R11/R12/R20, F1.4-b + F1.4-d): "deshacer gestion" — anulacion CON RASTRO de
 -- una gestion (decision 2 del humano: se ANULA dejando huella, NO se borra) + el 12.º valor
 -- del enum de origen del historial para que la linea de tiempo distinga un deshacer de una
 -- gestion real.

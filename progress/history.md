@@ -1363,16 +1363,16 @@
     aflojado ("rechaza zonaId ausente" → "rechaza nombre/zonaId del modelo viejo (strict)", más fuerte).
 - Verificación: **suite 2652/2652 VERDE** (294/294 archivos), typecheck **35 → 2**, lint 0 errores.
 - Decisiones/deuda: `init.sh` **sigue ROJO con razón** — corta en typecheck por los 2 errores reales de la
-  **feature 65** (`TarifaVigentePorZonaRepository` rompería aprobar un cierre; `seed-zonas.ts`). Aparcada a
+  **feature 68** (`TarifaVigentePorZonaRepository` rompería aprobar un cierre; `seed-zonas.ts`). Aparcada a
   propósito por el humano. Features **35/60/62 ANULADAS** (`cancelled` + `status_note`, no borradas).
   Deudas de arnés registradas en `current.md`: `jq` ausente hacía que las reglas 3 y 4 de `init.sh` nunca
   corrieran; denylist frágil en `zonas-migration.test.ts`; fakes de repos triplicados a mano.
 
-## 2026-07-15 — 64 (deshacer gestión: devolver una orden a gestión)
+## 2026-07-15 — 67 (deshacer gestión: devolver una orden a gestión)
 - El mensajero puede devolver una orden a gestión desde las 4 tablas del cierre del día cuando se
   equivocó al gestionarla. La gestión se **anula dejando rastro** (`anulada_at`/`anulada_por`), no se
   borra, y solo mientras no haya solicitado el cierre (`cierre_id IS NULL`).
-- Requisitos cubiertos: **R1–R38**, todos con test real (mapa en `progress/impl_64-deshacer-gestion.md`).
+- Requisitos cubiertos: **R1–R38**, todos con test real (mapa en `progress/impl_67-deshacer-gestion.md`).
 - **Alcance recortado en la evaluación, y fue lo más valioso del ciclo.** El pedido tenía dos mitades
   y **la primera ya existía**: la gestión nace con `cierre_id=NULL` (feature 36) y
   `CierreDiaRepository` lista exactamente esas (37/R2-R3), así que las 4 tablas ya se llenaban en
@@ -1404,7 +1404,7 @@
   vivo, repetido por el reviewer en tx con `ROLLBACK` · estado vivo: enum 12, FK `confdeltype='r'`,
   RLS `gestion_orden` true/0 policies. Reviewer **APROBADO 0 bloqueantes de código** (el RECHAZADO
   inicial fue solo por 2 gates documentales del leader, ya cerrados; precedente 59).
-- Decisiones/deuda: **HALLAZGO que sube la urgencia de la feature 65** — al correr `pnpm build` por
+- Decisiones/deuda: **HALLAZGO que sube la urgencia de la feature 68** — al correr `pnpm build` por
   primera vez en el cierre, **falla** en `TarifaVigentePorZonaRepository.ts:22`: Next.js typechequea al
   construir, así que **`dev` no compila y nada se despliega**. Cuando se aparcó el bug nadie lo sabía;
   no es runtime dormido, es bloqueo de despliegue. Por lo mismo `./init.sh` corta en typecheck sin

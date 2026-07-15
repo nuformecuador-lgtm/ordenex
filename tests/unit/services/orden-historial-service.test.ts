@@ -137,9 +137,9 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     if (r.status === "ok") expect(r.intentos).toBe(0);
   });
 
-  // Feature 64/R28: la linea de tiempo expone el conteo YA CORREGIDO (sin los anulados), el
+  // Feature 67/R28: la linea de tiempo expone el conteo YA CORREGIDO (sin los anulados), el
   // MISMO que usa la regla de escalado -> "intento X de N" coincide con la decision real.
-  it("64/R28: `intentos` de la linea de tiempo es el conteo VIGENTE (2 devueltas, 1 anulada -> 1)", async () => {
+  it("67/R28: `intentos` de la linea de tiempo es el conteo VIGENTE (2 devueltas, 1 anulada -> 1)", async () => {
     const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
     // El repo ya excluye la anulada en la LECTURA (design §4.2): de 2 filas destino `devuelta`
     // devuelve 1 vigente.
@@ -151,10 +151,10 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     expect(h.contarPorDestinoVigentes).toHaveBeenCalledWith("o1", "s-devuelta");
   });
 
-  // Feature 64/R23: el historial es append-only e INMUTABLE. La correccion del contador es un
+  // Feature 67/R23: el historial es append-only e INMUTABLE. La correccion del contador es un
   // filtro de LECTURA: la linea de tiempo sigue mostrando TODAS las filas (incluida la de la
   // gestion anulada y la del propio `deshacer_gestion`). La verdad historica se conserva.
-  it("64/R23: `findHistorialByOrden` devuelve TODAS las filas (no filtra las de gestiones anuladas)", async () => {
+  it("67/R23: `findHistorialByOrden` devuelve TODAS las filas (no filtra las de gestiones anuladas)", async () => {
     const eGestion = entrada({
       estatusOrigenValue: "en_reparto",
       estatusDestinoValue: "devuelta",
@@ -298,10 +298,10 @@ describe("contarIntentos — derivador de intentos (R24/R25)", () => {
     expect(h.contarPorDestinoVigentes).not.toHaveBeenCalled();
   });
 
-  // Feature 64/R24: el derivador consume el conteo VIGENTE, NUNCA el conteo crudo. Este test
+  // Feature 67/R24: el derivador consume el conteo VIGENTE, NUNCA el conteo crudo. Este test
   // guarda la decision: si alguien volviera a un `contarPorDestino` sin filtro, el intento de
   // una gestion deshecha volveria a contar y la orden escalaria sola a `rechazada` (dinero).
-  it("64/R24: consume `contarPorDestinoVigentes` (el conteo que excluye gestiones anuladas)", async () => {
+  it("67/R24: consume `contarPorDestinoVigentes` (el conteo que excluye gestiones anuladas)", async () => {
     const o = ordenRepo({ findEstatusIdByValue: vi.fn(async () => "s-devuelta") });
     const h = historialRepo({ contarPorDestinoVigentes: vi.fn(async () => 1) });
     expect(await newService(o, h).contarIntentos("o1")).toBe(1);

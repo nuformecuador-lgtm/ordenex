@@ -1,8 +1,8 @@
-# Feature 64 — Deshacer gestión: devolver una orden a gestión · design.md
+# Feature 67 — Deshacer gestión: devolver una orden a gestión · design.md
 
 > El CÓMO técnico. Decisiones sujetas a las respuestas F1.4 de `requirements.md`; aquí se
 > documenta la opción recomendada y su justificación. Todas las referencias a código fueron
-> verificadas en la rama `feature/64-deshacer-gestion`.
+> verificadas en la rama `feature/67-deshacer-gestion`.
 
 ## 1. Alcance y capas afectadas
 
@@ -34,8 +34,8 @@
 ```prisma
 model GestionOrden {
   // ...campos existentes...
-  anuladaAt  DateTime? @map("anulada_at")  // feature 64/R11: NULL = gestion vigente
-  anuladaPor String?   @map("anulada_por") // feature 64/R11: FK -> usuario (quien deshizo)
+  anuladaAt  DateTime? @map("anulada_at")  // feature 67/R11: NULL = gestion vigente
+  anuladaPor String?   @map("anulada_por") // feature 67/R11: FK -> usuario (quien deshizo)
 
   anuladaPorUsuario Usuario? @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
 }

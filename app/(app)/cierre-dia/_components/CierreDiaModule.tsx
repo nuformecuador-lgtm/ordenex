@@ -22,7 +22,7 @@ import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 // Feature 37 (T15, R3-R7/R10/R11/R18): módulo cliente del "Cierre del día". Recibe
 // del Server Component padre los grupos ya resueltos (por resultado), los totales
 // snapshot-able, el gate `puedesSolicitar` + su `motivoBloqueo` y el histórico de
-// cierres. Las mutaciones (Solicitar cierre; feature 64/R35-R38: Devolver a gestión)
+// cierres. Las mutaciones (Solicitar cierre; feature 67/R35-R38: Devolver a gestión)
 // van por Server Action y refrescan la ruta para releer el estado del servidor. Los
 // montos llegan como STRING (money-safe): se renderizan tal cual, sin `parseFloat`/`Number`.
 
@@ -55,7 +55,7 @@ const PAGO_MENSAJERO_COL = "Pago mensajero";
 const INGRESO_BODEGA_RECHAZOS_LABEL = "Ingreso de bodega por rechazos";
 const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
 
-// Feature 64 (R35-R38): textos del deshacer (separados de la lógica, i18n-ready).
+// Feature 67 (R35-R38): textos del deshacer (separados de la lógica, i18n-ready).
 const DESHACER_COL = "Acciones";
 const DESHACER_LABEL = "Devolver a gestión";
 const DESHACER_TITULO = "Devolver la orden a gestión";
@@ -142,11 +142,11 @@ export function CierreDiaModule({
   const [confirmar, setConfirmar] = useState(false);
   // Evidencia (URL firmada, R5) en el visor; null = cerrado.
   const [evidencia, setEvidencia] = useState<string | null>(null);
-  // Feature 64/R36: fila pendiente de confirmar el deshacer; null = modal cerrado.
+  // Feature 67/R36: fila pendiente de confirmar el deshacer; null = modal cerrado.
   const [deshacerFila, setDeshacerFila] = useState<CierreDetalleGestion | null>(
     null,
   );
-  // Feature 64: gestionId del deshacer EN VUELO; deshabilita el botón de ESA fila
+  // Feature 67: gestionId del deshacer EN VUELO; deshabilita el botón de ESA fila
   // (anti-doble-submit en la UI; el WHERE guardado del repo lo cubre igual).
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
 
@@ -169,7 +169,7 @@ export function CierreDiaModule({
   }
 
   /**
-   * Feature 64/R36-R38: ejecuta el deshacer ya confirmado. `ok` → toast + `router.refresh()`
+   * Feature 67/R36-R38: ejecuta el deshacer ya confirmado. `ok` → toast + `router.refresh()`
    * (R37: la vista releé el estado del SERVIDOR; la fila desaparece y los totales se
    * recalculan allá, nunca se mutan acá). Error → toast accionable y NI la tabla NI los
    * totales se tocan (R38): no hay refresh y las filas siguen siendo las props del padre.
@@ -348,7 +348,7 @@ export function CierreDiaModule({
         closeOnConfirm={false}
       />
 
-      {/* Feature 64/R36: confirmación explícita del deshacer (una sola por módulo,
+      {/* Feature 67/R36: confirmación explícita del deshacer (una sola por módulo,
           parametrizada con la fila elegida: el Modal ya es un focus-trap accesible). */}
       <Modal
         open={deshacerFila !== null}
@@ -448,7 +448,7 @@ const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
 /**
  * Construye las columnas de una sección: las comunes (R4) + las específicas del
  * resultado (monto+método si entregada R6; fecha+motivo si reprogramada; motivo
- * si devuelta; motivo+evidencia si rechazada, R5) + la de acciones (64/R35). El
+ * si devuelta; motivo+evidencia si rechazada, R5) + la de acciones (67/R35). El
  * setter del visor de evidencia se inyecta para la columna de la sección
  * "Rechazadas"; el del deshacer, para la columna de acciones de las 4.
  */
@@ -464,7 +464,7 @@ function columnasPara(
     value: PAGO_MENSAJERO_COL,
     render: (g) => money(g.pagoMensajero),
   };
-  // Feature 64/R35: "Devolver a gestión" por fila, en las 4 tablas. NO hay estado
+  // Feature 67/R35: "Devolver a gestión" por fila, en las 4 tablas. NO hay estado
   // "no deshacible" que pintar: la vista solo lista gestiones dentro de la ventana
   // (`findGestionesPendientes` filtra `cierre_id IS NULL` + `anulada_at IS NULL`) y
   // son todas del actor (`/cierre-dia` es exclusivo del mensajero dueño, `page.tsx`

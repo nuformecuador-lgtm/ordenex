@@ -20,12 +20,12 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "gestion", // feature 36: crearGestionYTransicionar
   "liberacion_reprogramada", // feature 46: liberarOrden (cron)
   "ajuste_estado", // feature 6: OrdenService.actualizar (CRUD generico)
-  "deshacer_gestion", // feature 64 (F1.4-b): CierreDiaRepository.anularGestionYDevolverAGestion
+  "deshacer_gestion", // feature 67 (F1.4-b): CierreDiaRepository.anularGestionYDevolverAGestion
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];
 
-// Feature 64 (design §4.2, F1.4-a) — FAMILIAS de transicion que enlazan una gestion: una fila
+// Feature 67 (design §4.2, F1.4-a) — FAMILIAS de transicion que enlazan una gestion: una fila
 // de historial con uno de estos `origen_tipo` SIEMPRE nace con `gestion_orden_id` poblado
 // (`crearGestionYTransicionar` / `anularGestionYDevolverAGestion`, verificado). Fuente unica
 // del predicado que desambigua la NULIDAD del enlace en el derivador de intentos:

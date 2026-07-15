@@ -41,7 +41,7 @@ const MSG_VACIO = "No tenes gestiones pendientes de cierre."; // R11
 const MSG_DUPLICADO = "Ya tenes un cierre solicitado pendiente de aprobacion."; // R12
 const MSG_SIN_ZONA = "No tenes una zona asignada; contacta a tu administrador."; // R16
 
-// Feature 64 — mensajes ACCIONABLES del deshacer (constantes i18n-ready, patron MSG_* de la 37).
+// Feature 67 — mensajes ACCIONABLES del deshacer (constantes i18n-ready, patron MSG_* de la 37).
 const MSG_YA_EN_CIERRE = "Esta gestion ya esta incluida en un cierre solicitado; no se puede deshacer."; // R2
 const MSG_YA_DESHECHA = "Esta gestion ya fue deshecha."; // R3
 const MSG_NO_ES_LA_ULTIMA = "Esta orden tiene una gestion mas reciente; hay que deshacer esa primero."; // R4
@@ -49,12 +49,12 @@ const MSG_ORDEN_MOVIDA = "Esta orden ya fue procesada por la bodega; ya no se pu
 const MSG_ORDEN_BORRADA = "Esta orden fue eliminada; ya no se puede deshacer su gestion."; // R6
 const MSG_CATALOGO = "catalogo de estados incompleto (seed pendiente)"; // patron `gestionar` (36)
 
-// Feature 64/R18: unico estado desde el que se puede volver a gestionar (`ORIGEN_GESTION` de
+// Feature 67/R18: unico estado desde el que se puede volver a gestionar (`ORIGEN_GESTION` de
 // MisAsignacionesService, guardia `cargarOrdenGestionable`). Destino del deshacer.
 const ESTADO_EN_REPARTO = "en_reparto";
 
 /**
- * Feature 64/R5 (design §5.3) — REGLA: estado en el que la orden DEBE estar para que su gestion
+ * Feature 67/R5 (design §5.3) — REGLA: estado en el que la orden DEBE estar para que su gestion
  * sea deshacible, derivado del `resultado` de esa gestion. Es la guardia de "la orden no se
  * movio": si la bodega ya la reasigno/ruteo/recibio, o el cron libero una `reprogramada`, o se
  * devolvio a la tienda de origen, o un admin ajusto el estado, el deshacer es peligroso -> conflict.
@@ -75,7 +75,7 @@ const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
 // como Pick para dobles de test sin DB/red (patron RecepcionSateliteService).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 39: ademas de la zona (37), el service resuelve el vehiculo del mensajero
-// para el resolver de tarifa. Feature 64: + `findEstatusIdByValue` (resuelve `en_reparto`).
+// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_reparto`).
 type OrdenRepo = Pick<
   IOrdenRepository,
   "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue"
@@ -257,7 +257,7 @@ export class CierreDiaService implements ICierreDiaService {
   }
 
   /**
-   * Feature 64 (design §5.2) — REGLA del deshacer: 8 guardias antes de la UNICA escritura.
+   * Feature 67 (design §5.2) — REGLA del deshacer: 8 guardias antes de la UNICA escritura.
    * Todas devuelven SIN efectos. El orden importa: autz (R8/R9) antes que negocio, y las
    * lecturas mas baratas primero.
    */

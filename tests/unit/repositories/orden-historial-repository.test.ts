@@ -163,7 +163,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
   });
 });
 
-describe("contarPorDestinoVigentes (49/R24 + 64/R24-R26)", () => {
+describe("contarPorDestinoVigentes (49/R24 + 67/R24-R26)", () => {
   it("cuenta filtrando por ordenId + estatusDestinoId (usa el indice del destino)", async () => {
     const prisma = buildPrisma();
     prisma.ordenHistorialEstado.count.mockResolvedValue(3);
@@ -176,10 +176,10 @@ describe("contarPorDestinoVigentes (49/R24 + 64/R24-R26)", () => {
     expect(arg.where).toMatchObject({ ordenId: "o1", estatusDestinoId: "s-devuelta" });
   });
 
-  // Feature 64 (F1.4-a, design §4.2): el predicado discrimina por `origen_tipo`, NO por la
+  // Feature 67 (F1.4-a, design §4.2): el predicado discrimina por `origen_tipo`, NO por la
   // nulidad del enlace. Este test FIJA la forma exacta del OR: si alguien lo relaja al
   // predicado ingenuo (`{ gestionOrdenId: null }` a secas), rompe.
-  it("64/R24-R26: el WHERE es el OR de (sin-gestion FUERA de la familia gestion) | (gestion vigente)", async () => {
+  it("67/R24-R26: el WHERE es el OR de (sin-gestion FUERA de la familia gestion) | (gestion vigente)", async () => {
     const prisma = buildPrisma();
     prisma.ordenHistorialEstado.count.mockResolvedValue(0);
     const repo = new OrdenHistorialRepository(prisma as unknown as PrismaClient);
@@ -201,11 +201,11 @@ describe("contarPorDestinoVigentes (49/R24 + 64/R24-R26)", () => {
   });
 });
 
-// Feature 64 (F1.4-a) — verificacion SEMANTICA del predicado: se evalua el WHERE que produce
+// Feature 67 (F1.4-a) — verificacion SEMANTICA del predicado: se evalua el WHERE que produce
 // el repo contra filas de ejemplo (sin DB), para probar que cada caso de la tabla de design
 // §4.1 cae del lado correcto. Complementa al test de forma de arriba: ese fija la QUERY, este
 // fija el SIGNIFICADO.
-describe("contarPorDestinoVigentes — semantica del predicado (64/R24-R26)", () => {
+describe("contarPorDestinoVigentes — semantica del predicado (67/R24-R26)", () => {
   type Fila = {
     gestionOrdenId: string | null;
     origenTipo: string;

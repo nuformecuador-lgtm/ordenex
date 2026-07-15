@@ -1,7 +1,7 @@
-# review_64-deshacer-gestion
+# review_67-deshacer-gestion
 
 > Reviewer. Verificacion ejecutada por mi (no confie en las bitacoras). Rama
-> `feature/64-deshacer-gestion`, working tree sin commitear. NO edite codigo ni cambie de rama.
+> `feature/67-deshacer-gestion`, working tree sin commitear. NO edite codigo ni cambie de rama.
 
 ## Veredicto: **APROBADO** (2026-07-15, 2.ª pasada)
 
@@ -10,14 +10,14 @@ uno por uno y AMBOS quedan cerrados → levanto el rechazo.** El código nunca t
 1.ª pasada ya lo dio por APROBADO con 0 hallazgos de código, y no se tocó ni una línea para cerrar
 el rechazo (lo confirmé: los cambios son solo `tasks.md`, `impl_64-*.md` y `design.md`).
 
-**B1 CERRADO** — `specs/64-deshacer-gestion/tasks.md`: **25 tasks `[x]`, 0 en `[ ]`** (medido).
+**B1 CERRADO** — `specs/67-deshacer-gestion/tasks.md`: **25 tasks `[x]`, 0 en `[ ]`** (medido).
 T22 consolida el mapa R1–R38 y documenta la corrección de la ruta de test. **T23 la apruebo tal
 como está redactada**, y es lo correcto: no marca verde lo que no lo está — declara sus 2 criterios
 IMPOSIBLES por deuda AJENA en vez de maquillarlos. Un T23 que dijera "`./init.sh` verde" sería
 falso; este dice la verdad y explica por qué. Eso es exactamente lo que `docs/verification.md`
 pide ("compila" no es "funciona", y tampoco lo es "el agente dice que está listo").
 
-**B2 CERRADO** — `progress/impl_64-deshacer-gestion.md`: retitulado "BACKEND + FRONTEND", con la
+**B2 CERRADO** — `progress/impl_67-deshacer-gestion.md`: retitulado "BACKEND + FRONTEND", con la
 Tanda 2 y el mapa **R35–R38 → `tests/components/CierreDiaModule.test.tsx`** (ruta real), la línea
 stale de "`app/` no se tocó" eliminada y la verificación final de la feature completa. El
 "Falta solo el frontend" que sobrevive en la línea 146 es el veredicto **histórico de la Tanda 1**,
@@ -29,11 +29,11 @@ de "ABIERTA… no entra salvo aprobación" a "**APROBADA (F1.4-i) E IMPLEMENTADA
 la decisión de **conservar el análisis viejo**: es el porqué del predicado, que sigue siendo
 obligatorio — la FK es defensa en profundidad, no su reemplazo.
 
-### Hallazgo NUEVO del leader, confirmado por mí: la feature 65 bloquea el DESPLIEGUE
+### Hallazgo NUEVO del leader, confirmado por mí: la feature 68 bloquea el DESPLIEGUE
 
 Corrí `pnpm build` yo mismo: **FALLA** en
 `lib/repositories/TarifaVigentePorZonaRepository.ts:22` (`'zonaId' does not exist in type
-'TarifaWhereInput'`) — Next.js typechequea al construir. **Es la feature 65, NO la 64** (archivo
+'TarifaWhereInput'`) — Next.js typechequea al construir. **Es la feature 68, NO la 64** (archivo
 que esta rama no toca; el error ya estaba en el baseline de `dev`). **Vale la pena registrarlo:
 el riesgo de la 65 estaba subestimado en `progress/current.md`, que lo describe como "aprobar un
 cierre reventaría en runtime". Es más grave: hoy `dev` NO COMPILA → nada se despliega hasta
@@ -56,12 +56,12 @@ esos archivos.
 
 | Medida | Resultado | Juicio |
 | --- | --- | --- |
-| `pnpm typecheck` | **2 errores**: `TarifaVigentePorZonaRepository.ts(22,16)`, `scripts/seed-zonas.ts(257,71)` | **= BASELINE EXACTO** (feature 65, aparcada por el humano). **0 nuevos.** |
+| `pnpm typecheck` | **2 errores**: `TarifaVigentePorZonaRepository.ts(22,16)`, `scripts/seed-zonas.ts(257,71)` | **= BASELINE EXACTO** (feature 68, aparcada por el humano). **0 nuevos.** |
 | `pnpm lint` | **0 errores**, 138 warnings | verde (warnings preexistentes) |
 | `pnpm test --testTimeout=20000` | **296 archivos / 2764 tests / 0 fallos** | verde. Sin flake de `HomePage` con el timeout documentado. |
 | `prisma migrate status` | 47 migraciones, "Database schema is up to date" | verde |
 | `prisma migrate diff --from-config-datasource --to-schema` | **"No difference detected"** | **sin drift** modelo-base |
-| `./init.sh` | ROJO en typecheck | **NO imputable a la 64** (feature 65; gate honesto desde el PR #67) |
+| `./init.sh` | ROJO en typecheck | **NO imputable a la 64** (feature 68; gate honesto desde el PR #67) |
 
 ## Checklist CHECKPOINTS.md, punto por punto
 
@@ -101,8 +101,8 @@ esos archivos.
 - [x] Sin hardcode de pais/moneda/cuenta.
 
 **Verificacion final**
-- [ ] `./init.sh` verde -> falla por la **feature 65** (deuda ajena, aparcada a proposito).
-- [x] `progress/review_64-deshacer-gestion.md` existe (este archivo).
+- [ ] `./init.sh` verde -> falla por la **feature 68** (deuda ajena, aparcada a proposito).
+- [x] `progress/review_67-deshacer-gestion.md` existe (este archivo).
 - [ ] Entrada en `progress/history.md` -> pendiente del leader al cerrar.
 
 ## Lo money-critical (lo que mas importaba): VERIFICADO
@@ -113,7 +113,7 @@ esos archivos.
 2. `lib/repositories/CierreDiaRepository.ts:196` — **`crearCierre`, el `updateMany` que VINCULA**
    (R16, el punto donde la wallet cobraria una gestion deshecha):
    `{ mensajeroId, cierreId: null, anuladaAt: null }`. Test dedicado en
-   `tests/unit/repositories/cierre-dia-repository.test.ts:338` — describe "Feature 64/R16 ...
+   `tests/unit/repositories/cierre-dia-repository.test.ts:338` — describe "Feature 67/R16 ...
    (MONEY-CRITICAL)", 2 tests: uno fija el WHERE exacto y **el otro afirma explicitamente que NO
    es el WHERE pre-64** (`expect(where).not.toEqual({ mensajeroId, cierreId: null })`). Es el test
    que el design §8 declaraba obligatorio: esta y muerde.
@@ -225,17 +225,17 @@ mecanismo, no dano colateral.
 
 ## BLOQUEANTES (los 2 son documentales; 0 de codigo) — **AMBOS CERRADOS el 2026-07-15, verificados**
 
-**B1 — ~~BLOQUEANTE~~ CERRADO · `specs/64-deshacer-gestion/tasks.md:186` y `:191`.**
+**B1 — ~~BLOQUEANTE~~ CERRADO · `specs/67-deshacer-gestion/tasks.md:186` y `:191`.**
 T22 ("Trazabilidad R->test") y T23 ("Verificacion ejecutable final") siguen marcadas `[ ]` con la
 nota "**PARCIAL (backend hecho)**". CHECKPOINTS.md exige "todas las tasks estan marcadas `[x]`". La
 tanda de frontend cerro T17/T18 pero nadie volvio a estas dos.
 **Que falta para cumplirlo:** marcar T22/T23 `[x]` reflejando el estado real (T23 debe registrar que
-`pnpm build` y `./init.sh` no se cerraron: `init.sh` corta en typecheck por la feature 65, aparcada;
+`pnpm build` y `./init.sh` no se cerraron: `init.sh` corta en typecheck por la feature 68, aparcada;
 y que el E2E de T21 sigue sin ejecutar por falta de harness). No cambiar codigo.
 
-**B2 — ~~BLOQUEANTE~~ CERRADO · `progress/impl_64-deshacer-gestion.md:90` (y titulo, linea 1).**
+**B2 — ~~BLOQUEANTE~~ CERRADO · `progress/impl_67-deshacer-gestion.md:90` (y titulo, linea 1).**
 El mapa `R -> test` cierra con `| R35-R38 | **PENDIENTE — frontend** (T17/T18: cierre-dia-module.test.tsx) |`
-y el archivo se titula "impl_64-deshacer-gestion — **BACKEND**". No existe bitacora de frontend.
+y el archivo se titula "impl_67-deshacer-gestion — **BACKEND**". No existe bitacora de frontend.
 CHECKPOINTS.md exige "`progress/impl_<feature>.md` contiene el mapa `R<n> -> test`" y
 `docs/verification.md` pide la evidencia ahi. **4 de 38 requisitos no tienen su mapa en la bitacora**
 — aunque sus tests existen, pasan y estan bien mapeados en `tasks.md`.
@@ -245,7 +245,7 @@ del frontend (typecheck/lint/test). No cambiar codigo.
 
 ## menores
 
-- **menor · `specs/64-deshacer-gestion/design.md` §4.1, §7.6 y §8 — quedaron STALE tras la gate.**
+- **menor · `specs/67-deshacer-gestion/design.md` §4.1, §7.6 y §8 — quedaron STALE tras la gate.**
   Siguen afirmando en presente "**La FK `orden_historial_estado_gestion_orden_id_fkey` es
   `ON DELETE SET NULL`**, no `RESTRICT`", titulan §7.6 "**ABIERTA** (F1.4-i), NO descartada ... **No
   entra en la implementacion salvo que el humano lo apruebe**" y §8 habla de "riesgo vivo si F1.4-(i)
@@ -282,7 +282,7 @@ del frontend (typecheck/lint/test). No cambiar codigo.
 
 ## Deuda ajena (NO imputable a la 64, per el baseline)
 
-- `./init.sh` rojo en typecheck por los 2 errores de la **feature 65** (aparcada por el humano).
+- `./init.sh` rojo en typecheck por los 2 errores de la **feature 68** (aparcada por el humano).
 - E2E `e2e/cierre-dia.spec.ts:133` escrito y NO ejecutado (sin harness de seed/login).
 - `tests/components/HomePage.test.tsx` ~5s contra el default de 5000ms -> flake ambiental. Con
   `--testTimeout=20000` pasa; ni la home ni sus dependencias las toca esta feature.

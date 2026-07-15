@@ -66,7 +66,7 @@ export interface CrearCierreInput {
 // Fila cruda de un cierre pasado (R18); el repo la mapea a CierrePasadoDTO.
 export type CierrePasadoRow = CierrePasadoDTO & { estado: CierreEstado };
 
-// Feature 64 — proyeccion MINIMA de la gestion candidata a deshacerse + el estado real de su
+// Feature 67 — proyeccion MINIMA de la gestion candidata a deshacerse + el estado real de su
 // orden, con TODO lo que necesitan las guardias del service (design 64 §5.2) y nada mas (no
 // expone montos ni evidencia: la decision no los usa). `anuladaAt` != null = ya deshecha (R3);
 // `cierreId` != null = ya vinculada a un cierre (R2). `orden.estatusId` es el id REAL leido de
@@ -85,7 +85,7 @@ export interface GestionDeshacerRow {
   };
 }
 
-// Feature 64/R11/R18/R19/R20/R22 — input de la UNICA escritura del deshacer. `estatusEsperadoId`
+// Feature 67/R11/R18/R19/R20/R22 — input de la UNICA escritura del deshacer. `estatusEsperadoId`
 // es el `orden.estatusId` REAL leido por `findGestionParaDeshacer` (guardia optimista: si la
 // orden se movio entre la lectura y la escritura, el UPDATE afecta 0 filas -> rollback).
 export interface AnularGestionInput {
@@ -123,20 +123,20 @@ export interface ICierreDiaRepository {
   /** R18: cierres del mensajero (mas reciente primero) con estado + totales. */
   findCierresByMensajero(mensajeroId: string): Promise<CierrePasadoDTO[]>;
   /**
-   * Feature 64 — lee la gestion candidata a deshacerse + el estado real de su orden. Devuelve
+   * Feature 67 — lee la gestion candidata a deshacerse + el estado real de su orden. Devuelve
    * la fila SIN juzgarla (las guardias de R2/R3/R5/R6/R9 viven en el service); `null` si la
    * gestion no existe. Solo query.
    */
   findGestionParaDeshacer(gestionId: string): Promise<GestionDeshacerRow | null>;
   /**
-   * Feature 64/R4 — id de la gestion NO anulada mas reciente de la orden (`orderBy created_at
+   * Feature 67/R4 — id de la gestion NO anulada mas reciente de la orden (`orderBy created_at
    * desc`), o `null` si la orden no tiene ninguna vigente. El service exige que coincida con la
    * gestion a deshacer: solo se deshace la ULTIMA. Se ordena por `gestion_orden.created_at` (una
    * gestion por tx) y NO por filas de historial, que pueden empatar en `created_at` (design §8).
    */
   findUltimaGestionNoAnuladaId(ordenId: string): Promise<string | null>;
   /**
-   * Feature 64/R11/R18-R23 — UNICA escritura del deshacer, todo-o-nada en UNA `$transaction`
+   * Feature 67/R11/R18-R23 — UNICA escritura del deshacer, todo-o-nada en UNA `$transaction`
    * (R22): (1) ANULA la gestion con rastro (`anulada_at`/`anulada_por`) conservando intactos
    * todos sus datos originales (R11/R12), (2) devuelve la orden a `en_reparto` REPONIENDO la
    * asignacion al mensajero autor (R18/R19: una gestion `devuelta` con reintento habia limpiado

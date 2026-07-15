@@ -1,4 +1,4 @@
-# impl_64-deshacer-gestion — BACKEND + FRONTEND
+# impl_67-deshacer-gestion — BACKEND + FRONTEND
 
 > Alcance de esta bitácora: la feature COMPLETA. Nació como bitácora de la tanda de **backend**
 > (R1–R34: datos, negocio, Server Action y tests) y se cerró con la de **frontend** (R35–R38:
@@ -127,7 +127,7 @@ residuo verificado 0/0/0):
 - `npx prisma validate --schema db/schema.prisma` → **"The schema at db\schema.prisma is valid 🚀"**
 - `pnpm typecheck 2>&1 | grep -c "error TS"` → **2** = baseline exacto. Son
   `TarifaVigentePorZonaRepository.ts(22,16)` y `scripts/seed-zonas.ts(257,71)`, bugs REALES
-  preexistentes de la feature 65 **aparcados a propósito por el humano**: no se tocaron.
+  preexistentes de la feature 68 **aparcados a propósito por el humano**: no se tocaron.
   **0 errores nuevos.**
 - `pnpm lint` → **0 errores**, 138 warnings (todos preexistentes, ninguno en archivos de esta feature).
 - `pnpm test` → **296 archivos / 2748 tests, 0 fallos** (baseline 2652 → **+96 tests nuevos**).
@@ -185,7 +185,7 @@ sembrada + harness de login por rol, que no existe. No es algo que esta feature 
 | Round-trip de las 2 migraciones | REAL contra Postgres vivo. El reviewer lo repitió por su cuenta en una tx con `ROLLBACK`: ambos `down.sql` corren limpio y devuelven el esquema exacto (enum 11, 0 columnas, 0 índice, FK `'n'`). Estado vivo: enum **12**, FK `confdeltype='r'` (**RESTRICT**), RLS `gestion_orden` true / 0 policies |
 
 **Los 2 errores de typecheck NO son de esta feature**: son `TarifaVigentePorZonaRepository.ts:22` y
-`scripts/seed-zonas.ts:257`, bugs REALES preexistentes registrados como **feature 65** y aparcados a
+`scripts/seed-zonas.ts:257`, bugs REALES preexistentes registrados como **feature 68** y aparcados a
 propósito por el humano. Por ellos `./init.sh` corta en rojo en typecheck (el gate se volvió honesto
 hoy, PR #67) sin llegar a los tests → la verificación de la 64 se hizo con `pnpm test`/`typecheck`
 directos, y así se reporta, sin apoyarse en un gate que hoy no llega.

@@ -62,7 +62,7 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     existeCierreSolicitado: vi.fn(async () => false),
     crearCierre: vi.fn(async () => "c1"),
     findCierresByMensajero: vi.fn(async () => []),
-    // Feature 64: por defecto, una gestion `entregada` vigente del propio mensajero, sin
+    // Feature 67: por defecto, una gestion `entregada` vigente del propio mensajero, sin
     // cierre, que ES la mas reciente y cuya orden sigue en `entregada` -> deshacible (R1).
     findGestionParaDeshacer: vi.fn(async () => gestionDeshacer()),
     findUltimaGestionNoAnuladaId: vi.fn(async () => "g1"),
@@ -71,7 +71,7 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
   };
 }
 
-// Feature 64 — fila de la gestion candidata a deshacerse (default: caso feliz).
+// Feature 67 — fila de la gestion candidata a deshacerse (default: caso feliz).
 function gestionDeshacer(overrides: Partial<GestionDeshacerRow> = {}): GestionDeshacerRow {
   return {
     gestionId: "g1",
@@ -102,7 +102,7 @@ function newService(opts: {
   vehiculoMensajero?: string | null;
   tarifa?: PagoTarifa | null; // feature 39: tarifa resuelta (default TARIFA_DEFECTO)
   signedUrls?: ISignedUrlProvider;
-  // Feature 64: id de `en_reparto` en el catalogo (null = seed pendiente -> validation_error).
+  // Feature 67: id de `en_reparto` en el catalogo (null = seed pendiente -> validation_error).
   estatusEnRepartoId?: string | null;
 } = {}) {
   const repo = opts.repo ?? fakeRepo();
@@ -112,7 +112,7 @@ function newService(opts: {
   const ordenRepo = {
     findUsuarioZonaId: vi.fn(async () => (opts.zonaMensajero === undefined ? ZONA_MENSAJERO : opts.zonaMensajero)),
     findUsuarioVehiculoId: vi.fn(async () => opts.vehiculoMensajero ?? null),
-    // Feature 64/R18: resuelve el destino `en_reparto`.
+    // Feature 67/R18: resuelve el destino `en_reparto`.
     findEstatusIdByValue: vi.fn(async () =>
       opts.estatusEnRepartoId === undefined ? "s-reparto" : opts.estatusEnRepartoId,
     ),
@@ -726,11 +726,11 @@ describe("solicitarCierre — snapshot del ingreso de bodega por rechazos (R8/R1
 });
 
 // ============================================================================
-// Feature 64 — deshacerGestion: la REGLA (8 guardias de design §5.2).
+// Feature 67 — deshacerGestion: la REGLA (8 guardias de design §5.2).
 // Cubre R1-R6, R8, R9, R18, R19, R29, R30, R32, R34 con dobles (sin DB/red).
 // ============================================================================
 
-describe("Feature 64 · deshacerGestion — ventana y elegibilidad (R1-R6)", () => {
+describe("Feature 67 · deshacerGestion — ventana y elegibilidad (R1-R6)", () => {
   it("R1: gestion vigente (cierreId null, no anulada), la mas reciente, orden en su sitio -> ok", async () => {
     const { service, repo } = newService();
 
@@ -809,7 +809,7 @@ describe("Feature 64 · deshacerGestion — ventana y elegibilidad (R1-R6)", () 
 
 // R5: la guardia de "la orden no se movio" (F1.4-h), un caso por resultado. La tabla
 // ESTADOS_ESPERADOS sale de crearGestionYTransicionar + resolverSeguimientoDevuelta.
-describe("Feature 64 · deshacerGestion — guardia de estado de la orden (R5, F1.4-h)", () => {
+describe("Feature 67 · deshacerGestion — guardia de estado de la orden (R5, F1.4-h)", () => {
   const CASOS_OK = [
     { resultado: "entregada" as const, estatusValue: "entregada", nota: "destino = resultado" },
     { resultado: "reprogramada" as const, estatusValue: "reprogramada", nota: "destino = resultado" },
@@ -865,7 +865,7 @@ describe("Feature 64 · deshacerGestion — guardia de estado de la orden (R5, F
   }
 });
 
-describe("Feature 64 · deshacerGestion — autorizacion (R8/R9)", () => {
+describe("Feature 67 · deshacerGestion — autorizacion (R8/R9)", () => {
   it("R8 (F1.4-f): rol != mensajero -> forbidden, sin tocar el repo", async () => {
     const repo = fakeRepo();
     const { service } = newService({ repo });
@@ -901,7 +901,7 @@ describe("Feature 64 · deshacerGestion — autorizacion (R8/R9)", () => {
   });
 });
 
-describe("Feature 64 · deshacerGestion — transicion y efectos (R18/R19/R29/R30/R32/R34)", () => {
+describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R30/R32/R34)", () => {
   it("R18/R19: pide al repo `en_reparto` como destino y el mensajero AUTOR como asignado", async () => {
     const repo = fakeRepo({
       findGestionParaDeshacer: vi.fn(async () =>
@@ -997,7 +997,7 @@ describe("Feature 64 · deshacerGestion — transicion y efectos (R18/R19/R29/R3
 // T19 (R13/R14/R15): una gestion anulada desaparece de la vista Y de los derivados. La
 // exclusion ocurre aguas arriba (el WHERE del repo, T6): aqui se prueba el efecto END-TO-END
 // sobre grupos + totales + pago al mensajero (39) + ingreso de bodega (56).
-describe("Feature 64 · gestion anulada ausente de la vista y los totales (R13/R14/R15)", () => {
+describe("Feature 67 · gestion anulada ausente de la vista y los totales (R13/R14/R15)", () => {
   it("R13/R14/R15: la lista SIN la anulada -> no aparece en los grupos ni suma a ningun total", async () => {
     // El repo (con `anuladaAt: null` en su WHERE) devuelve SOLO la vigente: una anulada de
     // 20.00 en efectivo ni se lista ni suma.

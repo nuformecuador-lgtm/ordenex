@@ -4,7 +4,7 @@
 -- Prisma para una relacion opcional sin `onDelete`).
 --
 -- OJO al revertir: con SET NULL vuelve el riesgo documentado en design.md §8 (un DELETE
--- sobre `gestion_orden` orfana filas del historial en silencio). La feature 64 sigue siendo
+-- sobre `gestion_orden` orfana filas del historial en silencio). La feature 67 sigue siendo
 -- correcta sin esta FK — el predicado de `contarPorDestinoVigentes` (design §4.2) trata la
 -- huerfana como intento NO vigente (R26) y no depende de la accion referencial —, pero se
 -- pierde la defensa en profundidad. Si se revierte, revertir tambien el `onDelete: Restrict`

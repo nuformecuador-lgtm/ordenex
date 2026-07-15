@@ -37,7 +37,7 @@ function fakeSignedUrls(): ISignedUrlProvider {
   };
 }
 
-// Feature 64 — gestion deshacible por defecto en el repo en memoria (del propio MENSAJERO,
+// Feature 67 — gestion deshacible por defecto en el repo en memoria (del propio MENSAJERO,
 // vigente, sin cierre, con su orden todavia en `entregada`).
 const GESTION_DESHACIBLE: GestionDeshacerRow = {
   gestionId: "11111111-1111-4111-8111-111111111111",
@@ -58,7 +58,7 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
     findGestionesPendientes: vi.fn(async () => [...pendientes]),
     contarOrdenesPendientesGestion: vi.fn(async () => 0),
     existeCierreSolicitado: vi.fn(async () => false),
-    // Feature 64: el deshacer sobre el repo en memoria (caso feliz).
+    // Feature 67: el deshacer sobre el repo en memoria (caso feliz).
     findGestionParaDeshacer: vi.fn(async () => GESTION_DESHACIBLE),
     findUltimaGestionNoAnuladaId: vi.fn(async () => GESTION_DESHACIBLE.gestionId),
     anularGestionYDevolverAGestion: vi.fn(async () => true),
@@ -86,7 +86,7 @@ function realService(repo: ICierreDiaRepository): ICierreDiaService {
   const ordenRepo = {
     findUsuarioZonaId: vi.fn(async () => "z-satelite"),
     findUsuarioVehiculoId: vi.fn(async () => null), // feature 39
-    findEstatusIdByValue: vi.fn(async () => "s-reparto"), // feature 64/R18
+    findEstatusIdByValue: vi.fn(async () => "s-reparto"), // feature 67/R18
   } as unknown as IOrdenRepository;
   // Feature 39: tarifa por defecto (cobroEntregado 5.00); resuelve el pago en vivo/snapshot.
   const tarifaZonaRepo = {
@@ -138,7 +138,7 @@ describe("cierre-dia actions — unauthenticated en el borde", () => {
 });
 
 // ============================================================================
-// Feature 64 — Server Action `deshacerGestion`: el BORDE (R7 sesion, R10 zod, R8 rol).
+// Feature 67 — Server Action `deshacerGestion`: el BORDE (R7 sesion, R10 zod, R8 rol).
 // ============================================================================
 
 const GESTION_ID = "11111111-1111-4111-8111-111111111111"; // uuid v4 valido
@@ -151,7 +151,7 @@ function fakeDeshacerService(): ICierreDiaService {
   } as unknown as ICierreDiaService;
 }
 
-describe("Feature 64 · deshacerGestion action — R7: sesion", () => {
+describe("Feature 67 · deshacerGestion action — R7: sesion", () => {
   it("R7: sin sesion -> unauthenticated, SIN ejecutar la logica de negocio ni tocar la DB", async () => {
     const service = fakeDeshacerService();
     const r = await deshacerGestion({ gestionId: GESTION_ID }, { service, getActor: noActor });
@@ -167,7 +167,7 @@ describe("Feature 64 · deshacerGestion action — R7: sesion", () => {
   });
 });
 
-describe("Feature 64 · deshacerGestion action — R10: zod en el borde", () => {
+describe("Feature 67 · deshacerGestion action — R10: zod en el borde", () => {
   it("R10: gestionId no-uuid -> validation_error, sin llegar al service", async () => {
     const service = fakeDeshacerService();
     const r = await deshacerGestion({ gestionId: "no-es-uuid" }, { service, getActor: actorMensajero });
@@ -194,7 +194,7 @@ describe("Feature 64 · deshacerGestion action — R10: zod en el borde", () => 
   });
 });
 
-describe("Feature 64 · deshacerGestion action — R8: rol", () => {
+describe("Feature 67 · deshacerGestion action — R8: rol", () => {
   it("R8: rol != mensajero -> forbidden (resultado de dominio del service), sin efectos", async () => {
     const repo = inMemoryRepo([pendiente()]);
     const service = realService(repo);

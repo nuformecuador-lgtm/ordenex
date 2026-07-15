@@ -61,10 +61,10 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     expect(prisma.cierreDia.findMany).not.toHaveBeenCalled();
   });
 
-  // Feature 64/R17: una gestion ANULADA (deshecha) NO es "actividad del dia pendiente de
+  // Feature 67/R17: una gestion ANULADA (deshecha) NO es "actividad del dia pendiente de
   // cierre". Un mensajero cuyas unicas gestiones del dia estan anuladas NO debe recibir un
   // cierre `vencido` del corte diario (que ademas lo bloquearia para nuevas asignaciones).
-  it("64/R17: el WHERE exige `anuladaAt: null` (las gestiones deshechas no son actividad pendiente)", async () => {
+  it("67/R17: el WHERE exige `anuladaAt: null` (las gestiones deshechas no son actividad pendiente)", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findMany.mockResolvedValue([]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
@@ -75,7 +75,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     expect(arg.where).toEqual({ cierreId: null, anuladaAt: null });
   });
 
-  it("64/R17: un mensajero cuya unica gestion pendiente esta anulada queda FUERA del corte", async () => {
+  it("67/R17: un mensajero cuya unica gestion pendiente esta anulada queda FUERA del corte", async () => {
     const prisma = buildPrisma();
     // El WHERE `{ cierreId: null, anuladaAt: null }` no devuelve a m2 (su unica gestion del dia
     // esta anulada): la query ya lo excluye en la base, no hace falta filtrar en memoria.

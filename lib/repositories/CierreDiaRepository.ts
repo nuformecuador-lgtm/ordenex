@@ -18,7 +18,7 @@ const ESTADO_SOLICITADO = "solicitado";
 // devuelve null (sin efectos), NO se propaga como error real.
 class SinGestionesVinculadas extends Error {}
 
-// Feature 64: sentinela interno del deshacer (mismo patron que SinGestionesVinculadas). Una
+// Feature 67: sentinela interno del deshacer (mismo patron que SinGestionesVinculadas). Una
 // guardia que afecta 0 filas DENTRO de la tx (carrera con `solicitarCierre` / doble submit /
 // la orden se movio) fuerza el rollback -> `anularGestionYDevolverAGestion` devuelve `false`
 // SIN efectos parciales (R22). NO es un error real: no se propaga.
@@ -112,7 +112,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
   async findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]> {
     const rows = await this.prisma.gestionOrden.findMany({
       // R2: nunca gestiones de otro mensajero; R3: solo sin cierre.
-      // Feature 64/R13/R14/R15: `anuladaAt: null` = solo gestiones VIGENTES. ESTA lista es la
+      // Feature 67/R13/R14/R15: `anuladaAt: null` = solo gestiones VIGENTES. ESTA lista es la
       // que consumen los 4 grupos (R13), `computeTotales` (R14), `derivarPagos` (39) y
       // `derivarIngresoBodega` (56) (R15), tanto en la vista EN VIVO (`listarCierreDia`) como
       // en el SNAPSHOT (`solicitarCierre` y el corte diario de la 41): un solo filtro cubre
@@ -185,13 +185,13 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         // Feature 41/C1 (R8/R9/R23): si vincula 0 (otra solicitud/corte concurrente las
         // vinculo primero), fuerza el rollback -> crearCierre devuelve null (sin efectos).
         //
-        // Feature 64/R16 — PUNTO MONEY-CRITICAL DE LA FEATURE. `anuladaAt: null` NO es una
+        // Feature 67/R16 — PUNTO MONEY-CRITICAL DE LA FEATURE. `anuladaAt: null` NO es una
         // optimizacion: este updateMany es el que VINCULA la gestion al cierre, y los feeds de
         // wallet (`WalletFeedService`/`WalletTiendaFeedService`/`WalletMensajeroFeedService`)
         // leen `gestionOrden.findMany({ where: { cierreId } })` dentro de la tx de aprobacion
         // (`CierresAdminRepository`). Sin este filtro, una gestion DESHECHA recibiria
         // `cierre_id` y la wallet la COBRARIA al aprobar el cierre: exactamente el bug que la
-        // feature 64 viene a evitar. No basta con filtrar la lista de la vista (design §3-#2).
+        // feature 67 viene a evitar. No basta con filtrar la lista de la vista (design §3-#2).
         const vinculadas = await tx.gestionOrden.updateMany({
           where: { mensajeroId, cierreId: null, anuladaAt: null },
           data: { cierreId: cierre.id },
@@ -275,7 +275,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
   }
 
   /**
-   * Feature 64 — gestion candidata a deshacerse + estado real de su orden. Devuelve la fila tal
+   * Feature 67 — gestion candidata a deshacerse + estado real de su orden. Devuelve la fila tal
    * cual (sin juzgarla: las guardias viven en el service, `docs/architecture.md`). `null` = no
    * existe -> el service lo trata como `forbidden` (R9: no distingue inexistente de ajena).
    */
@@ -308,7 +308,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     };
   }
 
-  /** Feature 64/R4: id de la gestion NO anulada mas reciente de la orden (o null). */
+  /** Feature 67/R4: id de la gestion NO anulada mas reciente de la orden (o null). */
   async findUltimaGestionNoAnuladaId(ordenId: string): Promise<string | null> {
     const row = await this.prisma.gestionOrden.findFirst({
       where: { ordenId, anuladaAt: null },
@@ -319,7 +319,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
   }
 
   /**
-   * Feature 64/R11/R18-R23 — UNICA escritura del deshacer, en UNA `$transaction` (R22). Las dos
+   * Feature 67/R11/R18-R23 — UNICA escritura del deshacer, en UNA `$transaction` (R22). Las dos
    * escrituras van GUARDADAS en su WHERE (concurrencia-segura, patron `crearCierre`/`recogerLote`):
    * si alguna afecta 0 filas, el sentinela fuerza el rollback -> `false` sin efectos parciales.
    */

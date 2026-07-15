@@ -64,10 +64,10 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
     expect(arg.orderBy).toMatchObject({ createdAt: "desc" });
   });
 
-  // Feature 64/R13/R14/R15 — ESTA lista alimenta los 4 grupos, `computeTotales`,
+  // Feature 67/R13/R14/R15 — ESTA lista alimenta los 4 grupos, `computeTotales`,
   // `derivarPagos` (39) y `derivarIngresoBodega` (56), en la vista EN VIVO y en el SNAPSHOT
   // de `solicitarCierre`/corte diario: un solo filtro cubre los tres requisitos.
-  it("64/R13/R14/R15: el WHERE exige `anuladaAt: null` (las gestiones deshechas no se listan)", async () => {
+  it("67/R13/R14/R15: el WHERE exige `anuladaAt: null` (las gestiones deshechas no se listan)", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findMany.mockResolvedValue([]);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient);
@@ -332,10 +332,10 @@ describe("CierreDiaRepository.crearCierre — feature 41/C1 (R8/R9/R23)", () => 
 });
 
 // ============================================================================
-// Feature 64 — el deshacer. Bloque money-critical + la escritura atomica.
+// Feature 67 — el deshacer. Bloque money-critical + la escritura atomica.
 // ============================================================================
 
-describe("Feature 64/R16 — crearCierre NO vincula gestiones anuladas (MONEY-CRITICAL)", () => {
+describe("Feature 67/R16 — crearCierre NO vincula gestiones anuladas (MONEY-CRITICAL)", () => {
   // design §3-#2 y §8: este `updateMany` es el que VINCULA la gestion al cierre. Los feeds de
   // wallet (42/43/44) leen `gestionOrden.findMany({ where: { cierreId } })` dentro de la tx de
   // aprobacion: si una gestion DESHECHA recibiera `cierre_id`, la wallet la cobraria al
@@ -394,7 +394,7 @@ describe("Feature 64/R16 — crearCierre NO vincula gestiones anuladas (MONEY-CR
   });
 });
 
-describe("Feature 64 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId (R4/R6)", () => {
+describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId (R4/R6)", () => {
   it("lee la gestion por id con lo que necesitan las guardias (cierre, anulacion, orden)", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findUnique.mockResolvedValue({
@@ -468,7 +468,7 @@ describe("Feature 64 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
   });
 });
 
-describe("Feature 64 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", () => {
+describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", () => {
   const INPUT = {
     gestionId: "g1",
     ordenId: "o1",
