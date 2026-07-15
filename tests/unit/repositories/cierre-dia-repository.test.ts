@@ -50,6 +50,9 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     },
     orden: { count: vi.fn() },
     cierreDia: { count: vi.fn(), create: vi.fn(), findMany: vi.fn() },
+    // Feature 69/T10: el snapshot y el resolver batch viven en la tx de `crearCierre`.
+    cierreDetail: { createMany: vi.fn() },
+    tarifa: { findMany: vi.fn(), findFirst: vi.fn() },
     $transaction: vi.fn(),
     ...overrides,
   };
@@ -773,5 +776,397 @@ describe("CierreDiaRepository.findCierresByMensajero (R18)", () => {
       totalIngresoBodegaRechazos: "3.00", // feature 56/R12: snapshot money-safe STRING
       solicitadoAt: "2026-07-12T10:00:00.000Z",
     });
+  });
+});
+
+// ============================================================================
+// Feature 69 — el SNAPSHOT (`cierre_detail`). Bloque money-critical: es lo que impide que
+// editar la orden o la tarifa entre SOLICITAR y APROBAR mueva el dinero del cierre.
+// ============================================================================
+
+const TARIFA_T1: TarifaVigenteResuelta = {
+  tarifaId: "ta1",
+  valorFlete: "1000.00",
+  valorFleteGam: "800.00",
+  valorFleteDevuelto: "500.00",
+  valorFleteDevueltoGam: "400.00",
+  comisionCod: "5.00",
+  ivaFlete: "13.00",
+  ivaComisionCod: "13.00",
+};
+
+// Gestion vinculada, tal como la lee `SNAPSHOT_SELECT` DENTRO de la tx.
+function snapshotRow(overrides: { ordenId?: string; orden?: Record<string, unknown> } = {}) {
+  return {
+    ordenId: overrides.ordenId ?? "o1",
+    orden: {
+      montoCobrar: new Prisma.Decimal("25000.00"),
+      cobraComision: true,
+      zonaId: "z1",
+      tiendaId: "t1",
+      numGuia: 10,
+      numRemision: "REM-1",
+      destinatario: "Ana",
+      direccion: "Av 1",
+      producto: "Caja",
+      zona: { nombre: "Cartago", esCentral: false },
+      tienda: { nombre: "Tienda X" },
+      provincia: { nombre: "Cartago" },
+      canton: { nombre: "Central" },
+      distrito: { nombre: "Oriental" },
+      ...(overrides.orden ?? {}),
+    },
+  };
+}
+
+function buildSnapshotTx(
+  rows: ReturnType<typeof snapshotRow>[],
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    cierreDia: { create: vi.fn(async () => ({ id: "c1" })) },
+    gestionOrden: {
+      updateMany: vi.fn(async () => ({ count: rows.length || 1 })),
+      findMany: vi.fn(async () => rows),
+    },
+    cierreDetail: { createMany: vi.fn(async () => ({ count: rows.length })) },
+    ...overrides,
+  };
+}
+
+const INPUT_CIERRE = {
+  mensajeroId: "m1",
+  destinoTipo: "bodega_satelite" as const,
+  destinoZonaId: "z1",
+  totales: { efectivo: "10.00", simpe: "0.00", transferencia: "0.00", general: "10.00" },
+  pagoByGestionId: { g1: "0.00" },
+  totalPagoMensajero: "0.00",
+  ingresoByGestionId: { g1: "0.00" },
+  totalIngresoBodegaRechazos: "0.00",
+};
+
+describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
+  it("R3: puebla el snapshot en la MISMA $transaction que el INSERT y la vinculacion", async () => {
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    const id = await repo.crearCierre(INPUT_CIERRE);
+
+    expect(id).toBe("c1");
+    // Una sola tx: el snapshot no puede quedar fuera del todo-o-nada.
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.cierreDetail.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  // El invariante que mata la carrera (design §3): si el snapshot se construyera con la lista
+  // que el service leyo ANTES de la tx, una gestion creada entre medias quedaria vinculada
+  // (el updateMany no lleva ids) pero SIN fila -> con R14 (sin fallback) la aprobacion
+  // abortaria. Por eso se lee `where: { cierreId }` DENTRO de la tx.
+  it("R3: lee lo que la tx VINCULO (where cierreId), no la lista del service", async () => {
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const arg = (tx.gestionOrden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { where: unknown };
+    expect(arg.where).toEqual({ cierreId: "c1" });
+  });
+
+  it("R4: si el createMany del snapshot falla, el error se propaga (rollback, sin efectos)", async () => {
+    const boom = new Error("createMany fallo");
+    const tx = buildSnapshotTx([snapshotRow()], {
+      cierreDetail: {
+        createMany: vi.fn(async () => {
+          throw boom;
+        }),
+      },
+    });
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    // NO se traga como el sentinela de 0-gestiones: un fallo real del snapshot debe
+    // propagarse para que la tx haga rollback (cierre + vinculacion + pagos incluidos).
+    await expect(repo.crearCierre(INPUT_CIERRE)).rejects.toThrow(boom);
+  });
+
+  it("R5: no puede haber filas de gestiones anuladas (el updateMany ya solo vincula vigentes)", async () => {
+    // El snapshot filtra por `cierreId` a secas; el invariante lo sostiene el updateMany de
+    // la vinculacion (67/R16). Se fija aqui: si alguien le quitara `anuladaAt: null` a esa
+    // guardia, una gestion deshecha recibiria cierre_id y ENTRARIA al snapshot.
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const vincula = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { where: unknown };
+    expect(vincula.where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
+  });
+
+  it("R6: congela los datos money-critical de la orden", async () => {
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data).toHaveLength(1);
+    expect(data[0]).toMatchObject({
+      cierreId: "c1",
+      ordenId: "o1",
+      cobraComision: true,
+      zonaId: "z1",
+      tiendaId: "t1",
+      esCentral: false, // el flag de la zona EN ESE INSTANTE, no el FK
+    });
+  });
+
+  it("R7: congela los descriptivos + los 5 nombres desnormalizados", async () => {
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0]).toMatchObject({
+      numGuia: 10,
+      numRemision: "REM-1",
+      destinatario: "Ana",
+      direccion: "Av 1",
+      producto: "Caja",
+      tiendaNombre: "Tienda X",
+      zonaNombre: "Cartago",
+      provinciaNombre: "Cartago",
+      cantonNombre: "Central",
+      distritoNombre: "Oriental",
+    });
+  });
+
+  it("R7: distrito nulo (unico FK nullable de la orden) => distritoNombre null", async () => {
+    const tx = buildSnapshotTx([snapshotRow({ orden: { distrito: null } })]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0].distritoNombre).toBeNull();
+  });
+
+  it("R8: congela los 7 valores de la tarifa + tarifa_id, resueltos EN LA MISMA tx", async () => {
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const tarifaRepo = buildTarifaRepo({ t1: TARIFA_T1 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, tarifaRepo);
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    // El resolver se invoca con el cliente de la TX (no con `prisma`): si se resolviera
+    // fuera, la tarifa congelada podria no ser la que la tx vio.
+    const [txArg, tiendaIds] = (tarifaRepo.resolveTarifasPorTiendas as ReturnType<typeof vi.fn>)
+      .mock.calls[0];
+    expect(txArg).toBe(tx);
+    expect(tiendaIds).toEqual(["t1"]);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0]).toMatchObject({ tarifaId: "ta1" });
+    const esperado: Record<string, string> = {
+      tarifaValorFlete: "1000.00",
+      tarifaValorFleteGam: "800.00",
+      tarifaValorFleteDevuelto: "500.00",
+      tarifaValorFleteDevueltoGam: "400.00",
+      tarifaComisionCod: "5.00",
+      tarifaIvaFlete: "13.00",
+      tarifaIvaComisionCod: "13.00",
+    };
+    for (const [col, valor] of Object.entries(esperado)) {
+      // R11: Decimal escala 2, nunca number.
+      expect(data[0][col]).toBeInstanceOf(Prisma.Decimal);
+      expect((data[0][col] as Prisma.Decimal).toFixed(2)).toBe(valor);
+    }
+  });
+
+  it("R9: tienda SIN tarifa => fila con las 8 columnas NULL y el cierre se crea igual", async () => {
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    // Sin tarifa para `t1`: el resolver devuelve null (gap de datos).
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const id = await repo.crearCierre(INPUT_CIERRE);
+
+    // Decision (c): el gap NO bloquea. El cierre lo solicita el MENSAJERO; la tarifa es
+    // configuracion de la TIENDA: bloquear le impediria cerrar su dia por un dato que no
+    // controla (y tumbaria el corte diario masivo de la 41).
+    expect(id).toBe("c1");
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0]).toMatchObject({
+      tarifaId: null,
+      tarifaValorFlete: null,
+      tarifaValorFleteGam: null,
+      tarifaValorFleteDevuelto: null,
+      tarifaValorFleteDevueltoGam: null,
+      tarifaComisionCod: null,
+      tarifaIvaFlete: null,
+      tarifaIvaComisionCod: null,
+    });
+  });
+
+  it("R2 (EL GRANO): 2 gestiones vigentes de la MISMA orden => UNA sola fila", async () => {
+    // Una orden puede acumular varias gestiones vigentes en el mismo cierre (reintentos
+    // 46/47). El detalle es de la ORDEN: sin dedupe, el UNIQUE (cierre_id, orden_id)
+    // rechazaria la segunda fila y tumbaria el cierre entero.
+    const tx = buildSnapshotTx([snapshotRow(), snapshotRow(), snapshotRow({ ordenId: "o2" })]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data).toHaveLength(2);
+    expect(data.map((d) => d.ordenId)).toEqual(["o1", "o2"]);
+  });
+
+  it("R11: montoCobrar viaja como Decimal escala 2 (nunca number/parseFloat)", async () => {
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0].montoCobrar).toBeInstanceOf(Prisma.Decimal);
+    expect((data[0].montoCobrar as Prisma.Decimal).toFixed(2)).toBe("25000.00");
+  });
+
+  it("R6: montoCobrar nulo en la orden se congela como null (no como 0)", async () => {
+    const tx = buildSnapshotTx([snapshotRow({ orden: { montoCobrar: null } })]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0].montoCobrar).toBeNull();
+  });
+
+  it("una tienda con varias ordenes se resuelve UNA vez (sin N+1)", async () => {
+    const tx = buildSnapshotTx([
+      snapshotRow({ ordenId: "o1" }),
+      snapshotRow({ ordenId: "o2" }),
+      snapshotRow({ ordenId: "o3", orden: { tiendaId: "t2" } }),
+    ]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const tarifaRepo = buildTarifaRepo({ t1: TARIFA_T1 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, tarifaRepo);
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    // UNA sola llamada batch para todas las tiendas del cierre.
+    expect(tarifaRepo.resolveTarifasPorTiendas).toHaveBeenCalledTimes(1);
+    expect(tarifaRepo.resolveTarifaPorTienda).not.toHaveBeenCalled();
+  });
+
+  it("R9/C1: si no se vincula ninguna gestion (rollback) el snapshot NO se toca", async () => {
+    const tx = buildSnapshotTx([], {
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 0 })),
+        findMany: vi.fn(async () => []),
+      },
+    });
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo({ t1: TARIFA_T1 }),
+    );
+
+    expect(await repo.crearCierre(INPUT_CIERRE)).toBeNull();
+    expect(tx.cierreDetail.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("Feature 69/R16 — la vista EN VIVO no depende del snapshot", () => {
+  // R16: mientras el cierre no existe (gestiones con cierre_id IS NULL) NO hay snapshot por
+  // definicion. `findGestionesPendientes` debe seguir resolviendo por relacion, en vivo.
+  it("findGestionesPendientes sigue leyendo gestion_orden en vivo, sin tocar cierreDetail", async () => {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findMany.mockResolvedValue([detalleRow()]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const rows = await repo.findGestionesPendientes("m1");
+
+    expect(rows).toHaveLength(1);
+    const arg = prisma.gestionOrden.findMany.mock.calls[0][0];
+    expect(arg.where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
+    expect(prisma.cierreDetail.createMany).not.toHaveBeenCalled();
   });
 });
