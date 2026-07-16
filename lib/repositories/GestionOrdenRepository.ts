@@ -281,7 +281,9 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           where: { id: ordenId },
           data: {
             estatusId: seguimiento.destinoEstatusId,
-            ...(seguimiento.limpiaMensajero ? { mensajeroAsignadoId: null } : {}),
+            // Feature 76/LC1 (C1): al limpiar el mensajero (reintento devuelto) limpia tambien
+            // `asignado_at` (defensivo, evita un timestamp huerfano).
+            ...(seguimiento.limpiaMensajero ? { mensajeroAsignadoId: null, asignadoAt: null } : {}),
           },
         });
         await appendCambioEstado(tx, [

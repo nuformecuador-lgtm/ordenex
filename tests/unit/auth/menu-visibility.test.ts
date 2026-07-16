@@ -93,21 +93,23 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Ranking");
   });
 
-  it("mensajero ve Entregas + Novedades + Cierre del día + QR + Perfil, NO Órdenes ni Configuración", () => {
+  it("mensajero ve Entregas + Novedades + Ranking + Cierre del día + QR + Perfil, NO Órdenes ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
     // PR #75: "QR" es visible para todos los roles (ROLES_SEED).
+    // Feature 76 (R20): "Ranking" es visible para el mensajero en solo-lectura
+    // (roles maestro+mensajero); su defensa real es el notFound de la página.
     expect(visibles).toEqual([
       "Entregas",
       "Novedades",
+      "Ranking",
       "Cierre del día",
       "QR",
       "Perfil",
     ]);
     expect(visibles).not.toContain("Órdenes");
     expect(visibles).not.toContain("Configuración");
-    expect(visibles).not.toContain("Ranking");
   });
 
   it("adminSatelite ve Órdenes + Cierres del día + QR + Perfil", () => {

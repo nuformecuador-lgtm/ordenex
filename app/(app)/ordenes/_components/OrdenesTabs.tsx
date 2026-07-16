@@ -7,7 +7,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
-import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
+import {
+  listarMensajerosParaAsignacion,
+  listarZonasBloqueadasPorCierre,
+} from "@/lib/actions/ordenes-guia";
 import type { Column } from "@/components/shared/DataTable";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
@@ -36,10 +39,24 @@ type ModalAbierto =
 async function mensajerosFetcher() {
   const res = await listarMensajerosParaAsignacion();
   if (res.status !== "ok") throw new Error(res.status);
-  // `bloqueadosIds` = mensajeros de la bodega central (GAM) con un cierre abierto
-  // (`solicitado`/`vencido`). Se usa para deshabilitar la selección en las tabs de
-  // asignación cuando la bodega tiene al menos uno.
+  // `bloqueadosIds` (mensajeros GAM con cierre abierto) NO se usa en esta vista: el
+  // bloqueo del checkbox se deriva por ZONA de la orden (`zonasBloqueadasFetcher`).
+  // Se mantiene en el objeto porque la key SWR "ordenes:mensajeros" la comparte
+  // OrdenesRevisionMaestro, que sí lo consume (selector de mensajeros del modal):
+  // dos fetchers con la misma key deben devolver la MISMA forma.
   return { mensajeros: res.mensajeros, bloqueadosIds: res.bloqueadosIds ?? [] };
+}
+
+/**
+ * Zonas (central GAM y satélites, misma regla) con AL MENOS 1 mensajero con un cierre
+ * abierto (`solicitado`/`vencido`). Alimenta el bloqueo POR ORDEN del checkbox en las
+ * tabs cuya acción por lote asigna/rutea: mientras la zona de la orden esté bloqueada
+ * no se le puede asignar mensajero, así que no se deja seleccionar.
+ */
+async function zonasBloqueadasFetcher(): Promise<Set<string>> {
+  const res = await listarZonasBloqueadasPorCierre();
+  if (res.status !== "ok") throw new Error(res.status);
+  return new Set(res.zonasBloqueadasIds);
 }
 
 // Feature 63/C3 (F1.4-c): `exclude` es por `value` del estado; default
@@ -65,12 +82,21 @@ const ESTADO_RECHAZADA = "rechazada";
 const MOTIVO_RECHAZADA_NO_CENTRAL =
   "Orden de zona satélite: la devuelve el admin de la bodega satélite de su zona.";
 
-// Estados cuya asignación ("Generar guía") se bloquea si la bodega central tiene al
-// menos un cierre de mensajero abierto: no se asignan nuevas órdenes hasta resolverlo,
-// así que su checkbox de selección se deshabilita por completo.
-const ESTADOS_ASIGNACION = new Set(["en_fulfillment", "en_preparacion"]);
-const MOTIVO_BODEGA_CIERRE_ABIERTO =
-  "La bodega tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar órdenes.";
+// Estados cuya acción por lote ASIGNA mensajero o RUTEA a una bodega: ahí el checkbox
+// se bloquea POR ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
+// Derivado de `accionesDe()`: `en_fulfillment`/`en_preparacion` -> "Generar guía"
+// (asigna mensajero) y `en_bodega` -> "Asignar mensajero" + "Rutear a bodega satélite".
+// Las tabs que solo imprimen etiquetas (`en_espera_aceptacion`,
+// `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
+// Nota: en `en_bodega` el bloqueo también alcanza a "Imprimir etiquetas" (comparte el
+// checkbox); es el precio de una única columna de selección por tab.
+const ESTADOS_ASIGNACION = new Set([
+  "en_fulfillment",
+  "en_preparacion",
+  "en_bodega",
+]);
+const MOTIVO_ZONA_CIERRE_ABIERTO =
+  "La bodega de esta zona tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar la orden.";
 
 /** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
 function labelDe(value: string): string {
@@ -133,11 +159,14 @@ export function OrdenesTabs({
     accionesLote ? "ordenes:mensajeros" : null,
     mensajerosFetcher,
   );
-  console.log("xyz", mensajerosData);
   const mensajeros = mensajerosData?.mensajeros;
-  // La bodega central está bloqueada para asignar si al menos un mensajero GAM tiene
-  // un cierre abierto (regla estricta: basta con uno).
-  const bodegaConCierreAbierto = (mensajerosData?.bloqueadosIds?.length ?? 0) > 0;
+
+  // Zonas bloqueadas por cierre (≥1 mensajero con cierre abierto), central y satélites
+  // por igual. Solo se pide si hay acciones por lote (sin checkbox no hay qué bloquear).
+  const { data: zonasBloqueadas } = useSWR(
+    accionesLote ? "ordenes:zonas-bloqueadas" : null,
+    zonasBloqueadasFetcher,
+  );
 
   const [modalAbierto, setModalAbierto] = useState<ModalAbierto>(null);
   const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<
@@ -332,23 +361,35 @@ export function OrdenesTabs({
                 } else if (tab.value === ESTADO_REPROGRAMADA) {
                   columns = ordenesColumnsReprogramada;
                 }
-                // Bloqueo de selección por tab:
+                // Bloqueo de selección por tab (dos reglas distintas que conviven):
                 // - `rechazada`: bloquea el check de las órdenes NO centrales (el
                 //   maestro/admin solo devuelve a la tienda las de la bodega central).
-                // - `en_fulfillment`/`en_preparacion`: si la bodega central tiene al
-                //   menos un cierre de mensajero abierto, se deshabilita TODO el check
-                //   (no se pueden asignar órdenes hasta resolver el/los cierre/s).
+                //   Es la regla MÁS ESPECÍFICA de esa tab (la acción "Devolver a la
+                //   tienda" no asigna mensajero), así que se evalúa primero y gana; en
+                //   la práctica no se solapan porque `rechazada` no es tab de asignación.
+                // - tabs de asignación/ruteo: bloqueo POR ORDEN si la ZONA de esa orden
+                //   tiene ≥1 mensajero con cierre abierto. No es global: en la misma tab
+                //   conviven órdenes de zona bloqueada (check off) y de zona libre (on).
                 let bloqueoSeleccion:
                   | ((row: OrdenListItemDTO) => string | null)
                   | undefined;
                 if (tab.value === ESTADO_RECHAZADA) {
                   bloqueoSeleccion = (o) =>
                     o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL;
-                } else if (
-                  ESTADOS_ASIGNACION.has(tab.value) &&
-                  bodegaConCierreAbierto
-                ) {
-                  bloqueoSeleccion = () => MOTIVO_BODEGA_CIERRE_ABIERTO;
+                } else if (ESTADOS_ASIGNACION.has(tab.value)) {
+                  const zonas = zonasBloqueadas;
+                  bloqueoSeleccion = (o) => {
+                    // Sin datos aún (SWR en vuelo) o sin `zonaId` utilizable: NO se
+                    // bloquea. No se puede AFIRMAR que la zona esté bloqueada, y el
+                    // backend revalida la regla al ejecutar la acción (defensa en
+                    // profundidad); bloquear "por si acaso" castigaría órdenes válidas.
+                    // (`zonaId` es `string` en el DTO; la guarda es defensiva ante un
+                    // dato degradado en runtime.)
+                    if (!zonas || !o.zonaId) return null;
+                    return zonas.has(o.zonaId)
+                      ? MOTIVO_ZONA_CIERRE_ABIERTO
+                      : null;
+                  };
                 }
                 return (
                   <OrdenesModule

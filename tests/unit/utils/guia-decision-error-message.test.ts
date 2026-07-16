@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { guiaDecisionErrorMessage } from "@/app/(app)/ordenes/_components/guia-decision-error-messages";
 
-// Ajuste maestro: el `conflict` por rutear a una bodega satelite con TODOS sus
-// mensajeros en cierre debe traducirse a un mensaje especifico (no el generico de
-// conflict), detectando el `motivo` en el `detalle`.
+// Ajuste maestro: el `conflict` por rutear a una bodega satelite bloqueada (>=1 de sus
+// mensajeros con un cierre abierto, decision del humano 2026-07-16) debe traducirse a un
+// mensaje especifico (no el generico de conflict), detectando el `motivo` en el
+// `detalle`. El mapper hace match por el substring estable "bodega satelite bloqueada",
+// asi que el sufijo del motivo puede cambiar sin romperlo.
 
 describe("guiaDecisionErrorMessage", () => {
   it("conflict con motivo de bodega satelite bloqueada -> mensaje especifico", () => {
@@ -12,12 +14,14 @@ describe("guiaDecisionErrorMessage", () => {
       detalle: [
         {
           ordenId: "o1",
-          motivo: "bodega satelite bloqueada: todos sus mensajeros tienen un cierre abierto",
+          // Motivo real que emite hoy GuiaAsignacionService (regla >=1).
+          motivo: "bodega satelite bloqueada: tiene un mensajero con un cierre abierto",
         },
       ],
     };
     expect(guiaDecisionErrorMessage(error)).toMatch(
-      /bodega satélite cuyos mensajeros están todos con un cierre abierto/i,
+      // La copia sigue la regla real (>=1 mensajero en cierre), no "todos".
+      /bodega satélite que tiene al menos un mensajero con un cierre abierto/i,
     );
   });
 

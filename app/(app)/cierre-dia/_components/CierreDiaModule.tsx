@@ -240,6 +240,8 @@ export function CierreDiaModule({
       {/* ---------- Secciones por resultado (R3/R4/R5/R6) ---------- */}
       {ORDEN_RESULTADOS.map((resultado) => {
         const filas = grupos[resultado] ?? [];
+        // Pedido: no mostrar las secciones sin registros (p. ej. reprogramadas con 0).
+        if (filas.length === 0) return null;
         return (
           <section
             key={resultado}
@@ -551,6 +553,11 @@ const COLUMNAS_PASADOS: Column<CierrePasadoDTO>[] = [
     id: "pagoMensajero",
     value: PAGO_MENSAJERO_COL,
     render: (c) => money(c.totalPagoMensajero),
+  },
+  {
+    id: "ingresoBodegaRechazos",
+    value: INGRESO_BODEGA_RECHAZOS_COL,
+    render: (c) => money(c.totalIngresoBodegaRechazos),
   },
   {
     id: "solicitadoAt",

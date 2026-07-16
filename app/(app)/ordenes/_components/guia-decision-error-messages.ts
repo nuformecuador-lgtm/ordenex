@@ -21,11 +21,13 @@ function isGuiaErrorStatus(value: unknown): value is GuiaErrorStatus {
 }
 
 // Ajuste maestro: mensaje específico cuando el `conflict` viene por rutear a una bodega
-// satélite cuyos mensajeros están TODOS en cierre. Coincide con el `motivo` que emite
-// `GuiaAsignacionService` (substring estable, tolerante a acentos/variantes).
+// satélite bloqueada. La regla real (decisión del humano 2026-07-16) es AL MENOS 1
+// mensajero con cierre abierto (`solicitado`/`vencido`), no "todos". Coincide con el
+// `motivo` que emite `GuiaAsignacionService` (substring estable, tolerante a
+// acentos/variantes).
 const MOTIVO_BODEGA_SATELITE_BLOQUEADA = "bodega satelite bloqueada";
 const MSG_BODEGA_SATELITE_BLOQUEADA =
-  "No se puede enviar a una bodega satélite cuyos mensajeros están todos con un cierre abierto. Espera a que alguno resuelva su cierre.";
+  "No se puede enviar a una bodega satélite que tiene al menos un mensajero con un cierre abierto. Espera a que se resuelva el cierre.";
 
 /** ¿El `conflict` incluye el motivo de bodega satélite bloqueada? */
 function tieneBodegaSateliteBloqueada(error: unknown): boolean {

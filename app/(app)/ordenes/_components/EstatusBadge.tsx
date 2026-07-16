@@ -15,7 +15,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   en_ruta_bodega_principal: "En ruta a bodega",
   entregada: "Entregada",
   devuelta: "Devuelta",
-  devuelta_origen: "En ruta a origen",
+  devuelta_origen: "Devuelta a origen",
   reprogramada: "Reprogramada",
   en_espera_aceptacion: "En espera de aceptación del mensajero", // feature 17
   en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30
