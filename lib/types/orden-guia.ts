@@ -98,6 +98,15 @@ export type ListarMensajerosParaAsignacionResult =
   | { status: "unauthenticated" }
   | { status: "forbidden" };
 
+// Gate de seleccion del maestro — loader de solo lectura de las zonas BLOQUEADAS:
+// las que tienen AL MENOS 1 mensajero con un cierre abierto (`solicitado`/`vencido`).
+// Cubre TODAS las zonas (central GAM y satelites) con la misma regla, para que la UI
+// deshabilite la seleccion de esas ordenes y no diverja de la guarda del servidor.
+export type ListarZonasBloqueadasResult =
+  | { status: "ok"; zonasBloqueadasIds: string[] }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" };
+
 // Soporte R15/R16 — loader de solo lectura del catalogo `order_status` (id,
 // value) para que la UI resuelva value -> estatusId y siga filtrando
 // `listarOrdenes` por `estatusId` (contrato feature 6/7 intacto, design.md §4).

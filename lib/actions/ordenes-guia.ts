@@ -8,6 +8,7 @@ import {
   type GenerarGuiaResult,
   type ListarCatalogoEstatusResult,
   type ListarMensajerosParaAsignacionResult,
+  type ListarZonasBloqueadasResult,
   type RutearSateliteResult,
 } from "@/lib/types/orden-guia";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -43,6 +44,13 @@ function buildOrdenRepoParaCatalogo(): Pick<IOrdenRepository, "listOrderStatus">
   return new OrdenRepository(getPrismaClient());
 }
 
+function buildOrdenRepoParaZonasBloqueadas(): Pick<
+  IOrdenRepository,
+  "findZonasConMensajeroBloqueado"
+> {
+  return new OrdenRepository(getPrismaClient());
+}
+
 export interface GuiaActionDeps {
   guiaService?: IGuiaAsignacionService;
   getActor?: () => Promise<Actor | null>;
@@ -59,6 +67,11 @@ export interface ListarMensajerosDeps {
 
 export interface ListarCatalogoEstatusDeps {
   ordenRepo?: Pick<IOrdenRepository, "listOrderStatus">;
+  getActor?: () => Promise<Actor | null>;
+}
+
+export interface ListarZonasBloqueadasDeps {
+  ordenRepo?: Pick<IOrdenRepository, "findZonasConMensajeroBloqueado">;
   getActor?: () => Promise<Actor | null>;
 }
 
@@ -188,6 +201,33 @@ export async function listarCatalogoEstatus(
     const repo = deps.ordenRepo ?? buildOrdenRepoParaCatalogo();
     const estatus = await repo.listOrderStatus();
     return { status: "ok" as const, estatus };
+  });
+  // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el
+  // unico AppErrorShape posible es UNAUTHORIZED.
+  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * Gate de seleccion del maestro — loader de solo lectura de las zonas BLOQUEADAS: las
+ * que tienen AL MENOS 1 mensajero con un cierre abierto (`solicitado`/`vencido`). Cubre
+ * TODAS las zonas (central GAM y satelites) con la misma regla, para que la UI
+ * deshabilite la seleccion de esas ordenes con el mismo criterio que la guarda de
+ * escritura del servidor (`existeBodegaSateliteBloqueada` / `zonasSateliteBloqueadas`).
+ * Una zona sin mensajeros nunca sale bloqueada. `maestro` y `admin` pueden leer (mismo
+ * criterio de solo-lectura que `listarMensajerosParaAsignacion`); el resto -> forbidden.
+ */
+export async function listarZonasBloqueadasPorCierre(
+  deps: ListarZonasBloqueadasDeps = {},
+): Promise<ListarZonasBloqueadasResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    if (actor.rol !== "maestro" && actor.rol !== "admin") {
+      return { status: "forbidden" as const };
+    }
+    const repo = deps.ordenRepo ?? buildOrdenRepoParaZonasBloqueadas();
+    const zonas = await repo.findZonasConMensajeroBloqueado();
+    return { status: "ok" as const, zonasBloqueadasIds: [...zonas] };
   });
   // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el
   // unico AppErrorShape posible es UNAUTHORIZED.

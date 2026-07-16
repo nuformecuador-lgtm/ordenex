@@ -911,7 +911,9 @@ describe("Feature 30 — no-regresion camino GAM feature 17 (R18)", () => {
   });
 });
 
-describe("Ajuste maestro — no rutear a bodega satelite con TODOS sus mensajeros en cierre", () => {
+// Decision del humano 2026-07-16: la regla se unifica a >=1 (antes "TODOS"): basta un
+// mensajero con cierre abierto para que la bodega destino no reciba ordenes nuevas.
+describe("Ajuste maestro — no rutear a bodega satelite con >=1 mensajero en cierre", () => {
   const MENSAJEROS_LIMON = [
     { id: "m-lim1", nombre: "Ana" },
     { id: "m-lim2", nombre: "Beto" },
@@ -941,13 +943,38 @@ describe("Ajuste maestro — no rutear a bodega satelite con TODOS sus mensajero
     expect(repo.findMensajerosByZona).toHaveBeenCalledWith(NO_GAM_ZONA_ID);
   });
 
-  it("generarGuia: si NO todos los mensajeros de la zona destino estan en cierre -> rutea normal (ok)", async () => {
+  // Decision del humano 2026-07-16: 1 solo mensajero en cierre YA bloquea la zona
+  // destino (antes este caso ruteaba ok con los mensajeros libres).
+  it("generarGuia: 1 solo mensajero de la zona destino en cierre -> conflict, sin persistir", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
       findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
       findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1"])), // solo uno
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia(
+      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([
+      { ordenId: "o1", motivo: expect.stringContaining("bodega satelite bloqueada") },
+    ]);
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+
+  it("generarGuia: NINGUN mensajero de la zona destino en cierre -> rutea normal (ok)", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+      findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
     });
     const service = newService(repo);
 
@@ -967,7 +994,7 @@ describe("Ajuste maestro — no rutear a bodega satelite con TODOS sus mensajero
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
-      findMensajerosByZona: vi.fn(async () => []), // sin mensajeros: no hay "todos" que evaluar
+      findMensajerosByZona: vi.fn(async () => []), // sin mensajeros: no hay cierre que resolver
       findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
     });
     const service = newService(repo);

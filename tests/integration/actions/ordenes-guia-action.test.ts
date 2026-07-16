@@ -4,6 +4,7 @@ import {
   asignarDesdeBodega,
   listarMensajerosParaAsignacion,
   listarCatalogoEstatus,
+  listarZonasBloqueadasPorCierre,
   rutearABodegaSatelite,
 } from "@/lib/actions/ordenes-guia";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -297,5 +298,64 @@ describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, 
 
     expect(r).toEqual({ status: "forbidden" });
     expect(listOrderStatus).not.toHaveBeenCalled();
+  });
+});
+
+// Gate de seleccion del maestro (decision del humano 2026-07-16): la UI deshabilita el
+// checkbox de las ordenes cuya zona tenga >=1 mensajero con cierre abierto. Cubre TODAS
+// las zonas (central GAM y satelites) con la misma regla que la guarda de escritura.
+describe("listarZonasBloqueadasPorCierre — zonas con >=1 mensajero en cierre", () => {
+  it("devuelve las zonasBloqueadasIds del repo (central y satelite por igual)", async () => {
+    const findZonasConMensajeroBloqueado = vi
+      .fn()
+      .mockResolvedValue(new Set(["z-gam", "z-limon"]));
+    const r = await listarZonasBloqueadasPorCierre({
+      ordenRepo: { findZonasConMensajeroBloqueado },
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(new Set(r.zonasBloqueadasIds)).toEqual(new Set(["z-gam", "z-limon"]));
+  });
+
+  it("ninguna zona con cierre abierto -> lista vacia (nada se deshabilita)", async () => {
+    const r = await listarZonasBloqueadasPorCierre({
+      ordenRepo: { findZonasConMensajeroBloqueado: vi.fn().mockResolvedValue(new Set()) },
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(r).toEqual({ status: "ok", zonasBloqueadasIds: [] });
+  });
+
+  it("admin (solo-lectura del modulo) tambien puede leer", async () => {
+    const r = await listarZonasBloqueadasPorCierre({
+      ordenRepo: { findZonasConMensajeroBloqueado: vi.fn().mockResolvedValue(new Set(["z1"])) },
+      getActor: getActor(ADMIN),
+    });
+
+    expect(r).toEqual({ status: "ok", zonasBloqueadasIds: ["z1"] });
+  });
+
+  it("mensajero/adminTienda -> forbidden, sin consultar", async () => {
+    const findZonasConMensajeroBloqueado = vi.fn();
+    const r = await listarZonasBloqueadasPorCierre({
+      ordenRepo: { findZonasConMensajeroBloqueado },
+      getActor: getActor({ usuarioId: "u-msg", rol: "mensajero" }),
+    });
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(findZonasConMensajeroBloqueado).not.toHaveBeenCalled();
+  });
+
+  it("sin sesion -> unauthenticated, sin consultar", async () => {
+    const findZonasConMensajeroBloqueado = vi.fn();
+    const r = await listarZonasBloqueadasPorCierre({
+      ordenRepo: { findZonasConMensajeroBloqueado },
+      getActor: getActor(null),
+    });
+
+    expect(r).toEqual({ status: "unauthenticated" });
+    expect(findZonasConMensajeroBloqueado).not.toHaveBeenCalled();
   });
 });
