@@ -1291,20 +1291,44 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
+   * Zonas (central y satelite) con AL MENOS 1 mensajero con un cierre abierto
+   * (`solicitado`/`vencido`) — misma regla y mismos estados que la causa (i) de
+   * `existeBodegaSateliteBloqueada`, para que el gate de lectura de la UI y la guarda de
+   * escritura del servidor no diverjan.
+   * Una consulta agregada (sin N+1 por zona): pide los mensajeros CON zona que tengan
+   * algun cierre bloqueante y devuelve sus zonas distintas. La pertenencia a la zona se
+   * lee de `usuario.zonaId` (fuente de verdad viva), NO de `cierre_dia.destino_zona_id`,
+   * que es un snapshot del momento de la solicitud.
+   */
+  async findZonasConMensajeroBloqueado(): Promise<Set<string>> {
+    const rows = await this.prisma.usuario.findMany({
+      where: {
+        rol: { value: "mensajero" },
+        zonaId: { not: null },
+        cierresRealizados: { some: { estado: { in: ESTADOS_CIERRE_BLOQUEANTES } } },
+      },
+      select: { zonaId: true },
+      distinct: ["zonaId"],
+    });
+    return new Set(rows.map((r) => r.zonaId).filter((id): id is string => id !== null));
+  }
+
+  /**
    * `bloqueada = (i) || (ii)`. (ii) su propio CierreBodega hacia la central en
-   * `solicitado` = bloqueo duro. (i) causa de mensajeros RELAJADA (pedido
-   * admin_satelite): antes bloqueaba si CUALQUIER mensajero tenia un cierre; ahora
-   * `porMensajeros` es bloqueo duro SOLO si TODOS los mensajeros de la zona tienen un
-   * cierre abierto (`solicitado`/`vencido`). Con 0 mensajeros no bloquea por (i).
+   * `solicitado` = bloqueo duro. (i) causa de mensajeros: la bodega queda bloqueada si
+   * AL MENOS 1 de sus mensajeros tiene un cierre abierto (`solicitado`/`vencido`).
+   * Mientras hay un cierre pendiente la bodega esta cuadrando caja: no se le envian
+   * ordenes nuevas hasta resolverlo. Una zona SIN mensajeros no bloquea por (i) (no hay
+   * cierre alguno que resolver).
    * Se reutiliza `findMensajerosBloqueados` (mismo criterio que la guarda por-mensajero
    * de la asignacion, R14), de modo que el set de bloqueados coincide exactamente con
    * los mensajeros que el servidor rechazaria al asignar. Los campos informativos
-   * (`cierresAbiertos`/`totalMensajeros`/`mensajerosConCierreIds`) alimentan el aviso
-   * NO bloqueante y el deshabilitado por-mensajero en el selector.
+   * (`cierresAbiertos`/`totalMensajeros`/`mensajerosConCierreIds`) alimentan el detalle
+   * del aviso y el deshabilitado por-mensajero en el selector.
    */
   async existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult> {
     const [mensajerosZona, countCierreBodega] = await Promise.all([
-      // Mensajeros de la zona (universo sobre el que se evalua "todos bloqueados").
+      // Mensajeros de la zona (universo del que basta 1 bloqueado para bloquear).
       this.prisma.usuario.findMany({
         where: { rol: { value: "mensajero" }, zonaId },
         select: { id: true },
@@ -1320,8 +1344,9 @@ export class OrdenRepository implements IOrdenRepository {
     const totalMensajeros = idsZona.length;
     const cierresAbiertos = bloqueadosSet.size;
     const porCierreBodega = countCierreBodega > 0;
-    // (i) bloqueo duro solo si HAY mensajeros y TODOS estan bloqueados.
-    const porMensajeros = totalMensajeros > 0 && cierresAbiertos === totalMensajeros;
+    // (i) bloqueo duro si AL MENOS 1 mensajero de la zona tiene un cierre abierto.
+    // Con 0 mensajeros, `cierresAbiertos` es 0 y no bloquea por esta causa.
+    const porMensajeros = cierresAbiertos > 0;
     return {
       bloqueada: porMensajeros || porCierreBodega,
       porMensajeros,

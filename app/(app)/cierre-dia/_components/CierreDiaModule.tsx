@@ -267,6 +267,8 @@ export function CierreDiaModule({
       {/* ---------- Secciones por resultado (R3/R4/R5/R6) ---------- */}
       {ORDEN_RESULTADOS.map((resultado) => {
         const filas = grupos[resultado] ?? [];
+        // Pedido: no mostrar las secciones sin registros (p. ej. reprogramadas con 0).
+        if (filas.length === 0) return null;
         return (
           <section
             key={resultado}

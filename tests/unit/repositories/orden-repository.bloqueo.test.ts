@@ -3,10 +3,11 @@ import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 
 // Feature 41/D1 (R12/R16/R17) — consultas del bloqueo derivado. `findMensajerosBloqueados`
-// = mensajeros con cierre solicitado/vencido. `existeBodegaSateliteBloqueada` = ajuste
-// admin_satelite: bloqueo duro por mensajeros SOLO si TODOS los mensajeros de la zona
-// tienen un cierre abierto; en otro caso, campos informativos para el aviso no bloqueante.
-// Mockea Prisma (sin DB real).
+// = mensajeros con cierre solicitado/vencido. `existeBodegaSateliteBloqueada` = bloqueo
+// duro por mensajeros si AL MENOS 1 mensajero de la zona tiene un cierre abierto
+// (decision del humano 2026-07-16: se unifica la semantica a >=1 en central y satelites,
+// revirtiendo el ajuste previo "TODOS", para que coincida con el gate de seleccion del
+// maestro). Mockea Prisma (sin DB real).
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   return {
@@ -41,7 +42,49 @@ describe("OrdenRepository.findMensajerosBloqueados (R12/R16)", () => {
   });
 });
 
-describe("OrdenRepository.existeBodegaSateliteBloqueada (ajuste admin_satelite)", () => {
+// Gate de seleccion del maestro: zonas (central y satelite) con >=1 mensajero con cierre
+// abierto. Una sola consulta agregada (sin N+1 por zona).
+describe("OrdenRepository.findZonasConMensajeroBloqueado", () => {
+  it("devuelve las zonas distintas de los mensajeros con cierre abierto", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.findMany.mockResolvedValue([{ zonaId: "z-gam" }, { zonaId: "z-limon" }]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.findZonasConMensajeroBloqueado()).toEqual(new Set(["z-gam", "z-limon"]));
+    expect(prisma.usuario.findMany).toHaveBeenCalledTimes(1); // sin N+1 por zona
+  });
+
+  it("filtra por rol mensajero, zona no nula y cierre solicitado/vencido; distinct por zona", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.findMany.mockResolvedValue([]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+    await repo.findZonasConMensajeroBloqueado();
+
+    const arg = prisma.usuario.findMany.mock.calls[0][0];
+    expect(arg.where).toMatchObject({
+      rol: { value: "mensajero" },
+      zonaId: { not: null },
+      cierresRealizados: { some: { estado: { in: ["solicitado", "vencido"] } } },
+    });
+    expect(arg.distinct).toEqual(["zonaId"]);
+  });
+
+  it("nadie con cierre abierto -> set vacio", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.findMany.mockResolvedValue([]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+    expect(await repo.findZonasConMensajeroBloqueado()).toEqual(new Set());
+  });
+
+  it("descarta zonaId null (defensivo) sin romper el set", async () => {
+    const prisma = buildPrisma();
+    prisma.usuario.findMany.mockResolvedValue([{ zonaId: "z1" }, { zonaId: null }]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+    expect(await repo.findZonasConMensajeroBloqueado()).toEqual(new Set(["z1"]));
+  });
+});
+
+describe("OrdenRepository.existeBodegaSateliteBloqueada (regla >=1, 2026-07-16)", () => {
   /**
    * `mensajeros` = ids de mensajeros de la zona; `bloqueados` = subconjunto con cierre
    * abierto (solicitado/vencido); `countBodega` = CierreBodega pendiente (causa ii).
@@ -63,6 +106,7 @@ describe("OrdenRepository.existeBodegaSateliteBloqueada (ajuste admin_satelite)"
   }
 
   it("TODOS los mensajeros con cierre abierto -> bloqueo duro por mensajeros", async () => {
+    // Caso extremo de la regla >=1: sigue bloqueando.
     const { res } = await run(["m1", "m2"], ["m1", "m2"], 0);
     expect(res).toMatchObject({
       bloqueada: true,
@@ -74,11 +118,13 @@ describe("OrdenRepository.existeBodegaSateliteBloqueada (ajuste admin_satelite)"
     expect(new Set(res.mensajerosConCierreIds)).toEqual(new Set(["m1", "m2"]));
   });
 
-  it("ALGUNOS (no todos) con cierre abierto -> NO bloquea, solo informativo", async () => {
+  // Decision del humano 2026-07-16: 1 solo cierre abierto ya bloquea la bodega (antes
+  // este caso NO bloqueaba y solo alimentaba un aviso informativo).
+  it("1 de 3 mensajeros con cierre abierto -> bloqueo duro por mensajeros", async () => {
     const { res } = await run(["m1", "m2", "m3"], ["m2"], 0);
     expect(res).toMatchObject({
-      bloqueada: false,
-      porMensajeros: false,
+      bloqueada: true,
+      porMensajeros: true,
       porCierreBodega: false,
       cierresAbiertos: 1,
       totalMensajeros: 3,
@@ -98,13 +144,15 @@ describe("OrdenRepository.existeBodegaSateliteBloqueada (ajuste admin_satelite)"
     });
   });
 
-  it("causa (ii): CierreBodega pendiente -> bloqueo duro aunque no todos los mensajeros esten bloqueados", async () => {
-    const { res } = await run(["m1", "m2"], ["m1"], 1);
+  // Causa (ii) aislada: sin ningun mensajero bloqueado, para que el `true` venga solo
+  // del CierreBodega pendiente y no de la causa (i).
+  it("causa (ii): CierreBodega pendiente -> bloqueo duro sin mensajeros bloqueados", async () => {
+    const { res } = await run(["m1", "m2"], [], 1);
     expect(res).toMatchObject({
       bloqueada: true,
-      porMensajeros: false, // solo 1 de 2 mensajeros
+      porMensajeros: false, // ningun mensajero con cierre abierto
       porCierreBodega: true,
-      cierresAbiertos: 1,
+      cierresAbiertos: 0,
       totalMensajeros: 2,
     });
   });

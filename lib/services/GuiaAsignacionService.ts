@@ -48,11 +48,11 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
 // cierre pendiente (solicitado/vencido). No se le asignan nuevas ordenes hasta resolverlo.
 const MSG_MENSAJERO_BLOQUEADO = "mensajero bloqueado por cierre pendiente";
 
-// Ajuste maestro: motivo cuando una orden se rutearia a una bodega satelite cuyos
-// mensajeros estan TODOS con un cierre abierto. No se envian nuevas ordenes a esa bodega
-// hasta que al menos un mensajero resuelva su cierre.
+// Ajuste maestro: motivo cuando una orden se rutearia a una bodega satelite que tiene al
+// menos un mensajero con un cierre abierto. Con un cierre pendiente la bodega esta
+// cuadrando caja: no recibe ordenes nuevas hasta resolverlo.
 const MSG_BODEGA_SATELITE_BLOQUEADA =
-  "bodega satelite bloqueada: todos sus mensajeros tienen un cierre abierto";
+  "bodega satelite bloqueada: tiene un mensajero con un cierre abierto";
 
 function distinct(values: string[]): string[] {
   return [...new Set(values)];
@@ -66,10 +66,13 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
 
   /**
    * Ajuste maestro: de `zonaIds` (zonas destino satelite), devuelve las que estan
-   * BLOQUEADAS para recibir nuevas ordenes porque TODOS sus mensajeros tienen un cierre
-   * abierto (`solicitado`/`vencido`). Una zona sin mensajeros NO se bloquea (no hay
-   * "todos" que evaluar). Reutiliza primitivas de repo existentes (sin ampliar la
-   * interfaz): `findMensajerosByZona` + `findMensajerosBloqueados` por zona.
+   * BLOQUEADAS para recibir nuevas ordenes porque AL MENOS 1 de sus mensajeros tiene un
+   * cierre abierto (`solicitado`/`vencido`): con un cierre pendiente la bodega esta
+   * cuadrando caja y no recibe ordenes nuevas hasta resolverlo. Una zona sin mensajeros
+   * NO se bloquea (no hay cierre que resolver). Misma regla que el gate de seleccion del
+   * maestro y que `existeBodegaSateliteBloqueada`, para que no diverjan.
+   * Reutiliza primitivas de repo existentes (sin ampliar la interfaz):
+   * `findMensajerosByZona` + `findMensajerosBloqueados` por zona.
    */
   private async zonasSateliteBloqueadas(zonaIds: string[]): Promise<Set<string>> {
     const zonasUnicas = distinct(zonaIds);
@@ -82,7 +85,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         const bloqueados = await this.repo.findMensajerosBloqueados(
           mensajeros.map((m) => m.id),
         );
-        if (bloqueados.size === mensajeros.length) bloqueadas.add(zonaId);
+        if (bloqueados.size > 0) bloqueadas.add(zonaId);
       }),
     );
     return bloqueadas;

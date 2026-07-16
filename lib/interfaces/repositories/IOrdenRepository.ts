@@ -190,12 +190,13 @@ export interface RecepcionSateliteRow {
 // `bloqueada = porMensajeros || porCierreBodega`. `porCierreBodega` = existe su propio
 // CierreBodega hacia la central en `solicitado` (causa ii, bloqueo duro).
 //
-// Ajuste (pedido admin_satelite): la causa (i) de mensajeros se RELAJA. Un cierre de un
-// mensajero ya NO bloquea toda la bodega; `porMensajeros` es `true` (bloqueo duro) SOLO
-// si TODOS los mensajeros de la zona tienen un cierre abierto (`solicitado`/`vencido`).
-// Mientras no sea bloqueo duro, la UI muestra un aviso INFORMATIVO y se puede seguir
-// asignando a los mensajeros SIN cierre. Los campos informativos alimentan ese aviso y
-// el deshabilitado por-mensajero en el selector:
+// Causa (i), mensajeros: `porMensajeros` es `true` (bloqueo duro) si AL MENOS 1 mensajero
+// de la zona tiene un cierre abierto (`solicitado`/`vencido`). Con un cierre pendiente la
+// bodega esta cuadrando caja, asi que no recibe ordenes nuevas hasta resolverlo. Una zona
+// SIN mensajeros no bloquea por (i) (no hay cierre que resolver). Es la misma regla que
+// aplica el gate de seleccion del maestro, para que lectura y escritura no diverjan.
+// Los campos informativos alimentan el detalle del aviso y el deshabilitado
+// por-mensajero en el selector:
 //   - `cierresAbiertos`         = mensajeros de la zona con un cierre abierto.
 //   - `totalMensajeros`         = mensajeros de la zona.
 //   - `mensajerosConCierreIds`  = ids de esos mensajeros (para deshabilitarlos al asignar).
@@ -512,6 +513,14 @@ export interface IOrdenRepository {
    * NO bloquean (R16). Usa el indice (mensajero_id, estado). Vacio si `ids` esta vacio.
    */
   findMensajerosBloqueados(ids: string[]): Promise<Set<string>>;
+  /**
+   * Zonas (central y satelite) con AL MENOS 1 mensajero con un cierre abierto
+   * (`solicitado`/`vencido`): misma regla y mismos estados que la causa (i) de
+   * `existeBodegaSateliteBloqueada`, para que el gate de lectura de la UI y la guarda de
+   * escritura del servidor no diverjan. Una zona sin mensajeros nunca aparece. La
+   * pertenencia se lee de `usuario.zonaId`, no del snapshot `cierre_dia.destino_zona_id`.
+   */
+  findZonasConMensajeroBloqueado(): Promise<Set<string>>;
   /**
    * R17 (regla estricta F1.4-Q4): la bodega satelite de `zonaId` esta BLOQUEADA para
    * asignar a sus mensajeros si existe CUALQUIERA de: (i) un `cierre_dia`
