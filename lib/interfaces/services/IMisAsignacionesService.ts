@@ -1,5 +1,6 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
+import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 
 // Feature 36 — contrato del servicio del flujo del mensajero: listar mis
 // asignaciones, recoger (una o varias), escoger una para gestionar (bloqueo
@@ -90,7 +91,8 @@ export type GestionarInput =
       evidencia: EvidenciaArchivo;
     }
   | { ordenId: string; resultado: "reprogramada"; fechaReprogramacion: string; motivo: string }
-  | { ordenId: string; resultado: "devuelta"; motivo: string }
+  // Feature 73/R10: la causa tipificada es un campo de la rama `devuelta` y SOLO de ella.
+  | { ordenId: string; resultado: "devuelta"; causaDevolucion: CausaDevolucion; motivo: string }
   | { ordenId: string; resultado: "rechazada"; motivo: string; evidencia: EvidenciaArchivo };
 
 export type GestionarServiceResult =

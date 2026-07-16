@@ -454,7 +454,10 @@ describe("MisAsignacionesModule", () => {
     expect(fd.get("motivo")).toBe("Cliente ausente");
   });
 
-  it("R27/R28: DEVOLVER envía solo el motivo", async () => {
+  // Feature 73/T5.1: el nombre anterior de este caso ("DEVOLVER envía solo el motivo") quedó
+  // OBSOLETO POR DISEÑO: la rama `devuelta` ahora exige TAMBIÉN la causa tipificada (R4/R6/R9).
+  // Las aserciones previas (resultado, motivo intacto, sin evidencia) se CONSERVAN tal cual.
+  it("R27/R28 + 73/R9: DEVOLVER envía la causa y el motivo (sin evidencia)", async () => {
     const user = userEvent.setup();
     gestionarMock.mockResolvedValue({
       status: "ok",
@@ -467,6 +470,7 @@ describe("MisAsignacionesModule", () => {
 
     await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Devolver" });
 
+    await user.click(screen.getByRole("radio", { name: "Dirección errada" }));
     fireEvent.change(screen.getByLabelText("Motivo"), {
       target: { value: "Rechazo del producto" },
     });
@@ -476,8 +480,90 @@ describe("MisAsignacionesModule", () => {
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
     expect(fd.get("resultado")).toBe("devuelta");
+    expect(fd.get("causaDevolucion")).toBe("wrong_address");
     expect(fd.get("motivo")).toBe("Rechazo del producto");
     expect(fd.get("evidencia")).toBeNull();
+  });
+
+  // --- Feature 73: selector de causa de devolución (B5) ---
+
+  it("73/R3+R4 (T5.2): DEVOLVER muestra las 3 causas con su etiqueta en español, sin slugs", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Devolver" });
+
+    const grupo = screen.getByRole("radiogroup", { name: "Causa de la devolución" });
+    expect(within(grupo).getAllByRole("radio")).toHaveLength(3);
+    for (const label of [
+      "Cliente no localizado",
+      "Número de celular errado",
+      "Dirección errada",
+    ]) {
+      expect(within(grupo).getByRole("radio", { name: label })).toBeInTheDocument();
+    }
+    // R3: nunca el valor crudo del enum en el texto renderizado.
+    expect(panelDetalle().textContent).not.toMatch(
+      /not_found|wrong_number|wrong_address/,
+    );
+    // R7: el motivo sigue presente y APARTE de la causa.
+    expect(screen.getByLabelText("Motivo")).toBeInTheDocument();
+  });
+
+  it("73/R5 (T5.3): el selector de causa NO aparece en Entregar / Reprogramar / Rechazar", async () => {
+    for (const resultado of ["Entregar", "Reprogramar", "Rechazar"]) {
+      const user = userEvent.setup();
+      renderModule({
+        porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      });
+
+      await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado });
+
+      expect(screen.queryByRole("radiogroup")).toBeNull();
+      expect(screen.queryByRole("radio")).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("73/R6 (T5.3): DEVOLVER sin causa NO envía y muestra el error junto al campo", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Devolver" });
+
+    // Motivo válido, causa sin elegir → sólo falla la causa.
+    fireEvent.change(screen.getByLabelText("Motivo"), {
+      target: { value: "Cliente ausente" },
+    });
+    await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
+
+    expect(gestionarMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("causa requerida");
+    expect(
+      screen.getByRole("radiogroup", { name: "Causa de la devolución" }),
+    ).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("73/R4 (T5.4): cambiar de resultado y volver a Devolver no arrastra la causa anterior", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Devolver" });
+    await user.click(screen.getByRole("radio", { name: "Cliente no localizado" }));
+    expect(screen.getByRole("radio", { name: "Cliente no localizado" })).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Atrás" }));
+    await user.click(await screen.findByRole("button", { name: "Devolver" }));
+
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).not.toBeChecked();
+    }
   });
 
   it("R29/R30: RECHAZAR envía foto + motivo", async () => {

@@ -142,18 +142,29 @@ describe("gestionarSchema — REPROGRAMAR (R25)", () => {
   });
 });
 
-describe("gestionarSchema — DEVOLUCION (R27)", () => {
+// Feature 73 (R6): la rama `devuelta` ahora exige TAMBIEN una causa tipificada. Los dos casos
+// de abajo se AMPLIAN con `causaDevolucion` (no se relajan): sin ella, un `devuelta` valido de
+// la 36 ya no parsea —que es exactamente lo que pide R6— y el caso del motivo vacio pasaria por
+// el motivo EQUIVOCADO (le faltaria la causa, no el motivo). Lo que cada test AFIRMA no cambia.
+// El resto de la 36 (R22/R24/R25/R29) queda intacto: la causa vive SOLO en esta rama (R10).
+describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6)", () => {
   it("valida con motivo no vacio", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       resultado: "devuelta",
+      causaDevolucion: "wrong_address",
       motivo: "direccion inexistente",
     });
     expect(r.success).toBe(true);
   });
 
   it("R27: motivo vacio -> invalido", () => {
-    const r = gestionarSchema.safeParse({ ordenId: "o1", resultado: "devuelta", motivo: "" });
+    const r = gestionarSchema.safeParse({
+      ordenId: "o1",
+      resultado: "devuelta",
+      causaDevolucion: "wrong_address",
+      motivo: "",
+    });
     expect(r.success).toBe(false);
   });
 });

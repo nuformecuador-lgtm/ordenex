@@ -370,7 +370,13 @@ function buildGestionData(
         motivo: input.motivo,
       };
     case "devuelta":
-      return { resultado: "devuelta", motivo: input.motivo };
+      // Feature 73/R11/R12: la causa va en su COLUMNA propia, APARTE del texto libre; el
+      // `motivo` se persiste EXACTAMENTE como lo escribio el mensajero, sin decoracion.
+      return {
+        resultado: "devuelta",
+        causaDevolucion: input.causaDevolucion,
+        motivo: input.motivo,
+      };
     case "rechazada":
       return {
         resultado: "rechazada",

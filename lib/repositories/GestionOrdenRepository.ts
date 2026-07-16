@@ -227,6 +227,10 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           fechaReprogramacion: gestion.fechaReprogramacion
             ? new Date(`${gestion.fechaReprogramacion}T00:00:00.000Z`)
             : null,
+          // Feature 73/R11/R13: la causa entra en el MISMO INSERT que la gestion, dentro de
+          // la tx que cambia el estatus y aplica la transicion de seguimiento de la 47 -> si
+          // algo falla, la causa NO queda persistida (atomicidad ya provista, sin firma nueva).
+          causaDevolucion: gestion.causaDevolucion ?? null,
         },
         select: { id: true },
       });
