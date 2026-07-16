@@ -231,7 +231,14 @@ export async function estadoBloqueoBodegaSatelite(
       // Sin zona no hay bodega que bloquear (la vista ya avisa `sinZona`).
       return {
         status: "ok" as const,
-        bloqueo: { bloqueada: false, porMensajeros: false, porCierreBodega: false },
+        bloqueo: {
+          bloqueada: false,
+          porMensajeros: false,
+          porCierreBodega: false,
+          cierresAbiertos: 0,
+          totalMensajeros: 0,
+          mensajerosConCierreIds: [],
+        },
       };
     }
     const bloqueo = await repo.existeBodegaSateliteBloqueada(zonaId);

@@ -54,7 +54,7 @@ beforeEach(() => {
     porRecoger: [],
     porGestionar: [],
     ordenEnGestionId: null,
-    kpis: { pendientes: 0, entregadas: 0, porCobrar: 0 },
+    kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
   });
 });
 
@@ -82,14 +82,14 @@ describe("MisAsignacionesPage — control de acceso por rol (R9/R12)", () => {
     ).toBeInTheDocument();
   });
 
-  it("Feature 61: la fila de KPIs muestra pendientes, entregadas y por cobrar", async () => {
+  it("Feature 61: la fila de KPIs muestra pendientes, entregadas, por cobrar y total a cobrar", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
     listarMock.mockResolvedValue({
       status: "ok",
       porRecoger: [],
       porGestionar: [],
       ordenEnGestionId: null,
-      kpis: { pendientes: 3, entregadas: 7, porCobrar: 350 },
+      kpis: { pendientes: 3, entregadas: 7, porCobrar: 350, totalACobrar: 750 },
     });
 
     const page = await MisAsignacionesPage();
@@ -102,6 +102,9 @@ describe("MisAsignacionesPage — control de acceso por rol (R9/R12)", () => {
     expect(kpis).toHaveTextContent("7");
     expect(kpis).toHaveTextContent("Por cobrar");
     expect(kpis).toHaveTextContent("350");
+    // Nuevo KPI acumulado: COD en_reparto (350) + COD entregado (400) = 750.
+    expect(kpis).toHaveTextContent("Total a cobrar");
+    expect(kpis).toHaveTextContent("750");
   });
 
   it("R12: cualquier rol distinto de mensajero NO ve el módulo (notFound)", async () => {

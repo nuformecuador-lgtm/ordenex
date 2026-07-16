@@ -72,6 +72,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
   return {
     findMisAsignaciones: vi.fn(async () => []),
     contarEntregadas: vi.fn(async () => 0),
+    sumMontoCobrarEntregadas: vi.fn(async () => 0),
     findByIdsParaGestion: vi.fn(async () => [gestionRow()]),
     getOrdenEnGestion: vi.fn(async () => null),
     setOrdenEnGestion: vi.fn(async () => true),
@@ -177,6 +178,8 @@ describe("listarMisAsignaciones (R9-R13)", () => {
         asignacionRow({ id: "d", estatusValue: "en_reparto", montoCobrar: null }),
       ]),
       contarEntregadas: vi.fn(async () => 7),
+      // COD ya entregado (400): alimenta 'Total a cobrar' junto al COD de en_reparto (350).
+      sumMontoCobrarEntregadas: vi.fn(async () => 400),
     });
     const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
 
@@ -184,8 +187,16 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     if (r.status !== "ok") return;
     // pendientes = # en_reparto (no cuenta por recoger); porCobrar suma solo en_reparto,
     // null cuenta 0 (100 + 250 + 0); entregadas viene del conteo del repo.
-    expect(r.kpis).toEqual({ pendientes: 3, entregadas: 7, porCobrar: 350 });
+    // totalACobrar = COD en_reparto (350) + COD entregado (400) = 750 (acumulado, no baja
+    // al entregar; reprogramada/devuelta/rechazada quedan fuera de ambos sets).
+    expect(r.kpis).toEqual({
+      pendientes: 3,
+      entregadas: 7,
+      porCobrar: 350,
+      totalACobrar: 750,
+    });
     expect(repo.contarEntregadas).toHaveBeenCalledWith("m1");
+    expect(repo.sumMontoCobrarEntregadas).toHaveBeenCalledWith("m1");
   });
 });
 
@@ -285,7 +296,7 @@ describe("escogerParaGestion (R19-R21)", () => {
 describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R12: rol != mensajero -> forbidden", async () => {
     const r = await newService().gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MAESTRO,
     );
     expect(r.status).toBe("forbidden");
@@ -298,7 +309,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -310,7 +321,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ mensajeroAsignadoId: "m2" })]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("forbidden");
@@ -320,7 +331,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R21: otra orden activa distinta -> conflict, sin persistir", async () => {
     const repo = fakeRepo({ getOrdenEnGestion: vi.fn(async () => "o-otra") });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -336,7 +347,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -450,15 +461,19 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     expect(gArg.nuevoEstatusId).toBe("os-reprogramada");
   });
 
-  it("R28: devolucion valida -> gestion(devuelta) + estado devuelta", async () => {
+  it("R28 + pedido: devolucion valida -> sube foto, gestion(devuelta) con evidencia + estado devuelta", async () => {
     const repo = fakeRepo();
-    const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "no estaba" },
+    const storage = fakeStorage();
+    const r = await newService(repo, storage).gestionar(
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "no estaba", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
+    // Pedido: la devolución ahora sube y persiste la evidencia (como rechazo/entrega).
+    expect(storage.upload).toHaveBeenCalledTimes(1);
     const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(gArg.gestion.resultado).toBe("devuelta");
+    expect(gArg.gestion.evidenciaStoragePath).toContain("o1/devuelta-");
     expect(gArg.nuevoEstatusId).toBe("os-devuelta");
   });
 
@@ -508,6 +523,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
     resultado: "devuelta",
     causaDevolucion: "not_found",
     motivo: "ausente",
+    evidencia: evidencia(),
   };
 
   function repoCall(repo: IGestionOrdenRepository) {
@@ -748,7 +764,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       });
       const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 0) }); // intento actual = 1 < umbral 3
       const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente" },
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");
@@ -768,7 +784,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       const repo = fakeRepo();
       const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 2) }); // intento actual = 3 == umbral
       const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente" },
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");
@@ -785,7 +801,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       });
       const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 1) }); // intento actual = 2 < umbral
       const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente" },
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");

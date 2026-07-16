@@ -46,7 +46,9 @@ async function catalogoEstatusFetcher() {
 async function mensajerosFetcher() {
   const res = await listarMensajerosParaAsignacion();
   if (res.status !== "ok") throw new Error(res.status);
-  return res.mensajeros;
+  // Ajuste maestro: incluye los ids de mensajeros GAM con cierre abierto para
+  // deshabilitarlos en los selectores.
+  return { mensajeros: res.mensajeros, bloqueadosIds: res.bloqueadosIds ?? [] };
 }
 
 /**
@@ -87,10 +89,12 @@ export function OrdenesRevisionMaestro({
     "ordenes:catalogo-estatus",
     catalogoEstatusFetcher,
   );
-  const { data: mensajeros, error: mensajerosError } = useSWR(
+  const { data: mensajerosData, error: mensajerosError } = useSWR(
     "ordenes:mensajeros",
     mensajerosFetcher,
   );
+  const mensajeros = mensajerosData?.mensajeros ?? [];
+  const mensajerosBloqueadosIds = mensajerosData?.bloqueadosIds ?? [];
 
   const [modalAbierto, setModalAbierto] = useState<ModalAbierto>(null);
   const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<
@@ -260,14 +264,16 @@ export function OrdenesRevisionMaestro({
           <GenerarGuiaModal
             open={modalAbierto === "generar-guia"}
             ordenes={ordenesSeleccionadas}
-            mensajeros={mensajeros ?? []}
+            mensajeros={mensajeros}
+            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />
           <AsignarBodegaModal
             open={modalAbierto === "asignar-bodega"}
             ordenes={ordenesSeleccionadas}
-            mensajeros={mensajeros ?? []}
+            mensajeros={mensajeros}
+            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />

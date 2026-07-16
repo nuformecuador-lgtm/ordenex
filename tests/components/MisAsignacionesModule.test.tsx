@@ -455,9 +455,9 @@ describe("MisAsignacionesModule", () => {
   });
 
   // Feature 73/T5.1: el nombre anterior de este caso ("DEVOLVER envía solo el motivo") quedó
-  // OBSOLETO POR DISEÑO: la rama `devuelta` ahora exige TAMBIÉN la causa tipificada (R4/R6/R9).
-  // Las aserciones previas (resultado, motivo intacto, sin evidencia) se CONSERVAN tal cual.
-  it("R27/R28 + 73/R9: DEVOLVER envía la causa y el motivo (sin evidencia)", async () => {
+  // Pedido: la rama `devuelta` ahora exige TAMBIÉN evidencia (foto) obligatoria, además
+  // de la causa tipificada (73/R4/R6/R9) y el motivo (36/R7).
+  it("R27/R28 + 73/R9 + pedido: DEVOLVER envía causa, motivo y evidencia", async () => {
     const user = userEvent.setup();
     gestionarMock.mockResolvedValue({
       status: "ok",
@@ -474,6 +474,7 @@ describe("MisAsignacionesModule", () => {
     fireEvent.change(screen.getByLabelText("Motivo"), {
       target: { value: "Rechazo del producto" },
     });
+    await subirEvidencia(user, "Foto de evidencia de la devolución");
 
     await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
 
@@ -482,7 +483,26 @@ describe("MisAsignacionesModule", () => {
     expect(fd.get("resultado")).toBe("devuelta");
     expect(fd.get("causaDevolucion")).toBe("wrong_address");
     expect(fd.get("motivo")).toBe("Rechazo del producto");
-    expect(fd.get("evidencia")).toBeNull();
+    expect(fd.get("evidencia")).toBeInstanceOf(File);
+  });
+
+  it("pedido: DEVOLVER sin evidencia -> error en el campo y NO llama al service", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Devolver" });
+
+    await user.click(screen.getByRole("radio", { name: "Dirección errada" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), {
+      target: { value: "Rechazo del producto" },
+    });
+    // NO se sube evidencia.
+    await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
+
+    // La validación de borde en cliente corta: el service no se invoca.
+    expect(gestionarMock).not.toHaveBeenCalled();
   });
 
   // --- Feature 73: selector de causa de devolución (B5) ---
@@ -535,10 +555,11 @@ describe("MisAsignacionesModule", () => {
 
     await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Devolver" });
 
-    // Motivo válido, causa sin elegir → sólo falla la causa.
+    // Motivo y evidencia válidos, causa sin elegir → sólo falla la causa.
     fireEvent.change(screen.getByLabelText("Motivo"), {
       target: { value: "Cliente ausente" },
     });
+    await subirEvidencia(user, "Foto de evidencia de la devolución");
     await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
 
     expect(gestionarMock).not.toHaveBeenCalled();

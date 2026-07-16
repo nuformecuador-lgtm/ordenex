@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 export interface SelectOption {
   value: string;
   label: string;
+  /** Si `true`, la opción se muestra pero no es seleccionable (p. ej. mensajero con cierre abierto). */
+  disabled?: boolean;
 }
 
 export interface SelectProps {
@@ -76,7 +78,8 @@ export function Select({
                 <SelectPrimitive.Item
                   key={option.value}
                   value={option.value}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted"
+                  disabled={option.disabled}
+                  className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
                 >
                   <SelectPrimitive.ItemText>
                     {option.label}

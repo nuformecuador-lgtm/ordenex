@@ -28,7 +28,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
       porRecoger: [],
       porGestionar: [],
       ordenEnGestionId: null,
-      kpis: { pendientes: 0, entregadas: 0, porCobrar: 0 },
+      kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
     })),
     recogerAsignaciones: vi.fn(async () => ({ status: "ok" as const, recogidas: ["o1"] })),
     escogerParaGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),
@@ -214,6 +214,9 @@ describe("menor-1: withErrorHandler envuelve los cuerpos de las actions", () => 
     // valido; lo que el test AFIRMA no cambia.
     fd.set("causaDevolucion", "not_found");
     fd.set("motivo", "cliente no estaba");
+    // Pedido: la devolución ahora exige evidencia; sin ella el input moriría en el borde y
+    // el test dejaría de probar lo suyo. Se añade una imagen válida para llegar al service.
+    fd.set("evidencia", imagenFile());
 
     await expect(gestionar(fd, { service, getActor: actorMensajero })).rejects.toThrow(
       /AppErrorCode inesperado/,

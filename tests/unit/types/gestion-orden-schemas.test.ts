@@ -154,6 +154,7 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6)", () => {
       resultado: "devuelta",
       causaDevolucion: "wrong_address",
       motivo: "direccion inexistente",
+      evidencia: evidenciaValida(), // pedido: la devolución exige evidencia obligatoria
     });
     expect(r.success).toBe(true);
   });
@@ -164,6 +165,17 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6)", () => {
       resultado: "devuelta",
       causaDevolucion: "wrong_address",
       motivo: "",
+      evidencia: evidenciaValida(),
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("pedido: SIN evidencia -> invalido", () => {
+    const r = gestionarSchema.safeParse({
+      ordenId: "o1",
+      resultado: "devuelta",
+      causaDevolucion: "wrong_address",
+      motivo: "direccion inexistente",
     });
     expect(r.success).toBe(false);
   });

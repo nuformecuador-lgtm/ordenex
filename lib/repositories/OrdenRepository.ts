@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
+import type { CierreEstado } from "@/lib/types/cierre";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
@@ -17,6 +17,7 @@ import {
   type GenerarGuiaDecisionData,
   type GenerarGuiaResultRow,
   type GeoExistence,
+  type BodegaBloqueoResult,
   type IOrdenRepository,
   type ListOrdenesParams,
   type ListOrdenesResult,
@@ -46,7 +47,6 @@ type OrdenPrismaClient = Pick<
 // Feature 41 (R12/R16/R17): estados de cierre que BLOQUEAN. `rechazado`/`aprobado` NO
 // bloquean (dinero conciliado o descartado). Fuente de verdad en lib/types/cierre.ts.
 const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido"];
-const DESTINO_BODEGA_SATELITE: CierreDestinoTipo = "bodega_satelite";
 const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
 
 // Feature 17/R3: nombre CONSTANTE de la secuencia (nunca interpolar entrada de
@@ -1291,23 +1291,23 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * R17 (regla estricta F1.4-Q4): `bloqueada = (i) || (ii)`. (i) cierre_dia de sus
-   * mensajeros (destino satelite de su zona) en `solicitado`/`vencido`; (ii) su propio
-   * CierreBodega hacia la central en `solicitado`. Dos EXISTS en paralelo.
+   * `bloqueada = (i) || (ii)`. (ii) su propio CierreBodega hacia la central en
+   * `solicitado` = bloqueo duro. (i) causa de mensajeros RELAJADA (pedido
+   * admin_satelite): antes bloqueaba si CUALQUIER mensajero tenia un cierre; ahora
+   * `porMensajeros` es bloqueo duro SOLO si TODOS los mensajeros de la zona tienen un
+   * cierre abierto (`solicitado`/`vencido`). Con 0 mensajeros no bloquea por (i).
+   * Se reutiliza `findMensajerosBloqueados` (mismo criterio que la guarda por-mensajero
+   * de la asignacion, R14), de modo que el set de bloqueados coincide exactamente con
+   * los mensajeros que el servidor rechazaria al asignar. Los campos informativos
+   * (`cierresAbiertos`/`totalMensajeros`/`mensajerosConCierreIds`) alimentan el aviso
+   * NO bloqueante y el deshabilitado por-mensajero en el selector.
    */
-  async existeBodegaSateliteBloqueada(zonaId: string): Promise<{
-    bloqueada: boolean;
-    porMensajeros: boolean;
-    porCierreBodega: boolean;
-  }> {
-    const [countMensajeros, countCierreBodega] = await Promise.all([
-      // (i) usa el indice (destino_tipo, destino_zona_id) + filtro por estado.
-      this.prisma.cierreDia.count({
-        where: {
-          destinoTipo: DESTINO_BODEGA_SATELITE,
-          destinoZonaId: zonaId,
-          estado: { in: ESTADOS_CIERRE_BLOQUEANTES },
-        },
+  async existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult> {
+    const [mensajerosZona, countCierreBodega] = await Promise.all([
+      // Mensajeros de la zona (universo sobre el que se evalua "todos bloqueados").
+      this.prisma.usuario.findMany({
+        where: { rol: { value: "mensajero" }, zonaId },
+        select: { id: true },
       }),
       // (ii) mismo criterio que la guardia de unicidad de la feature 40 (indice unico
       // parcial WHERE estado='solicitado'): a lo sumo uno por zona.
@@ -1315,9 +1315,21 @@ export class OrdenRepository implements IOrdenRepository {
         where: { zonaId, estado: ESTADO_CIERRE_BODEGA_PENDIENTE },
       }),
     ]);
-    const porMensajeros = countMensajeros > 0;
+    const idsZona = mensajerosZona.map((m) => m.id);
+    const bloqueadosSet = await this.findMensajerosBloqueados(idsZona);
+    const totalMensajeros = idsZona.length;
+    const cierresAbiertos = bloqueadosSet.size;
     const porCierreBodega = countCierreBodega > 0;
-    return { bloqueada: porMensajeros || porCierreBodega, porMensajeros, porCierreBodega };
+    // (i) bloqueo duro solo si HAY mensajeros y TODOS estan bloqueados.
+    const porMensajeros = totalMensajeros > 0 && cierresAbiertos === totalMensajeros;
+    return {
+      bloqueada: porMensajeros || porCierreBodega,
+      porMensajeros,
+      porCierreBodega,
+      cierresAbiertos,
+      totalMensajeros,
+      mensajerosConCierreIds: [...bloqueadosSet],
+    };
   }
 }
 

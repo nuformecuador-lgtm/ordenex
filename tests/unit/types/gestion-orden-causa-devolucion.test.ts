@@ -18,16 +18,23 @@ function fieldErrorsDe(error: ZodError<unknown>): Record<string, string[] | unde
 
 const MOTIVO = "el cliente no contesto el timbre";
 
-function devuelta(extra: Record<string, unknown> = {}) {
-  return { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: MOTIVO, ...extra };
-}
-
 function evidenciaValida() {
   return { type: "image/jpeg", size: 1024 };
 }
 
+function devuelta(extra: Record<string, unknown> = {}) {
+  return {
+    ordenId: "o1",
+    resultado: "devuelta",
+    causaDevolucion: "not_found",
+    motivo: MOTIVO,
+    evidencia: evidenciaValida(), // pedido: la devolución exige evidencia obligatoria
+    ...extra,
+  };
+}
+
 /** `devuelta()` sin el campo indicado (para probar su ausencia en el borde). */
-function devueltaSin(campo: "causaDevolucion" | "motivo") {
+function devueltaSin(campo: "causaDevolucion" | "motivo" | "evidencia") {
   const base: Record<string, unknown> = devuelta();
   delete base[campo];
   return base;
@@ -61,6 +68,14 @@ describe("Feature 73 · rama `devuelta` — causa obligatoria (R1/R6)", () => {
       if (!r.success) {
         expect(fieldErrorsDe(r.error).causaDevolucion).toBeDefined();
       }
+    }
+  });
+
+  it("pedido: SIN evidencia -> invalido con el error asociado al campo `evidencia`", () => {
+    const r = gestionarSchema.safeParse(devueltaSin("evidencia"));
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(fieldErrorsDe(r.error).evidencia).toBeDefined();
     }
   });
 });

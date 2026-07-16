@@ -36,6 +36,12 @@ export interface MisAsignacionesKpis {
   entregadas: number;
   /** Suma de `montoCobrar` (COD) de las ordenes en `en_reparto`; null cuenta 0. */
   porCobrar: number;
+  /**
+   * Total a cobrar ACUMULADO: COD de las ordenes `en_reparto` + `entregada`. No baja al
+   * ENTREGAR (la orden sale de reparto pero sigue sumando como entregada); se descuenta
+   * cuando se gestiona como reprogramada/devuelta/rechazada (no entra en ningun set).
+   */
+  totalACobrar: number;
 }
 
 // R9/R10/R20: dos grupos separados (por recoger vs por gestionar) + el puntero de
@@ -92,7 +98,14 @@ export type GestionarInput =
     }
   | { ordenId: string; resultado: "reprogramada"; fechaReprogramacion: string; motivo: string }
   // Feature 73/R10: la causa tipificada es un campo de la rama `devuelta` y SOLO de ella.
-  | { ordenId: string; resultado: "devuelta"; causaDevolucion: CausaDevolucion; motivo: string }
+  // Pedido: la devolucion exige evidencia OBLIGATORIA (como entrega/rechazo).
+  | {
+      ordenId: string;
+      resultado: "devuelta";
+      causaDevolucion: CausaDevolucion;
+      motivo: string;
+      evidencia: EvidenciaArchivo;
+    }
   | { ordenId: string; resultado: "rechazada"; motivo: string; evidencia: EvidenciaArchivo };
 
 export type GestionarServiceResult =

@@ -186,16 +186,28 @@ export interface RecepcionSateliteRow {
   distritoNombre: string | null;
 }
 
-// Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite. Regla
-// ESTRICTA (F1.4-Q4): `bloqueada = porMensajeros || porCierreBodega`. `porMensajeros` =
-// existe un cierre_dia de sus mensajeros (destino satelite de su zona) en
-// `solicitado`/`vencido` (causa i). `porCierreBodega` = existe su propio CierreBodega
-// hacia la central en `solicitado` (causa ii). Ambos flags viajan para que el borde
-// (feature 34) distinga el motivo accionable de R22.
+// Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite.
+// `bloqueada = porMensajeros || porCierreBodega`. `porCierreBodega` = existe su propio
+// CierreBodega hacia la central en `solicitado` (causa ii, bloqueo duro).
+//
+// Ajuste (pedido admin_satelite): la causa (i) de mensajeros se RELAJA. Un cierre de un
+// mensajero ya NO bloquea toda la bodega; `porMensajeros` es `true` (bloqueo duro) SOLO
+// si TODOS los mensajeros de la zona tienen un cierre abierto (`solicitado`/`vencido`).
+// Mientras no sea bloqueo duro, la UI muestra un aviso INFORMATIVO y se puede seguir
+// asignando a los mensajeros SIN cierre. Los campos informativos alimentan ese aviso y
+// el deshabilitado por-mensajero en el selector:
+//   - `cierresAbiertos`         = mensajeros de la zona con un cierre abierto.
+//   - `totalMensajeros`         = mensajeros de la zona.
+//   - `mensajerosConCierreIds`  = ids de esos mensajeros (para deshabilitarlos al asignar).
+// Son opcionales (aditivos): los consumidores que solo deciden el bloqueo usan los tres
+// primeros campos.
 export interface BodegaBloqueoResult {
   bloqueada: boolean;
   porMensajeros: boolean;
   porCierreBodega: boolean;
+  cierresAbiertos?: number;
+  totalMensajeros?: number;
+  mensajerosConCierreIds?: string[];
 }
 
 export interface IOrdenRepository {

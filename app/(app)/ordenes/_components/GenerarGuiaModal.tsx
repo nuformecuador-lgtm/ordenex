@@ -20,6 +20,8 @@ export interface GenerarGuiaModalProps {
   ordenes: OrdenListItemDTO[];
   /** TODOS los mensajeros, sin filtro de zona (R28). */
   mensajeros: MensajeroLiteDTO[];
+  /** Ajuste maestro: ids de mensajeros con cierre abierto; se deshabilitan en cada selector. */
+  mensajerosBloqueadosIds?: string[];
   onOpenChange: (open: boolean) => void;
   /** Se invoca tras un "ok" para que el padre refresque los apartados. */
   onSuccess: () => void;
@@ -83,6 +85,7 @@ export function GenerarGuiaModal({
   open,
   ordenes,
   mensajeros,
+  mensajerosBloqueadosIds = [],
   onOpenChange,
   onSuccess,
 }: GenerarGuiaModalProps) {
@@ -102,7 +105,10 @@ export function GenerarGuiaModal({
     if (open) setSeleccion(seleccionInicial(ordenes));
   }
 
-  const mensajeroOptions = toMensajeroOptions(mensajeros);
+  const mensajeroOptions = toMensajeroOptions(
+    mensajeros,
+    new Set(mensajerosBloqueadosIds),
+  );
   // Feature 30/R8: primero se separa GAM (con select) de NO-GAM (a satélite, sin
   // select). Dentro de GAM se conserva el subgrupo sugerido/sin-sugerido (feat 17).
   const gamOrdenes = ordenes.filter(esGam);

@@ -68,10 +68,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    const [ordenEnGestionId, rows, entregadas] = await Promise.all([
+    const [ordenEnGestionId, rows, entregadas, montoEntregadas] = await Promise.all([
       this.repo.getOrdenEnGestion(actor.usuarioId), // R20
       this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
       this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
+      this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
     ]);
 
     const porRecoger: MiAsignacionDTO[] = [];
@@ -83,10 +84,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     }
     // Feature 61: KPIs derivados de las ordenes en_reparto (porGestionar) + el conteo
     // de entregadas. `pendientes` = en camino; `porCobrar` = COD por recaudar (null = 0).
+    const codEnReparto = porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
     const kpis: MisAsignacionesKpis = {
       pendientes: porGestionar.length,
       entregadas,
-      porCobrar: porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0),
+      porCobrar: codEnReparto,
+      // Total a cobrar ACUMULADO: COD en_reparto + COD ya entregado. Estable al entregar;
+      // se descuenta al gestionar como reprogramada/devuelta/rechazada (fuera de ambos sets).
+      totalACobrar: codEnReparto + montoEntregadas,
     };
     return { status: "ok", porRecoger, porGestionar, ordenEnGestionId, kpis }; // R10
   }
@@ -186,10 +191,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       };
     }
 
-    // R23/R30: subir evidencia (entrega/rechazo) ANTES de la transaccion.
+    // R23/R30: subir evidencia (entrega/rechazo/devolucion) ANTES de la transaccion.
     let storagePath: string | null = null;
     let contentType: string | null = null;
-    if (input.resultado === "entregada" || input.resultado === "rechazada") {
+    if (
+      input.resultado === "entregada" ||
+      input.resultado === "rechazada" ||
+      input.resultado === "devuelta"
+    ) {
       const ext = GESTION_MIME_EXTENSION[input.evidencia.contentType as GestionMimeType] ?? "bin";
       const path = `${input.ordenId}/${input.resultado}-${Date.now()}.${ext}`;
       storagePath = await this.storage.upload({
@@ -372,10 +381,14 @@ function buildGestionData(
     case "devuelta":
       // Feature 73/R11/R12: la causa va en su COLUMNA propia, APARTE del texto libre; el
       // `motivo` se persiste EXACTAMENTE como lo escribio el mensajero, sin decoracion.
+      // Pedido: la devolucion ahora persiste la FOTO de evidencia (obligatoria), igual que
+      // entrega/rechazo (mismas columnas genericas de gestion_orden).
       return {
         resultado: "devuelta",
         causaDevolucion: input.causaDevolucion,
         motivo: input.motivo,
+        evidenciaStoragePath: storagePath,
+        evidenciaContentType: contentType,
       };
     case "rechazada":
       return {
