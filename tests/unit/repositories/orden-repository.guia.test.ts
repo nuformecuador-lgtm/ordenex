@@ -211,10 +211,10 @@ describe("OrdenRepository.rutearBodegaSateliteLote (feature 30/R10/R13)", () => 
     expect(sql).toContain("num_guia IS NULL");
     expect(sql).toContain("nextval('orden_num_guia_seq')");
     expect(ordenId).toBe("o1");
-    // R9: fija estatus y deja mensajeroAsignadoId NULL.
+    // R9: fija estatus y deja mensajeroAsignadoId NULL. Feature 76/LC1 (C2): limpia asignado_at.
     expect(tx.orden.update).toHaveBeenCalledWith({
       where: { id: "o1" },
-      data: { estatusId: "os-ruta-satelite", mensajeroAsignadoId: null },
+      data: { estatusId: "os-ruta-satelite", mensajeroAsignadoId: null, asignadoAt: null },
     });
   });
 
@@ -342,9 +342,10 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
       HIST_GUIA,
     );
 
+    // Feature 76/R23 (W1): con mensajero no nulo estampa asignado_at = now.
     expect(tx.orden.update).toHaveBeenCalledWith({
       where: { id: "o1" },
-      data: { estatusId: "os-espera", mensajeroAsignadoId: "m1" },
+      data: { estatusId: "os-espera", mensajeroAsignadoId: "m1", asignadoAt: expect.any(Date) },
       select: { numGuia: true },
     });
     expect(resultados).toEqual([{ ordenId: "o1", numGuia: 7 }]);
@@ -360,11 +361,14 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
       HIST_GUIA,
     );
 
+    // Feature 76/R23 (W1): SIN mensajero (null) NO estampa asignado_at (queda ausente).
     expect(tx.orden.update).toHaveBeenCalledWith({
       where: { id: "o2" },
       data: { estatusId: "os-bodega", mensajeroAsignadoId: null },
       select: { numGuia: true },
     });
+    const dataSinMensajero = tx.orden.update.mock.calls.at(-1)![0].data;
+    expect(dataSinMensajero).not.toHaveProperty("asignadoAt");
     expect(resultados).toEqual([{ ordenId: "o2", numGuia: 8 }]);
   });
 
@@ -467,7 +471,12 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     const arg = tx.orden.updateMany.mock.calls[0][0];
     expect(arg.where).toEqual({ id: { in: ["o1", "o2"] } });
-    expect(arg.data).toEqual({ mensajeroAsignadoId: "m1", estatusId: "os-espera" });
+    // Feature 76/R23 (W2): asignacion de bodega siempre estampa asignado_at = now.
+    expect(arg.data).toEqual({
+      mensajeroAsignadoId: "m1",
+      estatusId: "os-espera",
+      asignadoAt: expect.any(Date),
+    });
     expect(arg.data).not.toHaveProperty("numGuia");
   });
 

@@ -832,7 +832,13 @@ export class OrdenRepository implements IOrdenRepository {
         );
         const updated = await tx.orden.update({
           where: { id: d.ordenId },
-          data: { estatusId: d.estatusId, mensajeroAsignadoId: d.mensajeroAsignadoId },
+          data: {
+            estatusId: d.estatusId,
+            mensajeroAsignadoId: d.mensajeroAsignadoId,
+            // Feature 76/R23 (W1): estampa `asignado_at = now` SOLO cuando se asigna un
+            // mensajero no nulo (el ruteo sin mensajero deja NULL y no cuenta al ranking).
+            ...(d.mensajeroAsignadoId != null ? { asignadoAt: new Date() } : {}),
+          },
           select: { numGuia: true },
         });
         if (updated.numGuia === null) {
@@ -874,7 +880,8 @@ export class OrdenRepository implements IOrdenRepository {
       });
       const result = await tx.orden.updateMany({
         where: { id: { in: ordenIds } },
-        data: { mensajeroAsignadoId: mensajeroId, estatusId },
+        // Feature 76/R23 (W2): asignacion en lote desde bodega, siempre no nula -> estampa.
+        data: { mensajeroAsignadoId: mensajeroId, estatusId, asignadoAt: new Date() },
       });
       // R8: registra SOLO las filas efectivamente afectadas (las existentes).
       await appendCambioEstado(
@@ -920,7 +927,9 @@ export class OrdenRepository implements IOrdenRepository {
         );
         await tx.orden.update({
           where: { id },
-          data: { estatusId, mensajeroAsignadoId: null }, // R9
+          // R9: sin mensajero. Feature 76/LC1 (C2): limpia tambien `asignado_at` (defensivo,
+          // evita un timestamp huerfano; el conteo ya filtra por mensajero no nulo).
+          data: { estatusId, mensajeroAsignadoId: null, asignadoAt: null },
         });
       }
       // R13: destino en_ruta_bodega_satelite; append en la MISMA tx (R7).
@@ -1123,6 +1132,7 @@ export class OrdenRepository implements IOrdenRepository {
         UPDATE "orden"
         SET "mensajero_asignado_id" = ${mensajeroId},
             "estatus_id" = ${destinoEstatusId},
+            "asignado_at" = NOW(),
             "updated_at" = NOW()
         WHERE "id" IN (${Prisma.join(ordenIds)})
           AND "estatus_id" = ${origenEstatusId}

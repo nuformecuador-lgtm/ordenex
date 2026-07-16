@@ -92,6 +92,7 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
     expect(arg.data).toEqual({
       estatusId: "os-en-bodega",
       mensajeroAsignadoId: null,
+      asignadoAt: null, // feature 76/LC1 (C3): limpia el timestamp de asignacion
       liberadaReprogramadaAt: corridaAt,
     });
   });

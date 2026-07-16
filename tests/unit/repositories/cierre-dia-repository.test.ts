@@ -628,6 +628,8 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     expect(arg.data.estatusId).toBe("s-reparto");
     // R19: repone la asignacion que el SEGUIMIENTO del reintento (47/R6) habia limpiado.
     expect(arg.data.mensajeroAsignadoId).toBe("m1");
+    // Feature 76/R23 (W4): la reposicion es una reasignacion efectiva -> estampa asignado_at.
+    expect(arg.data.asignadoAt).toBeInstanceOf(Date);
   });
 
   it("R20: appendCambioEstado con origen real, destino en_reparto, actor, enlace y `deshacer_gestion`", async () => {

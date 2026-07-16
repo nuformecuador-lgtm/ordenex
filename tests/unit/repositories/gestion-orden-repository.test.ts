@@ -386,6 +386,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     };
     expect(segUpdate.data.estatusId).toBe("os-en-bodega-satelite");
     expect(segUpdate.data.mensajeroAsignadoId).toBeNull(); // R6: handoff limpio a la bodega
+    expect(segUpdate.data.asignadoAt).toBeNull(); // feature 76/LC1 (C1): limpia asignado_at
     expect(segUpdate.data).not.toHaveProperty("numGuia"); // R6: conserva num_guia (no lo toca)
 
     // DOS appends por el choke point: en_reparto->devuelta (actor m1) y devuelta->bodega (actor null).
