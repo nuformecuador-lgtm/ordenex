@@ -2,6 +2,7 @@ import { z } from "zod";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 import type {
   DetalleConflicto,
   MiAsignacionDTO,
@@ -92,6 +93,12 @@ const fechaFuturaSchema = z
 
 const motivoSchema = z.string().trim().min(1, "motivo requerido");
 
+// Feature 73 (R1/R6): causa TIPIFICADA de la devolucion. La obligatoriedad vive AQUI, en el
+// borde (F1.4-b: sin CHECK en la base), y SOLO en la rama `devuelta`. Un valor fuera del
+// catalogo o su ausencia producen un error en el campo `causaDevolucion` (R6). NO sustituye
+// al `motivo` ni afloja su validacion (R7): son campos APARTE.
+const causaDevolucionSchema = z.enum(CAUSA_DEVOLUCION_SEED, { message: "causa requerida" });
+
 // R22/R25/R27/R29: entrada de gestion DISCRIMINADA por `resultado` con las
 // obligatoriedades por rama (decision F1.4-i). La evidencia (File) va en el mismo
 // schema como file-like (obligatoria en entrega/rechazo).
@@ -112,7 +119,11 @@ export const gestionarSchema = z.discriminatedUnion("resultado", [
   z.object({
     ordenId: z.string().min(1),
     resultado: z.literal("devuelta"),
-    motivo: motivoSchema,
+    // Feature 73/R10: la causa vive SOLO en esta variante. Al ser una discriminatedUnion, un
+    // cliente que la envie en `entregada`/`reprogramada`/`rechazada` no la consigue persistir:
+    // el campo no existe en el tipo parseado de esas ramas.
+    causaDevolucion: causaDevolucionSchema,
+    motivo: motivoSchema, // feature 36: se CONSERVA obligatorio (R7)
   }),
   z.object({
     ordenId: z.string().min(1),

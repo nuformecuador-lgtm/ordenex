@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
@@ -21,9 +22,11 @@ import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { GESTION_ALLOWED_MIME } from "@/lib/config/gestion";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
+import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
 
 // Feature 36 / rediseño 63 (pedido humano): detalle GRANDE y centrado de UNA
@@ -143,6 +146,9 @@ export function GestionarOrdenPanel({
   const [metodoPago, setMetodoPago] = useState("");
   const [fechaReprogramacion, setFechaReprogramacion] = useState(mananaISO());
   const [motivo, setMotivo] = useState("");
+  // Feature 73 (R4): causa TIPIFICADA de la rama `devuelta`. `""` = sin elegir; el mensajero
+  // DEBE escoger una (R6). Es un campo APARTE del `motivo`, que sigue obligatorio (R7).
+  const [causaDevolucion, setCausaDevolucion] = useState<CausaDevolucion | "">("");
   const [evidencia, setEvidencia] = useState<File | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [enviando, setEnviando] = useState(false);
@@ -162,7 +168,9 @@ export function GestionarOrdenPanel({
       case "reprogramada":
         return { ...base, fechaReprogramacion, motivo };
       case "devuelta":
-        return { ...base, motivo };
+        // Feature 73/R6: `|| undefined` reproduce el patrón de `metodoPago` (:159) para que zod
+        // diga "requerido" y no "valor inválido" cuando no se eligió ninguna causa.
+        return { ...base, causaDevolucion: causaDevolucion || undefined, motivo };
       case "rechazada":
         return { ...base, motivo, evidencia: evidencia ?? undefined };
     }
@@ -181,6 +189,7 @@ export function GestionarOrdenPanel({
       fd.set("fechaReprogramacion", fechaReprogramacion);
       fd.set("motivo", motivo);
     } else if (resultado === "devuelta") {
+      fd.set("causaDevolucion", causaDevolucion); // feature 73 (R9)
       fd.set("motivo", motivo);
     } else {
       fd.set("motivo", motivo);
@@ -215,6 +224,7 @@ export function GestionarOrdenPanel({
     setMetodoPago("");
     setFechaReprogramacion(mananaISO());
     setMotivo("");
+    setCausaDevolucion(""); // feature 73/R4: cambiar de resultado no arrastra la causa anterior
     setEvidencia(null);
     setPaso("formulario");
   }
@@ -262,6 +272,7 @@ export function GestionarOrdenPanel({
   const evidenciaError = firstError(fieldErrors, "evidencia");
   const fechaError = firstError(fieldErrors, "fechaReprogramacion");
   const motivoError = firstError(fieldErrors, "motivo");
+  const causaError = firstError(fieldErrors, "causaDevolucion");
 
   const resultadoLabel =
     RESULTADO_BOTONES.find((b) => b.value === resultado)?.label ?? "";
@@ -435,7 +446,14 @@ export function GestionarOrdenPanel({
           ) : null}
 
           {resultado === "devuelta" ? (
-            <MotivoField value={motivo} onChange={setMotivo} error={motivoError} />
+            <>
+              <CausaField
+                value={causaDevolucion}
+                onChange={setCausaDevolucion}
+                error={causaError}
+              />
+              <MotivoField value={motivo} onChange={setMotivo} error={motivoError} />
+            </>
           ) : null}
 
           {resultado === "rechazada" ? (
@@ -488,6 +506,43 @@ export function GestionarOrdenPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Feature 73 (R3/R4): selector de la causa TIPIFICADA, sólo en la rama `devuelta`. Radios
+ * (decisión F1.4-f): las 3 opciones visibles de una, móvil-first, sin dropdown que abrir en la
+ * calle. Las etiquetas salen SIEMPRE de `CAUSA_DEVOLUCION_OPTIONS` (derivadas del SEED) → aquí
+ * no se duplica ninguna cadena ni se pinta el slug crudo del enum. Vive en este archivo, como
+ * `MotivoField`: un solo consumidor (docs/architecture.md "sin sobre-ingeniería").
+ */
+function CausaField({
+  value,
+  onChange,
+  error,
+}: {
+  value: CausaDevolucion | "";
+  onChange: (value: CausaDevolucion | "") => void;
+  error: string | undefined;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {/* Título visible del grupo; el nombre accesible del `radiogroup` lo da su `aria-label`
+          (mismo contrato que el `Select` de "Método de pago", :372-379). */}
+      <Label>Causa de la devolución</Label>
+      <RadioGroup
+        value={value}
+        onValueChange={(next) => onChange(next as CausaDevolucion | "")}
+        options={CAUSA_DEVOLUCION_OPTIONS}
+        aria-label="Causa de la devolución"
+        aria-invalid={error ? true : undefined}
+      />
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

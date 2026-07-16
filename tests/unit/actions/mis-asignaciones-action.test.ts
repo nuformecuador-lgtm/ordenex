@@ -208,6 +208,11 @@ describe("menor-1: withErrorHandler envuelve los cuerpos de las actions", () => 
     const fd = new FormData();
     fd.set("ordenId", "o1");
     fd.set("resultado", "devuelta");
+    // Feature 73/R6: sin causa este FormData ya no llegaria al service (moriria en el borde
+    // como validation_error) y el test dejaria de probar lo suyo — que un error EXCEPCIONAL
+    // del service pasa por withErrorHandler. Se añade la causa para que el input siga siendo
+    // valido; lo que el test AFIRMA no cambia.
+    fd.set("causaDevolucion", "not_found");
     fd.set("motivo", "cliente no estaba");
 
     await expect(gestionar(fd, { service, getActor: actorMensajero })).rejects.toThrow(

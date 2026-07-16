@@ -472,4 +472,71 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(ordenUpdate).toHaveBeenCalledTimes(1);
     expect(historialCreateMany).toHaveBeenCalledTimes(1);
   });
+
+  // --- Feature 73 (R11/R12/R13): la causa llega al INSERT, dentro de la MISMA tx ---
+
+  it("R11: devuelta con causa -> el INSERT lleva `causaDevolucion` en su columna propia", async () => {
+    const { repo, gestionCreate } = buildTxRepo();
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "devuelta", causaDevolucion: "wrong_number", motivo: "telefono errado" },
+      nuevoEstatusId: "os-devuelta",
+      seguimiento: { destinoEstatusId: "os-en-bodega", limpiaMensajero: true },
+    });
+
+    const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
+    expect(gArg.data.causaDevolucion).toBe("wrong_number");
+    // R12: el texto libre se persiste tal cual, sin decorarlo con la causa.
+    expect(gArg.data.motivo).toBe("telefono errado");
+  });
+
+  it("R13: la causa entra en el MISMO create que la gestion (una sola tx, sin firma nueva)", async () => {
+    const { repo, gestionCreate, ordenUpdate } = buildTxRepo();
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "devuelta", causaDevolucion: "not_found", motivo: "ausente" },
+      nuevoEstatusId: "os-devuelta",
+    });
+
+    // Un unico INSERT de gestion (con la causa dentro) + el UPDATE del estado: si la tx aborta,
+    // no queda ni gestion ni causa (atomicidad todo-o-nada ya provista por $transaction).
+    expect(gestionCreate).toHaveBeenCalledTimes(1);
+    expect(ordenUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("R13: si el append de seguimiento (47) falla, el INSERT con causa no se confirma", async () => {
+    const historialCreateMany = vi.fn(async () => {
+      throw new Error("append seguimiento falla");
+    });
+    const { repo } = buildTxRepo("os-reparto", historialCreateMany);
+
+    // El fallo se propaga -> $transaction revierte: la causa NO queda persistida.
+    await expect(
+      repo.crearGestionYTransicionar({
+        ordenId: "o1",
+        mensajeroId: "m1",
+        gestion: { resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "x" },
+        nuevoEstatusId: "os-devuelta",
+        seguimiento: { destinoEstatusId: "os-en-bodega", limpiaMensajero: true },
+      }),
+    ).rejects.toThrow("append seguimiento falla");
+  });
+
+  it("R10/R16: una rama sin causa -> la columna se escribe NULL (nunca undefined)", async () => {
+    const { repo, gestionCreate } = buildTxRepo();
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "rechazada", motivo: "cliente rechazo" },
+      nuevoEstatusId: "os-rechazada",
+    });
+
+    const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
+    expect(gArg.data.causaDevolucion).toBeNull();
+  });
 });
