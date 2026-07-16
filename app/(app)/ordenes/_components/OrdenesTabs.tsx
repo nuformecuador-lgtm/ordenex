@@ -53,6 +53,15 @@ const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"])
 // reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
 const ESTADO_REPROGRAMADA = "reprogramada";
 
+// Estado cuya tab bloquea la seleccion de las ordenes NO centrales: "Devolver a la
+// tienda" (rechazada -> devuelta_origen) la ejecuta la bodega RESPONSABLE, y para el
+// maestro/admin eso es solo la bodega central (zonaEsGam). Las satelite las devuelve
+// el adminSatelite de la zona (en /recepcion-satelite), asi que su check se bloquea
+// en vez de dejar seleccionarlas y vaciar el modal.
+const ESTADO_RECHAZADA = "rechazada";
+const MOTIVO_RECHAZADA_NO_CENTRAL =
+  "Orden de zona satélite: la devuelve el admin de la bodega satélite de su zona.";
+
 /** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
 function labelDe(value: string): string {
   return (ORDER_STATUS_LABELS as Record<string, string>)[value] ?? value;
@@ -310,12 +319,20 @@ export function OrdenesTabs({
                 } else if (tab.value === ESTADO_REPROGRAMADA) {
                   columns = ordenesColumnsReprogramada;
                 }
+                // En `rechazada`, bloquea el check de las ordenes NO centrales: el
+                // maestro/admin solo devuelve a la tienda las de la bodega central.
+                const bloqueoSeleccion =
+                  tab.value === ESTADO_RECHAZADA
+                    ? (o: OrdenListItemDTO) =>
+                        o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL
+                    : undefined;
                 return (
                   <OrdenesModule
                     filter={{ status_id: tab.id }}
                     columns={columns}
                     mostrarHistorial={mostrarHistorial}
                     selectable={acc.length > 0}
+                    bloqueoSeleccion={bloqueoSeleccion}
                     acciones={acc}
                   />
                 );
