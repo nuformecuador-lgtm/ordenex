@@ -36,7 +36,10 @@ type ModalAbierto =
 async function mensajerosFetcher() {
   const res = await listarMensajerosParaAsignacion();
   if (res.status !== "ok") throw new Error(res.status);
-  return res.mensajeros;
+  // `bloqueadosIds` = mensajeros de la bodega central (GAM) con un cierre abierto
+  // (`solicitado`/`vencido`). Se usa para deshabilitar la selección en las tabs de
+  // asignación cuando la bodega tiene al menos uno.
+  return { mensajeros: res.mensajeros, bloqueadosIds: res.bloqueadosIds ?? [] };
 }
 
 // Feature 63/C3 (F1.4-c): `exclude` es por `value` del estado; default
@@ -61,6 +64,13 @@ const ESTADO_REPROGRAMADA = "reprogramada";
 const ESTADO_RECHAZADA = "rechazada";
 const MOTIVO_RECHAZADA_NO_CENTRAL =
   "Orden de zona satélite: la devuelve el admin de la bodega satélite de su zona.";
+
+// Estados cuya asignación ("Generar guía") se bloquea si la bodega central tiene al
+// menos un cierre de mensajero abierto: no se asignan nuevas órdenes hasta resolverlo,
+// así que su checkbox de selección se deshabilita por completo.
+const ESTADOS_ASIGNACION = new Set(["en_fulfillment", "en_preparacion"]);
+const MOTIVO_BODEGA_CIERRE_ABIERTO =
+  "La bodega tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar órdenes.";
 
 /** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
 function labelDe(value: string): string {
@@ -118,13 +128,16 @@ export function OrdenesTabs({
     catalogoFetcher,
   );
 
-  console.log("xyz", catalogo);
-
   // Mensajeros para los modales de asignación (solo si hay acciones por lote).
-  const { data: mensajeros } = useSWR(
+  const { data: mensajerosData } = useSWR(
     accionesLote ? "ordenes:mensajeros" : null,
     mensajerosFetcher,
   );
+  console.log("xyz", mensajerosData);
+  const mensajeros = mensajerosData?.mensajeros;
+  // La bodega central está bloqueada para asignar si al menos un mensajero GAM tiene
+  // un cierre abierto (regla estricta: basta con uno).
+  const bodegaConCierreAbierto = (mensajerosData?.bloqueadosIds?.length ?? 0) > 0;
 
   const [modalAbierto, setModalAbierto] = useState<ModalAbierto>(null);
   const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<
@@ -319,13 +332,24 @@ export function OrdenesTabs({
                 } else if (tab.value === ESTADO_REPROGRAMADA) {
                   columns = ordenesColumnsReprogramada;
                 }
-                // En `rechazada`, bloquea el check de las ordenes NO centrales: el
-                // maestro/admin solo devuelve a la tienda las de la bodega central.
-                const bloqueoSeleccion =
-                  tab.value === ESTADO_RECHAZADA
-                    ? (o: OrdenListItemDTO) =>
-                        o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL
-                    : undefined;
+                // Bloqueo de selección por tab:
+                // - `rechazada`: bloquea el check de las órdenes NO centrales (el
+                //   maestro/admin solo devuelve a la tienda las de la bodega central).
+                // - `en_fulfillment`/`en_preparacion`: si la bodega central tiene al
+                //   menos un cierre de mensajero abierto, se deshabilita TODO el check
+                //   (no se pueden asignar órdenes hasta resolver el/los cierre/s).
+                let bloqueoSeleccion:
+                  | ((row: OrdenListItemDTO) => string | null)
+                  | undefined;
+                if (tab.value === ESTADO_RECHAZADA) {
+                  bloqueoSeleccion = (o) =>
+                    o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL;
+                } else if (
+                  ESTADOS_ASIGNACION.has(tab.value) &&
+                  bodegaConCierreAbierto
+                ) {
+                  bloqueoSeleccion = () => MOTIVO_BODEGA_CIERRE_ABIERTO;
+                }
                 return (
                   <OrdenesModule
                     filter={{ status_id: tab.id }}

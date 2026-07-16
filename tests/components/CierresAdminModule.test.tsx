@@ -15,6 +15,7 @@ import type {
   CierreGrupos,
   CierreTotales,
   CierreResultado,
+  TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 
 // Feature 38 (T13) — módulo cliente de "Cierres del día" del admin. Se mockean las
@@ -113,6 +114,24 @@ function emptyGrupos(): CierreGrupos {
   return { entregada: [], reprogramada: [], devuelta: [], rechazada: [] };
 }
 
+/** Ingreso de Ordenex en cero: el default para los tests que no lo están mirando. */
+function zeroIngreso(over: Partial<TotalesIngresoOrdenex> = {}): TotalesIngresoOrdenex {
+  return {
+    montoCobrar: "0.00",
+    fleteConIva: "0.00",
+    fleteDevolucionConIva: "0.00",
+    comisionConIva: "0.00",
+    total: "0.00",
+    flete: "0.00",
+    ivaFlete: "0.00",
+    fleteDevolucion: "0.00",
+    ivaFleteDevolucion: "0.00",
+    comisionCod: "0.00",
+    ivaComisionCod: "0.00",
+    ...over,
+  };
+}
+
 function renderModule(props?: Partial<Parameters<typeof CierresAdminModule>[0]>) {
   render(
     <CierresAdminModule
@@ -203,6 +222,8 @@ describe("CierresAdminModule", () => {
         },
       }),
       grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -220,6 +241,163 @@ describe("CierresAdminModule", () => {
     expect(within(totales).getByText("₡160.35")).toBeInTheDocument();
   });
 
+  it("el detalle muestra el ingreso bruto y la ganancia (bruto - pago al mensajero)", async () => {
+    const user = userEvent.setup();
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
+      grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso({ total: "3672.50" }),
+      ganancia: "2172.50", // 3672.50 - 1500.00, derivado server-side
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
+
+    const bruto = within(dialog).getByRole("region", { name: "Ingreso bruto" });
+    expect(within(bruto).getByText("₡3672.50")).toBeInTheDocument();
+    const ganancia = within(dialog).getByRole("region", { name: "Ganancia" });
+    expect(within(ganancia).getByText("₡2172.50")).toBeInTheDocument();
+  });
+
+  it("la ganancia se muestra negativa si el pago al mensajero supera el ingreso", async () => {
+    const user = userEvent.setup();
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
+      grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(), // total "0.00": p.ej. puras reprogramaciones
+      ganancia: "-1500.00",
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
+    const ganancia = within(dialog).getByRole("region", { name: "Ganancia" });
+    expect(within(ganancia).getByText("₡-1500.00")).toBeInTheDocument();
+  });
+
+  it("el detalle muestra el ingreso de Ordenex del cierre por concepto", async () => {
+    const user = userEvent.setup();
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "c1" }),
+      grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso({
+        montoCobrar: "25000.00",
+        fleteConIva: "2825.00",
+        comisionConIva: "847.50",
+        fleteDevolucionConIva: "1130.00",
+        total: "4802.50",
+      }),
+      ganancia: "0.00",
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
+    const panel = within(dialog).getByRole("region", { name: "Ingreso de Ordenex" });
+    // Cada concepto va con su IVA incluido, en un solo monto.
+    expect(within(panel).getByText("₡25000.00")).toBeInTheDocument();
+    expect(within(panel).getByText("₡2825.00")).toBeInTheDocument();
+    expect(within(panel).getByText("₡847.50")).toBeInTheDocument();
+    expect(within(panel).getByText("₡1130.00")).toBeInTheDocument();
+    expect(within(panel).getByText("₡4802.50")).toBeInTheDocument();
+    // El IVA no se pinta como concepto aparte en el panel.
+    expect(within(panel).queryByText("IVA flete")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("IVA comisión")).not.toBeInTheDocument();
+  });
+
+  it("el desglose por orden se despliega y muestra la tarifa congelada con su fórmula", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({
+        gestionId: "g1",
+        resultado: "entregada",
+        numRemision: "REM-123",
+        destinatario: "Ana Pérez",
+        montoRecibido: "25000.00",
+        ingresoOrdenex: {
+          montoCobrar: "25000.00",
+          cobraComision: true,
+          esCentral: true,
+          flete: "2500.00",
+          ivaFlete: "325.00",
+          fleteDevolucion: null,
+          ivaFleteDevolucion: null,
+          comisionCod: "750.00",
+          ivaComisionCod: "97.50",
+          fleteConIva: "2825.00",
+          fleteDevolucionConIva: null,
+          comisionConIva: "847.50",
+          total: "3672.50",
+          tarifa: {
+            tarifaId: "tar_88",
+            valorFlete: "2000.00",
+            valorFleteGam: "2500.00",
+            valorFleteDevuelto: "1000.00",
+            valorFleteDevueltoGam: "1200.00",
+            comisionCod: "3.00",
+            ivaFlete: "13.00",
+            ivaComisionCod: "13.00",
+          },
+        },
+      }),
+    ];
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "c1" }),
+      grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
+    const region = within(dialog).getByRole("region", { name: "Entregadas" });
+
+    // El botón identifica SU orden, no un genérico repetido por fila.
+    const toggle = within(region).getByRole("button", {
+      name: "Desglose de ingreso de la orden REM-123 · Ana Pérez",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    // La tarifa congelada, incluida la variante NO aplicada (base 2000, se aplicó GAM 2500).
+    expect(within(region).getByText("tar_88")).toBeInTheDocument();
+    expect(within(region).getByText("₡2000.00")).toBeInTheDocument();
+    expect(within(region).getAllByText("13.00 %").length).toBeGreaterThan(0);
+    expect(within(region).getByText("3.00 %")).toBeInTheDocument();
+  });
+
+  it("sin ingresoOrdenex (cierre sin snapshot) no se pinta el botón de desglose", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.entregada = [
+      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-9" }),
+    ];
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({ cierreId: "c1" }),
+      grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
+    const region = within(dialog).getByRole("region", { name: "Entregadas" });
+    expect(
+      within(region).queryByRole("button", { name: /Desglose de ingreso/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("R6/R9: una entrega expone su monto (string) y método en el detalle", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
@@ -235,6 +413,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -266,6 +446,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -304,6 +486,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -330,6 +514,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -357,6 +543,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -377,6 +565,8 @@ describe("CierresAdminModule", () => {
         totalIngresoBodegaRechazos: "9200.00",
       }),
       grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -405,6 +595,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -430,6 +622,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     aprobarMock.mockResolvedValue({
       status: "ok",
@@ -457,6 +651,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -484,6 +680,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     rechazarMock.mockResolvedValue({
       status: "ok",
@@ -523,6 +721,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c2", estado: "aprobado", resueltoAt: "2026-07-12T00:00:00.000Z" }),
       grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({
       historico: [
@@ -548,6 +748,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     aprobarMock.mockResolvedValue({ status: "conflict" });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
@@ -612,6 +814,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),
       grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
 
@@ -633,6 +837,8 @@ describe("CierresAdminModule", () => {
       status: "ok",
       cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),
       grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
     });
     aprobarMock.mockResolvedValue({
       status: "ok",

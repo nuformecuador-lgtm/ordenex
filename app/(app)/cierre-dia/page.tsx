@@ -38,7 +38,6 @@ export default async function CierreDiaPage() {
         grupos={result.grupos}
         totales={result.totales}
         totalPagoMensajero={result.totalPagoMensajero}
-        totalIngresoBodegaRechazos={result.totalIngresoBodegaRechazos}
         puedesSolicitar={result.puedesSolicitar}
         motivoBloqueo={result.motivoBloqueo}
         cierresPasados={result.cierresPasados}

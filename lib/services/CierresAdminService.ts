@@ -18,6 +18,7 @@ import type {
   RechazarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
+import { gananciaOrdenex, totalesIngresoOrdenex } from "@/lib/utils/ingreso-ordenex";
 
 // Roles autorizados en el modulo (R1): el maestro (bodega central) y el adminSatelite
 // (su bodega). Cualquier otro -> forbidden.
@@ -122,7 +123,16 @@ export class CierresAdminService implements ICierresAdminService {
       grupos[g.resultado].push(toDetalleDTO(g, urlByPath));
     }
 
-    return { status: "ok", cierre: toResumen(found.cierre), grupos };
+    // Totales por concepto del cierre: se suman desde el MISMO desglose por orden que ve el
+    // admin en las tablas, no por una consulta aparte que podria no cuadrar con ellas.
+    const totalesIngreso = totalesIngresoOrdenex(found.gestiones);
+
+    // Ganancia DERIVADA: el ingreso bruto MENOS lo que se le debe al mensajero. El pago sale
+    // del snapshot del cierre (no se recomputa, R4); el ingreso, del desglose por orden.
+    const resumen = toResumen(found.cierre);
+    const ganancia = gananciaOrdenex(totalesIngreso.total, resumen.totalPagoMensajero);
+
+    return { status: "ok", cierre: resumen, grupos, totalesIngreso, ganancia };
   }
 
   async aprobarCierre(cierreId: string, actor: Actor): Promise<AprobarCierreServiceResult> {

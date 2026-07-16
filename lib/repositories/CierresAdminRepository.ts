@@ -14,7 +14,12 @@ import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWallet
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
-import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
+import type {
+  IngresoOrdenexDTO,
+  TarifaSnapshotDTO,
+} from "@/lib/interfaces/services/ICierreDiaService";
+import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
+import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 
 // Estados de ORIGEN que la resolucion puede transicionar (R12). Feature 41/E1 (R19):
 // ademas de `solicitado`, un `vencido` (creado por el corte diario) es resoluble por la
@@ -47,6 +52,20 @@ export const DETALLE_ADMIN_SELECT = {
   provinciaNombre: true,
   cantonNombre: true,
   distritoNombre: true,
+  // Entradas de la formula del ingreso + la tarifa congelada (feature 69/R6/R8). El admin
+  // ve el desglose completo (flete, IVA, comision) y de que tarifa salio, sin volver a
+  // consultar datos VIVOS: el snapshot es la unica fuente (R14).
+  montoCobrar: true,
+  cobraComision: true,
+  esCentral: true,
+  tarifaId: true,
+  tarifaValorFlete: true,
+  tarifaValorFleteGam: true,
+  tarifaValorFleteDevuelto: true,
+  tarifaValorFleteDevueltoGam: true,
+  tarifaComisionCod: true,
+  tarifaIvaFlete: true,
+  tarifaIvaComisionCod: true,
 } as const;
 
 // Feature 69/T18 — lo que aporta la GESTION (que NO se congela: es suyo, no de la orden).
@@ -69,6 +88,85 @@ type GestionAdminRow = Prisma.GestionOrdenGetPayload<{ select: typeof GESTION_AD
 // Money-safe: Decimal -> string escala 2 fija (nunca number/parseFloat).
 function decimalToString(d: Prisma.Decimal | null): string | null {
   return d === null ? null : d.toFixed(2);
+}
+
+/**
+ * Proyecta la tarifa congelada de la fila al DTO, o `null` si la tienda no tenia tarifa
+ * vigente al solicitar (`tarifa_id IS NULL`, gap conocido de la feature 69/R9). Con
+ * `tarifa_id` presente el resto no puede ser null (R8: se congelan todas o ninguna), y
+ * `tarifaVigente` ya normalizo esos campos a STRING escala 2.
+ */
+function toTarifaSnapshot(d: DetalleAdminRow): TarifaSnapshotDTO | null {
+  const t = tarifaDe(d);
+  if (d.tarifaId === null || t === null) return null;
+  return {
+    tarifaId: d.tarifaId,
+    valorFlete: t.valorFlete,
+    valorFleteGam: t.valorFleteGam,
+    valorFleteDevuelto: t.valorFleteDevuelto,
+    valorFleteDevueltoGam: t.valorFleteDevueltoGam,
+    comisionCod: t.comisionCod,
+    ivaFlete: t.ivaFlete,
+    ivaComisionCod: t.ivaComisionCod,
+  };
+}
+
+/**
+ * Deriva el desglose del ingreso de Ordenex de UNA gestion desde el snapshot, con la MISMA
+ * `derivarIngresoOrden` que alimenta las wallets al aprobar: si el admin viera una formula
+ * y la liquidacion usara otra, el descuadre seria invisible. Por eso aca no se re-implementa
+ * nada, solo se serializa lo que la funcion devuelve.
+ *
+ * Un concepto AUSENTE en el derivado (`undefined`) se emite como `null`: no aplica a este
+ * resultado (una entrega no tiene flete de devolucion). Eso es distinto de "0.00", que es un
+ * monto real. El `total` suma solo los presentes.
+ */
+function toIngresoOrdenex(g: GestionAdminRow, d: DetalleAdminRow): IngresoOrdenexDTO {
+  const tarifa = tarifaDe(d);
+  const montoCobrar = decimalToString(d.montoCobrar);
+  const derivado = derivarIngresoOrden(
+    {
+      resultado: g.resultado,
+      esCentral: d.esCentral,
+      montoCobrar,
+      cobraComision: d.cobraComision,
+    },
+    tarifa,
+  );
+  let total = new Prisma.Decimal(0);
+  for (const monto of Object.values(derivado)) {
+    if (monto !== undefined) total = total.plus(monto);
+  }
+  const opt = (v: Prisma.Decimal | undefined): string | null =>
+    v === undefined ? null : v.toFixed(2);
+  // Agrupa un concepto con su IVA. Si NINGUNO de los dos aplica -> `null` (el concepto no
+  // existe para este resultado), no "0.00": eso es lo que distingue "no aplica" de un cero.
+  const conIva = (
+    base: Prisma.Decimal | undefined,
+    iva: Prisma.Decimal | undefined,
+  ): string | null => {
+    if (base === undefined && iva === undefined) return null;
+    return (base ?? new Prisma.Decimal(0)).plus(iva ?? 0).toFixed(2);
+  };
+  return {
+    montoCobrar,
+    cobraComision: d.cobraComision,
+    esCentral: d.esCentral,
+    flete: opt(derivado.ingreso_flete),
+    ivaFlete: opt(derivado.ingreso_iva_flete),
+    fleteDevolucion: opt(derivado.ingreso_flete_devolucion),
+    ivaFleteDevolucion: opt(derivado.ingreso_iva_flete_devolucion),
+    comisionCod: opt(derivado.ingreso_comision_cod),
+    ivaComisionCod: opt(derivado.ingreso_iva_comision_cod),
+    fleteConIva: conIva(derivado.ingreso_flete, derivado.ingreso_iva_flete),
+    fleteDevolucionConIva: conIva(
+      derivado.ingreso_flete_devolucion,
+      derivado.ingreso_iva_flete_devolucion,
+    ),
+    comisionConIva: conIva(derivado.ingreso_comision_cod, derivado.ingreso_iva_comision_cod),
+    total: total.toFixed(2),
+    tarifa: toTarifaSnapshot(d),
+  };
 }
 
 /**
@@ -103,6 +201,7 @@ export function toPendienteRowDesdeSnapshot(
     evidenciaStoragePath: g.evidenciaStoragePath,
     pagoMensajero: decimalToString(g.pagoMensajero),
     ingresoBodegaRechazo: decimalToString(g.ingresoBodegaRechazo),
+    ingresoOrdenex: toIngresoOrdenex(g, d),
   };
 }
 

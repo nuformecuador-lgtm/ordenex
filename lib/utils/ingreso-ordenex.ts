@@ -1,6 +1,10 @@
 import { Prisma } from "@prisma/client";
 import type { GestionResultado } from "@prisma/client";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type {
+  IngresoOrdenexDTO,
+  TotalesIngresoOrdenex,
+} from "@/lib/interfaces/services/ICierreDiaService";
 import type { WalletIngresoConcepto } from "@/lib/types/wallet";
 
 /**
@@ -91,6 +95,71 @@ export function derivarIngresoOrden(
 
   // reprogramada (u otro en transito): no aporta a ningun concepto.
   return {};
+}
+
+/**
+ * Suma el desglose por orden de un cierre en 1 total por concepto, para la vista de
+ * auditoria del admin. NO es `agregarIngresosPorConcepto`: aquel emite movimientos de wallet
+ * y OMITE los conceptos en 0.00 (R10); este emite SIEMPRE los 8 campos, porque una tabla de
+ * auditoria con un concepto ausente y uno en cero no dicen lo mismo.
+ *
+ * Money-safe: suma con Prisma.Decimal sobre los STRING ya derivados, salida STRING escala 2.
+ * Las gestiones sin desglose (vista en vivo, o cierre pre-snapshot) no aportan.
+ */
+export function totalesIngresoOrdenex(
+  gestiones: Array<{ ingresoOrdenex?: IngresoOrdenexDTO | null }>,
+): TotalesIngresoOrdenex {
+  const acc = {
+    montoCobrar: new Prisma.Decimal(0),
+    fleteConIva: new Prisma.Decimal(0),
+    fleteDevolucionConIva: new Prisma.Decimal(0),
+    comisionConIva: new Prisma.Decimal(0),
+    total: new Prisma.Decimal(0),
+    flete: new Prisma.Decimal(0),
+    ivaFlete: new Prisma.Decimal(0),
+    fleteDevolucion: new Prisma.Decimal(0),
+    ivaFleteDevolucion: new Prisma.Decimal(0),
+    comisionCod: new Prisma.Decimal(0),
+    ivaComisionCod: new Prisma.Decimal(0),
+  };
+  for (const g of gestiones) {
+    const i = g.ingresoOrdenex;
+    if (!i) continue;
+    for (const k of Object.keys(acc) as Array<keyof typeof acc>) {
+      const v = i[k];
+      // `null` = el concepto no aplica a ese resultado; no aporta (no es un 0.00 real).
+      if (v !== null && v !== undefined) acc[k] = acc[k].plus(v);
+    }
+  }
+  return {
+    montoCobrar: acc.montoCobrar.toFixed(2),
+    fleteConIva: acc.fleteConIva.toFixed(2),
+    fleteDevolucionConIva: acc.fleteDevolucionConIva.toFixed(2),
+    comisionConIva: acc.comisionConIva.toFixed(2),
+    total: acc.total.toFixed(2),
+    flete: acc.flete.toFixed(2),
+    ivaFlete: acc.ivaFlete.toFixed(2),
+    fleteDevolucion: acc.fleteDevolucion.toFixed(2),
+    ivaFleteDevolucion: acc.ivaFleteDevolucion.toFixed(2),
+    comisionCod: acc.comisionCod.toFixed(2),
+    ivaComisionCod: acc.ivaComisionCod.toFixed(2),
+  };
+}
+
+/**
+ * Ganancia de Ordenex: el ingreso BRUTO facturado menos lo que se le debe al mensajero.
+ * Incluye los conceptos de devolucion (un rechazo tambien factura flete), asi que siempre
+ * cuadra con el `total` del desglose. Puede ser NEGATIVA: un cierre de puras
+ * reprogramaciones no factura nada y aun asi paga.
+ *
+ * Vive aca, y no duplicada en cada service, porque los dos detalles de admin (cierre de
+ * mensajero y cierre de bodega) muestran el MISMO numero: si un dia divergieran, la misma
+ * plata se leeria distinta segun por que pantalla se entra.
+ *
+ * Money-safe: resta con Prisma.Decimal sobre STRING, salida STRING escala 2.
+ */
+export function gananciaOrdenex(ingresoTotal: string, pagoMensajero: string): string {
+  return new Prisma.Decimal(ingresoTotal).minus(pagoMensajero).toFixed(2);
 }
 
 // Un concepto de ingreso a insertar (categoria + monto STRING). El feed OMITE los que

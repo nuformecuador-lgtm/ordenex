@@ -48,6 +48,86 @@ export interface CierreDetalleGestion {
   // `entregada && pago === "0.00"` de la 39, para entregas Y rechazos. En el detalle admin
   // (38/40), donde no se re-resuelve la tarifa (snapshot), es `false` por defecto.
   tarifaFaltante: boolean;
+  /**
+   * Desglose del ingreso de Ordenex (flete, IVA, comision) + la tarifa congelada de esa
+   * orden. Solo lo pueblan los detalles de ADMIN (38/40), que leen del snapshot; en la vista
+   * EN VIVO del mensajero es `undefined` (no ve el ingreso de la empresa, y ademas no hay
+   * snapshot todavia). `null` en cierres pre-snapshot.
+   */
+  ingresoOrdenex?: IngresoOrdenexDTO | null;
+}
+
+/**
+ * Tarifa CONGELADA en `cierre_detail` al solicitar el cierre (feature 69/R8: las 8 columnas
+ * se congelan todas o ninguna). Es la tarifa COMPLETA de la tienda, no solo la que aplico:
+ * el admin necesita ver de donde sale el numero, incluida la variante que NO se uso.
+ * Money-safe: los montos y porcentajes cruzan como STRING (nunca number/parseFloat).
+ * Los `%` van 0..100 (no factor), tal cual se capturan.
+ */
+export interface TarifaSnapshotDTO {
+  tarifaId: string;
+  valorFlete: string;
+  valorFleteGam: string;
+  valorFleteDevuelto: string;
+  valorFleteDevueltoGam: string;
+  comisionCod: string; // % 0..100 sobre montoCobrar
+  ivaFlete: string; // % 0..100 sobre el flete
+  ivaComisionCod: string; // % 0..100 sobre la comision
+}
+
+/**
+ * Desglose del ingreso de Ordenex por orden, DERIVADO server-side del snapshot congelado
+ * con la MISMA funcion que alimenta las wallets al aprobar (`derivarIngresoOrden`): la
+ * pantalla del admin y el dinero que se liquida no pueden salir de dos formulas distintas.
+ *
+ * Los conceptos son `null` cuando NO aplican a ese resultado (una entrega no tiene flete de
+ * devolucion; una orden con `cobraComision: false` no tiene comision). `null` != "0.00": el
+ * primero es "este concepto no existe acá", el segundo es un monto real de cero.
+ *
+ * `tarifa === null` es el gap conocido (feature 69/R9): la tienda no tenia tarifa vigente al
+ * solicitar, asi que ningun concepto se derivo. No bloquea el cierre; se avisa en la UI.
+ */
+export interface IngresoOrdenexDTO {
+  montoCobrar: string | null; // COD a recaudar, congelado (distinto de montoRecibido)
+  cobraComision: boolean;
+  esCentral: boolean; // zona GAM: elige la COLUMNA de tarifa, no la formula (R21)
+  flete: string | null;
+  ivaFlete: string | null;
+  fleteDevolucion: string | null;
+  ivaFleteDevolucion: string | null;
+  comisionCod: string | null;
+  ivaComisionCod: string | null;
+  // Agrupados (concepto + su IVA en UN solo monto): es como se lee el dinero en las tablas
+  // y los paneles. El detalle separado sigue arriba, para el desglose que muestra la
+  // formula. `null` cuando el concepto no aplica a ese resultado.
+  fleteConIva: string | null;
+  fleteDevolucionConIva: string | null;
+  comisionConIva: string | null;
+  total: string; // suma de los conceptos presentes (STRING escala 2)
+  tarifa: TarifaSnapshotDTO | null; // null = sin tarifa vigente al solicitar (R9)
+}
+
+/**
+ * Totales por concepto de un cierre: la suma del desglose de TODAS sus gestiones. A
+ * diferencia de los movimientos de wallet (que OMITEN los conceptos en 0.00), acá cada
+ * concepto se emite siempre: es una vista de auditoria, y un "0.00" explicito dice algo
+ * distinto a una fila ausente. Money-safe: STRING escala 2.
+ */
+export interface TotalesIngresoOrdenex {
+  montoCobrar: string;
+  // Agrupados (concepto + su IVA): lo que se muestra en los paneles.
+  fleteConIva: string;
+  fleteDevolucionConIva: string;
+  comisionConIva: string;
+  total: string;
+  // Detalle separado del agrupado de arriba. No se pinta en los paneles; existe para poder
+  // auditar cuanto de cada agrupado es IVA sin volver a recorrer las ordenes.
+  flete: string;
+  ivaFlete: string;
+  fleteDevolucion: string;
+  ivaFleteDevolucion: string;
+  comisionCod: string;
+  ivaComisionCod: string;
 }
 
 // Totales por metodo de pago + general (R7/R8). Decimal serializado a STRING (R9).

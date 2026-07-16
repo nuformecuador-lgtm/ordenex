@@ -82,6 +82,19 @@ function detalleDbRow(overrides: Record<string, unknown> = {}) {
     provinciaNombre: "Cartago",
     cantonNombre: "Central",
     distritoNombre: "Oriental",
+    // Entradas de la fórmula del ingreso + tarifa congelada (feature 69/R6/R8). Default sin
+    // tarifa (`tarifaId: null` = gap real de la R9): estos tests miran los descriptivos.
+    montoCobrar: null,
+    cobraComision: false,
+    esCentral: false,
+    tarifaId: null,
+    tarifaValorFlete: null,
+    tarifaValorFleteGam: null,
+    tarifaValorFleteDevuelto: null,
+    tarifaValorFleteDevueltoGam: null,
+    tarifaComisionCod: null,
+    tarifaIvaFlete: null,
+    tarifaIvaComisionCod: null,
     ...overrides,
   };
 }

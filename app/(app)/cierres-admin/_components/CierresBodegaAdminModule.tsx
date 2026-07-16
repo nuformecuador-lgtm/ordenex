@@ -16,6 +16,7 @@ import type {
   CierreBodegaDetalleCierre,
   CierreBodegaResumen,
 } from "@/lib/interfaces/services/ICierreBodegaService";
+import type { TotalesIngresoOrdenex } from "@/lib/interfaces/services/ICierreDiaService";
 import {
   money,
   ESTADO_LABEL,
@@ -24,6 +25,13 @@ import {
   DetalleSecciones,
   PagoMensajeroTotal,
   IngresoBodegaRechazosTotal,
+  TotalesIngresoPanel,
+  MontoDerivadoCard,
+  INGRESO_BRUTO_LABEL,
+  INGRESO_BRUTO_NOTA,
+  GANANCIA_LABEL,
+  GANANCIA_NOTA,
+  GANANCIA_NOTA_BODEGA,
   TotalesPanel,
   VisorEvidencia,
 } from "./cierre-detalle-shared";
@@ -48,6 +56,10 @@ export interface CierresBodegaAdminModuleProps {
 interface DetalleAbierto {
   cierre: CierreBodegaResumen;
   cierres: CierreBodegaDetalleCierre[];
+  /** Ingreso de Ordenex agregado de toda la bodega, por concepto (derivado del snapshot). */
+  totalesIngreso: TotalesIngresoOrdenex;
+  /** Ingreso bruto agregado menos el pago a mensajeros (puede ser negativo). */
+  ganancia: string;
 }
 
 export function CierresBodegaAdminModule({
@@ -71,7 +83,12 @@ export function CierresBodegaAdminModule({
   async function abrirDetalle(cierreBodegaId: string) {
     const result = await verCierreBodegaDetalle({ cierreBodegaId });
     if (result.status === "ok") {
-      setDetalle({ cierre: result.cierre, cierres: result.cierres });
+      setDetalle({
+        cierre: result.cierre,
+        cierres: result.cierres,
+        totalesIngreso: result.totalesIngreso,
+        ganancia: result.ganancia,
+      });
       return;
     }
     if (result.status === "no_encontrada") {
@@ -238,6 +255,27 @@ export function CierresBodegaAdminModule({
               title="Totales del cierre de bodega"
             />
 
+            {/* Primero los ingresos: qué facturó Ordenex y qué le queda. Recién después,
+                lo que se paga o se debe (mismo orden que el detalle del cierre de mensajero). */}
+            <TotalesIngresoPanel
+              totales={detalle.totalesIngreso}
+              ariaLabel="Ingreso de Ordenex del cierre de bodega"
+            />
+
+            {/* Bruto y ganancia agregados: el mismo cálculo que en el cierre de mensajero. */}
+            <MontoDerivadoCard
+              value={detalle.totalesIngreso.total}
+              label={INGRESO_BRUTO_LABEL}
+              nota={INGRESO_BRUTO_NOTA}
+              ariaLabel="Ingreso bruto del cierre de bodega"
+            />
+            <MontoDerivadoCard
+              value={detalle.ganancia}
+              label={GANANCIA_LABEL}
+              nota={GANANCIA_NOTA_BODEGA}
+              ariaLabel="Ganancia del cierre de bodega"
+            />
+
             {/* Feature 39/R20: agregado a pagar a mensajeros, separado del dinero recibido. */}
             <PagoMensajeroTotal
               value={detalle.cierre.totalPagoMensajero}
@@ -276,6 +314,23 @@ export function CierresBodegaAdminModule({
                   totales={cierreDia.totales}
                   ariaLabel={`Totales · ${cierreDia.mensajeroNombre}`}
                   title="Totales del cierre del día"
+                />
+                {/* Primero los ingresos de ESTE cierre_dia; después lo que se le paga. */}
+                <TotalesIngresoPanel
+                  totales={cierreDia.totalesIngreso}
+                  ariaLabel={`Ingreso de Ordenex · ${cierreDia.mensajeroNombre}`}
+                />
+                <MontoDerivadoCard
+                  value={cierreDia.totalesIngreso.total}
+                  label={INGRESO_BRUTO_LABEL}
+                  nota={INGRESO_BRUTO_NOTA}
+                  ariaLabel={`Ingreso bruto · ${cierreDia.mensajeroNombre}`}
+                />
+                <MontoDerivadoCard
+                  value={cierreDia.ganancia}
+                  label={GANANCIA_LABEL}
+                  nota={GANANCIA_NOTA}
+                  ariaLabel={`Ganancia · ${cierreDia.mensajeroNombre}`}
                 />
                 {/* Feature 39/R20: pago snapshot a este mensajero, separado del dinero recibido. */}
                 <PagoMensajeroTotal

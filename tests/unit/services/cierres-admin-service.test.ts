@@ -9,6 +9,7 @@ import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService"
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { IngresoOrdenexDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type {
   Alcance,
   CierreAdminResumenRow,
@@ -256,6 +257,99 @@ describe("CierresAdminService.listarCierresAdmin — particion y totales (R4/R5/
 });
 
 // --- verCierreDetalle — detalle + evidencia firmada (R6/R7/R9/R13/R16) ---
+
+describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
+  /** Desglose por orden como lo emite el repo (ya derivado del snapshot). */
+  function conIngreso(over: Partial<IngresoOrdenexDTO>): IngresoOrdenexDTO {
+    return {
+      montoCobrar: null,
+      cobraComision: false,
+      esCentral: false,
+      flete: null,
+      ivaFlete: null,
+      fleteDevolucion: null,
+      ivaFleteDevolucion: null,
+      comisionCod: null,
+      ivaComisionCod: null,
+      fleteConIva: null,
+      fleteDevolucionConIva: null,
+      comisionConIva: null,
+      total: "0.00",
+      tarifa: null,
+      ...over,
+    };
+  }
+
+  it("suma el ingreso por concepto y deriva la ganancia = bruto - pago al mensajero", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow({ totalPagoMensajero: "1500.00" }),
+        gestiones: [
+          gestionRow({
+            gestionId: "a",
+            resultado: "entregada",
+            ingresoOrdenex: conIngreso({
+              flete: "2500.00",
+              ivaFlete: "325.00",
+              comisionCod: "750.00",
+              ivaComisionCod: "97.50",
+              fleteConIva: "2825.00",
+              comisionConIva: "847.50",
+              total: "3672.50",
+            }),
+          }),
+          gestionRow({
+            gestionId: "b",
+            resultado: "rechazada",
+            ingresoOrdenex: conIngreso({
+              fleteDevolucion: "1000.00",
+              ivaFleteDevolucion: "130.00",
+              fleteDevolucionConIva: "1130.00",
+              total: "1130.00",
+            }),
+          }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalesIngreso).toMatchObject({
+      // Agrupados: lo que se pinta en el panel.
+      fleteConIva: "2825.00",
+      comisionConIva: "847.50",
+      fleteDevolucionConIva: "1130.00",
+      total: "4802.50", // 3672.50 + 1130.00
+      // Detalle separado: sigue disponible para auditar cuánto de cada agrupado es IVA.
+      flete: "2500.00",
+      ivaFlete: "325.00",
+      comisionCod: "750.00",
+      ivaComisionCod: "97.50",
+      fleteDevolucion: "1000.00",
+      ivaFleteDevolucion: "130.00",
+    });
+    // La devolución también factura, así que entra en la ganancia.
+    expect(r.ganancia).toBe("3302.50"); // 4802.50 - 1500.00
+    expect(typeof r.ganancia).toBe("string"); // money-safe
+  });
+
+  it("la ganancia es negativa si el cierre no factura pero igual paga al mensajero", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow({ totalPagoMensajero: "1500.00" }),
+        // Una reprogramación no aporta a ningún concepto.
+        gestiones: [gestionRow({ gestionId: "a", resultado: "reprogramada" })],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalesIngreso.total).toBe("0.00");
+    expect(r.ganancia).toBe("-1500.00");
+  });
+});
 
 describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9/R13/R16)", () => {
   it("R6/R9: agrupa las gestiones por resultado con montos string escala 2", async () => {
