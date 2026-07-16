@@ -29,16 +29,21 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
   const toast = useToast();
   const [procesando, setProcesando] = useState(false);
 
-  /** Traduce cada resultado de la acción a un toast por ítem (R12–R16). */
+  /**
+   * Traduce cada resultado de la acción a un toast por ítem (R12–R16). El
+   * `num_guia` es el del escaneo (el mismo con el que la acción resolvió la
+   * orden): es lo que el humano ve impreso en la etiqueta, a diferencia del
+   * `result.ordenId`, que es el UUID interno y no le dice nada.
+   */
   const notificar = useCallback(
-    (result: RecibirResult) => {
+    (result: RecibirResult, numGuia: number) => {
       switch (result.status) {
         case "ok":
-          toast.success(`Orden ${result.ordenId} recibida.`);
+          toast.success(`Guía ${numGuia} recibida.`);
           onRecibida();
           break;
         case "ya_recibida":
-          toast.info("Esta orden ya estaba recibida.");
+          toast.info(`La guía ${numGuia} ya estaba recibida.`);
           onRecibida();
           break;
         case "zona_ajena":
@@ -82,9 +87,7 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
   const procesar = useCallback(
     async (escaneado: string) => {
       if (procesando) return;
-      console.log('xyz1', escaneado)
       const numGuia = extractNumGuiaFromScan(escaneado);
-      console.log('xyz', numGuia)
       if (numGuia === null) {
         toast.error("Código inválido.");
         return;
@@ -92,7 +95,7 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
       setProcesando(true);
       try {
         const result = await recibirPorQr({ numGuia });
-        notificar(result);
+        notificar(result, numGuia);
       } finally {
         setProcesando(false);
       }

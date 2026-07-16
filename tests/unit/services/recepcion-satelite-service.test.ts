@@ -36,6 +36,7 @@ function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransi
     deletedAt: null,
     zonaId: ZONA,
     zonaEsGam: false,
+    tiendaId: "store-1",
     ...overrides,
   };
 }

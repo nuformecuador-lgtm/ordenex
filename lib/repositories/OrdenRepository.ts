@@ -58,6 +58,9 @@ const NUM_GUIA_SEQUENCE = "orden_num_guia_seq";
 // guardada (`recibirEnSatelite`) solo transiciona una orden que sigue en este
 // estado (guardia por estado de origen en el propio UPDATE, patron feature 17/36).
 const ORIGEN_RECEPCION_SATELITE = "en_ruta_bodega_satelite";
+// Estado de ORIGEN de la recepcion en la tienda: la orden viaja de vuelta a la
+// tienda ("En ruta a origen") y esta la recibe fisicamente.
+const ORIGEN_RECEPCION_ORIGEN = "devuelta_origen";
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
 const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
@@ -99,6 +102,18 @@ const TARIFA_SELECT = {
   updatedAt: true,
 } as const;
 
+// `gestion_orden.resultado` de una reprogramacion (espejo de
+// `LiberacionReprogramadaRepository`, el cron que consume la misma fecha).
+const RESULTADO_REPROGRAMADA = "reprogramada";
+
+/**
+ * Serializa una fecha `@db.Date` (guardada a medianoche UTC) a `YYYY-MM-DD`.
+ * `null`/`undefined` -> `null`. Convencion del repo (ver CierreDiaRepository).
+ */
+function toFechaISO(fecha: Date | null | undefined): string | null {
+  return fecha ? fecha.toISOString().slice(0, 10) : null;
+}
+
 const WITH_ESTATUS_Y_TIENDA = {
   include: {
     estatus: { select: { id: true, value: true } },
@@ -123,6 +138,18 @@ const WITH_ESTATUS_Y_TIENDA = {
     distrito: { select: { id: true, nombre: true } },
     mensajeroSugerido: { select: { id: true, nombre: true } },
     mensajeroAsignado: { select: { id: true, nombre: true } },
+    // Gestion de reprogramacion VIGENTE (a lo sumo una, `take: 1`): alimenta la
+    // columna "Liberada el" de la tab `reprogramada`. `orden -> gestiones` es 1:N
+    // (una orden acumula gestiones entre reintentos), asi que la vigente es la mas
+    // reciente NO anulada. Mismo shape que `LiberacionReprogramadaRepository`
+    // (el cron que libera), para que la fecha mostrada sea EXACTAMENTE la que
+    // decide la liberacion y no puedan divergir.
+    gestiones: {
+      where: { resultado: RESULTADO_REPROGRAMADA, anuladaAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 1,
+      select: { fechaReprogramacion: true },
+    },
   },
 } as const;
 
@@ -226,6 +253,12 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     direccion: row.direccion,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
     cobraComision: row.cobraComision,
+    // Fecha de la gestion de reprogramacion vigente -> `YYYY-MM-DD` (patron
+    // CierreDiaRepository). `fecha_reprogramacion` es `@db.Date` guardada a
+    // medianoche UTC, asi que `toISOString().slice(0, 10)` da el dia calendario
+    // correcto (aqui NO aplica el off-by-one de `fecha-cr`, que solo afecta a
+    // derivar "hoy" desde un instante real). Sin gestion vigente -> null.
+    fechaReprogramacion: toFechaISO(row.gestiones[0]?.fechaReprogramacion),
     relaciones: toRelaciones(row),
   };
 }
@@ -738,6 +771,8 @@ export class OrdenRepository implements IOrdenRepository {
         // Feature 30/R8/R9/R11/R12: zona de la orden + flag GAM de esa zona.
         zonaId: true,
         zona: { select: { esCentral: true } },
+        // Tienda dueña: acota por tienda sin consulta extra (recepcion en origen).
+        tiendaId: true,
       },
     });
     return rows.map((r) => ({
@@ -747,6 +782,7 @@ export class OrdenRepository implements IOrdenRepository {
       deletedAt: r.deletedAt,
       zonaId: r.zonaId,
       zonaEsGam: r.zona.esCentral,
+      tiendaId: r.tiendaId,
     }));
   }
 
@@ -765,6 +801,7 @@ export class OrdenRepository implements IOrdenRepository {
         estatus: { select: { value: true } },
         zonaId: true,
         zona: { select: { esCentral: true } },
+        tiendaId: true,
       },
     });
     if (!r) return null;
@@ -775,6 +812,7 @@ export class OrdenRepository implements IOrdenRepository {
       deletedAt: r.deletedAt,
       zonaId: r.zonaId,
       zonaEsGam: r.zona.esCentral,
+      tiendaId: r.tiendaId,
     };
   }
 
@@ -1078,6 +1116,56 @@ export class OrdenRepository implements IOrdenRepository {
             estatusDestinoId: destinoEstatusId,
             actorUsuarioId: historial.actorUsuarioId,
             origenTipo: historial.origenTipo, // recepcion_satelite
+          },
+        ]);
+      }
+      return result.count === 1;
+    });
+  }
+
+  /**
+   * Recepcion en la tienda de ORIGEN (`devuelta_origen` -> `recibido_origen`), cierre
+   * del flujo de devolucion. Espejo EXACTO de `recibirEnSatelite` cambiando la guarda
+   * de zona por la de tienda: updateMany guardado + append del historial en la MISMA
+   * tx (choke point de la feature 49), con el origen pre-leido bajo la misma guarda.
+   * La guarda por `tiendaId` en el WHERE es la defensa real contra recibir una orden
+   * ajena (el service ademas lo comprueba antes, para poder reportarlo distinto).
+   */
+  async recibirEnOrigen(
+    ordenId: string,
+    tiendaId: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      // Origen pre-leido con la MISMA guarda (estado devuelta_origen + tienda).
+      const actual = await tx.orden.findFirst({
+        where: {
+          id: ordenId,
+          tiendaId,
+          deletedAt: null,
+          estatus: { value: ORIGEN_RECEPCION_ORIGEN },
+        },
+        select: { estatusId: true },
+      });
+      const result = await tx.orden.updateMany({
+        where: {
+          id: ordenId,
+          tiendaId,
+          deletedAt: null,
+          estatus: { value: ORIGEN_RECEPCION_ORIGEN },
+        },
+        data: { estatusId: destinoEstatusId },
+      });
+      // SOLO si transiciono (count 1); una orden que perdio la carrera no deja rastro.
+      if (result.count === 1 && actual !== null) {
+        await appendCambioEstado(tx, [
+          {
+            ordenId,
+            estatusOrigenId: actual.estatusId,
+            estatusDestinoId: destinoEstatusId,
+            actorUsuarioId: historial.actorUsuarioId,
+            origenTipo: historial.origenTipo, // ajuste_estado (como la devolucion)
           },
         ]);
       }

@@ -137,7 +137,9 @@ describe("EscanerRecepcion (cámara)", () => {
     await escanear(user, qrDeGuia(1001));
 
     await vi.waitFor(() => expect(successMock).toHaveBeenCalled());
-    expect(successMock.mock.calls[0][0]).toMatch(/ord-1/);
+    // El toast nombra la guía (lo impreso en la etiqueta), NO el UUID interno.
+    expect(successMock.mock.calls[0][0]).toMatch(/1001/);
+    expect(successMock.mock.calls[0][0]).not.toMatch(/ord-1/);
     expect(onRecibida).toHaveBeenCalledTimes(1);
   });
 
@@ -150,7 +152,7 @@ describe("EscanerRecepcion (cámara)", () => {
     await escanear(user, qrDeGuia(1002));
 
     await vi.waitFor(() => expect(infoMock).toHaveBeenCalled());
-    expect(infoMock.mock.calls[0][0]).toMatch(/ya .*recibida/i);
+    expect(infoMock.mock.calls[0][0]).toMatch(/guía 1002 ya .*recibida/i);
     expect(onRecibida).toHaveBeenCalledTimes(1);
   });
 

@@ -71,6 +71,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // PR #75: "QR" (roles: ROLES_SEED) se intercala antes de "Perfil".
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
       "Órdenes",
+      "Ranking",
       "Configuración",
       "Cierres del día",
       "QR",
@@ -84,25 +85,34 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Órdenes + QR + Perfil, NO Configuración", () => {
+  it("adminTienda ve Órdenes + Novedades + QR + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
-    expect(visibles).toEqual(["Órdenes", "QR", "Perfil"]); // PR #75: QR
+    expect(visibles).toEqual(["Órdenes", "Novedades", "QR", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
+    // "Ranking" es solo del maestro.
+    expect(visibles).not.toContain("Ranking");
   });
 
-  it("mensajero ve Entregas + Cierre del día + QR + Perfil, NO Órdenes ni Configuración", () => {
+  it("mensajero ve Entregas + Novedades + Cierre del día + QR + Perfil, NO Órdenes ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
     // PR #75: "QR" es visible para todos los roles (ROLES_SEED).
-    expect(visibles).toEqual(["Entregas", "Cierre del día", "QR", "Perfil"]);
+    expect(visibles).toEqual([
+      "Entregas",
+      "Novedades",
+      "Cierre del día",
+      "QR",
+      "Perfil",
+    ]);
     expect(visibles).not.toContain("Órdenes");
     expect(visibles).not.toContain("Configuración");
+    expect(visibles).not.toContain("Ranking");
   });
 
-  it("adminSatelite ve Asignaciones + Cierres del día + QR + Perfil", () => {
+  it("adminSatelite ve Órdenes + Cierres del día + QR + Perfil", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Asignaciones", "Cierres del día", "QR", "Perfil"], // PR #75: QR
+      ["Órdenes", "Cierres del día", "QR", "Perfil"], // PR #75: QR
     );
   });
 

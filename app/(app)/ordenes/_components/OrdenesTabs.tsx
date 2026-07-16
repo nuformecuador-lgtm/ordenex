@@ -5,17 +5,20 @@ import useSWR, { useSWRConfig } from "swr";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { QrScanner } from "@/components/shared/QrScanner";
-import { useQrNavigate } from "@/hooks/useQrNavigate";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
 import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
+import type { Column } from "@/components/shared/DataTable";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
+import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
-import { ordenesColumnsMensajeroSugerido } from "./ordenes-columns";
+import {
+  ordenesColumnsMensajeroSugerido,
+  ordenesColumnsReprogramada,
+} from "./ordenes-columns";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { RutearSateliteModal } from "./RutearSateliteModal";
@@ -45,6 +48,10 @@ const DEFAULT_EXCLUDE = ["pendiente"];
 // Estados PREVIOS a la asignación de mensajero: muestran "Mensajero sugerido" en
 // lugar de "Mensajero" (aún no hay asignado; la asignación es en "Generar guía").
 const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"]);
+
+// Estado cuya tab muestra ademas "Liberada el" (la fecha para la que quedo
+// reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
+const ESTADO_REPROGRAMADA = "reprogramada";
 
 /** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
 function labelDe(value: string): string {
@@ -80,9 +87,10 @@ export function OrdenesTabs({
   exclude?: string[];
   puedeCargarMasiva?: boolean;
   /**
-   * Ofrece "Escanear con cámara" junto a la carga masiva: escanea el QR de la
-   * etiqueta de una orden y navega a la ruta que codifica (`/paquete/<ordenId>`,
-   * ver `EtiquetaGuia`), en vez de buscarla a mano entre las tabs.
+   * Ofrece "Escanear con cámara" junto a la carga masiva: el adminTienda escanea el
+   * QR de la etiqueta de una orden que vuelve ("En ruta a origen") y la marca como
+   * recibida en su tienda (`devuelta_origen` -> `recibido_origen`), sin salir del
+   * listado. NO navega (para eso está `/qr`).
    */
   puedeEscanearQr?: boolean;
   mostrarHistorial?: boolean;
@@ -96,8 +104,6 @@ export function OrdenesTabs({
   accionesLote?: boolean;
 }>) {
   const { mutate } = useSWRConfig();
-  // Escaneo de QR: el decode se traduce a navegación (misma semántica que `/qr`).
-  const { onDecoded: onQrDecoded, procesando: qrProcesando } = useQrNavigate();
   const { data: catalogo, isLoading } = useSWR(
     "order-status:catalogo",
     catalogoFetcher,
@@ -242,13 +248,10 @@ export function OrdenesTabs({
       <div className="flex flex-col items-end gap-3">
         <div className="flex flex-wrap items-center justify-end gap-2">
           {puedeEscanearQr ? (
-            <QrScanner onDecoded={onQrDecoded} disabled={qrProcesando} />
+            <EscanerRecepcionOrigen onRecibida={handleSuccess} />
           ) : null}
           {puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
         </div>
-        {qrProcesando ? (
-          <p className="text-sm text-muted-foreground">Procesando código QR…</p>
-        ) : null}
       </div>
     ) : null;
 
@@ -298,10 +301,15 @@ export function OrdenesTabs({
                 // Selección por checkbox SOLO en estados que tienen alguna acción por
                 // lote (evita checkboxes inertes en estados solo-lectura).
                 const acc = accionesLote ? accionesDe(tab.value) : [];
-                // En_fulfillment/en_preparacion: "Mensajero sugerido" en vez de "Mensajero".
-                const columns = ESTADOS_MENSAJERO_SUGERIDO.has(tab.value)
-                  ? ordenesColumnsMensajeroSugerido
-                  : undefined;
+                // Columnas por estado: en_fulfillment/en_preparacion muestran
+                // "Mensajero sugerido" en vez de "Mensajero"; reprogramada añade
+                // "Liberada el" (el día en que el cron la desbloquea).
+                let columns: Column<OrdenListItemDTO>[] | undefined;
+                if (ESTADOS_MENSAJERO_SUGERIDO.has(tab.value)) {
+                  columns = ordenesColumnsMensajeroSugerido;
+                } else if (tab.value === ESTADO_REPROGRAMADA) {
+                  columns = ordenesColumnsReprogramada;
+                }
                 return (
                   <OrdenesModule
                     filter={{ status_id: tab.id }}

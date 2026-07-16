@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { GESTION_ALLOWED_MIME } from "@/lib/config/gestion";
+import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
@@ -115,10 +116,14 @@ function firstError(
   return errors[field]?.[0];
 }
 
-function tomorrowISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+/**
+ * Default y mínimo del campo "Nueva fecha": MAÑANA en el calendario de Costa Rica.
+ * Se delega en `fecha-cr` (UTC-6 fijo, la misma convención que usa el backend para
+ * `fecha_reprogramacion`): calcularlo con `toISOString()` daba el día siguiente a
+ * partir de las 18:00 CR, porque emite la fecha en UTC.
+ */
+function mananaISO(): string {
+  return mananaCalendarioCR();
 }
 
 export function GestionarOrdenPanel({
@@ -136,7 +141,7 @@ export function GestionarOrdenPanel({
   const [paso, setPaso] = useState<Paso>(yaActiva ? "resultados" : "detalle");
   const [resultado, setResultado] = useState<Resultado>("entregada");
   const [metodoPago, setMetodoPago] = useState("");
-  const [fechaReprogramacion, setFechaReprogramacion] = useState(tomorrowISO());
+  const [fechaReprogramacion, setFechaReprogramacion] = useState(mananaISO());
   const [motivo, setMotivo] = useState("");
   const [evidencia, setEvidencia] = useState<File | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -208,7 +213,7 @@ export function GestionarOrdenPanel({
     setResultado(next);
     setFieldErrors({});
     setMetodoPago("");
-    setFechaReprogramacion(tomorrowISO());
+    setFechaReprogramacion(mananaISO());
     setMotivo("");
     setEvidencia(null);
     setPaso("formulario");
@@ -410,6 +415,10 @@ export function GestionarOrdenPanel({
                 <Input
                   id="gestion-fecha"
                   type="date"
+                  // R25: la reprogramación más temprana posible es mañana. El
+                  // `min` lo impide en el date picker; `gestionarSchema` lo
+                  // revalida en cliente y el servidor otra vez (no es la defensa).
+                  min={mananaISO()}
                   value={fechaReprogramacion}
                   onChange={(e) => setFechaReprogramacion(e.target.value)}
                   aria-invalid={fechaError ? true : undefined}

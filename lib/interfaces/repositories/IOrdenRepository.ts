@@ -84,6 +84,10 @@ export interface OrdenTransicionRow {
   deletedAt: Date | null;
   zonaId: string;
   zonaEsGam: boolean;
+  // Tienda DUEÑA de la orden (FK a `usuario`; para el adminTienda su `usuarioId` ES
+  // el tiendaId, misma identidad que usa OrdenService.listar). Permite acotar por
+  // tienda sin una consulta extra, igual que `zonaId` lo permite por zona.
+  tiendaId: string;
 }
 
 // Feature 17/T15 — fila liviana de mensajero para el loader del modal (R28).
@@ -426,6 +430,21 @@ export interface IOrdenRepository {
   recibirEnSatelite(
     ordenId: string,
     zonaId: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean>;
+  /**
+   * Recepcion en la tienda de ORIGEN: transicion atomica y concurrencia-segura de
+   * UNA orden a `recibido_origen`, cerrando el flujo de devolucion. Espejo de
+   * `recibirEnSatelite` cambiando la guarda de zona por la de TIENDA: UPDATE
+   * guardado por estado de origen (solo si sigue en `devuelta_origen`), tienda
+   * duenna (`tiendaId`) y no borrada. Devuelve `true` si afecto 1 fila, `false` si
+   * 0 (ya no estaba en el origen -> race). NO toca `mensajeroAsignadoId` ni
+   * `numGuia`.
+   */
+  recibirEnOrigen(
+    ordenId: string,
+    tiendaId: string,
     destinoEstatusId: string,
     historial: HistorialContexto,
   ): Promise<boolean>;

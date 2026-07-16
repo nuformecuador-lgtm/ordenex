@@ -32,6 +32,7 @@ function ordenRow(overrides: Partial<{
   deletedAt: Date | null;
   zonaId: string;
   zonaEsGam: boolean;
+  tiendaId: string;
 }> = {}) {
   return {
     id: "o1",
@@ -40,6 +41,7 @@ function ordenRow(overrides: Partial<{
     deletedAt: null,
     zonaId: GAM_ZONA_ID,
     zonaEsGam: true,
+    tiendaId: "store-1",
     ...overrides,
   };
 }

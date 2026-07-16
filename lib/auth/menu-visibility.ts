@@ -8,7 +8,15 @@ import { ROLES_SEED } from "@/lib/types/roles";
  * Client Component Sidebar) y las funciones/componentes no son serializables.
  * El Sidebar resuelve `iconKey -> componente` en el cliente al renderizar.
  */
-export type IconKey = "settings" | "user" | "package" | "clipboardCheck" | "truck" | "qrCode";
+export type IconKey =
+  | "settings"
+  | "user"
+  | "package"
+  | "clipboardCheck"
+  | "truck"
+  | "qrCode"
+  | "megaphone"
+  | "trophy";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -64,10 +72,26 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     // órdenes ruteadas a su bodega (por recibir/recibidas) + asignación a mensajeros
     // de su zona. Exclusivo de `adminSatelite`; la defensa real es el `notFound` de
     // la página `/recepcion-satelite` (resuelve el rol server-side).
-    label: "Asignaciones",
+    label: "Órdenes",
     href: "/recepcion-satelite",
     iconKey: "package",
     roles: ["adminSatelite"],
+  },
+  // {
+  //   // Novedades del producto para quien opera a diario: el admin de tienda y el
+  //   // mensajero. La defensa real es el `notFound` de la pagina (resuelve el rol
+  //   // server-side); este item solo decide que se MUESTRA.
+  //   label: "Novedades",
+  //   href: "/novedades",
+  //   iconKey: "megaphone",
+  //   roles: ["adminTienda", "mensajero"],
+  // },
+  {
+    // Ranking de mensajeros; hoy solo para `maestro` (vista de supervision).
+    label: "Ranking",
+    href: "/ranking",
+    iconKey: "trophy",
+    roles: ["maestro", "mensajero"],
   },
   {
     label: "Configuración",

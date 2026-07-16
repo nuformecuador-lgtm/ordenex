@@ -1,0 +1,59 @@
+import { describe, it, expect } from "vitest";
+
+import { fechaCalendarioCR, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
+
+// Regresión (off-by-one por zona horaria): `new Date().toISOString().slice(0, 10)`
+// emite la fecha en UTC, así que a partir de las 18:00 de CR (UTC-6) ya devuelve el
+// día SIGUIENTE. Estos casos fijan la convención de CR en el borde del día.
+
+describe("fechaCalendarioCR", () => {
+  it("de noche en CR sigue siendo el MISMO día, aunque en UTC ya sea el siguiente", () => {
+    // 20:00 CR del 15 = 02:00 UTC del 16. `toISOString()` habría dicho "2026-07-16".
+    expect(fechaCalendarioCR(new Date("2026-07-16T02:00:00.000Z"))).toBe(
+      "2026-07-15",
+    );
+  });
+
+  it("un minuto antes de medianoche CR todavía es el día que termina", () => {
+    // 23:59 CR del 14 = 05:59 UTC del 15.
+    expect(fechaCalendarioCR(new Date("2026-07-15T05:59:00.000Z"))).toBe(
+      "2026-07-14",
+    );
+  });
+
+  it("a medianoche CR ya es el día nuevo", () => {
+    // 00:00 CR del 15 = 06:00 UTC del 15.
+    expect(fechaCalendarioCR(new Date("2026-07-15T06:00:00.000Z"))).toBe(
+      "2026-07-15",
+    );
+  });
+
+  it("cruza el cambio de mes por el calendario de CR, no por el de UTC", () => {
+    // 19:00 CR del 31 jul = 01:00 UTC del 1 ago.
+    expect(fechaCalendarioCR(new Date("2026-08-01T01:00:00.000Z"))).toBe(
+      "2026-07-31",
+    );
+  });
+});
+
+describe("mananaCalendarioCR", () => {
+  it("de noche en CR devuelve el día siguiente, NO dos días después", () => {
+    // El bug original: 20:00 CR del 15 daba "2026-07-17" (UTC ya era 16, +1 = 17).
+    expect(mananaCalendarioCR(new Date("2026-07-16T02:00:00.000Z"))).toBe(
+      "2026-07-16",
+    );
+  });
+
+  it("de mañana en CR devuelve el día siguiente", () => {
+    // 08:00 CR del 15 = 14:00 UTC del 15.
+    expect(mananaCalendarioCR(new Date("2026-07-15T14:00:00.000Z"))).toBe(
+      "2026-07-16",
+    );
+  });
+
+  it("desde el último día del mes salta al primero del siguiente", () => {
+    expect(mananaCalendarioCR(new Date("2026-07-31T14:00:00.000Z"))).toBe(
+      "2026-08-01",
+    );
+  });
+});
