@@ -22,7 +22,7 @@ type RepoMethods = Pick<
   IOrdenRepository,
   | "findUsuarioZonaId"
   | "findRecepcionSateliteByZona"
-  | "findByIdsForTransicion"
+  | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recibirEnSatelite"
   | "recibirLoteEnSatelite"
@@ -64,7 +64,7 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
   return {
     findUsuarioZonaId: vi.fn(async () => ZONA),
     findRecepcionSateliteByZona: vi.fn(async () => []),
-    findByIdsForTransicion: vi.fn(async () => [transicionRow()]),
+    findByNumGuiaForTransicion: vi.fn(async () => transicionRow()),
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
     recibirEnSatelite: vi.fn(async () => true),
     recibirLoteEnSatelite: vi.fn(async (ordenIds: string[]) => ordenIds.length),
@@ -171,7 +171,7 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
 describe("recibir (R11-R18)", () => {
   it("R17: rol != adminSatelite -> forbidden, sin tocar datos", async () => {
     const repo = fakeRepo();
-    const r = await newService(repo).recibir("o1", MAESTRO);
+    const r = await newService(repo).recibir(10, MAESTRO);
     expect(r.status).toBe("forbidden");
     expect(repo.findUsuarioZonaId).not.toHaveBeenCalled();
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
@@ -179,64 +179,71 @@ describe("recibir (R11-R18)", () => {
 
   it("R5: adminSatelite sin zona -> sin_zona, sin efectos", async () => {
     const repo = fakeRepo({ findUsuarioZonaId: vi.fn(async () => null) });
-    const r = await newService(repo).recibir("o1", ADMIN);
+    const r = await newService(repo).recibir(10, ADMIN);
     expect(r.status).toBe("sin_zona");
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
   });
 
-  it("R15: orden inexistente -> no_encontrada, sin efectos", async () => {
-    const repo = fakeRepo({ findByIdsForTransicion: vi.fn(async () => []) });
-    const r = await newService(repo).recibir("o1", ADMIN);
+  it("R15: ninguna orden con ese num_guia -> no_encontrada, sin efectos", async () => {
+    const repo = fakeRepo({ findByNumGuiaForTransicion: vi.fn(async () => null) });
+    const r = await newService(repo).recibir(10, ADMIN);
     expect(r.status).toBe("no_encontrada");
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
   });
 
   it("R15: orden borrada -> no_encontrada, sin efectos", async () => {
     const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [transicionRow({ deletedAt: new Date() })]),
+      findByNumGuiaForTransicion: vi.fn(async () => transicionRow({ deletedAt: new Date() })),
     });
-    const r = await newService(repo).recibir("o1", ADMIN);
+    const r = await newService(repo).recibir(10, ADMIN);
     expect(r.status).toBe("no_encontrada");
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
   });
 
   it("R12: orden de otra zona -> zona_ajena, sin efectos", async () => {
     const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [transicionRow({ zonaId: "z-otra" })]),
+      findByNumGuiaForTransicion: vi.fn(async () => transicionRow({ zonaId: "z-otra" })),
     });
-    const r = await newService(repo).recibir("o1", ADMIN);
+    const r = await newService(repo).recibir(10, ADMIN);
     expect(r.status).toBe("zona_ajena");
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
   });
 
   it("R14: orden ya en_bodega_satelite -> ya_recibida idempotente, sin escribir", async () => {
     const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [transicionRow({ estatusValue: "en_bodega_satelite" })]),
+      findByNumGuiaForTransicion: vi.fn(async () => transicionRow({ estatusValue: "en_bodega_satelite" })),
     });
-    const r = await newService(repo).recibir("o1", ADMIN);
+    const r = await newService(repo).recibir(10, ADMIN);
     expect(r.status).toBe("ya_recibida");
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
   });
 
   it("R13: origen distinto de en_ruta_bodega_satelite -> estado_invalido con el estado actual", async () => {
     const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [transicionRow({ estatusValue: "en_fulfillment" })]),
+      findByNumGuiaForTransicion: vi.fn(async () => transicionRow({ estatusValue: "en_fulfillment" })),
     });
-    const r = await newService(repo).recibir("o1", ADMIN);
+    const r = await newService(repo).recibir(10, ADMIN);
     expect(r).toEqual({ status: "estado_invalido", estado: "en_fulfillment" });
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
   });
 
   it("catalogo incompleto (destino sin seed) -> validation_error, sin escribir", async () => {
     const repo = fakeRepo({ findEstatusIdByValue: vi.fn(async () => null) });
-    const r = await newService(repo).recibir("o1", ADMIN);
+    const r = await newService(repo).recibir(10, ADMIN);
     expect(r.status).toBe("validation_error");
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
   });
 
+  it("R16: la orden se resuelve por el num_guia escaneado (el QR codifica /paquete/<numGuia>)", async () => {
+    const repo = fakeRepo();
+    await newService(repo).recibir(10, ADMIN);
+    expect(repo.findByNumGuiaForTransicion).toHaveBeenCalledWith(10);
+  });
+
   it("R11/R18: origen valido y de la zona -> transiciona a en_bodega_satelite (guardado por estado+zona)", async () => {
     const repo = fakeRepo();
-    const r = await newService(repo).recibir("o1", ADMIN);
+    const r = await newService(repo).recibir(10, ADMIN);
+    // El `ordenId` del resultado sale de la fila resuelta por num_guia, no del input.
     expect(r).toEqual({ status: "ok", ordenId: "o1", estado: "en_bodega_satelite" });
     // R11/R18: escritura guardada con la zona del actor y el estatus destino.
     // Feature 49/#6: pasa ademas el contexto de historial (actor = adminSatelite, tipo).
@@ -248,30 +255,30 @@ describe("recibir (R11-R18)", () => {
 
   it("R18: race — UPDATE no afecta y al re-leer esta recibida -> ya_recibida", async () => {
     // 1a lectura: aun en origen; re-lectura tras el UPDATE fallido: ya recibida.
-    const lecturas: OrdenTransicionRow[][] = [
-      [transicionRow()],
-      [transicionRow({ estatusValue: "en_bodega_satelite" })],
+    const lecturas: (OrdenTransicionRow | null)[] = [
+      transicionRow(),
+      transicionRow({ estatusValue: "en_bodega_satelite" }),
     ];
     let i = 0;
     const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => lecturas[i++] ?? []),
+      findByNumGuiaForTransicion: vi.fn(async () => lecturas[i++] ?? null),
       recibirEnSatelite: vi.fn(async () => false), // race: 0 filas
     });
-    const r = await newService(repo).recibir("o1", ADMIN);
+    const r = await newService(repo).recibir(10, ADMIN);
     expect(r.status).toBe("ya_recibida");
   });
 
   it("R18: race — UPDATE no afecta y al re-leer NO esta recibida -> conflict", async () => {
-    const lecturas: OrdenTransicionRow[][] = [
-      [transicionRow()],
-      [transicionRow({ estatusValue: "en_fulfillment" })],
+    const lecturas: (OrdenTransicionRow | null)[] = [
+      transicionRow(),
+      transicionRow({ estatusValue: "en_fulfillment" }),
     ];
     let i = 0;
     const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => lecturas[i++] ?? []),
+      findByNumGuiaForTransicion: vi.fn(async () => lecturas[i++] ?? null),
       recibirEnSatelite: vi.fn(async () => false),
     });
-    const r = await newService(repo).recibir("o1", ADMIN);
+    const r = await newService(repo).recibir(10, ADMIN);
     expect(r.status).toBe("conflict");
   });
 });

@@ -88,10 +88,10 @@ export function OrdenesTabs({
   mostrarHistorial?: boolean;
   /**
    * Habilita la selección por checkbox + barra de acciones por lote por estado
-   * (asignar mensajero, rutear a bodega satélite, generar guía, imprimir etiquetas,
-   * devolver a tienda), restaurando la vista de revisión del maestro dentro de las
-   * tabs. Solo para `maestro` (las Server Actions son maestro-only); `admin`
-   * (solo-lectura) y `adminTienda` lo reciben en `false`.
+   * (asignar mensajero, rutear a bodega satélite —solo en `en_bodega`—, generar
+   * guía, imprimir etiquetas, devolver a tienda) dentro de las tabs. Solo para
+   * `maestro` (las Server Actions son maestro-only); `admin` (solo-lectura) y
+   * `adminTienda` lo reciben en `false`.
    */
   accionesLote?: boolean;
 }>) {
@@ -154,20 +154,16 @@ export function OrdenesTabs({
     );
   }
 
-  // Mapeo estado -> acciones por lote (mismo comportamiento que la vista de revisión
-  // previa, OrdenesRevisionMaestro). Sin `accionesLote` no hay acciones (undefined).
+  // Mapeo estado -> acciones por lote. Sin `accionesLote` no hay acciones (undefined).
+  // Nota: "Rutear a bodega satélite" solo se ofrece en `en_bodega`; se retiró de
+  // `en_fulfillment`/`en_preparacion` (ahí la vista legacy OrdenesRevisionMaestro
+  // sí la ofrece, así que la paridad con esa vista ya no es total).
   function accionesDe(estatusValue: string): AccionLote[] {
     switch (estatusValue) {
       case "en_fulfillment":
       case "en_preparacion":
         return [
           { key: "guia", label: "Generar guía", onRun: abrirGenerarGuia },
-          {
-            key: "rutear",
-            label: "Rutear a bodega satélite",
-            variant: "outline",
-            onRun: abrirRutearSatelite,
-          },
         ];
       case "en_espera_aceptacion":
         return [
@@ -321,8 +317,8 @@ export function OrdenesTabs({
         ))}
       </Tabs>
 
-      {/* Modales de acción por lote (solo maestro): mismos componentes/acciones que
-          la vista de revisión previa. Montados una vez; `open` por `modalAbierto`. */}
+      {/* Modales de acción por lote (solo maestro). Montados una vez; `open` por
+          `modalAbierto`. */}
       {accionesLote ? (
         <>
           <GenerarGuiaModal

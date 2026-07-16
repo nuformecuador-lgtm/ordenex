@@ -29,8 +29,9 @@ function etiquetaRow(overrides: Partial<EtiquetaRow> = {}): EtiquetaRow {
   };
 }
 
-// Stub de IOrdenRepository: solo `findEtiquetasByIds` se ejercita; el resto son
-// stubs que fallarian si se invocan (patron guia-asignacion-service.test.ts).
+// Stub de IOrdenRepository: solo `findEtiquetasByIds` / `findEtiquetaByNumGuia` se
+// ejercitan; el resto son stubs que fallarian si se invocan (patron
+// guia-asignacion-service.test.ts).
 function fakeRepo(rows: EtiquetaRow[] = [etiquetaRow()]): IOrdenRepository {
   return {
     create: vi.fn(),
@@ -52,6 +53,7 @@ function fakeRepo(rows: EtiquetaRow[] = [etiquetaRow()]): IOrdenRepository {
     asignarMensajeroSugerido: vi.fn(),
     countOrdenesDeTienda: vi.fn(),
     findByIdsForTransicion: vi.fn(),
+    findByNumGuiaForTransicion: vi.fn(),
     findMensajeroIdsValidos: vi.fn(),
     findAllMensajeros: vi.fn(),
     listOrderStatus: vi.fn(),
@@ -62,6 +64,10 @@ function fakeRepo(rows: EtiquetaRow[] = [etiquetaRow()]): IOrdenRepository {
     rutearBodegaSateliteLote: vi.fn(),
     // Feature 32: filtra por ids solicitados (simula el `where id in` del repo).
     findEtiquetasByIds: vi.fn(async (ids: string[]) => rows.filter((r) => ids.includes(r.id))),
+    // QR por guia: simula el `where num_guia = ? and deleted_at is null` (UNIQUE).
+    findEtiquetaByNumGuia: vi.fn(
+      async (numGuia: number) => rows.find((r) => r.numGuia === numGuia) ?? null,
+    ),
   } as unknown as IOrdenRepository;
 }
 
@@ -105,7 +111,7 @@ describe("EtiquetaGuiaService — armado del DTO de etiqueta (R1)", () => {
       provinciaNombre: "San Jose",
       cantonNombre: "Central",
       distritoNombre: "Carmen",
-      qrValue: "o1",
+      qrValue: "501",
       barcodeValue: "501",
     });
   });
@@ -213,15 +219,26 @@ describe("EtiquetaGuiaService — no expone internos (R6)", () => {
 });
 
 describe("EtiquetaGuiaService — codificacion QR/barcode (R7/R8)", () => {
-  it("R7: qrValue === ordenId (orden.id)", async () => {
+  it("R7: qrValue === String(numGuia) (el QR ya NO codifica orden.id)", async () => {
     const repo = fakeRepo([etiquetaRow({ id: "orden-uuid-abc", numGuia: 700 })]);
     const service = new EtiquetaGuiaService(repo);
 
     const r = await service.generarEtiquetas({ ordenIds: ["orden-uuid-abc"] }, MAESTRO);
 
     if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.etiquetas[0].qrValue).toBe("orden-uuid-abc");
-    expect(r.etiquetas[0].qrValue).toBe(r.etiquetas[0].ordenId);
+    expect(r.etiquetas[0].qrValue).toBe("700");
+    expect(r.etiquetas[0].qrValue).toBe(String(r.etiquetas[0].numGuia));
+    expect(r.etiquetas[0].qrValue).not.toBe(r.etiquetas[0].ordenId);
+  });
+
+  it("R7/R8: qrValue y barcodeValue codifican el MISMO num_guia", async () => {
+    const repo = fakeRepo([etiquetaRow({ id: "o1", numGuia: 4242 })]);
+    const service = new EtiquetaGuiaService(repo);
+
+    const r = await service.generarEtiquetas({ ordenIds: ["o1"] }, MAESTRO);
+
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.etiquetas[0].qrValue).toBe(r.etiquetas[0].barcodeValue);
   });
 
   it("R8: barcodeValue === String(numGuia)", async () => {
@@ -233,5 +250,40 @@ describe("EtiquetaGuiaService — codificacion QR/barcode (R7/R8)", () => {
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.etiquetas[0].barcodeValue).toBe("12345");
     expect(r.etiquetas[0].barcodeValue).toBe(String(r.etiquetas[0].numGuia));
+  });
+});
+
+describe("EtiquetaGuiaService — etiqueta por num_guia (ruta /paquete/<numGuia>)", () => {
+  it("R1/R7: resuelve la etiqueta de la orden con ese num_guia (mismo DTO)", async () => {
+    const repo = fakeRepo([etiquetaRow({ id: "o1", numGuia: 501 })]);
+    const service = new EtiquetaGuiaService(repo);
+
+    const r = await service.obtenerEtiquetaPorGuia(501, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.etiqueta.ordenId).toBe("o1");
+    expect(r.etiqueta.numGuia).toBe(501);
+    expect(r.etiqueta.qrValue).toBe("501");
+    expect(repo.findEtiquetaByNumGuia).toHaveBeenCalledWith(501);
+  });
+
+  it("R3: sin orden viva con ese num_guia (inexistente o borrada) -> no_encontrada", async () => {
+    const repo = fakeRepo([etiquetaRow({ id: "o1", numGuia: 501 })]);
+    const service = new EtiquetaGuiaService(repo);
+
+    const r = await service.obtenerEtiquetaPorGuia(999, MAESTRO);
+
+    expect(r.status).toBe("no_encontrada");
+  });
+
+  it("cualquier rol autenticado resuelve la etiqueta por guia (sin forbidden)", async () => {
+    const repo = fakeRepo([etiquetaRow({ id: "o1", numGuia: 501 })]);
+    const service = new EtiquetaGuiaService(repo);
+
+    for (const actor of [ADMIN, ADMIN_TIENDA, MENSAJERO, MAESTRO]) {
+      const r = await service.obtenerEtiquetaPorGuia(501, actor);
+      expect(r.status).toBe("ok");
+    }
   });
 });

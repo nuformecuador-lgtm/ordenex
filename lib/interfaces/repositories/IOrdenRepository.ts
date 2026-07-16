@@ -291,6 +291,13 @@ export interface IOrdenRepository {
    */
   findByIdsForTransicion(ids: string[]): Promise<OrdenTransicionRow[]>;
   /**
+   * Feature 33 (QR por guia): fila de transicion resuelta por `num_guia` (UNIQUE en
+   * `orden`). Como `findByIdsForTransicion`, INCLUYE borradas (`deletedAt !== null`)
+   * para que el service distinga "no existe" de "borrada"; `null` si ninguna orden
+   * tiene ese `num_guia`.
+   */
+  findByNumGuiaForTransicion(numGuia: number): Promise<OrdenTransicionRow | null>;
+  /**
    * R28: subconjunto de `ids` que corresponde a un usuario con rol `mensajero`,
    * SIN filtro de zona (el filtrado por zona/GAM es la feature 30, ver design.md
    * "Limites"). Mismo criterio que `findMensajerosByIds`, nombre propio para el
@@ -373,6 +380,14 @@ export interface IOrdenRepository {
    * sin logica de negocio. Vacio si `ids` esta vacio.
    */
   findEtiquetasByIds(ids: string[]): Promise<EtiquetaRow[]>;
+  /**
+   * Feature 32/R1/R3 (QR por guia): fila para la etiqueta resuelta por `num_guia`
+   * (UNIQUE en `orden`), con los mismos nombres legibles y el mismo filtro
+   * `deletedAt: null` que `findEtiquetasByIds` (R3: borrada/inexistente -> `null`).
+   * La fila devuelta SIEMPRE tiene `numGuia` no nulo (se busca justamente por el).
+   * Solo query, sin logica de negocio.
+   */
+  findEtiquetaByNumGuia(numGuia: number): Promise<EtiquetaRow | null>;
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
 

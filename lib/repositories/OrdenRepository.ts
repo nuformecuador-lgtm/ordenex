@@ -750,6 +750,34 @@ export class OrdenRepository implements IOrdenRepository {
     }));
   }
 
+  /**
+   * Feature 33 (QR por guia): fila de transicion por `num_guia` (UNIQUE). INCLUYE
+   * borradas (el service distingue "no existe" de "borrada"); `null` si no hay orden
+   * con ese `num_guia`.
+   */
+  async findByNumGuiaForTransicion(numGuia: number): Promise<OrdenTransicionRow | null> {
+    const r = await this.prisma.orden.findUnique({
+      where: { numGuia },
+      select: {
+        id: true,
+        numGuia: true,
+        deletedAt: true,
+        estatus: { select: { value: true } },
+        zonaId: true,
+        zona: { select: { esCentral: true } },
+      },
+    });
+    if (!r) return null;
+    return {
+      id: r.id,
+      estatusValue: r.estatus.value,
+      numGuia: r.numGuia,
+      deletedAt: r.deletedAt,
+      zonaId: r.zonaId,
+      zonaEsGam: r.zona.esCentral,
+    };
+  }
+
   /** R28: subconjunto de `ids` con rol `mensajero`, SIN filtro de zona. */
   async findMensajeroIdsValidos(ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
@@ -953,6 +981,19 @@ export class OrdenRepository implements IOrdenRepository {
       ...WITH_ETIQUETA,
     });
     return rows.map(toEtiquetaRow);
+  }
+
+  /**
+   * Feature 32/R1/R3 (QR por guia): fila para la etiqueta por `num_guia` (UNIQUE).
+   * Mismo filtro `deletedAt: null` que `findEtiquetasByIds` (R3: borrada/inexistente
+   * -> `null`, el service la reporta como no encontrada). Solo query.
+   */
+  async findEtiquetaByNumGuia(numGuia: number): Promise<EtiquetaRow | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { numGuia, deletedAt: null }, // R3
+      ...WITH_ETIQUETA,
+    });
+    return row ? toEtiquetaRow(row) : null;
   }
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---

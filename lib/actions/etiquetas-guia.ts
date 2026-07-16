@@ -2,7 +2,9 @@
 
 import {
   generarEtiquetasSchema,
+  etiquetaPorGuiaSchema,
   type GenerarEtiquetasResult,
+  type EtiquetaPorGuiaResult,
 } from "@/lib/types/etiqueta-guia";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IEtiquetaGuiaService } from "@/lib/interfaces/services/IEtiquetaGuiaService";
@@ -60,6 +62,27 @@ export async function generarEtiquetas(
     const data = generarEtiquetasSchema.parse(input); // ZodError -> VALIDATION_ERROR (R15)
     const service = deps.etiquetaService ?? buildEtiquetaService();
     return service.generarEtiquetas(data, actor); // resultado tipado de dominio (ok/forbidden)
+  });
+  return isAppErrorShape(r) ? toEtiquetaActionError(r) : r;
+}
+
+/**
+ * Feature 32/R1-R8/R14/R15 (QR por guia): resuelve la etiqueta de UNA orden por su
+ * `num_guia` (lo que codifica el QR y la URL `/paquete/<numGuia>`). READ derivado, sin
+ * efectos, para cualquier rol autenticado (misma autorizacion que `generarEtiquetas`).
+ * Sin sesion -> `unauthenticated` antes de tocar el service (R14); `numGuia` no entero
+ * positivo -> `validation_error` (R15); sin orden viva con esa guia -> `no_encontrada`.
+ */
+export async function obtenerEtiquetaPorGuia(
+  input: unknown,
+  deps: EtiquetaActionDeps = {},
+): Promise<EtiquetaPorGuiaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R14: antes de tocar el service
+    const data = etiquetaPorGuiaSchema.parse(input); // ZodError -> VALIDATION_ERROR (R15)
+    const service = deps.etiquetaService ?? buildEtiquetaService();
+    return service.obtenerEtiquetaPorGuia(data.numGuia, actor);
   });
   return isAppErrorShape(r) ? toEtiquetaActionError(r) : r;
 }

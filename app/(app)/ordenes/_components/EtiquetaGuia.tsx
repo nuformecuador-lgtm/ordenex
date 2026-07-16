@@ -48,7 +48,6 @@ function geografiaLegible(etiqueta: EtiquetaGuiaDTO): string {
  */
 export function EtiquetaGuia({ etiqueta, qrCanvasRef }: EtiquetaGuiaProps) {
   const {
-    ordenId,
     numGuia,
     numRemision,
     destinatario,
@@ -60,10 +59,12 @@ export function EtiquetaGuia({ etiqueta, qrCanvasRef }: EtiquetaGuiaProps) {
     barcodeValue,
   } = etiqueta;
 
-  // El QR codifica la URL pública del paquete (`<origin>/paquete/<ordenId>`), no el
-  // id pelado: una cámara externa la abre y la ruta valida sesión y muestra el
-  // detalle. El escáner in-app (feature 33) extrae el ordenId del path.
-  const qrUrl = buildPaqueteUrl(ordenId);
+  // El QR codifica la URL pública del paquete (`<origin>/paquete/<numGuia>`), no el
+  // código pelado: una cámara externa la abre y la ruta valida sesión y muestra el
+  // detalle. El escáner in-app (feature 33) extrae el num_guia del path. CORTE
+  // LIMPIO: ya NO se codifica `orden.id` (UUID); las etiquetas impresas con el
+  // formato anterior dejan de escanear y se reimprimen.
+  const qrUrl = buildPaqueteUrl(numGuia);
 
   return (
     <article

@@ -185,21 +185,27 @@ describe("RecepcionSateliteModule", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       /no tienes una zona asignada/i,
     );
-    // Sin zona → sin recepción posible: no se monta el input de escaneo.
+    // Sin zona → sin recepción posible: no se monta la sección de escaneo.
     expect(
-      screen.queryByRole("textbox", { name: "Código de la orden" }),
+      screen.queryByRole("region", { name: "Recepción por escaneo" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Escanear con cámara" }),
     ).toBeNull();
   });
 
-  it("R10: con zona, ofrece el escáner (input de recepción) como única acción", () => {
+  // El camino del lector físico (input keyboard-wedge, R10) se retiró por decisión
+  // humana: la cámara es la ÚNICA entrada de recepción por escaneo.
+  it("con zona, ofrece el escáner (cámara) como única entrada, sin input de teclado", () => {
     renderModule({ sinZona: false });
 
     expect(
       screen.getByRole("region", { name: "Recepción por escaneo" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("textbox", { name: "Código de la orden" }),
+      screen.getByRole("button", { name: "Escanear con cámara" }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 
   // ---------- Feature 34 (T8) ----------

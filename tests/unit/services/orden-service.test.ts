@@ -74,6 +74,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados por el
     // CRUD (feature 6) pero exigidos por la interfaz IOrdenRepository.
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
+    findByNumGuiaForTransicion: vi.fn().mockResolvedValue(null),
     findMensajeroIdsValidos: vi.fn().mockResolvedValue(new Set()),
     findAllMensajeros: vi.fn().mockResolvedValue([]),
     listOrderStatus: vi.fn().mockResolvedValue([]),
@@ -92,6 +93,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 32: etiqueta de guia, no ejercitada por el CRUD (feature 6) pero
     // exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
+    findEtiquetaByNumGuia: vi.fn().mockResolvedValue(null),
     // Feature 33: recepcion en bodega satelite, no ejercitada aqui pero exigida
     // por la interfaz IOrdenRepository.
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
