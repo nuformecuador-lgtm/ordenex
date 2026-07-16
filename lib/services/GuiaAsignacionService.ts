@@ -48,6 +48,12 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
 // cierre pendiente (solicitado/vencido). No se le asignan nuevas ordenes hasta resolverlo.
 const MSG_MENSAJERO_BLOQUEADO = "mensajero bloqueado por cierre pendiente";
 
+// Ajuste maestro: motivo cuando una orden se rutearia a una bodega satelite cuyos
+// mensajeros estan TODOS con un cierre abierto. No se envian nuevas ordenes a esa bodega
+// hasta que al menos un mensajero resuelva su cierre.
+const MSG_BODEGA_SATELITE_BLOQUEADA =
+  "bodega satelite bloqueada: todos sus mensajeros tienen un cierre abierto";
+
 function distinct(values: string[]): string[] {
   return [...new Set(values)];
 }
@@ -57,6 +63,30 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     private readonly repo: IOrdenRepository,
     private readonly zonaRepo: IZonaRepository,
   ) {}
+
+  /**
+   * Ajuste maestro: de `zonaIds` (zonas destino satelite), devuelve las que estan
+   * BLOQUEADAS para recibir nuevas ordenes porque TODOS sus mensajeros tienen un cierre
+   * abierto (`solicitado`/`vencido`). Una zona sin mensajeros NO se bloquea (no hay
+   * "todos" que evaluar). Reutiliza primitivas de repo existentes (sin ampliar la
+   * interfaz): `findMensajerosByZona` + `findMensajerosBloqueados` por zona.
+   */
+  private async zonasSateliteBloqueadas(zonaIds: string[]): Promise<Set<string>> {
+    const zonasUnicas = distinct(zonaIds);
+    if (zonasUnicas.length === 0) return new Set();
+    const bloqueadas = new Set<string>();
+    await Promise.all(
+      zonasUnicas.map(async (zonaId) => {
+        const mensajeros = await this.repo.findMensajerosByZona(zonaId);
+        if (mensajeros.length === 0) return;
+        const bloqueados = await this.repo.findMensajerosBloqueados(
+          mensajeros.map((m) => m.id),
+        );
+        if (bloqueados.size === mensajeros.length) bloqueadas.add(zonaId);
+      }),
+    );
+    return bloqueadas;
+  }
 
   async generarGuia(input: GenerarGuiaInput, actor: Actor): Promise<GenerarGuiaServiceResult> {
     // --- Autorizacion (R11-R13/R16), antes de tocar datos ---
@@ -138,6 +168,25 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         }
       }
       if (detalleBloqueo.length > 0) return { status: "conflict", detalle: detalleBloqueo };
+    }
+
+    // --- Ajuste maestro: no se puede rutear a una bodega satelite cuyos mensajeros
+    // esten TODOS en cierre. Aplica a las ordenes NO-GAM del lote (destino satelite). ---
+    const zonasNoGam = new Set<string>();
+    for (const d of decisiones) {
+      const orden = ordenMap.get(d.ordenId);
+      if (orden && orden.zonaId !== centralZonaId) zonasNoGam.add(orden.zonaId);
+    }
+    const zonasBloqueadas = await this.zonasSateliteBloqueadas([...zonasNoGam]);
+    if (zonasBloqueadas.size > 0) {
+      const detalleZona: DetalleConflicto[] = [];
+      for (const d of decisiones) {
+        const orden = ordenMap.get(d.ordenId);
+        if (orden && orden.zonaId !== centralZonaId && zonasBloqueadas.has(orden.zonaId)) {
+          detalleZona.push({ ordenId: d.ordenId, motivo: MSG_BODEGA_SATELITE_BLOQUEADA });
+        }
+      }
+      if (detalleZona.length > 0) return { status: "conflict", detalle: detalleZona };
     }
 
     const [estatusEsperaId, estatusBodegaId, estatusRutaSateliteId] = await Promise.all([
@@ -353,6 +402,25 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       }
     }
     if (detalle.length > 0) return { status: "conflict", detalle }; // R17: aborta sin efectos
+
+    // --- Ajuste maestro: no se rutea a una bodega satelite cuyos mensajeros esten TODOS
+    // en cierre. Aqui todas las ordenes son NO-GAM (destino su zona satelite). ---
+    const zonasDestino = new Set<string>();
+    for (const id of ordenIds) {
+      const orden = ordenMap.get(id);
+      if (orden && orden.zonaId !== centralZonaId) zonasDestino.add(orden.zonaId);
+    }
+    const zonasBloqueadas = await this.zonasSateliteBloqueadas([...zonasDestino]);
+    if (zonasBloqueadas.size > 0) {
+      const detalleZona: DetalleConflicto[] = [];
+      for (const id of ordenIds) {
+        const orden = ordenMap.get(id);
+        if (orden && orden.zonaId !== centralZonaId && zonasBloqueadas.has(orden.zonaId)) {
+          detalleZona.push({ ordenId: id, motivo: MSG_BODEGA_SATELITE_BLOQUEADA });
+        }
+      }
+      if (detalleZona.length > 0) return { status: "conflict", detalle: detalleZona };
+    }
 
     const estatusRutaSateliteId = await this.repo.findEstatusIdByValue(
       ESTATUS_EN_RUTA_BODEGA_SATELITE,

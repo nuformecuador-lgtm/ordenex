@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
-import { generarEtiquetas } from "@/lib/actions/etiquetas-guia";
+import { obtenerEtiquetaPorGuia } from "@/lib/actions/etiquetas-guia";
 import { formatMonto } from "@/lib/config/moneda";
 import { PAQUETE_BASE_PATH } from "@/lib/utils/paquete-url";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
@@ -16,33 +16,43 @@ function ubicacionLegible(e: EtiquetaGuiaDTO): string {
   return partes || SIN_DATO;
 }
 
+/** El segmento de ruta es un `num_guia`: entero positivo o nada (404). */
+function parseNumGuiaParam(raw: string): number | null {
+  if (!/^\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
 /**
  * Detalle público del paquete al que apunta el QR de la etiqueta
- * (`<origin>/paquete/<ordenId>`). La sesión se exige: el `middleware.ts` ya redirige
- * a `/login?redirect=/paquete/<id>` si falta la cookie; aquí se refuerza el caso de
- * cookie presente pero sesión inválida/expirada (actor null). Los datos se resuelven
- * con la Server Action `generarEtiquetas` (payload legible ya autorizado para
- * cualquier rol autenticado); si la orden no existe -> 404.
+ * (`<origin>/paquete/<numGuia>`). La sesión se exige: el `middleware.ts` ya redirige
+ * a `/login?redirect=/paquete/<numGuia>` si falta la cookie; aquí se refuerza el caso
+ * de cookie presente pero sesión inválida/expirada (actor null). Los datos se
+ * resuelven con la Server Action `obtenerEtiquetaPorGuia` (payload legible ya
+ * autorizado para cualquier rol autenticado); si el segmento no es un `num_guia`
+ * válido o no hay orden viva con esa guía -> 404.
  */
 export default async function PaquetePage({
   params,
 }: {
-  params: Promise<{ ordenId: string }>;
+  params: Promise<{ numGuia: string }>;
 }) {
-  const { ordenId } = await params;
+  const { numGuia: numGuiaParam } = await params;
+  const numGuia = parseNumGuiaParam(numGuiaParam);
+  if (numGuia === null) notFound();
 
   // Defensa server-side: cookie presente pero sesión no válida -> login (returnTo).
   const actor = await resolveActorFromSession();
-  if (!actor) redirect(`/login?redirect=${PAQUETE_BASE_PATH}/${ordenId}`);
+  if (!actor) redirect(`/login?redirect=${PAQUETE_BASE_PATH}/${numGuia}`);
 
-  const res = await generarEtiquetas({ ordenIds: [ordenId] });
+  const res = await obtenerEtiquetaPorGuia({ numGuia });
   if (res.status === "unauthenticated") {
-    redirect(`/login?redirect=${PAQUETE_BASE_PATH}/${ordenId}`);
+    redirect(`/login?redirect=${PAQUETE_BASE_PATH}/${numGuia}`);
   }
-  // Orden inexistente/borrada (o resultado sin etiqueta) -> 404.
-  if (res.status !== "ok" || res.etiquetas.length === 0) notFound();
+  // Guía inexistente/orden borrada (o entrada inválida) -> 404.
+  if (res.status !== "ok") notFound();
 
-  const orden = res.etiquetas[0];
+  const orden = res.etiqueta;
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 px-5 py-10">

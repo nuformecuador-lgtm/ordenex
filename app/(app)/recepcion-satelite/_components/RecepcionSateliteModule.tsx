@@ -24,7 +24,9 @@ import { recibidasColumns } from "./recibidas-columns";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
 import {
   BODEGA_BLOQUEADA_TITULO,
+  BODEGA_CIERRES_ABIERTOS_DETALLE,
   bodegaBloqueadaLineas,
+  bodegaCierresAbiertosTitulo,
   type BodegaBloqueoCausa,
 } from "./asignacion-satelite-bloqueo";
 
@@ -57,11 +59,19 @@ export interface RecepcionSateliteModuleProps {
    */
   mensajeros: { id: string; nombre: string }[];
   /**
-   * Feature 41 (R22): bloqueo DERIVADO server-side de la bodega satélite (regla
-   * estricta R17). Si `bloqueada`, se muestra el aviso con la causa diferenciada y
-   * se deshabilita "Asignar". Llega por props desde el Server Component.
+   * Feature 41 (R22) + ajuste admin_satelite: bloqueo DERIVADO server-side de la bodega
+   * satélite. Si `bloqueada` (todos los mensajeros con cierre O CierreBodega pendiente),
+   * se muestra el aviso de bloqueo y se deshabilita "Asignar". Si NO está bloqueada pero
+   * `cierresAbiertos > 0`, se muestra un aviso INFORMATIVO (no bloqueante) y se puede
+   * seguir asignando a los mensajeros sin cierre. `mensajerosConCierreIds` deshabilita a
+   * esos mensajeros en el selector del modal.
    */
-  bloqueoBodega: BodegaBloqueoCausa & { bloqueada: boolean };
+  bloqueoBodega: BodegaBloqueoCausa & {
+    bloqueada: boolean;
+    cierresAbiertos?: number;
+    totalMensajeros?: number;
+    mensajerosConCierreIds?: string[];
+  };
   /**
    * Feature 46 (R15/R16): órdenes liberadas HOY (CR) por el cron para esta bodega
    * satélite (`en_bodega_satelite`), pre-resueltas server-side. Alimentan el aviso
@@ -136,7 +146,7 @@ function FilaPorDevolver({
               onClick={handleDevolver}
               disabled={procesando}
             >
-              {procesando ? "Devolviendo…" : "Devolver a la tienda"}
+              {procesando ? "Devolviendo…" : "Devolver a bodega central"}
             </Button>
           </div>
         </CardContent>
@@ -268,7 +278,8 @@ export function RecepcionSateliteModule({
         aria-label="Recibidas"
         className="flex flex-col gap-3 border-t pt-6"
       >
-        {/* Feature 41 (R22): aviso de bodega bloqueada con causa diferenciada. */}
+        {/* Feature 41 (R22): aviso de bodega BLOQUEADA con causa diferenciada (bloqueo
+            duro: todos los mensajeros con cierre O CierreBodega pendiente). */}
         {bloqueoBodega.bloqueada ? (
           <div
             role="alert"
@@ -280,6 +291,18 @@ export function RecepcionSateliteModule({
                 <li key={linea}>{linea}</li>
               ))}
             </ul>
+          </div>
+        ) : (bloqueoBodega.cierresAbiertos ?? 0) > 0 ? (
+          /* Ajuste admin_satelite: aviso INFORMATIVO (no bloqueante) cuando algunos —no
+             todos— los mensajeros tienen un cierre abierto. La asignación sigue activa. */
+          <div
+            role="status"
+            className="flex flex-col gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400"
+          >
+            <span className="font-medium">
+              {bodegaCierresAbiertosTitulo(bloqueoBodega.cierresAbiertos ?? 0)}
+            </span>
+            <span>{BODEGA_CIERRES_ABIERTOS_DETALLE}</span>
           </div>
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -308,10 +331,10 @@ export function RecepcionSateliteModule({
           "Devolver a la tienda" (rechazada → devuelta_origen) con estado/error por
           fila. Tras el éxito se releé el estado del servidor. */}
       <section
-        aria-label="Por devolver a tienda"
+        aria-label="Por devolver a bodega central"
         className="flex flex-col gap-3 border-t pt-6"
       >
-        <h2 className="text-lg font-semibold">Por devolver a tienda</h2>
+        <h2 className="text-lg font-semibold">Por devolver a bodega central</h2>
         {porDevolver.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No hay órdenes por devolver.
@@ -338,6 +361,7 @@ export function RecepcionSateliteModule({
         open={modalOpen}
         ordenes={ordenesSeleccionadas}
         mensajeros={mensajeros}
+        mensajerosBloqueadosIds={bloqueoBodega.mensajerosConCierreIds ?? []}
         onOpenChange={setModalOpen}
         onSuccess={handleSuccess}
       />

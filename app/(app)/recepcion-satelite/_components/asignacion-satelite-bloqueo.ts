@@ -42,3 +42,18 @@ export function bodegaBloqueadaMensaje(causa: BodegaBloqueoCausa): string {
     ? `${BODEGA_BLOQUEADA_TITULO} ${lineas.join(" ")}`
     : BODEGA_BLOQUEADA_TITULO;
 }
+
+// --- Aviso INFORMATIVO (no bloqueante): pedido admin_satelite ---
+// Cuando algunos (pero no todos) los mensajeros de la bodega tienen un cierre abierto,
+// la asignacion NO se bloquea; solo se avisa cuantos cierres hay abiertos y que se
+// puede seguir asignando a los mensajeros sin cierre.
+
+/** Titulo del aviso informativo, con el conteo de cierres abiertos. */
+export function bodegaCierresAbiertosTitulo(cierresAbiertos: number): string {
+  const plural = cierresAbiertos === 1 ? "" : "s";
+  return `Tienes ${cierresAbiertos} cierre${plural} abierto${plural} de tus mensajeros.`;
+}
+
+/** Detalle accionable del aviso informativo. */
+export const BODEGA_CIERRES_ABIERTOS_DETALLE =
+  "Puedes seguir asignando órdenes a los mensajeros que no tienen un cierre activo.";

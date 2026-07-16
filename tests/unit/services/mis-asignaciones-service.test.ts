@@ -72,6 +72,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
   return {
     findMisAsignaciones: vi.fn(async () => []),
     contarEntregadas: vi.fn(async () => 0),
+    sumMontoCobrarEntregadas: vi.fn(async () => 0),
     findByIdsParaGestion: vi.fn(async () => [gestionRow()]),
     getOrdenEnGestion: vi.fn(async () => null),
     setOrdenEnGestion: vi.fn(async () => true),
@@ -177,6 +178,8 @@ describe("listarMisAsignaciones (R9-R13)", () => {
         asignacionRow({ id: "d", estatusValue: "en_reparto", montoCobrar: null }),
       ]),
       contarEntregadas: vi.fn(async () => 7),
+      // COD ya entregado (400): alimenta 'Total a cobrar' junto al COD de en_reparto (350).
+      sumMontoCobrarEntregadas: vi.fn(async () => 400),
     });
     const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
 
@@ -184,8 +187,16 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     if (r.status !== "ok") return;
     // pendientes = # en_reparto (no cuenta por recoger); porCobrar suma solo en_reparto,
     // null cuenta 0 (100 + 250 + 0); entregadas viene del conteo del repo.
-    expect(r.kpis).toEqual({ pendientes: 3, entregadas: 7, porCobrar: 350 });
+    // totalACobrar = COD en_reparto (350) + COD entregado (400) = 750 (acumulado, no baja
+    // al entregar; reprogramada/devuelta/rechazada quedan fuera de ambos sets).
+    expect(r.kpis).toEqual({
+      pendientes: 3,
+      entregadas: 7,
+      porCobrar: 350,
+      totalACobrar: 750,
+    });
     expect(repo.contarEntregadas).toHaveBeenCalledWith("m1");
+    expect(repo.sumMontoCobrarEntregadas).toHaveBeenCalledWith("m1");
   });
 });
 
@@ -450,7 +461,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     expect(gArg.nuevoEstatusId).toBe("os-reprogramada");
   });
 
-  it("R28 (+ feature 75): devolucion valida -> sube foto, gestion(devuelta) + estado devuelta", async () => {
+  it("R28 + pedido: devolucion valida -> sube foto, gestion(devuelta) con evidencia + estado devuelta", async () => {
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
@@ -458,7 +469,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
-    // Feature 75: la evidencia se sube ANTES de la tx, igual que en rechazada.
+    // Pedido: la devolución ahora sube y persiste la evidencia (como rechazo/entrega).
     expect(storage.upload).toHaveBeenCalledTimes(1);
     const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(gArg.gestion.resultado).toBe("devuelta");
@@ -529,7 +540,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
     resultado: "devuelta",
     causaDevolucion: "not_found",
     motivo: "ausente",
-    evidencia: evidencia(), // feature 75: la evidencia es obligatoria tambien en devuelta
+    evidencia: evidencia(),
   };
 
   function repoCall(repo: IGestionOrdenRepository) {

@@ -105,6 +105,95 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
   });
 });
 
+// QR por guia: la recepcion satelite resuelve la orden por `num_guia` (UNIQUE).
+describe("OrdenRepository.findByNumGuiaForTransicion (QR = num_guia)", () => {
+  it("busca por num_guia (UNIQUE) e incluye borradas (el service decide no_encontrada)", async () => {
+    const { prisma } = buildPrisma({
+      orden: { findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    });
+    const orden = prisma.orden as unknown as { findUnique: ReturnType<typeof vi.fn> };
+    orden.findUnique.mockResolvedValue({
+      id: "o2",
+      numGuia: 5,
+      deletedAt: new Date("2026-01-01"),
+      estatus: { value: "entregada" },
+      zonaId: "z-limon",
+      zona: { esCentral: false },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const row = await repo.findByNumGuiaForTransicion(5);
+
+    expect(row).toEqual({
+      id: "o2",
+      estatusValue: "entregada",
+      numGuia: 5,
+      deletedAt: new Date("2026-01-01"),
+      zonaId: "z-limon",
+      zonaEsGam: false,
+    });
+    const arg = orden.findUnique.mock.calls[0][0];
+    // NO filtra deletedAt: el service distingue "no existe" de "borrada".
+    expect(arg.where).toEqual({ numGuia: 5 });
+    expect(arg.select.zona).toEqual({ select: { esCentral: true } });
+  });
+
+  it("null si ninguna orden tiene ese num_guia", async () => {
+    const { prisma } = buildPrisma({
+      orden: { findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    });
+    const orden = prisma.orden as unknown as { findUnique: ReturnType<typeof vi.fn> };
+    orden.findUnique.mockResolvedValue(null);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.findByNumGuiaForTransicion(999)).toBeNull();
+  });
+});
+
+// QR por guia: la ruta /paquete/<numGuia> resuelve la etiqueta por `num_guia`.
+describe("OrdenRepository.findEtiquetaByNumGuia (feature 32/R1/R3)", () => {
+  it("R3: filtra deletedAt: null y mapea la fila de etiqueta", async () => {
+    const { prisma } = buildPrisma({
+      orden: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    });
+    const orden = prisma.orden as unknown as { findFirst: ReturnType<typeof vi.fn> };
+    orden.findFirst.mockResolvedValue({
+      id: "o1",
+      numGuia: 501,
+      numRemision: "REM-1",
+      destinatario: "Ana",
+      telefonoDest: "099",
+      direccion: "calle",
+      producto: "caja",
+      montoCobrar: null,
+      tienda: { nombre: "T" },
+      zona: { nombre: "Limon" },
+      provincia: { nombre: "P" },
+      canton: { nombre: "C" },
+      distrito: { nombre: "D" },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const row = await repo.findEtiquetaByNumGuia(501);
+
+    expect(row?.id).toBe("o1");
+    expect(row?.numGuia).toBe(501);
+    const arg = orden.findFirst.mock.calls[0][0];
+    expect(arg.where).toEqual({ numGuia: 501, deletedAt: null }); // R3
+  });
+
+  it("R3: null si la orden con ese num_guia esta borrada o no existe", async () => {
+    const { prisma } = buildPrisma({
+      orden: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    });
+    const orden = prisma.orden as unknown as { findFirst: ReturnType<typeof vi.fn> };
+    orden.findFirst.mockResolvedValue(null);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.findEtiquetaByNumGuia(501)).toBeNull();
+  });
+});
+
 describe("OrdenRepository.findMensajeroIdsValidos (R28)", () => {
   it("filtra por rol mensajero, sin filtro de zona", async () => {
     const { prisma } = buildPrisma();

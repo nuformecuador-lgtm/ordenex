@@ -84,6 +84,10 @@ export interface OrdenTransicionRow {
   deletedAt: Date | null;
   zonaId: string;
   zonaEsGam: boolean;
+  // Tienda DUEÑA de la orden (FK a `usuario`; para el adminTienda su `usuarioId` ES
+  // el tiendaId, misma identidad que usa OrdenService.listar). Permite acotar por
+  // tienda sin una consulta extra, igual que `zonaId` lo permite por zona.
+  tiendaId: string;
 }
 
 // Feature 17/T15 — fila liviana de mensajero para el loader del modal (R28).
@@ -182,16 +186,28 @@ export interface RecepcionSateliteRow {
   distritoNombre: string | null;
 }
 
-// Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite. Regla
-// ESTRICTA (F1.4-Q4): `bloqueada = porMensajeros || porCierreBodega`. `porMensajeros` =
-// existe un cierre_dia de sus mensajeros (destino satelite de su zona) en
-// `solicitado`/`vencido` (causa i). `porCierreBodega` = existe su propio CierreBodega
-// hacia la central en `solicitado` (causa ii). Ambos flags viajan para que el borde
-// (feature 34) distinga el motivo accionable de R22.
+// Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite.
+// `bloqueada = porMensajeros || porCierreBodega`. `porCierreBodega` = existe su propio
+// CierreBodega hacia la central en `solicitado` (causa ii, bloqueo duro).
+//
+// Ajuste (pedido admin_satelite): la causa (i) de mensajeros se RELAJA. Un cierre de un
+// mensajero ya NO bloquea toda la bodega; `porMensajeros` es `true` (bloqueo duro) SOLO
+// si TODOS los mensajeros de la zona tienen un cierre abierto (`solicitado`/`vencido`).
+// Mientras no sea bloqueo duro, la UI muestra un aviso INFORMATIVO y se puede seguir
+// asignando a los mensajeros SIN cierre. Los campos informativos alimentan ese aviso y
+// el deshabilitado por-mensajero en el selector:
+//   - `cierresAbiertos`         = mensajeros de la zona con un cierre abierto.
+//   - `totalMensajeros`         = mensajeros de la zona.
+//   - `mensajerosConCierreIds`  = ids de esos mensajeros (para deshabilitarlos al asignar).
+// Son opcionales (aditivos): los consumidores que solo deciden el bloqueo usan los tres
+// primeros campos.
 export interface BodegaBloqueoResult {
   bloqueada: boolean;
   porMensajeros: boolean;
   porCierreBodega: boolean;
+  cierresAbiertos?: number;
+  totalMensajeros?: number;
+  mensajerosConCierreIds?: string[];
 }
 
 export interface IOrdenRepository {
@@ -291,6 +307,13 @@ export interface IOrdenRepository {
    */
   findByIdsForTransicion(ids: string[]): Promise<OrdenTransicionRow[]>;
   /**
+   * Feature 33 (QR por guia): fila de transicion resuelta por `num_guia` (UNIQUE en
+   * `orden`). Como `findByIdsForTransicion`, INCLUYE borradas (`deletedAt !== null`)
+   * para que el service distinga "no existe" de "borrada"; `null` si ninguna orden
+   * tiene ese `num_guia`.
+   */
+  findByNumGuiaForTransicion(numGuia: number): Promise<OrdenTransicionRow | null>;
+  /**
    * R28: subconjunto de `ids` que corresponde a un usuario con rol `mensajero`,
    * SIN filtro de zona (el filtrado por zona/GAM es la feature 30, ver design.md
    * "Limites"). Mismo criterio que `findMensajerosByIds`, nombre propio para el
@@ -373,6 +396,14 @@ export interface IOrdenRepository {
    * sin logica de negocio. Vacio si `ids` esta vacio.
    */
   findEtiquetasByIds(ids: string[]): Promise<EtiquetaRow[]>;
+  /**
+   * Feature 32/R1/R3 (QR por guia): fila para la etiqueta resuelta por `num_guia`
+   * (UNIQUE en `orden`), con los mismos nombres legibles y el mismo filtro
+   * `deletedAt: null` que `findEtiquetasByIds` (R3: borrada/inexistente -> `null`).
+   * La fila devuelta SIEMPRE tiene `numGuia` no nulo (se busca justamente por el).
+   * Solo query, sin logica de negocio.
+   */
+  findEtiquetaByNumGuia(numGuia: number): Promise<EtiquetaRow | null>;
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
 
@@ -411,6 +442,21 @@ export interface IOrdenRepository {
   recibirEnSatelite(
     ordenId: string,
     zonaId: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean>;
+  /**
+   * Recepcion en la tienda de ORIGEN: transicion atomica y concurrencia-segura de
+   * UNA orden a `recibido_origen`, cerrando el flujo de devolucion. Espejo de
+   * `recibirEnSatelite` cambiando la guarda de zona por la de TIENDA: UPDATE
+   * guardado por estado de origen (solo si sigue en `devuelta_origen`), tienda
+   * duenna (`tiendaId`) y no borrada. Devuelve `true` si afecto 1 fila, `false` si
+   * 0 (ya no estaba en el origen -> race). NO toca `mensajeroAsignadoId` ni
+   * `numGuia`.
+   */
+  recibirEnOrigen(
+    ordenId: string,
+    tiendaId: string,
     destinoEstatusId: string,
     historial: HistorialContexto,
   ): Promise<boolean>;

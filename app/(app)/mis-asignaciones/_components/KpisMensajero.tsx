@@ -1,4 +1,4 @@
-import { Truck, PackageCheck, Wallet } from "lucide-react";
+import { Truck, PackageCheck, Wallet, Coins } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { PriceLabel } from "@/components/shared/PriceLabel";
@@ -36,13 +36,18 @@ const TILES: Tile[] = [
     icon: Wallet,
     render: (k) => <PriceLabel value={k.porCobrar} />,
   },
+  {
+    label: "Total a cobrar",
+    icon: Coins,
+    render: (k) => <PriceLabel value={k.totalACobrar} />,
+  },
 ];
 
 export function KpisMensajero({ kpis }: Readonly<KpisMensajeroProps>) {
   return (
     <section
       aria-label="Indicadores de mis asignaciones"
-      className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
     >
       {TILES.map((tile) => {
         const Icon = tile.icon;

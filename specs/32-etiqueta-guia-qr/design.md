@@ -47,8 +47,9 @@ export interface EtiquetaGuiaDTO {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null; // R4
-  qrValue: string;               // = ordenId (recomendación (a))
-  barcodeValue: string;          // = String(numGuia) (recomendación (b))
+  qrValue: string;               // = String(numGuia) (decisión (a') 2026-07-15)
+  barcodeValue: string;          // = String(numGuia) (decisión (b))
+                                 // QR y barcode codifican el MISMO valor: num_guia.
 }
 
 // Órdenes solicitadas que NO produjeron etiqueta (R2/R3), para el aviso de UI (R11).
@@ -69,8 +70,10 @@ export type GenerarEtiquetasResult =
 ```
 
 Nota: `qrValue`/`barcodeValue` se resuelven en el backend (no en el componente)
-para centralizar la decisión (a)/(b) en un solo lugar y que la feature 33 lea el
-mismo contrato.
+para centralizar la decisión (a')/(b) en un solo lugar y que la feature 33 lea el
+mismo contrato. La presentación construye la URL del paquete
+`<origin>/paquete/<qrValue>` para el QR impreso; el backend emite el `num_guia`
+pelado, no la URL (el `origin` es de presentación).
 
 ## 3. Capas (Controller → Service → Repository)
 
@@ -96,7 +99,7 @@ Nuevo método `findEtiquetasByIds(ids: string[]): Promise<EtiquetaRow[]>`:
   3. Por cada id solicitado: si no vino de la query → `omitida: no_encontrada`
      (R3); si vino pero `numGuia === null` → `omitida: sin_guia` (R2); si tiene
      guía → construir `EtiquetaGuiaDTO` (resolver nombres, `Decimal->number`,
-     `qrValue = ordenId`, `barcodeValue = String(numGuia)`).
+     `qrValue = String(numGuia)`, `barcodeValue = String(numGuia)`).
   4. Devuelve `{ status: "ok", etiquetas, omitidas }`.
 - No conoce HTTP ni Prisma directamente.
 
@@ -137,8 +140,12 @@ en los componentes marcados `"use client"`. Instalación efectiva y elección fi
 humano (F1.4).
 
 ## 5. Integraciones
-- Feature 33 (recepción por escaneo) CONSUMIRÁ el `qrValue` (= `orden.id`). Esta
-  feature solo lo PRODUCE; no implementa la recepción.
+- Feature 33 (recepción por escaneo) CONSUMIRÁ el `qrValue` (= `String(numGuia)`,
+  decisión (a') 2026-07-15). Esta feature solo lo PRODUCE; no implementa la recepción.
+  El escaneo resuelve la orden por `num_guia` (`@unique`), no por PK.
+- Ruta pública del detalle del paquete: `<origin>/paquete/<numGuia>` (antes
+  `<origin>/paquete/<ordenId>`). Es el destino del QR y el que abre la feature 65
+  (lectura genérica de QR por origen).
 - Ninguna integración externa (Meta/WhatsApp/Shopify) ni webhook.
 
 ## 6. Alternativas descartadas
@@ -157,10 +164,20 @@ humano (F1.4).
   listado para todos los consumidores, con PII/monto que hoy no se exponen ahí.
   Se prefiere un DTO dedicado `EtiquetaGuiaDTO` (patrón `orden-guia.ts`,
   "DTOs propios que no amplían OrdenDTO").
-- **D. Codificar `num_guia` en el QR.** Descartada como recomendación: el QR lo
+- **D. Codificar `num_guia` en el QR.** ~~Descartada como recomendación: el QR lo
   consume la recepción de la feature 33; `orden.id` (UUID PK) es un lookup más
-  directo y estable. `num_guia` va al código de barras (lector físico). Decisión
-  final del humano en Preguntas abiertas (a)/(b).
+  directo y estable. `num_guia` va al código de barras (lector físico).~~
+  **REVERTIDA el 2026-07-15: esta es ahora la opción ELEGIDA** (decisión (a') en
+  `requirements.md`). QR y barcode codifican `num_guia`; el lookup de recepción es
+  por la columna `@unique` `num_guia`. Se conserva el texto original tachado para
+  dejar rastro de por qué se había descartado.
+- **D'. (Ahora descartada) Codificar `orden.id` (UUID) en el QR.** Era la decisión
+  F1.4 (a) del 2026-07-11 e incluso llegó a implementarse. Descartada el 2026-07-15
+  por decisión del humano: obliga a manejar dos identificadores distintos (UUID en
+  QR, `num_guia` en barcode y en la etiqueta visible), y el UUID no es legible ni
+  verificable a ojo contra el documento físico. Ventaja perdida al descartarla: el
+  UUID era inadivinable, lo que acotaba de facto el acceso a `/paquete/<id>` (ver §8:
+  ese efecto protector desaparece y quedó como riesgo aceptado).
 - **E. Disparar la impresión automáticamente al "Generar guía" (feature 17).**
   Descartada como default: acopla impresión a asignación e impide reimprimir a
   demanda; se prefiere acción explícita "Imprimir etiquetas" sobre la selección
@@ -176,8 +193,9 @@ humano (F1.4).
 | R4 | unit service: `distritoId` null → `distritoNombre: null` con etiqueta válida |
 | R5 | unit service: `montoCobrar` Decimal→number y null; sin símbolo de moneda |
 | R6 | unit service/DTO: el payload no incluye `deletedAt` |
-| R7 | unit service: `qrValue === ordenId`; component test: renderiza QR |
-| R8 | unit service: `barcodeValue === String(numGuia)`; component test: renderiza barcode |
+| R7 | unit service: `qrValue === String(numGuia)`; component test: renderiza QR con `<origin>/paquete/<numGuia>` |
+| R7.1 | unit: un UUID escaneado no resuelve orden → `validation_error` (sin retrocompatibilidad) |
+| R8 | unit service: `barcodeValue === String(numGuia)` (= `qrValue`); component test: renderiza barcode |
 | R9 | component test `EtiquetaGuia`: todos los campos + QR + barcode en el DOM |
 | R10 | component test `EtiquetasGuiaModal`: "Imprimir" invoca `window.print` |
 | R11 | component test: selección mixta → M etiquetas + aviso de N−M omitidas |
@@ -185,3 +203,35 @@ humano (F1.4).
 | R13 | unit action/service: rol no autorizado → `forbidden` |
 | R14 | unit action: sin actor → `unauthenticated` |
 | R15 | unit action: lista vacía / id malformado → `validation_error` |
+
+## 8. Riesgo conocido / deuda abierta — enumerabilidad de `/paquete/<numGuia>`
+
+Registrado el **2026-07-15**, derivado de la decisión (a') (QR codifica `num_guia`).
+
+**Hecho técnico.** `num_guia` se asigna desde una secuencia Postgres
+(`nextval(orden_num_guia_seq)`, feature 17). Es por tanto **correlativo y enumerable**:
+conocida una guía, las contiguas son adivinables por incremento/decremento.
+
+**Superficie expuesta.** La ruta `/paquete/<numGuia>` sirve el payload de etiqueta, que
+incluye **PII y datos comerciales**: destinatario, teléfono, dirección, producto y monto a
+cobrar. La autorización de esa ruta y de `obtenerEtiquetaPorGuia` exige **sesión válida**,
+pero **no acota por zona ni por tienda**: cualquier rol autenticado (`maestro`, `admin`,
+`mensajero`, `adminTienda`, `adminSatelite`) puede leer el detalle de **cualquier** guía.
+
+**Consecuencia.** Con el QR anterior (`orden.id`, UUID v4) el identificador era
+inadivinable, lo que hacía impracticable el barrido aunque la autorización fuese la misma.
+Con el correlativo, un usuario autenticado puede **recorrer la secuencia** (1, 2, 3, …) y
+cosechar los datos de todas las órdenes del sistema. El cambio no altera la autorización;
+altera la **dificultad práctica** de explotarla.
+
+**Decisión.** El humano fue informado explícitamente de este efecto y **ACEPTÓ el riesgo**
+el 2026-07-15, optando por **no** acotar la autorización en este cambio. Queda como **deuda
+abierta**, no como descuido ni como omisión del diseño.
+
+**Mitigaciones NO implementadas** (registradas para quien retome la deuda; ninguna está en
+el alcance actual y ninguna debe implementarse sin una decisión nueva):
+- Acotar `obtenerEtiquetaPorGuia` por zona/tienda según el rol del actor (el `adminTienda`
+  solo sus órdenes; el `adminSatelite`/`mensajero` solo su zona).
+- Mantener `num_guia` como identificador visible/escaneable, pero servir la ruta por un
+  token opaco no enumerable.
+- Rate limiting / auditoría de accesos a `/paquete/*` para detectar barridos.

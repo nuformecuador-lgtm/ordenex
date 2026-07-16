@@ -70,6 +70,8 @@ function ordenListRow(overrides: Record<string, unknown> = {}) {
     distrito: null,
     mensajeroSugerido: null,
     mensajeroAsignado: null,
+    // Gestión de reprogramación vigente (`take: 1`): vacío = sin reprogramación.
+    gestiones: [],
     ...overrides,
   };
 }
@@ -231,6 +233,71 @@ describe("OrdenRepository.findById (R34)", () => {
 });
 
 describe("OrdenRepository.list (R30/R31/R34)", () => {
+  // La columna "Liberada el" de la tab `reprogramada` sale de la gestión VIGENTE
+  // (`orden -> gestiones` es 1:N). El repo la resuelve con el MISMO shape que el
+  // cron de liberación (LiberacionReprogramadaRepository) y la serializa a
+  // `YYYY-MM-DD`, para que la fecha mostrada no pueda divergir de la que libera.
+  it("resuelve fechaReprogramacion de la gestión vigente y la serializa a YYYY-MM-DD", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow({
+        // @db.Date se guarda a medianoche UTC.
+        gestiones: [{ fechaReprogramacion: new Date("2026-07-20T00:00:00.000Z") }],
+      }),
+    ]);
+    prisma.orden.count.mockResolvedValue(1);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.list({
+      where: { estatusId: "os-reprogramada" },
+      sortBy: "num_guia",
+      sortDir: "asc",
+      skip: 0,
+      take: 20,
+    });
+
+    expect(res.items[0].fechaReprogramacion).toBe("2026-07-20");
+  });
+
+  it("sin gestión de reprogramación vigente, fechaReprogramacion es null", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([ordenListRow({ gestiones: [] })]);
+    prisma.orden.count.mockResolvedValue(1);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.list({
+      where: {},
+      sortBy: "num_guia",
+      sortDir: "asc",
+      skip: 0,
+      take: 20,
+    });
+
+    expect(res.items[0].fechaReprogramacion).toBeNull();
+  });
+
+  it("pide SOLO la gestión de reprogramación vigente: no anulada y la más reciente", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([ordenListRow()]);
+    prisma.orden.count.mockResolvedValue(1);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.list({
+      where: {},
+      sortBy: "num_guia",
+      sortDir: "asc",
+      skip: 0,
+      take: 20,
+    });
+
+    const arg = prisma.orden.findMany.mock.calls[0][0];
+    expect(arg.include.gestiones).toMatchObject({
+      where: { resultado: "reprogramada", anuladaAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 1,
+    });
+  });
+
   it("devuelve items y total, excluye borradas y mapea el orden de lista blanca", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([

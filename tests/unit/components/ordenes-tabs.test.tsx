@@ -249,3 +249,52 @@ describe("OrdenesTabs — mensajero (R20)", () => {
     expect(listarOrdenesMock).not.toHaveBeenCalled();
   });
 });
+
+// La tab `reprogramada` es la ÚNICA que muestra "Liberada el" (el día para el que
+// quedó reprogramada la orden = cuando el cron la desbloquea, feature 46).
+describe("OrdenesTabs — columna 'Liberada el' solo en la tab reprogramada", () => {
+  // Catálogo propio: el CATALOGO compartido fija el número de tabs que asertan
+  // otros tests (R12/R13), así que `reprogramada` se añade solo aquí.
+  const CATALOGO_CON_REPROGRAMADA = [
+    ...CATALOGO,
+    { id: "est-reprogramada", value: "reprogramada" },
+  ];
+
+  beforeEach(() => {
+    listarOrderStatusMock.mockResolvedValue({
+      status: "ok",
+      estatus: CATALOGO_CON_REPROGRAMADA,
+    });
+  });
+
+  it("la tab reprogramada muestra la columna con la fecha de la orden", async () => {
+    const user = userEvent.setup();
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      items: [{ ...makeOrden("o1", 1001), fechaReprogramacion: "2026-07-20" }],
+      total: 1,
+      page: 1,
+      pageSize: 10,
+    });
+    renderTabs(<OrdenesTabs />);
+
+    await user.click(await screen.findByRole("tab", { name: /reprogramada/i }));
+
+    expect(
+      await screen.findByRole("columnheader", { name: "Liberada el" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("2026-07-20")).toBeInTheDocument();
+  });
+
+  it("otra tab NO muestra la columna", async () => {
+    const user = userEvent.setup();
+    renderTabs(<OrdenesTabs />);
+
+    await user.click(await screen.findByRole("tab", { name: /en bodega/i }));
+    await screen.findByRole("table");
+
+    expect(
+      screen.queryByRole("columnheader", { name: "Liberada el" }),
+    ).toBeNull();
+  });
+});

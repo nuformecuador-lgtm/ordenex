@@ -6,7 +6,7 @@ import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 const ESTATUS_LABELS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   entregada: "Entregada",
   devuelta: "Devuelta",
-  devuelta_origen: "Devuelta a origen",
+  devuelta_origen: "En ruta a origen",
   reprogramada: "Reprogramada",
   en_fulfillment: "En fulfillment",
   en_ruta_bodega_principal: "En ruta a bodega principal",

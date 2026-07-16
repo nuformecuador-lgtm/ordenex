@@ -40,7 +40,7 @@ describe("R3: unauthenticated antes de tocar el service", () => {
 
   it("recibir sin actor -> unauthenticated, sin tocar el service", async () => {
     const service = buildService();
-    const r = await recibirPorQr({ ordenId: "o1" }, { service, getActor: noActor });
+    const r = await recibirPorQr({ numGuia: 10 }, { service, getActor: noActor });
     expect(r.status).toBe("unauthenticated");
     expect(service.recibir).not.toHaveBeenCalled();
   });
@@ -66,43 +66,55 @@ describe("listar delega en el service", () => {
 // --- recibir: zod de borde (R16) + delegacion (R10) ---
 
 describe("recibirPorQr — validacion de borde (R16) y delegacion (R10)", () => {
-  it("R16: ordenId vacio -> validation_error, sin tocar el service", async () => {
+  it("R16: numGuia como texto (no numero) -> validation_error, sin tocar el service", async () => {
     const service = buildService();
-    const r = await recibirPorQr({ ordenId: "" }, { service, getActor: actorAdmin });
+    const r = await recibirPorQr({ numGuia: "10" }, { service, getActor: actorAdmin });
     expect(r.status).toBe("validation_error");
     expect(service.recibir).not.toHaveBeenCalled();
   });
 
-  it("R16: ordenId solo espacios (ilegible) -> validation_error, sin service", async () => {
+  it("R16: numGuia no entero positivo (0 / negativo / decimal) -> validation_error, sin service", async () => {
     const service = buildService();
-    const r = await recibirPorQr({ ordenId: "   " }, { service, getActor: actorAdmin });
-    expect(r.status).toBe("validation_error");
+    for (const numGuia of [0, -1, 1.5]) {
+      const r = await recibirPorQr({ numGuia }, { service, getActor: actorAdmin });
+      expect(r.status).toBe("validation_error");
+    }
     expect(service.recibir).not.toHaveBeenCalled();
   });
 
-  it("R16: input sin ordenId (forma invalida) -> validation_error, sin service", async () => {
+  it("R16: input sin numGuia (forma invalida, QR ilegible) -> validation_error, sin service", async () => {
     const service = buildService();
     const r = await recibirPorQr({}, { service, getActor: actorAdmin });
     expect(r.status).toBe("validation_error");
     expect(service.recibir).not.toHaveBeenCalled();
   });
 
-  it("R10: texto valido (orden.id) delega en el service con el ordenId (trim) y el actor", async () => {
+  it("R16: UUID escaneado (etiqueta antigua) -> validation_error, sin service (corte limpio)", async () => {
     const service = buildService();
-    const r = await recibirPorQr({ ordenId: "  o1  " }, { service, getActor: actorAdmin });
+    const r = await recibirPorQr(
+      { numGuia: "3f1c7c2e-9a1a-4f0e-9d4a-2b6a1c9e5d33" },
+      { service, getActor: actorAdmin },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.recibir).not.toHaveBeenCalled();
+  });
+
+  it("R10: num_guia valido delega en el service con el numGuia y el actor", async () => {
+    const service = buildService();
+    const r = await recibirPorQr({ numGuia: 10 }, { service, getActor: actorAdmin });
     expect(r.status).toBe("ok");
-    expect(service.recibir).toHaveBeenCalledWith("o1", ADMIN);
+    expect(service.recibir).toHaveBeenCalledWith(10, ADMIN);
   });
 
   it("resultados de dominio del service pasan tal cual (zona_ajena)", async () => {
     const service = buildService({ recibir: vi.fn(async () => ({ status: "zona_ajena" as const })) });
-    const r = await recibirPorQr({ ordenId: "o1" }, { service, getActor: actorAdmin });
+    const r = await recibirPorQr({ numGuia: 10 }, { service, getActor: actorAdmin });
     expect(r.status).toBe("zona_ajena");
   });
 
   it("ya_recibida del service pasa tal cual (idempotente, R14)", async () => {
     const service = buildService({ recibir: vi.fn(async () => ({ status: "ya_recibida" as const })) });
-    const r = await recibirPorQr({ ordenId: "o1" }, { service, getActor: actorAdmin });
+    const r = await recibirPorQr({ numGuia: 10 }, { service, getActor: actorAdmin });
     expect(r.status).toBe("ya_recibida");
   });
 });
@@ -158,10 +170,10 @@ describe("withErrorHandler envuelve los cuerpos de las actions", () => {
         throw new Error("db down");
       }),
     });
-    await expect(recibirPorQr({ ordenId: "o1" }, { service, getActor: actorAdmin })).rejects.toThrow(
+    await expect(recibirPorQr({ numGuia: 10 }, { service, getActor: actorAdmin })).rejects.toThrow(
       /AppErrorCode inesperado/,
     );
-    await expect(recibirPorQr({ ordenId: "o1" }, { service, getActor: actorAdmin })).rejects.not.toThrow(
+    await expect(recibirPorQr({ numGuia: 10 }, { service, getActor: actorAdmin })).rejects.not.toThrow(
       /^db down$/,
     );
   });

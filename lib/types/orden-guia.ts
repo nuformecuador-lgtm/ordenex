@@ -85,7 +85,16 @@ export interface MensajeroLiteDTO {
 }
 
 export type ListarMensajerosParaAsignacionResult =
-  | { status: "ok"; mensajeros: MensajeroLiteDTO[] }
+  | {
+      status: "ok";
+      mensajeros: MensajeroLiteDTO[];
+      /**
+       * Ajuste maestro: ids de mensajeros GAM con un cierre abierto (`solicitado`/
+       * `vencido`). La UI los deshabilita en el selector para no asignarles nuevas
+       * órdenes. Opcional (aditivo): ausente = ninguno bloqueado.
+       */
+      bloqueadosIds?: string[];
+    }
   | { status: "unauthenticated" }
   | { status: "forbidden" };
 

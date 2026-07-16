@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
 
@@ -16,7 +17,11 @@ vi.mock("@/lib/actions/ordenes", () => ({
 
 import { OrdenesModule } from "@/app/(app)/ordenes/_components/OrdenesModule";
 
-function makeOrden(id: string, numGuia: number): OrdenListItemDTO {
+function makeOrden(
+  id: string,
+  numGuia: number,
+  overrides: Partial<OrdenListItemDTO> = {},
+): OrdenListItemDTO {
   return {
     id,
     numGuia,
@@ -36,6 +41,7 @@ function makeOrden(id: string, numGuia: number): OrdenListItemDTO {
     notas: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
+    ...overrides,
   } as OrdenListItemDTO;
 }
 
@@ -93,5 +99,98 @@ describe("OrdenesModule — prop `filter` opcional (R19, sin regresión R10)", (
       screen.getByRole("navigation", { name: "Paginación" }),
     ).toBeInTheDocument();
     await screen.findByText("1001");
+  });
+});
+
+// `bloqueoSeleccion`: deshabilita el checkbox de las filas que la acción del estado
+// no puede procesar (tab `rechazada`: solo la bodega central devuelve a la tienda),
+// en vez de dejar seleccionarlas y que el modal quede vacío/"bloqueado".
+describe("OrdenesModule — bloqueoSeleccion por fila", () => {
+  const acciones = [{ key: "devolver", label: "Devolver a la tienda", onRun: vi.fn() }];
+  // Solo las NO centrales (zonaEsGam !== true) se bloquean, con su motivo.
+  const bloqueoSeleccion = (o: OrdenListItemDTO) =>
+    o.zonaEsGam === true ? null : "Orden de zona satélite: la devuelve el admin satélite.";
+
+  beforeEach(() => {
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      items: [
+        makeOrden("gam", 5001, { zonaEsGam: true }),
+        makeOrden("sat", 5002, { zonaEsGam: false }),
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 2,
+    });
+  });
+
+  it("deshabilita el checkbox de la fila bloqueada y habilita el de la seleccionable", async () => {
+    renderModule(
+      <OrdenesModule
+        filter={{ status_id: "est-rechazada" }}
+        selectable
+        acciones={acciones}
+        bloqueoSeleccion={bloqueoSeleccion}
+      />,
+    );
+
+    await screen.findByText("5001");
+    // La GAM se puede seleccionar; la satélite no.
+    expect(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-gam" }),
+    ).not.toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("checkbox", {
+        name: /No se puede seleccionar la orden REM-sat/,
+      }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("marcar la fila seleccionable abre la barra de acciones; la bloqueada no se puede marcar", async () => {
+    const user = userEvent.setup();
+    renderModule(
+      <OrdenesModule
+        filter={{ status_id: "est-rechazada" }}
+        selectable
+        acciones={acciones}
+        bloqueoSeleccion={bloqueoSeleccion}
+      />,
+    );
+
+    await screen.findByText("5001");
+
+    // Marcar la satélite (deshabilitada) no hace nada: no aparece la barra.
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /No se puede seleccionar la orden REM-sat/,
+      }),
+    );
+    expect(screen.queryByText(/seleccionada/)).toBeNull();
+
+    // Marcar la GAM sí: aparece la barra con la acción "Devolver a la tienda".
+    await user.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-gam" }),
+    );
+    const barra = await screen.findByText(/1 seleccionada/);
+    expect(
+      within(barra.parentElement as HTMLElement).getByRole("button", {
+        name: "Devolver a la tienda",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("sin `bloqueoSeleccion` todas las filas son seleccionables (sin regresión)", async () => {
+    renderModule(
+      <OrdenesModule
+        filter={{ status_id: "est-rechazada" }}
+        selectable
+        acciones={acciones}
+      />,
+    );
+
+    await screen.findByText("5001");
+    for (const cb of screen.getAllByRole("checkbox")) {
+      expect(cb).not.toHaveAttribute("aria-disabled", "true");
+    }
   });
 });

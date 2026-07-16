@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
@@ -33,10 +33,29 @@ export function QrScanner({
 
   const regionId = useId().replace(/:/g, "_") + "-camara";
 
+  // El efecto NO puede depender de estas tres: `onDecoded` y `toast` cambian de
+  // identidad en cada render de los consumidores (p. ej. `useQrNavigate` la
+  // recrea al mover su flag `procesando`), y tenerlas en las deps limpiaba el
+  // efecto y RE-ARRANCABA la cámara, que volvía a decodificar el mismo QR en
+  // bucle. Las leemos por ref: siempre la versión fresca, cero churn de deps.
+  const onDecodedRef = useRef(onDecoded);
+  const toastRef = useRef(toast);
+  const mensajeErrorCamaraRef = useRef(mensajeErrorCamara);
+  useEffect(() => {
+    onDecodedRef.current = onDecoded;
+    toastRef.current = toast;
+    mensajeErrorCamaraRef.current = mensajeErrorCamara;
+  });
+
   useEffect(() => {
     if (!camaraAbierta) return;
     let cancelado = false;
     let iniciado = false;
+    // html5-qrcode sigue entregando frames (~fps) hasta que `stop()` resuelve,
+    // que es asíncrono: sin este pestillo el primer QR dispara `onDecoded` una
+    // vez por frame. Un `useState` no serviría — el callback vive en la clausura
+    // que `start()` capturó y nunca vería el valor nuevo.
+    let entregado = false;
     let instancia: {
       stop: () => Promise<void>;
       clear: () => void;
@@ -52,15 +71,17 @@ export function QrScanner({
           { facingMode: "environment" },
           { fps: 10, qrbox: 250 },
           (decodedText: string) => {
+            if (entregado || cancelado) return;
+            entregado = true;
             setCamaraAbierta(false);
-            onDecoded(decodedText);
+            onDecodedRef.current(decodedText);
           },
           undefined,
         );
         iniciado = true;
       } catch {
         if (!cancelado) {
-          toast.error(mensajeErrorCamara);
+          toastRef.current.error(mensajeErrorCamaraRef.current);
           setCamaraAbierta(false);
         }
       }
@@ -82,7 +103,7 @@ export function QrScanner({
         }
       }
     };
-  }, [camaraAbierta, regionId, onDecoded, toast, mensajeErrorCamara]);
+  }, [camaraAbierta, regionId]);
 
   return (
     <>

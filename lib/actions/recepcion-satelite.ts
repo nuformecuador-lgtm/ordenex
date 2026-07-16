@@ -124,7 +124,7 @@ export async function listarRecepcionSatelite(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
-/** R3/R10/R16/R17: recibe una orden por el `orden.id` escaneado (texto del QR). */
+/** R3/R10/R16/R17: recibe una orden por el `num_guia` escaneado (el QR codifica /paquete/<numGuia>). */
 export async function recibirPorQr(
   input: unknown,
   deps: RecepcionSateliteDeps = {},
@@ -134,7 +134,7 @@ export async function recibirPorQr(
     if (!actor) throw new UnauthenticatedError();
     const data = recibirSchema.parse(input); // R16: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.recibir(data.ordenId, actor);
+    return service.recibir(data.numGuia, actor);
   });
   return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
 }
@@ -231,7 +231,14 @@ export async function estadoBloqueoBodegaSatelite(
       // Sin zona no hay bodega que bloquear (la vista ya avisa `sinZona`).
       return {
         status: "ok" as const,
-        bloqueo: { bloqueada: false, porMensajeros: false, porCierreBodega: false },
+        bloqueo: {
+          bloqueada: false,
+          porMensajeros: false,
+          porCierreBodega: false,
+          cierresAbiertos: 0,
+          totalMensajeros: 0,
+          mensajerosConCierreIds: [],
+        },
       };
     }
     const bloqueo = await repo.existeBodegaSateliteBloqueada(zonaId);

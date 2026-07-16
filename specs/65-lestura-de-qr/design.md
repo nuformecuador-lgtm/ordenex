@@ -93,8 +93,11 @@ router.push(qrUrl.pathname + qrUrl.search);
 ```
 
 **No se restringe a `/paquete/*`**: aunque hoy los QR solo codifican rutas
-`/paquete/<ordenId>`, validar por origen es más flexible y no requiere
-modificaciones si en el futuro se codifican otras rutas.
+`/paquete/<numGuia>` (feature 32, decisión (a') del 2026-07-15: el QR codifica
+`num_guia`, no `orden.id`), validar por origen es más flexible y no requiere
+modificaciones si en el futuro se codifican otras rutas. Esta feature es **agnóstica
+al cambio**: valida por `origin` y redirige al `pathname`, sea cual sea el
+identificador del segmento; no requiere ajustes por el corte a `num_guia`.
 
 ## Icono del menú
 

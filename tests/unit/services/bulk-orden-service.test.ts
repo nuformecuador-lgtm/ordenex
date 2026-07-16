@@ -40,6 +40,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados por la
     // carga masiva (feature 15) pero exigidos por la interfaz IOrdenRepository.
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
+    findByNumGuiaForTransicion: vi.fn().mockResolvedValue(null),
     findMensajeroIdsValidos: vi.fn().mockResolvedValue(new Set()),
     findAllMensajeros: vi.fn().mockResolvedValue([]),
     listOrderStatus: vi.fn().mockResolvedValue([]),
@@ -53,12 +54,14 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
     // Feature 32: etiqueta de guia, exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
+    findEtiquetaByNumGuia: vi.fn().mockResolvedValue(null),
     // Feature 33: recepcion en bodega satelite, no ejercitada aqui pero exigida
     // por la interfaz IOrdenRepository.
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
     findUsuarioVehiculoId: vi.fn().mockResolvedValue(null), // feature 39: exigido por IOrdenRepository
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
+    recibirEnOrigen: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).

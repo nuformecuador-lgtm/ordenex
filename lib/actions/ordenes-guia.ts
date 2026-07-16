@@ -28,7 +28,10 @@ function buildGuiaService(): IGuiaAsignacionService {
   return new GuiaAsignacionService(new OrdenRepository(prisma), new ZonaRepository(prisma));
 }
 
-function buildOrdenRepo(): Pick<IOrdenRepository, "findMensajerosByZona"> {
+function buildOrdenRepo(): Pick<
+  IOrdenRepository,
+  "findMensajerosByZona" | "findMensajerosBloqueados"
+> {
   return new OrdenRepository(getPrismaClient());
 }
 
@@ -46,7 +49,10 @@ export interface GuiaActionDeps {
 }
 
 export interface ListarMensajerosDeps {
-  ordenRepo?: Pick<IOrdenRepository, "findMensajerosByZona">;
+  ordenRepo?: Pick<
+    IOrdenRepository,
+    "findMensajerosByZona" | "findMensajerosBloqueados"
+  >;
   zonaRepo?: Pick<IZonaRepository, "findCentralZonaId">;
   getActor?: () => Promise<Actor | null>;
 }
@@ -133,7 +139,14 @@ export async function listarMensajerosParaAsignacion(
     }
     const repo = deps.ordenRepo ?? buildOrdenRepo();
     const mensajeros = await repo.findMensajerosByZona(centralZonaId);
-    return { status: "ok" as const, mensajeros };
+    // Ajuste maestro: marca los mensajeros GAM con un cierre abierto para que la UI los
+    // deshabilite en el selector (no se les asignan nuevas órdenes hasta resolverlo).
+    const bloqueados = await repo.findMensajerosBloqueados(mensajeros.map((m) => m.id));
+    return {
+      status: "ok" as const,
+      mensajeros,
+      bloqueadosIds: [...bloqueados],
+    };
   });
   // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el
   // unico AppErrorShape posible es UNAUTHORIZED.

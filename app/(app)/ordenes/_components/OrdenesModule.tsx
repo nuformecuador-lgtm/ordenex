@@ -74,6 +74,7 @@ export function OrdenesModule({
   mostrarHistorial = false,
   filter,
   selectable = false,
+  bloqueoSeleccion,
   acciones,
 }: {
   columns?: Column<OrdenListItemDTO>[];
@@ -88,6 +89,15 @@ export function OrdenesModule({
   filter?: { status_id: string };
   /** Habilita la columna de checkbox por fila (selección por lote, solo maestro). */
   selectable?: boolean;
+  /**
+   * Predicado de bloqueo por fila: devuelve el MOTIVO (texto) si la orden NO puede
+   * seleccionarse, o `null` si sí. Cuando devuelve motivo, el checkbox se deshabilita
+   * y el texto va en su tooltip. Se usa cuando una acción del estado no aplica a
+   * todas las filas (p. ej. la tab `rechazada`: la bodega central solo devuelve a la
+   * tienda las órdenes de su zona; las satélite las devuelve el adminSatelite). Sin
+   * el predicado, todas las filas son seleccionables.
+   */
+  bloqueoSeleccion?: (row: OrdenListItemDTO) => string | null;
   /**
    * Acciones por lote disponibles para este listado/estado. Se muestran en una barra
    * contextual SOLO cuando hay ≥1 fila marcada. Sin acciones o sin selección, no se
@@ -115,15 +125,27 @@ export function OrdenesModule({
           {
             id: "seleccionar",
             value: "Seleccionar",
-            render: (row) => (
-              <Checkbox
-                checked={seleccionIds.has(row.id)}
-                onCheckedChange={(checked) =>
-                  toggleSeleccion(row.id, checked === true)
-                }
-                aria-label={`Seleccionar orden ${row.numRemision}`}
-              />
-            ),
+            render: (row) => {
+              // Motivo de bloqueo (o null): deshabilita el checkbox y lo explica en
+              // el tooltip, en vez de dejar seleccionar una orden que la acción del
+              // estado va a descartar (lo que dejaba el modal vacío/"bloqueado").
+              const motivo = bloqueoSeleccion?.(row) ?? null;
+              return (
+                <Checkbox
+                  checked={seleccionIds.has(row.id)}
+                  disabled={motivo !== null}
+                  onCheckedChange={(checked) =>
+                    toggleSeleccion(row.id, checked === true)
+                  }
+                  aria-label={
+                    motivo
+                      ? `No se puede seleccionar la orden ${row.numRemision}: ${motivo}`
+                      : `Seleccionar orden ${row.numRemision}`
+                  }
+                  title={motivo ?? undefined}
+                />
+              );
+            },
           },
           ...columns,
         ]
@@ -145,7 +167,7 @@ export function OrdenesModule({
         ),
       },
     ];
-  }, [columns, mostrarHistorial, selectable, seleccionIds]);
+  }, [columns, mostrarHistorial, selectable, seleccionIds, bloqueoSeleccion]);
 
   // Feature 63/C2 (R17): el `status_id` entra en la key SWR para que la caché y
   // la paginación sean por-tab. Sin `filter`, `statusId` es `undefined`.

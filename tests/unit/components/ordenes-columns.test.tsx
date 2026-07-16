@@ -3,7 +3,10 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 
 import { DataTable } from "@/components/shared/DataTable";
-import { ordenesColumns } from "@/app/(app)/ordenes/_components/ordenes-columns";
+import {
+  ordenesColumns,
+  ordenesColumnsReprogramada,
+} from "@/app/(app)/ordenes/_components/ordenes-columns";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 afterEach(() => {
@@ -99,5 +102,55 @@ describe("ordenesColumns — feature 30 (R15: estado ruteado legible por zona)",
     expect(
       within(fila).queryByText("En ruta a bodega satélite"),
     ).toBeNull();
+  });
+});
+
+// La tab `reprogramada` añade "Liberada el": el día para el que quedó reprogramada
+// la orden (= cuando el cron de liberación la desbloquea, feature 46). El valor
+// llega del repo ya como `YYYY-MM-DD`; se renderiza tal cual, sin reinterpretarlo
+// como Date en el cliente (eso reintroduciría el off-by-one de zona horaria).
+describe("ordenesColumnsReprogramada — columna 'Liberada el'", () => {
+  it("añade la columna al final, sin perder ninguna de las base", () => {
+    expect(ordenesColumnsReprogramada.length).toBe(ordenesColumns.length + 1);
+    expect(ordenesColumnsReprogramada.at(-1)?.id).toBe("liberada");
+    // Las base se conservan en su orden original.
+    expect(ordenesColumnsReprogramada.slice(0, -1)).toEqual(ordenesColumns);
+  });
+
+  it("muestra la fecha de reprogramación tal cual la sirve el repo", () => {
+    const orden = makeOrden({ id: "o1", fechaReprogramacion: "2026-07-20" });
+    render(
+      <DataTable
+        columns={ordenesColumnsReprogramada}
+        data={[orden]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+
+    const fila = screen.getAllByRole("row")[1];
+    expect(within(fila).getByText("2026-07-20")).toBeInTheDocument();
+  });
+
+  it("muestra el placeholder si la orden no tiene gestión de reprogramación vigente", () => {
+    const orden = makeOrden({ id: "o1", fechaReprogramacion: null });
+    render(
+      <DataTable
+        columns={ordenesColumnsReprogramada}
+        data={[orden]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+
+    // Por índice de celda: otras columnas también usan "—" como placeholder, así
+    // que buscar el texto suelto no distingue cuál es. Es la última columna.
+    const fila = screen.getAllByRole("row")[1];
+    const celdas = within(fila).getAllByRole("cell");
+    expect(celdas.at(-1)).toHaveTextContent("—");
+  });
+
+  it("las columnas base NO incluyen 'Liberada el' (solo la tab reprogramada)", () => {
+    expect(ordenesColumns.some((c) => c.id === "liberada")).toBe(false);
   });
 });

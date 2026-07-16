@@ -45,6 +45,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
   return {
     findMisAsignaciones: vi.fn(async () => []),
     contarEntregadas: vi.fn(async () => 0),
+    sumMontoCobrarEntregadas: vi.fn(async () => 0),
     findByIdsParaGestion: vi.fn(async () => [gestionRow()]),
     getOrdenEnGestion: vi.fn(async () => null),
     setOrdenEnGestion: vi.fn(async () => true),

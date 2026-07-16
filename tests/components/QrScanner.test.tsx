@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -142,6 +143,55 @@ describe("QrScanner", () => {
     expect(
       screen.getByRole("button", { name: "Escanear con cámara" }),
     ).toBeDisabled();
+  });
+
+  // Regresión (bucle de escaneo): html5-qrcode entrega un frame por tick hasta
+  // que `stop()` resuelve, así que el mismo QR llegaba al callback muchas veces
+  // y disparaba la acción del consumidor una vez por frame.
+  it("entrega un solo onDecoded aunque la cámara siga decodificando frames", async () => {
+    const user = userEvent.setup();
+    const onDecoded = vi.fn();
+    render(<QrScanner onDecoded={onDecoded} />);
+
+    await user.click(screen.getByRole("button", { name: "Escanear con cámara" }));
+    await vi.waitFor(() => expect(decodeCallback.current).not.toBeNull());
+
+    await decodificar("https://ordenex.app/paquete/ord-1");
+    await decodificar("https://ordenex.app/paquete/ord-1");
+    await decodificar("https://ordenex.app/paquete/ord-1");
+
+    expect(onDecoded).toHaveBeenCalledTimes(1);
+  });
+
+  // Regresión (bucle de escaneo): `onDecoded` y `toast` cambian de identidad en
+  // cada render de los consumidores (`useQrNavigate` recrea `onDecoded` al mover
+  // su flag `procesando`). Estaban en las deps del efecto, así que un re-render
+  // limpiaba el efecto y RE-ARRANCABA la cámara → nuevo decode → bucle.
+  it("no reinicia la cámara cuando el consumidor recrea onDecoded en cada render", async () => {
+    const user = userEvent.setup();
+
+    function Consumidor() {
+      const [, setTick] = useState(0);
+      return (
+        <>
+          <button type="button" onClick={() => setTick((t) => t + 1)}>
+            re-render
+          </button>
+          {/* identidad nueva en cada render, como en useQrNavigate */}
+          <QrScanner onDecoded={() => {}} />
+        </>
+      );
+    }
+
+    render(<Consumidor />);
+    await user.click(screen.getByRole("button", { name: "Escanear con cámara" }));
+    await vi.waitFor(() => expect(startMock).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: "re-render" }));
+    await user.click(screen.getByRole("button", { name: "re-render" }));
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    expect(stopMock).not.toHaveBeenCalled();
   });
 
   it("al cerrar la cámara detiene y limpia el scanner (sin fuga)", async () => {
