@@ -14,7 +14,7 @@ import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWallet
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
-import { WITH_DETALLE, toPendienteRow } from "@/lib/repositories/CierreDiaRepository";
+import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
 
 // Estados de ORIGEN que la resolucion puede transicionar (R12). Feature 41/E1 (R19):
 // ademas de `solicitado`, un `vencido` (creado por el corte diario) es resoluble por la
@@ -24,7 +24,87 @@ const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado", "vencido"];
 
 // Feature 42/T8: la resolucion del cierre ahora orquesta una transaccion (para alimentar
 // la wallet atomicamente al aprobar, R5/R7) -> el cliente necesita `$transaction`.
-type CierresAdminPrismaClient = Pick<PrismaClient, "cierreDia" | "gestionOrden" | "$transaction">;
+// Feature 69/T18: el detalle del admin sale del SNAPSHOT -> necesita `cierreDetail`.
+type CierresAdminPrismaClient = Pick<
+  PrismaClient,
+  "cierreDia" | "gestionOrden" | "cierreDetail" | "$transaction"
+>;
+
+// Feature 69/T18 (R15) — proyeccion del detalle del cierre YA CREADO: los DESCRIPTIVOS
+// congelados de la orden (`WITH_DETALLE` los navegaba VIVOS via `gestion_orden.orden.*`).
+// Exportado desde T23: `CierresBodegaAdminRepository` (feature 40) muestra el detalle del
+// MISMO cierre_dia ya creado y debe leerlo del MISMO snapshot. Compartir la proyeccion y el
+// mapper (y no re-escribirlos) es lo que impide que las dos pantallas de admin diverjan.
+export const DETALLE_ADMIN_SELECT = {
+  ordenId: true,
+  numGuia: true,
+  numRemision: true,
+  destinatario: true,
+  direccion: true,
+  producto: true,
+  tiendaNombre: true,
+  zonaNombre: true,
+  provinciaNombre: true,
+  cantonNombre: true,
+  distritoNombre: true,
+} as const;
+
+// Feature 69/T18 — lo que aporta la GESTION (que NO se congela: es suyo, no de la orden).
+export const GESTION_ADMIN_SELECT = {
+  id: true,
+  ordenId: true,
+  resultado: true,
+  montoRecibido: true,
+  metodoPago: true,
+  motivo: true,
+  fechaReprogramacion: true,
+  evidenciaStoragePath: true,
+  pagoMensajero: true, // feature 39: snapshot del pago al mensajero
+  ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo
+} as const;
+
+type DetalleAdminRow = Prisma.CierreDetailGetPayload<{ select: typeof DETALLE_ADMIN_SELECT }>;
+type GestionAdminRow = Prisma.GestionOrdenGetPayload<{ select: typeof GESTION_ADMIN_SELECT }>;
+
+// Money-safe: Decimal -> string escala 2 fija (nunca number/parseFloat).
+function decimalToString(d: Prisma.Decimal | null): string | null {
+  return d === null ? null : d.toFixed(2);
+}
+
+/**
+ * Feature 69/T18 (R15) — compone gestion + snapshot en el MISMO DTO que devolvia
+ * `toPendienteRow` (la UI no cambia). La gestion aporta lo suyo (`resultado`, `montoRecibido`,
+ * evidencia, snapshots 39/56); `cierre_detail` aporta lo de la ORDEN, CONGELADO.
+ */
+export function toPendienteRowDesdeSnapshot(
+  g: GestionAdminRow,
+  d: DetalleAdminRow,
+): CierreGestionPendienteRow {
+  return {
+    gestionId: g.id,
+    ordenId: g.ordenId,
+    numGuia: d.numGuia,
+    numRemision: d.numRemision,
+    destinatario: d.destinatario,
+    direccion: d.direccion,
+    zonaNombre: d.zonaNombre,
+    provinciaNombre: d.provinciaNombre,
+    cantonNombre: d.cantonNombre,
+    distritoNombre: d.distritoNombre,
+    producto: d.producto,
+    tiendaNombre: d.tiendaNombre,
+    resultado: g.resultado,
+    montoRecibido: decimalToString(g.montoRecibido),
+    metodoPago: g.metodoPago,
+    motivo: g.motivo,
+    fechaReprogramacion: g.fechaReprogramacion
+      ? g.fechaReprogramacion.toISOString().slice(0, 10)
+      : null,
+    evidenciaStoragePath: g.evidenciaStoragePath,
+    pagoMensajero: decimalToString(g.pagoMensajero),
+    ingresoBodegaRechazo: decimalToString(g.ingresoBodegaRechazo),
+  };
+}
 
 // Proyeccion de la cabecera de un cierre (join a mensajero/zona para nombres).
 const CIERRE_RESUMEN_SELECT = {
@@ -82,8 +162,13 @@ function alcanceWhere(alcance: Alcance): { destinoTipo: Alcance["destinoTipo"]; 
 
 /**
  * Feature 38 — repositorio de "Cierres del dia" del admin. SOLO queries Prisma. El
- * ALCANCE (rol+zona destino) va SIEMPRE en el WHERE (R2/R13), nunca en memoria. Reusa
- * WITH_DETALLE / toPendienteRow de la feature 37 para el detalle de gestiones.
+ * ALCANCE (rol+zona destino) va SIEMPRE en el WHERE (R2/R13), nunca en memoria.
+ *
+ * Feature 69/T18 (R15): el detalle de un cierre YA CREADO se compone del SNAPSHOT
+ * (`cierre_detail`) + la gestion, y devuelve el MISMO DTO (`CierreGestionPendienteRow`): la UI
+ * no cambia. Ya NO reusa `WITH_DETALLE`/`toPendienteRow` de la 37 — esos siguen existiendo
+ * para la vista EN VIVO (`findGestionesPendientes`: gestiones con `cierre_id IS NULL`, que por
+ * definicion no tienen snapshot). R16 = no romper eso.
  */
 export class CierresAdminRepository implements ICierresAdminRepository {
   constructor(
@@ -116,7 +201,10 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     return rows.map(toResumenRow);
   }
 
-  /** R6/R7/R9/R13: cierre (solo si casa el alcance) + sus gestiones (WITH_DETALLE). */
+  /**
+   * R6/R7/R9/R13: cierre (solo si casa el alcance) + sus gestiones. Feature 69/T18 (R15/R19):
+   * el detalle se compone del SNAPSHOT + la gestion, en el MISMO DTO.
+   */
   async findCierreByIdEnAlcance(
     cierreId: string,
     alcance: Alcance,
@@ -127,12 +215,34 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     });
     if (cierre === null) return null; // R13: no existe o de otra bodega/zona (no se distingue)
 
-    const gestiones = await this.prisma.gestionOrden.findMany({
-      where: { cierreId }, // R6: gestiones vinculadas a ESTE cierre
-      orderBy: { createdAt: "desc" },
-      ...WITH_DETALLE,
-    });
-    return { cierre: toResumenRow(cierre), gestiones: gestiones.map(toPendienteRow) };
+    // Feature 69/T18 (R15): el detalle de un cierre YA CREADO sale del SNAPSHOT, no de la
+    // orden VIVA. Antes esto reusaba `WITH_DETALLE`, que navegaba `gestion_orden.orden.*`: el
+    // admin veia los valores de HOY, no los del cierre que esta revisando.
+    // R19 sale de aqui gratis: una orden con `deleted_at` sigue mostrandose, y ahora por
+    // diseño y no por el accidente de que `WITH_DETALLE` no filtraba `deletedAt`.
+    const [gestiones, detalle] = await Promise.all([
+      this.prisma.gestionOrden.findMany({
+        where: { cierreId }, // R6: gestiones vinculadas a ESTE cierre
+        orderBy: { createdAt: "desc" },
+        select: GESTION_ADMIN_SELECT,
+      }),
+      this.prisma.cierreDetail.findMany({
+        where: { cierreId },
+        select: DETALLE_ADMIN_SELECT,
+      }),
+    ]);
+    const byOrden = new Map(detalle.map((d) => [d.ordenId, d]));
+    return {
+      cierre: toResumenRow(cierre),
+      // Grano: N gestiones de una orden comparten su UNICA fila congelada.
+      // Sin fallback (R14/decision (a)): si falta la fila, es un error DURO, no un silencio
+      // que muestre datos vivos disfrazados de congelados.
+      gestiones: gestiones.map((g) => {
+        const d = byOrden.get(g.ordenId);
+        if (d === undefined) throw new CierreDetalleFaltanteError(cierreId, g.ordenId);
+        return toPendienteRowDesdeSnapshot(g, d);
+      }),
+    };
   }
 
   /**

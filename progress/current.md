@@ -7,7 +7,9 @@
 
 | Branch | Zona | Fase | Estado |
 |--------|------|------|--------|
+| feature/69-cierre-detail | fullstack (impl = **backend puro**) | F2 (bloque 0 hecho; **T5 → T22 en curso**) | **LA TABLA `cierre_detail` TODAVIA NO EXISTE** (sin modelo en `db/schema.prisma`, sin migracion): el bloque 0 (T1-T4) **NO construye la tabla, DESBLOQUEA el arbol**. Spec COMPLETA + **gate F1.4 APROBADA** 2026-07-15 (decisiones (a)-(g), **1 override**: (g) NO se filtra `tarifas.status`, se conserva el resolver + `TODO:`). `specs/69-cierre-detail/` = **R1-R30 + 23 tasks**. **YA ENTREGADO (medido):** typecheck **2 → 0** y `pnpm build` **ROJO → VERDE** — lo que la 68 nunca logro. **Las 23 tasks son BACKEND** (T18 devuelve el MISMO DTO: la UI no cambia, sin `frontend_dev`). **T5 desbloqueado 2026-07-15 mergeando `feature/72` en esta rama** — NO hacia falta esperar el merge del PR #76: git deduplica cuando la 72 entre a `dev`. Ese wait fue tiempo perdido por el leader. **PENDIENTE: T6 (modelo) → T7 (migracion + backfill + down.sql) → T10 (crearCierre puebla) → T14-T18 (lectores) → T19 (test de la propiedad) → reviewer → PR.** |
 | feature/72-tests-recibido-origen | fullstack | F2.4 (**PR #76 abierto**) | **DEVUELVE `dev` A VERDE.** Fix ágil (`sdd:false`, patrón 58/#70), rama desde `origin/dev` `14f6548`. 5 commits. **MEDIDO: 18 fallos → 2**, y los 2 restantes **pasan en aislado** (`OrdenesModuleReuse`, `HomePage`: `Test timed out in 5000ms` bajo carga de suite completa) → **flaky preexistentes, NO regresión**. `pnpm lint` 0 errores. `pnpm typecheck` **sigue en 2** (los de la 68 — se arreglan en la rama de la **69**, no acá). **Contenido:** (1) conteos `ORDER_STATUS_SEED` 13→14 + test posicional del 14.º + menú (ítem QR) + `order-status-enum-migration` + denylist de `zonas-migration`; **ningún test borrado ni aflojado** (patrón #70). (2) **RESTAURA las 5 columnas** que el PR #75 borró por drift (revert exacto de `8541498` sobre `ordenes-columns.tsx`, verificado: diff vacío contra el estado pre-drift, conservando `d201f56`) + **elimina el `console.log('xyz')`** que estaba VIVO en `dev`. (3) **arregla el guard `no-embalaje`**: `.claude` a `IGNORED_DIRS` (escaneaba los worktrees del harness y encontraba su propio reflejo) — **verificado con canario**: se metió `embalaje` en `lib/types/order-status.ts`, el guard **falló señalando el archivo**, se quitó y volvió a verde → ignora exactamente lo que debe y **sigue cazando de verdad**. **PENDIENTE: PR a `dev` + merge (OK humano).** **DESBLOQUEA el T5 de la 69.** |
+
 | feature/63-orden-lista-actualizada | fullstack | F2.4 (PR abierto) | **impl COMPLETA (R1–R20) + reviewer APROBADO 0 bloqueantes.** **PR #65 → `dev`** abierto. + Pedido humano: re-agregadas columnas (producto/dirección/zona/**monto a cobrar**/flete+IVA/fulfillment/comisión+IVA) y **adminTienda ahora VE Zona** (oculta solo Tienda). 50 tests propios/afectados verde; ordenes-columns R14-zona (era rojo baseline) ahora pasa. **PENDIENTE: merge del PR #65 (OK humano).** |
 | feature/64-pwa-basic | frontend | F2.4 (PR abierto) | **impl COMPLETA (T1–T8) + reviewer APROBADO 0 bloqueantes.** **PR #72 → `dev`** abierto. PWA básica: manifest.json, SW vanilla, meta tags, íconos 192/512, página offline. 7 archivos nuevos, 2 modificados. typecheck 0 errores nuevos, build ok. Lighthouse pendiente manual. **PENDIENTE: merge del PR #72 (OK humano).** |
 | feature/65-lestura-de-qr | frontend | F2.4 (PR abierto) | **impl COMPLETA (T1–T7) + reviewer APROBADO 0 bloqueantes.** **PR #73 → `dev`** abierto. Página `/qr` + item menú "QR" para todos los roles. 1 archivo nuevo, 2 modificados. typecheck 0 errores nuevos, lint 0, tests 0 regresiones. **PENDIENTE: merge del PR #73 (OK humano).** |
@@ -237,6 +239,113 @@
 ## Evaluaciones
 
 > El leader documenta aca cada evaluacion de zone/complexity/particion.
+
+- `listado del maestro: bloquear checkbox de ordenes con cierre sin resolver` (id 71): **zone=fullstack,
+  complexity=medium, depends_on=69.** Evaluada 2026-07-15. Pedida por el humano en el chat ("una vez
+  terminado" la 69), no venia del backlog. **PENDING a proposito**: la zona fullstack la ocupa la 69
+  (regla 1 del arnes), y el propio humano la puso detras.
+  **EL PEDIDO LITERAL ROMPE LAS FEATURES 46 Y 47** -- verificado en codigo, no supuesto. Pidio bloquear el
+  checkbox "si la orden esta registrada como parte de un cierre". Pero `crearCierre:195-198` puebla
+  `cierre_id` **por MENSAJERO** (`where: {mensajeroId, cierreId: null, anuladaAt: null}`), **sin mirar el
+  estado de la orden** -> una gestion `reprogramada`/`devuelta` entra al cierre igual que una `entregada`. Y
+  46/47 dependen de que esas ordenes VUELVAN al listado: la 46 las libera por cron a `en_bodega`
+  (`LiberacionReprogramadaRepository.liberarOrden:78-104` **NO toca `gestion_orden`**: la gestion sigue viva
+  CON su `cierre_id`) y la 47 manda la `devuelta` a `en_bodega` con `limpiaMensajero:true` para el reintento.
+  -> bloqueo literal = **checkbox muerto PARA SIEMPRE**: los intentos 2 y 3 del umbral inalcanzables y el cron
+  de liberacion de la 46 **funcionalmente ANULADO**. **Raiz: `cierre_id NOT NULL` es PERMANENTE E
+  IRREVERSIBLE** (un cierre aprobado nunca lo suelta) -> un bloqueo colgado de ese predicado no se levanta
+  jamas.
+  **DECISION DEL HUMANO tras exponerle el conflicto (parte de la gate F1.4):** el predicado es **cierre SIN
+  RESOLVER** (`solicitado`|`vencido`, reusa `ESTADOS_CIERRE_BLOQUEANTES` de la 41), NO `cierre_id NOT NULL`.
+  Bloqueo **TEMPORAL**: al resolverse el cierre la orden vuelve a ser asignable -> 46/47 sobreviven.
+  **HALLAZGOS DE LA EXPLORACION:** (1) el checkbox se arma INLINE en `OrdenesApartado.tsx:137-144`, sin
+  `disabled`; `ordenes-columns.tsx` no tiene columna de seleccion y `DataTable.tsx` es generico -> **un solo
+  punto a tocar**. (2) **NO existe patron de fila deshabilitada con motivo**: hay que crearlo; lo mas parecido
+  (`OrdenesRevisionMaestro.tsx:119-122,138-141`) filtra en SILENCIO al abrir el modal -> **mal precedente, no
+  copiarlo**. (3) el bloqueo de la 41 es por **MENSAJERO destino, no por orden**, y solo server-side; tiene UI
+  para mensajero (R21) y adminSatelite (R22) pero **ninguna para el listado del maestro**. (4) **el precedente
+  correcto es la 46**: `mensajes-bloqueo.ts:7-8` (`MSG_ORDEN_REPROGRAMADA_BLOQUEADA`) es la UNICA nocion de
+  bloqueo A NIVEL ORDEN que existe. (5) `zonaEsGam` (`lib/types/orden.ts:140-143`) es la **plantilla exacta**
+  del campo derivado opcional a anadir al DTO.
+  **OJO en la F1.4:** (a) UI-only **NO es una guarda** -> hace falta tambien server-side (patron 46), y por eso
+  es fullstack y no frontend; (b) N+1: el listado es paginado, el predicado necesita query en LOTE por pagina
+  (patron `findMensajerosBloqueados`, devuelve un Set); (c) hay que guardar `toggleSeleccion`/`seleccionadas`
+  (`OrdenesApartado.tsx:120-127,167`): una fila YA seleccionada sigue en el `Set` tras un revalidate de SWR ->
+  el bloqueo se saltearia solo; (d) **NO depende de `cierre_detail`**: el predicado sale de
+  `gestion_orden.cierre -> cierre_dia.estado`; no inventar una dependencia de datos que no existe.
+
+- `cierre_detail - congelar el detalle y la tarifa del cierre` (id 69): **zone=fullstack, complexity=high,
+  branch=feature/69-cierre-detail, depends_on=37 (done, en dev).** Evaluada 2026-07-15. Pedida por el humano
+  en el chat (no venia del backlog; se registro al vuelo). Rama a nacer de `origin/dev` (OJO: la sesion
+  estaba parada en la rama `qr`, no en dev).
+  **EL PEDIDO LITERAL YA ESTABA HECHO, igual que en la 67 — y de nuevo eso fue lo valioso.** Pidio "una tabla
+  relacion cierre_detail entre cierre_dia y orden, llenada al solicitar el cierre": esa relacion YA EXISTE
+  (`gestion_orden.orden_id` + `gestion_orden.cierre_id`, schema:380) y YA se llena sola en la tx de
+  `crearCierre:195`. Verificado en el codigo, no supuesto. Al preguntarle QUE resolvia la tabla que hoy no
+  estuviera resuelto, el humano eligio **"congelar el detalle (snapshot)"** -> ese, y no la relacion, es el
+  alcance.
+  **HALLAZGO CRITICO (money-critical, lo destapo la exploracion del leader, ningun test lo cubre):** los
+  totales SI estan congelados (37/R14, 39, 56), pero los **feeds de wallet leen campos VIVOS de `orden`
+  DESPUES de que el cierre existe**, dentro de la tx de aprobacion, y escriben a libros **append-only
+  inmutables**. `WalletFeedService:26-39` lee `orden.{zonaId, montoCobrar, cobraComision, zona.esCentral}`;
+  `WalletTiendaFeedService:59-74` lee ademas `orden.tiendaId` (= A QUIEN se le acredita/debita);
+  `WalletFeedService:46` resuelve la **tarifa VIVA**. Y `OrdenRepository.update:442` **no tiene guarda**
+  (WHERE = `{id, deletedAt:null}`, no mira gestiones ni cierres). -> Editar `monto_cobrar` o la tarifa entre
+  SOLICITAR y APROBAR **descuadra EN SILENCIO** los `total_*` snapshot contra los movimientos de wallet, sin
+  error, y solo se corrige a mano con `ajuste_credito`/`ajuste_debito`. `WalletMensajeroFeedService:31-33` es
+  el modelo sano: ya consume solo snapshots y por eso es inmune.
+  **El soft-delete resulto INOFENSIVO** (contra la intuicion): `WITH_DETALLE` navega `gestionOrden.orden` sin
+  filtrar `deletedAt` y la FK es NOT NULL -> la fila sigue mostrandose. **El vector de dano es el UPDATE, no
+  el DELETE.**
+  **Decisiones del humano (valen como parte de la gate F1.4):** (1) alcance = congelar **todo el grano orden**
+  (descriptivos + money-critical), no solo el detalle visual; grano `(cierre_id, orden_id)` porque los campos
+  congelados son de la ORDEN y no dependen de cuantas gestiones tenga en el cierre. (2) **INCLUIR la tarifa**
+  (override de la recomendacion del leader, que la dejaba aparte): congelar la orden sin congelar la tarifa
+  deja el agujero medio tapado.
+  **ABSORBE LA FEATURE 68 -> `status: cancelled` + `sdd:false` + `status_note`** (patron de las anuladas 35/60/62;
+  NO se borra). Su fix es un subconjunto estricto: la 69 tiene que recablear ese resolver igual.
+  **HALLAZGO QUE DESBLOQUEA LA 68, y corrige a la sesion anterior:** `current.md` afirmaba que arreglarla "NO
+  es un fix mecanico zonaId->tiendaId" porque "tarifa vigente por ZONA deja de estar definido si la tarifa
+  cuelga de una TIENDA". **Demasiado pesimista: se escribio sin cruzar el resolver con el modelo `Tarifa`.** La
+  dimension zona NO se perdio -- vive DENTRO de la fila (`valor_flete` vs `valor_flete_gam`,
+  `valor_flete_devuelto` vs `valor_flete_devuelto_gam`, schema:522-543) y `WalletFeedService:57` YA lee
+  `zona.esCentral` justamente para elegir columna. El humano **CONFIRMO el modelo**: la **tienda** decide QUE
+  fila de tarifa aplica (`orden.tienda_id` -> `tarifas.tienda_id`), la **zona** decide QUE COLUMNA se cobra.
+  Con eso la 68 deja de estar bloqueada por una decision de diseno. **-> esta feature DEVUELVE `dev` A
+  COMPILAR** (`pnpm build` e `init.sh` cortan hoy en `TarifaVigentePorZonaRepository:22`); tambien entra
+  `scripts/seed-zonas.ts:257` (`distrito.zonaId`, dropeada por `20260713000000_drop_distrito_zona_id`), el
+  otro de los 2 errores de typecheck.
+  **VERIFICACION = criterio de aceptacion, NO deuda:** arranca con `pnpm test`/`typecheck`/`lint` DIRECTOS
+  (init.sh rojo de base, precedente 64/67) y **DEBE terminar con `./init.sh` y `pnpm build` EN VERDE** y
+  typecheck **2 -> 0**. Hueco de test a saldar: la implementacion REAL del resolver de tarifa no tiene
+  cobertura (todos los tests la mockean) -- por eso la 68 nunca salio en rojo.
+  DECISION DE PROCESO (leader): un ciclo fullstack, NO el `implementer` monolitico (bug opus-4.8[1m]);
+  precedente 56/67. **La impl resulto BACKEND PURA -> `spec_author` -> `backend_dev` -> `reviewer`, SIN
+  `frontend_dev`** (T18 recompone el detalle admin desde el snapshot devolviendo el MISMO DTO: la UI no
+  cambia). El `backend_dev` **murio en el 1er intento por el bug opus-4.8[1m]** (sin tocar nada, arbol
+  limpio); relanzado con **`model: opus` explicito** -> workaround que funciona, anotarlo para las proximas.
+  **GATE F1.4 APROBADA por el humano 2026-07-15**: (a)-(f) tal como las recomendo el spec, **(g) con
+  OVERRIDE**. Spec = **R1-R30 / 23 tasks**, sellado como fuente de verdad de lo aprobado.
+  **La (g) nacio DENTRO de la fase 1** (no estaba en la evaluacion): el recableo destapo que el PR #64 anadio
+  `tarifas.status` (activo/inactivo) y **el resolver NO lo filtra** -> una tarifa `inactivo` puede liquidar
+  dinero. El humano decidio **NO filtrarlo en esta feature** (no mezclar dos cambios de dinero en un PR) y
+  dejar un `TODO:` -> **registrada la feature 70** como salida (regla del arnes: el pendiente va al backlog,
+  no solo a un comentario; es lo que le paso a la 68 al aparcarse).
+  **DOS CORRECCIONES QUE VALE GUARDAR.** (1) **El leader se equivoco y el spec_author lo cazo**: el leader
+  sugirio congelar los CONCEPTOS DERIVADOS (flete/IVA/comision) en vez de las ENTRADAS, por analogia con los
+  `*_movimiento`. **Falso**: esos conceptos dependen del `resultado` de la GESTION
+  (`lib/utils/ingreso-ordenex.ts:62,82`), no de la orden -> exigirian grano gestion, el que se descarto (una
+  orden puede tener 2 gestiones vigentes en un cierre). La analogia era aparente: los `*_movimiento` son la
+  SALIDA del cierre aprobado, y el hueco esta entre solicitar y aprobar, donde solo las ENTRADAS son estables.
+  (2) **El `TODO` de la (g) cambia de objeto**: "migrarlo a snapshot" queda SIN OBJETO porque el snapshot lo
+  introduce esta misma feature (R8). Lo pendiente es la **regla de SELECCION** de la fila vigente. Congelar no
+  corrige la seleccion: **la vuelve permanente**.
+  **HALLAZGO FINO (leader, matiza al spec_author):** la 69 NO empeora el resultado de la deuda (g) -- hoy una
+  tarifa inactiva ya se cobra mal y ya queda grabada para siempre en `wallet_movimiento`, append-only. Lo que
+  cambia es **CUANDO se cierra la ventana de correccion**: hoy la tarifa se resuelve AL APROBAR (arreglar la
+  config antes de aprobar todavia salva el cierre); tras la 69 se resuelve AL SOLICITAR -> la ventana pasa a
+  "antes de que el mensajero solicite". Es inherente a congelar. A cambio, `cierre_detail.tarifa_id` hace la
+  deuda **auditable por primera vez** (hoy no queda rastro de que fila se uso) -> insumo natural de la 70.
 
 - `deshacer gestion - devolver una orden a gestion` (id 67): **zone=fullstack, complexity=high,
   branch=feature/67-deshacer-gestion, depends_on=37 (done, en dev; la 37 a su vez cuelga de la 36).**

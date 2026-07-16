@@ -8,7 +8,12 @@ import {
   seedZonas,
 } from "@/scripts/seed-zonas";
 
-type GeoZonaPrisma = Pick<PrismaClient, "provincia" | "canton" | "distrito" | "zona">;
+// Feature 69/R28: el cruce escribe la N:M `zona_distrito` (feature 24), no `distrito.zona_id`
+// (columna dropeada por `20260713000000_drop_distrito_zona_id`).
+type GeoZonaPrisma = Pick<
+  PrismaClient,
+  "provincia" | "canton" | "distrito" | "zona" | "zonaDistrito"
+>;
 
 // --- Fake Prisma con estado en memoria (para idempotencia y cruce reales) ---
 interface Row {
@@ -19,11 +24,12 @@ function matches(row: Row, where: Record<string, unknown>): boolean {
   return Object.entries(where).every(([k, v]) => row[k] === v);
 }
 function makeFakePrisma() {
-  const state: Record<"provincia" | "canton" | "distrito" | "zona", Row[]> = {
+  const state: Record<"provincia" | "canton" | "distrito" | "zona" | "zonaDistrito", Row[]> = {
     provincia: [],
     canton: [],
     distrito: [],
     zona: [],
+    zonaDistrito: [], // feature 69/R28: la N:M donde vive la zona del distrito (feature 24)
   };
   let seq = 0;
   const nid = (p: string) => `${p}${++seq}`;
@@ -44,13 +50,27 @@ function makeFakePrisma() {
   const prisma = {
     provincia: table("provincia"),
     canton: table("canton"),
-    distrito: {
-      ...table("distrito"),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-        const row = state.distrito.find((r) => r.id === where.id);
-        if (row) Object.assign(row, data);
-        return row;
-      }),
+    distrito: table("distrito"),
+    // Feature 69/R28: doble de la tabla puente con la semantica REAL del constraint
+    // `@@unique([zonaId, distritoId])`: el upsert del par no puede duplicar (R39).
+    zonaDistrito: {
+      upsert: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { zonaId_distritoId: { zonaId: string; distritoId: string } };
+        }) => {
+          const { zonaId, distritoId } = where.zonaId_distritoId;
+          let row = state.zonaDistrito.find(
+            (r) => r.zonaId === zonaId && r.distritoId === distritoId,
+          );
+          if (!row) {
+            row = { id: nid("zd"), zonaId, distritoId };
+            state.zonaDistrito.push(row);
+          }
+          return row; // update: {} -> no sobrescribe nada
+        },
+      ),
     },
     zona: {
       upsert: vi.fn(
@@ -145,11 +165,15 @@ describe("seedZonasCompleto — cruce y resumen (R34/R36/R38)", () => {
     expect(summary.ternasSinCorrespondencia).toBe(1);
     expect(summary.filasOmitidas).toBe(2);
 
+    // R36 + feature 69/R28: la asignacion vive en `zona_distrito` (feature 24), NO en
+    // `distrito.zona_id` (columna dropeada por `20260713000000_drop_distrito_zona_id`).
     const carmen = state.distrito.find((d) => d.nombre === "Carmen");
     const gam = state.zona.find((z) => z.nombre === "GAM");
-    expect(carmen?.zonaId).toBe(gam?.id); // R36: asignado
+    expect(state.zonaDistrito).toContainEqual(
+      expect.objectContaining({ zonaId: gam?.id, distritoId: carmen?.id }),
+    ); // R36: asignado
     const limon = state.distrito.find((d) => d.nombre === "Limón");
-    expect(limon?.zonaId).toBeUndefined(); // R36: sin zona -> NULL (no seteado)
+    expect(state.zonaDistrito.some((zd) => zd.distritoId === limon?.id)).toBe(false); // R36: zona vacia -> sin relacion
 
     // R37: ninguna zona sembrada con es_central=true
     expect(state.zona.every((z) => z.esCentral === false)).toBe(true);
@@ -165,6 +189,7 @@ describe("idempotencia (R39)", () => {
     await seedZonasCompleto(prisma, geoRows, hints);
     const provIds = state.provincia.map((p) => p.id);
     const zonaIds = state.zona.map((z) => z.id);
+    const zdIds = state.zonaDistrito.map((zd) => zd.id); // feature 69/R28
 
     // el maestro marca la zona central entre corridas
     const gam = state.zona.find((z) => z.nombre === "GAM")!;
@@ -176,6 +201,10 @@ describe("idempotencia (R39)", () => {
     expect(state.provincia.map((p) => p.id)).toEqual(provIds);
     expect(state.zona.map((z) => z.id)).toEqual(zonaIds);
     expect(state.distrito).toHaveLength(3);
+    // Feature 69/R28: el upsert sobre `zona_distrito` es idempotente — re-correr el seed NO
+    // duplica el par (zona, distrito) ni cambia sus ids.
+    expect(state.zonaDistrito.map((zd) => zd.id)).toEqual(zdIds);
+    expect(state.zonaDistrito).toHaveLength(2); // Carmen y Merced (Limón no tiene zona)
     // no se pisa es_central editado (update: {} en el upsert)
     expect(gam.esCentral).toBe(true);
   });

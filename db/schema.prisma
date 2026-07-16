@@ -99,31 +99,32 @@ model Usuario {
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
-  tipoIdentificacion  TipoIdentificacion   @relation(fields: [tipoIdentificacionId], references: [id])
-  rol                 Rol                  @relation(fields: [rolId], references: [id])
-  vehiculo            Vehiculo?            @relation(fields: [vehiculoId], references: [id]) // feature 21
-  zona                Zona?                @relation(fields: [zonaId], references: [id]) // feature 24/R6/R8: ON DELETE RESTRICT
-  ordenEnGestion      Orden?               @relation("UsuarioOrdenEnGestion", fields: [ordenEnGestionId], references: [id], onDelete: SetNull) // feature 36/R19-R21
-  loginAttempts       LoginAttempt[]
-  trustedDevices      TrustedDevice[]
-  otpChallenges       EmailOtpChallenge[]
-  documentos          MensajeroDocumento[] // feature 21
-  ordenesTienda       Orden[]              @relation("OrdenTienda")
-  ordenesMensajeria   Orden[]              @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
-  ordenesAsignadas    Orden[]              @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
-  gestionesRealizadas GestionOrden[]       @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
-  gestionesAnuladas   GestionOrden[]       @relation("GestionAnuladaPor") // feature 67/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
-  tarifasTienda       Tarifa[]             @relation("TarifaTienda") // tarifas cuya tienda es este usuario (adminTienda)
-  cierresRealizados   CierreDia[]          @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
-  cierresResueltos    CierreDia[]          @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
-  cierresBodegaSolicitados CierreBodega[]  @relation("CierreBodegaSolicitadoPor") // feature 40: cierres de bodega solicitados por este adminSatelite
-  cierresBodegaResueltos   CierreBodega[]  @relation("CierreBodegaResueltoPor") // feature 40: cierres de bodega que este maestro aprobo/rechazo
-  walletMovimientosRegistrados WalletMovimiento[] @relation("WalletMovimientoRegistrador") // feature 42/R2/R15: movimientos manuales que este usuario (maestro) registro
-  walletTiendaMovimientos      WalletTiendaMovimiento[] @relation("WalletTiendaMovimientoTienda") // feature 43/R1/R2: movimientos del ledger de ESTA tienda (rol adminTienda)
-  walletTiendaMovimientosRegistrados WalletTiendaMovimiento[] @relation("WalletTiendaMovimientoRegistrador") // feature 43/R2: movimientos manuales del ledger de tienda que este usuario registro
-  pagoMensajeroMovimientos           PagoMensajeroMovimiento[] @relation("PagoMensajeroMovimientoMensajero") // feature 44/R1/R2: movimientos del libro del pago a ESTE mensajero (rol mensajero)
+  tipoIdentificacion                  TipoIdentificacion        @relation(fields: [tipoIdentificacionId], references: [id])
+  rol                                 Rol                       @relation(fields: [rolId], references: [id])
+  vehiculo                            Vehiculo?                 @relation(fields: [vehiculoId], references: [id]) // feature 21
+  zona                                Zona?                     @relation(fields: [zonaId], references: [id]) // feature 24/R6/R8: ON DELETE RESTRICT
+  ordenEnGestion                      Orden?                    @relation("UsuarioOrdenEnGestion", fields: [ordenEnGestionId], references: [id], onDelete: SetNull) // feature 36/R19-R21
+  loginAttempts                       LoginAttempt[]
+  trustedDevices                      TrustedDevice[]
+  otpChallenges                       EmailOtpChallenge[]
+  documentos                          MensajeroDocumento[] // feature 21
+  ordenesTienda                       Orden[]                   @relation("OrdenTienda")
+  ordenesMensajeria                   Orden[]                   @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
+  ordenesAsignadas                    Orden[]                   @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
+  gestionesRealizadas                 GestionOrden[]            @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
+  gestionesAnuladas                   GestionOrden[]            @relation("GestionAnuladaPor") // feature 67/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
+  tarifasTienda                       Tarifa[]                  @relation("TarifaTienda") // tarifas cuya tienda es este usuario (adminTienda)
+  cierresRealizados                   CierreDia[]               @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
+  cierresResueltos                    CierreDia[]               @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
+  cierresBodegaSolicitados            CierreBodega[]            @relation("CierreBodegaSolicitadoPor") // feature 40: cierres de bodega solicitados por este adminSatelite
+  cierresBodegaResueltos              CierreBodega[]            @relation("CierreBodegaResueltoPor") // feature 40: cierres de bodega que este maestro aprobo/rechazo
+  walletMovimientosRegistrados        WalletMovimiento[]        @relation("WalletMovimientoRegistrador") // feature 42/R2/R15: movimientos manuales que este usuario (maestro) registro
+  walletTiendaMovimientos             WalletTiendaMovimiento[]  @relation("WalletTiendaMovimientoTienda") // feature 43/R1/R2: movimientos del ledger de ESTA tienda (rol adminTienda)
+  walletTiendaMovimientosRegistrados  WalletTiendaMovimiento[]  @relation("WalletTiendaMovimientoRegistrador") // feature 43/R2: movimientos manuales del ledger de tienda que este usuario registro
+  pagoMensajeroMovimientos            PagoMensajeroMovimiento[] @relation("PagoMensajeroMovimientoMensajero") // feature 44/R1/R2: movimientos del libro del pago a ESTE mensajero (rol mensajero)
   pagoMensajeroMovimientosRegistrados PagoMensajeroMovimiento[] @relation("PagoMensajeroMovimientoRegistrador") // feature 44/R2: movimientos manuales del libro del pago que este usuario registro
-  historialEstadosActuados     OrdenHistorialEstado[] @relation("HistorialActor") // feature 49/R21: transiciones de estado que este usuario (actor) origino
+  historialEstadosActuados            OrdenHistorialEstado[]    @relation("HistorialActor") // feature 49/R21: transiciones de estado que este usuario (actor) origino
+  cierreDetallesTienda                CierreDetail[]            @relation("CierreDetailTienda") // feature 69/R6: snapshots que congelaron a esta tienda como destinataria
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -245,6 +246,7 @@ model Zona {
   usuarios             Usuario[] // feature 54: lado opuesto de Usuario.zona (mensajero/adminSatelite)
   cierresDestino       CierreDia[] // feature 37: cierres cuyo destino_zona_id apunta a esta zona
   cierresBodega        CierreBodega[] // feature 40: cierres de bodega de esta zona satelite
+  cierreDetalles       CierreDetail[] // feature 69/R6: snapshots que congelaron esta zona
 
   @@map("zona")
 }
@@ -305,29 +307,29 @@ model ZonaDistrito {
 
 // Orden de negocio (R7-R14a). Borrado logico via deleted_at (soft delete).
 model Orden {
-  id                  String    @id @default(uuid())
-  numGuia             Int?      @unique @map("num_guia") // feature 17/R1: nullable, sin default; asignado en "Generar guia" via nextval(orden_num_guia_seq)
-  numRemision         String    @unique @map("num_remision") // R9/R14: lo provee el usuario
-  estatusId           String    @map("estatus_id") // R10: FK not null
-  destinatario        String
-  telefonoDest        String    @map("telefono_dest")
-  tiendaId            String    @map("tienda_id") // R11: FK -> usuario, not null
-  zonaId              String    @map("zona_id") // R12: NOT NULL
-  provinciaId         String    @map("provincia_id") // R12: NOT NULL
-  cantonId            String    @map("canton_id") // R12: NOT NULL
-  distritoId          String?   @map("distrito_id") // R12: nullable (unico FK nullable)
-  producto            String
-  peso                Decimal?  @db.Decimal(10, 3) // feature 15/R4: nullable (carga masiva sin peso)
-  notas               String? // R14a: texto nullable
-  direccion           String? // feature 15/R1: nuevo, carga masiva
-  montoCobrar         Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
-  mensajeroSugeridoId String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
-  mensajeroAsignadoId String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
-  cobraComision       Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
+  id                     String    @id @default(uuid())
+  numGuia                Int?      @unique @map("num_guia") // feature 17/R1: nullable, sin default; asignado en "Generar guia" via nextval(orden_num_guia_seq)
+  numRemision            String    @unique @map("num_remision") // R9/R14: lo provee el usuario
+  estatusId              String    @map("estatus_id") // R10: FK not null
+  destinatario           String
+  telefonoDest           String    @map("telefono_dest")
+  tiendaId               String    @map("tienda_id") // R11: FK -> usuario, not null
+  zonaId                 String    @map("zona_id") // R12: NOT NULL
+  provinciaId            String    @map("provincia_id") // R12: NOT NULL
+  cantonId               String    @map("canton_id") // R12: NOT NULL
+  distritoId             String?   @map("distrito_id") // R12: nullable (unico FK nullable)
+  producto               String
+  peso                   Decimal?  @db.Decimal(10, 3) // feature 15/R4: nullable (carga masiva sin peso)
+  notas                  String? // R14a: texto nullable
+  direccion              String? // feature 15/R1: nuevo, carga masiva
+  montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
+  mensajeroSugeridoId    String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
+  mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
+  cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
   liberadaReprogramadaAt DateTime? @map("liberada_reprogramada_at") // feature 46/R13/R18: instante de liberacion programada (NULL = nunca liberada por reprogramacion); auditoria + fuente del aviso derivado
-  deletedAt           DateTime? @map("deleted_at") // soft delete
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+  deletedAt              DateTime? @map("deleted_at") // soft delete
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
   estatus           OrderStatus @relation(fields: [estatusId], references: [id])
   tienda            Usuario     @relation("OrdenTienda", fields: [tiendaId], references: [id])
@@ -338,9 +340,10 @@ model Orden {
   mensajeroSugerido Usuario?    @relation("OrdenMensajeroSugerido", fields: [mensajeroSugeridoId], references: [id])
   mensajeroAsignado Usuario?    @relation("OrdenMensajeroAsignado", fields: [mensajeroAsignadoId], references: [id], onDelete: SetNull) // feature 17/R7
 
-  gestiones           GestionOrden[] // feature 36: gestiones registradas sobre esta orden
-  mensajerosGestionando Usuario[]    @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
-  historialEstados    OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
+  gestiones             GestionOrden[] // feature 36: gestiones registradas sobre esta orden
+  mensajerosGestionando Usuario[]              @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
+  historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
+  cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -395,13 +398,13 @@ model GestionOrden {
   anuladaPor           String?          @map("anulada_por") // feature 67/R11: FK -> usuario que la deshizo (espejo de cierre_dia.resuelto_por)
   createdAt            DateTime         @default(now()) @map("created_at")
 
-  orden     Orden      @relation(fields: [ordenId], references: [id])
-  mensajero Usuario    @relation("GestionMensajero", fields: [mensajeroId], references: [id])
-  cierre    CierreDia? @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
+  orden             Orden                  @relation(fields: [ordenId], references: [id])
+  mensajero         Usuario                @relation("GestionMensajero", fields: [mensajeroId], references: [id])
+  cierre            CierreDia?             @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
   // Feature 67/R11: quien deshizo la gestion. ON DELETE SET NULL como el actor del historial
   // (49/R21): borrar al usuario no borra el rastro de la anulacion.
-  anuladaPorUsuario Usuario? @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
-  historialEstados OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
+  anuladaPorUsuario Usuario?               @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
+  historialEstados  OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
@@ -444,31 +447,32 @@ enum CierreDestinoTipo {
 // (para la feature 38). RLS habilitada sin policies (solo service role, patron
 // gestion_orden/orden).
 model CierreDia {
-  id                 String            @id @default(uuid())
-  mensajeroId        String            @map("mensajero_id") // FK -> usuario (el actor)
-  estado             CierreEstado      @default(solicitado)
-  destinoTipo        CierreDestinoTipo @map("destino_tipo") // central/satelite derivado al solicitar
-  destinoZonaId      String            @map("destino_zona_id") // zona del mensajero (central o satelite)
-  totalEfectivo      Decimal           @default(0) @map("total_efectivo") @db.Decimal(12, 2) // snapshot R14
-  totalSimpe         Decimal           @default(0) @map("total_simpe") @db.Decimal(12, 2) // snapshot R14
-  totalTransferencia Decimal           @default(0) @map("total_transferencia") @db.Decimal(12, 2) // snapshot R14
-  totalGeneral       Decimal           @default(0) @map("total_general") @db.Decimal(12, 2) // snapshot R14
-  totalPagoMensajero Decimal           @default(0) @map("total_pago_mensajero") @db.Decimal(12, 2) // feature 39/R13: snapshot total del pago al mensajero
-  totalIngresoBodegaRechazos Decimal   @default(0) @map("total_ingreso_bodega_rechazos") @db.Decimal(12, 2) // feature 56/R12: snapshot total del ingreso de bodega por rechazos
-  solicitadoAt       DateTime          @default(now()) @map("solicitado_at")
-  resueltoPor        String?           @map("resuelto_por") // feature 38/R14: FK -> usuario (admin actor); NULL mientras solicitado
-  resueltoAt         DateTime?         @map("resuelto_at") // feature 38/R14: marca de tiempo de la resolucion
-  motivoRechazo      String?           @map("motivo_rechazo") // feature 38/R11: obligatorio SOLO al rechazar; NULL en aprobado/solicitado
-  createdAt          DateTime          @default(now()) @map("created_at")
-  updatedAt          DateTime          @updatedAt @map("updated_at")
+  id                         String            @id @default(uuid())
+  mensajeroId                String            @map("mensajero_id") // FK -> usuario (el actor)
+  estado                     CierreEstado      @default(solicitado)
+  destinoTipo                CierreDestinoTipo @map("destino_tipo") // central/satelite derivado al solicitar
+  destinoZonaId              String            @map("destino_zona_id") // zona del mensajero (central o satelite)
+  totalEfectivo              Decimal           @default(0) @map("total_efectivo") @db.Decimal(12, 2) // snapshot R14
+  totalSimpe                 Decimal           @default(0) @map("total_simpe") @db.Decimal(12, 2) // snapshot R14
+  totalTransferencia         Decimal           @default(0) @map("total_transferencia") @db.Decimal(12, 2) // snapshot R14
+  totalGeneral               Decimal           @default(0) @map("total_general") @db.Decimal(12, 2) // snapshot R14
+  totalPagoMensajero         Decimal           @default(0) @map("total_pago_mensajero") @db.Decimal(12, 2) // feature 39/R13: snapshot total del pago al mensajero
+  totalIngresoBodegaRechazos Decimal           @default(0) @map("total_ingreso_bodega_rechazos") @db.Decimal(12, 2) // feature 56/R12: snapshot total del ingreso de bodega por rechazos
+  solicitadoAt               DateTime          @default(now()) @map("solicitado_at")
+  resueltoPor                String?           @map("resuelto_por") // feature 38/R14: FK -> usuario (admin actor); NULL mientras solicitado
+  resueltoAt                 DateTime?         @map("resuelto_at") // feature 38/R14: marca de tiempo de la resolucion
+  motivoRechazo              String?           @map("motivo_rechazo") // feature 38/R11: obligatorio SOLO al rechazar; NULL en aprobado/solicitado
+  createdAt                  DateTime          @default(now()) @map("created_at")
+  updatedAt                  DateTime          @updatedAt @map("updated_at")
 
-  cierreBodegaId     String?           @map("cierre_bodega_id") // feature 40: nullable; NULL = cierre_dia aun no consolidado en bodega
+  cierreBodegaId String? @map("cierre_bodega_id") // feature 40: nullable; NULL = cierre_dia aun no consolidado en bodega
 
   mensajero          Usuario        @relation("CierreMensajero", fields: [mensajeroId], references: [id])
   destinoZona        Zona           @relation(fields: [destinoZonaId], references: [id])
   resueltoPorUsuario Usuario?       @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
   cierreBodega       CierreBodega?  @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
   gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
+  detalle            CierreDetail[] // feature 69/R1: snapshot congelado por orden de este cierre
 
   @@index([mensajeroId])
   @@index([destinoTipo, destinoZonaId]) // feature 38: filtra por rol+zona destino
@@ -486,22 +490,22 @@ model CierreDia {
 // R20). Indice unico parcial (zona_id) WHERE estado='solicitado' + RLS habilitada sin
 // policies van a mano en el SQL de la migracion (Prisma no los expresa).
 model CierreBodega {
-  id                 String       @id @default(uuid())
-  zonaId             String       @map("zona_id") // zona satelite que cierra
-  solicitadoPor      String       @map("solicitado_por") // adminSatelite actor (FK usuario)
-  estado             CierreEstado @default(solicitado) // reuso enum feature 37 (F1.4-b)
-  totalEfectivo      Decimal      @default(0) @map("total_efectivo") @db.Decimal(12, 2) // snapshot agregado R10
-  totalSimpe         Decimal      @default(0) @map("total_simpe") @db.Decimal(12, 2) // snapshot agregado R10
-  totalTransferencia Decimal      @default(0) @map("total_transferencia") @db.Decimal(12, 2) // snapshot agregado R10
-  totalGeneral       Decimal      @default(0) @map("total_general") @db.Decimal(12, 2) // snapshot agregado R10
-  totalPagoMensajero Decimal      @default(0) @map("total_pago_mensajero") @db.Decimal(12, 2) // feature 39/R19: snapshot agregado del pago a mensajeros
-  totalIngresoBodegaRechazos Decimal @default(0) @map("total_ingreso_bodega_rechazos") @db.Decimal(12, 2) // feature 56/R18: snapshot agregado del ingreso de bodega por rechazos
-  solicitadoAt       DateTime     @default(now()) @map("solicitado_at")
-  resueltoPor        String?      @map("resuelto_por") // maestro actor; NULL mientras solicitado (R20)
-  resueltoAt         DateTime?    @map("resuelto_at") // marca de tiempo de la resolucion (R20)
-  motivoRechazo      String?      @map("motivo_rechazo") // obligatorio SOLO al rechazar (R17); NULL si aprobado/solicitado
-  createdAt          DateTime     @default(now()) @map("created_at")
-  updatedAt          DateTime     @updatedAt @map("updated_at")
+  id                         String       @id @default(uuid())
+  zonaId                     String       @map("zona_id") // zona satelite que cierra
+  solicitadoPor              String       @map("solicitado_por") // adminSatelite actor (FK usuario)
+  estado                     CierreEstado @default(solicitado) // reuso enum feature 37 (F1.4-b)
+  totalEfectivo              Decimal      @default(0) @map("total_efectivo") @db.Decimal(12, 2) // snapshot agregado R10
+  totalSimpe                 Decimal      @default(0) @map("total_simpe") @db.Decimal(12, 2) // snapshot agregado R10
+  totalTransferencia         Decimal      @default(0) @map("total_transferencia") @db.Decimal(12, 2) // snapshot agregado R10
+  totalGeneral               Decimal      @default(0) @map("total_general") @db.Decimal(12, 2) // snapshot agregado R10
+  totalPagoMensajero         Decimal      @default(0) @map("total_pago_mensajero") @db.Decimal(12, 2) // feature 39/R19: snapshot agregado del pago a mensajeros
+  totalIngresoBodegaRechazos Decimal      @default(0) @map("total_ingreso_bodega_rechazos") @db.Decimal(12, 2) // feature 56/R18: snapshot agregado del ingreso de bodega por rechazos
+  solicitadoAt               DateTime     @default(now()) @map("solicitado_at")
+  resueltoPor                String?      @map("resuelto_por") // maestro actor; NULL mientras solicitado (R20)
+  resueltoAt                 DateTime?    @map("resuelto_at") // marca de tiempo de la resolucion (R20)
+  motivoRechazo              String?      @map("motivo_rechazo") // obligatorio SOLO al rechazar (R17); NULL si aprobado/solicitado
+  createdAt                  DateTime     @default(now()) @map("created_at")
+  updatedAt                  DateTime     @updatedAt @map("updated_at")
 
   zona                 Zona        @relation(fields: [zonaId], references: [id])
   solicitadoPorUsuario Usuario     @relation("CierreBodegaSolicitadoPor", fields: [solicitadoPor], references: [id])
@@ -535,7 +539,8 @@ model Tarifa {
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
 
-  tienda Usuario @relation("TarifaTienda", fields: [tiendaId], references: [id])
+  tienda         Usuario        @relation("TarifaTienda", fields: [tiendaId], references: [id])
+  cierreDetalles CierreDetail[] // feature 69/R8: cierres que liquidaron contra ESTA fila de tarifa (hace auditable la deuda (g))
 
   @@index([createdAt])
   @@index([tiendaId])
@@ -868,4 +873,76 @@ model OrdenHistorialEstado {
   @@index([ordenId, createdAt]) // R5: linea de tiempo de UNA orden
   @@index([ordenId, estatusDestinoId]) // R24: conteo de intentos (destinos `devuelta`)
   @@map("orden_historial_estado")
+}
+
+// Feature 69 (R1/R2/R6/R7/R8/R10/R11, design §2.1/§2.2): SNAPSHOT congelado del detalle de
+// cada orden incluida en un cierre del dia. Grano (cierre_id, orden_id): a lo sumo UNA fila
+// por orden y cierre, aunque la orden acumule varias gestiones vigentes en el mismo cierre
+// (R2). Fila INMUTABLE (patron orden_historial_estado): SIN updated_at/deleted_at, sin soft
+// delete — ninguna operacion posterior a la creacion del cierre la modifica (R10).
+//
+// El PORQUE: los feeds de wallet (42/43) leian `orden`/`zona`/`tarifas` VIVAS dentro de la tx
+// de APROBACION. Editar `monto_cobrar` o la tarifa entre SOLICITAR y APROBAR descuadraba en
+// silencio los `total_*` snapshot del cierre (37/R14) contra los movimientos emitidos. Aqui el
+// cierre deja de PREGUNTAR y pasa a RECORDAR: se congela al crear el cierre (R3, misma tx).
+//
+// Se congelan las ENTRADAS de la formula, no los conceptos derivados (decision (b), design
+// §7.1): los conceptos dependen del `resultado` de la GESTION, no de la orden, y exigirian el
+// grano gestion. Con las entradas + `derivarIngresoOrden` (sin cambios, R21) la fila es
+// re-derivable y auditable.
+//
+// `es_central` y los 5 nombres son COLUMNAS aunque exista el FK: `zona.es_central` y los
+// nombres son MUTABLES; guardar solo el FK dejaria abierto el mismo vector (cambiar la zona
+// central re-etiquetaria cierres viejos).
+//
+// Dinero DECIMAL(12,2), porcentajes DECIMAL(5,2); money-safe: nunca number/parseFloat (R11).
+// RLS habilitada sin policies va en el SQL de la migracion (Prisma no la expresa, R25).
+model CierreDetail {
+  id       String @id @default(uuid())
+  cierreId String @map("cierre_id")
+  ordenId  String @map("orden_id")
+
+  // --- money-critical (R6): las entradas de la formula de derivacion ---
+  montoCobrar   Decimal? @map("monto_cobrar") @db.Decimal(12, 2) // `orden.monto_cobrar` (ya nullable en origen)
+  cobraComision Boolean  @map("cobra_comision") // `orden.cobra_comision`
+  zonaId        String   @map("zona_id") // `orden.zona_id`
+  tiendaId      String   @map("tienda_id") // `orden.tienda_id`: a quien se acredita (43), CONGELADO
+  esCentral     Boolean  @map("es_central") // `zona.es_central` EN ESE INSTANTE (elige columna GAM, R21)
+
+  // --- tarifa congelada (R8): todas o ninguna. NULL = la tienda no tenia tarifa vigente al
+  // solicitar (gap R9, decision (c)): conceptos 0.00, NO bloquea el cierre. `tarifa_id` deja
+  // rastro de QUE FILA se uso (contrapartida auditable de la deuda (g), design §6.1).
+  tarifaId                    String?  @map("tarifa_id")
+  tarifaValorFlete            Decimal? @map("tarifa_valor_flete") @db.Decimal(12, 2) // monto
+  tarifaValorFleteGam         Decimal? @map("tarifa_valor_flete_gam") @db.Decimal(12, 2) // monto
+  tarifaValorFleteDevuelto    Decimal? @map("tarifa_valor_flete_devuelto") @db.Decimal(12, 2) // monto
+  tarifaValorFleteDevueltoGam Decimal? @map("tarifa_valor_flete_devuelto_gam") @db.Decimal(12, 2) // monto
+  tarifaComisionCod           Decimal? @map("tarifa_comision_cod") @db.Decimal(5, 2) // porcentaje 0..100
+  tarifaIvaFlete              Decimal? @map("tarifa_iva_flete") @db.Decimal(5, 2) // porcentaje 0..100
+  tarifaIvaComisionCod        Decimal? @map("tarifa_iva_comision_cod") @db.Decimal(5, 2) // porcentaje 0..100
+
+  // --- descriptivos (R7): lo que el admin ve del cierre (38), congelado ---
+  numGuia         Int?    @map("num_guia") // SIN @unique: es copia, no identidad
+  numRemision     String  @map("num_remision")
+  destinatario    String
+  direccion       String? // `orden.direccion` (nullable en origen)
+  producto        String
+  tiendaNombre    String  @map("tienda_nombre")
+  zonaNombre      String  @map("zona_nombre")
+  provinciaNombre String  @map("provincia_nombre")
+  cantonNombre    String  @map("canton_nombre")
+  distritoNombre  String? @map("distrito_nombre") // el distrito es el unico FK nullable de la orden
+
+  createdAt DateTime @default(now()) @map("created_at")
+  // SIN updated_at / deleted_at: fila INMUTABLE (R10).
+
+  cierre CierreDia @relation(fields: [cierreId], references: [id])
+  orden  Orden     @relation(fields: [ordenId], references: [id])
+  zona   Zona      @relation(fields: [zonaId], references: [id])
+  tienda Usuario   @relation("CierreDetailTienda", fields: [tiendaId], references: [id])
+  tarifa Tarifa?   @relation(fields: [tarifaId], references: [id])
+
+  @@unique([cierreId, ordenId]) // R2: el grano. Es tambien el indice de la ruta caliente (los feeds filtran por cierre_id)
+  @@index([ordenId]) // trazar en que cierres aparecio una orden
+  @@map("cierre_detail")
 }

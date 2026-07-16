@@ -1,14 +1,11 @@
 import { Prisma } from "@prisma/client";
-import type {
-  ITarifaVigentePorZonaRepository,
-  TarifaVigentePorZona,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
 import type { CrearMovimientoTiendaInput } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
   IWalletTiendaFeedService,
   WalletTiendaFeedTxClient,
 } from "@/lib/interfaces/services/IWalletTiendaFeedService";
 import { walletTiendaConfig, type WalletTiendaConfig } from "@/lib/config/wallet-tienda";
+import { detalleDe, leerDetallePorOrden, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { conceptoIngresoADebitoTienda } from "@/lib/utils/mapeo-concepto-tienda";
 import { WALLET_INGRESO_CONCEPTO_SEED, type WalletIngresoConcepto } from "@/lib/types/wallet";
@@ -40,10 +37,20 @@ interface Acumulado {
  * conceptos que Ordenex se queda) y `montoRecibido` para el credito COD (Q2/R9). Agrega por
  * (tienda, concepto), OMITE totales 0.00 (R11) y aplica el interruptor Q3 en UN SOLO punto
  * (R28). Money-safe: Prisma.Decimal, salida STRING. NO persiste (lo hace el repo en la tx).
+ *
+ * Feature 69 (R13/R14) — deriva desde el SNAPSHOT (`cierre_detail`); NO lee `orden`, `zona`
+ * ni `tarifas` VIVAS. Aqui el vector era aun peor que en la 42: se leia `orden.tienda_id`
+ * vivo, o sea A QUIEN se le acredita/debita. Re-apuntar la orden a otra tienda entre
+ * SOLICITAR y APROBAR movia el dinero de ledger. Ahora `tiendaId` viene CONGELADO.
+ *
+ * Dos cosas que a proposito NO se congelan:
+ * - `montoRecibido` sigue saliendo de `gestion_orden`: es el COD realmente recaudado POR ESA
+ *   GESTION (dato de la gestion, inmutable de facto), no un dato de la orden.
+ * - El interruptor Q3 se sigue leyendo al aprobar: es POLITICA DE LA CASA, no un dato de la
+ *   orden. Congelarlo seria congelar una decision de negocio, no un hecho.
  */
 export class WalletTiendaFeedService implements IWalletTiendaFeedService {
   constructor(
-    private readonly tarifaRepo: ITarifaVigentePorZonaRepository,
     // Interruptor Q3 (R28): unico punto de lectura. Default = singleton de config del modulo;
     // se inyecta para poder verificar ambos estados del flag en test sin manipular env.
     private readonly config: WalletTiendaConfig = walletTiendaConfig,
@@ -53,35 +60,16 @@ export class WalletTiendaFeedService implements IWalletTiendaFeedService {
     cierreId: string,
     tx: WalletTiendaFeedTxClient,
   ): Promise<CrearMovimientoTiendaInput[]> {
-    // R5: TODAS las gestiones del cierre, con la orden (tiendaId, zonaId, montoCobrar,
-    // cobraComision) y su zona (esCentral), y el COD recaudado (montoRecibido). Money-safe:
+    // Feature 69/R13: el SNAPSHOT aporta lo de la ORDEN (congelado) y `gestion_orden` lo de
+    // la GESTION: el `resultado` y el COD REALMENTE recaudado (`montoRecibido`). Money-safe:
     // los Decimal se leen como STRING/Decimal, nunca number.
-    const gestiones = await tx.gestionOrden.findMany({
-      where: { cierreId },
-      select: {
-        resultado: true,
-        montoRecibido: true,
-        orden: {
-          select: {
-            tiendaId: true,
-            zonaId: true,
-            montoCobrar: true,
-            cobraComision: true,
-            zona: { select: { esCentral: true } },
-          },
-        },
-      },
-    });
-
-    // Cache de tarifa por zonaId (una zona se resuelve una sola vez por cierre; null si no
-    // hay tarifa vigente -> debitos 0.00, R14, sin bloquear).
-    const cacheTarifa = new Map<string, TarifaVigentePorZona | null>();
-    const resolverTarifa = async (zonaId: string): Promise<TarifaVigentePorZona | null> => {
-      if (cacheTarifa.has(zonaId)) return cacheTarifa.get(zonaId) ?? null;
-      const t = await this.tarifaRepo.resolveTarifaPorZona(zonaId);
-      cacheTarifa.set(zonaId, t);
-      return t;
-    };
+    const [byOrden, gestiones] = await Promise.all([
+      leerDetallePorOrden(cierreId, tx),
+      tx.gestionOrden.findMany({
+        where: { cierreId },
+        select: { ordenId: true, resultado: true, montoRecibido: true },
+      }),
+    ]);
 
     // R28: se lee el interruptor UNA sola vez, aqui.
     const debitaFleteDevolucion = this.config.TIENDA_DEBITA_FLETE_DEVOLUCION;
@@ -101,25 +89,30 @@ export class WalletTiendaFeedService implements IWalletTiendaFeedService {
     };
 
     for (const g of gestiones) {
-      const tiendaId = g.orden.tiendaId;
+      // R14: sin fallback a datos vivos; si falta la fila congelada, la aprobacion ABORTA.
+      const d = detalleDe(byOrden, cierreId, g.ordenId);
+      // R13: A QUIEN se le acredita/debita sale del SNAPSHOT, no de la orden viva.
+      const tiendaId = d.tiendaId;
 
-      // CREDITO propio de la 43 (Q2/R9): COD REALMENTE recaudado; null -> 0.00.
+      // CREDITO propio de la 43 (Q2/R9): COD REALMENTE recaudado; null -> 0.00. Sale de la
+      // GESTION a proposito (no se congela): es lo que esa gestion recaudo de verdad.
       const codRecaudado = new Prisma.Decimal(
         g.montoRecibido === null ? "0" : g.montoRecibido.toFixed(2),
       );
       bump(tiendaId, "credito", "cod_recaudado", codRecaudado);
 
-      // DEBITOS: identicos a la 42 (misma funcion), mapeados a categorias de debito.
-      const tarifa = await resolverTarifa(g.orden.zonaId);
+      // DEBITOS: identicos a la 42 (misma funcion), mapeados a categorias de debito. Ahora
+      // desde las entradas CONGELADAS (R13) y la tarifa congelada (R9 preservado: `tarifa_id`
+      // NULL -> null -> debitos 0.00, sin bloquear).
       const derivado = derivarIngresoOrden(
         {
           resultado: g.resultado,
-          esCentral: g.orden.zona.esCentral,
+          esCentral: d.esCentral,
           // La comision sigue basada en montoCobrar (decision de la 42, la 43 NO la altera).
-          montoCobrar: g.orden.montoCobrar === null ? null : g.orden.montoCobrar.toFixed(2),
-          cobraComision: g.orden.cobraComision,
+          montoCobrar: d.montoCobrar === null ? null : d.montoCobrar.toFixed(2),
+          cobraComision: d.cobraComision,
         },
-        tarifa,
+        tarifaDe(d),
       );
 
       for (const concepto of WALLET_INGRESO_CONCEPTO_SEED) {

@@ -6,6 +6,10 @@ import type {
   GestionDeshacerRow,
   ICierreDiaRepository,
 } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type {
+  ITarifaVigentePorTiendaRepository,
+  TarifaVigenteResuelta,
+} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 
@@ -24,7 +28,70 @@ class SinGestionesVinculadas extends Error {}
 // SIN efectos parciales (R22). NO es un error real: no se propaga.
 class NoAnulable extends Error {}
 
-type CierrePrismaClient = Pick<PrismaClient, "gestionOrden" | "orden" | "cierreDia" | "$transaction">;
+// Feature 69/T10: `cierreDetail` (el snapshot que se puebla en la tx de `crearCierre`) y
+// `tarifa` (el resolver batch corre DENTRO de esa misma tx, design §3.1).
+type CierrePrismaClient = Pick<
+  PrismaClient,
+  "gestionOrden" | "orden" | "cierreDia" | "cierreDetail" | "tarifa" | "$transaction"
+>;
+
+// Feature 69 (design §3, paso 5) — proyeccion del snapshot: TODO lo que `cierre_detail`
+// congela de la orden. Se lee DENTRO de la tx, de las gestiones que el `updateMany`
+// REALMENTE vinculo (no de la lista que el service leyo antes).
+const SNAPSHOT_SELECT = {
+  ordenId: true,
+  orden: {
+    select: {
+      // money-critical (R6): las entradas de la formula.
+      montoCobrar: true,
+      cobraComision: true,
+      zonaId: true,
+      tiendaId: true,
+      // descriptivos (R7).
+      numGuia: true,
+      numRemision: true,
+      destinatario: true,
+      direccion: true,
+      producto: true,
+      // `esCentral` (R6) + los 5 nombres (R7): se congelan como VALOR, no como FK, porque
+      // son mutables (design §2.1).
+      zona: { select: { nombre: true, esCentral: true } },
+      tienda: { select: { nombre: true } },
+      provincia: { select: { nombre: true } },
+      canton: { select: { nombre: true } },
+      distrito: { select: { nombre: true } },
+    },
+  },
+} as const;
+
+type SnapshotRow = Prisma.GestionOrdenGetPayload<{ select: typeof SNAPSHOT_SELECT }>;
+
+// Money-safe: STRING escala 2 -> Decimal (nunca number/parseFloat), R11. `null` = la tienda
+// no tenia tarifa vigente al solicitar (gap R9): las 8 columnas quedan NULL, todas o ninguna.
+function tarifaColumnas(t: TarifaVigenteResuelta | null) {
+  if (t === null) {
+    return {
+      tarifaId: null,
+      tarifaValorFlete: null,
+      tarifaValorFleteGam: null,
+      tarifaValorFleteDevuelto: null,
+      tarifaValorFleteDevueltoGam: null,
+      tarifaComisionCod: null,
+      tarifaIvaFlete: null,
+      tarifaIvaComisionCod: null,
+    };
+  }
+  return {
+    tarifaId: t.tarifaId,
+    tarifaValorFlete: new Prisma.Decimal(t.valorFlete),
+    tarifaValorFleteGam: new Prisma.Decimal(t.valorFleteGam),
+    tarifaValorFleteDevuelto: new Prisma.Decimal(t.valorFleteDevuelto),
+    tarifaValorFleteDevueltoGam: new Prisma.Decimal(t.valorFleteDevueltoGam),
+    tarifaComisionCod: new Prisma.Decimal(t.comisionCod),
+    tarifaIvaFlete: new Prisma.Decimal(t.ivaFlete),
+    tarifaIvaComisionCod: new Prisma.Decimal(t.ivaComisionCod),
+  };
+}
 
 // Proyeccion de una gestion pendiente de cierre con el detalle de la orden via las
 // relaciones existentes (patron GestionOrdenRepository.WITH_ASIGNACION). Exportada
@@ -106,7 +173,15 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
  * transaccional y consume las gestiones pendientes con un WHERE guardado.
  */
 export class CierreDiaRepository implements ICierreDiaRepository {
-  constructor(private readonly prisma: CierrePrismaClient) {}
+  constructor(
+    private readonly prisma: CierrePrismaClient,
+    // Feature 69 (design §3.1): el resolver de la tarifa vigente, por INTERFAZ (precedente:
+    // `CierresAdminRepository` recibe repos y services). `crearCierre` lo invoca DENTRO de su
+    // tx para congelar la tarifa (R8). Es el UNICO consumidor del resolver tras la 69: los
+    // feeds de wallet dejan de depender de el (leen el snapshot), y ese es justo el cambio
+    // que mata el vector "cambio la tarifa entre solicitar y aprobar" (R18).
+    private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
+  ) {}
 
   /** R2/R3: gestiones del mensajero sin cierre (cierre_id IS NULL) + detalle. */
   async findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]> {
@@ -226,6 +301,64 @@ export class CierreDiaRepository implements ICierreDiaRepository {
           await tx.gestionOrden.updateMany({
             where: { id: { in: ids }, cierreId: cierre.id },
             data: { ingresoBodegaRechazo: new Prisma.Decimal(ingreso) },
+          });
+        }
+
+        // Feature 69/R3-R9 — EL SNAPSHOT. Se construye en ESTA tx (R3/R4: todo-o-nada) y
+        // DESPUES del updateMany que vincula, leyendo LO QUE LA TX REALMENTE VINCULO
+        // (`where: { cierreId }`), NO la lista que el service leyo antes
+        // (`findGestionesPendientes`, CierreDiaService:204). Porque: el updateMany no lleva
+        // lista de ids, asi que una gestion creada entre la lectura del service y esta tx se
+        // vincula IGUAL. Con el patron de la 39/56 eso solo dejaba un pago nulo (inofensivo);
+        // aqui dejaria una orden SIN fila de detalle y, sin fallback (R14), la APROBACION
+        // abortaria. Leer dentro de la tx elimina la carrera por construccion (design §3).
+        //
+        // R5: no hace falta filtrar `anuladaAt` — el updateMany de arriba ya solo vincula
+        // gestiones vigentes (67/R16), asi que `where: { cierreId }` no puede traer anuladas.
+        const gestiones = (await tx.gestionOrden.findMany({
+          where: { cierreId: cierre.id },
+          select: SNAPSHOT_SELECT,
+        })) as SnapshotRow[];
+
+        // R2 — EL GRANO: dedupe por ordenId. Una orden puede acumular varias gestiones
+        // vigentes en el mismo cierre (reintentos 46/47); el detalle es de la ORDEN, y el
+        // UNIQUE (cierre_id, orden_id) rechazaria la segunda fila.
+        const porOrden = new Map<string, SnapshotRow>();
+        for (const g of gestiones) if (!porOrden.has(g.ordenId)) porOrden.set(g.ordenId, g);
+        const filas = [...porOrden.values()];
+
+        if (filas.length > 0) {
+          // R8: la tarifa vigente de cada tienda distinta, EN LA MISMA tx y en UNA query
+          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 8 columnas quedan
+          // NULL y el cierre se crea igual (decision (c): el gap NO bloquea).
+          const tarifas = await this.tarifaRepo.resolveTarifasPorTiendas(
+            tx,
+            filas.map((f) => f.orden.tiendaId),
+          );
+          await tx.cierreDetail.createMany({
+            data: filas.map((f) => ({
+              cierreId: cierre.id,
+              ordenId: f.ordenId,
+              // money-critical (R6). `montoCobrar` ya es Decimal|null en origen: se copia
+              // tal cual, sin pasar por number (R11).
+              montoCobrar: f.orden.montoCobrar,
+              cobraComision: f.orden.cobraComision,
+              zonaId: f.orden.zonaId,
+              tiendaId: f.orden.tiendaId,
+              esCentral: f.orden.zona.esCentral,
+              ...tarifaColumnas(tarifas.get(f.orden.tiendaId) ?? null),
+              // descriptivos (R7).
+              numGuia: f.orden.numGuia,
+              numRemision: f.orden.numRemision,
+              destinatario: f.orden.destinatario,
+              direccion: f.orden.direccion,
+              producto: f.orden.producto,
+              tiendaNombre: f.orden.tienda.nombre,
+              zonaNombre: f.orden.zona.nombre,
+              provinciaNombre: f.orden.provincia.nombre,
+              cantonNombre: f.orden.canton.nombre,
+              distritoNombre: f.orden.distrito?.nombre ?? null,
+            })),
           });
         }
         return cierre.id;

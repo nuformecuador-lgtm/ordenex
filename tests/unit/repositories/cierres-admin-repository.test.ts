@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
+import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { IWalletFeedService } from "@/lib/interfaces/services/IWalletFeedService";
@@ -112,6 +113,43 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
   return {
     cierreDia: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     gestionOrden: { findMany: vi.fn() },
+    // Feature 69/T18 (R15): el detalle de un cierre YA CREADO sale del SNAPSHOT.
+    cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
+    ...overrides,
+  };
+}
+
+// Feature 69/T18 — el par que compone el detalle del admin: la GESTION aporta lo suyo y
+// `cierre_detail` lo de la ORDEN, congelado.
+function gestionRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "g1",
+    ordenId: "o1",
+    resultado: "entregada",
+    montoRecibido: new Prisma.Decimal("12.50"),
+    metodoPago: "efectivo",
+    motivo: null,
+    fechaReprogramacion: null,
+    evidenciaStoragePath: "o1/e.jpg",
+    pagoMensajero: new Prisma.Decimal("5.00"), // feature 39/R16: snapshot leido
+    ingresoBodegaRechazo: new Prisma.Decimal("0.00"), // feature 56/R15: snapshot leido
+    ...overrides,
+  };
+}
+
+function detalleRow(overrides: Record<string, unknown> = {}) {
+  return {
+    ordenId: "o1",
+    numGuia: 10,
+    numRemision: "REM-1",
+    destinatario: "Ana",
+    direccion: "Av 1",
+    producto: "Caja",
+    tiendaNombre: "Tienda X",
+    zonaNombre: "Cartago",
+    provinciaNombre: "Cartago",
+    cantonNombre: "Central",
+    distritoNombre: "Oriental",
     ...overrides,
   };
 }
@@ -190,47 +228,88 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
     expect(prisma.gestionOrden.findMany).not.toHaveBeenCalled();
   });
 
-  it("R6: cierre en alcance -> carga gestiones WHERE cierre_id = X y las mapea", async () => {
+  it("R6/R15: cierre en alcance -> compone gestiones (WHERE cierre_id = X) con el SNAPSHOT", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
-    prisma.gestionOrden.findMany.mockResolvedValue([
-      {
-        id: "g1",
-        ordenId: "o1",
-        resultado: "entregada",
-        montoRecibido: new Prisma.Decimal("12.50"),
-        metodoPago: "efectivo",
-        motivo: null,
-        fechaReprogramacion: null,
-        evidenciaStoragePath: "o1/e.jpg",
-        pagoMensajero: new Prisma.Decimal("5.00"), // feature 39/R16: snapshot leido
-        ingresoBodegaRechazo: new Prisma.Decimal("0.00"), // feature 56/R15: snapshot leido
-        orden: {
-          numGuia: 10,
-          numRemision: "REM-1",
-          destinatario: "Ana",
-          direccion: "Av 1",
-          producto: "Caja",
-          tienda: { nombre: "Tienda X" },
-          zona: { nombre: "Cartago" },
-          provincia: { nombre: "Cartago" },
-          canton: { nombre: "Central" },
-          distrito: { nombre: "Oriental" },
-        },
-      },
-    ]);
+    // La GESTION aporta lo suyo; ya NO trae `orden` (la relacion viva desaparece del select).
+    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow()]);
+    prisma.cierreDetail.findMany.mockResolvedValue([detalleRow()]);
     const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
     const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
 
     expect(r).not.toBeNull();
     expect(prisma.gestionOrden.findMany.mock.calls[0][0].where).toEqual({ cierreId: "c1" });
+    expect(prisma.cierreDetail.findMany.mock.calls[0][0].where).toEqual({ cierreId: "c1" });
+    // MISMO DTO que antes de la 69: la UI no cambia.
     expect(r?.cierre.cierreId).toBe("c1");
     expect(r?.gestiones[0]).toMatchObject({
       gestionId: "g1",
       montoRecibido: "12.50",
       evidenciaStoragePath: "o1/e.jpg",
+      pagoMensajero: "5.00",
+      ingresoBodegaRechazo: "0.00",
     });
+  });
+
+  it("R15: los descriptivos salen del SNAPSHOT, no de la orden viva", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
+    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow()]);
+    // La fila congelada dice "Tienda ORIGINAL"/"Cartago". Si el admin viera la orden viva,
+    // veria lo que la orden diga HOY: exactamente lo que la feature viene a impedir.
+    prisma.cierreDetail.findMany.mockResolvedValue([
+      detalleRow({ tiendaNombre: "Tienda ORIGINAL", zonaNombre: "Cartago", numGuia: 10 }),
+    ]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    expect(r?.gestiones[0]).toMatchObject({
+      numGuia: 10,
+      numRemision: "REM-1",
+      destinatario: "Ana",
+      direccion: "Av 1",
+      producto: "Caja",
+      tiendaNombre: "Tienda ORIGINAL",
+      zonaNombre: "Cartago",
+      provinciaNombre: "Cartago",
+      cantonNombre: "Central",
+      distritoNombre: "Oriental",
+    });
+    // El select de la gestion ya no navega la relacion `orden`.
+    expect(prisma.gestionOrden.findMany.mock.calls[0][0].select).not.toHaveProperty("orden");
+  });
+
+  it("R19: una orden con deleted_at sigue apareciendo en el detalle del cierre", async () => {
+    // Con el snapshot ya no depende del accidente de que `WITH_DETALLE` no filtrara
+    // `deletedAt`: la fila congelada NO tiene deleted_at (es inmutable) y no se consulta
+    // `orden` en absoluto. Borrar la orden no puede sacarla del cierre que la liquido.
+    const prisma = buildPrisma();
+    prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
+    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow()]);
+    prisma.cierreDetail.findMany.mockResolvedValue([detalleRow()]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    expect(r?.gestiones).toHaveLength(1);
+    expect(r?.gestiones[0].ordenId).toBe("o1");
+    // Ningun WHERE del detalle menciona `deletedAt`: la orden viva no participa.
+    expect(JSON.stringify(prisma.cierreDetail.findMany.mock.calls[0][0])).not.toContain("deleted");
+    expect(JSON.stringify(prisma.gestionOrden.findMany.mock.calls[0][0])).not.toContain("deleted");
+  });
+
+  it("R14: falta la fila congelada de una orden -> error duro (sin fallback a datos vivos)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
+    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow()]);
+    prisma.cierreDetail.findMany.mockResolvedValue([]); // sin snapshot
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    await expect(repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO)).rejects.toThrow(
+      CierreDetalleFaltanteError,
+    );
   });
 });
 

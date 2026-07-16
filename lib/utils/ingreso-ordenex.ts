@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { GestionResultado } from "@prisma/client";
-import type { TarifaVigentePorZona } from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { WalletIngresoConcepto } from "@/lib/types/wallet";
 
 /**
@@ -16,7 +16,7 @@ import type { WalletIngresoConcepto } from "@/lib/types/wallet";
  * - `devuelta`|`rechazada` -> flete de DEVOLUCION (valorFleteDevueltoGam si esCentral, si no
  *   valorFleteDevuelto) + su IVA (mismo % ivaFlete). SIN comision COD (no hubo recaudo).
  * - `reprogramada` (u otro en transito) -> no aporta a ningun concepto.
- * - `tarifa === null` (zona sin tarifa vigente) -> todos los conceptos 0.00, sin lanzar (R9).
+ * - `tarifa === null` (tienda sin tarifa vigente) -> todos los conceptos 0.00, sin lanzar (R9).
  */
 
 // Datos de la orden/gestion necesarios para derivar el ingreso (sin acoplar a Prisma models).
@@ -49,11 +49,11 @@ function aplicarPorcentaje(base: Prisma.Decimal, porcentaje: Prisma.Decimal): Pr
 
 /**
  * Deriva los conceptos de ingreso de UNA gestion segun su `resultado` y la tarifa vigente
- * de la zona de la orden. `tarifa === null` -> objeto vacio (todos 0.00 en el agregado, R9).
+ * de la tienda de la orden. `tarifa === null` -> objeto vacio (todos 0.00 en el agregado, R9).
  */
 export function derivarIngresoOrden(
   input: OrdenIngresoInput,
-  tarifa: TarifaVigentePorZona | null,
+  tarifa: TarifaVigente | null,
 ): IngresoOrdenDerivado {
   if (tarifa === null) return {}; // R9: gap seguro, no bloquea; ningun concepto aporta.
 
@@ -112,13 +112,14 @@ const CONCEPTOS: WalletIngresoConcepto[] = [
 
 /**
  * Agrega los conceptos de TODAS las gestiones de un cierre en 1 total por concepto (R10),
- * resolviendo la tarifa de cada gestion via `tarifaPorZona(esCentral, montoCobrar,...)`.
+ * resolviendo la tarifa de cada gestion por la TIENDA de su orden (feature 69/R20); la zona
+ * solo elige la COLUMNA (`esCentral` -> variante GAM), sin cambio de formula (R21).
  * OMITE los conceptos cuyo total sea "0.00". Money-safe: suma con Prisma.Decimal, salida STRING.
  *
  * `gestiones` ya trae, por cada una, su input derivado y la tarifa vigente resuelta de su zona.
  */
 export function agregarIngresosPorConcepto(
-  gestiones: Array<{ input: OrdenIngresoInput; tarifa: TarifaVigentePorZona | null }>,
+  gestiones: Array<{ input: OrdenIngresoInput; tarifa: TarifaVigente | null }>,
 ): ConceptoIngresoAgregado[] {
   const totales = new Map<WalletIngresoConcepto, Prisma.Decimal>();
   for (const c of CONCEPTOS) totales.set(c, new Prisma.Decimal(0));

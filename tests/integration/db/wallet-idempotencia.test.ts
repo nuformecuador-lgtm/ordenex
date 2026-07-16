@@ -4,7 +4,6 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
-import type { ITarifaVigentePorZonaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorZonaRepository";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 
 // Feature 42/T9 — idempotencia + no-doble-conteo (R6/R13). Simula el constraint unico
@@ -53,19 +52,34 @@ const TARIFA = {
   ivaComisionCod: "13.00",
 };
 
-function buildTarifaRepo(): ITarifaVigentePorZonaRepository {
-  return { resolveTarifaPorZona: vi.fn().mockResolvedValue(TARIFA) };
-}
+// Feature 69: la misma tarifa, ya CONGELADA en la fila de `cierre_detail`.
+const TARIFA_CONGELADA = {
+  tarifaId: "ta1",
+  tarifaValorFlete: new Prisma.Decimal(TARIFA.valorFlete),
+  tarifaValorFleteGam: new Prisma.Decimal(TARIFA.valorFleteGam),
+  tarifaValorFleteDevuelto: new Prisma.Decimal(TARIFA.valorFleteDevuelto),
+  tarifaValorFleteDevueltoGam: new Prisma.Decimal(TARIFA.valorFleteDevueltoGam),
+  tarifaComisionCod: new Prisma.Decimal(TARIFA.comisionCod),
+  tarifaIvaFlete: new Prisma.Decimal(TARIFA.ivaFlete),
+  tarifaIvaComisionCod: new Prisma.Decimal(TARIFA.ivaComisionCod),
+};
 
-// Prisma doble: gestiones del cierre + la tienda de wallet + $transaction (tx === prisma).
+// Prisma doble: gestiones del cierre + su detalle CONGELADO + la tienda de wallet +
+// $transaction (tx === prisma). Feature 69: el feed deriva del snapshot, asi que el doble
+// aporta `cierreDetail`; los importes (y por tanto los 6 conceptos) no cambian.
 function buildPrisma(store: ReturnType<typeof makeWalletStore>) {
   const gestiones = [
-    { resultado: "entregada", orden: { zonaId: "z1", montoCobrar: new Prisma.Decimal("10000.00"), cobraComision: true, zona: { esCentral: false } } },
-    { resultado: "devuelta", orden: { zonaId: "z1", montoCobrar: null, cobraComision: true, zona: { esCentral: false } } },
+    { ordenId: "o1", resultado: "entregada" },
+    { ordenId: "o2", resultado: "devuelta" },
+  ];
+  const detalle = [
+    { ordenId: "o1", tiendaId: "t1", montoCobrar: new Prisma.Decimal("10000.00"), cobraComision: true, esCentral: false, ...TARIFA_CONGELADA },
+    { ordenId: "o2", tiendaId: "t1", montoCobrar: null, cobraComision: true, esCentral: false, ...TARIFA_CONGELADA },
   ];
   const prisma = {
     cierreDia: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(1) },
     gestionOrden: { findMany: vi.fn().mockResolvedValue(gestiones) },
+    cierreDetail: { findMany: vi.fn().mockResolvedValue(detalle) },
     walletMovimiento: store.walletMovimiento,
   };
   return {
@@ -83,7 +97,7 @@ describe("wallet idempotencia (R6/R13)", () => {
     const repo = new CierresAdminRepository(
       prisma as unknown as PrismaClient,
       new WalletMovimientoRepository(prisma as unknown as PrismaClient),
-      new WalletFeedService(buildTarifaRepo()),
+      new WalletFeedService(),
       // Feature 43: dobles no-op del ledger por tienda (este test cubre SOLO la idempotencia
       // de la caja principal 42; el ledger por tienda tiene su propio test de idempotencia).
       { crearMovimientos: vi.fn().mockResolvedValue(0), listarPorTienda: vi.fn(), agregarSaldoPorTienda: vi.fn(), listarSaldosTodasTiendas: vi.fn() },
