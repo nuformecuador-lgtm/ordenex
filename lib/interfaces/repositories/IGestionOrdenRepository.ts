@@ -1,4 +1,4 @@
-import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
+import type { GestionCausaDevolucion, GestionResultado, MetodoPagoValue } from "@prisma/client";
 
 // Feature 36 — contrato del repositorio del flujo del mensajero. Persistencia de
 // gestion_orden, lectura de "mis asignaciones", transicion "Recoger" en lote y
@@ -58,6 +58,13 @@ export interface GestionOrdenData {
   motivo?: string | null;
   /** Fecha (YYYY-MM-DD) de reprogramacion; se persiste como columna DATE. */
   fechaReprogramacion?: string | null;
+  /**
+   * Feature 73/R11: causa tipificada de la DEVOLUCION. Nullable por rama como los demas:
+   * el service solo la arma en `resultado = devuelta` (la obligatoriedad ya la exigio el
+   * borde, R6). Viaja DENTRO de `GestionOrdenData` -> `crearGestionYTransicionar` NO
+   * cambia su firma y la atomicidad de R13 se conserva tal cual.
+   */
+  causaDevolucion?: GestionCausaDevolucion | null;
 }
 
 export interface IGestionOrdenRepository {

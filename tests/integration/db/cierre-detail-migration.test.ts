@@ -215,12 +215,19 @@ describe("estructura de la carpeta de migracion", () => {
   });
 
   it("tiene timestamp posterior a las migraciones previas", () => {
+    // Lo que este test AFIRMA (y su nombre dice) es que esta migracion nace DESPUES de las que
+    // ya existian, no que sea la ULTIMA del repo para siempre: eso ultimo se rompe en cuanto
+    // cualquier feature posterior añade una migracion (paso con la 73). Se compara contra su
+    // predecesora real, que es el patron del resto de tests de migracion del repo
+    // (gestion-orden-anulacion-migration.test.ts).
     const dirs = fs
       .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       .sort();
     const thisDir = dirs.find((d) => d.endsWith("_cierre_detail"))!;
-    expect(thisDir).toBe(dirs[dirs.length - 1]);
+    const previa = dirs.find((d) => d.endsWith("_order_status_recibido_origen"));
+    expect(previa).toBeDefined();
+    expect(thisDir > (previa as string)).toBe(true);
   });
 });

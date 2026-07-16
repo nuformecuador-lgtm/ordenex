@@ -184,7 +184,14 @@ export async function liberarGestion(
 /** Extrae los campos de gestion del FormData (montoRecibido a number). */
 function rawFromFormData(formData: FormData): Record<string, unknown> {
   const raw: Record<string, unknown> = {};
-  for (const campo of ["ordenId", "resultado", "metodoPago", "fechaReprogramacion", "motivo"]) {
+  for (const campo of [
+    "ordenId",
+    "resultado",
+    "metodoPago",
+    "fechaReprogramacion",
+    "motivo",
+    "causaDevolucion", // feature 73: campo de texto -> entra por el bucle, sin coercion
+  ]) {
     const value = formData.get(campo);
     if (value !== null) raw[campo] = value;
   }
@@ -214,7 +221,12 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
         motivo: data.motivo,
       };
     case "devuelta":
-      return { ordenId: data.ordenId, resultado: "devuelta", motivo: data.motivo };
+      return {
+        ordenId: data.ordenId,
+        resultado: "devuelta",
+        causaDevolucion: data.causaDevolucion, // feature 73/R6
+        motivo: data.motivo,
+      };
     case "rechazada":
       return {
         ordenId: data.ordenId,

@@ -12,6 +12,7 @@ import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlPro
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
+import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const OTRO: Actor = { usuarioId: "m2", rol: "mensajero" };
@@ -284,7 +285,7 @@ describe("escogerParaGestion (R19-R21)", () => {
 describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R12: rol != mensajero -> forbidden", async () => {
     const r = await newService().gestionar(
-      { ordenId: "o1", resultado: "devuelta", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
       MAESTRO,
     );
     expect(r.status).toBe("forbidden");
@@ -297,7 +298,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -309,7 +310,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ mensajeroAsignadoId: "m2" })]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("forbidden");
@@ -319,7 +320,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R21: otra orden activa distinta -> conflict, sin persistir", async () => {
     const repo = fakeRepo({ getOrdenEnGestion: vi.fn(async () => "o-otra") });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -335,7 +336,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -452,7 +453,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
   it("R28: devolucion valida -> gestion(devuelta) + estado devuelta", async () => {
     const repo = fakeRepo();
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", motivo: "no estaba" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "no estaba" },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
@@ -498,7 +499,16 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
 // --- FEATURE 47: reintento vs escalado en la rama DEVUELTA (R1/R2/R4/R5/R8/R9/R13/R19) ---
 
 describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
-  const devolucion: GestionarInput = { ordenId: "o1", resultado: "devuelta", motivo: "ausente" };
+  // Feature 73/R6: la rama `devuelta` ahora exige causa. Se añade al input SIN cambiar nada de
+  // lo que estos tests afirman: la regla de reintento/escalado de la 47 NO lee la causa (R17,
+  // F1.4-e) y `resolverSeguimientoDevuelta` no se toca. La verificacion dedicada de R17 (las 3
+  // causas -> el MISMO seguimiento) es la task T6.1 del bloque 6.
+  const devolucion: GestionarInput = {
+    ordenId: "o1",
+    resultado: "devuelta",
+    causaDevolucion: "not_found",
+    motivo: "ausente",
+  };
 
   function repoCall(repo: IGestionOrdenRepository) {
     return (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
@@ -717,6 +727,74 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
     };
     expect(call.seguimiento).toBeUndefined();
     expect(historial.contarIntentos).not.toHaveBeenCalled();
+  });
+
+  // --- FEATURE 73 / R17 (T6.1): la causa NO altera la regla de seguimiento de la 47 ---
+  // F1.4-e: para la MISMA orden y el MISMO conteo previo, las 3 causas
+  // (not_found / wrong_number / wrong_address) producen el MISMO seguimiento. La causa
+  // viaja en su columna propia y NUNCA entra en `resolverSeguimientoDevuelta`, asi que
+  // ni el destino (reintento a bodega / escalado a rechazada) ni el conteo de intentos
+  // dependen de ella. Bug historico que este test cierra: al ampliar los tests de la 47
+  // se dejo pasando SIEMPRE `not_found`, con lo que las otras 2 causas nunca recorrian
+  // esta ruta y R17 quedaba huerfano.
+
+  const CAUSAS = CAUSA_DEVOLUCION_SEED; // ["not_found", "wrong_number", "wrong_address"]
+
+  it.each(CAUSAS)(
+    "73/R17: causa '%s' BAJO umbral -> MISMO seguimiento (reintento a en_bodega_satelite, limpia mensajero, cuenta igual)",
+    async (causa) => {
+      const repo = fakeRepo({
+        findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
+      });
+      const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 0) }); // intento actual = 1 < umbral 3
+      const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente" },
+        MENSAJERO,
+      );
+      expect(r.status).toBe("ok");
+      const call = repoCall(repo);
+      // Mismo destino de seguimiento que el caso baseline (independiente de la causa).
+      expect(call.seguimiento).toEqual({ destinoEstatusId: "os-en-bodega-satelite", limpiaMensajero: true });
+      // Mismo efecto sobre el conteo de intento: la decision consume el derivador de la 49
+      // con el id de orden, sin que la causa lo altere.
+      expect(historial.contarIntentos).toHaveBeenCalledTimes(1);
+      expect(historial.contarIntentos).toHaveBeenCalledWith("o1");
+    },
+  );
+
+  it.each(CAUSAS)(
+    "73/R17: causa '%s' EN umbral -> MISMO escalado a rechazada, NO limpia mensajero (causa irrelevante)",
+    async (causa) => {
+      const repo = fakeRepo();
+      const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 2) }); // intento actual = 3 == umbral
+      const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente" },
+        MENSAJERO,
+      );
+      expect(r.status).toBe("ok");
+      expect(repoCall(repo).seguimiento).toEqual({ destinoEstatusId: "os-rechazada", limpiaMensajero: false });
+      expect(historial.contarIntentos).toHaveBeenCalledTimes(1);
+      expect(historial.contarIntentos).toHaveBeenCalledWith("o1");
+    },
+  );
+
+  it("73/R17: las 3 causas colapsan al MISMO seguimiento para la misma orden y conteo (invariante directa)", async () => {
+    async function seguimientoDe(causa: (typeof CAUSAS)[number]) {
+      const repo = fakeRepo({
+        findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
+      });
+      const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 1) }); // intento actual = 2 < umbral
+      const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente" },
+        MENSAJERO,
+      );
+      expect(r.status).toBe("ok");
+      return repoCall(repo).seguimiento;
+    }
+    const [a, b, c] = await Promise.all(CAUSAS.map(seguimientoDe));
+    expect(a).toEqual(b);
+    expect(b).toEqual(c);
+    expect(a).toEqual({ destinoEstatusId: "os-en-bodega-satelite", limpiaMensajero: true });
   });
 });
 
