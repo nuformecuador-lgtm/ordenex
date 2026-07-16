@@ -124,3 +124,79 @@ el contrato I/O de `premios` ahora es `{ posicion, monto: string|null, descripci
 Backend de la 76 completo (T0a-T7 + `descripcion`): typecheck 0, lint 0 errores, 2963 tests
 verdes; migraciones validadas estáticamente (no aplicadas por falta de DB) con up/down; 4/4
 writers de asignación instrumentados (R23) + 3/3 limpiezas (LC1); ninguno sin estampar.
+
+---
+
+# Implementación 76 — FRONTEND (T8-T10)
+
+> Zona: frontend (página, módulo cliente, menú). Consume el backend commiteado en `0388bde`
+> SIN tocarlo. Contrato verificado leyendo `lib/actions/ranking.ts`,
+> `lib/interfaces/services/IRankingService.ts` y `lib/types/ranking.ts` (no supuesto).
+
+## Estado de partida (drift respecto al design §1)
+
+El design §1 asumía un stub `app/(app)/ranking/page.tsx` y un ítem `/ranking` con
+`iconKey:trophy` ya presentes en `menu-visibility.ts:89-95`. En este worktree NINGUNO existía
+(la rama salió de un dev anterior). Por eso: la página se CREA (no reemplaza) y el ítem de menú
+se AÑADE (no solo "conserva"), respetando `roles:["maestro","mensajero"]` y el comentario
+corregido (R20). Añadí también el `iconKey:"trophy"` al tipo `IconKey` y su mapeo en el Sidebar.
+
+## Archivos creados
+
+- `app/(app)/ranking/page.tsx` (T8, R12/R16/R17/R18) — Server Component role-aware; permite
+  maestro+mensajero, resto/sin sesión → `notFound`; prefetch `obtenerRankingAction()`,
+  `status!=="ok"` → `notFound` (defensa en profundidad).
+- `app/(app)/ranking/_components/RankingModule.tsx` (T9, R13/R6/R14/R15) — tabla del ranking
+  (posición, nombre, % del día, conteo crudo entregadas/asignadas; orden del servidor
+  respetado) + tabla de premios asociando premio↔ocupante elegible del podio (sin inventar
+  ocupante).
+- `app/(app)/ranking/_components/PremioInputRow.tsx` (T9, R9/R16/R17/R25) — fila por posición
+  con DOS inputs abiertos (monto + descripción) si `esEditable`; on-save →
+  `editarPremioAction` (Server Action, no fetch a /api); vaciar → null; feedback de error por
+  toast (`invalid`/`forbidden`/`unauthenticated`). Mensajero: solo-lectura.
+- `app/(app)/ranking/_components/ranking-labels.ts` — etiquetas i18n-ready + helpers `money`/
+  `porcentaje`/`conteoCrudo` (money-safe: STRING tal cual, sin parseFloat/Number).
+- `tests/components/RankingModule.test.tsx`, `tests/components/RankingPage.test.tsx`.
+
+## Archivos modificados
+
+- `lib/auth/menu-visibility.ts` (T10, R20) — `IconKey` += `"trophy"`; nuevo ítem `/ranking`
+  `roles:["maestro","mensajero"]` con comentario que documenta que la visibilidad
+  maestro+mensajero es INTENCIONAL (maestro edita, mensajero solo-lectura).
+- `app/(app)/_components/Sidebar.tsx` — import `Trophy` de lucide + mapeo `trophy: Trophy`
+  en `ICON_BY_KEY` (necesario para que el nuevo `iconKey` renderice).
+- `tests/unit/auth/menu-visibility.test.ts` — actualizado (no aflojado) para reflejar el ítem
+  "Ranking" intencional: `puedeVer` maestro/mensajero true y admin/adminTienda/adminSatelite
+  false; listas `itemsVisibles` de maestro y mensajero incluyen "Ranking".
+
+## Mapa R → test (frontend)
+
+| R   | Test |
+| --- | ---- |
+| R9  | `RankingModule.test.tsx` "monto vacío → 'Sin premio asignado', nunca cero" + "vaciar → null" |
+| R13 | `RankingModule.test.tsx` "tabla ordenada con posición/nombre/%/conteo crudo" |
+| R14 | `RankingModule.test.tsx` "premio (monto+descripción) asociado al ocupante elegible" |
+| R15 | `RankingModule.test.tsx` "posición sin ocupante NO inventa mensajero" |
+| R16 | `RankingModule.test.tsx` "esEditable → inputs monto/descripción + guardar"; `RankingPage.test.tsx` "maestro ve inputs" |
+| R17 | `RankingModule.test.tsx` "sin esEditable no hay inputs"; `RankingPage.test.tsx` "mensajero solo-lectura" |
+| R18 | `RankingPage.test.tsx` "otros roles / sin sesión → notFound sin consultar datos" + "action no-ok → notFound" |
+| R20 | `menu-visibility.test.ts` (maestro+mensajero ven "Ranking"; otros no; listas por rol) |
+| R25 | `RankingModule.test.tsx` "descripción vacía → 'Sin descripción'; con texto tal cual" + "guardar envía descripción" |
+| R10 | `RankingModule.test.tsx` "guardar envía monto+descripción a editarPremioAction y refresca" |
+| R11 | `RankingModule.test.tsx` "action `invalid` → toast de error, sin refrescar" |
+
+## Verificación (tras el cambio frontend)
+
+- `typecheck`: **0 errores**.
+- `lint`: **0 errores**, **139 warnings** (mismos del baseline; ninguno nuevo en mis archivos).
+- `test` (suite completa): **314 files, 2978 passed, 1 failed**. La única falla es
+  `tests/components/LoginForm.test.tsx` por **timeout 5000ms bajo carga** (ajeno, misma clase
+  que el flaky `no-embalaje`): pasa **26/26 en aislamiento** → NO es regresión. Tests nuevos
+  del frontend: 11 (`RankingModule`) + 5 (`RankingPage`) = 16 verdes.
+
+## Veredicto frontend
+
+Frontend de la 76 (T8-T10) completo: página role-aware + módulo (tabla ranking + inputs
+monto/descripción por posición) + ítem de menú maestro+mensajero. typecheck 0, lint 0 errores,
+2978/2979 (la falla es un timeout flaky ajeno de LoginForm, verde en aislamiento). Backend NO
+tocado; contrato consumido tal cual.

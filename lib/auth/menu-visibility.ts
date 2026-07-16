@@ -8,7 +8,14 @@ import { ROLES_SEED } from "@/lib/types/roles";
  * Client Component Sidebar) y las funciones/componentes no son serializables.
  * El Sidebar resuelve `iconKey -> componente` en el cliente al renderizar.
  */
-export type IconKey = "settings" | "user" | "package" | "clipboardCheck" | "truck" | "qrCode";
+export type IconKey =
+  | "settings"
+  | "user"
+  | "package"
+  | "clipboardCheck"
+  | "truck"
+  | "qrCode"
+  | "trophy";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -93,6 +100,17 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     href: "/cierres-admin",
     iconKey: "clipboardCheck",
     roles: ["maestro", "adminSatelite"],
+  },
+  {
+    // Feature 76: ranking DIARIO de mensajeros + tabla de premios. Visible para
+    // `maestro` y `mensajero` de forma INTENCIONAL (R20): el maestro ve y edita los
+    // premios (supervisión); el mensajero ve el ranking completo en solo-lectura
+    // (R16/R17). La defensa real es el `notFound` de la página `/ranking`, que
+    // resuelve el rol server-side.
+    label: "Ranking",
+    href: "/ranking",
+    iconKey: "trophy",
+    roles: ["maestro", "mensajero"],
   },
   {
     label: "QR",

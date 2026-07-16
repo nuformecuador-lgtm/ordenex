@@ -10,6 +10,7 @@ import {
   Package,
   QrCode,
   Settings,
+  Trophy,
   Truck,
   User,
   type LucideProps,
@@ -137,6 +138,7 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   clipboardCheck: ClipboardCheck,
   truck: Truck,
   qrCode: QrCode,
+  trophy: Trophy,
 };
 
 // El Sidebar reexporta los tipos de dominio del menu para consumidores/tests.
