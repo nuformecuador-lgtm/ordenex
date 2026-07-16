@@ -7,6 +7,7 @@
 import type { EtiquetaRow, IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  EtiquetaPorGuiaServiceResult,
   GenerarEtiquetasInput,
   GenerarEtiquetasServiceResult,
   IEtiquetaGuiaService,
@@ -58,11 +59,23 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
     return { status: "ok", etiquetas, omitidas };
   }
 
+  async obtenerEtiquetaPorGuia(
+    numGuia: number,
+    _actor: Actor,
+  ): Promise<EtiquetaPorGuiaServiceResult> {
+    // Misma autorizacion que `generarEtiquetas`: READ derivado disponible para
+    // cualquier rol autenticado (la sesion se exige en el borde).
+    const row = await this.repo.findEtiquetaByNumGuia(numGuia); // ya filtra borradas (R3)
+    if (!row || row.numGuia === null) return { status: "no_encontrada" };
+    return { status: "ok", etiqueta: this.toEtiquetaDTO(row, row.numGuia) };
+  }
+
   // R1/R4/R5/R6/R7/R8: arma el DTO de una orden con guia. `numGuia` se recibe ya
   // estrechado a `number` (el llamador descarto el caso null, R2). montoCobrar es
   // number|null sin moneda (R5); distritoNombre null si no hay (R4); qrValue =
-  // ordenId (R7, la UI construye la URL del paquete); barcodeValue = String(numGuia)
-  // (R8). No expone deletedAt (R6): la fila ni siquiera lo trae.
+  // String(numGuia) (R7, la UI construye la URL del paquete `/paquete/<numGuia>`);
+  // barcodeValue = String(numGuia) (R8): QR y barcode codifican el MISMO valor.
+  // No expone deletedAt (R6): la fila ni siquiera lo trae.
   private toEtiquetaDTO(row: EtiquetaRow, numGuia: number): EtiquetaGuiaDTO {
     return {
       ordenId: row.id,
@@ -78,7 +91,7 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
       provinciaNombre: row.provinciaNombre,
       cantonNombre: row.cantonNombre,
       distritoNombre: row.distritoNombre,
-      qrValue: row.id, // R7: QR codifica orden.id (UUID estable, feature 33)
+      qrValue: String(numGuia), // R7: QR codifica num_guia (UNIQUE en orden)
       barcodeValue: String(numGuia), // R8: barcode codifica num_guia
     };
   }

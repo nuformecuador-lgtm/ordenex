@@ -42,7 +42,14 @@ export default async function RecepcionSatelitePage() {
   const bloqueoBodega =
     bloqueoResult.status === "ok"
       ? bloqueoResult.bloqueo
-      : { bloqueada: false, porMensajeros: false, porCierreBodega: false };
+      : {
+          bloqueada: false,
+          porMensajeros: false,
+          porCierreBodega: false,
+          cierresAbiertos: 0,
+          totalMensajeros: 0,
+          mensajerosConCierreIds: [],
+        };
 
   // Feature 46 (R15/R16): pre-fetch server-side del aviso derivado "Liberadas hoy
   // (reprogramación)" de la bodega satélite del actor (estatus `en_bodega_satelite` +

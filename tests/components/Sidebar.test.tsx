@@ -54,6 +54,21 @@ function renderSidebar(items?: readonly MenuItem[]) {
   );
 }
 
+/**
+ * Enlace del sidebar por `href`. Estos tests renderizan SIDEBAR_ITEMS COMPLETO (sin
+ * filtrar por rol) y hay DOS items con el label "Órdenes": el de maestro/admin/
+ * adminTienda (`/ordenes`) y el del adminSatelite (`/recepcion-satelite`). En la app
+ * real nunca coexisten —`itemsVisibles` filtra por rol y ningún rol ve los dos—, así
+ * que aquí se desambigua por destino en vez de por nombre.
+ */
+function linkPorHref(href: string): HTMLElement {
+  const link = screen
+    .getAllByRole("link")
+    .find((l) => l.getAttribute("href") === href);
+  if (!link) throw new Error(`No hay enlace del sidebar con href="${href}"`);
+  return link;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   currentPathname = "/";
@@ -70,9 +85,9 @@ describe("Sidebar", () => {
 
     // Perfil y Órdenes son enlaces directos.
     const perfil = screen.getByRole("link", { name: "Perfil" });
-    const ordenes = screen.getByRole("link", { name: "Órdenes" });
+    const ordenes = linkPorHref("/ordenes");
     expect(perfil).toHaveAttribute("href", "/perfil");
-    expect(ordenes).toHaveAttribute("href", "/ordenes");
+    expect(ordenes).toHaveAccessibleName("Órdenes");
 
     // Configuración tiene subítems: es un botón colapsable, no un enlace.
     const config = screen.getByRole("button", { name: /configuración/i });
@@ -85,7 +100,7 @@ describe("Sidebar", () => {
 
     const config = screen.getByRole("button", { name: /configuración/i });
     const perfil = screen.getByRole("link", { name: "Perfil" });
-    const ordenes = screen.getByRole("link", { name: "Órdenes" });
+    const ordenes = linkPorHref("/ordenes");
 
     for (const el of [config, perfil, ordenes]) {
       expect(el.querySelector("svg")).not.toBeNull();
@@ -136,16 +151,17 @@ describe("Sidebar", () => {
   });
 
   it("marca item simple activo por ruta (R4, R5)", () => {
-    const cases: Array<{ path: string; active: string }> = [
-      { path: "/ordenes", active: "Órdenes" },
-      { path: "/perfil", active: "Perfil" },
+    // Por `href`: "Órdenes" está duplicado como label al renderizar sin filtrar.
+    const cases: Array<{ path: string; activeHref: string }> = [
+      { path: "/ordenes", activeHref: "/ordenes" },
+      { path: "/perfil", activeHref: "/perfil" },
     ];
 
-    for (const { path, active } of cases) {
+    for (const { path, activeHref } of cases) {
       currentPathname = path;
       const { unmount } = renderSidebar();
 
-      const link = screen.getByRole("link", { name: active });
+      const link = linkPorHref(activeHref);
       expect(link).toHaveAttribute("aria-current", "page");
       expect(link).toHaveAttribute("data-active");
       unmount();

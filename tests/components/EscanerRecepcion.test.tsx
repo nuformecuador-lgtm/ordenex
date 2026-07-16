@@ -1,24 +1,28 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { EscanerRecepcion } from "@/app/(app)/recepcion-satelite/_components/EscanerRecepcion";
 import { recibirPorQr } from "@/lib/actions/recepcion-satelite";
 
-// Feature 33 (T13) — recepción por escaneo (keyboard-wedge). Se mockean la Server
-// Action, el toast y la lib de cámara (sin hardware en CI). Se simula el lector
-// físico escribiendo el orden.id en el input y pulsando Enter (submit del form).
+// Feature 33 (T13) — recepción por escaneo con la CÁMARA (única entrada: el input
+// keyboard-wedge se retiró por pedido humano). Se mockean la Server Action, el
+// toast y la lib de cámara (sin hardware en CI): el doble captura el callback de
+// decodificación que `start` recibe, para poder simular un escaneo.
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
 }));
 
-const { successMock, errorMock, infoMock } = vi.hoisted(() => ({
-  successMock: vi.fn(),
-  errorMock: vi.fn(),
-  infoMock: vi.fn(),
-}));
+const { successMock, errorMock, infoMock, startMock, decodeCallback } =
+  vi.hoisted(() => ({
+    successMock: vi.fn(),
+    errorMock: vi.fn(),
+    infoMock: vi.fn(),
+    startMock: vi.fn(),
+    decodeCallback: { current: null as ((texto: string) => void) | null },
+  }));
 
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
@@ -35,7 +39,7 @@ vi.mock("@/hooks/useToast", () => ({
 // ciclo de vida (start/stop/clear) para que abrir/cerrar la cámara no falle.
 vi.mock("html5-qrcode", () => ({
   Html5Qrcode: class {
-    start = vi.fn().mockResolvedValue(undefined);
+    start = startMock;
     stop = vi.fn().mockResolvedValue(undefined);
     clear = vi.fn();
   },
@@ -43,26 +47,43 @@ vi.mock("html5-qrcode", () => ({
 
 const recibirMock = vi.mocked(recibirPorQr);
 
-/** Escribe un código en el input de escaneo y pulsa Enter (lector keyboard-wedge). */
+/** Abre la cámara y simula que decodifica un QR con el texto dado. */
 async function escanear(
   user: ReturnType<typeof userEvent.setup>,
-  codigo: string,
+  texto: string,
 ) {
-  const input = screen.getByRole("textbox", { name: "Código de la orden" });
-  await user.click(input);
-  await user.type(input, `${codigo}{Enter}`);
+  await user.click(screen.getByRole("button", { name: "Escanear con cámara" }));
+  await vi.waitFor(() => expect(decodeCallback.current).not.toBeNull());
+  await act(async () => {
+    decodeCallback.current?.(texto);
+  });
+}
+
+/** URL del paquete tal como la codifica el QR de la etiqueta: `/paquete/<numGuia>`. */
+function qrDeGuia(numGuia: number): string {
+  return `https://ordenex.app/paquete/${numGuia}`;
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  decodeCallback.current = null;
+  startMock.mockImplementation(
+    async (
+      _config: unknown,
+      _opciones: unknown,
+      onDecode: (texto: string) => void,
+    ) => {
+      decodeCallback.current = onDecode;
+    },
+  );
 });
 
 afterEach(() => {
   cleanup();
 });
 
-describe("EscanerRecepcion (keyboard-wedge)", () => {
-  it("R10: al Enter llama recibirPorQr con el ordenId escaneado y limpia el input", async () => {
+describe("EscanerRecepcion (cámara)", () => {
+  it("al decodificar llama recibirPorQr con el código escaneado", async () => {
     const user = userEvent.setup();
     const onRecibida = vi.fn();
     recibirMock.mockResolvedValue({
@@ -72,16 +93,22 @@ describe("EscanerRecepcion (keyboard-wedge)", () => {
     });
     render(<EscanerRecepcion onRecibida={onRecibida} />);
 
-    await escanear(user, "ord-1");
+    await escanear(user, qrDeGuia(1001));
 
     await vi.waitFor(() =>
-      expect(recibirMock).toHaveBeenCalledWith({ ordenId: "ord-1" }),
+      expect(recibirMock).toHaveBeenCalledWith({ numGuia: 1001 }),
     );
-    const input = screen.getByRole("textbox", { name: "Código de la orden" });
-    expect((input as HTMLInputElement).value).toBe("");
   });
 
-  it("QR con URL del paquete → extrae el ordenId del último segmento y llama recibirPorQr", async () => {
+  // La entrada por teclado se retiró: solo queda la cámara.
+  it("ya no expone el input de escaneo por teclado", () => {
+    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Recibir" })).toBeNull();
+  });
+
+  it("QR con URL del paquete → extrae el código del último segmento y llama recibirPorQr", async () => {
     const user = userEvent.setup();
     recibirMock.mockResolvedValue({
       status: "ok",
@@ -90,14 +117,14 @@ describe("EscanerRecepcion (keyboard-wedge)", () => {
     });
     render(<EscanerRecepcion onRecibida={vi.fn()} />);
 
-    await escanear(user, "https://ordenex.app/paquete/ord-1");
+    await escanear(user, `${qrDeGuia(1001)}/`); // robusto ante barra final
 
     await vi.waitFor(() =>
-      expect(recibirMock).toHaveBeenCalledWith({ ordenId: "ord-1" }),
+      expect(recibirMock).toHaveBeenCalledWith({ numGuia: 1001 }),
     );
   });
 
-  it("R10: resultado ok → toast de éxito y dispara onRecibida", async () => {
+  it("resultado ok → toast de éxito y dispara onRecibida", async () => {
     const user = userEvent.setup();
     const onRecibida = vi.fn();
     recibirMock.mockResolvedValue({
@@ -107,10 +134,12 @@ describe("EscanerRecepcion (keyboard-wedge)", () => {
     });
     render(<EscanerRecepcion onRecibida={onRecibida} />);
 
-    await escanear(user, "ord-1");
+    await escanear(user, qrDeGuia(1001));
 
     await vi.waitFor(() => expect(successMock).toHaveBeenCalled());
-    expect(successMock.mock.calls[0][0]).toMatch(/ord-1/);
+    // El toast nombra la guía (lo impreso en la etiqueta), NO el UUID interno.
+    expect(successMock.mock.calls[0][0]).toMatch(/1001/);
+    expect(successMock.mock.calls[0][0]).not.toMatch(/ord-1/);
     expect(onRecibida).toHaveBeenCalledTimes(1);
   });
 
@@ -120,10 +149,10 @@ describe("EscanerRecepcion (keyboard-wedge)", () => {
     recibirMock.mockResolvedValue({ status: "ya_recibida" });
     render(<EscanerRecepcion onRecibida={onRecibida} />);
 
-    await escanear(user, "ord-2");
+    await escanear(user, qrDeGuia(1002));
 
     await vi.waitFor(() => expect(infoMock).toHaveBeenCalled());
-    expect(infoMock.mock.calls[0][0]).toMatch(/ya .*recibida/i);
+    expect(infoMock.mock.calls[0][0]).toMatch(/guía 1002 ya .*recibida/i);
     expect(onRecibida).toHaveBeenCalledTimes(1);
   });
 
@@ -133,7 +162,7 @@ describe("EscanerRecepcion (keyboard-wedge)", () => {
     recibirMock.mockResolvedValue({ status: "zona_ajena" });
     render(<EscanerRecepcion onRecibida={onRecibida} />);
 
-    await escanear(user, "ord-3");
+    await escanear(user, qrDeGuia(1003));
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     expect(errorMock.mock.calls[0][0]).toMatch(/otra zona/i);
@@ -148,7 +177,7 @@ describe("EscanerRecepcion (keyboard-wedge)", () => {
     });
     render(<EscanerRecepcion onRecibida={vi.fn()} />);
 
-    await escanear(user, "ord-4");
+    await escanear(user, qrDeGuia(1004));
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     // Estado legible derivado del value crudo.
@@ -160,21 +189,52 @@ describe("EscanerRecepcion (keyboard-wedge)", () => {
     recibirMock.mockResolvedValue({ status: "no_encontrada" });
     render(<EscanerRecepcion onRecibida={vi.fn()} />);
 
-    await escanear(user, "ord-5");
+    await escanear(user, qrDeGuia(1005));
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     expect(errorMock.mock.calls[0][0]).toMatch(/no encontrada/i);
   });
 
-  it("R16: validation_error → toast de error 'código inválido'", async () => {
+  it("R16: validation_error del servidor → toast de error 'código inválido'", async () => {
     const user = userEvent.setup();
     recibirMock.mockResolvedValue({ status: "validation_error", fieldErrors: {} });
+    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+
+    await escanear(user, qrDeGuia(1007));
+
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(errorMock.mock.calls[0][0]).toMatch(/inválido/i);
+  });
+
+  // Un QR que no es la URL del paquete (o cuyo último segmento no es un num_guia)
+  // lo rechaza `extractNumGuiaFromScan` en cliente: mismo mensaje que el
+  // `validation_error` del borde, pero sin llamar a la acción.
+  it("R16: un QR ajeno se rechaza en cliente, sin llamar a recibirPorQr", async () => {
+    const user = userEvent.setup();
     render(<EscanerRecepcion onRecibida={vi.fn()} />);
 
     await escanear(user, "###");
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     expect(errorMock.mock.calls[0][0]).toMatch(/inválido/i);
+    expect(recibirMock).not.toHaveBeenCalled();
+  });
+
+  // CORTE LIMPIO (decisión humana): una etiqueta VIEJA codificaba el UUID de la
+  // orden en la URL. Ese QR ya no resuelve a num_guia y NO se intenta resolver por
+  // otra vía: da error de validación y la etiqueta se reimprime.
+  it("R16: el QR de una etiqueta vieja (UUID) NO se resuelve: error de validación sin llamar a la acción", async () => {
+    const user = userEvent.setup();
+    render(<EscanerRecepcion onRecibida={vi.fn()} />);
+
+    await escanear(
+      user,
+      "https://ordenex.app/paquete/3f1c9a2e-7b41-4d6a-9c15-8e2d0b6f4a77",
+    );
+
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(errorMock.mock.calls[0][0]).toMatch(/inválido/i);
+    expect(recibirMock).not.toHaveBeenCalled();
   });
 
   it("R5: sin_zona → toast de error 'no tienes una zona asignada'", async () => {
@@ -182,7 +242,7 @@ describe("EscanerRecepcion (keyboard-wedge)", () => {
     recibirMock.mockResolvedValue({ status: "sin_zona" });
     render(<EscanerRecepcion onRecibida={vi.fn()} />);
 
-    await escanear(user, "ord-6");
+    await escanear(user, qrDeGuia(1006));
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     expect(errorMock.mock.calls[0][0]).toMatch(/zona asignada/i);

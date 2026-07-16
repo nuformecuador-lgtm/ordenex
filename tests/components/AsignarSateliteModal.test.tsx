@@ -185,6 +185,34 @@ describe("AsignarSateliteModal", () => {
     );
   });
 
+  it("admin_satelite: un mensajero con cierre abierto aparece deshabilitado; los demás siguen asignables", async () => {
+    const user = userEvent.setup();
+    render(
+      <AsignarSateliteModal
+        open
+        ordenes={[makeOrden({ id: "o1", numRemision: "REM-001" })]}
+        mensajeros={MENSAJEROS}
+        mensajerosBloqueadosIds={["m2"]}
+        onOpenChange={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    const select = screen.getByRole("combobox", {
+      name: "Mensajero para el lote",
+    });
+    await user.click(select);
+    const listbox = await screen.findByRole("listbox");
+
+    const bloqueado = within(listbox).getByRole("option", {
+      name: /Beto Mensajero \(cierre abierto\)/i,
+    });
+    expect(bloqueado).toHaveAttribute("aria-disabled", "true");
+
+    const libre = within(listbox).getByRole("option", { name: "Ana Mensajera" });
+    expect(libre).not.toHaveAttribute("aria-disabled", "true");
+  });
+
   it("R6: zona sin mensajeros → estado vacío accionable y 'Asignar' deshabilitado", async () => {
     const user = userEvent.setup();
     renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })], []);

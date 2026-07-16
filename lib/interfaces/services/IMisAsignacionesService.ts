@@ -36,6 +36,12 @@ export interface MisAsignacionesKpis {
   entregadas: number;
   /** Suma de `montoCobrar` (COD) de las ordenes en `en_reparto`; null cuenta 0. */
   porCobrar: number;
+  /**
+   * Total a cobrar ACUMULADO: COD de las ordenes `en_reparto` + `entregada`. No baja al
+   * ENTREGAR (la orden sale de reparto pero sigue sumando como entregada); se descuenta
+   * cuando se gestiona como reprogramada/devuelta/rechazada (no entra en ningun set).
+   */
+  totalACobrar: number;
 }
 
 // R9/R10/R20: dos grupos separados (por recoger vs por gestionar) + el puntero de

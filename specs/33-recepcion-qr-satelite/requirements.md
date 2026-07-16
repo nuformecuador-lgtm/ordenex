@@ -4,9 +4,28 @@ Zone: `fullstack` · complexity: `high` · depends_on: 30 (`done`), 32 (`done`) 
 
 > Estado: `in_progress` (F2.0). **F1.4 APROBADA por el humano el 2026-07-11** (ver bloque
 > "## Decisiones F1.4 (APROBADAS)" abajo, que SUPERSEDE la sección "Preguntas abiertas para
-> F1.4"). Los requisitos R1–R23 estaban redactados sobre la opción recomendada; el ÚNICO cambio
-> respecto a lo provisional es (a): se implementan **AMBOS** mecanismos de escaneo (cámara +
-> lector keyboard-wedge), no solo el lector.
+> F1.4").
+>
+> ⚠️ **Cambios posteriores 2026-07-15** (ver "## Decisiones 2026-07-15"), que SUPERSEDEN a F1.4 (a):
+> 1. El QR codifica **`num_guia`**, no `orden.id` (cambio de la feature 32, decisión (a')). La
+>    recepción resuelve la orden por `num_guia`.
+> 2. Se **RETIRA el camino del lector físico keyboard-wedge**: la recepción es **SOLO por cámara**.
+>    **R10 queda RETIRADO** (ver su entrada, conservada con el motivo y la fecha).
+
+## Decisiones 2026-07-15 (APROBADAS por el humano) — SUPERSEDEN a F1.4 (a)
+
+- **(a-1) Escaneo = SOLO cámara.** El camino del lector físico keyboard-wedge (el `<input>` autofocus
+  donde el lector "teclea" el QR y termina con Enter) fue **eliminado de la UI** por decisión del
+  humano. Ya NO hay "dos caminos" de recepción: queda **únicamente** la cámara del dispositivo
+  (`html5-qrcode`, vía el componente compartido `QrScanner`). Consecuencia directa: **R10 RETIRADO**
+  y los tests que cubrían el input (texto + Enter) **eliminados a propósito** — su ausencia NO es una
+  regresión ni trazabilidad rota (ver "Tabla de trazabilidad" y la nota de R10).
+- **(a-2) El QR codifica `num_guia`, no `orden.id`.** Alineado con la decisión (a') de la feature 32
+  (2026-07-15). El QR de la etiqueta codifica la URL `<origin>/paquete/<numGuia>`; el escáner extrae
+  el `num_guia` del último segmento y la recepción hace lookup por `num_guia` (`@unique`), NO por PK.
+  **Corte limpio sin retrocompatibilidad:** un `orden.id` (UUID) escaneado de una etiqueta antigua NO
+  resuelve ninguna orden y produce `validation_error`; esas etiquetas deben reimprimirse.
+  R11–R16 y R22 quedan referidos a `num_guia` como identificador escaneado.
 
 ## Decisiones F1.4 (APROBADAS 2026-07-11)
 
@@ -16,6 +35,10 @@ Zone: `fullstack` · complexity: `high` · depends_on: 30 (`done`), 32 (`done`) 
   (keyboard-wedge)**: el lector "teclea" el contenido del QR en un input y dispara la recepción.
   Ambos caminos resuelven a la MISMA lógica de recepción (dado un `orden.id`, transiciona).
   NOTA: convertir la app en **PWA** es una feature FUTURA aparte — NO entra en la 33.
+  > **SUPERADA el 2026-07-15 por la decisión (a-1).** Se conserva el rastro: se llegó a implementar
+  > el camino keyboard-wedge, pero el humano decidió retirarlo y dejar la recepción SOLO por cámara.
+  > De esta decisión sobrevive únicamente el mecanismo (1) cámara; el (2) lector físico ya NO existe
+  > en la UI. La mención a `orden.id` queda además superada por (a-2): el QR codifica `num_guia`.
 - **(b)** UN solo estado NUEVO **`en_bodega_satelite`** con la zona derivada de `orden.zonaId`
   para el display ("en bodega satélite de <zona>"). Mismo patrón de la feature 30.
 - **(c)** El adminSatelite **SOLO recibe órdenes de SU zona**: escanear una orden con
@@ -52,10 +75,13 @@ trazabilidad"). El "actor" se resuelve vía `resolveActorFromSession` → `{ usu
     (feature 24/R6). El `adminSatelite` está atado a una zona.
   - `Orden.mensajeroAsignadoId` — NULL mientras la orden está en satélite (feature 30/R9). Esta
     feature NO lo toca (la asignación a mensajero de la satélite es la feature 34).
-- **QR = `orden.id`** (decisión F1.4 de la feature 32; ver `EtiquetaGuiaService.toEtiquetaDTO`,
-  `qrValue: row.id`). La etiqueta imprimible codifica `orden.id` en el QR justamente para que
-  la recepción de esta feature escanee y haga *lookup* por PK. El código de barras codifica
-  `num_guia` y NO se usa aquí.
+- **QR = `num_guia`** (decisión (a') de la feature 32, **2026-07-15**; ver
+  `EtiquetaGuiaService.toEtiquetaDTO`, `qrValue: String(numGuia)`). La etiqueta imprimible codifica
+  la URL `<origin>/paquete/<numGuia>` en el QR; la recepción de esta feature extrae el `num_guia`
+  del último segmento (`extractNumGuiaFromScan`, `lib/utils/paquete-url.ts`) y hace *lookup* por
+  `num_guia` (`Orden.numGuia` es `Int? @unique`). El código de barras codifica el MISMO `num_guia`.
+  > Antes (F1.4, 2026-07-11 → 2026-07-15) el QR codificaba `orden.id` y el lookup era por PK.
+  > Superado por (a-2); sin retrocompatibilidad (un UUID escaneado → `validation_error`).
 - Flujo de transición de estado (precedentes): `lib/services/GuiaAsignacionService.ts` +
   `lib/repositories/OrdenRepository.ts` (`findByIdsForTransicion`, `findEstatusIdByValue`,
   `rutearBodegaSateliteLote`) + `lib/actions/ordenes-guia.ts` (guardias por estado de origen,
@@ -118,31 +144,51 @@ trazabilidad"). El "actor" se resuelve vía `resolveActorFromSession` → `{ usu
 
 ## Recepción por escaneo de QR
 
-- **R10** — El sistema DEBE ofrecer un mecanismo de recepción que reciba el contenido escaneado de
-  un QR como **texto** (el valor codificado es `orden.id`, feature 32) y dispare la recepción de
-  UNA orden por escaneo (1-a-1), con feedback por ítem (éxito o motivo de rechazo). El mecanismo de
-  entrada recomendado es un lector físico tipo teclado (keyboard-wedge) que "teclea" el contenido en
-  un input; la recepción NO DEBE depender de acceso a cámara. (Ver Pregunta abierta (a).)
-- **R11** — CUANDO se recibe un `orden.id` cuya orden está en `en_ruta_bodega_satelite` y cuyo
+- **~~R10~~ — RETIRADO el 2026-07-15** (decisión (a-1) del humano). Texto original, conservado como
+  rastro de que existió:
+  > ~~El sistema DEBE ofrecer un mecanismo de recepción que reciba el contenido escaneado de un QR
+  > como **texto** (el valor codificado es `orden.id`, feature 32) y dispare la recepción de UNA
+  > orden por escaneo (1-a-1), con feedback por ítem (éxito o motivo de rechazo). El mecanismo de
+  > entrada recomendado es un lector físico tipo teclado (keyboard-wedge) que "teclea" el contenido
+  > en un input; la recepción NO DEBE depender de acceso a cámara.~~
+  >
+  > **Motivo del retiro:** el `<input>` autofocus del lector keyboard-wedge fue **eliminado de la
+  > UI** por decisión del humano; la recepción es ahora **SOLO por cámara**. El requisito describía
+  > justamente ese camino de entrada, por lo que deja de aplicar en su totalidad.
+  >
+  > **Efecto en trazabilidad (leer antes de reportar regresión):** los tests que cubrían R10 (entrada
+  > de texto + Enter en el input) fueron **eliminados a propósito** junto con el input. La ausencia
+  > de esos casos es **intencional**, NO una regresión ni un requisito sin test. R10 no debe volver a
+  > mapearse a ningún test.
+  >
+  > **Qué sobrevive y dónde:** la entrada por cámara está cubierta por la decisión (a-1) y por
+  > R11–R16 (que definen el comportamiento de la recepción dado el valor escaneado, sea cual sea el
+  > medio de captura), más R22 (testabilidad de la lógica). Ver Pregunta abierta (i) sobre si el
+  > humano quiere un requisito EARS explícito para el camino cámara.
+
+- **R11** — CUANDO se recibe un `num_guia` cuya orden está en `en_ruta_bodega_satelite` y cuyo
   `orden.zonaId` es la zona del `adminSatelite`, ENTONCES el sistema DEBE transicionar esa orden a
   `en_bodega_satelite` (fijando `estatus_id`) y confirmar la recepción de ese ítem. NO DEBE tocar
   `mensajero_asignado_id` ni `num_guia`.
-- **R12** — SI el `orden.id` recibido corresponde a una orden cuyo `orden.zonaId` NO es la zona del
+- **R12** — SI el `num_guia` recibido corresponde a una orden cuyo `orden.zonaId` NO es la zona del
   `adminSatelite`, ENTONCES el sistema DEBE rechazar la recepción con un motivo claro (`zona_ajena`,
   "esta orden pertenece a otra zona"), SIN efectos en datos.
-- **R13** — SI el `orden.id` recibido corresponde a una orden que NO está en
+- **R13** — SI el `num_guia` recibido corresponde a una orden que NO está en
   `en_ruta_bodega_satelite` (estado de origen incorrecto, p. ej. `en_fulfillment`), ENTONCES el
   sistema DEBE rechazar la recepción con un motivo claro (`estado_invalido`, indicando el estado
   actual), SIN efectos en datos.
-- **R14** — SI el `orden.id` recibido corresponde a una orden que YA está en `en_bodega_satelite`
+- **R14** — SI el `num_guia` recibido corresponde a una orden que YA está en `en_bodega_satelite`
   (de la propia zona), ENTONCES el sistema NO DEBE producir error ni efectos: DEBE responder de forma
   idempotente con un mensaje "ya recibida". (Reescanear un paquete ya recibido no rompe el flujo.)
-- **R15** — SI el `orden.id` recibido no corresponde a ninguna orden, o corresponde a una orden
+- **R15** — SI el `num_guia` recibido no corresponde a ninguna orden, o corresponde a una orden
   borrada (`deleted_at`), ENTONCES el sistema DEBE rechazar la recepción con un motivo claro
   (`no_encontrada`), SIN efectos en datos.
-- **R16** — SI el valor escaneado no tiene el formato de un `orden.id` válido (QR ilegible, cadena
-  vacía o que no valida el schema del identificador), ENTONCES el sistema DEBE rechazar la entrada en
-  el borde (`validation_error`, "código inválido") ANTES de invocar el service, SIN tocar datos.
+- **R16** — SI del valor escaneado no se puede extraer un `num_guia` válido (QR ilegible, cadena
+  vacía, URL de otro origen, segmento no numérico, o un `orden.id`/UUID de una etiqueta antigua),
+  ENTONCES el sistema DEBE rechazar la entrada en el borde (`validation_error`, "código inválido")
+  ANTES de invocar el service, SIN tocar datos.
+  *Nota (2026-07-15):* el caso "UUID de etiqueta antigua" es consecuencia del corte limpio sin
+  retrocompatibilidad (decisión (a-2)): esas etiquetas deben reimprimirse.
 
 ## Autorización, transaccionalidad y guardias (backend)
 
@@ -165,15 +211,19 @@ trazabilidad"). El "actor" se resuelve vía `resolveActorFromSession` → `{ usu
   abierta (b)).
 - **R21** — El sistema DEBE introducir el cambio de catálogo mediante migración Prisma versionada con
   `down.sql` reversible, y `pnpm db:rollback` DEBE funcionar (CHECKPOINTS: migraciones reversibles).
-- **R22** — La lógica de recepción (transición dado un `orden.id`) DEBE ser testeable a nivel de
+- **R22** — La lógica de recepción (transición dado un `num_guia`) DEBE ser testeable a nivel de
   **service** (con dobles de repo, sin DB ni HTTP) y a nivel de **Server Action** recibiendo el
-  identificador escaneado como **texto**. El hardware de escaneo (lector keyboard-wedge) NO es
-  unit-testeable: su integración (el lector "teclea" en el input y dispara la acción) DEBE quedar
-  declarada como verificación **manual**; se evalúa un E2E (Playwright) que simule la entrada de
-  texto en el input de escaneo para cubrir el flujo crítico de recepción (ver Pregunta abierta (g)).
-- **R23** — Cada requisito (`R1`–`R22`) DEBE quedar mapeado a al menos un test concreto (tabla de
-  trazabilidad; el `implementer` la completa con rutas en
-  `progress/impl_33-recepcion-qr-satelite.md`).
+  identificador escaneado como **texto**. El hardware de captura (la **cámara**) NO es
+  unit-testeable: la decodificación real DEBE quedar declarada como verificación **manual**; los
+  tests de componente cubren el escáner con la librería de decodificación mockeada (entregar el texto
+  decodificado al handler).
+  *Actualizado 2026-07-15 (decisión (a-1)):* la referencia previa al lector keyboard-wedge y al E2E
+  "que escribe texto en el input de escaneo" queda **sin efecto** — ese input ya no existe. El
+  hardware cuya integración se verifica manualmente es ahora la cámara, no el lector físico.
+- **R23** — Cada requisito **vigente** (`R1`–`R22`, **excepto R10, RETIRADO el 2026-07-15**) DEBE
+  quedar mapeado a al menos un test concreto (tabla de trazabilidad; el `implementer` la completa con
+  rutas en `progress/impl_33-recepcion-qr-satelite.md`). R10 NO cuenta para esta regla: está retirado
+  y sus tests se eliminaron a propósito.
 
 ---
 
@@ -190,20 +240,20 @@ trazabilidad"). El "actor" se resuelve vía `resolveActorFromSession` → `{ usu
 | R7  | component: la tarjeta "Por recibir" no expone acción de asignar/gestionar |
 | R8  | integration repo+service + component: "Recibidas" = `en_bodega_satelite` de la zona, sección aparte |
 | R9  | component: estado `en_bodega_satelite` renderiza "en bodega satélite de \<zona\>" |
-| R10 | unit action + component: la acción recibe texto (orden.id) y transiciona 1 orden por escaneo con feedback |
+| ~~R10~~ | **RETIRADO 2026-07-15 — SIN test, por diseño.** Los casos del input keyboard-wedge (texto + Enter) se eliminaron a propósito junto con el input. No es regresión ni trazabilidad rota. |
 | R11 | unit service: orden en `en_ruta_bodega_satelite` de la zona → pasa a `en_bodega_satelite`; sin tocar mensajero/num_guia |
 | R12 | unit service: orden de otra zona → `zona_ajena`, sin efectos |
 | R13 | unit service: orden en estado != `en_ruta_bodega_satelite` → `estado_invalido`, sin efectos |
 | R14 | unit service: orden ya en `en_bodega_satelite` → `ya_recibida`, idempotente, sin efectos |
 | R15 | unit service: orden inexistente/borrada → `no_encontrada`, sin efectos |
-| R16 | unit action: valor no-`orden.id` (vacío/ilegible) → `validation_error`, sin tocar service |
+| R16 | unit action/util: valor sin `num_guia` extraíble (vacío/ilegible/otro origen/UUID antiguo) → `validation_error`, sin tocar service |
 | R17 | unit service: rol != adminSatelite → forbidden antes de tocar datos |
 | R18 | integration service/repo: update guardado por estado+zona; doble escaneo concurrente sin doble efecto |
 | R19 | unit/type: contratos features 30/32/36 estables; ruteo del maestro intacto |
 | R20 | integration/db: un único valor `en_bodega_satelite`; display deriva la zona |
 | R21 | script/CI: `db:migrate` up + `db:rollback` down verdes |
-| R22 | unit service + action (texto) verdes; E2E de recepción por input de texto (si aplica); nota de verificación manual del lector |
-| R23 | revisión: todos los R con test asociado (reviewer) |
+| R22 | unit service + action (texto) verdes; component del escáner con la decodificación mockeada; nota de verificación manual de la cámara |
+| R23 | revisión: todos los R **vigentes** con test asociado (reviewer); R10 excluido por retirado |
 
 ---
 
@@ -212,14 +262,22 @@ trazabilidad"). El "actor" se resuelve vía `resolveActorFromSession` → `{ usu
 - **Asignación desde la bodega satélite a mensajeros de su zona → feature 34.** Aquí la orden solo
   llega a `en_bodega_satelite`; parte de ahí la feature 34.
 - **Ruteo del maestro a satélite → feature 30.** No se toca.
-- **Etiqueta con QR/código de barras → feature 32.** Aquí solo se **consume** el QR (`orden.id`).
+- **Etiqueta con QR/código de barras → feature 32.** Aquí solo se **consume** el QR (`num_guia`,
+  decisión (a-2) 2026-07-15; antes `orden.id`).
+- **Recepción con lector físico (keyboard-wedge) → RETIRADA del producto** el 2026-07-15 (R10). No es
+  "fuera de alcance de esta feature": es un camino que existió y se eliminó. Reintroducirlo exige una
+  decisión nueva del humano.
 - **Tiempo real → feature 35. Trazabilidad → feature 49.** No aplican.
 
 ---
 
 ## Preguntas abiertas para F1.4 (recomendación + alternativas — el humano decide)
 
-**(a) Mecanismo de escaneo.**
+> Registro histórico. **(a) quedó resuelta en F1.4 (2026-07-11, ambos mecanismos) y luego REVERTIDA
+> el 2026-07-15 por la decisión (a-1): SOLO cámara.** (g) queda igualmente afectada: el E2E que
+> proponía escribir texto en el input de escaneo ya no aplica (ese input no existe).
+
+**(a) Mecanismo de escaneo.** [RESUELTA 2026-07-11 → ambos; REVERTIDA 2026-07-15 → solo cámara]
 - *Recomendación:* lector físico de QR **tipo teclado (keyboard-wedge)** como base — el lector
   "teclea" el contenido del QR (`orden.id`) en un input enfocado y dispara la recepción al recibir el
   terminador (Enter). Robusto, barato, sin permisos de cámara, sin dependencia nueva; encaja con Next
@@ -264,3 +322,21 @@ trazabilidad"). El "actor" se resuelve vía `resolveActorFromSession` → `{ usu
 - *Recomendación:* NO en esta feature. El maestro ya ve el estado `en_ruta_bodega_satelite` (feature
   30) y verá `en_bodega_satelite` como estado legible en el listado general (aditivo, sin trabajo nuevo
   aquí). ¿Se confirma que no se construye vista extra para maestro/GAM?
+
+---
+
+## Preguntas abiertas (2026-07-15, tras el retiro de R10)
+
+**(i) ¿Se quiere un requisito EARS explícito para el camino cámara?**
+- *Contexto:* R10 era el único requisito que enunciaba el **mecanismo de entrada** y la **granularidad
+  1-a-1 con feedback por ítem**. Al retirarlo, esos dos enunciados quedan sostenidos solo por las
+  decisiones (a-1)/(d), no por un `R<n>` testeable. El comportamiento **sí** está implementado y
+  cubierto por tests de componente del escáner; lo que falta es el requisito que los ancle.
+- *No se redacta aquí por decisión de proceso:* escribir un "R10 bis" sería inventar un requisito que
+  el humano no pidió en este cambio. Se deja la elección explícita:
+  1. Dejarlo así (R10 retirado, sin sustituto) — el camino cámara se documenta solo como decisión; o
+  2. Añadir un requisito nuevo (p. ej. `R24`) que enuncie en EARS: "CUANDO la cámara decodifica un QR,
+     el sistema DEBE recibir UNA orden por escaneo con feedback por ítem", y mapearlo al test de
+     componente ya existente.
+- *Impacto si no se decide:* ninguno sobre el código; el reviewer podría señalar que la recepción por
+  cámara no tiene requisito propio.

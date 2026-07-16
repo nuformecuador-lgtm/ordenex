@@ -29,7 +29,7 @@ type RecepcionSateliteRepo = Pick<
   IOrdenRepository,
   | "findUsuarioZonaId"
   | "findRecepcionSateliteByZona"
-  | "findByIdsForTransicion"
+  | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recibirEnSatelite"
   | "recibirLoteEnSatelite"
@@ -88,15 +88,18 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     return { status: "ok", porRecibir, recibidas, porDevolver, zonaNombre, sinZona: false };
   }
 
-  async recibir(ordenId: string, actor: Actor): Promise<RecibirServiceResult> {
+  async recibir(numGuia: number, actor: Actor): Promise<RecibirServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R17
 
     const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R4
     if (zonaId === null) return { status: "sin_zona" }; // R5
 
-    const row = (await this.repo.findByIdsForTransicion([ordenId]))[0];
+    // El QR codifica `/paquete/<numGuia>`: la orden se resuelve por `num_guia`
+    // (UNIQUE); el `id` sale de la fila para la transicion guardada.
+    const row = await this.repo.findByNumGuiaForTransicion(numGuia);
     // R15: inexistente o borrada -> no_encontrada, sin efectos.
     if (!row || row.deletedAt !== null) return { status: "no_encontrada" };
+    const ordenId = row.id;
     // R12: orden de otra zona -> zona_ajena, sin efectos.
     if (row.zonaId !== zonaId) return { status: "zona_ajena" };
     // R14: ya recibida (misma zona) -> idempotente, sin escribir.
@@ -124,7 +127,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
 
     // R18: race — otro escaneo la movio entre la lectura y la escritura. Re-lee y
     // decide: si ahora esta recibida -> ya_recibida (idempotente); si no -> conflict.
-    const actual = (await this.repo.findByIdsForTransicion([ordenId]))[0];
+    const actual = await this.repo.findByNumGuiaForTransicion(numGuia);
     if (actual && actual.deletedAt === null && actual.estatusValue === ESTADO_RECIBIDA) {
       return { status: "ya_recibida" };
     }

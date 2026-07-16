@@ -18,7 +18,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
       porRecoger: [],
       porGestionar: [],
       ordenEnGestionId: null,
-      kpis: { pendientes: 0, entregadas: 0, porCobrar: 0 },
+      kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
     })),
     recogerAsignaciones: vi.fn(async () => ({ status: "ok" as const, recogidas: ["o1"] })),
     escogerParaGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),
@@ -135,6 +135,18 @@ describe("Feature 73 · la action rechaza en el borde, sin efectos (R6/R9)", () 
     const r = await gestionar(fdDevuelta({ motivo: "" }), { service, getActor: actorMensajero });
     expect(r.status).toBe("validation_error");
     if (r.status === "validation_error") expect(r.fieldErrors.motivo).toBeDefined();
+    expect(service.gestionar).not.toHaveBeenCalled();
+  });
+
+  it("pedido: devuelta SIN evidencia -> validation_error en `evidencia`, service NO invocado", async () => {
+    const service = buildService();
+    const fd = fdDevuelta();
+    fd.delete("evidencia");
+    const r = await gestionar(fd, { service, getActor: actorMensajero });
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(r.fieldErrors.evidencia).toBeDefined();
+    }
     expect(service.gestionar).not.toHaveBeenCalled();
   });
 });

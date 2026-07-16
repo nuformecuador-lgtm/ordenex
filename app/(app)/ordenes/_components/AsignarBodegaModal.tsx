@@ -19,6 +19,8 @@ export interface AsignarBodegaModalProps {
   ordenes: OrdenListItemDTO[];
   /** TODOS los mensajeros, sin filtro de zona (R28). */
   mensajeros: MensajeroLiteDTO[];
+  /** Ajuste maestro: ids de mensajeros con cierre abierto; se deshabilitan en el selector. */
+  mensajerosBloqueadosIds?: string[];
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
@@ -33,6 +35,7 @@ export function AsignarBodegaModal({
   open,
   ordenes,
   mensajeros,
+  mensajerosBloqueadosIds = [],
   onOpenChange,
   onSuccess,
 }: AsignarBodegaModalProps) {
@@ -46,7 +49,10 @@ export function AsignarBodegaModal({
     if (open) setMensajeroId("");
   }
 
-  const mensajeroOptions = toMensajeroOptions(mensajeros);
+  const mensajeroOptions = toMensajeroOptions(
+    mensajeros,
+    new Set(mensajerosBloqueadosIds),
+  );
 
   async function handleConfirm() {
     if (!mensajeroId) {

@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Megaphone,
   Package,
   QrCode,
   Settings,
@@ -138,6 +139,7 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   clipboardCheck: ClipboardCheck,
   truck: Truck,
   qrCode: QrCode,
+  megaphone: Megaphone,
   trophy: Trophy,
 };
 

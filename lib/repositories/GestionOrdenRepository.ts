@@ -92,6 +92,19 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     });
   }
 
+  /** Suma de `montoCobrar` (COD) de las entregadas del mensajero, no borradas; null -> 0. */
+  async sumMontoCobrarEntregadas(mensajeroId: string): Promise<number> {
+    const agg = await this.prisma.orden.aggregate({
+      _sum: { montoCobrar: true },
+      where: {
+        mensajeroAsignadoId: mensajeroId,
+        deletedAt: null,
+        estatus: { value: ESTATUS_ENTREGADA },
+      },
+    });
+    return agg._sum.montoCobrar ? agg._sum.montoCobrar.toNumber() : 0;
+  }
+
   /** R27/R31: filas por id INCLUYENDO borradas (el service distingue el motivo). */
   async findByIdsParaGestion(ids: string[]): Promise<OrdenGestionRow[]> {
     if (ids.length === 0) return [];

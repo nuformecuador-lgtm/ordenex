@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
+import type { CierreEstado } from "@/lib/types/cierre";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
@@ -17,6 +17,7 @@ import {
   type GenerarGuiaDecisionData,
   type GenerarGuiaResultRow,
   type GeoExistence,
+  type BodegaBloqueoResult,
   type IOrdenRepository,
   type ListOrdenesParams,
   type ListOrdenesResult,
@@ -46,7 +47,6 @@ type OrdenPrismaClient = Pick<
 // Feature 41 (R12/R16/R17): estados de cierre que BLOQUEAN. `rechazado`/`aprobado` NO
 // bloquean (dinero conciliado o descartado). Fuente de verdad en lib/types/cierre.ts.
 const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido"];
-const DESTINO_BODEGA_SATELITE: CierreDestinoTipo = "bodega_satelite";
 const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
 
 // Feature 17/R3: nombre CONSTANTE de la secuencia (nunca interpolar entrada de
@@ -58,6 +58,9 @@ const NUM_GUIA_SEQUENCE = "orden_num_guia_seq";
 // guardada (`recibirEnSatelite`) solo transiciona una orden que sigue en este
 // estado (guardia por estado de origen en el propio UPDATE, patron feature 17/36).
 const ORIGEN_RECEPCION_SATELITE = "en_ruta_bodega_satelite";
+// Estado de ORIGEN de la recepcion en la tienda: la orden viaja de vuelta a la
+// tienda ("En ruta a origen") y esta la recibe fisicamente.
+const ORIGEN_RECEPCION_ORIGEN = "devuelta_origen";
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
 const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
@@ -99,6 +102,18 @@ const TARIFA_SELECT = {
   updatedAt: true,
 } as const;
 
+// `gestion_orden.resultado` de una reprogramacion (espejo de
+// `LiberacionReprogramadaRepository`, el cron que consume la misma fecha).
+const RESULTADO_REPROGRAMADA = "reprogramada";
+
+/**
+ * Serializa una fecha `@db.Date` (guardada a medianoche UTC) a `YYYY-MM-DD`.
+ * `null`/`undefined` -> `null`. Convencion del repo (ver CierreDiaRepository).
+ */
+function toFechaISO(fecha: Date | null | undefined): string | null {
+  return fecha ? fecha.toISOString().slice(0, 10) : null;
+}
+
 const WITH_ESTATUS_Y_TIENDA = {
   include: {
     estatus: { select: { id: true, value: true } },
@@ -123,6 +138,18 @@ const WITH_ESTATUS_Y_TIENDA = {
     distrito: { select: { id: true, nombre: true } },
     mensajeroSugerido: { select: { id: true, nombre: true } },
     mensajeroAsignado: { select: { id: true, nombre: true } },
+    // Gestion de reprogramacion VIGENTE (a lo sumo una, `take: 1`): alimenta la
+    // columna "Liberada el" de la tab `reprogramada`. `orden -> gestiones` es 1:N
+    // (una orden acumula gestiones entre reintentos), asi que la vigente es la mas
+    // reciente NO anulada. Mismo shape que `LiberacionReprogramadaRepository`
+    // (el cron que libera), para que la fecha mostrada sea EXACTAMENTE la que
+    // decide la liberacion y no puedan divergir.
+    gestiones: {
+      where: { resultado: RESULTADO_REPROGRAMADA, anuladaAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 1,
+      select: { fechaReprogramacion: true },
+    },
   },
 } as const;
 
@@ -226,6 +253,12 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     direccion: row.direccion,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
     cobraComision: row.cobraComision,
+    // Fecha de la gestion de reprogramacion vigente -> `YYYY-MM-DD` (patron
+    // CierreDiaRepository). `fecha_reprogramacion` es `@db.Date` guardada a
+    // medianoche UTC, asi que `toISOString().slice(0, 10)` da el dia calendario
+    // correcto (aqui NO aplica el off-by-one de `fecha-cr`, que solo afecta a
+    // derivar "hoy" desde un instante real). Sin gestion vigente -> null.
+    fechaReprogramacion: toFechaISO(row.gestiones[0]?.fechaReprogramacion),
     relaciones: toRelaciones(row),
   };
 }
@@ -738,6 +771,8 @@ export class OrdenRepository implements IOrdenRepository {
         // Feature 30/R8/R9/R11/R12: zona de la orden + flag GAM de esa zona.
         zonaId: true,
         zona: { select: { esCentral: true } },
+        // Tienda dueña: acota por tienda sin consulta extra (recepcion en origen).
+        tiendaId: true,
       },
     });
     return rows.map((r) => ({
@@ -747,7 +782,38 @@ export class OrdenRepository implements IOrdenRepository {
       deletedAt: r.deletedAt,
       zonaId: r.zonaId,
       zonaEsGam: r.zona.esCentral,
+      tiendaId: r.tiendaId,
     }));
+  }
+
+  /**
+   * Feature 33 (QR por guia): fila de transicion por `num_guia` (UNIQUE). INCLUYE
+   * borradas (el service distingue "no existe" de "borrada"); `null` si no hay orden
+   * con ese `num_guia`.
+   */
+  async findByNumGuiaForTransicion(numGuia: number): Promise<OrdenTransicionRow | null> {
+    const r = await this.prisma.orden.findUnique({
+      where: { numGuia },
+      select: {
+        id: true,
+        numGuia: true,
+        deletedAt: true,
+        estatus: { select: { value: true } },
+        zonaId: true,
+        zona: { select: { esCentral: true } },
+        tiendaId: true,
+      },
+    });
+    if (!r) return null;
+    return {
+      id: r.id,
+      estatusValue: r.estatus.value,
+      numGuia: r.numGuia,
+      deletedAt: r.deletedAt,
+      zonaId: r.zonaId,
+      zonaEsGam: r.zona.esCentral,
+      tiendaId: r.tiendaId,
+    };
   }
 
   /** R28: subconjunto de `ids` con rol `mensajero`, SIN filtro de zona. */
@@ -836,7 +902,7 @@ export class OrdenRepository implements IOrdenRepository {
             estatusId: d.estatusId,
             mensajeroAsignadoId: d.mensajeroAsignadoId,
             // Feature 76/R23 (W1): estampa `asignado_at = now` SOLO cuando se asigna un
-            // mensajero no nulo (el ruteo sin mensajero deja NULL y no cuenta al ranking).
+            // mensajero (valor no nulo); si la decision no lleva mensajero no se toca.
             ...(d.mensajeroAsignadoId != null ? { asignadoAt: new Date() } : {}),
           },
           select: { numGuia: true },
@@ -880,7 +946,7 @@ export class OrdenRepository implements IOrdenRepository {
       });
       const result = await tx.orden.updateMany({
         where: { id: { in: ordenIds } },
-        // Feature 76/R23 (W2): asignacion en lote desde bodega, siempre no nula -> estampa.
+        // Feature 76/R23 (W2): al fijar el mensajero, estampa `asignado_at = now`.
         data: { mensajeroAsignadoId: mensajeroId, estatusId, asignadoAt: new Date() },
       });
       // R8: registra SOLO las filas efectivamente afectadas (las existentes).
@@ -927,8 +993,8 @@ export class OrdenRepository implements IOrdenRepository {
         );
         await tx.orden.update({
           where: { id },
-          // R9: sin mensajero. Feature 76/LC1 (C2): limpia tambien `asignado_at` (defensivo,
-          // evita un timestamp huerfano; el conteo ya filtra por mensajero no nulo).
+          // R9. Feature 76/LC1 (C2): al limpiar el mensajero, limpia tambien
+          // `asignado_at` (defensivo, mantiene el invariante asignado_at<->mensajero).
           data: { estatusId, mensajeroAsignadoId: null, asignadoAt: null },
         });
       }
@@ -962,6 +1028,19 @@ export class OrdenRepository implements IOrdenRepository {
       ...WITH_ETIQUETA,
     });
     return rows.map(toEtiquetaRow);
+  }
+
+  /**
+   * Feature 32/R1/R3 (QR por guia): fila para la etiqueta por `num_guia` (UNIQUE).
+   * Mismo filtro `deletedAt: null` que `findEtiquetasByIds` (R3: borrada/inexistente
+   * -> `null`, el service la reporta como no encontrada). Solo query.
+   */
+  async findEtiquetaByNumGuia(numGuia: number): Promise<EtiquetaRow | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { numGuia, deletedAt: null }, // R3
+      ...WITH_ETIQUETA,
+    });
+    return row ? toEtiquetaRow(row) : null;
   }
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
@@ -1054,6 +1133,56 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
+   * Recepcion en la tienda de ORIGEN (`devuelta_origen` -> `recibido_origen`), cierre
+   * del flujo de devolucion. Espejo EXACTO de `recibirEnSatelite` cambiando la guarda
+   * de zona por la de tienda: updateMany guardado + append del historial en la MISMA
+   * tx (choke point de la feature 49), con el origen pre-leido bajo la misma guarda.
+   * La guarda por `tiendaId` en el WHERE es la defensa real contra recibir una orden
+   * ajena (el service ademas lo comprueba antes, para poder reportarlo distinto).
+   */
+  async recibirEnOrigen(
+    ordenId: string,
+    tiendaId: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      // Origen pre-leido con la MISMA guarda (estado devuelta_origen + tienda).
+      const actual = await tx.orden.findFirst({
+        where: {
+          id: ordenId,
+          tiendaId,
+          deletedAt: null,
+          estatus: { value: ORIGEN_RECEPCION_ORIGEN },
+        },
+        select: { estatusId: true },
+      });
+      const result = await tx.orden.updateMany({
+        where: {
+          id: ordenId,
+          tiendaId,
+          deletedAt: null,
+          estatus: { value: ORIGEN_RECEPCION_ORIGEN },
+        },
+        data: { estatusId: destinoEstatusId },
+      });
+      // SOLO si transiciono (count 1); una orden que perdio la carrera no deja rastro.
+      if (result.count === 1 && actual !== null) {
+        await appendCambioEstado(tx, [
+          {
+            ordenId,
+            estatusOrigenId: actual.estatusId,
+            estatusDestinoId: destinoEstatusId,
+            actorUsuarioId: historial.actorUsuarioId,
+            origenTipo: historial.origenTipo, // ajuste_estado (como la devolucion)
+          },
+        ]);
+      }
+      return result.count === 1;
+    });
+  }
+
+  /**
    * Feature 63 — recepcion EN LOTE en la bodega satelite (paridad con `recogerLote`
    * del mensajero). UPDATE raw guardado por estado de ORIGEN + zona + no borrada, con
    * `RETURNING "id"` DENTRO de un `$transaction`, y con los ids retornados (EXACTAMENTE
@@ -1131,8 +1260,8 @@ export class OrdenRepository implements IOrdenRepository {
       const rows = await tx.$queryRaw<{ id: string }[]>`
         UPDATE "orden"
         SET "mensajero_asignado_id" = ${mensajeroId},
-            "estatus_id" = ${destinoEstatusId},
             "asignado_at" = NOW(),
+            "estatus_id" = ${destinoEstatusId},
             "updated_at" = NOW()
         WHERE "id" IN (${Prisma.join(ordenIds)})
           AND "estatus_id" = ${origenEstatusId}
@@ -1172,23 +1301,23 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * R17 (regla estricta F1.4-Q4): `bloqueada = (i) || (ii)`. (i) cierre_dia de sus
-   * mensajeros (destino satelite de su zona) en `solicitado`/`vencido`; (ii) su propio
-   * CierreBodega hacia la central en `solicitado`. Dos EXISTS en paralelo.
+   * `bloqueada = (i) || (ii)`. (ii) su propio CierreBodega hacia la central en
+   * `solicitado` = bloqueo duro. (i) causa de mensajeros RELAJADA (pedido
+   * admin_satelite): antes bloqueaba si CUALQUIER mensajero tenia un cierre; ahora
+   * `porMensajeros` es bloqueo duro SOLO si TODOS los mensajeros de la zona tienen un
+   * cierre abierto (`solicitado`/`vencido`). Con 0 mensajeros no bloquea por (i).
+   * Se reutiliza `findMensajerosBloqueados` (mismo criterio que la guarda por-mensajero
+   * de la asignacion, R14), de modo que el set de bloqueados coincide exactamente con
+   * los mensajeros que el servidor rechazaria al asignar. Los campos informativos
+   * (`cierresAbiertos`/`totalMensajeros`/`mensajerosConCierreIds`) alimentan el aviso
+   * NO bloqueante y el deshabilitado por-mensajero en el selector.
    */
-  async existeBodegaSateliteBloqueada(zonaId: string): Promise<{
-    bloqueada: boolean;
-    porMensajeros: boolean;
-    porCierreBodega: boolean;
-  }> {
-    const [countMensajeros, countCierreBodega] = await Promise.all([
-      // (i) usa el indice (destino_tipo, destino_zona_id) + filtro por estado.
-      this.prisma.cierreDia.count({
-        where: {
-          destinoTipo: DESTINO_BODEGA_SATELITE,
-          destinoZonaId: zonaId,
-          estado: { in: ESTADOS_CIERRE_BLOQUEANTES },
-        },
+  async existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult> {
+    const [mensajerosZona, countCierreBodega] = await Promise.all([
+      // Mensajeros de la zona (universo sobre el que se evalua "todos bloqueados").
+      this.prisma.usuario.findMany({
+        where: { rol: { value: "mensajero" }, zonaId },
+        select: { id: true },
       }),
       // (ii) mismo criterio que la guardia de unicidad de la feature 40 (indice unico
       // parcial WHERE estado='solicitado'): a lo sumo uno por zona.
@@ -1196,9 +1325,21 @@ export class OrdenRepository implements IOrdenRepository {
         where: { zonaId, estado: ESTADO_CIERRE_BODEGA_PENDIENTE },
       }),
     ]);
-    const porMensajeros = countMensajeros > 0;
+    const idsZona = mensajerosZona.map((m) => m.id);
+    const bloqueadosSet = await this.findMensajerosBloqueados(idsZona);
+    const totalMensajeros = idsZona.length;
+    const cierresAbiertos = bloqueadosSet.size;
     const porCierreBodega = countCierreBodega > 0;
-    return { bloqueada: porMensajeros || porCierreBodega, porMensajeros, porCierreBodega };
+    // (i) bloqueo duro solo si HAY mensajeros y TODOS estan bloqueados.
+    const porMensajeros = totalMensajeros > 0 && cierresAbiertos === totalMensajeros;
+    return {
+      bloqueada: porMensajeros || porCierreBodega,
+      porMensajeros,
+      porCierreBodega,
+      cierresAbiertos,
+      totalMensajeros,
+      mensajerosConCierreIds: [...bloqueadosSet],
+    };
   }
 }
 

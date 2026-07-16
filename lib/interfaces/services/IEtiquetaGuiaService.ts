@@ -19,11 +19,19 @@ export type GenerarEtiquetasServiceResult =
   | { status: "ok"; etiquetas: EtiquetaGuiaDTO[]; omitidas: EtiquetaOmitidaDTO[] }
   | { status: "forbidden" }; // R13
 
+// Resultado de dominio de la etiqueta resuelta por `num_guia` (el QR codifica
+// `num_guia`, no `orden.id`). `no_encontrada` cubre "ninguna orden con ese num_guia"
+// y "orden borrada" (R3, el repo filtra deletedAt). `unauthenticated`/
+// `validation_error` los agrega el borde.
+export type EtiquetaPorGuiaServiceResult =
+  | { status: "ok"; etiqueta: EtiquetaGuiaDTO }
+  | { status: "no_encontrada" }; // R3
+
 export interface IEtiquetaGuiaService {
   /**
    * R1-R8: dado un conjunto de ids de orden, arma el payload de etiqueta de cada
    * orden con `num_guia` asignado (nombres de tienda/geografia resueltos,
-   * `montoCobrar` Decimal->number, `qrValue = ordenId`, `barcodeValue =
+   * `montoCobrar` Decimal->number, `qrValue = String(numGuia)`, `barcodeValue =
    * String(numGuia)`) y reporta como `omitidas` las que no tienen guia (`sin_guia`,
    * R2, sin QR disponible) o no existen/estan borradas (`no_encontrada`, R3), sin
    * abortar el lote. Disponible para cualquier rol autenticado (la sesion se exige
@@ -33,4 +41,14 @@ export interface IEtiquetaGuiaService {
     input: GenerarEtiquetasInput,
     actor: Actor,
   ): Promise<GenerarEtiquetasServiceResult>;
+  /**
+   * R1-R8 por `num_guia`: arma el payload de etiqueta de la orden cuyo `num_guia` es
+   * el escaneado/pedido en la URL del paquete (`/paquete/<numGuia>`). Mismo payload y
+   * misma autorizacion que `generarEtiquetas` (cualquier rol autenticado; la sesion se
+   * exige en el borde). Sin orden viva con ese `num_guia` -> `no_encontrada` (R3).
+   */
+  obtenerEtiquetaPorGuia(
+    numGuia: number,
+    actor: Actor,
+  ): Promise<EtiquetaPorGuiaServiceResult>;
 }

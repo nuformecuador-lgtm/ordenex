@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
+import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 import type {
   DetalleConflicto,
@@ -68,19 +69,27 @@ export const liberarSchema = z.object({
 });
 export type LiberarActionInput = z.infer<typeof liberarSchema>;
 
-/** True si `value` (YYYY-MM-DD) representa una fecha estrictamente futura (R25). */
-export function esFechaFutura(value: string): boolean {
-  const fecha = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(fecha.getTime())) return false;
-  const hoy = new Date();
-  const hoyUtc = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
-  return fecha.getTime() > hoyUtc;
+/**
+ * True si `value` (YYYY-MM-DD) es MAÑANA o posterior en el calendario de Costa Rica
+ * (R25: la reprogramacion mas temprana posible es mañana). El dia "de hoy" se resuelve
+ * con `fecha-cr` (UTC-6 fijo), NO con los campos UTC de `new Date()`: entre las 18:00 y
+ * la medianoche de CR el dia UTC ya es el siguiente, y comparar contra el rechazaba
+ * mañana como si fuera hoy (off-by-one). Comparacion lexicografica: `YYYY-MM-DD` ordena
+ * igual como texto que como fecha.
+ */
+export function esFechaFutura(value: string, now: Date = new Date()): boolean {
+  // Formato ISO estricto: un dia inexistente ("2026-02-31") da Invalid Date.
+  if (Number.isNaN(new Date(`${value}T00:00:00.000Z`).getTime())) return false;
+  return value >= mananaCalendarioCR(now);
 }
 
 const fechaFuturaSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "fecha invalida")
-  .refine(esFechaFutura, "la fecha debe ser futura");
+  .refine(
+    (v) => esFechaFutura(v),
+    "la fecha debe ser mañana o posterior",
+  );
 
 const motivoSchema = z.string().trim().min(1, "motivo requerido");
 

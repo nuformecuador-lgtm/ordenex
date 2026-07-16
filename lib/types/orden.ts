@@ -150,6 +150,14 @@ export type OrdenListItemDTO = OrdenDTO & {
   direccion?: string | null;
   montoCobrar?: number | null;
   cobraComision?: boolean;
+  // Fecha (`YYYY-MM-DD`) para la que quedo reprogramada la orden: el dia en que el
+  // cron de liberacion (feature 46) la desbloquea. Sale de la gestion VIGENTE
+  // (`gestion_orden.fecha_reprogramacion` de la mas reciente no anulada), no de la
+  // orden: la relacion es 1:N (una orden acumula gestiones entre reintentos). Ya
+  // serializada por el repo (patron CierreDiaRepository), no `Date`: el DataTable
+  // descarta objetos al renderizar. `null` = la orden no tiene gestion de
+  // reprogramacion vigente; en las tabs que no son "reprogramada" lo normal es null.
+  fechaReprogramacion?: string | null;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
   // que solo usa los escalares/`*Nombre` sigue funcionando. La relacion `tienda`

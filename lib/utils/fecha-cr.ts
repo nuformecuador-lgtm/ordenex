@@ -25,6 +25,33 @@ export function startOfDayCR(now: Date = new Date()): Date {
 }
 
 /**
+ * Fecha CALENDARIO de Costa Rica como `YYYY-MM-DD` (el formato de `<input type="date">`
+ * y de `fecha_reprogramacion`). NO uses `new Date().toISOString().slice(0, 10)` para
+ * esto: `toISOString` emite la fecha en UTC, asi que despues de las 18:00 de CR ya
+ * devuelve el dia SIGUIENTE (off-by-one). Ejemplos (UTC-6): `2026-07-16T02:00:00Z`
+ * (20:00 CR del 15) -> `"2026-07-15"`; `2026-07-15T05:59:00Z` (23:59 CR del 14) ->
+ * `"2026-07-14"`.
+ */
+export function fechaCalendarioCR(now: Date = new Date()): string {
+  const crWall = new Date(now.getTime() - CR_OFFSET_MS);
+  const anio = crWall.getUTCFullYear();
+  const mes = String(crWall.getUTCMonth() + 1).padStart(2, "0");
+  const dia = String(crWall.getUTCDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+}
+
+/** Milisegundos de un dia; CR no tiene horario de verano, asi que sumar 24h == +1 dia. */
+const UN_DIA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Fecha CALENDARIO de Costa Rica de MAÑANA como `YYYY-MM-DD`. Default del campo
+ * "Nueva fecha" al reprogramar (feature 36): la reprogramacion mas temprana posible.
+ */
+export function mananaCalendarioCR(now: Date = new Date()): string {
+  return fechaCalendarioCR(new Date(now.getTime() + UN_DIA_MS));
+}
+
+/**
  * Feature 45 (R30) — periodo mensual `YYYY-MM` de la fecha CALENDARIO de Costa Rica (UTC-6)
  * correspondiente a `now`. Consistente con `startOfDayCR` (mismo offset). Se usa como parte
  * de la clave de idempotencia del cron de gastos fijos (`<plantillaId>:<YYYY-MM>`). Ejemplos:

@@ -23,7 +23,6 @@ const config = byLabel("Configuración");
 const perfil = byLabel("Perfil");
 const cierreDia = byLabel("Cierre del día");
 const cierresAdmin = byLabel("Cierres del día");
-const ranking = byLabel("Ranking");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -39,10 +38,6 @@ describe("puedeVer", () => {
     // "Cierres del día" (admin) es visible para maestro y adminSatelite (R1).
     expect(puedeVer(cierresAdmin, actor("maestro"))).toBe(true);
     expect(puedeVer(cierresAdmin, actor("adminSatelite"))).toBe(true);
-    // Feature 76 (R20): "Ranking" es visible para maestro (edita) y mensajero
-    // (solo-lectura) de forma INTENCIONAL.
-    expect(puedeVer(ranking, actor("maestro"))).toBe(true);
-    expect(puedeVer(ranking, actor("mensajero"))).toBe(true);
   });
 
   it("oculta el item cuando el rol no está autorizado", () => {
@@ -62,10 +57,6 @@ describe("puedeVer", () => {
     expect(puedeVer(cierresAdmin, actor("mensajero"))).toBe(false);
     expect(puedeVer(cierresAdmin, actor("admin"))).toBe(false);
     expect(puedeVer(cierresAdmin, actor("adminTienda"))).toBe(false);
-    // Feature 76 (R20): "Ranking" NO lo ven admin, adminTienda ni adminSatelite.
-    expect(puedeVer(ranking, actor("admin"))).toBe(false);
-    expect(puedeVer(ranking, actor("adminTienda"))).toBe(false);
-    expect(puedeVer(ranking, actor("adminSatelite"))).toBe(false);
   });
 
   it("oculta todo cuando no hay actor (sesión ausente o inválida)", () => {
@@ -80,9 +71,9 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // PR #75: "QR" (roles: ROLES_SEED) se intercala antes de "Perfil".
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
       "Órdenes",
+      "Ranking",
       "Configuración",
       "Cierres del día",
-      "Ranking", // Feature 76 (R20)
       "QR",
       "Perfil",
     ]);
@@ -94,22 +85,26 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Órdenes + QR + Perfil, NO Configuración", () => {
+  it("adminTienda ve Órdenes + Novedades + QR + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
-    expect(visibles).toEqual(["Órdenes", "QR", "Perfil"]); // PR #75: QR
+    expect(visibles).toEqual(["Órdenes", "Novedades", "QR", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
+    // "Ranking" es solo del maestro.
+    expect(visibles).not.toContain("Ranking");
   });
 
-  it("mensajero ve Entregas + Cierre del día + QR + Perfil, NO Órdenes ni Configuración", () => {
+  it("mensajero ve Entregas + Novedades + Ranking + Cierre del día + QR + Perfil, NO Órdenes ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
     // PR #75: "QR" es visible para todos los roles (ROLES_SEED).
-    // Feature 76 (R20): el mensajero también ve "Ranking" (solo-lectura).
+    // Feature 76 (R20): "Ranking" es visible para el mensajero en solo-lectura
+    // (roles maestro+mensajero); su defensa real es el notFound de la página.
     expect(visibles).toEqual([
       "Entregas",
-      "Cierre del día",
+      "Novedades",
       "Ranking",
+      "Cierre del día",
       "QR",
       "Perfil",
     ]);
@@ -117,9 +112,9 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminSatelite ve Asignaciones + Cierres del día + QR + Perfil", () => {
+  it("adminSatelite ve Órdenes + Cierres del día + QR + Perfil", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Asignaciones", "Cierres del día", "QR", "Perfil"], // PR #75: QR
+      ["Órdenes", "Cierres del día", "QR", "Perfil"], // PR #75: QR
     );
   });
 

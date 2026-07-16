@@ -39,7 +39,7 @@ function makeEtiqueta(
     provinciaNombre: "San José",
     cantonNombre: "Escazú",
     distritoNombre: "San Rafael",
-    qrValue: "orden-uuid-1",
+    qrValue: "4021", // = String(numGuia): el QR codifica /paquete/<numGuia>
     barcodeValue: "4021",
     ...overrides,
   };
@@ -66,11 +66,24 @@ describe("EtiquetaGuia", () => {
     expect(screen.getByText("Tienda Central")).toBeInTheDocument();
   });
 
-  it("R7: el QR codifica la URL del paquete (`/paquete/<ordenId>`), no el id pelado", () => {
-    render(<EtiquetaGuia etiqueta={makeEtiqueta({ ordenId: "orden-uuid-1" })} />);
+  it("R7: el QR codifica la URL del paquete (`/paquete/<numGuia>`), no el código pelado", () => {
+    render(<EtiquetaGuia etiqueta={makeEtiqueta({ numGuia: 4021 })} />);
     const qr = screen.getByTestId("qr-stub");
-    // La URL es absoluta (origin de jsdom) y termina en la ruta del paquete.
-    expect(qr.getAttribute("data-value")).toMatch(/\/paquete\/orden-uuid-1$/);
+    // La URL es absoluta (origin de jsdom) y termina en el num_guia de la orden.
+    expect(qr.getAttribute("data-value")).toMatch(/\/paquete\/4021$/);
+  });
+
+  // CORTE LIMPIO: el QR dejó de codificar `orden.id` (UUID). El ordenId sigue en el
+  // DTO para otros usos, pero NO debe aparecer en el valor del QR.
+  it("R7: el QR NO codifica el ordenId (UUID) de la orden", () => {
+    render(
+      <EtiquetaGuia
+        etiqueta={makeEtiqueta({ ordenId: "orden-uuid-1", numGuia: 4021 })}
+      />,
+    );
+    expect(screen.getByTestId("qr-stub").getAttribute("data-value")).not.toMatch(
+      /orden-uuid-1/,
+    );
   });
 
   it("R8: pasa `barcodeValue` (num_guia) al código de barras", () => {

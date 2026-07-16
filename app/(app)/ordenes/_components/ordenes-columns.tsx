@@ -198,3 +198,26 @@ export const ordenesColumnsMensajeroSugerido: Column<OrdenListItemDTO>[] =
   ordenesColumns.map((col) =>
     col.id === "mensajero" ? mensajeroSugeridoColumn : col,
   );
+
+/**
+ * Columna "Liberada el" de la tab `reprogramada`: el día para el que quedó
+ * reprogramada la orden, que es cuando el cron de liberación (feature 46) la
+ * desbloquea. El valor llega del repo ya como `YYYY-MM-DD` (gestión vigente); se
+ * renderiza tal cual, igual que en los cierres (`cierre-detalle-shared`), sin
+ * re-formatear: reinterpretarlo como Date en el cliente reintroduciría el
+ * off-by-one de zona horaria que `lib/utils/fecha-cr` documenta.
+ */
+const liberadaColumn: Column<OrdenListItemDTO> = {
+  id: "liberada",
+  value: "Liberada el",
+  render: (row) => row.fechaReprogramacion ?? SIN_DATO,
+};
+
+/**
+ * Variante de columnas para la tab `reprogramada`: añade "Liberada el" al final.
+ * Deriva de `ordenesColumns` para no duplicar el resto.
+ */
+export const ordenesColumnsReprogramada: Column<OrdenListItemDTO>[] = [
+  ...ordenesColumns,
+  liberadaColumn,
+];

@@ -116,3 +116,53 @@ describe("RecepcionSatelitePage — control de acceso por rol (R3)", () => {
     await expect(RecepcionSatelitePage()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });
+
+describe("RecepcionSatelitePage — aviso de cierres (ajuste admin_satelite)", () => {
+  it("cierres abiertos (no todos los mensajeros) → aviso INFORMATIVO, no bloqueante", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminSatelite" });
+    bloqueoMock.mockResolvedValue({
+      status: "ok",
+      bloqueo: {
+        bloqueada: false,
+        porMensajeros: false,
+        porCierreBodega: false,
+        cierresAbiertos: 2,
+        totalMensajeros: 3,
+        mensajerosConCierreIds: ["m2", "m3"],
+      },
+    });
+
+    const page = await RecepcionSatelitePage();
+    render(page);
+
+    expect(
+      screen.getByText(/2 cierres abiertos de tus mensajeros/i),
+    ).toBeInTheDocument();
+    // No es el aviso de bloqueo duro.
+    expect(
+      screen.queryByText(/cierres pendientes de resolver/i),
+    ).toBeNull();
+  });
+
+  it("TODOS los mensajeros con cierre → bloqueo duro (aviso destructivo)", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminSatelite" });
+    bloqueoMock.mockResolvedValue({
+      status: "ok",
+      bloqueo: {
+        bloqueada: true,
+        porMensajeros: true,
+        porCierreBodega: false,
+        cierresAbiertos: 2,
+        totalMensajeros: 2,
+        mensajerosConCierreIds: ["m1", "m2"],
+      },
+    });
+
+    const page = await RecepcionSatelitePage();
+    render(page);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /cierres pendientes de resolver/i,
+    );
+  });
+});

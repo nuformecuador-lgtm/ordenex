@@ -5,17 +5,20 @@ import useSWR, { useSWRConfig } from "swr";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { QrScanner } from "@/components/shared/QrScanner";
-import { useQrNavigate } from "@/hooks/useQrNavigate";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
 import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
+import type { Column } from "@/components/shared/DataTable";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
+import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
-import { ordenesColumnsMensajeroSugerido } from "./ordenes-columns";
+import {
+  ordenesColumnsMensajeroSugerido,
+  ordenesColumnsReprogramada,
+} from "./ordenes-columns";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { RutearSateliteModal } from "./RutearSateliteModal";
@@ -45,6 +48,19 @@ const DEFAULT_EXCLUDE = ["pendiente"];
 // Estados PREVIOS a la asignación de mensajero: muestran "Mensajero sugerido" en
 // lugar de "Mensajero" (aún no hay asignado; la asignación es en "Generar guía").
 const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"]);
+
+// Estado cuya tab muestra ademas "Liberada el" (la fecha para la que quedo
+// reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
+const ESTADO_REPROGRAMADA = "reprogramada";
+
+// Estado cuya tab bloquea la seleccion de las ordenes NO centrales: "Devolver a la
+// tienda" (rechazada -> devuelta_origen) la ejecuta la bodega RESPONSABLE, y para el
+// maestro/admin eso es solo la bodega central (zonaEsGam). Las satelite las devuelve
+// el adminSatelite de la zona (en /recepcion-satelite), asi que su check se bloquea
+// en vez de dejar seleccionarlas y vaciar el modal.
+const ESTADO_RECHAZADA = "rechazada";
+const MOTIVO_RECHAZADA_NO_CENTRAL =
+  "Orden de zona satélite: la devuelve el admin de la bodega satélite de su zona.";
 
 /** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
 function labelDe(value: string): string {
@@ -80,24 +96,23 @@ export function OrdenesTabs({
   exclude?: string[];
   puedeCargarMasiva?: boolean;
   /**
-   * Ofrece "Escanear con cámara" junto a la carga masiva: escanea el QR de la
-   * etiqueta de una orden y navega a la ruta que codifica (`/paquete/<ordenId>`,
-   * ver `EtiquetaGuia`), en vez de buscarla a mano entre las tabs.
+   * Ofrece "Escanear con cámara" junto a la carga masiva: el adminTienda escanea el
+   * QR de la etiqueta de una orden que vuelve ("En ruta a origen") y la marca como
+   * recibida en su tienda (`devuelta_origen` -> `recibido_origen`), sin salir del
+   * listado. NO navega (para eso está `/qr`).
    */
   puedeEscanearQr?: boolean;
   mostrarHistorial?: boolean;
   /**
    * Habilita la selección por checkbox + barra de acciones por lote por estado
-   * (asignar mensajero, rutear a bodega satélite, generar guía, imprimir etiquetas,
-   * devolver a tienda), restaurando la vista de revisión del maestro dentro de las
-   * tabs. Solo para `maestro` (las Server Actions son maestro-only); `admin`
-   * (solo-lectura) y `adminTienda` lo reciben en `false`.
+   * (asignar mensajero, rutear a bodega satélite —solo en `en_bodega`—, generar
+   * guía, imprimir etiquetas, devolver a tienda) dentro de las tabs. Solo para
+   * `maestro` (las Server Actions son maestro-only); `admin` (solo-lectura) y
+   * `adminTienda` lo reciben en `false`.
    */
   accionesLote?: boolean;
 }>) {
   const { mutate } = useSWRConfig();
-  // Escaneo de QR: el decode se traduce a navegación (misma semántica que `/qr`).
-  const { onDecoded: onQrDecoded, procesando: qrProcesando } = useQrNavigate();
   const { data: catalogo, isLoading } = useSWR(
     "order-status:catalogo",
     catalogoFetcher,
@@ -154,20 +169,16 @@ export function OrdenesTabs({
     );
   }
 
-  // Mapeo estado -> acciones por lote (mismo comportamiento que la vista de revisión
-  // previa, OrdenesRevisionMaestro). Sin `accionesLote` no hay acciones (undefined).
+  // Mapeo estado -> acciones por lote. Sin `accionesLote` no hay acciones (undefined).
+  // Nota: "Rutear a bodega satélite" solo se ofrece en `en_bodega`; se retiró de
+  // `en_fulfillment`/`en_preparacion` (ahí la vista legacy OrdenesRevisionMaestro
+  // sí la ofrece, así que la paridad con esa vista ya no es total).
   function accionesDe(estatusValue: string): AccionLote[] {
     switch (estatusValue) {
       case "en_fulfillment":
       case "en_preparacion":
         return [
           { key: "guia", label: "Generar guía", onRun: abrirGenerarGuia },
-          {
-            key: "rutear",
-            label: "Rutear a bodega satélite",
-            variant: "outline",
-            onRun: abrirRutearSatelite,
-          },
         ];
       case "en_espera_aceptacion":
         return [
@@ -246,13 +257,10 @@ export function OrdenesTabs({
       <div className="flex flex-col items-end gap-3">
         <div className="flex flex-wrap items-center justify-end gap-2">
           {puedeEscanearQr ? (
-            <QrScanner onDecoded={onQrDecoded} disabled={qrProcesando} />
+            <EscanerRecepcionOrigen onRecibida={handleSuccess} />
           ) : null}
           {puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
         </div>
-        {qrProcesando ? (
-          <p className="text-sm text-muted-foreground">Procesando código QR…</p>
-        ) : null}
       </div>
     ) : null;
 
@@ -302,16 +310,29 @@ export function OrdenesTabs({
                 // Selección por checkbox SOLO en estados que tienen alguna acción por
                 // lote (evita checkboxes inertes en estados solo-lectura).
                 const acc = accionesLote ? accionesDe(tab.value) : [];
-                // En_fulfillment/en_preparacion: "Mensajero sugerido" en vez de "Mensajero".
-                const columns = ESTADOS_MENSAJERO_SUGERIDO.has(tab.value)
-                  ? ordenesColumnsMensajeroSugerido
-                  : undefined;
+                // Columnas por estado: en_fulfillment/en_preparacion muestran
+                // "Mensajero sugerido" en vez de "Mensajero"; reprogramada añade
+                // "Liberada el" (el día en que el cron la desbloquea).
+                let columns: Column<OrdenListItemDTO>[] | undefined;
+                if (ESTADOS_MENSAJERO_SUGERIDO.has(tab.value)) {
+                  columns = ordenesColumnsMensajeroSugerido;
+                } else if (tab.value === ESTADO_REPROGRAMADA) {
+                  columns = ordenesColumnsReprogramada;
+                }
+                // En `rechazada`, bloquea el check de las ordenes NO centrales: el
+                // maestro/admin solo devuelve a la tienda las de la bodega central.
+                const bloqueoSeleccion =
+                  tab.value === ESTADO_RECHAZADA
+                    ? (o: OrdenListItemDTO) =>
+                        o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL
+                    : undefined;
                 return (
                   <OrdenesModule
                     filter={{ status_id: tab.id }}
                     columns={columns}
                     mostrarHistorial={mostrarHistorial}
                     selectable={acc.length > 0}
+                    bloqueoSeleccion={bloqueoSeleccion}
                     acciones={acc}
                   />
                 );
@@ -321,8 +342,8 @@ export function OrdenesTabs({
         ))}
       </Tabs>
 
-      {/* Modales de acción por lote (solo maestro): mismos componentes/acciones que
-          la vista de revisión previa. Montados una vez; `open` por `modalAbierto`. */}
+      {/* Modales de acción por lote (solo maestro). Montados una vez; `open` por
+          `modalAbierto`. */}
       {accionesLote ? (
         <>
           <GenerarGuiaModal

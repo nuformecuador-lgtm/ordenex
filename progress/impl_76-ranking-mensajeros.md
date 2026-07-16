@@ -200,3 +200,116 @@ Frontend de la 76 (T8-T10) completo: página role-aware + módulo (tabla ranking
 monto/descripción por posición) + ítem de menú maestro+mensajero. typecheck 0, lint 0 errores,
 2978/2979 (la falla es un timeout flaky ajeno de LoginForm, verde en aislamiento). Backend NO
 tocado; contrato consumido tal cual.
+
+## Merge con dev (PR #80)
+
+### Qué trajo dev
+El merge de `origin/dev` (PR #80 = merge de `flow`, commit `349fbab` "reglas de cierre en
+asignación") es el SUPERSET de `OrdenRepository.ts`: reescribió partes del repo para meter las
+reglas de cierre en la asignación satélite (guardia anti-TOCTOU `NOT EXISTS` sobre `cierre_dia`
+en estado `solicitado`/`vencido` dentro del mismo UPDATE de `asignarSateliteLote`, y el helper
+`existeBodegaSateliteBloqueada` con bloqueo duro sólo si TODOS los mensajeros de la zona tienen
+cierre abierto). Esas reglas de cierre son GUARDIAS, no writers nuevos de `mensajero_asignado_id`.
+
+### Estrategia de resolución (base = dev, re-aplicar delta 76)
+`OrdenRepository.ts` estaba en conflicto de archivo completo. Se tomó la versión de `dev` íntegra
+(`git checkout --theirs`) para conservar las reglas de cierre, y sobre ella se re-aplicó SÓLO el
+delta de instrumentación de `asignado_at` de la feature 76 (choke-point R23). Los otros 4 archivos
+en conflicto (frontend) los resolvió el leader y no se tocaron.
+
+### Lista FINAL de writers de asignación instrumentados (post-merge)
+Se hizo `grep mensajeroAsignadoId/mensajero_asignado_id` sobre el archivo ya resuelto. Sitios que
+ESCRIBEN el mensajero (los demás hits son mappers de lectura o filtros `where`):
+
+- W1 `generarGuiaLote` (`tx.orden.update`): estampa `asignadoAt: new Date()` SÓLO si
+  `d.mensajeroAsignadoId != null` (condicional; la decisión puede no llevar mensajero). ✔ instrumentado
+- W2 `asignarBodegaLote` (`tx.orden.updateMany`, valor no nulo): `asignadoAt: new Date()`. ✔ instrumentado
+- W3 `asignarSateliteLote` (raw `$queryRaw` UPDATE, valor no nulo): `"asignado_at" = NOW()` en el SET. ✔ instrumentado
+- C2 `rutearBodegaSateliteLote` (limpieza, `mensajeroAsignadoId: null`): `asignadoAt: null`. ✔ instrumentado (invariante asignado_at<->mensajero)
+
+Confirmación del choke-point: dev NO introdujo ningún writer de asignación nuevo en este archivo
+(sus reglas de cierre son guardias, no asignan mensajero). Ningún writer de asignación quedó sin
+estampar `asignado_at`; ningún writer de limpieza quedó sin poner `asignado_at = null`.
+
+### Verificación medida
+- `pnpm run typecheck`: 0 errores.
+- `pnpm run lint`: 0 errores (140 warnings preexistentes).
+- Scope backend (repositories + services de asignación): 44 files / 494 tests, todos verdes.
+- Suite completa: 15 fallos / 3056 verdes. Los 15 fallos son regresiones REALES de INTEGRACIÓN
+  de FRONTEND traídas por el merge de dev, NINGUNA en OrdenRepository ni en ranking (ninguno de los
+  test files fallidos importa OrdenRepository; reproducen en aislado, no son flaky):
+  - `tests/unit/auth/menu-visibility.test.ts` (x2) y componentes que dependen del menú/estatus:
+    dev añadió el ítem de menú "Novedades" y un estatus de seed nuevo; la resolución frontend del
+    leader dejó "Novedades" comentado en `lib/auth/menu-visibility.ts` (líneas 81-84) y "Ranking"
+    visible para `mensajero`, mientras que los tests (versión dev) esperan "Novedades". Es un
+    conflicto SEMÁNTICO (falta la unión Ranking+Novedades / mapa de estatus), en los 4 archivos
+    frontend que el leader resolvió (fuera del scope de este agente backend).
+  - `EstatusLabel`, `HomePage/HomePageRol`, `AppLayout`, `CierreDiaModule`,
+    `HistorialOrdenTimeline`, `MisAsignacionesModule`, `OrdenesEstatusLabelAdminTienda`,
+    `RecepcionSateliteModule`: mismo origen (menú/estatus/"Devolver a la tienda" de dev no
+    integrados en el source resuelto).
+
+### Estado del merge
+OrdenRepository resuelto y staged (0 marcadores de conflicto, 0 archivos unmerged). El merge NO se
+cerró con `git commit`: la suite no está verde por las 15 regresiones de integración de FRONTEND,
+que están fuera del scope backend y en los archivos que el leader resolvió. Requiere que el owner
+de frontend integre la unión menú (Ranking+Novedades) + mapa de estatus + feature "Devolver a la
+tienda" antes de cerrar el merge commit.
+
+## Cierre del merge (frontend) — origin/dev (PR #80) @ d4b6e48
+
+Merge de `origin/dev` en `feature/76`. Backend (`OrdenRepository.ts`) y 4 archivos
+frontend ya resueltos por el leader. Tras el merge la suite completa tenía fallos
+REALES de integración frontend (reproducen en aislado). Diagnóstico y arreglo:
+
+### Fallos y causa raíz (todos integrados SIN aflojar tests)
+
+1. **`estatus-label.ts` + `EstatusBadge.tsx` — `devuelta_origen`** (rompía
+   `EstatusLabel.test`, `OrdenesEstatusLabelAdminTienda.test`, `HistorialOrdenTimeline.test`).
+   Causa: dev renombró el label `devuelta_origen` de "Devuelta a origen" → "En ruta a
+   origen" en el CÓDIGO, pero NINGÚN test (ni de dev) lo acompañó; base/ours/todos los
+   tests exigen "Devuelta a origen". El auto-merge tomó el cambio de dev (único lado que
+   tocó la línea). Integración: revertí ambos mapas a "Devuelta a origen" (coherente con
+   la semántica `origen`=tienda y con todos los tests).
+
+2. **Menú (`menu-visibility.ts`) — Novedades vs Ranking** (rompía 2 tests de
+   `menu-visibility.test`). Causa: la resolución dejó "Novedades" (item de dev) COMENTADO
+   y conservó "Ranking" (nuestro, R20). El test resuelto es la unión y esperaba AMBOS.
+   Integración: descomenté "Novedades" (roles adminTienda+mensajero) conservando "Ranking"
+   (roles maestro+mensajero, R20). Actualicé el test del mensajero para reflejar la unión
+   REAL (Entregas, Novedades, **Ranking**, Cierre del día, QR, Perfil) — ampliar, no aflojar.
+
+3. **`AppLayout.test` — adminSatelite** (1 test). Causa: dev renombró deliberadamente el
+   portal del adminSatelite "Asignaciones" → "Órdenes" (actualizó `menu-visibility.test` y
+   `Sidebar.test`, que ya documentan los DOS ítems "Órdenes" por href), pero dejó stale el
+   assert de `AppLayout.test` (`queryByRole link "Órdenes" → null`). Integración: actualicé
+   ese assert para chequear por `href` (adminSatelite NO ve `/ordenes` pero SÍ su portal
+   `/recepcion-satelite`) — conserva el intento del test (filtrado por rol), no lo afloja.
+
+4. **`RecepcionSateliteModule.tsx` — "Devolver a la tienda"** (4 tests). Causa: dev
+   renombró en el módulo la sección/botón "Por devolver a tienda"/"Devolver a la tienda" →
+   "…bodega central", sin tocar los tests (todos los tests de UI —RecepcionSateliteModule,
+   OrdenesRevisionMaestro, ordenes-module, DevolverATiendaModal— exigen "…tienda"; los
+   "bodega central" en tests son solo comentarios de dominio). Integración: revertí el
+   heading, el `aria-label` y el texto del botón a "…tienda".
+
+5. **`GestionarOrdenPanel.tsx` — evidencia DUPLICADA** (2 tests de `MisAsignacionesModule`).
+   Causa: la rama `resultado === "devuelta"` de dev tenía el campo "Foto de evidencia de la
+   devolución" DUPLICADO (ours estaba limpio). Integración: eliminé el bloque repetido; la
+   rama queda CausaField → evidencia → MotivoField (como ours).
+
+6. **`CierreDiaModule.tsx` — columna `ingresoBodegaRechazos` del histórico** (1 test de
+   `CierreDiaModule`, feature 56/R12). Causa: `COLUMNAS_PASADOS` de dev perdió la columna
+   que ours tenía. Integración: restauré la columna (`INGRESO_BODEGA_RECHAZOS_COL` ya
+   existía en el módulo).
+
+No toqué `OrdenRepository.ts` ni `app/(app)/ranking/page.tsx` ni migraciones/db.
+
+### Números finales (medidos en este worktree)
+- `typecheck`: **0 errores**.
+- `lint`: **0 errores** (140 warnings preexistentes).
+- `pnpm test`: **3069 passed / 2 failed** en la corrida completa; los 2 (`HomePage`,
+  `zona-form`) PASAN en aislado → flaky por timeout bajo carga (documentado). Los 12
+  archivos que arreglé PASAN en aislado (108+ asserts verdes).
+
+Ningún fallo resultó ser una regresión que no supiera integrar.

@@ -3,6 +3,10 @@
 > Estado: `in_progress` (F2.0). **F1.4 APROBADA por el humano 2026-07-11** (ver "Decisiones F1.4"
 > más abajo). Decisión clave: la etiqueta es un **PDF de 100mm × 100mm** por orden (no HTML print).
 >
+> ⚠️ **Cambio posterior 2026-07-15:** el QR codifica `num_guia`, NO `orden.id`. Ver
+> "Decisiones 2026-07-15", que SUPERSEDEN a la decisión F1.4 (a). Corte limpio sin
+> retrocompatibilidad: las etiquetas ya impresas con UUID deben reimprimirse.
+>
 > Depende de la feature 17 (Generar guía asigna `num_guia`). Alcance: generar y
 > renderizar una ETIQUETA imprimible por orden con QR + código de barras, y
 > exponer los datos necesarios. NO construye la recepción por escaneo (feature 33,
@@ -56,17 +60,26 @@
 
 ### Codificación QR y código de barras
 
-- **R7** — Cada etiqueta DEBE incluir un código QR cuyo contenido codifica un
-  identificador estable de la orden que la feature 33 pueda usar para la
-  recepción por escaneo (valor recomendado: `orden.id`; decisión final en
-  Preguntas abiertas (a)).
-  *Verificable:* el payload de etiqueta expone el `qrValue` esperado y el
-  componente renderiza un QR a partir de él.
+- **R7** — Cada etiqueta DEBE incluir un código QR cuyo contenido codifica el
+  `num_guia` de la orden (`qrValue = String(numGuia)`), que la feature 33 usa para
+  la recepción por escaneo (lookup por `num_guia`, columna `@unique`). El QR
+  impreso DEBE codificar la URL del paquete `<origin>/paquete/<numGuia>`,
+  construida en la presentación a partir de `qrValue`.
+  *Verificable:* el payload de etiqueta expone `qrValue === String(numGuia)` y el
+  componente renderiza un QR cuyo valor es `<origin>/paquete/<numGuia>`.
+  (Decisión 2026-07-15; SUPERSEDE la decisión F1.4 (a), que codificaba `orden.id`.)
+
+- **R7.1** — CUANDO se escanee una etiqueta antigua cuyo QR codifica un `orden.id`
+  (UUID), el sistema DEBE rechazarla como entrada inválida (`validation_error` en
+  la feature 33): NO hay retrocompatibilidad con el formato anterior.
+  *Verificable:* un UUID escaneado no resuelve ninguna orden y produce
+  `validation_error`. (Corte limpio, ver "Decisiones 2026-07-15".)
 
 - **R8** — Cada etiqueta DEBE incluir un código de barras cuyo contenido codifica
-  `num_guia` (valor recomendado; decisión final en Preguntas abiertas (b)).
-  *Verificable:* el payload expone el `barcodeValue` esperado y el componente
-  renderiza un barcode legible a partir de él.
+  `num_guia` (`barcodeValue = String(numGuia)`; decisión F1.4 (b)). QR (R7) y
+  código de barras codifican por tanto el MISMO valor `num_guia`.
+  *Verificable:* el payload expone `barcodeValue === String(numGuia)`, igual a
+  `qrValue`, y el componente renderiza un barcode legible a partir de él.
 
 ### Presentación e impresión (frontend)
 
@@ -112,9 +125,31 @@
   válido; entrada inválida DEBE devolver `validation_error`.
   *Verificable:* input con lista vacía o id malformado devuelve `validation_error`.
 
+## Decisiones 2026-07-15 (APROBADAS por el humano) — SUPERSEDEN a F1.4 (a)
+
+- **(a') QR codifica `num_guia`** (`qrValue = String(numGuia)`), no `orden.id`. El QR impreso
+  codifica la URL del paquete `<origin>/paquete/<numGuia>`; la ruta pública del detalle pasa de
+  `<origin>/paquete/<ordenId>` a `<origin>/paquete/<numGuia>`. QR y código de barras codifican el
+  MISMO valor (`num_guia`), unificando ambos códigos sobre un identificador legible por humanos y
+  ligado al documento físico. Reemplaza a la decisión F1.4 (a) del 2026-07-11 (que elegía el UUID),
+  la cual queda marcada como SUPERADA abajo. Afecta a R7/R7.1/R8 y a la feature 33 (recepción).
+- **(a'') CORTE LIMPIO, SIN RETROCOMPATIBILIDAD.** Las etiquetas ya impresas con el QR en formato
+  `orden.id` (UUID) DEJAN DE ESCANEAR y DEBEN reimprimirse. Un UUID escaneado produce
+  `validation_error` (R7.1): no se acepta ni se traduce el formato anterior. La reimpresión está
+  permitida sin límite (decisión F1.4 (g)), por lo que no se requiere migración de datos.
+- **Riesgo aceptado (enumerabilidad de `/paquete/<numGuia>`):** `num_guia` proviene de una secuencia
+  (`nextval(orden_num_guia_seq)`), es correlativo y por tanto enumerable. El humano fue informado
+  explícitamente y ACEPTÓ el riesgo en este cambio. Detalle y alcance en `design.md` §8 "Riesgo
+  conocido / deuda abierta".
+
 ## Decisiones F1.4 (APROBADAS por el humano 2026-07-11)
 
 - **(a) QR codifica `orden.id`** (UUID estable). La feature 33 lo escanea para recepción (lookup por PK).
+  > **SUPERADA el 2026-07-15 por la decisión (a') de arriba.** Se conserva el rastro para que se
+  > entienda por qué cambió: el UUID se eligió por ser un lookup directo por PK e inadivinable, pero
+  > el humano optó por unificar QR y barcode sobre `num_guia` (legible, ligado al documento físico,
+  > un solo valor que operativa y visualmente coincide con la guía impresa), aceptando a cambio la
+  > enumerabilidad descrita en el riesgo de arriba. NO implementada como está escrita.
 - **(b) Código de barras codifica `num_guia`** (numérico, CODE128/1D para lector físico). [recomendado]
 - **(c) Render = PDF real, cada etiqueta EXACTAMENTE `100mm × 100mm`.** ⚠️ CAMBIO vs. la recomendación
   (era HTML `window.print()`): el humano exige un **PDF descargable** con página/etiqueta cuadrada de
@@ -135,7 +170,9 @@
 
 ## Preguntas abiertas (registro histórico — RESUELTAS arriba en Decisiones F1.4)
 
-- **(a) Qué codifica el QR.** Recomendación: `orden.id` (UUID estable e inmutable).
+- **(a) Qué codifica el QR.** [Resuelta en F1.4 (a) el 2026-07-11 → `orden.id`; REVERTIDA el
+  2026-07-15 por la decisión (a'): el QR codifica `num_guia`.] Recomendación original: `orden.id`
+  (UUID estable e inmutable).
   Trade-off: la feature 33 escanea el QR para RECIBIR el paquete; `orden.id` es un
   lookup directo por PK, robusto aunque cambie cualquier otro dato, y no depende de
   que la guía sea numérica. Alternativa `num_guia`: legible por humanos y ligado al

@@ -28,7 +28,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
       porRecoger: [],
       porGestionar: [],
       ordenEnGestionId: null,
-      kpis: { pendientes: 0, entregadas: 0, porCobrar: 0 },
+      kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
     })),
     recogerAsignaciones: vi.fn(async () => ({ status: "ok" as const, recogidas: ["o1"] })),
     escogerParaGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),

@@ -72,6 +72,14 @@ describe("Feature 73 · rama `devuelta` — causa obligatoria (R1/R6)", () => {
       }
     }
   });
+
+  it("pedido: SIN evidencia -> invalido con el error asociado al campo `evidencia`", () => {
+    const r = gestionarSchema.safeParse(devueltaSin("evidencia"));
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(fieldErrorsDe(r.error).evidencia).toBeDefined();
+    }
+  });
 });
 
 describe("Feature 73 · el motivo SIGUE obligatorio y no lo sustituye la causa (R7/R8/R12)", () => {

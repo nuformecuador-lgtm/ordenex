@@ -476,6 +476,7 @@ describe("MisAsignacionesModule", () => {
     fireEvent.change(screen.getByLabelText("Motivo"), {
       target: { value: "Rechazo del producto" },
     });
+    await subirEvidencia(user, "Foto de evidencia de la devolución");
 
     await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
 
@@ -543,6 +544,7 @@ describe("MisAsignacionesModule", () => {
     fireEvent.change(screen.getByLabelText("Motivo"), {
       target: { value: "Cliente ausente" },
     });
+    await subirEvidencia(user, "Foto de evidencia de la devolución");
     await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
 
     expect(gestionarMock).not.toHaveBeenCalled();

@@ -91,11 +91,12 @@ export interface IRecepcionSateliteService {
    */
   listar(actor: Actor): Promise<ListarRecepcionSateliteServiceResult>;
   /**
-   * R11-R18: recibe una orden por su `id` (contenido del QR). Transiciona a
-   * en_bodega_satelite solo si sigue en en_ruta_bodega_satelite y es de la zona
-   * del actor; idempotente si ya estaba recibida (R14).
+   * R11-R18: recibe una orden por su `num_guia` (lo que codifica el QR:
+   * `/paquete/<numGuia>`). Transiciona a en_bodega_satelite solo si sigue en
+   * en_ruta_bodega_satelite y es de la zona del actor; idempotente si ya estaba
+   * recibida (R14). Sin orden con ese `num_guia` -> no_encontrada (R15).
    */
-  recibir(ordenId: string, actor: Actor): Promise<RecibirServiceResult>;
+  recibir(numGuia: number, actor: Actor): Promise<RecibirServiceResult>;
   /**
    * Feature 63: recibe EN LOTE las ordenes indicadas que sigan en
    * `en_ruta_bodega_satelite` y sean de la zona del adminSatelite, pasandolas a

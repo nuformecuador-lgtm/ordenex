@@ -9,12 +9,12 @@ import type { MensajeroLiteRow } from "@/lib/interfaces/repositories/IOrdenRepos
 // resultados de dominio (forbidden/sin_zona/zona_ajena/…) los devuelve el service
 // sin excepcion, la action solo agrega `unauthenticated`.
 
-// R16: el contenido escaneado del QR es `orden.id` (id estilo CUID/UUID de texto,
-// ver Orden.id en schema.prisma). Se exige texto NO vacio (trim + min 1); un valor
-// vacio/ilegible -> ZodError -> validation_error "codigo invalido" ANTES del
-// service, sin tocar datos.
+// R16: el QR codifica la URL `/paquete/<numGuia>`; el escaner extrae el `num_guia`
+// (Int UNIQUE de `orden`, secuencia `orden_num_guia_seq`) y lo manda aqui. Se exige
+// entero positivo; un valor ilegible/no numerico (el escaner ya lo resuelve a null)
+// -> ZodError -> validation_error "codigo invalido" ANTES del service, sin tocar datos.
 export const recibirSchema = z.object({
-  ordenId: z.string().trim().min(1),
+  numGuia: z.number().int().positive(),
 });
 export type RecibirActionInput = z.infer<typeof recibirSchema>;
 
