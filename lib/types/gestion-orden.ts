@@ -115,6 +115,9 @@ export const gestionarSchema = z.discriminatedUnion("resultado", [
     // el campo no existe en el tipo parseado de esas ramas.
     causaDevolucion: causaDevolucionSchema,
     motivo: motivoSchema, // feature 36: se CONSERVA obligatorio (R7)
+    // Feature 75: la evidencia (foto) pasa a ser OBLIGATORIA en Devolver, igual que en
+    // entrega/rechazo. Mismo evidenciaSchema (R24: MIME jpeg/png/webp + tamano).
+    evidencia: evidenciaSchema,
   }),
   z.object({
     ordenId: z.string().min(1),

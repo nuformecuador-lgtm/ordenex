@@ -454,10 +454,11 @@ describe("MisAsignacionesModule", () => {
     expect(fd.get("motivo")).toBe("Cliente ausente");
   });
 
-  // Feature 73/T5.1: el nombre anterior de este caso ("DEVOLVER envía solo el motivo") quedó
-  // OBSOLETO POR DISEÑO: la rama `devuelta` ahora exige TAMBIÉN la causa tipificada (R4/R6/R9).
-  // Las aserciones previas (resultado, motivo intacto, sin evidencia) se CONSERVAN tal cual.
-  it("R27/R28 + 73/R9: DEVOLVER envía la causa y el motivo (sin evidencia)", async () => {
+  // Feature 73/T5.1: el nombre anterior ("DEVOLVER envía solo el motivo") quedó OBSOLETO: la rama
+  // `devuelta` exige TAMBIÉN la causa tipificada (R4/R6/R9). Feature 75: y AHORA además la
+  // evidencia (foto) OBLIGATORIA, espejo de `rechazada`. Se AMPLÍAN las aserciones de causa y
+  // motivo (no se aflojan) y se afirma que la evidencia viaja en el FormData.
+  it("R27/R28 + 73/R9 + 75: DEVOLVER envía la causa, el motivo y la evidencia", async () => {
     const user = userEvent.setup();
     gestionarMock.mockResolvedValue({
       status: "ok",
@@ -471,6 +472,7 @@ describe("MisAsignacionesModule", () => {
     await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Devolver" });
 
     await user.click(screen.getByRole("radio", { name: "Dirección errada" }));
+    await subirEvidencia(user, "Foto de evidencia de la devolución");
     fireEvent.change(screen.getByLabelText("Motivo"), {
       target: { value: "Rechazo del producto" },
     });
@@ -482,7 +484,7 @@ describe("MisAsignacionesModule", () => {
     expect(fd.get("resultado")).toBe("devuelta");
     expect(fd.get("causaDevolucion")).toBe("wrong_address");
     expect(fd.get("motivo")).toBe("Rechazo del producto");
-    expect(fd.get("evidencia")).toBeNull();
+    expect(fd.get("evidencia")).toBeInstanceOf(File);
   });
 
   // --- Feature 73: selector de causa de devolución (B5) ---
@@ -535,7 +537,9 @@ describe("MisAsignacionesModule", () => {
 
     await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Devolver" });
 
-    // Motivo válido, causa sin elegir → sólo falla la causa.
+    // Motivo y evidencia válidos, causa sin elegir → sólo falla la causa (feature 75: la
+    // evidencia se aporta para aislar el error a la causa, ahora que `devuelta` la exige).
+    await subirEvidencia(user, "Foto de evidencia de la devolución");
     fireEvent.change(screen.getByLabelText("Motivo"), {
       target: { value: "Cliente ausente" },
     });

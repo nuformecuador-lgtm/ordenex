@@ -285,7 +285,7 @@ describe("escogerParaGestion (R19-R21)", () => {
 describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R12: rol != mensajero -> forbidden", async () => {
     const r = await newService().gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MAESTRO,
     );
     expect(r.status).toBe("forbidden");
@@ -298,7 +298,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -310,7 +310,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ mensajeroAsignadoId: "m2" })]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("forbidden");
@@ -320,7 +320,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R21: otra orden activa distinta -> conflict, sin persistir", async () => {
     const repo = fakeRepo({ getOrdenEnGestion: vi.fn(async () => "o-otra") });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -336,7 +336,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x" },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -450,16 +450,37 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     expect(gArg.nuevoEstatusId).toBe("os-reprogramada");
   });
 
-  it("R28: devolucion valida -> gestion(devuelta) + estado devuelta", async () => {
+  it("R28 (+ feature 75): devolucion valida -> sube foto, gestion(devuelta) + estado devuelta", async () => {
     const repo = fakeRepo();
-    const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "no estaba" },
+    const storage = fakeStorage();
+    const r = await newService(repo, storage).gestionar(
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "no estaba", evidencia: evidencia() },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
+    // Feature 75: la evidencia se sube ANTES de la tx, igual que en rechazada.
+    expect(storage.upload).toHaveBeenCalledTimes(1);
     const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(gArg.gestion.resultado).toBe("devuelta");
+    expect(gArg.gestion.evidenciaStoragePath).toContain("o1/devuelta-");
+    expect(gArg.gestion.evidenciaContentType).toBe("image/jpeg");
     expect(gArg.nuevoEstatusId).toBe("os-devuelta");
+  });
+
+  it("feature 75: devolucion con transaccion fallida -> limpia storage y propaga", async () => {
+    const storage = fakeStorage();
+    const repo = fakeRepo({
+      crearGestionYTransicionar: vi.fn(async () => {
+        throw new Error("db caida");
+      }),
+    });
+    await expect(
+      newService(repo, storage).gestionar(
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
+        MENSAJERO,
+      ),
+    ).rejects.toThrow("db caida");
+    expect(storage.remove).toHaveBeenCalledTimes(1);
   });
 
   it("R30: rechazo valido -> sube foto, gestion(rechazada) + estado rechazada", async () => {
@@ -508,6 +529,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
     resultado: "devuelta",
     causaDevolucion: "not_found",
     motivo: "ausente",
+    evidencia: evidencia(), // feature 75: la evidencia es obligatoria tambien en devuelta
   };
 
   function repoCall(repo: IGestionOrdenRepository) {
@@ -748,7 +770,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       });
       const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 0) }); // intento actual = 1 < umbral 3
       const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente" },
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");
@@ -768,7 +790,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       const repo = fakeRepo();
       const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 2) }); // intento actual = 3 == umbral
       const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente" },
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");
@@ -785,7 +807,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       });
       const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 1) }); // intento actual = 2 < umbral
       const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente" },
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");

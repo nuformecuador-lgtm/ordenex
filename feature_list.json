@@ -816,6 +816,17 @@
       "zone": "fullstack",
       "branch": null,
       "depends_on": 73
+    },
+    {
+      "id": 75,
+      "name": "evidencia (foto) obligatoria en la devolucion",
+      "description": "Pedida por el humano en el chat 2026-07-16. PEDIDO LITERAL: 'ahi que agregar evidencia en la devolucion al igual que con las demas'. EVALUACION (leader), verificada contra el codigo en `origin/dev` (que ya tiene la feature 73 mergeada, PR #78): hoy SOLO `entregada` y `rechazada` exigen evidencia (`evidenciaSchema` en `lib/types/gestion-orden.ts`, ramas de la discriminatedUnion); `reprogramada` y `devuelta` NO. El pedido 'al igual que con las demas' = agregar la MISMA evidencia OBLIGATORIA que ya tienen entrega y rechazo. La rama `rechazada` (`resultado:'rechazada'` -> `{motivo: motivoSchema, evidencia: evidenciaSchema}`) es el ESPEJO EXACTO: `devuelta` pasa de `{causaDevolucion, motivo}` a `{causaDevolucion, motivo, evidencia}`, los tres obligatorios. NADA de la feature 47 (intentos/escalado) ni de la causa (73) cambia; solo se suma el campo evidencia. PUNTOS A TOCAR (cadena completa, todos con precedente literal en la rama rechazada): (1) `lib/types/gestion-orden.ts`: anadir `evidencia: evidenciaSchema` a la variante `devuelta` de `gestionarSchema`. (2) `lib/actions/mis-asignaciones.ts`: `rawFromFormData` YA lee `evidencia` (comun); `toGestionarInput` rama `devuelta` debe leer el binario con `leerEvidencia(data.evidencia ...)` igual que rechazada (hoy solo pasa causa+motivo). (3) `lib/services/MisAsignacionesService.ts:192`: el bloque que sube la evidencia ANTES de la tx (`if (input.resultado === 'entregada' || input.resultado === 'rechazada')`) debe incluir `'devuelta'` -> `storagePath`/`contentType` se suben al bucket de evidencias y entran al INSERT (el repo YA persiste `evidenciaStoragePath`/`evidenciaContentType` para cualquier gestion; no cambia el repo). Ojo interaccion 47: en `devuelta` la orden ademas transiciona (reintento/escalado); la subida de evidencia es independiente y ocurre antes de la tx (patron ya probado con rechazada, que NO transiciona, pero la subida es identica). (4) UI `GestionarOrdenPanel.tsx`: la rama `devuelta` (hoy `<CausaField> + <MotivoField>`) suma el `<input type=file accept=ACCEPT_MIME>` + estado de error de evidencia, ESPEJO de la rama `rechazada` (:441-462); `buildRaw`/`buildFormData` de `devuelta` deben incluir `evidencia`. (5) TESTS: los que hoy afirman 'DEVOLVER envia causa+motivo SIN evidencia' (`MisAsignacionesModule.test.tsx`, renombrado en la 73) y los de schema/action/service de la rama devuelta cambian de asercion (ahora evidencia es obligatoria) -> AMPLIAR input y afirmar el rechazo cuando falta, patron de los tests de rechazada; NO aflojar. DECISION DEL HUMANO (el leader asume OBLIGATORIA por 'al igual que con las demas' = como entrega/rechazo; alternativa OPCIONAL si una devolucion no siempre tiene algo que fotografiar). VERIFICACION: `evidenciaSchema` valida MIME (jpeg/png/webp) y tamano (`validarEvidencia`, R24) en cliente y servidor; se reutiliza tal cual. Baseline: MEDIR en worktree limpio (precedente 72/73: el typecheck baseline de dev puede no ser 0).",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "fullstack",
+      "branch": "feature/75-evidencia-devolucion",
+      "depends_on": 73
     }
   ]
 }

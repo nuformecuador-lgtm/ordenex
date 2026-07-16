@@ -189,7 +189,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // R23/R30: subir evidencia (entrega/rechazo) ANTES de la transaccion.
     let storagePath: string | null = null;
     let contentType: string | null = null;
-    if (input.resultado === "entregada" || input.resultado === "rechazada") {
+    if (
+      input.resultado === "entregada" ||
+      input.resultado === "rechazada" ||
+      input.resultado === "devuelta" // feature 75: evidencia obligatoria tambien en Devolver
+    ) {
       const ext = GESTION_MIME_EXTENSION[input.evidencia.contentType as GestionMimeType] ?? "bin";
       const path = `${input.ordenId}/${input.resultado}-${Date.now()}.${ext}`;
       storagePath = await this.storage.upload({
@@ -376,6 +380,9 @@ function buildGestionData(
         resultado: "devuelta",
         causaDevolucion: input.causaDevolucion,
         motivo: input.motivo,
+        // Feature 75: la evidencia (subida ANTES de la tx, espejo de rechazada) entra al INSERT.
+        evidenciaStoragePath: storagePath,
+        evidenciaContentType: contentType,
       };
     case "rechazada":
       return {

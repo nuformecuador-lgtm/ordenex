@@ -165,7 +165,13 @@ export function GestionarOrdenPanel({
       case "devuelta":
         // Feature 73/R6: `|| undefined` reproduce el patrón de `metodoPago` (:159) para que zod
         // diga "requerido" y no "valor inválido" cuando no se eligió ninguna causa.
-        return { ...base, causaDevolucion: causaDevolucion || undefined, motivo };
+        // Feature 75: la evidencia (foto) es OBLIGATORIA en `devuelta`, igual que en `rechazada`.
+        return {
+          ...base,
+          causaDevolucion: causaDevolucion || undefined,
+          motivo,
+          evidencia: evidencia ?? undefined,
+        };
       case "rechazada":
         return { ...base, motivo, evidencia: evidencia ?? undefined };
     }
@@ -186,6 +192,7 @@ export function GestionarOrdenPanel({
     } else if (resultado === "devuelta") {
       fd.set("causaDevolucion", causaDevolucion); // feature 73 (R9)
       fd.set("motivo", motivo);
+      if (evidencia) fd.set("evidencia", evidencia); // feature 75: evidencia obligatoria
     } else {
       fd.set("motivo", motivo);
       if (evidencia) fd.set("evidencia", evidencia);
@@ -443,6 +450,24 @@ export function GestionarOrdenPanel({
                 onChange={setCausaDevolucion}
                 error={causaError}
               />
+              {/* Feature 75: evidencia OBLIGATORIA, espejo de la rama `rechazada` (:450-468). */}
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="gestion-evidencia-devolucion">Foto de evidencia</Label>
+                <input
+                  id="gestion-evidencia-devolucion"
+                  type="file"
+                  accept={ACCEPT_MIME}
+                  onChange={(e) => setEvidencia(e.target.files?.[0] ?? null)}
+                  aria-invalid={evidenciaError ? true : undefined}
+                  aria-label="Foto de evidencia de la devolución"
+                  className="text-sm"
+                />
+                {evidenciaError ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    {evidenciaError}
+                  </p>
+                ) : null}
+              </div>
               <MotivoField value={motivo} onChange={setMotivo} error={motivoError} />
             </>
           ) : null}
