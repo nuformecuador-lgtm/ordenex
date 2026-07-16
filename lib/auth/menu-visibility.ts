@@ -77,17 +77,20 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     iconKey: "package",
     roles: ["adminSatelite"],
   },
-  // {
-  //   // Novedades del producto para quien opera a diario: el admin de tienda y el
-  //   // mensajero. La defensa real es el `notFound` de la pagina (resuelve el rol
-  //   // server-side); este item solo decide que se MUESTRA.
-  //   label: "Novedades",
-  //   href: "/novedades",
-  //   iconKey: "megaphone",
-  //   roles: ["adminTienda", "mensajero"],
-  // },
   {
-    // Ranking de mensajeros; hoy solo para `maestro` (vista de supervision).
+    // Novedades del producto para quien opera a diario: el admin de tienda y el
+    // mensajero. La defensa real es el `notFound` de la pagina (resuelve el rol
+    // server-side); este item solo decide que se MUESTRA.
+    label: "Novedades",
+    href: "/novedades",
+    iconKey: "megaphone",
+    roles: ["adminTienda", "mensajero"],
+  },
+  {
+    // Feature 76: ranking diario de mensajeros. Visible para `maestro` (ve y edita
+    // los premios) y `mensajero` (lo ve en solo-lectura) de forma intencional; la
+    // defensa real es el `notFound` de la página `/ranking`, que resuelve el rol
+    // server-side y decide el modo editable.
     label: "Ranking",
     href: "/ranking",
     iconKey: "trophy",

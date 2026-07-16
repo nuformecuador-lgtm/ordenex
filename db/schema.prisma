@@ -325,6 +325,7 @@ model Orden {
   montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
   mensajeroSugeridoId    String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
+  asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
   liberadaReprogramadaAt DateTime? @map("liberada_reprogramada_at") // feature 46/R13/R18: instante de liberacion programada (NULL = nunca liberada por reprogramacion); auditoria + fuente del aviso derivado
   deletedAt              DateTime? @map("deleted_at") // soft delete
@@ -350,6 +351,7 @@ model Orden {
   @@index([createdAt])
   @@index([mensajeroSugeridoId])
   @@index([mensajeroAsignadoId]) // feature 17/R7
+  @@index([mensajeroAsignadoId, asignadoAt]) // feature 76/R1: denominador del ranking diario (asignadas HOY por mensajero)
   @@map("orden")
 }
 
@@ -839,6 +841,22 @@ model GastoFijoPlantilla {
 
   @@index([activa]) // cron: WHERE activa = true (R27)
   @@map("gasto_fijo_plantilla")
+}
+
+// Feature 76 (R8/R21/design §4.3): tabla de PREMIOS del ranking diario. Exactamente 3
+// posiciones (1,2,3), cada una con un monto OPCIONAL en colones. `monto` NULLABLE =
+// "sin premio asignado" (R9, decision F1.4-d): NUNCA es cero ni error. Monto-only (sin
+// columna `etiqueta`). El ganador NO se guarda: el ocupante del podio se calcula on-read
+// (R14/R15) cruzando el ranking con estas filas por posicion. Migracion aditiva con RLS.
+model PremioRanking {
+  id          String   @id @default(cuid())
+  posicion    Int      @unique // 1, 2 o 3 (CHECK en la migracion); UNIQUE garantiza R8
+  monto       Decimal? @db.Decimal(12, 2) // NULLABLE = sin premio asignado (R9)
+  descripcion String?  @map("descripcion") // feature 76 (cambio de alcance 2026-07-16): rotulo libre opcional por posicion, INDEPENDIENTE del monto (NULLABLE = sin descripcion)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("premio_ranking")
 }
 
 // Feature 49 (design §1.2, R23): tipo de ORIGEN de una transicion de estado — clasifica

@@ -480,7 +480,13 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         // Guardias: la orden sigue EXACTAMENTE en el estado leido (R5) y no esta borrada (R6).
         const movida = await tx.orden.updateMany({
           where: { id: ordenId, estatusId: estatusEsperadoId, deletedAt: null },
-          data: { estatusId: estatusEnRepartoId, mensajeroAsignadoId: mensajeroId },
+          // Feature 76/R23 (W4): al deshacer una gestion se REPONE la asignacion al mensajero
+          // autor (reasignacion efectiva) -> estampa `asignado_at = now`.
+          data: {
+            estatusId: estatusEnRepartoId,
+            mensajeroAsignadoId: mensajeroId,
+            asignadoAt: new Date(),
+          },
         });
         if (movida.count === 0) throw new NoAnulable();
 

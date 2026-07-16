@@ -146,7 +146,7 @@ function FilaPorDevolver({
               onClick={handleDevolver}
               disabled={procesando}
             >
-              {procesando ? "Devolviendo…" : "Devolver a bodega central"}
+              {procesando ? "Devolviendo…" : "Devolver a la tienda"}
             </Button>
           </div>
         </CardContent>
@@ -331,10 +331,10 @@ export function RecepcionSateliteModule({
           "Devolver a la tienda" (rechazada → devuelta_origen) con estado/error por
           fila. Tras el éxito se releé el estado del servidor. */}
       <section
-        aria-label="Por devolver a bodega central"
+        aria-label="Por devolver a tienda"
         className="flex flex-col gap-3 border-t pt-6"
       >
-        <h2 className="text-lg font-semibold">Por devolver a bodega central</h2>
+        <h2 className="text-lg font-semibold">Por devolver a tienda</h2>
         {porDevolver.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No hay órdenes por devolver.

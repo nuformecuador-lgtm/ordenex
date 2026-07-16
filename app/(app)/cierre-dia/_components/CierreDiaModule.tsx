@@ -586,6 +586,11 @@ const COLUMNAS_PASADOS: Column<CierrePasadoDTO>[] = [
     render: (c) => money(c.totalPagoMensajero),
   },
   {
+    id: "ingresoBodegaRechazos",
+    value: INGRESO_BODEGA_RECHAZOS_COL,
+    render: (c) => money(c.totalIngresoBodegaRechazos),
+  },
+  {
     id: "solicitadoAt",
     value: "Fecha",
     render: (c) => c.solicitadoAt.slice(0, 10),

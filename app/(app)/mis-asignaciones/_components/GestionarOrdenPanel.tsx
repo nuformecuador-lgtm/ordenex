@@ -478,23 +478,6 @@ export function GestionarOrdenPanel({
                 ) : null}
               </div>
               <MotivoField value={motivo} onChange={setMotivo} error={motivoError} />
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="gestion-evidencia-devolucion">Foto de evidencia</Label>
-                <input
-                  id="gestion-evidencia-devolucion"
-                  type="file"
-                  accept={ACCEPT_MIME}
-                  onChange={(e) => setEvidencia(e.target.files?.[0] ?? null)}
-                  aria-invalid={evidenciaError ? true : undefined}
-                  aria-label="Foto de evidencia de la devolución"
-                  className="text-sm"
-                />
-                {evidenciaError ? (
-                  <p role="alert" className="text-sm text-destructive">
-                    {evidenciaError}
-                  </p>
-                ) : null}
-              </div>
             </>
           ) : null}
 

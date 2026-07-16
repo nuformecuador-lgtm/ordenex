@@ -898,7 +898,13 @@ export class OrdenRepository implements IOrdenRepository {
         );
         const updated = await tx.orden.update({
           where: { id: d.ordenId },
-          data: { estatusId: d.estatusId, mensajeroAsignadoId: d.mensajeroAsignadoId },
+          data: {
+            estatusId: d.estatusId,
+            mensajeroAsignadoId: d.mensajeroAsignadoId,
+            // Feature 76/R23 (W1): estampa `asignado_at = now` SOLO cuando se asigna un
+            // mensajero (valor no nulo); si la decision no lleva mensajero no se toca.
+            ...(d.mensajeroAsignadoId != null ? { asignadoAt: new Date() } : {}),
+          },
           select: { numGuia: true },
         });
         if (updated.numGuia === null) {
@@ -940,7 +946,8 @@ export class OrdenRepository implements IOrdenRepository {
       });
       const result = await tx.orden.updateMany({
         where: { id: { in: ordenIds } },
-        data: { mensajeroAsignadoId: mensajeroId, estatusId },
+        // Feature 76/R23 (W2): al fijar el mensajero, estampa `asignado_at = now`.
+        data: { mensajeroAsignadoId: mensajeroId, estatusId, asignadoAt: new Date() },
       });
       // R8: registra SOLO las filas efectivamente afectadas (las existentes).
       await appendCambioEstado(
@@ -986,7 +993,9 @@ export class OrdenRepository implements IOrdenRepository {
         );
         await tx.orden.update({
           where: { id },
-          data: { estatusId, mensajeroAsignadoId: null }, // R9
+          // R9. Feature 76/LC1 (C2): al limpiar el mensajero, limpia tambien
+          // `asignado_at` (defensivo, mantiene el invariante asignado_at<->mensajero).
+          data: { estatusId, mensajeroAsignadoId: null, asignadoAt: null },
         });
       }
       // R13: destino en_ruta_bodega_satelite; append en la MISMA tx (R7).
@@ -1251,6 +1260,7 @@ export class OrdenRepository implements IOrdenRepository {
       const rows = await tx.$queryRaw<{ id: string }[]>`
         UPDATE "orden"
         SET "mensajero_asignado_id" = ${mensajeroId},
+            "asignado_at" = NOW(),
             "estatus_id" = ${destinoEstatusId},
             "updated_at" = NOW()
         WHERE "id" IN (${Prisma.join(ordenIds)})

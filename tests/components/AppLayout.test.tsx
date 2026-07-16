@@ -77,7 +77,7 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     expect(screen.getByText("AL")).toBeInTheDocument();
   });
 
-  it("filtra el sidebar según el rol del actor (adminSatelite solo ve Perfil)", async () => {
+  it("filtra el sidebar según el rol del actor (adminSatelite: su portal, no la Configuración ni el listado maestro)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u2", rol: "adminSatelite" });
 
     await renderLayout(<div>Contenido</div>);
@@ -86,7 +86,13 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     expect(
       screen.queryByRole("button", { name: /configuración/i }),
     ).toBeNull();
-    expect(screen.queryByRole("link", { name: "Órdenes" })).toBeNull();
+    // Hay DOS ítems con label "Órdenes": el del maestro/admin/adminTienda
+    // (`/ordenes`) y el portal del adminSatelite (`/recepcion-satelite`). El
+    // adminSatelite NO ve el listado maestro (`/ordenes`) pero SÍ su portal.
+    const ordenesLinks = screen.getAllByRole("link", { name: "Órdenes" });
+    const hrefs = ordenesLinks.map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("/recepcion-satelite");
+    expect(hrefs).not.toContain("/ordenes");
   });
 
   it("expone el control de alternado del sidebar para móvil (off-canvas)", async () => {
