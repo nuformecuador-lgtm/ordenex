@@ -92,7 +92,14 @@ export type GestionarInput =
     }
   | { ordenId: string; resultado: "reprogramada"; fechaReprogramacion: string; motivo: string }
   // Feature 73/R10: la causa tipificada es un campo de la rama `devuelta` y SOLO de ella.
-  | { ordenId: string; resultado: "devuelta"; causaDevolucion: CausaDevolucion; motivo: string }
+  // Feature 75: la evidencia pasa a ser obligatoria tambien en `devuelta` (espejo de rechazada).
+  | {
+      ordenId: string;
+      resultado: "devuelta";
+      causaDevolucion: CausaDevolucion;
+      motivo: string;
+      evidencia: EvidenciaArchivo;
+    }
   | { ordenId: string; resultado: "rechazada"; motivo: string; evidencia: EvidenciaArchivo };
 
 export type GestionarServiceResult =
