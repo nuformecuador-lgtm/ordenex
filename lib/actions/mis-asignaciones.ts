@@ -226,7 +226,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
         resultado: "devuelta",
         causaDevolucion: data.causaDevolucion, // feature 73/R6
         motivo: data.motivo,
-        evidencia: await leerEvidencia(data.evidencia as unknown as FileLike),
+        evidencia: await leerEvidencia(data.evidencia as unknown as FileLike), // feature 75
       };
     case "rechazada":
       return {

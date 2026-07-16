@@ -22,13 +22,15 @@ function evidenciaValida() {
   return { type: "image/jpeg", size: 1024 };
 }
 
+// Feature 75: `devuelta` valido exige AHORA tambien evidencia (foto). El helper la incluye por
+// defecto para que los tests de causa/motivo sigan fallando por SU campo (no por la evidencia).
 function devuelta(extra: Record<string, unknown> = {}) {
   return {
     ordenId: "o1",
     resultado: "devuelta",
     causaDevolucion: "not_found",
     motivo: MOTIVO,
-    evidencia: evidenciaValida(), // pedido: la devolución exige evidencia obligatoria
+    evidencia: evidenciaValida(),
     ...extra,
   };
 }
@@ -114,6 +116,29 @@ describe("Feature 73 · el motivo SIGUE obligatorio y no lo sustituye la causa (
       // se concatena, prefija ni embebe en el texto libre.
       expect(r.data.motivo).toBe(crudo.trim());
       expect(r.data.motivo).not.toMatch(/not_found|Cliente no localizado/);
+    }
+  });
+});
+
+describe("Feature 75 · la evidencia (foto) pasa a ser obligatoria en `devuelta`", () => {
+  it("acepta un `devuelta` completo con causa + motivo + evidencia", () => {
+    const r = gestionarSchema.safeParse(devuelta());
+    expect(r.success).toBe(true);
+  });
+
+  it("SIN evidencia -> invalido, con el error asociado al campo `evidencia`", () => {
+    const r = gestionarSchema.safeParse(devueltaSin("evidencia"));
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(fieldErrorsDe(r.error).evidencia).toBeDefined();
+    }
+  });
+
+  it("evidencia no-imagen (pdf) -> invalido en el campo `evidencia`", () => {
+    const r = gestionarSchema.safeParse(devuelta({ evidencia: { type: "application/pdf", size: 10 } }));
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(fieldErrorsDe(r.error).evidencia).toBeDefined();
     }
   });
 });

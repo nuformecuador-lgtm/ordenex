@@ -98,7 +98,7 @@ export type GestionarInput =
     }
   | { ordenId: string; resultado: "reprogramada"; fechaReprogramacion: string; motivo: string }
   // Feature 73/R10: la causa tipificada es un campo de la rama `devuelta` y SOLO de ella.
-  // Pedido: la devolucion exige evidencia OBLIGATORIA (como entrega/rechazo).
+  // Feature 75: la evidencia pasa a ser obligatoria tambien en `devuelta` (espejo de rechazada).
   | {
       ordenId: string;
       resultado: "devuelta";

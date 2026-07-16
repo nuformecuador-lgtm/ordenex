@@ -214,8 +214,9 @@ describe("menor-1: withErrorHandler envuelve los cuerpos de las actions", () => 
     // valido; lo que el test AFIRMA no cambia.
     fd.set("causaDevolucion", "not_found");
     fd.set("motivo", "cliente no estaba");
-    // Pedido: la devolución ahora exige evidencia; sin ella el input moriría en el borde y
-    // el test dejaría de probar lo suyo. Se añade una imagen válida para llegar al service.
+    // Feature 75/analogo: sin evidencia este FormData moriria en el borde (validation_error) y
+    // dejaria de probar lo suyo. Se adjunta la foto para que el input siga siendo valido; lo que
+    // el test AFIRMA no cambia.
     fd.set("evidencia", imagenFile());
 
     await expect(gestionar(fd, { service, getActor: actorMensajero })).rejects.toThrow(

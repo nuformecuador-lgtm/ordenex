@@ -197,7 +197,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     if (
       input.resultado === "entregada" ||
       input.resultado === "rechazada" ||
-      input.resultado === "devuelta"
+      input.resultado === "devuelta" // feature 75: evidencia obligatoria tambien en Devolver
     ) {
       const ext = GESTION_MIME_EXTENSION[input.evidencia.contentType as GestionMimeType] ?? "bin";
       const path = `${input.ordenId}/${input.resultado}-${Date.now()}.${ext}`;
@@ -387,6 +387,7 @@ function buildGestionData(
         resultado: "devuelta",
         causaDevolucion: input.causaDevolucion,
         motivo: input.motivo,
+        // Feature 75: la evidencia (subida ANTES de la tx, espejo de rechazada) entra al INSERT.
         evidenciaStoragePath: storagePath,
         evidenciaContentType: contentType,
       };

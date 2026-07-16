@@ -474,7 +474,24 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(gArg.gestion.resultado).toBe("devuelta");
     expect(gArg.gestion.evidenciaStoragePath).toContain("o1/devuelta-");
+    expect(gArg.gestion.evidenciaContentType).toBe("image/jpeg");
     expect(gArg.nuevoEstatusId).toBe("os-devuelta");
+  });
+
+  it("feature 75: devolucion con transaccion fallida -> limpia storage y propaga", async () => {
+    const storage = fakeStorage();
+    const repo = fakeRepo({
+      crearGestionYTransicionar: vi.fn(async () => {
+        throw new Error("db caida");
+      }),
+    });
+    await expect(
+      newService(repo, storage).gestionar(
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
+        MENSAJERO,
+      ),
+    ).rejects.toThrow("db caida");
+    expect(storage.remove).toHaveBeenCalledTimes(1);
   });
 
   it("R30: rechazo valido -> sube foto, gestion(rechazada) + estado rechazada", async () => {

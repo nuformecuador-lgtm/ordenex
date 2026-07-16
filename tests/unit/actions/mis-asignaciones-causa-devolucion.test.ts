@@ -28,14 +28,20 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
   };
 }
 
+function evidenciaFile(): File {
+  return new File([new Uint8Array([1, 2, 3, 4])], "ev.jpg", { type: "image/jpeg" });
+}
+
+// Feature 75: un `devuelta` valido incluye AHORA la foto (campo comun `evidencia`, igual que
+// entrega/rechazo). El helper la adjunta por defecto para que los tests de causa/motivo sigan
+// fallando por SU campo, no por la evidencia.
 function fdDevuelta(campos: Record<string, string> = {}): FormData {
   const fd = new FormData();
   fd.set("ordenId", "o1");
   fd.set("resultado", "devuelta");
   fd.set("causaDevolucion", "not_found");
   fd.set("motivo", "nadie contesto");
-  // Pedido: la devolución exige evidencia obligatoria (imagen).
-  fd.set("evidencia", new File([new Uint8Array([1, 2, 3, 4])], "ev.jpg", { type: "image/jpeg" }));
+  fd.set("evidencia", evidenciaFile());
   for (const [k, v] of Object.entries(campos)) fd.set(k, v);
   return fd;
 }
@@ -56,6 +62,30 @@ describe("Feature 73 · la action propaga la causa al service (R6/R9)", () => {
     expect(input.resultado).toBe("devuelta");
     expect(input.causaDevolucion).toBe(causa);
     expect(input.motivo).toBe("nadie contesto");
+  });
+});
+
+describe("Feature 75 · la action lee la foto del FormData y la propaga al service", () => {
+  it("FormData con evidencia -> el input del service lleva la evidencia leida", async () => {
+    const service = buildService();
+    const r = await gestionar(fdDevuelta(), { service, getActor: actorMensajero });
+    expect(r.status).toBe("ok");
+    const input = inputRecibido(service);
+    expect(input.resultado).toBe("devuelta");
+    expect(input.evidencia).toBeDefined();
+    expect(input.evidencia.contentType).toBe("image/jpeg");
+  });
+
+  it("FormData SIN evidencia -> validation_error con fieldErrors.evidencia y el service NO se invoca", async () => {
+    const service = buildService();
+    const fd = fdDevuelta();
+    fd.delete("evidencia");
+    const r = await gestionar(fd, { service, getActor: actorMensajero });
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(r.fieldErrors.evidencia).toBeDefined();
+    }
+    expect(service.gestionar).not.toHaveBeenCalled();
   });
 });
 

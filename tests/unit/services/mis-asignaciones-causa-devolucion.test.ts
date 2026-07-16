@@ -88,7 +88,7 @@ function devolucion(overrides: Partial<GestionarInput> = {}): GestionarInput {
     resultado: "devuelta",
     causaDevolucion: "wrong_address",
     motivo: "la direccion no existe",
-    // Pedido: la devolución exige evidencia obligatoria (el service ahora la sube).
+    // Feature 75: la evidencia es obligatoria tambien en devuelta; el service la sube antes de la tx.
     evidencia: { contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) },
     ...overrides,
   } as GestionarInput;

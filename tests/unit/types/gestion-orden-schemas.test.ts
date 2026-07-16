@@ -147,14 +147,16 @@ describe("gestionarSchema — REPROGRAMAR (R25)", () => {
 // la 36 ya no parsea —que es exactamente lo que pide R6— y el caso del motivo vacio pasaria por
 // el motivo EQUIVOCADO (le faltaria la causa, no el motivo). Lo que cada test AFIRMA no cambia.
 // El resto de la 36 (R22/R24/R25/R29) queda intacto: la causa vive SOLO en esta rama (R10).
-describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6)", () => {
-  it("valida con motivo no vacio", () => {
+// Feature 75: la rama `devuelta` gana TAMBIEN evidencia obligatoria (espejo de rechazada). Los
+// casos validos se AMPLIAN con `evidencia`; se suma un caso de ausencia de foto -> invalido.
+describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia de la 75)", () => {
+  it("valida con motivo no vacio, causa y foto", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       resultado: "devuelta",
       causaDevolucion: "wrong_address",
       motivo: "direccion inexistente",
-      evidencia: evidenciaValida(), // pedido: la devolución exige evidencia obligatoria
+      evidencia: evidenciaValida(),
     });
     expect(r.success).toBe(true);
   });
@@ -170,12 +172,27 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6)", () => {
     expect(r.success).toBe(false);
   });
 
-  it("pedido: SIN evidencia -> invalido", () => {
+  it("Feature 75: sin foto -> invalido, con el error en el campo `evidencia`", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       resultado: "devuelta",
       causaDevolucion: "wrong_address",
       motivo: "direccion inexistente",
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const fieldErrors = r.error.flatten().fieldErrors as Record<string, string[] | undefined>;
+      expect(fieldErrors.evidencia).toBeDefined();
+    }
+  });
+
+  it("Feature 75: foto no-imagen -> invalido", () => {
+    const r = gestionarSchema.safeParse({
+      ordenId: "o1",
+      resultado: "devuelta",
+      causaDevolucion: "wrong_address",
+      motivo: "direccion inexistente",
+      evidencia: { type: "application/pdf", size: 10 },
     });
     expect(r.success).toBe(false);
   });
