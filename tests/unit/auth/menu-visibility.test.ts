@@ -24,6 +24,7 @@ const perfil = byLabel("Perfil");
 const cierreDia = byLabel("Cierre del día");
 const cierresAdmin = byLabel("Cierres del día");
 const novedades = byLabel("Novedades");
+const wallet = byLabel("Wallet");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -41,6 +42,8 @@ describe("puedeVer", () => {
     expect(puedeVer(cierresAdmin, actor("adminSatelite"))).toBe(true);
     // Feature 87 (R20): "Novedades" es exclusivo del adminTienda.
     expect(puedeVer(novedades, actor("adminTienda"))).toBe(true);
+    // Feature 42: "Wallet" (caja principal) es exclusivo del maestro.
+    expect(puedeVer(wallet, actor("maestro"))).toBe(true);
   });
 
   it("oculta el item cuando el rol no está autorizado", () => {
@@ -64,6 +67,11 @@ describe("puedeVer", () => {
     expect(puedeVer(novedades, actor("mensajero"))).toBe(false);
     expect(puedeVer(novedades, actor("maestro"))).toBe(false);
     expect(puedeVer(novedades, actor("adminSatelite"))).toBe(false);
+    // Feature 42: "Wallet" NO lo ve ningún rol distinto del maestro.
+    expect(puedeVer(wallet, actor("admin"))).toBe(false);
+    expect(puedeVer(wallet, actor("adminTienda"))).toBe(false);
+    expect(puedeVer(wallet, actor("adminSatelite"))).toBe(false);
+    expect(puedeVer(wallet, actor("mensajero"))).toBe(false);
   });
 
   it("oculta todo cuando no hay actor (sesión ausente o inválida)", () => {
@@ -71,6 +79,7 @@ describe("puedeVer", () => {
     expect(puedeVer(perfil, null)).toBe(false);
     expect(puedeVer(ordenes, null)).toBe(false);
     expect(puedeVer(novedades, null)).toBe(false);
+    expect(puedeVer(wallet, null)).toBe(false);
   });
 });
 
