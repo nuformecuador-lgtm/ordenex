@@ -13,13 +13,17 @@ El worktree venia **sin `node_modules` y sin `.env`** → `pnpm install` + copia
 | --- | --- | --- |
 | `pnpm typecheck` | **0 errores** | **0 errores** |
 | `pnpm lint` | **0 errores, 140 warnings** | **0 errores, 140 warnings** (delta 0) |
-| `pnpm test` | **2 failed / 3184 passed (3186)** | **2 failed / 3217 passed (3219)** |
+| `pnpm test` | **2 failed / 3184 passed (3186)** | **1 failed / 3224 passed (3225)** |
+
+> Los numeros de la columna final estan **REMEDIDOS tras reescribir la asercion de R19**
+> (ver la seccion "Reescritura de R19"). El unico rojo final es el ajeno.
 
 Fallos del baseline, ambos **AJENOS**:
 1. `tests/components/CierreDiaPage.test.tsx > R1` — real pero ajeno (PR #82 cambio `CierreDiaModule.tsx` sin actualizar su test). Sigue rojo al final; no es mio, no lo toque.
 2. `tests/unit/guards/no-embalaje.test.ts` — `Test timed out in 5000ms` bajo carga. **Verificado en aislado: pasa en 575ms** → flake por el walk del filesystem con el runner saturado. No reaparecio en la corrida final.
 
-**+33 tests nuevos** (3186 → 3219), todos verdes.
+**+39 tests nuevos** (3186 → 3225), todos verdes. El unico rojo final (`CierreDiaPage`) es
+el mismo ajeno del baseline; mi rojo a-proposito quedo resuelto (R19 pasa, ahora mas fuerte).
 
 ## Archivos creados
 
@@ -27,6 +31,7 @@ Fallos del baseline, ambos **AJENOS**:
 - `tests/unit/repositories/api-key-repository.list.test.ts`
 - `tests/unit/services/api-key-service.listar.test.ts`
 - `tests/unit/actions/api-keys-listar.test.ts`
+- `tests/unit/repositories/api-key-repository.secreto.test.ts` — **guard nuevo de R19** (reemplaza la asercion vieja; ver "Reescritura de R19").
 
 > Nota de nombres: el spec proponia `ApiKeyRepository.list.test.ts` / `ApiKeyService.listar.test.ts`. Se uso **kebab-case** (`api-key-repository.list.test.ts`) por `docs/conventions.md:9` ("Archivos: `kebab-case.ts`") y por consistencia con los vecinos ya existentes (`api-key-repository.test.ts`, `api-key-service.test.ts`, `user-repository.crud.test.ts`).
 
@@ -75,29 +80,32 @@ Decisiones del gate aplicadas: **[D1]** email sintetico via `include` (no el uui
 
 R11–R31 (pagina + UI) quedan **fuera de esta bitacora**: los cubre el `frontend_dev`.
 
-## ⚠️ Tests ajenos afectados — UNO QUEDA ROJO, PARA DECISION HUMANA
+## Tests de la 81 afectados por la ampliacion de interfaz
 
 Ampliar `IApiKeyRepository` / `IApiKeyService` rompio los mocks de la 81 (efecto previsto por el propio `tasks.md` T1.2: *"prueba de que la interfaz manda"*). Se **completaron** los mocks con stubs que **fallan ruidosamente** si `list`/`count`/`listar` se invocan desde los tests de `generar` — en vez de devolver un vacio que haria pasar un test por la razon equivocada. Ninguna asercion existente se debilito.
 
-**Salvo uno, que dejo ROJO a proposito y sin tocar** (`docs`: no aflojar tests; se reporta en vez de decidir por mi cuenta):
+## Reescritura de R19 (aprobada por el coordinador)
 
-```
-FAIL tests/unit/services/api-key-service.test.ts
-  > "R19: el objeto publico no expone el hash ni ninguna lectura del secreto"
-  tests/unit/services/api-key-service.test.ts:259
+La asercion vieja en `api-key-service.test.ts:259` era:
 
-    expect(Object.keys(repo)).toEqual(["createConUsuario"]);
-    // - Expected: ["createConUsuario"]
-    // + Received: ["list", "count", "createConUsuario"]
+```ts
+// R19: el repositorio NO ofrece ninguna operacion de lectura de la key.
+expect(Object.keys(repo)).toEqual(["createConUsuario"]);
 ```
 
-- **Que afirma:** que `IApiKeyRepository` no ofrece **ninguna** operacion de lectura (81/R19).
-- **Por que es incompatible con la 82:** el spec aprobado (design §2.1/§2.2) **exige** agregar `list`/`count` a esa interfaz. La feature 82 no puede existir sin violar esa asercion literal.
-- **Por que NO creo que sea una regresion real:** 81/R19 protege que *el secreto no sea recuperable*, no que la interfaz tenga exactamente un metodo. `list`/`count` **no leen el secreto**: `LIST_SELECT` no lo pide y `ApiKeyListItem` no lo declara. La asercion es un **proxy estructural demasiado estrecho** del requisito real, y el resto de ese mismo test (`r.apiKey` sin `keyHash`/`plainKey`, claves exactas) sigue verde.
-- **Fix que propongo (NO aplicado, decidilo vos):** sustituir la linea 259 por una asercion sobre la *intencion* de R19 — que ninguna operacion del repositorio devuelva el secreto — p. ej. afirmar que el resultado de `repo.list(...)` no contiene `keyHash`/`plainKey`. Eso **fortalece** R19 en vez de aflojarlo. Alternativa: mantener la lista de metodos pero como lista blanca explicita (`["createConUsuario", "list", "count"]`), que obliga a revisar R19 cada vez que la interfaz crezca.
+**Por que cambio (no es un aflojamiento):** R19 protege la **irrecuperabilidad del secreto en claro**, NO la **cardinalidad de la interfaz**. La asercion vieja medía la forma —prohibía *cualquier* metodo nuevo— cuando la 82 agrego `list`/`count` legitimamente (design §2.1/§2.2) y **ninguno lee el secreto** (`LIST_SELECT` ni se lo pide a Postgres). Ademas corría sobre el **mock** (un objeto literal), no sobre la clase: los metodos reales de `ApiKeyRepository` viven en el prototipo, asi que `Object.keys` de una instancia real habria dado `[]` — nunca miraba el codigo que importa.
 
-Hasta esa decision, `pnpm test` cierra en **2 failed** (este + el ajeno de `CierreDiaPage`).
+**La reescritura es ESTRICTAMENTE MAS FUERTE** que la vieja. Nuevo guard: `tests/unit/repositories/api-key-repository.secreto.test.ts`, contra la **clase real**:
+
+1. **Robusto a metodos futuros, sin clavar nombres.** Deriva la superficie del **prototipo real** (`Object.getOwnPropertyNames(ApiKeyRepository.prototype)`) y exige que **toda** operacion tenga entrada en el mapa `INVOCACIONES`. Un metodo nuevo no puede entrar en silencio: o se registra (y entonces queda sujeto a la asercion de fuga) o el test falla. La lista de nombres —lo que hacia fragil a la vieja— desaparece; lo que perdura es la obligacion de demostrar no-fuga.
+2. **Afirma sobre lo que cada operacion DEVUELVE, serializado.** Un Prisma fake **honra `select` como Postgres**: sobre una fila envenenada con `keyHash` y un secreto en claro, si un metodo pidiera el hash el fake se lo entregaria (como la base real) y `JSON.stringify(resultado)` lo delataria. Se corre sobre **todas** las operaciones (`createConUsuario`, `list`, `count`), no solo el listado.
+3. **Verifica la garantia por construccion (82/R6):** ningun `select` emitido por ninguna operacion contiene `keyHash` — el hash no se filtra de la respuesta, es que nunca sale de la base.
+4. **Control negativo:** un test comprueba que el fake SI entrega el hash cuando se lo piden, probando que las aserciones de arriba pueden fallar de verdad (un guard de no-fuga que no puede fallar no vale nada).
+
+Lo que la vieja detectaba (un metodo nuevo) → el guard tambien lo obliga a declararse. Lo que la vieja NO podia detectar (un metodo que filtre el secreto en su retorno o en su `select`) → el guard SI. Mas fuerte en ambos ejes.
+
+En `api-key-service.test.ts` la linea se reemplazo por un comentario que explica el traslado, para que el proximo lector no crea que alguien aflojo el test. El resto de ese test (`r.apiKey` sin `keyHash`/`plainKey`, claves exactas) queda intacto.
 
 ## Veredicto
 
-Backend del listado completo y trazado (R1–R10, cada uno con test); typecheck 0 errores y lint sin delta; queda **1 test de la 81 rojo a proposito** (`api-key-service.test.ts:259`), reportado y sin tocar, esperando decision.
+Backend del listado completo y trazado (R1–R10, cada uno con test); typecheck 0 errores y lint sin delta (140 warnings preexistentes); R19 reescrito **estrictamente mas fuerte** y en verde. Suite en **1 failed** (unico rojo = el ajeno `CierreDiaPage`, del baseline).

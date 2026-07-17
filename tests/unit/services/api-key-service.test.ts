@@ -255,8 +255,14 @@ describe("ApiKeyService.generar — la key (R14..R22)", () => {
     expect(Object.keys(r.apiKey).sort()).toEqual(
       ["createdAt", "id", "identificador", "keyPrefix", "usuarioId"].sort(),
     );
-    // R19: el repositorio NO ofrece ninguna operacion de lectura de la key.
-    expect(Object.keys(repo)).toEqual(["createConUsuario"]);
+    // [82] La irrecuperabilidad del secreto A NIVEL DEL REPOSITORIO se verifica ahora en
+    // `tests/unit/repositories/api-key-repository.secreto.test.ts`, contra la clase real
+    // y afirmando sobre lo que cada operacion DEVUELVE. Aqui se elimino
+    // `expect(Object.keys(repo)).toEqual(["createConUsuario"])`: medía la CARDINALIDAD de
+    // la interfaz (que la 82 amplio legitimamente con `list`/`count`, ninguno de los
+    // cuales lee el secreto), no la INTENCION de R19 —la irrecuperabilidad del secreto—;
+    // ademas corría sobre el mock, no sobre la clase. El guard nuevo es estrictamente mas
+    // fuerte: caza una fuga en CUALQUIER operacion, presente o futura.
   });
 
   it("R21: registra el usuario dedicado, el actor que la genero y la fecha de creacion", async () => {
