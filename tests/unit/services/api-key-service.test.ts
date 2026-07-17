@@ -5,6 +5,7 @@ import { UsuarioDuplicadoError } from "@/lib/interfaces/repositories/IUserReposi
 import type {
   CreateApiKeyConUsuarioData,
   IApiKeyRepository,
+  ListApiKeysResult,
 } from "@/lib/interfaces/repositories/IApiKeyRepository";
 import type { Actor } from "@/lib/interfaces/services/IApiKeyService";
 import { verifyPassword } from "@/lib/utils/password";
@@ -14,9 +15,26 @@ import { hashApiKey } from "@/lib/utils/api-key-hash";
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 
+/**
+ * Feature 82: `IApiKeyRepository` ahora exige `list`/`count`. En los tests de `generar`
+ * no deben invocarse nunca: stubs que fallan ruidosamente en vez de devolver un vacio
+ * que haria pasar un test por la razon equivocada.
+ */
+function listStubs(): Pick<IApiKeyRepository, "list" | "count"> {
+  return {
+    list: vi.fn(async (): Promise<ListApiKeysResult> => {
+      throw new Error("list no debe invocarse desde generar");
+    }),
+    count: vi.fn(async (): Promise<number> => {
+      throw new Error("count no debe invocarse desde generar");
+    }),
+  };
+}
+
 function makeRepo() {
   const capturado: CreateApiKeyConUsuarioData[] = [];
   const repo: IApiKeyRepository = {
+    ...listStubs(),
     createConUsuario: vi.fn(async (data: CreateApiKeyConUsuarioData) => {
       capturado.push(data);
       return {
@@ -121,6 +139,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
 
   it("R11: devuelve conflict cuando el email derivado ya existe", async () => {
     const repo: IApiKeyRepository = {
+      ...listStubs(),
       createConUsuario: vi.fn(async () => {
         throw new UsuarioDuplicadoError("email");
       }),
@@ -131,6 +150,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
 
   it("R11: devuelve conflict cuando la cedula derivada ya existe", async () => {
     const repo: IApiKeyRepository = {
+      ...listStubs(),
       createConUsuario: vi.fn(async () => {
         throw new UsuarioDuplicadoError("cedula");
       }),
@@ -165,6 +185,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
 describe("ApiKeyService.generar — atomicidad (R13)", () => {
   it("R13: si la creacion transaccional falla, no devuelve ok ni filtra el secreto", async () => {
     const repo: IApiKeyRepository = {
+      ...listStubs(),
       createConUsuario: vi.fn(async () => {
         throw new Error("transaccion abortada");
       }),
