@@ -25,14 +25,16 @@ const codeSchema = z.object({
     .regex(/^\d{6}$/, "El código debe ser exactamente 6 dígitos numéricos"),
 });
 
-// Calcula el target de redirección validando el parámetro
-function getRedirectTarget(redirectParam: string | null): string {
-  if (!redirectParam) return "/";
+// Calcula el target de redirección validando el parámetro. El destino por
+// defecto es `/dashboard` (feature 86, R14): la home autenticada se movió de `/`
+// a `/dashboard`. Exportada para su prueba unitaria (R14, R15).
+export function getRedirectTarget(redirectParam: string | null): string {
+  if (!redirectParam) return "/dashboard";
   // Proteger contra open-redirect: debe empezar con / pero no con //
   if (typeof redirectParam === "string" && redirectParam.startsWith("/") && !redirectParam.startsWith("//")) {
     return redirectParam;
   }
-  return "/";
+  return "/dashboard";
 }
 
 export interface LoginFormProps {

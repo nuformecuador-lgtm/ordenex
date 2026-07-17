@@ -47,7 +47,7 @@ beforeEach(() => {
 });
 
 describe("app/login/page.tsx — sesion activa (R24)", () => {
-  it("redirige a / cuando la cookie de sesion es valida segun SessionRepository.findValidById", async () => {
+  it("redirige a /dashboard cuando la cookie de sesion es valida segun SessionRepository.findValidById", async () => {
     const { default: LoginPage } = await import("@/app/login/page");
     cookieGetMock.mockReturnValue({ value: "session-abc" });
     findValidByIdMock.mockResolvedValue({
@@ -59,7 +59,7 @@ describe("app/login/page.tsx — sesion activa (R24)", () => {
 
     await expect(
       LoginPage({ searchParams: Promise.resolve({}) }),
-    ).rejects.toThrow("NEXT_REDIRECT:/");
+    ).rejects.toThrow("NEXT_REDIRECT:/dashboard");
     expect(findValidByIdMock).toHaveBeenCalledWith("session-abc");
   });
 

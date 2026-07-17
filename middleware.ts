@@ -16,6 +16,18 @@ const PUBLIC_ROUTES = [
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // `/` es la landing publica (feature 86), pero por coincidencia EXACTA: NO se
+  // agrega a PUBLIC_ROUTES porque esa lista se evalua con `startsWith` y `"/"`
+  // es prefijo de TODO -> volveria publica la app entera (R8). Con sesion, la
+  // home autenticada vive en /dashboard (R7); sin sesion se sirve la landing (R1).
+  if (pathname === "/") {
+    const sessionCookie = request.cookies.get("session");
+    if (sessionCookie) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+    return NextResponse.next();
+  }
+
   const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
   if (isPublic) return NextResponse.next();
 

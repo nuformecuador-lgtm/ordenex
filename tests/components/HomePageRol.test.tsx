@@ -79,7 +79,7 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
   it("R1: rol adminTienda con sesión válida renderiza el dashboard del admin de tienda", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
 
-    const { default: Home } = await import("@/app/(app)/page");
+    const { default: Home } = await import("@/app/(app)/dashboard/page");
     const element = await Home();
     renderHome(element);
 
@@ -93,7 +93,7 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
   it("R5: el rol se resuelve server-side invocando resolveActorFromSession (sin hook de cliente)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
 
-    const { default: Home } = await import("@/app/(app)/page");
+    const { default: Home } = await import("@/app/(app)/dashboard/page");
     await Home();
 
     expect(resolveActorMock).toHaveBeenCalledTimes(1);
@@ -118,7 +118,7 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
         createdAt: new Date(),
       });
 
-      const { default: Home } = await import("@/app/(app)/page");
+      const { default: Home } = await import("@/app/(app)/dashboard/page");
       const element = await Home();
       renderHome(element);
 
@@ -141,7 +141,7 @@ describe("app/(app)/page.tsx — ramificación por rol (feature 26)", () => {
     resolveActorMock.mockResolvedValue(null);
     cookieGetMock.mockReturnValue(undefined);
 
-    const { default: Home } = await import("@/app/(app)/page");
+    const { default: Home } = await import("@/app/(app)/dashboard/page");
     const element = await Home();
     renderHome(element);
 
