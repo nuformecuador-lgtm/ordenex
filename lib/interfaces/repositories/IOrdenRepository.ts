@@ -1,3 +1,4 @@
+import type { GestionCausaDevolucion } from "@prisma/client";
 import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
@@ -209,6 +210,26 @@ export interface BodegaBloqueoResult {
   cierresAbiertos?: number;
   totalMensajeros?: number;
   mensajerosConCierreIds?: string[];
+}
+
+// Feature 87 (T2, design §2.1) — fila liviana de una orden en `devuelta` para la lista
+// de NOVEDADES. Solo los campos que consume el DTO (R9) + `createdAt` para el
+// reordenamiento por fecha de gestion (R21, fallback). NO expone `deletedAt` (el repo ya
+// filtra `deletedAt: null`, R4) ni relaciones pesadas.
+export interface NovedadOrdenRow {
+  id: string;
+  numGuia: number | null;
+  destinatario: string;
+  telefonoDest: string;
+  createdAt: Date;
+}
+
+// Feature 87 (T2, design §2.1) — causa de devolucion VIGENTE resuelta para UNA orden: el
+// valor `causaDevolucion` (nullable, R7) de su ultima gestion `devuelta` no anulada, con la
+// `fecha` (createdAt) de esa gestion para el orden por recencia (R21).
+export interface CausaDevueltaVigente {
+  causa: GestionCausaDevolucion | null;
+  fecha: Date;
 }
 
 export interface IOrdenRepository {
@@ -531,4 +552,35 @@ export interface IOrdenRepository {
    * Devuelve los dos flags + `bloqueada = i || ii` para que el borde distinga el motivo.
    */
   existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult>;
+
+  // --- Feature 87: lista de novedades (ordenes devueltas de la tienda, R1-R8/R21/R22) ---
+
+  /**
+   * Feature 87/R22 (T2): cuenta las ordenes de `tiendaId` en el estatus `estatusValue`
+   * (`"devuelta"`, resuelto por el service) que NO estan borradas (R2/R3/R4). Alimenta el
+   * `total` de la respuesta paginada. `estatusValue` lo pasa el service; no se hardcodea aqui.
+   */
+  countDevueltasByTienda(tiendaId: string, estatusValue: string): Promise<number>;
+  /**
+   * Feature 87/R1/R2/R3/R4/R22 (T2): una PAGINA de ordenes de `tiendaId` en `estatusValue`
+   * (`"devuelta"`), no borradas, ordenadas por `Orden.createdAt` desc (fallback documentado
+   * de R21; el orden estricto por fecha de gestion lo aplica el service con la fecha traida
+   * por `findCausasDevueltaVigentes`). `skip`/`take` para la paginacion. Solo los campos que
+   * consume el DTO + `createdAt`.
+   */
+  findDevueltasByTienda(
+    tiendaId: string,
+    estatusValue: string,
+    pagination: { skip: number; take: number },
+  ): Promise<NovedadOrdenRow[]>;
+  /**
+   * Feature 87/R6/R7/R8 (T2): resuelve la causa de devolucion VIGENTE de TODAS las ordenes
+   * de la pagina con UNA sola consulta agregada (evita N+1). `findMany` sobre `gestion_orden`
+   * con `resultado: "devuelta", anuladaAt: null` (mismo criterio de vigencia que
+   * `contarPorDestinoVigentes`, feature 67), `orderBy createdAt desc`, y reduce en memoria a
+   * `Map<ordenId, { causa, fecha }>` quedandose con la fila MAS RECIENTE por orden (R6). Las
+   * ordenes sin fila en el mapa (sin gestion vigente) NO aparecen -> causa ausente (R7). `[]`
+   * -> `Map` vacio.
+   */
+  findCausasDevueltaVigentes(ordenIds: string[]): Promise<Map<string, CausaDevueltaVigente>>;
 }

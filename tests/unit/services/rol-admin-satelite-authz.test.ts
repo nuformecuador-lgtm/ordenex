@@ -105,6 +105,10 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     recibirEnOrigen: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
+    // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
+    countDevueltasByTienda: vi.fn().mockResolvedValue(0),
+    findDevueltasByTienda: vi.fn().mockResolvedValue([]),
+    findCausasDevueltaVigentes: vi.fn().mockResolvedValue(new Map()),
     ...overrides,
   };
 }
