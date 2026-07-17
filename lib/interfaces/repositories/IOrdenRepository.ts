@@ -553,24 +553,30 @@ export interface IOrdenRepository {
    */
   existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult>;
 
-  // --- Feature 87: lista de novedades (ordenes devueltas de la tienda, R1-R8/R21/R22) ---
+  // --- Feature 87/89: lista de novedades (devoluciones del mensajero de la tienda) ---
 
   /**
-   * Feature 87/R22 (T2): cuenta las ordenes de `tiendaId` en el estatus `estatusValue`
-   * (`"devuelta"`, resuelto por el service) que NO estan borradas (R2/R3/R4). Alimenta el
-   * `total` de la respuesta paginada. `estatusValue` lo pasa el service; no se hardcodea aqui.
+   * Feature 89/R1-R8 (T2): cuenta las NOVEDADES de `tiendaId`. Una orden es novedad si
+   * tiene una gestion de devolucion VIGENTE (`gestion_orden.resultado = "devuelta"` Y
+   * `anuladaAt IS NULL`, R1/R7), NO esta borrada (R5) y su estatus ACTUAL NO esta en el
+   * conjunto `cerrados` (R2/R3). El predicado se re-ancla a la GESTION, no al estatus actual:
+   * la feature 47 saca la orden de `devuelta` (a `en_bodega`/`rechazada`) en la misma tx, asi
+   * que filtrar por estatus actual `= "devuelta"` daba lista vacia (el bug). `cerrados`
+   * (`["entregada", "devuelta_origen", "recibido_origen"]`) lo pasa el service; el repo no
+   * hardcodea valores de catalogo. Alimenta el `total` paginado; comparte `where` con
+   * `findDevueltasByTienda` (R8).
    */
-  countDevueltasByTienda(tiendaId: string, estatusValue: string): Promise<number>;
+  countDevueltasByTienda(tiendaId: string, cerrados: string[]): Promise<number>;
   /**
-   * Feature 87/R1/R2/R3/R4/R22 (T2): una PAGINA de ordenes de `tiendaId` en `estatusValue`
-   * (`"devuelta"`), no borradas, ordenadas por `Orden.createdAt` desc (fallback documentado
-   * de R21; el orden estricto por fecha de gestion lo aplica el service con la fecha traida
-   * por `findCausasDevueltaVigentes`). `skip`/`take` para la paginacion. Solo los campos que
-   * consume el DTO + `createdAt`.
+   * Feature 89/R1-R8/R12 (T2): una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado
+   * que `countDevueltasByTienda` (gestion devuelta vigente + orden abierta + no borrada, R8),
+   * ordenada por `Orden.createdAt` desc (fallback documentado de R12; el orden estricto por
+   * fecha de gestion lo aplica el service con la fecha traida por `findCausasDevueltaVigentes`).
+   * `skip`/`take` para la paginacion. Solo los campos que consume el DTO + `createdAt`.
    */
   findDevueltasByTienda(
     tiendaId: string,
-    estatusValue: string,
+    cerrados: string[],
     pagination: { skip: number; take: number },
   ): Promise<NovedadOrdenRow[]>;
   /**

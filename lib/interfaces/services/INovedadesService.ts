@@ -1,10 +1,13 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
-// Feature 87 (T3, design §2.2) — contrato del servicio de NOVEDADES: lista paginada de las
-// ordenes en estatus `devuelta` de la tienda del adminTienda, cada una con su causa de
-// devolucion vigente. Logica de negocio pura (sin HTTP ni Prisma); el borde (Server Action)
-// la traduce a resultado tipado. Solo el rol `adminTienda` (R5).
+// Feature 87/89 (T3, design §2.2) — contrato del servicio de NOVEDADES: lista paginada de las
+// devoluciones del mensajero de la tienda del adminTienda. Una orden es novedad si tiene una
+// gestion de devolucion VIGENTE y AUN NO esta cerrada (estatus fuera de
+// `{entregada, devuelta_origen, recibido_origen}`), independientemente de su estatus ACTUAL
+// (la feature 47 la mueve fuera de `devuelta`). Cada una con su causa de devolucion vigente.
+// Logica de negocio pura (sin HTTP ni Prisma); el borde (Server Action) la traduce a resultado
+// tipado. Solo el rol `adminTienda` (R11).
 
 // Input paginado. `pageSize` lo fija el borde (10, R22); el service lo recibe ya acotado.
 export interface ListarNovedadesInput {
@@ -21,10 +24,11 @@ export type ListarNovedadesServiceResult =
 
 export interface INovedadesService {
   /**
-   * R1-R8/R21/R22: lista la pagina de ordenes `devuelta` de la tienda del actor (acotada a
-   * `actor.usuarioId` = tiendaId, R2), con la causa derivada de la ultima gestion `devuelta`
-   * vigente (R6/R7) resuelta en UNA consulta agregada (R8). Ordena por la fecha de esa
-   * gestion desc, con fallback a `Orden.createdAt` (R21). Rol != adminTienda -> forbidden (R5).
+   * R1-R13: lista la pagina de novedades (devoluciones vigentes y abiertas) de la tienda del
+   * actor (acotada a `actor.usuarioId` = tiendaId, R9), con la causa derivada de la ultima
+   * gestion `devuelta` vigente (R6/R7/R10) resuelta en UNA consulta agregada (R8). Ordena por
+   * la fecha de esa gestion desc, con fallback a `Orden.createdAt` (R12). Rol != adminTienda
+   * -> forbidden (R11).
    */
   listar(input: ListarNovedadesInput, actor: Actor): Promise<ListarNovedadesServiceResult>;
 }

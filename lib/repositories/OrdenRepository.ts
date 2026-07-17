@@ -1375,27 +1375,48 @@ export class OrdenRepository implements IOrdenRepository {
     };
   }
 
-  // --- Feature 87: lista de novedades (ordenes devueltas de la tienda, R1-R8/R21/R22) ---
+  // --- Feature 87/89: lista de novedades (devoluciones del mensajero de la tienda) ---
 
-  /** R22/R2/R3/R4: cuenta las ordenes no borradas de `tiendaId` en el estatus `estatusValue`. */
-  async countDevueltasByTienda(tiendaId: string, estatusValue: string): Promise<number> {
+  /**
+   * Feature 89/R1-R8: predicado CENTRAL de una NOVEDAD, extraido para que `count` y `find`
+   * usen EXACTAMENTE el mismo `where` (garantiza R8: total y pagina cuentan el mismo universo).
+   * Una orden es novedad si: es de la tienda del actor (R9), no esta borrada (R5), su estatus
+   * ACTUAL NO esta en `cerrados` (R2/R3: `{entregada, devuelta_origen, recibido_origen}`) y
+   * tiene AL MENOS una gestion de devolucion VIGENTE (`resultado="devuelta"`, `anuladaAt IS
+   * NULL`, R1/R7) via la back-relation `gestiones` (`some`). No filtra por estatus actual =
+   * `devuelta` (bug de la feature 87): la feature 47 saca la orden de `devuelta` en la misma tx.
+   */
+  private novedadWhere(tiendaId: string, cerrados: string[]): Prisma.OrdenWhereInput {
+    return {
+      tiendaId,
+      deletedAt: null, // R5: excluye borradas
+      estatus: { value: { notIn: cerrados } }, // R2/R3: solo mientras no este cerrada
+      gestiones: {
+        some: { resultado: RESULTADO_DEVUELTA, anuladaAt: null }, // R1/R7: gestion devuelta VIGENTE
+      },
+    };
+  }
+
+  /** Feature 89/R1-R8: cuenta las NOVEDADES de `tiendaId` (predicado central, mismo `where` que find). */
+  async countDevueltasByTienda(tiendaId: string, cerrados: string[]): Promise<number> {
     return this.prisma.orden.count({
-      where: { tiendaId, deletedAt: null, estatus: { value: estatusValue } },
+      where: this.novedadWhere(tiendaId, cerrados),
     });
   }
 
   /**
-   * R1/R2/R3/R4/R22: una PAGINA de ordenes no borradas de `tiendaId` en `estatusValue`,
-   * ordenada por `Orden.createdAt` desc (fallback documentado de R21; el service reordena por
-   * la fecha de la gestion vigente). Select minimo: solo lo que consume el DTO + `createdAt`.
+   * Feature 89/R1-R8/R12: una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado central
+   * que `countDevueltasByTienda` (R8), ordenada por `Orden.createdAt` desc (fallback documentado
+   * de R12; el service reordena por la fecha de la gestion vigente). Select minimo: solo lo que
+   * consume el DTO + `createdAt`.
    */
   async findDevueltasByTienda(
     tiendaId: string,
-    estatusValue: string,
+    cerrados: string[],
     pagination: { skip: number; take: number },
   ): Promise<NovedadOrdenRow[]> {
     const rows = await this.prisma.orden.findMany({
-      where: { tiendaId, deletedAt: null, estatus: { value: estatusValue } },
+      where: this.novedadWhere(tiendaId, cerrados),
       orderBy: { createdAt: "desc" },
       skip: pagination.skip,
       take: pagination.take,
