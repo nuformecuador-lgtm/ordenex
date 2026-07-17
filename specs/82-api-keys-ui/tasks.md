@@ -38,26 +38,26 @@ Convencion de commits (`docs/conventions.md`): un commit por task, `feat(82): �
 
 ## Fase 2 — UI
 
-- [ ] **T2.1 [P] [GATE:D1]** `app/(app)/configuracion/api/_components/api-keys-columns.tsx`: columnas identificador · prefijo (`font-mono`, con elipsis) · usuario dedicado · fecha. Sin columna de acciones.
+- [x] **T2.1 [P] [GATE:D1]** `app/(app)/configuracion/api/_components/api-keys-columns.tsx`: columnas identificador · prefijo (`font-mono`, con elipsis) · usuario dedicado · fecha. Sin columna de acciones.
   **Hecho:** typecheck verde; el modulo no importa nada del secreto. Dep: T1.3
-- [ ] **T2.2 [P]** `.../GenerarApiKeyForm.tsx`: molde `UsuarioForm` (`ref` + `FormHandle`), campo unico `identificador`, pinta `fieldErrors` del backend.
+- [x] **T2.2 [P]** `.../GenerarApiKeyForm.tsx`: molde `UsuarioForm` (`ref` + `FormHandle`), campo unico `identificador`, pinta `fieldErrors` del backend.
   **Hecho:** typecheck verde. Dep: —
-- [ ] **T2.3 [GATE:D5]** `.../RevelarApiKeyModal.tsx`: secreto seleccionable + aviso `role="alert"` + boton Copiar (con fallback de toast) + checkbox "Ya guarde la clave…" que habilita Cerrar + Escape/click-fuera bloqueados.
+- [x] **T2.3 [GATE:D5]** `.../RevelarApiKeyModal.tsx`: secreto seleccionable + aviso `role="alert"` + boton Copiar (con fallback de toast) + checkbox "Ya guarde la clave…" que habilita Cerrar + Escape/click-fuera bloqueados.
   **Hecho:** typecheck verde; no existe ninguna prop ni rama que reabra el secreto. Dep: —
-- [ ] **T2.4** `.../ApiKeysModule.tsx`: SWR con `fallbackData`, `DataTable`, `Pagination` (page-size options acotadas por `MAX_PAGE_SIZE`), boton "Generar API key", modal de creacion → modal de revelado, `useToast`, `mutate()` al recibir `ok`, guardia anti doble-submit.
+- [x] **T2.4** `.../ApiKeysModule.tsx`: SWR con `fallbackData`, `DataTable`, `Pagination` (page-size options acotadas por `MAX_PAGE_SIZE`), boton "Generar API key", modal de creacion → modal de revelado, `useToast`, `mutate()` al recibir `ok`, guardia anti doble-submit.
   **Hecho:** typecheck verde. Dep: T2.1, T2.2, T2.3, T1.9
-- [ ] **T2.5 [GATE:D7]** `app/(app)/configuracion/api/page.tsx`: conservar el guard `maestro` existente, alinear a `PageHeader` + `Container`, pre-cargar pagina 1 y pasar `initialData`; fallback a listado vacio si no es `ok`.
+- [x] **T2.5 [GATE:D7]** `app/(app)/configuracion/api/page.tsx`: conservar el guard `maestro` existente, alinear a `PageHeader` + `Container`, pre-cargar pagina 1 y pasar `initialData`; fallback a listado vacio si no es `ok`.
   **Hecho:** typecheck verde; `/configuracion/api` renderiza la tabla. Dep: T2.4, T1.9
 
 ## Fase 3 — Tests de UI
 
-- [ ] **T3.1** `tests/components/ConfiguracionApiPage.test.tsx` — **R11** (rol no maestro y sesion ausente → alert, modulo NO renderizado), **R12** (maestro → llama a `listarApiKeys` y pasa los datos), **R13** (respuesta no-ok → modulo con listado vacio, sin excepcion).
-  **Hecho:** 3+ tests verdes. Dep: T2.5
-- [ ] **T3.2** `tests/components/ApiKeysModule.test.tsx` — listado: **R14** (columnas), **R15** (prefijo con elipsis; asercion negativa: el DOM no contiene la key completa), **R16** (vacio), **R17** (error), **R18** (cambio de pagina → refetch), **R19** (cambio de pageSize → vuelve a pagina 1).
+- [x] **T3.1** `tests/components/ConfiguracionApiPage.test.tsx` — **R11** (rol no maestro y sesion ausente → alert, modulo NO renderizado), **R12** (maestro → llama a `listarApiKeys` y pasa los datos), **R13** (respuesta no-ok → modulo con listado vacio, sin excepcion).
+  **Hecho:** 4 tests verdes. Dep: T2.5
+- [x] **T3.2** `tests/components/ApiKeysModule.test.tsx` — listado: **R14** (columnas), **R15** (prefijo con elipsis; asercion negativa: el DOM no contiene la key completa), **R16** (vacio), **R17** (error), **R18** (cambio de pagina → refetch), **R19** (cambio de pageSize → vuelve a pagina 1).
   **Hecho:** un test por requisito. Dep: T2.4
-- [ ] **T3.3** `tests/components/ApiKeysModule.test.tsx` (o archivo hermano) — generacion: **R20** (abre modal con un campo), **R21** (`validation_error` → error de campo, modal abierto), **R22** (`conflict`), **R23** (`forbidden`/`unauthenticated`), **R24** (`ok` → key visible + aviso), **R25/R26** (copiar → toast de exito; clipboard ausente → toast de error y key aun visible), **R27** (Cerrar deshabilitado sin checkbox; Escape no cierra), **R28** (tras cerrar, la key no esta en el DOM y no hay accion para reabrirla), **R29** (`mutate` invocado al recibir `ok`), **R31** (doble submit → una sola llamada a `generarApiKey`).
+- [x] **T3.3** `tests/components/ApiKeysModule.test.tsx` — generacion: **R20** (abre modal con un campo), **R21** (`validation_error` → error de campo, modal abierto), **R22** (`conflict`), **R23** (`forbidden`/`unauthenticated`), **R24** (`ok` → key visible + aviso), **R25/R26** (copiar → toast de exito; clipboard ausente → toast de error y key aun visible), **R27** (Cerrar deshabilitado sin checkbox; Escape no cierra), **R28** (tras cerrar, la key no esta en el DOM y no hay accion para reabrirla), **R29** (`mutate` invocado al recibir `ok`), **R31** (doble submit → una sola llamada a `generarApiKey`).
   **Hecho:** un test por requisito. Dep: T2.4
-- [ ] **T3.4** **R30**: test que espia `console.log`/`console.info`/`console.debug` y `localStorage.setItem`/`sessionStorage.setItem` durante el flujo completo de generacion y afirma que el `plainKey` no aparece en ningun argumento.
+- [x] **T3.4** **R30**: test que espia `console.log`/`console.info`/`console.debug` y `localStorage.setItem`/`sessionStorage.setItem` durante el flujo completo de generacion y afirma que el `plainKey` no aparece en ningun argumento.
   **Hecho:** test verde. Dep: T2.4
 
 ## Fase 4 — Cierre

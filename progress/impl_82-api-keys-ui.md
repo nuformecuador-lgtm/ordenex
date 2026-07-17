@@ -106,6 +106,80 @@ Lo que la vieja detectaba (un metodo nuevo) → el guard tambien lo obliga a dec
 
 En `api-key-service.test.ts` la linea se reemplazo por un comentario que explica el traslado, para que el proximo lector no crea que alguien aflojo el test. El resto de ese test (`r.apiKey` sin `keyHash`/`plainKey`, claves exactas) queda intacto.
 
-## Veredicto
+## Veredicto (backend)
 
 Backend del listado completo y trazado (R1–R10, cada uno con test); typecheck 0 errores y lint sin delta (140 warnings preexistentes); R19 reescrito **estrictamente mas fuerte** y en verde. Suite en **1 failed** (unico rojo = el ajeno `CierreDiaPage`, del baseline).
+
+---
+
+# impl — Feature 82 — PARTE FRONTEND (Fases 2–4, R11–R31)
+
+Continuacion escrita por el `frontend_dev`. Alcance: pagina + UI (R11–R31). **No se toco backend, DB ni actions** — solo se consumen `generarApiKey`/`listarApiKeys`.
+
+## Baseline MEDIDO en el worktree (no citado) — antes de tocar la UI
+
+`pnpm db:generate` primero (trampa Prisma conocida), luego:
+
+| Medicion | Baseline (antes de la UI) | Final (con la UI) |
+| --- | --- | --- |
+| `pnpm typecheck` | **0 errores** | **0 errores** |
+| `pnpm lint` | **0 errores, 140 warnings** | **0 errores, 140 warnings** (delta 0) |
+| `pnpm test` | **1 failed / 3224 passed (3225)** | **1 failed / 3246 passed (3247)** |
+
+El unico rojo, en baseline y final, es el **AJENO** `tests/components/CierreDiaPage.test.tsx > R1` (PR #82; no lo toque). **+22 tests nuevos** (3225 → 3247), todos verdes.
+
+## Archivos creados (frontend)
+
+- `app/(app)/configuracion/api/_components/api-keys-columns.tsx` — columnas identificador · prefijo (`font-mono` + elipsis, R15) · usuario dedicado (email sintetico [D1]) · fecha. Sin columna de acciones.
+- `app/(app)/configuracion/api/_components/GenerarApiKeyForm.tsx` — molde `UsuarioForm` (`ref` + `FormHandle`), campo unico `identificador`, valida con `generarApiKeySchema`, pinta `fieldErrors`/conflict por campo.
+- `app/(app)/configuracion/api/_components/RevelarApiKeyModal.tsx` — **la UX central [D5]**: secreto seleccionable (`Input readOnly font-mono` + `aria-label`), aviso `role="alert"`, boton Copiar con fallback [D6], checkbox obligatorio que habilita el UNICO boton "Cerrar", Escape/overlay bloqueados (`dismissible={false}` + `hideCancel`).
+- `app/(app)/configuracion/api/_components/ApiKeysModule.tsx` — `DataTable` + `Pagination` + SWR con `fallbackData`, boton "Generar API key" (D9), modal de creacion → modal de revelado, `mutate()` al recibir `ok`, anti doble-submit via el `Modal` async.
+- `tests/components/ConfiguracionApiPage.test.tsx` — 4 tests (R11×2, R12, R13).
+- `tests/components/ApiKeysModule.test.tsx` — 18 tests (R14–R31).
+
+## Archivos modificados (frontend)
+
+- `app/(app)/configuracion/api/page.tsx` — se **rellena** el placeholder: guard `maestro` **conservado** (R11), alineado a `PageHeader` + `Container` [D7], pre-carga pagina 1 (R12) y fallback a listado vacio si no es `ok` (R13). Monta `ApiKeysModule`.
+
+## El modal del secreto (D5) — como se garantiza cada invariante
+
+- **Una sola via de cierre:** el `Modal` (feature 13) soporta `dismissible={false}` (bloquea Escape y click-fuera, su R27) y `hideCancel`. Se usan ambos: queda EXCLUSIVAMENTE el boton confirmar reetiquetado "Cerrar".
+- **Checkbox habilita el cierre:** `confirmDisabled={!guardado}` ata el unico boton al checkbox (R27). Sin marcar → `disabled`; marcado → habilitado (R27/R28).
+- **Irrecuperabilidad:** al cerrar, el anfitrion hace `setRevelado(null)`; el `plainKey` vive solo en `useState`. No hay prop ni rama que lo reabra (R28). Verificado: tras cerrar, ni el secreto ni el boton Copiar existen en el DOM.
+- **Sin fuga (R30):** el secreto no toca `console.*` ni `localStorage`/`sessionStorage`; test que espia esos canales durante generar→copiar→cerrar.
+- **Fallback de portapapeles [D6]:** `if (!navigator.clipboard?.writeText) throw` → toast de error; nunca fallo duro, el secreto sigue seleccionable.
+
+## Mapa R → test (frontend R11–R31)
+
+| R | Test |
+| --- | --- |
+| **R11** rol no maestro / sin sesion → alert, sin modulo, sin pre-carga | `ConfiguracionApiPage.test.tsx` › "R11: rol no maestro NO ve el módulo y no pre-carga datos" (admin/adminTienda/adminSatelite/mensajero) + "R11: sesión ausente tampoco ve el módulo" |
+| **R12** maestro → pre-carga pagina 1 y la pasa como `initialData` | `ConfiguracionApiPage.test.tsx` › "R12: el maestro ve el módulo y la primera página se pasa como initialData" |
+| **R13** pre-carga no-ok → listado vacio sin romper | `ConfiguracionApiPage.test.tsx` › "R13: si la pre-carga no es ok, pasa un listado vacío sin romper" |
+| **R14** columnas | `ApiKeysModule.test.tsx` › "R14: muestra la tabla con las columnas…" |
+| **R15** prefijo con elipsis; asercion negativa (DOM sin la key completa ni `keyHash`) | "R15: muestra el prefijo con elipsis y NUNCA la key completa ni el hash" |
+| **R16** vacio | "R16: sin registros muestra un mensaje de vacío explícito" |
+| **R17** error de carga cliente | "R17: si la carga en el cliente falla, muestra un error en la tabla" |
+| **R18** cambio de pagina → refetch + refleja | "R18: cambiar de página recarga con los nuevos parámetros y refleja el resultado" |
+| **R19** cambio de pageSize → vuelve a pagina 1 | "R19: cambiar el tamaño de página vuelve a la página 1" |
+| **R20** modal con un unico campo | "R20: 'Generar API key' abre un modal con un único campo obligatorio" |
+| **R21** `validation_error` → error de campo, modal abierto | "R21: validation_error del backend muestra el error del campo y NO cierra el modal" |
+| **R22** `conflict` → aviso, modal abierto | "R22: conflict informa que ya existe una key… y NO cierra el modal" |
+| **R23** `forbidden`/`unauthenticated` → feedback, modal abierto | "R23: forbidden muestra feedback y NO cierra el modal" |
+| **R24** `ok` → secreto visible + aviso | "R24: tras ok muestra el secreto en claro y un aviso de que es la única vez" |
+| **R25/R26** copiar → toast exito; clipboard ausente → toast error + key visible | "R25/R26: copiar con clipboard disponible…" + "R26/D6: si el clipboard no existe…" |
+| **R27** Cerrar deshabilitado sin checkbox; Escape no cierra | "R27: el botón Cerrar está deshabilitado sin el checkbox y Escape no cierra" |
+| **R28** tras cerrar, secreto fuera del DOM y sin accion para reabrir | "R28: tras cerrar, el secreto desaparece del DOM y no hay acción para reabrirlo" |
+| **R29** `ok` refresca el listado | "R29: una generación ok refresca el listado (re-consulta listarApiKeys)" |
+| **R30** el `plainKey` no llega a console ni storage | "R30: durante generar → copiar → cerrar, el plainKey no llega a console ni a storage" |
+| **R31** doble submit → una sola llamada a `generarApiKey` | "R31: mientras la generación está en curso, un segundo envío no dispara otra llamada" |
+
+Decisiones del gate aplicadas en UI: **[D1]** email sintetico en la columna (test asertando el email y negando el uuid) · **[D3]** `apiKeysConfig` para page-size y pre-carga · **[D5]** modal de revelado exacto · **[D6]** fallback de portapapeles · **[D7]** `PageHeader` + `Container` · **[D9]** boton "Generar API key" arriba a la derecha.
+
+## Nota de nombres
+
+Los tests de UI se colocaron en `tests/components/` con nombre `PascalCase` (`ApiKeysModule.test.tsx`, `ConfiguracionApiPage.test.tsx`) tal como los nombra la tabla de trazabilidad de `requirements.md` y como conviven los vecinos de esa carpeta (`MisAsignacionesModule.test.tsx`, `RankingPage.test.tsx`).
+
+## Veredicto (frontend)
+
+Pagina + UI completas y trazadas (R11–R31, cada uno con test de componente); typecheck 0 errores; lint sin delta (140 warnings preexistentes); suite **1 failed / 3246 passed (3247)** — el unico rojo es el ajeno `CierreDiaPage` del baseline. Ningun test existente aflojado.
