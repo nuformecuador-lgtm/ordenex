@@ -523,3 +523,74 @@ describe("Modal — accesibilidad de foco (R28, R29, R30)", () => {
     expect(document.activeElement).not.toBe(document.body);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tamaño del popup (prop `size`) — aditiva, con default de compatibilidad
+// ---------------------------------------------------------------------------
+describe("Modal — tamaño del popup (prop size)", () => {
+  it("por defecto conserva max-w-md: los consumidores existentes no cambian de ancho", async () => {
+    renderModal();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveClass("max-w-md");
+  });
+
+  it("size='md' explícito equivale al default", async () => {
+    renderModal({ size: "md" });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveClass("max-w-md");
+  });
+
+  it("size='xl' fija el ancho máximo en 1000px y deja de aplicar max-w-md", async () => {
+    renderModal({ size: "xl" });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveClass("max-w-[1000px]");
+    expect(dialog).not.toHaveClass("max-w-md");
+  });
+
+  it("size='sm' y size='lg' aplican sus anchos respectivos", async () => {
+    const { rerender } = renderModal({ size: "sm" });
+    expect(await screen.findByRole("dialog")).toHaveClass("max-w-sm");
+
+    rerender(
+      <Modal open onOpenChange={vi.fn()} title="Título de prueba" size="lg" />,
+    );
+    expect(await screen.findByRole("dialog")).toHaveClass("max-w-2xl");
+  });
+
+  it("en cualquier tamaño el popup sigue limitado al viewport (responsive)", async () => {
+    renderModal({ size: "xl" });
+    const dialog = await screen.findByRole("dialog");
+    // Se encoge en pantallas chicas en lugar de desbordar.
+    expect(dialog).toHaveClass("w-[calc(100%-2rem)]");
+  });
+
+  it("size no rompe el scroll del cuerpo ni el header/footer fijos (feature 58)", async () => {
+    renderModal({ size: "xl", children: <p>contenido</p> });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveClass("max-h-[calc(100dvh-2rem)]");
+    // El cuerpo conserva su contenedor scrollable.
+    const body = screen.getByText("contenido").parentElement;
+    expect(body).toHaveClass("overflow-auto");
+    expect(body).toHaveClass("min-h-0");
+  });
+
+  it("className del consumidor sigue pudiendo sobreescribir el ancho del tamaño", async () => {
+    renderModal({ size: "xl", className: "max-w-none" });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveClass("max-w-none");
+    expect(dialog).not.toHaveClass("max-w-[1000px]");
+  });
+});
+
+describe("Modal — confirmVariant brand-outline (aditiva)", () => {
+  it("aplica la variante de marca al botón confirmar", async () => {
+    renderModal({ confirmVariant: "brand-outline", confirmLabel: "Cerrar" });
+    const boton = await screen.findByRole("button", { name: "Cerrar" });
+    expect(boton).toHaveClass("text-brand");
+  });
+
+  it("el confirmar por defecto sigue siendo la variante sólida", async () => {
+    renderModal();
+    expect(confirmBtn()).toHaveClass("bg-primary");
+  });
+});
