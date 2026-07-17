@@ -165,7 +165,10 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_cierre_detail") && // feature 69: apendida despues
         !d.endsWith("_gestion_orden_causa_devolucion") && // feature 73: apendida despues
         !d.endsWith("_orden_asignado_at") && // feature 76: apendida despues
-        !d.endsWith("_premio_ranking"), // feature 76: apendida despues
+        !d.endsWith("_premio_ranking") && // feature 76: apendida despues
+        // feature 81: apendidas despues. Este `endsWith` cubre las DOS carpetas
+        // (`..._api_key` y `..._rol_api_key`, que tambien termina en "_api_key").
+        !d.endsWith("_api_key"),
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);
