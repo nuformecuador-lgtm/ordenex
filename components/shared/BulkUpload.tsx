@@ -1,12 +1,18 @@
 "use client";
 
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Download, Loader2, Upload } from "lucide-react";
+import {
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type ReactNode,
+} from "react";
+import { Download, FileSpreadsheet, Loader2, UploadCloud, X } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 /** Definición parametrizable de una columna de la plantilla (R1, R5, R6). */
@@ -30,42 +36,45 @@ export interface TemplateField {
 /** Tipos de archivo admitidos para la SUBIDA (R3). */
 export type UploadFileType = "csv" | "xlsx" | "xls";
 
-export interface BulkUploadResult {
-  /** Cuerpo ya parseado de la respuesta del endpoint, si lo hubo. */
-  data?: unknown;
-  /** Código HTTP devuelto por el endpoint. */
-  status: number;
-}
-
-export interface BulkUploadError {
-  /** Mensaje legible del fallo (validación, red o HTTP no exitoso). */
-  message: string;
-  /** Código HTTP si el fallo provino de una respuesta del servidor. */
-  status?: number;
-}
-
 export interface BulkUploadProps {
-  /** Ruta de la API destino del POST multipart (R2). Sin ella, la subida se deshabilita (R19). */
-  endpoint?: string;
-  /** Tipos de archivo permitidos para subir (R3). Al menos uno. */
+  /** Tipos de archivo permitidos (R3). Al menos uno. */
   accept: UploadFileType[];
-  /** Definición de columnas de la plantilla, en orden (R1, R5). */
-  fields: TemplateField[];
+  /**
+   * Definición de columnas de la plantilla, en orden (R1, R5). Si va vacío, la
+   * descarga de plantilla se deshabilita (R11).
+   */
+  fields?: TemplateField[];
   /** Nombre del archivo de plantilla descargado (R4). Por defecto "plantilla.xlsx". */
   templateFileName?: string;
-  /** Nombre del campo multipart bajo el que viaja el archivo (R12). Por defecto "file". */
-  fieldName?: string;
   /**
    * Límite de tamaño en bytes validado en cliente (R23). Si se omite, NO se valida
    * tamaño en cliente; el backend sigue siendo la autoridad final.
    */
   maxSizeBytes?: number;
-  /** Callback tras subida exitosa (R14). */
-  onSuccess?: (result: BulkUploadResult) => void;
-  /** Callback tras fallo de subida (R15). */
-  onError?: (error: BulkUploadError) => void;
-  /** Texto accesible/título opcional del bloque. */
+  /**
+   * Valida además el MIME que reporta el navegador (R21/R22). Por defecto `true`.
+   * Los consumidores que solo confían en la extensión (p. ej. hojas exportadas
+   * con MIME errático) pueden desactivarlo sin perder la validación por extensión.
+   */
+  validateMime?: boolean;
+  /** Etiqueta accesible del input. Por defecto "Archivo a cargar". */
   label?: string;
+  /** Texto de ayuda bajo la zona de subida (i18n vía prop, no hardcode interno). */
+  hint?: ReactNode;
+  /** Deshabilita la interacción mientras el consumidor procesa el archivo. */
+  busy?: boolean;
+  /**
+   * Error del CONSUMIDOR (p. ej. fallo de parseo/validación de dominio). Se
+   * muestra solo si no hay un error local de selección, de modo que siempre haya
+   * como mucho un `role="alert"`.
+   */
+  error?: string | null;
+  /** Se invoca con el archivo ya validado (tipo y tamaño). El consumidor decide qué hacer con él. */
+  onFileSelected: (file: File) => void;
+  /** Se invoca al quitar el archivo elegido, para que el consumidor limpie su estado. */
+  onClear?: () => void;
+  /** Slot para estado del consumidor (progreso, loaders) bajo las acciones. */
+  children?: ReactNode;
 }
 
 /**
@@ -87,19 +96,25 @@ const FILE_TYPE_MAP: Record<UploadFileType, { ext: string; mimes: string[] }> = 
 };
 
 const DEFAULT_TEMPLATE_NAME = "plantilla.xlsx";
-const DEFAULT_FIELD_NAME = "file";
+const DEFAULT_LABEL = "Archivo a cargar";
 
 /** MIME de un libro XLSX (OpenXML), para el Blob de descarga (R6). */
 const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-
-type UploadStatus = "idle" | "selected" | "uploading" | "success" | "error";
 
 /** Extrae la extensión (en minúsculas, con punto) del nombre de archivo. */
 function getExtension(fileName: string): string {
   const dot = fileName.lastIndexOf(".");
   if (dot < 0) return "";
   return fileName.slice(dot).toLowerCase();
+}
+
+/** Formatea bytes a una unidad legible para los mensajes de tamaño. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return `${Number(mb.toFixed(mb >= 10 ? 0 : 1))} MB`;
+  return `${Math.round(bytes / 1024)} KB`;
 }
 
 /**
@@ -110,64 +125,78 @@ function validateFile(
   file: File,
   accept: UploadFileType[],
   maxSizeBytes: number | undefined,
+  validateMime: boolean,
 ): string | null {
   const allowedExts = accept.map((t) => FILE_TYPE_MAP[t].ext);
   const ext = getExtension(file.name);
 
   // Capa 1: extensión (autoridad primaria, R10).
   if (!allowedExts.includes(ext)) {
-    return `Tipo de archivo no permitido. Formatos aceptados: ${allowedExts.join(", ")}.`;
+    return `Tipo no permitido. Usa: ${allowedExts.join(", ")}.`;
   }
 
-  // Capa 2: MIME (R21/R22). Solo se valida si el navegador aporta uno no vacío.
-  const mime = file.type?.trim();
-  if (mime) {
-    const allowedMimes = accept.flatMap((t) => FILE_TYPE_MAP[t].mimes);
-    if (!allowedMimes.includes(mime)) {
-      return "El contenido del archivo no coincide con el tipo permitido.";
+  // Capa 2: MIME (R21/R22). Solo si el consumidor lo pide y el navegador aporta uno no vacío.
+  if (validateMime) {
+    const mime = file.type?.trim();
+    if (mime) {
+      const allowedMimes = accept.flatMap((t) => FILE_TYPE_MAP[t].mimes);
+      if (!allowedMimes.includes(mime)) {
+        return "El contenido del archivo no coincide con el tipo permitido.";
+      }
     }
   }
 
   // Tamaño (R23): solo si el consumidor fija un límite en cliente.
   if (maxSizeBytes !== undefined && file.size > maxSizeBytes) {
-    return `El archivo excede el tamaño máximo permitido (${maxSizeBytes} bytes).`;
+    return `El archivo excede el tamaño máximo permitido (${formatBytes(maxSizeBytes)}).`;
   }
 
   return null;
 }
 
 /**
- * Componente genérico y reutilizable de carga masiva (UI pura). Ofrece dos
- * acciones: descargar una plantilla XLSX parametrizada por `fields` y subir un
- * archivo por `POST` multipart al `endpoint`. No conoce el dominio ni el destino.
+ * Selector de archivo reutilizable para flujos de carga masiva (UI pura). Ofrece
+ * una zona de subida (click, teclado o arrastrar/soltar), validación de tipo y
+ * tamaño en cliente, y la descarga de una plantilla XLSX parametrizada por
+ * `fields`.
+ *
+ * NO decide qué se hace con el archivo: lo entrega por `onFileSelected` y el
+ * consumidor elige (parsear en el navegador, enviar por chunks, subirlo entero…).
+ * Esto es deliberado — los flujos de carga difieren demasiado entre sí como para
+ * fijar el transporte aquí.
  */
 export function BulkUpload({
-  endpoint,
   accept,
-  fields,
+  fields = [],
   templateFileName,
-  fieldName = DEFAULT_FIELD_NAME,
   maxSizeBytes,
-  onSuccess,
-  onError,
+  validateMime = true,
   label,
+  hint,
+  busy = false,
+  error,
+  onFileSelected,
+  onClear,
+  children,
 }: BulkUploadProps) {
-  const [status, setStatus] = useState<UploadStatus>("idle");
-  const [file, setFile] = useState<File | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const reactId = useId();
+  const inputId = `${reactId}-input`;
+  const hintId = `${reactId}-hint`;
 
   const acceptAttr = useMemo(
     () => accept.map((t) => FILE_TYPE_MAP[t].ext).join(","),
     [accept],
   );
 
-  const isUploading = status === "uploading";
-  const canDownloadTemplate =
-    fields.length > 0 && !isUploading && !isGeneratingTemplate;
-  const hasValidFile = file !== null && (status === "selected" || status === "error" || status === "success");
-  const canUpload = hasValidFile && Boolean(endpoint) && !isUploading;
+  const fieldLabel = label ?? DEFAULT_LABEL;
+  const canDownloadTemplate = fields.length > 0 && !busy && !isGeneratingTemplate;
+  // Un único alert: el error local de selección tiene prioridad sobre el del consumidor.
+  const shownError = localError ?? error ?? null;
 
   async function handleDownloadTemplate() {
     // R10/R11: no re-dispara si no hay campos o ya hay una generación en curso.
@@ -192,135 +221,150 @@ export function BulkUpload({
     }
   }
 
+  /** Libera el value del input para poder re-seleccionar el MISMO archivo. */
+  function limpiarInput() {
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function handleFile(selected: File) {
+    const invalid = validateFile(selected, accept, maxSizeBytes, validateMime);
+    if (invalid) {
+      // Archivo inválido: no se guarda ni se emite; se muestra el error (R10, R21, R23).
+      setFileName(null);
+      setLocalError(invalid);
+      return;
+    }
+    setFileName(selected.name);
+    setLocalError(null);
+    onFileSelected(selected);
+  }
+
   function handleSelect(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
-    if (!selected) {
-      setFile(null);
-      setStatus("idle");
-      setMessage(null);
-      return;
-    }
-
-    const error = validateFile(selected, accept, maxSizeBytes);
-    if (error) {
-      // Archivo inválido: no se guarda, se muestra error y no se habilita envío
-      // (R10, R21, R23). El estado vuelve a idle para mantener la subida bloqueada.
-      setFile(null);
-      setStatus("idle");
-      setMessage(error);
-      return;
-    }
-
-    // Archivo válido: se muestra el nombre y se limpia cualquier mensaje previo
-    // para permitir reintento tras un fallo anterior (R9, R16, R22).
-    setFile(selected);
-    setStatus("selected");
-    setMessage(null);
+    limpiarInput();
+    if (!selected) return;
+    handleFile(selected);
   }
 
-  async function handleUpload() {
-    if (!endpoint || !file) return;
-
-    setStatus("uploading");
-    setMessage(null);
-
-    const formData = new FormData();
-    formData.append(fieldName, file);
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error: BulkUploadError = {
-          message: `La carga falló con estado ${response.status}.`,
-          status: response.status,
-        };
-        setStatus("error");
-        setMessage(error.message);
-        onError?.(error);
-        return;
-      }
-
-      const data = await response.json().catch(() => undefined);
-      setStatus("success");
-      setMessage("Archivo cargado correctamente.");
-      onSuccess?.({ status: response.status, data });
-    } catch (cause) {
-      // Fallo de red: se envuelve con contexto y se notifica, sin propagar (R15).
-      const error: BulkUploadError = {
-        message:
-          cause instanceof Error
-            ? `No se pudo enviar el archivo: ${cause.message}`
-            : "No se pudo enviar el archivo por un error de red.",
-      };
-      setStatus("error");
-      setMessage(error.message);
-      onError?.(error);
-    }
+  function handleClear() {
+    if (busy) return;
+    setFileName(null);
+    setLocalError(null);
+    limpiarInput();
+    onClear?.();
   }
 
-  const inputId = "bulk-upload-input";
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+    if (busy) return;
+    const dropped = event.dataTransfer?.files?.[0];
+    if (dropped) handleFile(dropped);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!busy) setIsDragging(true);
+  }
 
   return (
-    <div
-      className="flex flex-col gap-3"
-      aria-label={label}
-      role={label ? "group" : undefined}
-    >
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={inputId}>{label ?? "Archivo a cargar"}</Label>
-        <Input
+    <div className="flex flex-col gap-3">
+      {/* El click en la zona es un atajo de ratón; la operación por teclado y por
+          lector de pantalla la sigue proveyendo el <input type="file"> real, que
+          permanece en el árbol (sr-only, enfocable) y NO se sustituye. */}
+      <div
+        onClick={() => {
+          if (!busy) inputRef.current?.click();
+        }}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={() => setIsDragging(false)}
+        className={cn(
+          "relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors",
+          "has-[input:focus-visible]:border-brand has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-brand/30",
+          isDragging
+            ? "border-brand bg-brand-soft"
+            : "border-border bg-muted/30 hover:border-brand/60 hover:bg-brand-soft/40",
+          busy && "pointer-events-none opacity-60",
+        )}
+      >
+        {/* Label sr-only: da al input un nombre accesible ESTABLE en ambos estados
+            (vacío y con archivo), del que dependen consumidores y tests. */}
+        <label htmlFor={inputId} className="sr-only">
+          {fieldLabel}
+        </label>
+        <input
           ref={inputRef}
           id={inputId}
           type="file"
           accept={acceptAttr}
           onChange={handleSelect}
-          disabled={isUploading}
+          disabled={busy}
+          // El texto de ayuda solo existe en el estado vacío: no se referencia
+          // un id inexistente cuando ya hay archivo elegido.
+          aria-describedby={fileName ? undefined : hintId}
+          className="sr-only"
         />
-        {file ? (
-          <p className="text-sm text-muted-foreground">{file.name}</p>
-        ) : null}
+
+        {fileName ? (
+          <>
+            <FileSpreadsheet className="size-8 text-brand" aria-hidden="true" />
+            <p className="text-sm font-medium break-all text-foreground">
+              {fileName}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Haz clic o arrastra otro archivo para reemplazarlo
+            </p>
+          </>
+        ) : (
+          <>
+            <UploadCloud className="size-8 text-brand" aria-hidden="true" />
+            <p className="text-sm font-medium text-foreground">{fieldLabel}</p>
+            <p id={hintId} className="text-xs text-muted-foreground">
+              Arrastra el archivo aquí o haz clic para elegirlo ({acceptAttr})
+              {maxSizeBytes !== undefined
+                ? ` · hasta ${formatBytes(maxSizeBytes)}`
+                : null}
+            </p>
+          </>
+        )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
+
+      <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"
-          variant="outline"
+          variant="brand-outline"
           onClick={handleDownloadTemplate}
           disabled={!canDownloadTemplate}
         >
-          <Download aria-hidden="true" />
+          {isGeneratingTemplate ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Download aria-hidden="true" />
+          )}
           Descargar plantilla
         </Button>
-        <Button
-          type="button"
-          onClick={handleUpload}
-          disabled={!canUpload}
-        >
-          <Upload aria-hidden="true" />
-          Cargar archivo
-        </Button>
+        {fileName ? (
+          <Button
+            type="button"
+            variant="brand-outline"
+            onClick={handleClear}
+            disabled={busy}
+            aria-label="Quitar archivo"
+            title="Quitar archivo"
+          >
+            <X aria-hidden="true" />
+            Quitar archivo
+          </Button>
+        ) : null}
+        {children}
       </div>
 
-      {isUploading ? (
-        <span role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="animate-spin" aria-hidden="true" />
-          Cargando…
-        </span>
-      ) : null}
-
-      {status === "success" && message ? (
-        <Alert role="status" className={cn("border-transparent")}>
-          <AlertDescription>{message}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {status !== "success" && status !== "uploading" && message ? (
+      {shownError ? (
         <Alert variant="destructive" role="alert">
-          <AlertDescription>{message}</AlertDescription>
+          <AlertDescription>{shownError}</AlertDescription>
         </Alert>
       ) : null}
     </div>

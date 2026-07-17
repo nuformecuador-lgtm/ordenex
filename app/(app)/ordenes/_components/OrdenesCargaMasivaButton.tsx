@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useSWRConfig } from "swr";
+import { Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/shared/Modal";
+import { cn } from "@/lib/utils";
 import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
 import { OrdenesCargaPreview } from "@/app/(app)/ordenes/_components/OrdenesCargaPreview";
 import {
@@ -43,6 +45,67 @@ const CLASIFICACION_VACIA: ClasificacionCarga = {
  * con chips) y `asignacion` (tras la carga real: asignar mensajero a las nuevas).
  */
 type Step = "upload" | "preview" | "asignacion";
+
+/** Orden y etiqueta de los pasos, para el indicador de progreso. */
+const PASOS: { id: Step; label: string }[] = [
+  { id: "upload", label: "Subir archivo" },
+  { id: "preview", label: "Revisar hallazgos" },
+  { id: "asignacion", label: "Asignar mensajero" },
+];
+
+/** Subtítulo del modal según el paso; orienta sin repetir lo que ya dice el paso. */
+const PASO_DESCRIPCION: Record<Step, string> = {
+  upload: "Sube un archivo CSV o XLSX. Se valida en tu navegador antes de guardar nada.",
+  preview: "Revisa los hallazgos de la validación y confirma para cargar.",
+  asignacion: "Asigna un mensajero a las órdenes recién creadas.",
+};
+
+/** Indicador de progreso de los 3 pasos del modal (presentacional). */
+function OrdenesCargaPasos({ step }: { step: Step }) {
+  const actual = PASOS.findIndex((p) => p.id === step);
+
+  return (
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-1" aria-label="Progreso de la carga masiva">
+      {PASOS.map((paso, index) => {
+        const completado = index < actual;
+        const activo = index === actual;
+        return (
+          <li key={paso.id} className="flex items-center gap-2">
+            <span
+              className={cn(
+                "flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
+                activo && "border-brand bg-brand text-white",
+                completado && "border-brand bg-brand-soft text-brand-dark",
+                !activo && !completado && "border-border text-muted-foreground",
+              )}
+              aria-hidden="true"
+            >
+              {completado ? <Check className="size-3.5" /> : index + 1}
+            </span>
+            <span
+              className={cn(
+                "text-sm",
+                activo ? "font-medium text-foreground" : "text-muted-foreground",
+              )}
+              aria-current={activo ? "step" : undefined}
+            >
+              {paso.label}
+            </span>
+            {index < PASOS.length - 1 ? (
+              <span
+                className={cn(
+                  "hidden h-px w-8 sm:block",
+                  completado ? "bg-brand" : "bg-border",
+                )}
+                aria-hidden="true"
+              />
+            ) : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 /**
  * Botón "Carga masiva". El archivo se parsea y deduplica EN EL NAVEGADOR y sus
@@ -170,16 +233,20 @@ export function OrdenesCargaMasivaButton() {
         open={open}
         onOpenChange={handleOpenChange}
         title="Carga masiva de órdenes"
+        description={PASO_DESCRIPCION[step]}
         hideCancel
         confirmLabel="Cerrar"
-        className="w-[75vw] max-w-none min-w-[320px]"
+        confirmVariant="brand-outline"
+        size="xl"
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
+          <OrdenesCargaPasos step={step} />
+
           {/* El mensajero sugerido persiste en subida y preview: se aplica en la
               carga real (al confirmar). No se muestra en la asignación, que tiene
               su propio asignador por orden. */}
           {step !== "asignacion" ? (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-muted/30 p-4 sm:max-w-md">
               <Label htmlFor="carga-mensajero-sugerido">
                 Mensajero sugerido (opcional)
               </Label>
