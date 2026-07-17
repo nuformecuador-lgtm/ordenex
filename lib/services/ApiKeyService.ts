@@ -1,7 +1,12 @@
 import { UsuarioDuplicadoError } from "@/lib/interfaces/repositories/IUserRepository";
 import type { IApiKeyRepository } from "@/lib/interfaces/repositories/IApiKeyRepository";
 import type { Actor, IApiKeyService } from "@/lib/interfaces/services/IApiKeyService";
-import type { GenerarApiKeyInput, GenerarApiKeyResult } from "@/lib/types/api-key";
+import type {
+  GenerarApiKeyInput,
+  GenerarApiKeyResult,
+  ListarApiKeysInput,
+  ListarApiKeysResult,
+} from "@/lib/types/api-key";
 import { generateApiKey } from "@/lib/utils/api-key-generator";
 import { hashApiKey } from "@/lib/utils/api-key-hash";
 import { cedulaSintetica, emailSintetico, slugify } from "@/lib/utils/api-key-identity";
@@ -67,5 +72,26 @@ export class ApiKeyService implements IApiKeyService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Feature 82/R4: listado paginado. Reusa el mismo `ALLOWED_ROLES` que `generar`: quien
+   * no puede crear keys tampoco puede inventariarlas.
+   *
+   * R6 no necesita ningun filtrado aqui: los items vienen del repositorio ya sin
+   * `keyHash` (`LIST_SELECT` no lo pide) y `ApiKeyListItem` no lo declara. No hay
+   * secreto que borrar porque nunca existio en este camino.
+   */
+  async listar(input: ListarApiKeysInput, actor: Actor): Promise<ListarApiKeysResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R2: antes de la DB
+
+    const skip = (input.page - 1) * input.pageSize;
+    const { items, total } = await this.repo.list({
+      skip,
+      take: input.pageSize, // ya acotado a MAX_PAGE_SIZE por el schema (R8)
+    });
+
+    // R9: si `skip` supera el final, `items` viene vacio y `total` sigue siendo el real.
+    return { status: "ok", items, page: input.page, pageSize: input.pageSize, total };
   }
 }
