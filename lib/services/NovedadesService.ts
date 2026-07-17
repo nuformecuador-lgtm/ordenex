@@ -11,12 +11,14 @@ import type {
 } from "@/lib/interfaces/services/INovedadesService";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
-// R3/R5: el UNICO estatus que cuenta como "en devolucion" (F1.4, NO `devuelta_origen` ni
-// `rechazada`). Constante del service (patron `OrdenHistorialService.ESTATUS_DEVUELTA`); el
-// repo la recibe como parametro (no hardcodea el valor).
-const ESTATUS_DEVUELTA = "devuelta";
+// R3: estatus que CIERRAN la novedad (retiran la orden de la lista aunque tenga gestion de
+// devolucion vigente). Decision #1 del gate, verificada contra `ORDER_STATUS_SEED`. `rechazada`
+// (escalado) y `en_bodega`/`en_bodega_satelite` (reintento) NO cierran (siguen como novedad).
+// Constante del service (el repo la recibe como parametro `cerrados` y solo aplica el `notIn`,
+// sin hardcodear valores de catalogo).
+const ESTATUS_CERRADOS = ["entregada", "devuelta_origen", "recibido_origen"];
 
-// R5: unico rol autorizado (paridad con `RecepcionSateliteService.ROL_AUTORIZADO`).
+// R11: unico rol autorizado (paridad con `RecepcionSateliteService.ROL_AUTORIZADO`).
 const ROL_AUTORIZADO = "adminTienda";
 
 // Metodos de repo que consume el service (inyeccion por constructor). `Pick` para dobles de
@@ -27,8 +29,9 @@ type NovedadesRepo = Pick<
 >;
 
 /**
- * Feature 87 (design §2.2) — logica de negocio de la lista de NOVEDADES: las ordenes en
- * `devuelta` de la tienda del adminTienda, con la causa de la ultima gestion `devuelta`
+ * Feature 87/89 (design §2.2) — logica de negocio de la lista de NOVEDADES: las devoluciones
+ * del mensajero de la tienda del adminTienda (ordenes con gestion de devolucion VIGENTE y aun
+ * ABIERTAS, estatus fuera de `ESTATUS_CERRADOS`), con la causa de la ultima gestion `devuelta`
  * vigente. Solo lectura. No conoce HTTP ni Prisma; testeable con dobles sin red/DB.
  */
 export class NovedadesService implements INovedadesService {
@@ -38,17 +41,18 @@ export class NovedadesService implements INovedadesService {
     input: ListarNovedadesInput,
     actor: Actor,
   ): Promise<ListarNovedadesServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R5
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R11
 
     const { page, pageSize } = input;
 
-    // R2/R3/R4/R22: total de la tienda del actor (acota `tiendaId = actor.usuarioId` en el repo).
-    const total = await this.repo.countDevueltasByTienda(actor.usuarioId, ESTATUS_DEVUELTA);
+    // R1-R9: total de novedades de la tienda del actor (acota `tiendaId = actor.usuarioId` y
+    // pasa el mismo conjunto `cerrados` que la pagina, R8).
+    const total = await this.repo.countDevueltasByTienda(actor.usuarioId, ESTATUS_CERRADOS);
 
-    // R1/R2/R3/R4/R22: la pagina de devueltas de la tienda, ordenada por Orden.createdAt desc
-    // (fallback R21). `skip` derivado de la pagina (1-based).
+    // R1-R9/R12: la pagina de novedades de la tienda, ordenada por Orden.createdAt desc
+    // (fallback R12). `skip` derivado de la pagina (1-based).
     const skip = (page - 1) * pageSize;
-    const rows = await this.repo.findDevueltasByTienda(actor.usuarioId, ESTATUS_DEVUELTA, {
+    const rows = await this.repo.findDevueltasByTienda(actor.usuarioId, ESTATUS_CERRADOS, {
       skip,
       take: pageSize,
     });
@@ -60,7 +64,7 @@ export class NovedadesService implements INovedadesService {
     // R8: UNA sola consulta agregada para las causas de TODAS las ordenes de la pagina.
     const causas = await this.repo.findCausasDevueltaVigentes(rows.map((r) => r.id)); // R6/R7
 
-    // R21 (estricto): reordena la PAGINA por la fecha de la ultima gestion `devuelta` vigente
+    // R12 (estricto): reordena la PAGINA por la fecha de la ultima gestion `devuelta` vigente
     // desc, con la fecha ya traida por `findCausasDevueltaVigentes` (sin query extra). Las
     // ordenes sin gestion vigente caen a `Orden.createdAt` (fallback documentado). Copia antes
     // de ordenar para no mutar el arreglo del repo.
@@ -68,7 +72,7 @@ export class NovedadesService implements INovedadesService {
       (a, b) => fechaEfectiva(b, causas).getTime() - fechaEfectiva(a, causas).getTime(),
     );
 
-    // R6/R7/R9: mapea a NovedadDTO; causa = ultima gestion vigente, o null ("sin causa").
+    // R6/R7/R10: mapea a NovedadDTO; causa = ultima gestion vigente, o null ("sin causa").
     const items: NovedadDTO[] = ordered.map((row) => ({
       id: row.id,
       numGuia: row.numGuia,
@@ -81,7 +85,7 @@ export class NovedadesService implements INovedadesService {
   }
 }
 
-// R21: fecha de recencia de una orden = fecha de su ultima gestion `devuelta` vigente si
+// R12: fecha de recencia de una orden = fecha de su ultima gestion `devuelta` vigente si
 // existe; si no (R7), `Orden.createdAt` como fallback documentado.
 function fechaEfectiva(
   row: NovedadOrdenRow,
