@@ -3,15 +3,14 @@
 import { useState } from "react";
 import {
   Loader2,
-  MessageCircle,
   PackageCheck,
-  Phone,
   RotateCcw,
   Undo2,
   XCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup } from "@/components/ui/radio-group";
@@ -304,31 +303,14 @@ export function GestionarOrdenPanel({
       {/* Paso 1: llamar, whatsapp y gestionar. */}
       {paso === "detalle" ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="size-14 shrink-0"
-            onClick={() => window.open(`tel:${orden.telefonoDest}`, "_self")}
-            aria-label={`Llamar a ${orden.destinatario}`}
-          >
-            <Phone className="size-5" aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="size-14 shrink-0"
-            onClick={() =>
-              window.open(
-                `https://wa.me/${orden.telefonoDest.replace(/[^\d]/g, "")}`,
-                "_blank",
-              )
-            }
-            aria-label={`WhatsApp a ${orden.destinatario}`}
-          >
-            <MessageCircle className="size-5" aria-hidden="true" />
-          </Button>
+          {/* Feature 87 (R17): botones de contacto deduplicados en el compuesto
+              compartido `ContactoButtons` (antes inline aqui). Ademas corrige el
+              enlace wa.me para prefijar `506` (R15). */}
+          <ContactoButtons
+            telefono={orden.telefonoDest}
+            nombre={orden.destinatario}
+            size="lg"
+          />
           <Button
             type="button"
             size="lg"
