@@ -24,8 +24,12 @@ export interface ModalProps {
   confirmLabel?: string;
   /** Etiqueta del botón cancelar (R8). Default "Cancelar". */
   cancelLabel?: string;
-  /** Variante visual del confirmar; se pasa al Button (R8b). Default "default". */
-  confirmVariant?: "default" | "destructive";
+  /**
+   * Variante visual del confirmar; se pasa al Button (R8b). Default "default".
+   * `brand-outline` se añadió para flujos de marca (carga masiva); es aditivo y
+   * no altera el default.
+   */
+  confirmVariant?: "default" | "destructive" | "brand-outline";
   /** Oculta el botón cancelar (R10). Default false. */
   hideCancel?: boolean;
   /**
@@ -65,9 +69,29 @@ export interface ModalProps {
    */
   dismissible?: boolean;
 
+  /**
+   * Ancho máximo del popup. Aditivo: el default `md` conserva exactamente el
+   * ancho histórico (`max-w-md`), por lo que los consumidores existentes no
+   * cambian. `xl` = 1000px (flujos anchos, p. ej. carga masiva). En todos los
+   * casos el popup sigue limitado a `w-[calc(100%-2rem)]`, así que en pantallas
+   * chicas se encoge en lugar de desbordar.
+   */
+  size?: ModalSize;
+
   /** Clases extra para el popup. */
   className?: string;
 }
+
+/** Tamaños admitidos por el Modal. `md` es el histórico y el default. */
+export type ModalSize = "sm" | "md" | "lg" | "xl";
+
+/** Ancho máximo por tamaño. `md` DEBE seguir siendo `max-w-md` (compatibilidad). */
+const SIZE_MAX_WIDTH: Record<ModalSize, string> = {
+  sm: "max-w-sm",
+  md: "max-w-md",
+  lg: "max-w-2xl",
+  xl: "max-w-[1000px]",
+};
 
 /** Fase interna del confirmar; el `open` lo controla siempre el padre. */
 type ConfirmPhase = "idle" | "pending";
@@ -104,6 +128,7 @@ export function Modal({
   onError,
   closeOnConfirm = true,
   dismissible = true,
+  size = "md",
   className,
 }: ModalProps) {
   const [phase, setPhase] = useState<ConfirmPhase>("idle");
@@ -199,7 +224,8 @@ export function Modal({
           aria-modal="true"
           aria-busy={pending || undefined}
           className={cn(
-            "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-lg border border-border bg-background p-6 shadow-lg outline-none",
+            "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-lg border border-border bg-background p-6 shadow-lg outline-none",
+            SIZE_MAX_WIDTH[size],
             className,
           )}
         >

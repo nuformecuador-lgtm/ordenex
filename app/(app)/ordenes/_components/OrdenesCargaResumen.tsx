@@ -212,7 +212,7 @@ export function OrdenesCargaResumen({ numRemisiones, onDone }: OrdenesCargaResum
         </Alert>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/30 p-4">
         <span className="text-sm font-medium" id="carga-resumen-global-label">
           Asignar mensajero a todas las órdenes
         </span>
@@ -236,9 +236,10 @@ export function OrdenesCargaResumen({ numRemisiones, onDone }: OrdenesCargaResum
         ariaLabel="Resumen de la carga masiva"
       />
 
-      <div className="flex justify-end">
+      <div className="flex justify-end border-t border-border pt-4">
         <Button
           type="button"
+          variant="brand-outline"
           onClick={handleConfirmar}
           disabled={submitting || filasState.status !== "ok"}
         >
