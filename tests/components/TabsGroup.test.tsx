@@ -15,6 +15,54 @@ afterEach(() => {
   cleanup();
 });
 
+describe("TabsGroup — listado vertical: alto y desborde", () => {
+  const LARGO =
+    "Órdenes rechazadas pendientes de devolución a la tienda de origen";
+
+  it("el listado no tiene alto fijo: crece con sus tabs y no scrollea aparte", () => {
+    render(<TabsGroup items={items} orientation="vertical" ariaLabel="Secciones" />);
+
+    const list = screen.getByRole("tablist", { name: "Secciones" });
+    expect(list.className).not.toMatch(/max-h-/);
+    expect(list.className).not.toMatch(/overflow-y-(auto|scroll)/);
+  });
+
+  it("una tab larga se trunca con elipsis en vez de desbordar la columna", () => {
+    render(
+      <TabsGroup
+        items={[{ value: "largo", label: LARGO, content: <p>Panel</p> }]}
+        orientation="vertical"
+      />,
+    );
+
+    const tab = screen.getByRole("tab", { name: LARGO });
+    // `min-w-0` es lo que permite que el hijo flex se encoja; sin eso no hay elipsis.
+    expect(tab.className).toMatch(/min-w-0/);
+    expect(tab.querySelector(".truncate")).not.toBeNull();
+    // El texto truncado sigue disponible completo al pasar el mouse.
+    expect(tab).toHaveAttribute("title", LARGO);
+  });
+
+  it("el nombre accesible de la tab truncada es el label completo", () => {
+    render(
+      <TabsGroup
+        items={[{ value: "largo", label: LARGO, content: <p>Panel</p> }]}
+        orientation="vertical"
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: LARGO })).toBeInTheDocument();
+  });
+
+  it("horizontal: el label no se trunca (el listado scrollea en X)", () => {
+    render(<TabsGroup items={[{ value: "largo", label: LARGO }]} />);
+
+    const tab = screen.getByRole("tab", { name: LARGO });
+    expect(tab.querySelector(".truncate")).toBeNull();
+    expect(tab).not.toHaveAttribute("title");
+  });
+});
+
 describe("TabsGroup", () => {
   it("horizontal: activa la primera tab por defecto y no muestra filtro", () => {
     render(<TabsGroup items={items} ariaLabel="Secciones" />);

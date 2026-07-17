@@ -246,7 +246,8 @@ export function CierresBodegaAdminModule({
             ? `${cierreAbierto.zonaNombre} · ${cierreAbierto.solicitadoPorNombre}`
             : undefined
         }
-        className="max-w-4xl"
+        // Sin ancho propio: el default del Modal (75% de la pantalla) es el que corresponde
+        // a un detalle con tablas anchas.
         confirmLabel="Cerrar"
         hideCancel
         onConfirm={cerrarDetalle}

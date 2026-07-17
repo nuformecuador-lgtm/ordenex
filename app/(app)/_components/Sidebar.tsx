@@ -14,6 +14,7 @@ import {
   Trophy,
   Truck,
   User,
+  Wallet,
   type LucideProps,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -141,6 +142,7 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   qrCode: QrCode,
   megaphone: Megaphone,
   trophy: Trophy,
+  wallet: Wallet,
 };
 
 // El Sidebar reexporta los tipos de dominio del menu para consumidores/tests.

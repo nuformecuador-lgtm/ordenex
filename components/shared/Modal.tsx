@@ -70,28 +70,53 @@ export interface ModalProps {
   dismissible?: boolean;
 
   /**
-   * Ancho máximo del popup. Aditivo: el default `md` conserva exactamente el
-   * ancho histórico (`max-w-md`), por lo que los consumidores existentes no
-   * cambian. `xl` = 1000px (flujos anchos, p. ej. carga masiva). En todos los
-   * casos el popup sigue limitado a `w-[calc(100%-2rem)]`, así que en pantallas
-   * chicas se encoge en lugar de desbordar.
+   * Ancho MÁXIMO del popup. Admite un token (`sm`/`md`/`lg`/`xl`) o una medida CSS
+   * explícita en % o px (`"75%"`, `"800px"`). Default `"75%"`: el popup nunca ocupa
+   * el ancho completo de la pantalla.
+   *
+   * Es un TECHO, no un ancho fijo: el popup sigue limitado a `w-[calc(100%-2rem)]`,
+   * así que en pantallas chicas se encoge en vez de desbordar. Por debajo manda el
+   * `min-width` de 300px (ver `MIN_WIDTH_PX`).
    */
-  size?: ModalSize;
+  size?: ModalMaxWidth;
 
   /** Clases extra para el popup. */
   className?: string;
 }
 
-/** Tamaños admitidos por el Modal. `md` es el histórico y el default. */
+/** Tamaños con nombre admitidos por el Modal. */
 export type ModalSize = "sm" | "md" | "lg" | "xl";
 
-/** Ancho máximo por tamaño. `md` DEBE seguir siendo `max-w-md` (compatibilidad). */
+/** Medida CSS explícita para `size`: solo % o px (no `rem`, `vw`, `calc()`…). */
+export type ModalMaxWidthUnit = `${number}%` | `${number}px`;
+
+/** Un token con nombre o una medida explícita. */
+export type ModalMaxWidth = ModalSize | ModalMaxWidthUnit;
+
+/** Ancho máximo por token. */
 const SIZE_MAX_WIDTH: Record<ModalSize, string> = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-2xl",
   xl: "max-w-[1000px]",
 };
+
+/**
+ * Ancho máximo por defecto: el popup ocupa como mucho 3/4 de la pantalla. Antes el
+ * default era `md` (448px) y los flujos anchos lo pisaban con `className`.
+ */
+const DEFAULT_MAX_WIDTH: ModalMaxWidth = "75%";
+
+/**
+ * Ancho mínimo del popup, en px. Va acá y no en cada consumidor: un modal más angosto
+ * que esto no es legible, sea cual sea su contenido.
+ */
+const MIN_WIDTH_PX = 300;
+
+/** `true` si el valor es un token con nombre (y no una medida CSS). */
+function esToken(size: ModalMaxWidth): size is ModalSize {
+  return size in SIZE_MAX_WIDTH;
+}
 
 /** Fase interna del confirmar; el `open` lo controla siempre el padre. */
 type ConfirmPhase = "idle" | "pending";
@@ -128,9 +153,9 @@ export function Modal({
   onError,
   closeOnConfirm = true,
   dismissible = true,
-  size = "md",
+  size = DEFAULT_MAX_WIDTH,
   className,
-}: ModalProps) {
+}: Readonly<ModalProps>) {
   const [phase, setPhase] = useState<ConfirmPhase>("idle");
   const mountedRef = useRef(true);
   // Espejo síncrono de la fase pendiente: cierra la ventana de carrera entre dos
@@ -223,9 +248,15 @@ export function Modal({
         <Dialog.Popup
           aria-modal="true"
           aria-busy={pending || undefined}
+          // Una medida explícita (%/px) va por `style` y no por clase: Tailwind compila
+          // clases estáticas, así que un valor arbitrario en runtime no existiría en el CSS.
+          style={{
+            minWidth: `${MIN_WIDTH_PX}px`,
+            ...(esToken(size) ? {} : { maxWidth: size }),
+          }}
           className={cn(
             "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-lg border border-border bg-background p-6 shadow-lg outline-none",
-            SIZE_MAX_WIDTH[size],
+            esToken(size) ? SIZE_MAX_WIDTH[size] : undefined,
             className,
           )}
         >

@@ -134,21 +134,29 @@ export function TabsGroup({
           </>
         ) : null}
 
+        {/* Sin alto fijo: el listado crece con sus tabs y es la página la que scrollea.
+            Un `max-h` acá metía un segundo scroll dentro del de la página. */}
         <TabsList
           aria-label={ariaLabel}
-          className={cn(
-            isVertical &&
-              "max-h-80 flex-col items-stretch overflow-x-hidden overflow-y-auto",
-          )}
+          className={cn(isVertical && "flex-col items-stretch overflow-x-hidden")}
         >
           {visibleItems.map((item) => (
             <TabsTrigger
               key={item.value}
               value={item.value}
               disabled={item.disabled}
-              className={cn(isVertical && "w-full justify-start")}
+              // `min-w-0` habilita el truncado: sin esto el hijo flex se niega a
+              // encogerse por debajo de su contenido y el label desborda la columna.
+              className={cn(isVertical && "w-full min-w-0 justify-start")}
+              // El label truncado deja de ser legible completo: el title lo recupera al
+              // pasar el mouse (el nombre accesible sigue siendo el texto entero).
+              title={isVertical ? item.label : undefined}
             >
-              {item.label}
+              {isVertical ? (
+                <span className="truncate">{item.label}</span>
+              ) : (
+                item.label
+              )}
             </TabsTrigger>
           ))}
         </TabsList>
