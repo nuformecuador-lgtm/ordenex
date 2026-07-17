@@ -30,7 +30,15 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
     actor: Actor,
   ): Promise<CrearPlantillaServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R17
-    const plantilla = await this.repo.crear({ concepto: input.concepto, monto: input.monto }); // R24
+    // Feature 84: la periodicidad llega SIEMPRE resuelta desde el borde (el schema zod aplica los
+    // defaults meses/1/hoy-CR cuando la UI actual no la manda), asi que aca no hay fallback.
+    const plantilla = await this.repo.crear({
+      concepto: input.concepto,
+      monto: input.monto,
+      periodicidadUnidad: input.periodicidadUnidad,
+      periodicidadCantidad: input.periodicidadCantidad,
+      fechaCobro: input.fechaCobro,
+    }); // R24
     return { status: "ok", plantilla };
   }
 
@@ -44,7 +52,10 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
     const plantilla = await this.repo.actualizar(input.id, {
       concepto: input.concepto,
       monto: input.monto,
-    }); // R25
+      periodicidadUnidad: input.periodicidadUnidad,
+      periodicidadCantidad: input.periodicidadCantidad,
+      fechaCobro: input.fechaCobro,
+    }); // R25 (feature 84: tambien mueve el ciclo/ancla)
     return { status: "ok", plantilla };
   }
 

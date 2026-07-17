@@ -1,4 +1,5 @@
-// Feature 45 (R27-R31) — Route Handler del cron mensual de GASTOS FIJOS. Capa Controller:
+// Feature 45 (R27-R31) — Route Handler del cron DIARIO de GASTOS FIJOS (feature 84: era mensual
+// dia 1; ahora corre `0 6 * * *` y el SERVICE filtra que plantillas aplican hoy). Capa Controller:
 // solo HTTP + autorizacion por `CRON_SECRET`; delega TODA la logica de negocio en
 // GeneracionGastosFijosService (docs/architecture.md, patron Controller -> Service -> Repo).
 // Sin queries ni logica de negocio aqui. NUNCA loguea el secreto ni PII (R29). Clon del patron
@@ -17,7 +18,8 @@ export interface GenerarGastosFijosDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
   getSecret?: () => string | null;
   service?: IGeneracionGastosFijosService;
-  // Reloj inyectable (tests): por defecto `new Date()`. Determina el periodo YYYY-MM CR (R30).
+  // Reloj inyectable (tests): por defecto `new Date()`. Determina el dia CR de la corrida, y con
+  // el que plantillas aplican hoy (feature 84; la regla vive en el service, no aca).
   now?: () => Date;
 }
 
@@ -58,13 +60,15 @@ export async function handleGenerarGastosFijos(
 
   const result = await withErrorHandler(async () => {
     const service = deps.service ?? buildService();
-    // R30: el periodo YYYY-MM se deriva de `now` en hora CR dentro del service.
+    // Feature 84: TODA la decision (que plantillas aplican hoy, que periodo/clave usa cada una)
+    // vive en el service; el controller solo le pasa `now`.
     const hoy = (deps.now ?? (() => new Date()))();
     const resumen = await service.ejecutarGeneracion(hoy);
-    // R29: resumen SIN PII (solo conteos + periodo).
+    // R29: resumen SIN PII (solo conteos + la fecha CR de la corrida).
     return {
-      periodo: resumen.periodo,
+      fecha: resumen.fecha,
       plantillasActivas: resumen.plantillasActivas,
+      plantillasQueAplicanHoy: resumen.plantillasQueAplicanHoy,
       egresosGenerados: resumen.egresosGenerados,
     };
   });

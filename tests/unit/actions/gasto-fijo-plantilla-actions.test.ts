@@ -23,6 +23,9 @@ function plantilla(): GastoFijoPlantillaDTO {
     concepto: "Alquiler",
     monto: "80000.00",
     activa: true,
+    periodicidadUnidad: "meses",
+    periodicidadCantidad: 1,
+    fechaCobro: "2026-07-13",
     createdAt: "2026-07-13T10:00:00.000Z",
     updatedAt: "2026-07-13T10:00:00.000Z",
   };

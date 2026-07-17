@@ -823,21 +823,48 @@ model PagoMensajeroMovimiento {
   @@map("pago_mensajero_movimiento")
 }
 
+// Feature 84: unidad de la periodicidad de una plantilla de gasto fijo. Con `periodicidadCantidad`
+// expresa el pedido del humano y cualquier otro ciclo: diaria = 1 dias; semanal = 1 semanas;
+// quincenal = 2 semanas; mensual = 1 meses; y tambien cada-3-dias, cada-6-meses, etc.
+enum PeriodicidadUnidad {
+  dias
+  semanas
+  meses
+}
+
 // Feature 45 (design §1.2): plantilla recurrente de GASTO FIJO. CONFIGURACION mutable (NO es
 // el libro wallet_movimiento, que es inmutable): SI lleva updatedAt y se edita/activa/
 // desactiva. NO se borra (R25): la desactivacion (activa=false) detiene la generacion futura
-// y preserva el rastro de que genero cada egreso. El cron mensual
-// (`/api/cron/generar-gastos-fijos`) lee las ACTIVAS y emite un egreso `egreso_gasto_fijo` en
-// la caja principal por cada una, idempotente por (plantilla, periodo YYYY-MM). Periodicidad
-// SIEMPRE mensual, dia 1 fijo (F1.4-b): no se modela `dia_del_mes`. RLS habilitada sin policies
-// (solo service role, patron wallet_movimiento/wallet_tienda_movimiento, R20).
+// y preserva el rastro de que genero cada egreso. El cron DIARIO
+// (`/api/cron/generar-gastos-fijos`, `0 6 * * *`) lee las ACTIVAS, filtra las que aplican HOY
+// segun su periodicidad (`lib/utils/periodicidad.ts`) y emite un egreso `egreso_gasto_fijo` en
+// la caja principal por cada una. RLS habilitada sin policies (solo service role, patron
+// wallet_movimiento/wallet_tienda_movimiento, R20).
+//
+// Feature 84 — periodicidad ARBITRARIA (antes: SIEMPRE mensual dia 1, clavada). Modelo
+// unidad + cantidad + fecha de cobro: `fechaCobro` es el PRIMER cobro y el ANCLA del ciclo
+// (antes de esa fecha no se cobra nada); los siguientes caen cada `periodicidadCantidad` x
+// `periodicidadUnidad` a partir de ella. En `meses` el dia se CLAMPEA al ultimo dia del mes
+// (ancla 31 -> 28/feb, 30/abr), nunca se saltea el mes.
+//
+// IDEMPOTENCIA (ojo, aca se puede duplicar plata): la clave `origen_id` es
+// `<plantillaId>:<periodo>` bajo el indice unico parcial (origen_tipo, origen_id, categoria).
+// Para `meses` el periodo SIGUE siendo `YYYY-MM` — mismo formato que pre-84, para que la clave
+// no cambie en el deploy y no haya doble cobro. Para `dias`/`semanas` es `YYYY-MM-DD`.
+// Ver `lib/utils/periodicidad.ts#periodoDe`.
+//
+// La periodicidad vive SOLO aca (plantilla -> `egreso_gasto_fijo`). Un `egreso_gasto_variable`
+// es un movimiento suelto sin plantilla: por construccion, un variable no puede ser periodico.
 model GastoFijoPlantilla {
-  id        String   @id @default(uuid())
-  concepto  String // nombre/concepto del gasto fijo (obligatorio, no vacio)
-  monto     Decimal  @db.Decimal(12, 2) // > 0
-  activa    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  id                   String             @id @default(uuid())
+  concepto             String // nombre/concepto del gasto fijo (obligatorio, no vacio)
+  monto                Decimal            @db.Decimal(12, 2) // > 0
+  activa               Boolean            @default(true)
+  periodicidadUnidad   PeriodicidadUnidad @default(meses) @map("periodicidad_unidad")
+  periodicidadCantidad Int                @default(1) @map("periodicidad_cantidad") // CHECK >= 1 en la migracion
+  fechaCobro           DateTime           @db.Date @map("fecha_cobro") // ancla: fecha del PRIMER cobro
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @default(now()) @updatedAt @map("updated_at")
 
   @@index([activa]) // cron: WHERE activa = true (R27)
   @@map("gasto_fijo_plantilla")
