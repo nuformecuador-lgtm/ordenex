@@ -13,12 +13,16 @@ import { seedRoles } from "@/scripts/seed-catalogos";
 // Mapa nombre-de-miembro-Prisma -> label real del enum en la DB.
 // Feature 19: adminSatelite es identidad (sin @map): el nombre del miembro y
 // el label DB coinciden.
+// Feature 81 [D1]: apiKey tambien es identidad (sin @map). El seed lo crea porque
+// ROLES_SEED = Object.values(RolValue); su rol queda SIN filas en `rol_permiso`
+// (fallo seguro), cosa que este archivo ya cubre en "no toca otras tablas (R12)".
 const DB_LABEL: Record<string, string> = {
   maestro: "maestro",
   admin: "admin",
   mensajero: "mensajero",
   adminTienda: "Admin Tienda",
   adminSatelite: "adminSatelite",
+  apiKey: "apiKey",
 };
 
 interface RolRow {
@@ -54,7 +58,7 @@ function createFakeRol() {
   return { rows, upsert };
 }
 
-describe("seedRoles crea los cinco roles con grafia exacta (R8, R7)", () => {
+describe("seedRoles crea los seis roles con grafia exacta (R8, R7)", () => {
   it("persiste una fila por cada valor del enum con el label real de la DB", async () => {
     const fake = createFakeRol();
     await seedRoles({ rol: { upsert: fake.upsert } } as unknown as Pick<
@@ -64,7 +68,8 @@ describe("seedRoles crea los cinco roles con grafia exacta (R8, R7)", () => {
 
     const valores = [...fake.rows.values()].map((r) => r.value).sort();
     expect(valores).toEqual(
-      ["Admin Tienda", "admin", "adminSatelite", "maestro", "mensajero"].sort()
+      // Feature 81 [D1]: 6.º rol `apiKey` (sin @map, label DB = slug camelCase).
+      ["Admin Tienda", "admin", "adminSatelite", "maestro", "mensajero", "apiKey"].sort()
     );
   });
 
@@ -80,7 +85,7 @@ describe("seedRoles crea los cinco roles con grafia exacta (R8, R7)", () => {
 });
 
 describe("seedRoles es idempotente (R9, R10)", () => {
-  it("dos ejecuciones dejan exactamente 5 filas, sin duplicados y con id estable", async () => {
+  it("dos ejecuciones dejan exactamente 6 filas, sin duplicados y con id estable", async () => {
     const fake = createFakeRol();
     const client = { rol: { upsert: fake.upsert } } as unknown as Pick<
       PrismaClient,
@@ -88,13 +93,13 @@ describe("seedRoles es idempotente (R9, R10)", () => {
     >;
 
     await seedRoles(client);
-    expect(fake.rows.size).toBe(5);
+    expect(fake.rows.size).toBe(6);
     const idsPrimera = new Map(
       [...fake.rows.entries()].map(([k, v]) => [k, v.id])
     );
 
     await seedRoles(client);
-    expect(fake.rows.size).toBe(5); // no crecen (R10)
+    expect(fake.rows.size).toBe(6); // no crecen (R10)
 
     for (const [k, v] of fake.rows.entries()) {
       expect(v.id).toBe(idsPrimera.get(k)); // id estable (R9)
@@ -132,7 +137,9 @@ describe("seedRoles no toca otras tablas (R12)", () => {
 
     await seedRoles(client);
 
-    expect(fake.upsert).toHaveBeenCalledTimes(5);
+    // Feature 81 [D1]: 6 upserts (un rol mas). `rolPermiso` sigue intacto: la key nace
+    // SIN permisos y solo el humano puede concederselos explicitamente.
+    expect(fake.upsert).toHaveBeenCalledTimes(6);
     expect(otras.tipoIdentificacion.upsert).not.toHaveBeenCalled();
     expect(otras.usuario.upsert).not.toHaveBeenCalled();
     expect(otras.usuario.create).not.toHaveBeenCalled();

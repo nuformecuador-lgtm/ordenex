@@ -1,0 +1,13 @@
+-- Feature 81 [D1]: añade el 6.º valor al enum `rol_value` — el rol `apiKey`, la cuenta
+-- dedicada a una API key.
+--
+-- POR QUE ESTA MIGRACION VA SOLA (y el seed del catalogo `rol` va en la siguiente,
+-- 20260716150000_api_key): Postgres NO permite USAR un valor de enum en la misma
+-- transaccion que lo añadio (error 55P04 "unsafe use of new value of enum type").
+-- Prisma Migrate corre cada migration.sql en una transaccion, asi que un
+-- `INSERT INTO "rol" ... 'apiKey'::rol_value` aqui abortaria. Es exactamente el
+-- motivo por el que el repo ya separo 20260710130000_rol_admin_satelite (ADD VALUE)
+-- de 20260711000000_seed_roles_catalogo (INSERT). Se reusa ese precedente tal cual.
+--
+-- Aditiva (R24): no altera ninguna tabla existente.
+ALTER TYPE "rol_value" ADD VALUE IF NOT EXISTS 'apiKey';
