@@ -1,0 +1,14 @@
+-- Feature 88 [D7]: añade el valor `carga_api` al enum `orden_historial_origen_tipo` — el
+-- canal por el que se creo la orden es la carga por API (integrador), distinto de la
+-- `carga_masiva` por sesion. El historial de la PRIMERA transicion de estas ordenes
+-- (origen null -> `en_ruta_bodega_principal`) usa `origen_tipo = carga_api`.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite
+-- USAR un valor de enum recien añadido en la misma transaccion que lo añadio (error 55P04
+-- "unsafe use of new value of enum type"). Prisma Migrate corre cada migration.sql en una
+-- transaccion. Aqui SOLO se añade el valor; su primer uso ocurre en tiempo de aplicacion
+-- (`createManyOrdenesConGuia`), en transacciones posteriores. Mismo precedente que
+-- 20260716140000_rol_api_key (ADD VALUE del rol `apiKey`, sin seed en la misma migracion).
+--
+-- Aditiva: no altera ninguna tabla existente.
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'carga_api';

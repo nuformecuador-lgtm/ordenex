@@ -29,6 +29,8 @@ function fakeService(overrides: Partial<IBulkOrdenService> = {}): IBulkOrdenServ
     cargarMasiva: vi
       .fn()
       .mockResolvedValue({ status: "ok", summary: okSummary() } satisfies BulkOrdenResult),
+    // Feature 88: exigido por IBulkOrdenService; no ejercitado por la vía sesión.
+    cargarViaApi: vi.fn(),
     ...overrides,
   };
 }

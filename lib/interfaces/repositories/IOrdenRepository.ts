@@ -117,6 +117,16 @@ export interface GenerarGuiaResultRow {
   numGuia: number;
 }
 
+// Feature 88 — fila devuelta por `createManyOrdenesConGuia`: por cada orden EFECTIVAMENTE
+// creada (no las duplicadas que `skipDuplicates` salto), su `numGuia` YA asignado en la
+// misma tx (R9/R10) y el `value` del estado inicial fijado (`en_ruta_bodega_principal`).
+export interface CreateOrdenConGuiaResultRow {
+  ordenId: string;
+  numRemision: string;
+  numGuia: number;
+  estatusValue: string;
+}
+
 // Feature 15 — filas de catalogo geografico usadas para resolver por nombre
 // (R19/R21), jerarquicas: canton dentro de provincia, distrito dentro de canton.
 export interface ProvinciaRow {
@@ -279,6 +289,23 @@ export interface IOrdenRepository {
     batchSize: number,
     historial: HistorialContexto,
   ): Promise<number>;
+
+  /**
+   * Feature 88/R8/R9/R10: inserta en lotes de `batchSize` con `skipDuplicates` (patron
+   * `createManyOrdenes`) y, en la MISMA transaccion del chunk, asigna a cada orden
+   * EFECTIVAMENTE creada un `num_guia = nextval('orden_num_guia_seq')` SOLO si `num_guia IS
+   * NULL` (idempotente, misma secuencia y guarda que `generarGuiaLote` -> ninguna guia puede
+   * colisionar con la feature 17/30) y registra su primera fila de historial (origen null,
+   * destino = estado inicial `en_ruta_bodega_principal`, `origenTipo` = `carga_api`). Las
+   * filas duplicadas (saltadas por `skipDuplicates`) NO consumen `num_guia` (R11). Devuelve
+   * una fila por orden creada con su `num_guia` asignado. El estado inicial ya viene resuelto
+   * en `data[].estatusId` (el service lo fija a `en_ruta_bodega_principal`).
+   */
+  createManyOrdenesConGuia(
+    data: CreateOrdenData[],
+    batchSize: number,
+    historial: HistorialContexto,
+  ): Promise<CreateOrdenConGuiaResultRow[]>;
 
   // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
 

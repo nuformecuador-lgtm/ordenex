@@ -24,10 +24,11 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "liberacion_reprogramada",
     "ajuste_estado",
     "deshacer_gestion", // feature 67: CierreDiaRepository.anularGestionYDevolverAGestion
+    "carga_api", // feature 88 (D7): createManyOrdenesConGuia (canal integrador por API)
   ];
 
-  it("contiene exactamente los 12 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(12);
+  it("contiene exactamente los 13 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(13);
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

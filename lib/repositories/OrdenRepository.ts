@@ -12,6 +12,7 @@ import {
   NumRemisionDuplicadoError,
   type CantonRow,
   type CreateOrdenData,
+  type CreateOrdenConGuiaResultRow,
   type DistritoRow,
   type EtiquetaRow,
   type GenerarGuiaDecisionData,
@@ -697,6 +698,83 @@ export class OrdenRepository implements IOrdenRepository {
       inserted += chunkInserted;
     }
     return inserted;
+  }
+
+  /**
+   * Feature 88/R8/R9/R10/R11: inserta el lote (patron `createManyOrdenes`: diff
+   * before/after + `skipDuplicates` para registrar SOLO las EFECTIVAMENTE nuevas) y, en la
+   * MISMA tx del chunk, asigna a cada nueva `num_guia = nextval('orden_num_guia_seq')` con
+   * la guarda idempotente `num_guia IS NULL` (patron `generarGuiaLote`) — misma secuencia
+   * atomica que la feature 17/30, asi ninguna guia colisiona. Luego `appendCambioEstado`
+   * (origen null -> estado inicial, `origenTipo` = `carga_api`). Las filas duplicadas no
+   * aparecen en `nuevas`, no consumen `num_guia` ni dejan historial (R11).
+   */
+  async createManyOrdenesConGuia(
+    data: CreateOrdenData[],
+    batchSize: number,
+    historial: HistorialContexto,
+  ): Promise<CreateOrdenConGuiaResultRow[]> {
+    const creadas: CreateOrdenConGuiaResultRow[] = [];
+    for (let i = 0; i < data.length; i += batchSize) {
+      const chunk = data.slice(i, i + batchSize);
+      const chunkNums = chunk.map((d) => d.numRemision);
+      const chunkCreadas = await this.prisma.$transaction(async (tx) => {
+        // Diff before/after: las nuevas son las que no existian antes del insert (respeta
+        // duplicados por carrera, igual que createManyOrdenes).
+        const before = await tx.orden.findMany({
+          where: { numRemision: { in: chunkNums } },
+          select: { id: true },
+        });
+        const beforeIds = new Set(before.map((r) => r.id));
+        await tx.orden.createMany({
+          data: chunk.map((d) => this.toCreateManyInput(d)),
+          skipDuplicates: true,
+        });
+        const after = await tx.orden.findMany({
+          where: { numRemision: { in: chunkNums } },
+          select: { id: true, numRemision: true, estatusId: true, estatus: { select: { value: true } } },
+        });
+        const nuevas = after.filter((r) => !beforeIds.has(r.id));
+
+        const resultado: CreateOrdenConGuiaResultRow[] = [];
+        const entradas: CambioEstadoEntrada[] = [];
+        for (const nueva of nuevas) {
+          // R9: idempotente — solo consume nextval() si num_guia es NULL. Secuencia por la
+          // constante del modulo (jamas se interpola entrada de usuario en el SQL).
+          await tx.$executeRawUnsafe(
+            `UPDATE "orden" SET num_guia = nextval('${NUM_GUIA_SEQUENCE}') WHERE id = $1 AND num_guia IS NULL`,
+            nueva.id,
+          );
+          const numerada = await tx.orden.findUniqueOrThrow({
+            where: { id: nueva.id },
+            select: { numGuia: true },
+          });
+          if (numerada.numGuia === null) {
+            // Guarda defensiva (patron generarGuiaLote): el UPDATE previo siempre deja
+            // num_guia asignado; se documenta en vez de mentir con `as number`.
+            throw new Error(`num_guia no asignado para la orden ${nueva.id}`);
+          }
+          resultado.push({
+            ordenId: nueva.id,
+            numRemision: nueva.numRemision,
+            numGuia: numerada.numGuia,
+            estatusValue: nueva.estatus.value,
+          });
+          // R8/R20: origen null (creacion) -> destino estado inicial; origenTipo carga_api (D7).
+          entradas.push({
+            ordenId: nueva.id,
+            estatusOrigenId: null,
+            estatusDestinoId: nueva.estatusId,
+            actorUsuarioId: historial.actorUsuarioId,
+            origenTipo: historial.origenTipo, // carga_api
+          });
+        }
+        await appendCambioEstado(tx, entradas);
+        return resultado;
+      });
+      creadas.push(...chunkCreadas);
+    }
+    return creadas;
   }
 
   private toCreateManyInput(data: CreateOrdenData): Prisma.OrdenCreateManyInput {

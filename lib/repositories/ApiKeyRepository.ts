@@ -5,6 +5,7 @@ import {
   UsuarioDuplicadoError,
 } from "@/lib/interfaces/repositories/IUserRepository";
 import type {
+  ApiKeyAutenticada,
   CreateApiKeyConUsuarioData,
   IApiKeyRepository,
 } from "@/lib/interfaces/repositories/IApiKeyRepository";
@@ -90,6 +91,30 @@ export class ApiKeyRepository implements IApiKeyRepository {
     } catch (error) {
       throw mapDuplicadoError(error);
     }
+  }
+
+  /**
+   * Feature 88/R3/R4: resuelve la key presentada por su `key_hash` (UNIQUE -> lookup por
+   * indice). Solo query, sin logica de negocio (la decision `activo`/rechazo vive en
+   * `ApiKeyAuthService`). El `select` NUNCA incluye `keyHash` ni el secreto (R6/R19): solo
+   * lo minimo para autorizar (id, usuario dedicado, su estado y el `value` de su rol).
+   */
+  async findByKeyHash(keyHash: string): Promise<ApiKeyAutenticada | null> {
+    const row = await this.prisma.apiKey.findUnique({
+      where: { keyHash },
+      select: {
+        id: true,
+        usuarioId: true,
+        usuario: { select: { estado: true, rol: { select: { value: true } } } },
+      },
+    });
+    if (!row) return null;
+    return {
+      apiKeyId: row.id,
+      usuarioId: row.usuarioId,
+      estado: row.usuario.estado,
+      rol: row.usuario.rol.value,
+    };
   }
 }
 
