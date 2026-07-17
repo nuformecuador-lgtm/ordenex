@@ -1,12 +1,25 @@
 import { describe, it, expect, vi } from "vitest";
 import { generarApiKey } from "@/lib/actions/api-keys";
 import type { Actor, IApiKeyService } from "@/lib/interfaces/services/IApiKeyService";
-import type { GenerarApiKeyResult } from "@/lib/types/api-key";
+import type { GenerarApiKeyResult, ListarApiKeysResult } from "@/lib/types/api-key";
 
 // Feature 81 — Server Action. `deps` inyectados: no toca cookies reales ni Prisma.
 
+/**
+ * Feature 82: `IApiKeyService` ahora exige `listar`. En los tests de `generarApiKey` no
+ * debe invocarse nunca: stub que falla ruidosamente en vez de devolver un vacio.
+ */
+function listarStub(): Pick<IApiKeyService, "listar"> {
+  return {
+    listar: vi.fn(async (): Promise<ListarApiKeysResult> => {
+      throw new Error("listar no debe invocarse desde generarApiKey");
+    }),
+  };
+}
+
 function okService(): IApiKeyService {
   return {
+    ...listarStub(),
     generar: vi.fn(
       async (): Promise<GenerarApiKeyResult> => ({
         status: "ok",
@@ -104,6 +117,7 @@ describe("generarApiKey (action) — propagacion del service (R2/R11/R18)", () =
 
   it("R2: propaga el forbidden del service", async () => {
     const service: IApiKeyService = {
+      ...listarStub(),
       generar: vi.fn(async (): Promise<GenerarApiKeyResult> => ({ status: "forbidden" })),
     };
     const r = await generarApiKey(
@@ -115,6 +129,7 @@ describe("generarApiKey (action) — propagacion del service (R2/R11/R18)", () =
 
   it("R11: propaga el conflict del service con su campo", async () => {
     const service: IApiKeyService = {
+      ...listarStub(),
       generar: vi.fn(
         async (): Promise<GenerarApiKeyResult> => ({ status: "conflict", campo: "email" }),
       ),

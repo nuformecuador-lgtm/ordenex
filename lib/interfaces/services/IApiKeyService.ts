@@ -1,4 +1,9 @@
-import type { GenerarApiKeyInput, GenerarApiKeyResult } from "@/lib/types/api-key";
+import type {
+  GenerarApiKeyInput,
+  GenerarApiKeyResult,
+  ListarApiKeysInput,
+  ListarApiKeysResult,
+} from "@/lib/types/api-key";
 import type { Actor } from "@/lib/interfaces/services/IUsuarioService";
 
 export type { Actor };
@@ -15,4 +20,16 @@ export interface IApiKeyService {
    * NO conoce HTTP ni Prisma: la autenticacion (R1) la resuelve la Server Action.
    */
   generar(input: GenerarApiKeyInput, actor: Actor): Promise<GenerarApiKeyResult>;
+
+  /**
+   * Feature 82: listado paginado de API keys (R4).
+   *
+   * - Solo `maestro` (R2); el resto -> `forbidden` SIN consultar la base.
+   * - [D2] devuelve TODAS las keys, sin scoping por creador.
+   * - Orden fijo `createdAt desc` (R7) [D4]; `pageSize` ya llega acotado por el schema.
+   * - NUNCA devuelve el secreto ni su hash (R6): `ApiKeyListItem` no los declara.
+   *
+   * NO conoce HTTP ni Prisma: la autenticacion (R1) la resuelve la Server Action.
+   */
+  listar(input: ListarApiKeysInput, actor: Actor): Promise<ListarApiKeysResult>;
 }
