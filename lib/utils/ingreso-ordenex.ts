@@ -162,6 +162,27 @@ export function gananciaOrdenex(ingresoTotal: string, pagoMensajero: string): st
   return new Prisma.Decimal(ingresoTotal).minus(pagoMensajero).toFixed(2);
 }
 
+/**
+ * Pago a la tienda: la plata RECIBIDA (total general del cierre) menos los dos conceptos que
+ * Ordenex le factura sobre esa plata — flete + IVA y comision + IVA.
+ *
+ * NO descuenta el flete de devolucion + IVA: una devolucion no cobra COD, asi que no aporta
+ * al total general y no se le resta a lo recibido. Si un dia hay que cobrarlo tambien, se
+ * cambia ACA y las dos pantallas de admin lo reflejan a la vez.
+ *
+ * Puede ser NEGATIVO si lo facturado supera lo recibido (p.ej. un cierre de puras
+ * devoluciones con algo de efectivo suelto).
+ *
+ * Money-safe: resta con Prisma.Decimal sobre STRING, salida STRING escala 2.
+ */
+export function pagoTiendaOrdenex(
+  totalGeneral: string,
+  fleteConIva: string,
+  comisionConIva: string,
+): string {
+  return new Prisma.Decimal(totalGeneral).minus(fleteConIva).minus(comisionConIva).toFixed(2);
+}
+
 // Un concepto de ingreso a insertar (categoria + monto STRING). El feed OMITE los que
 // tengan total "0.00" (R10).
 export interface ConceptoIngresoAgregado {

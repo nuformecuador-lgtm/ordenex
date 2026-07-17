@@ -18,7 +18,11 @@ import type {
   RechazarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
-import { gananciaOrdenex, totalesIngresoOrdenex } from "@/lib/utils/ingreso-ordenex";
+import {
+  gananciaOrdenex,
+  pagoTiendaOrdenex,
+  totalesIngresoOrdenex,
+} from "@/lib/utils/ingreso-ordenex";
 
 // Roles autorizados en el modulo (R1): el maestro (bodega central) y el adminSatelite
 // (su bodega). Cualquier otro -> forbidden.
@@ -132,7 +136,15 @@ export class CierresAdminService implements ICierresAdminService {
     const resumen = toResumen(found.cierre);
     const ganancia = gananciaOrdenex(totalesIngreso.total, resumen.totalPagoMensajero);
 
-    return { status: "ok", cierre: resumen, grupos, totalesIngreso, ganancia };
+    // Pago a la tienda DERIVADO: lo RECIBIDO (total general) menos lo que Ordenex le factura
+    // sobre esa plata. Sale de otra resta que la ganancia: parte de lo cobrado, no del bruto.
+    const pagoTienda = pagoTiendaOrdenex(
+      resumen.totales.general,
+      totalesIngreso.fleteConIva,
+      totalesIngreso.comisionConIva,
+    );
+
+    return { status: "ok", cierre: resumen, grupos, totalesIngreso, ganancia, pagoTienda };
   }
 
   async aprobarCierre(cierreId: string, actor: Actor): Promise<AprobarCierreServiceResult> {

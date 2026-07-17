@@ -58,6 +58,9 @@ export interface CierreBodegaDetalleCierre {
   // DERIVADO: `totalesIngreso.total` - `totalPagoMensajero` de ESTE cierre_dia (STRING).
   // Lo que le queda a Ordenex del dia de ese mensajero. Puede ser NEGATIVO.
   ganancia: string;
+  // DERIVADO: `totales.general` - `fleteConIva` - `comisionConIva` de ESTE cierre_dia
+  // (STRING money-safe). Lo que se le paga a la tienda. Puede ser NEGATIVO.
+  pagoTienda: string;
 }
 
 // R1/R3-R7: consolidacion pendiente + totales agregados + gate de "Solicitar" +

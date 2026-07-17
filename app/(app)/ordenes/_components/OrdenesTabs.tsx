@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { TabsGroup, type TabItem } from "@/components/shared/TabsGroup";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
@@ -128,8 +128,16 @@ export function OrdenesTabs({
   puedeEscanearQr = false,
   mostrarHistorial = false,
   accionesLote = false,
+  orientation = "horizontal",
 }: Readonly<{
   exclude?: string[];
+  /**
+   * Disposición de las tabs (`TabsGroup`). `vertical` las pone en columna a la
+   * izquierda del listado y añade un input para filtrarlas por nombre de estado:
+   * con ~13 estados es más rápido que barrer el scroll horizontal. Se usa en la
+   * vista del `maestro`; `admin`/`adminTienda` siguen en `horizontal`.
+   */
+  orientation?: "horizontal" | "vertical";
   puedeCargarMasiva?: boolean;
   /**
    * Ofrece "Escanear con cámara" junto a la carga masiva: el adminTienda escanea el
@@ -326,86 +334,85 @@ export function OrdenesTabs({
     );
   }
 
+  /**
+   * Contenido de una tab. R16 (lazy loading duro): si la tab NUNCA se visitó
+   * devuelve `null`, así su `OrdenesModule` no se monta y no invoca `listarOrdenes`.
+   */
+  function contenidoDe(tab: OrderStatusLiteRow): React.ReactNode {
+    if (!visited.has(tab.id)) return null;
+    // Selección por checkbox SOLO en estados que tienen alguna acción por
+    // lote (evita checkboxes inertes en estados solo-lectura).
+    const acc = accionesLote ? accionesDe(tab.value) : [];
+    // Columnas por estado: en_fulfillment/en_preparacion muestran
+    // "Mensajero sugerido" en vez de "Mensajero"; reprogramada añade
+    // "Liberada el" (el día en que el cron la desbloquea).
+    let columns: Column<OrdenListItemDTO>[] | undefined;
+    if (ESTADOS_MENSAJERO_SUGERIDO.has(tab.value)) {
+      columns = ordenesColumnsMensajeroSugerido;
+    } else if (tab.value === ESTADO_REPROGRAMADA) {
+      columns = ordenesColumnsReprogramada;
+    }
+    // Bloqueo de selección por tab (dos reglas distintas que conviven):
+    // - `rechazada`: bloquea el check de las órdenes NO centrales (el
+    //   maestro/admin solo devuelve a la tienda las de la bodega central).
+    //   Es la regla MÁS ESPECÍFICA de esa tab (la acción "Devolver a la
+    //   tienda" no asigna mensajero), así que se evalúa primero y gana; en
+    //   la práctica no se solapan porque `rechazada` no es tab de asignación.
+    // - tabs de asignación/ruteo: bloqueo POR ORDEN si la ZONA de esa orden
+    //   tiene ≥1 mensajero con cierre abierto. No es global: en la misma tab
+    //   conviven órdenes de zona bloqueada (check off) y de zona libre (on).
+    let bloqueoSeleccion: ((row: OrdenListItemDTO) => string | null) | undefined;
+    if (tab.value === ESTADO_RECHAZADA) {
+      bloqueoSeleccion = (o) =>
+        o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL;
+    } else if (ESTADOS_ASIGNACION.has(tab.value)) {
+      const zonas = zonasBloqueadas;
+      bloqueoSeleccion = (o) => {
+        // Sin datos aún (SWR en vuelo) o sin `zonaId` utilizable: NO se
+        // bloquea. No se puede AFIRMAR que la zona esté bloqueada, y el
+        // backend revalida la regla al ejecutar la acción (defensa en
+        // profundidad); bloquear "por si acaso" castigaría órdenes válidas.
+        // (`zonaId` es `string` en el DTO; la guarda es defensiva ante un
+        // dato degradado en runtime.)
+        if (!zonas || !o.zonaId) return null;
+        return zonas.has(o.zonaId) ? MOTIVO_ZONA_CIERRE_ABIERTO : null;
+      };
+    }
+    return (
+      <OrdenesModule
+        filter={{ status_id: tab.id }}
+        columns={columns}
+        mostrarHistorial={mostrarHistorial}
+        selectable={acc.length > 0}
+        bloqueoSeleccion={bloqueoSeleccion}
+        acciones={acc}
+      />
+    );
+  }
+
+  const items: TabItem[] = tabs.map((tab) => ({
+    value: tab.id,
+    label: labelDe(tab.value),
+    content: contenidoDe(tab),
+  }));
+
   return (
     <div className="flex flex-col gap-4">
       {header}
-      <Tabs
-        value={activeValue}
-        onValueChange={(value) => setActive(value as string)}
-      >
-        {/* R18: scroll horizontal usable con ~13 tabs (overflow-x-auto en TabsList). */}
-        <TabsList aria-label="Órdenes por estado">
-          {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id}>
-              {labelDe(tab.value)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        {tabs.map((tab) => (
-          // keepMounted: una vez montado (visitado) el panel permanece en el DOM
-          // para conservar el estado del OrdenesModule (paginación) al cambiar de
-          // tab (R17). Su contenido solo se monta si la tab fue visitada (R16).
-          <TabsContent key={tab.id} value={tab.id} keepMounted>
-            {visited.has(tab.id) ? (
-              (() => {
-                // Selección por checkbox SOLO en estados que tienen alguna acción por
-                // lote (evita checkboxes inertes en estados solo-lectura).
-                const acc = accionesLote ? accionesDe(tab.value) : [];
-                // Columnas por estado: en_fulfillment/en_preparacion muestran
-                // "Mensajero sugerido" en vez de "Mensajero"; reprogramada añade
-                // "Liberada el" (el día en que el cron la desbloquea).
-                let columns: Column<OrdenListItemDTO>[] | undefined;
-                if (ESTADOS_MENSAJERO_SUGERIDO.has(tab.value)) {
-                  columns = ordenesColumnsMensajeroSugerido;
-                } else if (tab.value === ESTADO_REPROGRAMADA) {
-                  columns = ordenesColumnsReprogramada;
-                }
-                // Bloqueo de selección por tab (dos reglas distintas que conviven):
-                // - `rechazada`: bloquea el check de las órdenes NO centrales (el
-                //   maestro/admin solo devuelve a la tienda las de la bodega central).
-                //   Es la regla MÁS ESPECÍFICA de esa tab (la acción "Devolver a la
-                //   tienda" no asigna mensajero), así que se evalúa primero y gana; en
-                //   la práctica no se solapan porque `rechazada` no es tab de asignación.
-                // - tabs de asignación/ruteo: bloqueo POR ORDEN si la ZONA de esa orden
-                //   tiene ≥1 mensajero con cierre abierto. No es global: en la misma tab
-                //   conviven órdenes de zona bloqueada (check off) y de zona libre (on).
-                let bloqueoSeleccion:
-                  | ((row: OrdenListItemDTO) => string | null)
-                  | undefined;
-                if (tab.value === ESTADO_RECHAZADA) {
-                  bloqueoSeleccion = (o) =>
-                    o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL;
-                } else if (ESTADOS_ASIGNACION.has(tab.value)) {
-                  const zonas = zonasBloqueadas;
-                  bloqueoSeleccion = (o) => {
-                    // Sin datos aún (SWR en vuelo) o sin `zonaId` utilizable: NO se
-                    // bloquea. No se puede AFIRMAR que la zona esté bloqueada, y el
-                    // backend revalida la regla al ejecutar la acción (defensa en
-                    // profundidad); bloquear "por si acaso" castigaría órdenes válidas.
-                    // (`zonaId` es `string` en el DTO; la guarda es defensiva ante un
-                    // dato degradado en runtime.)
-                    if (!zonas || !o.zonaId) return null;
-                    return zonas.has(o.zonaId)
-                      ? MOTIVO_ZONA_CIERRE_ABIERTO
-                      : null;
-                  };
-                }
-                return (
-                  <OrdenesModule
-                    filter={{ status_id: tab.id }}
-                    columns={columns}
-                    mostrarHistorial={mostrarHistorial}
-                    selectable={acc.length > 0}
-                    bloqueoSeleccion={bloqueoSeleccion}
-                    acciones={acc}
-                  />
-                );
-              })()
-            ) : null}
-          </TabsContent>
-        ))}
-      </Tabs>
+      {/* R18: con ~13 tabs el listado sigue usable — `horizontal` scrollea en X;
+          `vertical` (maestro) las apila y ofrece el filtro por nombre de estado.
+          `keepMounted`: el panel de una tab ya visitada permanece en el DOM al
+          cambiar de tab, conservando la paginación de su OrdenesModule (R17). */}
+      <TabsGroup
+        items={items}
+        orientation={orientation}
+        value={activeValue ?? undefined}
+        onValueChange={setActive}
+        keepMounted
+        filterPlaceholder="Filtrar estados…"
+        emptyFilterMessage="Ningún estado coincide"
+        ariaLabel="Órdenes por estado"
+      />
 
       {/* Modales de acción por lote (solo maestro). Montados una vez; `open` por
           `modalAbierto`. */}

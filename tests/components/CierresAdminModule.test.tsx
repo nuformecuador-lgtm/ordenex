@@ -224,6 +224,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -249,6 +250,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso({ total: "3672.50" }),
       ganancia: "2172.50", // 3672.50 - 1500.00, derivado server-side
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -261,6 +263,33 @@ describe("CierresAdminModule", () => {
     expect(within(ganancia).getByText("₡2172.50")).toBeInTheDocument();
   });
 
+  it("el detalle muestra el pago a tienda derivado server-side (sin recalcular)", async () => {
+    const user = userEvent.setup();
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      cierre: makeResumen({
+        cierreId: "c1",
+        totales: {
+          efectivo: "25000.00",
+          simpe: "0.00",
+          transferencia: "0.00",
+          general: "25000.00",
+        },
+      }),
+      grupos: emptyGrupos(),
+      totalesIngreso: zeroIngreso({ fleteConIva: "2825.00", comisionConIva: "847.50" }),
+      ganancia: "0.00",
+      pagoTienda: "21327.50", // 25000.00 - 2825.00 - 847.50, derivado server-side
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
+
+    const pago = within(dialog).getByRole("region", { name: "Pago a tienda" });
+    expect(within(pago).getByText("₡21327.50")).toBeInTheDocument();
+  });
+
   it("la ganancia se muestra negativa si el pago al mensajero supera el ingreso", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
@@ -269,6 +298,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(), // total "0.00": p.ej. puras reprogramaciones
       ganancia: "-1500.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -292,6 +322,7 @@ describe("CierresAdminModule", () => {
         total: "4802.50",
       }),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -300,11 +331,12 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
     const panel = within(dialog).getByRole("region", { name: "Ingreso de Ordenex" });
     // Cada concepto va con su IVA incluido, en un solo monto.
-    expect(within(panel).getByText("₡25000.00")).toBeInTheDocument();
     expect(within(panel).getByText("₡2825.00")).toBeInTheDocument();
     expect(within(panel).getByText("₡847.50")).toBeInTheDocument();
     expect(within(panel).getByText("₡1130.00")).toBeInTheDocument();
     expect(within(panel).getByText("₡4802.50")).toBeInTheDocument();
+    // El monto a cobrar no es un concepto facturado: vive solo en el desglose por orden.
+    expect(within(panel).queryByText("₡25000.00")).not.toBeInTheDocument();
     // El IVA no se pinta como concepto aparte en el panel.
     expect(within(panel).queryByText("IVA flete")).not.toBeInTheDocument();
     expect(within(panel).queryByText("IVA comisión")).not.toBeInTheDocument();
@@ -353,6 +385,7 @@ describe("CierresAdminModule", () => {
       grupos,
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -387,6 +420,7 @@ describe("CierresAdminModule", () => {
       grupos,
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -415,6 +449,7 @@ describe("CierresAdminModule", () => {
       grupos,
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -448,6 +483,7 @@ describe("CierresAdminModule", () => {
       grupos,
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -488,6 +524,7 @@ describe("CierresAdminModule", () => {
       grupos,
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -516,6 +553,7 @@ describe("CierresAdminModule", () => {
       grupos,
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -545,6 +583,7 @@ describe("CierresAdminModule", () => {
       grupos,
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -567,6 +606,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -597,6 +637,7 @@ describe("CierresAdminModule", () => {
       grupos,
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -624,6 +665,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     aprobarMock.mockResolvedValue({
       status: "ok",
@@ -653,6 +695,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -682,6 +725,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     rechazarMock.mockResolvedValue({
       status: "ok",
@@ -723,6 +767,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({
       historico: [
@@ -750,6 +795,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     aprobarMock.mockResolvedValue({ status: "conflict" });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
@@ -816,6 +862,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
 
@@ -839,6 +886,7 @@ describe("CierresAdminModule", () => {
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
+      pagoTienda: "0.00",
     });
     aprobarMock.mockResolvedValue({
       status: "ok",

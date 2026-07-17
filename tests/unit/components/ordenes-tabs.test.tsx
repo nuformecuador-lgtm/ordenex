@@ -214,6 +214,38 @@ describe("OrdenesTabs — overflow accesible (R18)", () => {
   });
 });
 
+describe("OrdenesTabs — orientación vertical con filtro (maestro)", () => {
+  it("por default (horizontal) NO ofrece el filtro de estados", async () => {
+    renderTabs(<OrdenesTabs />);
+
+    await screen.findByRole("tab", { name: "En bodega" });
+    expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+
+  it("vertical: filtra las tabs por nombre de estado", async () => {
+    const user = userEvent.setup();
+    renderTabs(<OrdenesTabs orientation="vertical" />);
+
+    await screen.findByRole("tab", { name: "En bodega" });
+    await user.type(screen.getByRole("searchbox"), "entreg");
+
+    expect(screen.getByRole("tab", { name: "Entregada" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Devuelta" })).toBeNull();
+  });
+
+  it("vertical: filtrar NO monta las tabs filtradas ni dispara su fetch (R16)", async () => {
+    const user = userEvent.setup();
+    renderTabs(<OrdenesTabs orientation="vertical" />);
+
+    await screen.findByRole("tab", { name: "En bodega" });
+    listarOrdenesMock.mockClear();
+
+    await user.type(screen.getByRole("searchbox"), "entreg");
+
+    expect(listarOrdenesMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("OrdenesTabs — carga masiva a nivel contenedor (adminTienda)", () => {
   it("ofrece Carga masiva cuando `puedeCargarMasiva`", async () => {
     renderTabs(<OrdenesTabs puedeCargarMasiva />);

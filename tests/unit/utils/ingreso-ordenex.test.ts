@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import {
   derivarIngresoOrden,
   agregarIngresosPorConcepto,
+  pagoTiendaOrdenex,
   type OrdenIngresoInput,
 } from "@/lib/utils/ingreso-ordenex";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
@@ -162,5 +163,21 @@ describe("agregarIngresosPorConcepto (R10)", () => {
     ]);
     const map = Object.fromEntries(agg.map((a) => [a.categoria, a.monto]));
     expect(new Prisma.Decimal(map.ingreso_flete).toFixed(2)).toBe("0.30");
+  });
+});
+
+// Pago a la tienda: lo RECIBIDO en el cierre menos lo que Ordenex le factura sobre esa plata.
+describe("pagoTiendaOrdenex", () => {
+  it("resta al total general el flete + IVA y la comision + IVA", () => {
+    expect(pagoTiendaOrdenex("25000.00", "2825.00", "847.50")).toBe("21327.50");
+  });
+
+  it("es NEGATIVO si lo facturado supera lo recibido", () => {
+    expect(pagoTiendaOrdenex("100.00", "2825.00", "847.50")).toBe("-3572.50");
+  });
+
+  it("resta Decimal exacta (sin drift de float) y sale STRING escala 2", () => {
+    // 0.30 - 0.10 - 0.20 en float da 5.55e-17; con Decimal es 0.00 exacto.
+    expect(pagoTiendaOrdenex("0.30", "0.10", "0.20")).toBe("0.00");
   });
 });

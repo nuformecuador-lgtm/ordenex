@@ -55,6 +55,9 @@ export type CierreDetalleAdminServiceResult =
       // DERIVADO: `totalesIngreso.total` - `cierre.totalPagoMensajero` (STRING money-safe).
       // Lo que le queda a Ordenex del cierre. Puede ser NEGATIVO.
       ganancia: string;
+      // DERIVADO: `cierre.totales.general` - `fleteConIva` - `comisionConIva` (STRING
+      // money-safe). Lo que se le paga a la tienda. Puede ser NEGATIVO.
+      pagoTienda: string;
     }
   | { status: "forbidden" } // rol invalido (R1)
   | { status: "no_encontrada" }; // id inexistente o de otra bodega/zona (R13)

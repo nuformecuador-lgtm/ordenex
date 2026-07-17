@@ -16,7 +16,11 @@ import type {
   RechazarCierreBodegaServiceResult,
 } from "@/lib/interfaces/services/ICierresBodegaAdminService";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
-import { gananciaOrdenex, totalesIngresoOrdenex } from "@/lib/utils/ingreso-ordenex";
+import {
+  gananciaOrdenex,
+  pagoTiendaOrdenex,
+  totalesIngresoOrdenex,
+} from "@/lib/utils/ingreso-ordenex";
 
 // Solo el rol autorizado (R2): el maestro (bodega central). El alcance del maestro es
 // "todos los cierres de bodega" (van a la central), sin filtro de zona.
@@ -99,6 +103,12 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
         totalesIngreso,
         // Ganancia del dia de ESE mensajero: su ingreso menos SU pago (snapshot, sin recomputar).
         ganancia: gananciaOrdenex(totalesIngreso.total, cd.resumen.totalPagoMensajero),
+        // Pago a la tienda de ESTE cierre_dia: lo que recibio menos lo que se le facturo.
+        pagoTienda: pagoTiendaOrdenex(
+          cd.resumen.totales.general,
+          totalesIngreso.fleteConIva,
+          totalesIngreso.comisionConIva,
+        ),
       };
     });
 
@@ -110,9 +120,15 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
     );
     // El pago agregado sale del snapshot del cierre de bodega (R13), no de sumar los cierre_dia.
     const ganancia = gananciaOrdenex(totalesIngreso.total, resumen.totalPagoMensajero);
+    // Pago a tiendas agregado: parte del total general recibido, no del bruto facturado.
+    const pagoTienda = pagoTiendaOrdenex(
+      resumen.totales.general,
+      totalesIngreso.fleteConIva,
+      totalesIngreso.comisionConIva,
+    );
 
     // R11/R13: cabecera con totales agregados snapshot.
-    return { status: "ok", cierre: resumen, cierres, totalesIngreso, ganancia };
+    return { status: "ok", cierre: resumen, cierres, totalesIngreso, ganancia, pagoTienda };
   }
 
   async aprobarCierreBodega(

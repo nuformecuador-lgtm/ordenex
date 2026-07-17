@@ -30,6 +30,8 @@ import {
   INGRESO_BRUTO_LABEL,
   INGRESO_BRUTO_NOTA,
   GANANCIA_LABEL,
+  PAGO_TIENDA_LABEL,
+  PAGO_TIENDA_NOTA,
   GANANCIA_NOTA,
   GANANCIA_NOTA_BODEGA,
   TotalesPanel,
@@ -60,12 +62,14 @@ interface DetalleAbierto {
   totalesIngreso: TotalesIngresoOrdenex;
   /** Ingreso bruto agregado menos el pago a mensajeros (puede ser negativo). */
   ganancia: string;
+  /** Total general agregado menos flete + IVA y comisión + IVA (puede ser negativo). */
+  pagoTienda: string;
 }
 
 export function CierresBodegaAdminModule({
   pendientes,
   historico,
-}: CierresBodegaAdminModuleProps) {
+}: Readonly<CierresBodegaAdminModuleProps>) {
   const router = useRouter();
   const toast = useToast();
 
@@ -88,6 +92,7 @@ export function CierresBodegaAdminModule({
         cierres: result.cierres,
         totalesIngreso: result.totalesIngreso,
         ganancia: result.ganancia,
+        pagoTienda: result.pagoTienda,
       });
       return;
     }
@@ -269,6 +274,13 @@ export function CierresBodegaAdminModule({
               nota={INGRESO_BRUTO_NOTA}
               ariaLabel="Ingreso bruto del cierre de bodega"
             />
+            {/* Feature 39/R20: agregado a pagar a mensajeros, separado del dinero recibido.
+                Va encima de la ganancia: es el sustraendo. */}
+            <PagoMensajeroTotal
+              value={detalle.cierre.totalPagoMensajero}
+              ariaLabel="Pago a mensajeros del cierre de bodega"
+              label="Total a pagar a mensajeros"
+            />
             <MontoDerivadoCard
               value={detalle.ganancia}
               label={GANANCIA_LABEL}
@@ -276,17 +288,18 @@ export function CierresBodegaAdminModule({
               ariaLabel="Ganancia del cierre de bodega"
             />
 
-            {/* Feature 39/R20: agregado a pagar a mensajeros, separado del dinero recibido. */}
-            <PagoMensajeroTotal
-              value={detalle.cierre.totalPagoMensajero}
-              ariaLabel="Pago a mensajeros del cierre de bodega"
-              label="Total a pagar a mensajeros"
-            />
-
             {/* Feature 56/R17: agregado del ingreso de bodega por rechazos, separado. */}
             <IngresoBodegaRechazosTotal
               value={detalle.cierre.totalIngresoBodegaRechazos}
               ariaLabel="Ingreso de bodega por rechazos del cierre de bodega"
+            />
+
+            {/* Cierra el detalle agregado: lo que se les paga a las tiendas. */}
+            <MontoDerivadoCard
+              value={detalle.pagoTienda}
+              label={PAGO_TIENDA_LABEL}
+              nota={PAGO_TIENDA_NOTA}
+              ariaLabel="Pago a tienda del cierre de bodega"
             />
 
             {/* Motivo de rechazo si el cierre de bodega del histórico fue rechazado. */}
@@ -326,21 +339,28 @@ export function CierresBodegaAdminModule({
                   nota={INGRESO_BRUTO_NOTA}
                   ariaLabel={`Ingreso bruto · ${cierreDia.mensajeroNombre}`}
                 />
+                {/* Feature 39/R20: pago snapshot a este mensajero, separado del dinero recibido. */}
+                <PagoMensajeroTotal
+                  value={cierreDia.totalPagoMensajero}
+                  ariaLabel={`Pago al mensajero · ${cierreDia.mensajeroNombre}`}
+                />
                 <MontoDerivadoCard
                   value={cierreDia.ganancia}
                   label={GANANCIA_LABEL}
                   nota={GANANCIA_NOTA}
                   ariaLabel={`Ganancia · ${cierreDia.mensajeroNombre}`}
                 />
-                {/* Feature 39/R20: pago snapshot a este mensajero, separado del dinero recibido. */}
-                <PagoMensajeroTotal
-                  value={cierreDia.totalPagoMensajero}
-                  ariaLabel={`Pago al mensajero · ${cierreDia.mensajeroNombre}`}
-                />
                 {/* Feature 56/R19: ingreso de bodega por rechazos de este cierre_dia, separado. */}
                 <IngresoBodegaRechazosTotal
                   value={cierreDia.totalIngresoBodegaRechazos}
                   ariaLabel={`Ingreso de bodega por rechazos · ${cierreDia.mensajeroNombre}`}
+                />
+                {/* Cierra el sub-detalle: lo que se le paga a la tienda por este cierre_dia. */}
+                <MontoDerivadoCard
+                  value={cierreDia.pagoTienda}
+                  label={PAGO_TIENDA_LABEL}
+                  nota={PAGO_TIENDA_NOTA}
+                  ariaLabel={`Pago a tienda · ${cierreDia.mensajeroNombre}`}
                 />
                 <DetalleSecciones
                   grupos={cierreDia.grupos}

@@ -37,6 +37,9 @@ export type CierreBodegaDetalleServiceResult =
       // DERIVADO: `totalesIngreso.total` - `cierre.totalPagoMensajero` (STRING money-safe).
       // Lo que le queda a Ordenex de toda la bodega. Puede ser NEGATIVO.
       ganancia: string;
+      // DERIVADO: `cierre.totales.general` - `fleteConIva` - `comisionConIva` (STRING
+      // money-safe). Lo que se le paga a las tiendas. Puede ser NEGATIVO.
+      pagoTienda: string;
     }
   | { status: "forbidden" } // rol != maestro (R2)
   | { status: "no_encontrada" }; // id inexistente (R19)

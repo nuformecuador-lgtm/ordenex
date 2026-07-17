@@ -35,6 +35,8 @@ import {
   INGRESO_BRUTO_LABEL,
   INGRESO_BRUTO_NOTA,
   GANANCIA_LABEL,
+  PAGO_TIENDA_LABEL,
+  PAGO_TIENDA_NOTA,
   GANANCIA_NOTA,
   DesgloseIngresoOrdenex,
   desgloseAriaLabel,
@@ -79,13 +81,15 @@ interface DetalleAbierto {
   totalesIngreso: TotalesIngresoOrdenex;
   /** Ingreso bruto menos el pago al mensajero, derivado server-side (puede ser negativo). */
   ganancia: string;
+  /** Total general menos flete + IVA y comisión + IVA, derivado server-side (puede ser negativo). */
+  pagoTienda: string;
 }
 
 export function CierresAdminModule({
   pendientes,
   historico,
   sinZona,
-}: CierresAdminModuleProps) {
+}: Readonly<CierresAdminModuleProps>) {
   const router = useRouter();
   const toast = useToast();
 
@@ -120,6 +124,7 @@ export function CierresAdminModule({
         grupos: result.grupos,
         totalesIngreso: result.totalesIngreso,
         ganancia: result.ganancia,
+        pagoTienda: result.pagoTienda,
       });
       return;
     }
@@ -298,9 +303,8 @@ export function CierresAdminModule({
               </Card>
             </section>
 
-            {/* Primero los ingresos: qué facturó Ordenex y qué le queda. Recién después,
-                lo que se paga o se debe (el pago al mensajero es el sustraendo, así que se
-                lee después de la resta). */}
+            {/* Primero los ingresos: qué facturó Ordenex. Después la resta completa, en
+                orden: bruto, pago al mensajero, ganancia. */}
             <TotalesIngresoPanel totales={detalle.totalesIngreso} />
 
             {/* Bruto y ganancia: el bruto es el mismo total del panel de arriba, repetido
@@ -310,22 +314,31 @@ export function CierresAdminModule({
               label={INGRESO_BRUTO_LABEL}
               nota={INGRESO_BRUTO_NOTA}
             />
+            {/* Feature 39/R17: total snapshot a pagar al mensajero, separado del dinero recibido.
+                Va encima de la ganancia: es el sustraendo, así que la resta se lee de arriba
+                hacia abajo (bruto − pago = ganancia). */}
+            <PagoMensajeroTotal
+              value={detalle.cierre.totalPagoMensajero}
+              ariaLabel="Pago al mensajero del cierre"
+            />
             <MontoDerivadoCard
               value={detalle.ganancia}
               label={GANANCIA_LABEL}
               nota={GANANCIA_NOTA}
             />
 
-            {/* Feature 39/R17: total snapshot a pagar al mensajero, separado del dinero recibido. */}
-            <PagoMensajeroTotal
-              value={detalle.cierre.totalPagoMensajero}
-              ariaLabel="Pago al mensajero del cierre"
-            />
-
             {/* Feature 56/R16: total snapshot del ingreso de bodega por rechazos, separado. */}
             <IngresoBodegaRechazosTotal
               value={detalle.cierre.totalIngresoBodegaRechazos}
               ariaLabel="Ingreso de bodega por rechazos del cierre"
+            />
+
+            {/* Cierra el detalle: lo que se le paga a la tienda. Parte del total general
+                RECIBIDO, no del bruto facturado — por eso va aparte de la ganancia. */}
+            <MontoDerivadoCard
+              value={detalle.pagoTienda}
+              label={PAGO_TIENDA_LABEL}
+              nota={PAGO_TIENDA_NOTA}
             />
 
             {/* Motivo de rechazo si el cierre del histórico fue rechazado. */}

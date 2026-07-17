@@ -102,6 +102,10 @@ export const INGRESO_BRUTO_LABEL = "Ingreso bruto";
 export const INGRESO_BRUTO_NOTA =
   "Todo lo que facturó Ordenex en el cierre (flete + IVA + comisión + IVA), sin descontar nada.";
 export const GANANCIA_LABEL = "Ganancia";
+// --- Pago a la tienda: lo recibido menos lo que Ordenex le factura (texto separado, i18n-ready) ---
+export const PAGO_TIENDA_LABEL = "Pago a tienda";
+export const PAGO_TIENDA_NOTA =
+  "Total general menos flete + IVA y comisión + IVA. No descuenta el flete de devolución: una devolución no cobra COD.";
 export const GANANCIA_NOTA = "Ingreso bruto menos el pago al mensajero.";
 export const GANANCIA_NOTA_BODEGA = "Ingreso bruto menos el pago a los mensajeros.";
 export const INGRESO_TOTAL_COL = "Total Ordenex";
@@ -672,18 +676,17 @@ export function columnasPara(
 export function TotalesIngresoPanel({
   totales,
   ariaLabel = INGRESO_PANEL_LABEL,
-}: {
+}: Readonly<{
   totales: TotalesIngresoOrdenex;
   ariaLabel?: string;
-}) {
+}>) {
   return (
     <section aria-label={ariaLabel} className="flex flex-col gap-3">
       <h3 className="text-base font-semibold">{INGRESO_PANEL_LABEL}</h3>
       <Card>
         {/* Cada concepto va CON su IVA en un solo monto: el IVA no es un concepto aparte,
             es parte de lo que se factura. El desglose separado vive en la fila desplegable. */}
-        <CardContent className="grid grid-cols-2 gap-4 pt-6 sm:grid-cols-3 lg:grid-cols-5">
-          <TotalItem label={MONTO_COBRAR_LABEL} value={money(totales.montoCobrar)} />
+        <CardContent className="grid grid-cols-2 gap-4 pt-6 sm:grid-cols-4">
           <TotalItem label={FLETE_CON_IVA_LABEL} value={money(totales.fleteConIva)} />
           <TotalItem label={COMISION_CON_IVA_LABEL} value={money(totales.comisionConIva)} />
           <TotalItem
