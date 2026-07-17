@@ -79,13 +79,14 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     roles: ["adminSatelite"],
   },
   {
-    // Novedades del producto para quien opera a diario: el admin de tienda y el
-    // mensajero. La defensa real es el `notFound` de la pagina (resuelve el rol
-    // server-side); este item solo decide que se MUESTRA.
+    // Feature 87 (R20): lista de ordenes en devolucion de la tienda, con su causa y
+    // el contacto del cliente. Exclusivo del `adminTienda` (el mensajero DEJA de verlo).
+    // La defensa real es el `notFound` de la pagina (resuelve el rol server-side); este
+    // item solo decide que se MUESTRA.
     label: "Novedades",
     href: "/novedades",
     iconKey: "megaphone",
-    roles: ["adminTienda", "mensajero"],
+    roles: ["adminTienda"],
   },
   {
     // Feature 76: ranking diario de mensajeros. Visible para `maestro` (ve y edita

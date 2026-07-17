@@ -21,7 +21,9 @@ import {
   type IOrdenRepository,
   type ListOrdenesParams,
   type ListOrdenesResult,
+  type CausaDevueltaVigente,
   type MensajeroLiteRow,
+  type NovedadOrdenRow,
   type OrdenTransicionRow,
   type OrderStatusLiteRow,
   type ProvinciaRow,
@@ -40,6 +42,7 @@ type OrdenPrismaClient = Pick<
   | "usuario"
   | "cierreDia" // feature 41: bloqueo derivado del mensajero / bodega (R12/R17)
   | "cierreBodega" // feature 41: causa (ii) del bloqueo de bodega (R17)
+  | "gestionOrden" // feature 87: causa de devolucion vigente de la lista de novedades (R6/R8)
   | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
   | "$executeRaw" // feature 41/R23: anti-TOCTOU (NOT EXISTS cierre bloqueante en el lote)
 >;
@@ -105,6 +108,11 @@ const TARIFA_SELECT = {
 // `gestion_orden.resultado` de una reprogramacion (espejo de
 // `LiberacionReprogramadaRepository`, el cron que consume la misma fecha).
 const RESULTADO_REPROGRAMADA = "reprogramada";
+
+// Feature 87 (T2/R6): `gestion_orden.resultado` de una DEVOLUCION. Mismo valor del enum
+// `GestionResultado` que ya usa el historial; la vigencia se filtra por `anuladaAt: null`
+// (mismo criterio que `contarPorDestinoVigentes`, feature 67).
+const RESULTADO_DEVUELTA = "devuelta";
 
 /**
  * Serializa una fecha `@db.Date` (guardada a medianoche UTC) a `YYYY-MM-DD`.
@@ -1365,6 +1373,69 @@ export class OrdenRepository implements IOrdenRepository {
       totalMensajeros,
       mensajerosConCierreIds: [...bloqueadosSet],
     };
+  }
+
+  // --- Feature 87: lista de novedades (ordenes devueltas de la tienda, R1-R8/R21/R22) ---
+
+  /** R22/R2/R3/R4: cuenta las ordenes no borradas de `tiendaId` en el estatus `estatusValue`. */
+  async countDevueltasByTienda(tiendaId: string, estatusValue: string): Promise<number> {
+    return this.prisma.orden.count({
+      where: { tiendaId, deletedAt: null, estatus: { value: estatusValue } },
+    });
+  }
+
+  /**
+   * R1/R2/R3/R4/R22: una PAGINA de ordenes no borradas de `tiendaId` en `estatusValue`,
+   * ordenada por `Orden.createdAt` desc (fallback documentado de R21; el service reordena por
+   * la fecha de la gestion vigente). Select minimo: solo lo que consume el DTO + `createdAt`.
+   */
+  async findDevueltasByTienda(
+    tiendaId: string,
+    estatusValue: string,
+    pagination: { skip: number; take: number },
+  ): Promise<NovedadOrdenRow[]> {
+    const rows = await this.prisma.orden.findMany({
+      where: { tiendaId, deletedAt: null, estatus: { value: estatusValue } },
+      orderBy: { createdAt: "desc" },
+      skip: pagination.skip,
+      take: pagination.take,
+      select: {
+        id: true,
+        numGuia: true,
+        destinatario: true,
+        telefonoDest: true,
+        createdAt: true,
+      },
+    });
+    return rows;
+  }
+
+  /**
+   * R6/R7/R8: causa de devolucion VIGENTE de TODAS las ordenes de la pagina en UNA sola
+   * consulta agregada (sin N+1). Filtra `gestion_orden` por `resultado: "devuelta",
+   * anuladaAt: null` (criterio de vigencia de la feature 67, aplicado como LECTURA), ordena
+   * por `createdAt` desc y reduce a `Map<ordenId, { causa, fecha }>` quedandose con la fila
+   * MAS RECIENTE por orden (la primera del desc). Las ordenes sin gestion vigente NO entran
+   * al mapa -> causa ausente (R7). `[]` -> `Map` vacio (no dispara la query).
+   */
+  async findCausasDevueltaVigentes(
+    ordenIds: string[],
+  ): Promise<Map<string, CausaDevueltaVigente>> {
+    if (ordenIds.length === 0) return new Map();
+    const rows = await this.prisma.gestionOrden.findMany({
+      where: { ordenId: { in: ordenIds }, resultado: RESULTADO_DEVUELTA, anuladaAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { ordenId: true, causaDevolucion: true, createdAt: true },
+    });
+    const map = new Map<string, CausaDevueltaVigente>();
+    for (const row of rows) {
+      // Las filas vienen desc: la PRIMERA por `ordenId` es la mas reciente (R6). Las
+      // posteriores (gestiones mas antiguas de la misma orden) se ignoran.
+      if (!map.has(row.ordenId)) {
+        map.set(row.ordenId, { causa: row.causaDevolucion, fecha: row.createdAt });
+      }
+    }
+    return map;
   }
 }
 
