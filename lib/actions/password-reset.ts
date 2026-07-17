@@ -32,6 +32,26 @@ function buildPasswordResetService(): IPasswordResetService {
   const prisma = getPrismaClient();
   const userRepo = new UserRepository(prisma);
   const otpRepo = new EmailOtpChallengeRepository(prisma);
+  // TODO(feature 80): NO existe proveedor de correo real. Produccion instancia
+  // aqui `StubEmailProvider`, que solo emite un `console.info` con metadata
+  // (destinatario y expiracion) y NUNCA envia el email. No hay dependencia de
+  // Resend/SendGrid/SES en package.json.
+  //
+  // Consecuencia real y vigente: la entrega del OTP depende HOY del
+  // `console.log("Codigo OTP generado:", code)` de OtpChallengeIssuer.ts:39,
+  // es decir, del log del servidor. Sin ese log el flujo de recuperacion es
+  // incompletable, y por eso se conserva a proposito (riesgo aceptado).
+  //
+  // OJO al leer el resto del codigo: los comentarios de EmailProvider.ts:3-9
+  // ("nunca el codigo en claro") y de OtpChallengeIssuer.ts:27-30 ("el codigo
+  // en claro solo viaja por email") describen un estado que AUN NO EXISTE y
+  // quedan desactualizados DELIBERADAMENTE hasta la feature 80. Este TODO es
+  // el unico punto del codigo que describe el estado real.
+  //
+  // lib/interfaces/external/IEmailProvider.ts ya esta lista para la
+  // implementacion real: basta sustituir este stub. Saldar todo lo anterior
+  // (proveedor real, quitar el log del OTP y corregir esos comentarios) es la
+  // feature 80.
   const emailProvider = new StubEmailProvider();
   const otpIssuer = new OtpChallengeIssuer(otpRepo, emailProvider);
   return new PasswordResetService(userRepo, otpRepo, otpIssuer, verifyLimiter);
