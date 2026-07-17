@@ -38,6 +38,7 @@ enum RolValue {
   mensajero
   adminTienda   @map("Admin Tienda")
   adminSatelite // feature 19: label literal en la DB 'adminSatelite' (slug camelCase, SIN @map)
+  apiKey // feature 81 [D1]: cuenta dedicada a una API key. SIN filas en `rol_permiso` (fallo seguro: la key no puede nada hasta que el humano conceda permisos explicitos)
 
   @@map("rol_value")
 }
@@ -125,6 +126,8 @@ model Usuario {
   pagoMensajeroMovimientosRegistrados PagoMensajeroMovimiento[] @relation("PagoMensajeroMovimientoRegistrador") // feature 44/R2: movimientos manuales del libro del pago que este usuario registro
   historialEstadosActuados            OrdenHistorialEstado[]    @relation("HistorialActor") // feature 49/R21: transiciones de estado que este usuario (actor) origino
   cierreDetallesTienda                CierreDetail[]            @relation("CierreDetailTienda") // feature 69/R6: snapshots que congelaron a esta tienda como destinataria
+  apiKey                              ApiKey?                   @relation("ApiKeyUsuario") // feature 81/[D6]: la key dedicada a ESTA cuenta sintetica (1:1)
+  apiKeysCreadas                      ApiKey[]                  @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -985,4 +988,27 @@ model CierreDetail {
   @@unique([cierreId, ordenId]) // R2: el grano. Es tambien el indice de la ruta caliente (los feeds filtran por cierre_id)
   @@index([ordenId]) // trazar en que cierres aparecio una orden
   @@map("cierre_detail")
+}
+
+// Feature 81 (design §2): una API key emitida por un maestro. La key en claro NUNCA
+// se persiste: solo su hash SHA-256 [D7] (R16) y un `key_prefix` no secreto (R17)
+// para poder identificarla visualmente sin revelarla. 1:1 con su usuario dedicado
+// [D6]: `usuario_id` UNIQUE. Sin `revoked_at`/`expires_at`/`last_used_at`: fuera de
+// alcance (81b), se añaden aditivamente cuando el humano los pida.
+model ApiKey {
+  id            String   @id @default(uuid())
+  identificador String // input crudo (recortado) para mostrar. No unico [D8]
+  slug          String // normalizado; base del email/cedula sinteticos (R5)
+  keyPrefix     String   @map("key_prefix") // `ordx_` + 7 chars, en claro (R17)
+  keyHash       String   @unique @map("key_hash") // SHA-256 hex del secreto completo (R16/R25)
+  usuarioId     String   @unique @map("usuario_id") // [D6] 1:1 con la cuenta dedicada (R21)
+  createdById   String   @map("created_by_id") // actor que la genero (R21)
+  createdAt     DateTime @default(now()) @map("created_at") // R21
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  usuario   Usuario @relation("ApiKeyUsuario", fields: [usuarioId], references: [id])
+  createdBy Usuario @relation("ApiKeyCreadaPor", fields: [createdById], references: [id])
+
+  @@index([createdById])
+  @@map("api_key")
 }

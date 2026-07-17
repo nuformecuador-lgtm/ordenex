@@ -10,18 +10,21 @@ import { ROLES_SEED } from "@/lib/types/roles";
 // Prisma expone el NOMBRE del miembro (`adminTienda`), que es el valor que el
 // seed pasa a `rol.upsert` y que Prisma traduce al label 'Admin Tienda'.
 // Feature 19: 5.o rol `adminSatelite` (sin @map; label DB = slug camelCase).
+// Feature 81 [D1]: 6.o rol `apiKey` (sin @map), cuenta dedicada a una API key. Se
+// siembra en el catalogo `rol` pero SIN filas en `rol_permiso` (fallo seguro: la key
+// no puede hacer nada hasta que el humano le conceda permisos explicitos).
 
 describe("ROLES_SEED (fuente unica de verdad) (R7, R11, R1, R2, R6)", () => {
-  it("tiene exactamente los cinco valores del enum, sin duplicados (R7, R2)", () => {
-    expect(ROLES_SEED).toHaveLength(5);
-    expect(new Set(ROLES_SEED).size).toBe(5);
+  it("tiene exactamente los seis valores del enum, sin duplicados (R7, R2)", () => {
+    expect(ROLES_SEED).toHaveLength(6);
+    expect(new Set(ROLES_SEED).size).toBe(6);
   });
 
   it("se deriva del enum RolValue de Prisma (R7, R6)", () => {
     // Sin una segunda lista literal: ROLES_SEED === Object.values(RolValue).
     expect([...ROLES_SEED].sort()).toEqual([...Object.values(RolValue)].sort());
     expect([...ROLES_SEED].sort()).toEqual(
-      ["maestro", "admin", "mensajero", "adminTienda", "adminSatelite"].sort()
+      ["maestro", "admin", "mensajero", "adminTienda", "adminSatelite", "apiKey"].sort()
     );
   });
 
@@ -60,7 +63,7 @@ describe("db/schema.prisma declara el enum RolValue (R2, R3, R1)", () => {
     expect(schema).toMatch(/adminTienda\s+@map\("Admin Tienda"\)/);
   });
 
-  it("declara el enum RolValue con exactamente 5 miembros (R2)", () => {
+  it("declara el enum RolValue con exactamente 6 miembros (R2)", () => {
     const match = schema.match(/enum\s+RolValue\s*\{([\s\S]*?)\}/);
     expect(match).not.toBeNull();
     const body = match ? match[1] : "";
@@ -69,7 +72,7 @@ describe("db/schema.prisma declara el enum RolValue (R2, R3, R1)", () => {
       .map((l) => l.trim())
       .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("@@"))
       .map((l) => l.split(/\s|\/\//)[0]);
-    expect(miembros).toHaveLength(5);
+    expect(miembros).toHaveLength(6);
     expect(miembros).toEqual(
       expect.arrayContaining([
         "maestro",
@@ -77,8 +80,17 @@ describe("db/schema.prisma declara el enum RolValue (R2, R3, R1)", () => {
         "mensajero",
         "adminTienda",
         "adminSatelite",
+        "apiKey",
       ])
     );
+  });
+
+  // Feature 81 [D1]: el label DB del 6.o rol es el slug camelCase, igual que
+  // adminSatelite. Si alguien le añadiera un @map, la migracion que siembra
+  // 'apiKey'::rol_value dejaria de resolver.
+  it("declara apiKey SIN @map (label DB = slug camelCase) (feature 81/[D1])", () => {
+    expect(schema).toMatch(/\bapiKey\b/);
+    expect(schema).not.toMatch(/apiKey\s+@map/);
   });
 
   it("declara adminSatelite SIN @map (label DB = slug camelCase) (R1)", () => {
