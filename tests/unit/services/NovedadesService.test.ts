@@ -7,9 +7,11 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
-// Feature 87 (T6) — service de NOVEDADES con el repo mockeado (sin DB/HTTP). Cubre
-// R1/R2/R3/R5/R6/R7/R21/R22. R3 se ejercita a nivel de contrato: el service SIEMPRE pide
-// `"devuelta"` al repo (el filtrado por estatus lo impone el WHERE del repo, cubierto en T7).
+// Feature 89 (T4) — service de NOVEDADES con el repo mockeado (sin DB/HTTP). Cubre R8 (count y
+// find reciben el MISMO `cerrados`), R9 (acota `tienda = actor.usuarioId`), R10 (causa al DTO,
+// null si no hay), R11 (rol != adminTienda -> forbidden), R12/R13 (paginacion 10, orden por
+// recencia, shape). El predicado de la query (R1-R7) se ejercita a nivel de repo en T5; aqui se
+// verifica el CONTRATO: el service pide el conjunto de estatus CERRADOS, no un estatus unico.
 
 const ADMIN: Actor = { usuarioId: "tienda-1", rol: "adminTienda" };
 const OTRA_TIENDA: Actor = { usuarioId: "tienda-2", rol: "adminTienda" };
@@ -17,6 +19,10 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 
 const PAGE_SIZE = 10;
+
+// R3: el conjunto de estatus que CIERRAN la novedad (decision #1 del gate). El service debe
+// pasar EXACTAMENTE este conjunto tanto a count como a find (R8).
+const ESTATUS_CERRADOS = ["entregada", "devuelta_origen", "recibido_origen"];
 
 type RepoMethods = Pick<
   IOrdenRepository,
@@ -43,8 +49,8 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
   };
 }
 
-describe("NovedadesService.listar (feature 87)", () => {
-  it("R5: rol != adminTienda -> forbidden sin tocar el repo", async () => {
+describe("NovedadesService.listar (feature 89)", () => {
+  it("R11: rol != adminTienda -> forbidden sin tocar el repo", async () => {
     for (const actor of [MENSAJERO, MAESTRO]) {
       const repo = fakeRepo();
       const service = new NovedadesService(repo);
@@ -55,7 +61,7 @@ describe("NovedadesService.listar (feature 87)", () => {
     }
   });
 
-  it("R2: acota al `tiendaId = actor.usuarioId` en count y en la lista", async () => {
+  it("R9: acota al `tiendaId = actor.usuarioId` en count y en la lista", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 3),
       findDevueltasByTienda: vi.fn(async () => [ordenRow()]),
@@ -63,14 +69,14 @@ describe("NovedadesService.listar (feature 87)", () => {
     const service = new NovedadesService(repo);
     await service.listar({ page: 1, pageSize: PAGE_SIZE }, OTRA_TIENDA);
 
-    expect(repo.countDevueltasByTienda).toHaveBeenCalledWith("tienda-2", "devuelta");
-    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-2", "devuelta", {
+    expect(repo.countDevueltasByTienda).toHaveBeenCalledWith("tienda-2", ESTATUS_CERRADOS);
+    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-2", ESTATUS_CERRADOS, {
       skip: 0,
       take: PAGE_SIZE,
     });
   });
 
-  it("R1/R3: siempre pide el estatus `devuelta` al repo (no otros estatus)", async () => {
+  it("R8: count y find se invocan con el MISMO conjunto `cerrados` (mismo universo)", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 1),
       findDevueltasByTienda: vi.fn(async () => [ordenRow()]),
@@ -78,13 +84,23 @@ describe("NovedadesService.listar (feature 87)", () => {
     const service = new NovedadesService(repo);
     await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
 
-    expect(repo.countDevueltasByTienda).toHaveBeenCalledWith("tienda-1", "devuelta");
-    const [, estatusArg] = (repo.findDevueltasByTienda as ReturnType<typeof vi.fn>).mock
-      .calls[0];
-    expect(estatusArg).toBe("devuelta");
+    const [, cerradosCount] = (
+      repo.countDevueltasByTienda as ReturnType<typeof vi.fn>
+    ).mock.calls[0];
+    const [, cerradosFind] = (
+      repo.findDevueltasByTienda as ReturnType<typeof vi.fn>
+    ).mock.calls[0];
+    // Mismo contenido y, ademas, exactamente el conjunto de cierre ratificado (R3).
+    expect(cerradosCount).toEqual(ESTATUS_CERRADOS);
+    expect(cerradosFind).toEqual(cerradosCount);
+    // Ni `rechazada` ni `en_bodega`/`en_bodega_satelite` cierran la novedad (R4).
+    expect(cerradosCount).not.toContain("rechazada");
+    expect(cerradosCount).not.toContain("en_bodega");
+    expect(cerradosCount).not.toContain("en_bodega_satelite");
+    expect(cerradosCount).not.toContain("devuelta");
   });
 
-  it("R6: la causa es la de la ultima gestion `devuelta` vigente (via el mapa del repo)", async () => {
+  it("R10: la causa fluye al DTO desde la ultima gestion `devuelta` vigente", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 1),
       findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
@@ -106,7 +122,7 @@ describe("NovedadesService.listar (feature 87)", () => {
     expect(repo.findCausasDevueltaVigentes).toHaveBeenCalledWith(["o1"]);
   });
 
-  it("R7: orden sin gestion vigente / causa nula -> causa null (no rompe)", async () => {
+  it("R10: orden sin gestion vigente / causa nula -> causa null (no rompe)", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 2),
       findDevueltasByTienda: vi.fn(async () => [
@@ -130,7 +146,7 @@ describe("NovedadesService.listar (feature 87)", () => {
     expect(byId.get("causa-nula")).toBeNull();
   });
 
-  it("R21: ordena por la fecha de la ultima gestion vigente desc (mas reciente primero)", async () => {
+  it("R12: ordena por la fecha de la ultima gestion vigente desc (mas reciente primero)", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 3),
       findDevueltasByTienda: vi.fn(async () => [
@@ -154,7 +170,7 @@ describe("NovedadesService.listar (feature 87)", () => {
     expect(res.items.map((i) => i.id)).toEqual(["vieja", "nueva"]);
   });
 
-  it("R21 (fallback): sin gestion vigente ordena por Orden.createdAt desc", async () => {
+  it("R12 (fallback): sin gestion vigente ordena por Orden.createdAt desc", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 2),
       findDevueltasByTienda: vi.fn(async () => [
@@ -173,7 +189,7 @@ describe("NovedadesService.listar (feature 87)", () => {
     expect(res.items.map((i) => i.id)).toEqual(["a", "b"]);
   });
 
-  it("R22: respuesta { items, total, page, pageSize } y skip derivado de la pagina", async () => {
+  it("R13/R12: respuesta { items, total, page, pageSize } y skip derivado de la pagina", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 25),
       findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
@@ -184,14 +200,14 @@ describe("NovedadesService.listar (feature 87)", () => {
     expect(res).toMatchObject({ status: "ok", total: 25, page: 3, pageSize: PAGE_SIZE });
     if (res.status !== "ok") throw new Error("esperaba ok");
     expect(res.items).toHaveLength(1);
-    // page 3, pageSize 10 -> skip 20.
-    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", "devuelta", {
+    // page 3, pageSize 10 -> skip 20 (paginacion de 10 por pagina, R12).
+    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", ESTATUS_CERRADOS, {
       skip: 20,
       take: PAGE_SIZE,
     });
   });
 
-  it("R8/R22: pagina vacia -> items [] con total, sin pedir causas (no N+1 en vacio)", async () => {
+  it("R8/R13: pagina vacia -> items [] con total, sin pedir causas (no N+1 en vacio)", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 0),
       findDevueltasByTienda: vi.fn(async () => []),
