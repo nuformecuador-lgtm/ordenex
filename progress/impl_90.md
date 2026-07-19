@@ -57,7 +57,7 @@ cada minuto (`/api/cron/procesar-jobs`), + migración del cron `liberar-reprogra
 | R24 | job-queue-service (fallo terminal recurrente → dead-letter + enqueue próxima) |
 | R25 | real DB (dedupe único parcial: 2 mismos dedupe → 1) |
 | R26 | seed usa enqueue ON CONFLICT DO NOTHING (mismo mecanismo de dedupe verificado en DB) |
-| R27 | procesar-jobs-route (liberar-reprogramadas ausente de crons) + ruta sin cambio de código |
+| R27 | liberar-reprogramadas-route (401/200/error de la ruta manual siguen verdes; bloque de schedule INVERTIDO: liberar-reprogramadas ausente de crons, corte-diario conservado) + ruta sin cambio de código |
 
 ## Verificación medida
 
