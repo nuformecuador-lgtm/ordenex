@@ -31,8 +31,21 @@ export class GeocodeRespuestaInvalidaError extends Error {
   }
 }
 
-// Contrato MINIMO que consumimos. `.passthrough()` implicito: campos extra del proveedor
-// no rompen (Google amplia sin avisar); lo que se exige es lo que se lee.
+// Contrato MINIMO que consumimos. Zod hace STRIP por defecto: los campos que Google manda
+// y no estan declarados aqui NO rompen el parseo (el proveedor amplia sin avisar) pero
+// TAMPOCO sobreviven — `parse` devuelve un objeto recortado a lo declarado.
+//
+// ESE STRIP ES UNA DECISION DE PRIVACIDAD (R31), NO UN DESCUIDO. El resultado parseado se
+// propaga como `crudo` y termina persistido en `geocode_cache.payload_crudo`. La respuesta
+// real de Google incluye `formatted_address`, `address_components` y `plus_code`, que son
+// la DIRECCION EN CLARO, es decir dato personal. El strip es lo unico que la mantiene
+// fuera de la tabla.
+//
+// POR ESO: NO anadir `.passthrough()` ni `.catchall()` a estos schemas. Hacerlo empezaria
+// a persistir la direccion en claro en `payload_crudo` y violaria R31. Si algun dia hace
+// falta un campo nuevo, se DECLARA explicitamente aqui tras comprobar que no es PII.
+// Hay un test que falla si se afloja el strip: tests/unit/services/geocodificacion-service.test.ts
+// "el payload crudo persistido en la cache NO arrastra la direccion en claro".
 const locationSchema = z.object({
   lat: z.number(),
   lng: z.number(),

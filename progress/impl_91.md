@@ -105,7 +105,7 @@ Rama `feature/91-geocodificacion-ordenes`, worktree aislado `ordenex-f91`, base
 | R28 | `tests/unit/services/geocodificacion-service.test.ts` | "una entrada antigua del almacen se usa igual, sin expiracion por tiempo" |
 | R29 | `tests/unit/services/geocodificacion-service.test.ts` | "ejecutar el mismo job dos veces deja el mismo estado final" |
 | R30 | `tests/unit/services/geocodificacion-service.test.ts` | "un job de una orden inexistente o borrada se completa sin error" |
-| R31 | `tests/unit/services/geocodificacion-service.test.ts` | "ningun log emitido contiene direccion, coordenadas ni credencial" (+ "el codigo del service no usa console.*") |
+| R31 | `tests/unit/services/geocodificacion-service.test.ts` | "ningun log emitido contiene direccion, coordenadas ni credencial" (+ "el codigo del service no usa console.*", + "el payload crudo persistido en la cache NO arrastra la direccion en claro" — guardian del strip de zod, se pone rojo si alguien anade `.passthrough()`/`.catchall()` al schema del cliente) |
 | R32 | `tests/integration/api/procesar-jobs-geocodificacion.test.ts` | "buildHandlers registra el tipo geocodificacion" + "buildRecurrencias NO registra geocodificacion (no es recurrente)" |
 | R33 | `tests/unit/config/geocode-config.test.ts` | "la credencial ausente o vacia se resuelve a null sin lanzar" |
 | R34 | `tests/unit/services/geocodificacion-encolado.test.ts` | "el encolado fija maxIntentos en 8, por encima del default de la cola" |

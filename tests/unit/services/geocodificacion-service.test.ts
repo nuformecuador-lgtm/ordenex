@@ -5,6 +5,7 @@ import {
   GeocodeIntentoFallidoError,
 } from "@/lib/services/GeocodificacionService";
 import { JobQueueService } from "@/lib/services/JobQueueService";
+import { GoogleGeocodeClient } from "@/lib/clients/google-geocode";
 import type { JobDTO } from "@/lib/interfaces/repositories/IJobRepository";
 import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
 import type { JobHandler, RecurrenciaSpec } from "@/lib/interfaces/services/IJobQueueService";
@@ -366,6 +367,90 @@ describe("R31 — privacidad de los logs", () => {
         expect(linea).not.toContain("-84.0833");
         expect(linea).not.toContain(ORDEN_ID);
       }
+    }
+  });
+
+  it("el payload crudo persistido en la cache NO arrastra la direccion en claro", async () => {
+    // Este test NO usa un cliente doble: usa el GoogleGeocodeClient REAL con `fetch`
+    // inyectado, porque lo que se protege es el STRIP de zod en `google-geocode.ts`. La
+    // respuesta real de Google trae la direccion en claro (`formatted_address`,
+    // `address_components`, `plus_code`); el schema solo declara `geometry`, asi que zod
+    // la recorta antes de que llegue a `geocode_cache.payload_crudo` (R31).
+    // Si alguien anade `.passthrough()` o `.catchall()` a esos schemas, este test se pone
+    // ROJO: es el guardian de esa decision de privacidad.
+    const DIRECCION_EN_CLARO = "Av. Central 100, Carmen, San José, 10101, Costa Rica";
+    const respuestaRealDeGoogle = {
+      status: "OK",
+      results: [
+        {
+          geometry: {
+            location: { lat: 9.9333, lng: -84.0833 },
+            location_type: "ROOFTOP",
+            viewport: { northeast: { lat: 9.94, lng: -84.08 }, southwest: { lat: 9.93, lng: -84.09 } },
+          },
+          formatted_address: DIRECCION_EN_CLARO,
+          address_components: [
+            { long_name: "100", short_name: "100", types: ["street_number"] },
+            { long_name: "Avenida Central", short_name: "Av. Central", types: ["route"] },
+            { long_name: "Carmen", short_name: "Carmen", types: ["locality"] },
+          ],
+          plus_code: { compound_code: "WQVM+2R Carmen, San José", global_code: "77P3WQVM+2R" },
+          place_id: "ChIJ0000000000000000000",
+          // Campo NO declarado en el schema e inexistente hoy: el proveedor amplia sin avisar.
+          campo_futuro_del_proveedor: { eco_de_la_consulta: DIRECCION_EN_CLARO },
+        },
+      ],
+    };
+
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify(respuestaRealDeGoogle), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+
+    const ordenes = {
+      findParaGeocodificar: vi.fn(async () => ORDEN),
+      guardarResultado: vi.fn(async () => {}),
+    };
+    const cache = {
+      findByHash: vi.fn(async () => null),
+      upsert: vi.fn(async () => {}),
+    };
+    const service = new GeocodificacionService(
+      ordenes as unknown as IOrdenGeocodeRepository,
+      cache as unknown as IGeocodeCacheRepository,
+      new GoogleGeocodeClient({ apiKey: "clave-de-prueba", fetchImpl }),
+      { GOOGLE_MAPS_API_KEY: "clave-de-prueba", GEOCODE_TIMEOUT_MS: 10_000 },
+      () => AHORA,
+      { warn: () => {} },
+    );
+
+    await service.ejecutar(job());
+
+    expect(cache.upsert).toHaveBeenCalledTimes(1);
+    const entry = (cache.upsert.mock.calls[0] as unknown[])[1] as { payloadCrudo: unknown };
+
+    // Lo persistido es EXACTAMENTE lo declarado en el schema, nada mas.
+    expect(entry.payloadCrudo).toEqual({
+      geometry: { location: { lat: 9.9333, lng: -84.0833 }, location_type: "ROOFTOP" },
+    });
+
+    // Y explicitamente: ni las claves de PII ni la direccion en claro sobreviven.
+    const persistido = JSON.stringify(entry.payloadCrudo);
+    for (const prohibido of [
+      "formatted_address",
+      "address_components",
+      "plus_code",
+      "place_id",
+      "campo_futuro_del_proveedor",
+      DIRECCION_EN_CLARO,
+      "Avenida Central",
+      "Carmen",
+      "Costa Rica",
+    ]) {
+      expect(persistido).not.toContain(prohibido);
     }
   });
 
