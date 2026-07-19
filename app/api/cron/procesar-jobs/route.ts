@@ -19,6 +19,10 @@ import {
   crearLiberarReprogramadasHandler,
   recurrenciaLiberarReprogramadas,
 } from "@/lib/services/jobs/liberar-reprogramadas-handler";
+import {
+  buildGeocodificacionService,
+  crearGeocodificacionHandler,
+} from "@/lib/services/jobs/geocodificacion-handler";
 
 export interface ProcesarJobsDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -28,18 +32,31 @@ export interface ProcesarJobsDeps {
   now?: () => Date;
 }
 
-/** Registro de handlers por tipo de job. En v1 solo `liberar_reprogramadas`; 91/92 anaden. */
-function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
+/**
+ * Registro de handlers por tipo de job. La 91 anade `geocodificacion`; falta la 92.
+ * Exportada para que el test de registro (R32) verifique que el tipo esta enganchado sin
+ * levantar el endpoint entero. Construir el service NO abre conexion (singleton perezoso).
+ */
+export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
   const handlers = new Map<JobTipo, JobHandler>();
   handlers.set(
     "liberar_reprogramadas",
     crearLiberarReprogramadasHandler(buildLiberarReprogramadasService(), now),
   );
+  // Feature 91 (R32): geocodificacion de la direccion de UNA orden. NO se registra en
+  // `buildRecurrencias()`: se encola por EVENTO, no por reloj. Un fallo suyo (p. ej. sin
+  // `GOOGLE_MAPS_API_KEY`) lo captura `JobQueueService.drenar` job a job, asi que NO
+  // afecta al drenado de `liberar_reprogramadas`, que comparte este cron.
+  handlers.set("geocodificacion", crearGeocodificacionHandler(buildGeocodificacionService(now)));
   return handlers;
 }
 
-/** Registro de recurrencia por tipo. Solo `liberar_reprogramadas` es recurrente en v1. */
-function buildRecurrencias(): Map<JobTipo, RecurrenciaSpec> {
+/**
+ * Registro de recurrencia por tipo. Solo `liberar_reprogramadas` es recurrente: la
+ * geocodificacion se encola por EVENTO y NO debe re-agendarse (R32). Exportada por el
+ * mismo motivo que `buildHandlers`.
+ */
+export function buildRecurrencias(): Map<JobTipo, RecurrenciaSpec> {
   const recurrencias = new Map<JobTipo, RecurrenciaSpec>();
   recurrencias.set("liberar_reprogramadas", recurrenciaLiberarReprogramadas);
   return recurrencias;

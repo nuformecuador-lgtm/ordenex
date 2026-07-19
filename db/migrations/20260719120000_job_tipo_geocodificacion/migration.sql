@@ -1,0 +1,16 @@
+-- Feature 91 (design §1.3, R4): anade el 2.º valor al enum `job_tipo` — el tipo de job
+-- `geocodificacion`, que resuelve la direccion de UNA orden contra el proveedor.
+--
+-- POR QUE ESTA MIGRACION VA SOLA (las columnas de orden y `geocode_cache` van en la
+-- siguiente, 20260719130000_orden_geocode): Postgres NO permite USAR un valor de enum en
+-- la misma transaccion que lo anadio (error 55P04 "unsafe use of new value of enum type").
+-- Prisma Migrate corre cada migration.sql en una transaccion, asi que cualquier sentencia
+-- que consumiera 'geocodificacion'::job_tipo aqui abortaria. Es exactamente el motivo por
+-- el que el repo ya separo 20260710130000_rol_admin_satelite y 20260716140000_rol_api_key
+-- (ADD VALUE) de las migraciones que consumen el valor. Se reusa ese precedente tal cual.
+--
+-- Esta feature no inserta filas con el valor durante la migracion, pero se mantiene la
+-- separacion por consistencia y para que el down.sql sea AISLABLE.
+--
+-- Aditiva (R4): no altera ninguna tabla existente.
+ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'geocodificacion';

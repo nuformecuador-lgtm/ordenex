@@ -6,13 +6,18 @@
 // (design §5.1). Se comparan por su clave normalizada.
 const ACRONIMOS = new Set<string>(["gam"]);
 
+// Feature 91: `collapseSpaces` y `stripDiacritics` se EXPORTAN (antes privadas) para
+// reutilizarlas en `lib/geo/direccion-query.ts`. Su comportamiento NO cambia: siguen
+// siendo exactamente las mismas funciones que consumen `normalizeZonaKey` y
+// `canonicalZonaNombre`.
+
 /** trim + colapso de espacios internos a uno solo. */
-function collapseSpaces(raw: string): string {
+export function collapseSpaces(raw: string): string {
   return raw.trim().replace(/\s+/g, " ");
 }
 
 /** Quita acentos/diacriticos: NFD + elimina marcas combinantes. */
-function stripDiacritics(raw: string): string {
+export function stripDiacritics(raw: string): string {
   return raw.normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 

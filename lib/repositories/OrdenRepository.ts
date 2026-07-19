@@ -8,6 +8,9 @@ import type {
   HistorialContexto,
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
+import { JobRepository } from "@/lib/repositories/JobRepository";
+import { encolarGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
 import {
   NumRemisionDuplicadoError,
   type CantonRow,
@@ -45,6 +48,7 @@ type OrdenPrismaClient = Pick<
   | "gestionOrden" // feature 87: causa de devolucion vigente de la lista de novedades (R6/R8)
   | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
   | "$executeRaw" // feature 41/R23: anti-TOCTOU (NOT EXISTS cierre bloqueante en el lote)
+  | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
 >;
 
 // Feature 41 (R12/R16/R17): estados de cierre que BLOQUEAN. `rechazado`/`aprobado` NO
@@ -402,7 +406,15 @@ function toRecepcionSateliteRow(row: OrdenRecepcionSateliteRow): RecepcionSateli
 }
 
 export class OrdenRepository implements IOrdenRepository {
-  constructor(private readonly prisma: OrdenPrismaClient) {}
+  /**
+   * Feature 91: `jobRepo` se inyecta para el encolado TRANSACTIONAL OUTBOX de la
+   * geocodificacion (design §6). Por defecto es el `JobRepository` real; `enqueue` recibe
+   * SIEMPRE el `tx` del writer, asi que el cliente propio del repo de jobs no se usa.
+   */
+  constructor(
+    private readonly prisma: OrdenPrismaClient,
+    private readonly jobRepo: IJobRepository = new JobRepository(prisma),
+  ) {}
 
   async create(data: CreateOrdenData, historial: HistorialContexto): Promise<OrdenDTO> {
     try {
@@ -438,6 +450,13 @@ export class OrdenRepository implements IOrdenRepository {
             origenTipo: historial.origenTipo, // creacion_manual
           },
         ]);
+        // Feature 91 (R6/R7): encolado outbox DENTRO de esta misma tx. Si el create o el
+        // append revierten, el job se va con ellos. No-op si la direccion no es
+        // geocodificable (R9).
+        await encolarGeocodificacion(this.jobRepo, tx as unknown as JobTxClient, {
+          id: row.id,
+          direccion: row.direccion,
+        });
         return toDTO(row);
       });
     } catch (error) {
@@ -496,6 +515,31 @@ export class OrdenRepository implements IOrdenRepository {
         });
         origenEstatusId = actual?.estatusId ?? null;
       }
+      // ── Feature 91 (R10/R11, decision Q1): GUARD LATENTE de re-geocodificacion ──────
+      //
+      // ESTE CODIGO NO ES ALCANZABLE HOY, Y NO ES CODIGO MUERTO A ELIMINAR.
+      //
+      // Hoy la condicion `data.direccion !== undefined` NUNCA se cumple: la ruta de
+      // edicion es estructuralmente incapaz de cambiar una direccion — `actualizarOrdenSchema`
+      // (lib/types/orden.ts) es `.strict()` y no incluye `direccion`, y `toUpdateData()`
+      // tampoco la proyecta. Ampliar el CRUD para permitir editarla es OTRA feature y
+      // esta explicitamente FUERA de alcance de la 91 (design §0/C1).
+      //
+      // Se implementa igualmente porque el dia que el CRUD gane el campo, sin este guard
+      // la orden quedaria con direccion NUEVA y coordenadas VIEJAS, en silencio, sin
+      // ninguna senal de inconsistencia — y nadie relacionaria ese bug con esta feature.
+      // Cuesta ~6 lineas y deja el sistema correcto por construccion.
+      //
+      // La pre-lectura es CONDICIONAL (patron del `estatusId` de arriba) para no anadir
+      // una query a cada actualizacion de orden.
+      let direccionPrevia: string | null = null;
+      if (data.direccion !== undefined) {
+        const actual = await tx.orden.findFirst({
+          where: { id, deletedAt: null },
+          select: { direccion: true },
+        });
+        direccionPrevia = actual?.direccion ?? null;
+      }
       // Solo aplica si existe y no esta borrada (R36); updateMany no lanza si 0 filas.
       const result = await tx.orden.updateMany({
         where: { id, deletedAt: null },
@@ -518,6 +562,15 @@ export class OrdenRepository implements IOrdenRepository {
             origenTipo: historial.origenTipo, // ajuste_estado
           },
         ]);
+      }
+      // R10/R11 (guard latente, ver el bloque de arriba): encola SOLO si la actualizacion
+      // cambia EFECTIVAMENTE la direccion (viene informada Y difiere de la almacenada).
+      // Si no viene el campo, o la deja igual, no se encola nada.
+      if (data.direccion !== undefined && data.direccion !== direccionPrevia) {
+        await encolarGeocodificacion(this.jobRepo, tx as unknown as JobTxClient, {
+          id,
+          direccion: data.direccion,
+        });
       }
       const row = await tx.orden.findFirst({
         where: { id, deletedAt: null },
@@ -686,7 +739,10 @@ export class OrdenRepository implements IOrdenRepository {
         });
         const after = await tx.orden.findMany({
           where: { numRemision: { in: chunkNums } },
-          select: { id: true, estatusId: true },
+          // Feature 91 (design §0/C3): `direccion` se anade al select para decidir POR
+          // FILA si encolar geocodificacion (R8/R9). Es aditivo sobre una query que YA se
+          // ejecutaba: no anade round-trip.
+          select: { id: true, estatusId: true, direccion: true },
         });
         const nuevas = after.filter((r) => !beforeIds.has(r.id));
         // R9/R20: por cada orden creada, origen null (creacion) -> destino estado inicial.
@@ -700,6 +756,17 @@ export class OrdenRepository implements IOrdenRepository {
             origenTipo: historial.origenTipo, // carga_masiva
           })),
         );
+        // Feature 91 (R8, decision Q2): UN job por orden EFECTIVAMENTE insertada — las
+        // duplicadas saltadas por `skipDuplicates` no estan en `nuevas`, asi que no
+        // encolan. Se eligio N jobs individuales y no 1 job por lote porque el coste con
+        // el proveedor es IDENTICO (no hay endpoint batch) y el reintento granular evita
+        // que una direccion irresoluble haga reintentar 199 geocodificaciones ya pagadas.
+        for (const nueva of nuevas) {
+          await encolarGeocodificacion(this.jobRepo, tx as unknown as JobTxClient, {
+            id: nueva.id,
+            direccion: nueva.direccion,
+          });
+        }
         return result.count;
       });
       inserted += chunkInserted;
