@@ -99,14 +99,19 @@ describe("handleLiberarReprogramadas — errores del service (R19)", () => {
   });
 });
 
-describe("R8 — schedule del cron en vercel.json (00:00 CR = 06:00 UTC, mismo que 41)", () => {
-  it("vercel.json define /api/cron/liberar-reprogramadas con schedule '0 6 * * *'", () => {
+// Feature 90 (R20/R27) — INVERSION del bloque heredado de la 46: la ruta
+// /api/cron/liberar-reprogramadas dejo de tener un `schedule` propio en vercel.json (se
+// migro al job recurrente `liberar_reprogramadas` drenado por /api/cron/procesar-jobs). La
+// ruta se CONSERVA como disparo manual on-demand (R27, sus tests de auth/conteos arriba
+// siguen validos), solo perdio su entrada temporal. La asercion positiva de procesar-jobs
+// vive en procesar-jobs-route.test.ts (R20); aqui basta afirmar la AUSENCIA.
+describe("R20/R27 — liberar-reprogramadas ya NO tiene schedule en vercel.json", () => {
+  it("vercel.json NO define un cron para /api/cron/liberar-reprogramadas (migrado a job recurrente)", () => {
     const raw = fs.readFileSync(path.join(__dirname, "..", "..", "..", "vercel.json"), "utf8");
     const cfg = JSON.parse(raw) as { crons: { path: string; schedule: string }[] };
     const cron = cfg.crons.find((c) => c.path === "/api/cron/liberar-reprogramadas");
-    expect(cron).toBeDefined();
-    expect(cron?.schedule).toBe("0 6 * * *"); // MISMO horario que corte-diario
-    // no rompe el cron existente de la feature 41.
+    expect(cron).toBeUndefined();
+    // no rompe el cron existente de la feature 41: corte-diario sigue definido.
     expect(cfg.crons.find((c) => c.path === "/api/cron/corte-diario")).toBeDefined();
   });
 });
