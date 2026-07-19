@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/shared/Modal";
 import { cn } from "@/lib/utils";
 import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
@@ -26,9 +24,7 @@ import {
 } from "@/app/(app)/ordenes/_components/carga-masiva-chunks";
 import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
 import { useToast } from "@/hooks/useToast";
-import { listarMensajeros } from "@/lib/actions/mensajeros";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
-import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
 
 // Re-export por compatibilidad con consumidores previos de la constante.
 export { ORDENES_BULK_FIELDS } from "@/app/(app)/ordenes/_components/carga-masiva-fields";
@@ -125,32 +121,8 @@ export function OrdenesCargaMasivaButton() {
     hechas: number;
     total: number;
   } | null>(null);
-  const [mensajeros, setMensajeros] = useState<MensajeroDTO[]>([]);
-  const [mensajeroSugeridoId, setMensajeroSugeridoId] = useState("");
   const { mutate } = useSWRConfig();
   const toast = useToast();
-
-  // Carga la lista de mensajeros al abrir el modal (una sola vez por apertura).
-  useEffect(() => {
-    if (!open || mensajeros.length > 0) return;
-    let cancelled = false;
-    listarMensajeros()
-      .then((result) => {
-        if (cancelled) return;
-        if (result.status === "ok") setMensajeros(result.mensajeros);
-      })
-      .catch(() => {
-        // Silencioso: el mensajero sugerido es opcional.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, mensajeros.length]);
-
-  const mensajeroOptions = [
-    { value: "", label: "Sin sugerir" },
-    ...mensajeros.map((m) => ({ value: m.id, label: m.nombre })),
-  ];
 
   // Fase 1: la validación (dry-run por chunks) terminó. Nada persistido.
   function handleValidated(result: OrdenesCargaUploadResult) {
@@ -175,7 +147,6 @@ export function OrdenesCargaMasivaButton() {
     try {
       const realResults = await procesarEnChunks(filasUnicas, {
         dryRun: false,
-        mensajeroSugeridoId,
         chunkSize: cargaMasivaConfig.CHUNK_SIZE,
         onProgress: (hechas, total) => setConfirmProgreso({ hechas, total }),
       });
@@ -216,7 +187,6 @@ export function OrdenesCargaMasivaButton() {
       setFilasUnicas([]);
       setConfirmando(false);
       setConfirmProgreso(null);
-      setMensajeroSugeridoId("");
     }
   }
 
@@ -242,29 +212,6 @@ export function OrdenesCargaMasivaButton() {
         <div className="flex flex-col gap-5">
           <OrdenesCargaPasos step={step} />
 
-          {/* El mensajero sugerido persiste en subida y preview: se aplica en la
-              carga real (al confirmar). No se muestra en la asignación, que tiene
-              su propio asignador por orden. */}
-          {step !== "asignacion" ? (
-            <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-muted/30 p-4 sm:max-w-md">
-              <Label htmlFor="carga-mensajero-sugerido">
-                Mensajero sugerido (opcional)
-              </Label>
-              <Select
-                value={mensajeroSugeridoId}
-                onValueChange={setMensajeroSugeridoId}
-                options={mensajeroOptions}
-                placeholder="Sin sugerir"
-                disabled={mensajeros.length === 0 || confirmando}
-                aria-label="Mensajero sugerido para el lote"
-              />
-              <p className="text-sm text-muted-foreground">
-                Puedes sugerir un mensajero para todos los pedidos de esta carga.
-                Es opcional; si no eliges ninguno, quedarán sin mensajero sugerido.
-              </p>
-            </div>
-          ) : null}
-
           {step === "upload" ? (
             <OrdenesCargaUpload onValidated={handleValidated} />
           ) : step === "preview" ? (
@@ -275,7 +222,10 @@ export function OrdenesCargaMasivaButton() {
               onConfirmar={handleConfirmar}
             />
           ) : (
-            <OrdenesCargaResumen numRemisiones={clasificacion.numRemisionesNuevas} />
+            <OrdenesCargaResumen
+              numRemisiones={clasificacion.numRemisionesNuevas}
+              onDone={() => handleOpenChange(false)}
+            />
           )}
         </div>
       </Modal>

@@ -11,18 +11,18 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   en_preparacion: "En preparación",
   en_fulfillment: "En fulfillment",
-  en_bodega: "En bodega",
-  en_ruta_bodega_principal: "En ruta a bodega",
+  en_bodega: "En B. Central",
+  en_ruta_bodega_principal: "Enviando a B. Central",
   entregada: "Entregada",
   devuelta: "Devuelta",
-  devuelta_origen: "Devuelta a origen",
+  devuelta_origen: "Devolviendo a tienda",
   reprogramada: "Reprogramada",
-  en_espera_aceptacion: "En espera de aceptación del mensajero", // feature 17
-  en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30
-  en_reparto: "En reparto", // feature 36
+  en_espera_aceptacion: "Por recoger", // feature 17
+  en_ruta_bodega_satelite: "Por recibir en satélite", // feature 30
+  en_reparto: "En ruta", // feature 36
   rechazada: "Rechazada", // feature 36
-  en_bodega_satelite: "En bodega satélite", // feature 33 (R9: la UI puede derivar la zona)
-  recibido_origen: "Recibido en tienda", // cierre del flujo de devolución: la tienda de origen la recibió
+  en_bodega_satelite: "En satélite", // feature 33 (R9: la UI puede derivar la zona)
+  recibido_origen: "En tienda", // cierre del flujo de devolución: la tienda de origen la recibió
 };
 
 const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {

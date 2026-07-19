@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { cn } from "@/lib/utils";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -102,6 +103,8 @@ export const INGRESO_BRUTO_LABEL = "Ingreso bruto";
 export const INGRESO_BRUTO_NOTA =
   "Todo lo que facturó Ordenex en el cierre (flete + IVA + comisión + IVA), sin descontar nada.";
 export const GANANCIA_LABEL = "Ganancia";
+// Cuando la ganancia es NEGATIVA no es ganancia sino una deuda: se rotula "Debe".
+export const GANANCIA_DEBE_LABEL = "Debe";
 // --- Pago a la tienda: lo recibido menos lo que Ordenex le factura (texto separado, i18n-ready) ---
 export const PAGO_TIENDA_LABEL = "Pago a tienda";
 export const PAGO_TIENDA_NOTA =
@@ -135,6 +138,14 @@ export const ORDEN_RESULTADOS: CierreResultado[] = [
  */
 export function money(value: string | null): string {
   return value === null ? "—" : `₡${value}`;
+}
+
+/**
+ * ¿El monto (STRING money-safe, escala 2 con signo, p. ej. "-12.50") es negativo?
+ * Se lee el signo del texto: NO se parsea a número (money-safe, R13).
+ */
+export function esMontoNegativo(value: string | null): boolean {
+  return value !== null && value.trimStart().startsWith("-");
 }
 
 /** Une la jerarquía geográfica en una línea legible (omite los vacíos). */
@@ -251,12 +262,15 @@ export function MontoDerivadoCard({
   label,
   nota,
   ariaLabel,
-}: {
+  tone = "default",
+}: Readonly<{
   value: string;
   label: string;
   nota: string;
   ariaLabel?: string;
-}) {
+  /** `danger` pinta el monto en rojo (p. ej. una ganancia negativa = deuda). */
+  tone?: "default" | "danger";
+}>) {
   return (
     <section aria-label={ariaLabel ?? label} className="flex flex-col gap-3">
       <Card className="border-dashed">
@@ -265,7 +279,14 @@ export function MontoDerivadoCard({
             <span className="text-sm font-medium">{label}</span>
             <span className="text-xs text-muted-foreground">{nota}</span>
           </span>
-          <span className="text-lg font-semibold">{money(value)}</span>
+          <span
+            className={cn(
+              "text-lg font-semibold",
+              tone === "danger" && "text-destructive",
+            )}
+          >
+            {money(value)}
+          </span>
         </CardContent>
       </Card>
     </section>

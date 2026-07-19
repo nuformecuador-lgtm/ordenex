@@ -242,14 +242,14 @@ describe("CierresAdminModule", () => {
     expect(within(totales).getByText("₡160.35")).toBeInTheDocument();
   });
 
-  it("el detalle muestra el ingreso bruto y la ganancia (bruto - pago al mensajero)", async () => {
+  it("el detalle muestra el ingreso bruto y NO muestra card de ganancia cuando es ≥ 0", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
       cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso({ total: "3672.50" }),
-      ganancia: "2172.50", // 3672.50 - 1500.00, derivado server-side
+      ganancia: "2172.50", // 3672.50 - 1500.00, derivado server-side (positiva)
       pagoTienda: "0.00",
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
@@ -259,8 +259,9 @@ describe("CierresAdminModule", () => {
 
     const bruto = within(dialog).getByRole("region", { name: "Ingreso bruto" });
     expect(within(bruto).getByText("₡3672.50")).toBeInTheDocument();
-    const ganancia = within(dialog).getByRole("region", { name: "Ganancia" });
-    expect(within(ganancia).getByText("₡2172.50")).toBeInTheDocument();
+    // Ganancia positiva: no se muestra ninguna card de ganancia ni de "Debe".
+    expect(within(dialog).queryByRole("region", { name: "Ganancia" })).toBeNull();
+    expect(within(dialog).queryByRole("region", { name: "Debe" })).toBeNull();
   });
 
   it("el detalle muestra el pago a tienda derivado server-side (sin recalcular)", async () => {
@@ -290,7 +291,7 @@ describe("CierresAdminModule", () => {
     expect(within(pago).getByText("₡21327.50")).toBeInTheDocument();
   });
 
-  it("la ganancia se muestra negativa si el pago al mensajero supera el ingreso", async () => {
+  it("muestra 'Debe' en rojo cuando la ganancia es negativa (el pago supera el ingreso)", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
@@ -304,8 +305,12 @@ describe("CierresAdminModule", () => {
 
     await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
-    const ganancia = within(dialog).getByRole("region", { name: "Ganancia" });
-    expect(within(ganancia).getByText("₡-1500.00")).toBeInTheDocument();
+    // Ganancia negativa -> se rotula "Debe" y el monto va en rojo.
+    expect(within(dialog).queryByRole("region", { name: "Ganancia" })).toBeNull();
+    const debe = within(dialog).getByRole("region", { name: "Debe" });
+    const monto = within(debe).getByText("₡-1500.00");
+    expect(monto).toBeInTheDocument();
+    expect(monto).toHaveClass("text-destructive");
   });
 
   it("el detalle muestra el ingreso de Ordenex del cierre por concepto", async () => {

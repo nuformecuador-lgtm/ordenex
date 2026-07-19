@@ -172,15 +172,18 @@ describe("OrdenesApartado — acción 'Ver historial' por fila (feature 49, R27/
     });
 
     await screen.findByText("REM-1");
-    // La columna de selección convive con la de acciones.
+    // La columna de selección convive con la de acciones: checkbox "seleccionar
+    // todo" en la cabecera + uno por cada una de las 2 filas.
     const checkboxes = screen.getAllByRole("checkbox");
-    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes).toHaveLength(3);
     expect(
       screen.getByRole("button", { name: "Ver historial de la orden REM-1" }),
     ).toBeInTheDocument();
 
     // La acción de lote sigue operando sobre la selección (no la altera "Ver historial").
-    await user.click(checkboxes[0]);
+    await user.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-1" }),
+    );
     await user.click(screen.getByRole("button", { name: "Asignar mensajero" }));
 
     expect(onAction).toHaveBeenCalledTimes(1);

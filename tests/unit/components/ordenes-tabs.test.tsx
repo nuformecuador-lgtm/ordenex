@@ -175,6 +175,32 @@ describe("OrdenesTabs — lazy loading duro (R16) + tab activa (R15)", () => {
   });
 });
 
+describe("OrdenesTabs — tab 'Todas' (maestro)", () => {
+  it("con `incluirTodas` antepone 'Todas', activa por default y sin filtro de estado", async () => {
+    renderTabs(<OrdenesTabs incluirTodas />);
+
+    expect(await screen.findByRole("tab", { name: "Todas" })).toBeInTheDocument();
+    // Todas + 3 estados mostrables del catálogo.
+    await waitFor(() => expect(tabs()).toHaveLength(4));
+
+    // La tab activa por default ("Todas") consulta `listarOrdenes` SIN filtro.
+    await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalled());
+    expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
+    // Lazy (R16): ninguna tab de estado se consultó todavía (sin `filter`).
+    const algunaConFiltro = listarOrdenesMock.mock.calls.some(
+      (c) => (c[0] as { filter?: unknown }).filter !== undefined,
+    );
+    expect(algunaConFiltro).toBe(false);
+  });
+
+  it("sin `incluirTodas` NO aparece la tab 'Todas'", async () => {
+    renderTabs(<OrdenesTabs />);
+
+    await screen.findByRole("tab", { name: "En bodega" });
+    expect(screen.queryByRole("tab", { name: "Todas" })).toBeNull();
+  });
+});
+
 describe("OrdenesTabs — paginación independiente por tab (R17)", () => {
   it("R17: cada tab monta su propio OrdenesModule (paginación propia por status)", async () => {
     const user = userEvent.setup();
