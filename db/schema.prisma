@@ -1012,3 +1012,48 @@ model ApiKey {
   @@index([createdById])
   @@map("api_key")
 }
+
+// Feature 90 (design §1.1): tipo de un background job. Enum NATIVO de Postgres con
+// `@@map`, ampliable por `ALTER TYPE ... ADD VALUE` en las features 91/92 (geocodificacion,
+// webhooks). En v1 solo existe el job recurrente de liberacion de reprogramadas (feature 46).
+enum JobTipo {
+  liberar_reprogramadas // 91/92 anaden valores aditivamente
+
+  @@map("job_tipo")
+}
+
+// Feature 90 (design §1.1): estado del ciclo de vida de un job en la cola. Enum NATIVO
+// de Postgres con `@@map`. `pending` (encolado, vencido o no), `processing` (reclamado por
+// un worker), `done` (ejecutado con exito), `failed` (dead-letter tras agotar intentos).
+enum JobEstado {
+  pending
+  processing
+  done
+  failed
+
+  @@map("job_estado")
+}
+
+// Feature 90 (design §1.2): una fila de la cola de background jobs (patron
+// transactional-outbox + worker sobre Postgres). El drenador `procesar-jobs` reclama
+// lotes vencidos con `FOR UPDATE SKIP LOCKED`, ejecuta el handler por tipo y aplica
+// complete / backoff / dead-letter. Los indices REALES son PARCIALES (seleccion de
+// pendientes vencidos y unicidad de `dedupe_key` no nulo) y la RLS sin policies van a
+// mano en la migracion (Prisma no expresa ni indices parciales ni RLS). RLS habilitada
+// sin policies (solo service role), patron api_key / wallet_movimiento / premio_ranking.
+model Job {
+  id          String    @id @default(uuid())
+  tipo        JobTipo
+  payload     Json      @default("{}") @db.JsonB
+  estado      JobEstado @default(pending)
+  intentos    Int       @default(0)
+  maxIntentos Int       @map("max_intentos")
+  runAfter    DateTime  @default(now()) @map("run_after")
+  lockedAt    DateTime? @map("locked_at")
+  lastError   String?   @map("last_error")
+  dedupeKey   String?   @unique @map("dedupe_key") // el indice REAL es unico PARCIAL (WHERE dedupe_key IS NOT NULL)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("jobs")
+}
