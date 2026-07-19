@@ -13,7 +13,7 @@ a `requirements.md`.
 
 ## Bloque 1 — Modelo de datos y migración (base, sin dependencias)
 
-- [ ] **T1. Enums + modelo Prisma.** (R1, R2)
+- [x] **T1. Enums + modelo Prisma.** (R1, R2)
   Archivos: `db/schema.prisma`.
   Añadir `enum JobTipo { liberar_reprogramadas @@map("job_tipo") }`,
   `enum JobEstado { pending processing done failed @@map("job_estado") }` y `model Job`
@@ -21,7 +21,7 @@ a `requirements.md`.
   Hecho: `pnpm run db:generate` regenera el cliente sin error y `Job`/`JobTipo`/`JobEstado`
   existen en el cliente Prisma.
 
-- [ ] **T2. Migración up/down.** (R3, R4, R5, R6) — depende de T1.
+- [x] **T2. Migración up/down.** (R3, R4, R5, R6) — depende de T1.
   Archivos: `db/migrations/<ts>_jobs_cola/migration.sql`, `db/migrations/<ts>_jobs_cola/down.sql`.
   `pnpm run db:migrate:create`; editar a mano `migration.sql` para añadir los dos `CREATE TYPE`,
   la tabla, el **índice parcial** `jobs_run_after_pending_idx ... WHERE estado='pending'`, el
@@ -34,7 +34,7 @@ a `requirements.md`.
 
 ## Bloque 2 — Config (independiente del bloque 1)
 
-- [ ] **T3. `loadJobsConfig()`.** (R21) — `[P]` (independiente de T1/T2).
+- [x] **T3. `loadJobsConfig()`.** (R21) — `[P]` (independiente de T1/T2).
   Archivos: `lib/config/jobs.ts`.
   Clon de `lib/config/cron.ts`: lee `JOBS_BATCH_SIZE`, `JOBS_MAX_ATTEMPTS`,
   `JOBS_BACKOFF_BASE_MS`, `JOBS_BACKOFF_CAP_MS`, `JOBS_VISIBILITY_TIMEOUT_MS` con defaults
@@ -46,13 +46,13 @@ a `requirements.md`.
 
 ## Bloque 3 — Repository (depende de T1; el test DB de T5 depende de T2)
 
-- [ ] **T4. Interfaz + DTO del repositorio.** (R7, R9, R10) — depende de T1.
+- [x] **T4. Interfaz + DTO del repositorio.** (R7, R9, R10) — depende de T1.
   Archivos: `lib/interfaces/repositories/IJobRepository.ts` (+ tipo `JobDTO`, `EnqueueOpts`,
   `ClaimOpts` colocados junto a la interfaz o en `lib/types/`).
   Declarar `enqueue`, `claimBatch`, `complete`, `fail` según design §3.
   Hecho: `pnpm run typecheck` en verde; la interfaz no expone `PrismaClient`.
 
-- [ ] **T5. Implementación `JobRepository`.** (R7, R8, R9, R10, R11, R12, R13, R14, R16) —
+- [x] **T5. Implementación `JobRepository`.** (R7, R8, R9, R10, R11, R12, R13, R14, R16) —
   depende de T2 y T4.
   Archivos: `lib/repositories/JobRepository.ts`.
   Constructor `Pick<PrismaClient, "job" | "$transaction" | "$queryRaw" | "$executeRaw">`
@@ -64,12 +64,12 @@ a `requirements.md`.
 
 ## Bloque 4 — Service, handler y recurrencia (depende de T3, T4; gate F1.4 resuelto)
 
-- [ ] **T6. Interfaz del service.** (R18) — depende de T4.
+- [x] **T6. Interfaz del service.** (R18) — depende de T4.
   Archivos: `lib/interfaces/services/IJobQueueService.ts` (+ tipos `JobHandler`, contrato de
   conteos de `drenar`).
   Hecho: `pnpm run typecheck` en verde.
 
-- [ ] **T7. Implementación `JobQueueService`.** (R14, R15, R16, R23, R24, R25) —
+- [x] **T7. Implementación `JobQueueService`.** (R14, R15, R16, R23, R24, R25) —
   depende de T3, T5, T6 y **gate F1.4**.
   Archivos: `lib/services/JobQueueService.ts`.
   DI por interfaces + `Map<JobTipo, JobHandler>` + `now` inyectable + logger sin PII. `drenar`:
@@ -77,7 +77,7 @@ a `requirements.md`.
   terminal (`enqueue` con dedupe por día CR). Backoff `min(cap, base*2^(intentos-1))`.
   Hecho: unit tests de T9 pasan (backoff, dead-letter, recurrencia en éxito y en fallo).
 
-- [ ] **T8. Handler `liberar_reprogramadas` + registro de recurrencia.** (R22, R23, R24) —
+- [x] **T8. Handler `liberar_reprogramadas` + registro de recurrencia.** (R22, R23, R24) —
   depende de T7 y **gate F1.4** (horario + payload).
   Archivos: `lib/services/jobs/liberar-reprogramadas-handler.ts` (ruta a confirmar), registro
   de "recurrencia por tipo".
@@ -90,27 +90,27 @@ a `requirements.md`.
 
 ## Bloque 5 — Controller, cron y seed (depende de T7/T8)
 
-- [ ] **T9. Route handler `procesar-jobs`.** (R17, R18, R19) — depende de T7.
+- [x] **T9. Route handler `procesar-jobs`.** (R17, R18, R19) — depende de T7.
   Archivos: `app/api/cron/procesar-jobs/route.ts`.
   Clon de `liberar-reprogramadas/route.ts`: `Deps` inyectables, `buildService()`, auth Bearer
   vs `CRON_SECRET` ANTES de efectos (401), `withErrorHandler` + `isAppErrorShape` +
   `appErrorToResponse`, `GET` delgado, 200 con conteos sin PII.
   Hecho: route test de T11 pasa.
 
-- [ ] **T10. `vercel.json` — añadir drenado, quitar liberar-reprogramadas.** (R20, R27) —
+- [x] **T10. `vercel.json` — añadir drenado, quitar liberar-reprogramadas.** (R20, R27) —
   depende de T9. `[P]` con T8 (solo toca JSON).
   Archivos: `vercel.json`.
   Añadir `{ "path": "/api/cron/procesar-jobs", "schedule": "* * * * *" }`; eliminar el bloque
   de `/api/cron/liberar-reprogramadas`. Conservar `corte-diario` y `generar-gastos-fijos`.
   Hecho: `procesar-jobs` presente con `* * * * *`; `liberar-reprogramadas` ausente de `crons`.
 
-- [ ] **T11. Seed inicial idempotente.** (R26) — depende de T5 y **gate F1.4**.
+- [x] **T11. Seed inicial idempotente.** (R26) — depende de T5 y **gate F1.4**.
   Archivos: `scripts/seed-jobs-liberar-reprogramadas.ts` (o migración de datos idempotente —
   decidir aquí).
   `enqueue` de la primera fila `liberar_reprogramadas` con `ON CONFLICT DO NOTHING`.
   Hecho: ejecutarlo dos veces deja exactamente una fila para la fecha CR sembrada.
 
-- [ ] **T12. Repurpose ruta manual (verificación).** (R27) — depende de T10.
+- [x] **T12. Repurpose ruta manual (verificación).** (R27) — depende de T10.
   Archivos: `app/api/cron/liberar-reprogramadas/route.ts` (sin cambios de código esperados).
   Confirmar que la ruta sigue autorizando y respondiendo conteos como disparo manual.
   Hecho: los tests existentes de la ruta siguen verdes; solo perdió su `schedule` (T10).
@@ -119,7 +119,7 @@ a `requirements.md`.
 
 ## Bloque 6 — Tests (mapeo R→test; algunos escritos junto a su bloque)
 
-- [ ] **T13. Tests de integración DB del repositorio.** (R1–R6, R7, R8, R10, R11, R12, R13,
+- [x] **T13. Tests de integración DB del repositorio.** (R1–R6, R7, R8, R10, R11, R12, R13,
   R14, R16, R25, R26) — depende de T5, T11.
   Archivos: `tests/integration/db/job-repository.test.ts` (patrón `tests/integration/db/`).
   Cubre: schema/índices/RLS/migración, enqueue+dedupe, claim SKIP LOCKED, no tomar `run_after`
@@ -127,24 +127,24 @@ a `requirements.md`.
   idempotente.
   Hecho: `pnpm test` (integración DB) pasa.
 
-- [ ] **T14. Unit tests del service.** (R14, R15, R16, R22, R23, R24) — depende de T7, T8.
+- [x] **T14. Unit tests del service.** (R14, R15, R16, R22, R23, R24) — depende de T7, T8.
   Archivos: `tests/unit/services/job-queue-service.test.ts`.
   Dobles de `IJobRepository` y handlers fake: backoff exponencial acotado, dead-letter al
   superar `max_intentos`, recurrencia en éxito y en fallo terminal, `last_error` sin secreto.
   Hecho: `pnpm test` pasa.
 
-- [ ] **T15. Unit test de config.** (R21) — depende de T3. `[P]` con T13/T14.
+- [x] **T15. Unit test de config.** (R21) — depende de T3. `[P]` con T13/T14.
   Archivos: `tests/unit/config/jobs-config.test.ts`.
   Hecho: `pnpm test` pasa.
 
-- [ ] **T16. Route test de `procesar-jobs`.** (R17, R18, R19, R20) — depende de T9, T10.
+- [x] **T16. Route test de `procesar-jobs`.** (R17, R18, R19, R20) — depende de T9, T10.
   Archivos: `tests/integration/actions/procesar-jobs-route.test.ts`.
   Clon de `corte-diario-route.test.ts`: 401 sin/incorrecto/null secreto SIN efectos (spy no
   invocado), 200 con conteos sin PII, error del service → ≥500 sin filtrar secreto, y bloque
   que valida `vercel.json` (procesar-jobs presente, liberar-reprogramadas ausente).
   Hecho: `pnpm test` pasa.
 
-- [ ] **T17. Cierre de verificación.** — depende de todas.
+- [x] **T17. Cierre de verificación.** — depende de todas.
   `./init.sh` en verde, `pnpm run typecheck`, `pnpm run lint`, `pnpm test`. Mapa `R<n> → test`
   en `progress/impl_90.md`. Marcar todas las tasks `[x]`.
   Hecho: CHECKPOINTS.md cumplido; cada R1–R27 mapea a al menos un test.
