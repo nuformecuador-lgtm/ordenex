@@ -18,7 +18,8 @@
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
     "db:seed": "tsx scripts/seed-catalogos.ts",
-    "db:seed:maestro": "tsx scripts/seed-maestro.ts"
+    "db:seed:maestro": "tsx scripts/seed-maestro.ts",
+    "db:seed:zonas": "tsx scripts/seed-zonas.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
