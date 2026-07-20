@@ -17,6 +17,7 @@ const byLabel = (label: string): MenuItem => {
   if (!it) throw new Error(`sin item ${label}`);
   return it;
 };
+const inicio = byLabel("Inicio");
 const ordenes = byLabel("Órdenes");
 const entregas = byLabel("Entregas");
 const config = byLabel("Configuración");
@@ -44,6 +45,9 @@ describe("puedeVer", () => {
     expect(puedeVer(novedades, actor("adminTienda"))).toBe(true);
     // Feature 42: "Wallet" (caja principal) es exclusivo del maestro.
     expect(puedeVer(wallet, actor("maestro"))).toBe(true);
+    // Feature 92: "Inicio" (acceso a /dashboard) es visible para maestro y admin.
+    expect(puedeVer(inicio, actor("maestro"))).toBe(true);
+    expect(puedeVer(inicio, actor("admin"))).toBe(true);
   });
 
   it("oculta el item cuando el rol no está autorizado", () => {
@@ -72,6 +76,10 @@ describe("puedeVer", () => {
     expect(puedeVer(wallet, actor("adminTienda"))).toBe(false);
     expect(puedeVer(wallet, actor("adminSatelite"))).toBe(false);
     expect(puedeVer(wallet, actor("mensajero"))).toBe(false);
+    // Feature 92: "Inicio" NO lo ven roles distintos de maestro/admin.
+    expect(puedeVer(inicio, actor("adminTienda"))).toBe(false);
+    expect(puedeVer(inicio, actor("mensajero"))).toBe(false);
+    expect(puedeVer(inicio, actor("adminSatelite"))).toBe(false);
   });
 
   it("oculta todo cuando no hay actor (sesión ausente o inválida)", () => {
@@ -84,10 +92,12 @@ describe("puedeVer", () => {
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve Órdenes, Wallet, Configuración, Cierres del día, QR y Perfil en orden real", () => {
+  it("maestro ve Inicio, Órdenes, Wallet, Configuración, Cierres del día, QR y Perfil en orden real", () => {
     // PR #75: "QR" (roles: ROLES_SEED) se intercala antes de "Perfil".
     // Feature 42: "Wallet" (caja principal, solo maestro) va antes de "Configuración".
+    // Feature 92: "Inicio" (acceso a /dashboard) va PRIMERO en SIDEBAR_ITEMS.
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
+      "Inicio",
       "Órdenes",
       "Ranking",
       "Wallet",
@@ -98,9 +108,10 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     ]);
   });
 
-  it("admin ve Órdenes + QR + Perfil, NO Configuración", () => {
+  it("admin ve Inicio + Órdenes + QR + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("admin")));
-    expect(visibles).toEqual(["Órdenes", "QR", "Perfil"]); // PR #75: QR
+    // Feature 92: "Inicio" va PRIMERO (visible para maestro/admin).
+    expect(visibles).toEqual(["Inicio", "Órdenes", "QR", "Perfil"]); // PR #75: QR
     expect(visibles).not.toContain("Configuración");
   });
 

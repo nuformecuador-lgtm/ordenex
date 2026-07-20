@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Home,
   Megaphone,
   Package,
   QrCode,
@@ -134,6 +135,7 @@ function SidebarCollapseToggle() {
 // cruzan el borde RSC (menu-visibility) solo traen la clave string serializable;
 // aqui la resolvemos al render.
 const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
+  home: Home,
   settings: Settings,
   user: User,
   package: Package,
