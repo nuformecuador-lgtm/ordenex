@@ -18,7 +18,7 @@ Criterio global: `./init.sh` en verde y suite de tests pasando antes de cerrar.
 
 ## Bloque 0 — Preparación
 
-### T0 · Worktree y rama
+### [x] T0 · Worktree y rama
 Crear worktree aislado desde `origin/dev` y verificar que la infraestructura de la 90
 está presente (`lib/config/jobs.ts`, `lib/services/JobQueueService.ts`,
 `app/api/cron/procesar-jobs/route.ts`, migración `20260717120000_jobs_cola`).
@@ -30,14 +30,14 @@ tests/typecheck **medido** (no citado de `progress/current.md`, que caduca).
 
 ## Bloque 1 — Esquema y migraciones
 
-### T1 · Schema Prisma
+### [x] T1 · Schema Prisma
 Añadir a `Orden` las cinco columnas de §1.1 del design y el modelo `GeocodeCache`
 (§1.2); añadir `geocodificacion` al enum `JobTipo`.
 **Hecho:** `pnpm db:generate` sin errores y el tipo `Prisma.OrdenUpdateInput` expone
 los campos nuevos.
 **Depende de:** T0
 
-### T2 · Migración A — enum `job_tipo` (va SOLA)
+### [x] T2 · Migración A — enum `job_tipo` (va SOLA)
 `db/migrations/<ts>_job_tipo_geocodificacion/` con `migration.sql`
 (`ALTER TYPE … ADD VALUE IF NOT EXISTS 'geocodificacion'`) y `down.sql` que **recrea el
 tipo** (Postgres no tiene `DROP VALUE`), borrando antes las filas `jobs` de ese tipo.
@@ -47,7 +47,7 @@ el `55P04`).
 re-ejecutables.
 **Depende de:** T1
 
-### T3 · Migración B — columnas de orden + `geocode_cache`
+### [x] T3 · Migración B — columnas de orden + `geocode_cache`
 `db/migrations/<ts>_orden_geocode/` con el SQL de §1.4 (columnas nullable, tabla,
 índice único, `ENABLE ROW LEVEL SECURITY`) y su `down.sql`. Incluir en la cabecera el
 comentario sobre retención permanente y ToS de Google (Q7).
@@ -55,7 +55,7 @@ comentario sobre retención permanente y ToS de Google (Q7).
 policies** verificado en la DB.
 **Depende de:** T2 (orden de timestamps)
 
-### T4 · Tests de migración y rollback
+### [x] T4 · Tests de migración y rollback
 `tests/integration/db/geocodificacion-migracion.test.ts` y `…-rollback.test.ts`.
 **Cubre:** R1, R2, R3, R4, R5.
 **Hecho:** los 5 requisitos con test verde.
@@ -65,7 +65,7 @@ policies** verificado en la DB.
 
 ## Bloque 2 — Piezas puras (paralelizables entre sí)
 
-### T5 · [P] Config `lib/config/geocode.ts`
+### [x] T5 · [P] Config `lib/config/geocode.ts`
 Clon de `lib/config/cron.ts:10-15`: ausente/`""` → `null`, nunca lanza. Añadir
 `# GOOGLE_MAPS_API_KEY=` comentada en `.env.example` §`# Integraciones (según feature)`.
 **Cubre:** R33.
@@ -73,7 +73,7 @@ Clon de `lib/config/cron.ts:10-15`: ausente/`""` → `null`, nunca lanza. Añadi
 "credencial vacía → null sin lanzar".
 **Depende de:** T0
 
-### T6 · [P] Query y huella de dirección — `lib/geo/direccion-query.ts`
+### [x] T6 · [P] Query y huella de dirección — `lib/geo/direccion-query.ts`
 Exportar `collapseSpaces`/`stripDiacritics` desde `lib/geo/normalize.ts` **sin alterar
 su comportamiento**; implementar `construirQueryDireccion` y `hashDireccion` (§4).
 Respetar las **dos normalizaciones distintas** (consulta conserva acentos, huella no).
@@ -82,7 +82,7 @@ Respetar las **dos normalizaciones distintas** (consulta conserva acentos, huell
 `normalize.ts` / `ZonaService` / `seed-zonas` siguen verdes (regresión).
 **Depende de:** T0
 
-### T7 · [P] Cliente `lib/clients/google-geocode.ts` + `IGeocodeClient`
+### [x] T7 · [P] Cliente `lib/clients/google-geocode.ts` + `IGeocodeClient`
 Crear `lib/clients/` y `lib/interfaces/external/IGeocodeClient.ts` con el tipo
 `GeocodeOutcome` (§3). `fetchImpl?: typeof fetch` inyectable. Validación **zod en el
 borde** de la respuesta. El cliente **traduce** estados, no decide política.
@@ -97,7 +97,7 @@ mensaje de error contiene la URL, la credencial ni la dirección.
 
 ## Bloque 3 — Persistencia
 
-### T8 · Repositorios de geocodificación
+### [x] T8 · Repositorios de geocodificación
 `IOrdenGeocodeRepository` (leer orden + nombres de catálogo; escribir coordenadas y
 estado vía `updateMany` con `deletedAt: null`) e `IGeocodeCacheRepository`
 (`findByHash`, `upsert` por `direccion_hash`), con sus implementaciones Prisma.
@@ -109,7 +109,7 @@ Solo queries, sin lógica de negocio (`docs/architecture.md` §Repository).
 
 ## Bloque 4 — Handler
 
-### T9 · `lib/services/GeocodificacionService.ts`
+### [x] T9 · `lib/services/GeocodificacionService.ts`
 Implementa `JobHandler`. DI por interfaces. Flujo y tabla de decisión de §5.
 **Cubre:** R18, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31.
 **Hecho:** `tests/unit/services/geocodificacion-service.test.ts` verde con **un caso
@@ -119,7 +119,7 @@ expiración, y un espía del logger que verifica que ningún mensaje contiene di
 coordenadas ni credencial.
 **Depende de:** T5, T6, T7, T8
 
-### T10 · Registro en el drenador
+### [x] T10 · Registro en el drenador
 En `app/api/cron/procesar-jobs/route.ts`, `handlers.set("geocodificacion", …)` dentro
 de `buildHandlers()` (`:32-39`). **No tocar** `buildRecurrencias()` ni `vercel.json`.
 **Cubre:** R32.
@@ -132,7 +132,7 @@ el handler se resuelve y que el job **no** se re-agenda; los tests existentes de
 
 ## Bloque 5 — Encolado (outbox)
 
-### T11 · Helper de encolado
+### [x] T11 · Helper de encolado
 `lib/services/jobs/geocodificacion-encolado.ts` con `dedupeKeyGeocodificacion` y
 `encolarGeocodificacion(repo, tx, orden)`, no-op si la dirección no es geocodificable.
 
@@ -150,7 +150,7 @@ mismo par y **distinta al cambiar la dirección**; `maxIntentos` = 8 en las opci
 encolado.
 **Depende de:** T6, T8
 
-### T12 · Enganche en `create()` y `createManyOrdenes()`
+### [x] T12 · Enganche en `create()` y `createManyOrdenes()`
 `OrdenRepository.create()` (`:407`, tx `:410`) y `createManyOrdenes()` (`:664`, tx
 `:674`). En la carga masiva, **ampliar el `select` del `after`** (`:687-690`) a
 `{ id, estatusId, direccion }` para decidir por fila.
@@ -162,7 +162,7 @@ dirección corregida → job nuevo. Los tests existentes de `OrdenRepository` y 
 masiva siguen verdes.
 **Depende de:** T11
 
-### T13 · Guard latente en `update()`
+### [x] T13 · Guard latente en `update()`
 `OrdenRepository.update()` (`:483`, tx `:489`): pre-lectura condicional de `direccion`
 (patrón de `estatusId`, `:492-498`) y encolado solo si el valor difiere.
 **Cubre:** R10, R11.
@@ -184,7 +184,7 @@ inalcanzable (C1) y que **no es código muerto a eliminar**.
 
 ## Bloque 6 — Cierre
 
-### T14 · [P] Seguimientos documentados — incluido el 4.º choke-point de la 88
+### [x] T14 · [P] Seguimientos documentados — incluido el 4.º choke-point de la 88
 Anotar en `progress/impl_91.md` los 4 seguimientos de design §9.
 
 **Foco: `createManyOrdenesConGuia` (feature 88, PR #92).** Decisión **Q9**: esta función
@@ -204,13 +204,13 @@ Contenido mínimo de la nota de seguimiento:
 de la 88 marcado explícitamente como **bloqueado por PR #92, no ejecutable ahora**.
 **Depende de:** T13
 
-### T15 · [P] Mapa de trazabilidad
+### [x] T15 · [P] Mapa de trazabilidad
 `progress/impl_91.md` con la tabla `R<n>` → test concreto (archivo + nombre del test),
 para los **34** requisitos (R34 entró con la decisión Q3).
 **Hecho:** los 34 mapeados; ninguno sin test (el reviewer rechaza si falta alguno).
 **Depende de:** T13
 
-### T16 · Verificación final
+### [x] T16 · Verificación final
 `./init.sh` en verde, suite completa, typecheck limpio y `pnpm db:rollback` de las dos
 migraciones probado en orden inverso.
 **Hecho:** todo verde y baseline comparado contra el medido en T0.

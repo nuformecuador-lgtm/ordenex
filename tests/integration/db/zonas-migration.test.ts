@@ -170,7 +170,10 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         // (`..._api_key` y `..._rol_api_key`, que tambien termina en "_api_key").
         !d.endsWith("_api_key") &&
         !d.endsWith("_orden_historial_origen_tipo_carga_api") && // feature 88: apendida despues
-        !d.endsWith("_jobs_cola"), // feature 90: apendida despues
+        !d.endsWith("_jobs_cola") && // feature 90: apendida despues
+        // feature 91: apendidas despues (enum de job_tipo + columnas de geocodificacion).
+        !d.endsWith("_job_tipo_geocodificacion") &&
+        !d.endsWith("_orden_geocode"),
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);

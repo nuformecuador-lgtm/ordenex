@@ -331,6 +331,17 @@ model Orden {
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
   liberadaReprogramadaAt DateTime? @map("liberada_reprogramada_at") // feature 46/R13/R18: instante de liberacion programada (NULL = nunca liberada por reprogramacion); auditoria + fuente del aviso derivado
+  // Feature 91 (design §1.1, R1): resultado de la geocodificacion de `direccion`. TODAS
+  // nullable: una orden sin geocodificar las tiene vacias. `geocode_precision` y
+  // `geocode_status` son String? y NO enums nativos a proposito: son vocabulario OPACO del
+  // proveedor (OK / ZERO_RESULTS / ROOFTOP / APPROXIMATE / ...), ampliable por Google sin
+  // avisar; un enum obligaria a un ALTER TYPE por cada valor nuevo. Sin indice: no hay
+  // consumidor todavia (design §1.1).
+  latitud                Decimal?  @db.Decimal(10, 7)
+  longitud               Decimal?  @db.Decimal(10, 7)
+  geocodedAt             DateTime? @map("geocoded_at")
+  geocodePrecision       String?   @map("geocode_precision")
+  geocodeStatus          String?   @map("geocode_status")
   deletedAt              DateTime? @map("deleted_at") // soft delete
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
@@ -1019,6 +1030,7 @@ model ApiKey {
 // webhooks). En v1 solo existe el job recurrente de liberacion de reprogramadas (feature 46).
 enum JobTipo {
   liberar_reprogramadas // 91/92 anaden valores aditivamente
+  geocodificacion // feature 91: geocodifica la direccion de UNA orden (payload { ordenId })
 
   @@map("job_tipo")
 }
@@ -1057,4 +1069,24 @@ model Job {
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@map("jobs")
+}
+
+// Feature 91 (design §1.2, R2/R28): cache de direcciones YA resueltas, indexada por la
+// HUELLA de la direccion normalizada (nunca la direccion en claro: es dato personal).
+// Evita re-pagar al proveedor por direcciones repetidas y abarata los reintentos de la
+// cola. Solo se cachean resultados SATISFACTORIOS: un ZERO_RESULTS vive en la orden
+// (`geocode_status`), no aqui. Retencion PERMANENTE, sin TTL (gate F1.4-Q7): la
+// invalidacion es implicita, una direccion distinta produce una huella distinta.
+// RLS habilitada sin policies (solo service role), patron jobs / api_key: guarda
+// coordenadas y no es accesible desde el cliente.
+model GeocodeCache {
+  id            String   @id @default(uuid())
+  direccionHash String   @unique @map("direccion_hash")
+  latitud       Decimal  @db.Decimal(10, 7)
+  longitud      Decimal  @db.Decimal(10, 7)
+  precision     String
+  payloadCrudo  Json?    @map("payload_crudo") @db.JsonB
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("geocode_cache")
 }

@@ -40,6 +40,15 @@ export interface UpdateOrdenData {
   producto?: string;
   peso?: number | null;
   notas?: string | null;
+  /**
+   * Feature 91 (R10/R11, decision Q1): campo del GUARD LATENTE de re-geocodificacion.
+   * Hoy NADIE lo informa: `actualizarOrdenSchema` es `.strict()` y no lo admite, y
+   * `OrdenRepository.toUpdateData()` NO lo proyecta, asi que `update()` sigue siendo
+   * incapaz de ESCRIBIR la direccion. Declararlo aqui permite que el guard exista y sea
+   * testeable hoy, sin ampliar el CRUD (permitir editar la direccion es otra feature,
+   * explicitamente fuera de alcance). NO eliminar por "no usado".
+   */
+  direccion?: string | null;
 }
 
 export interface ListOrdenesParams {
