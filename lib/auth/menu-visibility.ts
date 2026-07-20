@@ -9,6 +9,7 @@ import { ROLES_SEED } from "@/lib/types/roles";
  * El Sidebar resuelve `iconKey -> componente` en el cliente al renderizar.
  */
 export type IconKey =
+  | "home"
   | "settings"
   | "user"
   | "package"
@@ -53,6 +54,16 @@ export interface MenuItem {
  * - Perfil: cualquier rol autenticado (ningun service lo restringe).
  */
 export const SIDEBAR_ITEMS: readonly MenuItem[] = [
+  {
+    // Feature 92: acceso al dashboard (landing post-login movido a /dashboard por
+    // la feature 86). Visible solo para maestro/admin, los roles para los que la
+    // página renderiza contenido real; la defensa real es la resolución de rol
+    // server-side de la propia página.
+    label: "Inicio",
+    href: "/dashboard",
+    iconKey: "home",
+    roles: ["maestro", "admin"],
+  },
   {
     label: "Órdenes",
     href: "/ordenes",

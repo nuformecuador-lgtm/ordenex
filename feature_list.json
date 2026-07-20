@@ -1016,6 +1016,17 @@
       "zone": "backend",
       "branch": "feature/91-geocodificacion-ordenes",
       "depends_on": 90
+    },
+    {
+      "id": 92,
+      "name": "dashboard - item de sidebar",
+      "description": "Agregar en el sidebar un item 'Inicio' que enlaza a la pagina /dashboard (ya existente), visible solo para los roles maestro y admin.",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": 86
     }
   ]
 }
