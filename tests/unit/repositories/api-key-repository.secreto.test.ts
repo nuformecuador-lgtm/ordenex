@@ -40,7 +40,16 @@ const FILA_COMPLETA: Record<string, unknown> = {
   usuarioId: "u-dedicado",
   createdById: "u-maestro",
   createdAt: new Date("2026-07-16T12:00:00Z"),
-  usuario: { id: "u-dedicado", email: "apikey+tienda-uno@apikey.invalid", passwordHash: "$2b$10$x" },
+  usuario: {
+    id: "u-dedicado",
+    email: "apikey+tienda-uno@apikey.invalid",
+    passwordHash: "$2b$10$x",
+    // [88] `findByKeyHash` proyecta campos ANIDADOS del usuario (`estado`, `rol.value`).
+    // Se agregan aqui para que el fake pueda servirselos, y con ellos el `passwordHash`
+    // de al lado queda como cebo: si el metodo pidiera el usuario entero, se lo llevaria.
+    estado: "activo",
+    rol: { id: "rol-apikey", value: "apiKey" },
+  },
 };
 
 type Select = Record<string, unknown>;
@@ -73,6 +82,7 @@ function makePrisma() {
 
   const apiKey = {
     findMany: vi.fn(async (args: unknown) => [capturar(args)]),
+    findUnique: vi.fn(async (args: unknown) => capturar(args)), // [88] findByKeyHash
     create: vi.fn(async (args: unknown) => capturar(args)),
     count: vi.fn(async () => 1),
   };
@@ -109,6 +119,10 @@ const INVOCACIONES: Record<string, (r: ApiKeyRepository) => Promise<unknown>> = 
   createConUsuario: (r) => r.createConUsuario(DATA),
   list: (r) => r.list({ skip: 0, take: 25 }),
   count: (r) => r.count(),
+  // [88] Lectura por hash. Es la operacion que MAS cerca pasa del secreto —recibe el
+  // `key_hash` como argumento y lee la fila que lo contiene— asi que es justamente la que
+  // tiene que demostrar aqui que no devuelve ni el hash ni el secreto en claro.
+  findByKeyHash: (r) => r.findByKeyHash(KEY_HASH),
 };
 
 function metodosDelRepositorio(): string[] {

@@ -152,6 +152,49 @@ describe("ApiKeyRepository.createConUsuario — la key (R16/R17/R19/R21)", () =>
   });
 });
 
+describe("ApiKeyRepository.findByKeyHash — lookup por hash sin filtrar el secreto (feature 88/R3/R6)", () => {
+  function makePrismaFind(row: unknown) {
+    const findUnique = vi.fn(async (_args: unknown) => row);
+    const prisma = { apiKey: { findUnique } };
+    return { prisma, findUnique };
+  }
+
+  it("R3: busca por key_hash (UNIQUE) y su select NUNCA proyecta keyHash ni el secreto", async () => {
+    const { prisma, findUnique } = makePrismaFind({
+      id: "key-1",
+      usuarioId: "u-dedicado",
+      usuario: { estado: "activo", rol: { value: "apiKey" } },
+    });
+    const out = await repoDe(prisma).findByKeyHash("a".repeat(64));
+
+    // Lookup por el indice UNIQUE key_hash (nunca por el secreto en claro).
+    const args = findUnique.mock.calls[0][0] as { where: Record<string, unknown>; select: Record<string, unknown> };
+    expect(args.where).toEqual({ keyHash: "a".repeat(64) });
+    // El select NO incluye keyHash ni ningun secreto; solo lo minimo para autorizar.
+    expect(args.select).not.toHaveProperty("keyHash");
+    expect(Object.keys(args.select).sort()).toEqual(["id", "usuario", "usuarioId"].sort());
+    // La proyeccion devuelta tampoco expone keyHash.
+    expect(out).toEqual({ apiKeyId: "key-1", usuarioId: "u-dedicado", estado: "activo", rol: "apiKey" });
+    expect(out).not.toHaveProperty("keyHash");
+  });
+
+  it("R4: devuelve null cuando ninguna fila coincide con el hash", async () => {
+    const { prisma } = makePrismaFind(null);
+    const out = await repoDe(prisma).findByKeyHash("b".repeat(64));
+    expect(out).toBeNull();
+  });
+
+  it("proyecta el estado del usuario dedicado (insumo de la palanca de revocacion, R5)", async () => {
+    const { prisma } = makePrismaFind({
+      id: "key-9",
+      usuarioId: "u-9",
+      usuario: { estado: "bloqueado", rol: { value: "apiKey" } },
+    });
+    const out = await repoDe(prisma).findByKeyHash("c".repeat(64));
+    expect(out).toMatchObject({ estado: "bloqueado" });
+  });
+});
+
 describe("ApiKeyRepository.createConUsuario — atomicidad (R13)", () => {
   it("R13: ambos INSERT ocurren DENTRO de la misma $transaction", async () => {
     const { prisma, usuarioCreate, apiKeyCreate } = makePrisma();

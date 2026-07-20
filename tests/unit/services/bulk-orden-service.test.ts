@@ -35,6 +35,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     ]),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1"])),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
+    // Feature 88: persistencia con guia inmediata (carga por API). Por defecto vacio;
+    // los tests de cargarViaApi lo sobreescriben para devolver las guias asignadas.
+    createManyOrdenesConGuia: vi.fn().mockResolvedValue([]),
     // Feature 16: metodos de resumen/asignacion, no ejercitados por la carga
     // masiva (feature 15) pero exigidos por la interfaz IOrdenRepository.
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados por la
@@ -564,5 +567,23 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
     await service.cargarMasiva([row()], TIENDA, { dryRun: false });
 
     expect(repo.createManyOrdenes).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Feature 88/R14 — la vía sesión (cargarMasiva) NO cambia de forma con la nueva vía API:
+// mismo default de estado, sin asignación inmediata de num_guia (usa createManyOrdenes, NO
+// createManyOrdenesConGuia), y sigue exigiendo adminTienda.
+describe("BulkOrdenService.cargarMasiva — no-regresión frente a la vía API (feature 88/R14)", () => {
+  it("persiste vía createManyOrdenes (sin guía inmediata) y NUNCA vía createManyOrdenesConGuia", async () => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo);
+
+    await service.cargarMasiva([row()], TIENDA);
+
+    expect(repo.createManyOrdenes).toHaveBeenCalledTimes(1);
+    expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
+    // Estado inicial de la vía sesión intacto (en_preparacion), NO en_ruta_bodega_principal.
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
+    expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_ruta_bodega_principal");
   });
 });

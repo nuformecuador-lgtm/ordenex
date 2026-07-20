@@ -33,9 +33,13 @@ const schemaPrisma = fs.readFileSync(
 );
 
 describe("Feature 67 · SEED del enum — `deshacer_gestion` es el 12.º valor (F1.4-b)", () => {
-  it("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED incluye deshacer_gestion y cierra en 12", () => {
+  it("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED incluye deshacer_gestion como su 12.º valor", () => {
+    // El invariante de la feature 67 es POSICIONAL (deshacer_gestion es el 12.º valor,
+    // indice 11), NO el total del enum: features posteriores lo AMPLIAN aditivamente
+    // (feature 88 añadio `carga_api` como 13.º). Se afirma la posicion, no un conteo que
+    // cualquier añadido ajeno rompe — asi este guard no ata al 67 al tamaño futuro del enum.
     expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toContain("deshacer_gestion");
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(12);
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.indexOf("deshacer_gestion")).toBe(11);
   });
 
   it("ORIGEN_TIPOS_CON_GESTION = las 2 familias que enlazan una gestion (design §4.2)", () => {
@@ -99,9 +103,13 @@ describe("Feature 67 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(valores).toHaveLength(11);
     expect(valores).not.toContain("deshacer_gestion");
-    // Los 11 originales = el SEED actual menos el valor de esta feature.
+    // Los 11 originales = el SEED actual menos los valores AÑADIDOS EN O DESPUES de la
+    // feature 67. El down.sql del 67 recrea el enum a su estado PRE-67 (fijo, historico);
+    // por eso se descuenta tanto `deshacer_gestion` (67) como `carga_api` (88, apendido
+    // despues). Sin este descuento, el SEED crecido divergiria del enum recreado por el 67.
+    const AÑADIDOS_EN_O_DESPUES_DEL_67 = new Set(["deshacer_gestion", "carga_api"]);
     expect(new Set(valores)).toEqual(
-      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => v !== "deshacer_gestion")),
+      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_67.has(v))),
     );
   });
 
