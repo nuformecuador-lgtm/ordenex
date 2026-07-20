@@ -234,7 +234,7 @@ export function OrdenesCargaResumen({ numRemisiones, onDone }: OrdenesCargaResum
           onClick={handleConfirmar}
           disabled={submitting || filasState.status !== "ok"}
         >
-          {submitting ? "Asignando…" : "Confirmar asignación"}
+          {submitting ? "Asignando…" : "Sugerir asignación"}
         </Button>
       </div>
     </div>
