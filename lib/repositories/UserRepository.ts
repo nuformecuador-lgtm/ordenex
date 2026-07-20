@@ -113,13 +113,23 @@ export class UserRepository implements IUserRepository {
     });
   }
 
-  /** Feature 16/R1/R2/R3: solo mensajeros activos, proyectados a id/nombre. */
+  /**
+   * Feature 16/R1/R2/R3: solo mensajeros activos, proyectados a id/nombre (sin
+   * PII) mas su zona (feature 24/R6, nullable) para que el select del resumen de
+   * carga masiva pueda filtrar por la zona de la orden.
+   */
   async listMensajeros(): Promise<MensajeroDTO[]> {
-    return this.prisma.usuario.findMany({
+    const rows = await this.prisma.usuario.findMany({
       where: { rol: { value: "mensajero" }, estado: "activo" },
-      select: { id: true, nombre: true },
+      select: { id: true, nombre: true, zonaId: true, zona: { select: { nombre: true } } },
       orderBy: { nombre: "asc" },
     });
+    return rows.map((row) => ({
+      id: row.id,
+      nombre: row.nombre,
+      zonaId: row.zonaId,
+      zonaNombre: row.zona?.nombre ?? null,
+    }));
   }
 
   /** Feature 25/R13/R14/R15: listado paginado con `rolValue`, sin hash. */

@@ -14,7 +14,10 @@ import {
   rechazarCierre,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
-import type { CierreGrupos } from "@/lib/interfaces/services/ICierreDiaService";
+import type {
+  CierreGrupos,
+  TotalesIngresoOrdenex,
+} from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo } from "@/lib/types/cierre";
 import {
   money,
@@ -27,6 +30,17 @@ import {
   RESULTADO_VACIO,
   PagoMensajeroTotal,
   IngresoBodegaRechazosTotal,
+  TotalesIngresoPanel,
+  MontoDerivadoCard,
+  INGRESO_BRUTO_LABEL,
+  INGRESO_BRUTO_NOTA,
+  GANANCIA_DEBE_LABEL,
+  PAGO_TIENDA_LABEL,
+  PAGO_TIENDA_NOTA,
+  GANANCIA_NOTA,
+  esMontoNegativo,
+  DesgloseIngresoOrdenex,
+  desgloseAriaLabel,
   TotalItem,
   columnasPara,
 } from "./cierre-detalle-shared";
@@ -64,13 +78,19 @@ function destino(c: CierreAdminResumen): string {
 interface DetalleAbierto {
   cierre: CierreAdminResumen;
   grupos: CierreGrupos;
+  /** Ingreso de Ordenex del cierre por concepto (derivado del snapshot, money-safe). */
+  totalesIngreso: TotalesIngresoOrdenex;
+  /** Ingreso bruto menos el pago al mensajero, derivado server-side (puede ser negativo). */
+  ganancia: string;
+  /** Total general menos flete + IVA y comisión + IVA, derivado server-side (puede ser negativo). */
+  pagoTienda: string;
 }
 
 export function CierresAdminModule({
   pendientes,
   historico,
   sinZona,
-}: CierresAdminModuleProps) {
+}: Readonly<CierresAdminModuleProps>) {
   const router = useRouter();
   const toast = useToast();
 
@@ -100,7 +120,13 @@ export function CierresAdminModule({
   async function abrirDetalle(cierreId: string) {
     const result = await verCierreDetalle({ cierreId });
     if (result.status === "ok") {
-      setDetalle({ cierre: result.cierre, grupos: result.grupos });
+      setDetalle({
+        cierre: result.cierre,
+        grupos: result.grupos,
+        totalesIngreso: result.totalesIngreso,
+        ganancia: result.ganancia,
+        pagoTienda: result.pagoTienda,
+      });
       return;
     }
     if (result.status === "no_encontrada") {
@@ -242,7 +268,8 @@ export function CierresAdminModule({
             ? `${cierreAbierto.mensajeroNombre} · ${destino(cierreAbierto)}`
             : undefined
         }
-        className="max-w-4xl"
+        // Sin ancho propio: el default del Modal (75% de la pantalla) es el que corresponde
+        // a un detalle con tablas anchas.
         confirmLabel="Cerrar"
         hideCancel
         onConfirm={cerrarDetalle}
@@ -278,16 +305,48 @@ export function CierresAdminModule({
               </Card>
             </section>
 
-            {/* Feature 39/R17: total snapshot a pagar al mensajero, separado del dinero recibido. */}
+            {/* Primero los ingresos: qué facturó Ordenex. Después la resta completa, en
+                orden: bruto, pago al mensajero, ganancia. */}
+            <TotalesIngresoPanel totales={detalle.totalesIngreso} />
+
+            {/* Bruto y ganancia: el bruto es el mismo total del panel de arriba, repetido
+                acá a propósito para que la resta de la ganancia se lea completa. */}
+            <MontoDerivadoCard
+              value={detalle.totalesIngreso.total}
+              label={INGRESO_BRUTO_LABEL}
+              nota={INGRESO_BRUTO_NOTA}
+            />
+            {/* Feature 39/R17: total snapshot a pagar al mensajero, separado del dinero recibido.
+                Va encima de la ganancia: es el sustraendo, así que la resta se lee de arriba
+                hacia abajo (bruto − pago = ganancia). */}
             <PagoMensajeroTotal
               value={detalle.cierre.totalPagoMensajero}
               ariaLabel="Pago al mensajero del cierre"
             />
+            {/* La ganancia solo se muestra cuando es NEGATIVA: ahí Ordenex pagó al
+                mensajero más de lo que facturó, así que es una DEUDA ("Debe") y el
+                monto va en rojo. Si es ≥ 0 no se muestra card de ganancia. */}
+            {esMontoNegativo(detalle.ganancia) ? (
+              <MontoDerivadoCard
+                value={detalle.ganancia}
+                label={GANANCIA_DEBE_LABEL}
+                nota={GANANCIA_NOTA}
+                tone="danger"
+              />
+            ) : null}
 
             {/* Feature 56/R16: total snapshot del ingreso de bodega por rechazos, separado. */}
             <IngresoBodegaRechazosTotal
               value={detalle.cierre.totalIngresoBodegaRechazos}
               ariaLabel="Ingreso de bodega por rechazos del cierre"
+            />
+
+            {/* Cierra el detalle: lo que se le paga a la tienda. Parte del total general
+                RECIBIDO, no del bruto facturado — por eso va aparte de la ganancia. */}
+            <MontoDerivadoCard
+              value={detalle.pagoTienda}
+              label={PAGO_TIENDA_LABEL}
+              nota={PAGO_TIENDA_NOTA}
             />
 
             {/* Motivo de rechazo si el cierre del histórico fue rechazado. */}
@@ -324,6 +383,11 @@ export function CierresAdminModule({
                       rowKey="gestionId"
                       ariaLabel={RESULTADO_LABEL[resultado]}
                       emptyMessage={RESULTADO_VACIO[resultado]}
+                      // Desglose por orden: de qué tarifa salió cada monto.
+                      renderExpanded={(g) =>
+                        g.ingresoOrdenex ? <DesgloseIngresoOrdenex g={g} /> : null
+                      }
+                      expandAriaLabel={desgloseAriaLabel}
                     />
                   </div>
                 </section>

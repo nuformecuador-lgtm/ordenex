@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
@@ -197,6 +198,15 @@ export function RecepcionSateliteModule({
     });
   }
 
+  function toggleTodos(ids: string[], checked: boolean) {
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (checked) ids.forEach((id) => next.add(id));
+      else ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  }
+
   // Snapshot de las órdenes seleccionadas (por id, filtrando las que sigan en la
   // lista actual) para pasarlas al modal de asignación.
   const ordenesSeleccionadas = useMemo(
@@ -213,6 +223,18 @@ export function RecepcionSateliteModule({
       {
         id: "seleccionar",
         value: "Seleccionar",
+        // Cabecera = checkbox "seleccionar todo" sobre las recibidas visibles.
+        renderHeader: () => {
+          const ids = recibidas.map((orden) => orden.id);
+          return (
+            <SelectAllCheckbox
+              selectableIds={ids}
+              selectedIds={seleccionados}
+              onToggleAll={(checked) => toggleTodos(ids, checked)}
+              ariaLabel="Seleccionar todas las recibidas"
+            />
+          );
+        },
         render: (orden: RecepcionSateliteDTO) => (
           <Checkbox
             checked={seleccionados.has(orden.id)}
@@ -225,7 +247,7 @@ export function RecepcionSateliteModule({
       },
       ...recibidasColumns(zonaNombre),
     ],
-    [seleccionados, zonaNombre],
+    [seleccionados, zonaNombre, recibidas],
   );
 
   function handleSuccess() {

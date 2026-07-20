@@ -16,7 +16,8 @@ export type IconKey =
   | "truck"
   | "qrCode"
   | "megaphone"
-  | "trophy";
+  | "trophy"
+  | "wallet";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -96,6 +97,21 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     href: "/ranking",
     iconKey: "trophy",
     roles: ["maestro", "mensajero"],
+  },
+  {
+    // Feature 42: caja principal de Ordenex (balance + libro de movimientos).
+    // Exclusiva del maestro. La defensa real es el `notFound` de la página
+    // `/wallet`, que resuelve el rol server-side; este item solo decide que se
+    // MUESTRA. Los subitems apuntan a las vistas por contraparte (43/44).
+    label: "Wallet",
+    href: "/wallet",
+    iconKey: "wallet",
+    roles: ["maestro"],
+    children: [
+      { label: "Caja principal", href: "/wallet" },
+      { label: "Tiendas", href: "/wallet/tiendas" },
+      { label: "Mensajeros", href: "/wallet/mensajeros" },
+    ],
   },
   {
     label: "Configuración",

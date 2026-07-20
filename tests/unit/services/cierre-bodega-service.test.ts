@@ -284,6 +284,114 @@ describe("CierreBodegaService — pago a mensajeros agregado (R18/R19)", () => {
   });
 });
 
+// --- Total neto + deuda de la central (el pago a mensajeros solo sale del EFECTIVO) ---
+
+/** Consolidable con `efectivo` (y `general`) a medida: el reparto solo mira el efectivo. */
+function conEfectivo(
+  efectivo: string,
+  overrides: Partial<CierreDiaConsolidableRow> = {},
+): CierreDiaConsolidableRow {
+  return consolidableRow({
+    totales: {
+      efectivo,
+      simpe: "0.00",
+      transferencia: "0.00",
+      general: efectivo,
+    },
+    ...overrides,
+  });
+}
+
+describe("CierreBodegaService — total neto y deuda de la central", () => {
+  it("el efectivo alcanza para todos -> no hay deuda y el neto descuenta todo el pago", async () => {
+    const repo = fakeRepo({
+      findCierresDiaConsolidables: vi.fn(async () => [
+        conEfectivo("5000.00", { cierreDiaId: "cd1", totalPagoMensajero: "1000.00" }),
+        conEfectivo("0.00", { cierreDiaId: "cd2", totalPagoMensajero: "2000.00" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarConsolidacion(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalesAgregados.efectivo).toBe("5000.00");
+    expect(r.totalPagoMensajeroAgregado).toBe("3000.00");
+    expect(r.totalCentralDebeAgregado).toBe("0.00");
+    expect(r.totalNetoAgregado).toBe("2000.00"); // 5000 general - 3000 pagados
+  });
+
+  it("efectivo insuficiente -> se paga completo a los que alcanzan y la central debe el resto", async () => {
+    // El caso del usuario: 5000 en efectivo, 6 mensajeros de 1500 c/u. Solo se le puede
+    // pagar a 3 (4500); el pago no puede ser parcial, así que los 500 sobrantes no se usan.
+    const repo = fakeRepo({
+      findCierresDiaConsolidables: vi.fn(async () =>
+        Array.from({ length: 6 }, (_, i) =>
+          conEfectivo(i === 0 ? "5000.00" : "0.00", {
+            cierreDiaId: `cd${i + 1}`,
+            mensajeroId: `m${i + 1}`,
+            totalPagoMensajero: "1500.00",
+          }),
+        ),
+      ),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarConsolidacion(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalPagoMensajeroAgregado).toBe("9000.00"); // se mantiene sin cambios
+    expect(r.totalCentralDebeAgregado).toBe("4500.00"); // los 3 que no se pudieron pagar
+    expect(r.totalNetoAgregado).toBe("500.00"); // 5000 general - 4500 pagados
+  });
+
+  it("con montos distintos se paga de menor a mayor (le paga a la mayor cantidad posible)", async () => {
+    // 5000 en efectivo y montos 4000/3000/2000/1000: de menor a mayor entran 1000+2000 =
+    // 3000; el de 3000 ya no cabe (3000+3000 > 5000) y el de 4000 tampoco.
+    const repo = fakeRepo({
+      findCierresDiaConsolidables: vi.fn(async () => [
+        conEfectivo("5000.00", { cierreDiaId: "cd1", totalPagoMensajero: "4000.00" }),
+        conEfectivo("0.00", { cierreDiaId: "cd2", totalPagoMensajero: "3000.00" }),
+        conEfectivo("0.00", { cierreDiaId: "cd3", totalPagoMensajero: "2000.00" }),
+        conEfectivo("0.00", { cierreDiaId: "cd4", totalPagoMensajero: "1000.00" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarConsolidacion(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalPagoMensajeroAgregado).toBe("10000.00");
+    expect(r.totalCentralDebeAgregado).toBe("7000.00"); // 3000 + 4000 sin pagar
+    expect(r.totalNetoAgregado).toBe("2000.00"); // 5000 general - 3000 pagados
+  });
+
+  it("el pago a mensajeros NO se paga con SIMPE ni transferencia: solo cuenta el efectivo", async () => {
+    const repo = fakeRepo({
+      findCierresDiaConsolidables: vi.fn(async () => [
+        consolidableRow({
+          totales: {
+            efectivo: "0.00",
+            simpe: "9000.00",
+            transferencia: "0.00",
+            general: "9000.00",
+          },
+          totalPagoMensajero: "1500.00",
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarConsolidacion(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // Hay 9000 recibidos, pero ninguno en efectivo: no se puede pagar nada en mano.
+    expect(r.totalCentralDebeAgregado).toBe("1500.00");
+    expect(r.totalNetoAgregado).toBe("9000.00"); // no se descuenta lo que no se pagó
+  });
+
+  it("sin zona -> neto y deuda en 0.00", async () => {
+    const { service } = newService({ zonaSatelite: null });
+    const r = await service.listarConsolidacion(ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalNetoAgregado).toBe("0.00");
+    expect(r.totalCentralDebeAgregado).toBe("0.00");
+    expect(typeof r.totalNetoAgregado).toBe("string"); // money-safe
+  });
+});
+
 // --- Feature 56: ingreso de bodega por rechazos agregado (R17/R18) ---
 
 describe("CierreBodegaService — ingreso de bodega por rechazos agregado (R17/R18)", () => {

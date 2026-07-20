@@ -70,15 +70,18 @@ describe("puedeVer", () => {
     expect(puedeVer(config, null)).toBe(false);
     expect(puedeVer(perfil, null)).toBe(false);
     expect(puedeVer(ordenes, null)).toBe(false);
+    expect(puedeVer(novedades, null)).toBe(false);
   });
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve Órdenes, Configuración, Cierres del día, QR y Perfil en orden real", () => {
+  it("maestro ve Órdenes, Wallet, Configuración, Cierres del día, QR y Perfil en orden real", () => {
     // PR #75: "QR" (roles: ROLES_SEED) se intercala antes de "Perfil".
+    // Feature 42: "Wallet" (caja principal, solo maestro) va antes de "Configuración".
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
       "Órdenes",
       "Ranking",
+      "Wallet",
       "Configuración",
       "Cierres del día",
       "QR",

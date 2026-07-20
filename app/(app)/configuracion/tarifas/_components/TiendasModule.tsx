@@ -116,14 +116,14 @@ export function TiendasModule() {
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-base font-semibold">Tiendas</h2>
+          <h2 className="text-base font-semibold">Asignar Tarifas</h2>
           <p className="max-w-prose text-sm text-muted-foreground">
             Tarifas por tienda (flete, fulfillment, comisiones e IVA).
           </p>
         </div>
         {view === "list" ? (
           <Button type="button" onClick={abrirCrear}>
-            Crear tienda
+            Crear Tarifa
           </Button>
         ) : null}
       </div>

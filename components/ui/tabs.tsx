@@ -48,13 +48,14 @@ function TabsTrigger({
       data-slot="tabs-trigger"
       className={cn(
         "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all outline-none select-none",
-        "focus-visible:ring-3 focus-visible:ring-ring/50",
+        "focus-visible:ring-3 focus-visible:ring-navy/50",
         "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
-        // Tabs = botones NARANJAS (--primary). Inactiva: naranja con borde/outline y
-        // fondo transparente (hover rellena suave). Activa: naranja SÓLIDO con texto
-        // de contraste + sombra, para distinguir la seleccionada.
-        "border border-primary bg-transparent text-primary hover:bg-primary/10",
-        "aria-selected:border-primary aria-selected:bg-primary aria-selected:text-white aria-selected:shadow-sm aria-selected:hover:bg-primary aria-selected:hover:text-white",
+        // Tabs = botones NAVY (--color-navy) con borde/outline y texto navy.
+        // Inactiva: fondo transparente; el hover rellena suave (bg-navy/10).
+        // Activa: MISMO fondo del hover (bg-navy/10, incluso al pasar el mouse),
+        // distinguida por peso y sombra en vez de un relleno sólido.
+        "border border-navy bg-transparent text-navy hover:bg-navy/10",
+        "aria-selected:bg-navy/10 aria-selected:font-semibold aria-selected:shadow-sm aria-selected:hover:bg-navy/10",
         className,
       )}
       {...props}

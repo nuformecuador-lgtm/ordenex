@@ -3,6 +3,7 @@ import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 import type {
   CierreGrupos,
   CierreTotales,
+  TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 
 // Feature 38 — contrato del servicio "Cierres del dia" del admin (maestro /
@@ -49,6 +50,14 @@ export type CierreDetalleAdminServiceResult =
       status: "ok";
       cierre: CierreAdminResumen;
       grupos: CierreGrupos; // por resultado (reuso 37)
+      // Totales por concepto del ingreso de Ordenex del cierre, derivados del snapshot.
+      totalesIngreso: TotalesIngresoOrdenex;
+      // DERIVADO: `totalesIngreso.total` - `cierre.totalPagoMensajero` (STRING money-safe).
+      // Lo que le queda a Ordenex del cierre. Puede ser NEGATIVO.
+      ganancia: string;
+      // DERIVADO: `cierre.totales.general` - `fleteConIva` - `comisionConIva` (STRING
+      // money-safe). Lo que se le paga a la tienda. Puede ser NEGATIVO.
+      pagoTienda: string;
     }
   | { status: "forbidden" } // rol invalido (R1)
   | { status: "no_encontrada" }; // id inexistente o de otra bodega/zona (R13)

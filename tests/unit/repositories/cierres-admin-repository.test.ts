@@ -150,6 +150,20 @@ function detalleRow(overrides: Record<string, unknown> = {}) {
     provinciaNombre: "Cartago",
     cantonNombre: "Central",
     distritoNombre: "Oriental",
+    // Entradas de la fórmula del ingreso + tarifa congelada (feature 69/R6/R8). El default
+    // es SIN tarifa (`tarifaId: null`): es el gap real de la R9, y así los tests que no
+    // miran el ingreso no dependen de una tarifa inventada.
+    montoCobrar: null,
+    cobraComision: false,
+    esCentral: false,
+    tarifaId: null,
+    tarifaValorFlete: null,
+    tarifaValorFleteGam: null,
+    tarifaValorFleteDevuelto: null,
+    tarifaValorFleteDevueltoGam: null,
+    tarifaComisionCod: null,
+    tarifaIvaFlete: null,
+    tarifaIvaComisionCod: null,
     ...overrides,
   };
 }
@@ -249,6 +263,111 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
       evidenciaStoragePath: "o1/e.jpg",
       pagoMensajero: "5.00",
       ingresoBodegaRechazo: "0.00",
+    });
+  });
+
+  it("deriva el desglose del ingreso de Ordenex de la TARIFA CONGELADA, con la fórmula de las wallets", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
+    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow({ resultado: "entregada" })]);
+    prisma.cierreDetail.findMany.mockResolvedValue([
+      detalleRow({
+        montoCobrar: new Prisma.Decimal("25000.00"),
+        cobraComision: true,
+        esCentral: true, // zona GAM -> se aplica la columna GAM, no la base
+        tarifaId: "tar_88",
+        tarifaValorFlete: new Prisma.Decimal("2000.00"),
+        tarifaValorFleteGam: new Prisma.Decimal("2500.00"),
+        tarifaValorFleteDevuelto: new Prisma.Decimal("1000.00"),
+        tarifaValorFleteDevueltoGam: new Prisma.Decimal("1200.00"),
+        tarifaComisionCod: new Prisma.Decimal("3.00"),
+        tarifaIvaFlete: new Prisma.Decimal("13.00"),
+        tarifaIvaComisionCod: new Prisma.Decimal("13.00"),
+      }),
+    ]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    expect(r?.gestiones[0].ingresoOrdenex).toMatchObject({
+      montoCobrar: "25000.00",
+      cobraComision: true,
+      esCentral: true,
+      flete: "2500.00", // columna GAM (R21: la zona elige columna, no fórmula)
+      ivaFlete: "325.00", // 13% de 2500
+      comisionCod: "750.00", // 3% de 25000
+      ivaComisionCod: "97.50", // 13% de 750
+      // Una entrega no deriva conceptos de devolución: `null`, no "0.00".
+      fleteDevolucion: null,
+      ivaFleteDevolucion: null,
+      // Agrupados: cada concepto con su IVA. El de devolución no aplica -> null.
+      fleteConIva: "2825.00", // 2500 + 325
+      comisionConIva: "847.50", // 750 + 97.50
+      fleteDevolucionConIva: null,
+      total: "3672.50",
+    });
+    // La tarifa viaja COMPLETA, incluida la variante que no se aplicó (auditoría).
+    expect(r?.gestiones[0].ingresoOrdenex?.tarifa).toMatchObject({
+      tarifaId: "tar_88",
+      valorFlete: "2000.00",
+      valorFleteGam: "2500.00",
+      comisionCod: "3.00",
+    });
+  });
+
+  it("un rechazo deriva flete de devolución + su IVA, y NUNCA comisión (no hubo recaudo)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
+    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow({ resultado: "rechazada" })]);
+    prisma.cierreDetail.findMany.mockResolvedValue([
+      detalleRow({
+        montoCobrar: new Prisma.Decimal("25000.00"),
+        cobraComision: true, // aunque cobre comisión: sin entrega no hay comisión
+        esCentral: false,
+        tarifaId: "tar_88",
+        tarifaValorFlete: new Prisma.Decimal("2000.00"),
+        tarifaValorFleteGam: new Prisma.Decimal("2500.00"),
+        tarifaValorFleteDevuelto: new Prisma.Decimal("1000.00"),
+        tarifaValorFleteDevueltoGam: new Prisma.Decimal("1200.00"),
+        tarifaComisionCod: new Prisma.Decimal("3.00"),
+        tarifaIvaFlete: new Prisma.Decimal("13.00"),
+        tarifaIvaComisionCod: new Prisma.Decimal("13.00"),
+      }),
+    ]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    expect(r?.gestiones[0].ingresoOrdenex).toMatchObject({
+      flete: null,
+      comisionCod: null,
+      ivaComisionCod: null,
+      fleteDevolucion: "1000.00", // columna base (esCentral: false)
+      ivaFleteDevolucion: "130.00", // 13% de 1000
+      fleteConIva: null,
+      comisionConIva: null,
+      fleteDevolucionConIva: "1130.00", // 1000 + 130
+      total: "1130.00",
+    });
+  });
+
+  it("R9: sin tarifa congelada (tarifa_id NULL) no se deriva ingreso, y no lanza", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
+    prisma.gestionOrden.findMany.mockResolvedValue([gestionRow()]);
+    prisma.cierreDetail.findMany.mockResolvedValue([
+      detalleRow({ montoCobrar: new Prisma.Decimal("25000.00") }), // tarifaId: null por default
+    ]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    expect(r?.gestiones[0].ingresoOrdenex).toMatchObject({
+      tarifa: null,
+      flete: null,
+      comisionCod: null,
+      total: "0.00",
+      montoCobrar: "25000.00", // el COD congelado se sigue viendo
     });
   });
 

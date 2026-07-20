@@ -1,6 +1,6 @@
 "use client";
 
-import { isValidElement, type ReactNode } from "react";
+import { Fragment, isValidElement, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,12 @@ export interface Column<T> {
   value: string;
   /** Cómo renderizar la celda. Ver descripción del contrato arriba. */
   render?: ((row: T) => ReactNode) | keyof T | string;
+  /**
+   * Cabecera custom opcional. Si se define, sustituye al texto `value` dentro del
+   * `<th>` (p. ej. un checkbox "seleccionar todo"). `value` sigue siendo el nombre
+   * accesible/fallback de la columna, así que déjalo siempre poblado.
+   */
+  renderHeader?: () => ReactNode;
 }
 
 export interface DataTableProps<T> {
@@ -39,6 +45,40 @@ export interface DataTableProps<T> {
   error?: string | null;
   /** Mensaje del estado vacío (R11). */
   emptyMessage?: string;
+  /**
+   * Contenido desplegable de una fila. Al pasarlo, la tabla antepone una columna con un
+   * botón de expandir por fila y el contenido aparece en una fila propia debajo. Devolver
+   * `null` para una fila concreta la deja sin desplegar (sin botón).
+   *
+   * La tabla NO decide qué va adentro: sigue siendo data-driven y sin dominio (R1).
+   */
+  renderExpanded?: (row: T) => ReactNode;
+  /**
+   * Nombre accesible del botón de expandir de cada fila. Debe identificar SU fila, no ser
+   * un genérico "Ver detalle" repetido N veces.
+   */
+  expandAriaLabel?: (row: T) => string;
+}
+
+/** Chevron del botón de expandir; rota al abrir. Decorativo (el botón ya tiene nombre). */
+function ExpandIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      focusable="false"
+      className={cn("size-4 transition-transform", open && "rotate-90")}
+    >
+      <path
+        d="M6 4l4 4-4 4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 /**
@@ -102,9 +142,25 @@ export function DataTable<T>({
   isLoading = false,
   error = null,
   emptyMessage = "No hay registros",
+  renderExpanded,
+  expandAriaLabel,
 }: DataTableProps<T>) {
-  // Precedencia de estados: error > carga > vacío > datos.
-  const colSpan = columns.length;
+  // Filas desplegadas, por key de fila. Vive acá (y no en el consumidor) porque es estado
+  // de PRESENTACIÓN de la tabla; el consumidor solo dice QUÉ se despliega.
+  const [expandidas, setExpandidas] = useState<ReadonlySet<string>>(new Set());
+  const expandible = renderExpanded !== undefined;
+
+  function toggle(key: string) {
+    setExpandidas((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }
+
+  // Precedencia de estados: error > carga > vacío > datos. La columna del botón (si la hay)
+  // también ocupa ancho: sin sumarla, los estados vacío/carga no cubren la tabla entera.
+  const colSpan = columns.length + (expandible ? 1 : 0);
   let body: ReactNode;
 
   if (error) {
@@ -139,15 +195,45 @@ export function DataTable<T>({
       </tr>
     );
   } else {
-    body = data.map((row, index) => (
-      <tr key={resolveRowKey(rowKey, row, index)} className="border-b">
-        {columns.map((column) => (
-          <td key={column.id} className="px-3 py-2 align-middle">
-            {resolveCell(column, row)}
-          </td>
-        ))}
-      </tr>
-    ));
+    body = data.map((row, index) => {
+      const key = resolveRowKey(rowKey, row, index);
+      const expandido = renderExpanded?.(row) ?? null;
+      const abierta = expandidas.has(key);
+      return (
+        <Fragment key={key}>
+          <tr className="border-b">
+            {expandible ? (
+              <td className="px-3 py-2 align-middle">
+                {expandido === null ? null : (
+                  <button
+                    type="button"
+                    onClick={() => toggle(key)}
+                    aria-expanded={abierta}
+                    aria-controls={`${key}-expandido`}
+                    aria-label={expandAriaLabel?.(row)}
+                    className="inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <ExpandIcon open={abierta} />
+                  </button>
+                )}
+              </td>
+            ) : null}
+            {columns.map((column) => (
+              <td key={column.id} className="px-3 py-2 align-middle">
+                {resolveCell(column, row)}
+              </td>
+            ))}
+          </tr>
+          {expandido !== null && abierta ? (
+            <tr id={`${key}-expandido`} className="border-b bg-muted/30">
+              <td colSpan={colSpan} className="px-3 py-3">
+                {expandido}
+              </td>
+            </tr>
+          ) : null}
+        </Fragment>
+      );
+    });
   }
 
   return (
@@ -167,13 +253,20 @@ export function DataTable<T>({
         ) : null}
         <thead>
           <tr className="border-b">
+            {/* Cabecera de la columna del botón: sin texto visible, pero con nombre para
+                que la tabla no quede con una columna anónima para un lector de pantalla. */}
+            {expandible ? (
+              <th scope="col" className="px-3 py-2">
+                <span className="sr-only">Desglose</span>
+              </th>
+            ) : null}
             {columns.map((column) => (
               <th
                 key={column.id}
                 scope="col"
                 className="px-3 py-2 font-medium text-muted-foreground"
               >
-                {column.value}
+                {column.renderHeader ? column.renderHeader() : column.value}
               </th>
             ))}
           </tr>

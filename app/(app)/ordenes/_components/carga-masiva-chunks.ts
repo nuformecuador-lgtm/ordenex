@@ -47,7 +47,7 @@ export function dedupPorRemision(filas: FilaParseada[]): {
  * Aplica el mensajero sugerido del lote a una fila que no traiga uno propio. El
  * backend valida el id; el select del formulario solo ofrece ids válidos.
  */
-function aplicarMensajero(row: RawRow, mensajeroSugeridoId: string): RawRow {
+function aplicarMensajero(row: RawRow, mensajeroSugeridoId?: string): RawRow {
   if (!mensajeroSugeridoId) return row;
   if ((row.mensajero_sugerido_id ?? "").trim() !== "") return row;
   return { ...row, mensajero_sugerido_id: mensajeroSugeridoId };
@@ -55,7 +55,7 @@ function aplicarMensajero(row: RawRow, mensajeroSugeridoId: string): RawRow {
 
 export interface ProcesarChunksOpts {
   dryRun: boolean;
-  mensajeroSugeridoId: string;
+  mensajeroSugeridoId?: string;
   chunkSize: number;
   endpoint?: string;
   onProgress?: (procesadas: number, total: number) => void;
