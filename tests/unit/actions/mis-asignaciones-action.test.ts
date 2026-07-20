@@ -125,10 +125,28 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     expect(service.gestionar).not.toHaveBeenCalled();
   });
 
-  it("R22: entrega con monto <= 0 -> validation_error", async () => {
+  // El schema paso de `.positive()` a `.nonnegative()` (lib/types/gestion-orden.ts):
+  // una entrega SIN cobro recauda 0 y es valida, asi que 0 ya NO se rechaza aqui.
+  // Lo que la action sigue rechazando es un monto NEGATIVO.
+  //
+  // Que el monto CUADRE con el `montoCobrar` de la orden es R22 (h) y lo valida
+  // el SERVICIO, no el schema (MisAsignacionesService: comparacion en Decimal).
+  // Sus casos viven en tests/unit/services/mis-asignaciones-service.test.ts
+  // ("monto != montoCobrar -> validation_error", "montoCobrar 0 + monto 0 -> ok",
+  // "montoCobrar null + monto 100 -> validation_error"): R22 sigue trazado.
+  it("R22: entrega con monto negativo -> validation_error, sin service", async () => {
+    const service = buildService();
+    const r = await gestionar(fdEntrega({ montoRecibido: "-1" }), { service, getActor: actorMensajero });
+    expect(r.status).toBe("validation_error");
+    expect(service.gestionar).not.toHaveBeenCalled();
+  });
+
+  it("R22: entrega con monto 0 (sin cobro) -> delega en el service", async () => {
     const service = buildService();
     const r = await gestionar(fdEntrega({ montoRecibido: "0" }), { service, getActor: actorMensajero });
-    expect(r.status).toBe("validation_error");
+    expect(r.status).toBe("ok");
+    const [input] = (service.gestionar as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(input.montoRecibido).toBe(0);
   });
 
   it("R25: reprogramar con fecha pasada -> validation_error", async () => {

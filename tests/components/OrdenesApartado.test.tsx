@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
 import { OrdenesApartado } from "@/app/(app)/ordenes/_components/OrdenesApartado";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import { obtenerHistorialOrden } from "@/lib/actions/orden-historial";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
@@ -141,8 +142,11 @@ describe("OrdenesApartado — acción 'Ver historial' por fila (feature 49, R27/
     );
 
     const dialog = await screen.findByRole("dialog");
-    // R30: etiqueta legible del estado destino, no el value crudo.
-    expect(await within(dialog).findByText("En bodega")).toBeInTheDocument();
+    // R30: etiqueta legible del estado destino, no el value crudo (se aserta contra
+    // el mapa de presentación, blindado aparte en `EstatusLabel.test.ts`).
+    expect(
+      await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega),
+    ).toBeInTheDocument();
     expect(within(dialog).queryByText("en_bodega")).toBeNull();
     // R28: la lectura pasó por la Server Action (import perezoso interceptado),
     // con la ordenId de la fila.

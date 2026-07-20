@@ -106,6 +106,10 @@ describe("schedule del cron en vercel.json (dia 1, 00:00 CR = 06:00 UTC)", () =>
     expect(cron?.schedule).toBe("0 6 1 * *"); // dia 1 del mes, 00:00 CR
     // no rompe los crons existentes (41/46).
     expect(cfg.crons.find((c) => c.path === "/api/cron/corte-diario")).toBeDefined();
-    expect(cfg.crons.find((c) => c.path === "/api/cron/liberar-reprogramadas")).toBeDefined();
+    // `liberar-reprogramadas` YA NO se agenda por su cuenta: la feature 90 lo
+    // migro a la cola de jobs, que drena `/api/cron/procesar-jobs` cada minuto.
+    // Se asevera ese cron en su lugar para que la guarda siga cubriendo "no
+    // rompas los crons existentes" en vez de fijar un schedule ya eliminado.
+    expect(cfg.crons.find((c) => c.path === "/api/cron/procesar-jobs")).toBeDefined();
   });
 });

@@ -87,7 +87,7 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     // guarda `num_guia IS NULL` (idempotencia); el id viaja como parametro, no interpolado.
     expect(prisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
     const [sql, idParam] = prisma.$executeRawUnsafe.mock.calls[0];
-    expect(sql).toContain("nextval('orden_num_guia_seq')");
+    expect(sql).toContain("siguiente_num_guia()");
     expect(sql).toContain("num_guia IS NULL");
     expect(idParam).toBe("o1");
   });
