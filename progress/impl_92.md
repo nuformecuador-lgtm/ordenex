@@ -179,6 +179,13 @@ pnpm vitest run <los 18 archivos de la 92>
 `OrdenesRevisionMaestro`, `RecepcionSateliteModule`, `generar-gastos-fijos-route`,
 `mis-asignaciones-action`, `ordenes-tabs`.
 
+> **MATIZADO DESPUES DEL REVIEW — ver ADDENDUM §A2.** Esta lista es la de UNA corrida. El
+> conjunto **fluctua entre corridas del mismo codigo** (12/12/18/12/15 archivos en cinco
+> mediciones): casi todos son **flakes de carga** de `testing-library`, no fallos deterministas.
+> El unico rojo VIVO y determinista es `generar-gastos-fijos-route.test.ts:109`, deuda de la
+> **feature 90**. La comparacion valida no es "N rojos" sino la de **conjuntos por nombre de
+> test**, que da diferencia **vacia** en ambos sentidos (36 = 36).
+
 ### Round-trip REAL de migraciones — **SÍ se ejecutó**
 
 Contra un **Postgres 16 desechable en docker** (`ordenex-f92-pg`, puerto 55492), **nunca** contra
@@ -242,7 +249,11 @@ producción. Ningún secreto vive en el repo.
    y ~107, dentro de `listarMisAsignaciones`). **No son de esta feature y no se tocaron.**
    Requieren decisión del leader: son logging de depuración que imprime el `actor` completo en
    producción.
-2. **El baseline del briefing estaba caduco**: 12 archivos rojos, no 2 (§6).
+2. **El baseline del briefing estaba caduco**: no eran 2 rojos preexistentes (§6).
+   **Corregido tras el review (§A2):** de los 2 que citaba el briefing, `CierreDiaPage.test.tsx`
+   **PASA** —se re-midio aislado y esta verde, lo arrastraba desde la feature 81—, y el otro,
+   `generar-gastos-fijos-route.test.ts:109`, si es un rojo real y es deuda de la **feature 90**
+   (commit `57c53ea` cambio el cron de `vercel.json` y no actualizo su test).
 3. **Purga de `jobs`** (heredado de la 91, Q8): con un tercer tipo por evento el crecimiento se
    acelera. Sigue sin feature.
 4. **Coordenadas de bodega/zona** como origen real cuando no hay GPS (Q4): hoy se usa el centroide.
@@ -250,8 +261,197 @@ producción. Ningún secreto vive en el repo.
    habilitar en producción; la reversión a Routes API queda contenida en `lib/clients/`,
    `lib/config/` y `lib/auth/google-sa-token.ts`.
 
+---
+
+# ADDENDUM — cierre del review (2026-07-20)
+
+El `reviewer` **RECHAZÓ** por **1 bloqueante exclusivamente de bookkeeping (B1)** y 4 menores.
+Su veredicto sobre el código fue: *"No hay ningún defecto de código"*. Detalle en
+`progress/review_92.md` (382 líneas). Este addendum cierra B1 y responde a los 4 menores.
+
+## A1 — B1 CERRADO: `tasks.md` marcado (23/23, ninguna queda en `[ ]`)
+
+| Estado | Nº | Tasks |
+| --- | --- | --- |
+| `[x]` entregadas en esta rama | **20** | T0–T16, T20, T21, T22 |
+| `[~]` **DIFERIDAS a la feature 93** | **3** | T17, T18, T19 |
+| `[ ]` sin marcar | **0** | — |
+
+**T17/T18/T19 NO se marcaron `[x]`**, como pidió el leader: son frontend puro (hook de
+geolocalización, módulo del mensajero, toasts del gate) y cubren R25-cliente, R29, R30, R31 y
+R32. Cada una lleva ahora una nota `DIFERIDA A LA FEATURE 93 — no está hecha y no está
+olvidada`, más un puntero a la mitad servidor que sí está entregada y que las alimenta. Se añadió
+además una leyenda de checkboxes y una tabla de estado en la cabecera del fichero, para que nadie
+lea `[~]` como "a medias".
+
+**T22 se marcó `[x]` con una excepción MEDIDA**, no en silencio: su criterio literal
+("`pnpm test` sin errores") **hoy no se cumple**, y la nota lo dice explícitamente. Ver A2.
+
+## A2 — Estado real de los rojos (re-medido por mí, no citado)
+
+### El rojo VIVO y determinista es UNO, y es deuda de la feature 90
+
+`tests/integration/actions/generar-gastos-fijos-route.test.ts:109` afirma que `vercel.json`
+define `/api/cron/liberar-reprogramadas`. Verificado con mi propia ejecución:
+
+```
+AssertionError: expected undefined to be defined
+ -> tests/integration/actions/generar-gastos-fijos-route.test.ts:109:81
+```
+
+Y verificada la atribución con `git log --oneline -- vercel.json`: el commit **`57c53ea`
+"feat(90): infraestructura de cola de jobs + migra liberar-reprogramadas a job recurrente"**
+sustituyó esa ruta por `/api/cron/procesar-jobs`. El `vercel.json` actual tiene tres crons y
+ninguno es `liberar-reprogramadas`. **La feature 90 cambió la config y no actualizó su test.**
+Arreglarlo aquí sería arrastrar deuda ajena a esta rama.
+
+### `CierreDiaPage.test.tsx` YA NO es un rojo preexistente: PASA
+
+Re-medido aislado por mí: el archivo entero está **verde**. La bitácora original de esta feature
+—y el briefing— lo arrastraban desde la feature 81. **Queda corregido:** citarlo como rojo
+preexistente era incorrecto.
+
+### El resto son FLAKES DE CARGA, no fallos deterministas
+
+Todos son tests de componente (`testing-library` con `findBy*`/`waitFor`, sensibles a timing).
+El conjunto **cambia entre corridas de la misma suite sobre el mismo código**:
+
+| Corrida | Archivos rojos | Medida por |
+| --- | --- | --- |
+| 1 | 12 | reviewer |
+| 2 | 12 | reviewer |
+| 3 | 18 | reviewer |
+| 4 | 12 | implementer (pre-review) |
+| 5 | **15** | implementer (post-review, tras `pnpm install --force`) |
+
+En mi corrida nº 5 aparecieron `HomePage.test.tsx`, `OrdenesModuleReuse.test.tsx` y
+`no-embalaje.test.ts`, que **no** estaban en ninguna corrida anterior — y que tampoco toca esta
+feature. Eso confirma la caracterización: **"N rojos antes vs N después" es una métrica inútil**
+en este repo.
+
+La comparación válida es la de **conjuntos por nombre completo de test**, que es la que corrió el
+reviewer con el reporter JSON en HEAD y en un worktree limpio de `5244cf3`:
+
+```
+fallos HEAD: 36 | fallos BASE: 36
+=== SOLO EN HEAD (regresiones candidatas) ===   (vacio)
+=== SOLO EN BASE ===                            (vacio)
+```
+
+**Cero regresiones, demostradas test a test, en los dos sentidos.**
+
+### Cifras re-medidas tras `pnpm install --force`
+
+Durante este cierre el árbol de `node_modules` se rompió (`node_modules/.bin` vacío y luego
+`Cannot find module @asamuzakjp/css-color` bajo `jsdom`). Es el fallo conocido de pnpm en este
+repo; se reparó con `pnpm install --force` + `pnpm db:generate`, **no con npm**. Cifras después:
+
+```
+pnpm typecheck                 -> 0 errores
+pnpm lint                      -> 143 problems (0 errors, 143 warnings)  [= baseline]
+tests de la feature (18 files) -> 219 passed (219)
+```
+
+## A3 — Respuesta a los 4 menores
+
+| # | Decisión | Motivo |
+| --- | --- | --- |
+| **m1** `./init.sh` / `pnpm test` no verdes | **CERRADO como documentación** | Deuda ajena; documentado en A2 y en la nota de T22 con la causa exacta y su commit culpable. No se arregla aquí. |
+| **m2** `jobRepo` con default | **CERRADO — se deja como está, documentado** | Ver A4. |
+| **m3** `console.log("xyz AAA*")` | **NO APLICADO — escalado, con argumento** | Ver A5. |
+| **m4** entrada en `progress/history.md` | **NO ES MÍO** | Es paso del leader posterior al review; se anota para que no se pierda. |
+
+## A4 — m2 CERRADO: por qué `GestionOrdenRepository.jobRepo` se queda con default
+
+**Coincido con el reviewer y lo dejo como está.** Se documenta aquí para que un futuro lector no
+lo "arregle" convirtiéndolo en requerido sin entender el matiz:
+
+```ts
+private readonly jobRepo: IJobRepository = new JobRepository(prisma),
+```
+
+El default **no es `undefined` ni un no-op: es una implementación REAL** enlazada al mismo
+cliente Prisma que el repositorio ya recibió. Por tanto **el modo de fallo que motivó hacer
+requeridas las otras deps nuevas no puede ocurrir aquí**: una fábrica que omita el argumento
+**sigue encolando de verdad**, no desactiva el outbox en silencio.
+
+El contraste con las otras tres deps es deliberado y la asimetría tiene una razón:
+
+- `GuiaAsignacionService.asignabilidad`, `AsignacionSateliteService.asignabilidad` y
+  `MisAsignacionesService.rutaRepo` **no tienen default posible**, porque un gate ausente
+  equivale a *gate desactivado* — un fallo abierto y silencioso. Por eso son **requeridas**: una
+  fábrica que las olvide **no compila**.
+- `GestionOrdenRepository.jobRepo` **sí** tiene un default correcto y seguro, y además sigue el
+  patrón exacto que la feature 91 ya estableció en `OrdenRepository` (`:421`). Hacerlo requerido
+  rompería esa simetría sin ganar ninguna garantía.
+
+**Regla para el futuro: default sí, pero SOLO si el default es la implementación real.** Un
+default a `undefined`, a un no-op o a un doble sería inaceptable aquí.
+
+## A5 — m3 NO APLICADO: por qué no borro los `console.log` en este commit
+
+Los dos `console.log("xyz AAA*", actor, ...)` de `lib/actions/mis-asignaciones.ts` **son un
+problema real**: imprimen el objeto `actor` completo en producción, es decir PII, y son
+depuración accidental. **No discuto el diagnóstico del reviewer.** Discuto el momento.
+
+**No los toco en este commit, por tres razones concretas:**
+
+1. **El propio `tasks.md` lo prohíbe explícitamente.** T22, literal: *"`lib/actions/
+   mis-asignaciones.ts` **ya trae** dos `console.log("xyz AAA*")` en `dev` — reportar al leader,
+   **no** arrastrarlos a esta rama sin decisión, no son de esta feature"*. La instrucción fue
+   **reportar**, y está reportada desde el primer commit (§9.1). La decisión no ha llegado.
+2. **El propio reviewer cerró su veredicto diciendo que esta corrección debe ser
+   documentación-only**: *"Es un cambio de documentación. Hecho eso, esta feature queda **OK** sin
+   necesidad de re-verificar código."* Si ahora modifico código de producción, **invalido esa
+   conclusión** y obligo a re-verificar. m3 contradice el cierre del propio review.
+3. **Verificado con `git show 5244cf3`: ya estaban en `dev`.** No los introduje ni los arrastré.
+   Borrarlos es una corrección de higiene de OTRA feature, y merece su propio commit atribuible —
+   no ir escondida dentro de un commit de bookkeeping de la 92.
+
+**Recomendación al leader:** hacerlo ya, pero como commit propio y trivial
+(`fix: quita console.log de depuracion con PII en mis-asignaciones`), borrando las dos líneas.
+Es una eliminación de 2 líneas sin riesgo de comportamiento. **Si me lo autorizas
+explícitamente, lo hago en 30 segundos** — solo no quiero tomar por mi cuenta una decisión que
+dos fuentes independientes (`tasks.md` y el cierre del review) piden dejar fuera de esta rama.
+
+## A6 — Ruido de diff: revisar el PR con `--ignore-all-space`
+
+> ### INSTRUCCIÓN PARA QUIEN REVISE EL PR
+>
+> El diff crudo del commit `172a835` es **76 archivos, +11722 / −4293**. **La sustancia real es
+> +7457 / −28.** La diferencia es **normalización CRLF → LF entremezclada** en ~20 archivos de
+> test que se reescribieron.
+>
+> **Revisad el PR con `--ignore-all-space`** (o `?w=1` en la URL de GitHub):
+>
+> ```
+> git diff --ignore-all-space 5244cf3..HEAD
+> ```
+>
+> Sin eso, el revisor humano se ahoga en ruido de fin de línea y **puede pasar por alto un cambio
+> real**. El commit **no se rehizo** a propósito: reescribir el historial para arreglar finales de
+> línea es más arriesgado que anotarlo aquí.
+
+## A7 — Seguimientos abiertos al leader (actualizado)
+
+1. **Deuda de la feature 90:** `generar-gastos-fijos-route.test.ts:109` afirma un cron que la
+   propia 90 eliminó en `57c53ea`. **Rojo determinista y vivo.** Merece fix propio.
+2. **Suite flaky bajo carga:** 12/12/18/12/15 archivos rojos en cinco corridas del mismo código.
+   Hace inútil cualquier métrica de "N rojos" en futuros reviews. **Merece feature propia de
+   estabilización.**
+3. **`console.log` con PII** en `lib/actions/mis-asignaciones.ts` — ver A5, pendiente de tu
+   autorización.
+4. **Corrección de la bitácora:** `CierreDiaPage.test.tsx` **pasa**; dejó de ser rojo
+   preexistente. Conviene no volver a citarlo como tal en briefings futuros.
+5. **`progress/history.md`** — entrada pendiente (paso del leader).
+6. Siguen abiertos de la spec: purga de `jobs` (Q8), coordenadas de bodega/zona (Q4) y coste real
+   del SKU de `optimizeTours` (Q9).
+
 ## Veredicto
 
 Backend de la feature 92 completo y verificado: typecheck 0, lint 0 errores sin nuevos warnings,
-219 tests propios en verde, cero regresiones contra el baseline medido, y round-trip real de
-migraciones (UP → DOWN → RE-UP) ejecutado contra un Postgres desechable en docker.
+219 tests propios en verde, **cero regresiones demostradas test a test** (conjuntos idénticos,
+36 = 36, diferencia vacía en ambos sentidos), y round-trip real de migraciones
+(UP → DOWN → RE-UP) ejecutado contra un Postgres desechable en docker con 55P04 confirmado
+empíricamente. **B1 cerrado**: `tasks.md` queda 20 `[x]` + 3 `[~]` diferidas a la 93 + 0 sin
+marcar, con la excepción de T22 anotada y medida.

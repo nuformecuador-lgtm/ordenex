@@ -12,9 +12,26 @@ El bloque 5 (frontend) depende del 4.
 
 ---
 
+## Estado de la entrega (actualizado 2026-07-20, commit `172a835` + bookkeeping)
+
+La feature se **partió en backend + frontend**. Este `tasks.md` cubre las dos mitades, así que
+**no todas las tasks se cierran en esta rama**:
+
+| Estado | Tasks | Significado |
+| --- | --- | --- |
+| `[x]` **HECHAS** | T0–T16, T20, T21, T22 | 20 tasks entregadas en `feature/92-optimizacion-ruta-mensajero` |
+| `[~]` **DIFERIDAS a la feature 93** | T17, T18, T19 | 3 tasks de FRONTEND. **No están olvidadas ni hechas**: son el alcance de la 93 |
+| ⚠️ **con excepción anotada** | T22 | marcada `[x]` con una excepción **medida** por deuda ajena; ver su nota |
+
+Las 3 diferidas cubren R25 (captura GPS en el navegador), R29, R30, R31 y R32 — exactamente los
+requisitos que el briefing del backend excluyó. La bitácora `progress/impl_92.md` las lista con
+el mismo criterio.
+
+---
+
 ## Bloque 0 — Preparación
 
-### [ ] T0 · Worktree y baseline
+### [x] T0 · Worktree y baseline
 Crear worktree aislado desde `origin/dev`, `pnpm install --force` si el árbol de `node_modules` está
 roto, `pnpm db:generate` desde el schema limpio y **medir** typecheck + tests **antes** de tocar nada.
 **Depende de:** —
@@ -25,7 +42,7 @@ roto, `pnpm db:generate` desde el schema limpio y **medir** typecheck + tests **
 
 ## Bloque 1 — Datos (bloquea a todo lo demás)
 
-### [ ] T1 · Migración del enum `job_tipo`
+### [x] T1 · Migración del enum `job_tipo`
 `db/migrations/<ts>_job_tipo_optimizacion_ruta/` con
 `ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'optimizacion_ruta';` y **ninguna** sentencia que
 consuma el valor (55P04). `down.sql` documentando que Postgres no soporta quitar un valor de enum
@@ -35,7 +52,7 @@ criterio exacto, no inventar otro).
 **Hecho:** `pnpm db:migrate` aplica; el valor aparece en `pg_enum`; el enum del schema Prisma incluye
 `optimizacion_ruta`.
 
-### [ ] T2 · Migración de `ruta_optimizada` + `ruta_optimizada_parada`
+### [x] T2 · Migración de `ruta_optimizada` + `ruta_optimizada_parada`
 Tablas, enum `ruta_estado`, los tres índices (`mensajero_id` único, `(ruta_id, orden_id)` único,
 `(ruta_id, secuencia)` único, `orden_id`), FKs con `ON DELETE CASCADE`, `ENABLE ROW LEVEL SECURITY`
 sin policies en ambas. `down.sql` que revierta exactamente (design §1.1). Modelos en
@@ -48,7 +65,7 @@ sin policies en ambas. `down.sql` que revierta exactamente (design §1.1). Model
 
 ## Bloque 2 — Cola y gate de asignabilidad
 
-### [ ] T3 · `findByDedupeKeys` en la cola
+### [x] T3 · `findByDedupeKeys` en la cola
 Añadir el método a `lib/interfaces/repositories/IJobRepository.ts` y a
 `lib/repositories/JobRepository.ts` (`WHERE dedupe_key IN (...)`, `keys` vacío → `[]` sin consulta).
 Comentario de cabecera explicando por qué **no** es búsqueda por prefijo (design §0.2).
@@ -57,7 +74,7 @@ Comentario de cabecera explicando por qué **no** es búsqueda por prefijo (desi
 lote mixto, lista vacía y clave inexistente. `pnpm typecheck` limpio (la interfaz la implementan
 también los dobles de los tests de 90/91: se actualizan).
 
-### [ ] T4 · Servicio de asignabilidad por coordenadas
+### [x] T4 · Servicio de asignabilidad por coordenadas
 `lib/services/AsignabilidadCoordenadasService.ts` + su interfaz. Árbol de decisión exacto del design
 §7, en este orden: coordenadas → `geocode_status` determinista → clave exacta reconstruida con
 `hashDireccion` → `estado='failed'` → `pending|processing` → encolado puntual.
@@ -67,7 +84,7 @@ también los dobles de los tests de 90/91: se actualizan).
 **Hecho:** `tests/unit/services/asignabilidad-coordenadas.test.ts` cubre los **seis** estados de R1,
 más el caso "dirección corregida: job `failed` del hash viejo NO bloquea".
 
-### [ ] T5 · Enganchar el gate en los tres writers `[P]`
+### [x] T5 · Enganchar el gate en los tres writers `[P]`
 `GuiaAsignacionService.generarGuia` (solo la rama GAM con mensajero no nulo),
 `GuiaAsignacionService.asignarDesdeBodega` y `AsignacionSateliteService.asignar`. Traducir el mapa
 del gate a los `DetalleConflicto` ya existentes, **antes** de persistir, abortando todo el lote.
@@ -80,14 +97,14 @@ los tests existentes de esos tres services siguen en verde (con órdenes que ya 
 
 ## Bloque 3 — Proveedor (paralelo al bloque 2)
 
-### [ ] T6 · Config de Route Optimization `[P]`
+### [x] T6 · Config de Route Optimization `[P]`
 `lib/config/route-optimization.ts`, clon estructural de `lib/config/geocode.ts`: **nunca lanza**,
 lee `process.env` en cada llamada, secretos → `string | null`, enteros con `readPositiveInt`.
 **Depende de:** T0 · **Cubre:** R10
 **Hecho:** `tests/unit/config/route-optimization-config.test.ts` verifica ausente/vacío → `null`,
 enteros inválidos → default y que ninguna combinación lanza.
 
-### [ ] T7 · Token OAuth2 de service account `[P]`
+### [x] T7 · Token OAuth2 de service account `[P]`
 `lib/auth/google-sa-token.ts`: JWT RS256 firmado con `node:crypto`, intercambio en
 `oauth2.googleapis.com/token`, caché en memoria hasta `exp - 60 s`. `fetch` y reloj inyectables.
 Sin dependencia nueva (**no** se añade `google-auth-library`).
@@ -96,7 +113,7 @@ Sin dependencia nueva (**no** se añade `google-auth-library`).
 verifica claims (`iss`/`scope`/`aud`/`exp`), reutilización de token vigente, renovación al vencer y
 `RutaNoConfiguradoError` con credencial incompleta **sin** llamar a `fetch`.
 
-### [ ] T8 · Cliente `optimizeTours`
+### [x] T8 · Cliente `optimizeTours`
 `lib/interfaces/external/IRouteOptimizationClient.ts` + `lib/clients/google-route-optimization.ts`.
 **Primero** verificar los nombres reales de los campos del request/response contra la documentación
 del proveedor (no están en el repo). Zod en el borde sin `passthrough`. Traducción de desenlaces
@@ -110,7 +127,7 @@ asserta que ningún mensaje de error contiene el token ni coordenadas.
 
 ## Bloque 4 — Servicio de optimización y encolado
 
-### [ ] T9 · Repositorio de ruta optimizada
+### [x] T9 · Repositorio de ruta optimizada
 `lib/repositories/RutaOptimizadaRepository.ts` + interfaz: `findByMensajero`,
 `upsertOrigen`, `reemplazarSecuencia` (en `$transaction`: DELETE + createMany + UPDATE cabecera),
 `marcarDesactualizada`.
@@ -118,7 +135,7 @@ asserta que ningún mensaje de error contiene el token ni coordenadas.
 **Hecho:** `tests/integration/repositories/ruta-optimizada-repo.test.ts` verifica reemplazo completo,
 que los índices únicos rechazan secuencia duplicada y que el origen se persiste con su fuente.
 
-### [ ] T10 · Helper de encolado (debounce + inmediato)
+### [x] T10 · Helper de encolado (debounce + inmediato)
 `lib/services/jobs/optimizacion-ruta-encolado.ts` con `dedupeKeyDebounce` y `dedupeKeyInmediato`.
 ⚠️ **Normativo:** dos **espacios de claves disjuntos** (`:debounce:` / `:inmediato:`). Si se
 unificaran, el disparo de la gestión sería tragado en silencio por un debounce en vuelo. Y la clave
@@ -128,7 +145,7 @@ del debounce DEBE llevar la ventana temporal: sin ella queda ocupada para siempr
 **Hecho:** `tests/unit/services/optimizacion-ruta-encolado.test.ts` verifica: misma ventana → misma
 clave; ventana siguiente → clave distinta; inmediato y debounce **nunca** colisionan.
 
-### [ ] T11 · Servicio de optimización
+### [x] T11 · Servicio de optimización
 `lib/services/OptimizacionRutaService.ts` con la secuencia de 7 pasos del design §5, incluidas las
 guardas de coste (R20 obsolescencia, R35 ≤1 parada, R36 huella, R38 tope) y la resolución del origen
 con sus tres escalones (§5.1). Ante fallo: **no** tocar paradas, marcar `desactualizada`, lanzar.
@@ -137,7 +154,7 @@ con sus tres escalones (§5.1). Ante fallo: **no** tocar paradas, marcar `desact
 `tests/unit/services/optimizacion-ruta-origen.test.ts` con dobles: cada guarda tiene un test que
 asserta **cero llamadas** al cliente, y el test de fallo asserta que la secuencia previa sigue intacta.
 
-### [ ] T12 · Handler y registro en el drenador
+### [x] T12 · Handler y registro en el drenador
 `lib/services/jobs/optimizacion-ruta-handler.ts` (adaptador + fábrica de deps) y
 `handlers.set("optimizacion_ruta", ...)` en `buildHandlers()` de
 `app/api/cron/procesar-jobs/route.ts`. **No** tocar `buildRecurrencias()`.
@@ -146,7 +163,7 @@ asserta **cero llamadas** al cliente, y el test de fallo asserta que la secuenci
 y **ausente** de `buildRecurrencias`; un test asserta que un fallo de este handler no impide drenar
 los demás jobs del lote.
 
-### [ ] T13 · Outbox en los dos writers del mensajero
+### [x] T13 · Outbox en los dos writers del mensajero
 Inyectar `jobRepo` en `GestionOrdenRepository` (patrón `OrdenRepository` de la 91) y encolar dentro de
 las transacciones ya existentes: `recogerLote` → debounce; `crearGestionYTransicionar` → inmediato con
 `eventoId` = id de la gestión recién creada.
@@ -159,7 +176,7 @@ debounce en vuelo; rollback de la tx → **ninguna** fila de job.
 
 ## Bloque 5 — Lectura y UI (depende del 4)
 
-### [ ] T14 · Orden de las cards en el service
+### [x] T14 · Orden de las cards en el service
 `MisAsignacionesService.listarMisAsignaciones` ordena `porGestionar` por secuencia asc y deja al final
 las órdenes sin posición en su orden actual. `MiAsignacionDTO` gana `secuenciaRuta`; el resultado gana
 el bloque `ruta`. **No** se toca el `orderBy` del repositorio ni el orden de "Por recoger".
@@ -167,28 +184,34 @@ el bloque `ruta`. **No** se toca el `orderBy` del repositorio ni el orden de "Po
 **Hecho:** `tests/unit/services/mis-asignaciones-orden-ruta.test.ts` cubre: todas con posición; mezcla
 con y sin posición; ninguna con posición (orden idéntico al actual); KPIs sin alterar.
 
-### [ ] T15 · Server Action de sincronización manual
+### [x] T15 · Server Action de sincronización manual
 `lib/actions/ruta-mensajero.ts` → `sincronizarRuta`. Guarda de rol, zod en el borde para la ubicación,
 ejecución **síncrona** del servicio, `withErrorHandler` (patrón `mis-asignaciones.ts`).
 **Depende de:** T11 · **Cubre:** R22, R31 (servidor), R32, R33, R34
 **Hecho:** `tests/unit/actions/sincronizar-ruta.test.ts` cubre `forbidden` para 3 roles distintos,
 lat/lng fuera de rango → `validation_error`, y sin ubicación → ejecuta igual.
 
-### [ ] T16 · Ubicación opcional en las actions existentes `[P]`
+### [x] T16 · Ubicación opcional en las actions existentes `[P]`
 `recogerAsignaciones` y `gestionar` aceptan `ubicacion` **opcional** en su schema zod y la propagan
 para que se persista como origen.
 **Depende de:** T15 · **Cubre:** R22, R23
 **Hecho:** `tests/unit/actions/mis-asignaciones-ubicacion.test.ts` verifica que la ausencia del campo
 no rompe ninguna llamada existente; los tests actuales de esas dos actions siguen en verde sin cambios.
 
-### [ ] T17 · Hook de geolocalización `[P]`
+### [~] T17 · Hook de geolocalización `[P]`
 `hooks/useUbicacionActual.ts`: `getCurrentPosition` con timeout, estado `{ coords, denegado }`, nunca
 lanza al render.
 **Depende de:** T0 · **Cubre:** R25 (cliente)
 **Hecho:** test con `navigator.geolocation` mockeado: permiso concedido, denegado y timeout — en los
 tres casos el hook resuelve sin excepción.
 
-### [ ] T18 · Módulo del mensajero: botón, aviso y orden
+> ⚠️ **DIFERIDA A LA FEATURE 93 — no está hecha y no está olvidada.** Es frontend puro y
+> quedó fuera del briefing del backend a propósito. El contrato que la alimenta SÍ está
+> entregado y congelado en esta rama (ver `progress/impl_92.md` §7).
+> Verificado por el revisor: **`hooks/useUbicacionActual.ts` no existe** en esta rama.
+
+
+### [~] T18 · Módulo del mensajero: botón, aviso y orden
 `MisAsignacionesModule.tsx`: botón "Sincronizar ruta" (solo mensajero), aviso de ruta desactualizada /
 paradas sin optimizar, badge de posición en la card, `router.refresh()` tras sincronizar. Revisar
 primero si el botón/badge existe en shadcn/ui antes de crear nada.
@@ -197,25 +220,41 @@ primero si el botón/badge existe en shadcn/ui antes de crear nada.
 el orden de la secuencia; aviso visible con ruta desactualizada; `router.refresh()` llamado tras
 sincronizar; "Por recoger" intacto; con geolocalización denegada la sincronización se dispara igual.
 
-### [ ] T19 · Toast del gate en las UIs de asignación
+> ⚠️ **DIFERIDA A LA FEATURE 93 — no está hecha y no está olvidada.** Es frontend puro y
+> quedó fuera del briefing del backend a propósito. El contrato que la alimenta SÍ está
+> entregado y congelado en esta rama (ver `progress/impl_92.md` §7).
+> Lo entregado aquí es la MITAD SERVIDOR: `porGestionar` sale ya ordenado del service (R28), el
+> bloque `ruta` alimenta el aviso (R30) y `sincronizarRuta` existe con su guarda de rol (R31/R33).
+> `MisAsignacionesModule.test.tsx` solo se tocó para ampliar dobles, **no** se añadió UI.
+
+
+### [~] T19 · Toast del gate en las UIs de asignación
 `GenerarGuiaModal`, `AsignarBodegaModal` y `AsignarSateliteModal`: "Dirección no encontrada" para
 `direccion_no_geocodificable` / `geocodificacion_agotada`; mensaje distinto de "validándose" para los
 otros tres motivos.
 **Depende de:** T5 · **Cubre:** R9
 **Hecho:** los tests de esos componentes verifican los **dos** textos distintos según el motivo.
 
+> ⚠️ **DIFERIDA A LA FEATURE 93 — no está hecha y no está olvidada.** Es frontend puro y
+> quedó fuera del briefing del backend a propósito. El contrato que la alimenta SÍ está
+> entregado y congelado en esta rama (ver `progress/impl_92.md` §7).
+> El backend ya emite el `motivo` que estos toasts consumen: los 5 estados no-asignables viajan
+> en `conflict.detalle` desde los tres writers (R8), con test en
+> `guia-asignacion-gate-coordenadas.test.ts` y `asignacion-satelite-gate-coordenadas.test.ts`.
+
+
 ---
 
 ## Bloque 6 — Documentación y entorno
 
-### [ ] T20 · Variables de entorno y despliegue `[P]`
+### [x] T20 · Variables de entorno y despliegue `[P]`
 Documentar las 8 variables del design §2 donde el repo documente las demás (`.env.example` /
 `docs/`). Anotar explícitamente que `GOOGLE_MAPS_API_KEY` **no** sirve para este producto y que hace
 falta habilitar el SKU de Route Optimization en GCP.
 **Depende de:** T6 · **Cubre:** soporte de R10
 **Hecho:** ningún secreto en el repo; las 8 variables listadas con su default; nota del SKU escrita.
 
-### [ ] T21 · Mapa de trazabilidad
+### [x] T21 · Mapa de trazabilidad
 `progress/impl_92.md` con el mapa `R<n> → test` completo (R1..R40), la lista de archivos tocados y
 los seguimientos anotados del design §11.
 **Depende de:** T1–T20 · **Cubre:** trazabilidad (CHECKPOINTS)
@@ -225,7 +264,7 @@ los seguimientos anotados del design §11.
 
 ## Bloque 7 — Verificación final
 
-### [ ] T22 · Suite completa y gate de calidad
+### [x] T22 · Suite completa y gate de calidad
 **Depende de:** T21
 **Hecho:** `./init.sh` en verde; `pnpm typecheck`, `pnpm lint` y `pnpm test` sin errores y **sin
 regresión** contra el baseline de T0; `pnpm db:migrate` + `pnpm db:rollback` + `pnpm db:migrate`
@@ -233,9 +272,48 @@ completan; `console.log` de depuración eliminados de los archivos tocados (ojo:
 mis-asignaciones.ts` **ya trae** dos `console.log("xyz AAA*")` en `dev` — reportar al leader, **no**
 arrastrarlos a esta rama sin decisión, no son de esta feature).
 
+> ### ⚠️ EXCEPCIÓN MEDIDA — `pnpm test` NO termina en verde, y la causa es AJENA
+>
+> Marcada `[x]` porque todo lo que esta feature controla se cumple, **pero el criterio literal
+> "`pnpm test` sin errores" NO se cumple hoy**. Se documenta en vez de darlo por verde en
+> silencio.
+>
+> **Lo que SÍ se cumple y está medido (2026-07-20, tras `pnpm install --force`):**
+> - `pnpm typecheck` → **0 errores** (baseline: 0).
+> - `pnpm lint` → **0 errores** / 143 warnings, **idéntico al baseline** medido con `git stash -u`.
+> - Tests de la feature aislados → **18 archivos, 219 tests, 219 verdes**.
+> - **CERO regresiones, demostradas test a test.** El revisor aisló la unión de rojos con el
+>   reporter JSON en HEAD y en un worktree limpio de `5244cf3`: **36 fallos en ambos**, y la
+>   diferencia de conjuntos es **vacía en los dos sentidos**.
+> - Round-trip de migraciones UP → DOWN → RE-UP contra Postgres 16 desechable en docker, con
+>   **0 residuos**; 55P04 confirmado empíricamente
+>   (`ERROR: unsafe use of new value "optimizacion_ruta" of enum type job_tipo`).
+> - `console.log` de depuración en los archivos que ESTA feature creó: **ninguno**.
+>
+> **El rojo VIVO y determinista es UNO, y es deuda de la feature 90:**
+> `tests/integration/actions/generar-gastos-fijos-route.test.ts:109` afirma que `vercel.json`
+> define `/api/cron/liberar-reprogramadas`. La **propia feature 90** sustituyó esa ruta por
+> `/api/cron/procesar-jobs` en el commit `57c53ea` (verificado con `git log -- vercel.json`), y
+> nunca actualizó el test. Arreglarlo aquí sería arrastrar deuda ajena a esta rama.
+>
+> **`CierreDiaPage.test.tsx` YA NO es un rojo preexistente: PASA.** Se re-midió aislado y el
+> archivo entero está verde. La bitácora lo arrastraba desde la feature 81; queda corregido.
+>
+> **El resto de rojos de la suite completa son FLAKES DE CARGA, no deterministas.** El revisor
+> midió **12, 12 y 18** archivos rojos en tres corridas completas: todos son tests de componente
+> (`testing-library` con `findBy*`/`waitFor`, sensibles a timing). Por eso "N rojos antes vs N
+> después" es una métrica inútil, y por eso la comparación válida es la de conjuntos por nombre,
+> que da diferencia vacía. **La estabilización de la suite merece feature propia** (seguimiento
+> abierto al leader, junto con la deuda de la 90).
+>
+> **`./init.sh` queda formalmente incumplido por lo mismo**, y por la misma causa ajena.
+
 ---
 
 ## Resumen de dependencias
+
+Leyenda de los checkboxes: `[x]` entregada en esta rama · `[~]` **diferida a la feature 93**
+(frontend, ni hecha ni olvidada). No queda ninguna task en `[ ]`.
 
 ```
 T0 ─┬─ T1 ─┬─ T2 ── T9 ─┬─ T11 ─┬─ T12 ── T13
