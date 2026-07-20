@@ -57,10 +57,17 @@ type OrdenPrismaClient = Pick<
 const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido"];
 const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
 
-// Feature 17/R3: nombre CONSTANTE de la secuencia (nunca interpolar entrada de
-// usuario en el SQL crudo). Es la misma secuencia que el SERIAL de la feature 6
-// creo y que esta migracion desliga con `OWNED BY NONE`.
-const NUM_GUIA_SEQUENCE = "orden_num_guia_seq";
+// Feature 17/R3: nombre CONSTANTE del generador (nunca interpolar entrada de
+// usuario en el SQL crudo).
+//
+// Ya NO es `nextval('orden_num_guia_seq')` directo: la guia se imprime en la
+// etiqueta y viaja en el QR, y un contador visible filtra volumen de operacion
+// (restar dos guias da las ordenes emitidas en el medio). `siguiente_num_guia()`
+// —migracion 20260720160000— aplica una permutacion multiplicativa BIYECTIVA
+// sobre esa misma secuencia: sigue sin colisionar, pero no es ascendente.
+// La formula vive en la funcion, no aqui, para que los tres call sites de abajo
+// (y cualquiera nuevo) no puedan divergir.
+const NUM_GUIA_GENERATOR = "siguiente_num_guia()";
 
 // Feature 33/R11/R18: estado de ORIGEN de la recepcion en satelite. La escritura
 // guardada (`recibirEnSatelite`) solo transiciona una orden que sigue en este
@@ -782,7 +789,7 @@ export class OrdenRepository implements IOrdenRepository {
   /**
    * Feature 88/R8/R9/R10/R11: inserta el lote (patron `createManyOrdenes`: diff
    * before/after + `skipDuplicates` para registrar SOLO las EFECTIVAMENTE nuevas) y, en la
-   * MISMA tx del chunk, asigna a cada nueva `num_guia = nextval('orden_num_guia_seq')` con
+   * MISMA tx del chunk, asigna a cada nueva `num_guia = siguiente_num_guia()` con
    * la guarda idempotente `num_guia IS NULL` (patron `generarGuiaLote`) — misma secuencia
    * atomica que la feature 17/30, asi ninguna guia colisiona. Luego `appendCambioEstado`
    * (origen null -> estado inicial, `origenTipo` = `carga_api`). Las filas duplicadas no
@@ -821,7 +828,7 @@ export class OrdenRepository implements IOrdenRepository {
           // R9: idempotente — solo consume nextval() si num_guia es NULL. Secuencia por la
           // constante del modulo (jamas se interpola entrada de usuario en el SQL).
           await tx.$executeRawUnsafe(
-            `UPDATE "orden" SET num_guia = nextval('${NUM_GUIA_SEQUENCE}') WHERE id = $1 AND num_guia IS NULL`,
+            `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
             nueva.id,
           );
           const numerada = await tx.orden.findUniqueOrThrow({
@@ -1050,7 +1057,7 @@ export class OrdenRepository implements IOrdenRepository {
       for (const d of decisiones) {
         // R5: idempotente — solo consume nextval() si num_guia es NULL.
         await tx.$executeRawUnsafe(
-          `UPDATE "orden" SET num_guia = nextval('${NUM_GUIA_SEQUENCE}') WHERE id = $1 AND num_guia IS NULL`,
+          `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
           d.ordenId,
         );
         const updated = await tx.orden.update({
@@ -1145,7 +1152,7 @@ export class OrdenRepository implements IOrdenRepository {
       for (const id of ordenIds) {
         // R10: idempotente — solo consume nextval() si num_guia es NULL.
         await tx.$executeRawUnsafe(
-          `UPDATE "orden" SET num_guia = nextval('${NUM_GUIA_SEQUENCE}') WHERE id = $1 AND num_guia IS NULL`,
+          `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
           id,
         );
         await tx.orden.update({

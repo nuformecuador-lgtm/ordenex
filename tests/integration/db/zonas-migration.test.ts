@@ -176,7 +176,11 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_orden_geocode") &&
         // despliegue: apendida despues. Neutraliza el usuario maestro sembrado
         // con hash hardcodeado por `20260709120000_seed_maestro_user`.
-        !d.endsWith("_drop_default_maestro_user"),
+        !d.endsWith("_drop_default_maestro_user") &&
+        // num_guia no secuencial: apendidas despues. La segunda reemplaza la
+        // permutacion de la primera (dejaba delta constante entre consecutivas).
+        !d.endsWith("_num_guia_no_secuencial") &&
+        !d.endsWith("_num_guia_feistel"),
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);
