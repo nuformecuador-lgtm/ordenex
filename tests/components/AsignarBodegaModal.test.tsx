@@ -135,4 +135,58 @@ describe("AsignarBodegaModal", () => {
       ),
     );
   });
+
+  /** Elige el mensajero del lote y confirma. */
+  async function asignarConMensajero(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      screen.getByRole("combobox", { name: "Mensajero para el lote" }),
+    );
+    const listbox = await screen.findByRole("listbox");
+    await user.click(within(listbox).getByRole("option", { name: "Ana Mensajera" }));
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+  }
+
+  // Feature 93 (R9): el gate de coordenadas (92) devuelve `conflict` con un
+  // `motivo` por orden. El toast debe DIFERENCIAR el desenlace definitivo del
+  // transitorio en vez de caer en el mensaje genérico de `conflict`.
+  it.each(["direccion_no_geocodificable", "geocodificacion_agotada"])(
+    "R9: conflict con motivo %s → toast 'Dirección no encontrada'",
+    async (motivo) => {
+      const user = userEvent.setup();
+      asignarDesdeBodegaMock.mockResolvedValue({
+        status: "conflict",
+        detalle: [{ ordenId: "o1", motivo }],
+      });
+      renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
+
+      await asignarConMensajero(user);
+
+      await vi.waitFor(() =>
+        expect(errorMock).toHaveBeenCalledWith("Dirección no encontrada"),
+      );
+    },
+  );
+
+  it.each([
+    "geocodificacion_en_curso",
+    "geocodificacion_encolada",
+    "geocodificacion_no_encolable",
+  ])(
+    "R9: conflict con motivo %s → mensaje DISTINTO (la dirección aún se valida)",
+    async (motivo) => {
+      const user = userEvent.setup();
+      asignarDesdeBodegaMock.mockResolvedValue({
+        status: "conflict",
+        detalle: [{ ordenId: "o1", motivo }],
+      });
+      renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
+
+      await asignarConMensajero(user);
+
+      await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+      const msg = errorMock.mock.calls.at(-1)?.[0] as string;
+      expect(msg).not.toBe("Dirección no encontrada");
+      expect(msg).toMatch(/valid/i);
+    },
+  );
 });

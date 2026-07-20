@@ -3,6 +3,8 @@
 // usuario, sin filtrar `fieldErrors`/`detalle` internos ni PII. Patrón
 // `app/(app)/_components/decision-error-messages.ts` (feature 23).
 
+import { geocodificacionMotivoMessage } from "@/app/(app)/_components/geocodificacion-motivo-messages";
+
 type GuiaErrorStatus =
   | "unauthenticated"
   | "forbidden"
@@ -46,6 +48,11 @@ function tieneBodegaSateliteBloqueada(error: unknown): boolean {
 /** Mensaje de usuario para el error lanzado por `Modal.onConfirm`; fallback genérico defensivo. */
 export function guiaDecisionErrorMessage(error: unknown): string {
   if (tieneBodegaSateliteBloqueada(error)) return MSG_BODEGA_SATELITE_BLOQUEADA;
+  // Feature 93 (R9): el gate de coordenadas (92) devuelve `conflict` con un
+  // `motivo` por orden. Se inspecciona ANTES del switch por `status`, que si no
+  // lo colapsaría en el mensaje genérico de `conflict` y descartaría el motivo.
+  const porGeocodificacion = geocodificacionMotivoMessage(error);
+  if (porGeocodificacion !== null) return porGeocodificacion;
   const status =
     error && typeof error === "object" && "status" in error
       ? (error as { status: unknown }).status

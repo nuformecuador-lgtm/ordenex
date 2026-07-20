@@ -231,4 +231,48 @@ describe("GenerarGuiaModal", () => {
       "Alguna orden ya no está en un estado válido para esta acción.",
     );
   });
+
+  // Feature 93 (R9): el gate de coordenadas (92) aborta con `conflict` + `motivo`
+  // por orden. Antes de la 93 el motivo se descartaba y el toast era el genérico
+  // de `conflict` (el mismo que afirma el test de R25 justo arriba).
+  it.each(["direccion_no_geocodificable", "geocodificacion_agotada"])(
+    "R9: conflict con motivo %s → toast 'Dirección no encontrada'",
+    async (motivo) => {
+      const user = userEvent.setup();
+      generarGuiaMock.mockResolvedValue({
+        status: "conflict",
+        detalle: [{ ordenId: "o1", motivo }],
+      });
+      renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
+
+      await user.click(screen.getByRole("button", { name: "Generar guía" }));
+
+      await vi.waitFor(() =>
+        expect(errorMock).toHaveBeenCalledWith("Dirección no encontrada"),
+      );
+    },
+  );
+
+  it.each([
+    "geocodificacion_en_curso",
+    "geocodificacion_encolada",
+    "geocodificacion_no_encolable",
+  ])(
+    "R9: conflict con motivo %s → mensaje DISTINTO (la dirección aún se valida)",
+    async (motivo) => {
+      const user = userEvent.setup();
+      generarGuiaMock.mockResolvedValue({
+        status: "conflict",
+        detalle: [{ ordenId: "o1", motivo }],
+      });
+      renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
+
+      await user.click(screen.getByRole("button", { name: "Generar guía" }));
+
+      await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+      const msg = errorMock.mock.calls.at(-1)?.[0] as string;
+      expect(msg).not.toBe("Dirección no encontrada");
+      expect(msg).toMatch(/valid/i);
+    },
+  );
 });
