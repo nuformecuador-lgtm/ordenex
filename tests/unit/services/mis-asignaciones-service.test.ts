@@ -7,6 +7,7 @@ import type {
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -125,14 +126,40 @@ function fakeSignedUrls(): ISignedUrlProvider {
   };
 }
 
+
+/**
+ * Feature 92 (R23/R28): doble del repo de ruta optimizada. Por defecto NO hay ruta
+ * (`findByMensajero` -> null), que es el estado de un mensajero que nunca se optimizo: en
+ * ese caso `porGestionar` conserva EXACTAMENTE el orden previo, asi que los tests
+ * heredados de la 36/47/73 siguen midiendo lo mismo que antes.
+ */
+function fakeRutaRepo(
+  over: Partial<Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen">> = {},
+): Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen"> {
+  return {
+    findByMensajero: vi.fn(async () => null),
+    upsertOrigen: vi.fn(async () => {}),
+    ...over,
+  };
+}
+
 function newService(
   repo: IGestionOrdenRepository = fakeRepo(),
   storage: IFileStorage = fakeStorage(),
   signed: ISignedUrlProvider = fakeSignedUrls(),
   historial: Pick<IOrdenHistorialService, "contarIntentos"> = fakeHistorial(),
   zonaRepo: Pick<IZonaRepository, "findCentralZonaId"> = fakeZonaRepo(),
+  rutaRepo: Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen"> = fakeRutaRepo(),
 ) {
-  return new MisAsignacionesService(repo, fakeOrdenRepo(), storage, signed, historial, zonaRepo);
+  return new MisAsignacionesService(
+    repo,
+    fakeOrdenRepo(),
+    storage,
+    signed,
+    historial,
+    zonaRepo,
+    rutaRepo,
+  );
 }
 
 function evidencia() {
@@ -712,6 +739,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       fakeSignedUrls(),
       fakeHistorial(),
       fakeZonaRepo(),
+      fakeRutaRepo(),
     );
     const r = await service.gestionar(devolucion, MENSAJERO);
     expect(r.status).toBe("validation_error");
@@ -730,6 +758,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       fakeSignedUrls(),
       fakeHistorial(),
       fakeZonaRepo(),
+      fakeRutaRepo(),
     );
     await service.gestionar(devolucion, MENSAJERO);
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devuelta_origen");

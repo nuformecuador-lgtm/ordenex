@@ -18,6 +18,8 @@ import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaReposit
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import { JobRepository } from "@/lib/repositories/JobRepository";
+import { AsignabilidadCoordenadasService } from "@/lib/services/AsignabilidadCoordenadasService";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
@@ -26,7 +28,12 @@ import type { AppErrorShape } from "@/lib/errors";
 function buildGuiaService(): IGuiaAsignacionService {
   const prisma = getPrismaClient();
   // Feature 30/R18: inyecta ademas ZonaRepository (guardia GAM); firmas estables.
-  return new GuiaAsignacionService(new OrdenRepository(prisma), new ZonaRepository(prisma));
+  // Feature 92/R8: + el gate de asignabilidad por coordenadas, que lee la cola de jobs.
+  return new GuiaAsignacionService(
+    new OrdenRepository(prisma),
+    new ZonaRepository(prisma),
+    new AsignabilidadCoordenadasService(new JobRepository(prisma)),
+  );
 }
 
 function buildOrdenRepo(): Pick<

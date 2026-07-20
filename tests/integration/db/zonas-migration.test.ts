@@ -173,7 +173,10 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_jobs_cola") && // feature 90: apendida despues
         // feature 91: apendidas despues (enum de job_tipo + columnas de geocodificacion).
         !d.endsWith("_job_tipo_geocodificacion") &&
-        !d.endsWith("_orden_geocode"),
+        !d.endsWith("_orden_geocode") &&
+        // feature 92: apendidas despues (enum de job_tipo + tablas de la ruta optimizada).
+        !d.endsWith("_job_tipo_optimizacion_ruta") &&
+        !d.endsWith("_ruta_optimizada"),
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);
