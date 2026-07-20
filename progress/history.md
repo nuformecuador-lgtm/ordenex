@@ -1413,3 +1413,46 @@
   harness e2e); `db:rollback` no alcanza la 1.ª de las 2 migraciones (limitación preexistente del
   script); `unauthenticated` con mensaje genérico; tests R13/R14/R15 del service algo tautológicos.
   El typo "desha" (única cadena que ve el usuario) sí se corrigió antes del PR.
+
+## 2026-07-19 — 90 (background jobs: infraestructura de cola + `liberar-reprogramadas` a job recurrente)
+- **Feature A** de un sistema de background jobs en 3 partes (A infra, **91** geocodificación, **92**
+  webhooks/outbox); B y C quedaron explícitamente fuera de alcance. Pedido del humano: *"como podría
+  manejar colas… descarta redis, dame el contexto de la otra opción"* → **Redis descartado por él**
+  porque exige un worker persistente, es decir infra externa que Vercel no da.
+- Requisitos cubiertos: **R1–R27**, todos con test real. PR **#94 → `dev`, mergeado** (commits
+  `57c53ea` impl + `9db7256` fix de test heredado + `334a4e4` review).
+- **Qué se construyó:** tabla `jobs` genérica (patrón transactional-outbox + worker) drenada por un
+  Vercel Cron nuevo `/api/cron/procesar-jobs` **cada minuto** — el único disparador temporal que
+  queda. Claim atómico con **`FOR UPDATE SKIP LOCKED`** (**sin precedente en el repo**; el patrón
+  `$queryRaw`+`RETURNING` dentro de `$transaction` ya existía en `OrdenRepository`), **visibility
+  timeout de 1h** para rescatar jobs muertos por crash, **backoff exponencial** y **dead-letter**.
+  Config por env en `lib/config/jobs.ts` (clon de `cron.ts`).
+- **Consolidación pedida por el humano:** `liberar-reprogramadas` (feature 46) se **fusiona** a la
+  cola como job recurrente que **envuelve `LiberacionReprogramadaService` sin reescribir su lógica**.
+  Se re-agenda en éxito **y también en fallo terminal** — si no, un solo fallo terminal detendría el
+  job diario para siempre. Su entrada de schedule sale de `vercel.json` y **la ruta se conserva como
+  disparo manual** (decisión (4) del gate). Anti-colisión = SKIP LOCKED + `run_after` futuro +
+  idempotencia por "día CR".
+- **Gate F1.4 — 5 decisiones, todas con la recomendación:** (1) el horario **preserva 00:00 CR**, no
+  se mueve a 01:00; (2) `max_intentos` por-fila desde config con override por tipo; (3) payload de
+  `liberar_reprogramadas` **derivado de `now`** (payload vacío + `startOfDayCR(now)`), no estampado al
+  encolar; (4) la ruta manual se conserva; (5) contrato de conteos fijado
+  `{procesados, ok, fallidos, reintentados, muertos}`.
+- **El reviewer rechazó la primera vez, con razón, y el fallo era del tipo que este repo ya conoce:**
+  el código nuevo estaba sólido, pero un test **heredado de la feature 46**
+  (`liberar-reprogramadas-route.test.ts`, bloque *"R8 — schedule del cron"*) seguía afirmando el
+  `schedule '0 6 * * *'` que **esta feature acababa de quitar** → `pnpm test` rojo. Es el mismo patrón
+  que los PRs #75 y #82: cambiar el comportamiento y dejar atrás el test que lo afirmaba. Acá **se
+  cazó antes del merge**. Se corrigió **invirtiendo** el bloque (ahora afirma que el `cron` de
+  liberar-reprogramadas es `undefined`, conserva el guard de `corte-diario` y no duplica
+  `procesar-jobs`), sin borrar ni aflojar los tests de auth/conteos/error de la ruta manual.
+- Verificación: typecheck **0**, lint **0 errores**, **55 tests de la feature verdes** (43 re-medidos
+  por el reviewer tras el fix). **Round-trip REAL** de la migración `_jobs_cola` (up/down) hecho en un
+  **Postgres 16 desechable en docker — nunca contra la DB dev compartida** (guardrail explícito):
+  índices parciales y predicados, RLS `relrowsecurity=t`/0 policies, dedupe, claim (ignora
+  pending-futuro y processing-reciente, rescata processing-viejo) y **SKIP LOCKED concurrente
+  disjunto**. Reviewer **APROBADO 0 bloqueantes**. Trabajo en worktree aislado `ordenex-f90` desde
+  `origin/dev` — nunca sobre `flow`, que arrastra WIP ajeno.
+- Deuda declarada: falta el round-trip de la **cadena completa** de migraciones contra Postgres en CI
+  (la `jobs_cola` se validó **aislada**). Seguimiento futuro: migrar `corte-diario` y
+  `generar-gastos-fijos` al mismo patrón.

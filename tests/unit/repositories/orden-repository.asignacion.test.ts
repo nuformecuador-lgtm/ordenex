@@ -51,7 +51,9 @@ describe("OrdenRepository.findResumenByNumRemisiones (R6, R8, R9, R10)", () => {
         montoCobrar: new Prisma.Decimal("12.50"),
         direccion: "Av. Siempre Viva",
         mensajeroSugeridoId: "msg-1",
+        zonaId: "z1",
         estatus: { value: "en_preparacion" },
+        zona: { nombre: "Norte" },
         mensajeroSugerido: { nombre: "Beto" },
       },
       {
@@ -64,7 +66,9 @@ describe("OrdenRepository.findResumenByNumRemisiones (R6, R8, R9, R10)", () => {
         montoCobrar: null,
         direccion: null,
         mensajeroSugeridoId: null,
+        zonaId: "z2",
         estatus: { value: "en_preparacion" },
+        zona: { nombre: "Sur" },
         mensajeroSugerido: null,
       },
     ]);
@@ -74,8 +78,11 @@ describe("OrdenRepository.findResumenByNumRemisiones (R6, R8, R9, R10)", () => {
 
     expect(rows[0].montoCobrar).toBe(12.5);
     expect(rows[0].mensajeroSugeridoNombre).toBe("Beto");
+    expect(rows[0].zonaId).toBe("z1");
+    expect(rows[0].zonaNombre).toBe("Norte");
     expect(rows[1].montoCobrar).toBeNull();
     expect(rows[1].mensajeroSugeridoNombre).toBeNull();
+    expect(rows[1].zonaNombre).toBe("Sur");
   });
 
   it("no expone deletedAt ni otros campos internos en la salida", async () => {
@@ -91,7 +98,9 @@ describe("OrdenRepository.findResumenByNumRemisiones (R6, R8, R9, R10)", () => {
         montoCobrar: null,
         direccion: null,
         mensajeroSugeridoId: null,
+        zonaId: "z1",
         estatus: { value: "en_preparacion" },
+        zona: { nombre: "Norte" },
         mensajeroSugerido: null,
       },
     ]);
@@ -116,7 +125,9 @@ describe("OrdenRepository.findResumenByNumRemisiones (R6, R8, R9, R10)", () => {
         montoCobrar: null,
         direccion: null,
         mensajeroSugeridoId: null,
+        zonaId: "z1",
         estatus: { value: "en_preparacion" },
+        zona: { nombre: "Norte" },
         mensajeroSugerido: null,
       },
       {
@@ -129,7 +140,9 @@ describe("OrdenRepository.findResumenByNumRemisiones (R6, R8, R9, R10)", () => {
         montoCobrar: null,
         direccion: null,
         mensajeroSugeridoId: null,
+        zonaId: "z2",
         estatus: { value: "en_preparacion" },
+        zona: { nombre: "Sur" },
         mensajeroSugerido: null,
       },
     ]);

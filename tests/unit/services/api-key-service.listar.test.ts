@@ -35,6 +35,11 @@ function makeRepo(items: ApiKeyListItem[] = [item(1), item(2)], total = items.le
       return { items, total };
     }),
     count: vi.fn(async () => total),
+    // [88] `findByKeyHash` llego con la feature 88 al mergear. Listar no autentica: lanza
+    // para delatar cualquier invocacion, mismo criterio que `createConUsuario` arriba.
+    findByKeyHash: vi.fn(async () => {
+      throw new Error("findByKeyHash no debe invocarse desde listar");
+    }),
   };
   return { repo, capturado };
 }

@@ -425,6 +425,28 @@ describe("MisAsignacionesModule", () => {
     expect(fd.get("evidencia")).toBeInstanceOf(File);
   });
 
+  it("ENTREGAR sin cobro (montoCobrar 0): oculta el método y envía monto 0 + efectivo", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", montoCobrar: 0 })],
+    });
+
+    await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Entregar" });
+
+    // Sin cobro: no se pide método de pago.
+    expect(screen.queryByRole("combobox", { name: "Método de pago" })).toBeNull();
+
+    await subirEvidencia(user, "Foto de evidencia de entrega");
+    await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
+
+    await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
+    const fd = gestionarMock.mock.calls[0][0] as FormData;
+    expect(fd.get("resultado")).toBe("entregada");
+    expect(fd.get("montoRecibido")).toBe("0");
+    expect(fd.get("metodoPago")).toBe("efectivo");
+    expect(fd.get("evidencia")).toBeInstanceOf(File);
+  });
+
   it("R25/R26: REPROGRAMAR envía fecha futura + motivo", async () => {
     const user = userEvent.setup();
     gestionarMock.mockResolvedValue({

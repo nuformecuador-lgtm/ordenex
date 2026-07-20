@@ -8,6 +8,7 @@ import type { Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
@@ -118,6 +119,25 @@ export function OrdenesModule({
     });
   }
 
+  function toggleTodos(ids: string[], checked: boolean) {
+    setSeleccionIds((prev) => {
+      const next = new Set(prev);
+      if (checked) ids.forEach((id) => next.add(id));
+      else ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  }
+
+  // Feature 63/C2 (R17): el `status_id` entra en la key SWR para que la caché y
+  // la paginación sean por-tab. Sin `filter`, `statusId` es `undefined`.
+  const statusId = filter?.status_id;
+  const { data, error, isLoading } = useSWR(
+    ["ordenes:list", statusId, page, pageSize],
+    () => ordenesFetcher(page, pageSize, filter),
+  );
+
+  const items = data?.items ?? [];
+
   const columnasEfectivas = useMemo<Column<OrdenListItemDTO>[]>(() => {
     // Columna de selección (checkbox) al frente cuando el listado es seleccionable.
     const conSeleccion: Column<OrdenListItemDTO>[] = selectable
@@ -125,6 +145,21 @@ export function OrdenesModule({
           {
             id: "seleccionar",
             value: "Seleccionar",
+            // Cabecera = checkbox "seleccionar todo" sobre las filas SELECCIONABLES de la
+            // página (excluye las bloqueadas por `bloqueoSeleccion`, que no se pueden marcar).
+            renderHeader: () => {
+              const ids = items
+                .filter((row) => (bloqueoSeleccion?.(row) ?? null) === null)
+                .map((row) => row.id);
+              return (
+                <SelectAllCheckbox
+                  selectableIds={ids}
+                  selectedIds={seleccionIds}
+                  onToggleAll={(checked) => toggleTodos(ids, checked)}
+                  ariaLabel="Seleccionar todas las órdenes"
+                />
+              );
+            },
             render: (row) => {
               // Motivo de bloqueo (o null): deshabilita el checkbox y lo explica en
               // el tooltip, en vez de dejar seleccionar una orden que la acción del
@@ -167,17 +202,8 @@ export function OrdenesModule({
         ),
       },
     ];
-  }, [columns, mostrarHistorial, selectable, seleccionIds, bloqueoSeleccion]);
+  }, [columns, mostrarHistorial, selectable, seleccionIds, bloqueoSeleccion, items]);
 
-  // Feature 63/C2 (R17): el `status_id` entra en la key SWR para que la caché y
-  // la paginación sean por-tab. Sin `filter`, `statusId` es `undefined`.
-  const statusId = filter?.status_id;
-  const { data, error, isLoading } = useSWR(
-    ["ordenes:list", statusId, page, pageSize],
-    () => ordenesFetcher(page, pageSize, filter),
-  );
-
-  const items = data?.items ?? [];
   // Snapshot de las filas marcadas PRESENTES en la página actual (la selección se
   // acota a lo visible, como en la vista de revisión previa).
   const seleccionadas = items.filter((item) => seleccionIds.has(item.id));

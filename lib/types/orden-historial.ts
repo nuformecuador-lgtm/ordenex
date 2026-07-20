@@ -21,6 +21,7 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "liberacion_reprogramada", // feature 46: liberarOrden (cron)
   "ajuste_estado", // feature 6: OrdenService.actualizar (CRUD generico)
   "deshacer_gestion", // feature 67 (F1.4-b): CierreDiaRepository.anularGestionYDevolverAGestion
+  "carga_api", // feature 88 (D7): estado inicial en createManyOrdenesConGuia (canal integrador)
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];

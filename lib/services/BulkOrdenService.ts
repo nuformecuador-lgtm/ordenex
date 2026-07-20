@@ -16,9 +16,18 @@ import type {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   BulkOrdenResult,
+  CargaViaApiOrden,
+  CargaViaApiResult,
+  CargaViaApiRow,
+  CargaViaApiSummary,
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
 import { normalizeName } from "@/lib/utils/normalize";
+
+// Feature 88/R8: estado inicial FIJO de las ordenes cargadas por API (canal integrador),
+// distinto del default de la carga masiva por sesion (en_preparacion/en_fulfillment). Valor
+// de enum EXISTENTE (order-status.ts), sin migracion de estado.
+const ESTATUS_INICIAL_API = "en_ruta_bodega_principal";
 
 // La resolucion geografica compara nombres del archivo contra los de la DB con el
 // MISMO normalizador que indexa el arbol de zonas (lib/utils/normalize): minusculas,
@@ -260,6 +269,101 @@ export class BulkOrdenService implements IBulkOrdenService {
     }
 
     return { status: "ok", summary: this.buildSummary(rows.length, filas) };
+  }
+
+  async cargarViaApi(rows: RawRow[], actor: Actor): Promise<CargaViaApiResult> {
+    // R15: SOLO el rol `apiKey` (el usuario dedicado de la key). La vía sesión sigue
+    // exigiendo `adminTienda` en `cargarMasiva` (intacta, R14). Sin tocar datos para otros
+    // roles: defensa en profundidad sobre la autenticación por key del borde.
+    if (actor.rol !== "apiKey") return { status: "forbidden" };
+
+    const tiendaId = actor.usuarioId; // D4: el usuario dedicado de la key es el dueño.
+
+    // R8: estado inicial FIJO `en_ruta_bodega_principal` (no se consulta `fulfillment`).
+    const ctx = await this.precargar(rows, ESTATUS_INICIAL_API);
+
+    if (ctx.estatusId === null) {
+      // Guarda defensiva (patrón cargarMasiva): sin el seed del estatus inicial, ninguna
+      // fila puede crearse (todas a error).
+      const filas: CargaViaApiRow[] = rows.map((raw, idx) => ({
+        fila: idx + 1,
+        numRemision: (raw.num_remision ?? "").trim(),
+        resultado: "error",
+        errores: {
+          estatus: [`estatus inicial "${ESTATUS_INICIAL_API}" no disponible (seed pendiente)`],
+        },
+      }));
+      return { status: "ok", summary: this.buildViaApiSummary(rows.length, filas, []) };
+    }
+    const estatusId = ctx.estatusId;
+
+    const filas: CargaViaApiRow[] = [];
+    const toCreate: CreateOrdenData[] = [];
+    const seen = new Map<string, string>();
+
+    rows.forEach((raw, idx) => {
+      const fila = idx + 1;
+      const result = this.resolveFila(raw, ctx, seen); // R7: mismas reglas que la carga masiva.
+      if (result.status === "error") {
+        filas.push({ fila, numRemision: result.numRemision, resultado: "error", errores: result.errores });
+        return;
+      }
+      if (result.status === "duplicada") {
+        filas.push({ fila, numRemision: result.numRemision, resultado: "duplicada", estatus: result.estatus });
+        return;
+      }
+      toCreate.push({ ...result.createData, estatusId, tiendaId });
+      filas.push({
+        fila,
+        numRemision: result.createData.numRemision,
+        resultado: "creada",
+        estatus: ctx.estatusInicialValue,
+      });
+    });
+
+    // R9/R10: persistencia con `num_guia` inmediato (misma tx que la creación). El actor del
+    // historial es el usuario dedicado de la key; origenTipo `carga_api` (D7).
+    const creadas =
+      toCreate.length > 0
+        ? await this.repo.createManyOrdenesConGuia(toCreate, cargaMasivaConfig.BATCH_SIZE, {
+            actorUsuarioId: tiendaId,
+            origenTipo: "carga_api",
+          })
+        : [];
+
+    // R10: mapea el `num_guia` (por num_remision) a las filas creadas y arma el bloque plano.
+    const guiaPorRemision = new Map(creadas.map((c) => [c.numRemision, c]));
+    const ordenes: CargaViaApiOrden[] = [];
+    for (const f of filas) {
+      if (f.resultado !== "creada") continue;
+      const creada = guiaPorRemision.get(f.numRemision);
+      if (!creada) continue; // defensivo: una creada sin fila persistida (no debería ocurrir).
+      f.numGuia = creada.numGuia;
+      f.estatus = creada.estatusValue;
+      ordenes.push({
+        id: creada.ordenId,
+        numRemision: creada.numRemision,
+        numGuia: creada.numGuia,
+        estado: creada.estatusValue,
+      });
+    }
+
+    return { status: "ok", summary: this.buildViaApiSummary(rows.length, filas, ordenes) };
+  }
+
+  private buildViaApiSummary(
+    total: number,
+    filas: CargaViaApiRow[],
+    ordenes: CargaViaApiOrden[],
+  ): CargaViaApiSummary {
+    return {
+      total,
+      creadas: filas.filter((f) => f.resultado === "creada").length,
+      duplicadas: filas.filter((f) => f.resultado === "duplicada").length,
+      conError: filas.filter((f) => f.resultado === "error").length,
+      filas,
+      ordenes,
+    };
   }
 
   private buildSummary(total: number, filas: RowResult[]): BulkSummary {

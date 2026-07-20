@@ -76,11 +76,22 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
     expect(r.success).toBe(false);
   });
 
-  it("R22: monto <= 0 -> invalido", () => {
+  it("monto 0 (entrega sin cobro) -> valido", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       resultado: "entregada",
       montoRecibido: 0,
+      metodoPago: "efectivo",
+      evidencia: evidenciaValida(),
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("R22: monto negativo -> invalido", () => {
+    const r = gestionarSchema.safeParse({
+      ordenId: "o1",
+      resultado: "entregada",
+      montoRecibido: -1,
       metodoPago: "efectivo",
       evidencia: evidenciaValida(),
     });

@@ -8,6 +8,7 @@ import type {
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IngresoOrdenexDTO } from "@/lib/interfaces/services/ICierreDiaService";
 
 // Feature 40 — tests unit del CierresBodegaAdminService (lado maestro; dobles de
 // repo/signedUrls, sin DB/red). Cubre R2 (rol), R11 (detalle por cierre_dia con grupos
@@ -173,6 +174,117 @@ describe("CierresBodegaAdminService.listarCierresBodegaAdmin (R15/R13/R23)", () 
 });
 
 // --- detalle agregado (R11/R12/R13/R14/R19/R23) ---
+
+describe("CierresBodegaAdminService.verCierreBodegaDetalle — ingreso y ganancia", () => {
+  /** Desglose por orden como lo emite el repo (ya derivado del snapshot). */
+  function conIngreso(over: Partial<IngresoOrdenexDTO>): IngresoOrdenexDTO {
+    return {
+      montoCobrar: null,
+      cobraComision: false,
+      esCentral: false,
+      flete: null,
+      ivaFlete: null,
+      fleteDevolucion: null,
+      ivaFleteDevolucion: null,
+      comisionCod: null,
+      ivaComisionCod: null,
+      fleteConIva: null,
+      fleteDevolucionConIva: null,
+      comisionConIva: null,
+      total: "0.00",
+      tarifa: null,
+      ...over,
+    };
+  }
+
+  it("deriva el ingreso y la ganancia por cierre_dia Y agregados de toda la bodega", async () => {
+    const repo = fakeRepo({
+      findCierreBodegaConDetalle: vi.fn(async () => ({
+        // Snapshot agregado de la bodega: 1500 + 500 de pago a mensajeros.
+        cierre: bodegaResumenRow({ totalPagoMensajero: "2000.00" }),
+        cierresDia: [
+          {
+            resumen: detalleCierreRow({ cierreDiaId: "cd1", totalPagoMensajero: "1500.00" }),
+            gestiones: [
+              gestionRow({
+                gestionId: "g1",
+                resultado: "entregada",
+                ingresoOrdenex: conIngreso({
+                  flete: "2500.00",
+                  ivaFlete: "325.00",
+                  fleteConIva: "2825.00",
+                  total: "2825.00",
+                }),
+              }),
+            ],
+          },
+          {
+            resumen: detalleCierreRow({ cierreDiaId: "cd2", totalPagoMensajero: "500.00" }),
+            gestiones: [
+              gestionRow({
+                gestionId: "g2",
+                resultado: "rechazada",
+                ingresoOrdenex: conIngreso({
+                  fleteDevolucion: "1000.00",
+                  ivaFleteDevolucion: "130.00",
+                  fleteDevolucionConIva: "1130.00",
+                  total: "1130.00",
+                }),
+              }),
+            ],
+          },
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // Por cierre_dia: cada mensajero con SU ingreso y SU pago.
+    expect(r.cierres[0].totalesIngreso.total).toBe("2825.00");
+    expect(r.cierres[0].ganancia).toBe("1325.00"); // 2825 - 1500
+    expect(r.cierres[1].totalesIngreso.total).toBe("1130.00");
+    expect(r.cierres[1].ganancia).toBe("630.00"); // 1130 - 500
+
+    // Agregado de la bodega: suma de los dos, menos el pago agregado del snapshot.
+    expect(r.totalesIngreso).toMatchObject({
+      // Agrupados: cada concepto con su IVA (lo que se pinta en el panel de arriba).
+      fleteConIva: "2825.00",
+      fleteDevolucionConIva: "1130.00",
+      total: "3955.00", // 2825 + 1130
+      // Detalle separado, para auditar cuánto de cada agrupado es IVA.
+      flete: "2500.00",
+      ivaFlete: "325.00",
+      fleteDevolucion: "1000.00",
+      ivaFleteDevolucion: "130.00",
+    });
+    expect(r.ganancia).toBe("1955.00"); // 3955 - 2000
+    expect(typeof r.ganancia).toBe("string"); // money-safe
+  });
+
+  it("la ganancia agregada es negativa si la bodega no factura pero igual paga", async () => {
+    const repo = fakeRepo({
+      findCierreBodegaConDetalle: vi.fn(async () => ({
+        cierre: bodegaResumenRow({ totalPagoMensajero: "2000.00" }),
+        cierresDia: [
+          {
+            resumen: detalleCierreRow({ cierreDiaId: "cd1", totalPagoMensajero: "2000.00" }),
+            // Una reprogramación no aporta a ningún concepto.
+            gestiones: [gestionRow({ gestionId: "g1", resultado: "reprogramada" })],
+          },
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalesIngreso.total).toBe("0.00");
+    expect(r.ganancia).toBe("-2000.00");
+    expect(r.cierres[0].ganancia).toBe("-2000.00");
+  });
+});
 
 describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/R23)", () => {
   it("R11/R13: detalle por cierre_dia con gestiones agrupadas por resultado + totales snapshot", async () => {

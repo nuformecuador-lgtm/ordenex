@@ -45,6 +45,8 @@ function makeRepo() {
         createdAt: new Date("2026-07-16T12:00:00Z"),
       };
     }),
+    // Feature 88: exigido por IApiKeyRepository; no ejercitado por ApiKeyService (generar).
+    findByKeyHash: vi.fn(async () => null),
   };
   return { repo, capturado };
 }
@@ -143,6 +145,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
       createConUsuario: vi.fn(async () => {
         throw new UsuarioDuplicadoError("email");
       }),
+      findByKeyHash: vi.fn(async () => null),
     };
     const r = await new ApiKeyService(repo).generar({ identificador: "Tienda Uno" }, MAESTRO);
     expect(r).toEqual({ status: "conflict", campo: "email" });
@@ -154,6 +157,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
       createConUsuario: vi.fn(async () => {
         throw new UsuarioDuplicadoError("cedula");
       }),
+      findByKeyHash: vi.fn(async () => null),
     };
     const r = await new ApiKeyService(repo).generar({ identificador: "Tienda Uno" }, MAESTRO);
     expect(r).toEqual({ status: "conflict", campo: "cedula" });
@@ -189,6 +193,7 @@ describe("ApiKeyService.generar — atomicidad (R13)", () => {
       createConUsuario: vi.fn(async () => {
         throw new Error("transaccion abortada");
       }),
+      findByKeyHash: vi.fn(async () => null),
     };
     // El fallo escala: no hay estado parcial que reportar como ok.
     await expect(
@@ -263,6 +268,13 @@ describe("ApiKeyService.generar — la key (R14..R22)", () => {
     // cuales lee el secreto), no la INTENCION de R19 —la irrecuperabilidad del secreto—;
     // ademas corría sobre el mock, no sobre la clase. El guard nuevo es estrictamente mas
     // fuerte: caza una fuga en CUALQUIER operacion, presente o futura.
+    //
+    // [88] Al mergear `dev`, la variante por cardinalidad que traia esta rama
+    // (`toEqual(["createConUsuario", "findByKeyHash"])`) se DESCARTA a favor de la de
+    // arriba: es la mas fuerte de las dos y ademas corre sobre la clase real, no sobre el
+    // mock. No se pierde cobertura — `findByKeyHash` queda sujeto a la asercion de fuga
+    // por estar registrado en INVOCACIONES de ese guard, que exige cubrir TODO metodo del
+    // prototipo, asi que un metodo nuevo sigue sin poder entrar en silencio.
   });
 
   it("R21: registra el usuario dedicado, el actor que la genero y la fecha de creacion", async () => {

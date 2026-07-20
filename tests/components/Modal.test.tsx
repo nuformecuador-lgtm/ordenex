@@ -528,19 +528,41 @@ describe("Modal — accesibilidad de foco (R28, R29, R30)", () => {
 // Tamaño del popup (prop `size`) — aditiva, con default de compatibilidad
 // ---------------------------------------------------------------------------
 describe("Modal — tamaño del popup (prop size)", () => {
-  it("por defecto conserva max-w-md: los consumidores existentes no cambian de ancho", async () => {
+  it("por defecto el ancho máximo es 75%: el popup nunca ocupa la pantalla completa", async () => {
     renderModal();
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveClass("max-w-md");
+    expect(dialog).toHaveStyle({ maxWidth: "75%" });
+    // El default ya no es un token: no debe quedar ninguna clase de ancho pegada.
+    expect(dialog).not.toHaveClass("max-w-md");
   });
 
-  it("size='md' explícito equivale al default", async () => {
+  it("el min-width de 300px lo pone el Modal, sin que el consumidor haga nada", async () => {
+    renderModal();
+    expect(await screen.findByRole("dialog")).toHaveStyle({ minWidth: "300px" });
+  });
+
+  it("size acepta una medida en % o en px", async () => {
+    const { rerender } = renderModal({ size: "50%" });
+    expect(await screen.findByRole("dialog")).toHaveStyle({ maxWidth: "50%" });
+
+    rerender(
+      <Modal open onOpenChange={vi.fn()} title="Título de prueba" size="800px" />,
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveStyle({ maxWidth: "800px" });
+    // Una medida explícita conserva el min-width del Modal.
+    expect(dialog).toHaveStyle({ minWidth: "300px" });
+  });
+
+  it("size='md' sigue aplicando el token de siempre", async () => {
     renderModal({ size: "md" });
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveClass("max-w-md");
+    // Un token NO debe emitir maxWidth inline: pisaría cualquier clase del consumidor.
+    expect(dialog.style.maxWidth).toBe("");
   });
 
-  it("size='xl' fija el ancho máximo en 1000px y deja de aplicar max-w-md", async () => {
+  it("size='xl' fija el ancho máximo en 1000px", async () => {
     renderModal({ size: "xl" });
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveClass("max-w-[1000px]");

@@ -398,12 +398,28 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
     expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
   });
 
-  it("menor-2: montoCobrar null -> validation_error", async () => {
+  it("menor-2: montoCobrar null + monto 100 -> validation_error (100 no cuadra con 0)", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ montoCobrar: null })]),
     });
     const r = await newService(repo).gestionar(entrega(100), MENSAJERO);
     expect(r.status).toBe("validation_error");
+  });
+
+  it("sin cobro: montoCobrar 0 + monto 0 -> ok (entrega sin recaudo)", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ montoCobrar: 0 })]),
+    });
+    const r = await newService(repo).gestionar(entrega(0), MENSAJERO);
+    expect(r.status).toBe("ok");
+  });
+
+  it("sin cobro: montoCobrar null + monto 0 -> ok (null cuadra con 0)", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ montoCobrar: null })]),
+    });
+    const r = await newService(repo).gestionar(entrega(0), MENSAJERO);
+    expect(r.status).toBe("ok");
   });
 
   it("R23/R32: entrega valida -> sube foto, crea gestion(entregada), deja estado entregada + URL firmada", async () => {

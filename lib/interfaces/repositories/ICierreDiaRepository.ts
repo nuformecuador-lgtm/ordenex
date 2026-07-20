@@ -1,6 +1,10 @@
 import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
-import type { CierrePasadoDTO, CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
+import type {
+  CierrePasadoDTO,
+  CierreTotales,
+  IngresoOrdenexDTO,
+} from "@/lib/interfaces/services/ICierreDiaService";
 
 // Feature 37 — contrato del repositorio del cierre del dia. Solo queries Prisma;
 // sin logica de negocio (esa vive en CierreDiaService). Money-safe: los Decimal se
@@ -40,6 +44,9 @@ export interface CierreGestionPendienteRow {
   // (R7b) y del dinero recibido (R20). En vivo (37) el service lo DERIVA; en admin (38/40)
   // es el snapshot leido de la columna.
   ingresoBodegaRechazo: string | null;
+  // Desglose del ingreso de Ordenex + tarifa congelada, DERIVADO del snapshot. Solo lo
+  // pueblan los repos de ADMIN (38/40): la vista en vivo del mensajero (37) no lo expone.
+  ingresoOrdenex?: IngresoOrdenexDTO | null;
 }
 
 // Datos para crear la solicitud de cierre (R13/R14). Totales snapshot como STRING.

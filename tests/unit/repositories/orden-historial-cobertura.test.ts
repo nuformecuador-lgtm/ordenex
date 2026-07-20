@@ -66,6 +66,18 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "anularGestionYDevolverAGestion",
     origenTipo: "deshacer_gestion",
   },
+  // #13: feature 88 (D7). La carga por API crea la orden y, en la MISMA tx, fija su estado
+  // inicial (`en_ruta_bodega_principal`) con `origen_tipo` NUEVO `carga_api` (13.º valor del
+  // enum) para distinguir el canal integrador de la `carga_masiva` por sesion en metricas. La
+  // migracion `*_orden_historial_origen_tipo_carga_api` lo añade y su `down.sql` recrea el enum
+  // sin el. Es un NUEVO call-site de escritura de estado (no reusa createManyOrdenes: ese no
+  // asigna num_guia inmediato).
+  {
+    n: 13,
+    repo: "OrdenRepository",
+    simbolo: "createManyOrdenesConGuia",
+    origenTipo: "carga_api",
+  },
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
@@ -87,10 +99,10 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 12 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(12);
-    // numeracion 1..12 sin huecos ni duplicados.
-    expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  it("son EXACTAMENTE 13 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(13);
+    // numeracion 1..13 sin huecos ni duplicados.
+    expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
   });
 
   it("cada punto del mapa es un metodo REAL de su repositorio (rename/olvido -> rompe)", () => {
@@ -100,7 +112,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 12 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
+  it("los 13 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
     const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
     expect(tiposDelMapa).toEqual(tiposDelSeed);
@@ -152,7 +164,9 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
   it("feature 67 (R20/R21): el punto #12 es el deshacer, con `origen_tipo` dedicado `deshacer_gestion`", () => {
     const tipos = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED] as string[];
     expect(tipos).toContain("deshacer_gestion"); // 12.º valor (migracion *_gestion_orden_anulacion)
-    expect(tipos).toHaveLength(12);
+    // Invariante POSICIONAL, no de total: la feature 88 añadio `carga_api` como 13.º valor
+    // (aditivo); lo que la 67 fija es que `deshacer_gestion` es el 12.º (indice 11).
+    expect(tipos.indexOf("deshacer_gestion")).toBe(11);
 
     const p12 = PUNTOS_DE_ESCRITURA.find((p) => p.n === 12);
     expect(p12).toMatchObject({

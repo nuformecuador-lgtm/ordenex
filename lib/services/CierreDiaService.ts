@@ -362,6 +362,9 @@ export function toDetalleDTO(
     ingresoBodegaRechazo:
       ingresoBodegaRechazo !== undefined ? ingresoBodegaRechazo : g.ingresoBodegaRechazo,
     tarifaFaltante,
+    // Passthrough: solo viene poblado desde los repos de admin (38/40), que lo derivan del
+    // snapshot. En la vista en vivo del mensajero es `undefined` y la UI no muestra nada.
+    ingresoOrdenex: g.ingresoOrdenex,
   };
 }
 

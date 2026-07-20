@@ -74,6 +74,51 @@ function sumIngresoBodega(items: { totalIngresoBodegaRechazos: string }[]): stri
   return total.toFixed(2);
 }
 
+/**
+ * Reparto del EFECTIVO entre los pagos a mensajeros. Al mensajero se le paga SOLO con el
+ * efectivo de la consolidacion (SIMPE/transferencia no son plata en mano en la bodega), y el
+ * pago es ATOMICO: o se le paga completo o no se le paga (no hay pago parcial). Con el
+ * efectivo insuficiente se paga de MENOR a MAYOR monto, para pagarle a la mayor cantidad
+ * posible de mensajeros; lo que queda sin pagar lo debe la central.
+ *
+ * El sobrante de efectivo NO se reasigna: si tras pagar a los que alcanzan quedan 500 y el
+ * siguiente cobra 1500, esos 500 se quedan en la bodega (el pago parcial no existe).
+ *
+ * Devuelve STRING escala 2 (money-safe): la aritmetica es Prisma.Decimal, nunca number.
+ */
+function repartirEfectivo(
+  efectivo: string,
+  pagos: string[],
+): { pagado: string; centralDebe: string } {
+  const disponible = new Prisma.Decimal(efectivo);
+  // Copia ordenada ascendente: `sort` muta, y `pagos` viene de los consolidables que el
+  // caller sigue usando en el orden de la tabla.
+  const ordenados = [...pagos].sort((a, b) =>
+    new Prisma.Decimal(a).comparedTo(new Prisma.Decimal(b)),
+  );
+  let pagado = new Prisma.Decimal(0);
+  let debe = new Prisma.Decimal(0);
+  for (const p of ordenados) {
+    const monto = new Prisma.Decimal(p);
+    // `lessThanOrEqualTo` sobre el acumulado, no un `restante` que se va pisando: el que no
+    // alcanza NO consume efectivo y el siguiente (mas caro) tampoco va a alcanzar, pero se
+    // evalua igual para acumular su deuda.
+    if (pagado.plus(monto).lessThanOrEqualTo(disponible)) {
+      pagado = pagado.plus(monto);
+    } else {
+      debe = debe.plus(monto);
+    }
+  }
+  return { pagado: pagado.toFixed(2), centralDebe: debe.toFixed(2) };
+}
+
+// Neto agregado: dinero recibido (total general) MENOS lo que EFECTIVAMENTE se pago a los
+// mensajeros (no lo que se les debe: lo impago lo cubre la central y vive en `centralDebe`).
+// Resta exacta con Prisma.Decimal (sin parseFloat/Number), STRING escala 2 (money-safe).
+function netoDe(general: string, pagado: string): string {
+  return new Prisma.Decimal(general).minus(pagado).toFixed(2);
+}
+
 // `true` si el error es una violacion del indice unico parcial (R8): otra solicitud
 // concurrente creo el CierreBodega `solicitado` de la zona antes que esta.
 function isUniqueViolation(e: unknown): boolean {
@@ -106,6 +151,8 @@ export class CierreBodegaService implements ICierreBodegaService {
         totalesAgregados: ZERO_TOTALES,
         totalPagoMensajeroAgregado: "0.00", // R18: sin zona, nada que agregar
         totalIngresoBodegaRechazosAgregado: "0.00", // feature 56/R17: sin zona, nada que agregar
+        totalNetoAgregado: "0.00", // sin zona: 0.00 - 0.00
+        totalCentralDebeAgregado: "0.00", // sin zona: nada que pagar, nada que deber
         puedesSolicitar: false,
         motivoBloqueo: MSG_SIN_ZONA,
         cierresBodegaPasados: [],
@@ -127,6 +174,16 @@ export class CierreBodegaService implements ICierreBodegaService {
     // Feature 56/R17: total agregado del ingreso de bodega por rechazos (suma snapshot,
     // separada de totalesAgregados y del pago a mensajeros).
     const totalIngresoBodegaRechazosAgregado = sumIngresoBodega(consolidables);
+    // Reparto del efectivo entre los pagos a mensajeros (atomico, de menor a mayor). El
+    // agregado `totalPagoMensajeroAgregado` NO cambia: sigue siendo lo que se les debe en
+    // total; esto solo decide cuanto de eso se puede pagar hoy y cuanto queda a la central.
+    const { pagado, centralDebe } = repartirEfectivo(
+      totalesAgregados.efectivo,
+      consolidables.map((c) => c.totalPagoMensajero),
+    );
+    const totalCentralDebeAgregado = centralDebe;
+    // Neto agregado DERIVADO: total general - lo EFECTIVAMENTE pagado.
+    const totalNetoAgregado = netoDe(totalesAgregados.general, pagado);
 
     // R6/R7: gate de "Solicitar cierre de bodega" con motivo accionable.
     let puedesSolicitar = true;
@@ -145,6 +202,8 @@ export class CierreBodegaService implements ICierreBodegaService {
       totalesAgregados,
       totalPagoMensajeroAgregado, // R18
       totalIngresoBodegaRechazosAgregado, // feature 56/R17
+      totalNetoAgregado,
+      totalCentralDebeAgregado,
       puedesSolicitar,
       motivoBloqueo,
       cierresBodegaPasados,

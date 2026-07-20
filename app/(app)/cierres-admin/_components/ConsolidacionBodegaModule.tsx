@@ -20,6 +20,7 @@ import {
   INGRESO_BODEGA_RECHAZOS_COL,
   PagoMensajeroTotal,
   IngresoBodegaRechazosTotal,
+  CentralDebeTotal,
   TotalesPanel,
 } from "./cierre-detalle-shared";
 
@@ -40,6 +41,16 @@ export interface ConsolidacionBodegaModuleProps {
   totalPagoMensajeroAgregado: string;
   /** Feature 56/R17: suma snapshot del ingreso de bodega por rechazos (STRING), separado. */
   totalIngresoBodegaRechazosAgregado: string;
+  /**
+   * Neto DERIVADO server-side (STRING): `totalesAgregados.general` menos lo que el efectivo
+   * alcanzó a pagarle a los mensajeros. Llega ya calculado (money-safe): acá no se resta.
+   */
+  totalNetoAgregado: string;
+  /**
+   * Pago a mensajeros que el efectivo NO cubrió (STRING, DERIVADO server-side); lo debe la
+   * central. `"0.00"` si el efectivo alcanzó para todos.
+   */
+  totalCentralDebeAgregado: string;
   /** Gate de "Solicitar cierre de bodega" (R6/R7). */
   puedesSolicitar: boolean;
   /** Texto accionable del bloqueo si `!puedesSolicitar`. */
@@ -55,6 +66,8 @@ export function ConsolidacionBodegaModule({
   totalesAgregados,
   totalPagoMensajeroAgregado,
   totalIngresoBodegaRechazosAgregado,
+  totalNetoAgregado,
+  totalCentralDebeAgregado,
   puedesSolicitar,
   motivoBloqueo,
   cierresBodegaPasados,
@@ -112,6 +125,7 @@ export function ConsolidacionBodegaModule({
             totales={totalesAgregados}
             ariaLabel="Totales a consolidar"
             title="Totales a consolidar"
+            neto={totalNetoAgregado}
           />
 
           {/* Feature 39/R18: agregado a pagar a mensajeros, separado del dinero recibido. */}
@@ -126,6 +140,15 @@ export function ConsolidacionBodegaModule({
             value={totalIngresoBodegaRechazosAgregado}
             ariaLabel="Ingreso de bodega por rechazos a consolidar"
           />
+
+          {/* El efectivo no cubrió todos los pagos: el resto lo debe la central. Solo se
+              muestra si hay deuda ("0.00" → el efectivo alcanzó, no hay nada que avisar). */}
+          {totalCentralDebeAgregado === "0.00" ? null : (
+            <CentralDebeTotal
+              value={totalCentralDebeAgregado}
+              ariaLabel="Central debe"
+            />
+          )}
 
           {/* ---------- Cierres del día a consolidar (R5) ---------- */}
           <section

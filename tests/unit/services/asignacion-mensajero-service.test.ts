@@ -17,7 +17,9 @@ function buildUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepositor
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
-    listMensajeros: vi.fn().mockResolvedValue([{ id: "msg-1", nombre: "Ana" }]),
+    listMensajeros: vi
+      .fn()
+      .mockResolvedValue([{ id: "msg-1", nombre: "Ana", zonaId: "z1", zonaNombre: "Norte" }]),
     listByRol: vi.fn().mockResolvedValue([]), // exigido por IUserRepository; no ejercitado aqui
     updatePasswordHash: vi.fn(),
     list: vi.fn(),
@@ -47,6 +49,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findDistritosByCantonIds: vi.fn(),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1", "msg-2"])),
     createManyOrdenes: vi.fn(),
+    createManyOrdenesConGuia: vi.fn().mockResolvedValue([]), // feature 88
     findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
     asignarMensajeroSugerido: vi.fn().mockResolvedValue(0),
     countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
@@ -99,7 +102,9 @@ describe("AsignacionMensajeroService.listarMensajeros (R1, R5)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
-      expect(r.mensajeros).toEqual([{ id: "msg-1", nombre: "Ana" }]);
+      expect(r.mensajeros).toEqual([
+        { id: "msg-1", nombre: "Ana", zonaId: "z1", zonaNombre: "Norte" },
+      ]);
     }
     expect(userRepo.listMensajeros).toHaveBeenCalledTimes(1);
   });
