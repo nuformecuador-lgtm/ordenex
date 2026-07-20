@@ -1,4 +1,4 @@
-import { RolValue } from "@prisma/client";
+import { RolValue, VehiculoValue } from "@prisma/client";
 import { hashPassword } from "@/lib/utils/password";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 
@@ -30,7 +30,7 @@ interface Perfil {
   cedula: string;
   rol: RolValue;
   zona?: string;
-  vehiculo?: string;
+  vehiculo?: VehiculoValue;
   placa?: string;
   fulfillment?: boolean;
 }
