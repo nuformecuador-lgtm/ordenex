@@ -1,0 +1,24 @@
+# Normalizacion de finales de linea.
+#
+# Problema que resuelve: el repo tenia finales MIXTOS — 25 archivos .ts/.tsx
+# guardados con CRLF y el resto con LF, sin ninguna regla que lo arbitrara. El
+# efecto practico es que cualquier herramienta que reescriba un archivo CRLF con
+# LF (un formateador, un `sed`, un editor en Linux, un agente) produce un diff
+# de archivo ENTERO por un cambio de tres lineas: el commit se vuelve
+# irrevisable y `git blame` queda inservible para ese archivo.
+#
+# Regla: en el repositorio se guarda SIEMPRE LF, y tambien se materializa LF en
+# el working tree (`eol=lf`), sin depender de `core.autocrlf` de cada maquina.
+# Se elige LF y no CRLF porque es lo que ya tenia la mayoria del repo y lo que
+# usa el entorno donde esto corre de verdad (Vercel/Linux); asi no queda ninguna
+# conversion en el medio que pueda volver a divergir.
+* text=auto eol=lf
+
+# Scripts de shell: LF obligatorio. Con CRLF el shebang se lee como
+# "/usr/bin/env bash\r" y el script no arranca.
+*.sh text eol=lf
+
+# Binarios: nunca convertir ni intentar diffear como texto.
+*.xlsx binary
+*.png  binary
+*.ico  binary
