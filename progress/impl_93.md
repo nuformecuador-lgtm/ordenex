@@ -37,7 +37,7 @@ en el código y no existe en el producto**. El merge tiene que ir después de la
 | `app/(app)/_components/geocodificacion-motivo-messages.ts` | R9: mapeo COMPARTIDO de los 5 `motivo` del gate a los 2 mensajes. Escrito una vez. |
 | `hooks/useUbicacionActual.ts` | §6.3: `getCurrentPosition` con timeout + guarda dura; estado `{ coords, denegado }`. |
 | `lib/actions/ruta-mensajero.ts` | Firma y resultados de `sincronizarRuta` (R31–R34). **Sin cuerpo real: `TODO(92)`.** |
-| `lib/actions/_ruta-mensajero-simulado.ts` | Simulador de desarrollo **fenced**. No es el backend. |
+| `lib/actions/_ruta-mensajero-simulado.ts` | Simulador de desarrollo **fenced**: hace de backend (sincronización + **decorador de lectura** que reordena server-side). |
 | `tests/unit/components/guia-decision-error-messages.test.ts` | R9 a nivel mapper (los 5 motivos → 2 mensajes, en los DOS mappers). |
 | `tests/unit/actions/ruta-mensajero-fencing.test.ts` | Fencing del simulador + desenlaces simulados. |
 
@@ -48,7 +48,7 @@ en el código y no existe en el producto**. El merge tiene que ir después de la
 | `app/(app)/ordenes/_components/guia-decision-error-messages.ts` | R9: rama que inspecciona `detalle[].motivo` **antes** del switch por `status`. |
 | `app/(app)/recepcion-satelite/_components/asignacion-satelite-error-messages.ts` | R9: misma rama (es el mapper de `AsignarSateliteModal`). |
 | `app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx` | R30 (aviso), R31 (botón), R32/R25 (sincronizar + geolocalización). |
-| `app/(app)/mis-asignaciones/page.tsx` | Baja `ruta` y `rol` por props (server → cliente, sin fetch). |
+| `app/(app)/mis-asignaciones/page.tsx` | Baja `ruta` y `rol` por props (server → cliente, sin fetch) + aplica el decorador simulado en el seam server-side. |
 | `lib/interfaces/services/IMisAsignacionesService.ts` | Tipos de la 92 declarados por adelantado (ver abajo). |
 | `lib/types/gestion-orden.ts` | Espejo de `ruta` en el resultado de la Server Action (ver abajo). |
 | `tests/components/{GenerarGuiaModal,AsignarBodegaModal,MisAsignacionesModule}.test.tsx` | Casos nuevos de R9 / R25 / R29–R32. |
@@ -65,8 +65,17 @@ en el código y no existe en el producto**. El merge tiene que ir después de la
 *gana* `ruta: {...}`. Declararlos **requeridos** rompe el typecheck de inmediato: quien construye
 esos objetos es `MisAsignacionesService.toDTO` / `listarMisAsignaciones`, que están **fuera del
 alcance de la 93** y todavía no los pueblan. Como el baseline exigido es 0 errores de typecheck, van
-como `secuenciaRuta?: number | null` y `ruta?: RutaResumen`. La 92 los vuelve requeridos al
-implementar el cuerpo. Ambos llevan el comentario pedido:
+como `secuenciaRuta?: number | null` y `ruta?: RutaResumen`.
+
+> ⚠️ **ACCIÓN OBLIGATORIA PARA LA 92: endurecer ambos campos a REQUERIDOS.**
+> Mientras sigan opcionales, el contrato está flojo: un service que se olvide de poblar `ruta` o
+> `secuenciaRuta` **compila igual** y el fallo aparece en runtime como un aviso que nunca sale o un
+> orden que nunca cambia, sin que nadie se entere. En cuanto
+> `MisAsignacionesService.listarMisAsignaciones` / `toDTO` los pueblen, quitar el `?` en
+> `IMisAsignacionesService.ts` **y** en `lib/types/gestion-orden.ts` (los dos sitios, ver desviación
+> 2). El typecheck señalará entonces cualquier constructor que falte.
+
+Ambos llevan el comentario pedido:
 `// Feature 92 (§6.1) — declarado por la 93 por adelantado; ver status_note de la 93 en feature_list.json`.
 
 **2. Se tocó un TERCER archivo no-UI: `lib/types/gestion-orden.ts`.**
@@ -93,6 +102,11 @@ recibido; no hay ningún `sort`, `toSorted`, ni `useMemo` que reordene. El test
 `R28: renderiza las cards ... EN EL ORDEN RECIBIDO` pasa las órdenes desordenadas respecto de
 **cualquier** criterio local plausible (`numRemision`, `destinatario`, `secuenciaRuta`), de modo que
 se pone rojo si alguien mete un sort en cliente.
+
+Ojo con la lectura fácil de esta regla: **prohíbe que ordene el módulo, no que ordene el servidor**
+— §6.1 exige justo lo contrario, que el orden llegue ya resuelto. Por eso el reordenado simulado vive
+en `page.tsx` (Server Component) vía `decorarMisAsignacionesSimulado`, el mismo seam que ocupará
+`MisAsignacionesService` cuando llegue la 92. Ver la sección de simulación.
 
 **R9 vive en el mapper, no en los modales.** Los cuatro modales (`GenerarGuiaModal`,
 `AsignarBodegaModal`, `AsignarSateliteModal`, `RutearSateliteModal`) no leen `detalle`: delegan en
@@ -150,7 +164,29 @@ implementación. Queda documentado aquí como pendiente:
 
 `lib/actions/ruta-mensajero.ts` **no finge que funciona**: sin el flag devuelve
 `{ status: "no_implementado" }`. Detrás hay un simulador en memoria, en archivo aparte y con nombre
-que no engaña (`lib/actions/_ruta-mensajero-simulado.ts`), para poder recorrer el flujo a mano.
+que no engaña (`lib/actions/_ruta-mensajero-simulado.ts`), que **hace de backend** para poder
+recorrer el flujo entero a mano.
+
+### Dónde vive el reordenado (y por qué ahí)
+
+El simulador tiene **dos mitades**, y esto es lo importante del diseño:
+
+1. **Escritura** — `sincronizarRutaSimulado()`: la llama la Server Action al pulsar el botón.
+   Calcula una secuencia y un `ruta`, y los deja "persistidos" en memoria (hace de tabla de ruta).
+2. **Lectura** — `decorarMisAsignacionesSimulado()`: se aplica en **`page.tsx`, un Server
+   Component**, sobre el resultado de `listarMisAsignaciones()`. Devuelve `porGestionar` **ya
+   reordenado** y con el `ruta` adjunto.
+
+Ese es exactamente el seam donde la 92 pondrá el reordenado real (§6.1: lo resuelve
+`MisAsignacionesService`, no el repositorio ni el componente). R28 prohíbe que **el módulo** ordene;
+exige justo lo contrario del servidor: que el orden llegue ya resuelto. Por eso el decorador lo
+respeta en vez de violarlo.
+
+**`MisAsignacionesModule.tsx` no tiene un solo `sort`, ni con el flag ni sin él** (verificable:
+`grep -n "sort" MisAsignacionesModule.tsx` solo devuelve el comentario que lo prohíbe). El test
+`R28: renderiza las cards … EN EL ORDEN RECIBIDO (sin sort en cliente)` sigue **verde** con el
+decorador puesto — son sitios distintos y solo uno de los dos es legítimo. Si ese test se pusiera
+rojo, significaría que el reordenado se coló en el lugar prohibido.
 
 ### Cómo levantarlo
 
@@ -158,39 +194,55 @@ que no engaña (`lib/actions/_ruta-mensajero-simulado.ts`), para poder recorrer 
 RUTA_SIMULADA=1 pnpm dev     # el flag es obligatorio y explícito
 ```
 
-Entrá como usuario con rol `mensajero` y visitá **`/mis-asignaciones`**, con al menos 2 órdenes en
-`en_reparto`. El botón **"Sincronizar ruta"** está a la derecha del título "En reparto / por
-gestionar".
+Entrá como usuario con rol `mensajero` y visitá **`/mis-asignaciones`**, con al menos 3 órdenes en
+`en_reparto` (con 1 no se nota el reorden). El botón **"Sincronizar ruta"** está a la derecha del
+título "En reparto / por gestionar".
 
-### Qué se ve en cada desenlace
+### Recorrido completo (esto es lo que hay que poder ver)
 
-| Acción | Qué esperar |
-| --- | --- |
-| 1.ª pulsación, permiso de GPS **concedido** | Prompt del navegador → toast "Ruta sincronizada." → `router.refresh()`. Origen `gps`, ruta `vigente`, **sin** aviso. |
-| 2.ª pulsación (esperando >10 s) | Ruta `desactualizada` + `paradasSinOptimizar: 1` → **aparece el aviso amarillo de R30**. |
-| 3.ª pulsación | Vuelve a `vigente` → el aviso **desaparece**. Alterna en cada sync. |
-| Doble clic dentro de 10 s | Toast "Espera unos segundos antes de volver a sincronizar." (R34). Sin refresh. |
-| Permiso **denegado** o timeout | La sincronización **sigue igual**, sin `ubicacion`. Origen `ultima_conocida`/`centroide`. Sin toast de error (R25). |
-| Rol ≠ `mensajero` | El botón ni se renderiza (R31); si se invoca la action igual → `forbidden` (R33). |
+| # | Acción | Qué esperar en pantalla |
+| --- | --- | --- |
+| 1 | Carga inicial | Cards en el orden normal (`createdAt desc`). **Sin** aviso: todavía no hubo ninguna sincronización, el decorador devuelve el resultado intacto. |
+| 2 | Pulsar "Sincronizar ruta", **conceder** el GPS | Prompt del navegador → toast "Ruta sincronizada." → `router.refresh()` → **las cards CAMBIAN DE ORDEN** (el simulador rota la lista una posición: A,B,C → B,C,A). Ruta `vigente` → **sin** aviso. |
+| 3 | Volver a pulsar (esperando >10 s) | Las cards **vuelven a rotar** (B,C,A → C,A,B) y **aparece el aviso amarillo de R30** ("El orden de entrega no está actualizado…"): el simulador alterna a `desactualizada`. |
+| 4 | Pulsar otra vez | Rotan de nuevo y el aviso **desaparece** (vuelve a `vigente`). Alterna en cada sync. |
+| 5 | Pulsar y **denegar** el GPS (o dejar expirar el prompt) | La sincronización **sigue adelante igual**: las cards rotan lo mismo, sin `ubicacion`, origen `ultima_conocida`/`centroide`. **Sin** toast de error (R25: la denegación nunca bloquea). |
+| 6 | Doble clic dentro de 10 s | Toast "Espera unos segundos antes de volver a sincronizar." (R34). Sin refresh, sin reorden. |
+| 7 | Recibir una orden nueva y volver a cargar sin sincronizar | La orden nueva aparece **al final** con `secuenciaRuta: null` y el aviso se enciende (`paradasSinOptimizar > 0`), que es el caso de R28/R30 combinados. |
+| 8 | Rol ≠ `mensajero` | El botón ni se renderiza (R31); si se invoca la action igual → `forbidden` (R33). |
 
-### Límite honesto de la simulación
+Con el flag apagado (`pnpm dev` a secas) nada de esto ocurre: orden normal, sin aviso, y el botón
+devuelve `no_implementado`. Es el comportamiento que tendría producción hoy — y el motivo por el que
+este PR va después del de la 92.
 
-**Las cards NO se reordenan.** El orden lo decide el servidor (`porGestionar` ya ordenado por el
-service) y eso es de la 92; el simulador solo devuelve una `secuencia` de mentira en el resultado de
-la action. Simularlo en cliente exigiría un sort en el componente, que es justo lo que R28 prohíbe.
-Lo que sí se recorre de punta a punta es: pulsar → permiso → action → resultado → aviso →
-`router.refresh()`.
-
-### Fencing (tres candados, con test)
+### Fencing (tres candados, verificados POR MUTACIÓN)
 
 1. Archivo aparte, prefijo `_` y la palabra `simulado` en el nombre.
 2. Solo se activa con `RUTA_SIMULADA=1` explícito. **Apagado por defecto.**
 3. **Nunca** se activa con `NODE_ENV === "production"`, ni con el flag puesto.
 
-`tests/unit/actions/ruta-mensajero-fencing.test.ts` verifica los tres, **más una contraprueba** (con
-flag y fuera de producción la action **sí** entra al simulador) para que los dos primeros tests no
-pasen trivialmente si alguien hiciera que la action devolviera siempre `no_implementado`. Si alguien
-borra una guarda, ese archivo se pone rojo.
+Los candados cubren **las dos mitades**: la action (escritura) y el decorador (lectura) consultan
+`simulacionRutaHabilitada()` por separado, así que ninguna puede colarse sin la otra.
+
+`tests/unit/actions/ruta-mensajero-fencing.test.ts` (18 casos) verifica los tres, **más dos
+contrapruebas** para que los candados no pasen trivialmente:
+
+- con flag y fuera de producción la action **sí** entra al simulador (si no, los tests de "sin flag →
+  `no_implementado`" pasarían aunque la guarda no existiera);
+- sin flag el decorador devuelve **la misma referencia** del resultado (`toBe`), no una copia
+  equivalente: no toca nada en absoluto.
+
+**Verificación por mutación del candado del decorador** (hecha, no citada): al quitar la línea
+`if (!simulacionRutaHabilitada()) return result;` de `decorarMisAsignacionesSimulado`, se ponen en
+rojo exactamente los 2 tests de candado:
+
+```
+--- MUTADO: candado del decorador quitado ---
+     × CANDADO: sin el flag NO decora — devuelve el resultado INTACTO 10ms
+     × CANDADO: en production NO decora ni con el flag puesto 2ms
+      Tests  2 failed | 16 passed (18)
+--- RESTAURADO ---
+```
 
 ---
 
@@ -203,12 +255,15 @@ borra una guarda, ese archivo se pone rojo.
 | **R9** | `tests/components/AsignarBodegaModal.test.tsx` → `R9: conflict con motivo <5 motivos>` |
 | **R25** | `tests/components/MisAsignacionesModule.test.tsx` → `R25/R32: permiso CONCEDIDO…`, `R25: permiso DENEGADO…`, `R25: FALLO/TIMEOUT…`, `R25: navegador SIN geolocation…` |
 | **R28** (render) | `MisAsignacionesModule.test.tsx` → `R28: renderiza las cards … EN EL ORDEN RECIBIDO (sin sort en cliente)` |
+| **R28** (seam server) | `ruta-mensajero-fencing.test.ts` → `R28: tras sincronizar, porGestionar llega YA REORDENADO desde el servidor`, `R28: secuenciaRuta se puebla 1..n`, `R28: las órdenes que entraron DESPUÉS … van al final` |
+| **Candado del decorador** | `ruta-mensajero-fencing.test.ts` → `CANDADO: sin el flag NO decora`, `CANDADO: en production NO decora ni con el flag puesto` (verificados por mutación) |
 | **R29** | `MisAsignacionesModule.test.tsx` → `R29: NO altera el orden de 'Por recoger'` |
 | **R30** | `MisAsignacionesModule.test.tsx` → 4 casos: `desactualizada`, `paradasSinOptimizar>0`, vigente+0 (sin aviso), sin datos de ruta (sin aviso) + `R30/R32: tras sincronizar…` |
 | **R31** | `MisAsignacionesModule.test.tsx` → `R31: con rol mensajero…`, `R31: con rol <adminTienda/adminMaestro/bodega>…`, `R31: sin rol explícito (fail-closed)` |
 | **R32** | `MisAsignacionesModule.test.tsx` → `R25/R32: permiso CONCEDIDO → envía ubicacion y refresca`, `R32: mientras la action no resuelve, el botón queda deshabilitado` |
 | **R33/R34** (parte UI) | `MisAsignacionesModule.test.tsx` → `R34 (UI): un conflict…`; `tests/unit/actions/ruta-mensajero-fencing.test.ts` → `R33`, `R34` sobre el simulador |
-| **Fencing** | `tests/unit/actions/ruta-mensajero-fencing.test.ts` (4 casos + contraprueba) |
+| **Fencing** | `tests/unit/actions/ruta-mensajero-fencing.test.ts` (18 casos: candados de action y decorador + 2 contrapruebas + desenlaces) |
+| **R30** (seam server) | `ruta-mensajero-fencing.test.ts` → `R30: el decorador adjunta el ruta que dispara (o no) el aviso`, `R30: una parada sin posición marca la ruta como desactualizada` |
 
 Los tests de componente **mockean la Server Action**, no el simulador.
 
@@ -235,7 +290,7 @@ Los tests de componente **mockean la Server Action**, no el simulador.
 Los 143 warnings son preexistentes de `dev` (hooks/exhaustive-deps, no-unused-vars en
 `cierres-admin.ts`, `EtiquetaGuiaService.ts`, etc.). Ninguno en archivos de esta feature.
 
-### Tests de la feature → **100 passed / 100**
+### Tests de la feature → **108 passed / 108** (tras añadir el decorador)
 
 ```
 npx vitest run tests/components/MisAsignacionesModule.test.tsx \
@@ -248,17 +303,24 @@ npx vitest run tests/components/MisAsignacionesModule.test.tsx \
   tests/unit/actions/ruta-mensajero-fencing.test.ts
 
  Test Files  8 passed (8)
-      Tests  100 passed (100)
-   Duration  12.36s
+      Tests  108 passed (108)
+   Duration  10.89s
 ```
 
-### Suite completa → **35 failed | 3558 passed (3593)**
+El test que impide el sort en cliente sigue **verde** con el decorador puesto (está dentro de los 47
+de `MisAsignacionesModule.test.tsx`), que es la señal de que el reordenado quedó en el seam correcto.
+
+### Suite completa → **34 failed | 3567 passed (3601)**
 
 ```
- Test Files  13 failed | 351 passed (364)
-      Tests  35 failed | 3558 passed (3593)
-   Duration  115.15s
+ Test Files  12 failed | 352 passed (364)
+      Tests  34 failed | 3567 passed (3601)
+   Duration  117.25s
 ```
+
+(La corrida previa a añadir el decorador dio `35 failed | 3558 passed (3593)`: los 8 tests nuevos del
+decorador pasan y la diferencia de 1 rojo es un flake de timeout, no un cambio de comportamiento —
+ver clasificación abajo.)
 
 **Clasificación de los rojos — todos AJENOS, verificado en aislado:**
 
@@ -295,10 +357,14 @@ drift del PR #82.
 ## Seguimientos anotados
 
 1. **Q10** (arriba): decisión del humano sobre `RutearSateliteModal`.
-2. La 92 debe volver **requeridos** `secuenciaRuta` y `ruta` al implementar el cuerpo.
+2. **La 92 DEBE endurecer `secuenciaRuta` y `ruta` a requeridos** (quitar el `?` en
+   `IMisAsignacionesService.ts` **y** en `lib/types/gestion-orden.ts`). Mientras sigan opcionales el
+   contrato está flojo y un service que no los pueble compila igual. Ver desviación 1.
 3. `ListarMisAsignacionesResult` (`lib/types/gestion-orden.ts`) **duplica a mano** la rama `"ok"` de
    `ListarMisAsignacionesServiceResult`. Cada campo nuevo hay que añadirlo en dos sitios o el borde
    lo pierde en silencio. Candidato a unificación en una feature de limpieza.
-4. **Borrar `lib/actions/_ruta-mensajero-simulado.ts`** en cuanto la 92 aterrice con el cuerpo real.
+4. **Borrar `lib/actions/_ruta-mensajero-simulado.ts`** en cuanto la 92 aterrice con el cuerpo real,
+   **y con él la línea `decorarMisAsignacionesSimulado(...)` de `page.tsx`** (lleva su `TODO(92)`).
+   El reordenado pasa a hacerlo `MisAsignacionesService` en el mismo seam.
 5. `lib/actions/mis-asignaciones.ts:99,103` tiene `console.log("xyz AAA*")` de depuración, ajeno y
    preexistente. No se tocó (fuera de alcance), pero no debería llegar a producción.

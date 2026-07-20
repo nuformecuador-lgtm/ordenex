@@ -15,7 +15,10 @@
 //   3. NUNCA se activa si `NODE_ENV === "production"`, ni con el flag puesto.
 // =============================================================================
 
-import type { RutaResumen } from "@/lib/interfaces/services/IMisAsignacionesService";
+import type {
+  MiAsignacionDTO,
+  RutaResumen,
+} from "@/lib/interfaces/services/IMisAsignacionesService";
 
 /** Intervalo minimo entre sincronizaciones manuales (R34). Espeja el default del spec. */
 export const RUTA_SYNC_MIN_INTERVALO_S = 10;
@@ -44,11 +47,18 @@ export function simulacionRutaHabilitada(
 // --- Estado en memoria del simulador (se pierde en cada recarga del server) ---
 let ultimaSyncMs: number | null = null;
 let syncs = 0;
+// Ultimo resultado "persistido" por el simulador. Hace de tabla de ruta: lo
+// escribe `sincronizarRutaSimulado` y lo LEE el decorador de abajo en el render
+// siguiente (el que dispara `router.refresh()`).
+let ultimaSecuencia: string[] = [];
+let ultimaRuta: RutaResumen | null = null;
 
 /** Solo para los tests del simulador: vuelve al estado inicial. */
 export function resetSimulacionRuta(): void {
   ultimaSyncMs = null;
   syncs = 0;
+  ultimaSecuencia = [];
+  ultimaRuta = null;
 }
 
 /**
@@ -100,14 +110,80 @@ export function sincronizarRutaSimulado(args: {
       ? [...ordenIds.slice(1), ordenIds[0]!]
       : [...ordenIds];
 
+  const ruta: RutaResumen = {
+    estado: desactualizada ? "desactualizada" : "vigente",
+    calculadaAt: new Date(ahora),
+    origenFuente,
+    paradasSinOptimizar: desactualizada ? 1 : 0,
+  };
+
+  // "Persiste" el resultado para que el render siguiente lo lea (ver decorador).
+  ultimaSecuencia = secuencia;
+  ultimaRuta = ruta;
+
+  return { status: "ok", secuencia, ruta };
+}
+
+// =============================================================================
+// Decorador de lectura — hace de BACKEND, no de cliente.
+// =============================================================================
+// R28/§6.1 prohibe que el MODULO ordene: exige que el orden llegue ya resuelto
+// desde el servidor. Este decorador ocupa exactamente ese seam (se aplica en
+// `page.tsx`, un Server Component, sobre el resultado de `listarMisAsignaciones`),
+// que es el sitio donde la 92 pondra el reordenado de verdad.
+//
+// `MisAsignacionesModule` sigue SIN ordenar nada: recibe el array ya ordenado y
+// lo renderiza tal cual. Si esto se hiciera dentro del modulo si estaria mal.
+
+/** Forma minima que el decorador necesita; evita acoplarse al tipo del borde. */
+interface MisAsignacionesDecorable {
+  porGestionar: MiAsignacionDTO[];
+  ruta?: RutaResumen;
+}
+
+/**
+ * Aplica la ruta simulada a un resultado `ok` de `listarMisAsignaciones`:
+ * (a) reordena `porGestionar` segun la ultima secuencia calculada y (b) adjunta
+ * el `ruta` que la 92 devolvera de verdad.
+ *
+ * Devuelve el resultado INTACTO si el simulador esta apagado (candado) o si
+ * todavia no hubo ninguna sincronizacion.
+ */
+export function decorarMisAsignacionesSimulado<T extends MisAsignacionesDecorable>(
+  result: T,
+): T & { ruta?: RutaResumen } {
+  if (!simulacionRutaHabilitada()) return result; // candado: mismo flag que la action
+  if (ultimaRuta === null) return result; // aun no se pulso "Sincronizar ruta"
+
+  const posicion = new Map(ultimaSecuencia.map((id, i) => [id, i]));
+
+  // Orden estable: primero las que tienen posicion (por secuencia asc), y al
+  // final las que entraron despues de la ultima optimizacion, conservando el
+  // orden en el que ya venian (R28).
+  const conPosicion: MiAsignacionDTO[] = [];
+  const sinPosicion: MiAsignacionDTO[] = [];
+  for (const orden of result.porGestionar) {
+    (posicion.has(orden.id) ? conPosicion : sinPosicion).push(orden);
+  }
+  conPosicion.sort((a, b) => posicion.get(a.id)! - posicion.get(b.id)!);
+
+  const porGestionar = [
+    ...conPosicion.map((o) => ({
+      ...o,
+      secuenciaRuta: posicion.get(o.id)! + 1,
+    })),
+    ...sinPosicion.map((o) => ({ ...o, secuenciaRuta: null })),
+  ];
+
   return {
-    status: "ok",
-    secuencia,
+    ...result,
+    porGestionar,
     ruta: {
-      estado: desactualizada ? "desactualizada" : "vigente",
-      calculadaAt: new Date(ahora),
-      origenFuente,
-      paradasSinOptimizar: desactualizada ? 1 : 0,
+      ...ultimaRuta,
+      // El # real de paradas sin posicion lo sabe el decorador, no el `sincronizar`.
+      paradasSinOptimizar: sinPosicion.length,
+      estado:
+        sinPosicion.length > 0 ? "desactualizada" : ultimaRuta.estado,
     },
   };
 }

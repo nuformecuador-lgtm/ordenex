@@ -4,9 +4,11 @@ import { sincronizarRuta } from "@/lib/actions/ruta-mensajero";
 import {
   simulacionRutaHabilitada,
   sincronizarRutaSimulado,
+  decorarMisAsignacionesSimulado,
   resetSimulacionRuta,
   RUTA_SYNC_MIN_INTERVALO_S,
 } from "@/lib/actions/_ruta-mensajero-simulado";
+import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 93 — FENCING del simulador de `sincronizarRuta`.
 //
@@ -140,5 +142,168 @@ describe("desenlaces del simulador (solo para recorrer el flujo a mano)", () => 
     if (sinGps.status !== "ok") return;
     expect(sinGps.ruta.origenFuente).not.toBe("gps");
     expect(["ultima_conocida", "centroide"]).toContain(sinGps.ruta.origenFuente);
+  });
+});
+
+// =============================================================================
+// Decorador de lectura — el reordenado vive en el SEAM DEL SERVIDOR.
+// =============================================================================
+// R28/§6.1 exige que el orden llegue ya resuelto desde el servidor, y prohíbe
+// que el MÓDULO ordene. El decorador se aplica en `page.tsx` (Server Component),
+// que es justo donde la 92 pondrá el reordenado real. El test que impide el sort
+// en cliente (`MisAsignacionesModule.test.tsx`) debe seguir verde: son sitios
+// distintos y solo uno de los dos es legítimo.
+
+function dto(id: string, numRemision: string): MiAsignacionDTO {
+  return {
+    id,
+    numGuia: 1,
+    numRemision,
+    estatusValue: "en_reparto",
+    destinatario: "Ana",
+    telefonoDest: "88880000",
+    direccion: "Calle 1",
+    producto: "Caja",
+    peso: 1,
+    montoCobrar: 100,
+    notas: null,
+    tiendaNombre: "Tienda X",
+    zonaNombre: "GAM",
+    provinciaNombre: "San José",
+    cantonNombre: "Central",
+    distritoNombre: null,
+  };
+}
+
+const RESULT_BASE = {
+  status: "ok" as const,
+  porGestionar: [dto("a", "REM-A"), dto("b", "REM-B"), dto("c", "REM-C")],
+};
+
+describe("decorador de `listarMisAsignaciones` (seam server-side)", () => {
+  it("CANDADO: sin el flag NO decora — devuelve el resultado INTACTO", () => {
+    delete process.env.RUTA_SIMULADA;
+    // Aunque haya una sincronización previa "persistida" en memoria.
+    sincronizarRutaSimulado({
+      rol: "mensajero",
+      ordenIds: ["a", "b", "c"],
+      ahoraMs: 0,
+    });
+
+    const salida = decorarMisAsignacionesSimulado(RESULT_BASE);
+
+    expect(salida).toBe(RESULT_BASE); // misma referencia: ni copia
+    expect(salida.porGestionar.map((o) => o.id)).toEqual(["a", "b", "c"]);
+    expect(salida.ruta).toBeUndefined();
+  });
+
+  it("CANDADO: en production NO decora ni con el flag puesto", () => {
+    process.env.RUTA_SIMULADA = "1";
+    vi.stubEnv("NODE_ENV", "production");
+    sincronizarRutaSimulado({
+      rol: "mensajero",
+      ordenIds: ["a", "b", "c"],
+      ahoraMs: 0,
+    });
+
+    expect(decorarMisAsignacionesSimulado(RESULT_BASE)).toBe(RESULT_BASE);
+  });
+
+  it("con el flag pero SIN sincronización previa, devuelve el resultado intacto", () => {
+    process.env.RUTA_SIMULADA = "1";
+    expect(decorarMisAsignacionesSimulado(RESULT_BASE)).toBe(RESULT_BASE);
+  });
+
+  it("R28: tras sincronizar, `porGestionar` llega YA REORDENADO desde el servidor", () => {
+    process.env.RUTA_SIMULADA = "1";
+    // El simulador rota la lista una posición: [a,b,c] -> [b,c,a].
+    const sync = sincronizarRutaSimulado({
+      rol: "mensajero",
+      ordenIds: ["a", "b", "c"],
+      ahoraMs: 0,
+    });
+    expect(sync.status === "ok" && sync.secuencia).toEqual(["b", "c", "a"]);
+
+    const salida = decorarMisAsignacionesSimulado(RESULT_BASE);
+
+    expect(salida.porGestionar.map((o) => o.id)).toEqual(["b", "c", "a"]);
+    // El input NO se muta: el reordenado produce un array nuevo.
+    expect(RESULT_BASE.porGestionar.map((o) => o.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("R28: `secuenciaRuta` se puebla 1..n en el orden de la secuencia", () => {
+    process.env.RUTA_SIMULADA = "1";
+    sincronizarRutaSimulado({
+      rol: "mensajero",
+      ordenIds: ["a", "b", "c"],
+      ahoraMs: 0,
+    });
+
+    const salida = decorarMisAsignacionesSimulado(RESULT_BASE);
+
+    expect(salida.porGestionar.map((o) => o.secuenciaRuta)).toEqual([1, 2, 3]);
+  });
+
+  it("R28: las órdenes que entraron DESPUÉS de la optimización van al final, con `secuenciaRuta` null", () => {
+    process.env.RUTA_SIMULADA = "1";
+    // Se optimizó con a/b/c; luego apareció `d` (recién asignada).
+    sincronizarRutaSimulado({
+      rol: "mensajero",
+      ordenIds: ["a", "b", "c"],
+      ahoraMs: 0,
+    });
+
+    const salida = decorarMisAsignacionesSimulado({
+      status: "ok" as const,
+      porGestionar: [
+        dto("d", "REM-D"),
+        dto("a", "REM-A"),
+        dto("b", "REM-B"),
+        dto("c", "REM-C"),
+      ],
+    });
+
+    expect(salida.porGestionar.map((o) => o.id)).toEqual(["b", "c", "a", "d"]);
+    expect(salida.porGestionar.at(-1)?.secuenciaRuta).toBeNull();
+  });
+
+  it("R30: el decorador adjunta el `ruta` que dispara (o no) el aviso", () => {
+    process.env.RUTA_SIMULADA = "1";
+    sincronizarRutaSimulado({
+      rol: "mensajero",
+      ordenIds: ["a", "b", "c"],
+      ahoraMs: 0,
+    });
+
+    const vigente = decorarMisAsignacionesSimulado(RESULT_BASE);
+    expect(vigente.ruta?.estado).toBe("vigente");
+    expect(vigente.ruta?.paradasSinOptimizar).toBe(0);
+
+    // Segunda sincronización: el simulador alterna a `desactualizada`.
+    sincronizarRutaSimulado({
+      rol: "mensajero",
+      ordenIds: ["a", "b", "c"],
+      ahoraMs: 60_000,
+    });
+    expect(decorarMisAsignacionesSimulado(RESULT_BASE).ruta?.estado).toBe(
+      "desactualizada",
+    );
+  });
+
+  it("R30: una parada sin posición marca la ruta como desactualizada", () => {
+    process.env.RUTA_SIMULADA = "1";
+    sincronizarRutaSimulado({
+      rol: "mensajero",
+      ordenIds: ["a", "b", "c"],
+      ahoraMs: 0,
+    });
+
+    const salida = decorarMisAsignacionesSimulado({
+      status: "ok" as const,
+      porGestionar: [...RESULT_BASE.porGestionar, dto("d", "REM-D")],
+    });
+
+    expect(salida.ruta?.paradasSinOptimizar).toBe(1);
+    expect(salida.ruta?.estado).toBe("desactualizada");
   });
 });
