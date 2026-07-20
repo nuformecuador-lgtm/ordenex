@@ -175,6 +175,32 @@ describe("OrdenesTabs — lazy loading duro (R16) + tab activa (R15)", () => {
   });
 });
 
+describe("OrdenesTabs — tab 'Todas' (maestro)", () => {
+  it("con `incluirTodas` antepone 'Todas', activa por default y sin filtro de estado", async () => {
+    renderTabs(<OrdenesTabs incluirTodas />);
+
+    expect(await screen.findByRole("tab", { name: "Todas" })).toBeInTheDocument();
+    // Todas + 3 estados mostrables del catálogo.
+    await waitFor(() => expect(tabs()).toHaveLength(4));
+
+    // La tab activa por default ("Todas") consulta `listarOrdenes` SIN filtro.
+    await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalled());
+    expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
+    // Lazy (R16): ninguna tab de estado se consultó todavía (sin `filter`).
+    const algunaConFiltro = listarOrdenesMock.mock.calls.some(
+      (c) => (c[0] as { filter?: unknown }).filter !== undefined,
+    );
+    expect(algunaConFiltro).toBe(false);
+  });
+
+  it("sin `incluirTodas` NO aparece la tab 'Todas'", async () => {
+    renderTabs(<OrdenesTabs />);
+
+    await screen.findByRole("tab", { name: "En bodega" });
+    expect(screen.queryByRole("tab", { name: "Todas" })).toBeNull();
+  });
+});
+
 describe("OrdenesTabs — paginación independiente por tab (R17)", () => {
   it("R17: cada tab monta su propio OrdenesModule (paginación propia por status)", async () => {
     const user = userEvent.setup();
@@ -211,6 +237,38 @@ describe("OrdenesTabs — overflow accesible (R18)", () => {
     expect(list.className).toContain("overflow-x-auto");
     // Todas las tabs derivadas quedan presentes/accesibles (ninguna oculta).
     expect(within(list).getAllByRole("tab")).toHaveLength(3);
+  });
+});
+
+describe("OrdenesTabs — orientación vertical con filtro (maestro)", () => {
+  it("por default (horizontal) NO ofrece el filtro de estados", async () => {
+    renderTabs(<OrdenesTabs />);
+
+    await screen.findByRole("tab", { name: "En bodega" });
+    expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+
+  it("vertical: filtra las tabs por nombre de estado", async () => {
+    const user = userEvent.setup();
+    renderTabs(<OrdenesTabs orientation="vertical" />);
+
+    await screen.findByRole("tab", { name: "En bodega" });
+    await user.type(screen.getByRole("searchbox"), "entreg");
+
+    expect(screen.getByRole("tab", { name: "Entregada" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Devuelta" })).toBeNull();
+  });
+
+  it("vertical: filtrar NO monta las tabs filtradas ni dispara su fetch (R16)", async () => {
+    const user = userEvent.setup();
+    renderTabs(<OrdenesTabs orientation="vertical" />);
+
+    await screen.findByRole("tab", { name: "En bodega" });
+    listarOrdenesMock.mockClear();
+
+    await user.type(screen.getByRole("searchbox"), "entreg");
+
+    expect(listarOrdenesMock).not.toHaveBeenCalled();
   });
 });
 

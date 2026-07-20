@@ -55,13 +55,6 @@ export default async function CierresAdminPage() {
         description="Revisá el detalle de cada cierre solicitado por tus mensajeros y aprobalo o rechazalo"
       />
 
-      {/* Feature 38: cierres del día de los mensajeros del alcance. */}
-      <CierresAdminModule
-        pendientes={result.pendientes}
-        historico={result.historico}
-        sinZona={result.sinZona}
-      />
-
       {/* Feature 40 (adminSatelite): consolidación + solicitud de cierre de bodega. */}
       {consolidacion ? (
         <ConsolidacionBodegaModule
@@ -71,6 +64,8 @@ export default async function CierresAdminPage() {
           totalIngresoBodegaRechazosAgregado={
             consolidacion.totalIngresoBodegaRechazosAgregado
           }
+          totalNetoAgregado={consolidacion.totalNetoAgregado}
+          totalCentralDebeAgregado={consolidacion.totalCentralDebeAgregado}
           puedesSolicitar={consolidacion.puedesSolicitar}
           motivoBloqueo={consolidacion.motivoBloqueo}
           cierresBodegaPasados={consolidacion.cierresBodegaPasados}
@@ -85,6 +80,13 @@ export default async function CierresAdminPage() {
           historico={bodega.historico}
         />
       ) : null}
+
+      {/* Feature 38: cierres del día de los mensajeros del alcance. */}
+      <CierresAdminModule
+        pendientes={result.pendientes}
+        historico={result.historico}
+        sinZona={result.sinZona}
+      />
     </section>
   );
 }

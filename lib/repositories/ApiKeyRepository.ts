@@ -6,8 +6,11 @@ import {
 } from "@/lib/interfaces/repositories/IUserRepository";
 import type {
   ApiKeyAutenticada,
+  ApiKeyListItem,
   CreateApiKeyConUsuarioData,
   IApiKeyRepository,
+  ListApiKeysParams,
+  ListApiKeysResult,
 } from "@/lib/interfaces/repositories/IApiKeyRepository";
 import type { ApiKeyPublico } from "@/lib/types/api-key";
 
@@ -26,6 +29,21 @@ const PUBLIC_SELECT = {
   keyPrefix: true,
   usuarioId: true,
   createdAt: true,
+} as const;
+
+/**
+ * Feature 82/R6: seleccion del listado. Hermano de `PUBLIC_SELECT` y con la misma
+ * garantia, mas fuerte que una disciplina: `keyHash` NO figura aqui, asi que Prisma ni
+ * siquiera lo pide a Postgres. El secreto no se filtra de la respuesta porque nunca
+ * llega a salir de la base. `usuario.email` entra por include [D1].
+ */
+const LIST_SELECT = {
+  id: true,
+  identificador: true,
+  keyPrefix: true,
+  usuarioId: true,
+  createdAt: true,
+  usuario: { select: { email: true } },
 } as const;
 
 /** [D1] Rol de la cuenta dedicada. Se resuelve por lookup, nunca por id hardcodeado. */
@@ -115,6 +133,39 @@ export class ApiKeyRepository implements IApiKeyRepository {
       estado: row.usuario.estado,
       rol: row.usuario.rol.value,
     };
+  }
+
+  /**
+   * Feature 82/R4/R7/R9/R10: listado paginado, `createdAt desc` fijo [D4]. Solo queries:
+   * ni permisos ni reglas de negocio. [D2] sin scoping por `createdById`: el total es el
+   * de todas las keys, asi una pagina fuera de rango devuelve `items: []` con el `total`
+   * real (R9). Molde: `UserRepository.list`.
+   */
+  async list(params: ListApiKeysParams): Promise<ListApiKeysResult> {
+    const [rows, total] = await Promise.all([
+      this.prisma.apiKey.findMany({
+        select: LIST_SELECT, // R6: sin keyHash
+        orderBy: { createdAt: "desc" }, // R7
+        skip: params.skip,
+        take: params.take,
+      }),
+      this.prisma.apiKey.count(),
+    ]);
+
+    const items: ApiKeyListItem[] = rows.map((row) => ({
+      id: row.id,
+      identificador: row.identificador,
+      keyPrefix: row.keyPrefix,
+      usuarioId: row.usuarioId,
+      usuarioEmail: row.usuario.email, // [D1]: se aplana el include
+      createdAt: row.createdAt,
+    }));
+    return { items, total };
+  }
+
+  /** Feature 82: total de API keys existentes. */
+  async count(): Promise<number> {
+    return this.prisma.apiKey.count();
   }
 }
 

@@ -425,6 +425,28 @@ describe("MisAsignacionesModule", () => {
     expect(fd.get("evidencia")).toBeInstanceOf(File);
   });
 
+  it("ENTREGAR sin cobro (montoCobrar 0): oculta el método y envía monto 0 + efectivo", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", montoCobrar: 0 })],
+    });
+
+    await iniciarGestion(user, { card: "REM-G1 · Ana Pérez", resultado: "Entregar" });
+
+    // Sin cobro: no se pide método de pago.
+    expect(screen.queryByRole("combobox", { name: "Método de pago" })).toBeNull();
+
+    await subirEvidencia(user, "Foto de evidencia de entrega");
+    await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
+
+    await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
+    const fd = gestionarMock.mock.calls[0][0] as FormData;
+    expect(fd.get("resultado")).toBe("entregada");
+    expect(fd.get("montoRecibido")).toBe("0");
+    expect(fd.get("metodoPago")).toBe("efectivo");
+    expect(fd.get("evidencia")).toBeInstanceOf(File);
+  });
+
   it("R25/R26: REPROGRAMAR envía fecha futura + motivo", async () => {
     const user = userEvent.setup();
     gestionarMock.mockResolvedValue({
@@ -685,6 +707,46 @@ describe("MisAsignacionesModule", () => {
     ).toBeNull();
     expect(liberarMock).not.toHaveBeenCalled();
     expect(escogerMock).not.toHaveBeenCalled();
+  });
+
+  // Feature 87 (R17): el panel de detalle NO tiene botones de contacto inline; reusa el
+  // compuesto compartido `ContactoButtons` (que además prefija `506` en el enlace wa.me, R15).
+  // Este test se ata al COMPORTAMIENTO real de `ContactoButtons` (no se mockea): si alguien
+  // revirtiera el panel a los botones inline heredados —que abrían `wa.me/<telefono>` SIN el
+  // `506`—, la aserción sobre `window.open` se rompería.
+  it("R17/R15: el detalle reusa ContactoButtons y su WhatsApp abre wa.me con el número normalizado (506)", async () => {
+    const user = userEvent.setup();
+    const openSpy = vi
+      .spyOn(window, "open")
+      .mockReturnValue(null as unknown as Window);
+
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          destinatario: "Ana Pérez",
+          telefonoDest: "88880000",
+        }),
+      ],
+    });
+
+    // El panel arranca en el paso "detalle" y ahí viven los botones de contacto.
+    const panel = panelDetalle();
+    const llamar = within(panel).getByRole("button", { name: "Llamar a Ana Pérez" });
+    const whatsapp = within(panel).getByRole("button", { name: "WhatsApp a Ana Pérez" });
+    expect(llamar).toBeInTheDocument();
+    expect(whatsapp).toBeInTheDocument();
+
+    // Llamar usa el teléfono crudo en un enlace tel:.
+    await user.click(llamar);
+    expect(openSpy).toHaveBeenCalledWith("tel:88880000", "_self");
+
+    // WhatsApp usa el número NORMALIZADO con prefijo país 506 (bug corregido por ContactoButtons).
+    await user.click(whatsapp);
+    expect(openSpy).toHaveBeenCalledWith("https://wa.me/50688880000", "_blank");
+
+    openSpy.mockRestore();
   });
 
   it("R35: en el path de ÉXITO (onSuccess) NO se llama a liberarGestion", async () => {

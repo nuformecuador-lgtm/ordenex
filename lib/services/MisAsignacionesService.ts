@@ -168,11 +168,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
     // R22 (h): ENTREGADA exige monto == montoCobrar EXACTO; si no cuadra, no
     // persiste. Comparacion en Decimal (no float) para evitar falsos negativos
-    // por representacion binaria de los montos.
+    // por representacion binaria de los montos. `montoCobrar` null = orden SIN
+    // cobro: cuadra con un recaudo de 0 (mismo trato que montoCobrar 0).
     if (input.resultado === "entregada") {
-      const cuadra =
-        orden.montoCobrar !== null &&
-        new Prisma.Decimal(input.montoRecibido).equals(new Prisma.Decimal(orden.montoCobrar));
+      const cuadra = new Prisma.Decimal(input.montoRecibido).equals(
+        new Prisma.Decimal(orden.montoCobrar ?? 0),
+      );
       if (!cuadra) {
         return {
           status: "validation_error",

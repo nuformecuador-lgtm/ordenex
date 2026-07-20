@@ -58,8 +58,8 @@ vi.mock("@/lib/actions/mensajeros", () => ({
 // ---------------------------------------------------------------------------
 
 const MENSAJEROS: MensajeroDTO[] = [
-  { id: "u1", nombre: "Ana" },
-  { id: "u2", nombre: "Beto" },
+  { id: "u1", nombre: "Ana", zonaId: "z1", zonaNombre: "Norte" },
+  { id: "u2", nombre: "Beto", zonaId: "z1", zonaNombre: "Norte" },
 ];
 
 const ORDENES: ResumenCargaOrdenDTO[] = [
@@ -73,6 +73,8 @@ const ORDENES: ResumenCargaOrdenDTO[] = [
     montoCobrar: 25.9,
     direccion: "Av. Amazonas",
     estatusValue: "en_preparacion",
+    zonaId: "z1",
+    zonaNombre: "Norte",
     mensajeroSugeridoId: "u1",
     mensajeroSugeridoNombre: "Ana",
   },
@@ -126,10 +128,6 @@ describe("OrdenesCargaResumenPaso — tres secciones (R4, R7, R8, R9, R10, R18)"
     expect(
       screen.getByRole("combobox", { name: "Mensajero para la orden REM-0001" }),
     ).toBeInTheDocument();
-    // Global select también presente.
-    expect(
-      screen.getByRole("combobox", { name: "Asignar mensajero a todas las órdenes" }),
-    ).toBeInTheDocument();
   });
 
   it("con creadas===0 muestra solo existentes, sin resumen de mensajero (R11)", async () => {
@@ -143,8 +141,7 @@ describe("OrdenesCargaResumenPaso — tres secciones (R4, R7, R8, R9, R10, R18)"
     expect(screen.getByText("REM-0100")).toBeInTheDocument();
     // No se pide el resumen de asignación con lista vacía.
     expect(resumenCargaMasivaMock).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole("combobox", { name: "Asignar mensajero a todas las órdenes" }),
-    ).not.toBeInTheDocument();
+    // Sin órdenes nuevas no se muestra ningún select de mensajero.
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 });

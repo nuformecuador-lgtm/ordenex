@@ -67,6 +67,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     recibirEnOrigen: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
+    // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
+    countDevueltasByTienda: vi.fn().mockResolvedValue(0),
+    findDevueltasByTienda: vi.fn().mockResolvedValue([]),
+    findCausasDevueltaVigentes: vi.fn().mockResolvedValue(new Map()),
     // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
     findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
     findZonasConMensajeroBloqueado: vi.fn(async (): Promise<Set<string>> => new Set()),

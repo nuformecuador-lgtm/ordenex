@@ -38,6 +38,23 @@ export const DETALLE_SELECT = {
 export type CierreDetalleRow = Prisma.CierreDetailGetPayload<{ select: typeof DETALLE_SELECT }>;
 
 /**
+ * Las 8 columnas de tarifa congelada, y nada mas: es todo lo que `tarifaDe` necesita. Al
+ * pedir este subconjunto (y no la fila entera) la reconstruccion sirve tambien al detalle
+ * del admin, que proyecta otras columnas de `cierre_detail` pero la MISMA tarifa.
+ */
+export type TarifaCongeladaRow = Pick<
+  CierreDetalleRow,
+  | "tarifaId"
+  | "tarifaValorFlete"
+  | "tarifaValorFleteGam"
+  | "tarifaValorFleteDevuelto"
+  | "tarifaValorFleteDevueltoGam"
+  | "tarifaComisionCod"
+  | "tarifaIvaFlete"
+  | "tarifaIvaComisionCod"
+>;
+
+/**
  * Feature 69/R14 — falta la fila de detalle congelado de una orden del cierre.
  *
  * Es un error DURO a proposito (decision (a)): NO hay fallback a datos vivos. El backfill de
@@ -66,7 +83,7 @@ export class CierreDetalleFaltanteError extends Error {
  * lanzar (`ingreso-ordenex.ts:58`). El gap se PRESERVA tal cual: la 69 no lo abre ni lo cierra.
  * Money-safe: Decimal -> STRING escala 2, nunca number/parseFloat (R11).
  */
-export function tarifaDe(d: CierreDetalleRow): TarifaVigente | null {
+export function tarifaDe(d: TarifaCongeladaRow): TarifaVigente | null {
   if (d.tarifaId === null) return null;
   // Las 8 columnas de tarifa se congelan todas o ninguna (R8), asi que con `tarifa_id`
   // presente el resto no puede ser null. El `"0.00"` de `dec2` no es una politica: es el

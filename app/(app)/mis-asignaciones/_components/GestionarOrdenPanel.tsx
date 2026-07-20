@@ -3,15 +3,14 @@
 import { useState } from "react";
 import {
   Loader2,
-  MessageCircle,
   PackageCheck,
-  Phone,
   RotateCcw,
   Undo2,
   XCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup } from "@/components/ui/radio-group";
@@ -154,6 +153,12 @@ export function GestionarOrdenPanel({
   const [enviando, setEnviando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
 
+  // Orden SIN cobro (montoCobrar 0 o null): no hay COD que recaudar, así que el
+  // método de pago no aplica. Se oculta el selector y la entrega se envía con
+  // recaudo 0 y método "efectivo" (valor neutro para el enum del backend).
+  const sinCobro = !orden.montoCobrar;
+  const metodoPagoEfectivo = sinCobro ? "efectivo" : metodoPago;
+
   /** Construye el objeto crudo para validar en cliente con gestionarSchema. */
   function buildRaw(): Record<string, unknown> {
     const base = { ordenId: orden.id, resultado };
@@ -162,7 +167,7 @@ export function GestionarOrdenPanel({
         return {
           ...base,
           montoRecibido: orden.montoCobrar ?? 0,
-          metodoPago: metodoPago || undefined,
+          metodoPago: metodoPagoEfectivo || undefined,
           evidencia: evidencia ?? undefined,
         };
       case "reprogramada":
@@ -189,7 +194,7 @@ export function GestionarOrdenPanel({
     fd.set("resultado", resultado);
     if (resultado === "entregada") {
       fd.set("montoRecibido", String(orden.montoCobrar ?? 0));
-      fd.set("metodoPago", metodoPago);
+      fd.set("metodoPago", metodoPagoEfectivo);
       if (evidencia) fd.set("evidencia", evidencia);
     } else if (resultado === "reprogramada") {
       fd.set("fechaReprogramacion", fechaReprogramacion);
@@ -304,31 +309,14 @@ export function GestionarOrdenPanel({
       {/* Paso 1: llamar, whatsapp y gestionar. */}
       {paso === "detalle" ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="size-14 shrink-0"
-            onClick={() => window.open(`tel:${orden.telefonoDest}`, "_self")}
-            aria-label={`Llamar a ${orden.destinatario}`}
-          >
-            <Phone className="size-5" aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="size-14 shrink-0"
-            onClick={() =>
-              window.open(
-                `https://wa.me/${orden.telefonoDest.replace(/[^\d]/g, "")}`,
-                "_blank",
-              )
-            }
-            aria-label={`WhatsApp a ${orden.destinatario}`}
-          >
-            <MessageCircle className="size-5" aria-hidden="true" />
-          </Button>
+          {/* Feature 87 (R17): botones de contacto deduplicados en el compuesto
+              compartido `ContactoButtons` (antes inline aqui). Ademas corrige el
+              enlace wa.me para prefijar `506` (R15). */}
+          <ContactoButtons
+            telefono={orden.telefonoDest}
+            nombre={orden.destinatario}
+            size="lg"
+          />
           <Button
             type="button"
             size="lg"
@@ -391,21 +379,25 @@ export function GestionarOrdenPanel({
 
           {resultado === "entregada" ? (
             <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="gestion-metodo">Método de pago</Label>
-                <Select
-                  value={metodoPago}
-                  onValueChange={setMetodoPago}
-                  options={METODO_PAGO_OPTIONS}
-                  placeholder="Selecciona un método"
-                  aria-label="Método de pago"
-                />
-                {metodoError ? (
-                  <p role="alert" className="text-sm text-destructive">
-                    {metodoError}
-                  </p>
-                ) : null}
-              </div>
+              {/* Sin cobro (montoCobrar 0/null): no se pide método de pago; la
+                  entrega se registra con recaudo 0 y método "efectivo". */}
+              {sinCobro ? null : (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="gestion-metodo">Método de pago</Label>
+                  <Select
+                    value={metodoPago}
+                    onValueChange={setMetodoPago}
+                    options={METODO_PAGO_OPTIONS}
+                    placeholder="Selecciona un método"
+                    aria-label="Método de pago"
+                  />
+                  {metodoError ? (
+                    <p role="alert" className="text-sm text-destructive">
+                      {metodoError}
+                    </p>
+                  ) : null}
+                </div>
+              )}
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="gestion-evidencia">Foto de evidencia</Label>
                 <input

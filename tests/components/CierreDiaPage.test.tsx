@@ -4,6 +4,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import type { RolValue } from "@prisma/client";
 
 import CierreDiaPage from "@/app/(app)/cierre-dia/page";
+import type { CierreDetalleGestion } from "@/lib/interfaces/services/ICierreDiaService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarCierreDia, estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 
@@ -47,11 +48,10 @@ const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarCierreDia);
 const bloqueoMock = vi.mocked(estadoBloqueoMensajero);
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: false });
-  listarMock.mockResolvedValue({
-    status: "ok",
+/** Resultado `ok` del listado, con los 4 grupos VACÍOS. */
+function resultadoBase() {
+  return {
+    status: "ok" as const,
     grupos: { entregada: [], reprogramada: [], devuelta: [], rechazada: [] },
     totales: {
       efectivo: "0.00",
@@ -64,7 +64,40 @@ beforeEach(() => {
     puedesSolicitar: false,
     motivoBloqueo: "No hay gestiones para cerrar.",
     cierresPasados: [],
-  });
+  };
+}
+
+/** Una gestión entregada mínima: solo para que la sección "Entregadas" exista. */
+function gestionEntregada(): CierreDetalleGestion {
+  return {
+    gestionId: "g1",
+    ordenId: "o1",
+    numGuia: 1,
+    numRemision: "REM-1",
+    destinatario: "Ana",
+    direccion: null,
+    zonaNombre: "GAM",
+    provinciaNombre: "San José",
+    cantonNombre: "Central",
+    distritoNombre: null,
+    producto: "Caja",
+    tiendaNombre: "Tienda X",
+    resultado: "entregada",
+    montoRecibido: "10.00",
+    metodoPago: "efectivo",
+    motivo: null,
+    fechaReprogramacion: null,
+    evidenciaUrl: null,
+    pagoMensajero: "0.00",
+    ingresoBodegaRechazo: null,
+    tarifaFaltante: false,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: false });
+  listarMock.mockResolvedValue(resultadoBase());
 });
 
 afterEach(() => {
@@ -74,6 +107,17 @@ afterEach(() => {
 describe("CierreDiaPage — control de acceso por rol (R1)", () => {
   it("R1: el rol mensajero ve el módulo con su título y sus secciones", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
+    // Con una entrega: el módulo ya no pinta las secciones sin registros, así que una
+    // sección vacía no probaría nada sobre el acceso al módulo.
+    listarMock.mockResolvedValue({
+      ...resultadoBase(),
+      grupos: {
+        entregada: [gestionEntregada()],
+        reprogramada: [],
+        devuelta: [],
+        rechazada: [],
+      },
+    });
 
     const page = await CierreDiaPage();
     render(page);
@@ -87,6 +131,18 @@ describe("CierreDiaPage — control de acceso por rol (R1)", () => {
     expect(
       screen.getByRole("region", { name: "Entregadas" }),
     ).toBeInTheDocument();
+  });
+
+  it("una sección sin registros no se muestra", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
+    // El default del beforeEach trae los 4 grupos vacíos.
+    const page = await CierreDiaPage();
+    render(page);
+
+    expect(screen.queryByRole("region", { name: "Entregadas" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Reprogramadas" }),
+    ).not.toBeInTheDocument();
   });
 
   it("R1: cualquier rol distinto de mensajero NO ve el módulo (notFound)", async () => {

@@ -11,7 +11,7 @@ function fakeService(overrides: Partial<IAsignacionMensajeroService> = {}): IAsi
   return {
     listarMensajeros: vi.fn().mockResolvedValue({
       status: "ok",
-      mensajeros: [{ id: "msg-1", nombre: "Ana" }],
+      mensajeros: [{ id: "msg-1", nombre: "Ana", zonaId: "z1", zonaNombre: "Norte" }],
     }),
     resumenCargaMasiva: vi.fn().mockResolvedValue({ status: "ok", ordenes: [] }),
     asignarMensajeroSugerido: vi.fn().mockResolvedValue({ status: "ok", asignadas: 0 }),
@@ -112,7 +112,7 @@ describe("exito: propaga el resultado del service sin filtrar internals", () => 
     const r = await listarMensajeros({ asignacionService: service, getActor });
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
-      expect(r.mensajeros).toEqual([{ id: "msg-1", nombre: "Ana" }]);
+      expect(r.mensajeros).toEqual([{ id: "msg-1", nombre: "Ana", zonaId: "z1", zonaNombre: "Norte" }]);
     }
   });
 

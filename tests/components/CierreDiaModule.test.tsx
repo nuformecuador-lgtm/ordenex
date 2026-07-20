@@ -92,7 +92,6 @@ function renderModule(props?: Partial<Parameters<typeof CierreDiaModule>[0]>) {
       grupos={props?.grupos ?? emptyGrupos()}
       totales={props?.totales ?? ZERO_TOTALES}
       totalPagoMensajero={props?.totalPagoMensajero ?? "0.00"}
-      totalIngresoBodegaRechazos={props?.totalIngresoBodegaRechazos ?? "0.00"}
       puedesSolicitar={props?.puedesSolicitar ?? true}
       motivoBloqueo={props?.motivoBloqueo ?? null}
       cierresPasados={props?.cierresPasados ?? []}
@@ -257,11 +256,11 @@ describe("CierreDiaModule", () => {
   it("R11: el total a pagar al mensajero se muestra separado de los totales de dinero recibido", () => {
     renderModule({ totalPagoMensajero: "4200.00" });
 
-    const region = screen.getByRole("region", { name: "Pago al mensajero" });
+    const region = screen.getByRole("region", { name: "Ganancia" });
     expect(within(region).getByText("₡4200.00")).toBeInTheDocument();
   });
 
-  it("feature 56/R12: una gestión rechazada expone su ingreso de bodega por rechazos (string, money-safe)", () => {
+  it("feature 56/R12: el ingreso de bodega por rechazos NO se muestra por orden en la tabla de rechazadas (solo el total; el desglose vive en las vistas de bodega/admin)", () => {
     const grupos = emptyGrupos();
     grupos.rechazada = [
       makeGestion({
@@ -275,16 +274,16 @@ describe("CierreDiaModule", () => {
     renderModule({ grupos });
 
     const region = screen.getByRole("region", { name: "Rechazadas" });
-    expect(within(region).getByText("₡3500.00")).toBeInTheDocument();
+    expect(within(region).queryByText("Ingreso bodega")).not.toBeInTheDocument();
+    expect(within(region).queryByText("₡3500.00")).not.toBeInTheDocument();
   });
 
-  it("feature 56/R10: el total del ingreso de bodega por rechazos se muestra separado de los demás totales", () => {
-    renderModule({ totalIngresoBodegaRechazos: "7800.00" });
+  it("feature 56/R10: el ingreso de bodega por rechazos NO se le muestra al mensajero (el total vive en las vistas de bodega/admin)", () => {
+    renderModule();
 
-    const region = screen.getByRole("region", {
-      name: "Ingreso de bodega por rechazos",
-    });
-    expect(within(region).getByText("₡7800.00")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Ingreso de bodega por rechazos" }),
+    ).not.toBeInTheDocument();
   });
 
   it("R10/R11: sin poder solicitar, el botón está deshabilitado y se muestra el motivo", () => {
@@ -358,7 +357,7 @@ describe("CierreDiaModule", () => {
           general: "300.00",
         },
         totalPagoMensajero: "0.00", // feature 39/R13
-        totalIngresoBodegaRechazos: "2100.00", // feature 56/R12
+        totalIngresoBodegaRechazos: "2100.00", // en el DTO, pero el mensajero no lo ve
         solicitadoAt: "2026-07-11T10:00:00.000Z",
       },
     ];
@@ -369,8 +368,9 @@ describe("CierreDiaModule", () => {
     expect(within(region).getByText("Bodega central")).toBeInTheDocument();
     // Efectivo y total general comparten valor: hay 2 celdas con ₡300.00.
     expect(within(region).getAllByText("₡300.00")).toHaveLength(2);
-    // feature 56/R12: el total del ingreso de bodega por rechazos en el histórico.
-    expect(within(region).getByText("₡2100.00")).toBeInTheDocument();
+    // El histórico del mensajero nunca tuvo columna de ingreso de bodega (la tabla no
+    // renderiza `totalIngresoBodegaRechazos`); ese desglose vive en bodega/admin.
+    expect(within(region).queryByText("₡2100.00")).not.toBeInTheDocument();
     expect(within(region).getByText("2026-07-11")).toBeInTheDocument();
   });
 
@@ -601,7 +601,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     const panel = screen.getByRole("region", { name: "Totales del día" });
     expect(within(panel).getAllByText("₡150.00")).toHaveLength(2);
     expect(
-      within(screen.getByRole("region", { name: "Pago al mensajero" })).getByText("₡1500.00"),
+      within(screen.getByRole("region", { name: "Ganancia" })).getByText("₡1500.00"),
     ).toBeInTheDocument();
   });
 

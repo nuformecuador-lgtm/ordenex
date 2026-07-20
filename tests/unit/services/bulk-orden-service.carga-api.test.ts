@@ -78,6 +78,11 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
       porMensajeros: false,
       porCierreBodega: false,
     })),
+    // [89] Lecturas de /novedades, incorporadas a `IOrdenRepository` al mergear `dev`. La
+    // carga por API no las usa; se stubean neutras para satisfacer la interfaz completa.
+    countDevueltasByTienda: vi.fn(async (): Promise<number> => 0),
+    findDevueltasByTienda: vi.fn(async () => []),
+    findCausasDevueltaVigentes: vi.fn(async () => new Map()),
     ...overrides,
   };
 }

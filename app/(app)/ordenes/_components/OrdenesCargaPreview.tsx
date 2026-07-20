@@ -94,19 +94,17 @@ export function OrdenesCargaPreview({
                 onClick={() => toggleChip(chip.key)}
                 aria-pressed={activo}
                 className={cn(
-                  "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
+                  "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-brand/30",
                   activo
-                    ? "border-transparent bg-primary text-primary-foreground"
-                    : "border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground",
+                    ? "border-brand bg-brand text-white"
+                    : "border-input bg-background text-foreground hover:border-brand/60 hover:bg-brand-soft hover:text-brand-dark",
                 )}
               >
                 <span>{chip.label}</span>
                 <span
                   className={cn(
                     "rounded-full px-1.5 text-xs font-medium",
-                    activo
-                      ? "bg-primary-foreground/20"
-                      : "bg-muted text-muted-foreground",
+                    activo ? "bg-white/25" : "bg-muted text-muted-foreground",
                   )}
                 >
                   {chip.count}
@@ -125,7 +123,7 @@ export function OrdenesCargaPreview({
         <OrdenesExistentesTabla existentes={existentes} />
       ) : null}
 
-      <div className="flex items-center justify-end gap-3">
+      <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
         {confirmando && progresoTexto ? (
           <span role="status" className="text-sm text-muted-foreground">
             Cargando {progresoTexto} filas…
@@ -133,6 +131,7 @@ export function OrdenesCargaPreview({
         ) : null}
         <Button
           type="button"
+          variant="brand-outline"
           onClick={onConfirmar}
           disabled={confirmando || nuevas === 0}
         >

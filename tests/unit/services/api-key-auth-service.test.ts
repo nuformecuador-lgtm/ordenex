@@ -14,6 +14,15 @@ function makeRepo(findResult: ApiKeyAutenticada | null): IApiKeyRepository {
   return {
     createConUsuario: vi.fn(),
     findByKeyHash: vi.fn(async () => findResult),
+    // [88+82] `list`/`count` llegaron con la feature 82 al mergear `dev`. La autenticacion
+    // no debe tocarlas: lanzan para que, si algun dia las invocara, el test lo delate en
+    // vez de pasar en silencio.
+    list: vi.fn(async () => {
+      throw new Error("list no debe invocarse desde la autenticacion");
+    }),
+    count: vi.fn(async () => {
+      throw new Error("count no debe invocarse desde la autenticacion");
+    }),
   };
 }
 

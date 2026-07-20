@@ -61,6 +61,8 @@ export default async function OrdenesPage() {
             puedeEscanearQr={puedeEscanearQr}
             mostrarHistorial
             accionesLote={accionesLote}
+            incluirTodas={rol === RolValue.maestro}
+            orientation={"vertical"}
           />
         ) : (
           // adminSatelite / mensajero / sin sesión: listado plano previo, SIN

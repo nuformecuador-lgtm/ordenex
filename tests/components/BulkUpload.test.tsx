@@ -28,12 +28,12 @@ const fields: TemplateField[] = [
 /** Renderiza el componente con props por defecto sobreescribibles. */
 function renderBulkUpload(props: Partial<BulkUploadProps> = {}) {
   const merged: BulkUploadProps = {
-    endpoint: "/api/ordenes/carga-masiva",
     accept: ["csv"],
     fields,
+    onFileSelected: vi.fn(),
     ...props,
   };
-  return render(<BulkUpload {...merged} />);
+  return { ...render(<BulkUpload {...merged} />), props: merged };
 }
 
 /** Dispara la selección de un archivo en el input, sin filtrado por `accept`. */
@@ -81,7 +81,7 @@ afterEach(() => {
 });
 
 describe("BulkUpload — configuración y accesibilidad (R1, R3, R17)", () => {
-  it("R3/R17: expone input con label asociada, botones con nombre accesible y accept derivado de props", () => {
+  it("R3/R17: expone input con label asociada, botón de plantilla con nombre accesible y accept derivado de props", () => {
     renderBulkUpload({ accept: ["csv", "xlsx"] });
 
     const input = screen.getByLabelText("Archivo a cargar");
@@ -91,9 +91,24 @@ describe("BulkUpload — configuración y accesibilidad (R1, R3, R17)", () => {
     expect(
       screen.getByRole("button", { name: "Descargar plantilla" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Cargar archivo" }),
-    ).toBeInTheDocument();
+  });
+
+  it("R17: el label es parametrizable por prop y nombra al input (preparado para i18n)", () => {
+    renderBulkUpload({ label: "Archivo de órdenes" });
+    expect(screen.getByLabelText("Archivo de órdenes")).toHaveAttribute(
+      "type",
+      "file",
+    );
+  });
+
+  it("el input de archivo real sigue en el árbol y enfocable: la zona punteada no lo sustituye", () => {
+    renderBulkUpload();
+    const input = screen.getByLabelText("Archivo a cargar");
+    // No se usa `hidden`/`display:none` (que lo sacarían del orden de tabulación
+    // y del árbol de accesibilidad): la zona es solo presentación.
+    expect(input).not.toBeDisabled();
+    input.focus();
+    expect(input).toHaveFocus();
   });
 
   it("R1: acepta una lista no vacía de fields y habilita la descarga de plantilla", () => {
@@ -105,7 +120,7 @@ describe("BulkUpload — configuración y accesibilidad (R1, R3, R17)", () => {
 });
 
 describe("BulkUpload — descarga de plantilla XLSX (R6, R8, R9, R10, R11)", () => {
-  it("R8: al descargar genera el XLSX, crea un Blob con MIME XLSX y dispara la descarga sin llamar al endpoint", async () => {
+  it("R8: al descargar genera el XLSX, crea un Blob con MIME XLSX y dispara la descarga sin llamar a la red", async () => {
     renderBulkUpload({ templateFileName: undefined });
 
     fireEvent.click(screen.getByRole("button", { name: "Descargar plantilla" }));
@@ -177,211 +192,202 @@ describe("BulkUpload — descarga de plantilla XLSX (R6, R8, R9, R10, R11)", () 
   });
 });
 
-describe("BulkUpload — selección y validación (R9, R10, R11, R19, R21, R22, R23)", () => {
-  it("R9: al seleccionar un archivo válido muestra su nombre", () => {
-    renderBulkUpload();
-    selectFile(csvFile("remisiones.csv"));
+describe("BulkUpload — selección y validación (R9, R10, R21, R22, R23)", () => {
+  it("R9: al seleccionar un archivo válido muestra su nombre y lo emite por onFileSelected", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ onFileSelected });
+
+    const file = csvFile("remisiones.csv");
+    selectFile(file);
+
     expect(screen.getByText("remisiones.csv")).toBeInTheDocument();
+    expect(onFileSelected).toHaveBeenCalledTimes(1);
+    expect(onFileSelected).toHaveBeenCalledWith(file);
   });
 
-  it("R10: rechaza extensión no permitida con role=alert y mantiene la subida deshabilitada", () => {
-    renderBulkUpload({ accept: ["csv"] });
+  it("R10: rechaza extensión no permitida con role=alert, no emite el archivo y no muestra su nombre", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ accept: ["csv"], onFileSelected });
 
     selectFile(new File(["x"], "datos.pdf", { type: "application/pdf" }));
 
-    expect(screen.getByRole("alert")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cargar archivo" })).toBeDisabled();
+    // El mensaje debe contener "Tipo no permitido": los consumidores (p. ej. el
+    // paso de carga masiva de órdenes) afirman sobre ese texto.
+    expect(screen.getByRole("alert")).toHaveTextContent(/tipo no permitido/i);
+    expect(onFileSelected).not.toHaveBeenCalled();
     expect(screen.queryByText("datos.pdf")).not.toBeInTheDocument();
   });
 
-  it("R11: 'Cargar archivo' está deshabilitado mientras no haya archivo válido", () => {
-    renderBulkUpload();
-    expect(screen.getByRole("button", { name: "Cargar archivo" })).toBeDisabled();
-  });
-
-  it("R19: sin endpoint, 'Cargar archivo' sigue deshabilitado aun con archivo válido", () => {
-    renderBulkUpload({ endpoint: undefined });
-    selectFile(csvFile());
-    expect(screen.getByText("datos.csv")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cargar archivo" })).toBeDisabled();
-  });
-
   it("R21: rechaza MIME contradictorio aunque la extensión sea válida", () => {
-    renderBulkUpload({ accept: ["csv"] });
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ accept: ["csv"], onFileSelected });
 
     selectFile(csvFile("datos.csv", "application/pdf"));
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cargar archivo" })).toBeDisabled();
+    expect(onFileSelected).not.toHaveBeenCalled();
   });
 
-  it("R22: MIME vacío no rechaza; manda la extensión y el archivo queda habilitable", () => {
-    renderBulkUpload({ accept: ["csv"] });
+  it("R22: MIME vacío no rechaza; manda la extensión y el archivo se emite", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ accept: ["csv"], onFileSelected });
 
     selectFile(csvFile("datos.csv", ""));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByText("datos.csv")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Cargar archivo" }),
-    ).not.toBeDisabled();
+    expect(onFileSelected).toHaveBeenCalledTimes(1);
   });
 
-  it("R23: con maxSizeBytes, rechaza el archivo que lo excede con role=alert y no habilita la subida", () => {
-    renderBulkUpload({ maxSizeBytes: 10 });
+  it("validateMime=false: acepta MIME contradictorio y valida solo por extensión", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ accept: ["csv"], validateMime: false, onFileSelected });
+
+    selectFile(csvFile("datos.csv", "application/pdf"));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(onFileSelected).toHaveBeenCalledTimes(1);
+  });
+
+  it("validateMime=false: la extensión sigue siendo autoridad y rechaza el tipo no permitido", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ accept: ["csv"], validateMime: false, onFileSelected });
+
+    selectFile(new File(["x"], "datos.pdf", { type: "text/csv" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/tipo no permitido/i);
+    expect(onFileSelected).not.toHaveBeenCalled();
+  });
+
+  it("R23: con maxSizeBytes, rechaza el archivo que lo excede con role=alert y no lo emite", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ maxSizeBytes: 10, onFileSelected });
 
     selectFile(csvFile("grande.csv", "text/csv", "x".repeat(20)));
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cargar archivo" })).toBeDisabled();
+    expect(onFileSelected).not.toHaveBeenCalled();
   });
 
-  it("R23: sin maxSizeBytes, no valida tamaño y el archivo grande queda habilitable", () => {
-    renderBulkUpload({ maxSizeBytes: undefined });
+  it("R23: sin maxSizeBytes, no valida tamaño y el archivo grande se emite", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ maxSizeBytes: undefined, onFileSelected });
 
     selectFile(csvFile("grande.csv", "text/csv", "x".repeat(20)));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Cargar archivo" }),
-    ).not.toBeDisabled();
+    expect(onFileSelected).toHaveBeenCalledTimes(1);
+  });
+
+  it("R16: tras un error de selección, elegir un archivo válido limpia el alert y muestra el nombre", () => {
+    renderBulkUpload({ accept: ["csv"] });
+
+    selectFile(new File(["x"], "malo.pdf", { type: "application/pdf" }));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    selectFile(csvFile("bueno.csv"));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("bueno.csv")).toBeInTheDocument();
   });
 });
 
-describe("BulkUpload — subida multipart (R2, R12, R13, R14, R15, R16, R18)", () => {
-  function mockFetchResolved(value: {
-    ok: boolean;
-    status: number;
-    data?: unknown;
-  }) {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: value.ok,
-      status: value.status,
-      json: () => Promise.resolve(value.data),
-    });
-  }
-
-  it("R2/R12: envía POST multipart al endpoint con el archivo bajo el fieldName por defecto", async () => {
-    mockFetchResolved({ ok: true, status: 200, data: {} });
-    renderBulkUpload({ endpoint: "/api/carga" });
-
-    selectFile(csvFile("datos.csv"));
-    fireEvent.click(screen.getByRole("button", { name: "Cargar archivo" }));
-
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    const [url, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock
-      .calls[0];
-    expect(url).toBe("/api/carga");
-    expect(init.method).toBe("POST");
-    expect(init.body).toBeInstanceOf(FormData);
-    const sent = (init.body as FormData).get("file");
-    expect(sent).toBeInstanceOf(File);
-    expect((sent as File).name).toBe("datos.csv");
-    // No se fija Content-Type manual (lo pone el navegador con el boundary).
-    expect(init.headers).toBeUndefined();
-  });
-
-  it("R12: usa el fieldName custom en el FormData", async () => {
-    mockFetchResolved({ ok: true, status: 200, data: {} });
-    renderBulkUpload({ fieldName: "archivo" });
-
-    selectFile(csvFile());
-    fireEvent.click(screen.getByRole("button", { name: "Cargar archivo" }));
-
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect((init.body as FormData).get("archivo")).toBeInstanceOf(File);
-  });
-
-  it("R13: mientras la petición está en curso muestra role=status y deshabilita ambos botones", async () => {
-    let resolveFetch!: (v: unknown) => void;
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
-      new Promise((res) => {
-        resolveFetch = res;
-      }),
-    );
+describe("BulkUpload — quitar archivo y estado del consumidor", () => {
+  it("no ofrece 'Quitar archivo' mientras no hay archivo elegido", () => {
     renderBulkUpload();
+    expect(
+      screen.queryByRole("button", { name: /quitar archivo/i }),
+    ).not.toBeInTheDocument();
+  });
 
+  it("al quitar el archivo limpia el nombre e invoca onClear para que el consumidor resetee", () => {
+    const onClear = vi.fn();
+    renderBulkUpload({ onClear });
+
+    selectFile(csvFile("mi-archivo.csv"));
+    expect(screen.getByText("mi-archivo.csv")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /quitar archivo/i }));
+
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("mi-archivo.csv")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /quitar archivo/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("busy: deshabilita el input, la plantilla y el quitar mientras el consumidor procesa", () => {
+    renderBulkUpload({ busy: true });
     selectFile(csvFile());
-    fireEvent.click(screen.getByRole("button", { name: "Cargar archivo" }));
 
-    expect(await screen.findByRole("status")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cargar archivo" })).toBeDisabled();
+    expect(screen.getByLabelText("Archivo a cargar")).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Descargar plantilla" }),
     ).toBeDisabled();
-
-    resolveFetch({ ok: true, status: 200, json: () => Promise.resolve({}) });
-    await waitFor(() =>
-      expect(screen.queryByText("Cargando…")).not.toBeInTheDocument(),
-    );
   });
 
-  it("R14/R18: en éxito muestra role=status e invoca onSuccess con status y data", async () => {
-    mockFetchResolved({ ok: true, status: 200, data: { inserted: 3 } });
-    const onSuccess = vi.fn();
-    renderBulkUpload({ onSuccess });
-
-    selectFile(csvFile());
-    fireEvent.click(screen.getByRole("button", { name: "Cargar archivo" }));
-
-    await waitFor(() =>
-      expect(onSuccess).toHaveBeenCalledWith({
-        status: 200,
-        data: { inserted: 3 },
-      }),
-    );
-    expect(screen.getByRole("status")).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  it("muestra el error del consumidor por la prop error", () => {
+    renderBulkUpload({ error: "Faltan columnas obligatorias: canton." });
+    expect(screen.getByRole("alert")).toHaveTextContent(/faltan columnas/i);
   });
 
-  it("R15/R18: en error HTTP muestra role=alert e invoca onError con el status", async () => {
-    mockFetchResolved({ ok: false, status: 422 });
-    const onError = vi.fn();
-    renderBulkUpload({ onError });
+  it("el error local de selección tiene prioridad y nunca se muestran dos alerts a la vez", () => {
+    renderBulkUpload({ accept: ["csv"], error: "Error del consumidor" });
 
-    selectFile(csvFile());
-    fireEvent.click(screen.getByRole("button", { name: "Cargar archivo" }));
+    selectFile(new File(["x"], "malo.pdf", { type: "application/pdf" }));
 
-    await waitFor(() =>
-      expect(onError).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 422 }),
-      ),
-    );
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent(/tipo no permitido/i);
   });
 
-  it("R15: en fallo de red muestra role=alert e invoca onError sin status, sin propagar excepción", async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error("boom"),
-    );
-    const onError = vi.fn();
-    renderBulkUpload({ onError });
-
-    selectFile(csvFile());
-    fireEvent.click(screen.getByRole("button", { name: "Cargar archivo" }));
-
-    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
-    const arg = onError.mock.calls[0][0];
-    expect(arg.status).toBeUndefined();
-    expect(arg.message).toContain("boom");
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+  it("renderiza el slot children (estado/progreso del consumidor)", () => {
+    renderBulkUpload({ children: <span role="status">Validando archivo…</span> });
+    expect(screen.getByRole("status")).toHaveTextContent("Validando archivo…");
   });
 
-  it("R16: tras un error, seleccionar otro archivo válido limpia el alert y rehabilita la subida", async () => {
-    mockFetchResolved({ ok: false, status: 500 });
-    renderBulkUpload();
+  it("hint: renderiza la ayuda provista por el consumidor", () => {
+    renderBulkUpload({ hint: "Máximo 50.000 filas." });
+    expect(screen.getByText("Máximo 50.000 filas.")).toBeInTheDocument();
+  });
+});
 
-    selectFile(csvFile("primero.csv"));
-    fireEvent.click(screen.getByRole("button", { name: "Cargar archivo" }));
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+describe("BulkUpload — arrastrar y soltar", () => {
+  /** Construye un evento de drop con la lista de archivos indicada. */
+  function dropZone() {
+    // La zona es el contenedor punteado que envuelve al input.
+    return screen.getByLabelText("Archivo a cargar").parentElement as HTMLElement;
+  }
 
-    selectFile(csvFile("segundo.csv"));
+  it("soltar un archivo válido lo valida y lo emite igual que el input", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ onFileSelected });
 
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByText("segundo.csv")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Cargar archivo" }),
-    ).not.toBeDisabled();
+    const file = csvFile("soltado.csv");
+    fireEvent.drop(dropZone(), { dataTransfer: { files: [file] } });
+
+    expect(onFileSelected).toHaveBeenCalledWith(file);
+    expect(screen.getByText("soltado.csv")).toBeInTheDocument();
+  });
+
+  it("soltar un archivo inválido aplica la misma validación y no lo emite", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ accept: ["csv"], onFileSelected });
+
+    fireEvent.drop(dropZone(), {
+      dataTransfer: { files: [new File(["x"], "malo.pdf", { type: "application/pdf" })] },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/tipo no permitido/i);
+    expect(onFileSelected).not.toHaveBeenCalled();
+  });
+
+  it("busy: soltar un archivo no hace nada", () => {
+    const onFileSelected = vi.fn();
+    renderBulkUpload({ busy: true, onFileSelected });
+
+    fireEvent.drop(dropZone(), { dataTransfer: { files: [csvFile()] } });
+
+    expect(onFileSelected).not.toHaveBeenCalled();
   });
 });

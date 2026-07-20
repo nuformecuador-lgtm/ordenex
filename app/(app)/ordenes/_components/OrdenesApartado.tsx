@@ -7,6 +7,7 @@ import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
@@ -126,6 +127,15 @@ export function OrdenesApartado({
     });
   }
 
+  function toggleTodos(ids: string[], checked: boolean) {
+    setSeleccionIds((prev) => {
+      const next = new Set(prev);
+      if (checked) ids.forEach((id) => next.add(id));
+      else ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  }
+
   const columns = useMemo<Column<OrdenListItemDTO>[]>(() => {
     // Columna de selección (R17) SOLO cuando el apartado es seleccionable.
     const base: Column<OrdenListItemDTO>[] = selectable
@@ -133,6 +143,17 @@ export function OrdenesApartado({
           {
             id: "seleccionar",
             value: "Seleccionar",
+            renderHeader: () => {
+              const ids = items.map((item) => item.id);
+              return (
+                <SelectAllCheckbox
+                  selectableIds={ids}
+                  selectedIds={seleccionIds}
+                  onToggleAll={(checked) => toggleTodos(ids, checked)}
+                  ariaLabel="Seleccionar todas las órdenes"
+                />
+              );
+            },
             render: (row: OrdenListItemDTO) => (
               <Checkbox
                 checked={seleccionIds.has(row.id)}
@@ -162,7 +183,7 @@ export function OrdenesApartado({
         ),
       },
     ];
-  }, [selectable, seleccionIds, mostrarHistorial]);
+  }, [selectable, seleccionIds, mostrarHistorial, items]);
 
   const seleccionadas = items.filter((item) => seleccionIds.has(item.id));
 

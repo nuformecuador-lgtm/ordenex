@@ -1,6 +1,12 @@
 "use server";
 
-import { generarApiKeySchema, type GenerarApiKeyResult } from "@/lib/types/api-key";
+import {
+  generarApiKeySchema,
+  listarApiKeysSchema,
+  type ApiKeyActionErrorResult,
+  type GenerarApiKeyResult,
+  type ListarApiKeysResult,
+} from "@/lib/types/api-key";
 import type { Actor, IApiKeyService } from "@/lib/interfaces/services/IApiKeyService";
 import { ApiKeyService } from "@/lib/services/ApiKeyService";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
@@ -22,11 +28,15 @@ function buildApiKeyService(): IApiKeyService {
 }
 
 /**
- * Adapta el `AppErrorShape` del manejador global al resultado tipado de esta accion.
+ * Adapta el `AppErrorShape` del manejador global al resultado tipado de estas acciones.
  * El service ya traduce el duplicado a `conflict` CON su `campo`, asi que un `conflict`
  * sin campo desde el borde seria un bug: se rompe ruidosamente en vez de mentir.
+ *
+ * Devuelve el union estrecho de errores comunes (`ApiKeyActionErrorResult`), que es lo
+ * unico que puede quedar tras descartar `conflict` y `not_found`: asi sirve tanto a
+ * `generarApiKey` como a `listarApiKeys`, cuyo union no admite esos dos estados.
  */
-function toApiKeyActionError(shape: AppErrorShape): GenerarApiKeyResult {
+function toApiKeyActionError(shape: AppErrorShape): ApiKeyActionErrorResult {
   const err = toActionError(shape);
   if (err.status === "conflict") {
     throw new Error(`unexpected conflict status in api-keys action: ${shape.code}`);
@@ -57,6 +67,30 @@ export async function generarApiKey(
     const data = generarApiKeySchema.parse(input); // ZodError -> VALIDATION_ERROR (R4)
     const service = deps.apiKeyService ?? buildApiKeyService();
     return service.generar(data, actor);
+  });
+  return isAppErrorShape(r) ? toApiKeyActionError(r) : r;
+}
+
+/**
+ * Feature 82/R1/R2/R3/R4: lista las API keys paginadas. Server Action (lectura interna
+ * desde componente propio), no route handler.
+ *
+ * La autorizacion es server-side y de dos capas: aqui se resuelve el actor (R1) y el
+ * service filtra por rol (R2). Que la UI oculte el enlace no es una defensa.
+ *
+ * R6: el resultado no puede contener el secreto ni su hash — no por un filtrado aqui,
+ * sino porque `ApiKeyListItem` no los declara y `LIST_SELECT` no los pide a Postgres.
+ */
+export async function listarApiKeys(
+  input: unknown,
+  deps: ApiKeyActionDeps = {},
+): Promise<ListarApiKeysResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1: antes de tocar el service
+    const data = listarApiKeysSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR (R3)
+    const service = deps.apiKeyService ?? buildApiKeyService();
+    return service.listar(data, actor);
   });
   return isAppErrorShape(r) ? toApiKeyActionError(r) : r;
 }

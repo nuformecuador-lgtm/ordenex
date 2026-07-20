@@ -5,10 +5,15 @@
 import { z } from "zod";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
 
-// R1/R2: usuario con rol mensajero, proyectado SOLO a id/nombre (sin PII).
+// R1/R2: usuario con rol mensajero, proyectado SOLO a id/nombre (sin PII) mas su
+// zona (feature 24/R6: nullable; el select del resumen filtra por la zona de la
+// orden). `zonaNombre` es el nombre legible de esa zona, null si el mensajero no
+// tiene zona asignada.
 export interface MensajeroDTO {
   id: string;
   nombre: string;
+  zonaId: string | null;
+  zonaNombre: string | null;
 }
 
 // R6: fila del resumen de una orden del lote recien cargado. Campos disponibles
@@ -25,6 +30,10 @@ export interface ResumenCargaOrdenDTO {
   montoCobrar: number | null;
   direccion: string | null;
   estatusValue?: string;
+  // Feature 30: zona de la orden (NOT NULL, derivada del distrito). El select del
+  // resumen solo ofrece mensajeros de esta zona.
+  zonaId: string;
+  zonaNombre: string;
   mensajeroSugeridoId: string | null;
   mensajeroSugeridoNombre: string | null;
 }

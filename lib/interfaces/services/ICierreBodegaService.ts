@@ -3,6 +3,7 @@ import type { CierreEstado } from "@/lib/types/cierre";
 import type {
   CierreGrupos,
   CierreTotales,
+  TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 
 // Feature 40 — contrato del servicio del "Cierre de bodega" (lado adminSatelite:
@@ -52,6 +53,14 @@ export interface CierreBodegaDetalleCierre {
   totalPagoMensajero: string; // feature 39/R20: snapshot del pago al mensajero del cierre_dia (STRING)
   totalIngresoBodegaRechazos: string; // feature 56/R19: snapshot del ingreso de bodega por rechazos del cierre_dia (STRING)
   grupos: CierreGrupos; // por resultado (reuso CierreDetalleGestion de la 37, R11)
+  // Totales por concepto del ingreso de Ordenex de ESTE cierre_dia (derivados del snapshot).
+  totalesIngreso: TotalesIngresoOrdenex;
+  // DERIVADO: `totalesIngreso.total` - `totalPagoMensajero` de ESTE cierre_dia (STRING).
+  // Lo que le queda a Ordenex del dia de ese mensajero. Puede ser NEGATIVO.
+  ganancia: string;
+  // DERIVADO: `totales.general` - `fleteConIva` - `comisionConIva` de ESTE cierre_dia
+  // (STRING money-safe). Lo que se le paga a la tienda. Puede ser NEGATIVO.
+  pagoTienda: string;
 }
 
 // R1/R3-R7: consolidacion pendiente + totales agregados + gate de "Solicitar" +
@@ -65,6 +74,8 @@ export type ListarConsolidacionServiceResult =
       totalesAgregados: CierreTotales; // suma de los consolidables (R10)
       totalPagoMensajeroAgregado: string; // feature 39/R18: suma snapshot del pago a mensajeros (STRING)
       totalIngresoBodegaRechazosAgregado: string; // feature 56/R17: suma snapshot del ingreso de bodega por rechazos (STRING)
+      totalNetoAgregado: string; // DERIVADO: totalesAgregados.general - lo EFECTIVAMENTE pagado a mensajeros (STRING)
+      totalCentralDebeAgregado: string; // DERIVADO: pago a mensajeros que el efectivo NO alcanzo a cubrir (STRING; "0.00" si alcanzo)
       puedesSolicitar: boolean; // R6/R7
       motivoBloqueo: string | null; // texto accionable si !puedesSolicitar
       cierresBodegaPasados: CierreBodegaResumen[]; // historico propio de la zona (F1.4-h)

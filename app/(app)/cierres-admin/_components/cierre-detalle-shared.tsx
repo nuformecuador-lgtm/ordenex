@@ -8,11 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { cn } from "@/lib/utils";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
   CierreResultado,
   CierreTotales,
+  IngresoOrdenexDTO,
+  TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreEstado } from "@/lib/types/cierre";
 
@@ -80,6 +83,42 @@ export const PAGO_MENSAJERO_COL = "Pago mensajero";
 // --- Feature 56: etiquetas del ingreso de bodega por rechazos (texto separado, i18n-ready) ---
 export const INGRESO_BODEGA_RECHAZOS_LABEL = "Ingreso de bodega por rechazos";
 export const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
+// --- Neto DERIVADO (total general - lo pagado a mensajeros): texto separado, i18n-ready ---
+export const NETO_LABEL = "Total neto";
+// --- Deuda de la central: el pago a mensajeros que el efectivo no cubrió (i18n-ready) ---
+export const CENTRAL_DEBE_LABEL = "Central debe";
+export const CENTRAL_DEBE_NOTA =
+  "El efectivo no alcanzó para pagarle a todos los mensajeros (el pago no puede ser parcial).";
+// --- Desglose del ingreso de Ordenex por orden (texto separado, i18n-ready) ---
+export const MONTO_COBRAR_LABEL = "Monto a cobrar";
+export const MONTO_COBRAR_COL = "A cobrar";
+export const INGRESO_TOTAL_LABEL = "Total Ordenex";
+export const INGRESO_PANEL_LABEL = "Ingreso de Ordenex";
+// Conceptos AGRUPADOS (cada uno con su IVA incluido): así se leen en tablas y paneles.
+export const FLETE_CON_IVA_LABEL = "Flete + IVA";
+export const COMISION_CON_IVA_LABEL = "Comisión + IVA";
+export const FLETE_DEV_CON_IVA_LABEL = "Flete devolución + IVA";
+// --- Bruto y ganancia del cierre (texto separado, i18n-ready) ---
+export const INGRESO_BRUTO_LABEL = "Ingreso bruto";
+export const INGRESO_BRUTO_NOTA =
+  "Todo lo que facturó Ordenex en el cierre (flete + IVA + comisión + IVA), sin descontar nada.";
+export const GANANCIA_LABEL = "Ganancia";
+// Cuando la ganancia es NEGATIVA no es ganancia sino una deuda: se rotula "Debe".
+export const GANANCIA_DEBE_LABEL = "Debe";
+// --- Pago a la tienda: lo recibido menos lo que Ordenex le factura (texto separado, i18n-ready) ---
+export const PAGO_TIENDA_LABEL = "Pago a tienda";
+export const PAGO_TIENDA_NOTA =
+  "Total general menos flete + IVA y comisión + IVA. No descuenta el flete de devolución: una devolución no cobra COD.";
+export const GANANCIA_NOTA = "Ingreso bruto menos el pago al mensajero.";
+export const GANANCIA_NOTA_BODEGA = "Ingreso bruto menos el pago a los mensajeros.";
+export const INGRESO_TOTAL_COL = "Total Ordenex";
+export const DESGLOSE_TITULO = "Desglose de ingreso";
+export const TARIFA_TITULO = "Tarifa aplicada";
+export const TARIFA_NOTA = "Congelada al solicitar el cierre";
+export const APLICADA_HINT = "← se aplicó";
+export const SIN_COMISION_NOTA = "Esta orden no cobra comisión COD.";
+export const SIN_TARIFA_CONGELADA_NOTA =
+  "La tienda no tenía tarifa vigente al solicitar el cierre: no se derivó ningún ingreso para esta orden.";
 /** Aviso discreto (F1.4-5): pago de una entrega resuelto a ₡0.00 (tarifa faltante). */
 export const PAGO_SIN_TARIFA_LABEL = "Sin tarifa";
 export const PAGO_SIN_TARIFA_NOTA =
@@ -99,6 +138,14 @@ export const ORDEN_RESULTADOS: CierreResultado[] = [
  */
 export function money(value: string | null): string {
   return value === null ? "—" : `₡${value}`;
+}
+
+/**
+ * ¿El monto (STRING money-safe, escala 2 con signo, p. ej. "-12.50") es negativo?
+ * Se lee el signo del texto: NO se parsea a número (money-safe, R13).
+ */
+export function esMontoNegativo(value: string | null): boolean {
+  return value !== null && value.trimStart().startsWith("-");
 }
 
 /** Une la jerarquía geográfica en una línea legible (omite los vacíos). */
@@ -140,17 +187,26 @@ export function TotalesPanel({
   ariaLabel,
   title,
   labelGeneral = "Total general",
+  neto,
 }: {
   totales: CierreTotales;
   ariaLabel: string;
   title: string;
   labelGeneral?: string;
+  /**
+   * Neto DERIVADO server-side (STRING money-safe), si el consumidor lo tiene: se muestra
+   * como un ítem MÁS del panel, junto al total general. Omitirlo deja el panel de 4 ítems
+   * de siempre (los cierres de mensajero no derivan neto).
+   */
+  neto?: string;
 }) {
   return (
     <section aria-label={ariaLabel} className="flex flex-col gap-3">
       <h3 className="text-base font-semibold">{title}</h3>
       <Card>
-        <CardContent className="grid grid-cols-2 gap-4 pt-6 sm:grid-cols-4">
+        <CardContent
+          className={`grid grid-cols-2 gap-4 pt-6 ${neto === undefined ? "sm:grid-cols-4" : "sm:grid-cols-5"}`}
+        >
           <TotalItem label="Efectivo" value={money(totales.efectivo)} />
           <TotalItem label="SIMPE" value={money(totales.simpe)} />
           <TotalItem
@@ -158,6 +214,9 @@ export function TotalesPanel({
             value={money(totales.transferencia)}
           />
           <TotalItem label={labelGeneral} value={money(totales.general)} emphasis />
+          {neto === undefined ? null : (
+            <TotalItem label={NETO_LABEL} value={money(neto)} emphasis />
+          )}
         </CardContent>
       </Card>
     </section>
@@ -185,6 +244,79 @@ export function PagoMensajeroTotal({
         <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
           <span className="text-sm font-medium text-muted-foreground">
             {label}
+          </span>
+          <span className="text-lg font-semibold">{money(value)}</span>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+/**
+ * Card de un monto DERIVADO del cierre (bruto / ganancia), con la nota que explica de dónde
+ * sale. Los montos llegan como STRING ya derivados server-side: acá no se resta dinero.
+ * `region` accesible por `ariaLabel` (por defecto, la propia etiqueta).
+ */
+export function MontoDerivadoCard({
+  value,
+  label,
+  nota,
+  ariaLabel,
+  tone = "default",
+}: Readonly<{
+  value: string;
+  label: string;
+  nota: string;
+  ariaLabel?: string;
+  /** `danger` pinta el monto en rojo (p. ej. una ganancia negativa = deuda). */
+  tone?: "default" | "danger";
+}>) {
+  return (
+    <section aria-label={ariaLabel ?? label} className="flex flex-col gap-3">
+      <Card className="border-dashed">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium">{label}</span>
+            <span className="text-xs text-muted-foreground">{nota}</span>
+          </span>
+          <span
+            className={cn(
+              "text-lg font-semibold",
+              tone === "danger" && "text-destructive",
+            )}
+          >
+            {money(value)}
+          </span>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+/**
+ * Deuda de la central con los mensajeros: la parte del pago que el EFECTIVO de la zona no
+ * alcanzó a cubrir. El monto se deriva SERVER-SIDE y llega como STRING escala 2 (acá no se
+ * hace aritmética de dinero). Se pinta en tono de atención porque es plata que alguien más
+ * tiene que poner, no un total informativo. `region` accesible por `ariaLabel`.
+ */
+export function CentralDebeTotal({
+  value,
+  ariaLabel,
+  label = CENTRAL_DEBE_LABEL,
+  nota = CENTRAL_DEBE_NOTA,
+}: {
+  value: string;
+  ariaLabel: string;
+  label?: string;
+  nota?: string;
+}) {
+  return (
+    <section aria-label={ariaLabel} className="flex flex-col gap-3">
+      <Card className="border-dashed border-destructive/40 bg-destructive/5">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium">{label}</span>
+            <span className="text-xs text-muted-foreground">{nota}</span>
           </span>
           <span className="text-lg font-semibold">{money(value)}</span>
         </CardContent>
@@ -263,6 +395,200 @@ export const COLUMNA_INGRESO_BODEGA_RECHAZOS: Column<CierreDetalleGestion> = {
   render: (g) => money(g.ingresoBodegaRechazo),
 };
 
+/**
+ * Un renglón del desglose desplegable: etiqueta a la izquierda, valor a la derecha. `hint`
+ * explica de dónde sale el número (la fórmula aplicada), que es justo lo que el admin viene
+ * a auditar.
+ */
+function DesgloseFila({
+  label,
+  value,
+  hint,
+  emphasis = false,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-2 py-1">
+      <span className="flex flex-wrap items-baseline gap-2">
+        <span className={emphasis ? "text-sm font-medium" : "text-sm text-muted-foreground"}>
+          {label}
+        </span>
+        {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+      </span>
+      <span className={emphasis ? "text-sm font-semibold" : "text-sm"}>{value}</span>
+    </div>
+  );
+}
+
+/** Porcentaje ya normalizado a STRING 0..100 por el server; solo se le pega el símbolo. */
+function pct(value: string): string {
+  return `${value} %`;
+}
+
+/**
+ * Desglose completo del dinero de UNA orden: los conceptos derivados (flete, IVA, comisión)
+ * con la fórmula que los produjo, y la tarifa CONGELADA de la que salieron — incluida la
+ * variante que NO se aplicó, para que se vea por qué se eligió una u otra.
+ *
+ * Todos los montos llegan como STRING desde el server (money-safe): acá no se hace ninguna
+ * aritmética de dinero, solo se muestran y se etiquetan.
+ */
+export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
+  const ing = g.ingresoOrdenex;
+  if (!ing) return null;
+
+  // Gap conocido (feature 69/R9): la tienda no tenía tarifa vigente al solicitar el cierre,
+  // así que NO se derivó ningún concepto. Es un aviso real, no un error: el cierre es válido.
+  if (ing.tarifa === null) {
+    return (
+      <div className="flex flex-col gap-1">
+        <p role="note" className="text-sm text-destructive">
+          {SIN_TARIFA_CONGELADA_NOTA}
+        </p>
+        <DesgloseFila label={MONTO_COBRAR_LABEL} value={money(ing.montoCobrar)} />
+      </div>
+    );
+  }
+
+  const t = ing.tarifa;
+  // La zona elige la COLUMNA de tarifa, no la fórmula (feature 69/R21): mostrar cuál se
+  // aplicó y cuál no es la mitad de la auditoría.
+  const fleteAplicado = ing.esCentral ? t.valorFleteGam : t.valorFlete;
+  const fleteDevAplicado = ing.esCentral ? t.valorFleteDevueltoGam : t.valorFleteDevuelto;
+  const variante = ing.esCentral ? "GAM" : "no GAM";
+
+  return (
+    <div className="grid gap-6 sm:grid-cols-2">
+      {/* --- Lo que se derivó, con su fórmula --- */}
+      <div className="flex flex-col">
+        <h4 className="mb-1 text-sm font-semibold">{DESGLOSE_TITULO}</h4>
+        <DesgloseFila label={MONTO_COBRAR_LABEL} value={money(ing.montoCobrar)} />
+        {ing.flete === null ? null : (
+          <DesgloseFila
+            label="Flete"
+            value={money(ing.flete)}
+            hint={`tarifa ${variante}: ₡${fleteAplicado}`}
+          />
+        )}
+        {ing.ivaFlete === null ? null : (
+          <DesgloseFila
+            label="IVA flete"
+            value={money(ing.ivaFlete)}
+            hint={`${pct(t.ivaFlete)} de ₡${fleteAplicado}`}
+          />
+        )}
+        {ing.fleteDevolucion === null ? null : (
+          <DesgloseFila
+            label="Flete devolución"
+            value={money(ing.fleteDevolucion)}
+            hint={`tarifa ${variante}: ₡${fleteDevAplicado}`}
+          />
+        )}
+        {ing.ivaFleteDevolucion === null ? null : (
+          <DesgloseFila
+            label="IVA flete devolución"
+            value={money(ing.ivaFleteDevolucion)}
+            hint={`${pct(t.ivaFlete)} de ₡${fleteDevAplicado}`}
+          />
+        )}
+        {ing.comisionCod === null ? null : (
+          <DesgloseFila
+            label="Comisión COD"
+            value={money(ing.comisionCod)}
+            hint={`${pct(t.comisionCod)} de ${money(ing.montoCobrar)}`}
+          />
+        )}
+        {ing.ivaComisionCod === null ? null : (
+          <DesgloseFila
+            label="IVA comisión"
+            value={money(ing.ivaComisionCod)}
+            hint={`${pct(t.ivaComisionCod)} de ${money(ing.comisionCod)}`}
+          />
+        )}
+        {/* `cobraComision: false` no es un 0.00: la orden no genera comisión, y decirlo
+            explícitamente evita que se lea como un cálculo que dio cero. */}
+        {ing.cobraComision ? null : (
+          <p className="pt-1 text-xs text-muted-foreground">{SIN_COMISION_NOTA}</p>
+        )}
+        <div className="mt-1 border-t pt-1">
+          <DesgloseFila label={INGRESO_TOTAL_LABEL} value={money(ing.total)} emphasis />
+        </div>
+      </div>
+
+      {/* --- La tarifa congelada completa, tal cual quedó al solicitar --- */}
+      <div className="flex flex-col">
+        <h4 className="mb-1 text-sm font-semibold">{TARIFA_TITULO}</h4>
+        <p className="pb-1 text-xs text-muted-foreground">
+          {TARIFA_NOTA} · <span className="font-mono">{t.tarifaId}</span>
+        </p>
+        <DesgloseFila
+          label="Valor flete"
+          value={money(t.valorFlete)}
+          hint={ing.esCentral ? undefined : APLICADA_HINT}
+        />
+        <DesgloseFila
+          label="Valor flete GAM"
+          value={money(t.valorFleteGam)}
+          hint={ing.esCentral ? APLICADA_HINT : undefined}
+        />
+        <DesgloseFila
+          label="Flete devuelto"
+          value={money(t.valorFleteDevuelto)}
+          hint={ing.esCentral ? undefined : APLICADA_HINT}
+        />
+        <DesgloseFila
+          label="Flete devuelto GAM"
+          value={money(t.valorFleteDevueltoGam)}
+          hint={ing.esCentral ? APLICADA_HINT : undefined}
+        />
+        <DesgloseFila label="Comisión COD" value={pct(t.comisionCod)} />
+        <DesgloseFila label="IVA flete" value={pct(t.ivaFlete)} />
+        <DesgloseFila label="IVA comisión" value={pct(t.ivaComisionCod)} />
+      </div>
+    </div>
+  );
+}
+
+/** Nombre accesible del botón de desplegar: identifica SU orden, no un genérico repetido. */
+export function desgloseAriaLabel(g: CierreDetalleGestion): string {
+  return `${DESGLOSE_TITULO} de la orden ${g.numRemision} · ${g.destinatario}`;
+}
+
+// --- Columnas de dinero derivado por orden (solo el detalle admin las puebla) ---
+const COLUMNA_MONTO_COBRAR: Column<CierreDetalleGestion> = {
+  id: "montoCobrar",
+  value: MONTO_COBRAR_COL,
+  render: (g) => money(g.ingresoOrdenex?.montoCobrar ?? null),
+};
+
+/** Columna de un concepto derivado; `null` (no aplica a este resultado) → "—" vía `money`. */
+function columnaConcepto(
+  id: string,
+  value: string,
+  pick: (i: IngresoOrdenexDTO) => string | null,
+): Column<CierreDetalleGestion> {
+  return {
+    id,
+    value,
+    render: (g) => money(g.ingresoOrdenex ? pick(g.ingresoOrdenex) : null),
+  };
+}
+
+const COLUMNA_INGRESO_TOTAL: Column<CierreDetalleGestion> = {
+  id: "ingresoTotal",
+  value: INGRESO_TOTAL_COL,
+  render: (g) =>
+    g.ingresoOrdenex ? (
+      <span className="font-medium">{money(g.ingresoOrdenex.total)}</span>
+    ) : (
+      "—"
+    ),
+};
+
 // --- Columnas comunes a las 4 secciones del detalle (R11, reuso de la 37) ---
 export const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
   { id: "numGuia", value: "Nº Guía", render: (g) => g.numGuia ?? "—" },
@@ -286,19 +612,29 @@ export function columnasPara(
   if (resultado === "entregada") {
     return [
       ...COLUMNAS_COMUNES,
-      { id: "monto", value: "Monto", render: (g) => money(g.montoRecibido) },
+      COLUMNA_MONTO_COBRAR,
+      { id: "monto", value: "Recibido", render: (g) => money(g.montoRecibido) },
       {
         id: "metodo",
         value: "Método",
         render: (g) => (g.metodoPago ? METODO_LABEL[g.metodoPago] : "—"),
       },
+      // Conceptos que aplican a una ENTREGA, cada uno CON su IVA (los de devolución no se
+      // listan acá: serían una columna de "—" en todas las filas). El split flete/IVA vive
+      // en la fila desplegable.
+      columnaConcepto("fleteConIva", FLETE_CON_IVA_LABEL, (i) => i.fleteConIva),
+      columnaConcepto("comisionConIva", COMISION_CON_IVA_LABEL, (i) => i.comisionConIva),
+      COLUMNA_INGRESO_TOTAL,
       // Feature 39/R16: pago al mensajero snapshot por orden (separado del dinero recibido).
       COLUMNA_PAGO_MENSAJERO,
     ];
   }
   if (resultado === "reprogramada") {
+    // Una reprogramación no aporta a ningún concepto (la fórmula devuelve vacío): no se
+    // pintan columnas de ingreso que serían "—" en todas las filas.
     return [
       ...COLUMNAS_COMUNES,
+      COLUMNA_MONTO_COBRAR,
       {
         id: "fechaReprogramacion",
         value: "Nueva fecha",
@@ -311,13 +647,19 @@ export function columnasPara(
   if (resultado === "devuelta") {
     return [
       ...COLUMNAS_COMUNES,
+      COLUMNA_MONTO_COBRAR,
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      columnaConcepto("fleteDevolucion", "Flete devolución", (i) => i.fleteDevolucion),
+      columnaConcepto("ivaFleteDevolucion", "IVA flete dev.", (i) => i.ivaFleteDevolucion),
+      COLUMNA_INGRESO_TOTAL,
       COLUMNA_PAGO_MENSAJERO,
     ];
   }
-  // rechazada: motivo + evidencia firmada (R12) + ingreso de bodega por rechazos (56/R12)
+  // rechazada: motivo + evidencia firmada (R12) + ingreso de bodega por rechazos (56/R12).
+  // Un rechazo deriva los MISMOS conceptos que una devolución (flete de devolución + IVA).
   return [
     ...COLUMNAS_COMUNES,
+    COLUMNA_MONTO_COBRAR,
     { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
     {
       id: "evidencia",
@@ -336,9 +678,47 @@ export function columnasPara(
           "—"
         ),
     },
+    columnaConcepto(
+      "fleteDevolucionConIva",
+      FLETE_DEV_CON_IVA_LABEL,
+      (i) => i.fleteDevolucionConIva,
+    ),
+    COLUMNA_INGRESO_TOTAL,
     COLUMNA_PAGO_MENSAJERO,
     COLUMNA_INGRESO_BODEGA_RECHAZOS,
   ];
+}
+
+/**
+ * Totales por concepto del cierre completo, sumados desde el MISMO desglose por orden que
+ * muestran las tablas. Llegan ya derivados del server (`totalesIngresoOrdenex`): acá no se
+ * suma dinero, solo se muestra (money-safe).
+ */
+export function TotalesIngresoPanel({
+  totales,
+  ariaLabel = INGRESO_PANEL_LABEL,
+}: Readonly<{
+  totales: TotalesIngresoOrdenex;
+  ariaLabel?: string;
+}>) {
+  return (
+    <section aria-label={ariaLabel} className="flex flex-col gap-3">
+      <h3 className="text-base font-semibold">{INGRESO_PANEL_LABEL}</h3>
+      <Card>
+        {/* Cada concepto va CON su IVA en un solo monto: el IVA no es un concepto aparte,
+            es parte de lo que se factura. El desglose separado vive en la fila desplegable. */}
+        <CardContent className="grid grid-cols-2 gap-4 pt-6 sm:grid-cols-4">
+          <TotalItem label={FLETE_CON_IVA_LABEL} value={money(totales.fleteConIva)} />
+          <TotalItem label={COMISION_CON_IVA_LABEL} value={money(totales.comisionConIva)} />
+          <TotalItem
+            label={FLETE_DEV_CON_IVA_LABEL}
+            value={money(totales.fleteDevolucionConIva)}
+          />
+          <TotalItem label={INGRESO_TOTAL_LABEL} value={money(totales.total)} emphasis />
+        </CardContent>
+      </Card>
+    </section>
+  );
 }
 
 /**
@@ -378,6 +758,13 @@ export function DetalleSecciones({
                 rowKey="gestionId"
                 ariaLabel={RESULTADO_LABEL[resultado]}
                 emptyMessage={RESULTADO_VACIO[resultado]}
+                // Solo el detalle de admin trae `ingresoOrdenex`. Sin él se devuelve `null`
+                // (y no un componente que renderiza vacío): así la tabla no pinta el botón
+                // de desplegar sobre una fila que no tiene nada que mostrar.
+                renderExpanded={(g) =>
+                  g.ingresoOrdenex ? <DesgloseIngresoOrdenex g={g} /> : null
+                }
+                expandAriaLabel={desgloseAriaLabel}
               />
             </div>
           </section>

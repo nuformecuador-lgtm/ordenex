@@ -11,6 +11,10 @@ const buttonVariants = cva(
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        // Botón de marca en contorno: fondo del background, borde y texto naranja.
+        // Introducido para el flujo de carga masiva; no altera `default`/`outline`.
+        "brand-outline":
+          "border-brand bg-background text-brand hover:bg-brand-soft hover:text-brand-dark aria-expanded:bg-brand-soft aria-expanded:text-brand-dark focus-visible:border-brand focus-visible:ring-brand/30 dark:bg-transparent dark:text-brand-light dark:hover:bg-brand/15 dark:hover:text-brand-light",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
