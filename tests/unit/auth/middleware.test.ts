@@ -76,6 +76,42 @@ describe("middleware — rutas publicas y guard de sesion", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
+  // REGRESION: las rutas de API autorizan por si mismas (Bearer con CRON_SECRET
+  // o con una api key `ordx_`, o sesion resuelta dentro del handler). El guard de
+  // cookie las redirigia (307) a /login, dejando los cuatro crons y la ingesta
+  // por API key INALCANZABLES en produccion: Vercel Cron manda el header
+  // Authorization pero NUNCA una cookie `session`.
+  it.each([
+    "/api/cron/procesar-jobs",
+    "/api/cron/corte-diario",
+    "/api/cron/generar-gastos-fijos",
+    "/api/cron/liberar-reprogramadas",
+    "/api/ordenes/api-key/carga",
+    "/api/ordenes/carga-masiva/chunk",
+  ])("deja pasar %s sin cookie de sesion (autoriza el handler)", (ruta) => {
+    const res = middleware(buildRequest(ruta));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  // La exclusion es de la rama /api entera, no de una lista de rutas conocidas:
+  // una ruta de API nueva no debe nacer inalcanzable por olvidar registrarla.
+  it("deja pasar una ruta de API que todavia no existe", () => {
+    const res = middleware(buildRequest("/api/lo-que-sea/futuro"));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  // El guard de cookie SIGUE aplicando a las paginas: la exclusion es solo /api.
+  it("sigue redirigiendo una pagina privada que empieza con 'api' en el nombre", () => {
+    const res = middleware(buildRequest("/apitos"));
+
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location") as string).pathname).toBe("/login");
+  });
+
   // CARACTERIZACION, no comportamiento deseado: fija que HOY /paquete/[numGuia]
   // redirige a /login por no estar en PUBLIC_ROUTES. Si la feature 79 decide que
   // el rastreo es publico, este test DEBE cambiarse a proposito (y ese es el
