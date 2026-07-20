@@ -1,27 +1,28 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { middleware } from "@/middleware";
 
 /**
- * Primer test de `middleware.ts` del repo (feature 78). Importa el middleware
- * REAL: reimplementar la logica aqui no verificaria nada.
+ * Tests de `middleware.ts` (feature 78, endurecido despues). Importa el
+ * middleware REAL: reimplementar la logica aqui no verificaria nada.
  *
- * Contrato que se fija (antes solo implicito):
- * - ruta publica sin cookie -> `NextResponse.next()` (200), sin header `location`.
- * - ruta privada sin cookie -> redirige (307) a `/login?redirect=<pathname>`.
- * - ruta privada con cookie -> `NextResponse.next()` (200).
+ * Se mockea SOLO `isSessionActive` — la frontera con la DB. Asi el test cubre lo
+ * que es del middleware (que rutas pasan, a donde redirige, si limpia la cookie)
+ * sin levantar Postgres. La validez de una sesion en si es responsabilidad de
+ * `session-guard` / `SessionRepository` y se prueba en su propio nivel.
  *
- * Deliberadamente NO se afirma nada sobre el matching por prefijo
- * (`pathname.startsWith`), que puede endurecerse en una feature futura, ni que
- * la cookie se valide: el middleware solo mira su PRESENCIA, no su validez.
- *
- * CONSOLIDACION (merge de `dev`, 2026-07-17): este archivo ABSORBE
- * `tests/unit/middleware.test.ts`, que otra sesion aterrizo en `dev` en paralelo
- * (commit 43159c8, la mitad `/postulacion` de esta misma feature 78). Aquel
- * archivo se elimina para no dejar dos suites del mismo middleware. Sus 4 casos
- * quedan cubiertos aqui y sus aserciones de `res.status` (200/307) se
- * incorporaron a los casos equivalentes: NO se perdio cobertura.
+ * Contrato que se fija:
+ * - ruta publica sin cookie -> `next()` (200), sin `location`.
+ * - ruta con auth propia (cron / api-key) -> `next()` SIEMPRE, incluso sin cookie.
+ * - ruta privada sin cookie -> 307 a `/login?redirect=<pathname>`.
+ * - ruta privada con cookie INVALIDA -> 307 a login + `Set-Cookie` que la borra.
+ * - ruta privada con cookie VALIDA -> `next()` (200).
+ * - `/paquete/*` sin sesion -> 307 a `/` (no a `/login`).
  */
+
+const isSessionActive = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth/session-guard", () => ({ isSessionActive }));
+
+const { middleware } = await import("@/middleware");
 
 const BASE_URL = "https://app.test";
 
@@ -31,62 +32,101 @@ function buildRequest(pathname: string, session?: string): NextRequest {
   return request;
 }
 
-describe("middleware — rutas publicas y guard de sesion", () => {
-  it("deja pasar /recuperar-contrasena sin cookie de sesion", () => {
-    const res = middleware(buildRequest("/recuperar-contrasena"));
+beforeEach(() => {
+  isSessionActive.mockReset();
+  isSessionActive.mockResolvedValue(false);
+});
+
+describe("middleware — rutas publicas", () => {
+  it.each([
+    "/login",
+    "/api/health",
+    "/recuperar-contrasena",
+    "/postulacion",
+  ])("deja pasar %s sin cookie de sesion", async (ruta) => {
+    const res = await middleware(buildRequest(ruta));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
+    // No se consulta la DB para una ruta publica.
+    expect(isSessionActive).not.toHaveBeenCalled();
   });
+});
 
-  it("deja pasar /postulacion sin cookie de sesion", () => {
-    const res = middleware(buildRequest("/postulacion"));
+describe("middleware — endpoints con autenticacion propia", () => {
+  // REGRESION: estas rutas se autentican por `Authorization: Bearer ...` dentro
+  // del handler. Cuando el middleware las trataba como privadas, respondia 307 a
+  // /login y el handler NUNCA corria: los crons de Vercel y el canal de carga
+  // por API key quedaban silenciosamente muertos.
+  it.each([
+    "/api/cron/corte-diario",
+    "/api/cron/procesar-jobs",
+    "/api/ordenes/api-key/carga",
+  ])("deja pasar %s sin cookie (su auth vive en el handler)", async (ruta) => {
+    const res = await middleware(buildRequest(ruta));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
+    expect(isSessionActive).not.toHaveBeenCalled();
   });
+});
 
-  it("deja pasar /login sin cookie de sesion", () => {
-    const res = middleware(buildRequest("/login"));
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("location")).toBeNull();
-  });
-
-  it("deja pasar /api/health sin cookie de sesion", () => {
-    const res = middleware(buildRequest("/api/health"));
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("location")).toBeNull();
-  });
-
-  it("redirige a /login con ?redirect= cuando una ruta privada no trae cookie", () => {
-    const res = middleware(buildRequest("/ordenes"));
+describe("middleware — guard de sesion en rutas privadas", () => {
+  it("redirige a /login con ?redirect= cuando no hay cookie", async () => {
+    const res = await middleware(buildRequest("/ordenes"));
 
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe(
       "https://app.test/login?redirect=%2Fordenes",
     );
+    // Sin cookie no hay nada que validar contra la DB.
+    expect(isSessionActive).not.toHaveBeenCalled();
   });
 
-  it("deja pasar una ruta privada cuando trae cookie de sesion", () => {
-    const res = middleware(buildRequest("/ordenes", "cookie-de-sesion"));
+  it("deja pasar cuando la sesion es valida", async () => {
+    isSessionActive.mockResolvedValue(true);
+
+    const res = await middleware(buildRequest("/ordenes", "sesion-valida"));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
+    expect(isSessionActive).toHaveBeenCalledWith("sesion-valida");
   });
 
-  // CARACTERIZACION, no comportamiento deseado: fija que HOY /paquete/[numGuia]
-  // redirige a /login por no estar en PUBLIC_ROUTES. Si la feature 79 decide que
-  // el rastreo es publico, este test DEBE cambiarse a proposito (y ese es el
-  // punto: obliga a decidir en vez de olvidar, que es exactamente como
-  // /recuperar-contrasena y /postulacion llegaron a estar inalcanzables).
-  it("caracterizacion: hoy /paquete/[numGuia] redirige a /login sin cookie (pendiente feature 79)", () => {
-    const res = middleware(buildRequest("/paquete/ABC123"));
+  // El corazon del endurecimiento: antes bastaba con que la cookie EXISTIERA.
+  it("rechaza una cookie que no corresponde a una sesion activa", async () => {
+    isSessionActive.mockResolvedValue(false);
+
+    const res = await middleware(buildRequest("/ordenes", "cookie-inventada"));
 
     expect(res.status).toBe(307);
-    const location = res.headers.get("location");
-    expect(location).not.toBeNull();
-    expect(new URL(location as string).pathname).toBe("/login");
+    expect(new URL(res.headers.get("location") as string).pathname).toBe("/login");
+    expect(isSessionActive).toHaveBeenCalledWith("cookie-inventada");
+  });
+
+  it("borra la cookie invalida al rechazarla", async () => {
+    isSessionActive.mockResolvedValue(false);
+
+    const res = await middleware(buildRequest("/ordenes", "cookie-inventada"));
+
+    expect(res.cookies.get("session")?.value).toBe("");
+  });
+});
+
+describe("middleware — /paquete/[numGuia]", () => {
+  it("redirige a / (no a /login) cuando no hay sesion activa", async () => {
+    const res = await middleware(buildRequest("/paquete/ABC123"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://app.test/");
+  });
+
+  it("deja pasar cuando la sesion es valida", async () => {
+    isSessionActive.mockResolvedValue(true);
+
+    const res = await middleware(buildRequest("/paquete/ABC123", "sesion-valida"));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
   });
 });
