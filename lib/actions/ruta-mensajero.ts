@@ -1,97 +1,118 @@
 "use server";
 
-import { z } from "zod";
-
+// Feature 92 (design §6.2, R22/R32/R33/R34) — Server Action de la sincronizacion MANUAL de
+// la ruta del mensajero (mutacion interna del mismo proyecto: Server Action, no Route API,
+// patron de las features 21/36). Resuelve el actor por sesion, valida en el borde con zod y
+// delega en el servicio, TODO bajo `withErrorHandler` (patron `mis-asignaciones.ts`).
+//
+// ═══ POR QUE ES SINCRONA Y NO ENCOLADA (gate F1.4-Q5) ═══
+// El modulo del mensajero NO usa SWR: es Server Component + props + `router.refresh()`
+// (verificado). Encolar obligaria al mensajero a esperar hasta 60 s al cron sin ningun
+// feedback y sin nada con lo que hacer polling. El coste —una llamada facturada por
+// pulsacion— lo acota R34 (intervalo minimo), que se aplica DENTRO del service.
+//
+// ═══ LA GUARDA DE ROL ES DEFENSA EN PROFUNDIDAD, NO DECORACION (R33) ═══
+// La pagina que monta el modulo ya hace `notFound()` para roles distintos de `mensajero`,
+// pero una Server Action es un ENDPOINT: se puede invocar directamente con su id, sin pasar
+// por la pagina. Sin esta guarda, cualquier sesion valida podria disparar una llamada
+// facturada contra la ruta de otra persona.
+import { buildOptimizacionRutaService } from "@/lib/services/jobs/optimizacion-ruta-handler";
+import { RutaIntentoFallidoError } from "@/lib/services/OptimizacionRutaService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import type { RutaResumen } from "@/lib/interfaces/services/IMisAsignacionesService";
+import type { IOptimizacionRutaService } from "@/lib/interfaces/services/IOptimizacionRutaService";
 import {
-  simulacionRutaHabilitada,
-  sincronizarRutaSimulado,
-} from "@/lib/actions/_ruta-mensajero-simulado";
+  sincronizarRutaSchema,
+  type SincronizarRutaResult,
+} from "@/lib/types/ruta-mensajero";
+import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
+import type { AppErrorShape } from "@/lib/errors";
 
-// TODO(92): EL CUERPO REAL DE ESTA ACTION LO ENTREGA LA FEATURE 92.
-// =============================================================================
-// La feature 93 (frontend) declara aqui la FIRMA y los RESULTADOS de
-// `sincronizarRuta` (design §6.2, R31-R34) por adelantado, porque la 92 esta en
-// `spec_ready` con cero commits y el contrato no existe todavia en `dev`. Cuando
-// la 92 aterrice, sustituye el cuerpo por:
-//   resolveActorFromSession -> rol != "mensajero" -> forbidden (R33)
-//   -> zod en el borde (R22) -> OptimizacionRutaService.ejecutar(..., "manual")
-//   sincrono -> ok
-//
-// ESTE PR NO DEBE MERGEARSE ANTES QUE EL DE LA 92. Sin la 92 esta action no
-// optimiza nada: devuelve `no_implementado` y el boton queda muerto. El
-// simulador de `_ruta-mensajero-simulado.ts` NO lo salva en produccion, porque
-// esta fenced a proposito (ver `simulacionRutaHabilitada`).
-// =============================================================================
+/** Unico rol autorizado (R33). */
+const ROL_AUTORIZADO = "mensajero";
 
-/** R22: la ubicacion del navegador se valida en el borde, en rangos WGS84. */
-const ubicacionSchema = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-});
-
-// Sin `export`: un modulo "use server" solo puede exportar funciones async.
-const sincronizarRutaSchema = z.object({
-  /** Opcional a proposito (R25): sin permiso de GPS la sync sigue adelante. */
-  ubicacion: ubicacionSchema.optional(),
-  /**
-   * Ids de las ordenes en reparto que la UI esta mostrando. El backend real de
-   * la 92 los ignora (lee la ruta de la DB); el simulador los usa para devolver
-   * una secuencia reordenada visible.
-   */
-  ordenIds: z.array(z.string()).optional(),
-});
-
-export type SincronizarRutaInput = z.input<typeof sincronizarRutaSchema>;
-
-export type SincronizarRutaResult =
-  /** R32: la ruta se recalculo; la UI hace `router.refresh()`. */
-  | { status: "ok"; ruta: RutaResumen; secuencia: string[] }
-  /** R33: rol distinto de `mensajero`, sin efectos ni llamada al proveedor. */
-  | { status: "forbidden" }
-  /** R34: segunda pulsacion dentro de `RUTA_SYNC_MIN_INTERVALO_S`. */
-  | { status: "conflict"; motivo: string }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  /** TODO(92): unico desenlace posible mientras la 92 no aterrice. */
-  | { status: "no_implementado" };
-
-export interface SincronizarRutaDeps {
+export interface RutaMensajeroDeps {
+  service?: IOptimizacionRutaService;
   getActor?: () => Promise<Actor | null>;
 }
 
 /**
- * R31/R32: sincronizacion manual de la ruta del mensajero. Sincrona a proposito
- * (Q5): el modulo no tiene SWR con el que hacer polling.
+ * Espejo de `toMisAsignacionesActionError`: este borde solo puede producir VALIDATION_ERROR
+ * (ZodError) o UNAUTHORIZED (sin sesion). `forbidden` y `conflict` los decide esta action o
+ * el service como resultado de DOMINIO, nunca como excepcion.
+ */
+function toRutaActionError(
+  shape: AppErrorShape,
+): { status: "validation_error"; fieldErrors: Record<string, string[]> } | { status: "unauthenticated" } {
+  switch (shape.code) {
+    case "VALIDATION_ERROR":
+      return {
+        status: "validation_error",
+        fieldErrors: (shape.details?.fieldErrors as Record<string, string[]> | undefined) ?? {},
+      };
+    case "UNAUTHORIZED":
+      return { status: "unauthenticated" };
+    default:
+      throw new Error(`ruta-mensajero: AppErrorCode inesperado ${shape.code}`);
+  }
+}
+
+function buildService(): IOptimizacionRutaService {
+  // Se reusa la fabrica del handler de la cola: el MISMO service con las MISMAS guardas de
+  // coste corre por el cron y por el boton. Duplicar la fabrica seria la via mas rapida a
+  // que el boton acabe corriendo sin alguna guarda.
+  return buildOptimizacionRutaService();
+}
+
+/**
+ * R32: ejecuta la optimizacion de forma SINCRONA (sin esperar el debounce ni el cron).
+ * R33: `forbidden` para cualquier rol distinto de `mensajero`, SIN efectos ni llamada.
+ * R34: el intervalo minimo lo aplica el service; aqui se traduce a `conflict`.
+ * R22: `ubicacion` opcional, validada en el borde en los rangos del sistema de coordenadas.
  */
 export async function sincronizarRuta(
-  input: SincronizarRutaInput = {},
-  deps: SincronizarRutaDeps = {},
+  input: unknown = {},
+  deps: RutaMensajeroDeps = {},
 ): Promise<SincronizarRutaResult> {
-  // Candado ANTES de cualquier otra cosa: sin simulacion habilitada esta action
-  // no finge que funciona, dice la verdad.
-  if (!simulacionRutaHabilitada()) {
-    return { status: "no_implementado" };
-  }
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    // R33: el rol se comprueba ANTES de parsear y ANTES de construir el service: un actor
+    // no autorizado no llega ni a tocar la configuracion del proveedor.
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" as const };
 
-  const parsed = sincronizarRutaSchema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      status: "validation_error",
-      fieldErrors: parsed.error.flatten().fieldErrors as Record<
-        string,
-        string[]
-      >,
-    };
-  }
+    const data = sincronizarRutaSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
 
-  const actor = await (deps.getActor ?? resolveActorFromSession)();
-  if (!actor) return { status: "forbidden" };
+    let resultado;
+    try {
+      resultado = await service.ejecutar(actor.usuarioId, {
+        motivo: "manual",
+        ubicacion: data.ubicacion,
+      });
+    } catch (error) {
+      // R27: el proveedor fallo. En la COLA eso debe propagarse (backoff), pero aqui hay
+      // una persona esperando: se traduce a `conflict` accionable. La ruta ya quedo
+      // marcada `desactualizada` por el service y el ULTIMO ORDEN VALIDO sigue intacto.
+      // El mensaje es fijo: `error.message` viene saneado, pero no se reenvia al cliente.
+      if (error instanceof RutaIntentoFallidoError) {
+        return {
+          status: "conflict" as const,
+          motivo: "no se pudo recalcular la ruta ahora; se conserva el ultimo orden",
+        };
+      }
+      throw error;
+    }
 
-  return sincronizarRutaSimulado({
-    rol: actor.rol,
-    ubicacion: parsed.data.ubicacion,
-    ordenIds: parsed.data.ordenIds ?? [],
+    // R34: la guarda de intervalo minimo del service se traduce a `conflict` para que la
+    // UI pueda decir "espera un momento" en vez de fingir que recalculo.
+    if (resultado.status === "omitida" && resultado.razon === "intervalo_minimo") {
+      return {
+        status: "conflict" as const,
+        motivo: "la ruta se sincronizo hace muy poco; intenta de nuevo en unos segundos",
+      };
+    }
+    return { status: "ok" as const, omitida: resultado.status === "omitida" };
   });
+  return isAppErrorShape(r) ? toRutaActionError(r) : r;
 }

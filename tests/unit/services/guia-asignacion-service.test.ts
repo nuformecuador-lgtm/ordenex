@@ -6,6 +6,11 @@ import type {
   IOrdenRepository,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type {
+  EstadoAsignabilidad,
+  IAsignabilidadCoordenadasService,
+  OrdenAsignabilidadRow,
+} from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
@@ -70,6 +75,10 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     countOrdenesDeTienda: vi.fn(),
     // Feature 17
     findByIdsForTransicion: vi.fn(async () => [ordenRow()]),
+    // Feature 92 (R8): filas que consume el gate de coordenadas (ya geocodificadas).
+    findParaAsignabilidad: vi.fn(async (ids: string[]) =>
+      ids.map((id) => ({ id, direccion: "x", latitud: 9.9, longitud: -84.1, geocodeStatus: "OK" })),
+    ),
     findMensajeroIdsValidos: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
     findAllMensajeros: vi.fn(async () => []),
     listOrderStatus: vi.fn(async () => []),
@@ -111,9 +120,26 @@ function fakeZonaRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository
   } as unknown as IZonaRepository;
 }
 
-// Helper: construye el service con el nuevo constructor (repo, zonaRepo).
-function newService(repo: IOrdenRepository, zonaRepo: IZonaRepository = fakeZonaRepo()) {
-  return new GuiaAsignacionService(repo, zonaRepo);
+/**
+ * Feature 92 (R8): el gate de asignabilidad es una dep REQUERIDA del service. Estos tests
+ * no lo ejercitan (eso vive en `guia-asignacion-gate-coordenadas.test.ts`), asi que se
+ * inyecta un doble que declara TODA orden asignable — que es el estado real de una orden ya
+ * geocodificada. Es el escenario feliz, no un aflojamiento: el gate tiene su test propio.
+ */
+function gateTodoAsignable(): IAsignabilidadCoordenadasService {
+  return {
+    evaluar: async (ordenes: OrdenAsignabilidadRow[]) =>
+      new Map<string, EstadoAsignabilidad>(ordenes.map((o) => [o.id, "asignable"])),
+  };
+}
+
+// Helper: construye el service (repo, zonaRepo, gate de coordenadas).
+function newService(
+  repo: IOrdenRepository,
+  zonaRepo: IZonaRepository = fakeZonaRepo(),
+  gate: IAsignabilidadCoordenadasService = gateTodoAsignable(),
+) {
+  return new GuiaAsignacionService(repo, zonaRepo, gate);
 }
 
 describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", () => {

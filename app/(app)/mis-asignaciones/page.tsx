@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
-import { decorarMisAsignacionesSimulado } from "@/lib/actions/_ruta-mensajero-simulado";
 
 import { KpisMensajero } from "./_components/KpisMensajero";
 import { MisAsignacionesModule } from "./_components/MisAsignacionesModule";
@@ -20,16 +19,12 @@ export default async function MisAsignacionesPage() {
   const actor = await resolveActorFromSession();
   if (actor?.rol !== "mensajero") notFound(); // R9/R12
 
-  const resultReal = await listarMisAsignaciones();
-  if (resultReal.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
-
-  // TODO(92): quitar junto con `_ruta-mensajero-simulado.ts`.
-  // El reordenado de las cards y el `ruta` de R30 son SERVER-SIDE (§6.1): los
-  // resuelve el service. Mientras la 92 no exista, el decorador simulado ocupa
-  // ESE MISMO seam —aquí, en el Server Component— para poder recorrer el flujo a
-  // mano. Apagado por defecto: sin `RUTA_SIMULADA=1` devuelve el resultado
-  // intacto. `MisAsignacionesModule` no ordena nada, ni con el flag ni sin él.
-  const result = decorarMisAsignacionesSimulado(resultReal);
+  // Feature 92 (R28/R30): `porGestionar` llega YA ORDENADO por la secuencia
+  // optimizada (posición asc; las sin posición al final) y `ruta` trae el estado
+  // de esa ruta. Los resuelve el service SERVER-SIDE: ni esta página ni el
+  // módulo reordenan nada ni derivan el estado de la ruta por su cuenta.
+  const result = await listarMisAsignaciones();
+  if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
   return (
     <section className="flex flex-1 flex-col gap-6 p-6">

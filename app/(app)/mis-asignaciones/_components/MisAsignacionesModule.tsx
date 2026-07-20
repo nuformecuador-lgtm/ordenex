@@ -16,7 +16,7 @@ import {
 import { sincronizarRuta } from "@/lib/actions/ruta-mensajero";
 import type {
   MiAsignacionDTO,
-  RutaResumen,
+  RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
@@ -49,10 +49,12 @@ export interface MisAsignacionesModuleProps {
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
   ordenEnGestionId: string | null;
   /**
-   * Feature 93 (R30): estado de la ruta optimizada. `undefined` = el servidor no
-   * envió datos de ruta (la 92 aún no está) → sin aviso ni suposiciones.
+   * Feature 92/93 (R30): estado de la ruta optimizada, resuelto SERVER-SIDE.
+   * `listarMisAsignaciones` lo entrega SIEMPRE en su rama `ok`; se acepta
+   * `undefined` como defensa en profundidad: sin datos de ruta el módulo NO
+   * muestra aviso (fail-closed; no supone "desactualizada").
    */
-  ruta?: RutaResumen;
+  ruta?: RutaResumenDTO;
   /**
    * Feature 93 (R31): rol del actor. El botón de sincronización SOLO se
    * renderiza para `mensajero`. Fail-closed: sin rol explícito no se renderiza.
@@ -74,17 +76,18 @@ export function MisAsignacionesModule({
   // R32: la sincronización es síncrona en la action; el botón se deshabilita
   // mientras corre para no encadenar pulsaciones (R34 lo cubre en el servidor).
   const [sincronizando, setSincronizando] = useState(false);
-  // Resumen de ruta devuelto por la última sincronización. Prevalece sobre el
-  // prop hasta que el `router.refresh()` traiga el del servidor.
-  const [rutaLocal, setRutaLocal] = useState<RutaResumen | null>(null);
-  const rutaEfectiva = rutaLocal ?? ruta ?? null;
 
   // R30: aviso visible cuando la ruta está desactualizada O hay paradas que
   // entraron después de la última optimización.
+  //
+  // El estado sale SIEMPRE del prop, nunca de un estado local: la action real de
+  // la 92 devuelve `{ status, omitida }` y NO la ruta, así que el único camino
+  // por el que esto cambia es el `router.refresh()` que re-renderiza el Server
+  // Component (R32). Cachear aquí una ruta "optimista" mostraría un estado que
+  // el servidor no ha confirmado.
   const avisoRuta =
-    rutaEfectiva !== null &&
-    (rutaEfectiva.estado === "desactualizada" ||
-      rutaEfectiva.paradasSinOptimizar > 0);
+    ruta !== undefined &&
+    (ruta.estado === "desactualizada" || ruta.paradasSinOptimizar > 0);
 
   // Confirmación de recogida (lote o de a una): ids a recoger; null = cerrado.
   const [recogerIds, setRecogerIds] = useState<string[] | null>(null);
@@ -177,12 +180,13 @@ export function MisAsignacionesModule({
     setSincronizando(true);
     try {
       const coords = await pedirUbicacion();
-      const result = await sincronizarRuta({
-        ...(coords ? { ubicacion: coords } : {}),
-        ordenIds: porGestionar.map((o) => o.id),
-      });
+      // Solo `ubicacion` (contrato de la 92): la ruta la lee el servidor de la
+      // DB. Mandar los ids de lo que la UI está pintando dejaría al cliente
+      // influir en un orden que es decisión exclusiva del servidor.
+      const result = await sincronizarRuta(coords ? { ubicacion: coords } : {});
       if (result.status === "ok") {
-        setRutaLocal(result.ruta);
+        // `omitida` es un desenlace CORRECTO (guarda de coste del service): la
+        // ruta vigente sigue siendo válida, así que no se reporta como error.
         toast.success("Ruta sincronizada.");
         router.refresh(); // R32: el orden nuevo llega por el camino que ya existe
         return;
@@ -192,7 +196,9 @@ export function MisAsignacionesModule({
           ? "Espera unos segundos antes de volver a sincronizar."
           : result.status === "forbidden"
             ? "No tienes permiso para sincronizar la ruta."
-            : "No se pudo sincronizar la ruta.",
+            : result.status === "unauthenticated"
+              ? "Tu sesión expiró. Inicia sesión de nuevo."
+              : "No se pudo sincronizar la ruta.",
       );
     } finally {
       setSincronizando(false);
@@ -290,8 +296,31 @@ export function MisAsignacionesModule({
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-semibold text-foreground">
-                        {orden.numRemision}
+                      <span className="flex items-center gap-2">
+                        {/* R28: la POSICIÓN en la ruta la calcula el servidor
+                            (`secuenciaRuta`, 1-based). Aquí solo se pinta. Las
+                            que entraron después de la última optimización
+                            llegan con `null` y se marcan como pendientes, para
+                            que el mensajero no las lea como parada final. */}
+                        {orden.secuenciaRuta !== null ? (
+                          <span
+                            aria-label={`Parada ${orden.secuenciaRuta} de la ruta`}
+                            className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
+                          >
+                            {orden.secuenciaRuta}
+                          </span>
+                        ) : (
+                          <span
+                            aria-label="Pendiente de optimizar"
+                            title="Pendiente de optimizar"
+                            className="flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-xs font-semibold text-muted-foreground"
+                          >
+                            ·
+                          </span>
+                        )}
+                        <span className="font-semibold text-foreground">
+                          {orden.numRemision}
+                        </span>
                       </span>
                       {esActiva ? (
                         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">

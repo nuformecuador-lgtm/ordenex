@@ -19,6 +19,13 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
       porGestionar: [],
       ordenEnGestionId: null,
       kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
+    // Feature 92/R27/R30: bloque de estado de la ruta que acompana al listado.
+    ruta: {
+      estado: "vigente" as const,
+      calculadaAt: null,
+      origenFuente: null,
+      paradasSinOptimizar: 0,
+    },
     })),
     recogerAsignaciones: vi.fn(async () => ({ status: "ok" as const, recogidas: ["o1"] })),
     escogerParaGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),

@@ -3,11 +3,12 @@ import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
+import { ubicacionSchema } from "@/lib/types/ruta-mensajero";
 import type {
   DetalleConflicto,
   MiAsignacionDTO,
   MisAsignacionesKpis,
-  RutaResumen,
+  RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 36 — validacion de borde (zod) del flujo del mensajero. Los schemas se
@@ -53,8 +54,11 @@ const evidenciaSchema = z.custom<ArchivoLike>(
 );
 
 // R16: recoger recibe un conjunto NO vacio de ordenIds (lote o de a una).
+// Feature 92/R22: + `ubicacion` OPCIONAL. Al ser opcional, ninguna llamada existente se
+// rompe: un cliente que no la envie sigue validando igual.
 export const recogerSchema = z.object({
   ordenIds: z.array(z.string().min(1)).min(1),
+  ubicacion: ubicacionSchema.optional(),
 });
 export type RecogerActionInput = z.infer<typeof recogerSchema>;
 
@@ -112,12 +116,14 @@ export const gestionarSchema = z.discriminatedUnion("resultado", [
     montoRecibido: z.number().nonnegative("monto invalido"),
     metodoPago: z.enum(METODO_PAGO_SEED),
     evidencia: evidenciaSchema,
+    ubicacion: ubicacionSchema.optional(), // feature 92/R22
   }),
   z.object({
     ordenId: z.string().min(1),
     resultado: z.literal("reprogramada"),
     fechaReprogramacion: fechaFuturaSchema,
     motivo: motivoSchema,
+    ubicacion: ubicacionSchema.optional(), // feature 92/R22
   }),
   z.object({
     ordenId: z.string().min(1),
@@ -130,12 +136,14 @@ export const gestionarSchema = z.discriminatedUnion("resultado", [
     // Feature 75: la evidencia (foto) pasa a ser OBLIGATORIA en Devolver, igual que en
     // entrega/rechazo. Mismo evidenciaSchema (R24: MIME jpeg/png/webp + tamano).
     evidencia: evidenciaSchema,
+    ubicacion: ubicacionSchema.optional(), // feature 92/R22
   }),
   z.object({
     ordenId: z.string().min(1),
     resultado: z.literal("rechazada"),
     motivo: motivoSchema,
     evidencia: evidenciaSchema,
+    ubicacion: ubicacionSchema.optional(), // feature 92/R22
   }),
 ]);
 export type GestionarActionInput = z.infer<typeof gestionarSchema>;
@@ -149,11 +157,7 @@ export type ListarMisAsignacionesResult =
       porGestionar: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis; // Feature 61
-      // Feature 92 (§6.1) — declarado por la 93 por adelantado; ver status_note de
-      // la 93 en feature_list.json. Espejo en el borde del `ruta` del service:
-      // este tipo REPITE a mano la rama "ok", asi que la adicion tiene que hacerse
-      // en los dos sitios o la page no puede leer `result.ruta`.
-      ruta?: RutaResumen;
+      ruta: RutaResumenDTO; // Feature 92/R27/R28/R30
     }
   | { status: "unauthenticated" } // R12
   | { status: "forbidden" }; // R12

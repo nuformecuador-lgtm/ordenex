@@ -19,7 +19,7 @@ import {
 import { sincronizarRuta } from "@/lib/actions/ruta-mensajero";
 import type {
   MiAsignacionDTO,
-  RutaResumen,
+  RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano) — módulo del mensajero. Se
@@ -55,9 +55,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: refreshMock, push: vi.fn() }),
 }));
 
-// Feature 93 (R31/R32): la Server Action de sincronización se MOCKEA. Los tests
-// NO dependen del simulador de `_ruta-mensajero-simulado.ts` (ese es solo para
-// recorrer el flujo a mano en `pnpm dev`, y está fenced).
+// Feature 93 (R31/R32): la Server Action REAL de la feature 92 se MOCKEA. Su
+// contrato es `{ status: "ok"; omitida: boolean }` — NO devuelve la ruta ni la
+// secuencia: el orden nuevo llega SIEMPRE por `router.refresh()` (R32).
 vi.mock("@/lib/actions/ruta-mensajero", () => ({
   sincronizarRuta: vi.fn(),
 }));
@@ -108,7 +108,7 @@ function mockGeolocation(desenlace: DesenlaceGeo) {
   });
 }
 
-const RUTA_VIGENTE: RutaResumen = {
+const RUTA_VIGENTE: RutaResumenDTO = {
   estado: "vigente",
   calculadaAt: new Date("2026-07-20T10:00:00Z"),
   origenFuente: "gps",
@@ -144,12 +144,14 @@ function makeAsignacion(
     provinciaNombre: "San José",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    // Feature 92/R28: sin posicion en la ruta salvo que el test la fije.
+    secuenciaRuta: null,
     ...over,
   };
 }
 
 function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0]>) {
-  render(
+  return render(
     <MisAsignacionesModule
       porRecoger={props?.porRecoger ?? []}
       porGestionar={props?.porGestionar ?? []}
@@ -211,11 +213,7 @@ beforeEach(() => {
   });
   recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
   liberarMock.mockResolvedValue({ status: "ok" });
-  sincronizarMock.mockResolvedValue({
-    status: "ok",
-    ruta: RUTA_VIGENTE,
-    secuencia: [],
-  });
+  sincronizarMock.mockResolvedValue({ status: "ok", omitida: false });
   mockGeolocation({ tipo: "concedido", lat: 9.93, lng: -84.08 });
 });
 
@@ -980,9 +978,11 @@ describe("MisAsignacionesModule", () => {
     await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
 
     await vi.waitFor(() => expect(sincronizarMock).toHaveBeenCalledTimes(1));
+    // Contrato REAL de la 92: la action recibe SOLO `ubicacion`. El cliente NO
+    // manda `ordenIds`: la ruta la lee el servidor de la DB, no de lo que la UI
+    // esté pintando (mandarlos dejaría al cliente influir en el orden).
     expect(sincronizarMock).toHaveBeenCalledWith({
       ubicacion: { lat: 9.93, lng: -84.08 },
-      ordenIds: ["g1"],
     });
     // R32: el orden nuevo llega por `router.refresh()`, no por SWR ni fetch.
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
@@ -1000,7 +1000,7 @@ describe("MisAsignacionesModule", () => {
 
     await vi.waitFor(() => expect(sincronizarMock).toHaveBeenCalledTimes(1));
     // Sin `ubicacion`: el backend resuelve el origen por el fallback de R24.
-    expect(sincronizarMock).toHaveBeenCalledWith({ ordenIds: ["g1"] });
+    expect(sincronizarMock).toHaveBeenCalledWith({});
     // La denegación NUNCA bloquea: la sincronización llega hasta el refresh.
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
     expect(errorMock).not.toHaveBeenCalled();
@@ -1017,7 +1017,7 @@ describe("MisAsignacionesModule", () => {
     await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
 
     await vi.waitFor(() => expect(sincronizarMock).toHaveBeenCalledTimes(1));
-    expect(sincronizarMock).toHaveBeenCalledWith({ ordenIds: ["g1"] });
+    expect(sincronizarMock).toHaveBeenCalledWith({});
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
     expect(errorMock).not.toHaveBeenCalled();
   });
@@ -1033,18 +1033,19 @@ describe("MisAsignacionesModule", () => {
     await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
 
     await vi.waitFor(() => expect(sincronizarMock).toHaveBeenCalledTimes(1));
-    expect(sincronizarMock).toHaveBeenCalledWith({ ordenIds: ["g1"] });
+    expect(sincronizarMock).toHaveBeenCalledWith({});
   });
 
-  it("R30/R32: tras sincronizar, el aviso refleja la ruta devuelta por la action", async () => {
+  // Reescrito contra el contrato REAL de la 92: antes se apoyaba en que la action
+  // devolviera la ruta, y la action real NO la devuelve. Ahora afirma algo MÁS
+  // FUERTE: el aviso de R30 sale SIEMPRE del estado que manda el SERVIDOR por
+  // props, y el cliente no fabrica ninguno por su cuenta.
+  it("R30/R32: tras sincronizar, el aviso sale del SERVIDOR (props tras `router.refresh()`), no de la action", async () => {
     const user = userEvent.setup();
-    sincronizarMock.mockResolvedValue({
-      status: "ok",
-      ruta: { ...RUTA_VIGENTE, estado: "desactualizada", paradasSinOptimizar: 1 },
-      secuencia: [],
-    });
-    renderModule({
-      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    sincronizarMock.mockResolvedValue({ status: "ok", omitida: false });
+    const orden = makeAsignacion({ id: "g1", numRemision: "REM-G1" });
+    const { rerender } = renderModule({
+      porGestionar: [orden],
       ruta: RUTA_VIGENTE,
       rol: "mensajero",
     });
@@ -1052,10 +1053,61 @@ describe("MisAsignacionesModule", () => {
 
     await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
 
-    await vi.waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(/no está actualizado/i),
+    // R32: la action resolvió `ok` y el módulo pidió el refresco al servidor.
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    // Y MIENTRAS el servidor no mande una ruta nueva, el módulo NO inventa aviso:
+    // un `ok` de la action no es evidencia de que la ruta esté desactualizada.
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    // El `router.refresh()` vuelve a renderizar el Server Component: ESE es el
+    // único camino por el que cambia el estado de la ruta (R30).
+    rerender(
+      <MisAsignacionesModule
+        porRecoger={[]}
+        porGestionar={[orden]}
+        ordenEnGestionId={null}
+        ruta={{ ...RUTA_VIGENTE, estado: "desactualizada", paradasSinOptimizar: 1 }}
+        rol="mensajero"
+      />,
     );
+
+    expect(screen.getByRole("status")).toHaveTextContent(/no está actualizado/i);
   });
+
+  // R32: `omitida: true` es un desenlace CORRECTO (guarda de coste del service),
+  // no un error. La UI no debe tratarlo como fallo.
+  it("R32: un `ok` con `omitida: true` no se reporta como error y refresca igual", async () => {
+    const user = userEvent.setup();
+    sincronizarMock.mockResolvedValue({ status: "ok", omitida: true });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      rol: "mensajero",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(errorMock).not.toHaveBeenCalled();
+  });
+
+  // R33: la action real puede responder `forbidden` (rol != mensajero) o
+  // `unauthenticated` (sesión caída). Ninguno debe refrescar ni pasar por `ok`.
+  it.each([["forbidden"], ["unauthenticated"]] as const)(
+    "R33: un `%s` de la action se avisa y NO refresca",
+    async (status) => {
+      const user = userEvent.setup();
+      sincronizarMock.mockResolvedValue({ status });
+      renderModule({
+        porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+        rol: "mensajero",
+      });
+
+      await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+      await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+      expect(refreshMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("R34 (UI): un `conflict` por sincronizar demasiado seguido se avisa y no refresca", async () => {
     const user = userEvent.setup();
@@ -1080,8 +1132,7 @@ describe("MisAsignacionesModule", () => {
     sincronizarMock.mockImplementation(
       () =>
         new Promise((resolve) => {
-          resolver = () =>
-            resolve({ status: "ok", ruta: RUTA_VIGENTE, secuencia: [] });
+          resolver = () => resolve({ status: "ok", omitida: false });
         }),
     );
     renderModule({

@@ -368,3 +368,121 @@ drift del PR #82.
    El reordenado pasa a hacerlo `MisAsignacionesService` en el mismo seam.
 5. `lib/actions/mis-asignaciones.ts:99,103` tiene `console.log("xyz AAA*")` de depuración, ajeno y
    preexistente. No se tocó (fuera de alcance), pero no debería llegar a producción.
+
+---
+
+# RECONCILIACIÓN CON EL CONTRATO REAL DE LA 92 (merge `feature/92-optimizacion-ruta-mensajero`)
+
+Todo lo escrito ARRIBA de esta línea describe el estado **contra el backend SIMULADO** y ha quedado
+OBSOLETO. En particular: la "ADVERTENCIA DE ORDEN DE MERGE" ya está resuelta (la 92 está mergeada en
+esta rama) y el seguimiento 4 ("borrar el simulador") está EJECUTADO.
+
+## Regla aplicada
+
+**Ganó siempre la implementación real de la 92. El simulador se eliminó.** No queda ningún camino
+por el que una ruta fabricada en memoria pueda despacharse como si fuera una optimización real.
+
+## Resolución de los 4 conflictos
+
+| # | Archivo | Tipo | Resolución |
+| --- | --- | --- | --- |
+| 1 | `lib/actions/ruta-mensajero.ts` | add/add | **Versión de la 92 íntegra** (`--theirs`). Nada que reinjertar: la 93 aportaba zod inline y tipos propios, y la 92 ya los cubre —mejor— en `lib/types/ruta-mensajero.ts` (`ubicacionSchema`, `sincronizarRutaSchema`, `SincronizarRutaResult`). Se verificó campo por campo antes de descartar. |
+| 2 | `lib/interfaces/services/IMisAsignacionesService.ts` | content | **Versión de la 92**. La 93 había declarado `RutaResumen` con `secuenciaRuta?`/`ruta?` OPCIONALES; la 92 los endurece a REQUERIDOS y renombra a `RutaResumenDTO`. Se convergió al nombre y a la forma de la 92 (esto cierra el seguimiento 2 de la sección anterior). |
+| 3 | `lib/types/gestion-orden.ts` | content | **Versión de la 92** (superset estricto: `ruta: RutaResumenDTO` requerido + `ubicacion?` en `recogerSchema` y en las 4 ramas de `gestionarSchema`). Normalizado a LF: la 92 lo traía en CRLF y habría producido un diff de archivo completo. |
+| 4 | `tests/components/MisAsignacionesModule.test.tsx` | content | **CONSOLIDADO**, no descartado. Se verificó aserción por aserción: el único cambio de la 92 sobre la base era añadir `secuenciaRuta: null` al fixture; la 93 es superset del resto. Se tomó la 93 y se le injertó ese campo. |
+
+## Tests de la 93 reescritos contra el contrato real (no borrados)
+
+- `R30/R32 · "tras sincronizar, el aviso refleja la ruta devuelta por la action"` → **reescrito**. Se
+  apoyaba en que la action devolviera `ruta`/`secuencia`, que era una invención del simulador; la
+  action real devuelve `{ status, omitida }`. La versión nueva es **más fuerte**: afirma que tras un
+  `ok` el módulo NO inventa aviso, y que el estado SOLO cambia cuando el servidor manda props nuevas
+  tras `router.refresh()`.
+- Las 4 aserciones `toHaveBeenCalledWith({ ..., ordenIds: [...] })` pasan a no llevar `ordenIds`. El
+  contrato real recibe SOLO `ubicacion`: la ruta la lee el servidor de la DB. Mandar los ids de lo
+  que la UI pinta dejaría al cliente influir en un orden que es decisión del servidor.
+- **Añadidos**: `R32` con `omitida: true` (desenlace correcto, no error) y `R33` con
+  `forbidden`/`unauthenticated`, ramas que solo existen en la action real.
+
+## Simulador eliminado
+
+- **Borrado** `lib/actions/_ruta-mensajero-simulado.ts` (113 líneas).
+- **Borrado** `tests/unit/actions/ruta-mensajero-fencing.test.ts`: probaba el fencing y los
+  desenlaces del simulador. Sin simulador no hay nada que fencear, y su cobertura real
+  (`forbidden`, `conflict` por intervalo mínimo) la da ya `tests/unit/actions/sincronizar-ruta.test.ts`
+  de la 92, contra el service de verdad. No se reescribió porque sería duplicarlo.
+- **`app/(app)/mis-asignaciones/page.tsx`**: quitado `decorarMisAsignacionesSimulado(...)`. Este uso
+  NO estaba en el briefing de la reconciliación; se encontró con el grep. La página ahora pasa
+  directamente el resultado de `listarMisAsignaciones()`.
+- El grep de "simulado" sobre `app/ lib/ hooks/ tests/` solo deja dos `passwordHash: "hash-simulado"`
+  en `tests/unit/repositories/user-repository.test.ts` y
+  `tests/integration/repositories/user-repository-catalog.test.ts`, **preexistentes y ajenos** (son
+  placeholders de hash de contraseña, sin relación con la ruta).
+- El grep de `TODO(92)` queda **vacío**.
+
+## UI cableada al contrato real
+
+- `MisAsignacionesModule.tsx`: `RutaResumen` pasa a `RutaResumenDTO`; **eliminado el estado local
+  `rutaLocal`** (cacheaba una ruta "optimista" que el servidor no había confirmado); el aviso de R30
+  sale ahora SIEMPRE del prop; `sincronizarRuta` se llama con solo `ubicacion`; se maneja
+  `unauthenticated`.
+- **`secuenciaRuta` ahora SÍ se consume** (antes el módulo no lo leía en ningún sitio): cada card
+  pinta su posición 1-based, y las que llegan con `null` se marcan como *pendiente de optimizar*
+  (mitad de UI de R28).
+- **Sin `sort` en cliente, verificado**: el módulo renderiza `porGestionar` en el orden recibido. El
+  reorden del simulador vivía en el seam del SERVIDOR (`page.tsx`), no en el módulo, así que al
+  borrarlo no quedó ningún reorden de cliente. Lo fija el test
+  `R28: renderiza las cards ... EN EL ORDEN RECIBIDO (sin sort en cliente)`.
+
+## R9 — corrección sobre la spec (los DOS mappers)
+
+La tabla de trazabilidad de R9 en `specs/92-optimizacion-ruta-mensajero/requirements.md:301` nombra
+solo `GenerarGuiaModal.test.tsx` y `AsignarBodegaModal.test.tsx`. **Es incompleta**: hay dos mappers
+y cuatro consumidores. Estado tras la reconciliación:
+
+| Mapper | Consumidores | Rama R9 viva | Test |
+| --- | --- | --- | --- |
+| `ordenes/_components/guia-decision-error-messages.ts` | `GenerarGuiaModal`, `AsignarBodegaModal`, **`RutearSateliteModal`** | Sí (sobrevivió al merge, sin conflicto) | `GenerarGuiaModal.test.tsx`, `AsignarBodegaModal.test.tsx`, `guia-decision-error-messages.test.ts` + **`RutearSateliteModal.test.tsx` (NUEVO)** |
+| `recepcion-satelite/_components/asignacion-satelite-error-messages.ts` | `AsignarSateliteModal` | Sí (sobrevivió al merge, sin conflicto) | **`AsignarSateliteModal.test.tsx` (tests 92/R9 NUEVOS)** |
+
+- `RutearSateliteModal` entra por la **decisión Q10 del humano** y no tenía NINGÚN archivo de test:
+  se creó `tests/components/RutearSateliteModal.test.tsx`.
+- El segundo mapper tenía la rama R9 **sin cobertura alguna**: se añadieron sus tests.
+- Ambos incluyen un caso de no-regresión (un `conflict` con un `motivo` ajeno al gate conserva el
+  mensaje genérico), para que la rama nueva no se trague desenlaces que no le tocan.
+
+## Cifras MEDIDAS tras la reconciliación
+
+- `pnpm typecheck` → **0 errores**.
+- `pnpm lint` → **0 errores** (143 warnings preexistentes; ninguno en los archivos tocados).
+- Tests de la feature (8 archivos): **123/123 verdes**.
+  - `MisAsignacionesModule.test.tsx` solo: **50/50**.
+- Trazabilidad a test REAL: **R9** a `RutearSateliteModal.test.tsx`, `AsignarSateliteModal.test.tsx`,
+  `GenerarGuiaModal.test.tsx`, `AsignarBodegaModal.test.tsx`, `guia-decision-error-messages.test.ts`;
+  **R25/R29/R30/R31/R32** a `MisAsignacionesModule.test.tsx` (+ `sincronizar-ruta.test.ts` para
+  R31-R33).
+
+### Suite completa — clasificación por CONJUNTOS (no por totales)
+
+Corrida completa sobre este HEAD: **13 archivos rojos / 380**. Se comparó contra un árbol limpio en
+`7948ad7` (tip de la 92, el commit mergeado), instalado y con `db:generate` propio:
+
+- Rojos en el HEAD: 13 archivos. Rojos en el baseline limpio: 13 archivos.
+- **Regresiones introducidas por esta reconciliación: NINGUNA.** El conjunto de rojos del HEAD es
+  subconjunto del del baseline.
+- Las dos diferencias de conjunto son flakes conocidos, no regresiones:
+  - `HomePage.test.tsx`: rojo en la corrida completa del HEAD, pero **verde en aislado en el HEAD** y
+    **rojo en aislado en el baseline**.
+  - `no-embalaje.test.ts`: rojo en el baseline (timeout de 5 s recorriendo el repo), verde en el HEAD.
+- Los 13 rojos se verificaron **uno a uno en aislado en ambos árboles**: todos son deuda AJENA
+  preexistente, incluidas `generar-gastos-fijos-route.test.ts` (feature 90, `57c53ea`) y
+  `mis-asignaciones-action.test.ts` (rojo también en el baseline limpio de la 92; NO lo introduce
+  la 93). **Ninguno se aflojó ni se borró.**
+
+## Nota para el reviewer
+
+La afirmación del briefing de que la suite es "flaky bajo carga" se cumple solo parcialmente: los 13
+rojos **también fallan en aislado**, en ambos árboles. Son rojos DETERMINISTAS y preexistentes, no
+flakes de carga. Lo flaky es únicamente cuáles de ellos aparecen en una corrida completa concreta.
+Importa porque contar archivos rojos en la suite completa sigue sin concluir nada, pero el aislado
+sí concluye: es deuda ajena estable, no ruido.

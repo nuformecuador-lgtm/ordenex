@@ -82,6 +82,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // carga por API no las usa; se stubean neutras para satisfacer la interfaz completa.
     countDevueltasByTienda: vi.fn(async (): Promise<number> => 0),
     findDevueltasByTienda: vi.fn(async () => []),
+    // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos
+    // tests no ejercitan el gate de coordenadas ni la ruta: devuelven vacio.
+    findParaAsignabilidad: vi.fn(async () => []),
+    findParadasEnReparto: vi.fn(async () => []),
     findCausasDevueltaVigentes: vi.fn(async () => new Map()),
     ...overrides,
   };

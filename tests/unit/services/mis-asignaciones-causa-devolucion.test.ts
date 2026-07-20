@@ -7,6 +7,7 @@ import type {
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -74,7 +75,20 @@ function newService(repo: IGestionOrdenRepository) {
   const zonaRepo: Pick<IZonaRepository, "findCentralZonaId"> = {
     findCentralZonaId: vi.fn(async () => "z-central"),
   };
-  return new MisAsignacionesService(repo, ordenRepo, storage, signed, historial, zonaRepo);
+  // Feature 92 (R23/R28): sin ruta persistida -> `porGestionar` conserva su orden previo.
+  const rutaRepo: Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen"> = {
+    findByMensajero: vi.fn(async () => null),
+    upsertOrigen: vi.fn(async () => {}),
+  };
+  return new MisAsignacionesService(
+    repo,
+    ordenRepo,
+    storage,
+    signed,
+    historial,
+    zonaRepo,
+    rutaRepo,
+  );
 }
 
 function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {
