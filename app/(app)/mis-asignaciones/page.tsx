@@ -34,6 +34,10 @@ export default async function MisAsignacionesPage() {
         porRecoger={result.porRecoger}
         porGestionar={result.porGestionar}
         ordenEnGestionId={result.ordenEnGestionId}
+        /* Feature 93 (R30/R31): estado de la ruta y rol resueltos SERVER-SIDE y
+           bajados por props; el módulo no fetchea nada del cliente. */
+        ruta={result.ruta}
+        rol={actor.rol}
       />
     </section>
   );

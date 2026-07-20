@@ -7,6 +7,7 @@ import type {
   DetalleConflicto,
   MiAsignacionDTO,
   MisAsignacionesKpis,
+  RutaResumen,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 36 — validacion de borde (zod) del flujo del mensajero. Los schemas se
@@ -148,6 +149,11 @@ export type ListarMisAsignacionesResult =
       porGestionar: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis; // Feature 61
+      // Feature 92 (§6.1) — declarado por la 93 por adelantado; ver status_note de
+      // la 93 en feature_list.json. Espejo en el borde del `ruta` del service:
+      // este tipo REPITE a mano la rama "ok", asi que la adicion tiene que hacerse
+      // en los dos sitios o la page no puede leer `result.ruta`.
+      ruta?: RutaResumen;
     }
   | { status: "unauthenticated" } // R12
   | { status: "forbidden" }; // R12

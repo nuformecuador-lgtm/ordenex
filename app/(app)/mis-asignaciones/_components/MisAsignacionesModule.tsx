@@ -4,14 +4,20 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Modal } from "@/components/shared/Modal";
+import { Button } from "@/components/ui/button";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
+import { useUbicacionActual } from "@/hooks/useUbicacionActual";
 import {
   escogerParaGestion,
   liberarGestion,
   recogerAsignaciones,
 } from "@/lib/actions/mis-asignaciones";
-import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { sincronizarRuta } from "@/lib/actions/ruta-mensajero";
+import type {
+  MiAsignacionDTO,
+  RutaResumen,
+} from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
 import { EscanerRecoger } from "./EscanerRecoger";
@@ -33,19 +39,52 @@ import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 export interface MisAsignacionesModuleProps {
   /** Órdenes en `en_espera_aceptacion` (por recoger). */
   porRecoger: MiAsignacionDTO[];
-  /** Órdenes en `en_reparto` (por gestionar). */
+  /**
+   * Órdenes en `en_reparto` (por gestionar), YA ORDENADAS por el servidor
+   * (feature 92, R28: secuencia optimizada asc y las sin posición al final).
+   * Feature 93 / R28: este componente las RENDERIZA EN EL ORDEN RECIBIDO y no
+   * hace ningún `sort` en cliente — el orden es una decisión del servidor.
+   */
   porGestionar: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
   ordenEnGestionId: string | null;
+  /**
+   * Feature 93 (R30): estado de la ruta optimizada. `undefined` = el servidor no
+   * envió datos de ruta (la 92 aún no está) → sin aviso ni suposiciones.
+   */
+  ruta?: RutaResumen;
+  /**
+   * Feature 93 (R31): rol del actor. El botón de sincronización SOLO se
+   * renderiza para `mensajero`. Fail-closed: sin rol explícito no se renderiza.
+   */
+  rol?: string;
 }
 
 export function MisAsignacionesModule({
   porRecoger,
   porGestionar,
   ordenEnGestionId,
+  ruta,
+  rol,
 }: MisAsignacionesModuleProps) {
   const router = useRouter();
   const toast = useToast();
+  const { pedirUbicacion } = useUbicacionActual();
+
+  // R32: la sincronización es síncrona en la action; el botón se deshabilita
+  // mientras corre para no encadenar pulsaciones (R34 lo cubre en el servidor).
+  const [sincronizando, setSincronizando] = useState(false);
+  // Resumen de ruta devuelto por la última sincronización. Prevalece sobre el
+  // prop hasta que el `router.refresh()` traiga el del servidor.
+  const [rutaLocal, setRutaLocal] = useState<RutaResumen | null>(null);
+  const rutaEfectiva = rutaLocal ?? ruta ?? null;
+
+  // R30: aviso visible cuando la ruta está desactualizada O hay paradas que
+  // entraron después de la última optimización.
+  const avisoRuta =
+    rutaEfectiva !== null &&
+    (rutaEfectiva.estado === "desactualizada" ||
+      rutaEfectiva.paradasSinOptimizar > 0);
 
   // Confirmación de recogida (lote o de a una): ids a recoger; null = cerrado.
   const [recogerIds, setRecogerIds] = useState<string[] | null>(null);
@@ -129,6 +168,37 @@ export function MisAsignacionesModule({
     router.refresh();
   }
 
+  // R31/R32: sincronización manual. R25 es el punto delicado: si el permiso de
+  // geolocalización se deniega o expira, `pedirUbicacion()` resuelve `null` y la
+  // action se llama IGUAL, solo que sin `ubicacion`; el backend degrada al
+  // fallback de origen (R24). La denegación NUNCA aborta la sincronización.
+  async function sincronizar() {
+    if (sincronizando) return;
+    setSincronizando(true);
+    try {
+      const coords = await pedirUbicacion();
+      const result = await sincronizarRuta({
+        ...(coords ? { ubicacion: coords } : {}),
+        ordenIds: porGestionar.map((o) => o.id),
+      });
+      if (result.status === "ok") {
+        setRutaLocal(result.ruta);
+        toast.success("Ruta sincronizada.");
+        router.refresh(); // R32: el orden nuevo llega por el camino que ya existe
+        return;
+      }
+      toast.error(
+        result.status === "conflict"
+          ? "Espera unos segundos antes de volver a sincronizar."
+          : result.status === "forbidden"
+            ? "No tienes permiso para sincronizar la ruta."
+            : "No se pudo sincronizar la ruta.",
+      );
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-8">
       {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
@@ -164,7 +234,35 @@ export function MisAsignacionesModule({
         aria-label="En reparto / por gestionar"
         className="flex flex-col gap-3"
       >
-        <h2 className="text-lg font-semibold">En reparto / por gestionar</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">En reparto / por gestionar</h2>
+          {/* R31: solo el mensajero ve el botón de sincronización manual. */}
+          {rol === "mensajero" ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={sincronizar}
+              disabled={sincronizando}
+              aria-busy={sincronizando}
+            >
+              {sincronizando ? "Sincronizando…" : "Sincronizar ruta"}
+            </Button>
+          ) : null}
+        </div>
+
+        {/* R30: el orden mostrado no está al día. `status` (no `alert`) porque es
+            informativo y no exige acción inmediata. */}
+        {avisoRuta ? (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          >
+            El orden de entrega no está actualizado. Sincroniza la ruta para
+            recalcularlo.
+          </p>
+        ) : null}
+
         {porGestionar.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No hay órdenes en reparto.

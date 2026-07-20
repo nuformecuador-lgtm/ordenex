@@ -16,7 +16,11 @@ import {
   gestionar,
   liberarGestion,
 } from "@/lib/actions/mis-asignaciones";
-import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { sincronizarRuta } from "@/lib/actions/ruta-mensajero";
+import type {
+  MiAsignacionDTO,
+  RutaResumen,
+} from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano) — módulo del mensajero. Se
 // mockean las Server Actions (recoger / escoger / gestionar / liberar), el toast
@@ -51,10 +55,75 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: refreshMock, push: vi.fn() }),
 }));
 
+// Feature 93 (R31/R32): la Server Action de sincronización se MOCKEA. Los tests
+// NO dependen del simulador de `_ruta-mensajero-simulado.ts` (ese es solo para
+// recorrer el flujo a mano en `pnpm dev`, y está fenced).
+vi.mock("@/lib/actions/ruta-mensajero", () => ({
+  sincronizarRuta: vi.fn(),
+}));
+
 const recogerMock = vi.mocked(recogerAsignaciones);
 const escogerMock = vi.mocked(escogerParaGestion);
 const gestionarMock = vi.mocked(gestionar);
 const liberarMock = vi.mocked(liberarGestion);
+const sincronizarMock = vi.mocked(sincronizarRuta);
+
+// --- Feature 93 (R25): mock de `navigator.geolocation` con los TRES desenlaces --
+type DesenlaceGeo =
+  | { tipo: "concedido"; lat: number; lng: number }
+  | { tipo: "denegado" }
+  | { tipo: "timeout" }
+  | { tipo: "ausente" };
+
+const getCurrentPositionMock = vi.fn();
+
+function mockGeolocation(desenlace: DesenlaceGeo) {
+  if (desenlace.tipo === "ausente") {
+    Object.defineProperty(navigator, "geolocation", {
+      value: undefined,
+      configurable: true,
+    });
+    return;
+  }
+  getCurrentPositionMock.mockImplementation(
+    (
+      onOk: (p: { coords: { latitude: number; longitude: number } }) => void,
+      onErr: (e: { code: number; message: string }) => void,
+    ) => {
+      if (desenlace.tipo === "concedido") {
+        onOk({ coords: { latitude: desenlace.lat, longitude: desenlace.lng } });
+        return;
+      }
+      // 1 = PERMISSION_DENIED, 3 = TIMEOUT (constantes de GeolocationPositionError)
+      onErr(
+        desenlace.tipo === "denegado"
+          ? { code: 1, message: "User denied Geolocation" }
+          : { code: 3, message: "Timeout expired" },
+      );
+    },
+  );
+  Object.defineProperty(navigator, "geolocation", {
+    value: { getCurrentPosition: getCurrentPositionMock },
+    configurable: true,
+  });
+}
+
+const RUTA_VIGENTE: RutaResumen = {
+  estado: "vigente",
+  calculadaAt: new Date("2026-07-20T10:00:00Z"),
+  origenFuente: "gps",
+  paradasSinOptimizar: 0,
+};
+
+/** Nombres accesibles de las cards de "En reparto", EN EL ORDEN DEL DOM. */
+function ordenCardsEnReparto(): string[] {
+  const region = screen.getByRole("region", {
+    name: "En reparto / por gestionar",
+  });
+  return within(region)
+    .getAllByRole("button", { name: /^Gestionar orden / })
+    .map((b) => b.getAttribute("aria-label") ?? "");
+}
 
 function makeAsignacion(
   over: Partial<MiAsignacionDTO> & { id: string },
@@ -85,6 +154,8 @@ function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0
       porRecoger={props?.porRecoger ?? []}
       porGestionar={props?.porGestionar ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
+      ruta={props?.ruta}
+      rol={props?.rol}
     />,
   );
 }
@@ -140,6 +211,12 @@ beforeEach(() => {
   });
   recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
   liberarMock.mockResolvedValue({ status: "ok" });
+  sincronizarMock.mockResolvedValue({
+    status: "ok",
+    ruta: RUTA_VIGENTE,
+    secuencia: [],
+  });
+  mockGeolocation({ tipo: "concedido", lat: 9.93, lng: -84.08 });
 });
 
 afterEach(() => {
@@ -765,6 +842,261 @@ describe("MisAsignacionesModule", () => {
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     // El backend ya limpió el puntero dentro de su transacción: no se libera aquí.
     expect(liberarMock).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  // ========================= Feature 93 =========================
+
+  // --- R28/R29: el ORDEN lo decide el servidor, el cliente no reordena ---
+
+  it("R28: renderiza las cards de 'En reparto' EN EL ORDEN RECIBIDO (sin sort en cliente)", () => {
+    // `porGestionar` llega ya ordenado por el service (secuencia optimizada asc,
+    // y al final las que entraron después de la última optimización). Se pasan a
+    // propósito desordenadas respecto de CUALQUIER criterio local (numRemision,
+    // destinatario, secuenciaRuta) para que el test se ponga ROJO si alguien
+    // mete un `sort` en el componente.
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g3",
+          numRemision: "REM-C",
+          destinatario: "Zoe",
+          secuenciaRuta: 1,
+        }),
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-A",
+          destinatario: "Ana",
+          secuenciaRuta: 2,
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-B",
+          destinatario: "Beto",
+          secuenciaRuta: null,
+        }),
+      ],
+      rol: "mensajero",
+    });
+
+    expect(ordenCardsEnReparto()).toEqual([
+      "Gestionar orden REM-C · Zoe",
+      "Gestionar orden REM-A · Ana",
+      "Gestionar orden REM-B · Beto",
+    ]);
+  });
+
+  it("R29: NO altera el orden de 'Por recoger' (se renderiza tal cual llega)", () => {
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r2", numRemision: "REM-Z", destinatario: "Zoe" }),
+        makeAsignacion({ id: "r1", numRemision: "REM-A", destinatario: "Ana" }),
+      ],
+      rol: "mensajero",
+    });
+
+    const region = screen.getByRole("region", { name: "Por recoger" });
+    const textos = within(region).getAllByText(/^REM-/).map((n) => n.textContent);
+    expect(textos).toEqual(["REM-Z · Zoe", "REM-A · Ana"]);
+  });
+
+  // --- R30: aviso de orden no actualizado ---
+
+  it("R30: muestra el aviso cuando la ruta está `desactualizada`", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      ruta: { ...RUTA_VIGENTE, estado: "desactualizada" },
+      rol: "mensajero",
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(/no está actualizado/i);
+  });
+
+  it("R30: muestra el aviso cuando hay paradas sin optimizar aunque la ruta sea `vigente`", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      ruta: { ...RUTA_VIGENTE, paradasSinOptimizar: 2 },
+      rol: "mensajero",
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(/no está actualizado/i);
+  });
+
+  it("R30: NO muestra el aviso con ruta vigente y 0 paradas sin optimizar", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      ruta: RUTA_VIGENTE,
+      rol: "mensajero",
+    });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("R30: sin datos de ruta no inventa un aviso", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      rol: "mensajero",
+    });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  // --- R31: el botón solo existe para el rol mensajero ---
+
+  it("R31: con rol `mensajero` se renderiza el botón de sincronización manual", () => {
+    renderModule({ rol: "mensajero" });
+    expect(
+      screen.getByRole("button", { name: "Sincronizar ruta" }),
+    ).toBeInTheDocument();
+  });
+
+  it.each(["adminTienda", "adminMaestro", "bodega"])(
+    "R31: con rol %s el botón de sincronización NO se renderiza",
+    (rol) => {
+      renderModule({ rol });
+      expect(
+        screen.queryByRole("button", { name: "Sincronizar ruta" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("R31: sin rol explícito el botón NO se renderiza (fail-closed)", () => {
+    renderModule({});
+    expect(
+      screen.queryByRole("button", { name: "Sincronizar ruta" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // --- R25/R32: los TRES desenlaces del permiso de geolocalización ---
+
+  it("R25/R32: permiso CONCEDIDO → envía `ubicacion` y refresca la ruta", async () => {
+    const user = userEvent.setup();
+    mockGeolocation({ tipo: "concedido", lat: 9.93, lng: -84.08 });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      rol: "mensajero",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    await vi.waitFor(() => expect(sincronizarMock).toHaveBeenCalledTimes(1));
+    expect(sincronizarMock).toHaveBeenCalledWith({
+      ubicacion: { lat: 9.93, lng: -84.08 },
+      ordenIds: ["g1"],
+    });
+    // R32: el orden nuevo llega por `router.refresh()`, no por SWR ni fetch.
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  it("R25: permiso DENEGADO → llama IGUAL a la action, SIN `ubicacion`, y no aborta", async () => {
+    const user = userEvent.setup();
+    mockGeolocation({ tipo: "denegado" });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      rol: "mensajero",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    await vi.waitFor(() => expect(sincronizarMock).toHaveBeenCalledTimes(1));
+    // Sin `ubicacion`: el backend resuelve el origen por el fallback de R24.
+    expect(sincronizarMock).toHaveBeenCalledWith({ ordenIds: ["g1"] });
+    // La denegación NUNCA bloquea: la sincronización llega hasta el refresh.
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(errorMock).not.toHaveBeenCalled();
+  });
+
+  it("R25: FALLO/TIMEOUT de geolocalización → llama IGUAL a la action, SIN `ubicacion`", async () => {
+    const user = userEvent.setup();
+    mockGeolocation({ tipo: "timeout" });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      rol: "mensajero",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    await vi.waitFor(() => expect(sincronizarMock).toHaveBeenCalledTimes(1));
+    expect(sincronizarMock).toHaveBeenCalledWith({ ordenIds: ["g1"] });
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(errorMock).not.toHaveBeenCalled();
+  });
+
+  it("R25: navegador SIN `geolocation` → tampoco bloquea la sincronización", async () => {
+    const user = userEvent.setup();
+    mockGeolocation({ tipo: "ausente" });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      rol: "mensajero",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    await vi.waitFor(() => expect(sincronizarMock).toHaveBeenCalledTimes(1));
+    expect(sincronizarMock).toHaveBeenCalledWith({ ordenIds: ["g1"] });
+  });
+
+  it("R30/R32: tras sincronizar, el aviso refleja la ruta devuelta por la action", async () => {
+    const user = userEvent.setup();
+    sincronizarMock.mockResolvedValue({
+      status: "ok",
+      ruta: { ...RUTA_VIGENTE, estado: "desactualizada", paradasSinOptimizar: 1 },
+      secuencia: [],
+    });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      ruta: RUTA_VIGENTE,
+      rol: "mensajero",
+    });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    await vi.waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(/no está actualizado/i),
+    );
+  });
+
+  it("R34 (UI): un `conflict` por sincronizar demasiado seguido se avisa y no refresca", async () => {
+    const user = userEvent.setup();
+    sincronizarMock.mockResolvedValue({
+      status: "conflict",
+      motivo: "sincronizacion_demasiado_frecuente",
+    });
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      rol: "mensajero",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("R32: mientras la action no resuelve, el botón queda deshabilitado (sin doble envío)", async () => {
+    const user = userEvent.setup();
+    let resolver: (() => void) | undefined;
+    sincronizarMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolver = () =>
+            resolve({ status: "ok", ruta: RUTA_VIGENTE, secuencia: [] });
+        }),
+    );
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      rol: "mensajero",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Sincronizando…" })).toBeDisabled(),
+    );
+    expect(sincronizarMock).toHaveBeenCalledTimes(1);
+
+    resolver?.();
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 });

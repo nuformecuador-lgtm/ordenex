@@ -26,6 +26,24 @@ export interface MiAsignacionDTO {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+  // Feature 92 (§6.1) — declarado por la 93 por adelantado; ver status_note de la
+  // 93 en feature_list.json. Posicion en la ruta optimizada; `null` = la orden
+  // entro a la ruta DESPUES de la ultima optimizacion (se muestra al final).
+  // OPCIONAL a proposito: `MisAsignacionesService.toDTO` (fuera del alcance de la
+  // 93) todavia no lo puebla; la 92 lo vuelve requerido al implementarlo.
+  secuenciaRuta?: number | null;
+}
+
+// Feature 92 (§6.1) — declarado por la 93 por adelantado; ver status_note de la
+// 93 en feature_list.json. Estado de la ruta optimizada del mensajero: alimenta
+// el aviso de R30 y el boton de sincronizacion de R31/R32.
+export interface RutaResumen {
+  /** `desactualizada` = la ultima optimizacion fallo o quedo obsoleta (R27). */
+  estado: "vigente" | "desactualizada";
+  calculadaAt: Date | null;
+  origenFuente: "gps" | "ultima_conocida" | "centroide" | null;
+  /** # de ordenes en reparto sin posicion asignada (R28/R37). */
+  paradasSinOptimizar: number;
 }
 
 // Feature 61: KPIs del portal del mensajero, calculados SERVER-SIDE (autoritativos).
@@ -54,6 +72,11 @@ export type ListarMisAsignacionesServiceResult =
       porGestionar: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis;
+      // Feature 92 (§6.1) — declarado por la 93 por adelantado; ver status_note de
+      // la 93 en feature_list.json. OPCIONAL por el mismo motivo que
+      // `secuenciaRuta`: la 92 aun no lo devuelve. `undefined` = sin datos de ruta
+      // → la UI no muestra aviso (fail-closed, no inventa "desactualizada").
+      ruta?: RutaResumen;
     }
   | { status: "forbidden" };
 
