@@ -34,19 +34,37 @@ function toMensajeroOptions(mensajeros: MensajeroDTO[]): SelectOption[] {
   return mensajeros.map((m) => ({ value: m.id, label: m.nombre }));
 }
 
-/** Deriva el `Record<ordenId, mensajeroId>` inicial a partir del sugerido de cada orden (R27). */
-function seleccionInicial(ordenes: ResumenCargaOrdenDTO[]): Record<string, string> {
+/** Opciones de una fila: solo los mensajeros de la zona de esa orden. */
+function opcionesPorZona(mensajeros: MensajeroDTO[], zonaId: string): SelectOption[] {
+  return toMensajeroOptions(mensajeros.filter((m) => m.zonaId === zonaId));
+}
+
+/**
+ * Deriva el `Record<ordenId, mensajeroId>` inicial (R27). Si la orden trae un
+ * mensajero sugerido se respeta; si no, se elige uno AL AZAR entre los mensajeros
+ * de la zona de la orden. Queda "" solo si esa zona no tiene mensajeros.
+ */
+function seleccionInicial(
+  ordenes: ResumenCargaOrdenDTO[],
+  mensajeros: MensajeroDTO[],
+): Record<string, string> {
   const next: Record<string, string> = {};
   for (const orden of ordenes) {
-    next[orden.id] = orden.mensajeroSugeridoId ?? "";
+    if (orden.mensajeroSugeridoId) {
+      next[orden.id] = orden.mensajeroSugeridoId;
+      continue;
+    }
+    const deZona = mensajeros.filter((m) => m.zonaId === orden.zonaId);
+    next[orden.id] =
+      deZona.length > 0 ? deZona[Math.floor(Math.random() * deZona.length)].id : "";
   }
   return next;
 }
 
 /**
  * Segundo paso del modal de carga masiva (feature 14): resumen columna por
- * columna del lote recién creado, con asignación de `mensajero_sugerido_id`
- * vía `select` global "aplicar a todos" + override por fila (R21-R30).
+ * columna del lote recién creado. Cada fila arranca con un mensajero de su zona
+ * elegido al azar (o el sugerido si lo trae) y se puede reasignar por fila.
  */
 export function OrdenesCargaResumen({ numRemisiones, onDone }: OrdenesCargaResumenProps) {
   const toast = useToast();
@@ -59,55 +77,49 @@ export function OrdenesCargaResumen({ numRemisiones, onDone }: OrdenesCargaResum
     status: "loading",
   });
   const [seleccion, setSeleccion] = useState<Record<string, string>>({});
-  const [globalMensajeroId, setGlobalMensajeroId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
-  // R31: carga de mensajeros y R6/R7: resumen del lote, ambas por Server Action.
+  // R31: carga de mensajeros y R6/R7: resumen del lote. Ambas van juntas (una sola
+  // resolución) para poder sortear el mensajero inicial de cada fila entre los de
+  // su zona una vez que ambas listas están disponibles.
   useEffect(() => {
     let cancelled = false;
 
-    resumenCargaMasiva({ numRemisiones })
-      .then((result) => {
-        if (cancelled) return;
-        if (result.status === "ok") {
-          setFilasState({ status: "ok", data: result.ordenes });
-          setSeleccion(seleccionInicial(result.ordenes));
-        } else {
-          setFilasState({
-            status: "error",
-            message: "No se pudo cargar el resumen de la carga masiva.",
-          });
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setFilasState({
-          status: "error",
-          message: "No se pudo cargar el resumen de la carga masiva.",
-        });
+    const fallarMensajeros = () => {
+      setMensajerosState({
+        status: "error",
+        message: "No se pudo cargar la lista de mensajeros.",
+      });
+      toast.error("No se pudo cargar la lista de mensajeros.");
+    };
+    const fallarResumen = () =>
+      setFilasState({
+        status: "error",
+        message: "No se pudo cargar el resumen de la carga masiva.",
       });
 
-    listarMensajeros()
-      .then((result) => {
+    Promise.allSettled([resumenCargaMasiva({ numRemisiones }), listarMensajeros()])
+      .then(([resumen, mensajerosRes]) => {
         if (cancelled) return;
-        if (result.status === "ok") {
-          setMensajerosState({ status: "ok", data: result.mensajeros });
+
+        const mensajeros =
+          mensajerosRes.status === "fulfilled" && mensajerosRes.value.status === "ok"
+            ? mensajerosRes.value.mensajeros
+            : [];
+
+        if (mensajerosRes.status === "fulfilled" && mensajerosRes.value.status === "ok") {
+          setMensajerosState({ status: "ok", data: mensajeros });
         } else {
-          setMensajerosState({
-            status: "error",
-            message: "No se pudo cargar la lista de mensajeros.",
-          });
-          toast.error("No se pudo cargar la lista de mensajeros.");
+          fallarMensajeros();
         }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setMensajerosState({
-          status: "error",
-          message: "No se pudo cargar la lista de mensajeros.",
-        });
-        toast.error("No se pudo cargar la lista de mensajeros.");
+
+        if (resumen.status === "fulfilled" && resumen.value.status === "ok") {
+          setFilasState({ status: "ok", data: resumen.value.ordenes });
+          setSeleccion(seleccionInicial(resumen.value.ordenes, mensajeros));
+        } else {
+          fallarResumen();
+        }
       });
 
     return () => {
@@ -117,24 +129,12 @@ export function OrdenesCargaResumen({ numRemisiones, onDone }: OrdenesCargaResum
   }, []);
 
   const filas = filasState.status === "ok" ? filasState.data : [];
-  const mensajeroOptions =
-    mensajerosState.status === "ok" ? toMensajeroOptions(mensajerosState.data) : [];
+  const mensajeros = mensajerosState.status === "ok" ? mensajerosState.data : [];
   const mensajerosDisponibles = mensajerosState.status === "ok";
   const selectDisabled = !mensajerosDisponibles || submitting;
 
-  function handleGlobalChange(mensajeroId: string) {
-    setGlobalMensajeroId(mensajeroId); // R24
-    setSeleccion((prev) => {
-      const next: Record<string, string> = { ...prev };
-      for (const fila of filas) {
-        next[fila.id] = mensajeroId; // R25: aplica a TODAS las filas
-      }
-      return next;
-    });
-  }
-
   function handleRowChange(ordenId: string, mensajeroId: string) {
-    // R26: sobrescribe solo esta fila; no toca el global ni las demás filas.
+    // R26: sobrescribe solo esta fila; no toca las demás.
     setSeleccion((prev) => ({ ...prev, [ordenId]: mensajeroId }));
   }
 
@@ -189,13 +189,18 @@ export function OrdenesCargaResumen({ numRemisiones, onDone }: OrdenesCargaResum
       render: (row) => row.direccion ?? "-",
     },
     {
+      id: "zona",
+      value: "Zona",
+      render: (row) => row.zonaNombre,
+    },
+    {
       id: "mensajero",
       value: "Mensajero",
       render: (row) => (
         <Select
           value={seleccion[row.id] ?? ""}
           onValueChange={(mensajeroId) => handleRowChange(row.id, mensajeroId)}
-          options={mensajeroOptions}
+          options={opcionesPorZona(mensajeros, row.zonaId)}
           placeholder={SIN_ASIGNAR_LABEL}
           disabled={selectDisabled}
           aria-label={`Mensajero para la orden ${row.numRemision}`}
@@ -211,20 +216,6 @@ export function OrdenesCargaResumen({ numRemisiones, onDone }: OrdenesCargaResum
           <AlertDescription>{mensajerosState.message}</AlertDescription>
         </Alert>
       ) : null}
-
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/30 p-4">
-        <span className="text-sm font-medium" id="carga-resumen-global-label">
-          Asignar mensajero a todas las órdenes
-        </span>
-        <Select
-          value={globalMensajeroId}
-          onValueChange={handleGlobalChange}
-          options={mensajeroOptions}
-          placeholder={SIN_ASIGNAR_LABEL}
-          disabled={selectDisabled}
-          aria-label="Asignar mensajero a todas las órdenes"
-        />
-      </div>
 
       <DataTable<ResumenCargaOrdenDTO>
         columns={columns}

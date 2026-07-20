@@ -283,7 +283,9 @@ const WITH_RESUMEN = {
     montoCobrar: true,
     direccion: true,
     mensajeroSugeridoId: true,
+    zonaId: true,
     estatus: { select: { value: true } },
+    zona: { select: { nombre: true } },
     mensajeroSugerido: { select: { nombre: true } },
   },
 } as const;
@@ -302,6 +304,8 @@ function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
     montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
     direccion: row.direccion,
     estatusValue: row.estatus?.value,
+    zonaId: row.zonaId,
+    zonaNombre: row.zona.nombre,
     mensajeroSugeridoId: row.mensajeroSugeridoId,
     mensajeroSugeridoNombre: row.mensajeroSugerido?.nombre ?? null,
   };

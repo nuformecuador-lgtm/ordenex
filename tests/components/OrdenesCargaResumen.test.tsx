@@ -57,9 +57,12 @@ vi.mock("@/lib/actions/mensajeros", () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
+// Ana y Beto en la zona "z1" (Norte); Carla en "z2" (Sur), para verificar el
+// filtrado por zona del select de cada fila.
 const MENSAJEROS: MensajeroDTO[] = [
-  { id: "u1", nombre: "Ana" },
-  { id: "u2", nombre: "Beto" },
+  { id: "u1", nombre: "Ana", zonaId: "z1", zonaNombre: "Norte" },
+  { id: "u2", nombre: "Beto", zonaId: "z1", zonaNombre: "Norte" },
+  { id: "u3", nombre: "Carla", zonaId: "z2", zonaNombre: "Sur" },
 ];
 
 const ORDENES: ResumenCargaOrdenDTO[] = [
@@ -73,6 +76,8 @@ const ORDENES: ResumenCargaOrdenDTO[] = [
     montoCobrar: 25.9,
     direccion: "Av. Amazonas",
     estatusValue: "en_preparacion",
+    zonaId: "z1",
+    zonaNombre: "Norte",
     mensajeroSugeridoId: "u1",
     mensajeroSugeridoNombre: "Ana",
   },
@@ -86,6 +91,8 @@ const ORDENES: ResumenCargaOrdenDTO[] = [
     montoCobrar: null,
     direccion: null,
     estatusValue: "en_preparacion",
+    zonaId: "z1",
+    zonaNombre: "Norte",
     mensajeroSugeridoId: null,
     mensajeroSugeridoNombre: null,
   },
@@ -104,6 +111,8 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Azar determinista: 0.6 * (2 mensajeros en z1) = índice 1 -> Beto.
+  vi.spyOn(Math, "random").mockReturnValue(0.6);
   listarMensajerosMock.mockResolvedValue({ status: "ok", mensajeros: MENSAJEROS });
   resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: ORDENES });
   asignarMensajeroSugeridoMock.mockResolvedValue({ status: "ok", asignadas: 0 });
@@ -111,13 +120,11 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 const rowSelect = (numRemision: string) =>
   screen.getByRole("combobox", { name: `Mensajero para la orden ${numRemision}` });
-
-const globalSelect = () =>
-  screen.getByRole("combobox", { name: "Asignar mensajero a todas las órdenes" });
 
 async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, label: string) {
   await user.click(trigger);
@@ -159,7 +166,7 @@ describe("OrdenesCargaResumen — carga de mensajeros (R31)", () => {
 
     expect(listarMensajerosMock).toHaveBeenCalledTimes(1);
 
-    await user.click(globalSelect());
+    await user.click(rowSelect("REM-0001"));
     const listbox = await screen.findByRole("listbox");
     expect(within(listbox).getByRole("option", { name: "Ana" })).toBeInTheDocument();
     expect(within(listbox).getByRole("option", { name: "Beto" })).toBeInTheDocument();
@@ -171,7 +178,6 @@ describe("OrdenesCargaResumen — carga de mensajeros (R31)", () => {
 
     await screen.findByText("REM-0001");
 
-    expect(globalSelect()).toBeDisabled();
     expect(rowSelect("REM-0001")).toBeDisabled();
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(errorMock).toHaveBeenCalled();
@@ -179,31 +185,43 @@ describe("OrdenesCargaResumen — carga de mensajeros (R31)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// R24, R25 — select global aplica a todas las filas
+// Filtrado por zona — el select de cada fila solo ofrece mensajeros de la zona
+// de la orden, y la zona se muestra en el listado.
 // ---------------------------------------------------------------------------
-describe("OrdenesCargaResumen — select global (R24, R25)", () => {
-  it("elegir un mensajero en el global lo aplica a todas las filas", async () => {
+describe("OrdenesCargaResumen — filtrado de mensajeros por zona de la orden", () => {
+  it("el select de la fila solo ofrece mensajeros de la zona de la orden", async () => {
     const user = userEvent.setup();
     render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
     await screen.findByText("REM-0001");
 
-    await pickOption(user, globalSelect(), "Beto");
+    await user.click(rowSelect("REM-0001"));
+    const listbox = await screen.findByRole("listbox");
+    // z1: Ana y Beto sí; Carla (z2) no.
+    expect(within(listbox).getByRole("option", { name: "Ana" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Beto" })).toBeInTheDocument();
+    expect(within(listbox).queryByRole("option", { name: "Carla" })).not.toBeInTheDocument();
+  });
 
-    expect(within(rowSelect("REM-0001")).getByText("Beto")).toBeInTheDocument();
-    expect(within(rowSelect("REM-0002")).getByText("Beto")).toBeInTheDocument();
+  it("muestra la zona de la orden en el listado", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(screen.getAllByText("Norte").length).toBeGreaterThan(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// R26, R27 — override por fila y valor inicial = mensajeroSugeridoId
+// R26, R27 — override por fila y valor inicial (sugerido o azar de la zona)
 // ---------------------------------------------------------------------------
 describe("OrdenesCargaResumen — override por fila y valor inicial (R26, R27)", () => {
-  it("cada fila inicia con su mensajeroSugeridoId (R27)", async () => {
+  it("respeta el mensajeroSugeridoId y sortea uno de la zona para las demás (R27)", async () => {
     render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
     await screen.findByText("REM-0001");
 
+    // o1 trae sugerido u1 (Ana); o2 no, así que arranca con un mensajero al azar
+    // de su zona z1 (con Math.random=0.6 -> índice 1 -> Beto), nunca "Sin asignar".
     expect(within(rowSelect("REM-0001")).getByText("Ana")).toBeInTheDocument();
-    expect(rowSelect("REM-0002")).toHaveTextContent("Sin asignar");
+    expect(within(rowSelect("REM-0002")).getByText("Beto")).toBeInTheDocument();
   });
 
   it("cambiar el select de una fila no afecta a las demás (R26)", async () => {
@@ -211,13 +229,13 @@ describe("OrdenesCargaResumen — override por fila y valor inicial (R26, R27)",
     render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
     await screen.findByText("REM-0001");
 
-    await pickOption(user, globalSelect(), "Ana");
+    // Igualamos ambas filas a Beto y luego cambiamos SOLO la fila 2 a Ana; si el
+    // cambio se filtrara a otras filas, la fila 1 dejaría de ser Beto.
+    await pickOption(user, rowSelect("REM-0001"), "Beto");
+    await pickOption(user, rowSelect("REM-0002"), "Ana");
+
     expect(within(rowSelect("REM-0002")).getByText("Ana")).toBeInTheDocument();
-
-    await pickOption(user, rowSelect("REM-0002"), "Beto");
-
-    expect(within(rowSelect("REM-0002")).getByText("Beto")).toBeInTheDocument();
-    expect(within(rowSelect("REM-0001")).getByText("Ana")).toBeInTheDocument();
+    expect(within(rowSelect("REM-0001")).getByText("Beto")).toBeInTheDocument();
   });
 });
 
@@ -233,12 +251,13 @@ describe("OrdenesCargaResumen — confirmar asignación (R28, R33)", () => {
     render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} onDone={onDone} />);
     await screen.findByText("REM-0001");
 
-    await pickOption(user, globalSelect(), "Beto");
+    // Confirma con la selección inicial: o1 = sugerido u1; o2 = azar de su zona
+    // (Math.random=0.6 -> u2/Beto).
     await user.click(screen.getByRole("button", { name: /confirmar asignación/i }));
 
     expect(asignarMensajeroSugeridoMock).toHaveBeenCalledWith({
       asignaciones: [
-        { ordenId: "o1", mensajeroId: "u2" },
+        { ordenId: "o1", mensajeroId: "u1" },
         { ordenId: "o2", mensajeroId: "u2" },
       ],
     });
@@ -252,12 +271,27 @@ describe("OrdenesCargaResumen — confirmar asignación (R28, R33)", () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
-  it("solo incluye filas con mensajero elegido en las asignaciones", async () => {
+  it("excluye las filas sin mensajero (zona sin mensajeros) de las asignaciones", async () => {
     const user = userEvent.setup();
-    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    // o1 (z1) trae sugerido u1; la orden en z9 no tiene mensajeros -> queda "".
+    resumenCargaMasivaMock.mockResolvedValue({
+      status: "ok",
+      ordenes: [
+        ORDENES[0],
+        {
+          ...ORDENES[1],
+          id: "o9",
+          numRemision: "REM-9999",
+          zonaId: "z9",
+          zonaNombre: "Sin cobertura",
+          mensajeroSugeridoId: null,
+          mensajeroSugeridoNombre: null,
+        },
+      ],
+    });
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-9999"]} />);
     await screen.findByText("REM-0001");
 
-    // Solo la fila 1 tiene mensajero sugerido (u1); la fila 2 queda sin elegir.
     await user.click(screen.getByRole("button", { name: /confirmar asignación/i }));
 
     expect(asignarMensajeroSugeridoMock).toHaveBeenCalledWith({

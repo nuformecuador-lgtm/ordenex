@@ -34,10 +34,11 @@ import {
   MontoDerivadoCard,
   INGRESO_BRUTO_LABEL,
   INGRESO_BRUTO_NOTA,
-  GANANCIA_LABEL,
+  GANANCIA_DEBE_LABEL,
   PAGO_TIENDA_LABEL,
   PAGO_TIENDA_NOTA,
   GANANCIA_NOTA,
+  esMontoNegativo,
   DesgloseIngresoOrdenex,
   desgloseAriaLabel,
   TotalItem,
@@ -322,11 +323,17 @@ export function CierresAdminModule({
               value={detalle.cierre.totalPagoMensajero}
               ariaLabel="Pago al mensajero del cierre"
             />
-            <MontoDerivadoCard
-              value={detalle.ganancia}
-              label={GANANCIA_LABEL}
-              nota={GANANCIA_NOTA}
-            />
+            {/* La ganancia solo se muestra cuando es NEGATIVA: ahí Ordenex pagó al
+                mensajero más de lo que facturó, así que es una DEUDA ("Debe") y el
+                monto va en rojo. Si es ≥ 0 no se muestra card de ganancia. */}
+            {esMontoNegativo(detalle.ganancia) ? (
+              <MontoDerivadoCard
+                value={detalle.ganancia}
+                label={GANANCIA_DEBE_LABEL}
+                nota={GANANCIA_NOTA}
+                tone="danger"
+              />
+            ) : null}
 
             {/* Feature 56/R16: total snapshot del ingreso de bodega por rechazos, separado. */}
             <IngresoBodegaRechazosTotal

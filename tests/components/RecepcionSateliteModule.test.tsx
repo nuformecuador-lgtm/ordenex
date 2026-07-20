@@ -257,12 +257,13 @@ describe("RecepcionSateliteModule", () => {
     const region = screen.getByRole("region", { name: "Recibidas" });
     // Es una tabla, no una lista de cards.
     const tabla = within(region).getByRole("table", { name: "Recibidas" });
-    // Cabeceras: la de selección + las de datos espejadas de ordenes-columns.
+    // Cabeceras: la de selección (checkbox "seleccionar todo", sin texto) + las de
+    // datos espejadas de ordenes-columns.
     const headers = within(tabla)
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
     expect(headers).toEqual([
-      "Seleccionar",
+      "",
       "Nº Guía",
       "Nº Remisión",
       "Estado",
@@ -287,6 +288,50 @@ describe("RecepcionSateliteModule", () => {
     ).toBeInTheDocument();
     // Una fila de datos (más la de cabecera).
     expect(within(tabla).getAllByRole("row")).toHaveLength(2);
+    // La cabecera de la columna de selección es un checkbox "seleccionar todo".
+    expect(
+      within(tabla).getByRole("checkbox", {
+        name: "Seleccionar todas las recibidas",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("Pedido humano: el checkbox de cabecera marca/desmarca todas las recibidas", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+          zonaNombre: "Limón",
+        }),
+        makeOrden({
+          id: "b2",
+          numRemision: "REM-B2",
+          estatusValue: "en_bodega_satelite",
+          zonaNombre: "Limón",
+        }),
+      ],
+      zonaNombre: "Limón",
+    });
+
+    const tabla = screen.getByRole("table", { name: "Recibidas" });
+    const seleccionarTodo = within(tabla).getByRole("checkbox", {
+      name: "Seleccionar todas las recibidas",
+    });
+    const fila1 = within(tabla).getByRole("checkbox", { name: "Seleccionar REM-B1" });
+    const fila2 = within(tabla).getByRole("checkbox", { name: "Seleccionar REM-B2" });
+
+    // Marca todas.
+    await user.click(seleccionarTodo);
+    expect(fila1).toBeChecked();
+    expect(fila2).toBeChecked();
+
+    // Desmarca todas.
+    await user.click(seleccionarTodo);
+    expect(fila1).not.toBeChecked();
+    expect(fila2).not.toBeChecked();
   });
 
   it("Pedido humano: 'Nº Guía' vacía se muestra como 'Pendiente' en la tabla", () => {

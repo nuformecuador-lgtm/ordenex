@@ -17,8 +17,8 @@ function buildMockPrisma(findManyImpl?: ReturnType<typeof vi.fn>): MockedUserPri
 describe("UserRepository.listMensajeros (R1, R2, R3)", () => {
   it("filtra rol.value=mensajero y estado=activo, proyecta solo id/nombre, ordena por nombre", async () => {
     const findMany = vi.fn().mockResolvedValue([
-      { id: "msg-1", nombre: "Ana" },
-      { id: "msg-2", nombre: "Beto" },
+      { id: "msg-1", nombre: "Ana", zonaId: "z1", zona: { nombre: "Norte" } },
+      { id: "msg-2", nombre: "Beto", zonaId: null, zona: null },
     ]);
     const prisma = buildMockPrisma(findMany);
     const repo = new UserRepository(prisma);
@@ -26,8 +26,8 @@ describe("UserRepository.listMensajeros (R1, R2, R3)", () => {
     const mensajeros = await repo.listMensajeros();
 
     expect(mensajeros).toEqual([
-      { id: "msg-1", nombre: "Ana" },
-      { id: "msg-2", nombre: "Beto" },
+      { id: "msg-1", nombre: "Ana", zonaId: "z1", zonaNombre: "Norte" },
+      { id: "msg-2", nombre: "Beto", zonaId: null, zonaNombre: null },
     ]);
 
     const arg = findMany.mock.calls[0][0];
@@ -35,7 +35,12 @@ describe("UserRepository.listMensajeros (R1, R2, R3)", () => {
       rol: { value: "mensajero" },
       estado: "activo",
     });
-    expect(arg.select).toEqual({ id: true, nombre: true });
+    expect(arg.select).toEqual({
+      id: true,
+      nombre: true,
+      zonaId: true,
+      zona: { select: { nombre: true } },
+    });
     expect(arg.orderBy).toEqual({ nombre: "asc" });
   });
 

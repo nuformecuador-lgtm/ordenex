@@ -19,6 +19,12 @@ export interface Column<T> {
   value: string;
   /** Cómo renderizar la celda. Ver descripción del contrato arriba. */
   render?: ((row: T) => ReactNode) | keyof T | string;
+  /**
+   * Cabecera custom opcional. Si se define, sustituye al texto `value` dentro del
+   * `<th>` (p. ej. un checkbox "seleccionar todo"). `value` sigue siendo el nombre
+   * accesible/fallback de la columna, así que déjalo siempre poblado.
+   */
+  renderHeader?: () => ReactNode;
 }
 
 export interface DataTableProps<T> {
@@ -260,7 +266,7 @@ export function DataTable<T>({
                 scope="col"
                 className="px-3 py-2 font-medium text-muted-foreground"
               >
-                {column.value}
+                {column.renderHeader ? column.renderHeader() : column.value}
               </th>
             ))}
           </tr>

@@ -106,7 +106,9 @@ export const gestionarSchema = z.discriminatedUnion("resultado", [
   z.object({
     ordenId: z.string().min(1),
     resultado: z.literal("entregada"),
-    montoRecibido: z.number().positive("monto requerido"),
+    // >= 0: una entrega SIN cobro (montoCobrar 0/null) recauda 0 y es válida. El
+    // servicio revalida que el monto CUADRE con el `montoCobrar` de la orden (R22).
+    montoRecibido: z.number().nonnegative("monto invalido"),
     metodoPago: z.enum(METODO_PAGO_SEED),
     evidencia: evidenciaSchema,
   }),

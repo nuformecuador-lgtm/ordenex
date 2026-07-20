@@ -45,6 +45,37 @@ describe("DataTable", () => {
     }
   });
 
+  it("renderHeader sustituye el texto `value` por un nodo custom en el <th> (p. ej. un checkbox)", () => {
+    const onToggle = vi.fn();
+    const columns: Column<Row>[] = [
+      {
+        id: "seleccionar",
+        value: "Seleccionar",
+        renderHeader: () => (
+          <input
+            type="checkbox"
+            aria-label="Seleccionar todo"
+            onChange={onToggle}
+          />
+        ),
+        render: () => <input type="checkbox" aria-label="Seleccionar fila" />,
+      },
+      { id: "nombre", value: "Nombre" },
+    ];
+
+    render(<DataTable columns={columns} data={baseData} ariaLabel="Personas" />);
+
+    // El primer <th> ya no muestra el texto: contiene el checkbox de cabecera.
+    const headers = screen.getAllByRole("columnheader");
+    expect(headers[0].textContent).toBe("");
+    const selectAll = within(headers[0]).getByRole("checkbox", {
+      name: "Seleccionar todo",
+    });
+    expect(selectAll).toBeInTheDocument();
+    // La columna sin `renderHeader` conserva su `value` de texto.
+    expect(headers[1].textContent).toBe("Nombre");
+  });
+
   it("B2: render como FUNCIÓN produce un nodo custom por fila (R3a, R6)", () => {
     const columns: Column<Row>[] = [
       { id: "nombre", value: "Nombre" },

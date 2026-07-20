@@ -14,6 +14,7 @@ import {
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
+import { EscanerRecoger } from "./EscanerRecoger";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano): módulo del mensajero.
@@ -131,6 +132,14 @@ export function MisAsignacionesModule({
   return (
     <div className="flex flex-col gap-8">
       {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
+      {/* Recoger por escaneo: al escanear la etiqueta de un paquete se ACEPTA la
+          orden con la MISMA action que el botón "Recoger" (recogerAsignaciones). El
+          escáner resuelve el num_guia contra `porRecoger` para obtener el id. */}
+      <EscanerRecoger
+        porRecoger={porRecoger}
+        onRecogida={() => router.refresh()}
+      />
+
       {/* Reutiliza la sección compartida "por aceptar": banner con contador de
           nuevas + "Recoger todas" (lote, R16) + "Recoger" por-orden (R14, única
           acción). La confirmación en Modal y la action `recogerAsignaciones` se
