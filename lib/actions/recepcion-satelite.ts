@@ -4,6 +4,8 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { RecepcionSateliteService } from "@/lib/services/RecepcionSateliteService";
 import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
+import { JobRepository } from "@/lib/repositories/JobRepository";
+import { AsignabilidadCoordenadasService } from "@/lib/services/AsignabilidadCoordenadasService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IRecepcionSateliteService } from "@/lib/interfaces/services/IRecepcionSateliteService";
@@ -61,7 +63,11 @@ function buildService(): IRecepcionSateliteService {
 
 function buildAsignacionService(): IAsignacionSateliteService {
   const prisma = getPrismaClient();
-  return new AsignacionSateliteService(new OrdenRepository(prisma));
+  // Feature 92/R8: + el gate de asignabilidad por coordenadas, que lee la cola de jobs.
+  return new AsignacionSateliteService(
+    new OrdenRepository(prisma),
+    new AsignabilidadCoordenadasService(new JobRepository(prisma)),
+  );
 }
 
 // Feature 34/T6: repo minimo del loader de mensajeros de la zona (solo lectura).

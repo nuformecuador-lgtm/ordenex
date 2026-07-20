@@ -120,6 +120,26 @@ describe("GestionOrdenRepository.findByIdsParaGestion (feature 47/R5 · zonaId)"
   });
 });
 
+
+/**
+ * Feature 92 (R16/R19): `GestionOrdenRepository` inyecta ahora un `IJobRepository` para el
+ * encolado TRANSACTIONAL OUTBOX de la reoptimizacion de ruta. Este doble registra las
+ * llamadas para que los tests de la 36/47/49 sigan midiendo lo suyo Y ADEMAS puedan
+ * afirmar que el encolado va DENTRO de la transaccion del writer (4.º argumento).
+ * El comportamiento del debounce y del namespace disjunto se prueba aparte, en
+ * `tests/integration/repositories/optimizacion-ruta-enqueue.test.ts`.
+ */
+function colaFake() {
+  const enqueue = vi.fn(async () => null);
+  return {
+    enqueue,
+    claimBatch: vi.fn(async () => []),
+    complete: vi.fn(async () => {}),
+    fail: vi.fn(async () => {}),
+    findByDedupeKeys: vi.fn(async () => []),
+  };
+}
+
 describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
   // Feature 49/#8: recogerLote pasa a `$queryRaw ... RETURNING "id"` en un `$transaction`;
   // el count = rows.length y el append cubre EXACTAMENTE los ids retornados (R8).
@@ -128,8 +148,9 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
     const createMany = vi.fn();
     const tx = { $queryRaw, ordenHistorialEstado: { createMany } };
     const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<number>) => cb(tx));
-    const repo = new GestionOrdenRepository({ $transaction } as never);
-    return { repo, $queryRaw, createMany, $transaction };
+    const cola = colaFake();
+    const repo = new GestionOrdenRepository({ $transaction } as never, cola as never);
+    return { repo, $queryRaw, createMany, $transaction, cola, tx };
   }
 
   it("guardia propiedad + origen en el SQL; devuelve filas afectadas (rows.length)", async () => {
@@ -257,8 +278,9 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenHistorialEstado: { createMany: historialCreateMany },
     };
     const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<string>) => cb(tx));
-    const repo = new GestionOrdenRepository({ $transaction } as never);
-    return { repo, gestionCreate, ordenUpdate, usuarioUpdate, historialCreateMany };
+    const cola = colaFake();
+    const repo = new GestionOrdenRepository({ $transaction } as never, cola as never);
+    return { repo, gestionCreate, ordenUpdate, usuarioUpdate, historialCreateMany, cola, tx };
   }
 
   it("INSERT gestion + UPDATE estatus + limpiar puntero, todo bajo la misma tx", async () => {

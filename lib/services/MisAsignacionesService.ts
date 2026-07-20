@@ -11,6 +11,7 @@ import type {
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
@@ -63,25 +64,80 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // en la rama `devuelta`.
     private readonly historial: Pick<IOrdenHistorialService, "contarIntentos">,
     private readonly zonaRepo: Pick<IZonaRepository, "findCentralZonaId">,
+    // Feature 92 (R23/R28): dep anadida al FINAL (no rompe el orden existente). Se usa
+    // para leer la secuencia optimizada al listar y para persistir el origen `gps` que
+    // el navegador adjunta a recoger/gestionar.
+    private readonly rutaRepo: Pick<
+      IRutaOptimizadaRepository,
+      "findByMensajero" | "upsertOrigen"
+    >,
   ) {}
+
+  /**
+   * Feature 92 (R23/R25): persiste la ubicacion del navegador como origen `gps` de la ruta
+   * del mensajero. BEST-EFFORT A PROPOSITO: si falla, la accion del mensajero (recoger,
+   * gestionar) NO debe romperse por no haber podido guardar una coordenada auxiliar. R25
+   * es explicito: la geolocalizacion nunca bloquea el flujo, solo lo mejora.
+   */
+  private async registrarUbicacion(
+    mensajeroId: string,
+    ubicacion: { lat: number; lng: number } | undefined,
+  ): Promise<void> {
+    if (ubicacion === undefined) return;
+    try {
+      await this.rutaRepo.upsertOrigen(mensajeroId, {
+        lat: ubicacion.lat,
+        lng: ubicacion.lng,
+        capturadaAt: new Date(),
+        fuente: "gps",
+      });
+    } catch {
+      // Silencioso a proposito: no hay nada accionable que decirle al mensajero, y el
+      // servicio de optimizacion caera al escalon siguiente del origen (R24).
+    }
+  }
 
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    const [ordenEnGestionId, rows, entregadas, montoEntregadas] = await Promise.all([
+    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta] = await Promise.all([
       this.repo.getOrdenEnGestion(actor.usuarioId), // R20
       this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
       this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
       this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
+      this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
     ]);
+
+    // Feature 92 (R28): posicion por orden. Vacio si nunca se optimizo -> todas las cards
+    // quedan "sin posicion" y conservan el orden actual, que es el comportamiento previo.
+    const secuencias = ruta?.secuenciaPorOrden ?? new Map<string, number>();
 
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
     for (const row of rows) {
       const dto = toDTO(row);
-      if (row.estatusValue === ORIGEN_RECOGER) porRecoger.push(dto);
-      else if (row.estatusValue === ESTADO_EN_REPARTO) porGestionar.push(dto);
+      if (row.estatusValue === ORIGEN_RECOGER) {
+        // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
+        porRecoger.push(dto);
+      } else if (row.estatusValue === ESTADO_EN_REPARTO) {
+        porGestionar.push({ ...dto, secuenciaRuta: secuencias.get(row.id) ?? null });
+      }
     }
+
+    // Feature 92 (R28): reordenado. El REPOSITORIO no cambia su `orderBy` (`createdAt
+    // desc` sigue siendo el orden base y el de "Por recoger"); el reordenado vive AQUI.
+    //
+    // Las que tienen posicion van primero por `secuencia` asc; las que no la tienen —las
+    // que entraron a la ruta despues de la ultima optimizacion— van AL FINAL conservando
+    // el `createdAt desc` que ya traian. `sort` de JS es ESTABLE desde ES2019, que es
+    // exactamente lo que conserva ese orden relativo sin volver a ordenarlo.
+    porGestionar.sort((a, b) => {
+      if (a.secuenciaRuta === null && b.secuenciaRuta === null) return 0;
+      if (a.secuenciaRuta === null) return 1; // sin posicion -> al final
+      if (b.secuenciaRuta === null) return -1;
+      return a.secuenciaRuta - b.secuenciaRuta;
+    });
+    const paradasSinOptimizar = porGestionar.filter((o) => o.secuenciaRuta === null).length;
     // Feature 61: KPIs derivados de las ordenes en_reparto (porGestionar) + el conteo
     // de entregadas. `pendientes` = en camino; `porCobrar` = COD por recaudar (null = 0).
     const codEnReparto = porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
@@ -93,7 +149,22 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       // se descuenta al gestionar como reprogramada/devuelta/rechazada (fuera de ambos sets).
       totalACobrar: codEnReparto + montoEntregadas,
     };
-    return { status: "ok", porRecoger, porGestionar, ordenEnGestionId, kpis }; // R10
+    return {
+      status: "ok",
+      porRecoger,
+      porGestionar,
+      ordenEnGestionId,
+      kpis,
+      // Feature 92 (R27/R30): sin ruta persistida el estado es `vigente` con
+      // `calculadaAt: null` — "nunca se calculo" NO es "esta desactualizada"; la UI
+      // distingue los dos casos con `calculadaAt`.
+      ruta: {
+        estado: ruta?.estado ?? "vigente",
+        calculadaAt: ruta?.calculadaAt ?? null,
+        origenFuente: ruta?.origenFuente ?? null,
+        paradasSinOptimizar,
+      },
+    }; // R10
   }
 
   async recogerAsignaciones(input: RecogerInput, actor: Actor): Promise<RecogerServiceResult> {
@@ -136,6 +207,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     }
 
     await this.repo.recogerLote(ordenIds, actor.usuarioId, origenId, destinoId); // R15/R16
+    // Feature 92 (R23): el origen se persiste DESPUES de la transicion, y su fallo no la
+    // revierte: el mensajero ya recogio, eso es lo que importa.
+    await this.registrarUbicacion(actor.usuarioId, input.ubicacion);
     return { status: "ok", recogidas: ordenIds };
   }
 
@@ -240,6 +314,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       if (storagePath) await this.storage.remove([storagePath]);
       throw error;
     }
+
+    // Feature 92 (R23): igual que en `recogerAsignaciones`, tras la transaccion.
+    await this.registrarUbicacion(actor.usuarioId, input.ubicacion);
 
     // R8: la evidencia se muestra con URL firmada de TTL acotado, nunca el path crudo.
     let evidenciaUrl: string | undefined;
@@ -355,6 +432,9 @@ function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     provinciaNombre: row.provinciaNombre,
     cantonNombre: row.cantonNombre,
     distritoNombre: row.distritoNombre,
+    // Feature 92 (R28): la posicion la resuelve el llamador con el mapa de la ruta; el
+    // default `null` es correcto para "Por recoger", que nunca tiene posicion.
+    secuenciaRuta: null,
   };
 }
 
