@@ -4,8 +4,15 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { HistorialOrdenSheet } from "@/app/(app)/ordenes/_components/HistorialOrdenSheet";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import type { ObtenerHistorialOrdenResult } from "@/lib/actions/orden-historial";
 import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
+
+// R30: lo que se verifica es "se muestra la ETIQUETA legible del estado, no el
+// value crudo". Se aserta contra el mapa de presentación (fuente de verdad) en vez
+// de un literal, para que un rebrand de etiquetas no rompa estos tests. Los
+// literales del mapa los blinda `tests/components/EstatusLabel.test.ts`.
+const LABEL_DESTINO = ORDER_STATUS_LABELS.en_bodega;
 
 // Feature 49 (T6.2) — drawer "Ver historial". Cubre R28 (la lectura corre en el servidor via
 // Server Action; el drawer NO fetchea datos sensibles con fetch a la API) y R29 (al abrir se
@@ -79,7 +86,7 @@ describe("HistorialOrdenSheet (feature 49, R28/R29)", () => {
     // Título con la referencia legible.
     expect(within(dialog).getByText("Historial de la orden REM-1")).toBeInTheDocument();
     // Timeline con la etiqueta legible del estado destino (R30) — no el value crudo.
-    expect(await within(dialog).findByText("En bodega")).toBeInTheDocument();
+    expect(await within(dialog).findByText(LABEL_DESTINO)).toBeInTheDocument();
     expect(within(dialog).queryByText("en_bodega")).toBeNull();
 
     // R28: la lectura pasó por la Server Action inyectada, con la ordenId de la fila.
@@ -142,14 +149,14 @@ describe("HistorialOrdenSheet — badge 'Intento X de N' (feature 47, R15/R16/R1
 
     expect(await within(dialog).findByText("Intento 1 de 3")).toBeInTheDocument();
     // Sigue mostrando la línea de tiempo (la superficie de la 49 se conserva).
-    expect(await within(dialog).findByText("En bodega")).toBeInTheDocument();
+    expect(await within(dialog).findByText(LABEL_DESTINO)).toBeInTheDocument();
   });
 
   it("R16: ok con intentos=0 NO muestra el badge (orden sin devoluciones)", async () => {
     const dialog = await abrir(fakeAction(okResult({ intentos: 0, umbral: 3 })));
 
     // El timeline sí aparece; el badge de intentos NO.
-    expect(await within(dialog).findByText("En bodega")).toBeInTheDocument();
+    expect(await within(dialog).findByText(LABEL_DESTINO)).toBeInTheDocument();
     expect(within(dialog).queryByText(/^Intento \d+ de \d+$/)).toBeNull();
     expect(
       within(dialog).queryByRole("status", { name: /Intentos de entrega/i }),

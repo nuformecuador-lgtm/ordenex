@@ -173,7 +173,10 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_jobs_cola") && // feature 90: apendida despues
         // feature 91: apendidas despues (enum de job_tipo + columnas de geocodificacion).
         !d.endsWith("_job_tipo_geocodificacion") &&
-        !d.endsWith("_orden_geocode"),
+        !d.endsWith("_orden_geocode") &&
+        // despliegue: apendida despues. Neutraliza el usuario maestro sembrado
+        // con hash hardcodeado por `20260709120000_seed_maestro_user`.
+        !d.endsWith("_drop_default_maestro_user"),
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);

@@ -4,6 +4,7 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { devolverATienda } from "@/lib/actions/devolucion-origen";
 import { recibirLote } from "@/lib/actions/recepcion-satelite";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
@@ -30,6 +31,13 @@ vi.mock("@/lib/actions/devolucion-origen", () => ({
 const devolverATiendaMock = vi.mocked(devolverATienda);
 
 const { refreshMock } = vi.hoisted(() => ({ refreshMock: vi.fn() }));
+
+// R9: el estado legible de "Recibidas" se COMPONE como "<etiqueta del estado> de
+// <zona>". Lo verificado es esa composición, no el texto de la etiqueta: por eso la
+// parte del estado sale del mapa de presentación (fuente de verdad) y solo el
+// " de <zona>" queda literal. Los literales del mapa los blinda
+// `tests/components/EstatusLabel.test.ts`.
+const ESTADO_SATELITE_LIMON = `${ORDER_STATUS_LABELS.en_bodega_satelite} de Limón`;
 
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
@@ -142,7 +150,7 @@ describe("RecepcionSateliteModule", () => {
     ).toBeNull();
   });
 
-  it("R9: 'Recibidas' renderiza el estado legible 'En bodega satélite de <zona>'", () => {
+  it("R9: 'Recibidas' renderiza el estado legible '<etiqueta del estado> de <zona>'", () => {
     renderModule({
       recibidas: [
         makeOrden({
@@ -157,7 +165,7 @@ describe("RecepcionSateliteModule", () => {
 
     const region = screen.getByRole("region", { name: "Recibidas" });
     expect(
-      within(region).getByText("En bodega satélite de Limón"),
+      within(region).getByText(ESTADO_SATELITE_LIMON),
     ).toBeInTheDocument();
   });
 
@@ -284,7 +292,7 @@ describe("RecepcionSateliteModule", () => {
     expect(within(tabla).getByText("Av. Central 10")).toBeInTheDocument();
     expect(within(tabla).getByText("Tienda Z")).toBeInTheDocument();
     expect(
-      within(tabla).getByText("En bodega satélite de Limón"),
+      within(tabla).getByText(ESTADO_SATELITE_LIMON),
     ).toBeInTheDocument();
     // Una fila de datos (más la de cabecera).
     expect(within(tabla).getAllByRole("row")).toHaveLength(2);

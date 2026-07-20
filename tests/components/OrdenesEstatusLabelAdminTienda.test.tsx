@@ -3,6 +3,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
 import { ordenesColumnsAdminTienda } from "@/app/(app)/_components/ordenes-columns-admin-tienda";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 // Feature 48 (T10.1, R12/R13) — el listado del adminTienda (dashboard) reusa las
@@ -47,15 +48,17 @@ afterEach(() => {
 });
 
 describe("Listado del adminTienda — etiquetas de los estados del retorno (R12/R13)", () => {
-  it("R13: 'rechazada' se muestra como 'Rechazada' (no el value crudo)", () => {
+  it("R13: 'rechazada' se muestra con su etiqueta legible (no el value crudo)", () => {
     renderEstatus("rechazada");
-    expect(screen.getByText("Rechazada")).toBeInTheDocument();
+    expect(screen.getByText(ORDER_STATUS_LABELS.rechazada)).toBeInTheDocument();
     expect(screen.queryByText("rechazada")).toBeNull();
   });
 
-  it("R13: 'devuelta_origen' se muestra como 'Devuelta a origen' (no el value crudo)", () => {
+  it("R13: 'devuelta_origen' se muestra con su etiqueta legible (no el value crudo)", () => {
     renderEstatus("devuelta_origen");
-    expect(screen.getByText("Devuelta a origen")).toBeInTheDocument();
+    expect(
+      screen.getByText(ORDER_STATUS_LABELS.devuelta_origen),
+    ).toBeInTheDocument();
     expect(screen.queryByText("devuelta_origen")).toBeNull();
   });
 });

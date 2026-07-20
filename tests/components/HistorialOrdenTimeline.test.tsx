@@ -3,7 +3,14 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
 
 import { HistorialOrdenTimeline } from "@/app/(app)/ordenes/_components/HistorialOrdenTimeline";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
+
+// R30: lo verificado es "se presenta la ETIQUETA legible del estado, nunca el value
+// crudo". Se aserta contra el mapa de presentación (fuente de verdad) en vez de
+// literales, para que un rebrand de etiquetas no rompa este archivo. Los literales
+// del mapa los blinda `tests/components/EstatusLabel.test.ts`.
+const L = ORDER_STATUS_LABELS;
 
 // Feature 49 (T6.1) — timeline de PRESENTACION del historial. Cubre R29 (secuencia legible
 // con estado destino, actor y motivo) y R30 (etiquetas legibles via `estatus-label`, NUNCA
@@ -48,12 +55,12 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
   it("R30: presenta las etiquetas legibles de los estados, NUNCA los values/UUID crudos", () => {
     render(<HistorialOrdenTimeline entradas={ENTRADAS} />);
 
-    // Etiquetas legibles (estatus-label): en_preparacion -> "En preparación", etc.
-    expect(screen.getByText("En preparación")).toBeInTheDocument();
-    expect(screen.getByText("En reparto")).toBeInTheDocument();
-    expect(screen.getByText("En bodega")).toBeInTheDocument();
+    // Etiquetas legibles (estatus-label), una por value presente en las entradas.
+    expect(screen.getByText(L.en_preparacion)).toBeInTheDocument();
+    expect(screen.getByText(L.en_reparto)).toBeInTheDocument();
+    expect(screen.getByText(L.en_bodega)).toBeInTheDocument();
     // "reprogramada" aparece 2 veces (destino de la 2.ª entrada, origen de la 3.ª).
-    expect(screen.getAllByText("Reprogramada")).toHaveLength(2);
+    expect(screen.getAllByText(L.reprogramada)).toHaveLength(2);
 
     // Los values crudos NO se muestran (R30).
     for (const value of [
@@ -74,9 +81,9 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
 
     // Orden cronológico: creación primero, liberación del sistema al final.
     expect(within(items[0]).getByText("Creación")).toBeInTheDocument();
-    expect(within(items[0]).getByText("En preparación")).toBeInTheDocument();
-    expect(within(items[1]).getByText("En reparto")).toBeInTheDocument();
-    expect(within(items[2]).getByText("En bodega")).toBeInTheDocument();
+    expect(within(items[0]).getByText(L.en_preparacion)).toBeInTheDocument();
+    expect(within(items[1]).getByText(L.en_reparto)).toBeInTheDocument();
+    expect(within(items[2]).getByText(L.en_bodega)).toBeInTheDocument();
     // Actor null -> "Sistema" (R21/R29), en la última entrada.
     expect(within(items[2]).getByText(/Sistema/)).toBeInTheDocument();
   });
@@ -128,10 +135,10 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     // La última entrada es el retorno a la tienda de origen.
     const retorno = items[items.length - 1];
     // Etiqueta legible del destino (R15/R30), NUNCA el value crudo.
-    expect(within(retorno).getByText("Devuelta a origen")).toBeInTheDocument();
+    expect(within(retorno).getByText(L.devuelta_origen)).toBeInTheDocument();
     expect(within(retorno).queryByText("devuelta_origen")).toBeNull();
-    // Origen legible "Rechazada" y actor de la bodega que ejecutó el retorno.
-    expect(within(retorno).getByText("Rechazada")).toBeInTheDocument();
+    // Origen legible "rechazada" y actor de la bodega que ejecutó el retorno.
+    expect(within(retorno).getByText(L.rechazada)).toBeInTheDocument();
     expect(within(retorno).getByText(/Bodega Central/)).toBeInTheDocument();
     // Timestamp presente como <time>.
     expect(

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
 import { OrdenesCargaResumenPaso } from "@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import type { ClasificacionCarga } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
 import type { MensajeroDTO, ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 
@@ -112,9 +113,10 @@ describe("OrdenesCargaResumenPaso — tres secciones (R4, R7, R8, R9, R10, R18)"
     // Sección de nuevas: OrdenesCargaResumen resuelve su fetch y pinta REM-0001.
     expect(await screen.findByText("REM-0001")).toBeInTheDocument();
 
-    // Sección de existentes (solo lectura, etiqueta legible).
+    // Sección de existentes (solo lectura, etiqueta legible del mapa de
+    // presentación — no el value crudo `en_bodega`).
     expect(screen.getByText("REM-0100")).toBeInTheDocument();
-    expect(screen.getByText("En bodega")).toBeInTheDocument();
+    expect(screen.getByText(ORDER_STATUS_LABELS.en_bodega)).toBeInTheDocument();
 
     // Sección de errores (detalle por fila).
     expect(screen.getByText("REM-0500")).toBeInTheDocument();
