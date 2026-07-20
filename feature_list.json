@@ -1018,7 +1018,7 @@
       "depends_on": 90
     },
     {
-      "id": 92,
+      "id": 93,
       "name": "dashboard - item de sidebar",
       "description": "Agregar en el sidebar un item 'Inicio' que enlaza a la pagina /dashboard (ya existente), visible solo para los roles maestro y admin.",
       "status": "pending",
