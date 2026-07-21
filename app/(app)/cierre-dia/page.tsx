@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarCierreDia, estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 
@@ -29,11 +29,10 @@ export default async function CierreDiaPage() {
   const bloqueado = bloqueo.status === "ok" && bloqueo.bloqueado;
 
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
-      <PageHeader
-        title="Cierre del día"
-        description="Detalle de lo gestionado, totales por método de pago y solicitud de cierre"
-      />
+    <AppPage
+      title="Cierre del día"
+      description="Detalle de lo gestionado, totales por método de pago y solicitud de cierre"
+    >
       <CierreDiaModule
         grupos={result.grupos}
         totales={result.totales}
@@ -43,6 +42,6 @@ export default async function CierreDiaPage() {
         cierresPasados={result.cierresPasados}
         bloqueado={bloqueado}
       />
-    </section>
+    </AppPage>
   );
 }

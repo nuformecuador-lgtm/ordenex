@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   listarMisPagosAction,
@@ -41,12 +41,10 @@ export default async function MisPagosPage() {
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-8 p-6">
-      <PageHeader
-        title="Mis pagos"
-        description="Lo que Ordenex te debe: lo devengado por tus entregas menos lo ya pagado del efectivo, con el desglose por cierre"
-      />
-
+    <AppPage
+      title="Mis pagos"
+      description="Lo que Ordenex te debe: lo devengado por tus entregas menos lo ya pagado del efectivo, con el desglose por cierre"
+    >
       <MisPagosModule
         movimientos={pagosResult.data.movimientos}
         total={pagosResult.data.total}
@@ -54,6 +52,6 @@ export default async function MisPagosPage() {
         pageSize={pagosResult.data.pageSize}
         cuenta={cuentaResult.cuenta}
       />
-    </section>
+    </AppPage>
   );
 }

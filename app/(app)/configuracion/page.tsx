@@ -1,5 +1,4 @@
-import { PageHeader } from "@/components/shared/PageHeader";
-import { Container } from "@/components/shared/Container";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarUsuarios } from "@/lib/actions/usuarios";
 import { listarZonas } from "@/lib/actions/zonas";
@@ -21,14 +20,11 @@ export default async function ConfiguracionPage() {
 
   if (actor?.rol !== "maestro") {
     return (
-      <>
-        <PageHeader title="Configuración" />
-        <Container>
-          <p role="alert" className="text-sm text-muted-foreground">
-            No tienes permiso para acceder a esta sección.
-          </p>
-        </Container>
-      </>
+      <AppPage title="Configuración">
+        <p role="alert" className="text-sm text-muted-foreground">
+          No tienes permiso para acceder a esta sección.
+        </p>
+      </AppPage>
     );
   }
 
@@ -61,25 +57,22 @@ export default async function ConfiguracionPage() {
       : { items: [], total: 0, pageSize: zonasConfig.DEFAULT_PAGE_SIZE };
 
   return (
-    <>
-      <PageHeader
-        title="Configuración"
-        description="Gestión de usuarios y zonas del sistema"
-      />
-      <Container>
-        <section aria-labelledby="config-usuarios-heading" className="flex flex-col gap-4">
-          <h2 id="config-usuarios-heading" className="text-lg font-semibold">
-            Usuarios
-          </h2>
-          <UsuariosModule initialData={usuariosData} />
-        </section>
-        <section aria-labelledby="config-zonas-heading" className="flex flex-col gap-4">
-          <h2 id="config-zonas-heading" className="text-lg font-semibold">
-            Zonas
-          </h2>
-          <ZonasModule initialData={zonasData} />
-        </section>
-      </Container>
-    </>
+    <AppPage
+      title="Configuración"
+      description="Gestión de usuarios y zonas del sistema"
+    >
+      <section aria-labelledby="config-usuarios-heading" className="flex flex-col gap-4">
+        <h2 id="config-usuarios-heading" className="text-lg font-semibold">
+          Usuarios
+        </h2>
+        <UsuariosModule initialData={usuariosData} />
+      </section>
+      <section aria-labelledby="config-zonas-heading" className="flex flex-col gap-4">
+        <h2 id="config-zonas-heading" className="text-lg font-semibold">
+          Zonas
+        </h2>
+        <ZonasModule initialData={zonasData} />
+      </section>
+    </AppPage>
   );
 }

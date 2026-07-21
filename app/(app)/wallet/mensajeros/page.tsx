@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarCuentasPorPagarAction } from "@/lib/actions/wallet-mensajero";
@@ -36,15 +36,13 @@ export default async function WalletMensajerosPage() {
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-8 p-6">
-      <PageHeader
-        title="Cuentas por pagar a mensajeros"
-        description="Lo devengado, lo ya pagado del efectivo y lo pendiente por mensajero"
-      />
-
+    <AppPage
+      title="Cuentas por pagar a mensajeros"
+      description="Lo devengado, lo ya pagado del efectivo y lo pendiente por mensajero"
+    >
       <section aria-label="Cuentas por pagar a mensajeros" className="flex flex-col gap-4">
         <CuentasPorPagarTable mensajeros={cuentasResult.mensajeros} />
       </section>
-    </section>
+    </AppPage>
   );
 }

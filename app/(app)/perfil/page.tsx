@@ -1,9 +1,5 @@
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 
 export default function PerfilPage() {
-  return (
-    <section>
-      <PageHeader title="Perfil" />
-    </section>
-  );
+  return <AppPage title="Perfil" />;
 }
