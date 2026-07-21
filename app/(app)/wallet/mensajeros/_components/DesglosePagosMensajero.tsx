@@ -197,7 +197,7 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
 
         <div className="flex flex-col gap-0.5">
           <span className="text-sm text-muted-foreground">{DESGLOSE_LABEL.pagado}</span>
-          <span className="text-lg font-medium text-emerald-600 dark:text-emerald-400">
+          <span className="text-lg font-medium text-success-strong">
             {money(cuenta.pagado)}
           </span>
           <span className="text-xs text-muted-foreground">{DESGLOSE_LABEL.pagadoHint}</span>

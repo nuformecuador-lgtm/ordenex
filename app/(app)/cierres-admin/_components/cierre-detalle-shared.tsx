@@ -282,7 +282,7 @@ export function MontoDerivadoCard({
           <span
             className={cn(
               "text-lg font-semibold",
-              tone === "danger" && "text-destructive",
+              tone === "danger" && "text-danger-strong",
             )}
           >
             {money(value)}

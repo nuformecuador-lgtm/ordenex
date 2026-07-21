@@ -310,7 +310,7 @@ describe("CierresAdminModule", () => {
     const debe = within(dialog).getByRole("region", { name: "Debe" });
     const monto = within(debe).getByText("₡-1500.00");
     expect(monto).toBeInTheDocument();
-    expect(monto).toHaveClass("text-destructive");
+    expect(monto).toHaveClass("text-danger-strong");
   });
 
   it("el detalle muestra el ingreso de Ordenex del cierre por concepto", async () => {
