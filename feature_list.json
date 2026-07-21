@@ -1032,11 +1032,22 @@
       "id": 94,
       "name": "admin con paridad de maestro en ordenes, cierres, ranking y wallet",
       "description": "El rol admin obtiene el mismo acceso (ver y manipular) que el maestro en los modulos Ordenes, Cierres del dia, Ranking y Wallet.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/94-admin-paridad-maestro",
+      "depends_on": null
+    },
+    {
+      "id": 95,
+      "name": "etiquetas tras generar guia / asignar mensajero",
+      "description": "Tras generar la guia y asignar mensajero, encadenar la vista previa + descarga (PDF) de las etiquetas de esas guias, reusando el modal de etiquetas existente. Para maestro y admin.",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": "feature/95-etiquetas-tras-guia",
       "depends_on": null
     }
   ]
