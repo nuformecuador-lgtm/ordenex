@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import { PackageCheck, RotateCcw, Undo2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { GESTION_ALLOWED_MIME } from "@/lib/config/gestion";
+import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
@@ -143,9 +144,28 @@ export function GestionarOrdenPanel({
   // DEBE escoger una (R6). Es un campo APARTE del `motivo`, que sigue obligatorio (R7).
   const [causaDevolucion, setCausaDevolucion] = useState<CausaDevolucion | "">("");
   const [evidencia, setEvidencia] = useState<File | null>(null);
+  const [comprimiendo, setComprimiendo] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [enviando, setEnviando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+
+  // Comprime la foto en el cliente antes de guardarla en el estado: una foto de
+  // celular sin comprimir revienta el limite de body del Server Action (413).
+  // `comprimirImagen` cae al archivo original ante cualquier fallo, asi que esto
+  // nunca bloquea la gestion. Mientras comprime, "Guardar gestion" se deshabilita.
+  async function handleEvidenciaChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    if (!file) {
+      setEvidencia(null);
+      return;
+    }
+    setComprimiendo(true);
+    try {
+      setEvidencia(await comprimirImagen(file));
+    } finally {
+      setComprimiendo(false);
+    }
+  }
 
   // Orden SIN cobro (montoCobrar 0 o null): no hay COD que recaudar, así que el
   // método de pago no aplica. Se oculta el selector y la entrega se envía con
@@ -236,7 +256,7 @@ export function GestionarOrdenPanel({
   }
 
   async function handleConfirm() {
-    if (enviando) return;
+    if (enviando || comprimiendo) return;
     // R22/R24/R25/R27/R29: validación de borde en cliente (mismo schema que el
     // servidor revalida). Errores → por campo, sin enviar.
     const parsed = gestionarSchema.safeParse(buildRaw());
@@ -398,7 +418,7 @@ export function GestionarOrdenPanel({
                   id="gestion-evidencia"
                   type="file"
                   accept={ACCEPT_MIME}
-                  onChange={(e) => setEvidencia(e.target.files?.[0] ?? null)}
+                  onChange={handleEvidenciaChange}
                   aria-invalid={evidenciaError ? true : undefined}
                   aria-label="Foto de evidencia de entrega"
                   className="text-sm"
@@ -452,7 +472,7 @@ export function GestionarOrdenPanel({
                   id="gestion-evidencia-devolucion"
                   type="file"
                   accept={ACCEPT_MIME}
-                  onChange={(e) => setEvidencia(e.target.files?.[0] ?? null)}
+                  onChange={handleEvidenciaChange}
                   aria-invalid={evidenciaError ? true : undefined}
                   aria-label="Foto de evidencia de la devolución"
                   className="text-sm"
@@ -475,7 +495,7 @@ export function GestionarOrdenPanel({
                   id="gestion-evidencia-rechazo"
                   type="file"
                   accept={ACCEPT_MIME}
-                  onChange={(e) => setEvidencia(e.target.files?.[0] ?? null)}
+                  onChange={handleEvidenciaChange}
                   aria-invalid={evidenciaError ? true : undefined}
                   aria-label="Foto de evidencia del rechazo"
                   className="text-sm"
@@ -499,8 +519,13 @@ export function GestionarOrdenPanel({
             >
               Cancelar gestión
             </Button>
-            <Button type="button" onClick={handleConfirm} loading={enviando}>
-              Guardar gestión
+            <Button
+              type="button"
+              onClick={handleConfirm}
+              loading={enviando}
+              disabled={comprimiendo}
+            >
+              {comprimiendo ? "Procesando foto…" : "Guardar gestión"}
             </Button>
           </div>
         </div>
