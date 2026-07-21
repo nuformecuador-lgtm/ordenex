@@ -8,10 +8,10 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-> _Reconciliado 2026-07-21 (`dev` @ `6b2a06c`)._ Se vació la tabla "Features en curso" (las 16
-> que figuraban estaban **todas mergeadas**) y se podaron ~700 líneas de notas de cierre y
-> evaluaciones archivadas. **DEUDA de bookkeeping abierta:** `history.md` no tiene resumidas las
-> features **64–97**; su registro vive en git/PRs + `impl_*`/`review_*` + `feature_list.json`.
+> _Reconciliado 2026-07-21._ Se vació la tabla "Features en curso" (las 16 que figuraban estaban
+> **todas mergeadas**) y se podaron ~700 líneas de notas de cierre y evaluaciones archivadas. El
+> historial completo de features cerradas quedó al día en `history.md` (backfill de las 24 que
+> faltaban: 61, 64, 65, 69, 72, 73, 75–78, 81–84, 86–89, 91, 93–97).
 
 ## Features en curso
 
