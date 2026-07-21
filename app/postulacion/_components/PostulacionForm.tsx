@@ -440,7 +440,7 @@ export function PostulacionForm({
           ))}
         </fieldset>
 
-        <Button type="submit" disabled={isPending} className="w-full">
+        <Button type="submit" loading={isPending} className="w-full">
           {isPending ? "Enviando..." : "Enviar postulación"}
         </Button>
       </form>

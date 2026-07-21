@@ -109,7 +109,7 @@ export function buildPageItems(
 }
 
 const buttonClass =
-  "inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground";
+  "inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground";
 
 /**
  * Componente de paginación genérico, controlado y desacoplado (R1, R2). No obtiene
@@ -259,7 +259,8 @@ export function Pagination({
           disabled={disabled}
           onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
           className={cn(
-            "h-8 rounded-lg border border-border bg-background px-2 text-sm",
+            "h-8 rounded-lg border border-border bg-background px-2 text-sm outline-none",
+            "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
             "disabled:pointer-events-none disabled:opacity-50",
           )}
         >

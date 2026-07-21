@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Loader2,
-  PackageCheck,
-  RotateCcw,
-  Undo2,
-  XCircle,
-} from "lucide-react";
+import { PackageCheck, RotateCcw, Undo2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
@@ -505,18 +499,7 @@ export function GestionarOrdenPanel({
             >
               Cancelar gestión
             </Button>
-            <Button
-              type="button"
-              onClick={handleConfirm}
-              disabled={enviando}
-              aria-busy={enviando || undefined}
-            >
-              {enviando ? (
-                <span role="status" className="flex items-center gap-2">
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                  <span className="sr-only">Procesando…</span>
-                </span>
-              ) : null}
+            <Button type="button" onClick={handleConfirm} loading={enviando}>
               Guardar gestión
             </Button>
           </div>

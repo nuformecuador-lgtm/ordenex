@@ -277,7 +277,7 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
           </div>
 
           {/* Botón de envío (R2, R6, R6a) */}
-          <Button type="submit" disabled={isPending} className="w-full">
+          <Button type="submit" loading={isPending} className="w-full">
             {isPending ? "Verificando..." : "Iniciar sesión"}
           </Button>
         </form>
@@ -358,7 +358,7 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
         </div>
 
         {/* Botón de envío del código (R6, R6a) */}
-        <Button type="submit" disabled={isPending} className="w-full">
+        <Button type="submit" loading={isPending} className="w-full">
           {isPending ? "Verificando..." : "Verificar código"}
         </Button>
       </form>

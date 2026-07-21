@@ -247,7 +247,7 @@ export function RecuperarContrasenaForm() {
             )}
           </div>
 
-          <Button type="submit" disabled={isPending} className="w-full">
+          <Button type="submit" loading={isPending} className="w-full">
             {isPending ? "Enviando..." : "Enviar código"}
           </Button>
         </form>
@@ -313,7 +313,7 @@ export function RecuperarContrasenaForm() {
             )}
           </div>
 
-          <Button type="submit" disabled={isPending} className="w-full">
+          <Button type="submit" loading={isPending} className="w-full">
             {isPending ? "Verificando..." : "Verificar código"}
           </Button>
         </form>
@@ -409,7 +409,7 @@ export function RecuperarContrasenaForm() {
           )}
         </div>
 
-        <Button type="submit" disabled={isPending} className="w-full">
+        <Button type="submit" loading={isPending} className="w-full">
           {isPending ? "Guardando..." : "Restablecer contraseña"}
         </Button>
       </form>

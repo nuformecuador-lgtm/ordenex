@@ -81,3 +81,36 @@ describe("Button — variantes existentes no cambian (regresión)", () => {
     expect(screen.getByRole("button")).toHaveClass("bg-primary");
   });
 });
+
+describe("Button — estado loading", () => {
+  it("con loading: spinner presente, botón disabled y aria-busy expuesto", () => {
+    render(<Button loading>Guardar</Button>);
+
+    const button = screen.getByRole("button", { name: "Guardar" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    // El spinner es el único svg con animación de giro dentro del botón.
+    expect(button.querySelector(".animate-spin")).not.toBeNull();
+  });
+
+  it("el giro respeta prefers-reduced-motion (motion-reduce:animate-none)", () => {
+    render(<Button loading>Guardar</Button>);
+    const spinner = screen.getByRole("button").querySelector(".animate-spin");
+    expect(spinner).toHaveClass("motion-reduce:animate-none");
+  });
+
+  it("conserva el nombre accesible del contenido (el spinner es aria-hidden)", () => {
+    render(<Button loading>Iniciar sesión</Button>);
+    expect(
+      screen.getByRole("button", { name: "Iniciar sesión" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sin loading: ni spinner ni aria-busy y el botón queda operable", () => {
+    render(<Button>Guardar</Button>);
+    const button = screen.getByRole("button", { name: "Guardar" });
+    expect(button).not.toBeDisabled();
+    expect(button).not.toHaveAttribute("aria-busy");
+    expect(button.querySelector(".animate-spin")).toBeNull();
+  });
+});

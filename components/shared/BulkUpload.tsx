@@ -9,7 +9,7 @@ import {
   type DragEvent,
   type ReactNode,
 } from "react";
-import { Download, FileSpreadsheet, Loader2, UploadCloud, X } from "lucide-react";
+import { Download, FileSpreadsheet, UploadCloud, X } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -338,12 +338,9 @@ export function BulkUpload({
           variant="brand-outline"
           onClick={handleDownloadTemplate}
           disabled={!canDownloadTemplate}
+          loading={isGeneratingTemplate}
         >
-          {isGeneratingTemplate ? (
-            <Loader2 className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Download aria-hidden="true" />
-          )}
+          {isGeneratingTemplate ? null : <Download aria-hidden="true" />}
           Descargar plantilla
         </Button>
         {fileName ? (

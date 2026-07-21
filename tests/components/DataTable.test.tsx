@@ -200,13 +200,23 @@ describe("DataTable", () => {
     expect(rows[0]).toHaveTextContent("No hay registros");
   });
 
-  it("B8: isLoading muestra indicador role=status distinguible del vacío (R12)", () => {
-    const columns: Column<Row>[] = [{ id: "nombre", value: "Nombre" }];
+  it("B8: isLoading muestra filas skeleton (no el texto 'Cargando…') distinguibles del vacío (R12)", () => {
+    const columns: Column<Row>[] = [
+      { id: "nombre", value: "Nombre" },
+      { id: "edad", value: "Edad" },
+    ];
 
-    render(<DataTable columns={columns} data={[]} isLoading ariaLabel="T" />);
+    const { container } = render(
+      <DataTable columns={columns} data={[]} isLoading ariaLabel="T" />,
+    );
 
+    // El estado de carga ahora es visual (filas skeleton), no el texto plano.
+    const skeletons = container.querySelectorAll('[data-slot="skeleton"]');
+    expect(skeletons.length).toBeGreaterThan(0);
+    expect(screen.queryByText("Cargando…")).not.toBeInTheDocument();
+
+    // Sigue anunciado a lectores de pantalla y distinguible del estado vacío.
     expect(screen.getByRole("status")).toBeInTheDocument();
-    // No debe confundirse con el estado vacío
     expect(screen.queryByText("No hay registros")).not.toBeInTheDocument();
   });
 
