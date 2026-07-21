@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  forwardRef,
-  useImperativeHandle,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
 import useSWR from "swr";
 import type { ZodError } from "zod";
 
@@ -15,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { FieldError } from "@/components/shared/FieldError";
+import { FormField } from "@/components/shared/FormField";
 import {
   crearZonaSchema,
   type ActualizarZonaResult,
@@ -480,20 +476,16 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
 
     return (
       <div className="flex flex-col gap-4">
-        {formError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {formError}
-          </p>
-        ) : null}
+        {/* Error a NIVEL FORMULARIO (conflicto de dominio, sin campo concreto):
+            FieldError suelto, sin el andamiaje label/control. */}
+        <FieldError>{formError}</FieldError>
 
-        <Field id="nombre" label="Nombre" errors={errors.nombre}>
+        <FormField id="nombre" label="Nombre" error={errors.nombre}>
           <Input
-            id="nombre"
             value={form.nombre}
-            aria-invalid={errors.nombre ? true : undefined}
             onChange={(e) => setField("nombre", e.target.value)}
           />
-        </Field>
+        </FormField>
 
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="cobroVehiculo">Cobra por tipo de vehículo</Label>
@@ -536,11 +528,7 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
             </div>
           ) : null}
 
-          {errors.esCentral && errors.esCentral.length > 0 ? (
-            <p id="esCentral-error" role="alert" className="text-sm text-destructive">
-              {errors.esCentral.join(", ")}
-            </p>
-          ) : null}
+          <FieldError id="esCentral-error" messages={errors.esCentral} />
         </div>
 
         <fieldset className="flex flex-col gap-3 border-t border-border pt-3">
@@ -680,11 +668,9 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
               : "Sin distritos seleccionados"}
           </p>
 
-          {errors.distritoIds && errors.distritoIds.length > 0 ? (
-            <p id="distritoIds-error" role="alert" className="text-sm text-destructive">
-              {errors.distritoIds.join(", ")}
-            </p>
-          ) : null}
+          {/* Error del GRUPO de distritos (fieldset), no de un control único:
+              FieldError suelto asociado al conjunto. */}
+          <FieldError id="distritoIds-error" messages={errors.distritoIds} />
         </fieldset>
 
         <fieldset className="flex flex-col gap-3 border-t border-border pt-3">
@@ -774,39 +760,10 @@ export const ZonaForm = forwardRef<ZonaFormHandle, ZonaFormProps>(
             </Button>
           ) : null}
 
-          {errors.tarifas && errors.tarifas.length > 0 ? (
-            <p id="tarifas-error" role="alert" className="text-sm text-destructive">
-              {errors.tarifas.join(", ")}
-            </p>
-          ) : null}
+          {/* Error del GRUPO de tarifas (fieldset): FieldError suelto. */}
+          <FieldError id="tarifas-error" messages={errors.tarifas} />
         </fieldset>
       </div>
     );
   },
 );
-
-/** Envoltorio accesible de un campo con label y errores (i18n vía props). */
-function Field({
-  id,
-  label,
-  errors,
-  children,
-}: {
-  id: string;
-  label: string;
-  errors?: string[];
-  children: ReactNode;
-}) {
-  const errorId = `${id}-error`;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children}
-      {errors && errors.length > 0 ? (
-        <p id={errorId} role="alert" className="text-sm text-destructive">
-          {errors.join(", ")}
-        </p>
-      ) : null}
-    </div>
-  );
-}

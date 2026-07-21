@@ -11,10 +11,10 @@ import {
 import { POSTULACION_ALLOWED_MIME } from "@/lib/config/postulacion";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, type SelectOption } from "@/components/ui/select";
+import { FormField } from "@/components/shared/FormField";
 
 // Feature 21 — formulario de postulacion de mensajero (T9: R2, R3, R10, R11, R26).
 // Cliente. Valida con el MISMO schema zod del backend (postulacionSchema) para no
@@ -50,18 +50,6 @@ const CONFLICT_MESSAGES: Record<"email" | "cedula", string> = {
 };
 
 type FieldErrors = Record<string, string[]>;
-
-/** Bloque de error accesible asociado a un campo por id (role="alert"). */
-function FieldError({ id, messages }: { id: string; messages?: string[] }) {
-  if (!messages || messages.length === 0) return null;
-  return (
-    <div id={id} role="alert" className="text-sm text-destructive space-y-1">
-      {messages.map((msg, idx) => (
-        <div key={idx}>{msg}</div>
-      ))}
-    </div>
-  );
-}
 
 export interface PostulacionFormProps {
   tiposIdentificacion: SelectOption[];
@@ -231,192 +219,163 @@ export function PostulacionForm({
       */}
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {/* Nombres */}
-        <div className="space-y-2">
-          <Label htmlFor="nombre">{TEXTO_LABELS.nombre}</Label>
+        <FormField id="nombre" label={TEXTO_LABELS.nombre} error={fieldErrors.nombre}>
           <Input
-            id="nombre"
             type="text"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
             disabled={isPending}
-            aria-invalid={!!fieldErrors.nombre}
-            aria-describedby={fieldErrors.nombre ? "nombre-error" : undefined}
           />
-          <FieldError id="nombre-error" messages={fieldErrors.nombre} />
-        </div>
+        </FormField>
 
         {/* Primer apellido */}
-        <div className="space-y-2">
-          <Label htmlFor="primer_apellido">{TEXTO_LABELS.primer_apellido}</Label>
+        <FormField
+          id="primer_apellido"
+          label={TEXTO_LABELS.primer_apellido}
+          error={fieldErrors.primer_apellido}
+        >
           <Input
-            id="primer_apellido"
             type="text"
             value={primerApellido}
             onChange={(e) => setPrimerApellido(e.target.value)}
             disabled={isPending}
-            aria-invalid={!!fieldErrors.primer_apellido}
-            aria-describedby={
-              fieldErrors.primer_apellido ? "primer_apellido-error" : undefined
-            }
           />
-          <FieldError
-            id="primer_apellido-error"
-            messages={fieldErrors.primer_apellido}
-          />
-        </div>
+        </FormField>
 
         {/* Segundo apellido (opcional) */}
-        <div className="space-y-2">
-          <Label htmlFor="segundo_apellido">{TEXTO_LABELS.segundo_apellido}</Label>
+        <FormField
+          id="segundo_apellido"
+          label={TEXTO_LABELS.segundo_apellido}
+          error={fieldErrors.segundo_apellido}
+        >
           <Input
-            id="segundo_apellido"
             type="text"
             value={segundoApellido}
             onChange={(e) => setSegundoApellido(e.target.value)}
             disabled={isPending}
-            aria-invalid={!!fieldErrors.segundo_apellido}
-            aria-describedby={
-              fieldErrors.segundo_apellido ? "segundo_apellido-error" : undefined
-            }
           />
-          <FieldError
-            id="segundo_apellido-error"
-            messages={fieldErrors.segundo_apellido}
-          />
-        </div>
+        </FormField>
 
         {/* Correo electronico */}
-        <div className="space-y-2">
-          <Label htmlFor="email">{TEXTO_LABELS.email}</Label>
+        <FormField id="email" label={TEXTO_LABELS.email} error={fieldErrors.email}>
           <Input
-            id="email"
             type="email"
             placeholder="tu@correo.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={isPending}
-            aria-invalid={!!fieldErrors.email}
-            aria-describedby={fieldErrors.email ? "email-error" : undefined}
           />
-          <FieldError id="email-error" messages={fieldErrors.email} />
-        </div>
+        </FormField>
 
         {/* Telefono */}
-        <div className="space-y-2">
-          <Label htmlFor="telefono">{TEXTO_LABELS.telefono}</Label>
+        <FormField
+          id="telefono"
+          label={TEXTO_LABELS.telefono}
+          error={fieldErrors.telefono}
+        >
           <Input
-            id="telefono"
             type="text"
             inputMode="numeric"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value.replace(/\D/g, ""))}
             disabled={isPending}
-            aria-invalid={!!fieldErrors.telefono}
-            aria-describedby={fieldErrors.telefono ? "telefono-error" : undefined}
           />
-          <FieldError id="telefono-error" messages={fieldErrors.telefono} />
-        </div>
+        </FormField>
 
         {/* Tipo de documento (Select) */}
-        <div className="space-y-2">
-          <Label htmlFor="tipo_identificacion_id">Tipo de documento</Label>
-          <Select
-            value={tipoIdentificacionId}
-            onValueChange={setTipoIdentificacionId}
-            options={tiposIdentificacion}
-            placeholder="Selecciona un tipo de documento"
-            disabled={isPending}
-            aria-label="Tipo de documento"
-          />
-          <FieldError
-            id="tipo_identificacion_id-error"
-            messages={fieldErrors.tipo_identificacion_id}
-          />
-        </div>
+        <FormField
+          id="tipo_identificacion_id"
+          label="Tipo de documento"
+          error={fieldErrors.tipo_identificacion_id}
+        >
+          {({
+            "aria-invalid": ariaInvalid,
+            "aria-describedby": ariaDescribedBy,
+          }) => (
+            <Select
+              value={tipoIdentificacionId}
+              onValueChange={setTipoIdentificacionId}
+              options={tiposIdentificacion}
+              placeholder="Selecciona un tipo de documento"
+              disabled={isPending}
+              aria-label="Tipo de documento"
+              aria-invalid={ariaInvalid}
+              aria-describedby={ariaDescribedBy}
+            />
+          )}
+        </FormField>
 
         {/* Numero de documento */}
-        <div className="space-y-2">
-          <Label htmlFor="cedula">{TEXTO_LABELS.cedula}</Label>
+        <FormField id="cedula" label={TEXTO_LABELS.cedula} error={fieldErrors.cedula}>
           <Input
-            id="cedula"
             type="text"
             inputMode="numeric"
             value={cedula}
             onChange={(e) => setCedula(e.target.value.replace(/\D/g, ""))}
             disabled={isPending}
-            aria-invalid={!!fieldErrors.cedula}
-            aria-describedby={fieldErrors.cedula ? "cedula-error" : undefined}
           />
-          <FieldError id="cedula-error" messages={fieldErrors.cedula} />
-        </div>
+        </FormField>
 
         {/* Vehiculo (Select) */}
-        <div className="space-y-2">
-          <Label htmlFor="vehiculo_id">Vehículo</Label>
-          <Select
-            value={vehiculoId}
-            onValueChange={setVehiculoId}
-            options={vehiculos}
-            placeholder="Selecciona un vehículo"
-            disabled={isPending}
-            aria-label="Vehículo"
-          />
-          <FieldError id="vehiculo_id-error" messages={fieldErrors.vehiculo_id} />
-        </div>
+        <FormField
+          id="vehiculo_id"
+          label="Vehículo"
+          error={fieldErrors.vehiculo_id}
+        >
+          {({
+            "aria-invalid": ariaInvalid,
+            "aria-describedby": ariaDescribedBy,
+          }) => (
+            <Select
+              value={vehiculoId}
+              onValueChange={setVehiculoId}
+              options={vehiculos}
+              placeholder="Selecciona un vehículo"
+              disabled={isPending}
+              aria-label="Vehículo"
+              aria-invalid={ariaInvalid}
+              aria-describedby={ariaDescribedBy}
+            />
+          )}
+        </FormField>
 
         {/* Placa */}
-        <div className="space-y-2">
-          <Label htmlFor="placa">{TEXTO_LABELS.placa}</Label>
+        <FormField id="placa" label={TEXTO_LABELS.placa} error={fieldErrors.placa}>
           <Input
-            id="placa"
             type="text"
             value={placa}
             onChange={(e) => setPlaca(e.target.value)}
             disabled={isPending}
-            aria-invalid={!!fieldErrors.placa}
-            aria-describedby={fieldErrors.placa ? "placa-error" : undefined}
           />
-          <FieldError id="placa-error" messages={fieldErrors.placa} />
-        </div>
+        </FormField>
 
         {/* Contrasena */}
-        <div className="space-y-2">
-          <Label htmlFor="password">{TEXTO_LABELS.password}</Label>
+        <FormField
+          id="password"
+          label={TEXTO_LABELS.password}
+          error={fieldErrors.password}
+        >
           <Input
-            id="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isPending}
-            aria-invalid={!!fieldErrors.password}
-            aria-describedby={fieldErrors.password ? "password-error" : undefined}
           />
-          <FieldError id="password-error" messages={fieldErrors.password} />
-        </div>
+        </FormField>
 
         {/* Confirmar contrasena */}
-        <div className="space-y-2">
-          <Label htmlFor="confirmacion_password">
-            {TEXTO_LABELS.confirmacion_password}
-          </Label>
+        <FormField
+          id="confirmacion_password"
+          label={TEXTO_LABELS.confirmacion_password}
+          error={fieldErrors.confirmacion_password}
+        >
           <Input
-            id="confirmacion_password"
             type="password"
             value={confirmacionPassword}
             onChange={(e) => setConfirmacionPassword(e.target.value)}
             disabled={isPending}
-            aria-invalid={!!fieldErrors.confirmacion_password}
-            aria-describedby={
-              fieldErrors.confirmacion_password
-                ? "confirmacion_password-error"
-                : undefined
-            }
           />
-          <FieldError
-            id="confirmacion_password-error"
-            messages={fieldErrors.confirmacion_password}
-          />
-        </div>
+        </FormField>
 
         {/* Documentos (R3, R10): 5 imagenes */}
         <fieldset className="space-y-4 border-t border-border pt-4">
@@ -424,19 +383,19 @@ export function PostulacionForm({
             Documentos (imágenes jpeg, png o webp)
           </legend>
           {DOCUMENTO_TIPOS.map((tipo) => (
-            <div key={tipo} className="space-y-2">
-              <Label htmlFor={tipo}>{DOCUMENTO_LABELS[tipo]}</Label>
+            <FormField
+              key={tipo}
+              id={tipo}
+              label={DOCUMENTO_LABELS[tipo]}
+              error={fieldErrors[tipo]}
+            >
               <Input
-                id={tipo}
                 type="file"
                 accept={ACCEPT_IMAGES}
                 onChange={(e) => setDocumento(tipo, e.target.files?.[0] ?? null)}
                 disabled={isPending}
-                aria-invalid={!!fieldErrors[tipo]}
-                aria-describedby={fieldErrors[tipo] ? `${tipo}-error` : undefined}
               />
-              <FieldError id={`${tipo}-error`} messages={fieldErrors[tipo]} />
-            </div>
+            </FormField>
           ))}
         </fieldset>
 

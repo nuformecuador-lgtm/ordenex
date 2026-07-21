@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FieldError } from "@/components/shared/FieldError";
+import { FormField } from "@/components/shared/FormField";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import {
@@ -160,21 +162,13 @@ export function CrearZonaForm({
         {esEditar ? "Editar zona" : "Nueva zona"}
       </h3>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="nombre-zona">Nombre de la zona</Label>
+      <FormField id="nombre-zona" label="Nombre de la zona" error={errors.nombre}>
         <Input
-          id="nombre-zona"
           value={nombre}
           placeholder="Ej: San José centro"
-          aria-invalid={errors.nombre ? true : undefined}
           onChange={(e) => setNombre(e.target.value)}
         />
-        {errors.nombre?.length ? (
-          <p role="alert" className="text-sm text-destructive">
-            {errors.nombre.join(", ")}
-          </p>
-        ) : null}
-      </div>
+      </FormField>
 
       <div className="flex items-center gap-2">
         <Checkbox
@@ -192,22 +186,16 @@ export function CrearZonaForm({
         initialSelected={initial?.distritoIds}
         onSelectedChange={setDistritoIds}
       />
-      {errors.distritoIds?.length ? (
-        <p role="alert" className="text-sm text-destructive">
-          {errors.distritoIds.join(", ")}
-        </p>
-      ) : null}
+      {/* Error del GRUPO de distritos (selector geográfico): FieldError suelto. */}
+      <FieldError messages={errors.distritoIds} />
 
       <CobroVehiculoTarifas
         vehiculos={vehiculos}
         initial={initial?.cobro}
         onChange={setCobro}
       />
-      {errors.tarifas?.length ? (
-        <p role="alert" className="text-sm text-destructive">
-          {errors.tarifas.join(", ")}
-        </p>
-      ) : null}
+      {/* Error del GRUPO de tarifas: FieldError suelto. */}
+      <FieldError messages={errors.tarifas} />
 
       <div className="flex items-center gap-2">
         <Button type="button" onClick={guardar} loading={guardando}>

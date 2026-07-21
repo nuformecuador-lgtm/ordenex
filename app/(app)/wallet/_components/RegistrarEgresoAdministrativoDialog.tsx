@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { FormField } from "@/components/shared/FormField";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import { registrarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos";
@@ -127,58 +128,44 @@ export function RegistrarEgresoAdministrativoDialog({
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="egreso-monto">Monto</Label>
-            <Input
-              id="egreso-monto"
-              inputMode="decimal"
-              value={monto}
-              onChange={(e) => {
-                setMonto(e.target.value);
-                if (errores.monto) setErrores((p) => ({ ...p, monto: undefined }));
-              }}
-              aria-required="true"
-              aria-invalid={errores.monto !== undefined}
-              aria-describedby={errores.monto ? "egreso-monto-error" : undefined}
-              placeholder="0.00"
-            />
-            {errores.monto ? (
-              <p id="egreso-monto-error" role="alert" className="text-sm text-destructive">
-                {errores.monto}
-              </p>
-            ) : null}
-          </div>
+          <FormField id="egreso-monto" label="Monto" error={errores.monto}>
+            {(control) => (
+              <Input
+                {...control}
+                aria-required="true"
+                inputMode="decimal"
+                value={monto}
+                onChange={(e) => {
+                  setMonto(e.target.value);
+                  if (errores.monto) setErrores((p) => ({ ...p, monto: undefined }));
+                }}
+                placeholder="0.00"
+              />
+            )}
+          </FormField>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="egreso-descripcion">{DESCRIPCION_EGRESO_LABEL[tipoEgreso]}</Label>
-            <textarea
-              id="egreso-descripcion"
-              value={descripcion}
-              onChange={(e) => {
-                setDescripcion(e.target.value);
-                if (errores.descripcion)
-                  setErrores((p) => ({ ...p, descripcion: undefined }));
-              }}
-              rows={3}
-              aria-required="true"
-              aria-label={DESCRIPCION_EGRESO_LABEL[tipoEgreso]}
-              aria-invalid={errores.descripcion !== undefined}
-              aria-describedby={
-                errores.descripcion ? "egreso-descripcion-error" : undefined
-              }
-              placeholder={DESCRIPCION_EGRESO_PLACEHOLDER[tipoEgreso]}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            {errores.descripcion ? (
-              <p
-                id="egreso-descripcion-error"
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {errores.descripcion}
-              </p>
-            ) : null}
-          </div>
+          <FormField
+            id="egreso-descripcion"
+            label={DESCRIPCION_EGRESO_LABEL[tipoEgreso]}
+            error={errores.descripcion}
+          >
+            {(control) => (
+              <textarea
+                {...control}
+                aria-required="true"
+                aria-label={DESCRIPCION_EGRESO_LABEL[tipoEgreso]}
+                value={descripcion}
+                onChange={(e) => {
+                  setDescripcion(e.target.value);
+                  if (errores.descripcion)
+                    setErrores((p) => ({ ...p, descripcion: undefined }));
+                }}
+                rows={3}
+                placeholder={DESCRIPCION_EGRESO_PLACEHOLDER[tipoEgreso]}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            )}
+          </FormField>
         </div>
       </Modal>
     </>
