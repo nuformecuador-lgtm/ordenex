@@ -1,3 +1,4 @@
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { cierreConfig } from "@/lib/config/cierre";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type {
@@ -24,9 +25,8 @@ import {
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
 
-// Roles autorizados en el modulo (R1): el maestro (bodega central) y el adminSatelite
-// (su bodega). Cualquier otro -> forbidden.
-const ROL_MAESTRO = "maestro";
+// Roles autorizados en el modulo (R1): acceso total (maestro/admin -> bodega central) y el
+// adminSatelite (su bodega). Cualquier otro -> forbidden.
 const ROL_ADMIN_SATELITE = "adminSatelite";
 
 // Mensaje accionable cuando falta el motivo de rechazo (R11).
@@ -56,10 +56,10 @@ export class CierresAdminService implements ICierresAdminService {
     private readonly signedUrls: ISignedUrlProvider,
   ) {}
 
-  // R1/R2/R3: resuelve el alcance server-side por rol+zona. El maestro ve todos los
-  // `bodega_central` (sin filtro de zona); el adminSatelite solo su zona satelite.
+  // R1/R2/R3: resuelve el alcance server-side por rol+zona. Acceso total (maestro/admin) ve
+  // todos los `bodega_central` (sin filtro de zona); el adminSatelite solo su zona satelite.
   private async resolveAlcance(actor: Actor): Promise<AlcanceResult> {
-    if (actor.rol === ROL_MAESTRO) {
+    if (esAccesoTotal(actor.rol)) {
       return { status: "ok", alcance: { destinoTipo: "bodega_central", destinoZonaId: null } };
     }
     if (actor.rol === ROL_ADMIN_SATELITE) {

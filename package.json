@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -17,7 +17,9 @@
     "db:rollback": "tsx scripts/db-rollback.ts",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
-    "db:seed": "tsx scripts/seed-catalogos.ts"
+    "db:seed": "tsx scripts/seed-catalogos.ts",
+    "db:seed:maestro": "tsx scripts/seed-maestro.ts",
+    "db:seed:zonas": "tsx scripts/seed-zonas.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

@@ -9,6 +9,7 @@ import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 // no existe; SIN metodo de borrado (R25 — la desactivacion es el mecanismo). Montos STRING.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
+const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" }; // feature 94: paridad con maestro
 const OTRO: Actor = { usuarioId: "u-otro", rol: "adminSatelite" };
 
 function plantilla(overrides: Partial<GastoFijoPlantillaDTO> = {}): GastoFijoPlantillaDTO {
@@ -17,11 +18,22 @@ function plantilla(overrides: Partial<GastoFijoPlantillaDTO> = {}): GastoFijoPla
     concepto: "Alquiler",
     monto: "80000.00",
     activa: true,
+    periodicidadUnidad: "meses",
+    periodicidadCantidad: 1,
+    fechaCobro: "2026-07-13",
     createdAt: "2026-07-13T10:00:00.000Z",
     updatedAt: "2026-07-13T10:00:00.000Z",
     ...overrides,
   };
 }
+
+// Feature 84: la periodicidad llega SIEMPRE resuelta desde el borde (el schema zod aplica los
+// defaults), asi que el service la reenvia tal cual al repo.
+const PERIODICIDAD = {
+  periodicidadUnidad: "meses",
+  periodicidadCantidad: 1,
+  fechaCobro: "2026-07-13",
+} as const;
 
 function buildRepo(overrides: Partial<IGastoFijoPlantillaRepository> = {}): IGastoFijoPlantillaRepository {
   return {
@@ -39,19 +51,27 @@ describe("GastoFijoPlantillaService.crearPlantilla (R17/R24)", () => {
   it("R17: rol no autorizado -> forbidden, sin crear", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00" }, OTRO);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.crear).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> crea la plantilla (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.crear).toHaveBeenCalled();
   });
 
   it("R24: maestro -> crea la plantilla; monto STRING", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00" }, MAESTRO);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(typeof r.plantilla.monto).toBe("string");
-    expect(repo.crear).toHaveBeenCalledWith({ concepto: "Alquiler", monto: "80000.00" });
+    expect(repo.crear).toHaveBeenCalledWith({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD });
   });
 });
 
@@ -59,7 +79,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
   it("R17: rol no autorizado -> forbidden", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.actualizarPlantilla({ id: "p-1", concepto: "x", monto: "10.00" }, OTRO);
+    const r = await svc.actualizarPlantilla({ id: "p-1", concepto: "x", monto: "10.00", ...PERIODICIDAD }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.actualizar).not.toHaveBeenCalled();
   });
@@ -67,20 +87,35 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
   it("not_found: el id no existe -> not_found, sin actualizar", async () => {
     const repo = buildRepo({ obtenerPorId: vi.fn().mockResolvedValue(null) });
     const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.actualizarPlantilla({ id: "no", concepto: "x", monto: "10.00" }, MAESTRO);
+    const r = await svc.actualizarPlantilla({ id: "no", concepto: "x", monto: "10.00", ...PERIODICIDAD }, MAESTRO);
     expect(r).toEqual({ status: "not_found" });
     expect(repo.actualizar).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> edita la plantilla (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.actualizarPlantilla(
+      { id: "p-1", concepto: "Alquiler oficina", monto: "85000.00", ...PERIODICIDAD },
+      ADMIN,
+    );
+    expect(r.status).toBe("ok");
+    expect(repo.actualizar).toHaveBeenCalled();
   });
 
   it("R25: maestro -> edita concepto/monto", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
     const r = await svc.actualizarPlantilla(
-      { id: "p-1", concepto: "Alquiler oficina", monto: "85000.00" },
+      { id: "p-1", concepto: "Alquiler oficina", monto: "85000.00", ...PERIODICIDAD },
       MAESTRO,
     );
     expect(r.status).toBe("ok");
-    expect(repo.actualizar).toHaveBeenCalledWith("p-1", { concepto: "Alquiler oficina", monto: "85000.00" });
+    expect(repo.actualizar).toHaveBeenCalledWith("p-1", {
+      concepto: "Alquiler oficina",
+      monto: "85000.00",
+      ...PERIODICIDAD,
+    });
   });
 });
 
@@ -91,6 +126,14 @@ describe("GastoFijoPlantillaService.setActivaPlantilla (R17/R25)", () => {
     const r = await svc.setActivaPlantilla({ id: "p-1", activa: false }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.setActiva).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> activa/desactiva la plantilla (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.setActivaPlantilla({ id: "p-1", activa: false }, ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.setActiva).toHaveBeenCalledWith("p-1", false);
   });
 
   it("R25: desactivar (activa=false) -> ok (sin borrado)", async () => {
@@ -118,6 +161,14 @@ describe("GastoFijoPlantillaService.listarPlantillas (R17/R26)", () => {
     const r = await svc.listarPlantillas(OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.listar).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> lista plantillas (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.listarPlantillas(ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.listar).toHaveBeenCalled();
   });
 
   it("R26: maestro -> lista activas e inactivas", async () => {

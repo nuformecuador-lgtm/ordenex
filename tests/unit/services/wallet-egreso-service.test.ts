@@ -13,6 +13,7 @@ import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 // idempotente); reversa aplica tambien a egresos generados por el cron; desglose por tipo.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
+const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" }; // feature 94: paridad con maestro
 const OTRO: Actor = { usuarioId: "u-otro", rol: "adminSatelite" };
 
 function mov(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO {
@@ -59,6 +60,17 @@ describe("WalletEgresoService.registrarEgreso (R1/R2/R3/R7/R17)", () => {
     );
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> registra egreso (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new WalletEgresoService(repo, writeClient);
+    const r = await svc.registrarEgreso(
+      { tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "x" },
+      ADMIN,
+    );
+    expect(r.status).toBe("ok");
+    expect(crearMovCall(repo)).toMatchObject({ registradoPor: "u-admin", origenTipo: "gasto" });
   });
 
   it("R2: gasto variable -> categoria egreso_gasto_variable; egreso/gasto/origen_id null/registrado_por actor", async () => {
@@ -122,6 +134,15 @@ describe("WalletEgresoService.reversarEgreso (R13/R15/R16/R17/R32)", () => {
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.obtenerPorId).not.toHaveBeenCalled();
     expect(repo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> reversa egreso (paridad con maestro)", async () => {
+    const original = mov({ id: "eg-9", monto: "10.00" });
+    const repo = buildRepo({ obtenerPorId: vi.fn().mockResolvedValue(original) });
+    const svc = new WalletEgresoService(repo, writeClient);
+    const r = await svc.reversarEgreso({ movimientoId: "eg-9" }, ADMIN);
+    expect(r).toEqual({ status: "ok" });
+    expect(crearMovCall(repo)).toMatchObject({ registradoPor: "u-admin", categoria: "ingreso_ajuste" });
   });
 
   it("R13/R16: reversa crea ingreso_ajuste de IGUAL monto (leido server-side) referenciando el original", async () => {
@@ -212,6 +233,14 @@ describe("WalletEgresoService.verDesgloseEgresos (R11/R17)", () => {
     const r = await svc.verDesgloseEgresos({ page: 1, pageSize: 20 }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.agregarPorCategoria).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> ve el desglose (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new WalletEgresoService(repo, writeClient);
+    const r = await svc.verDesgloseEgresos({ page: 1, pageSize: 20 }, ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.agregarPorCategoria).toHaveBeenCalled();
   });
 
   it("R11: maestro -> desglose por tipo + total, todo STRING; pasa los filtros de fecha", async () => {

@@ -3,18 +3,17 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Modal } from "@/components/shared/Modal";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
 import {
   escogerParaGestion,
   liberarGestion,
-  recogerAsignaciones,
 } from "@/lib/actions/mis-asignaciones";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
 import { EscanerRecoger } from "./EscanerRecoger";
+import { InputRecoger } from "./InputRecoger";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano): módulo del mensajero.
@@ -47,8 +46,6 @@ export function MisAsignacionesModule({
   const router = useRouter();
   const toast = useToast();
 
-  // Confirmación de recogida (lote o de a una): ids a recoger; null = cerrado.
-  const [recogerIds, setRecogerIds] = useState<string[] | null>(null);
   // Orden que el mensajero eligió explícitamente para el panel de detalle. Es
   // solo una PREFERENCIA: la orden mostrada se DERIVA (ver `detalleOrden`) para
   // no quedar pegada a una orden que ya no existe tras `router.refresh()`.
@@ -71,22 +68,6 @@ export function MisAsignacionesModule({
     }
     return porGestionar[0];
   }, [porGestionar, ordenEnGestionId, seleccionId]);
-
-  async function confirmRecoger() {
-    if (!recogerIds) return;
-    const result = await recogerAsignaciones({ ordenIds: recogerIds });
-    if (result.status === "ok") {
-      toast.success(`${result.recogidas.length} orden(es) recogida(s).`);
-      setRecogerIds(null);
-      router.refresh();
-      return;
-    }
-    toast.error(
-      result.status === "conflict"
-        ? "Alguna orden ya no está por recoger."
-        : "No se pudieron recoger las órdenes.",
-    );
-  }
 
   // Seleccionar una card la lleva al panel de detalle. Bloqueada si hay otra
   // gestión activa (R19/R20): no se puede cambiar la orden del panel.
@@ -132,26 +113,26 @@ export function MisAsignacionesModule({
   return (
     <div className="flex flex-col gap-8">
       {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
-      {/* Recoger por escaneo: al escanear la etiqueta de un paquete se ACEPTA la
-          orden con la MISMA action que el botón "Recoger" (recogerAsignaciones). El
-          escáner resuelve el num_guia contra `porRecoger` para obtener el id. */}
+      {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
+          contra `porRecoger` (restricción "asignada a mí") y aceptan con la MISMA action
+          `recogerAsignaciones`, directo al confirmar (sin modal):
+            (1) input de número de guía tecleado + Enter/botón;
+            (2) escáner de cámara (QR de la etiqueta -> num_guia). */}
+      <InputRecoger porRecoger={porRecoger} onRecogida={() => router.refresh()} />
       <EscanerRecoger
         porRecoger={porRecoger}
         onRecogida={() => router.refresh()}
       />
 
-      {/* Reutiliza la sección compartida "por aceptar": banner con contador de
-          nuevas + "Recoger todas" (lote, R16) + "Recoger" por-orden (R14, única
-          acción). La confirmación en Modal y la action `recogerAsignaciones` se
-          disparan igual que antes, vía `setRecogerIds`. */}
+      {/* Lista de SOLO-VISUALIZACIÓN (feature 96): reutiliza la sección compartida "por
+          aceptar" con `mostrarAcciones={false}` (ya no hay botones "Recoger todas" /
+          "Recoger"). El mensajero sigue viendo qué guías tiene por recoger; la acción
+          vive en el input y el escáner de arriba. */}
       <PorAceptarSection
         titulo="Por recoger"
         nuevasLabel={(n) => `${n} Órdenes nuevas asignadas`}
         ordenes={porRecoger}
-        onAceptarTodas={(ids) => setRecogerIds(ids)}
-        onAceptarUna={(id) => setRecogerIds([id])}
-        textoBotonTodas="Recoger todas"
-        textoBotonUna="Recoger"
+        mostrarAcciones={false}
         vacio="No hay órdenes por recoger."
         renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
       />
@@ -251,23 +232,6 @@ export function MisAsignacionesModule({
           />
         ) : null}
       </section>
-
-      {/* Confirmación de recogida (lote o de a una). */}
-      <Modal
-        open={recogerIds !== null}
-        onOpenChange={(next) => {
-          if (!next) setRecogerIds(null);
-        }}
-        title="Recoger órdenes"
-        description={
-          recogerIds
-            ? `Vas a recoger ${recogerIds.length} orden(es). Pasarán a "en reparto".`
-            : undefined
-        }
-        confirmLabel="Recoger"
-        onConfirm={confirmRecoger}
-        closeOnConfirm={false}
-      />
     </div>
   );
 }

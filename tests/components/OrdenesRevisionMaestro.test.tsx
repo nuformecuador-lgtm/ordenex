@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
 import { OrdenesRevisionMaestro } from "@/app/(app)/ordenes/_components/OrdenesRevisionMaestro";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import {
@@ -155,6 +156,25 @@ function renderComponent(readOnly = false) {
   );
 }
 
+/** aria-label del checkbox "seleccionar todo" de la cabecera (SelectAllCheckbox). */
+const ARIA_SELECCIONAR_TODAS = "Seleccionar todas las órdenes";
+
+/**
+ * Checkboxes de FILA de un apartado, excluyendo el de la cabecera.
+ *
+ * Un apartado seleccionable renderiza N+1 checkboxes: el "seleccionar todo" que
+ * `OrdenesApartado` monta como `renderHeader`, mas uno por fila. Sin este filtro
+ * `getAllByRole("checkbox")[0]` deja de ser la primera fila y pasa a ser la
+ * cabecera, que alterna la seleccion COMPLETA: indexar sobre la lista cruda
+ * selecciona todo y luego deselecciona una fila, dejando seleccionada la fila
+ * equivocada sin que ninguna asercion de conteo lo delate.
+ */
+function checkboxesDeFila(scope: HTMLElement): HTMLElement[] {
+  return within(scope)
+    .getAllByRole("checkbox")
+    .filter((c) => c.getAttribute("aria-label") !== ARIA_SELECCIONAR_TODAS);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   listarCatalogoEstatusMock.mockResolvedValue({ status: "ok", estatus: ESTATUS });
@@ -254,7 +274,12 @@ describe("OrdenesRevisionMaestro", () => {
 
     const dialog = await screen.findByRole("dialog");
     // R29/R30: la línea de tiempo con la etiqueta legible del estado destino.
-    expect(await within(dialog).findByText("En bodega")).toBeInTheDocument();
+    // Se asevera contra ORDER_STATUS_LABELS y no contra un literal: lo que este
+    // caso verifica es que se muestre la etiqueta legible en vez del `value`
+    // crudo, no una redacción concreta (que ya cambió una vez y rompió 27 tests).
+    expect(
+      await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega),
+    ).toBeInTheDocument();
     expect(obtenerHistorialMock).toHaveBeenCalledWith("of1");
   });
 
@@ -271,7 +296,9 @@ describe("OrdenesRevisionMaestro", () => {
     );
 
     const dialog = await screen.findByRole("dialog");
-    expect(await within(dialog).findByText("En bodega")).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega),
+    ).toBeInTheDocument();
     expect(obtenerHistorialMock).toHaveBeenCalledWith("ob1");
   });
 
@@ -281,7 +308,7 @@ describe("OrdenesRevisionMaestro", () => {
 
     await screen.findByText("REM-F1");
     const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
-    const checkboxes = within(fulfillment).getAllByRole("checkbox");
+    const checkboxes = checkboxesDeFila(fulfillment);
     expect(checkboxes).toHaveLength(2);
 
     await user.click(checkboxes[0]);
@@ -297,7 +324,7 @@ describe("OrdenesRevisionMaestro", () => {
 
     await screen.findByText("REM-F1");
     const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
-    const checkbox = within(fulfillment).getAllByRole("checkbox")[0];
+    const checkbox = checkboxesDeFila(fulfillment)[0];
     await user.click(checkbox);
     await user.click(
       within(fulfillment).getByRole("button", { name: "Generar guía" }),
@@ -316,7 +343,7 @@ describe("OrdenesRevisionMaestro", () => {
 
     await screen.findByText("REM-P1");
     const preparacion = screen.getByRole("region", { name: "En preparación" });
-    await user.click(within(preparacion).getAllByRole("checkbox")[0]);
+    await user.click(checkboxesDeFila(preparacion)[0]);
     await user.click(
       within(preparacion).getByRole("button", { name: "Generar guía" }),
     );
@@ -334,7 +361,7 @@ describe("OrdenesRevisionMaestro", () => {
       name: "En espera de aceptación del mensajero",
     });
     // Feature 32/R13/F1.4(f): sus órdenes ya tienen guía → seleccionable para imprimir.
-    expect(within(espera).getAllByRole("checkbox")).toHaveLength(1);
+    expect(checkboxesDeFila(espera)).toHaveLength(1);
     expect(
       within(espera).getByRole("button", { name: "Imprimir etiquetas" }),
     ).toBeInTheDocument();
@@ -353,7 +380,7 @@ describe("OrdenesRevisionMaestro", () => {
 
     await screen.findByText("REM-B1");
     const bodega = screen.getByRole("region", { name: "En bodega" });
-    await user.click(within(bodega).getAllByRole("checkbox")[0]);
+    await user.click(checkboxesDeFila(bodega)[0]);
     await user.click(
       within(bodega).getByRole("button", { name: "Asignar mensajero" }),
     );
@@ -373,7 +400,7 @@ describe("OrdenesRevisionMaestro", () => {
     expect(satelite).toBeInTheDocument();
     await within(satelite).findByText("REM-S1");
     // Feature 32/R13/F1.4(f): seleccionable para "Imprimir etiquetas"...
-    expect(within(satelite).getAllByRole("checkbox")).toHaveLength(1);
+    expect(checkboxesDeFila(satelite)).toHaveLength(1);
     expect(
       within(satelite).getByRole("button", { name: "Imprimir etiquetas" }),
     ).toBeInTheDocument();
@@ -394,7 +421,7 @@ describe("OrdenesRevisionMaestro", () => {
 
     await screen.findByText("REM-B1");
     const bodega = screen.getByRole("region", { name: "En bodega" });
-    await user.click(within(bodega).getAllByRole("checkbox")[0]);
+    await user.click(checkboxesDeFila(bodega)[0]);
     await user.click(
       within(bodega).getByRole("button", { name: "Imprimir etiquetas" }),
     );
@@ -449,7 +476,7 @@ describe("OrdenesRevisionMaestro", () => {
     await screen.findByText("REM-NOGAM");
     const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
     // Selecciona AMBAS órdenes; solo la NO-GAM debe rutearse.
-    const checkboxes = within(fulfillment).getAllByRole("checkbox");
+    const checkboxes = checkboxesDeFila(fulfillment);
     await user.click(checkboxes[0]);
     await user.click(checkboxes[1]);
 
@@ -525,7 +552,7 @@ describe("OrdenesRevisionMaestro", () => {
     await screen.findByText("REM-CENTRAL");
     const rechazadas = screen.getByRole("region", { name: "Rechazadas" });
     // Selecciona AMBAS órdenes; solo la de zona central debe pasar al modal.
-    const checkboxes = within(rechazadas).getAllByRole("checkbox");
+    const checkboxes = checkboxesDeFila(rechazadas);
     await user.click(checkboxes[0]);
     await user.click(checkboxes[1]);
 

@@ -110,8 +110,24 @@ describe("CierresAdminPage — control de acceso por rol (R1)", () => {
     ).toBeInTheDocument();
   });
 
-  it("R1: roles no admin NO ven el módulo (notFound)", async () => {
-    const otros: RolValue[] = ["mensajero", "admin", "adminTienda"];
+  it("R1 (feature 94, paridad adm↔maestro): el rol admin ve el módulo igual que el maestro", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u3", rol: "admin" });
+
+    const page = await CierresAdminPage();
+    render(page);
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Cierres del día" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Pendientes de decisión" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R1: roles sin acceso NO ven el módulo (notFound)", async () => {
+    // Feature 94: `admin` YA no está aquí (ve el módulo, test aparte). Siguen excluidos
+    // el mensajero y el adminTienda.
+    const otros: RolValue[] = ["mensajero", "adminTienda"];
     for (const rol of otros) {
       resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol });
       await expect(CierresAdminPage()).rejects.toThrow("NEXT_NOT_FOUND");

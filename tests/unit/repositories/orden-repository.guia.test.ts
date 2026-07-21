@@ -298,7 +298,12 @@ describe("OrdenRepository.rutearBodegaSateliteLote (feature 30/R10/R13)", () => 
     expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(2);
     const [sql, ordenId] = tx.$executeRawUnsafe.mock.calls[0];
     expect(sql).toContain("num_guia IS NULL");
-    expect(sql).toContain("nextval('orden_num_guia_seq')");
+    expect(sql).toContain("siguiente_num_guia()");
+    // La guia NO debe salir de la secuencia en crudo: se imprime en la etiqueta
+    // y viaja en el QR, asi que un contador visible filtra volumen de operacion
+    // (migracion 20260720170000). Volver a `nextval(...)` directo aqui es
+    // exactamente la regresion que este caso vigila.
+    expect(sql).not.toContain("nextval");
     expect(ordenId).toBe("o1");
     // R9: fija estatus y deja mensajeroAsignadoId NULL. Feature 76/LC1 (C2): limpia asignado_at.
     expect(tx.orden.update).toHaveBeenCalledWith({
@@ -417,7 +422,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
 
     const [sql, ordenId] = tx.$executeRawUnsafe.mock.calls[0];
     expect(sql).toContain("num_guia IS NULL");
-    expect(sql).toContain("nextval('orden_num_guia_seq')");
+    expect(sql).toContain("siguiente_num_guia()");
     expect(ordenId).toBe("o1");
   });
 

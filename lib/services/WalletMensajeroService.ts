@@ -13,13 +13,13 @@ import type {
   ListarPagosMensajeroInput,
 } from "@/lib/types/wallet-mensajero";
 import { derivarCuentaPorPagar } from "@/lib/utils/cuenta-por-pagar";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Roles autorizados (R18/R19/R20). El `mensajero` ve SOLO lo suyo (acotado a su usuarioId =
-// mensajero_id en el WHERE del repo). El `maestro` ve las cuentas por pagar de TODOS los
-// mensajeros. El adminSatelite NO ve (el pago a mensajeros es un egreso de la caja central del
-// maestro, F1.4-Qe/A2).
+// mensajero_id en el WHERE del repo). El acceso total (maestro/admin) ve las cuentas por pagar
+// de TODOS los mensajeros. El adminSatelite NO ve (el pago a mensajeros es un egreso de la caja
+// central del maestro, F1.4-Qe/A2).
 const ROL_MENSAJERO = "mensajero";
-const ROL_MAESTRO = "maestro";
 
 /**
  * Feature 44 — logica de negocio de lectura del LIBRO del pago por mensajero. No conoce HTTP ni
@@ -77,7 +77,7 @@ export class WalletMensajeroService implements IWalletMensajeroService {
   }
 
   async listarCuentasPorPagar(actor: Actor): Promise<ListarCuentasPorPagarServiceResult> {
-    if (actor.rol !== ROL_MAESTRO) return { status: "forbidden" }; // R19
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
 
     const rows = await this.repo.listarCuentasPorPagarTodos();
     const mensajeros: CuentaPorPagarResumenDTO[] = rows.map((r) => {
@@ -98,7 +98,7 @@ export class WalletMensajeroService implements IWalletMensajeroService {
     input: ListarPagosDeMensajeroInput,
     actor: Actor,
   ): Promise<ListarPagosDeMensajeroServiceResult> {
-    if (actor.rol !== ROL_MAESTRO) return { status: "forbidden" }; // R19 (mismo gate que listarCuentasPorPagar)
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19 (mismo gate que listarCuentasPorPagar)
 
     const filtros = {
       cierreId: input.cierreId,

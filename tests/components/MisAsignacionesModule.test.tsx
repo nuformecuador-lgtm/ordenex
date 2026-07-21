@@ -222,7 +222,10 @@ describe("MisAsignacionesModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("R14: 'Por recoger' ofrece ÚNICAMENTE la acción 'Recoger' (no existe 'Rechazar')", () => {
+  // Feature 96: la recogida ya NO vive en la sección "Por recoger" (se quitaron los
+  // botones "Recoger" / "Recoger todas" y su modal). Queda como lista de SOLO-
+  // VISUALIZACIÓN; recoger es exclusivamente por el input de número de guía o el escáner.
+  it("Feature 96: 'Por recoger' es lista de SOLO-VISUALIZACIÓN (sin 'Recoger' / 'Recoger todas')", () => {
     renderModule({
       porRecoger: [
         makeAsignacion({ id: "r1", numRemision: "REM-R1" }),
@@ -231,46 +234,66 @@ describe("MisAsignacionesModule", () => {
     });
 
     const region = screen.getByRole("region", { name: "Por recoger" });
-    expect(within(region).getAllByRole("button", { name: "Recoger" })).toHaveLength(2);
+    // Ya no hay ninguna acción de recogida en esta sección.
+    expect(within(region).queryByRole("button", { name: "Recoger" })).toBeNull();
     expect(
-      within(region).queryByRole("button", { name: /rechazar/i }),
+      within(region).queryByRole("button", { name: "Recoger todas" }),
+    ).toBeNull();
+    expect(within(region).queryByRole("button")).toBeNull();
+    // Pero sigue LISTANDO las guías por recoger (el mensajero ve qué tiene pendiente).
+    expect(within(region).getByText(/REM-R1/)).toBeInTheDocument();
+    expect(within(region).getByText(/REM-R2/)).toBeInTheDocument();
+  });
+
+  it("Feature 96: la recogida se ofrece SOLO por input de número de guía y por escáner (sin modal)", () => {
+    renderModule({ porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })] });
+
+    expect(
+      screen.getByRole("region", { name: "Recoger por número de guía" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Recoger por escaneo" }),
+    ).toBeInTheDocument();
+    // Ya no existe el modal de confirmación de recogida.
+    expect(
+      screen.queryByRole("dialog", { name: "Recoger órdenes" }),
     ).toBeNull();
   });
 
-  it("R16: 'Recoger todas' dispara la acción en LOTE con todos los ordenIds", async () => {
+  it("Feature 96: teclear una guía por recoger + confirmar recoge esa orden por su id y refresca", async () => {
     const user = userEvent.setup();
-    recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1", "r2"] });
+    recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r2"] });
     renderModule({
       porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-R1" }),
-        makeAsignacion({ id: "r2", numRemision: "REM-R2" }),
+        makeAsignacion({ id: "r1", numGuia: 1001 }),
+        makeAsignacion({ id: "r2", numGuia: 1002 }),
       ],
     });
 
-    await user.click(screen.getByRole("button", { name: "Recoger todas" }));
-    const dialog = await screen.findByRole("dialog", { name: "Recoger órdenes" });
-    await user.click(within(dialog).getByRole("button", { name: "Recoger" }));
+    const region = screen.getByRole("region", { name: "Recoger por número de guía" });
+    await user.type(within(region).getByLabelText("Número de guía"), "1002");
+    await user.click(within(region).getByRole("button", { name: "Recoger" }));
 
-    await vi.waitFor(() => expect(recogerMock).toHaveBeenCalledTimes(1));
-    expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r1", "r2"] });
+    await vi.waitFor(() =>
+      expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r2"] }),
+    );
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 
-  it("R16: 'Recoger' de una fila envía solo ese ordenId", async () => {
+  it("Feature 96 (restricción 'asignada a mí'): una guía que NO está por recoger se rechaza sin llamar la action", async () => {
     const user = userEvent.setup();
     renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-R1" }),
-        makeAsignacion({ id: "r2", numRemision: "REM-R2" }),
-      ],
+      porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
     });
 
-    const region = screen.getByRole("region", { name: "Por recoger" });
-    await user.click(within(region).getAllByRole("button", { name: "Recoger" })[1]);
-    const dialog = await screen.findByRole("dialog", { name: "Recoger órdenes" });
-    await user.click(within(dialog).getByRole("button", { name: "Recoger" }));
+    const region = screen.getByRole("region", { name: "Recoger por número de guía" });
+    await user.type(within(region).getByLabelText("Número de guía"), "9999");
+    await user.click(within(region).getByRole("button", { name: "Recoger" }));
 
-    await vi.waitFor(() => expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r2"] }));
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(errorMock.mock.calls[0][0]).toMatch(/9999/);
+    expect(recogerMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
   });
 
   it("Sin órdenes en reparto: muestra el aviso y NO renderiza el panel de detalle", () => {

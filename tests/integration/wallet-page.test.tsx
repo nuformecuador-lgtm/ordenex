@@ -140,8 +140,10 @@ afterEach(() => {
 });
 
 describe("WalletPage — control de acceso por rol (R19)", () => {
-  it("roles ≠ maestro NO ven la wallet (notFound), sin pre-fetch de datos", async () => {
-    const otros: RolValue[] = ["mensajero", "admin", "adminTienda", "adminSatelite"];
+  it("roles sin acceso total NO ven la wallet (notFound), sin pre-fetch de datos", async () => {
+    // Feature 94: `admin` YA no está aquí (ve la wallet, test aparte). Siguen excluidos
+    // mensajero, adminTienda y adminSatelite.
+    const otros: RolValue[] = ["mensajero", "adminTienda", "adminSatelite"];
     for (const rol of otros) {
       resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol });
       const { default: WalletPage } = await import("@/app/(app)/wallet/page");
@@ -150,6 +152,20 @@ describe("WalletPage — control de acceso por rol (R19)", () => {
     // R19: no expone movimientos ni balance para rol no autorizado.
     expect(listarMock).not.toHaveBeenCalled();
     expect(balanceMock).not.toHaveBeenCalled();
+  });
+
+  it("feature 94 (paridad adm↔maestro): el admin ve la wallet y pre-fetch de datos igual que el maestro", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "a", rol: "admin" });
+    const { default: WalletPage } = await import("@/app/(app)/wallet/page");
+
+    render(await WalletPage());
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Wallet" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("wallet-module-stub")).toBeInTheDocument();
+    expect(listarMock).toHaveBeenCalledTimes(1);
+    expect(balanceMock).toHaveBeenCalledTimes(1);
   });
 
   it("sin sesión tampoco ve la wallet (notFound)", async () => {

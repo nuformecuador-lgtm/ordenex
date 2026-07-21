@@ -242,7 +242,7 @@ describe("OrdenesCargaResumen — override por fila y valor inicial (R26, R27)",
 // ---------------------------------------------------------------------------
 // R28, R33 — confirmar: asignarMensajeroSugerido + toast.success + mutate
 // ---------------------------------------------------------------------------
-describe("OrdenesCargaResumen — confirmar asignación (R28, R33)", () => {
+describe("OrdenesCargaResumen — sugerir asignación (R28, R33)", () => {
   it("llama a asignarMensajeroSugerido con las asignaciones resueltas y refresca la lista", async () => {
     const user = userEvent.setup();
     const onDone = vi.fn();
@@ -253,7 +253,7 @@ describe("OrdenesCargaResumen — confirmar asignación (R28, R33)", () => {
 
     // Confirma con la selección inicial: o1 = sugerido u1; o2 = azar de su zona
     // (Math.random=0.6 -> u2/Beto).
-    await user.click(screen.getByRole("button", { name: /confirmar asignación/i }));
+    await user.click(screen.getByRole("button", { name: /sugerir asignación/i }));
 
     expect(asignarMensajeroSugeridoMock).toHaveBeenCalledWith({
       asignaciones: [
@@ -292,7 +292,7 @@ describe("OrdenesCargaResumen — confirmar asignación (R28, R33)", () => {
     render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-9999"]} />);
     await screen.findByText("REM-0001");
 
-    await user.click(screen.getByRole("button", { name: /confirmar asignación/i }));
+    await user.click(screen.getByRole("button", { name: /sugerir asignación/i }));
 
     expect(asignarMensajeroSugeridoMock).toHaveBeenCalledWith({
       asignaciones: [{ ordenId: "o1", mensajeroId: "u1" }],
@@ -311,7 +311,7 @@ describe("OrdenesCargaResumen — fallo de asignación (R29)", () => {
     render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
     await screen.findByText("REM-0001");
 
-    await user.click(screen.getByRole("button", { name: /confirmar asignación/i }));
+    await user.click(screen.getByRole("button", { name: /sugerir asignación/i }));
 
     expect(errorMock).toHaveBeenCalledTimes(1);
     expect(successMock).not.toHaveBeenCalled();
@@ -325,7 +325,7 @@ describe("OrdenesCargaResumen — fallo de asignación (R29)", () => {
     render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
     await screen.findByText("REM-0001");
 
-    await user.click(screen.getByRole("button", { name: /confirmar asignación/i }));
+    await user.click(screen.getByRole("button", { name: /sugerir asignación/i }));
 
     expect(errorMock).toHaveBeenCalledTimes(1);
     expect(successMock).not.toHaveBeenCalled();
@@ -344,7 +344,7 @@ describe("OrdenesCargaResumen — bloqueo durante el envío (R30)", () => {
     render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
     await screen.findByText("REM-0001");
 
-    const confirmBtn = screen.getByRole("button", { name: /confirmar asignación/i });
+    const confirmBtn = screen.getByRole("button", { name: /sugerir asignación/i });
     await user.click(confirmBtn);
 
     expect(confirmBtn).toBeDisabled();
@@ -354,7 +354,7 @@ describe("OrdenesCargaResumen — bloqueo durante el envío (R30)", () => {
     expect(asignarMensajeroSugeridoMock).toHaveBeenCalledTimes(1);
 
     pending.resolve({ status: "ok", asignadas: 1 });
-    await screen.findByText("Confirmar asignación");
+    await screen.findByText("Sugerir asignación");
     expect(confirmBtn).not.toBeDisabled();
   });
 });

@@ -170,13 +170,21 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         // (`..._api_key` y `..._rol_api_key`, que tambien termina en "_api_key").
         !d.endsWith("_api_key") &&
         !d.endsWith("_orden_historial_origen_tipo_carga_api") && // feature 88: apendida despues
+        !d.endsWith("_gasto_fijo_periodicidad") && // feature 84 (wallet periodicidad): apendida despues
         !d.endsWith("_jobs_cola") && // feature 90: apendida despues
         // feature 91: apendidas despues (enum de job_tipo + columnas de geocodificacion).
         !d.endsWith("_job_tipo_geocodificacion") &&
         !d.endsWith("_orden_geocode") &&
         // feature 92: apendidas despues (enum de job_tipo + tablas de la ruta optimizada).
         !d.endsWith("_job_tipo_optimizacion_ruta") &&
-        !d.endsWith("_ruta_optimizada"),
+        !d.endsWith("_ruta_optimizada") &&
+        // despliegue: apendida despues. Neutraliza el usuario maestro sembrado
+        // con hash hardcodeado por `20260709120000_seed_maestro_user`.
+        !d.endsWith("_drop_default_maestro_user") &&
+        // num_guia no secuencial: apendidas despues. La segunda reemplaza la
+        // permutacion de la primera (dejaba delta constante entre consecutivas).
+        !d.endsWith("_num_guia_no_secuencial") &&
+        !d.endsWith("_num_guia_feistel"),
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);

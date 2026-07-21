@@ -14,10 +14,10 @@ import type {
   RegistrarMovimientoManualInput,
 } from "@/lib/types/wallet";
 import { derivarBalance } from "@/lib/utils/wallet-balance";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
-// Rol autorizado (R19): el maestro (dueño de la caja central). Cualquier otro rol ->
-// forbidden SIN exponer movimientos ni balance.
-const ROL_AUTORIZADO = "maestro";
+// Roles autorizados (R19): acceso total (maestro/admin, dueños de la caja central). Cualquier
+// otro rol -> forbidden SIN exponer movimientos ni balance.
 
 /**
  * Feature 42 — logica de negocio de la wallet (libro + balance + manual). No conoce HTTP
@@ -37,7 +37,7 @@ export class WalletService implements IWalletService {
     input: ListarMovimientosInput,
     actor: Actor,
   ): Promise<ListarMovimientosServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R19
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
 
     const { movimientos, total } = await this.repo.listar({
       page: input.page,
@@ -54,7 +54,7 @@ export class WalletService implements IWalletService {
   }
 
   async verBalance(input: ListarMovimientosInput, actor: Actor): Promise<VerBalanceServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R19
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
 
     // R16: balance DERIVADO del conjunto filtrado (mismos filtros que el listado), nunca
     // de un saldo almacenado.
@@ -71,7 +71,7 @@ export class WalletService implements IWalletService {
     input: RegistrarMovimientoManualInput,
     actor: Actor,
   ): Promise<RegistrarMovimientoManualServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R19
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
 
     // R15/Q6: manual = origen_tipo manual, origen_id NULL, registrado_por = actor, monto
     // > 0, descripcion obligatoria (ya validado por zod en el borde; se persiste como

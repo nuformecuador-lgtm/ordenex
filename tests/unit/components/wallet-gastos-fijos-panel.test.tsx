@@ -32,6 +32,9 @@ const ACTIVA: GastoFijoPlantillaDTO = {
   concepto: "Alquiler de bodega",
   monto: "300.00",
   activa: true,
+  periodicidadUnidad: "meses",
+  periodicidadCantidad: 1,
+  fechaCobro: "2026-07-01",
   createdAt: "2026-07-01T00:00:00.000Z",
   updatedAt: "2026-07-01T00:00:00.000Z",
 };
@@ -41,6 +44,9 @@ const INACTIVA: GastoFijoPlantillaDTO = {
   concepto: "Internet",
   monto: "45.00",
   activa: false,
+  periodicidadUnidad: "meses",
+  periodicidadCantidad: 1,
+  fechaCobro: "2026-07-01",
   createdAt: "2026-07-01T00:00:00.000Z",
   updatedAt: "2026-07-01T00:00:00.000Z",
 };
