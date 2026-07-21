@@ -46,7 +46,11 @@ export function dedupeKeyGeocodificacion(ordenId: string, hash: string): string 
  */
 export async function encolarGeocodificacion(
   repo: IJobRepository,
-  tx: JobTxClient,
+  // Feature 92: `undefined` es un valor VALIDO y significa "sin transaccion del writer".
+  // Lo usa el gate de asignabilidad (R7), que encola FUERA de cualquier transaccion a
+  // proposito: la asignacion se aborta de todas formas y el job debe sobrevivir al abort.
+  // `IJobRepository.enqueue` ya trata el 4.º parametro como opcional.
+  tx: JobTxClient | undefined,
   orden: { id: string; direccion: string | null },
 ): Promise<void> {
   // R9: se encola SOLO si hay direccion libre con contenido tras normalizar (gate

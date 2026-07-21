@@ -47,10 +47,13 @@ function toEtiquetaActionError(
 }
 
 /**
- * Feature 32/R1-R8/R13-R15: genera las etiquetas de guia (QR + barcode + datos)
- * de la seleccion. READ derivado, sin efectos. Solo `maestro` (R13, el service lo
- * decide). Sin sesion -> `unauthenticated` antes de tocar el service (R14);
- * entrada invalida (lista vacia / id malformado) -> `validation_error` (R15).
+ * Feature 32/R1-R8/R14-R15: genera las etiquetas de guia (QR + barcode + datos)
+ * de la seleccion. READ derivado, sin efectos. Disponible para CUALQUIER rol
+ * autenticado: el service NO restringe por rol (decision del usuario, ver
+ * EtiquetaGuiaService.generarEtiquetas); quien lo dispara desde el flujo de
+ * guia/asignacion por lote es maestro/admin, ya gateados aguas arriba. Sin sesion
+ * -> `unauthenticated` antes de tocar el service (R14); entrada invalida (lista
+ * vacia / id malformado) -> `validation_error` (R15).
  */
 export async function generarEtiquetas(
   input: unknown,

@@ -17,6 +17,9 @@ function fakeAsignacionRow(overrides: Record<string, unknown> = {}) {
     direccion: "calle 1",
     producto: "caja",
     montoCobrar: new Prisma.Decimal(100),
+    // Feature 97: coords geocodificadas (feature 91) como Decimal, igual que en la DB.
+    latitud: new Prisma.Decimal("9.9281244"),
+    longitud: new Prisma.Decimal("-84.0907246"),
     notas: null,
     mensajeroAsignadoId: "m1",
     estatus: { value: "en_espera_aceptacion" },
@@ -52,6 +55,37 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
     const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
     expect(await repo.findMisAsignaciones("m1", [])).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  // Feature 97: las coords de la parada (feature 91) viajan en el DTO. La query las PIDE
+  // (select) y las SERIALIZA Decimal -> number (mismo patron que montoCobrar).
+  it("F97: proyecta latitud/longitud en el select y las serializa Decimal -> number", async () => {
+    const findMany = vi.fn(async () => [fakeAsignacionRow()]);
+    const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
+
+    const rows = await repo.findMisAsignaciones("m1", ["en_reparto"]);
+
+    const arg = (findMany.mock.calls[0] as unknown[])[0] as { select: Record<string, unknown> };
+    expect(arg.select.latitud).toBe(true);
+    expect(arg.select.longitud).toBe(true);
+    expect(rows[0].latitud).toBe(9.9281244);
+    expect(rows[0].longitud).toBe(-84.0907246);
+    // Y son numbers puros, no Decimal (serializacion aplicada).
+    expect(typeof rows[0].latitud).toBe("number");
+    expect(typeof rows[0].longitud).toBe("number");
+  });
+
+  // Feature 97: orden aun sin geocodificar -> coords null; null -> null (no revienta el .toNumber()).
+  it("F97: orden sin geocodificar (latitud/longitud null) -> null", async () => {
+    const findMany = vi.fn(async () => [
+      fakeAsignacionRow({ latitud: null, longitud: null }),
+    ]);
+    const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
+
+    const rows = await repo.findMisAsignaciones("m1", ["en_reparto"]);
+
+    expect(rows[0].latitud).toBeNull();
+    expect(rows[0].longitud).toBeNull();
   });
 });
 
@@ -120,6 +154,26 @@ describe("GestionOrdenRepository.findByIdsParaGestion (feature 47/R5 · zonaId)"
   });
 });
 
+
+/**
+ * Feature 92 (R16/R19): `GestionOrdenRepository` inyecta ahora un `IJobRepository` para el
+ * encolado TRANSACTIONAL OUTBOX de la reoptimizacion de ruta. Este doble registra las
+ * llamadas para que los tests de la 36/47/49 sigan midiendo lo suyo Y ADEMAS puedan
+ * afirmar que el encolado va DENTRO de la transaccion del writer (4.º argumento).
+ * El comportamiento del debounce y del namespace disjunto se prueba aparte, en
+ * `tests/integration/repositories/optimizacion-ruta-enqueue.test.ts`.
+ */
+function colaFake() {
+  const enqueue = vi.fn(async () => null);
+  return {
+    enqueue,
+    claimBatch: vi.fn(async () => []),
+    complete: vi.fn(async () => {}),
+    fail: vi.fn(async () => {}),
+    findByDedupeKeys: vi.fn(async () => []),
+  };
+}
+
 describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
   // Feature 49/#8: recogerLote pasa a `$queryRaw ... RETURNING "id"` en un `$transaction`;
   // el count = rows.length y el append cubre EXACTAMENTE los ids retornados (R8).
@@ -128,8 +182,9 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
     const createMany = vi.fn();
     const tx = { $queryRaw, ordenHistorialEstado: { createMany } };
     const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<number>) => cb(tx));
-    const repo = new GestionOrdenRepository({ $transaction } as never);
-    return { repo, $queryRaw, createMany, $transaction };
+    const cola = colaFake();
+    const repo = new GestionOrdenRepository({ $transaction } as never, cola as never);
+    return { repo, $queryRaw, createMany, $transaction, cola, tx };
   }
 
   it("guardia propiedad + origen en el SQL; devuelve filas afectadas (rows.length)", async () => {
@@ -257,8 +312,9 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenHistorialEstado: { createMany: historialCreateMany },
     };
     const $transaction = vi.fn(async (cb: (t: typeof tx) => Promise<string>) => cb(tx));
-    const repo = new GestionOrdenRepository({ $transaction } as never);
-    return { repo, gestionCreate, ordenUpdate, usuarioUpdate, historialCreateMany };
+    const cola = colaFake();
+    const repo = new GestionOrdenRepository({ $transaction } as never, cola as never);
+    return { repo, gestionCreate, ordenUpdate, usuarioUpdate, historialCreateMany, cola, tx };
   }
 
   it("INSERT gestion + UPDATE estatus + limpiar puntero, todo bajo la misma tx", async () => {

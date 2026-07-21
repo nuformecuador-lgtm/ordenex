@@ -9,6 +9,7 @@ import { ROLES_SEED } from "@/lib/types/roles";
  * El Sidebar resuelve `iconKey -> componente` en el cliente al renderizar.
  */
 export type IconKey =
+  | "home"
   | "settings"
   | "user"
   | "package"
@@ -54,6 +55,16 @@ export interface MenuItem {
  */
 export const SIDEBAR_ITEMS: readonly MenuItem[] = [
   {
+    // Feature 92: acceso al dashboard (landing post-login movido a /dashboard por
+    // la feature 86). Visible solo para maestro/admin, los roles para los que la
+    // página renderiza contenido real; la defensa real es la resolución de rol
+    // server-side de la propia página.
+    label: "Inicio",
+    href: "/dashboard",
+    iconKey: "home",
+    roles: ["maestro", "admin"],
+  },
+  {
     label: "Órdenes",
     href: "/ordenes",
     iconKey: "package",
@@ -89,24 +100,25 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     roles: ["adminTienda"],
   },
   {
-    // Feature 76: ranking diario de mensajeros. Visible para `maestro` (ve y edita
-    // los premios) y `mensajero` (lo ve en solo-lectura) de forma intencional; la
-    // defensa real es el `notFound` de la página `/ranking`, que resuelve el rol
-    // server-side y decide el modo editable.
+    // Feature 76: ranking diario de mensajeros. Visible para `maestro`/`admin` (ven y
+    // editan los premios — feature 94, paridad adm↔maestro) y `mensajero` (lo ve en
+    // solo-lectura) de forma intencional; la defensa real es el `notFound` de la página
+    // `/ranking`, que resuelve el rol server-side y decide el modo editable.
     label: "Ranking",
     href: "/ranking",
     iconKey: "trophy",
-    roles: ["maestro", "mensajero"],
+    roles: ["maestro", "admin", "mensajero"],
   },
   {
     // Feature 42: caja principal de Ordenex (balance + libro de movimientos).
-    // Exclusiva del maestro. La defensa real es el `notFound` de la página
-    // `/wallet`, que resuelve el rol server-side; este item solo decide que se
-    // MUESTRA. Los subitems apuntan a las vistas por contraparte (43/44).
+    // Visible para `maestro`/`admin` (feature 94, paridad adm↔maestro). La defensa
+    // real es el `notFound` de la página `/wallet`, que resuelve el rol server-side;
+    // este item solo decide que se MUESTRA. Los subitems apuntan a las vistas por
+    // contraparte (43/44) y heredan la visibilidad del padre.
     label: "Wallet",
     href: "/wallet",
     iconKey: "wallet",
-    roles: ["maestro"],
+    roles: ["maestro", "admin"],
     children: [
       { label: "Caja principal", href: "/wallet" },
       { label: "Tiendas", href: "/wallet/tiendas" },
@@ -131,12 +143,14 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     roles: ["mensajero"],
   },
   {
-    // Feature 38: cola de cierres del admin de bodega. Ruta y roles distintos del
-    // ítem del mensajero ("/cierre-dia"); la defensa real es el notFound de la página.
+    // Feature 38: cola de cierres del admin de bodega. Visible para
+    // `maestro`/`admin` (feature 94, paridad adm↔maestro) y `adminSatelite`. Ruta y
+    // roles distintos del ítem del mensajero ("/cierre-dia"); la defensa real es el
+    // notFound de la página.
     label: "Cierres del día",
     href: "/cierres-admin",
     iconKey: "clipboardCheck",
-    roles: ["maestro", "adminSatelite"],
+    roles: ["maestro", "admin", "adminSatelite"],
   },
   {
     label: "QR",

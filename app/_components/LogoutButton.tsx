@@ -40,11 +40,11 @@ export function LogoutButton() {
   return (
     <Button
       onClick={handleLogout}
-      disabled={isPending}
+      loading={isPending}
       variant="outline"
       className="cursor-pointer border-navy/40 bg-transparent text-navy hover:bg-navy/10 hover:text-navy"
     >
-      <LogOut aria-hidden="true" />
+      {isPending ? null : <LogOut aria-hidden="true" />}
       {isPending ? "Saliendo…" : "Salir"}
     </Button>
   );

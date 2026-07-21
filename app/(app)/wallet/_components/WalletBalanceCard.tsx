@@ -23,8 +23,8 @@ const SIGNO_BADGE: Record<
 
 /** Color del monto del balance según su signo (verde/rojo/neutro). */
 const BALANCE_COLOR: Record<WalletBalanceDTO["signo"], string> = {
-  positivo: "text-emerald-600 dark:text-emerald-400",
-  negativo: "text-destructive",
+  positivo: "text-success-strong",
+  negativo: "text-danger-strong",
   cero: "text-muted-foreground",
 };
 
@@ -56,13 +56,13 @@ export function WalletBalanceCard({ balance }: WalletBalanceCardProps) {
         <div className="grid grid-cols-2 gap-4 border-t pt-4">
           <div className="flex flex-col gap-0.5">
             <span className="text-sm text-muted-foreground">Ingresos</span>
-            <span className="text-lg font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="text-lg font-medium text-success-strong">
               {money(balance.ingresos)}
             </span>
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-sm text-muted-foreground">Egresos</span>
-            <span className="text-lg font-medium text-destructive">
+            <span className="text-lg font-medium text-danger-strong">
               {money(balance.egresos)}
             </span>
           </div>

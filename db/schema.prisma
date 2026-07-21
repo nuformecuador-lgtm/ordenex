@@ -128,6 +128,7 @@ model Usuario {
   cierreDetallesTienda                CierreDetail[]            @relation("CierreDetailTienda") // feature 69/R6: snapshots que congelaron a esta tienda como destinataria
   apiKey                              ApiKey?                   @relation("ApiKeyUsuario") // feature 81/[D6]: la key dedicada a ESTA cuenta sintetica (1:1)
   apiKeysCreadas                      ApiKey[]                  @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
+  rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -359,6 +360,7 @@ model Orden {
   mensajerosGestionando Usuario[]              @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
   historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
+  rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -837,21 +839,48 @@ model PagoMensajeroMovimiento {
   @@map("pago_mensajero_movimiento")
 }
 
+// Feature 84: unidad de la periodicidad de una plantilla de gasto fijo. Con `periodicidadCantidad`
+// expresa el pedido del humano y cualquier otro ciclo: diaria = 1 dias; semanal = 1 semanas;
+// quincenal = 2 semanas; mensual = 1 meses; y tambien cada-3-dias, cada-6-meses, etc.
+enum PeriodicidadUnidad {
+  dias
+  semanas
+  meses
+}
+
 // Feature 45 (design §1.2): plantilla recurrente de GASTO FIJO. CONFIGURACION mutable (NO es
 // el libro wallet_movimiento, que es inmutable): SI lleva updatedAt y se edita/activa/
 // desactiva. NO se borra (R25): la desactivacion (activa=false) detiene la generacion futura
-// y preserva el rastro de que genero cada egreso. El cron mensual
-// (`/api/cron/generar-gastos-fijos`) lee las ACTIVAS y emite un egreso `egreso_gasto_fijo` en
-// la caja principal por cada una, idempotente por (plantilla, periodo YYYY-MM). Periodicidad
-// SIEMPRE mensual, dia 1 fijo (F1.4-b): no se modela `dia_del_mes`. RLS habilitada sin policies
-// (solo service role, patron wallet_movimiento/wallet_tienda_movimiento, R20).
+// y preserva el rastro de que genero cada egreso. El cron DIARIO
+// (`/api/cron/generar-gastos-fijos`, `0 6 * * *`) lee las ACTIVAS, filtra las que aplican HOY
+// segun su periodicidad (`lib/utils/periodicidad.ts`) y emite un egreso `egreso_gasto_fijo` en
+// la caja principal por cada una. RLS habilitada sin policies (solo service role, patron
+// wallet_movimiento/wallet_tienda_movimiento, R20).
+//
+// Feature 84 — periodicidad ARBITRARIA (antes: SIEMPRE mensual dia 1, clavada). Modelo
+// unidad + cantidad + fecha de cobro: `fechaCobro` es el PRIMER cobro y el ANCLA del ciclo
+// (antes de esa fecha no se cobra nada); los siguientes caen cada `periodicidadCantidad` x
+// `periodicidadUnidad` a partir de ella. En `meses` el dia se CLAMPEA al ultimo dia del mes
+// (ancla 31 -> 28/feb, 30/abr), nunca se saltea el mes.
+//
+// IDEMPOTENCIA (ojo, aca se puede duplicar plata): la clave `origen_id` es
+// `<plantillaId>:<periodo>` bajo el indice unico parcial (origen_tipo, origen_id, categoria).
+// Para `meses` el periodo SIGUE siendo `YYYY-MM` — mismo formato que pre-84, para que la clave
+// no cambie en el deploy y no haya doble cobro. Para `dias`/`semanas` es `YYYY-MM-DD`.
+// Ver `lib/utils/periodicidad.ts#periodoDe`.
+//
+// La periodicidad vive SOLO aca (plantilla -> `egreso_gasto_fijo`). Un `egreso_gasto_variable`
+// es un movimiento suelto sin plantilla: por construccion, un variable no puede ser periodico.
 model GastoFijoPlantilla {
-  id        String   @id @default(uuid())
-  concepto  String // nombre/concepto del gasto fijo (obligatorio, no vacio)
-  monto     Decimal  @db.Decimal(12, 2) // > 0
-  activa    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  id                   String             @id @default(uuid())
+  concepto             String // nombre/concepto del gasto fijo (obligatorio, no vacio)
+  monto                Decimal            @db.Decimal(12, 2) // > 0
+  activa               Boolean            @default(true)
+  periodicidadUnidad   PeriodicidadUnidad @default(meses) @map("periodicidad_unidad")
+  periodicidadCantidad Int                @default(1) @map("periodicidad_cantidad") // CHECK >= 1 en la migracion
+  fechaCobro           DateTime           @db.Date @map("fecha_cobro") // ancla: fecha del PRIMER cobro
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @default(now()) @updatedAt @map("updated_at")
 
   @@index([activa]) // cron: WHERE activa = true (R27)
   @@map("gasto_fijo_plantilla")
@@ -1031,6 +1060,7 @@ model ApiKey {
 enum JobTipo {
   liberar_reprogramadas // 91/92 anaden valores aditivamente
   geocodificacion // feature 91: geocodifica la direccion de UNA orden (payload { ordenId })
+  optimizacion_ruta // feature 92: reoptimiza la ruta de UN mensajero (payload { mensajeroId })
 
   @@map("job_tipo")
 }
@@ -1089,4 +1119,62 @@ model GeocodeCache {
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@map("geocode_cache")
+}
+
+// Feature 92 (design §1.1, R27/R30): estado de la ruta optimizada de un mensajero. Enum
+// NATIVO (patron JobEstado): vocabulario PROPIO y cerrado. `desactualizada` significa que
+// la ultima llamada al proveedor fallo y se CONSERVA el orden anterior (R27): la secuencia
+// previa NUNCA se borra ni se cae en silencio a `createdAt desc`.
+enum RutaEstado {
+  vigente
+  desactualizada
+
+  @@map("ruta_estado")
+}
+
+// Feature 92 (design §1.1, R23/R26/R27): cabecera de la ruta optimizada de UN mensajero
+// (una fila por mensajero, `mensajeroId` unico). Guarda el origen desde el que se calculo
+// la ruta con su fuente (gps | ultima_conocida | centroide) y la huella del conjunto de
+// paradas + origen, que es la guarda de coste R36 (mismo conjunto -> no se vuelve a pagar).
+// `ultimoError` guarda un mensaje AGREGADO: NUNCA credencial, token, direccion ni
+// coordenadas (R14). RLS habilitada sin policies (solo service role, va en la migracion):
+// guarda geolocalizacion de una persona y no es accesible desde el cliente.
+model RutaOptimizada {
+  id           String     @id @default(uuid())
+  mensajeroId  String     @unique @map("mensajero_id")
+  estado       RutaEstado @default(vigente)
+  calculadaAt  DateTime?  @map("calculada_at") // NULL = nunca se calculo
+  origenLat    Decimal?   @map("origen_lat") @db.Decimal(10, 7)
+  origenLng    Decimal?   @map("origen_lng") @db.Decimal(10, 7)
+  origenAt     DateTime?  @map("origen_at")
+  origenFuente String?    @map("origen_fuente")
+  huellaSet    String?    @map("huella_set")
+  ultimoError  String?    @map("ultimo_error")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  mensajero Usuario                @relation("RutaOptimizadaMensajero", fields: [mensajeroId], references: [id], onDelete: Cascade)
+  paradas   RutaOptimizadaParada[]
+
+  @@map("ruta_optimizada")
+}
+
+// Feature 92 (design §1.1/§5.2, R26): una parada POSICIONADA de la ruta. Los dos indices
+// unicos `(rutaId, ordenId)` y `(rutaId, secuencia)` son los que hacen IMPOSIBLE persistir
+// una secuencia con posiciones repetidas o con la misma orden dos veces: la invariante la
+// garantiza la DB, no solo el codigo. Una orden en reparto SIN fila aqui es una parada
+// "sin optimizar" (R28), que la lectura muestra al final.
+model RutaOptimizadaParada {
+  id        String @id @default(uuid())
+  rutaId    String @map("ruta_id")
+  ordenId   String @map("orden_id")
+  secuencia Int
+
+  ruta  RutaOptimizada @relation(fields: [rutaId], references: [id], onDelete: Cascade)
+  orden Orden          @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@unique([rutaId, ordenId])
+  @@unique([rutaId, secuencia])
+  @@index([ordenId])
+  @@map("ruta_optimizada_parada")
 }

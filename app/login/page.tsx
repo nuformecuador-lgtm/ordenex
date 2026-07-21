@@ -18,7 +18,7 @@ export default async function LoginPage(props: {
     const session = await sessionRepo.findValidById(sessionId);
 
     if (session) {
-      redirect("/");
+      redirect("/dashboard");
     }
   }
 

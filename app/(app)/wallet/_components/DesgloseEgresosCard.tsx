@@ -37,7 +37,7 @@ export function DesgloseEgresosCard({ desglose }: DesgloseEgresosCardProps) {
           {FILAS.map(({ key, label }) => (
             <div key={key} className="flex items-center justify-between gap-4">
               <dt className="text-sm text-muted-foreground">{label}</dt>
-              <dd className="text-sm font-medium text-destructive">
+              <dd className="text-sm font-medium text-danger-strong">
                 {money(desglose[key])}
               </dd>
             </div>
@@ -45,7 +45,7 @@ export function DesgloseEgresosCard({ desglose }: DesgloseEgresosCardProps) {
 
           <div className="flex items-center justify-between gap-4 border-t pt-3">
             <dt className="text-sm font-medium">Total de egresos</dt>
-            <dd className="text-base font-semibold text-destructive">
+            <dd className="text-base font-semibold text-danger-strong">
               {money(desglose.total)}
             </dd>
           </div>

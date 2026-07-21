@@ -1,10 +1,13 @@
 import type { EstadoUsuario } from "@prisma/client";
+import type { VariantProps } from "class-variance-authority";
 
 import type { Column } from "@/components/shared/DataTable";
+import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
 import type { UsuarioListItemDTO } from "@/lib/types/usuario";
+
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
 // Etiquetas de rol centralizadas en `lib/auth/rol-label`; se reexportan aquí para
 // no romper a los consumidores existentes de este módulo. Las de estado siguen
@@ -18,28 +21,17 @@ export const ESTADO_LABELS: Record<EstadoUsuario, string> = {
   bloqueado: "Bloqueado",
 };
 
-const ESTADO_CLASSES: Record<EstadoUsuario, string> = {
-  activo: "bg-success-soft text-[#065f46] dark:bg-success/15 dark:text-success",
-  inactivo:
-    "bg-asfalto-1 text-asfalto-7 dark:bg-asfalto-7/20 dark:text-asfalto-2",
-  pendiente:
-    "bg-warning-soft text-[#92400e] dark:bg-warning/15 dark:text-warning",
-  bloqueado:
-    "bg-danger-soft text-[#991b1b] dark:bg-danger/15 dark:text-danger",
+/** Estado del usuario -> variante semántica de la primitiva `Badge` (sin hex). */
+const ESTADO_VARIANT: Record<EstadoUsuario, BadgeVariant> = {
+  activo: "success",
+  inactivo: "secondary",
+  pendiente: "warning",
+  bloqueado: "danger",
 };
 
 /** Chip legible del estado del usuario (R14). */
 export function EstadoUsuarioBadge({ value }: { value: EstadoUsuario }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
-        ESTADO_CLASSES[value],
-      )}
-    >
-      {ESTADO_LABELS[value] ?? value}
-    </span>
-  );
+  return <Badge variant={ESTADO_VARIANT[value]}>{ESTADO_LABELS[value] ?? value}</Badge>;
 }
 
 export interface UsuariosColumnsActions {

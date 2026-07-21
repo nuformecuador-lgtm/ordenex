@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarSaldosTiendasAction } from "@/lib/actions/wallet-tienda";
 
 import { SaldosTiendasTable } from "./_components/SaldosTiendasTable";
@@ -18,7 +19,9 @@ import { SaldosTiendasTable } from "./_components/SaldosTiendasTable";
  */
 export default async function WalletTiendasPage() {
   const actor = await resolveActorFromSession();
-  if (!actor || actor.rol !== "maestro") {
+  // Feature 94 (paridad adm↔maestro): los saldos por tienda los ven los roles de
+  // ACCESO TOTAL (`maestro`/`admin`); cualquier otro rol (o sin sesion) → notFound (R20).
+  if (!actor || !esAccesoTotal(actor.rol)) {
     notFound(); // R20: rol no autorizado / sin sesion → sin exponer datos
   }
 
@@ -30,15 +33,13 @@ export default async function WalletTiendasPage() {
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-8 p-6">
-      <PageHeader
-        title="Saldos por tienda"
-        description="Saldo a favor de cada tienda para efectos de liquidación"
-      />
-
+    <AppPage
+      title="Saldos por tienda"
+      description="Saldo a favor de cada tienda para efectos de liquidación"
+    >
       <section aria-label="Saldos por tienda" className="flex flex-col gap-4">
         <SaldosTiendasTable tiendas={tiendasResult.tiendas} />
       </section>
-    </section>
+    </AppPage>
   );
 }

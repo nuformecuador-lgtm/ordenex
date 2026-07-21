@@ -23,6 +23,9 @@ import type {
   RutearSateliteServiceResult,
 } from "@/lib/interfaces/services/IGuiaAsignacionService";
 import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
+import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
+import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // R27: unicos estados de origen validos para "Generar guia".
 const ORIGEN_GENERAR_GUIA = new Set(["en_fulfillment", "en_preparacion"]);
@@ -62,7 +65,43 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
   constructor(
     private readonly repo: IOrdenRepository,
     private readonly zonaRepo: IZonaRepository,
+    // Feature 92 (R8): gate de asignabilidad por coordenadas. Dep NUEVA al final, patron
+    // de las features 30/41/47. Es REQUERIDA a proposito: si fuera opcional, olvidarla en
+    // una fabrica nueva desactivaria el gate en silencio y volveria a entrar a la ruta una
+    // orden sin coordenadas, que es exactamente lo que esta feature existe para impedir.
+    private readonly asignabilidad: IAsignabilidadCoordenadasService,
   ) {}
+
+  /**
+   * Feature 92 (R8) — guarda comun de los DOS writers de `mensajero_asignado_id` de este
+   * service. Devuelve el `detalle` de las ordenes NO asignables (vacio si todas lo son).
+   *
+   * TODO-O-NADA POR LOTE: es el contrato ya vigente de estos services (una sola orden
+   * conflictiva aborta el lote entero sin efectos), no se cambia aqui.
+   *
+   * Solo se evaluan las ordenes que REALMENTE reciben mensajero: una orden no-GAM que se
+   * rutea a satelite no se asigna a nadie, asi que su falta de coordenadas no bloquea nada
+   * todavia (se le exigiran cuando la bodega satelite la asigne, via
+   * `AsignacionSateliteService`).
+   */
+  private async gateCoordenadas(ordenIds: string[]): Promise<DetalleConflicto[]> {
+    if (ordenIds.length === 0) return [];
+    const filas = await this.repo.findParaAsignabilidad(ordenIds);
+    const estados = await this.asignabilidad.evaluar(filas);
+    const detalle: DetalleConflicto[] = [];
+    for (const ordenId of ordenIds) {
+      const estado = estados.get(ordenId);
+      if (esAsignable(estado)) continue;
+      // `estado` indefinido = la orden no existe (el gate devuelve una entrada por cada
+      // fila recibida). No deberia pasar aqui —las guardas de existencia corren antes—,
+      // pero se trata como NO asignable: nunca se deja pasar por omision.
+      detalle.push({
+        ordenId,
+        motivo: estado === undefined ? "orden no existe" : motivoAsignabilidad(estado),
+      });
+    }
+    return detalle;
+  }
 
   /**
    * Ajuste maestro: de `zonaIds` (zonas destino satelite), devuelve las que estan
@@ -93,7 +132,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
 
   async generarGuia(input: GenerarGuiaInput, actor: Actor): Promise<GenerarGuiaServiceResult> {
     // --- Autorizacion (R11-R13/R16), antes de tocar datos ---
-    if (actor.rol !== "maestro") return { status: "forbidden" };
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     const { decisiones } = input;
     if (decisiones.length === 0) return { status: "ok", resultados: [] };
@@ -192,6 +231,15 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       if (detalleZona.length > 0) return { status: "conflict", detalle: detalleZona };
     }
 
+    // --- Feature 92/R8: gate de asignabilidad por coordenadas, ANTES de persistir ---
+    // Solo las ordenes GAM que reciben mensajero: son las unicas que escriben
+    // `mensajero_asignado_id` y, por tanto, las unicas que entran a la ruta de alguien.
+    const idsQueRecibenMensajero = decisiones
+      .filter((d) => d.mensajeroId !== null && ordenMap.get(d.ordenId)?.zonaId === centralZonaId)
+      .map((d) => d.ordenId);
+    const detalleCoords = await this.gateCoordenadas(distinct(idsQueRecibenMensajero));
+    if (detalleCoords.length > 0) return { status: "conflict", detalle: detalleCoords };
+
     const [estatusEsperaId, estatusBodegaId, estatusRutaSateliteId] = await Promise.all([
       this.repo.findEstatusIdByValue(ESTATUS_EN_ESPERA_ACEPTACION),
       this.repo.findEstatusIdByValue(ESTATUS_EN_BODEGA),
@@ -273,7 +321,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     actor: Actor,
   ): Promise<AsignarBodegaServiceResult> {
     // --- Autorizacion (R11-R13/R16) ---
-    if (actor.rol !== "maestro") return { status: "forbidden" };
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     const ordenIds = distinct(input.ordenIds);
     if (ordenIds.length === 0) return { status: "ok", resultados: [] };
@@ -339,6 +387,12 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
+    // --- Feature 92/R8: gate de asignabilidad por coordenadas, ANTES de persistir ---
+    // Aqui TODAS las ordenes del lote reciben mensajero (es la accion "asignar desde
+    // bodega"), asi que se evalua el lote entero.
+    const detalleCoords = await this.gateCoordenadas(ordenIds);
+    if (detalleCoords.length > 0) return { status: "conflict", detalle: detalleCoords };
+
     const estatusEsperaId = await this.repo.findEstatusIdByValue(ESTATUS_EN_ESPERA_ACEPTACION);
     if (estatusEsperaId === null) {
       return {
@@ -366,7 +420,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     actor: Actor,
   ): Promise<RutearSateliteServiceResult> {
     // --- Autorizacion (R16) ---
-    if (actor.rol !== "maestro") return { status: "forbidden" };
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     const ordenIds = distinct(input.ordenIds);
     if (ordenIds.length === 0) return { status: "ok", resultados: [] };

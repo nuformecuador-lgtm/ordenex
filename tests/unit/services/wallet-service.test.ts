@@ -11,6 +11,7 @@ import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 // maestro; manual inmutable (no update/delete); DTOs con montos STRING.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
+const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" }; // feature 94: paridad con maestro
 const OTRO: Actor = { usuarioId: "u-otro", rol: "adminSatelite" };
 
 function mov(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO {
@@ -51,6 +52,14 @@ describe("WalletService.listarMovimientos (R19/R20)", () => {
     expect(repo.listar).not.toHaveBeenCalled();
   });
 
+  it("feature 94: admin -> ok (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+    const r = await svc.listarMovimientos({ page: 1, pageSize: 20 }, ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.listar).toHaveBeenCalled();
+  });
+
   it("R20: maestro -> ok; pasa filtros al repo; DTO con monto STRING", async () => {
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient);
@@ -84,6 +93,14 @@ describe("WalletService.verBalance (R16/R19)", () => {
     expect(repo.agregarBalance).not.toHaveBeenCalled();
   });
 
+  it("feature 94: admin -> balance derivado (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+    const r = await svc.verBalance({ page: 1, pageSize: 20 }, ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.agregarBalance).toHaveBeenCalled();
+  });
+
   it("R16: maestro -> balance derivado (STRING+signo) del conjunto filtrado", async () => {
     const repo = buildRepo();
     const svc = new WalletService(repo, writeClient);
@@ -110,6 +127,18 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     );
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.crearMovimientos).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> crea manual (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+    const r = await svc.registrarMovimientoManual(
+      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      ADMIN,
+    );
+    expect(r.status).toBe("ok");
+    const arg = (repo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(arg[0]).toMatchObject({ registradoPor: "u-admin", origenTipo: "manual" });
   });
 
   it("R15: maestro -> crea manual con origen_tipo manual, origen_id null, registrado_por actor", async () => {

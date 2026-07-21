@@ -1,16 +1,25 @@
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
+import type { PeriodicidadUnidad } from "@/lib/utils/periodicidad";
 
 // Feature 45 (design §2.1b) — contrato del repositorio de PLANTILLAS de gasto fijo
 // (configuracion recurrente mutable). Solo queries Prisma; sin logica de negocio. Money-safe:
 // el `monto` entra como STRING y sale como STRING (toFixed(2)) en el DTO. NO expone `delete`
 // (R25): la desactivacion (setActiva) es el mecanismo para dejar de generar.
 
-export interface CrearPlantillaInput {
+// Feature 84 — periodicidad del ciclo, comun a crear/actualizar. `fechaCobro` es el ancla
+// (primer cobro) como `YYYY-MM-DD`; la impl la convierte a la columna DATE.
+export interface PeriodicidadInput {
+  periodicidadUnidad: PeriodicidadUnidad;
+  periodicidadCantidad: number; // >= 1 (CHECK en la DB)
+  fechaCobro: string; // `YYYY-MM-DD`
+}
+
+export interface CrearPlantillaInput extends PeriodicidadInput {
   concepto: string;
   monto: string; // STRING > 0 -> Prisma.Decimal en la impl
 }
 
-export interface ActualizarPlantillaInput {
+export interface ActualizarPlantillaInput extends PeriodicidadInput {
   concepto: string;
   monto: string; // STRING > 0
 }

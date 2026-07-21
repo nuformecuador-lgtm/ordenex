@@ -35,14 +35,17 @@ export interface PorAceptarSectionProps<T extends PorAceptarOrdenBase> {
   nuevasLabel: (cantidad: number) => ReactNode;
   /** Órdenes a listar en este apartado. */
   ordenes: T[];
-  /** Lote: acepta TODAS las órdenes listadas (recibe todos sus ids). */
-  onAceptarTodas: (ids: string[]) => void;
-  /** Una: acepta la orden indicada por su id. */
-  onAceptarUna: (id: string) => void;
-  /** Texto del botón en lote ("Recoger todas" / "Aceptar todas"). */
-  textoBotonTodas: string;
-  /** Texto del botón por-orden ("Recoger" / "Aceptar"). */
-  textoBotonUna: string;
+  /**
+   * Lote: acepta TODAS las órdenes listadas (recibe todos sus ids). Opcional: solo se
+   * usa con `mostrarAcciones` (una lista de solo-visualización no lo necesita).
+   */
+  onAceptarTodas?: (ids: string[]) => void;
+  /** Una: acepta la orden indicada por su id. Opcional (ver `onAceptarTodas`). */
+  onAceptarUna?: (id: string) => void;
+  /** Texto del botón en lote ("Recoger todas" / "Aceptar todas"). Opcional. */
+  textoBotonTodas?: string;
+  /** Texto del botón por-orden ("Recoger" / "Aceptar"). Opcional. */
+  textoBotonUna?: string;
   /** Texto cuando no hay órdenes. */
   vacio: string;
   /** Render opcional del detalle de cada orden (evita acoplar el detalle). */
@@ -77,7 +80,7 @@ export function PorAceptarSection<T extends PorAceptarOrdenBase>({
         {mostrarAcciones ? (
           <Button
             type="button"
-            onClick={() => onAceptarTodas(ordenes.map((o) => o.id))}
+            onClick={() => onAceptarTodas?.(ordenes.map((o) => o.id))}
             disabled={ordenes.length === 0}
           >
             {textoBotonTodas}
@@ -111,7 +114,7 @@ export function PorAceptarSection<T extends PorAceptarOrdenBase>({
                       <Button
                         type="button"
                         size="sm"
-                        onClick={() => onAceptarUna(orden.id)}
+                        onClick={() => onAceptarUna?.(orden.id)}
                       >
                         {textoBotonUna}
                       </Button>

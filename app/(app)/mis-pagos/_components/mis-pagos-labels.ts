@@ -52,7 +52,7 @@ export const SIGNO_BADGE: Record<
 
 /** Color del monto de la cuenta por pagar segun su signo. Nunca negativo en flujo normal (R16). */
 export const CUENTA_COLOR: Record<CuentaPorPagarSigno, string> = {
-  positivo: "text-amber-600 dark:text-amber-400",
+  positivo: "text-warning-strong",
   cero: "text-muted-foreground",
 };
 

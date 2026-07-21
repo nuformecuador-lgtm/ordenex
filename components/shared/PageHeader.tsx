@@ -25,7 +25,7 @@ export function PageHeader({
   const today = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   return (
-    <header className="flex flex-row gap-3 px-5 py-4 text-navy border-b border-navy/20 mb-6 justify-between">
+    <header className="flex flex-row gap-3 px-5 py-4 text-navy border-b border-navy/20 justify-between">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

@@ -23,8 +23,8 @@ const SIGNO_BADGE: Record<
 
 /** Color del monto del saldo segun su signo (verde a favor / rojo en contra / neutro). */
 const SALDO_COLOR: Record<SaldoTiendaResumenDTO["signo"], string> = {
-  positivo: "text-emerald-600 dark:text-emerald-400",
-  negativo: "text-destructive",
+  positivo: "text-success-strong",
+  negativo: "text-danger-strong",
   cero: "text-muted-foreground",
 };
 

@@ -48,6 +48,8 @@ function makeAsignacion(
   over: Partial<MiAsignacionDTO> & { id: string; numGuia: number },
 ): MiAsignacionDTO {
   return {
+    // Feature 92/R28: sin posicion en la ruta salvo que el test la fije.
+    secuenciaRuta: null,
     numRemision: "REM-001",
     estatusValue: "en_espera_aceptacion",
     destinatario: "Ana Pérez",
@@ -56,6 +58,9 @@ function makeAsignacion(
     producto: "Caja mediana",
     peso: 1.5,
     montoCobrar: 150,
+    // Feature 97: coords de la parada (feature 91) para el mapa de ruta.
+    latitud: 9.9281244,
+    longitud: -84.0907246,
     notas: null,
     tiendaNombre: "Tienda X",
     zonaNombre: "GAM",

@@ -3,19 +3,27 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Modal } from "@/components/shared/Modal";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import {
   escogerParaGestion,
   liberarGestion,
-  recogerAsignaciones,
 } from "@/lib/actions/mis-asignaciones";
-import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
+import type {
+  MiAsignacionDTO,
+  RutaResumenDTO,
+} from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
 import { EscanerRecoger } from "./EscanerRecoger";
+import { InputRecoger } from "./InputRecoger";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
+import { RutaMapa } from "./RutaMapa";
+import { SincronizarRutaButton } from "./SincronizarRutaButton";
+import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano): módulo del mensajero.
 // Recibe los DOS grupos ya resueltos por el Server Component padre (datos
@@ -33,22 +41,56 @@ import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 export interface MisAsignacionesModuleProps {
   /** Órdenes en `en_espera_aceptacion` (por recoger). */
   porRecoger: MiAsignacionDTO[];
-  /** Órdenes en `en_reparto` (por gestionar). */
+  /** Órdenes en `en_reparto` (por gestionar), YA ordenadas por la ruta (R28). */
   porGestionar: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
   ordenEnGestionId: string | null;
+  /** Feature 97 (R27/R28/R30): estado de la ruta optimizada que produjo el orden. */
+  ruta: RutaResumenDTO;
 }
 
 export function MisAsignacionesModule({
   porRecoger,
   porGestionar,
   ordenEnGestionId,
+  ruta,
 }: MisAsignacionesModuleProps) {
   const router = useRouter();
   const toast = useToast();
 
-  // Confirmación de recogida (lote o de a una): ids a recoger; null = cerrado.
-  const [recogerIds, setRecogerIds] = useState<string[] | null>(null);
+  // Feature 97: última ubicación GPS capturada por el botón de sincronización. Se usa como
+  // punto de partida del mapa. Sobrevive a `router.refresh()` (estado de cliente), así que el
+  // origen se mantiene dibujado tras recalcular la ruta. NO se pide GPS al montar (R25: nunca
+  // se fuerza el permiso; solo se captura cuando el mensajero pulsa "Sincronizar ruta").
+  const [ubicacionActual, setUbicacionActual] = useState<RutaMapaOrigen | null>(
+    null,
+  );
+  const [mostrarMapa, setMostrarMapa] = useState(true);
+
+  // R28/mapa: paradas dibujables = las en reparto CON coordenadas (feature 91). Las que no
+  // tienen coords se omiten del mapa pero siguen en la lista (no se pierden).
+  const paradasMapa = useMemo<RutaMapaParada[]>(
+    () =>
+      porGestionar
+        .filter((o) => o.latitud !== null && o.longitud !== null)
+        .map((o) => ({
+          id: o.id,
+          secuencia: o.secuenciaRuta,
+          lat: o.latitud as number,
+          lng: o.longitud as number,
+          etiqueta: `${o.numRemision} · ${o.destinatario}`,
+        })),
+    [porGestionar],
+  );
+
+  // R30: la ruta no refleja el estado real si la última optimización falló
+  // (`desactualizada`) o si entraron paradas nuevas sin posición todavía.
+  const rutaDesactualizada =
+    ruta.estado === "desactualizada" || ruta.paradasSinOptimizar > 0;
+  // R24: aviso de que el punto de partida usado es aproximado (no GPS reciente).
+  const origenAproximado =
+    ruta.origenFuente === "centroide" || ruta.origenFuente === "ultima_conocida";
+
   // Orden que el mensajero eligió explícitamente para el panel de detalle. Es
   // solo una PREFERENCIA: la orden mostrada se DERIVA (ver `detalleOrden`) para
   // no quedar pegada a una orden que ya no existe tras `router.refresh()`.
@@ -71,22 +113,6 @@ export function MisAsignacionesModule({
     }
     return porGestionar[0];
   }, [porGestionar, ordenEnGestionId, seleccionId]);
-
-  async function confirmRecoger() {
-    if (!recogerIds) return;
-    const result = await recogerAsignaciones({ ordenIds: recogerIds });
-    if (result.status === "ok") {
-      toast.success(`${result.recogidas.length} orden(es) recogida(s).`);
-      setRecogerIds(null);
-      router.refresh();
-      return;
-    }
-    toast.error(
-      result.status === "conflict"
-        ? "Alguna orden ya no está por recoger."
-        : "No se pudieron recoger las órdenes.",
-    );
-  }
 
   // Seleccionar una card la lleva al panel de detalle. Bloqueada si hay otra
   // gestión activa (R19/R20): no se puede cambiar la orden del panel.
@@ -132,26 +158,26 @@ export function MisAsignacionesModule({
   return (
     <div className="flex flex-col gap-8">
       {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
-      {/* Recoger por escaneo: al escanear la etiqueta de un paquete se ACEPTA la
-          orden con la MISMA action que el botón "Recoger" (recogerAsignaciones). El
-          escáner resuelve el num_guia contra `porRecoger` para obtener el id. */}
+      {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
+          contra `porRecoger` (restricción "asignada a mí") y aceptan con la MISMA action
+          `recogerAsignaciones`, directo al confirmar (sin modal):
+            (1) input de número de guía tecleado + Enter/botón;
+            (2) escáner de cámara (QR de la etiqueta -> num_guia). */}
+      <InputRecoger porRecoger={porRecoger} onRecogida={() => router.refresh()} />
       <EscanerRecoger
         porRecoger={porRecoger}
         onRecogida={() => router.refresh()}
       />
 
-      {/* Reutiliza la sección compartida "por aceptar": banner con contador de
-          nuevas + "Recoger todas" (lote, R16) + "Recoger" por-orden (R14, única
-          acción). La confirmación en Modal y la action `recogerAsignaciones` se
-          disparan igual que antes, vía `setRecogerIds`. */}
+      {/* Lista de SOLO-VISUALIZACIÓN (feature 96): reutiliza la sección compartida "por
+          aceptar" con `mostrarAcciones={false}` (ya no hay botones "Recoger todas" /
+          "Recoger"). El mensajero sigue viendo qué guías tiene por recoger; la acción
+          vive en el input y el escáner de arriba. */}
       <PorAceptarSection
         titulo="Por recoger"
         nuevasLabel={(n) => `${n} Órdenes nuevas asignadas`}
         ordenes={porRecoger}
-        onAceptarTodas={(ids) => setRecogerIds(ids)}
-        onAceptarUna={(id) => setRecogerIds([id])}
-        textoBotonTodas="Recoger todas"
-        textoBotonUna="Recoger"
+        mostrarAcciones={false}
         vacio="No hay órdenes por recoger."
         renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
       />
@@ -164,7 +190,66 @@ export function MisAsignacionesModule({
         aria-label="En reparto / por gestionar"
         className="flex flex-col gap-3"
       >
-        <h2 className="text-lg font-semibold">En reparto / por gestionar</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">En reparto / por gestionar</h2>
+          {/* R31/R32: sincronización manual de la ruta. El botón captura el GPS del
+              navegador (best-effort) y lo eleva aquí para dibujar el origen en el mapa. */}
+          <SincronizarRutaButton onUbicacion={setUbicacionActual} />
+        </div>
+
+        {/* R30: aviso VISIBLE de que el orden mostrado no está actualizado. */}
+        {rutaDesactualizada ? (
+          <Alert variant="destructive">
+            <AlertTitle>El orden mostrado no está actualizado</AlertTitle>
+            <AlertDescription>
+              La ruta cambió desde el último cálculo. Pulsa «Sincronizar ruta»
+              para recalcular el orden de entrega.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {/* R28/mapa: recorrido optimizado sobre OpenStreetMap. Solo si hay paradas
+            con coordenadas; las paradas sin coords van igual en la lista de abajo. */}
+        {paradasMapa.length > 0 && mostrarMapa ? (
+          <div
+            aria-label="Mapa de ruta"
+            role="group"
+            className="flex flex-col gap-2"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">
+                Mapa de ruta
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={() => setMostrarMapa(false)}
+              >
+                Ocultar mapa
+              </Button>
+            </div>
+            {origenAproximado ? (
+              <p className="text-xs text-muted-foreground">
+                El punto de partida es aproximado (no se usó tu ubicación GPS
+                reciente).
+              </p>
+            ) : null}
+            <RutaMapa paradas={paradasMapa} origen={ubicacionActual} />
+          </div>
+        ) : null}
+        {paradasMapa.length > 0 && !mostrarMapa ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="w-fit"
+            onClick={() => setMostrarMapa(true)}
+          >
+            Mostrar mapa de ruta
+          </Button>
+        ) : null}
+
         {porGestionar.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No hay órdenes en reparto.
@@ -192,7 +277,21 @@ export function MisAsignacionesModule({
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-semibold text-foreground">
+                      <span className="flex items-center gap-2 font-semibold text-foreground">
+                        {/* R28: nº de parada en la ruta optimizada. */}
+                        {orden.secuenciaRuta !== null ? (
+                          <>
+                            <span className="sr-only">
+                              Parada {orden.secuenciaRuta} de la ruta
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
+                            >
+                              {orden.secuenciaRuta}
+                            </span>
+                          </>
+                        ) : null}
                         {orden.numRemision}
                       </span>
                       {esActiva ? (
@@ -205,6 +304,14 @@ export function MisAsignacionesModule({
                         </span>
                       ) : null}
                     </div>
+                    {/* R28: las paradas que entraron tras la última optimización
+                        no tienen posición todavía; el backend ya las ordena al
+                        final, aquí solo se marcan. */}
+                    {orden.secuenciaRuta === null ? (
+                      <Badge variant="outline" className="w-fit">
+                        Pendiente de optimizar
+                      </Badge>
+                    ) : null}
                     {/* Mientras hay una gestión activa en OTRA orden, esta card
                         oculta sus detalles (destinatario/producto/teléfono) y solo
                         muestra el Nº y el aviso: foco en la orden en gestión. */}
@@ -251,23 +358,6 @@ export function MisAsignacionesModule({
           />
         ) : null}
       </section>
-
-      {/* Confirmación de recogida (lote o de a una). */}
-      <Modal
-        open={recogerIds !== null}
-        onOpenChange={(next) => {
-          if (!next) setRecogerIds(null);
-        }}
-        title="Recoger órdenes"
-        description={
-          recogerIds
-            ? `Vas a recoger ${recogerIds.length} orden(es). Pasarán a "en reparto".`
-            : undefined
-        }
-        confirmLabel="Recoger"
-        onConfirm={confirmRecoger}
-        closeOnConfirm={false}
-      />
     </div>
   );
 }

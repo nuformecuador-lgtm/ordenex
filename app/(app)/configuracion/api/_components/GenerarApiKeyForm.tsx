@@ -1,14 +1,9 @@
 "use client";
 
-import {
-  forwardRef,
-  useImperativeHandle,
-  useState,
-  type ReactNode,
-} from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/shared/FormField";
 import {
   generarApiKeySchema,
   type GenerarApiKeyResult,
@@ -62,45 +57,17 @@ export const GenerarApiKeyForm = forwardRef<GenerarApiKeyFormHandle>(
 
     return (
       <div className="flex flex-col gap-3">
-        <Field
+        <FormField
           id="identificador"
           label="Identificador"
-          errors={errors.identificador}
+          error={errors.identificador}
         >
           <Input
-            id="identificador"
             value={identificador}
-            aria-invalid={errors.identificador ? true : undefined}
             onChange={(e) => setIdentificador(e.target.value)}
           />
-        </Field>
+        </FormField>
       </div>
     );
   },
 );
-
-/** Envoltorio accesible de un campo con label y errores (i18n vía props). */
-function Field({
-  id,
-  label,
-  errors,
-  children,
-}: {
-  id: string;
-  label: string;
-  errors?: string[];
-  children: ReactNode;
-}) {
-  const errorId = `${id}-error`;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children}
-      {errors && errors.length > 0 ? (
-        <p id={errorId} role="alert" className="text-sm text-destructive">
-          {errors.join(", ")}
-        </p>
-      ) : null}
-    </div>
-  );
-}

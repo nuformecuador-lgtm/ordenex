@@ -20,6 +20,13 @@ export interface MiAsignacionRow {
   producto: string;
   peso: number | null;
   montoCobrar: number | null;
+  /**
+   * Feature 97: coordenadas geocodificadas de la parada (feature 91: `orden.latitud`/
+   * `orden.longitud`, `Decimal(10,7)`). Serializadas a number|null con el MISMO patron que
+   * `montoCobrar` (`.toNumber()` con guarda de null). `null` = orden aun sin geocodificar.
+   */
+  latitud: number | null;
+  longitud: number | null;
   notas: string | null;
   tiendaNombre: string;
   zonaNombre: string;

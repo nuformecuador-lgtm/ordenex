@@ -96,7 +96,7 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
   it("R1: rol maestro renderiza el dashboard maestro con el panel de postulaciones", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
 
-    const { default: Home } = await import("@/app/(app)/page");
+    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(
@@ -110,7 +110,7 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
   it("R1: rol admin también renderiza el dashboard maestro", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "admin" });
 
-    const { default: Home } = await import("@/app/(app)/page");
+    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(
@@ -121,7 +121,7 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
   it("R2: rol adminTienda conserva el Panel de tienda (feature 26 intacta)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "adminTienda" });
 
-    const { default: Home } = await import("@/app/(app)/page");
+    const { default: Home } = await import("@/app/(app)/dashboard/page");
     renderHome(await Home());
 
     expect(
@@ -140,7 +140,7 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
       );
       cookieGetMock.mockReturnValue(undefined);
 
-      const { default: Home } = await import("@/app/(app)/page");
+      const { default: Home } = await import("@/app/(app)/dashboard/page");
       renderHome(await Home());
 
       expect(screen.getByText("Bienvenido")).toBeInTheDocument();
@@ -156,7 +156,7 @@ describe("app/(app)/page.tsx — ramificación maestro/admin (feature 23)", () =
   it("R4: el rol se resuelve server-side vía resolveActorFromSession", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
 
-    const { default: Home } = await import("@/app/(app)/page");
+    const { default: Home } = await import("@/app/(app)/dashboard/page");
     await Home();
 
     expect(resolveActorMock).toHaveBeenCalledTimes(1);

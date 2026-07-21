@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   listarMisMovimientosAction,
@@ -40,12 +40,10 @@ export default async function MiWalletPage() {
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-8 p-6">
-      <PageHeader
-        title="Mi wallet"
-        description="Tu saldo a favor: COD recaudado menos los descuentos de Ordenex, con el desglose por cierre y concepto"
-      />
-
+    <AppPage
+      title="Mi wallet"
+      description="Tu saldo a favor: COD recaudado menos los descuentos de Ordenex, con el desglose por cierre y concepto"
+    >
       <MiWalletModule
         movimientos={movimientosResult.data.movimientos}
         total={movimientosResult.data.total}
@@ -53,6 +51,6 @@ export default async function MiWalletPage() {
         pageSize={movimientosResult.data.pageSize}
         saldo={saldoResult.saldo}
       />
-    </section>
+    </AppPage>
   );
 }

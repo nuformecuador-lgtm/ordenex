@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 
 describe("app/recuperar-contrasena/page.tsx — sesion activa (R12)", () => {
-  it("redirige a / cuando la cookie de sesion es valida segun SessionRepository.findValidById", async () => {
+  it("redirige a /dashboard cuando la cookie de sesion es valida segun SessionRepository.findValidById", async () => {
     const { default: RecuperarContrasenaPage } = await import(
       "@/app/recuperar-contrasena/page"
     );
@@ -54,7 +54,9 @@ describe("app/recuperar-contrasena/page.tsx — sesion activa (R12)", () => {
       createdAt: new Date(),
     });
 
-    await expect(RecuperarContrasenaPage()).rejects.toThrow("NEXT_REDIRECT:/");
+    await expect(RecuperarContrasenaPage()).rejects.toThrow(
+      "NEXT_REDIRECT:/dashboard",
+    );
     expect(findValidByIdMock).toHaveBeenCalledWith("session-abc");
   });
 

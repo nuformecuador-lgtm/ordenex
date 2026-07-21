@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { MapPin } from "lucide-react";
 import useSWR from "swr";
 
 import { DataTable } from "@/components/shared/DataTable";
@@ -130,7 +131,16 @@ export function ZonasModule({ initialData }: ZonasModuleProps) {
         ariaLabel="Zonas"
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las zonas" : null}
-        emptyMessage="No hay zonas"
+        emptyState={{
+          icon: MapPin,
+          title: "No hay zonas",
+          description: "Crea la primera zona para agrupar los distritos de reparto.",
+          action: (
+            <Button type="button" onClick={abrirCrear}>
+              Crear zona
+            </Button>
+          ),
+        }}
       />
 
       <Pagination

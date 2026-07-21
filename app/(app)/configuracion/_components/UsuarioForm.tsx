@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  forwardRef,
-  useImperativeHandle,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Copy } from "lucide-react";
 
@@ -15,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { FormField } from "@/components/shared/FormField";
 import {
   actualizarUsuarioSchema,
   crearUsuarioSchema,
@@ -284,66 +279,76 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
 
     return (
       <div className="flex flex-col gap-3">
-        <Field id="nombre" label="Nombre" errors={errors.nombre}>
+        <FormField id="nombre" label="Nombre" error={errors.nombre}>
           <Input
-            id="nombre"
             value={form.nombre}
-            aria-invalid={errors.nombre ? true : undefined}
             onChange={(e) => setField("nombre", e.target.value)}
           />
-        </Field>
+        </FormField>
 
-        <Field id="email" label="Email" errors={errors.email}>
+        <FormField id="email" label="Email" error={errors.email}>
           <Input
-            id="email"
             type="email"
             value={form.email}
             disabled={isEditar}
-            aria-invalid={errors.email ? true : undefined}
             onChange={(e) => setField("email", e.target.value)}
           />
-        </Field>
+        </FormField>
 
-        <Field id="telefono" label="Teléfono" errors={errors.telefono}>
+        <FormField id="telefono" label="Teléfono" error={errors.telefono}>
           <Input
-            id="telefono"
             value={form.telefono}
-            aria-invalid={errors.telefono ? true : undefined}
             onChange={(e) => setField("telefono", e.target.value)}
           />
-        </Field>
+        </FormField>
 
-        <Field
+        <FormField
           id="tipoIdentificacionId"
           label="Tipo de documento"
-          errors={errors.tipoIdentificacionId}
+          error={errors.tipoIdentificacionId}
         >
-          <Select
-            aria-label="Tipo de documento"
-            value={form.tipoIdentificacionId}
-            options={tipoOptions}
-            onValueChange={(v) => setField("tipoIdentificacionId", v)}
-          />
-        </Field>
+          {({
+            "aria-invalid": ariaInvalid,
+            "aria-describedby": ariaDescribedBy,
+          }) => (
+            <Select
+              aria-label="Tipo de documento"
+              value={form.tipoIdentificacionId}
+              options={tipoOptions}
+              onValueChange={(v) => setField("tipoIdentificacionId", v)}
+              aria-invalid={ariaInvalid}
+              aria-describedby={ariaDescribedBy}
+            />
+          )}
+        </FormField>
 
-        <Field id="cedula" label="Número de documento" errors={errors.cedula}>
+        <FormField
+          id="cedula"
+          label="Número de documento"
+          error={errors.cedula}
+        >
           <Input
-            id="cedula"
             value={form.cedula}
             disabled={isEditar}
-            aria-invalid={errors.cedula ? true : undefined}
             onChange={(e) => setField("cedula", e.target.value)}
           />
-        </Field>
+        </FormField>
 
-        <Field id="rolId" label="Rol" errors={errors.rolId}>
-          <Select
-            aria-label="Rol"
-            value={form.rolId}
-            options={rolOptions}
-            onValueChange={(v) => setField("rolId", v)}
-          />
-        </Field>
+        <FormField id="rolId" label="Rol" error={errors.rolId}>
+          {({
+            "aria-invalid": ariaInvalid,
+            "aria-describedby": ariaDescribedBy,
+          }) => (
+            <Select
+              aria-label="Rol"
+              value={form.rolId}
+              options={rolOptions}
+              onValueChange={(v) => setField("rolId", v)}
+              aria-invalid={ariaInvalid}
+              aria-describedby={ariaDescribedBy}
+            />
+          )}
+        </FormField>
 
         {esAdminTienda ? (
           <div className="flex items-center justify-between gap-2">
@@ -360,15 +365,26 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
         {/* Feature 24/R27: la zona solo se muestra (y se envía) para
             mensajero/adminSatelite, y es OBLIGATORIA para esos roles. */}
         {esRolConZona ? (
-          <Field id="zonaId" label="Zona (obligatoria)" errors={errors.zonaId}>
-            <Select
-              aria-label="Zona"
-              value={form.zonaId}
-              options={zonaOptions}
-              placeholder="Selecciona una zona"
-              onValueChange={(v) => setField("zonaId", v)}
-            />
-          </Field>
+          <FormField
+            id="zonaId"
+            label="Zona (obligatoria)"
+            error={errors.zonaId}
+          >
+            {({
+              "aria-invalid": ariaInvalid,
+              "aria-describedby": ariaDescribedBy,
+            }) => (
+              <Select
+                aria-label="Zona"
+                value={form.zonaId}
+                options={zonaOptions}
+                placeholder="Selecciona una zona"
+                onValueChange={(v) => setField("zonaId", v)}
+                aria-invalid={ariaInvalid}
+                aria-describedby={ariaDescribedBy}
+              />
+            )}
+          </FormField>
         ) : null}
 
         {!isEditar ? (
@@ -397,15 +413,13 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
               </label>
             </div>
             {passwordMode === "manual" ? (
-              <Field id="password" label="Contraseña" errors={errors.password}>
+              <FormField id="password" label="Contraseña" error={errors.password}>
                 <Input
-                  id="password"
                   type="password"
                   value={form.password}
-                  aria-invalid={errors.password ? true : undefined}
                   onChange={(e) => setField("password", e.target.value)}
                 />
-              </Field>
+              </FormField>
             ) : (
               <p className="text-sm text-muted-foreground">
                 El sistema generará una contraseña segura y la mostrará una sola
@@ -418,29 +432,3 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
     );
   },
 );
-
-/** Envoltorio accesible de un campo con label y errores (i18n vía props). */
-function Field({
-  id,
-  label,
-  errors,
-  children,
-}: {
-  id: string;
-  label: string;
-  errors?: string[];
-  children: ReactNode;
-}) {
-  const errorId = `${id}-error`;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children}
-      {errors && errors.length > 0 ? (
-        <p id={errorId} role="alert" className="text-sm text-destructive">
-          {errors.join(", ")}
-        </p>
-      ) : null}
-    </div>
-  );
-}

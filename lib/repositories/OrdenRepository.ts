@@ -34,6 +34,11 @@ import {
   type RecepcionSateliteRow,
   type UpdateOrdenData,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
+import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
+
+/** Feature 92: unico estatus cuyas ordenes son paradas de la ruta de un mensajero. */
+const ESTATUS_EN_REPARTO = "en_reparto";
 
 type OrdenPrismaClient = Pick<
   PrismaClient,
@@ -947,6 +952,61 @@ export class OrdenRepository implements IOrdenRepository {
       zonaId: r.zonaId,
       zonaEsGam: r.zona.esCentral,
       tiendaId: r.tiendaId,
+    }));
+  }
+
+  /**
+   * Feature 92 (design §7, R8): proyeccion minima para el gate de asignabilidad.
+   * `latitud`/`longitud` son `Decimal` en Prisma y se serializan a `number` aqui, que es
+   * el tipo que consume el gate (misma conversion que `peso`/`montoCobrar`). Solo lectura,
+   * sin logica: la clasificacion vive en `AsignabilidadCoordenadasService`.
+   */
+  async findParaAsignabilidad(ids: string[]): Promise<OrdenAsignabilidadRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        direccion: true,
+        latitud: true,
+        longitud: true,
+        geocodeStatus: true,
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      direccion: r.direccion,
+      latitud: r.latitud !== null ? r.latitud.toNumber() : null,
+      longitud: r.longitud !== null ? r.longitud.toNumber() : null,
+      geocodeStatus: r.geocodeStatus,
+    }));
+  }
+
+  /**
+   * Feature 92 (design §5, R35/R37/R38): paradas candidatas del mensajero. El filtro va
+   * ENTERO en el WHERE (mensajero + estatus + no borrada) y se apoya en el indice
+   * `orden_mensajero_asignado_id_idx` YA existente; las coordenadas se leen de las filas
+   * ya seleccionadas, por eso esta feature NO anade indice sobre `(latitud, longitud)`
+   * (design §1.3: seria coste de escritura sin lector).
+   *
+   * `createdAt asc` NO es cosmetico: es el criterio con el que R38 recorta al tope de
+   * paradas, y hacerlo en la DB evita reordenar en memoria.
+   */
+  async findParadasEnReparto(mensajeroId: string): Promise<ParadaRutaRow[]> {
+    const rows = await this.prisma.orden.findMany({
+      where: {
+        mensajeroAsignadoId: mensajeroId,
+        deletedAt: null,
+        estatus: { value: ESTATUS_EN_REPARTO },
+      },
+      select: { id: true, latitud: true, longitud: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    return rows.map((r) => ({
+      ordenId: r.id,
+      latitud: r.latitud !== null ? r.latitud.toNumber() : null,
+      longitud: r.longitud !== null ? r.longitud.toNumber() : null,
+      createdAt: r.createdAt,
     }));
   }
 

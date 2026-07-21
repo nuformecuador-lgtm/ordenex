@@ -6,6 +6,11 @@ import type {
   IOrdenRepository,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type {
+  EstadoAsignabilidad,
+  IAsignabilidadCoordenadasService,
+  OrdenAsignabilidadRow,
+} from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
@@ -70,6 +75,10 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     countOrdenesDeTienda: vi.fn(),
     // Feature 17
     findByIdsForTransicion: vi.fn(async () => [ordenRow()]),
+    // Feature 92 (R8): filas que consume el gate de coordenadas (ya geocodificadas).
+    findParaAsignabilidad: vi.fn(async (ids: string[]) =>
+      ids.map((id) => ({ id, direccion: "x", latitud: 9.9, longitud: -84.1, geocodeStatus: "OK" })),
+    ),
     findMensajeroIdsValidos: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
     findAllMensajeros: vi.fn(async () => []),
     listOrderStatus: vi.fn(async () => []),
@@ -111,9 +120,26 @@ function fakeZonaRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository
   } as unknown as IZonaRepository;
 }
 
-// Helper: construye el service con el nuevo constructor (repo, zonaRepo).
-function newService(repo: IOrdenRepository, zonaRepo: IZonaRepository = fakeZonaRepo()) {
-  return new GuiaAsignacionService(repo, zonaRepo);
+/**
+ * Feature 92 (R8): el gate de asignabilidad es una dep REQUERIDA del service. Estos tests
+ * no lo ejercitan (eso vive en `guia-asignacion-gate-coordenadas.test.ts`), asi que se
+ * inyecta un doble que declara TODA orden asignable — que es el estado real de una orden ya
+ * geocodificada. Es el escenario feliz, no un aflojamiento: el gate tiene su test propio.
+ */
+function gateTodoAsignable(): IAsignabilidadCoordenadasService {
+  return {
+    evaluar: async (ordenes: OrdenAsignabilidadRow[]) =>
+      new Map<string, EstadoAsignabilidad>(ordenes.map((o) => [o.id, "asignable"])),
+  };
+}
+
+// Helper: construye el service (repo, zonaRepo, gate de coordenadas).
+function newService(
+  repo: IOrdenRepository,
+  zonaRepo: IZonaRepository = fakeZonaRepo(),
+  gate: IAsignabilidadCoordenadasService = gateTodoAsignable(),
+) {
+  return new GuiaAsignacionService(repo, zonaRepo, gate);
 }
 
 describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", () => {
@@ -230,14 +256,13 @@ describe("GuiaAsignacionService.generarGuia — autorizacion (R11-R13)", () => {
     expect(r.status).toBe("ok");
   });
 
-  it("R12/R13: admin (solo-lectura) en escritura -> forbidden, sin tocar datos", async () => {
+  it("feature 94: admin tiene paridad con maestro y puede generar guia", async () => {
     const repo = fakeRepo();
     const service = newService(repo);
 
     const r = await service.generarGuia({ decisiones: [{ ordenId: "o1", mensajeroId: null }] }, ADMIN);
 
-    expect(r).toEqual({ status: "forbidden" });
-    expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
+    expect(r.status).toBe("ok");
   });
 
   it("R13: adminTienda/mensajero en escritura -> forbidden", async () => {
@@ -602,13 +627,28 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
   });
 
-  it("forbidden fuera de maestro (R11-R13)", async () => {
-    const repo = fakeRepo();
+  it("feature 94: admin tiene paridad con maestro en asignarDesdeBodega", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega", numGuia: 55 }),
+      ]),
+    });
     const service = newService(repo);
 
     const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, ADMIN);
 
-    expect(r).toEqual({ status: "forbidden" });
+    expect(r.status).toBe("ok");
+    expect(repo.asignarBodegaLote).toHaveBeenCalled();
+  });
+
+  it("forbidden fuera de acceso total: adminTienda/mensajero -> forbidden", async () => {
+    const repo = fakeRepo();
+    const service = newService(repo);
+
+    for (const actor of [ADMIN_TIENDA, MENSAJERO]) {
+      const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, actor);
+      expect(r).toEqual({ status: "forbidden" });
+    }
     expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
   });
 });
@@ -861,15 +901,29 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
     expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
   });
 
-  it("R16: autorizacion — admin/adminTienda/mensajero -> forbidden, sin tocar datos", async () => {
+  it("R16: autorizacion — adminTienda/mensajero -> forbidden, sin tocar datos", async () => {
     const repo = fakeRepo();
     const service = newService(repo);
 
-    for (const actor of [ADMIN, ADMIN_TIENDA, MENSAJERO]) {
+    for (const actor of [ADMIN_TIENDA, MENSAJERO]) {
       const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, actor);
       expect(r).toEqual({ status: "forbidden" });
     }
     expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin tiene paridad con maestro y rutea a bodega satelite", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, ADMIN);
+
+    expect(r.status).toBe("ok");
+    expect(repo.rutearBodegaSateliteLote).toHaveBeenCalled();
   });
 });
 

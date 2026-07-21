@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarNovedadesAction } from "@/lib/actions/novedades";
 
@@ -25,18 +25,16 @@ export default async function NovedadesPage() {
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-8 p-6">
-      <PageHeader
-        title="Novedades"
-        description="Tus órdenes en devolución: la causa de cada una y el contacto del cliente para gestionarla"
-      />
-
+    <AppPage
+      title="Novedades"
+      description="Tus órdenes en devolución: la causa de cada una y el contacto del cliente para gestionarla"
+    >
       <NovedadesModule
         items={result.items}
         total={result.total}
         page={result.page}
         pageSize={result.pageSize}
       />
-    </section>
+    </AppPage>
   );
 }

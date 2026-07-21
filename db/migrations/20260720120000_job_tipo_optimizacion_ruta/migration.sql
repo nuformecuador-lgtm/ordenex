@@ -1,0 +1,13 @@
+-- Feature 92 (design §1.2, R40): anade el 3.er valor al enum `job_tipo` — el tipo de job
+-- `optimizacion_ruta`, que recalcula la secuencia de paradas de UN mensajero.
+--
+-- POR QUE ESTA MIGRACION VA SOLA (las tablas van en la siguiente,
+-- 20260720130000_ruta_optimizada): Postgres NO permite USAR un valor de enum en la misma
+-- transaccion que lo anadio (error 55P04 "unsafe use of new value of enum type"). Prisma
+-- Migrate corre cada migration.sql en una transaccion, asi que cualquier sentencia que
+-- consumiera 'optimizacion_ruta'::job_tipo aqui abortaria. Precedentes exactos en el repo:
+-- 20260710130000_rol_admin_satelite, 20260716140000_rol_api_key y
+-- 20260719120000_job_tipo_geocodificacion (feature 91). Se reusa ese criterio tal cual.
+--
+-- Aditiva (R39): no altera ninguna tabla existente.
+ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'optimizacion_ruta';

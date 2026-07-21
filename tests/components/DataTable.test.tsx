@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Inbox } from "lucide-react";
 
 import { DataTable, type Column } from "@/components/shared/DataTable";
 
@@ -200,13 +202,23 @@ describe("DataTable", () => {
     expect(rows[0]).toHaveTextContent("No hay registros");
   });
 
-  it("B8: isLoading muestra indicador role=status distinguible del vacío (R12)", () => {
-    const columns: Column<Row>[] = [{ id: "nombre", value: "Nombre" }];
+  it("B8: isLoading muestra filas skeleton (no el texto 'Cargando…') distinguibles del vacío (R12)", () => {
+    const columns: Column<Row>[] = [
+      { id: "nombre", value: "Nombre" },
+      { id: "edad", value: "Edad" },
+    ];
 
-    render(<DataTable columns={columns} data={[]} isLoading ariaLabel="T" />);
+    const { container } = render(
+      <DataTable columns={columns} data={[]} isLoading ariaLabel="T" />,
+    );
 
+    // El estado de carga ahora es visual (filas skeleton), no el texto plano.
+    const skeletons = container.querySelectorAll('[data-slot="skeleton"]');
+    expect(skeletons.length).toBeGreaterThan(0);
+    expect(screen.queryByText("Cargando…")).not.toBeInTheDocument();
+
+    // Sigue anunciado a lectores de pantalla y distinguible del estado vacío.
     expect(screen.getByRole("status")).toBeInTheDocument();
-    // No debe confundirse con el estado vacío
     expect(screen.queryByText("No hay registros")).not.toBeInTheDocument();
   });
 
@@ -242,6 +254,58 @@ describe("DataTable", () => {
     expect(table.querySelector("caption")?.textContent).toBe(
       "Listado de personas",
     );
+  });
+
+  it("B7b: estado vacío estructurado (`emptyState`) muestra icono, título, descripción y CTA (R11, EmptyState)", async () => {
+    const onCrear = vi.fn();
+    const user = userEvent.setup();
+    const columns: Column<Row>[] = [{ id: "nombre", value: "Nombre" }];
+
+    const { container } = render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        ariaLabel="T"
+        emptyState={{
+          icon: Inbox,
+          title: "No hay usuarios",
+          description: "Crea el primer usuario para dar acceso al sistema.",
+          action: <button onClick={onCrear}>Crear usuario</button>,
+        }}
+      />,
+    );
+
+    // Título estructurado + descripción que enseña el próximo paso.
+    expect(screen.getByText("No hay usuarios")).toBeInTheDocument();
+    expect(
+      screen.getByText("Crea el primer usuario para dar acceso al sistema."),
+    ).toBeInTheDocument();
+    // Icono decorativo renderizado.
+    expect(container.querySelector("svg")).toBeInTheDocument();
+    // CTA operativa.
+    const cta = screen.getByRole("button", { name: "Crear usuario" });
+    await user.click(cta);
+    expect(onCrear).toHaveBeenCalledTimes(1);
+    // Cabecera presente, sin filas de datos (solo la fila del estado vacío).
+    expect(screen.getAllByRole("columnheader")).toHaveLength(1);
+    expect(bodyRows()).toHaveLength(1);
+  });
+
+  it("B7c: `emptyState.title` tiene prioridad sobre `emptyMessage` (retrocompatible)", () => {
+    const columns: Column<Row>[] = [{ id: "nombre", value: "Nombre" }];
+
+    render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        ariaLabel="T"
+        emptyMessage="No hay registros"
+        emptyState={{ title: "No hay usuarios" }}
+      />,
+    );
+
+    expect(screen.getByText("No hay usuarios")).toBeInTheDocument();
+    expect(screen.queryByText("No hay registros")).not.toBeInTheDocument();
   });
 
   it("B11: columnas con id único renderizan sin throw (R4)", () => {

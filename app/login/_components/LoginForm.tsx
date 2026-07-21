@@ -8,9 +8,9 @@ import { login, verifyChallenge } from "@/lib/actions/auth";
 import { OTP_CODE_LENGTH } from "@/lib/types/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FormField } from "@/components/shared/FormField";
 
 // Validación de cliente: email válido, password no vacía
 const credentialsSchema = z.object({
@@ -25,14 +25,16 @@ const codeSchema = z.object({
     .regex(/^\d{6}$/, "El código debe ser exactamente 6 dígitos numéricos"),
 });
 
-// Calcula el target de redirección validando el parámetro
-function getRedirectTarget(redirectParam: string | null): string {
-  if (!redirectParam) return "/";
+// Calcula el target de redirección validando el parámetro. El destino por
+// defecto es `/dashboard` (feature 86, R14): la home autenticada se movió de `/`
+// a `/dashboard`. Exportada para su prueba unitaria (R14, R15).
+export function getRedirectTarget(redirectParam: string | null): string {
+  if (!redirectParam) return "/dashboard";
   // Proteger contra open-redirect: debe empezar con / pero no con //
   if (typeof redirectParam === "string" && redirectParam.startsWith("/") && !redirectParam.startsWith("//")) {
     return redirectParam;
   }
-  return "/";
+  return "/dashboard";
 }
 
 export interface LoginFormProps {
@@ -221,61 +223,45 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
         */}
         <form onSubmit={handleSubmitCredentials} noValidate className="space-y-4">
           {/* Campo de email (R1, R19) */}
-          <div className="space-y-2">
-            <Label htmlFor="email">Correo electrónico</Label>
-            <Input
-              ref={emailRef}
-              id="email"
-              type="email"
-              placeholder="tu@correo.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={isPending}
-              aria-invalid={!!credentialsFieldErrors.email}
-              aria-describedby={credentialsFieldErrors.email ? "email-error" : undefined}
-            />
-            {credentialsFieldErrors.email && (
-              <div
-                id="email-error"
-                role="alert"
-                className="text-sm text-destructive space-y-1"
-              >
-                {credentialsFieldErrors.email.map((msg, idx) => (
-                  <div key={idx}>{msg}</div>
-                ))}
-              </div>
+          <FormField
+            id="email"
+            label="Correo electrónico"
+            error={credentialsFieldErrors.email}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                ref={emailRef}
+                type="email"
+                placeholder="tu@correo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isPending}
+              />
             )}
-          </div>
+          </FormField>
 
           {/* Campo de password (R1, R19) */}
-          <div className="space-y-2">
-            <Label htmlFor="password">Contraseña</Label>
-            <Input
-              ref={passwordRef}
-              id="password"
-              type="password"
-              placeholder="Tu contraseña"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isPending}
-              aria-invalid={!!credentialsFieldErrors.password}
-              aria-describedby={credentialsFieldErrors.password ? "password-error" : undefined}
-            />
-            {credentialsFieldErrors.password && (
-              <div
-                id="password-error"
-                role="alert"
-                className="text-sm text-destructive space-y-1"
-              >
-                {credentialsFieldErrors.password.map((msg, idx) => (
-                  <div key={idx}>{msg}</div>
-                ))}
-              </div>
+          <FormField
+            id="password"
+            label="Contraseña"
+            error={credentialsFieldErrors.password}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                ref={passwordRef}
+                type="password"
+                placeholder="Tu contraseña"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isPending}
+              />
             )}
-          </div>
+          </FormField>
 
           {/* Botón de envío (R2, R6, R6a) */}
-          <Button type="submit" disabled={isPending} className="w-full">
+          <Button type="submit" loading={isPending} className="w-full">
             {isPending ? "Verificando..." : "Iniciar sesión"}
           </Button>
         </form>
@@ -323,40 +309,32 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
 
       <form onSubmit={handleSubmitChallenge} noValidate className="space-y-4">
         {/* Campo de código (R13, R19) */}
-        <div className="space-y-2">
-          <Label htmlFor="code">Código de verificación</Label>
-          <Input
-            ref={codeRef}
-            id="code"
-            type="text"
-            inputMode="numeric"
-            placeholder="000000"
-            maxLength={OTP_CODE_LENGTH}
-            value={code}
-            onChange={(e) => {
-              // Solo permitir dígitos
-              const filtered = e.target.value.replace(/\D/g, "");
-              setCode(filtered);
-            }}
-            disabled={isPending}
-            aria-invalid={!!codeFieldErrors.code}
-            aria-describedby={codeFieldErrors.code ? "code-error" : undefined}
-          />
-          {codeFieldErrors.code && (
-            <div
-              id="code-error"
-              role="alert"
-              className="text-sm text-destructive space-y-1"
-            >
-              {codeFieldErrors.code.map((msg, idx) => (
-                <div key={idx}>{msg}</div>
-              ))}
-            </div>
+        <FormField
+          id="code"
+          label="Código de verificación"
+          error={codeFieldErrors.code}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              ref={codeRef}
+              type="text"
+              inputMode="numeric"
+              placeholder="000000"
+              maxLength={OTP_CODE_LENGTH}
+              value={code}
+              onChange={(e) => {
+                // Solo permitir dígitos
+                const filtered = e.target.value.replace(/\D/g, "");
+                setCode(filtered);
+              }}
+              disabled={isPending}
+            />
           )}
-        </div>
+        </FormField>
 
         {/* Botón de envío del código (R6, R6a) */}
-        <Button type="submit" disabled={isPending} className="w-full">
+        <Button type="submit" loading={isPending} className="w-full">
           {isPending ? "Verificando..." : "Verificar código"}
         </Button>
       </form>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/shared/FormField";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import {
@@ -127,48 +127,37 @@ export function GastoFijoPlantillaDialog({
       closeOnConfirm={false}
     >
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="plantilla-concepto">Concepto</Label>
-          <Input
-            id="plantilla-concepto"
-            value={concepto}
-            onChange={(e) => {
-              setConcepto(e.target.value);
-              if (errores.concepto) setErrores((p) => ({ ...p, concepto: undefined }));
-            }}
-            aria-required="true"
-            aria-invalid={errores.concepto !== undefined}
-            aria-describedby={errores.concepto ? "plantilla-concepto-error" : undefined}
-            placeholder="Ej. Alquiler de bodega"
-          />
-          {errores.concepto ? (
-            <p id="plantilla-concepto-error" role="alert" className="text-sm text-destructive">
-              {errores.concepto}
-            </p>
-          ) : null}
-        </div>
+        <FormField id="plantilla-concepto" label="Concepto" error={errores.concepto}>
+          {(control) => (
+            <Input
+              {...control}
+              aria-required="true"
+              value={concepto}
+              onChange={(e) => {
+                setConcepto(e.target.value);
+                if (errores.concepto)
+                  setErrores((p) => ({ ...p, concepto: undefined }));
+              }}
+              placeholder="Ej. Alquiler de bodega"
+            />
+          )}
+        </FormField>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="plantilla-monto">Monto mensual</Label>
-          <Input
-            id="plantilla-monto"
-            inputMode="decimal"
-            value={monto}
-            onChange={(e) => {
-              setMonto(e.target.value);
-              if (errores.monto) setErrores((p) => ({ ...p, monto: undefined }));
-            }}
-            aria-required="true"
-            aria-invalid={errores.monto !== undefined}
-            aria-describedby={errores.monto ? "plantilla-monto-error" : undefined}
-            placeholder="0.00"
-          />
-          {errores.monto ? (
-            <p id="plantilla-monto-error" role="alert" className="text-sm text-destructive">
-              {errores.monto}
-            </p>
-          ) : null}
-        </div>
+        <FormField id="plantilla-monto" label="Monto mensual" error={errores.monto}>
+          {(control) => (
+            <Input
+              {...control}
+              aria-required="true"
+              inputMode="decimal"
+              value={monto}
+              onChange={(e) => {
+                setMonto(e.target.value);
+                if (errores.monto) setErrores((p) => ({ ...p, monto: undefined }));
+              }}
+              placeholder="0.00"
+            />
+          )}
+        </FormField>
       </div>
     </Modal>
   );

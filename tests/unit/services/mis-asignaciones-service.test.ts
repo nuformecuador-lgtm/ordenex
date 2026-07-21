@@ -7,6 +7,7 @@ import type {
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -57,6 +58,9 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
     producto: "caja",
     peso: null,
     montoCobrar: 100,
+    // Feature 97: coords de la parada (ya serializadas a number|null en el repo).
+    latitud: 9.9281244,
+    longitud: -84.0907246,
     notas: null,
     tiendaNombre: "T",
     zonaNombre: "Z",
@@ -125,14 +129,40 @@ function fakeSignedUrls(): ISignedUrlProvider {
   };
 }
 
+
+/**
+ * Feature 92 (R23/R28): doble del repo de ruta optimizada. Por defecto NO hay ruta
+ * (`findByMensajero` -> null), que es el estado de un mensajero que nunca se optimizo: en
+ * ese caso `porGestionar` conserva EXACTAMENTE el orden previo, asi que los tests
+ * heredados de la 36/47/73 siguen midiendo lo mismo que antes.
+ */
+function fakeRutaRepo(
+  over: Partial<Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen">> = {},
+): Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen"> {
+  return {
+    findByMensajero: vi.fn(async () => null),
+    upsertOrigen: vi.fn(async () => {}),
+    ...over,
+  };
+}
+
 function newService(
   repo: IGestionOrdenRepository = fakeRepo(),
   storage: IFileStorage = fakeStorage(),
   signed: ISignedUrlProvider = fakeSignedUrls(),
   historial: Pick<IOrdenHistorialService, "contarIntentos"> = fakeHistorial(),
   zonaRepo: Pick<IZonaRepository, "findCentralZonaId"> = fakeZonaRepo(),
+  rutaRepo: Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen"> = fakeRutaRepo(),
 ) {
-  return new MisAsignacionesService(repo, fakeOrdenRepo(), storage, signed, historial, zonaRepo);
+  return new MisAsignacionesService(
+    repo,
+    fakeOrdenRepo(),
+    storage,
+    signed,
+    historial,
+    zonaRepo,
+    rutaRepo,
+  );
 }
 
 function evidencia() {
@@ -197,6 +227,23 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     });
     expect(repo.contarEntregadas).toHaveBeenCalledWith("m1");
     expect(repo.sumMontoCobrarEntregadas).toHaveBeenCalledWith("m1");
+  });
+
+  // Feature 97: el DTO expone las coords de la parada (feature 91) para dibujar el mapa.
+  // Es un campo de la orden -> viaja en AMBOS grupos; el `null` (sin geocodificar) se preserva.
+  it("F97: el DTO propaga latitud/longitud (number|null) en porRecoger y porGestionar", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "r", estatusValue: "en_espera_aceptacion", latitud: 9.9, longitud: -84.1 }),
+        asignacionRow({ id: "g", estatusValue: "en_reparto", latitud: null, longitud: null }),
+      ]),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.porRecoger[0]).toMatchObject({ latitud: 9.9, longitud: -84.1 });
+    expect(r.porGestionar[0]).toMatchObject({ latitud: null, longitud: null });
   });
 });
 
@@ -712,6 +759,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       fakeSignedUrls(),
       fakeHistorial(),
       fakeZonaRepo(),
+      fakeRutaRepo(),
     );
     const r = await service.gestionar(devolucion, MENSAJERO);
     expect(r.status).toBe("validation_error");
@@ -730,6 +778,7 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
       fakeSignedUrls(),
       fakeHistorial(),
       fakeZonaRepo(),
+      fakeRutaRepo(),
     );
     await service.gestionar(devolucion, MENSAJERO);
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devuelta_origen");

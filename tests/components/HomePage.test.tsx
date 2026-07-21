@@ -23,7 +23,7 @@ beforeEach(() => {
 
 describe("app/(app)/page.tsx — sin botón de logout ad-hoc propio (feature 57, R14)", () => {
   it("la home muestra el placeholder y el único logout es el del PageHeader (sin botón ad-hoc)", async () => {
-    const { default: Home } = await import("@/app/(app)/page");
+    const { default: Home } = await import("@/app/(app)/dashboard/page");
 
     const element = await Home();
     render(element);

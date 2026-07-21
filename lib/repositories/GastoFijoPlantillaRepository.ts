@@ -11,6 +11,18 @@ type PlantillaPrismaClient = Pick<PrismaClient, "gastoFijoPlantilla">;
 
 type PlantillaRow = Prisma.GastoFijoPlantillaGetPayload<Record<string, never>>;
 
+// Feature 84 — la columna `fecha_cobro` es DATE: Prisma la entrega como Date a medianoche UTC.
+// El DTO la expone como `YYYY-MM-DD` (misma convencion que `lib/utils/periodicidad.ts`), asi que
+// alcanza con recortar el ISO. NO uses la hora local: la fila YA es medianoche UTC.
+function fechaCobroADTO(fechaCobro: Date): string {
+  return fechaCobro.toISOString().slice(0, 10);
+}
+
+/** `YYYY-MM-DD` -> Date a medianoche UTC, la convencion con que se persiste la columna DATE. */
+function fechaCobroAColumna(fechaCobro: string): Date {
+  return new Date(`${fechaCobro}T00:00:00.000Z`);
+}
+
 // Money-safe: Decimal -> STRING escala 2 (nunca number/parseFloat).
 function toDTO(r: PlantillaRow): GastoFijoPlantillaDTO {
   return {
@@ -18,6 +30,9 @@ function toDTO(r: PlantillaRow): GastoFijoPlantillaDTO {
     concepto: r.concepto,
     monto: r.monto.toFixed(2),
     activa: r.activa,
+    periodicidadUnidad: r.periodicidadUnidad,
+    periodicidadCantidad: r.periodicidadCantidad,
+    fechaCobro: fechaCobroADTO(r.fechaCobro),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -31,19 +46,34 @@ function toDTO(r: PlantillaRow): GastoFijoPlantillaDTO {
 export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaRepository {
   constructor(private readonly prisma: PlantillaPrismaClient) {}
 
-  /** R24: crea la plantilla (activa=true por default de la columna). */
+  /** R24: crea la plantilla (activa=true por default de la columna). Feature 84: + periodicidad. */
   async crear(input: CrearPlantillaInput): Promise<GastoFijoPlantillaDTO> {
     const row = await this.prisma.gastoFijoPlantilla.create({
-      data: { concepto: input.concepto, monto: new Prisma.Decimal(input.monto) },
+      data: {
+        concepto: input.concepto,
+        monto: new Prisma.Decimal(input.monto),
+        periodicidadUnidad: input.periodicidadUnidad,
+        periodicidadCantidad: input.periodicidadCantidad,
+        fechaCobro: fechaCobroAColumna(input.fechaCobro),
+      },
     });
     return toDTO(row);
   }
 
-  /** R25: edita concepto/monto (el @updatedAt de Prisma refresca updated_at). */
+  /**
+   * R25: edita concepto/monto (el @updatedAt de Prisma refresca updated_at). Feature 84: tambien
+   * la periodicidad. Mover `fechaCobro` mueve el ancla del ciclo, no reescribe egresos pasados.
+   */
   async actualizar(id: string, input: ActualizarPlantillaInput): Promise<GastoFijoPlantillaDTO> {
     const row = await this.prisma.gastoFijoPlantilla.update({
       where: { id },
-      data: { concepto: input.concepto, monto: new Prisma.Decimal(input.monto) },
+      data: {
+        concepto: input.concepto,
+        monto: new Prisma.Decimal(input.monto),
+        periodicidadUnidad: input.periodicidadUnidad,
+        periodicidadCantidad: input.periodicidadCantidad,
+        fechaCobro: fechaCobroAColumna(input.fechaCobro),
+      },
     });
     return toDTO(row);
   }

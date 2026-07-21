@@ -95,6 +95,15 @@ describe("middleware — rutas publicas y guard de sesion", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
+  // --- Feature 86: landing publica en `/` + dashboard en /dashboard ---
+
+  it("/ sin sesion deja pasar (landing publica, 200) (R1)", () => {
+    const res = middleware(buildRequest("/"));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
   // La exclusion es de la rama /api entera, no de una lista de rutas conocidas:
   // una ruta de API nueva no debe nacer inalcanzable por olvidar registrarla.
   it("deja pasar una ruta de API que todavia no existe", () => {
@@ -110,6 +119,43 @@ describe("middleware — rutas publicas y guard de sesion", () => {
 
     expect(res.status).toBe(307);
     expect(new URL(res.headers.get("location") as string).pathname).toBe("/login");
+  });
+
+  it("/ con sesion redirige (307) a /dashboard (R7)", () => {
+    const res = middleware(buildRequest("/", "cookie-de-sesion"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://app.test/dashboard");
+  });
+
+  it("/dashboard sin sesion redirige (307) a /login?redirect=%2Fdashboard (R10)", () => {
+    const res = middleware(buildRequest("/dashboard"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe(
+      "https://app.test/login?redirect=%2Fdashboard",
+    );
+  });
+
+  it("R8: una ruta con prefijo `/` arbitraria sin sesion NO se vuelve publica (sigue redirigiendo a /login)", () => {
+    const res = middleware(buildRequest("/xyz"));
+
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location") as string).pathname).toBe(
+      "/login",
+    );
+  });
+
+  it("R16 (regresion): /ordenes sin cookie -> 307 a /login; con cookie -> 200", () => {
+    const sin = middleware(buildRequest("/ordenes"));
+    expect(sin.status).toBe(307);
+    expect(sin.headers.get("location")).toBe(
+      "https://app.test/login?redirect=%2Fordenes",
+    );
+
+    const con = middleware(buildRequest("/ordenes", "cookie-de-sesion"));
+    expect(con.status).toBe(200);
+    expect(con.headers.get("location")).toBeNull();
   });
 
   // CARACTERIZACION, no comportamiento deseado: fija que HOY /paquete/[numGuia]

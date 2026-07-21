@@ -6,6 +6,13 @@ import type {
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
+import { JobRepository } from "@/lib/repositories/JobRepository";
+import {
+  encolarOptimizacionDebounce,
+  encolarOptimizacionInmediata,
+} from "@/lib/services/jobs/optimizacion-ruta-encolado";
+import { loadRouteOptimizationConfig } from "@/lib/config/route-optimization";
 
 // Feature 61: estado terminal de entrega para el KPI "entregadas" del portal.
 const ESTATUS_ENTREGADA = "entregada";
@@ -28,6 +35,9 @@ const WITH_ASIGNACION = {
     producto: true,
     peso: true,
     montoCobrar: true,
+    // Feature 97: coordenadas geocodificadas (feature 91) para dibujar el mapa de ruta.
+    latitud: true,
+    longitud: true,
     notas: true,
     mensajeroAsignadoId: true,
     estatus: { select: { value: true } },
@@ -53,6 +63,10 @@ function toMiAsignacionRow(row: AsignacionRow): MiAsignacionRow {
     producto: row.producto,
     peso: row.peso ? row.peso.toNumber() : null,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    // Feature 97: Decimal -> number|null con el MISMO patron que `montoCobrar` (una instancia
+    // Decimal es siempre truthy, incluida la de valor 0, asi que 0.0 NO se pierde: solo null->null).
+    latitud: row.latitud ? row.latitud.toNumber() : null,
+    longitud: row.longitud ? row.longitud.toNumber() : null,
     notas: row.notas,
     tiendaNombre: row.tienda.nombre,
     zonaNombre: row.zona.nombre,
@@ -64,7 +78,19 @@ function toMiAsignacionRow(row: AsignacionRow): MiAsignacionRow {
 }
 
 export class GestionOrdenRepository implements IGestionOrdenRepository {
-  constructor(private readonly prisma: GestionPrismaClient) {}
+  /**
+   * Feature 92 (design §4.3, R16/R19): `jobRepo` se inyecta para el encolado TRANSACTIONAL
+   * OUTBOX de la reoptimizacion de ruta, EXACTAMENTE como `OrdenRepository` en la 91. El
+   * default apunta al repo real, asi que ninguna fabrica existente cambia.
+   */
+  constructor(
+    private readonly prisma: GestionPrismaClient,
+    private readonly jobRepo: IJobRepository = new JobRepository(
+      prisma as unknown as ConstructorParameters<typeof JobRepository>[0],
+    ),
+    /** Reloj inyectable: el `runAfter` del debounce debe ser determinista en tests. */
+    private readonly now: () => Date = () => new Date(),
+  ) {}
 
   /** R9/R13: filtrado por mensajero + estado en el WHERE, no borradas. */
   async findMisAsignaciones(mensajeroId: string, estados: string[]): Promise<MiAsignacionRow[]> {
@@ -207,6 +233,24 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           origenTipo: "recoleccion", // R23
         })),
       );
+      // Feature 92 (R16): la recogida cambia el conjunto de paradas del mensajero -> se
+      // encola una reoptimizacion DIFERIDA, DENTRO de esta misma transaccion (outbox): si
+      // el UPDATE revierte, el job se va con el. El debounce colapsa las 8 recogidas de
+      // "recoger todas" en UN job (R17), no en ocho llamadas facturadas.
+      //
+      // Solo si alguna orden gano la guarda: `rows.length === 0` significa que nada
+      // cambio, asi que no hay nada que reoptimizar.
+      if (rows.length > 0) {
+        await encolarOptimizacionDebounce(
+          this.jobRepo,
+          tx as unknown as JobTxClient,
+          mensajeroId,
+          {
+            ahora: this.now(),
+            debounceS: loadRouteOptimizationConfig().RUTA_DEBOUNCE_S,
+          },
+        );
+      }
       return rows.length;
     });
   }
@@ -297,6 +341,20 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           },
         ]);
       }
+      // Feature 92 (R19): la gestion SACA la orden de `en_reparto` -> reoptimizacion
+      // INMEDIATA (sin delay), dentro de esta misma transaccion (outbox).
+      //
+      // ⚠️ Este encolado usa el namespace `:inmediato:`, DISJUNTO del `:debounce:`. Si
+      // compartieran espacio de claves, un debounce en vuelo del mismo mensajero lo
+      // tragaria EN SILENCIO via el `ON CONFLICT DO NOTHING` y la ruta no se recalcularia
+      // tras la entrega. El `eventoId` es el id de la gestion recien creada: unico por
+      // evento, disponible aqui sin generar nada nuevo.
+      await encolarOptimizacionInmediata(
+        this.jobRepo,
+        tx as unknown as JobTxClient,
+        mensajeroId,
+        creada.id,
+      );
       return creada.id;
     });
   }

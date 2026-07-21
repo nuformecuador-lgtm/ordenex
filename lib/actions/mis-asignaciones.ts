@@ -5,6 +5,7 @@ import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepositor
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
@@ -77,6 +78,8 @@ function buildService(): IMisAsignacionesService {
     // central (54) para derivar la bodega responsable del reintento.
     new OrdenHistorialService(new OrdenRepository(prisma), new OrdenHistorialRepository(prisma)),
     new ZonaRepository(prisma),
+    // Feature 92 (R23/R28): secuencia optimizada al listar + persistencia del origen `gps`.
+    new RutaOptimizadaRepository(prisma),
   );
 }
 
@@ -98,10 +101,8 @@ export async function listarMisAsignaciones(
 ): Promise<ListarMisAsignacionesResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
-    console.log("xyz AAA*", actor, Boolean(actor))
     if (!actor) throw new UnauthenticatedError(); // R12: antes de tocar el service
     const service = deps.service ?? buildService();
-    console.log("xyz AAA*1", actor)
     return service.listarMisAsignaciones(actor!);
   });
   // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
@@ -118,7 +119,10 @@ export async function recogerAsignaciones(
     if (!actor) throw new UnauthenticatedError();
     const data = recogerSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    const recogerInput: RecogerInput = { ordenIds: data.ordenIds };
+    // Feature 92/R22: `ubicacion` ya validada por `recogerSchema` (rangos [-90,90] /
+    // [-180,180]). Ausente = el navegador no la dio o el permiso esta denegado: R25 exige
+    // que eso NO bloquee la recogida.
+    const recogerInput: RecogerInput = { ordenIds: data.ordenIds, ubicacion: data.ubicacion };
     return service.recogerAsignaciones(recogerInput, actor);
   });
   return isAppErrorShape(r) ? toMisAsignacionesActionError(r) : r;
@@ -199,14 +203,27 @@ function rawFromFormData(formData: FormData): Record<string, unknown> {
   if (monto !== null && monto !== "") raw.montoRecibido = Number(monto);
   const evidencia = formData.get("evidencia");
   if (evidencia !== null && typeof evidencia !== "string") raw.evidencia = evidencia;
+  // Feature 92/R22: la geolocalizacion viaja como DOS campos escalares del FormData
+  // (`ubicacionLat`/`ubicacionLng`) y se recompone aqui. Solo se arma el objeto si vienen
+  // LOS DOS: media coordenada no es una ubicacion, y dejarla a medias haria que zod la
+  // rechazara y tumbara toda la gestion por un dato auxiliar (R25 lo prohibe).
+  const lat = formData.get("ubicacionLat");
+  const lng = formData.get("ubicacionLng");
+  if (lat !== null && lat !== "" && lng !== null && lng !== "") {
+    raw.ubicacion = { lat: Number(lat), lng: Number(lng) };
+  }
   return raw;
 }
 
 /** Lee el binario de la evidencia (si aplica) y arma el input del servicio. */
 async function toGestionarInput(data: GestionarActionInput): Promise<GestionarInput> {
+  // Feature 92/R22: `ubicacion` es transversal a las cuatro ramas (interseccion en el
+  // tipo del service), asi que se adjunta una sola vez en vez de repetirla cuatro veces.
+  const ubicacion = data.ubicacion;
   switch (data.resultado) {
     case "entregada":
       return {
+        ubicacion,
         ordenId: data.ordenId,
         resultado: "entregada",
         montoRecibido: data.montoRecibido,
@@ -215,6 +232,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
       };
     case "reprogramada":
       return {
+        ubicacion,
         ordenId: data.ordenId,
         resultado: "reprogramada",
         fechaReprogramacion: data.fechaReprogramacion,
@@ -222,6 +240,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
       };
     case "devuelta":
       return {
+        ubicacion,
         ordenId: data.ordenId,
         resultado: "devuelta",
         causaDevolucion: data.causaDevolucion, // feature 73/R6
@@ -230,6 +249,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
       };
     case "rechazada":
       return {
+        ubicacion,
         ordenId: data.ordenId,
         resultado: "rechazada",
         motivo: data.motivo,

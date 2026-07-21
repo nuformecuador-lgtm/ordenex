@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Home,
   Megaphone,
   Package,
   QrCode,
@@ -122,7 +123,7 @@ function SidebarCollapseToggle() {
         "absolute top-full right-0 z-20 hidden size-7 -translate-y-1/2 translate-x-1/2",
         "md:flex items-center justify-center rounded-full cursor-pointer",
         "bg-primary text-primary-foreground shadow-sm",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
       )}
     >
       <Chevron className="size-5" aria-hidden="true" />
@@ -134,6 +135,7 @@ function SidebarCollapseToggle() {
 // cruzan el borde RSC (menu-visibility) solo traen la clave string serializable;
 // aqui la resolvemos al render.
 const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
+  home: Home,
   settings: Settings,
   user: User,
   package: Package,
