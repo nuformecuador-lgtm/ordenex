@@ -79,17 +79,17 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
   });
 });
 
-describe("R12: admin en escritura -> forbidden (delegado al service, sin transformar)", () => {
+describe("feature 94: admin en escritura -> permitido (delegado al service con el actor, sin transformar)", () => {
   it("generarGuia", async () => {
     const service = fakeGuiaService({
-      generarGuia: vi.fn().mockResolvedValue({ status: "forbidden" }),
+      generarGuia: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     });
     const r = await generarGuia(
       { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
       { guiaService: service, getActor: getActor(ADMIN) },
     );
 
-    expect(r).toEqual({ status: "forbidden" });
+    expect(r).toEqual({ status: "ok", resultados: [] });
     expect(service.generarGuia).toHaveBeenCalledWith(
       { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
       ADMIN,
@@ -98,14 +98,18 @@ describe("R12: admin en escritura -> forbidden (delegado al service, sin transfo
 
   it("asignarDesdeBodega", async () => {
     const service = fakeGuiaService({
-      asignarDesdeBodega: vi.fn().mockResolvedValue({ status: "forbidden" }),
+      asignarDesdeBodega: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     });
     const r = await asignarDesdeBodega(
       { ordenIds: ["o1"], mensajeroId: "m1" },
       { guiaService: service, getActor: getActor(ADMIN) },
     );
 
-    expect(r).toEqual({ status: "forbidden" });
+    expect(r).toEqual({ status: "ok", resultados: [] });
+    expect(service.asignarDesdeBodega).toHaveBeenCalledWith(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      ADMIN,
+    );
   });
 });
 
@@ -193,7 +197,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     expect(findMensajerosByZona).not.toHaveBeenCalled();
   });
 
-  it("admin (solo-lectura del modulo) tambien puede listar", async () => {
+  it("feature 94: admin (paridad con maestro) tambien puede listar", async () => {
     const findCentralZonaId = vi.fn().mockResolvedValue("z-gam");
     const findMensajerosByZona = vi.fn().mockResolvedValue([]);
     const findMensajerosBloqueados = vi.fn().mockResolvedValue(new Set());
@@ -279,7 +283,7 @@ describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, 
     expect(listOrderStatus).toHaveBeenCalledWith();
   });
 
-  it("admin (solo-lectura del modulo) tambien puede listar", async () => {
+  it("feature 94: admin (paridad con maestro) tambien puede listar", async () => {
     const listOrderStatus = vi.fn().mockResolvedValue([]);
     const r = await listarCatalogoEstatus({
       ordenRepo: { listOrderStatus },
@@ -328,7 +332,7 @@ describe("listarZonasBloqueadasPorCierre — zonas con >=1 mensajero en cierre",
     expect(r).toEqual({ status: "ok", zonasBloqueadasIds: [] });
   });
 
-  it("admin (solo-lectura del modulo) tambien puede leer", async () => {
+  it("feature 94: admin (paridad con maestro) tambien puede leer", async () => {
     const r = await listarZonasBloqueadasPorCierre({
       ordenRepo: { findZonasConMensajeroBloqueado: vi.fn().mockResolvedValue(new Set(["z1"])) },
       getActor: getActor(ADMIN),

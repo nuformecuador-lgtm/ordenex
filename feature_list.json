@@ -1027,6 +1027,17 @@
       "zone": "frontend",
       "branch": null,
       "depends_on": 86
+    },
+    {
+      "id": 94,
+      "name": "admin con paridad de maestro en ordenes, cierres, ranking y wallet",
+      "description": "El rol admin obtiene el mismo acceso (ver y manipular) que el maestro en los modulos Ordenes, Cierres del dia, Ranking y Wallet.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/94-admin-paridad-maestro",
+      "depends_on": null
     }
   ]
 }

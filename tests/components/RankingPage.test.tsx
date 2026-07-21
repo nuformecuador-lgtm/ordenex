@@ -91,6 +91,22 @@ describe("RankingPage — control de acceso por rol (R16/R17/R18)", () => {
     ).toBeInTheDocument();
   });
 
+  it("R16 (feature 94, paridad adm↔maestro): el admin ve el ranking editable igual que el maestro", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u3", rol: "admin" });
+
+    const page = await RankingPage();
+    render(page);
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Ranking" }),
+    ).toBeInTheDocument();
+    // `esEditable` lo decide el service (que ya da acceso total al admin): con la data
+    // por defecto (editable) el admin ve los inputs de edición de premios.
+    expect(
+      screen.getByRole("textbox", { name: "Monto del premio — posición 1" }),
+    ).toBeInTheDocument();
+  });
+
   it("R17: el mensajero ve el ranking en solo-lectura (sin inputs)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u2", rol: "mensajero" });
     obtenerMock.mockResolvedValue({
@@ -108,7 +124,9 @@ describe("RankingPage — control de acceso por rol (R16/R17/R18)", () => {
   });
 
   it("R18: roles no autorizados NO ven el ranking (notFound), sin consultar datos", async () => {
-    const otros: RolValue[] = ["admin", "adminTienda", "adminSatelite"];
+    // Feature 94: `admin` YA no está aquí (ve el ranking, test aparte). Siguen excluidos
+    // el adminTienda y el adminSatelite.
+    const otros: RolValue[] = ["adminTienda", "adminSatelite"];
     for (const rol of otros) {
       resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol });
       await expect(RankingPage()).rejects.toThrow("NEXT_NOT_FOUND");

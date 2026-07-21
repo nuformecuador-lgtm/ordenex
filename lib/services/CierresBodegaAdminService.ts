@@ -1,3 +1,4 @@
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { cierreConfig } from "@/lib/config/cierre";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
@@ -22,9 +23,8 @@ import {
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
 
-// Solo el rol autorizado (R2): el maestro (bodega central). El alcance del maestro es
+// Roles autorizados (R2): acceso total (maestro/admin, bodega central). El alcance es
 // "todos los cierres de bodega" (van a la central), sin filtro de zona.
-const ROL_AUTORIZADO = "maestro";
 
 // Mensaje accionable cuando falta el motivo de rechazo (R17).
 const MSG_MOTIVO_REQUERIDO = "El motivo de rechazo es obligatorio.";
@@ -45,7 +45,7 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
   async listarCierresBodegaAdmin(
     actor: Actor,
   ): Promise<ListarCierresBodegaAdminServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R2
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R2
 
     // R23: SOLO lectura. R15: partir por estado (solicitado vs resuelto).
     const rows = await this.repo.findCierresBodega();
@@ -63,7 +63,7 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
     cierreBodegaId: string,
     actor: Actor,
   ): Promise<CierreBodegaDetalleServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R2
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R2
 
     const found = await this.repo.findCierreBodegaConDetalle(cierreBodegaId);
     if (found === null) return { status: "no_encontrada" }; // R19
@@ -135,7 +135,7 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
     cierreBodegaId: string,
     actor: Actor,
   ): Promise<AprobarCierreBodegaServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R2
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R2
 
     // R16/R18-R20: transicion guardada. Aprobar limpia motivoRechazo (null).
     const res = await this.repo.resolverCierreBodega({
@@ -154,7 +154,7 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
     motivo: string,
     actor: Actor,
   ): Promise<RechazarCierreBodegaServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R2
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R2
 
     // R17 (defensa): el borde ya valido con zod, pero el service re-exige motivo no
     // vacio antes de tocar el repo.
