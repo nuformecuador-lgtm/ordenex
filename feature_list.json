@@ -1043,11 +1043,22 @@
       "id": 95,
       "name": "etiquetas tras generar guia / asignar mensajero",
       "description": "Tras generar la guia y asignar mensajero, encadenar la vista previa + descarga (PDF) de las etiquetas de esas guias, reusando el modal de etiquetas existente. Para maestro y admin.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "low",
       "zone": "frontend",
       "branch": "feature/95-etiquetas-tras-guia",
+      "depends_on": null
+    },
+    {
+      "id": 96,
+      "name": "recoger guia por input de numero (mensajero)",
+      "description": "En el portal del mensajero, reemplazar los botones de recoger por un input de numero de guia; recoger queda disponible solo por ese input o por escaneo de camara, validando que la guia este asignada.",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": "feature/96-recoger-por-input",
       "depends_on": null
     }
   ]
