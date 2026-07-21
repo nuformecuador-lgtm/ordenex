@@ -319,7 +319,7 @@ export function RecepcionSateliteModule({
              todos— los mensajeros tienen un cierre abierto. La asignación sigue activa. */
           <div
             role="status"
-            className="flex flex-col gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400"
+            className="flex flex-col gap-1 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-strong"
           >
             <span className="font-medium">
               {bodegaCierresAbiertosTitulo(bloqueoBodega.cierresAbiertos ?? 0)}

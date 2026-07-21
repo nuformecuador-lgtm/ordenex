@@ -38,11 +38,11 @@ const TYPE_ICON: Record<
   NotificationType,
   { Icon: ComponentType<LucideProps>; className: string; label: string }
 > = {
-  alert: { Icon: CircleAlert, className: "text-red-500", label: "Alerta" },
+  alert: { Icon: CircleAlert, className: "text-danger", label: "Alerta" },
   box: { Icon: Package, className: "text-navy", label: "Paquete" },
   warning: {
     Icon: TriangleAlert,
-    className: "text-amber-500",
+    className: "text-warning",
     label: "Advertencia",
   },
 };
@@ -144,7 +144,7 @@ export function NotificationsBell({
       >
         <Bell className="size-5" aria-hidden="true" />
         {unread > 0 ? (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold leading-none text-white">
             {badge}
           </span>
         ) : null}

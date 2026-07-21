@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarCierresAdmin } from "@/lib/actions/cierres-admin";
 import {
   listarConsolidacion,
@@ -27,7 +28,9 @@ import { CierresBodegaAdminModule } from "./_components/CierresBodegaAdminModule
  */
 export default async function CierresAdminPage() {
   const actor = await resolveActorFromSession();
-  if (!actor || (actor.rol !== "maestro" && actor.rol !== "adminSatelite")) {
+  // Feature 94 (paridad adm↔maestro): roles de ACCESO TOTAL (`maestro`/`admin`) y
+  // `adminSatelite` ven el módulo; cualquier otro rol (o sin sesión) → `notFound`.
+  if (!actor || (!esAccesoTotal(actor.rol) && actor.rol !== "adminSatelite")) {
     notFound(); // R1
   }
 
@@ -35,7 +38,8 @@ export default async function CierresAdminPage() {
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
   // Feature 40 — pre-fetch por rol de los datos sensibles del cierre de bodega.
-  // adminSatelite: consolidación de SU zona (R1/R3). maestro: cola + histórico (R2).
+  // adminSatelite: consolidación de SU zona (R1/R3). maestro/admin (acceso total,
+  // feature 94): cola + histórico (R2).
   const consolidacionResult =
     actor.rol === "adminSatelite" ? await listarConsolidacion() : null;
   const consolidacion =
@@ -44,17 +48,15 @@ export default async function CierresAdminPage() {
       : null;
 
   const bodegaResult =
-    actor.rol === "maestro" ? await listarCierresBodegaAdmin() : null;
+    esAccesoTotal(actor.rol) ? await listarCierresBodegaAdmin() : null;
   const bodega =
     bodegaResult && bodegaResult.status === "ok" ? bodegaResult : null;
 
   return (
-    <section className="flex flex-1 flex-col gap-10 p-6">
-      <PageHeader
-        title="Cierres del día"
-        description="Revisá el detalle de cada cierre solicitado por tus mensajeros y aprobalo o rechazalo"
-      />
-
+    <AppPage
+      title="Cierres del día"
+      description="Revisá el detalle de cada cierre solicitado por tus mensajeros y aprobalo o rechazalo"
+    >
       {/* Feature 40 (adminSatelite): consolidación + solicitud de cierre de bodega. */}
       {consolidacion ? (
         <ConsolidacionBodegaModule
@@ -87,6 +89,6 @@ export default async function CierresAdminPage() {
         historico={result.historico}
         sinZona={result.sinZona}
       />
-    </section>
+    </AppPage>
   );
 }

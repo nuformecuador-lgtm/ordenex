@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Loader2,
-  PackageCheck,
-  RotateCcw,
-  Undo2,
-  XCircle,
-} from "lucide-react";
+import { PackageCheck, RotateCcw, Undo2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
@@ -77,7 +71,7 @@ const RESULTADO_BOTONES: {
     label: "Reprogramar",
     Icon: RotateCcw,
     className:
-      "border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-400",
+      "border-warning/40 bg-warning/10 text-warning-strong hover:bg-warning/20",
   },
   {
     value: "devuelta",
@@ -505,18 +499,7 @@ export function GestionarOrdenPanel({
             >
               Cancelar gestión
             </Button>
-            <Button
-              type="button"
-              onClick={handleConfirm}
-              disabled={enviando}
-              aria-busy={enviando || undefined}
-            >
-              {enviando ? (
-                <span role="status" className="flex items-center gap-2">
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                  <span className="sr-only">Procesando…</span>
-                </span>
-              ) : null}
+            <Button type="button" onClick={handleConfirm} loading={enviando}>
               Guardar gestión
             </Button>
           </div>

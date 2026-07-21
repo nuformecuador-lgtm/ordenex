@@ -25,6 +25,7 @@ import type {
 import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
 import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // R27: unicos estados de origen validos para "Generar guia".
 const ORIGEN_GENERAR_GUIA = new Set(["en_fulfillment", "en_preparacion"]);
@@ -131,7 +132,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
 
   async generarGuia(input: GenerarGuiaInput, actor: Actor): Promise<GenerarGuiaServiceResult> {
     // --- Autorizacion (R11-R13/R16), antes de tocar datos ---
-    if (actor.rol !== "maestro") return { status: "forbidden" };
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     const { decisiones } = input;
     if (decisiones.length === 0) return { status: "ok", resultados: [] };
@@ -320,7 +321,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     actor: Actor,
   ): Promise<AsignarBodegaServiceResult> {
     // --- Autorizacion (R11-R13/R16) ---
-    if (actor.rol !== "maestro") return { status: "forbidden" };
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     const ordenIds = distinct(input.ordenIds);
     if (ordenIds.length === 0) return { status: "ok", resultados: [] };
@@ -419,7 +420,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     actor: Actor,
   ): Promise<RutearSateliteServiceResult> {
     // --- Autorizacion (R16) ---
-    if (actor.rol !== "maestro") return { status: "forbidden" };
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     const ordenIds = distinct(input.ordenIds);
     if (ordenIds.length === 0) return { status: "ok", resultados: [] };

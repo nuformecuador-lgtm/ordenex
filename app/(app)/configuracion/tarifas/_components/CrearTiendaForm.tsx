@@ -3,9 +3,9 @@
 import { useState } from "react";
 
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, type SelectOption } from "@/components/ui/select";
+import { FormField } from "@/components/shared/FormField";
 import { useToast } from "@/hooks/useToast";
 import { crearTarifa, actualizarTarifa } from "@/lib/actions/tarifas";
 import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
@@ -152,49 +152,51 @@ export function CrearTiendaForm({
         {esEditar ? "Editar tienda" : "Nueva tienda"}
       </h3>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="tienda-admin">Administrador de tienda</Label>
-        <Select
-          value={tiendaId}
-          onValueChange={setTiendaId}
-          options={opciones}
-          placeholder="Selecciona un administrador de tienda"
-          disabled={opciones.length === 0}
-          aria-label="Administrador de tienda"
-        />
-        {errors.tiendaId?.length ? (
-          <p role="alert" className="text-sm text-destructive">
-            {errors.tiendaId.join(", ")}
-          </p>
-        ) : null}
-      </div>
+      <FormField
+        id="tienda-admin"
+        label="Administrador de tienda"
+        error={errors.tiendaId}
+      >
+        {({
+          "aria-invalid": ariaInvalid,
+          "aria-describedby": ariaDescribedBy,
+        }) => (
+          <Select
+            value={tiendaId}
+            onValueChange={setTiendaId}
+            options={opciones}
+            placeholder="Selecciona un administrador de tienda"
+            disabled={opciones.length === 0}
+            aria-label="Administrador de tienda"
+            aria-invalid={ariaInvalid}
+            aria-describedby={ariaDescribedBy}
+          />
+        )}
+      </FormField>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {TIENDA_CAMPOS.map((campo) => (
-          <div key={campo.key} className="flex flex-col gap-1.5">
-            <Label htmlFor={`tienda-${campo.key}`}>{campo.label}</Label>
+          <FormField
+            key={campo.key}
+            id={`tienda-${campo.key}`}
+            label={campo.label}
+            error={errors[campo.key]}
+          >
             <Input
-              id={`tienda-${campo.key}`}
               type="number"
               inputMode="decimal"
               min={0}
               max={campo.tipo === "porcentaje" ? 100 : undefined}
               step="0.01"
               value={valores[campo.key]}
-              aria-invalid={errors[campo.key] ? true : undefined}
               onChange={(e) => setCampo(campo.key, e.target.value)}
             />
-            {errors[campo.key]?.length ? (
-              <p role="alert" className="text-sm text-destructive">
-                {errors[campo.key].join(", ")}
-              </p>
-            ) : null}
-          </div>
+          </FormField>
         ))}
       </div>
 
       <div className="flex items-center gap-2">
-        <Button type="button" onClick={guardar} disabled={guardando}>
+        <Button type="button" onClick={guardar} loading={guardando}>
           {guardando ? "Guardando…" : "Guardar"}
         </Button>
         <Button

@@ -12,9 +12,9 @@ import { OTP_CODE_LENGTH } from "@/lib/types/auth";
 import { strongPasswordSchema } from "@/lib/types/password-policy";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FormField } from "@/components/shared/FormField";
 
 // Fases del flujo (R16/R17): email -> code -> password -> done.
 type Phase = "email" | "code" | "password" | "done";
@@ -221,33 +221,25 @@ export function RecuperarContrasenaForm() {
         )}
 
         <form onSubmit={handleSubmitEmail} noValidate className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="reset-email">Correo electrónico</Label>
-            <Input
-              ref={emailRef}
-              id="reset-email"
-              type="email"
-              placeholder="tu@correo.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={isPending}
-              aria-invalid={!!emailFieldErrors.email}
-              aria-describedby={emailFieldErrors.email ? "reset-email-error" : undefined}
-            />
-            {emailFieldErrors.email && (
-              <div
-                id="reset-email-error"
-                role="alert"
-                className="text-sm text-destructive space-y-1"
-              >
-                {emailFieldErrors.email.map((msg, idx) => (
-                  <div key={idx}>{msg}</div>
-                ))}
-              </div>
+          <FormField
+            id="reset-email"
+            label="Correo electrónico"
+            error={emailFieldErrors.email}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                ref={emailRef}
+                type="email"
+                placeholder="tu@correo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isPending}
+              />
             )}
-          </div>
+          </FormField>
 
-          <Button type="submit" disabled={isPending} className="w-full">
+          <Button type="submit" loading={isPending} className="w-full">
             {isPending ? "Enviando..." : "Enviar código"}
           </Button>
         </form>
@@ -285,35 +277,27 @@ export function RecuperarContrasenaForm() {
         )}
 
         <form onSubmit={handleSubmitCode} noValidate className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="reset-code">Código de verificación</Label>
-            <Input
-              ref={codeRef}
-              id="reset-code"
-              type="text"
-              inputMode="numeric"
-              placeholder="000000"
-              maxLength={OTP_CODE_LENGTH}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              disabled={isPending}
-              aria-invalid={!!codeFieldErrors.code}
-              aria-describedby={codeFieldErrors.code ? "reset-code-error" : undefined}
-            />
-            {codeFieldErrors.code && (
-              <div
-                id="reset-code-error"
-                role="alert"
-                className="text-sm text-destructive space-y-1"
-              >
-                {codeFieldErrors.code.map((msg, idx) => (
-                  <div key={idx}>{msg}</div>
-                ))}
-              </div>
+          <FormField
+            id="reset-code"
+            label="Código de verificación"
+            error={codeFieldErrors.code}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                ref={codeRef}
+                type="text"
+                inputMode="numeric"
+                placeholder="000000"
+                maxLength={OTP_CODE_LENGTH}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                disabled={isPending}
+              />
             )}
-          </div>
+          </FormField>
 
-          <Button type="submit" disabled={isPending} className="w-full">
+          <Button type="submit" loading={isPending} className="w-full">
             {isPending ? "Verificando..." : "Verificar código"}
           </Button>
         </form>
@@ -356,60 +340,39 @@ export function RecuperarContrasenaForm() {
       )}
 
       <form onSubmit={handleSubmitPassword} noValidate className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="reset-password">Nueva contraseña</Label>
-          <Input
-            ref={passwordRef}
-            id="reset-password"
-            type="password"
-            placeholder="Tu nueva contraseña"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={isPending}
-            aria-invalid={!!passwordFieldErrors.password}
-            aria-describedby={passwordFieldErrors.password ? "reset-password-error" : undefined}
-          />
-          {passwordFieldErrors.password && (
-            <div
-              id="reset-password-error"
-              role="alert"
-              className="text-sm text-destructive space-y-1"
-            >
-              {passwordFieldErrors.password.map((msg, idx) => (
-                <div key={idx}>{msg}</div>
-              ))}
-            </div>
+        <FormField
+          id="reset-password"
+          label="Nueva contraseña"
+          error={passwordFieldErrors.password}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              ref={passwordRef}
+              type="password"
+              placeholder="Tu nueva contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isPending}
+            />
           )}
-        </div>
+        </FormField>
 
-        <div className="space-y-2">
-          <Label htmlFor="reset-confirm-password">Confirmar contraseña</Label>
+        <FormField
+          id="reset-confirm-password"
+          label="Confirmar contraseña"
+          error={passwordFieldErrors.confirmPassword}
+        >
           <Input
-            id="reset-confirm-password"
             type="password"
             placeholder="Repite la contraseña"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             disabled={isPending}
-            aria-invalid={!!passwordFieldErrors.confirmPassword}
-            aria-describedby={
-              passwordFieldErrors.confirmPassword ? "reset-confirm-password-error" : undefined
-            }
           />
-          {passwordFieldErrors.confirmPassword && (
-            <div
-              id="reset-confirm-password-error"
-              role="alert"
-              className="text-sm text-destructive space-y-1"
-            >
-              {passwordFieldErrors.confirmPassword.map((msg, idx) => (
-                <div key={idx}>{msg}</div>
-              ))}
-            </div>
-          )}
-        </div>
+        </FormField>
 
-        <Button type="submit" disabled={isPending} className="w-full">
+        <Button type="submit" loading={isPending} className="w-full">
           {isPending ? "Guardando..." : "Restablecer contraseña"}
         </Button>
       </form>

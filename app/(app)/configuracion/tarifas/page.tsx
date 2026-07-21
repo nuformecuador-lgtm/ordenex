@@ -1,5 +1,4 @@
-import { PageHeader } from "@/components/shared/PageHeader";
-import { Container } from "@/components/shared/Container";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarArbolGeografico } from "@/lib/actions/geografia";
 import { listarVehiculos } from "@/lib/actions/vehiculos";
@@ -18,14 +17,11 @@ export default async function TarifasPage() {
 
   if (actor?.rol !== "maestro") {
     return (
-      <>
-        <PageHeader title="Tarifas" />
-        <Container>
-          <p role="alert" className="text-sm text-muted-foreground">
-            No tienes permiso para acceder a esta sección.
-          </p>
-        </Container>
-      </>
+      <AppPage title="Tarifas">
+        <p role="alert" className="text-sm text-muted-foreground">
+          No tienes permiso para acceder a esta sección.
+        </p>
+      </AppPage>
     );
   }
 
@@ -40,21 +36,18 @@ export default async function TarifasPage() {
   const zonas = zonasRes.status === "ok" ? zonasRes.items : [];
 
   return (
-    <>
-      <PageHeader title="Tarifas" />
-      <Container>
-        {arbolRes.status !== "ok" ? (
-          <p role="alert" className="text-sm text-muted-foreground">
-            No se pudo cargar el catálogo geográfico.
-          </p>
-        ) : null}
+    <AppPage title="Tarifas">
+      {arbolRes.status !== "ok" ? (
+        <p role="alert" className="text-sm text-muted-foreground">
+          No se pudo cargar el catálogo geográfico.
+        </p>
+      ) : null}
 
-        <ZonasTarifasModule
-          initialZonas={zonas}
-          provincias={provincias}
-          vehiculos={vehiculos}
-        />
-      </Container>
-    </>
+      <ZonasTarifasModule
+        initialZonas={zonas}
+        provincias={provincias}
+        vehiculos={vehiculos}
+      />
+    </AppPage>
   );
 }

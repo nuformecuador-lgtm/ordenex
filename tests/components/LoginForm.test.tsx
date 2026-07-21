@@ -126,7 +126,7 @@ describe("LoginForm — resultados de login (R7-R12)", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
   });
 
-  it("R7: status ok redirige a / cuando no hay redirectParam", async () => {
+  it("R7: status ok redirige a /dashboard cuando no hay redirectParam (feature 86, R14)", async () => {
     mockedLogin.mockResolvedValue({ status: "ok" });
     const user = userEvent.setup();
     render(<LoginForm redirectParam={null} />);
@@ -135,10 +135,10 @@ describe("LoginForm — resultados de login (R7-R12)", () => {
     await user.type(screen.getByLabelText("Contraseña"), "clave123");
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
   });
 
-  it("R7: status ok redirige a / cuando redirectParam es un open-redirect ('//evil.com')", async () => {
+  it("R7: status ok redirige a /dashboard cuando redirectParam es un open-redirect ('//evil.com') (feature 86, R15)", async () => {
     mockedLogin.mockResolvedValue({ status: "ok" });
     const user = userEvent.setup();
     render(<LoginForm redirectParam="//evil.com" />);
@@ -147,7 +147,7 @@ describe("LoginForm — resultados de login (R7-R12)", () => {
     await user.type(screen.getByLabelText("Contraseña"), "clave123");
     await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
   });
 
   it("R8: invalid_credentials muestra mensaje generico y conserva el correo", async () => {

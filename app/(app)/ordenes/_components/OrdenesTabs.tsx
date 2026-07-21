@@ -210,17 +210,49 @@ export function OrdenesTabs({
     setModalAbierto("devolver-tienda");
   }
 
-  function cerrarModal(open: boolean) {
-    if (!open) setModalAbierto(null);
-  }
-  function handleSuccess() {
-    setModalAbierto(null);
-    // Revalida TODAS las tablas por tab (comparten el prefijo de key SWR).
+  // Revalida TODAS las tablas por tab (comparten el prefijo de key SWR).
+  function revalidarTablas() {
     void mutate(
       (key) => Array.isArray(key) && key[0] === "ordenes:list",
       undefined,
       { revalidate: true },
     );
+  }
+
+  // Cierre de los modales de acción (generar-guía / asignar / devolver): vuelve a
+  // "sin modal". EXCEPCIÓN (feature 95): tras un éxito de guía/asignación,
+  // `encadenarEtiquetas` ya dejó `modalAbierto="etiquetas"` y el Modal de origen,
+  // por su `closeOnConfirm` por defecto, dispara este `onOpenChange(false)` JUSTO
+  // DESPUÉS del `onSuccess`. Si lo limpiara, mataría el encadenado; por eso, si el
+  // estado ya es "etiquetas", se respeta. El propio modal de etiquetas cierra con
+  // `cerrarEtiquetas`, no con esta función, así que no colisiona con la guarda.
+  function cerrarModal(open: boolean) {
+    if (!open) setModalAbierto((prev) => (prev === "etiquetas" ? prev : null));
+  }
+
+  // Cierre del modal de etiquetas (fin del flujo encadenado, feature 95): SIEMPRE
+  // limpia y NO re-encadena. Es una función aparte justamente para poder cerrar
+  // "etiquetas" sin chocar con la guarda de `cerrarModal`.
+  function cerrarEtiquetas(open: boolean) {
+    if (!open) setModalAbierto(null);
+  }
+
+  // Éxito de una acción por lote que NO encadena (devolver a tienda; escaneo de
+  // recepción): cierra y revalida.
+  function handleSuccess() {
+    setModalAbierto(null);
+    revalidarTablas();
+  }
+
+  // Feature 95: éxito de "Generar guía" / "Asignar mensajero" → revalida las tablas
+  // (num_guia/estado recién asignados) Y encadena la vista previa + descarga de las
+  // etiquetas del MISMO lote (`ordenesSeleccionadas`), en vez de solo cerrar.
+  // `EtiquetasGuiaModal` re-deriva las etiquetas por id (ya con num_guia) y omite
+  // las órdenes que no obtuvieron guía; al cerrarlo se corta el flujo (sin
+  // re-encadenar).
+  function encadenarEtiquetas() {
+    revalidarTablas();
+    setModalAbierto("etiquetas");
   }
 
   // Mapeo estado -> acciones por lote. Sin `accionesLote` no hay acciones (undefined).
@@ -439,19 +471,19 @@ export function OrdenesTabs({
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
             onOpenChange={cerrarModal}
-            onSuccess={handleSuccess}
+            onSuccess={encadenarEtiquetas}
           />
           <AsignarBodegaModal
             open={modalAbierto === "asignar-bodega"}
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
             onOpenChange={cerrarModal}
-            onSuccess={handleSuccess}
+            onSuccess={encadenarEtiquetas}
           />
           <EtiquetasGuiaModal
             open={modalAbierto === "etiquetas"}
             ordenes={ordenesSeleccionadas}
-            onOpenChange={cerrarModal}
+            onOpenChange={cerrarEtiquetas}
           />
           <DevolverATiendaModal
             open={modalAbierto === "devolver-tienda"}

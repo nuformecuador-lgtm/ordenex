@@ -60,6 +60,10 @@ function plantilla(overrides: Partial<GastoFijoPlantillaDTO> = {}): GastoFijoPla
     concepto: "Alquiler",
     monto: "80000.00",
     activa: true,
+    // Feature 84: mensual con ancla dia 15 -> aplica el 15 de julio y el 15 de agosto (JULIO/AGOSTO).
+    periodicidadUnidad: "meses",
+    periodicidadCantidad: 1,
+    fechaCobro: "2026-07-15",
     createdAt: "2026-07-01T10:00:00.000Z",
     updatedAt: "2026-07-01T10:00:00.000Z",
     ...overrides,
@@ -101,7 +105,12 @@ describe("cron gastos fijos — idempotencia por periodo (R28/R31)", () => {
     ]);
 
     const primera = await svc.ejecutarGeneracion(JULIO);
-    expect(primera).toEqual({ periodo: "2026-07", plantillasActivas: 2, egresosGenerados: 2 });
+    expect(primera).toEqual({
+      fecha: "2026-07-15",
+      plantillasActivas: 2,
+      plantillasQueAplicanHoy: 2,
+      egresosGenerados: 2,
+    });
     expect(store.rows).toHaveLength(2);
     const balance1 = derivarBalance(...(Object.values(await repo.agregarBalance({})) as [string, string]));
     expect(balance1.egresos).toBe("105000.00");

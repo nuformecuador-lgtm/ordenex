@@ -1,0 +1,20 @@
+-- Revierte 20260720150000_drop_default_maestro_user.
+--
+-- DELIBERADAMENTE NO restaura el usuario 'admin@ordenex.test'. Revertir "al
+-- pie de la letra" seria reinsertarlo con el hash bcrypt hardcodeado del repo,
+-- es decir REINTRODUCIR la credencial de privilegio total que esta migracion
+-- existe para eliminar. Un rollback de esquema no debe reabrir un agujero de
+-- seguridad.
+--
+-- El down de `20260709120000_seed_maestro_user` ya es un DELETE del mismo
+-- usuario, asi que bajar por debajo de esta migracion converge al mismo estado
+-- (sin ese usuario) por cualquiera de los dos caminos: no queda inconsistencia.
+--
+-- Si necesitas una cuenta maestra despues de un rollback, creala con la
+-- credencial que corresponda:
+--   MAESTRO_EMAIL=... MAESTRO_PASSWORD=... pnpm db:seed:maestro
+--
+-- No-op explicito para que el archivo exista (convencion del repo: toda
+-- migracion lleva su down.sql) y para dejar asentado que la ausencia de
+-- sentencias es una decision, no un olvido.
+SELECT 1;

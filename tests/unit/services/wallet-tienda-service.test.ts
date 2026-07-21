@@ -12,6 +12,7 @@ import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda"
 const TIENDA: Actor = { usuarioId: "t1", rol: "adminTienda" };
 const OTRA_TIENDA: Actor = { usuarioId: "t2", rol: "adminTienda" };
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
+const ADMIN: Actor = { usuarioId: "a1", rol: "admin" }; // feature 94: paridad con maestro
 const MENSAJERO: Actor = { usuarioId: "x1", rol: "mensajero" };
 
 function fakeRepo(overrides: Partial<IWalletTiendaMovimientoRepository> = {}): IWalletTiendaMovimientoRepository {
@@ -131,7 +132,19 @@ describe("WalletTiendaService.listarSaldosTiendas (R20)", () => {
     ]);
   });
 
-  it("R20: rol NO maestro (adminTienda/mensajero) -> forbidden, sin tocar el repo", async () => {
+  it("feature 94: admin ve el saldo de todas las tiendas (paridad con maestro)", async () => {
+    const repo = fakeRepo({
+      listarSaldosTodasTiendas: vi.fn(async () => [
+        { tiendaId: "t1", tiendaNombre: "Tienda Uno", creditos: "10000.00", debitos: "1695.00" },
+      ]),
+    });
+    const svc = new WalletTiendaService(repo);
+    const r = await svc.listarSaldosTiendas(ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.listarSaldosTodasTiendas).toHaveBeenCalled();
+  });
+
+  it("R20: rol sin acceso total (adminTienda/mensajero) -> forbidden, sin tocar el repo", async () => {
     const repo = fakeRepo();
     const svc = new WalletTiendaService(repo);
     expect((await svc.listarSaldosTiendas(TIENDA)).status).toBe("forbidden");

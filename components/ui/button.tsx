@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
+import { Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -48,14 +49,35 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  loading = false,
+  disabled,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> & {
+    /**
+     * Acción async en curso. Antepone un spinner al contenido, fuerza `disabled`
+     * (anti-doble-envío) y expone `aria-busy` para lectores de pantalla. El giro
+     * respeta `prefers-reduced-motion` (se detiene) sin perder el estado disabled.
+     */
+    loading?: boolean
+  }) {
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
-    />
+    >
+      {loading ? (
+        <Loader2
+          className="animate-spin motion-reduce:animate-none"
+          aria-hidden="true"
+        />
+      ) : null}
+      {children}
+    </ButtonPrimitive>
   )
 }
 

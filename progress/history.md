@@ -1456,3 +1456,226 @@
 - Deuda declarada: falta el round-trip de la **cadena completa** de migraciones contra Postgres en CI
   (la `jobs_cola` se validó **aislada**). Seguimiento futuro: migrar `corte-diario` y
   `generar-gastos-fijos` al mismo patrón.
+
+<!-- Backfill 2026-07-21 (PR de bookkeeping): las 24 entradas siguientes (features 61, 64, 65, 69,
+     72, 73, 75, 76, 77, 78, 81-84, 86-89, 91, 93-97) faltaban en esta bitácora. Reconstruidas desde
+     los PRs de GitHub + progress/impl_*/review_* + las descripciones de feature_list.json. Ordenadas
+     por fecha de merge. -->
+
+## 2026-07-14 — portal mensajero (feature 61, FULLSTACK)
+- Fila de KPIs sobre la lista de `/mis-asignaciones` (feature 36): **pendientes** (órdenes en
+  `en_reparto`), **entregadas** (en `entregada`) y **por cobrar** (suma de `orden.monto_cobrar` COD
+  de las `en_reparto`, null→0). Componente presentacional `KpisMensajero.tsx` (Card + PriceLabel,
+  región aria).
+- Aclaración del humano (= gate F1.4): el estado `en_ruta` de la descripción NO existe → se mapeó a
+  `en_reparto`; "por cobrar" es COD (`monto_cobrar`), no flete.
+- Backend mínimo: `+contarEntregadas(mensajeroId)` (count, sin traer filas) + `kpis` en el resultado
+  del service (dentro del `Promise.all` existente, sin latencia serial). Sin migración. Orquestada
+  directo por el leader (los subagentes mueren por el bug opus-4.8[1m]).
+- Landó vía la rama `adjustments` (PR #64). Deuda ajena preexistente en ese árbol: errores de tsc en
+  `Tarifa*`/`IUserRepository` (refactor por-tienda/usuarios-por-rol en curso de otras sesiones).
+
+## 2026-07-15 — pwa - basic (feature 64, FRONTEND)
+- PWA básica: `manifest.json`, service worker vanilla (~50 líneas, sin @serwist), meta tags, íconos
+  192/512, página offline. Colores del manifest desde `globals.css` (navy/kraft/brand).
+- Requisitos T1–T8; reviewer APROBADO 0 bloqueantes (`review_64-pwa-basic.md`). Enfoque manual por
+  riesgo de incompatibilidad con Next 16 + Turbopack.
+- El PR dedicado #72 quedó **CLOSED** (superado); el código llegó a `dev` en el lote pwa/qr
+  (~2026-07-15). Follow-up: el SW se restringió a **producción** (PR #111) para arreglar la recarga
+  infinita en dev.
+
+## 2026-07-15 — lectura de QR con cámara (feature 65, FRONTEND)
+- Página `/qr` + ítem de menú "QR" (todos los roles): lector con cámara (`QrScanner` sobre
+  `html5-qrcode` ya presente por la feature 33) que decodifica una ruta y navega a ella
+  (`useQrNavigate`).
+- Requisitos T1–T7; reviewer APROBADO 0 bloqueantes (`review_65-lestura-de-qr.md`). 1 archivo nuevo +
+  2 modificados. **PR #73**.
+- El detalle por-rol de la orden quedó como feature aparte (66, hoy `pending`).
+
+## 2026-07-15 — fix: dev en verde — recibido_origen + columnas del listado (feature 72, FIX ágil)
+- Fix ágil (`sdd:false`) que devolvió `dev` a **verde** tras el PR #75. (1) Conteos de
+  `ORDER_STATUS_SEED` 13→14 (nuevo valor `recibido_origen`) + tests posicionales/menú/migración, sin
+  borrar ni aflojar. (2) **Restauró 5 columnas** del listado (Producto/Dirección/Monto/Fulfillment/
+  Comisión+IVA) que el PR #75 había borrado por drift (revert exacto de `8541498`) y **eliminó el
+  `console.log('xyz')`** que corría en cada render en producción. (3) Arregló el guard `no-embalaje`
+  (ignora `.claude/worktrees`).
+- Medido: 18 fallos → 0 reales (2 flakes de timeout pasan en aislado); lint 0. **PR #76**.
+- Desbloqueó el T5 de la feature 69. Lección: un baseline citado de la bitácora no es un baseline
+  medido.
+
+## 2026-07-16 — cierre_detail: congelar el detalle y la tarifa del cierre (feature 69, FULLSTACK/backend puro)
+- Tabla nueva `cierre_detail` de grano (cierre, orden), poblada en la misma tx de `crearCierre`, que
+  **congela (snapshot)** los campos money-critical (monto_cobrar, cobra_comision, zona_id, tienda_id,
+  tarifa) + los descriptivos; los feeds de wallet pasan a leer el snapshot en vez de datos vivos de
+  `orden`.
+- Bug money-critical que cerró: editar monto/tarifa entre SOLICITAR y APROBAR descuadraba en silencio
+  los totales snapshot contra los movimientos de wallet (append-only).
+- **Absorbió la feature 68** (`cancelled`): recableó `TarifaVigentePorZonaRepository` a por-tienda →
+  devolvió `pnpm build`/`./init.sh` a **verde** (typecheck 2→0). La regla de selección de tarifa
+  (`tarifas.status`) quedó como `TODO:` → feature 70.
+- Requisitos R1–R30 / 23 tasks; gate F1.4 con 1 override (g). Round-trip real de ambas migraciones.
+  Reviewer APROBADO 0 bloqueantes. **PR #77**.
+
+## 2026-07-16 — causa tipificada de la devolución (feature 73, FULLSTACK)
+- Al devolver, el mensajero elige una **causa** (radios: `not_found`/`wrong_number`/`wrong_address`)
+  además del motivo libre, que sigue obligatorio. Columna nueva `gestion_orden.causa_devolucion`
+  (enum, nullable, sin CHECK), solo en la rama `devuelta`.
+- Decisiones (gate F1.4): lista cerrada de 3 sin "Otro"; todas las causas cuentan igual como intento
+  (feature 47 intacta); columna de **solo escritura** a propósito → mostrarla/agruparla = feature 74.
+- Migración con `down.sql` + round-trip real (una devolución previa sobrevive con causa NULL).
+  Primitiva `radio-group` sobre `@base-ui/react` (no Radix). Reviewer APROBADO 0 bloqueantes. **PR #78**.
+
+## 2026-07-16 — evidencia (foto) obligatoria en la devolución (feature 75, FULLSTACK)
+- La rama `devuelta` de la gestión suma `evidencia` obligatoria (espejo exacto de `rechazada`): reusa
+  `evidenciaSchema` (MIME jpeg/png/webp + tamaño) en cliente y servidor; la foto se sube al bucket de
+  evidencias antes de la tx.
+- Sin cambios en la feature 47 (intentos/escalado) ni en la causa (73); solo se suma el campo. Tests
+  de schema/action/service/UI ampliados a exigir evidencia, sin aflojar.
+- Reviewer APROBADO (`review_75-evidencia-devolucion.md`). **PR #79**.
+
+## 2026-07-16 — ranking diario de mensajeros + premios (feature 76, FULLSTACK)
+- Página `/ranking`: ranking **diario** = entregas exitosas del día / órdenes asignadas del día (hora
+  CR), % con 1 decimal server-side; tabla de premios editable (monto ₡ + descripción) para el top 3.
+- Se agregó `orden.asignado_at` (migración aditiva) estampada en CADA asignación/reasignación
+  (4 writers + 3 paths de limpieza instrumentados) para el denominador; tabla nueva `premio_ranking`.
+- Gate F1.4: maestro edita+ve, mensajero ve solo-lectura; mínimo de muestra configurable (default 1).
+  Reviewer APROBADO 0 bloqueantes. **PR #81**. Deuda: round-trip real de las 2 migraciones pendiente
+  de verificación en despliegue.
+
+## 2026-07-16 — bloqueo del checkbox del maestro por cierre abierto (feature 77, FULLSTACK/FIX ágil)
+- En la lista del maestro, el checkbox de una orden se **deshabilita** si su bodega (central o
+  satélite) tiene ≥1 mensajero con cierre **sin resolver** (`solicitado`/`vencido`), por ZONA de la
+  orden. `findZonasConMensajeroBloqueado()` (1 query agregada + `distinct`, sin N+1) + bloqueo
+  por-orden en la UI.
+- Continuaba un WIP del humano que resolvía mal el pedido (flag global) y que **había reintroducido el
+  `console.log("xyz")`** (mismo incidente del PR #75) → eliminado. Unifica la regla del backend a ≥1
+  (revierte a propósito el relajado de la feature 41).
+- Bug latente corregido de paso: `mensajerosFetcher` devolvía una forma incompatible bajo la misma key
+  SWR. Reviewer APROBADO 0 bloqueantes. **PR #82**.
+
+## 2026-07-17 — rutas públicas alcanzables sin sesión (feature 78, BACKEND)
+- Bug de 1 línea: `middleware.ts` con `PUBLIC_ROUTES=["/login","/api/health"]` dejaba
+  `/recuperar-contrasena` y `/postulacion` **inalcanzables sin sesión** (violaba el R22 de la feature
+  21). Se añadieron ambas a `PUBLIC_ROUTES` + el **primer test de middleware del repo** (7 casos,
+  escritos en rojo primero).
+- Decisiones (gate F1.4): se conserva `startsWith`; `/paquete` queda fuera a propósito → feature 79;
+  los `console.log` del OTP se quedan (único modo de completar el flujo hoy) → feature 80; sin
+  proveedor de correo, solo un `TODO:`.
+- Verificado en runtime con curl. Diff de producción: 2 archivos (`middleware.ts` + un comentario).
+  Requisitos R1–R7. **PR #85**.
+
+## 2026-07-17 — API keys: generación con usuario dedicado (feature 81, BACKEND)
+- Modelo `ApiKey` (keyHash SHA-256 UNIQUE, `usuarioId` 1:1). Generar una key crea un **usuario
+  dedicado** (rol nuevo `apiKey` sin permisos, email/cédula sintéticos únicos, contraseña aleatoria e
+  ignota); la key se muestra en claro **una sola vez**.
+- Gate F1.4: 8 decisiones D1–D8. La key con **SHA-256, no bcrypt** (el spec_author refutó al leader y
+  tenía razón: 256 bits sin diccionario, y bcrypt sería ~100ms/request sin lookup por hash); la
+  contraseña del usuario sí sigue en bcrypt. `down.sql` recrea el enum (Postgres no soporta DROP VALUE).
+- Alcance acotado a "generar + asignar" (consumo = feature 88, UI = feature 82). Round-trip real
+  repetido por el reviewer. Reviewer APROBADO 0 bloqueantes. **PR #86**.
+
+## 2026-07-17 — API keys: UI de gestión (feature 82, FULLSTACK)
+- Pantalla `Configuración > API` (solo maestro): **generar + listar** API keys (identificador,
+  `key_prefix` en claro, usuario dedicado, fecha). Backend nuevo `listarApiKeys` (la 81 solo tenía
+  `generar`). Reusa DataTable/Pagination/Modal/Toast/manejador de errores.
+- El secreto/hash nunca cruza al cliente (por construcción); modal del secreto con checkbox "Ya guardé
+  la clave" obligatorio, no dismissible.
+- Reescribió la guardia de irrecuperabilidad de R19 de la 81 (la vieja estaba rota) → verificada por
+  mutación por el reviewer. Apilada sobre la 81. Reviewer APROBADO 0 bloqueantes. **PR #87**.
+
+## 2026-07-17 — /novedades: órdenes devueltas por tienda con contacto (feature 87, FULLSTACK)
+- Página `/novedades` (solo adminTienda): lista las órdenes en estatus `devuelta` de la tienda del
+  actor con su causa de devolución vigente, paginada, con botones de contacto (llamar/WhatsApp).
+- Refactor: botones de contacto extraídos a `components/shared/ContactoButtons.tsx` con normalización
+  E.164 CR (+506) + **arregla el bug heredado de `wa.me` sin código de país**; `GestionarOrdenPanel`
+  deja de duplicarlos inline.
+- Sin migración (la causa existe desde la 73). Backend con `findCausasDevueltaVigentes` en una consulta
+  agregada (sin N+1). Requisitos R1–R22. Reviewer APROBADO 0 bloqueantes. **PR #89**.
+
+## 2026-07-17 — /novedades incluye las devoluciones del mensajero (feature 89, BACKEND)
+- Corrige que las devoluciones del mensajero no aparecían en `/novedades`: la feature 47 re-transiciona
+  la orden fuera de `devuelta` en la misma tx, así que filtrar por estatus actual daba lista vacía. Se
+  re-ancló el filtro a la **gestión devuelta vigente** (`resultado='devuelta' AND anulada_at IS NULL`)
+  + orden **no cerrada** (excluye `entregada`/`devuelta_origen`/`recibido_origen`).
+- Predicado central `novedadWhere` compartido por `count` y `find` (una orden con varios intentos
+  figura una sola vez). Encogió a backend puro (la causa ya se renderiza desde la 73; sin campo motivo
+  nuevo).
+- Requisitos R1–R13. Reviewer APROBADO 0 bloqueantes (`review_89.md`). **PR #93**.
+
+## 2026-07-20 — wallet: ítem de sidebar del maestro + periodicidad de gastos fijos (features 83 y 84)
+- **83 (frontend):** ítem "Wallet" en el sidebar (solo maestro) con hijos Caja principal/Tiendas/
+  Mensajeros (las 3 páginas ya eran solo-maestro server-side; antes solo se alcanzaban tecleando la
+  URL).
+- **84 (backend):** periodicidad de `GastoFijoPlantilla` modelada como unidad+cantidad+fecha_cobro
+  (enum `PeriodicidadUnidad{dias,semanas,meses}`) → cubre diaria/semanal/quincenal/mensual y cualquier
+  ciclo. Módulo puro `lib/utils/periodicidad.ts` (con clamping de fin de mes); cron a **diario**
+  filtrando por `aplicaHoy`; idempotencia por periodo derivado; migración aditiva con backfill a
+  meses/1 (comportamiento pre-84 preservado).
+- La regla "un variable no puede ser periódico" ya se cumplía por construcción (solo las plantillas son
+  periódicas) → se afirma y testea como regresión. Implementadas directo por el leader a pedido del
+  humano (sin gate SDD). **PR #90**. Deuda: round-trip real de la migración pendiente (requiere
+  `DATABASE_URL`). El frontend de la periodicidad quedó como feature 85 (`pending`).
+
+## 2026-07-20 — landing pública en / + dashboard a /dashboard (feature 86, FRONTEND)
+- Nueva `app/page.tsx` pública (topbar: logo + "Trabaja con nosotros"→`/postulacion` + "Ingreso"→
+  `/login`; hero mínimo, colores existentes). El dashboard se movió a `app/(app)/dashboard/page.tsx`
+  (`git mv`, cuerpo intacto, ramificación por rol conservada).
+- Punto duro: `/` se hizo pública por **match exacto** en `middleware.ts` (nunca en la lista
+  `startsWith`, que haría pública toda la app); con sesión, `/` redirige a `/dashboard`. Los 3
+  redirects internos pasaron a `/dashboard`.
+- Wordmark extraído a `components/shared/Logo.tsx`. Sin marketing inventado (regla 6). Requisitos
+  R1–R16 mapeados a test. Reviewer APROBADO 0 bloqueantes. **PR #88**.
+
+## 2026-07-20 — carga de órdenes por API key (feature 88, BACKEND — es la 81a)
+- Consumo de la API key: auth por `Authorization: Bearer ordx_...` (hash SHA-256 + `findByKeyHash`) →
+  endpoint nuevo que reusa `BulkOrdenService` con estado inicial `en_ruta_bodega_principal`, **guía
+  directa** desde la secuencia existente (excepción al diferido de la feature 17), y respuesta que
+  retorna cada orden con su `num_guia`.
+- Valida key válida + usuario dedicado `activo` (palanca de revocación) + valor (hereda la regla de la
+  carga masiva). Nuevo valor de enum `carga_api` (migración con `down.sql` que recrea el tipo).
+- Choke-point de historial de estados (49) → 13 puntos; guía sin duplicar (`nextval` con guarda
+  `IS NULL`). Round-trip real. Reviewer APROBADO 0 bloqueantes. **PR #92**. Completa la cadena API keys
+  (generar 81 + UI 82 + consumo 88).
+
+## 2026-07-20 — geocodificación de direcciones vía cola de jobs (feature 91, BACKEND)
+- Feature B del sistema de background jobs (consume la cola de la 90): geocodifica direcciones contra
+  **Google Geocoding API** y escribe lat/lng en `orden`. Columnas nuevas (latitud/longitud/geocoded_at/
+  precision/status) + tabla `geocode_cache` por hash de dirección normalizada. Enum `JobTipo` gana
+  `geocodificacion` (ALTER TYPE; `down.sql` recrea el tipo).
+- **Primer cliente HTTP saliente server-side** del repo (`lib/clients/google-geocode.ts`, fetch
+  inyectable). Disparadores = los 2 writers reales de dirección (el spec_author cazó que `update()` no
+  puede cambiarla), encolando dentro de la misma tx (transactional outbox). Sin backfill histórico. Sin
+  `GOOGLE_MAPS_API_KEY` el handler degrada sin tumbar el drenado.
+- Requisitos R1–R34; gate F1.4 (9 decisiones). 2 bugs cazados por tests y verificados por mutación
+  (TypeError en la construcción de la query; fuga de dirección en claro al cache). Round-trip real en
+  Postgres desechable. Reviewer APROBADO 0 bloqueantes. **PR #96**.
+
+## 2026-07-20 — dashboard: ítem "Inicio" en el sidebar (feature 93, FRONTEND)
+- Ítem "Inicio" en el sidebar que enlaza a `/dashboard` (ya existente por la feature 86), visible solo
+  para maestro y admin.
+- Fix ágil (`sdd:false`). Landó junto a la rama de dashboard-sidebar (renumerada 92→93 por colisión de
+  ids). **PR #103**.
+
+## 2026-07-21 — admin con paridad de maestro (feature 94, FULLSTACK)
+- El rol **admin** obtiene el mismo acceso (ver y manipular) que el maestro en los módulos Órdenes,
+  Cierres del día, Ranking y Wallet.
+- Trazabilidad en `impl_94.md`. **PR #107**.
+
+## 2026-07-21 — etiquetas tras generar guía / asignar mensajero (feature 95, FRONTEND)
+- Tras generar la guía y asignar mensajero, se encadena la vista previa + descarga (PDF) de las
+  etiquetas de esas guías, reusando el modal de etiquetas existente. Para maestro y admin.
+- Fix ágil (`sdd:false`). **PR #108**.
+
+## 2026-07-21 — recoger guía por input de número (feature 96, FRONTEND)
+- En el portal del mensajero, los botones de recoger se reemplazan por un input de número de guía;
+  recoger queda disponible solo por ese input o por escaneo de cámara, validando que la guía esté
+  asignada.
+- Fix ágil (`sdd:false`). **PR #109**.
+
+## 2026-07-21 — optimización de ruta - frontend (feature 97, FULLSTACK)
+- Mitad frontend de la spec 92 (backend en PR #98): mapa Leaflet + OpenStreetMap con las paradas
+  numeradas en orden de secuencia + la ruta dibujada (R28), aviso de ruta desactualizada (R30), botón
+  sincronizar con GPS best-effort y anti-doble-click (R25/R31/R32/R34), y mensajes de conflicto de
+  geocodificación en asignación (R9). Backend chico: `MiAsignacionDTO` expone lat/lng (feature 91).
+- Leaflet cargado con `next/dynamic` `ssr:false`. `pnpm build` exit 0. **PR #110**, **desplegada a
+  prod (PR #117)**.

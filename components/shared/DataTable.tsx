@@ -1,8 +1,20 @@
 "use client";
 
 import { Fragment, isValidElement, useState, type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
+/** Nº de filas placeholder mostradas mientras carga (estado skeleton). */
+const SKELETON_ROW_COUNT = 5;
+
+/**
+ * Anchos por columna del skeleton: estables columna a columna (no aleatorios por
+ * fila) para que las celdas placeholder se lean como columnas reales, no ruido.
+ */
+const SKELETON_WIDTHS = ["w-16", "w-24", "w-20", "w-28", "w-14"] as const;
 
 /**
  * Definición de una columna de la tabla genérica.
@@ -27,6 +39,23 @@ export interface Column<T> {
   renderHeader?: () => ReactNode;
 }
 
+/**
+ * Estado vacío estructurado de la tabla. Espejo de `EmptyStateProps` (sin
+ * `className`): el `DataTable` es dueño del layout del vacío y solo expone el
+ * contenido (icono/título/descripción/acción) para que todas las listas hereden
+ * el mismo `EmptyState`.
+ */
+export interface DataTableEmptyState {
+  /** Icono lucide opcional. */
+  icon?: LucideIcon;
+  /** Título que enseña el estado/próximo paso. */
+  title: ReactNode;
+  /** Descripción opcional con la guía del próximo paso. */
+  description?: ReactNode;
+  /** CTA opcional (normalmente un `<Button>`). */
+  action?: ReactNode;
+}
+
 export interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
@@ -43,8 +72,19 @@ export interface DataTableProps<T> {
   isLoading?: boolean;
   /** Mensaje de error ya saneado por el consumidor (R13). */
   error?: string | null;
-  /** Mensaje del estado vacío (R11). */
+  /**
+   * Mensaje del estado vacío (R11). Se usa como TÍTULO del `EmptyState` cuando
+   * no se pasa `emptyState` estructurado (retrocompatible: una lista que solo
+   * daba `emptyMessage` sigue mostrando ese texto como título).
+   */
   emptyMessage?: string;
+  /**
+   * Estado vacío estructurado: icono + título que ENSEÑA el próximo paso +
+   * descripción + CTA opcionales. Toda lista basada en `DataTable` hereda así
+   * un vacío consistente (`EmptyState`). Si se omite, se cae a `emptyMessage`
+   * como título. `emptyState.title` tiene prioridad sobre `emptyMessage`.
+   */
+  emptyState?: DataTableEmptyState;
   /**
    * Contenido desplegable de una fila. Al pasarlo, la tabla antepone una columna con un
    * botón de expandir por fila y el contenido aparece en una fila propia debajo. Devolver
@@ -142,6 +182,7 @@ export function DataTable<T>({
   isLoading = false,
   error = null,
   emptyMessage = "No hay registros",
+  emptyState,
   renderExpanded,
   expandAriaLabel,
 }: DataTableProps<T>) {
@@ -174,23 +215,53 @@ export function DataTable<T>({
       </tr>
     );
   } else if (isLoading) {
+    // Estado de carga como FILAS SKELETON (no el texto "Cargando…"): mantiene la
+    // forma de la tabla mientras llegan los datos. Las filas placeholder son
+    // puramente visuales (`aria-hidden`); el estado se anuncia a lectores de
+    // pantalla con una única región `role="status"` (sr-only).
     body = (
-      <tr>
-        <td colSpan={colSpan} className="px-3 py-6 text-center">
-          <span role="status" className="text-sm text-muted-foreground">
-            Cargando…
-          </span>
-        </td>
-      </tr>
+      <>
+        <tr>
+          <td colSpan={colSpan} className="p-0">
+            <span role="status" className="sr-only">
+              Cargando
+            </span>
+          </td>
+        </tr>
+        {Array.from({ length: SKELETON_ROW_COUNT }).map((_, rowIndex) => (
+          <tr key={`skeleton-${rowIndex}`} aria-hidden="true" className="border-b">
+            {expandible ? (
+              <td className="px-3 py-2 align-middle">
+                <Skeleton className="size-5 rounded" />
+              </td>
+            ) : null}
+            {columns.map((column, columnIndex) => (
+              <td key={column.id} className="px-3 py-2 align-middle">
+                <Skeleton
+                  className={cn(
+                    "h-4",
+                    SKELETON_WIDTHS[columnIndex % SKELETON_WIDTHS.length],
+                  )}
+                />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </>
     );
   } else if (data.length === 0) {
+    // Estado vacío consistente vía `EmptyState`. Retrocompatible: si el consumidor
+    // solo dio `emptyMessage`, se muestra como título; `emptyState.title` (si viene)
+    // tiene prioridad y habilita icono/descripción/CTA que enseñan el próximo paso.
     body = (
       <tr>
-        <td
-          colSpan={colSpan}
-          className="px-3 py-6 text-center text-sm text-muted-foreground"
-        >
-          {emptyMessage}
+        <td colSpan={colSpan} className="p-0">
+          <EmptyState
+            icon={emptyState?.icon}
+            title={emptyState?.title ?? emptyMessage}
+            description={emptyState?.description}
+            action={emptyState?.action}
+          />
         </td>
       </tr>
     );
@@ -211,7 +282,7 @@ export function DataTable<T>({
                     aria-expanded={abierta}
                     aria-controls={`${key}-expandido`}
                     aria-label={expandAriaLabel?.(row)}
-                    className="inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="inline-flex items-center justify-center rounded p-1 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   >
                     <ExpandIcon open={abierta} />
                   </button>

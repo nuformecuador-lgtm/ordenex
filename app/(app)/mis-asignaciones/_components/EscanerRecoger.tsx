@@ -1,24 +1,24 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 
 import { QrScanner } from "@/components/shared/QrScanner";
 import { useToast } from "@/hooks/useToast";
-import { recogerAsignaciones } from "@/lib/actions/mis-asignaciones";
 import { extractNumGuiaFromScan } from "@/lib/utils/paquete-url";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
+import { useRecogerPorGuia } from "./useRecogerPorGuia";
+
 // Recoger por escaneo: espejo de `EscanerRecepcion` (feature 33) para el portal del
 // mensajero. Delega la cámara y el ciclo de vida de html5-qrcode en el componente
-// compartido `QrScanner`; aquí solo se resuelve el num_guia del texto decodificado y
-// se ACEPTA la orden con la MISMA Server Action que el botón "Recoger"
-// (`recogerAsignaciones`, en_espera_aceptacion -> en_reparto). El backend no cambia.
+// compartido `QrScanner`; aquí solo se extrae el num_guia del texto decodificado y se
+// delega en `useRecogerPorGuia` (feature 96), la MISMA lógica "resolver numGuia contra
+// porRecoger -> recoger -> toast + revalidar" que usa el input de número de guía.
 //
-// El QR de la etiqueta codifica la URL del paquete (`<origin>/paquete/<numGuia>`),
-// así que se extrae el num_guia y se resuelve contra la lista de "por recoger" del
-// propio mensajero para obtener el UUID que la action espera (misma fuente de verdad
-// que el botón). Un código que no resuelve a una de esas órdenes se rechaza aquí sin
-// llamar a la action.
+// El QR de la etiqueta codifica la URL del paquete (`<origin>/paquete/<numGuia>`), así
+// que se extrae el num_guia con `extractNumGuiaFromScan` ANTES de resolverlo; un código
+// que no es esa URL se rechaza aquí (el input de texto NO usa este parser: compara el
+// número tecleado directo contra `numGuia`).
 
 export interface EscanerRecogerProps {
   /** Órdenes en `en_espera_aceptacion` (por recoger): resuelven numGuia -> id. */
@@ -29,60 +29,25 @@ export interface EscanerRecogerProps {
 
 export function EscanerRecoger({ porRecoger, onRecogida }: Readonly<EscanerRecogerProps>) {
   const toast = useToast();
-  const [procesando, setProcesando] = useState(false);
+  const { recoger, procesando } = useRecogerPorGuia(porRecoger);
 
-  const procesar = useCallback(
-    async (escaneado: string) => {
-      if (procesando) return;
-      const numGuia = extractNumGuiaFromScan(escaneado);
+  /**
+   * Camino cámara: `QrScanner` ya cierra el visor antes de invocarnos. Extraemos el
+   * num_guia de la URL del paquete y lo pasamos a la lógica compartida; en éxito
+   * disparamos `onRecogida` (router.refresh en el módulo).
+   */
+  const onDecoded = useCallback(
+    (texto: string) => {
+      const numGuia = extractNumGuiaFromScan(texto);
       if (numGuia === null) {
         toast.error("Código inválido.");
         return;
       }
-      const orden = porRecoger.find((o) => o.numGuia === numGuia);
-      if (!orden) {
-        toast.error(`La guía ${numGuia} no está entre tus órdenes por recoger.`);
-        return;
-      }
-      setProcesando(true);
-      try {
-        const result = await recogerAsignaciones({ ordenIds: [orden.id] });
-        switch (result.status) {
-          case "ok":
-            toast.success(`Guía ${numGuia} recogida.`);
-            onRecogida();
-            break;
-          case "conflict":
-            toast.error(
-              "La orden ya no está por recoger. Actualiza y vuelve a intentar.",
-            );
-            break;
-          case "forbidden":
-            toast.error("No tienes permiso para recoger esta orden.");
-            break;
-          case "unauthenticated":
-            toast.error("Tu sesión expiró. Inicia sesión de nuevo.");
-            break;
-          case "validation_error":
-            toast.error("Código inválido.");
-            break;
-        }
-      } finally {
-        setProcesando(false);
-      }
+      void recoger(numGuia).then((ok) => {
+        if (ok) onRecogida();
+      });
     },
-    [porRecoger, procesando, toast, onRecogida],
-  );
-
-  /**
-   * Camino cámara: `QrScanner` ya cierra el visor antes de invocarnos, así que aquí
-   * solo procesamos el texto.
-   */
-  const onDecoded = useCallback(
-    (texto: string) => {
-      void procesar(texto);
-    },
-    [procesar],
+    [recoger, onRecogida, toast],
   );
 
   return (

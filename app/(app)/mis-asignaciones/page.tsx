@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
 
@@ -27,22 +27,18 @@ export default async function MisAsignacionesPage() {
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
-      <PageHeader
-        title="Mis asignaciones"
-        description="Órdenes por recoger y en reparto"
-      />
+    <AppPage
+      title="Mis asignaciones"
+      description="Órdenes por recoger y en reparto"
+    >
       {/* Feature 61: KPIs del portal del mensajero sobre la lista de asignaciones. */}
       <KpisMensajero kpis={result.kpis} />
       <MisAsignacionesModule
         porRecoger={result.porRecoger}
         porGestionar={result.porGestionar}
         ordenEnGestionId={result.ordenEnGestionId}
-        /* Feature 93 (R30/R31): estado de la ruta y rol resueltos SERVER-SIDE y
-           bajados por props; el módulo no fetchea nada del cliente. */
         ruta={result.ruta}
-        rol={actor.rol}
       />
-    </section>
+    </AppPage>
   );
 }

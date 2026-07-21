@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarCuentasPorPagarAction } from "@/lib/actions/wallet-mensajero";
 
 import { CuentasPorPagarTable } from "./_components/CuentasPorPagarTable";
@@ -21,7 +22,9 @@ import { CuentasPorPagarTable } from "./_components/CuentasPorPagarTable";
  */
 export default async function WalletMensajerosPage() {
   const actor = await resolveActorFromSession();
-  if (!actor || actor.rol !== "maestro") {
+  // Feature 94 (paridad adm↔maestro): las cuentas por pagar las ven los roles de
+  // ACCESO TOTAL (`maestro`/`admin`); cualquier otro rol (o sin sesion) → notFound (R19).
+  if (!actor || !esAccesoTotal(actor.rol)) {
     notFound(); // R19: rol no autorizado / sin sesion → sin exponer datos
   }
 
@@ -33,15 +36,13 @@ export default async function WalletMensajerosPage() {
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-8 p-6">
-      <PageHeader
-        title="Cuentas por pagar a mensajeros"
-        description="Lo devengado, lo ya pagado del efectivo y lo pendiente por mensajero"
-      />
-
+    <AppPage
+      title="Cuentas por pagar a mensajeros"
+      description="Lo devengado, lo ya pagado del efectivo y lo pendiente por mensajero"
+    >
       <section aria-label="Cuentas por pagar a mensajeros" className="flex flex-col gap-4">
         <CuentasPorPagarTable mensajeros={cuentasResult.mensajeros} />
       </section>
-    </section>
+    </AppPage>
   );
 }

@@ -336,7 +336,7 @@ export interface IOrdenRepository {
   /**
    * Feature 88/R8/R9/R10: inserta en lotes de `batchSize` con `skipDuplicates` (patron
    * `createManyOrdenes`) y, en la MISMA transaccion del chunk, asigna a cada orden
-   * EFECTIVAMENTE creada un `num_guia = nextval('orden_num_guia_seq')` SOLO si `num_guia IS
+   * EFECTIVAMENTE creada un `num_guia = siguiente_num_guia()` SOLO si `num_guia IS
    * NULL` (idempotente, misma secuencia y guarda que `generarGuiaLote` -> ninguna guia puede
    * colisionar con la feature 17/30) y registra su primera fila de historial (origen null,
    * destino = estado inicial `en_ruta_bodega_principal`, `origenTipo` = `carga_api`). Las
@@ -430,7 +430,7 @@ export interface IOrdenRepository {
   listOrderStatus(): Promise<OrderStatusLiteRow[]>;
   /**
    * R5/R19/R25: transaccional (todo-o-nada). Por cada decision, asigna
-   * `num_guia = nextval('orden_num_guia_seq')` SOLO si `num_guia IS NULL`
+   * `num_guia = siguiente_num_guia()` SOLO si `num_guia IS NULL`
    * (idempotente, R5) y fija `estatusId`/`mensajeroAsignadoId`; TODAS las
    * decisiones reciben `num_guia` (incluidas las que van a en_bodega, R19). El
    * llamador DEBE haber validado el lote completo antes de invocar este metodo
@@ -459,7 +459,7 @@ export interface IOrdenRepository {
   /**
    * Feature 30/R10/R13: rutea un lote homogeneo de ordenes no-GAM a
    * `en_ruta_bodega_satelite`. Transaccional (todo-o-nada): por cada orden asigna
-   * `num_guia = nextval('orden_num_guia_seq')` SOLO si `num_guia IS NULL`
+   * `num_guia = siguiente_num_guia()` SOLO si `num_guia IS NULL`
    * (idempotente, R10), fija `estatusId` y deja `mensajeroAsignadoId = NULL`
    * (R9). El llamador DEBE haber validado el lote (existencia, origen permitido,
    * zona no-GAM) antes de invocar (sin logica de negocio aqui). Devuelve el

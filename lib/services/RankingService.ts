@@ -10,15 +10,15 @@ import type { IUserRepository } from "@/lib/interfaces/repositories/IUserReposit
 import type { EditarPremioInput, RankingRowDTO } from "@/lib/types/ranking";
 import { startOfDayCR } from "@/lib/utils/fecha-cr";
 import { loadRankingConfig, type RankingConfig } from "@/lib/config/ranking";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Un dia en milisegundos: limite superior del rango HOY(CR) = startOfDayCR(now) + 24h.
 // (fecha-cr.ts no exporta esta constante; se define aqui, igual que LiberacionReprogramadaRepository.)
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 
-// Rol autorizado a EDITAR premios (R16/R19): solo el maestro.
-const ROL_EDITOR = "maestro";
-// Roles autorizados a VER el ranking (R16/R17): maestro (editable) y mensajero (solo-lectura).
-const ROLES_LECTORES = new Set(["maestro", "mensajero"]);
+// Rol lector adicional (solo-lectura) ademas del acceso total: el mensajero. El acceso total
+// (maestro/admin) VE (editable) y EDITA los premios (R16/R17/R19).
+const ROL_LECTOR_SOLO_LECTURA = "mensajero";
 
 // R11: monto valido = no negativo, numerico, con a lo sumo 2 decimales. `null` = sin premio.
 const MONTO_RE = /^\d+(\.\d{1,2})?$/;
@@ -51,8 +51,10 @@ export class RankingService implements IRankingService {
   }
 
   async obtenerRanking(actor: Actor, now: Date = new Date()): Promise<ObtenerRankingServiceResult> {
-    // R16/R17/R18: solo maestro y mensajero ven; cualquier otro rol -> forbidden sin datos.
-    if (!ROLES_LECTORES.has(actor.rol)) return { status: "forbidden" };
+    // R16/R17/R18: acceso total (maestro/admin) y mensajero ven; cualquier otro rol -> forbidden sin datos.
+    if (!esAccesoTotal(actor.rol) && actor.rol !== ROL_LECTOR_SOLO_LECTURA) {
+      return { status: "forbidden" };
+    }
 
     // R22: rango HOY(CR) por el helper, half-open [desde, hasta).
     const desde = startOfDayCR(now);
@@ -127,7 +129,7 @@ export class RankingService implements IRankingService {
 
     return {
       status: "ok",
-      data: { ranking, premios, esEditable: actor.rol === ROL_EDITOR }, // R16/R17
+      data: { ranking, premios, esEditable: esAccesoTotal(actor.rol) }, // R16/R17
     };
   }
 
@@ -135,8 +137,8 @@ export class RankingService implements IRankingService {
     actor: Actor,
     input: EditarPremioInput,
   ): Promise<EditarPremioServiceResult> {
-    // R16/R19: solo el maestro edita; mensajero/otro -> forbidden sin persistir.
-    if (actor.rol !== ROL_EDITOR) return { status: "forbidden" };
+    // R16/R19: acceso total (maestro/admin) edita; mensajero/otro -> forbidden sin persistir.
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
     // R11: posicion 1|2|3 y monto valido (null | no negativo | <=2 decimales | numerico).
     if (input.posicion !== 1 && input.posicion !== 2 && input.posicion !== 3) {

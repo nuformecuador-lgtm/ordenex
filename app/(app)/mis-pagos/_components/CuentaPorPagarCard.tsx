@@ -47,7 +47,7 @@ export function CuentaPorPagarCard({ cuenta }: CuentaPorPagarCardProps) {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-sm text-muted-foreground">{CUENTA_LABEL.pagado}</span>
-            <span className="text-lg font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="text-lg font-medium text-success-strong">
               {money(cuenta.pagado)}
             </span>
           </div>

@@ -17,7 +17,7 @@ export default async function RecuperarContrasenaPage() {
     const session = await sessionRepo.findValidById(sessionId);
 
     if (session) {
-      redirect("/");
+      redirect("/dashboard");
     }
   }
 

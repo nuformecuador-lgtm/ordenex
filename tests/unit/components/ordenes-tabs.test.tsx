@@ -29,6 +29,16 @@ vi.mock("@/lib/actions/ordenes", () => ({
 }));
 
 import { OrdenesTabs } from "@/app/(app)/ordenes/_components/OrdenesTabs";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
+
+// Las tabs se titulan con la etiqueta legible del estado (R14), que sale del mapa
+// de presentación. Se asertan contra el mapa —no contra literales— porque lo que
+// se verifica es "la tab muestra la etiqueta del estado", no un texto concreto:
+// así un rebrand de etiquetas no rompe este archivo. Los literales del mapa los
+// blinda `tests/components/EstatusLabel.test.ts`.
+const TAB_EN_BODEGA = ORDER_STATUS_LABELS.en_bodega;
+const TAB_ENTREGADA = ORDER_STATUS_LABELS.entregada;
+const TAB_DEVUELTA = ORDER_STATUS_LABELS.devuelta;
 
 // Catálogo con `pendiente` (excluido por default) + 3 estados mostrables.
 const CATALOGO = [
@@ -102,9 +112,9 @@ describe("OrdenesTabs — derivación de tabs (R12/R14)", () => {
   it("R14: las tabs se derivan del catálogo (etiquetas legibles de cada estado)", async () => {
     renderTabs(<OrdenesTabs />);
 
-    expect(await screen.findByRole("tab", { name: "En bodega" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Entregada" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Devuelta" })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: TAB_EN_BODEGA })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: TAB_ENTREGADA })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: TAB_DEVUELTA })).toBeInTheDocument();
   });
 });
 
@@ -112,16 +122,16 @@ describe("OrdenesTabs — exclude (R13)", () => {
   it("R13: el estado por default `pendiente` NO genera tab", async () => {
     renderTabs(<OrdenesTabs />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     expect(screen.queryByRole("tab", { name: /pendiente/i })).toBeNull();
   });
 
   it("R13: `exclude` por `value` omite exactamente esos estados", async () => {
     renderTabs(<OrdenesTabs exclude={["pendiente", "devuelta"]} />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     expect(tabs()).toHaveLength(2); // en_bodega + entregada
-    expect(screen.queryByRole("tab", { name: "Devuelta" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: TAB_DEVUELTA })).toBeNull();
   });
 });
 
@@ -129,7 +139,7 @@ describe("OrdenesTabs — lazy loading duro (R16) + tab activa (R15)", () => {
   it("R15/R16: solo la tab activa (primera) consulta `listarOrdenes`; las no visitadas NO", async () => {
     renderTabs(<OrdenesTabs />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     // La tab activa (primera: en_bodega) consulta con su `status_id`.
     await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalled());
     expect(listarOrdenesMock).toHaveBeenCalledWith({
@@ -149,7 +159,7 @@ describe("OrdenesTabs — lazy loading duro (R16) + tab activa (R15)", () => {
     const user = userEvent.setup();
     renderTabs(<OrdenesTabs />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalled());
     // Antes de visitarla, "entregada" no se consultó.
     expect(
@@ -160,7 +170,7 @@ describe("OrdenesTabs — lazy loading duro (R16) + tab activa (R15)", () => {
       ),
     ).toBe(false);
 
-    await user.click(screen.getByRole("tab", { name: "Entregada" }));
+    await user.click(screen.getByRole("tab", { name: TAB_ENTREGADA }));
 
     // Ahora sí se consulta el estado recién activado.
     await waitFor(() =>
@@ -196,7 +206,7 @@ describe("OrdenesTabs — tab 'Todas' (maestro)", () => {
   it("sin `incluirTodas` NO aparece la tab 'Todas'", async () => {
     renderTabs(<OrdenesTabs />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     expect(screen.queryByRole("tab", { name: "Todas" })).toBeNull();
   });
 });
@@ -206,13 +216,13 @@ describe("OrdenesTabs — paginación independiente por tab (R17)", () => {
     const user = userEvent.setup();
     renderTabs(<OrdenesTabs />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     // Cada tab tiene su navegación de paginación (una por tab visitada).
     expect(
       await screen.findByRole("navigation", { name: "Paginación" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Entregada" }));
+    await user.click(screen.getByRole("tab", { name: TAB_ENTREGADA }));
     // La segunda tab también consulta con su propio status_id (caché/paginación
     // separada, key SWR por status).
     await waitFor(() =>
@@ -244,7 +254,7 @@ describe("OrdenesTabs — orientación vertical con filtro (maestro)", () => {
   it("por default (horizontal) NO ofrece el filtro de estados", async () => {
     renderTabs(<OrdenesTabs />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     expect(screen.queryByRole("searchbox")).toBeNull();
   });
 
@@ -252,18 +262,18 @@ describe("OrdenesTabs — orientación vertical con filtro (maestro)", () => {
     const user = userEvent.setup();
     renderTabs(<OrdenesTabs orientation="vertical" />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     await user.type(screen.getByRole("searchbox"), "entreg");
 
-    expect(screen.getByRole("tab", { name: "Entregada" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Devuelta" })).toBeNull();
+    expect(screen.getByRole("tab", { name: TAB_ENTREGADA })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: TAB_DEVUELTA })).toBeNull();
   });
 
   it("vertical: filtrar NO monta las tabs filtradas ni dispara su fetch (R16)", async () => {
     const user = userEvent.setup();
     renderTabs(<OrdenesTabs orientation="vertical" />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     listarOrdenesMock.mockClear();
 
     await user.type(screen.getByRole("searchbox"), "entreg");
@@ -284,7 +294,7 @@ describe("OrdenesTabs — carga masiva a nivel contenedor (adminTienda)", () => 
   it("NO ofrece Carga masiva por default", async () => {
     renderTabs(<OrdenesTabs />);
 
-    await screen.findByRole("tab", { name: "En bodega" });
+    await screen.findByRole("tab", { name: TAB_EN_BODEGA });
     expect(
       screen.queryByRole("button", { name: /carga masiva/i }),
     ).toBeNull();
@@ -348,7 +358,7 @@ describe("OrdenesTabs — columna 'Liberada el' solo en la tab reprogramada", ()
     const user = userEvent.setup();
     renderTabs(<OrdenesTabs />);
 
-    await user.click(await screen.findByRole("tab", { name: /en bodega/i }));
+    await user.click(await screen.findByRole("tab", { name: TAB_EN_BODEGA }));
     await screen.findByRole("table");
 
     expect(

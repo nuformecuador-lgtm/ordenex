@@ -1,7 +1,7 @@
 "use client";
 
 import { OrdenesModule } from "@/app/(app)/ordenes/_components/OrdenesModule";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 
 import { ordenesColumnsAdminTienda } from "./ordenes-columns-admin-tienda";
 
@@ -14,12 +14,8 @@ import { ordenesColumnsAdminTienda } from "./ordenes-columns-admin-tienda";
  */
 export function AdminTiendaDashboard() {
   return (
-    <section className="flex flex-1 flex-col gap-6 p-6">
-      <PageHeader
-        title="Panel de tienda"
-        description="Órdenes de mi tienda"
-      />
+    <AppPage title="Panel de tienda" description="Órdenes de mi tienda">
       <OrdenesModule columns={ordenesColumnsAdminTienda} puedeCargarMasiva />
-    </section>
+    </AppPage>
   );
 }

@@ -71,6 +71,15 @@
   --color-warning-soft: #fef3c7;
   --color-danger: #ef4444;
   --color-danger-soft: #fee2e2;
+  --color-info-soft: #eff6ff;
+  /* Variantes -strong: contrast-safe SOLO para TEXTO (>=4.5:1 sobre fondo claro
+     y oscuro). Los tokens base/-soft son claros y NO sirven para body text. Ver
+     DESIGN.md (Color: 3 roles = -soft fondo / base acento-borde-punto / -strong texto).
+     El valor real vive en :root/.dark para tener variante en modo oscuro. */
+  --color-success-strong: var(--success-strong);
+  --color-warning-strong: var(--warning-strong);
+  --color-danger-strong: var(--danger-strong);
+  --color-info-strong: var(--info-strong);
   --color-hivis: #f4c500;
   --color-kraft-canvas: #f7f8fc;
   --color-kraft-card: #ffffff;
@@ -110,6 +119,12 @@
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #1f3a63;
   --sidebar-ring: #f26419;
+  /* Texto semántico contrast-safe (modo claro). Medido sobre #ffffff/#f7f8fc y
+     sobre el -soft correspondiente: todos >=4.5:1. */
+  --success-strong: #047857; /* vs card 5.48 · vs bg 5.17 · vs success-soft 4.84 */
+  --warning-strong: #b45309; /* vs card 5.02 · vs bg 4.73 · vs warning-soft 4.51 */
+  --danger-strong: #b91c1c; /* vs card 6.47 · vs bg 6.10 · vs danger-soft 5.30 */
+  --info-strong: #1d4ed8; /* vs card 6.70 · vs bg 6.31 · vs info-soft 6.16 */
 }
 
 .dark {
@@ -144,6 +159,12 @@
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #22345a;
   --sidebar-ring: #ff7a33;
+  /* Texto semántico contrast-safe (modo oscuro). Medido sobre #0a1524/#10203a y
+     sobre el fondo del badge (base/15 compuesto): todos >=4.5:1. */
+  --success-strong: #34d399; /* vs bg 9.53 · vs card 8.47 · vs success/15 6.60 */
+  --warning-strong: #fbbf24; /* vs bg 10.98 · vs card 9.75 · vs warning/15 7.59 */
+  --danger-strong: #f87171; /* vs bg 6.63 · vs card 5.89 · vs danger/15 5.20 */
+  --info-strong: #93b4f7; /* vs bg 8.83 · vs card 7.84 · vs info/15 6.97 */
 }
 
 @layer base {

@@ -42,6 +42,9 @@ function row(id: string, estatusValue: string): MiAsignacionRow {
     producto: "caja",
     peso: null,
     montoCobrar: 100,
+    // Feature 97: coords de la parada (number|null); irrelevantes para el reordenado.
+    latitud: 9.9,
+    longitud: -84.1,
     notas: null,
     tiendaNombre: "T",
     zonaNombre: "Z",

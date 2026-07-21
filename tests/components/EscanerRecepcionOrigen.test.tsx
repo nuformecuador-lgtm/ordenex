@@ -4,6 +4,7 @@ import { render, screen, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { EscanerRecepcionOrigen } from "@/app/(app)/ordenes/_components/EscanerRecepcionOrigen";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { recibirEnOrigenPorQr } from "@/lib/actions/recepcion-origen";
 
 // Escáner de la tienda en `/ordenes`: cierra el flujo de devolución. Se mockean la
@@ -145,8 +146,10 @@ describe("EscanerRecepcionOrigen", () => {
     await escanear(user, qrDeGuia(14));
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
-    // Legible, no el value crudo.
-    expect(errorMock.mock.calls[0][0]).toMatch(/En reparto/);
+    // Legible, no el value crudo: la etiqueta sale del mapa de presentación
+    // (fuente de verdad), blindado aparte en `EstatusLabel.test.ts`.
+    expect(errorMock.mock.calls[0][0]).toMatch(ORDER_STATUS_LABELS.en_reparto);
+    expect(errorMock.mock.calls[0][0]).not.toMatch("en_reparto");
   });
 
   // Un QR ajeno (o el UUID de una etiqueta vieja) se rechaza en cliente.

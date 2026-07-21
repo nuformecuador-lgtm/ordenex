@@ -185,8 +185,10 @@ afterEach(() => {
 });
 
 describe("WalletMensajerosPage — control de acceso por rol (R19)", () => {
-  it("roles != maestro NO ven las cuentas por pagar (notFound), sin pre-fetch de datos", async () => {
-    const otros: RolValue[] = ["mensajero", "admin", "adminTienda", "adminSatelite"];
+  it("roles sin acceso total NO ven las cuentas por pagar (notFound), sin pre-fetch de datos", async () => {
+    // Feature 94: `admin` YA no está aquí (ve las cuentas, test aparte). Siguen excluidos
+    // mensajero, adminTienda y adminSatelite.
+    const otros: RolValue[] = ["mensajero", "adminTienda", "adminSatelite"];
     for (const rol of otros) {
       resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol });
       const { default: WalletMensajerosPage } = await import(
@@ -196,6 +198,26 @@ describe("WalletMensajerosPage — control de acceso por rol (R19)", () => {
     }
     // R19: no expone cuentas por pagar para rol no autorizado.
     expect(listarMock).not.toHaveBeenCalled();
+  });
+
+  it("feature 94 (paridad adm↔maestro): el admin ve las cuentas por pagar igual que el maestro", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "a", rol: "admin" });
+    const { default: WalletMensajerosPage } = await import(
+      "@/app/(app)/wallet/mensajeros/page"
+    );
+
+    render(await WalletMensajerosPage());
+
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Cuentas por pagar a mensajeros",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("cuentas-por-pagar-table-stub"),
+    ).toBeInTheDocument();
+    expect(listarMock).toHaveBeenCalledTimes(1);
   });
 
   it("sin sesion tampoco ve las cuentas por pagar (notFound)", async () => {
