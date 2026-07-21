@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import type { JobEstado, JobTipo } from "@prisma/client";
 import type {
   ClaimOpts,
@@ -118,6 +118,20 @@ export class JobRepository implements IJobRepository {
       FROM candidatos c
       WHERE j."id" = c."id"
       RETURNING j.*`;
+    return rows.map(toDTO);
+  }
+
+  /**
+   * Feature 92 (design §8, R4): lectura pura por igualdad sobre `dedupe_key`. UNA consulta
+   * por lote, apoyada en el indice unico YA existente. `keys` vacio -> `[]` sin tocar la
+   * DB (`IN ()` no es SQL valido y, ademas, seria una consulta inutil).
+   *
+   * NO es busqueda por prefijo: el motivo completo esta en `IJobRepository.findByDedupeKeys`.
+   */
+  async findByDedupeKeys(keys: string[]): Promise<JobDTO[]> {
+    if (keys.length === 0) return [];
+    const rows = await this.prisma.$queryRaw<JobRow[]>`
+      SELECT * FROM "jobs" WHERE "dedupe_key" IN (${Prisma.join(keys)})`;
     return rows.map(toDTO);
   }
 

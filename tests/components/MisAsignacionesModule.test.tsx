@@ -60,6 +60,8 @@ function makeAsignacion(
   over: Partial<MiAsignacionDTO> & { id: string },
 ): MiAsignacionDTO {
   return {
+    // Feature 92/R28: sin posicion en la ruta salvo que el test la fije.
+    secuenciaRuta: null,
     numGuia: 1001,
     numRemision: "REM-001",
     estatusValue: "en_espera_aceptacion",

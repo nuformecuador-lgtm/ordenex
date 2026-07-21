@@ -54,6 +54,15 @@ class ColaEnMemoria implements IJobRepository {
   async claimBatch(): Promise<JobDTO[]> {
     return [];
   }
+  /**
+   * Feature 92 (R4): la cola en memoria no guarda el DTO completo, y estos tests solo
+   * ejercitan el ENCOLADO. Se devuelve `[]` porque ninguna fila de esta cola llega a
+   * tener estado: el gate de asignabilidad se prueba en su propio test con un doble que
+   * SI modela `estado`.
+   */
+  async findByDedupeKeys(): Promise<JobDTO[]> {
+    return [];
+  }
   async complete(): Promise<void> {}
   async fail(): Promise<void> {}
 

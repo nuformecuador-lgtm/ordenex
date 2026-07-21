@@ -57,6 +57,11 @@ function fakeRepo(claimed: JobDTO[]) {
     async complete(id) {
       calls.complete.push(id);
     },
+    // Feature 92 (R4): lectura nueva de la interfaz. `JobQueueService` no la usa; el
+    // doble la implementa para satisfacer el contrato, devolviendo vacio.
+    async findByDedupeKeys() {
+      return [];
+    },
     async fail(id, error, runAfter) {
       calls.fail.push({ id, error, runAfter });
     },

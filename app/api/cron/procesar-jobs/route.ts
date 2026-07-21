@@ -23,6 +23,10 @@ import {
   buildGeocodificacionService,
   crearGeocodificacionHandler,
 } from "@/lib/services/jobs/geocodificacion-handler";
+import {
+  buildOptimizacionRutaService,
+  crearOptimizacionRutaHandler,
+} from "@/lib/services/jobs/optimizacion-ruta-handler";
 
 export interface ProcesarJobsDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -48,6 +52,15 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
   // `GOOGLE_MAPS_API_KEY`) lo captura `JobQueueService.drenar` job a job, asi que NO
   // afecta al drenado de `liberar_reprogramadas`, que comparte este cron.
   handlers.set("geocodificacion", crearGeocodificacionHandler(buildGeocodificacionService(now)));
+  // Feature 92 (R21): reoptimizacion de la ruta de UN mensajero. Como la geocodificacion,
+  // NO se registra en `buildRecurrencias()`: se encola por EVENTO (recogida con debounce,
+  // gestion inmediata), nunca por reloj. Un fallo suyo (p. ej. sin credencial de service
+  // account) lo captura `JobQueueService.drenar` job a job, asi que NO afecta al drenado
+  // de `liberar_reprogramadas` ni de `geocodificacion`, que comparten este cron.
+  handlers.set(
+    "optimizacion_ruta",
+    crearOptimizacionRutaHandler(buildOptimizacionRutaService(now)),
+  );
   return handlers;
 }
 

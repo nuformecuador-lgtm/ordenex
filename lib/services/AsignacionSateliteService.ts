@@ -6,6 +6,8 @@ import type {
   IAsignacionSateliteService,
 } from "@/lib/interfaces/services/IAsignacionSateliteService";
 import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
+import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
+import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
 
 // Estado de ORIGEN de la asignacion satelite (feature 33) y destino tras asignar
 // (feature 17). Esta feature NO agrega estados ni `num_guia` (R8): usa exclusivamente
@@ -35,6 +37,7 @@ type AsignacionSateliteRepo = Pick<
   | "asignarSateliteLote"
   | "existeBodegaSateliteBloqueada" // feature 41/R18
   | "findMensajerosBloqueados" // feature 41/R14
+  | "findParaAsignabilidad" // feature 92/R8: gate de coordenadas
 >;
 
 /**
@@ -45,7 +48,12 @@ type AsignacionSateliteRepo = Pick<
  * estado+zona). No conoce HTTP ni Prisma; testeable con dobles sin red/DB.
  */
 export class AsignacionSateliteService implements IAsignacionSateliteService {
-  constructor(private readonly repo: AsignacionSateliteRepo) {}
+  constructor(
+    private readonly repo: AsignacionSateliteRepo,
+    // Feature 92 (R8): gate de asignabilidad por coordenadas. REQUERIDA a proposito (mismo
+    // motivo que en `GuiaAsignacionService`): opcional se desactivaria en silencio.
+    private readonly asignabilidad: IAsignabilidadCoordenadasService,
+  ) {}
 
   async asignar(
     input: AsignarSateliteInput,
@@ -123,6 +131,23 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       }
     }
     if (detalle.length > 0) return { status: "conflict", detalle }; // R10
+
+    // 4b. Feature 92/R8: gate de asignabilidad por coordenadas, ANTES de cualquier
+    // escritura. Este writer SI asigna mensajero a todo el lote, asi que se evalua entero.
+    // Todo-o-nada, con el mismo `detalle` por orden que las demas guardas de este metodo.
+    const filas = await this.repo.findParaAsignabilidad(ordenIds);
+    const estados = await this.asignabilidad.evaluar(filas);
+    const detalleCoords: { ordenId: string; motivo: string }[] = [];
+    for (const id of ordenIds) {
+      const estado = estados.get(id);
+      if (esAsignable(estado)) continue;
+      detalleCoords.push({
+        ordenId: id,
+        // `undefined` = el gate no vio la orden. Nunca se deja pasar por omision.
+        motivo: estado === undefined ? "no_encontrada" : motivoAsignabilidad(estado),
+      });
+    }
+    if (detalleCoords.length > 0) return { status: "conflict", detalle: detalleCoords };
 
     // 5. Resuelve estatus origen (guardia) y destino; si falta el seed -> validation_error.
     const [origenId, destinoId] = await Promise.all([

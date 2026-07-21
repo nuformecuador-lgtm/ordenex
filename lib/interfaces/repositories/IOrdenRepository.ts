@@ -2,6 +2,7 @@ import type { GestionCausaDevolucion } from "@prisma/client";
 import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
+import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 
 // Datos listos para persistir una orden. `estatusId` y `tiendaId` ya resueltos
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
@@ -98,6 +99,18 @@ export interface OrdenTransicionRow {
   // el tiendaId, misma identidad que usa OrdenService.listar). Permite acotar por
   // tienda sin una consulta extra, igual que `zonaId` lo permite por zona.
   tiendaId: string;
+}
+
+/**
+ * Feature 92 (design §5) — una orden en reparto del mensajero, candidata a ser parada de
+ * la ruta. `latitud`/`longitud` nullable: la orden pudo asignarse antes de que existiera
+ * el gate de coordenadas (R8) o perder la geocodificacion al corregirse la direccion.
+ */
+export interface ParadaRutaRow {
+  ordenId: string;
+  latitud: number | null;
+  longitud: number | null;
+  createdAt: Date;
 }
 
 // Feature 17/T15 — fila liviana de mensajero para el loader del modal (R28).
@@ -364,6 +377,21 @@ export interface IOrdenRepository {
    * motivo exacto en `conflict.detalle`. Vacio si `ids` esta vacio.
    */
   findByIdsForTransicion(ids: string[]): Promise<OrdenTransicionRow[]>;
+  /**
+   * Feature 92 (design §7, R8): proyeccion MINIMA que consume el gate de asignabilidad
+   * por coordenadas (direccion + coordenadas + `geocode_status`). Metodo PROPIO en vez de
+   * cinco columnas mas en `OrdenTransicionRow`: esa fila la consumen media docena de
+   * services que no tienen nada que ver con la geocodificacion, y ensancharla les costaria
+   * ancho de banda en cada transicion del sistema. Vacio si `ids` esta vacio.
+   */
+  findParaAsignabilidad(ids: string[]): Promise<OrdenAsignabilidadRow[]>;
+  /**
+   * Feature 92 (design §5, R35/R37/R38): paradas candidatas de la ruta de UN mensajero —
+   * sus ordenes en `en_reparto` no borradas, con sus coordenadas (nullable: una orden sin
+   * coordenadas NO se excluye aqui, el service la registra como parada sin posicion, R37).
+   * Ordenadas por `createdAt asc`, que es el criterio de recorte de R38.
+   */
+  findParadasEnReparto(mensajeroId: string): Promise<ParadaRutaRow[]>;
   /**
    * Feature 33 (QR por guia): fila de transicion resuelta por `num_guia` (UNIQUE en
    * `orden`). Como `findByIdsForTransicion`, INCLUYE borradas (`deletedAt !== null`)

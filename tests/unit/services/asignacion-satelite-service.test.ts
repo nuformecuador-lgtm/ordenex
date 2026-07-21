@@ -6,6 +6,11 @@ import type {
   OrdenTransicionRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type {
+  EstadoAsignabilidad,
+  IAsignabilidadCoordenadasService,
+  OrdenAsignabilidadRow,
+} from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 
 // Feature 34 — service de la asignacion satelite. Dobles de repo (sin DB/HTTP),
 // patron recepcion-satelite-service.test.ts. Cubre R3, R7, R8, R9, R10, R11, R12,
@@ -32,6 +37,7 @@ type RepoMethods = Pick<
   | "asignarSateliteLote"
   | "existeBodegaSateliteBloqueada" // feature 41/R18
   | "findMensajerosBloqueados" // feature 41/R14
+  | "findParaAsignabilidad" // feature 92/R8
 >;
 
 function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
@@ -62,12 +68,32 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
       porCierreBodega: false,
     })),
     findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    // Feature 92 (R8): filas que consume el gate de coordenadas.
+    findParaAsignabilidad: vi.fn(async (ids: string[]) =>
+      ids.map((id) => ({ id, direccion: "x", latitud: 9.9, longitud: -84.1, geocodeStatus: "OK" })),
+    ),
     ...overrides,
   };
 }
 
-function newService(repo: RepoMethods = fakeRepo()) {
-  return new AsignacionSateliteService(repo as unknown as IOrdenRepository);
+/**
+ * Feature 92 (R8): el gate de asignabilidad es una dep REQUERIDA del service. Estos tests
+ * no lo ejercitan (eso vive en `asignacion-satelite-gate-coordenadas.test.ts`), asi que se
+ * inyecta un doble que declara TODA orden asignable — que es el estado real de una orden ya
+ * geocodificada. Es el escenario feliz, no un aflojamiento: el gate tiene su test propio.
+ */
+function gateTodoAsignable(): IAsignabilidadCoordenadasService {
+  return {
+    evaluar: async (ordenes: OrdenAsignabilidadRow[]) =>
+      new Map<string, EstadoAsignabilidad>(ordenes.map((o) => [o.id, "asignable"])),
+  };
+}
+
+function newService(
+  repo: RepoMethods = fakeRepo(),
+  gate: IAsignabilidadCoordenadasService = gateTodoAsignable(),
+) {
+  return new AsignacionSateliteService(repo as unknown as IOrdenRepository, gate);
 }
 
 describe("AsignacionSateliteService.asignar", () => {

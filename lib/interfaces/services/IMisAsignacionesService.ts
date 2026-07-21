@@ -26,6 +26,37 @@ export interface MiAsignacionDTO {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+  /**
+   * Feature 92 (R28): posicion 1-based de esta orden en la ruta optimizada del mensajero.
+   * `null` = la orden entro a la ruta DESPUES de la ultima optimizacion y todavia no tiene
+   * posicion (se muestra al final, marcada como pendiente de optimizar).
+   *
+   * Siempre `null` en las ordenes de "Por recoger": no estan en reparto, no son paradas.
+   */
+  secuenciaRuta: number | null;
+}
+
+/**
+ * Feature 92 (R27/R28/R30) — estado de la ruta optimizada del mensajero, que acompana al
+ * listado. Es el bloque que la UI (feature 93) necesita para decidir si muestra el aviso
+ * de "el orden no esta actualizado" y desde que clase de punto se calculo la ruta.
+ */
+export interface RutaResumenDTO {
+  /**
+   * `desactualizada` = la ultima llamada al proveedor fallo y lo que se muestra es el
+   * ULTIMO ORDEN VALIDO conservado (R27), no un orden recien calculado. NUNCA significa
+   * "se cayo a createdAt desc": eso no ocurre jamas.
+   */
+  estado: "vigente" | "desactualizada";
+  /** Instante de la ultima optimizacion exitosa. `null` = nunca se calculo. */
+  calculadaAt: Date | null;
+  /**
+   * Desde que clase de punto se calculo (R24). `centroide` y `ultima_conocida` significan
+   * que el punto de partida es aproximado y la UI debe poder decirlo.
+   */
+  origenFuente: "gps" | "ultima_conocida" | "centroide" | null;
+  /** R28: cuantas ordenes en reparto NO tienen posicion todavia. */
+  paradasSinOptimizar: number;
 }
 
 // Feature 61: KPIs del portal del mensajero, calculados SERVER-SIDE (autoritativos).
@@ -50,16 +81,38 @@ export interface MisAsignacionesKpis {
 export type ListarMisAsignacionesServiceResult =
   | {
       status: "ok";
+      /**
+       * R29: "Por recoger" CONSERVA su orden actual (`createdAt desc`). Esta feature NO lo
+       * toca: esas ordenes aun no son paradas de ninguna ruta.
+       */
       porRecoger: MiAsignacionDTO[];
+      /**
+       * R28: sale YA ORDENADO del service — primero las que tienen posicion, por
+       * `secuencia` asc; despues las que no la tienen, conservando su `createdAt desc`.
+       */
       porGestionar: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis;
+      /** Feature 92 (R27/R28/R30): estado de la ruta que produjo ese orden. */
+      ruta: RutaResumenDTO;
     }
   | { status: "forbidden" };
+
+/**
+ * Feature 92 (R22/R23): ubicacion capturada por la geolocalizacion del navegador. SIEMPRE
+ * OPCIONAL — R25 es explicito: la denegacion del permiso NUNCA bloquea la accion, solo
+ * hace que el origen de la ruta caiga al siguiente escalon (R24).
+ */
+export interface UbicacionInput {
+  lat: number;
+  lng: number;
+}
 
 // R16: recoger recibe un conjunto de ids (soporta "recoger todas" y de a una).
 export interface RecogerInput {
   ordenIds: string[];
+  /** Feature 92/R22: opcional; ausente = el navegador no la dio o la denegaron. */
+  ubicacion?: UbicacionInput;
 }
 
 // R17/R29: motivo por orden cuando una no puede recogerse (borrada, origen
@@ -88,7 +141,9 @@ export interface EvidenciaArchivo {
 // Entrada discriminada por `resultado` (R22/R25/R27/R29). La validacion de
 // obligatoriedad/MIME/tamano/fecha ya paso en el borde (zod); el service revalida
 // propiedad/origen/bloqueo y la regla (h) monto == montoCobrar.
-export type GestionarInput =
+// Feature 92 (R22): `ubicacion` opcional en las CUATRO ramas. Va como interseccion para no
+// repetirla en cada variante ni tocar el discriminante.
+export type GestionarInput = { ubicacion?: UbicacionInput } & (
   | {
       ordenId: string;
       resultado: "entregada";
@@ -106,7 +161,8 @@ export type GestionarInput =
       motivo: string;
       evidencia: EvidenciaArchivo;
     }
-  | { ordenId: string; resultado: "rechazada"; motivo: string; evidencia: EvidenciaArchivo };
+  | { ordenId: string; resultado: "rechazada"; motivo: string; evidencia: EvidenciaArchivo }
+);
 
 export type GestionarServiceResult =
   | { status: "ok"; ordenId: string; estado: string; evidenciaUrl?: string }

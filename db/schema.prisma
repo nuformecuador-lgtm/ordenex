@@ -128,6 +128,7 @@ model Usuario {
   cierreDetallesTienda                CierreDetail[]            @relation("CierreDetailTienda") // feature 69/R6: snapshots que congelaron a esta tienda como destinataria
   apiKey                              ApiKey?                   @relation("ApiKeyUsuario") // feature 81/[D6]: la key dedicada a ESTA cuenta sintetica (1:1)
   apiKeysCreadas                      ApiKey[]                  @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
+  rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -359,6 +360,7 @@ model Orden {
   mensajerosGestionando Usuario[]              @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
   historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
+  rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -1058,6 +1060,7 @@ model ApiKey {
 enum JobTipo {
   liberar_reprogramadas // 91/92 anaden valores aditivamente
   geocodificacion // feature 91: geocodifica la direccion de UNA orden (payload { ordenId })
+  optimizacion_ruta // feature 92: reoptimiza la ruta de UN mensajero (payload { mensajeroId })
 
   @@map("job_tipo")
 }
@@ -1116,4 +1119,62 @@ model GeocodeCache {
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@map("geocode_cache")
+}
+
+// Feature 92 (design §1.1, R27/R30): estado de la ruta optimizada de un mensajero. Enum
+// NATIVO (patron JobEstado): vocabulario PROPIO y cerrado. `desactualizada` significa que
+// la ultima llamada al proveedor fallo y se CONSERVA el orden anterior (R27): la secuencia
+// previa NUNCA se borra ni se cae en silencio a `createdAt desc`.
+enum RutaEstado {
+  vigente
+  desactualizada
+
+  @@map("ruta_estado")
+}
+
+// Feature 92 (design §1.1, R23/R26/R27): cabecera de la ruta optimizada de UN mensajero
+// (una fila por mensajero, `mensajeroId` unico). Guarda el origen desde el que se calculo
+// la ruta con su fuente (gps | ultima_conocida | centroide) y la huella del conjunto de
+// paradas + origen, que es la guarda de coste R36 (mismo conjunto -> no se vuelve a pagar).
+// `ultimoError` guarda un mensaje AGREGADO: NUNCA credencial, token, direccion ni
+// coordenadas (R14). RLS habilitada sin policies (solo service role, va en la migracion):
+// guarda geolocalizacion de una persona y no es accesible desde el cliente.
+model RutaOptimizada {
+  id           String     @id @default(uuid())
+  mensajeroId  String     @unique @map("mensajero_id")
+  estado       RutaEstado @default(vigente)
+  calculadaAt  DateTime?  @map("calculada_at") // NULL = nunca se calculo
+  origenLat    Decimal?   @map("origen_lat") @db.Decimal(10, 7)
+  origenLng    Decimal?   @map("origen_lng") @db.Decimal(10, 7)
+  origenAt     DateTime?  @map("origen_at")
+  origenFuente String?    @map("origen_fuente")
+  huellaSet    String?    @map("huella_set")
+  ultimoError  String?    @map("ultimo_error")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  mensajero Usuario                @relation("RutaOptimizadaMensajero", fields: [mensajeroId], references: [id], onDelete: Cascade)
+  paradas   RutaOptimizadaParada[]
+
+  @@map("ruta_optimizada")
+}
+
+// Feature 92 (design §1.1/§5.2, R26): una parada POSICIONADA de la ruta. Los dos indices
+// unicos `(rutaId, ordenId)` y `(rutaId, secuencia)` son los que hacen IMPOSIBLE persistir
+// una secuencia con posiciones repetidas o con la misma orden dos veces: la invariante la
+// garantiza la DB, no solo el codigo. Una orden en reparto SIN fila aqui es una parada
+// "sin optimizar" (R28), que la lectura muestra al final.
+model RutaOptimizadaParada {
+  id        String @id @default(uuid())
+  rutaId    String @map("ruta_id")
+  ordenId   String @map("orden_id")
+  secuencia Int
+
+  ruta  RutaOptimizada @relation(fields: [rutaId], references: [id], onDelete: Cascade)
+  orden Orden          @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@unique([rutaId, ordenId])
+  @@unique([rutaId, secuencia])
+  @@index([ordenId])
+  @@map("ruta_optimizada_parada")
 }

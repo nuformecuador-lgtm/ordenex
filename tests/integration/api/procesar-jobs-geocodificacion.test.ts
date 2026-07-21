@@ -41,9 +41,17 @@ describe("R32 — el drenador resuelve el handler de geocodificacion y no lo re-
   it("buildHandlers registra el tipo geocodificacion", () => {
     const handlers = buildHandlers(() => AHORA);
     expect(handlers.has("geocodificacion")).toBe(true);
-    // Y no se pierde el handler que ya existia (comparten el mismo cron).
+    // Y no se pierde ningun handler ya existente (todos comparten el mismo cron).
     expect(handlers.has("liberar_reprogramadas")).toBe(true);
-    expect(handlers.size).toBe(2);
+    // Feature 92: se suma `optimizacion_ruta`. La asercion se INVIERTE al sentido nuevo y
+    // ademas se ENDURECE: en vez de un `size` numerico (que solo dice "hay tres"), se
+    // enumera el conjunto EXACTO de tipos registrados. Asi, anadir un tipo sin actualizar
+    // este test falla ruidosamente, y quitar uno por accidente tambien.
+    expect([...handlers.keys()].sort()).toEqual([
+      "geocodificacion",
+      "liberar_reprogramadas",
+      "optimizacion_ruta",
+    ]);
   });
 
   it("buildRecurrencias NO registra geocodificacion (no es recurrente)", () => {

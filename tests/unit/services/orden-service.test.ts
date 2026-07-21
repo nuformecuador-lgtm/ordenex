@@ -108,6 +108,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
     countDevueltasByTienda: vi.fn().mockResolvedValue(0),
     findDevueltasByTienda: vi.fn().mockResolvedValue([]),
+    // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos
+    // tests no ejercitan el gate de coordenadas ni la ruta: devuelven vacio.
+    findParaAsignabilidad: vi.fn(async () => []),
+    findParadasEnReparto: vi.fn(async () => []),
     findCausasDevueltaVigentes: vi.fn().mockResolvedValue(new Map()),
     ...overrides,
   };

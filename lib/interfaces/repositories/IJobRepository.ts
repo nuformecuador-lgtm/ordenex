@@ -77,6 +77,28 @@ export interface IJobRepository {
    * terminal) la toma el service; el repo solo persiste.
    */
   fail(id: string, error: string, runAfter: Date | null): Promise<void>;
+
+  /**
+   * Feature 92 (design §8, R4): devuelve los jobs cuya `dedupe_key` esta en `keys`. UNA
+   * sola consulta por lote; `keys` vacio -> `[]` SIN consultar.
+   *
+   * ⚠️ POR QUE ES BUSQUEDA POR IGUALDAD Y NO POR PREFIJO (design §0.2). La tentacion es
+   * buscar `LIKE 'geocodificacion:<ordenId>:%'` porque el consumidor no conocia el hash.
+   * Si lo conoce: `hashDireccion` esta exportado y la clave se RECONSTRUYE exacta desde
+   * `orden.direccion`. La igualdad es mejor en las cuatro dimensiones:
+   *  - usa el indice unico YA existente (`jobs_dedupe_key_key`); el `LIKE` exigiria crear
+   *    otro con `text_pattern_ops` bajo collation no-C;
+   *  - `WHERE dedupe_key IN (...)` indexa; `LIKE ANY(array)` degenera en seq scan;
+   *  - el prefijo devuelve tambien jobs de direcciones HISTORICAS, que responden por una
+   *    direccion que ya no existe, y obligaria a inventar un desempate;
+   *  - con prefijo, un job `failed` de la direccion VIEJA bloquearia una orden cuya
+   *    direccion ya se corrigio.
+   *
+   * NO se anaden `cancel` ni `reschedule` a esta interfaz (design §4.1, alternativa D
+   * descartada): la guarda de obsolescencia del handler (R20) resuelve el mismo problema
+   * sin tocar un contrato compartido con las features 90 y 91.
+   */
+  findByDedupeKeys(keys: string[]): Promise<JobDTO[]>;
 }
 
 /**
