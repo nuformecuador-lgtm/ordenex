@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarSaldosTiendasAction } from "@/lib/actions/wallet-tienda";
@@ -33,15 +33,13 @@ export default async function WalletTiendasPage() {
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-8 p-6">
-      <PageHeader
-        title="Saldos por tienda"
-        description="Saldo a favor de cada tienda para efectos de liquidación"
-      />
-
+    <AppPage
+      title="Saldos por tienda"
+      description="Saldo a favor de cada tienda para efectos de liquidación"
+    >
       <section aria-label="Saldos por tienda" className="flex flex-col gap-4">
         <SaldosTiendasTable tiendas={tiendasResult.tiendas} />
       </section>
-    </section>
+    </AppPage>
   );
 }

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarCierresAdmin } from "@/lib/actions/cierres-admin";
@@ -53,12 +53,10 @@ export default async function CierresAdminPage() {
     bodegaResult && bodegaResult.status === "ok" ? bodegaResult : null;
 
   return (
-    <section className="flex flex-1 flex-col gap-10 p-6">
-      <PageHeader
-        title="Cierres del día"
-        description="Revisá el detalle de cada cierre solicitado por tus mensajeros y aprobalo o rechazalo"
-      />
-
+    <AppPage
+      title="Cierres del día"
+      description="Revisá el detalle de cada cierre solicitado por tus mensajeros y aprobalo o rechazalo"
+    >
       {/* Feature 40 (adminSatelite): consolidación + solicitud de cierre de bodega. */}
       {consolidacion ? (
         <ConsolidacionBodegaModule
@@ -91,6 +89,6 @@ export default async function CierresAdminPage() {
         historico={result.historico}
         sinZona={result.sinZona}
       />
-    </section>
+    </AppPage>
   );
 }

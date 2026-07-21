@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarMovimientosAction, verBalanceAction } from "@/lib/actions/wallet";
@@ -49,12 +49,10 @@ export default async function WalletPage() {
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-8 p-6">
-      <PageHeader
-        title="Wallet"
-        description="Caja principal de Ordenex: libro de movimientos y balance general"
-      />
-
+    <AppPage
+      title="Wallet"
+      description="Caja principal de Ordenex: libro de movimientos y balance general"
+    >
       <WalletModule
         movimientos={movimientosResult.data.movimientos}
         total={movimientosResult.data.total}
@@ -64,6 +62,6 @@ export default async function WalletPage() {
         desglose={desgloseResult.desglose}
         plantillas={plantillasResult.plantillas}
       />
-    </section>
+    </AppPage>
   );
 }

@@ -1,7 +1,7 @@
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { AdminTiendaDashboard } from "@/app/(app)/_components/AdminTiendaDashboard";
 import { AdminMaestroDashboard } from "@/app/(app)/_components/AdminMaestroDashboard";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 
 export default async function Home() {
   // Ramificación por rol resuelta SOLO server-side (feature 26, R5): el
@@ -23,11 +23,9 @@ export default async function Home() {
   // app/(app)/_components/Sidebar.tsx), único y visible para todos los roles
   // (feature 57, R14). La home ya no renderiza su propio botón ad-hoc.
   return (
-    <div className="flex flex-col flex-1 gap-6 bg-zinc-50 font-sans dark:bg-black">
-      <PageHeader
-        title="Bienvenido"
-        description="Has iniciado sesión correctamente"
-      />
-    </div>
+    <AppPage
+      title="Bienvenido"
+      description="Has iniciado sesión correctamente"
+    />
   );
 }

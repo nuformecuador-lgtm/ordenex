@@ -1,12 +1,11 @@
 import { RolValue } from "@prisma/client";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 import { OrdenesModule } from "./_components/OrdenesModule";
 import { OrdenesTabs } from "./_components/OrdenesTabs";
-import { Container } from "@/components/shared/Container";
 
 /**
  * Feature 63/C5 (R12/R20, design.md §4.3, F1.4-h): el rol se resuelve SOLO
@@ -54,25 +53,22 @@ export default async function OrdenesPage() {
   const accionesLote = rol ? esAccesoTotal(rol) : false;
 
   return (
-    <>
-      <PageHeader title="Órdenes" description="Listado y gestión de órdenes" />
-      <Container>
-        {usaTabs ? (
-          <OrdenesTabs
-            exclude={EXCLUDE_POR_ROL[rol as string] ?? ["pendiente"]}
-            puedeCargarMasiva={puedeCargarMasiva}
-            puedeEscanearQr={puedeEscanearQr}
-            mostrarHistorial
-            accionesLote={accionesLote}
-            incluirTodas={rol ? esAccesoTotal(rol) : false}
-            orientation={"vertical"}
-          />
-        ) : (
-          // adminSatelite / mensajero / sin sesión: listado plano previo, SIN
-          // regresión (R20). Feature 49: "Ver historial" por fila.
-          <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} mostrarHistorial />
-        )}
-      </Container>
-    </>
+    <AppPage title="Órdenes" description="Listado y gestión de órdenes">
+      {usaTabs ? (
+        <OrdenesTabs
+          exclude={EXCLUDE_POR_ROL[rol as string] ?? ["pendiente"]}
+          puedeCargarMasiva={puedeCargarMasiva}
+          puedeEscanearQr={puedeEscanearQr}
+          mostrarHistorial
+          accionesLote={accionesLote}
+          incluirTodas={rol ? esAccesoTotal(rol) : false}
+          orientation={"vertical"}
+        />
+      ) : (
+        // adminSatelite / mensajero / sin sesión: listado plano previo, SIN
+        // regresión (R20). Feature 49: "Ver historial" por fila.
+        <OrdenesModule puedeCargarMasiva={puedeCargarMasiva} mostrarHistorial />
+      )}
+    </AppPage>
   );
 }

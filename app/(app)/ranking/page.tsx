@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { obtenerRankingAction } from "@/lib/actions/ranking";
@@ -32,17 +32,15 @@ export default async function RankingPage() {
   if (result.status !== "ok") notFound(); // defensa en profundidad (R18)
 
   return (
-    <section className="flex flex-1 flex-col gap-8 p-6">
-      <PageHeader
-        title="Ranking"
-        description="Ranking diario de mensajeros por entregas exitosas y premios del podio"
-      />
-
+    <AppPage
+      title="Ranking"
+      description="Ranking diario de mensajeros por entregas exitosas y premios del podio"
+    >
       <RankingModule
         ranking={result.data.ranking}
         premios={result.data.premios}
         esEditable={result.data.esEditable}
       />
-    </section>
+    </AppPage>
   );
 }
