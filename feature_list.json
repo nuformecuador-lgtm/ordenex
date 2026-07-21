@@ -1027,6 +1027,17 @@
       "zone": "frontend",
       "branch": null,
       "depends_on": 86
+    },
+    {
+      "id": 95,
+      "name": "etiquetas tras generar guia / asignar mensajero",
+      "description": "Tras generar la guia y asignar mensajero, encadenar la vista previa + descarga (PDF) de las etiquetas de esas guias, reusando el modal de etiquetas existente. Para maestro y admin.",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": "feature/95-etiquetas-tras-guia",
+      "depends_on": null
     }
   ]
 }
