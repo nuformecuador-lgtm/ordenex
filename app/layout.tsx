@@ -44,14 +44,26 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         {children}
+        {/* PWA (feature 64): el service worker SOLO se registra en produccion. En
+            desarrollo cachea los chunks de Next y, como sus hashes cambian en cada
+            recompilacion, provoca fallos de carga de chunk -> recarga infinita. Ademas,
+            en dev DES-registra cualquier SW previo y limpia sus caches, para que un
+            navegador que ya lo tenia registrado se limpie solo sin pasos manuales. */}
         <Script id="sw-register" strategy="afterInteractive">
-          {`
-            if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-              window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').catch(() => {});
-              });
-            }
-          `}
+          {process.env.NODE_ENV === "production"
+            ? `if ('serviceWorker' in navigator) {
+                 window.addEventListener('load', () => {
+                   navigator.serviceWorker.register('/sw.js').catch(() => {});
+                 });
+               }`
+            : `if ('serviceWorker' in navigator) {
+                 navigator.serviceWorker.getRegistrations()
+                   .then((rs) => { for (const r of rs) r.unregister(); })
+                   .catch(() => {});
+                 if (window.caches) {
+                   caches.keys().then((ks) => { for (const k of ks) caches.delete(k); }).catch(() => {});
+                 }
+               }`}
         </Script>
       </body>
     </html>
