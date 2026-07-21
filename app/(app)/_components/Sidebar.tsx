@@ -10,7 +10,6 @@ import {
   Home,
   Megaphone,
   Package,
-  QrCode,
   Settings,
   Trophy,
   Truck,
@@ -44,6 +43,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Logo } from "@/components/shared/Logo";
 
 type SidebarIcon = ComponentType<LucideProps>;
 
@@ -141,7 +141,6 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   package: Package,
   clipboardCheck: ClipboardCheck,
   truck: Truck,
-  qrCode: QrCode,
   megaphone: Megaphone,
   trophy: Trophy,
   wallet: Wallet,
@@ -155,11 +154,11 @@ export { SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
 export function Sidebar({
   items = SIDEBAR_ITEMS,
   usuario = null,
-}: {
+}: Readonly<{
   items?: readonly MenuItem[];
   /** Usuario autenticado para el footer (nombre + rol). `null` = sin sesión. */
   usuario?: SidebarUsuario | null;
-}) {
+}>) {
   const pathname = usePathname();
 
   return (
@@ -167,9 +166,34 @@ export function Sidebar({
       {/* min-h-14 conserva el alto del logo al colapsar sin recortar el botón
           (que sobresale del borde); por eso NO se usa overflow-hidden aquí. */}
       <SidebarHeader className="px-3 py-4 relative min-h-14 justify-center">
-        <span className="text-base font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-          Ordenex
-        </span>
+        {/* Wordmark: visible cuando el sidebar está expandido. Mismo tratamiento
+            que el icono: se mantiene siempre en el DOM y se cruza por opacidad
+            (1 expandido → 0 colapsado) para que al expandir aparezca con un fade
+            en lugar de un salto. Posición absoluta (alineado a la izquierda, como
+            el padding del header) para que al colapsar no se envuelva en el rail
+            angosto ni empuje el alto. */}
+        <Logo
+          className={cn(
+            "absolute left-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-base text-sidebar-foreground",
+            "opacity-100 transition-opacity duration-300 ease-out",
+            "group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:opacity-0",
+          )}
+        />
+        {/* Icono de marca: solo cuando está colapsado. Centrado en el ancho del
+            rail y con fade de opacidad (0→1) para que no aparezca de golpe. Se
+            mantiene siempre en el DOM (opacity-0 en expandido) para que la
+            transición corra al colapsar en lugar de un display none→block seco. */}
+        <img
+          src="/icons/icon-192.png"
+          alt="Ordenex"
+          width={32}
+          height={32}
+          className={cn(
+            "pointer-events-none absolute left-1/2 top-1/2 size-8 -translate-x-1/2 -translate-y-1/2 rounded-md",
+            "opacity-0 transition-opacity duration-300 ease-out",
+            "group-data-[collapsible=icon]:opacity-100",
+          )}
+        />
         <SidebarCollapseToggle />
       </SidebarHeader>
       <SidebarContent>

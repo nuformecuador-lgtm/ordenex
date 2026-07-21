@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/lib/constants/auth";
 import { SessionRepository } from "@/lib/repositories/SessionRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { Logo } from "@/components/shared/Logo";
 import { LoginForm } from "./_components/LoginForm";
 
 export default async function LoginPage(props: {
@@ -35,9 +36,7 @@ export default async function LoginPage(props: {
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(242,100,25,0.16),transparent_55%)]"
         />
         <div className="relative">
-          <span className="font-heading text-2xl font-semibold tracking-tight">
-            Ordenex
-          </span>
+          <Logo />
           <div className="mt-3 h-1 w-10 rounded-full bg-brand" />
         </div>
         <p className="relative max-w-sm text-sm leading-relaxed text-white/70">
@@ -49,9 +48,7 @@ export default async function LoginPage(props: {
       <div className="flex flex-1 flex-col items-center justify-center gap-8 bg-background px-6 py-12">
         {/* Wordmark compacto, solo visible en móvil (el panel de marca cubre desktop) */}
         <div className="md:hidden">
-          <span className="font-heading text-xl font-semibold tracking-tight text-navy">
-            Ordenex
-          </span>
+          <Logo className="text-xl text-navy" />
         </div>
         <LoginForm redirectParam={redirectParam} />
       </div>

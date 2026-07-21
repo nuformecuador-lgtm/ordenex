@@ -102,8 +102,7 @@ describe("puedeVer", () => {
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve Inicio, Órdenes, Wallet, Configuración, Cierres del día, QR y Perfil en orden real", () => {
-    // PR #75: "QR" (roles: ROLES_SEED) se intercala antes de "Perfil".
+  it("maestro ve Inicio, Órdenes, Wallet, Configuración, Cierres del día y Perfil en orden real", () => {
     // Feature 42: "Wallet" (caja principal, solo maestro) va antes de "Configuración".
     // Feature 92: "Inicio" (acceso a /dashboard) va PRIMERO en SIDEBAR_ITEMS.
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
@@ -113,12 +112,11 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Wallet",
       "Configuración",
       "Cierres del día",
-      "QR",
       "Perfil",
     ]);
   });
 
-  it("admin ve Inicio, Órdenes, Ranking, Wallet, Cierres del día, QR y Perfil, NO Configuración (paridad con maestro salvo Configuración)", () => {
+  it("admin ve Inicio, Órdenes, Ranking, Wallet, Cierres del día y Perfil, NO Configuración (paridad con maestro salvo Configuración)", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("admin")));
     // Feature 94 (paridad adm↔maestro): el admin ve Ranking, Wallet y Cierres del día
     // igual que el maestro; solo Configuración sigue siendo maestro-only.
@@ -128,25 +126,23 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Ranking",
       "Wallet",
       "Cierres del día",
-      "QR",
       "Perfil",
     ]);
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Órdenes + Novedades + QR + Perfil, NO Configuración", () => {
+  it("adminTienda ve Órdenes + Novedades + Perfil, NO Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
-    expect(visibles).toEqual(["Órdenes", "Novedades", "QR", "Perfil"]);
+    expect(visibles).toEqual(["Órdenes", "Novedades", "Perfil"]);
     expect(visibles).not.toContain("Configuración");
     // "Ranking" es solo del maestro.
     expect(visibles).not.toContain("Ranking");
   });
 
-  it("mensajero ve Entregas + Ranking + Cierre del día + QR + Perfil, NO Órdenes, Novedades ni Configuración", () => {
+  it("mensajero ve Entregas + Ranking + Cierre del día + Perfil, NO Órdenes, Novedades ni Configuración", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("mensajero")));
     // Feature 61: el mensajero usa "Entregas" (su portal); ya NO ve "Órdenes"
     // (lista genérica reservada a maestro/admin/adminTienda).
-    // PR #75: "QR" es visible para todos los roles (ROLES_SEED).
     // Feature 76 (R20): "Ranking" es visible para el mensajero en solo-lectura
     // (roles maestro+mensajero); su defensa real es el notFound de la página.
     // Feature 87 (R20): "Novedades" ahora es exclusivo del adminTienda; el
@@ -155,7 +151,6 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Entregas",
       "Ranking",
       "Cierre del día",
-      "QR",
       "Perfil",
     ]);
     expect(visibles).not.toContain("Órdenes");
@@ -163,9 +158,9 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminSatelite ve Órdenes + Cierres del día + QR + Perfil", () => {
+  it("adminSatelite ve Órdenes + Cierres del día + Perfil", () => {
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Órdenes", "Cierres del día", "QR", "Perfil"], // PR #75: QR
+      ["Órdenes", "Cierres del día", "Perfil"],
     );
   });
 

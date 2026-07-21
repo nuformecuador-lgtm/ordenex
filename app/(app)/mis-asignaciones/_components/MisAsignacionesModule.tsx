@@ -351,6 +351,7 @@ export function MisAsignacionesModule({
           <GestionarOrdenPanel
             key={detalleOrden.id}
             orden={detalleOrden}
+            count={porGestionar?.length || 0}
             yaActiva={ordenEnGestionId === detalleOrden.id}
             onGestionarPedido={gestionarPedido}
             onCancelarGestion={cancelarGestion}
