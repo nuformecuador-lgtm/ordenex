@@ -1,0 +1,103 @@
+"use client";
+
+// Feature 97 (R25/R31/R32/R34) — botón de sincronización MANUAL de la ruta del mensajero.
+// Vive dentro de `MisAsignacionesModule`, que solo se monta desde una página que ya hace
+// `notFound()` para roles ≠ `mensajero`; la Server Action `sincronizarRuta` vuelve a
+// comprobar el rol (`forbidden`) como defensa en profundidad (R33).
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { RefreshCw } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/useToast";
+import { sincronizarRuta } from "@/lib/actions/ruta-mensajero";
+
+import type { RutaMapaOrigen } from "./ruta-mapa-tipos";
+
+export interface SincronizarRutaButtonProps {
+  /**
+   * Se invoca con la ubicación capturada por GPS (si el permiso se concedió), para que el
+   * padre pueda dibujar el punto de partida en el mapa. Nunca se llama si el permiso se
+   * negó o el navegador no expone geolocalización (R25).
+   */
+  onUbicacion?: (ubicacion: RutaMapaOrigen) => void;
+}
+
+/**
+ * Captura la ubicación actual del navegador BEST-EFFORT (R25): si `geolocation` no existe,
+ * el permiso se niega, o hay timeout/error, resuelve `undefined` en vez de rechazar. Así la
+ * sincronización NUNCA queda bloqueada por el permiso: simplemente corre sin `ubicacion`.
+ */
+function capturarUbicacion(): Promise<RutaMapaOrigen | undefined> {
+  return new Promise((resolve) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      resolve(undefined);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(undefined),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 },
+    );
+  });
+}
+
+export function SincronizarRutaButton({ onUbicacion }: SincronizarRutaButtonProps) {
+  const router = useRouter();
+  const toast = useToast();
+  const [procesando, setProcesando] = useState(false);
+  // R34 — cerrojo SÍNCRONO anti-doble-click: `disabled` solo engancha tras el re-render, así
+  // que un segundo click en el mismo tick lo atraparía igual. El ref cambia YA, en el primer
+  // click, y descarta el segundo antes de que llegue a la action facturada.
+  const enVueloRef = useRef(false);
+
+  async function handleClick() {
+    if (enVueloRef.current) return;
+    enVueloRef.current = true;
+    setProcesando(true);
+    try {
+      const ubicacion = await capturarUbicacion();
+      if (ubicacion) onUbicacion?.(ubicacion);
+      const result = await sincronizarRuta(ubicacion ? { ubicacion } : {});
+      switch (result.status) {
+        case "ok":
+          toast.success(
+            result.omitida ? "La ruta ya estaba al día." : "Ruta sincronizada.",
+          );
+          router.refresh(); // R32: refleja el orden nuevo (módulo server-driven, sin SWR)
+          break;
+        case "conflict":
+          // R34: pulsado dentro del intervalo mínimo, o el proveedor falló y se conservó
+          // el último orden válido (R27). Se avisa sin fingir que recalculó.
+          toast.warning(result.motivo);
+          break;
+        case "forbidden":
+          toast.error("No tienes permiso para sincronizar la ruta.");
+          break;
+        case "unauthenticated":
+          toast.error("Tu sesión expiró. Inicia sesión de nuevo.");
+          break;
+        case "validation_error":
+          toast.error("No se pudo sincronizar la ruta.");
+          break;
+      }
+    } finally {
+      enVueloRef.current = false;
+      setProcesando(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={handleClick}
+      disabled={procesando}
+      aria-busy={procesando}
+    >
+      <RefreshCw aria-hidden="true" className={procesando ? "animate-spin" : undefined} />
+      {procesando ? "Sincronizando…" : "Sincronizar ruta"}
+    </Button>
+  );
+}

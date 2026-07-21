@@ -231,4 +231,61 @@ describe("GenerarGuiaModal", () => {
       "Alguna orden ya no está en un estado válido para esta acción.",
     );
   });
+
+  // Feature 97/R9: el gate de asignabilidad por coordenadas (#98) devuelve `conflict` con un
+  // `motivo` por orden que es LITERALMENTE el `EstadoAsignabilidad`. La UI lo traduce a un
+  // mensaje claro según la clase del motivo.
+  it("R9: un conflict con motivo 'direccion_no_geocodificable' muestra 'Dirección no encontrada'", async () => {
+    const user = userEvent.setup();
+    generarGuiaMock.mockResolvedValue({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: "direccion_no_geocodificable" }],
+    });
+
+    const ordenes = [makeOrden({ id: "o1", numRemision: "REM-001" })];
+    const { onSuccess } = renderModal(ordenes);
+
+    await user.click(screen.getByRole("button", { name: "Generar guía" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith("Dirección no encontrada"),
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("R9: un conflict con motivo 'geocodificacion_agotada' también es 'Dirección no encontrada'", async () => {
+    const user = userEvent.setup();
+    generarGuiaMock.mockResolvedValue({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: "geocodificacion_agotada" }],
+    });
+
+    const ordenes = [makeOrden({ id: "o1", numRemision: "REM-001" })];
+    renderModal(ordenes);
+
+    await user.click(screen.getByRole("button", { name: "Generar guía" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith("Dirección no encontrada"),
+    );
+  });
+
+  it("R9: un conflict con motivo 'geocodificacion_en_curso' avisa que la dirección aún se valida", async () => {
+    const user = userEvent.setup();
+    generarGuiaMock.mockResolvedValue({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: "geocodificacion_en_curso" }],
+    });
+
+    const ordenes = [makeOrden({ id: "o1", numRemision: "REM-001" })];
+    renderModal(ordenes);
+
+    await user.click(screen.getByRole("button", { name: "Generar guía" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith(
+        "La dirección aún se está validando. Intenta de nuevo en unos minutos.",
+      ),
+    );
+  });
 });

@@ -135,4 +135,51 @@ describe("AsignarBodegaModal", () => {
       ),
     );
   });
+
+  // Feature 97/R9: el gate de asignabilidad por coordenadas (#98) devuelve `conflict` con el
+  // `motivo` = `EstadoAsignabilidad` por orden; la UI lo traduce a un mensaje claro.
+  it("R9: conflict 'direccion_no_geocodificable' muestra 'Dirección no encontrada'", async () => {
+    const user = userEvent.setup();
+    asignarDesdeBodegaMock.mockResolvedValue({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: "direccion_no_geocodificable" }],
+    });
+
+    const ordenes = [makeOrden({ id: "o1", numRemision: "REM-001" })];
+    const { onSuccess } = renderModal(ordenes);
+
+    const select = screen.getByRole("combobox", { name: "Mensajero para el lote" });
+    await user.click(select);
+    const listbox = await screen.findByRole("listbox");
+    await user.click(within(listbox).getByRole("option", { name: "Ana Mensajera" }));
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith("Dirección no encontrada"),
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("R9: conflict 'geocodificacion_encolada' avisa que la dirección aún se valida", async () => {
+    const user = userEvent.setup();
+    asignarDesdeBodegaMock.mockResolvedValue({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: "geocodificacion_encolada" }],
+    });
+
+    const ordenes = [makeOrden({ id: "o1", numRemision: "REM-001" })];
+    renderModal(ordenes);
+
+    const select = screen.getByRole("combobox", { name: "Mensajero para el lote" });
+    await user.click(select);
+    const listbox = await screen.findByRole("listbox");
+    await user.click(within(listbox).getByRole("option", { name: "Ana Mensajera" }));
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith(
+        "La dirección aún se está validando. Intenta de nuevo en unos minutos.",
+      ),
+    );
+  });
 });

@@ -35,6 +35,9 @@ const WITH_ASIGNACION = {
     producto: true,
     peso: true,
     montoCobrar: true,
+    // Feature 97: coordenadas geocodificadas (feature 91) para dibujar el mapa de ruta.
+    latitud: true,
+    longitud: true,
     notas: true,
     mensajeroAsignadoId: true,
     estatus: { select: { value: true } },
@@ -60,6 +63,10 @@ function toMiAsignacionRow(row: AsignacionRow): MiAsignacionRow {
     producto: row.producto,
     peso: row.peso ? row.peso.toNumber() : null,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    // Feature 97: Decimal -> number|null con el MISMO patron que `montoCobrar` (una instancia
+    // Decimal es siempre truthy, incluida la de valor 0, asi que 0.0 NO se pierde: solo null->null).
+    latitud: row.latitud ? row.latitud.toNumber() : null,
+    longitud: row.longitud ? row.longitud.toNumber() : null,
     notas: row.notas,
     tiendaNombre: row.tienda.nombre,
     zonaNombre: row.zona.nombre,
