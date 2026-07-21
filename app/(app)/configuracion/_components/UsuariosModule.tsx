@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Users } from "lucide-react";
 import useSWR from "swr";
 
 import { DataTable } from "@/components/shared/DataTable";
@@ -146,7 +147,16 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
         ariaLabel="Usuarios"
         isLoading={isLoading}
         error={error ? "No se pudieron cargar los usuarios" : null}
-        emptyMessage="No hay usuarios"
+        emptyState={{
+          icon: Users,
+          title: "No hay usuarios",
+          description: "Crea el primer usuario para dar acceso al sistema.",
+          action: (
+            <Button type="button" onClick={abrirCrear}>
+              Crear usuario
+            </Button>
+          ),
+        }}
       />
 
       <Pagination

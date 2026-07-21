@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Inbox } from "lucide-react";
 import useSWR from "swr";
 
 import { DataTable, type Column } from "@/components/shared/DataTable";
@@ -248,7 +249,11 @@ export function OrdenesApartado({
         ariaLabel={titulo}
         isLoading={isLoading || estatusId === undefined}
         error={error ? "No se pudieron cargar las órdenes" : null}
-        emptyMessage="No hay órdenes"
+        emptyState={{
+          icon: Inbox,
+          title: "No hay órdenes",
+          description: "Cuando una orden entre en este estado, la verás aquí.",
+        }}
       />
       <Pagination
         page={page}
