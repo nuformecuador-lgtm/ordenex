@@ -1,6 +1,6 @@
 import type { Column } from "@/components/shared/DataTable";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { ZonaDTO } from "@/lib/types/zona";
 
 /**
@@ -12,16 +12,7 @@ export function ZonaCentralBadge({ value }: { value: boolean }) {
   if (!value) {
     return <span className="text-muted-foreground">—</span>;
   }
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
-        "bg-success-soft text-[#065f46] dark:bg-success/15 dark:text-success",
-      )}
-    >
-      Central / GAM
-    </span>
-  );
+  return <Badge variant="success">Central / GAM</Badge>;
 }
 
 export interface ZonasColumnsActions {

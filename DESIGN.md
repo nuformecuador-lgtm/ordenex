@@ -8,7 +8,12 @@ App UI que **sirve a la tarea** (no marketing). Objetivo: familiaridad ganada (L
 ## Color
 Única fuente: los tokens de `app/globals.css` (shadcn + marca). **NUNCA** hex sueltos ni utilidades ad-hoc (`emerald-600`, `text-[#065f46]`, `red-*`).
 - Marca: `--primary` (#f26419 naranja) para acción primaria/selección/estado; `--sidebar` (navy) para el chrome de navegación.
-- Semánticos: `--color-success`, `--color-danger`, `--color-warning`, `--color-info` (+ variantes `-soft`). Todo indicador de estado (entregada/positivo, error, alerta, info) sale de acá.
+- Semánticos: `--color-success`, `--color-danger`, `--color-warning`, `--color-info`. Todo indicador de estado (entregada/positivo, error, alerta, info) sale de acá.
+- **Tres roles por semántico** (no son intercambiables):
+  - `-soft` (`--color-success-soft`, …) = **fondo** de chip/pill/alert. En dark el soft es demasiado claro: usar la técnica soft-badge `bg-{sem}/15`.
+  - base (`--color-success`, …) = **borde, acento y punto de estado** (dot, icono, barra). NO sirve para body text: su contraste sobre fondo claro es <4.5:1.
+  - `-strong` (`--color-success-strong`, …) = **TEXTO**. Contrast-safe ≥4.5:1 sobre `--background`/`--card` y sobre el `-soft`, con variante dark propia. Todo texto de dinero (positivo/negativo), monto de estado o label semántico usa `-strong`, nunca la base ni un hex más oscuro.
+  - La primitiva `Badge` implementa esto en sus variantes `success`/`warning`/`info`/`danger` (`bg-{sem}-soft text-{sem}-strong dark:bg-{sem}/15`). `EstatusBadge` y demás chips de estado se construyen sobre esas variantes: sin hex.
 - **Restrained**: el acento es para acción primaria, selección y estado — nunca decoración. Nada de saturación fuerte en estados inactivos.
 
 ## Tipografía

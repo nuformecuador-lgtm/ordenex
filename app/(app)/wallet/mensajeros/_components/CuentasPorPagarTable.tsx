@@ -114,7 +114,7 @@ export function CuentasPorPagarTable({ mensajeros }: CuentasPorPagarTableProps) 
                       </td>
                       {/* Money-safe (R21/R27): STRING tal cual, sin parseFloat/Number. */}
                       <td className="px-3 py-2 align-middle">{money(m.devengado)}</td>
-                      <td className="px-3 py-2 align-middle text-emerald-600 dark:text-emerald-400">
+                      <td className="px-3 py-2 align-middle text-success-strong">
                         {money(m.pagado)}
                       </td>
                       <td

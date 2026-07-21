@@ -1,12 +1,14 @@
+import type { VariantProps } from "class-variance-authority";
+
+import { Badge, badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { OrderStatusValue } from "@/lib/types/order-status";
 
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
+
 /**
- * Mapa de estatus de orden -> etiqueta legible + clases de color (fase 2
- * rebrand). Se reusa en cualquier lugar donde haya que mostrar un estatus con
- * el mismo look & feel. Los pares bg/texto están pensados para AA en light Y
- * dark (dark usa `/15` de opacidad sobre el color base + texto del color
- * base, técnica estándar de "soft badge").
+ * Mapa de estatus de orden -> etiqueta legible. Se reusa en cualquier lugar
+ * donde haya que mostrar un estatus con el mismo look & feel.
  */
 export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   en_preparacion: "En preparación",
@@ -25,40 +27,45 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   recibido_origen: "En tienda", // cierre del flujo de devolución: la tienda de origen la recibió
 };
 
-const ORDER_STATUS_CLASSES: Record<OrderStatusValue, string> = {
-  en_preparacion:
-    "bg-asfalto-1 text-asfalto-7 dark:bg-asfalto-7/20 dark:text-asfalto-2",
-  en_fulfillment:
-    "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light",
-  en_bodega: "bg-asfalto-1 text-navy dark:bg-navy/20 dark:text-asfalto-2",
-  en_ruta_bodega_principal:
-    "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]",
-  entregada:
-    "bg-success-soft text-[#065f46] dark:bg-success/15 dark:text-success",
-  devuelta:
-    "bg-warning-soft text-[#92400e] dark:bg-warning/15 dark:text-warning",
-  devuelta_origen:
-    "bg-danger-soft text-[#991b1b] dark:bg-danger/15 dark:text-danger",
-  reprogramada:
-    "border border-hivis/60 bg-warning-soft text-[#92400e] dark:border-hivis/40 dark:bg-warning/15 dark:text-warning",
-  en_espera_aceptacion:
-    "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 17
-  en_ruta_bodega_satelite:
-    "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 30
-  en_reparto:
-    "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light", // feature 36
-  rechazada:
-    "bg-danger-soft text-[#991b1b] dark:bg-danger/15 dark:text-danger", // feature 36
-  en_bodega_satelite:
-    "bg-[#eff6ff] text-info dark:bg-info/15 dark:text-[#7fa8f5]", // feature 33
-  // Terminal y NO error: reusa el par de `entregada` (success), el otro cierre
+/**
+ * Estatus -> variante semántica de la primitiva `Badge`. La semántica se conserva
+ * (entregada/recibido = éxito, devolución/rechazo = alerta/peligro, tránsito = info).
+ * Los estados operativos sin color semántico (fulfillment, bodega, preparación) usan
+ * la variante neutra `secondary` y, si necesitan el acento de marca/navy, un
+ * `className` de refuerzo con TOKENS (ver `ORDER_STATUS_CLASS`). Sin hex.
+ */
+const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
+  en_preparacion: "secondary",
+  en_fulfillment: "secondary",
+  en_bodega: "secondary",
+  en_ruta_bodega_principal: "info",
+  entregada: "success",
+  devuelta: "warning",
+  devuelta_origen: "danger",
+  reprogramada: "warning",
+  en_espera_aceptacion: "info", // feature 17
+  en_ruta_bodega_satelite: "info", // feature 30
+  en_reparto: "secondary", // feature 36
+  rechazada: "danger", // feature 36
+  en_bodega_satelite: "info", // feature 33
+  // Terminal y NO error: reusa la variante de `entregada` (success), el otro cierre
   // sano del flujo. `devuelta_origen` sigue en danger por ser el tránsito.
-  recibido_origen:
-    "bg-success-soft text-[#065f46] dark:bg-success/15 dark:text-success",
+  recibido_origen: "success",
 };
 
-const NEUTRAL_CLASSES =
-  "bg-asfalto-1 text-asfalto-7 dark:bg-asfalto-7/20 dark:text-asfalto-2";
+/**
+ * Refuerzo de acento (solo TOKENS) para los estados que sobre la variante neutra
+ * conservan su color de marca/navy o su borde hivis. Se combina sobre la variante
+ * base vía `cn`/twMerge (la última clase gana).
+ */
+const ORDER_STATUS_CLASS: Partial<Record<OrderStatusValue, string>> = {
+  en_fulfillment:
+    "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light",
+  en_reparto:
+    "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light",
+  en_bodega: "text-navy dark:bg-navy/20 dark:text-asfalto-2",
+  reprogramada: "border-hivis/60 dark:border-hivis/40",
+};
 
 function isKnownStatus(value: string): value is OrderStatusValue {
   return value in ORDER_STATUS_LABELS;
@@ -88,16 +95,9 @@ export function EstatusBadge({
       : known
         ? ORDER_STATUS_LABELS[value]
         : value;
-  const classes = known ? ORDER_STATUS_CLASSES[value] : NEUTRAL_CLASSES;
+  // Estatus desconocido -> variante neutra (no rompe la UI ante datos inesperados).
+  const variant = known ? ORDER_STATUS_VARIANT[value] : "secondary";
+  const extra = known ? ORDER_STATUS_CLASS[value] : undefined;
 
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
-        classes,
-      )}
-    >
-      {label}
-    </span>
-  );
+  return <Badge variant={variant} className={cn(extra)}>{label}</Badge>;
 }
