@@ -230,14 +230,13 @@ describe("GuiaAsignacionService.generarGuia — autorizacion (R11-R13)", () => {
     expect(r.status).toBe("ok");
   });
 
-  it("R12/R13: admin (solo-lectura) en escritura -> forbidden, sin tocar datos", async () => {
+  it("feature 94: admin tiene paridad con maestro y puede generar guia", async () => {
     const repo = fakeRepo();
     const service = newService(repo);
 
     const r = await service.generarGuia({ decisiones: [{ ordenId: "o1", mensajeroId: null }] }, ADMIN);
 
-    expect(r).toEqual({ status: "forbidden" });
-    expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
+    expect(r.status).toBe("ok");
   });
 
   it("R13: adminTienda/mensajero en escritura -> forbidden", async () => {
@@ -602,13 +601,28 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
   });
 
-  it("forbidden fuera de maestro (R11-R13)", async () => {
-    const repo = fakeRepo();
+  it("feature 94: admin tiene paridad con maestro en asignarDesdeBodega", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega", numGuia: 55 }),
+      ]),
+    });
     const service = newService(repo);
 
     const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, ADMIN);
 
-    expect(r).toEqual({ status: "forbidden" });
+    expect(r.status).toBe("ok");
+    expect(repo.asignarBodegaLote).toHaveBeenCalled();
+  });
+
+  it("forbidden fuera de acceso total: adminTienda/mensajero -> forbidden", async () => {
+    const repo = fakeRepo();
+    const service = newService(repo);
+
+    for (const actor of [ADMIN_TIENDA, MENSAJERO]) {
+      const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, actor);
+      expect(r).toEqual({ status: "forbidden" });
+    }
     expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
   });
 });
@@ -861,15 +875,29 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
     expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
   });
 
-  it("R16: autorizacion — admin/adminTienda/mensajero -> forbidden, sin tocar datos", async () => {
+  it("R16: autorizacion — adminTienda/mensajero -> forbidden, sin tocar datos", async () => {
     const repo = fakeRepo();
     const service = newService(repo);
 
-    for (const actor of [ADMIN, ADMIN_TIENDA, MENSAJERO]) {
+    for (const actor of [ADMIN_TIENDA, MENSAJERO]) {
       const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, actor);
       expect(r).toEqual({ status: "forbidden" });
     }
     expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin tiene paridad con maestro y rutea a bodega satelite", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, ADMIN);
+
+    expect(r.status).toBe("ok");
+    expect(repo.rutearBodegaSateliteLote).toHaveBeenCalled();
   });
 });
 

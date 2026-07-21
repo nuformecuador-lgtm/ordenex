@@ -16,9 +16,10 @@ import {
   type RegistrarEgresoAdministrativoInput,
   type ReversarEgresoInput,
 } from "@/lib/types/wallet";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
-// Rol autorizado (R17): el maestro (dueno de la caja central), espejo de WalletService.
-const ROL_AUTORIZADO = "maestro";
+// Roles autorizados (R17): acceso total (maestro/admin, dueños de la caja central), espejo de
+// WalletService.
 
 /**
  * Feature 45 — logica de negocio de los EGRESOS administrativos de la caja principal (gasto
@@ -39,7 +40,7 @@ export class WalletEgresoService implements IWalletEgresoService {
     input: RegistrarEgresoAdministrativoInput,
     actor: Actor,
   ): Promise<RegistrarEgresoServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R17
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
 
     // R2: mapeo tipo de egreso manual -> categoria del libro (gasto_variable /
     // egreso_gasto_variable, sueldo / egreso_sueldo). El gasto FIJO no llega aqui (rechazado
@@ -75,7 +76,7 @@ export class WalletEgresoService implements IWalletEgresoService {
     input: ReversarEgresoInput,
     actor: Actor,
   ): Promise<ReversarEgresoServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R17
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
 
     // R13: el monto se lee SERVER-SIDE (no lo provee el cliente). Solo se reversa un egreso
     // administrativo (tipo=egreso AND origen_tipo=gasto). Cubre tambien los egresos generados
@@ -108,7 +109,7 @@ export class WalletEgresoService implements IWalletEgresoService {
     input: ListarMovimientosInput,
     actor: Actor,
   ): Promise<VerDesgloseEgresosServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R17
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
 
     // R11: desglose por tipo del conjunto filtrado (mismos filtros de fecha que el libro),
     // derivado por agregacion. Money-safe: todo STRING (nunca number).

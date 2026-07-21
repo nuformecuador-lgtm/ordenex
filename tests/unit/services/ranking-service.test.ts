@@ -11,6 +11,7 @@ import type { ConteoPorMensajero, PremioRankingDTO } from "@/lib/types/ranking";
 // R6 (conteo crudo), R7 (umbral), R9 (null != 0), R12 (STRING), R16/R17/R18/R19 (autz) y LC1.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
+const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" }; // feature 94: paridad con maestro
 const MENSAJERO: Actor = { usuarioId: "u-msj", rol: "mensajero" };
 const NOW = new Date("2026-07-16T12:00:00.000Z"); // dentro de HOY(CR)
 
@@ -199,6 +200,13 @@ describe("RankingService.obtenerRanking — autorizacion (R16/R17/R18)", () => {
     expect(res.data.esEditable).toBe(true);
   });
 
+  it("feature 94: admin -> ve y esEditable true (paridad con maestro)", async () => {
+    const { service } = buildDeps({ mensajeros: [] });
+    const res = await service.obtenerRanking(ADMIN, NOW);
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    expect(res.data.esEditable).toBe(true);
+  });
+
   it("mensajero -> ve en solo-lectura (esEditable false)", async () => {
     const { service } = buildDeps({ mensajeros: [] });
     const res = await service.obtenerRanking(MENSAJERO, NOW);
@@ -257,6 +265,17 @@ describe("RankingService.editarPremio — autz y validacion (R10/R11/R16/R19)", 
     });
     expect(res).toEqual({ status: "forbidden" });
     expect(upsertPremio).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin puede editar premio (paridad con maestro)", async () => {
+    const { service, upsertPremio } = buildDeps({});
+    const res = await service.editarPremio(ADMIN, {
+      posicion: 1,
+      monto: "100",
+      descripcion: "Oro",
+    });
+    expect(res).toEqual({ status: "ok" });
+    expect(upsertPremio).toHaveBeenCalledWith(1, { monto: "100", descripcion: "Oro" });
   });
 
   it("maestro con monto valido -> ok y persiste monto + descripcion (R10)", async () => {

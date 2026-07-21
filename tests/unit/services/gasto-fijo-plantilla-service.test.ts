@@ -9,6 +9,7 @@ import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 // no existe; SIN metodo de borrado (R25 — la desactivacion es el mecanismo). Montos STRING.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
+const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" }; // feature 94: paridad con maestro
 const OTRO: Actor = { usuarioId: "u-otro", rol: "adminSatelite" };
 
 function plantilla(overrides: Partial<GastoFijoPlantillaDTO> = {}): GastoFijoPlantillaDTO {
@@ -55,6 +56,14 @@ describe("GastoFijoPlantillaService.crearPlantilla (R17/R24)", () => {
     expect(repo.crear).not.toHaveBeenCalled();
   });
 
+  it("feature 94: admin -> crea la plantilla (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.crear).toHaveBeenCalled();
+  });
+
   it("R24: maestro -> crea la plantilla; monto STRING", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
@@ -83,6 +92,17 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
     expect(repo.actualizar).not.toHaveBeenCalled();
   });
 
+  it("feature 94: admin -> edita la plantilla (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.actualizarPlantilla(
+      { id: "p-1", concepto: "Alquiler oficina", monto: "85000.00", ...PERIODICIDAD },
+      ADMIN,
+    );
+    expect(r.status).toBe("ok");
+    expect(repo.actualizar).toHaveBeenCalled();
+  });
+
   it("R25: maestro -> edita concepto/monto", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
@@ -106,6 +126,14 @@ describe("GastoFijoPlantillaService.setActivaPlantilla (R17/R25)", () => {
     const r = await svc.setActivaPlantilla({ id: "p-1", activa: false }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.setActiva).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> activa/desactiva la plantilla (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.setActivaPlantilla({ id: "p-1", activa: false }, ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.setActiva).toHaveBeenCalledWith("p-1", false);
   });
 
   it("R25: desactivar (activa=false) -> ok (sin borrado)", async () => {
@@ -133,6 +161,14 @@ describe("GastoFijoPlantillaService.listarPlantillas (R17/R26)", () => {
     const r = await svc.listarPlantillas(OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.listar).not.toHaveBeenCalled();
+  });
+
+  it("feature 94: admin -> lista plantillas (paridad con maestro)", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.listarPlantillas(ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.listar).toHaveBeenCalled();
   });
 
   it("R26: maestro -> lista activas e inactivas", async () => {

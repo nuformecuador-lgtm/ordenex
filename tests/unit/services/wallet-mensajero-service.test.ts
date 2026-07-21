@@ -12,6 +12,7 @@ import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensaj
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const OTRO_MENSAJERO: Actor = { usuarioId: "m2", rol: "mensajero" };
 const MAESTRO: Actor = { usuarioId: "adm-maestro", rol: "maestro" };
+const ADMIN: Actor = { usuarioId: "adm-admin", rol: "admin" }; // feature 94: paridad con maestro
 const ADMIN_SATELITE: Actor = { usuarioId: "adm-sat", rol: "adminSatelite" };
 const TIENDA: Actor = { usuarioId: "t1", rol: "adminTienda" };
 
@@ -129,7 +130,19 @@ describe("WalletMensajeroService.listarCuentasPorPagar (R18/R19)", () => {
     ]);
   });
 
-  it("R19: rol NO maestro (mensajero/adminSatelite/tienda) -> forbidden, sin tocar el repo", async () => {
+  it("feature 94: admin ve la cuenta por pagar de todos los mensajeros (paridad con maestro)", async () => {
+    const repo = fakeRepo({
+      listarCuentasPorPagarTodos: vi.fn(async () => [
+        { mensajeroId: "m1", mensajeroNombre: "Ana Mensajera", devengado: "1000.00", pagado: "300.00" },
+      ]),
+    });
+    const svc = new WalletMensajeroService(repo);
+    const r = await svc.listarCuentasPorPagar(ADMIN);
+    expect(r.status).toBe("ok");
+    expect(repo.listarCuentasPorPagarTodos).toHaveBeenCalled();
+  });
+
+  it("R19: rol sin acceso total (mensajero/adminSatelite/tienda) -> forbidden, sin tocar el repo", async () => {
     const repo = fakeRepo();
     const svc = new WalletMensajeroService(repo);
     expect((await svc.listarCuentasPorPagar(MENSAJERO)).status).toBe("forbidden");
@@ -214,7 +227,19 @@ describe("WalletMensajeroService.listarPagosDeMensajero (R18/R22 — vista del M
     expect(r.data.mensajeroNombre).toBe("");
   });
 
-  it("R19: rol NO maestro (mensajero/adminSatelite/tienda) -> forbidden, sin tocar el repo", async () => {
+  it("feature 94: admin obtiene el desglose de un mensajero arbitrario (paridad con maestro)", async () => {
+    const repo = fakeRepo({
+      listarPorMensajero: vi.fn(async () => ({ movimientos: [MOV], total: 5 })),
+      obtenerNombreMensajero: vi.fn(async () => "Nora Repartos"),
+    });
+    const svc = new WalletMensajeroService(repo);
+    const r = await svc.listarPagosDeMensajero({ page: 1, pageSize: 20, mensajeroId: "m9" }, ADMIN);
+    expect(r.status).toBe("ok");
+    const arg = (repo.listarPorMensajero as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.mensajeroId).toBe("m9");
+  });
+
+  it("R19: rol sin acceso total (mensajero/adminSatelite/tienda) -> forbidden, sin tocar el repo", async () => {
     const repo = fakeRepo();
     const svc = new WalletMensajeroService(repo);
     expect((await svc.listarPagosDeMensajero({ page: 1, pageSize: 20, mensajeroId: "m9" }, MENSAJERO)).status).toBe("forbidden");
