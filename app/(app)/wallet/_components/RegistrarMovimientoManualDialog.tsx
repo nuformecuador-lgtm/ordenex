@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { FormField } from "@/components/shared/FormField";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import { registrarMovimientoManualAction } from "@/lib/actions/wallet";
@@ -137,56 +138,42 @@ export function RegistrarMovimientoManualDialog({
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="manual-monto">Monto</Label>
-            <Input
-              id="manual-monto"
-              inputMode="decimal"
-              value={monto}
-              onChange={(e) => {
-                setMonto(e.target.value);
-                if (errores.monto) setErrores((p) => ({ ...p, monto: undefined }));
-              }}
-              aria-required="true"
-              aria-invalid={errores.monto !== undefined}
-              aria-describedby={errores.monto ? "manual-monto-error" : undefined}
-              placeholder="0.00"
-            />
-            {errores.monto ? (
-              <p id="manual-monto-error" role="alert" className="text-sm text-destructive">
-                {errores.monto}
-              </p>
-            ) : null}
-          </div>
+          <FormField id="manual-monto" label="Monto" error={errores.monto}>
+            {(control) => (
+              <Input
+                {...control}
+                aria-required="true"
+                inputMode="decimal"
+                value={monto}
+                onChange={(e) => {
+                  setMonto(e.target.value);
+                  if (errores.monto) setErrores((p) => ({ ...p, monto: undefined }));
+                }}
+                placeholder="0.00"
+              />
+            )}
+          </FormField>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="manual-descripcion">Descripción</Label>
-            <textarea
-              id="manual-descripcion"
-              value={descripcion}
-              onChange={(e) => {
-                setDescripcion(e.target.value);
-                if (errores.descripcion)
-                  setErrores((p) => ({ ...p, descripcion: undefined }));
-              }}
-              rows={3}
-              aria-required="true"
-              aria-invalid={errores.descripcion !== undefined}
-              aria-describedby={
-                errores.descripcion ? "manual-descripcion-error" : undefined
-              }
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            {errores.descripcion ? (
-              <p
-                id="manual-descripcion-error"
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {errores.descripcion}
-              </p>
-            ) : null}
-          </div>
+          <FormField
+            id="manual-descripcion"
+            label="Descripción"
+            error={errores.descripcion}
+          >
+            {(control) => (
+              <textarea
+                {...control}
+                aria-required="true"
+                value={descripcion}
+                onChange={(e) => {
+                  setDescripcion(e.target.value);
+                  if (errores.descripcion)
+                    setErrores((p) => ({ ...p, descripcion: undefined }));
+                }}
+                rows={3}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            )}
+          </FormField>
         </div>
       </Modal>
     </>
