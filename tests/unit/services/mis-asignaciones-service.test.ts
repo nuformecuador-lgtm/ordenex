@@ -58,6 +58,9 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
     producto: "caja",
     peso: null,
     montoCobrar: 100,
+    // Feature 97: coords de la parada (ya serializadas a number|null en el repo).
+    latitud: 9.9281244,
+    longitud: -84.0907246,
     notas: null,
     tiendaNombre: "T",
     zonaNombre: "Z",
@@ -224,6 +227,23 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     });
     expect(repo.contarEntregadas).toHaveBeenCalledWith("m1");
     expect(repo.sumMontoCobrarEntregadas).toHaveBeenCalledWith("m1");
+  });
+
+  // Feature 97: el DTO expone las coords de la parada (feature 91) para dibujar el mapa.
+  // Es un campo de la orden -> viaja en AMBOS grupos; el `null` (sin geocodificar) se preserva.
+  it("F97: el DTO propaga latitud/longitud (number|null) en porRecoger y porGestionar", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "r", estatusValue: "en_espera_aceptacion", latitud: 9.9, longitud: -84.1 }),
+        asignacionRow({ id: "g", estatusValue: "en_reparto", latitud: null, longitud: null }),
+      ]),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.porRecoger[0]).toMatchObject({ latitud: 9.9, longitud: -84.1 });
+    expect(r.porGestionar[0]).toMatchObject({ latitud: null, longitud: null });
   });
 });
 

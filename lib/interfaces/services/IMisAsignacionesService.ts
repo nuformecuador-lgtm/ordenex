@@ -20,6 +20,9 @@ export interface MiAsignacionDTO {
   producto: string;
   peso: number | null;
   montoCobrar: number | null;
+  /** Feature 97: coordenadas geocodificadas de la parada (feature 91). `null` si aun no se geocodifico. Para dibujar el mapa de ruta. */
+  latitud: number | null;
+  longitud: number | null;
   notas: string | null;
   tiendaNombre: string;
   zonaNombre: string;

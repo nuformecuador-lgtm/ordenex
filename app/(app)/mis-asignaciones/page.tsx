@@ -34,6 +34,7 @@ export default async function MisAsignacionesPage() {
         porRecoger={result.porRecoger}
         porGestionar={result.porGestionar}
         ordenEnGestionId={result.ordenEnGestionId}
+        ruta={result.ruta}
       />
     </section>
   );

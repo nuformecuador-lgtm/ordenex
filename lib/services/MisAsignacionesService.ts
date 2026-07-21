@@ -426,6 +426,10 @@ function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     producto: row.producto,
     peso: row.peso,
     montoCobrar: row.montoCobrar,
+    // Feature 97: coordenadas de la parada (ya number|null desde el repo). El mapa las usa en
+    // `porGestionar`; el campo es de la orden, asi que viaja tambien en `porRecoger`.
+    latitud: row.latitud,
+    longitud: row.longitud,
     notas: row.notas,
     tiendaNombre: row.tiendaNombre,
     zonaNombre: row.zonaNombre,

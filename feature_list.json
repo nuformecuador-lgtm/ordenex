@@ -1054,11 +1054,22 @@
       "id": 96,
       "name": "recoger guia por input de numero (mensajero)",
       "description": "En el portal del mensajero, reemplazar los botones de recoger por un input de numero de guia; recoger queda disponible solo por ese input o por escaneo de camara, validando que la guia este asignada.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "low",
       "zone": "frontend",
       "branch": "feature/96-recoger-por-input",
+      "depends_on": null
+    },
+    {
+      "id": 97,
+      "name": "optimizacion de ruta - frontend (mapa + orden + sincronizar)",
+      "description": "Frontend de la optimizacion de ruta del mensajero (mitad frontend de la spec 92, backend en el PR #98): muestra las paradas en el orden optimo con su numero de secuencia, un aviso si la ruta esta desactualizada, un boton de sincronizar que captura el GPS, y un mapa (Leaflet + OpenStreetMap) con la ruta dibujada para hacer las entregas.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/97-optimizacion-ruta-frontend",
       "depends_on": null
     }
   ]

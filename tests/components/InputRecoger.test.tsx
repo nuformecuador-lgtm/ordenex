@@ -49,6 +49,9 @@ function makeAsignacion(
     producto: "Caja mediana",
     peso: 1.5,
     montoCobrar: 150,
+    // Feature 97: coords de la parada (feature 91) para el mapa de ruta.
+    latitud: 9.9281244,
+    longitud: -84.0907246,
     notas: null,
     tiendaNombre: "Tienda X",
     zonaNombre: "GAM",
