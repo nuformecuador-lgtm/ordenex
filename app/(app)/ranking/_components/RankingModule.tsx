@@ -1,5 +1,8 @@
 "use client";
 
+import { Trophy } from "lucide-react";
+
+import { DataTable, type Column } from "@/components/shared/DataTable";
 import {
   Card,
   CardContent,
@@ -18,6 +21,34 @@ import {
   conteoCrudo,
   porcentaje,
 } from "./ranking-labels";
+
+// Columnas de la tabla del ranking (R13/R6): posición, nombre, % del día y conteo crudo
+// (entregadas/asignadas). El ORDEN de las filas ya viene resuelto del servidor (R4/R5); la
+// tabla solo presenta. Vive fuera del componente porque no depende de props ni de estado.
+const RANKING_COLUMNS: Column<RankingRowDTO>[] = [
+  {
+    id: "posicion",
+    value: RANKING_COLUMNAS.posicion,
+    render: (fila) => (
+      <span className="font-medium">{fila.posicion ?? SIN_DATO}</span>
+    ),
+  },
+  { id: "nombre", value: RANKING_COLUMNAS.mensajero, render: (fila) => fila.nombre },
+  {
+    id: "porcentaje",
+    value: RANKING_COLUMNAS.porcentaje,
+    render: (fila) => porcentaje(fila.pct),
+  },
+  {
+    id: "conteo",
+    value: RANKING_COLUMNAS.conteo,
+    render: (fila) => (
+      <span className="tabular-nums">
+        {conteoCrudo(fila.entregadasHoy, fila.asignadasHoy)}
+      </span>
+    ),
+  },
+];
 
 // Feature 76 (T9) — módulo cliente del ranking DIARIO. Recibe los datos YA serializados
 // (STRING) + `esEditable` por props desde el Server Component `page.tsx` (que validó rol y
@@ -57,56 +88,13 @@ export function RankingModule({ ranking, premios, esEditable }: RankingModulePro
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="w-full max-w-full overflow-x-auto">
-            <table
-              aria-label={RANKING_LABELS.tablaAria}
-              className="w-full border-collapse text-left text-sm"
-            >
-              <thead>
-                <tr className="border-b">
-                  <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                    {RANKING_COLUMNAS.posicion}
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                    {RANKING_COLUMNAS.mensajero}
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                    {RANKING_COLUMNAS.porcentaje}
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                    {RANKING_COLUMNAS.conteo}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranking.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="px-3 py-6 text-center text-sm text-muted-foreground"
-                    >
-                      {RANKING_LABELS.vacio}
-                    </td>
-                  </tr>
-                ) : (
-                  ranking.map((fila) => (
-                    <tr key={fila.mensajeroId} className="border-b">
-                      <td className="px-3 py-2 align-middle font-medium">
-                        {fila.posicion ?? SIN_DATO}
-                      </td>
-                      <td className="px-3 py-2 align-middle">{fila.nombre}</td>
-                      <td className="px-3 py-2 align-middle">
-                        {porcentaje(fila.pct)}
-                      </td>
-                      <td className="px-3 py-2 align-middle tabular-nums">
-                        {conteoCrudo(fila.entregadasHoy, fila.asignadasHoy)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={RANKING_COLUMNS}
+            data={ranking}
+            rowKey="mensajeroId"
+            ariaLabel={RANKING_LABELS.tablaAria}
+            emptyState={{ icon: Trophy, title: RANKING_LABELS.vacio }}
+          />
         </CardContent>
       </Card>
 

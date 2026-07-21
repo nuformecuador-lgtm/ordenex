@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { MapPin, Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import { listarZonas, obtenerZona, borrarZona } from "@/lib/actions/zonas";
@@ -144,6 +145,7 @@ export function ZonasTarifasModule({
       ) : (
         <ZonasList
           zonas={zonas}
+          onCrear={abrirCrear}
           onEditar={abrirEditar}
           onEliminar={setDeleteTarget}
         />
@@ -189,18 +191,31 @@ export function ZonasTarifasModule({
 /** Listado simple de zonas con acciones Editar/Eliminar. */
 function ZonasList({
   zonas,
+  onCrear,
   onEditar,
   onEliminar,
 }: {
   zonas: ZonaDTO[];
+  onCrear: () => void;
   onEditar: (zona: ZonaDTO) => void;
   onEliminar: (zona: ZonaDTO) => void;
 }) {
   if (zonas.length === 0) {
+    // Mismo tono/estructura que el vacío de ZonasModule (configuración/zonas): icono +
+    // título + descripción que enseña + CTA "Crear zona".
     return (
-      <p className="rounded-md border border-border p-4 text-sm text-muted-foreground">
-        Aún no hay zonas. Crea la primera con “Crear zona”.
-      </p>
+      <div className="rounded-md border border-border">
+        <EmptyState
+          icon={MapPin}
+          title="No hay zonas"
+          description="Crea la primera zona para definir los costos de pago al mensajero."
+          action={
+            <Button type="button" onClick={onCrear}>
+              Crear zona
+            </Button>
+          }
+        />
+      </div>
     );
   }
 

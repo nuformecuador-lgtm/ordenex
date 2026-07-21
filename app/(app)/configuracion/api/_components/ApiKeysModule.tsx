@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { KeyRound } from "lucide-react";
 import useSWR from "swr";
 
 import { DataTable } from "@/components/shared/DataTable";
@@ -120,7 +121,16 @@ export function ApiKeysModule({ initialData }: ApiKeysModuleProps) {
         ariaLabel="API keys"
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las API keys" : null}
-        emptyMessage="No hay API keys"
+        emptyState={{
+          icon: KeyRound,
+          title: "No hay API keys",
+          description: "Genera una API key para conectar sistemas externos con Ordenex.",
+          action: (
+            <Button type="button" onClick={abrirGenerar}>
+              Generar API key
+            </Button>
+          ),
+        }}
       />
 
       <Pagination
