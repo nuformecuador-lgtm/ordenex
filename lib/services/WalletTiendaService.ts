@@ -8,11 +8,12 @@ import type {
 } from "@/lib/interfaces/services/IWalletTiendaService";
 import type { ListarMovimientosTiendaInput, SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Roles autorizados (R19/R20). El `adminTienda` ES la tienda: su usuarioId = tienda_id, y solo
-// ve lo suyo (acotado en el WHERE del repo). El `maestro` ve el saldo de TODAS las tiendas.
+// ve lo suyo (acotado en el WHERE del repo). El acceso total (maestro/admin) ve el saldo de
+// TODAS las tiendas.
 const ROL_TIENDA = "adminTienda";
-const ROL_MAESTRO = "maestro";
 
 /**
  * Feature 43 — logica de negocio de lectura del ledger POR TIENDA. No conoce HTTP ni Prisma
@@ -69,7 +70,7 @@ export class WalletTiendaService implements IWalletTiendaService {
   }
 
   async listarSaldosTiendas(actor: Actor): Promise<ListarSaldosTiendasServiceResult> {
-    if (actor.rol !== ROL_MAESTRO) return { status: "forbidden" }; // R20
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R20
 
     const rows = await this.repo.listarSaldosTodasTiendas();
     const tiendas: SaldoTiendaResumenDTO[] = rows.map((r) => {

@@ -25,6 +25,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // signedUrls, sin DB/red). Cubre R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11,R12,R13,R16.
 
 const MAESTRO: Actor = { usuarioId: "adm-maestro", rol: "maestro" };
+const ADMIN: Actor = { usuarioId: "adm-admin", rol: "admin" }; // feature 94: paridad con maestro
 const ADMIN_SATELITE: Actor = { usuarioId: "adm-sat", rol: "adminSatelite" };
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
@@ -133,6 +134,24 @@ describe("CierresAdminService — autorizacion y alcance (R1/R2/R3)", () => {
     await service.listarCierresAdmin(MAESTRO);
     const alcance = (repo.findCierresByAlcance as ReturnType<typeof vi.fn>).mock.calls[0][0] as Alcance;
     expect(alcance).toEqual({ destinoTipo: "bodega_central", destinoZonaId: null });
+  });
+
+  it("feature 94: admin -> MISMO alcance bodega_central que maestro (sin zona)", async () => {
+    const { service, repo } = newService();
+    await service.listarCierresAdmin(ADMIN);
+    const alcance = (repo.findCierresByAlcance as ReturnType<typeof vi.fn>).mock.calls[0][0] as Alcance;
+    expect(alcance).toEqual({ destinoTipo: "bodega_central", destinoZonaId: null });
+  });
+
+  it("feature 94: admin puede aprobar/rechazar como maestro (alcance bodega_central)", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
+    const { service } = newService({ repo });
+    const rAprobar = await service.aprobarCierre("c1", ADMIN);
+    expect(rAprobar).toEqual({ status: "ok", cierreId: "c1", estado: "aprobado" });
+    const rRechazar = await service.rechazarCierre("c1", "motivo", ADMIN);
+    expect(rRechazar).toEqual({ status: "ok", cierreId: "c1", estado: "rechazado" });
+    const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.alcance).toEqual({ destinoTipo: "bodega_central", destinoZonaId: null });
   });
 
   it("R2: adminSatelite -> alcance bodega_satelite acotado a SU zona (ajeno excluido via el WHERE)", async () => {

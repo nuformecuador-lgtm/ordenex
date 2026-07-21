@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarMovimientosAction, verBalanceAction } from "@/lib/actions/wallet";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { listarPlantillasAction } from "@/lib/actions/gasto-fijo-plantilla";
@@ -19,7 +20,9 @@ import { WalletModule } from "./_components/WalletModule";
  */
 export default async function WalletPage() {
   const actor = await resolveActorFromSession();
-  if (!actor || actor.rol !== "maestro") {
+  // Feature 94 (paridad adm↔maestro): la wallet la ven los roles de ACCESO TOTAL
+  // (`maestro`/`admin`); cualquier otro rol (o sin sesión) → notFound (R19).
+  if (!actor || !esAccesoTotal(actor.rol)) {
     notFound(); // R19: rol no autorizado / sin sesión → sin exponer datos
   }
 

@@ -17,6 +17,7 @@ import type { IngresoOrdenexDTO } from "@/lib/interfaces/services/ICierreDiaServ
 // R19 (inexistente -> no_encontrada), R20 (resueltoPor al repo), R23 (listar/detalle no muta).
 
 const MAESTRO: Actor = { usuarioId: "adm-maestro", rol: "maestro" };
+const ADMIN: Actor = { usuarioId: "adm-admin", rol: "admin" }; // feature 94: paridad con maestro
 const ADMIN_SATELITE: Actor = { usuarioId: "adm-sat", rol: "adminSatelite" };
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
@@ -112,7 +113,7 @@ function newService(opts: { repo?: Repo; signedUrls?: ISignedUrlProvider } = {})
 // --- autorizacion (R2) ---
 
 describe("CierresBodegaAdminService — autorizacion (R2)", () => {
-  it("R2: rol != maestro -> forbidden en las 4 operaciones, sin tocar el repo", async () => {
+  it("R2: rol sin acceso total (adminSatelite/mensajero) -> forbidden en las 4 operaciones, sin tocar el repo", async () => {
     for (const actor of [ADMIN_SATELITE, MENSAJERO]) {
       const { service, repo } = newService();
       expect((await service.listarCierresBodegaAdmin(actor)).status).toBe("forbidden");
@@ -123,6 +124,23 @@ describe("CierresBodegaAdminService — autorizacion (R2)", () => {
       expect(repo.findCierreBodegaConDetalle).not.toHaveBeenCalled();
       expect(repo.resolverCierreBodega).not.toHaveBeenCalled();
     }
+  });
+
+  it("feature 94: admin tiene paridad con maestro en las 4 operaciones", async () => {
+    const repo = fakeRepo({
+      findCierresBodega: vi.fn(async () => [bodegaResumenRow()]),
+      findCierreBodegaConDetalle: vi.fn(async () => ({
+        cierre: bodegaResumenRow(),
+        cierresDia: [{ resumen: detalleCierreRow(), gestiones: [gestionRow()] }],
+      })),
+      resolverCierreBodega: vi.fn(async () => "updated" as const),
+    });
+    const { service } = newService({ repo });
+
+    expect((await service.listarCierresBodegaAdmin(ADMIN)).status).toBe("ok");
+    expect((await service.verCierreBodegaDetalle("cb1", ADMIN)).status).toBe("ok");
+    expect((await service.aprobarCierreBodega("cb1", ADMIN)).status).toBe("ok");
+    expect((await service.rechazarCierreBodega("cb1", "motivo", ADMIN)).status).toBe("ok");
   });
 });
 
