@@ -210,7 +210,7 @@ export function CrearZonaForm({
       ) : null}
 
       <div className="flex items-center gap-2">
-        <Button type="button" onClick={guardar} disabled={guardando}>
+        <Button type="button" onClick={guardar} loading={guardando}>
           {guardando ? "Guardando…" : "Guardar"}
         </Button>
         <Button

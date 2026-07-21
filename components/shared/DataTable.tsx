@@ -2,7 +2,17 @@
 
 import { Fragment, isValidElement, useState, type ReactNode } from "react";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
+/** Nº de filas placeholder mostradas mientras carga (estado skeleton). */
+const SKELETON_ROW_COUNT = 5;
+
+/**
+ * Anchos por columna del skeleton: estables columna a columna (no aleatorios por
+ * fila) para que las celdas placeholder se lean como columnas reales, no ruido.
+ */
+const SKELETON_WIDTHS = ["w-16", "w-24", "w-20", "w-28", "w-14"] as const;
 
 /**
  * Definición de una columna de la tabla genérica.
@@ -174,14 +184,39 @@ export function DataTable<T>({
       </tr>
     );
   } else if (isLoading) {
+    // Estado de carga como FILAS SKELETON (no el texto "Cargando…"): mantiene la
+    // forma de la tabla mientras llegan los datos. Las filas placeholder son
+    // puramente visuales (`aria-hidden`); el estado se anuncia a lectores de
+    // pantalla con una única región `role="status"` (sr-only).
     body = (
-      <tr>
-        <td colSpan={colSpan} className="px-3 py-6 text-center">
-          <span role="status" className="text-sm text-muted-foreground">
-            Cargando…
-          </span>
-        </td>
-      </tr>
+      <>
+        <tr>
+          <td colSpan={colSpan} className="p-0">
+            <span role="status" className="sr-only">
+              Cargando
+            </span>
+          </td>
+        </tr>
+        {Array.from({ length: SKELETON_ROW_COUNT }).map((_, rowIndex) => (
+          <tr key={`skeleton-${rowIndex}`} aria-hidden="true" className="border-b">
+            {expandible ? (
+              <td className="px-3 py-2 align-middle">
+                <Skeleton className="size-5 rounded" />
+              </td>
+            ) : null}
+            {columns.map((column, columnIndex) => (
+              <td key={column.id} className="px-3 py-2 align-middle">
+                <Skeleton
+                  className={cn(
+                    "h-4",
+                    SKELETON_WIDTHS[columnIndex % SKELETON_WIDTHS.length],
+                  )}
+                />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </>
     );
   } else if (data.length === 0) {
     body = (
@@ -211,7 +246,7 @@ export function DataTable<T>({
                     aria-expanded={abierta}
                     aria-controls={`${key}-expandido`}
                     aria-label={expandAriaLabel?.(row)}
-                    className="inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="inline-flex items-center justify-center rounded p-1 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   >
                     <ExpandIcon open={abierta} />
                   </button>
