@@ -11,6 +11,10 @@ const PUBLIC_ROUTES = [
   "/api/health",
   "/recuperar-contrasena",
   "/postulacion",
+  // Feature 106: documentacion publica de la API por API key (Swagger UI). El spec JSON vive en
+  // `/api/docs/openapi` y ya pasa por la salida de la rama `/api/*`; `/api-docs` (la pagina) NO,
+  // asi que se lista aqui para que la doc no quede detras del login.
+  "/api-docs",
 ];
 
 // Endpoints que NO usan cookie de sesion porque traen su PROPIA autenticacion

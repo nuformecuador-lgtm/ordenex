@@ -1189,6 +1189,18 @@
       "depends_on": 104
     },
     {
+      "id": 106,
+      "name": "api - lectura, detalle (con evidencias) y cancelacion de ordenes por API key",
+      "spec_path": "specs/106-api-lectura-ordenes",
+      "description": "Registrada 2026-07-22 (pedido del humano: 'exponer ordenes hacia usuarios con api keys; pueden leer todas las ordenes cargadas por el dueño de esa api key nada mas; detalle por orden; el detalle comparte evidencias de entrega/rechazo si las tiene; y poder cancelar (update) de estados siempre y cuando el estado este en_bodega o en_ruta_bodega_principal, caso contrario error'). ALCANCE (backend puro, canal integrador autenticado por API key `Authorization: Bearer ordx_...`, mismo patron que la feature 88): (1) GET listado paginado (offset/limit, tope 100, con total) de TODAS las ordenes cuyo dueño es el usuario dedicado de la key (actor.usuarioId de ApiKeyAuthService.autenticar), SCOPEADO en el REPOSITORIO por tienda_id = ownerId (nunca ve ordenes de otro owner; query manipulada no amplia); (2) GET detalle por num_guia (404 si no existe o es ajena, no filtra existencia), incluye evidencias de entrega/rechazo firmadas (signed URL TTL 5 min desde gestion_orden, sin exponer storagePath/bucket/PII); (3) PUT /api/ordenes/api-key/[numGuia]/cancelar: transiciona a devuelta_origen SOLO si el estado actual es en_bodega o en_ruta_bodega_principal, si no 409; el cambio pasa por appendCambioEstado en la misma tx con origen_tipo=cancelacion_api y motivo='cancelada por tienda' (marcador en orden_historial_estado.motivo; dispara el webhook de la 104). GATE F1.4 APROBADO por el humano 2026-07-22: (a) reusa devuelta_origen (SIN estado nuevo); (b) PUT; (c) num_guia; (d) offset/limit max 100; (e) signed URL 5 min; (nota) la nota de cancelacion va SOLO a la bitacora de estados, NO a gestion_orden. UNICA migracion: ADD VALUE 'cancelacion_api' al enum orden_historial_origen_tipo con down.sql; NO toca el enum de estatus ni gestion_orden. Backend puro. Implementada en worktree aislado (backend_dev, model opus): typecheck verde, lint 0, 55 tests nuevos + 68 del ripple del enum verdes; reviewer APROBADO 0 bloqueantes. db:migrate queda como paso de despliegue humano (el .env apunta a DB compartida). DEPENDE de la 88 (auth+carga por API) y de la 36 (evidencias); se alinea con la 104 (webhooks) via appendCambioEstado.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "backend",
+      "branch": "feature/106-api-lectura-ordenes",
+      "depends_on": 88
+    },
+    {
       "id": 107,
       "name": "plantillas de mensajes (Configuracion > Plantillas)",
       "spec_path": "specs/107-plantillas-mensajes",
