@@ -77,19 +77,19 @@ El leader elige modelo al delegar:
 
 ## Paralelismo
 
-Se permite un maximo de **3 features concurrentes por zona** (`frontend`, `backend`),
-siempre que no haya conflicto de archivos con las que ya estan `in_progress`.
+Se permite un maximo de **2 features concurrentes por zona** (`frontend`, `backend`,
+`fullstack`), siempre que no haya conflicto de archivos con las que ya estan `in_progress`.
 
 | Feature A | Feature B | Paralelo? |
 | --- | --- | --- |
 | `frontend` | `backend` | Si |
-| `frontend` | `frontend` | Si (max 3, validando sin conflicto de archivos) |
-| `backend` | `backend` | Si (max 3, validando sin conflicto de archivos) |
+| `frontend` | `frontend` | Si (max 2, validando sin conflicto de archivos) |
+| `backend` | `backend` | Si (max 2, validando sin conflicto de archivos) |
 
 ### Validacion de conflicto entre features de la misma zona
 
 Antes de lanzar una feature de zona `Z` cuando ya hay `N` features `in_progress`
-en esa zona (`N < 3`), el leader debe:
+en esa zona (`N < 2`), el leader debe:
 
 1. Listar los archivos que las features `in_progress` de zona `Z` estan tocando,
    consultando `progress/impl_<feature>.md` de cada una.
@@ -99,7 +99,7 @@ en esa zona (`N < 3`), el leader debe:
    a `done`.
 4. Si no hay interseccion (o la nueva es la primera de su zona), se permite el
    paralelismo.
-5. Si ya hay 3 features `in_progress` en zona `Z`, se espera a que una pase a
+5. Si ya hay 2 features `in_progress` en zona `Z`, se espera a que una pase a
    `done` antes de evaluar la siguiente.
 
 Feature con `depends_on` no arranca hasta que su dependencia este `done`.
@@ -116,11 +116,11 @@ Feature con `depends_on` no arranca hasta que su dependencia este `done`.
    - Agrupa las features `in_progress` por `zone` y cuenta cuantas hay en cada una.
    - Recorre las `pending` (ya evaluadas) en orden de `id` y selecciona la
      **primera** que cumpla **ambas** condiciones:
-     a. Su zona tiene **menos de 3** features `in_progress`.
+     a. Su zona tiene **menos de 2** features `in_progress`.
      b. Pasa la **validacion de conflicto** de archivos (ver `## Paralelismo`):
         ningun archivo de `specs/<feature>/tasks.md` intersecta con los archivos
         que estan tocando las features `in_progress` de la misma zona.
-   - Si la zona ya tiene 3 features `in_progress`, o hay conflicto de archivos,
+   - Si la zona ya tiene 2 features `in_progress`, o hay conflicto de archivos,
      saltea la feature y evalua la siguiente.
    - Si ninguna feature `pending` pasa el filtro, espera a que una feature
      `in_progress` pase a `done` y vuelve a este paso.

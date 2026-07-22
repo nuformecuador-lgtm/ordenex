@@ -27,6 +27,10 @@ import {
   buildOptimizacionRutaService,
   crearOptimizacionRutaHandler,
 } from "@/lib/services/jobs/optimizacion-ruta-handler";
+import {
+  buildWebhookEstadoService,
+  crearWebhookEstadoHandler,
+} from "@/lib/services/jobs/webhook-estado-handler";
 
 export interface ProcesarJobsDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -61,6 +65,12 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
     "optimizacion_ruta",
     crearOptimizacionRutaHandler(buildOptimizacionRutaService(now)),
   );
+  // Feature 99 (R26): entrega firmada del cambio de estado a un integrador suscrito. Como la
+  // geocodificacion y la optimizacion, NO se registra en `buildRecurrencias()`: se encola por
+  // EVENTO (transicion de estado con owner suscrito), nunca por reloj. Un fallo suyo (callback
+  // caido, clave de cifrado ausente) lo captura `JobQueueService.drenar` job a job, asi que NO
+  // afecta al drenado de los otros tipos, que comparten este cron.
+  handlers.set("webhook_estado", crearWebhookEstadoHandler(buildWebhookEstadoService(now)));
   return handlers;
 }
 
