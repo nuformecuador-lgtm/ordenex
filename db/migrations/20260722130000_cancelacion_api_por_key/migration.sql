@@ -1,0 +1,21 @@
+-- Feature 106 (T4, design §5.1, R27/R28): UNICO cambio de esquema de la feature. Agrega el
+-- valor NUEVO `cancelacion_api` al enum de origen del historial de estados, para que la
+-- linea de tiempo distinga la CANCELACION por API key (canal integrador) de una devolucion
+-- real: ambas terminan en el estado existente `devuelta_origen`, y el marcador semantico que
+-- las separa es `orden_historial_estado.motivo = 'cancelada por tienda'` (R26).
+--
+-- La cancelacion NO crea el estado `cancelada` ni migra el enum de estatus de orden (se
+-- reutiliza `devuelta_origen`, ya sembrado) y NO toca la tabla de gestiones (su esquema queda
+-- intacto): esta migracion es aditiva y es la UNICA de la feature.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR
+-- un valor de enum recien añadido en la misma transaccion que lo añadio (error 55P04 "unsafe
+-- use of new value of enum type"). Prisma Migrate corre cada migration.sql en una transaccion.
+-- Aqui SOLO se añade el valor; su primer uso ocurre en transacciones posteriores (el endpoint
+-- PUT `/api/ordenes/api-key/[numGuia]/cancelar`). Mismo precedente que
+-- 20260721130000_orden_historial_origen_tipo_resolver_novedad y 20260717120000_..._carga_api.
+-- `IF NOT EXISTS` lo hace idempotente si se reintenta.
+--
+-- Aditiva: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado`
+-- conserva su RLS de la feature 49).
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'cancelacion_api';
