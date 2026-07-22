@@ -24,6 +24,15 @@ vi.mock("@/lib/actions/api-keys", () => ({
   generarApiKey: (...a: unknown[]) => generarApiKeyMock(...a),
 }));
 
+// Feature 105/R2: la columna "Webhook" renderiza `WebhookAccionCell`, que consume
+// estas Server Actions. Se mockean para no arrastrar el backend en el test cliente.
+vi.mock("@/lib/actions/webhooks", () => ({
+  obtenerWebhook: vi.fn().mockResolvedValue({ status: "ok", webhook: null }),
+  registrarWebhook: vi.fn(),
+  desactivarWebhook: vi.fn(),
+  rotarSecretoWebhook: vi.fn(),
+}));
+
 import { ApiKeysModule } from "@/app/(app)/configuracion/api/_components/ApiKeysModule";
 
 const ITEM: ApiKeyListItemDTO = {
@@ -117,6 +126,20 @@ describe("ApiKeysModule — listado (R14–R19)", () => {
       within(table).getByText("apikey+integracion-erp@apikey.invalid"),
     ).toBeInTheDocument();
     expect(within(table).queryByText("u1")).toBeNull();
+  });
+
+  it("R2 (105): cada fila de API key expone la acción 'Webhook'", async () => {
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    const table = screen.getByRole("table", { name: "API keys" });
+    expect(
+      within(table).getByRole("columnheader", { name: "Webhook" }),
+    ).toBeInTheDocument();
+    expect(
+      await within(table).findByRole("button", {
+        name: "Gestionar webhook de integracion-erp",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("R15: muestra el prefijo con elipsis y NUNCA la key completa ni el hash", async () => {

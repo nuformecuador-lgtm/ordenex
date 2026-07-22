@@ -130,6 +130,7 @@ model Usuario {
   apiKeysCreadas                      ApiKey[]                  @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
   rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
   plantillasCreadas                   PlantillaMensaje[]        @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
+  webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -1096,6 +1097,28 @@ model ApiKey {
   @@map("api_key")
 }
 
+// Feature 99 (design §1.1, R1/R2) — suscripcion de webhook por OWNER (el usuario dueno de
+// las ordenes; para integradores, el usuario dedicado de la API key). El identificador del
+// suscriptor NO se inventa: es `owner_usuario_id` (unico -> a lo sumo UNA suscripcion por
+// owner, R1; el re-registro es un upsert por esa clave, R6). `secret` guarda el CIPHERTEXT
+// del secreto de firma (AES-256-GCM, design §1.3/§3.1, D2/R32): NUNCA texto plano. RLS
+// habilitada SIN policies (R2), patron api_key / jobs / geocode_cache: la tabla guarda un
+// secreto y solo es accesible desde el rol de servicio. El vinculo con las ordenes ya
+// existe (`orden.tienda_id = owner_usuario_id`), no se crea uno nuevo.
+model WebhookSuscripcion {
+  id             String   @id @default(uuid())
+  ownerUsuarioId String   @unique @map("owner_usuario_id") // R1: 1 por owner; R6: upsert por esta clave
+  url            String // callback https absoluta (validada en el borde, R5)
+  secret         String // CIPHERTEXT del secreto de firma HMAC (design §1.3, D2/R32) — nunca en claro
+  activa         Boolean  @default(true) // R8: baja = activa=false
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  owner Usuario @relation("WebhookSuscripcionOwner", fields: [ownerUsuarioId], references: [id], onDelete: Restrict)
+
+  @@map("webhook_suscripcion")
+}
+
 // Feature 90 (design §1.1): tipo de un background job. Enum NATIVO de Postgres con
 // `@@map`, ampliable por `ALTER TYPE ... ADD VALUE` en las features 91/92 (geocodificacion,
 // webhooks). En v1 solo existe el job recurrente de liberacion de reprogramadas (feature 46).
@@ -1103,6 +1126,7 @@ enum JobTipo {
   liberar_reprogramadas // 91/92 anaden valores aditivamente
   geocodificacion // feature 91: geocodifica la direccion de UNA orden (payload { ordenId })
   optimizacion_ruta // feature 92: reoptimiza la ruta de UN mensajero (payload { mensajeroId })
+  webhook_estado // feature 99: entrega firmada del cambio de estado de UNA orden a su integrador (payload { ordenId, estatusDestinoId, ocurridoAt })
 
   @@map("job_tipo")
 }
