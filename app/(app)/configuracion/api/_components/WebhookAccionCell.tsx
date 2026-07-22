@@ -128,9 +128,9 @@ export function WebhookAccionCell({
         variant="outline"
         size="sm"
         onClick={abrir}
-        aria-label={`Gestionar webhook de ${identificador}`}
+        aria-label={`Editar webhook de ${identificador}`}
       >
-        Webhook
+        Editar
       </Button>
 
       <Modal

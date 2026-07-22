@@ -117,6 +117,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     evidenciaStoragePath: null,
     pagoMensajero: null, // feature 39: snapshot (derivado en vivo por el service)
     ingresoBodegaRechazo: null, // feature 56: snapshot (derivado en vivo por el service)
+    esRechazoSla: false, // feature 102
     ...overrides,
   };
 }

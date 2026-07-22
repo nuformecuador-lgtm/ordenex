@@ -106,12 +106,24 @@ function makeGestion(
     pagoMensajero: null, // feature 39
     ingresoBodegaRechazo: null, // feature 56
     tarifaFaltante: false, // feature 56/R23
+    esRechazoSla: false, // feature 102
     ...over,
   };
 }
 
 function emptyGrupos(): CierreGrupos {
   return { entregada: [], reprogramada: [], devuelta: [], rechazada: [] };
+}
+
+/**
+ * Feature 102 (T10/T11): desglose del ingreso de bodega por rechazos. Default en cero (los tests
+ * que no lo están mirando solo lo necesitan para el typecheck); los tests del desglose lo
+ * sobreescriben con montos reales para afirmar SLA separado del manual (R8).
+ */
+function makeDesglose(
+  over: Partial<{ sla: string; manual: string; total: string }> = {},
+): { sla: string; manual: string; total: string } {
+  return { sla: "0.00", manual: "0.00", total: "0.00", ...over };
 }
 
 /** Ingreso de Ordenex en cero: el default para los tests que no lo están mirando. */
@@ -212,6 +224,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({
         cierreId: "c1",
         totales: {
@@ -246,6 +259,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso({ total: "3672.50" }),
@@ -268,6 +282,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({
         cierreId: "c1",
         totales: {
@@ -295,6 +310,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(), // total "0.00": p.ej. puras reprogramaciones
@@ -317,6 +333,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso({
@@ -386,6 +403,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -421,6 +439,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -450,6 +469,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -484,6 +504,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -525,6 +546,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -554,6 +576,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -584,6 +607,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -600,10 +624,16 @@ describe("CierresAdminModule", () => {
     expect(within(region).getByText("₡3500.00")).toBeInTheDocument();
   });
 
-  it("feature 56/R16: el total del ingreso de bodega por rechazos se muestra separado en el detalle", async () => {
+  it("feature 102/R8: el ingreso de bodega por rechazos muestra el total y los subtotales SLA y manual separados", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      // 6000 (SLA) + 3200 (manual) === 9200 (total snapshot), particionado server-side (R5).
+      desgloseIngresoBodegaRechazos: makeDesglose({
+        sla: "6000.00",
+        manual: "3200.00",
+        total: "9200.00",
+      }),
       cierre: makeResumen({
         cierreId: "c1",
         totalIngresoBodegaRechazos: "9200.00",
@@ -622,7 +652,62 @@ describe("CierresAdminModule", () => {
     const region = within(dialog).getByRole("region", {
       name: "Ingreso de bodega por rechazos del cierre",
     });
+    // El total combinado (56) + las dos sublíneas del desglose por origen (102/R8).
     expect(within(region).getByText("₡9200.00")).toBeInTheDocument();
+    expect(within(region).getByText("Por SLA (cron)")).toBeInTheDocument();
+    expect(within(region).getByText("₡6000.00")).toBeInTheDocument();
+    expect(within(region).getByText("Manual (mensajero)")).toBeInTheDocument();
+    expect(within(region).getByText("₡3200.00")).toBeInTheDocument();
+  });
+
+  it("feature 102/R9: cada fila rechazada se marca como SLA (cron) o Manual (mensajero) según esRechazoSla", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.rechazada = [
+      makeGestion({
+        gestionId: "g-sla",
+        resultado: "rechazada",
+        numRemision: "REM-SLA",
+        destinatario: "Cliente SLA",
+        ingresoBodegaRechazo: "6000.00",
+        esRechazoSla: true,
+      }),
+      makeGestion({
+        gestionId: "g-man",
+        resultado: "rechazada",
+        numRemision: "REM-MAN",
+        destinatario: "Cliente Manual",
+        ingresoBodegaRechazo: "3200.00",
+        esRechazoSla: false,
+      }),
+    ];
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose({
+        sla: "6000.00",
+        manual: "3200.00",
+        total: "9200.00",
+      }),
+      cierre: makeResumen({ cierreId: "c1" }),
+      grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
+      pagoTienda: "0.00",
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    // Cada fila trae su marca de origen: SLA para el escalado, Manual para el del mensajero.
+    const filaSla = within(region).getByText("REM-SLA").closest("tr");
+    const filaManual = within(region).getByText("REM-MAN").closest("tr");
+    expect(filaSla).not.toBeNull();
+    expect(filaManual).not.toBeNull();
+    expect(within(filaSla as HTMLElement).getByText("SLA")).toBeInTheDocument();
+    expect(within(filaManual as HTMLElement).getByText("Manual")).toBeInTheDocument();
   });
 
   it("R7: la evidencia se muestra vía URL firmada en el visor (nunca el path crudo)", async () => {
@@ -638,6 +723,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -666,6 +752,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -696,6 +783,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -726,6 +814,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -768,6 +857,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c2", estado: "aprobado", resueltoAt: "2026-07-12T00:00:00.000Z" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -796,6 +886,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -863,6 +954,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -887,6 +979,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),

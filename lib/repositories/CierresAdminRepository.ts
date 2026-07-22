@@ -20,6 +20,7 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
+import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 
 // Estados de ORIGEN que la resolucion puede transicionar (R12). Feature 41/E1 (R19):
 // ademas de `solicitado`, un `vencido` (creado por el corte diario) es resoluble por la
@@ -69,6 +70,9 @@ export const DETALLE_ADMIN_SELECT = {
 } as const;
 
 // Feature 69/T18 — lo que aporta la GESTION (que NO se congela: es suyo, no de la orden).
+// Feature 102/T2 (R1/R3): + la relacion `historialEstados` ACOTADA al origen SLA (feature 99),
+// para DERIVAR `esRechazoSla` por gestion sin columna/migracion nueva. `where` + `take: 1` la
+// dejan barata (a lo sumo una fila por gestion); el util `esRechazoSla` es el predicado.
 export const GESTION_ADMIN_SELECT = {
   id: true,
   ordenId: true,
@@ -80,6 +84,11 @@ export const GESTION_ADMIN_SELECT = {
   evidenciaStoragePath: true,
   pagoMensajero: true, // feature 39: snapshot del pago al mensajero
   ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo
+  historialEstados: {
+    where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA }, // feature 102/R1: solo la fila del cron SLA
+    take: 1,
+    select: { origenTipo: true },
+  },
 } as const;
 
 type DetalleAdminRow = Prisma.CierreDetailGetPayload<{ select: typeof DETALLE_ADMIN_SELECT }>;
@@ -201,6 +210,9 @@ export function toPendienteRowDesdeSnapshot(
     evidenciaStoragePath: g.evidenciaStoragePath,
     pagoMensajero: decimalToString(g.pagoMensajero),
     ingresoBodegaRechazo: decimalToString(g.ingresoBodegaRechazo),
+    // Feature 102/R1/R9: `true` si la gestion tiene una transicion del cron SLA enlazada
+    // (`historialEstados` ya viene acotado a ese origen por `GESTION_ADMIN_SELECT`).
+    esRechazoSla: esRechazoSla(g.historialEstados),
     ingresoOrdenex: toIngresoOrdenex(g, d),
   };
 }
