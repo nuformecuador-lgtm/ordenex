@@ -1076,11 +1076,11 @@
       "id": 98,
       "name": "verificar guia (QR o num_guia) antes de gestionar",
       "description": "En /mis-asignaciones (mensajero), antes de habilitar la gestion de una orden en reparto, exigir que identifique el paquete escaneando el QR de la etiqueta o tecleando el num_guia, y que coincida con la orden del panel. El gate va en el paso 'Gestionar esta orden' de GestionarOrdenPanel: guia correcta -> escogerParaGestion + revela los 4 botones (entregar/reprogramar/devolver/rechazar); guia distinta o vacia -> error, no avanza; si la orden no tiene num_guia, se bloquea con aviso. Reutiliza el patron de la feature 96 (input de guia + escaner de camara). Frontend puro (el backend ya valida pertenencia/estado). Evita gestionar el paquete equivocado.",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "low",
       "zone": "frontend",
-      "branch": null,
+      "branch": "feature/98-verificar-guia-antes-gestionar",
       "depends_on": null
     },
     {

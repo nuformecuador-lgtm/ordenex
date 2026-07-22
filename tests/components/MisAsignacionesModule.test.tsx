@@ -149,15 +149,21 @@ async function elegirEnSelect(
 
 /**
  * Lleva una card al panel de detalle y avanza hasta los 4 botones de resultado:
- * (1) click en la card → panel; (2) "Gestionar esta orden" → fija el puntero y revela
- * los 4 botones; (3) opcionalmente elige un resultado (muestra sus campos).
+ * (1) click en la card → panel; (2) feature 98: verifica la guía tecleando el
+ * `numGuia` (default 1001, el de `makeAsignacion`) en el gate del panel de
+ * detalle y pulsa "Gestionar" → fija el puntero y revela los 4 botones; (3)
+ * opcionalmente elige un resultado (muestra sus campos). El input de guía se
+ * busca DENTRO del panel para no chocar con el "Número de guía" de la sección
+ * "Recoger por número de guía" (InputRecoger), que vive fuera del panel.
  */
 async function iniciarGestion(
   user: ReturnType<typeof userEvent.setup>,
-  { card, resultado }: { card: string; resultado?: string },
+  { card, resultado, numGuia = 1001 }: { card: string; resultado?: string; numGuia?: number },
 ) {
   await user.click(screen.getByRole("button", { name: `Gestionar orden ${card}` }));
-  await user.click(screen.getByRole("button", { name: "Gestionar esta orden" }));
+  const panel = panelDetalle();
+  await user.type(within(panel).getByLabelText("Número de guía"), String(numGuia));
+  await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
   if (resultado) {
     await user.click(await screen.findByRole("button", { name: resultado }));
   }
@@ -358,8 +364,13 @@ describe("MisAsignacionesModule", () => {
       within(panelDetalle()).getByText("Orden REM-G1 · Uno"),
     ).toBeInTheDocument();
     expect(escogerMock).not.toHaveBeenCalled();
+    // Feature 98: el panel exige verificar la guía antes de gestionar → el gate
+    // (input "Número de guía" + botón "Gestionar") está montado en el detalle.
     expect(
-      within(panelDetalle()).getByRole("button", { name: "Gestionar esta orden" }),
+      within(panelDetalle()).getByLabelText("Número de guía"),
+    ).toBeInTheDocument();
+    expect(
+      within(panelDetalle()).getByRole("button", { name: "Gestionar" }),
     ).toBeInTheDocument();
   });
 
@@ -405,41 +416,68 @@ describe("MisAsignacionesModule", () => {
     expect(within(panelDetalle()).getByText("Orden REM-G2 · Activa Dos")).toBeInTheDocument();
   });
 
-  it("R17: 'Gestionar esta orden' fija el puntero (escogerParaGestion) y revela los 4 botones", async () => {
+  it("R17 + F98: verificar con la guía CORRECTA fija el puntero (escogerParaGestion) y revela los 4 botones", async () => {
     const user = userEvent.setup();
     renderModule({
-      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", numGuia: 1001 })],
     });
 
-    await user.click(screen.getByRole("button", { name: "Gestionar esta orden" }));
+    // Feature 98: el gate exige confirmar la guía del paquete antes de gestionar.
+    const panel = panelDetalle();
+    await user.type(within(panel).getByLabelText("Número de guía"), "1001");
+    await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
 
     await vi.waitFor(() =>
       expect(escogerMock).toHaveBeenCalledWith({ ordenId: "g1" }),
     );
-    // Se revelan los 4 botones de resultado y desaparece "Gestionar esta orden".
+    // Se revelan los 4 botones de resultado y desaparece el gate de verificación.
     expect(await screen.findByRole("button", { name: "Entregar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rechazar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reprogramar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Devolver" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Gestionar esta orden" }),
+      within(panelDetalle()).queryByLabelText("Número de guía"),
     ).toBeNull();
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  it("F98: verificar con una guía DISTINTA NO fija el puntero ni revela los 4 botones", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", numGuia: 1001 })],
+    });
+
+    const panel = panelDetalle();
+    await user.type(within(panel).getByLabelText("Número de guía"), "9999");
+    await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
+
+    // La guía no corresponde: avisa nombrándola y NO fija el puntero.
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(errorMock.mock.calls[0][0]).toMatch(/9999/);
+    expect(escogerMock).not.toHaveBeenCalled();
+    // No aparecen los 4 botones; el gate sigue disponible para reintentar.
+    expect(screen.queryByRole("button", { name: "Entregar" })).toBeNull();
+    expect(
+      within(panelDetalle()).getByLabelText("Número de guía"),
+    ).toBeInTheDocument();
   });
 
   it("R21: si escoger devuelve conflict, muestra Toast y NO revela los 4 botones", async () => {
     const user = userEvent.setup();
     escogerMock.mockResolvedValue({ status: "conflict", motivo: "otra activa" });
     renderModule({
-      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", numGuia: 1001 })],
     });
 
-    await user.click(screen.getByRole("button", { name: "Gestionar esta orden" }));
+    // Feature 98: verifica con la guía correcta; el conflict lo devuelve escoger.
+    const panel = panelDetalle();
+    await user.type(within(panel).getByLabelText("Número de guía"), "1001");
+    await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
-    // Sigue en el paso de detalle: "Gestionar esta orden" visible, sin los 4 botones.
+    // Sigue en el paso de detalle: el gate de verificación visible, sin los 4 botones.
     expect(
-      screen.getByRole("button", { name: "Gestionar esta orden" }),
+      within(panelDetalle()).getByLabelText("Número de guía"),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Entregar" })).toBeNull();
   });
@@ -453,8 +491,9 @@ describe("MisAsignacionesModule", () => {
     // No se re-fija el puntero; se muestran los 4 botones directamente.
     expect(escogerMock).not.toHaveBeenCalled();
     expect(await screen.findByRole("button", { name: "Entregar" })).toBeInTheDocument();
+    // Feature 98: con el puntero ya fijado no se re-verifica la guía (sin gate).
     expect(
-      screen.queryByRole("button", { name: "Gestionar esta orden" }),
+      within(panelDetalle()).queryByLabelText("Número de guía"),
     ).toBeNull();
   });
 
@@ -734,10 +773,13 @@ describe("MisAsignacionesModule", () => {
   it("R35: 'Cancelar gestión' tras fijar el puntero libera (liberarGestion) y refresca", async () => {
     const user = userEvent.setup();
     renderModule({
-      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", numGuia: 1001 })],
     });
 
-    await user.click(screen.getByRole("button", { name: "Gestionar esta orden" }));
+    // Feature 98: verifica la guía para fijar el puntero y revelar los 4 botones.
+    const panel = panelDetalle();
+    await user.type(within(panel).getByLabelText("Número de guía"), "1001");
+    await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
     await screen.findByRole("button", { name: "Entregar" });
 
     // Cancelar la gestión SIN registrar resultado → libera el puntero.
