@@ -96,11 +96,15 @@ listado.
 - **R16 (Condicional):** SI el cuerpo contiene una llave doble mal formada (p. ej.
   `{{}}` o `{{ }}` sin clave, o una clave con caracteres fuera de `[a-z0-9_]`),
   ENTONCES el sistema DEBE rechazarlo con error de validación sobre el campo `cuerpo`.
-- **R17 (Opcional):** DONDE el usuario edita el cuerpo en la UI, el sistema DEBE
-  permitirle DEFINIR una variable escribiendo su clave (formato `[a-z0-9_]+`) e
-  INSERTARLA como `{{clave}}` en la posición del cursor, tantas veces como quiera (0 o
-  más), sin depender de un catálogo predefinido. Rechaza en la UI una clave con formato
-  inválido antes de insertarla.
+- **R17 (Opcional):** DONDE el usuario edita el cuerpo en la UI, el sistema DEBE ofrecer
+  un input DEDICADO para DEFINIR variables (Corrección humana 2026-07-22): el usuario
+  escribe la clave (formato `[a-z0-9_]+`), pulsa "Añadir" y la variable queda listada
+  como un BADGE removible (con una "x" para quitarla de la lista). Al hacer CLIC sobre un
+  badge, el sistema INSERTA `{{clave}}` en la posición del cursor del cuerpo, tantas veces
+  como quiera (0 o más). No depende de un catálogo predefinido; rechaza en la UI una clave
+  con formato inválido o duplicada antes de añadirla. La lista de badges se inicializa con
+  las variables ya presentes en el cuerpo (al editar) y es un paladar de inserción; la
+  persistencia real de `variables` sigue derivándose del cuerpo (R15).
 
 ## Bloque E — Vista previa / render
 
