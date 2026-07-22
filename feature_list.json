@@ -1186,6 +1186,18 @@
       "zone": "frontend",
       "branch": "feature/105-webhooks-ui-registro",
       "depends_on": 104
+    },
+    {
+      "id": 107,
+      "name": "plantillas de mensajes (Configuracion > Plantillas)",
+      "spec_path": "specs/107-plantillas-mensajes",
+      "description": "Registrada 2026-07-22 (pedido del humano: 'en el menu de configuracion del rol maestro agrega el subitem plantillas'). GATE HUMANO APROBADO 2026-07-22 con 4 decisiones: (D1) nace en estado `pending`; (D2) el front SOLO puede DESACTIVAR -> destino `inactivo`; el flujo ACTIVAR `pending->activo` NO existe aun (transicion backend futura); (D3) borrado = SOFT DELETE con `deletedAt`; (D4) catalogo de variables ABIERTO/data-driven, `usuario`/`cod` son solo ejemplos, se persiste el array de claves usadas. `refused` reservado en el enum sin productor. NOTA DE COLISION: se salta el id 106 porque una sesion paralela ya tiene specs/106-api-lectura-ordenes/ en disco; se usa 107. ALCANCE (fullstack): subitem 'Plantillas' en el menu Configuracion (solo maestro, /configuracion/plantillas) + CRUD completo (crear/editar/eliminar) con editor que inserta campos variables `{{clave}}` y vista previa; enum `PlantillaEstado` (activo/inactivo/pending/refused), tabla `plantilla_mensaje` con `variables text[]`, soft delete, RLS, migracion reversible; Server Actions rol maestro. Implementada en worktree ordenex-wt-107 (orquestacion directa spec_author -> backend_dev -> frontend_dev -> reviewer). Reviewer APROBADO (31/31 R con test tras cerrar el bloqueante R3; typecheck/lint verdes; 82 tests de la feature verdes). Spec: 31 requisitos EARS en specs/107-plantillas-mensajes/. Pendiente: merge humano del PR a dev.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": "feature/107-plantillas-mensajes",
+      "depends_on": null
     }
   ]
 }
