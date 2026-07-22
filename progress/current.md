@@ -15,17 +15,28 @@
 
 ## Features en curso
 
-### Feature 102 — ingreso de bodega por rechazos SLA visible en cierres + aviso (Fase 2)
-- **Rama:** `feature/102-rechazos-sla-visible` (desde `origin/dev`). Zona `fullstack`, complexity `medium`. `depends_on: 99` ✅.
-- **Estado:** `in_progress` (Fase 2) — spec + impl (backend_dev → frontend_dev) + review COMPLETOS. Reviewer **APROBADO** (18/18 R con test que pasa; sin migración; money-safe; gate cumplido). Merge de `origin/dev` (features 98/103/104/105) resuelto; post-merge typecheck OK, lint 0 err, **suite 4120/4120**. **PR #131 → dev abierto; esperando merge humano (F2.5).** Al mergear: pasar a `done`, append a `history.md`, limpiar de aquí (F2.6). Sin migración → no requiere `prisma migrate deploy` local.
-- **Gate F1.4 (mecanismo + Q1–Q4, todo default):** aviso = **VISIBILIDAD DERIVADA**. Q1 monto tienda = `ingreso_bodega_rechazo` (snapshot 56); Q2 anclado al snapshot (`null`="pendiente de cierre"); Q3 superficie tienda = sección dentro de `/novedades`; Q4 subtotal SLA solo en el **detalle** del cierre. Sin migración, sin mover dinero, sin infra de notificaciones; desglose por join `origen_tipo='escalado_devuelta_sla'`.
-- **Artefactos:** `specs/102-rechazos-sla-visible/`, `progress/impl_102.md`, `progress/review_102.md`.
+**Plantillas de mensajes — feature 107 (2026-07-22) → PR #135, falta merge humano.** Subitem
+"Plantillas" en Configuración (rol maestro, `/configuracion/plantillas`): CRUD completo (crear/editar/
+eliminar) + editor que inserta campos variables `{{clave}}` + preview + estado
+(activo/inactivo/pending/refused). Fullstack, sin dependencias (se saltó el id 106 por colisión con
+`specs/106-api-lectura-ordenes/` de sesión paralela; ver también worktree `ordenex-wt-106`).
 
-_Contexto:_ lo último mergeado en `dev` antes de 102 fue **feature 101** (PR #129) y **feature 100** (PR #128); durante esta sesión `origin/dev` avanzó con la **feature 98** (`costoEnvio` carga API, PR #125) y el bookkeeping de 103/104/105. La app está en prod (PR #117).
+- **Gate humano APROBADO** con 4 decisiones: (D1) nace `pending`; (D2) el front SOLO desactiva
+  (destino `inactivo`, `z.literal("inactivo")`) — ACTIVAR `pending→activo` NO existe aún; `refused`
+  reservado sin productor; (D3) SOFT DELETE con `deletedAt`; (D4) catálogo de variables ABIERTO/
+  data-driven, `variables text[]` derivadas del cuerpo.
+- **Flujo:** spec_author (31 req EARS) → backend_dev (T1–T7) → frontend_dev (T8–T11 + eliminar) →
+  reviewer. Orquestación directa, `model: opus`. Implementado en worktree aislado **`ordenex-wt-107`**
+  desde `origin/dev` (rama `feature/107-plantillas-mensajes`), 14 commits.
+- **Reviewer APROBADO** (`progress/review_107.md`, viaja en la rama): 31/31 R con test tras cerrar el
+  único bloqueante (R3, test de autorización de la página). typecheck/lint verdes; **82 tests de la
+  feature verdes** (9 archivos).
+- **PR #135 → dev** (spec + review + alta 107 en feature_list viajan en la misma rama). Falta merge
+  humano. ⚠️ Al desplegar: correr la migración `20260722130000_plantilla_mensaje`.
+- Deuda menor diferida: `progress/impl_107.md` no se escribió (M1 del review); tasks.md sin marcas `[x]`.
 
----
 
-### Features 103/104/105 — webhooks + costoEnvio API (registro de sesión paralela, mergeado a dev)
+
 **Flujo de API key — verificación + huecos (2026-07-21).** A pedido del humano se verificó el flujo
 de carga por API key (features 81/82/88, `done`): valida la key por hash SHA-256, carga por endpoint
 expuesto (`POST /api/ordenes/api-key/carga`), genera `num_guia` y devuelve errores por fila. Dos
@@ -42,6 +53,20 @@ huecos → tres features nuevas. **Gate F1.4 APROBADO por el humano.**
 | 103 | api - `costoEnvio` (flete+IVA) en la carga por API | `feature/98-api-carga-valor-pagar` | backend | reviewer **APROBADO** · **PR #125** → dev (falta merge humano) |
 | 104 | webhooks de cambios de estado (API key) | `feature/99-webhooks-cambios-estado` | backend | reviewer **OK** · **PR #127** → dev (falta merge humano) |
 | 105 | webhooks - UI de registro (Config > API) | `feature/105-webhooks-ui-registro` | frontend | pending (bloqueada por 104; spec sin autoría) |
+
+**Feature 106 — API de lectura/detalle/cancelación de órdenes por API key (2026-07-22).** Ciclo SDD
+completo, backend, high, `depends_on: 88`. Exposición a integradores por API key: GET listado scopeado
+al dueño de la key (`tienda_id = actor.usuarioId`, forzado en el repo), GET detalle por `num_guia` con
+evidencias de entrega/rechazo firmadas (signed URL 5 min, sin PII), y **PUT** cancelar (solo desde
+`en_bodega`/`en_ruta_bodega_principal` → `devuelta_origen`, si no 409) vía `appendCambioEstado`
+(bitácora + webhook 104). Gate F1.4 aprobado por el humano; única migración = `ADD VALUE
+'cancelacion_api'` en el enum `orden_historial_origen_tipo`. Implementada en worktree aislado
+(`ordenex-wt-106`, `backend_dev` model opus): typecheck verde, lint 0, 55 tests nuevos + 68 ripple
+verdes. Reviewer **APROBADO 0 bloqueantes**. Rama `feature/106-api-lectura-ordenes` sincronizada con
+`dev`, pusheada, **PR #132 → dev (falta merge humano)**. Todo el registro (feature_list 106 + spec +
+`impl_106` + `review_106`) viaja commiteado en el propio PR #132 (self-contained). **⚠️ Al desplegar:
+correr `db:migrate` (agrega el valor de enum; no se aplicó pre-merge porque el `.env` apunta a DB
+compartida).**
 
 **Bookkeeping en PR #124** (`chore/registro-features-webhooks-103-105`): feature_list 103/104/105 +
 specs/103 + specs/104 + `review_103` + `review_104`. Los tres PRs (#124, #125, #127) → `dev`, merge humano.
