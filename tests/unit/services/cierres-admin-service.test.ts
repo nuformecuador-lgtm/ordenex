@@ -72,6 +72,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     evidenciaStoragePath: null,
     pagoMensajero: null, // feature 39: snapshot (override para R16)
     ingresoBodegaRechazo: null, // feature 56: snapshot (override para R15)
+    esRechazoSla: false, // feature 102: clasificacion SLA/manual (override para R8/R9)
     ...overrides,
   };
 }
@@ -507,6 +508,120 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
     const { service } = newService({ repo });
     await service.verCierreDetalle("c1", MAESTRO);
     expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+});
+
+// --- feature 102: desglose SLA/manual del ingreso de bodega por rechazos (R5/R6/R7/R8/R10/R16) ---
+
+describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 102)", () => {
+  // Cierre con un rechazo SLA (cron 99) y un rechazo manual (mensajero), con el snapshot del
+  // total del cierre YA congelado a la suma de ambos.
+  function repoConMezcla() {
+    return fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow({ totalIngresoBodegaRechazos: "5.00" }),
+        gestiones: [
+          gestionRow({
+            gestionId: "sla",
+            resultado: "rechazada",
+            montoRecibido: null,
+            metodoPago: null,
+            ingresoBodegaRechazo: "3.00",
+            esRechazoSla: true, // escalado por el cron SLA (99)
+          }),
+          gestionRow({
+            gestionId: "man",
+            resultado: "rechazada",
+            montoRecibido: null,
+            metodoPago: null,
+            ingresoBodegaRechazo: "2.00",
+            esRechazoSla: false, // rechazo manual del mensajero
+          }),
+        ],
+      })),
+    });
+  }
+
+  it("R8: expone el subtotal SLA separado del manual junto al total del cierre", async () => {
+    const { service } = newService({ repo: repoConMezcla() });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.desgloseIngresoBodegaRechazos).toEqual({ sla: "3.00", manual: "2.00", total: "5.00" });
+    expect(typeof r.desgloseIngresoBodegaRechazos.sla).toBe("string"); // R18
+    expect(typeof r.desgloseIngresoBodegaRechazos.manual).toBe("string");
+  });
+
+  it("R9: cada gestion rechazada del detalle viaja marcada SLA/manual (esRechazoSla)", async () => {
+    const { service } = newService({ repo: repoConMezcla() });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    const byId = Object.fromEntries(r.grupos.rechazada.map((g) => [g.gestionId, g.esRechazoSla]));
+    expect(byId.sla).toBe(true);
+    expect(byId.man).toBe(false);
+  });
+
+  it("R5: subtotal SLA + subtotal manual === total del cierre (money-safe, sin perder centavos)", async () => {
+    const { service } = newService({ repo: repoConMezcla() });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    const d = r.desgloseIngresoBodegaRechazos;
+    expect(new Prisma.Decimal(d.sla).plus(d.manual).toFixed(2)).toBe(d.total);
+  });
+
+  it("R6: el total del desglose es el SNAPSHOT del cierre, LEIDO (no recomputado)", async () => {
+    // El snapshot (7.00) NO coincide con la suma de las gestiones (5.00): el service lo LEE tal
+    // cual, no lo re-suma. Asi se prueba que R6 (no altera el total_ingreso_bodega_rechazos) se
+    // cumple aunque las gestiones no cuadren (cierre pre-migracion / dato historico).
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow({
+          totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
+          totalPagoMensajero: "5.00",
+          totalIngresoBodegaRechazos: "7.00",
+        }),
+        gestiones: [
+          gestionRow({ gestionId: "sla", resultado: "rechazada", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "3.00", esRechazoSla: true }),
+          gestionRow({ gestionId: "man", resultado: "rechazada", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "2.00", esRechazoSla: false }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.desgloseIngresoBodegaRechazos.total).toBe("7.00"); // snapshot leido
+    // R6: no altera los totales de dinero recibido, ni el pago al mensajero, ni el total 56.
+    expect(r.cierre.totales).toEqual({ efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" });
+    expect(r.cierre.totalPagoMensajero).toBe("5.00");
+    expect(r.cierre.totalIngresoBodegaRechazos).toBe("7.00");
+  });
+
+  it("R16: el flujo de detalle NO muta (nunca invoca resolverCierre -> sin movimiento de wallet/caja)", async () => {
+    const repo = repoConMezcla();
+    const { service } = newService({ repo });
+    await service.verCierreDetalle("c1", MAESTRO);
+    // resolverCierre es el UNICO camino que alimenta wallet/caja (al aprobar); leer el detalle
+    // jamas lo toca.
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+
+  it("R7: el desglose es estable (misma entrada inmutable -> misma salida), sin resolver tarifa", async () => {
+    // El detalle admin no recibe tarifa (el servicio no la resuelve): el desglose sale del
+    // snapshot congelado + la clasificacion inmutable, asi que dos lecturas coinciden.
+    const { service } = newService({ repo: repoConMezcla() });
+    const r1 = await service.verCierreDetalle("c1", MAESTRO);
+    const r2 = await service.verCierreDetalle("c1", MAESTRO);
+    if (r1.status !== "ok" || r2.status !== "ok") throw new Error("esperaba ok");
+    expect(r1.desgloseIngresoBodegaRechazos).toEqual(r2.desgloseIngresoBodegaRechazos);
+  });
+
+  it("R10: el adminSatelite recibe el MISMO desglose por el mismo camino (sin pantalla nueva)", async () => {
+    const { service, repo } = newService({ repo: repoConMezcla() });
+    const r = await service.verCierreDetalle("c1", ADMIN_SATELITE);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.desgloseIngresoBodegaRechazos).toEqual({ sla: "3.00", manual: "2.00", total: "5.00" });
+    // El alcance satelite viajo al repo por el MISMO metodo `findCierreByIdEnAlcance`.
+    const alcance = (repo.findCierreByIdEnAlcance as ReturnType<typeof vi.fn>).mock.calls[0][1] as Alcance;
+    expect(alcance).toEqual({ destinoTipo: "bodega_satelite", destinoZonaId: ZONA_SAT });
   });
 });
 

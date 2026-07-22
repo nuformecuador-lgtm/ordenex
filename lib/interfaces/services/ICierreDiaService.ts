@@ -48,6 +48,11 @@ export interface CierreDetalleGestion {
   // `entregada && pago === "0.00"` de la 39, para entregas Y rechazos. En el detalle admin
   // (38/40), donde no se re-resuelve la tarifa (snapshot), es `false` por defecto.
   tarifaFaltante: boolean;
+  // Feature 102/R9/R11: `true` si la gestion `rechazada` fue escalada por el cron SLA (99),
+  // `false` si es un rechazo manual del mensajero (o cualquier otro resultado). En el detalle
+  // admin (38/40) alimenta la marca por fila; en la vista EN VIVO del mensajero (37) es `false`
+  // por defecto (esa vista no expone el desglose SLA).
+  esRechazoSla: boolean;
   /**
    * Desglose del ingreso de Ordenex (flete, IVA, comision) + la tarifa congelada de esa
    * orden. Solo lo pueblan los detalles de ADMIN (38/40), que leen del snapshot; en la vista

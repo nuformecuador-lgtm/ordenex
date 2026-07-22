@@ -6,6 +6,7 @@ import { Badge, badgeVariants } from "@/components/ui/badge";
 import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
 
 import { ApiKeyAccionCell } from "./ApiKeyAccionCell";
+import { WebhookAccionCell } from "./WebhookAccionCell";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
@@ -60,15 +61,18 @@ export interface ApiKeysColumnsOptions {
 
 /**
  * Columnas del listado de API keys (feature 82/R14): identificador · prefijo ·
- * usuario dedicado (email sintético [D1]) · fecha de creación · estado · acciones.
+ * usuario dedicado (email sintético [D1]) · fecha de creación · estado · webhook · acciones.
  *
  * El prefijo se muestra seguido de un elipsis en `font-mono` (R15). El DTO de
  * fila (`ApiKeyListItemDTO`) no declara `keyHash` ni el secreto, así que NUNCA
  * hay forma de que la key completa aparezca en la tabla (R15, por construcción).
  *
  * La columna de estado pinta un `Badge` semántico con texto legible (no solo
- * color). La columna de acciones delega en `ApiKeyAccionCell`, al que se le pasa
- * el `onMutated` para refrescar el listado tras rotar/activar/desactivar.
+ * color). Feature 105/R2 (D1): la columna "Webhook" con `WebhookAccionCell` abre el
+ * modal de gestión de la suscripción de ese owner; su estado NO viaja en la fila, se
+ * lee on-demand con `obtenerWebhook` al abrir el modal (D2). La columna de acciones
+ * delega en `ApiKeyAccionCell`, al que se le pasa el `onMutated` para refrescar el
+ * listado tras rotar/activar/desactivar.
  */
 export function buildApiKeysColumns({
   onMutated,
@@ -100,6 +104,16 @@ export function buildApiKeysColumns({
       id: "estado",
       value: "Estado",
       render: (row) => <EstadoApiKeyBadge value={row.estado} />,
+    },
+    {
+      id: "webhook",
+      value: "Webhook",
+      render: (row) => (
+        <WebhookAccionCell
+          ownerUsuarioId={row.usuarioId}
+          identificador={row.identificador}
+        />
+      ),
     },
     {
       id: "acciones",

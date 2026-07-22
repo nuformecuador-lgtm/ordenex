@@ -77,26 +77,48 @@ rechazar el registro con un error de validación sin persistir nada.
 "rechaza una URL no https o relativa sin persistir".
 
 **R6.** CUANDO un owner que ya tiene suscripción registre de nuevo, el sistema DEBE
-actualizar su suscripción existente (upsert por owner), sin crear una segunda fila.
+actualizar su suscripción existente (una sola fila por owner), sin crear una segunda fila.
 → *Test:* `tests/integration/repositories/webhook-suscripcion-repository.test.ts` —
 "un segundo registro del mismo owner actualiza la fila, no crea otra".
 
-**R7.** El sistema DEBE devolver el secreto de firma en claro ÚNICAMENTE en el momento del
-registro; cualquier consulta o listado posterior de la suscripción NUNCA DEBE exponer el
-secreto, y el secreto DEBE almacenarse **cifrado en reposo** (nunca en texto plano).
+**R7.** El sistema DEBE devolver el secreto de firma en claro ÚNICAMENTE en el momento en
+que se genera (alta de la suscripción, R33; o rotación explícita, R34); cualquier consulta
+o listado posterior de la suscripción NUNCA DEBE exponer el secreto, y el secreto DEBE
+almacenarse **cifrado en reposo** (nunca en texto plano).
 → *Test:* `tests/unit/services/webhook-suscripcion-service.test.ts` —
-"el secreto se retorna al registrar, se persiste cifrado y no aparece al consultar la suscripción".
+"el alta retorna el secreto en claro (status creada), persiste su CIPHERTEXT y no lo expone al consultar".
 
 **R8.** El sistema DEBE permitir dar de baja (desactivar) la suscripción de un owner, tras
 lo cual sus órdenes dejan de generar entregas.
 → *Test:* `tests/unit/services/webhook-suscripcion-service.test.ts` —
 "desactivar la suscripción la marca inactiva".
 
-**R9.** El sistema NO DEBE permitir que un actor registre, consulte ni desactive la
+**R9.** El sistema NO DEBE permitir que un actor registre, consulte, rote ni desactive la
 suscripción de un owner distinto del autorizado; cada suscripción pertenece a un único
 owner.
 → *Test:* `tests/unit/services/webhook-suscripcion-service.test.ts` —
 "un actor no puede operar la suscripción de otro owner".
+
+**R33.** CUANDO se registre una suscripción, el sistema DEBE distinguir dos casos: SI el
+owner NO tenía suscripción (ALTA), ENTONCES la crea generando y cifrando un secreto nuevo
+que devuelve en claro UNA vez (resultado `creada`); SI el owner YA tenía suscripción
+(EDICIÓN), ENTONCES DEBE actualizar únicamente la URL, CONSERVANDO el secreto existente y
+SIN devolver ni regenerar secreto (resultado `actualizada`). Editar la URL NO rota el
+secreto. *(Gate P4.)*
+→ *Test:* `tests/unit/services/webhook-suscripcion-service.test.ts` —
+"editar un owner existente actualiza la URL, conserva el secreto y NO devuelve secreto (actualizada)".
+
+**R34.** El sistema DEBE ofrecer una rotación EXPLÍCITA del secreto de un owner con
+suscripción existente, que genera y cifra un secreto NUEVO (invalidando el anterior) y lo
+devuelve en claro UNA vez; SI el owner no tiene suscripción, ENTONCES DEBE responder
+`not_found` sin generar nada. *(Gate P4.)*
+→ *Test:* `tests/unit/services/webhook-suscripcion-service.test.ts` —
+"rotar genera un secreto NUEVO distinto, lo persiste cifrado y lo devuelve una vez".
+
+**R35.** El sistema DEBE ofrecer una lectura de la suscripción para la UI (feature 105) que
+devuelva `{url, activa}` o `null`, y que NUNCA exponga el secreto (ni cifrado). *(Gate D2.)*
+→ *Test:* `tests/unit/actions/webhooks-action.test.ts` —
+"R35: devuelve la vista {url, activa} y NUNCA el secreto".
 
 ---
 
@@ -280,14 +302,21 @@ pero el job de entrega DEBE fallar de forma recuperable (sin loguear jamás el s
 | Bloque | Requisitos | Archivo(s) de test principal |
 | --- | --- | --- |
 | A · Datos | R1–R4 | `tests/integration/db/webhook-suscripcion-migracion.test.ts`, `…-rollback.test.ts` |
-| B · Registro | R5–R9 | `tests/unit/services/webhook-suscripcion-service.test.ts`, `tests/integration/repositories/webhook-suscripcion-repository.test.ts` |
+| B · Registro | R5–R9, R33–R35 | `tests/unit/services/webhook-suscripcion-service.test.ts`, `tests/integration/repositories/webhook-suscripcion-repository.test.ts`, `tests/unit/actions/webhooks-action.test.ts` |
 | C · Emisión | R10–R16 | `tests/integration/repositories/orden-webhook-enqueue.test.ts`, `tests/unit/services/webhook-estado-encolado.test.ts` |
 | D · Entrega | R17–R23 | `tests/unit/services/webhook-estado-service.test.ts`, `tests/unit/crypto/webhook-firma.test.ts` |
 | E · Aislamiento | R24–R25 | `tests/unit/services/webhook-estado-service.test.ts`, `tests/integration/repositories/orden-webhook-enqueue.test.ts` |
 | F · Cola/wiring | R26–R28 | `tests/integration/api/procesar-jobs-webhook-estado.test.ts`, `tests/unit/services/webhook-estado-encolado.test.ts`, `tests/unit/config/webhook-config.test.ts` |
 | G · Seguridad | R29–R32 | `tests/unit/services/webhook-estado-service.test.ts`, `tests/unit/crypto/webhook-secret-cipher.test.ts` |
 
-**Total: 32 requisitos, 32 con test concreto mapeado. Ninguno huérfano.**
+**Total: 35 requisitos, 35 con test concreto mapeado. Ninguno huérfano.**
+
+> **Delta gate P4/D2 (2026-07-22).** Se añadieron **R33** (editar la URL preserva el
+> secreto: alta `creada` con secreto una vez vs edición `actualizada` sin secreto), **R34**
+> (rotación explícita del secreto vía service `rotarSecreto` + Server Action
+> `rotarSecretoWebhook`) y **R35** (lectura `obtenerWebhook` para la UI, feature 105, sin
+> secreto). R7 y R9 quedaron reescritos para reflejar que el secreto solo sale al generarse
+> (alta o rotación) y que la rotación también es una operación keyed por owner.
 
 ---
 

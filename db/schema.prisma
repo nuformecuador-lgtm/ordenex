@@ -129,6 +129,8 @@ model Usuario {
   apiKey                              ApiKey?                   @relation("ApiKeyUsuario") // feature 81/[D6]: la key dedicada a ESTA cuenta sintetica (1:1)
   apiKeysCreadas                      ApiKey[]                  @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
   rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
+  plantillasCreadas                   PlantillaMensaje[]        @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
+  webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -136,6 +138,42 @@ model Usuario {
   @@index([zonaId]) // feature 24/R6
   @@index([ordenEnGestionId]) // feature 36
   @@map("usuario")
+}
+
+// Feature 107: estado de una plantilla de mensaje. Enum Postgres nativo (patron
+// EstadoTarifa/RolValue). Cuatro valores EXACTOS (R23). `pending` (estado inicial,
+// Decision humana 1) y `refused` quedan RESERVADOS en el enum aunque este alcance NO
+// los transiciona desde el front; el front SOLO emite el destino `inactivo` (R24/R25).
+enum PlantillaEstado {
+  activo
+  inactivo
+  pending
+  refused
+
+  @@map("plantilla_estado")
+}
+
+// Feature 107: plantilla de mensaje con cuerpo que admite campos variables `{{clave}}`.
+// Configuracion MUTABLE (lleva updatedAt). SOFT DELETE via `deletedAt` (Decision humana
+// 3; R27/R28): los listados filtran `deletedAt IS NULL`. El conjunto de variables usadas
+// por el cuerpo se persiste como ARRAY de claves (Decision humana 4; R15), text[] nativo.
+model PlantillaMensaje {
+  id        String          @id @default(uuid())
+  nombre    String          @unique // R10: identificador unico
+  cuerpo    String // texto con placeholders {{clave}}
+  variables String[] // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
+  estado    PlantillaEstado @default(pending) // R12 (Decision humana 1)
+  createdBy String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
+  deletedAt DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  creador Usuario? @relation("PlantillaMensajeCreador", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([createdAt]) // R6: orden determinista del listado
+  @@index([estado]) // filtro por estado
+  @@index([deletedAt]) // R28: filtro de vigentes (deletedAt IS NULL)
+  @@map("plantilla_mensaje")
 }
 
 // Feature 21: documentos de postulacion del mensajero. 1:N (5 tipos por usuario).
@@ -1071,6 +1109,28 @@ model ApiKey {
   @@map("api_key")
 }
 
+// Feature 99 (design §1.1, R1/R2) — suscripcion de webhook por OWNER (el usuario dueno de
+// las ordenes; para integradores, el usuario dedicado de la API key). El identificador del
+// suscriptor NO se inventa: es `owner_usuario_id` (unico -> a lo sumo UNA suscripcion por
+// owner, R1; el re-registro es un upsert por esa clave, R6). `secret` guarda el CIPHERTEXT
+// del secreto de firma (AES-256-GCM, design §1.3/§3.1, D2/R32): NUNCA texto plano. RLS
+// habilitada SIN policies (R2), patron api_key / jobs / geocode_cache: la tabla guarda un
+// secreto y solo es accesible desde el rol de servicio. El vinculo con las ordenes ya
+// existe (`orden.tienda_id = owner_usuario_id`), no se crea uno nuevo.
+model WebhookSuscripcion {
+  id             String   @id @default(uuid())
+  ownerUsuarioId String   @unique @map("owner_usuario_id") // R1: 1 por owner; R6: upsert por esta clave
+  url            String // callback https absoluta (validada en el borde, R5)
+  secret         String // CIPHERTEXT del secreto de firma HMAC (design §1.3, D2/R32) — nunca en claro
+  activa         Boolean  @default(true) // R8: baja = activa=false
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  owner Usuario @relation("WebhookSuscripcionOwner", fields: [ownerUsuarioId], references: [id], onDelete: Restrict)
+
+  @@map("webhook_suscripcion")
+}
+
 // Feature 90 (design §1.1): tipo de un background job. Enum NATIVO de Postgres con
 // `@@map`, ampliable por `ALTER TYPE ... ADD VALUE` en las features 91/92 (geocodificacion,
 // webhooks). En v1 solo existe el job recurrente de liberacion de reprogramadas (feature 46).
@@ -1078,6 +1138,7 @@ enum JobTipo {
   liberar_reprogramadas // 91/92 anaden valores aditivamente
   geocodificacion // feature 91: geocodifica la direccion de UNA orden (payload { ordenId })
   optimizacion_ruta // feature 92: reoptimiza la ruta de UN mensajero (payload { mensajeroId })
+  webhook_estado // feature 99: entrega firmada del cambio de estado de UNA orden a su integrador (payload { ordenId, estatusDestinoId, ocurridoAt })
 
   @@map("job_tipo")
 }

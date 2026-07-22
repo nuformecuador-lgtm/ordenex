@@ -71,6 +71,7 @@ function makeGestion(
     pagoMensajero: null, // feature 39
     ingresoBodegaRechazo: null, // feature 56
     tarifaFaltante: false, // feature 56/R23
+    esRechazoSla: false, // feature 102
     ...over,
   };
 }

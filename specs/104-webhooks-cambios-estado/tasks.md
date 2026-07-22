@@ -126,25 +126,32 @@ lote excluye órdenes de un owner que no es rol apiKey"
 
 ## Bloque 4 — Servicio y controller de registro (D1 = Server Action)
 
-### [ ] T9 · `WebhookSuscripcionService`
-Validación de URL https en el borde (R5), generación del secreto, **cifrado antes de
-persistir** (T6b) y exposición única (R7/R32), upsert por owner (R6), baja (R8), autorización
-por owner (R9). Sin controller.
-**Cubre:** R5, R6, R7, R8, R9, R32 (persistencia cifrada).
+### [x] T9 · `WebhookSuscripcionService`
+Validación de URL https en el borde (R5); **alta vs edición** (R33): alta genera+cifra el
+secreto y lo devuelve una vez (`creada`), edición solo actualiza la URL conservando el
+secreto (`actualizada`, sin secreto); **rotación explícita** `rotarSecreto` (R34); baja
+(R8); lectura `obtener` sin secreto (R7/R35); autorización/aislamiento por owner (R9). Sin
+controller.
+**Cubre:** R5, R6, R7, R8, R9, R32 (persistencia cifrada), R33, R34, R35.
 **Hecho:** `tests/unit/services/webhook-suscripcion-service.test.ts` verde: URL no-https
-rechazada sin persistir; re-registro actualiza; el secreto se retorna al registrar, se
-**persiste cifrado** y no aparece al consultar; desactivación; un actor no opera la
-suscripción de otro owner.
+rechazada sin persistir; **alta** retorna secreto una vez y persiste cifrado; **editar
+conserva el secreto y no lo devuelve** (incluida reactivación de una baja); **rotar** genera
+un secreto NUEVO distinto y `not_found` si no hay suscripción; la vista nunca expone el
+secreto; un actor no opera la suscripción de otro owner.
 **Depende de:** T8, T6b
 
-### [ ] T10 · Controller de registro — Server Action (D1)
-`lib/actions/webhooks.ts` (`'use server'`), autorizada al rol `maestro` (patrón feature 82,
-`design.md` §9). Valida que el owner objetivo es rol `apiKey` (D3); registra/baja; devuelve
-el secreto en claro UNA vez para F100. **NO** endpoint por API key. F100 (frontend) se
-coordina aparte (ya registrada, D4).
-**Cubre:** superficie de R9 (autorización por rol maestro).
-**Hecho:** `tests/unit/actions/webhooks-action.test.ts` verde: un no-maestro es rechazado;
-un maestro registra y recibe el secreto una vez.
+### [x] T10 · Controller de registro/rotación/lectura — Server Actions (D1)
+`lib/actions/webhooks.ts` (`'use server'`), autorizadas al rol `maestro` (patrón feature 82,
+`design.md` §9): `registrarWebhook` (alta `creada` con secreto una vez / edición
+`actualizada` sin secreto, R33; guard owner rol `apiKey`, D3), `rotarSecretoWebhook`
+(R34: `ok`/`not_found`/`config_error`), `obtenerWebhook` (R35/D2: `{url, activa}|null`, sin
+secreto) y `desactivarWebhook`. **NO** endpoint por API key. La UI (feature 105) se coordina
+aparte (ya registrada, D4).
+**Cubre:** superficie de R9 (autorización por rol maestro), R33, R34, R35.
+**Hecho:** `tests/unit/actions/webhooks-action.test.ts` verde: un no-maestro es rechazado en
+las cuatro acciones; el alta recibe el secreto una vez (`creada`) y la edición no (`actualizada`);
+rotar devuelve el secreto nuevo (`ok`), `not_found` sin suscripción y `config_error` sin
+clave; obtener devuelve la vista sin secreto (o `null`).
 **Depende de:** T9
 
 ---

@@ -91,6 +91,7 @@ function gestionEntregada(): CierreDetalleGestion {
     pagoMensajero: "0.00",
     ingresoBodegaRechazo: null,
     tarifaFaltante: false,
+    esRechazoSla: false, // feature 102
   };
 }
 
