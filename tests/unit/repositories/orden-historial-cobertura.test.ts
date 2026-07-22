@@ -4,6 +4,7 @@ import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepositor
 import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionReprogramadaRepository";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaRepository";
+import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
 import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 
 // Feature 49 — T5.2 (R6): TEST DE COBERTURA. Enumera los 12 call-sites que ESCRIBEN
@@ -28,9 +29,11 @@ const REPOS = {
     LiberacionReprogramadaRepository.prototype as unknown as Record<string, unknown>,
   CierreDiaRepository: CierreDiaRepository.prototype as unknown as Record<string, unknown>,
   DevolucionSlaRepository: DevolucionSlaRepository.prototype as unknown as Record<string, unknown>,
+  RecuperacionBodegaRepository:
+    RecuperacionBodegaRepository.prototype as unknown as Record<string, unknown>,
 };
 
-// Los 12 puntos del mapa (design §2), 1 por familia de transicion.
+// Los 17 puntos del mapa (design §2), 1 por familia de transicion.
 const PUNTOS_DE_ESCRITURA = [
   { n: 1, repo: "OrdenRepository", simbolo: "createManyOrdenes", origenTipo: "carga_masiva" },
   { n: 2, repo: "OrdenRepository", simbolo: "create", origenTipo: "creacion_manual" },
@@ -98,6 +101,26 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "escalarDevueltaSla",
     origenTipo: "escalado_devuelta_sla",
   },
+  // #16/#17: feature 100. Acciones MANUALES que RESUELVEN una novedad ANTES de que venza su ventana
+  // SLA (99). Reprogramar (adminTienda): `GestionOrdenRepository.reprogramarDesdeDevuelta` transiciona
+  // `devuelta -> reprogramada` con gestion sintetica (`reprogramacion_tienda`). Recuperar (bodega
+  // dueña): `RecuperacionBodegaRepository.recuperarABodega` transiciona `devuelta ->
+  // en_bodega/en_bodega_satelite` limpiando el mensajero (`recuperacion_manual`, molde de
+  // `liberarDevueltaSla` pero con actor y origen_tipo propios, gate F1.4-Q2). Dos `origen_tipo`
+  // propios (aditivos, migracion `*_orden_historial_origen_tipo_resolver_novedad` + su down) para que
+  // la linea de tiempo distinga tienda vs bodega vs cron.
+  {
+    n: 16,
+    repo: "GestionOrdenRepository",
+    simbolo: "reprogramarDesdeDevuelta",
+    origenTipo: "reprogramacion_tienda",
+  },
+  {
+    n: 17,
+    repo: "RecuperacionBodegaRepository",
+    simbolo: "recuperarABodega",
+    origenTipo: "recuperacion_manual",
+  },
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
@@ -119,11 +142,11 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 15 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(15);
-    // numeracion 1..15 sin huecos ni duplicados.
+  it("son EXACTAMENTE 17 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(17);
+    // numeracion 1..17 sin huecos ni duplicados.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
     ]);
   });
 
@@ -134,7 +157,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 15 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
+  it("los 17 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
     const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
     expect(tiposDelMapa).toEqual(tiposDelSeed);

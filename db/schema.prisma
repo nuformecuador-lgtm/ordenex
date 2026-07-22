@@ -922,6 +922,8 @@ enum OrdenHistorialOrigenTipo {
   carga_api // feature 88 (D7): estado inicial en createManyOrdenesConGuia (canal integrador)
   liberacion_devuelta_sla // feature 99: cron SLA, devuelta -> en_bodega/en_bodega_satelite (reintento)
   escalado_devuelta_sla // feature 99: cron SLA, devuelta -> rechazada (escalado; enlaza gestion sintetica)
+  reprogramacion_tienda // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
+  recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite (accion manual, actor admin)
 
   @@map("orden_historial_origen_tipo")
 }

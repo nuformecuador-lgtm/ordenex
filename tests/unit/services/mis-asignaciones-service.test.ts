@@ -75,6 +75,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
     crearGestionYTransicionar: vi.fn(async () => "g1"),
+    reprogramarDesdeDevuelta: vi.fn(async () => true), // feature 100: no lo usa MisAsignacionesService
     ...overrides,
   };
 }

@@ -42,6 +42,13 @@ export type ListarRecepcionSateliteServiceResult =
       // adminSatelite NO ve rechazadas de otra zona. Solo listado, la autz de
       // ejecutar el retorno la impone DevolucionOrigenService (rol + zona).
       porDevolver: RecepcionSateliteDTO[];
+      // Feature 100/T4.1/R12: ordenes en estado `devuelta` (novedad que reposa bajo la
+      // feature 99) de la MISMA zona del adminSatelite, elegibles para "Recuperar a bodega"
+      // (transicion devuelta -> en_bodega_satelite la ejecuta RecuperacionBodegaService).
+      // Acotado server-side por zona (findRecepcionSateliteByZona(zonaId, ...)); un
+      // adminSatelite NO ve devueltas de otra zona. Solo listado; la autz de ejecutar la
+      // recuperacion la impone RecuperacionBodegaService (rol + zona).
+      devueltas: RecepcionSateliteDTO[];
       zonaNombre: string | null;
       sinZona: boolean;
     }

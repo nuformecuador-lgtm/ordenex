@@ -26,12 +26,14 @@ import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
+import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
 
 type ModalAbierto =
   | "generar-guia"
   | "asignar-bodega"
   | "etiquetas"
   | "devolver-tienda"
+  | "recuperar-bodega"
   | null;
 
 async function mensajerosFetcher() {
@@ -79,6 +81,15 @@ const ESTADO_REPROGRAMADA = "reprogramada";
 const ESTADO_RECHAZADA = "rechazada";
 const MOTIVO_RECHAZADA_NO_CENTRAL =
   "Orden de zona satélite: la devuelve el admin de la bodega satélite de su zona.";
+
+// Feature 100/T4.2: estado cuya tab ofrece "Recuperar a bodega"
+// (devuelta -> en_bodega). Igual que `rechazada`, la ejecuta la bodega RESPONSABLE:
+// para maestro/admin eso es SOLO la bodega central (zonaEsGam). Las devueltas de zona
+// satélite las recupera el adminSatelite de la zona (en /recepcion-satelite), así que
+// su check se bloquea en vez de dejar seleccionarlas y vaciar el modal (R15).
+const ESTADO_DEVUELTA = "devuelta";
+const MOTIVO_DEVUELTA_NO_CENTRAL =
+  "Orden de zona satélite: la recupera el admin de la bodega satélite de su zona.";
 
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
@@ -209,6 +220,12 @@ export function OrdenesTabs({
     setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
     setModalAbierto("devolver-tienda");
   }
+  // "Recuperar a bodega" (feature 100) solo aplica a órdenes `devuelta` de la bodega
+  // CENTRAL (`zonaEsGam === true`); se filtra antes de abrir (el backend revalida, R15).
+  function abrirRecuperar(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
+    setModalAbierto("recuperar-bodega");
+  }
 
   // Revalida TODAS las tablas por tab (comparten el prefijo de key SWR).
   function revalidarTablas() {
@@ -294,6 +311,15 @@ export function OrdenesTabs({
             key: "devolver",
             label: "Devolver a la tienda",
             onRun: abrirDevolver,
+          },
+        ];
+      case "devuelta":
+        // Feature 100/T4.2 (R12): recuperar a bodega las devueltas de la zona central.
+        return [
+          {
+            key: "recuperar",
+            label: "Recuperar a bodega",
+            onRun: abrirRecuperar,
           },
         ];
       default:
@@ -397,6 +423,11 @@ export function OrdenesTabs({
     if (tab.value === ESTADO_RECHAZADA) {
       bloqueoSeleccion = (o) =>
         o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL;
+    } else if (tab.value === ESTADO_DEVUELTA) {
+      // Feature 100/T4.2 (R15): maestro/admin solo recupera a bodega las devueltas
+      // de la zona central; las satélite se bloquean (las recupera el adminSatelite).
+      bloqueoSeleccion = (o) =>
+        o.zonaEsGam === true ? null : MOTIVO_DEVUELTA_NO_CENTRAL;
     } else if (ESTADOS_ASIGNACION.has(tab.value)) {
       const zonas = zonasBloqueadas;
       bloqueoSeleccion = (o) => {
@@ -487,6 +518,12 @@ export function OrdenesTabs({
           />
           <DevolverATiendaModal
             open={modalAbierto === "devolver-tienda"}
+            ordenes={ordenesSeleccionadas}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          <RecuperarABodegaModal
+            open={modalAbierto === "recuperar-bodega"}
             ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
