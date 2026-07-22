@@ -707,7 +707,14 @@ export class OrdenRepository implements IOrdenRepository {
       // La zona del distrito vive en la N:M `zona_distrito` (feature 24): es ahi donde
       // la UI/ZonaForm asigna distritos a zonas, NO en la columna escalar distrito.zona_id
       // (que quedo sin poblar). La carga masiva deriva orden.zona_id de esta relacion.
-      select: { id: true, nombre: true, cantonId: true, zonas: { select: { zonaId: true } } },
+      // Feature 98/R2: junto al `zonaId` de la N:M se proyecta `zona.esCentral` (flag que elige
+      // la columna del flete al tarifar la carga por API), sin una consulta extra.
+      select: {
+        id: true,
+        nombre: true,
+        cantonId: true,
+        zonas: { select: { zonaId: true, zona: { select: { esCentral: true } } } },
+      },
     });
     // Un distrito con EXACTAMENTE una zona resuelve orden.zona_id; con 0 zonas -> sin zona
     // asignada (error de fila); con >1 -> ambiguo/no derivable -> null (mismo trato seguro:
@@ -717,6 +724,9 @@ export class OrdenRepository implements IOrdenRepository {
       nombre: d.nombre,
       cantonId: d.cantonId,
       zonaId: d.zonas.length === 1 ? d.zonas[0].zonaId : null,
+      // Feature 98/R2: `esCentral` de la unica zona; `false` si el distrito no resuelve UNA
+      // zona (0 o >1 -> `zonaId` null -> la fila no llega a tarifarse).
+      esCentral: d.zonas.length === 1 ? d.zonas[0].zona.esCentral : false,
     }));
   }
 

@@ -136,17 +136,22 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
   it("findDistritosByCantonIds filtra por cantonId in y deriva zonaId de la N:M zona_distrito", async () => {
     const prisma = buildPrisma();
     prisma.distrito.findMany.mockResolvedValue([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonas: [{ zonaId: "z1" }] },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonas: [{ zonaId: "z1", zona: { esCentral: false } }] },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findDistritosByCantonIds(["c1"]);
 
-    expect(rows).toEqual([{ id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1" }]);
+    expect(rows).toEqual([
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false },
+    ]);
     const arg = prisma.distrito.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ cantonId: { in: ["c1"] } });
-    // La zona se pide por la relacion, no por la columna escalar zona_id.
-    expect(arg.select).toMatchObject({ zonas: { select: { zonaId: true } } });
+    // La zona (y su flag esCentral, feature 98/R2) se piden por la relacion, no por la columna
+    // escalar zona_id.
+    expect(arg.select).toMatchObject({
+      zonas: { select: { zonaId: true, zona: { select: { esCentral: true } } } },
+    });
     expect(arg.select.zonaId).toBeUndefined();
   });
 
@@ -159,20 +164,48 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
 
     const rows = await repo.findDistritosByCantonIds(["c1"]);
 
-    expect(rows).toEqual([{ id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null }]);
+    // Feature 98/R2: sin zona -> esCentral false (no se tarifa: la fila falla arriba por zonaId null).
+    expect(rows).toEqual([
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false },
+    ]);
   });
 
   it("findDistritosByCantonIds: distrito con >1 zonas -> zonaId null (ambiguo, no elige una)", async () => {
     const prisma = buildPrisma();
     prisma.distrito.findMany.mockResolvedValue([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonas: [{ zonaId: "z1" }, { zonaId: "z2" }] },
+      {
+        id: "d1",
+        nombre: "San Rafael",
+        cantonId: "c1",
+        zonas: [
+          { zonaId: "z1", zona: { esCentral: true } },
+          { zonaId: "z2", zona: { esCentral: false } },
+        ],
+      },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findDistritosByCantonIds(["c1"]);
 
-    // Ambiguo: ni "z1" (la primera) ni "z2". Null y que la fila falle arriba.
-    expect(rows).toEqual([{ id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null }]);
+    // Ambiguo: ni "z1" (la primera) ni "z2". Null y esCentral false; la fila falla arriba.
+    expect(rows).toEqual([
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false },
+    ]);
+  });
+
+  // Feature 98 (T4) — proyeccion de esCentral de la zona del distrito. Mapea R2.
+  it("findDistritosByCantonIds: distrito en zona CENTRAL -> esCentral true", async () => {
+    const prisma = buildPrisma();
+    prisma.distrito.findMany.mockResolvedValue([
+      { id: "d1", nombre: "Centro", cantonId: "c1", zonas: [{ zonaId: "z1", zona: { esCentral: true } }] },
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDistritosByCantonIds(["c1"]);
+
+    expect(rows).toEqual([
+      { id: "d1", nombre: "Centro", cantonId: "c1", zonaId: "z1", esCentral: true },
+    ]);
   });
 });
 
