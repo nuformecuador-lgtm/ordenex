@@ -15,8 +15,11 @@ import type { IApiKeyRepository } from "@/lib/interfaces/repositories/IApiKeyRep
 import { hashApiKey } from "@/lib/utils/api-key-hash";
 import type { RolValue } from "@prisma/client";
 
-/** R5: unico estado que autoriza la carga; `pendiente`/`inactivo`/`bloqueado` -> forbidden. */
+/** R5: unico estado del USUARIO dedicado que autoriza la carga; el resto -> forbidden. */
 const ESTADO_ACTIVO = "activo";
+
+/** R7: unico estado PROPIO de la key que autoriza la carga; `inactiva` -> forbidden. */
+const ESTADO_API_KEY_ACTIVA = "activa";
 
 export class ApiKeyAuthService implements IApiKeyAuthService {
   constructor(private readonly repo: IApiKeyRepository) {}
@@ -35,6 +38,10 @@ export class ApiKeyAuthService implements IApiKeyAuthService {
 
     // R5: la key existe pero su usuario dedicado no esta `activo` -> forbidden (revocacion).
     if (encontrada.estado !== ESTADO_ACTIVO) return { status: "forbidden" };
+
+    // R7: la key esta desactivada (`api_key.estado !== 'activa'`) -> forbidden. Palanca de
+    // revocacion PROPIA de la key, independiente del estado del usuario dedicado.
+    if (encontrada.apiKeyEstado !== ESTADO_API_KEY_ACTIVA) return { status: "forbidden" };
 
     // ok: el actor es el usuario dedicado de la key (D4: dueño de las ordenes que cree).
     return {

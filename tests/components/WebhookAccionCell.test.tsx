@@ -46,7 +46,7 @@ function renderCell(ui: ReactElement) {
 /** Abre el modal de gestión y espera a que el estado cargue. */
 async function abrir(user: ReturnType<typeof userEvent.setup>) {
   await user.click(
-    screen.getByRole("button", { name: `Gestionar webhook de ${IDENT}` }),
+    screen.getByRole("button", { name: `Editar webhook de ${IDENT}` }),
   );
   await screen.findByRole("dialog");
 }
@@ -61,6 +61,33 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+});
+
+describe("WebhookAccionCell — rótulo del botón (feature 108: R15, R16)", () => {
+  it("R15: el botón de la fila se rotula 'Editar' (no 'Webhook')", () => {
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    const boton = screen.getByRole("button", {
+      name: `Editar webhook de ${IDENT}`,
+    });
+    expect(boton).toHaveTextContent("Editar");
+    expect(
+      screen.queryByRole("button", { name: `Gestionar webhook de ${IDENT}` }),
+    ).toBeNull();
+  });
+
+  it("R16: 'Editar' abre el modal y lee el estado con obtenerWebhook", async () => {
+    obtenerWebhookMock.mockResolvedValue(OK_ACTIVA);
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await user.click(
+      screen.getByRole("button", { name: `Editar webhook de ${IDENT}` }),
+    );
+
+    await screen.findByRole("dialog");
+    expect(obtenerWebhookMock).toHaveBeenCalledWith({ ownerUsuarioId: OWNER });
+  });
 });
 
 describe("WebhookAccionCell — lectura del estado (R3, R4, R5)", () => {

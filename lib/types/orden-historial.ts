@@ -26,6 +26,7 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "escalado_devuelta_sla", // feature 99: cron SLA, devuelta -> rechazada (escalado; enlaza gestion sintetica)
   "reprogramacion_tienda", // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
   "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite (accion manual del admin)
+  "cancelacion_api", // feature 106: cancelacion por API key (OrdenRepository.cancelarViaApi), en_bodega/en_ruta_bodega_principal -> devuelta_origen
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];

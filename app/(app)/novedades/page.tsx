@@ -46,7 +46,7 @@ export default async function NovedadesPage() {
   return (
     <AppPage
       title="Novedades"
-      description="Tus órdenes en devolución y las que llegaron a rechazo por vencimiento de SLA"
+      description="Tus órdenes en devolución y las que llegaron a rechazo por vencerse el plazo"
     >
       <NovedadesTabs
         novedades={{

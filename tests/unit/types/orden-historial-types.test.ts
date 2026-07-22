@@ -15,6 +15,9 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // Feature 100: el conjunto pasa a 17 con `reprogramacion_tienda` (adminTienda reprograma desde
 // `devuelta`) y `recuperacion_manual` (bodega recupera desde `devuelta`): dos valores propios para
 // que la linea de tiempo distinga las acciones MANUALES que resuelven una novedad del cron SLA (99).
+// Feature 106: el conjunto pasa a 18 con `cancelacion_api` (cancelacion de la tienda por API key:
+// en_bodega/en_ruta_bodega_principal -> devuelta_origen con motivo="cancelada por tienda"): valor
+// propio para que la linea de tiempo distinga esa cancelacion de integrador de una devolucion real.
 describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
   const ESPERADOS = [
     "carga_masiva",
@@ -34,10 +37,11 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "escalado_devuelta_sla", // feature 99: cron SLA, devuelta -> rechazada (gestion sintetica)
     "reprogramacion_tienda", // feature 100: adminTienda reprograma devuelta -> reprogramada
     "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite
+    "cancelacion_api", // feature 106: OrdenRepository.cancelarViaApi (cancelacion por API key)
   ];
 
-  it("contiene exactamente los 17 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(17);
+  it("contiene exactamente los 18 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(18);
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

@@ -658,7 +658,7 @@ describe("CierresAdminModule", () => {
     });
     // El total combinado (56) + las dos sublíneas del desglose por origen (102/R8).
     expect(within(region).getByText("₡9200.00")).toBeInTheDocument();
-    expect(within(region).getByText("Por SLA (cron)")).toBeInTheDocument();
+    expect(within(region).getByText("Automático (por plazo vencido)")).toBeInTheDocument();
     expect(within(region).getByText("₡6000.00")).toBeInTheDocument();
     expect(within(region).getByText("Manual (mensajero)")).toBeInTheDocument();
     expect(within(region).getByText("₡3200.00")).toBeInTheDocument();
@@ -710,7 +710,7 @@ describe("CierresAdminModule", () => {
     const filaManual = within(region).getByText("REM-MAN").closest("tr");
     expect(filaSla).not.toBeNull();
     expect(filaManual).not.toBeNull();
-    expect(within(filaSla as HTMLElement).getByText("SLA")).toBeInTheDocument();
+    expect(within(filaSla as HTMLElement).getByText("Automático")).toBeInTheDocument();
     expect(within(filaManual as HTMLElement).getByText("Manual")).toBeInTheDocument();
   });
 
