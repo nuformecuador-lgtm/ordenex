@@ -1679,3 +1679,30 @@
   geocodificación en asignación (R9). Backend chico: `MiAsignacionDTO` expone lat/lng (feature 91).
 - Leaflet cargado con `next/dynamic` `ssr:false`. `pnpm build` exit 0. **PR #110**, **desplegada a
   prod (PR #117)**.
+
+## 2026-07-21 — devolución diferida + cron SLA de novedades (feature 99, BACKEND, money-critical)
+- Motor del nuevo flujo de devolución. La orden devuelta ya NO se re-rutea de inmediato (feature
+  47): cuenta como intento y QUEDA en `devuelta` (entra a /novedades). Un cron horario
+  (`/api/cron/procesar-devueltas-sla`, `0 * * * *`, auth `CRON_SECRET`) procesa las vencidas sin
+  resolver: not_found 24h con intentos<3 → libera a la bodega dueña (`en_bodega`/
+  `en_bodega_satelite` por zona, sin mensajero); not_found 3er intento tras 24h → `rechazada`;
+  wrong_number/wrong_address al día 6 → `rechazada`. Ventanas rolling en hora CR, ancladas a la
+  última gestión `devuelta` vigente (SIN columna `devuelta_at`).
+- Requisitos R1–R30 (mapa R→test en `progress/impl_99.md`). Migración: SOLO ALTER del enum
+  `orden_historial_origen_tipo` (+`liberacion_devuelta_sla`/`escalado_devuelta_sla`) con `down.sql`
+  que recrea el tipo; round-trip real verificado en DB desechable.
+- **DINERO (Option A, gate F1.4-Q1):** al escalar, el cron crea una gestión SINTÉTICA
+  `resultado=rechazada` (actor sistema, `cierre_id null`, mensajero de la última devuelta) en la
+  misma tx → el snapshot de la 56 y la wallet 42/69 cobran el ingreso de bodega SIN código
+  monetario nuevo. De paso cierra un hueco preexistente de la 47 (los escalados no generaban
+  ingreso: `ingreso-bodega.ts:23` da 0.00 para `resultado !== rechazada`). Verificado POR MUTACIÓN
+  por el reviewer.
+- Reconcilia la 47 (relocaliza `resolverSeguimientoDevuelta` al cron; tests INVERTIDOS al sentido
+  nuevo, no aflojados) y /novedades 89 (predicado ancla a `estatus = devuelta`; tests invertidos).
+  Todas las transiciones por el choke point `appendCambioEstado` (49); los 2 `origen_tipo` nuevos NO
+  cuentan como intento (destino ≠ `devuelta`).
+- Gate F1.4 aprobado por el humano (las 8 recomendadas + confirmación Q1). Ciclo SDD directo del
+  leader (spec_author → backend_dev → reviewer, `model:opus`). **Reviewer APROBADO 0 bloqueantes.**
+  Medido (implementer + reviewer + leader, independiente): typecheck 0, lint 0, **3950/3950 tests**,
+  round-trip real. Base de 100/101/102. **DEUDA ajena:** `./init.sh` rojo por bug preexistente del
+  harness (`login` sin `specs/login/`), medido idéntico en HEAD limpio — no es de esta feature.

@@ -3,6 +3,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionReprogramadaRepository";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
+import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaRepository";
 import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 
 // Feature 49 — T5.2 (R6): TEST DE COBERTURA. Enumera los 12 call-sites que ESCRIBEN
@@ -26,6 +27,7 @@ const REPOS = {
   LiberacionReprogramadaRepository:
     LiberacionReprogramadaRepository.prototype as unknown as Record<string, unknown>,
   CierreDiaRepository: CierreDiaRepository.prototype as unknown as Record<string, unknown>,
+  DevolucionSlaRepository: DevolucionSlaRepository.prototype as unknown as Record<string, unknown>,
 };
 
 // Los 12 puntos del mapa (design §2), 1 por familia de transicion.
@@ -78,6 +80,24 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "createManyOrdenesConGuia",
     origenTipo: "carga_api",
   },
+  // #14/#15: feature 99. El cron SLA DIFIERE el re-ruteo de una devolucion: `DevolucionSlaRepository`
+  // libera (`devuelta -> en_bodega/en_bodega_satelite`, reintento) o escala (`devuelta -> rechazada`,
+  // con gestion sintetica que dispara el ingreso de bodega). Dos `origen_tipo` propios (aditivos,
+  // migracion `*_orden_historial_origen_tipo_sla_devuelta` + su down) para que la linea de tiempo
+  // distinga el reintento del escalado. Reemplazan la 2.ª transicion que la 47 emitia en
+  // `crearGestionYTransicionar` (#9): esa RELOCALIZACION mantiene el choke point completo.
+  {
+    n: 14,
+    repo: "DevolucionSlaRepository",
+    simbolo: "liberarDevueltaSla",
+    origenTipo: "liberacion_devuelta_sla",
+  },
+  {
+    n: 15,
+    repo: "DevolucionSlaRepository",
+    simbolo: "escalarDevueltaSla",
+    origenTipo: "escalado_devuelta_sla",
+  },
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
@@ -99,10 +119,12 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 13 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(13);
-    // numeracion 1..13 sin huecos ni duplicados.
-    expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+  it("son EXACTAMENTE 15 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(15);
+    // numeracion 1..15 sin huecos ni duplicados.
+    expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    ]);
   });
 
   it("cada punto del mapa es un metodo REAL de su repositorio (rename/olvido -> rompe)", () => {
@@ -112,7 +134,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 13 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
+  it("los 15 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
     const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
     expect(tiposDelMapa).toEqual(tiposDelSeed);
@@ -134,16 +156,22 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  // Feature 47 (R14/R21): el seguimiento del reintento/escalado REUTILIZA `origen_tipo=gestion`.
-  // El diseno recomendado (design 47 §6/§7) NO agrega valores al enum, asi que NO hubo migracion
-  // de enum y el recuento sigue siendo EXACTAMENTE 11. Este test guarda esa decision: si alguien
-  // introdujera `reintento_devolucion`/`escalado_rechazo`, deberia venir con su migracion + down.
-  it("feature 47 (R14/R21): el enum NO gana valores nuevos; el seguimiento reutiliza `gestion`", () => {
+  // Feature 99 (R29/R30): INVIERTE la decision de la 47. El re-ruteo de la devolucion se DIFIRIO
+  // al cron SLA (`DevolucionSlaRepository`), que YA NO reutiliza `gestion`: emite con sus DOS
+  // origen_tipo propios (`liberacion_devuelta_sla`/`escalado_devuelta_sla`, puntos #14/#15). La
+  // gestion del mensajero (`crearGestionYTransicionar`, #9) sigue usando `gestion` SOLO para la
+  // transicion a `devuelta` (ya sin la 2.ª transicion de seguimiento que la 47 emitia).
+  it("feature 99 (R29): el re-ruteo de la devolucion usa `origen_tipo` propios del cron, no `gestion`", () => {
     const tipos = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED] as string[];
-    expect(tipos).not.toContain("reintento_devolucion");
-    expect(tipos).not.toContain("escalado_rechazo");
-    // El seguimiento se emite con el mismo origen_tipo que la gestion (sin enum nuevo).
+    expect(tipos).toContain("liberacion_devuelta_sla");
+    expect(tipos).toContain("escalado_devuelta_sla");
+    // La gestion sigue existiendo (la transicion a `devuelta` la usa), pero YA NO carga el
+    // reintento/escalado: eso vive en los dos puntos del cron (#14/#15).
     expect(tipos).toContain("gestion");
+    const familiasDelCron = PUNTOS_DE_ESCRITURA.filter(
+      (p) => p.repo === "DevolucionSlaRepository",
+    ).map((p) => p.origenTipo);
+    expect(familiasDelCron.sort()).toEqual(["escalado_devuelta_sla", "liberacion_devuelta_sla"]);
   });
 
   // Feature 48 (R9/F1.4-e recomendada): el retorno a la tienda (`rechazada -> devuelta_origen`)
