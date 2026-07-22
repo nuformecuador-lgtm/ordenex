@@ -15,12 +15,52 @@
 
 ## Features en curso
 
-### Feature 102 — ingreso de bodega por rechazos SLA visible en cierres + aviso (Fase 1)
+### Feature 102 — ingreso de bodega por rechazos SLA visible en cierres + aviso (Fase 2)
 - **Rama:** `feature/102-rechazos-sla-visible` (desde `origin/dev`). Zona `fullstack`, complexity `medium`. `depends_on: 99` ✅.
-- **Estado:** `in_progress` (Fase 2) — gate F1.4 **aprobado con defaults** (humano, 2026-07-22). `spec_author` dejó los 3 archivos en `specs/102-rechazos-sla-visible/` (18 R, mapa R→test, sin migración). Orquestación: `backend_dev` (T1–T9, T13) → `frontend_dev` (T10–T12, T14) → `reviewer`.
+- **Estado:** `in_progress` (Fase 2) — spec + impl (backend_dev → frontend_dev) + review COMPLETOS. Reviewer **APROBADO** (18/18 R con test que pasa; sin migración; money-safe; gate cumplido). Merge de `origin/dev` (features 98/103/104/105) resuelto. **Pendiente: push + PR → dev (F2.4).**
 - **Gate F1.4 (mecanismo + Q1–Q4, todo default):** aviso = **VISIBILIDAD DERIVADA**. Q1 monto tienda = `ingreso_bodega_rechazo` (snapshot 56); Q2 anclado al snapshot (`null`="pendiente de cierre"); Q3 superficie tienda = sección dentro de `/novedades`; Q4 subtotal SLA solo en el **detalle** del cierre. Sin migración, sin mover dinero, sin infra de notificaciones; desglose por join `origen_tipo='escalado_devuelta_sla'`.
+- **Artefactos:** `specs/102-rechazos-sla-visible/`, `progress/impl_102.md`, `progress/review_102.md`.
 
-_Contexto:_ lo último mergeado antes de 102 fue **feature 101** (prioridad de reasignación, PR #129) y **feature 100** (resolver novedad, PR #128). La app está en prod (PR #117).
+_Contexto:_ lo último mergeado en `dev` antes de 102 fue **feature 101** (PR #129) y **feature 100** (PR #128); durante esta sesión `origin/dev` avanzó con la **feature 98** (`costoEnvio` carga API, PR #125) y el bookkeeping de 103/104/105. La app está en prod (PR #117).
+
+---
+
+### Features 103/104/105 — webhooks + costoEnvio API (registro de sesión paralela, mergeado a dev)
+**Flujo de API key — verificación + huecos (2026-07-21).** A pedido del humano se verificó el flujo
+de carga por API key (features 81/82/88, `done`): valida la key por hash SHA-256, carga por endpoint
+expuesto (`POST /api/ordenes/api-key/carga`), genera `num_guia` y devuelve errores por fila. Dos
+huecos → tres features nuevas. **Gate F1.4 APROBADO por el humano.**
+
+> ⚠️ **Colisión de IDs por sesiones paralelas.** Se registraron primero como 98/99/100, pero durante
+> la sesión otras sesiones commitearon a `origin/dev` las features **98–102**. Se **renumeraron a
+> 103/104/105**. Las **ramas de código conservan su slug original** (`feature/98-api-carga-valor-pagar`,
+> `feature/99-webhooks-cambios-estado`) porque ya estaban pusheadas y el classifier bloquea el borrado
+> de ramas remotas. Los specs se movieron a `specs/103-*` y `specs/104-*`.
+
+| # | Feature | Rama | Zona | Estado |
+|---|---------|------|------|--------|
+| 103 | api - `costoEnvio` (flete+IVA) en la carga por API | `feature/98-api-carga-valor-pagar` | backend | reviewer **APROBADO** · **PR #125** → dev (falta merge humano) |
+| 104 | webhooks de cambios de estado (API key) | `feature/99-webhooks-cambios-estado` | backend | reviewer **OK** · **PR #127** → dev (falta merge humano) |
+| 105 | webhooks - UI de registro (Config > API) | `feature/105-webhooks-ui-registro` | frontend | pending (bloqueada por 104; spec sin autoría) |
+
+**Bookkeeping en PR #124** (`chore/registro-features-webhooks-103-105`): feature_list 103/104/105 +
+specs/103 + specs/104 + `review_103` + `review_104`. Los tres PRs (#124, #125, #127) → `dev`, merge humano.
+
+**Decisiones del gate F1.4 (cerradas por el humano):** F103 → `costoEnvio` = flete+IVA, `"0.00"` si la
+tienda no tiene tarifa, campo `costoEnvio`. F104 → registro por **UI en Config>API** (Server Action,
+rol maestro; nace 105), secreto **cifrado AES-256-GCM** (`WEBHOOK_SECRET_ENC_KEY` en env), emite **solo
+órdenes cargadas por API key**, **5 reintentos**, persiste el error de entrega vía `jobs.last_error`.
+
+- **F103:** `feature/98-api-carga-valor-pagar` @ `ae651b7`, pusheada; typecheck 0, suite 3935/3935.
+  `impl_98.md` vive en esa rama. Pendiente: PR hacia `dev`.
+- **F104:** en implementación en worktree aislado (`backend_dev`, `model: opus`). Al mergear:
+  **configurar `WEBHOOK_SECRET_ENC_KEY` en Vercel** o los webhooks no pueden firmar.
+
+> Este registro (feature_list 103/104/105 + specs/103 + specs/104 + esta bitácora) viaja en
+> `chore/registro-features-webhooks-103-105` → PR a `dev` (sin commits directos a `dev`).
+
+El último trabajo previo mergeado fue la **feature 97** (optimización de ruta — frontend): PR #110 a
+`dev`, prod PR #117.
 
 ## Backlog pendiente
 

@@ -26,6 +26,7 @@ import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import { ApiKeyAuthService } from "@/lib/services/ApiKeyAuthService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
+import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
@@ -43,7 +44,12 @@ function buildAutenticar(): (rawKey: string | null) => Promise<ApiKeyAuthResult>
 
 function buildBulkService(): IBulkOrdenService {
   const prisma = getPrismaClient();
-  return new BulkOrdenService(new OrdenRepository(prisma));
+  // Feature 98/T8: se inyecta tambien el resolver de tarifa vigente por tienda, para que
+  // `cargarViaApi` devuelva el `costoEnvio` (flete + IVA) por orden creada.
+  return new BulkOrdenService(
+    new OrdenRepository(prisma),
+    new TarifaVigentePorTiendaRepository(prisma),
+  );
 }
 
 // R1/§3: extrae el secreto del header `Authorization: Bearer <key>`. `null` si el header

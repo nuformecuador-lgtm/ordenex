@@ -2,8 +2,16 @@ import { describe, it, expect, vi } from "vitest";
 import type { RolValue } from "@prisma/client";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
+
+// Feature 98: la via sesion (`cargarMasiva`) NO usa el resolver de tarifa (R9). Stub neutro
+// para el 2do parametro requerido del constructor; estos tests no lo ejercitan.
+const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
+  resolveTarifaPorTienda: vi.fn(async () => null),
+  resolveTarifasPorTiendas: vi.fn(async () => new Map()),
+};
 
 const TIENDA: Actor = { usuarioId: "store1", rol: "adminTienda" };
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
@@ -116,7 +124,7 @@ describe("BulkOrdenService.cargarMasiva — autorizacion (R11)", () => {
     "rol %o distinto de adminTienda -> forbidden sin tocar datos",
     async (actor) => {
       const repo = buildRepo();
-      const service = new BulkOrdenService(repo);
+      const service = new BulkOrdenService(repo, tarifaRepoStub);
 
       const r = await service.cargarMasiva([row()], actor);
 
@@ -129,7 +137,7 @@ describe("BulkOrdenService.cargarMasiva — autorizacion (R11)", () => {
 
   it("adminTienda si es autorizado", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -140,7 +148,7 @@ describe("BulkOrdenService.cargarMasiva — autorizacion (R11)", () => {
 describe("BulkOrdenService.cargarMasiva — tienda del actor (R24)", () => {
   it("fija tienda_id=actor.usuarioId en todas las ordenes creadas", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva([row({ num_remision: "REM-A" }), row({ num_remision: "REM-B" })], TIENDA);
 
@@ -154,7 +162,7 @@ describe("BulkOrdenService.cargarMasiva — tienda del actor (R24)", () => {
 describe("BulkOrdenService.cargarMasiva — campos obligatorios (R18)", () => {
   it("fila sin destinatario -> error de fila, sin abortar el resto", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row({ destinatario: "" })], TIENDA);
 
@@ -170,7 +178,7 @@ describe("BulkOrdenService.cargarMasiva — campos obligatorios (R18)", () => {
 describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
   it("provincia inexistente -> error de fila con fieldError geografico", async () => {
     const repo = buildRepo({ findAllProvincias: vi.fn().mockResolvedValue([]) });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -188,7 +196,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
         { id: "c2", nombre: "Quito", provinciaId: "p1" },
       ]),
     });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -199,7 +207,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
 
   it("canton no encontrado dentro de la provincia -> error de fila", async () => {
     const repo = buildRepo({ findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]) });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row({ canton: "Otro" })], TIENDA);
 
@@ -210,7 +218,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
 
   it("deriva zonaId desde el distrito resuelto", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva([row()], TIENDA);
 
@@ -223,7 +231,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
 
   it("sin distrito -> error de fila (la zona se deriva del distrito)", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row({ distrito: "" })], TIENDA);
 
@@ -242,7 +250,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
         { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: null },
       ]),
     });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -258,7 +266,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
 
   it("distrito provisto pero inexistente en el canton -> error de fila", async () => {
     const repo = buildRepo({ findDistritosByCantonIds: vi.fn().mockResolvedValue([]) });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row({ distrito: "La Mariscal" })], TIENDA);
 
@@ -271,7 +279,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
 describe("BulkOrdenService.cargarMasiva — mensajero sugerido (R22)", () => {
   it("vacio -> persiste null", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva([row({ mensajero_sugerido_id: "" })], TIENDA);
 
@@ -281,7 +289,7 @@ describe("BulkOrdenService.cargarMasiva — mensajero sugerido (R22)", () => {
 
   it("id valido con rol mensajero -> se persiste", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva([row({ mensajero_sugerido_id: "msg-1" })], TIENDA);
 
@@ -291,7 +299,7 @@ describe("BulkOrdenService.cargarMasiva — mensajero sugerido (R22)", () => {
 
   it("id inexistente o sin rol mensajero -> error de fila", async () => {
     const repo = buildRepo({ findMensajerosByIds: vi.fn().mockResolvedValue(new Set()) });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row({ mensajero_sugerido_id: "no-existe" })], TIENDA);
 
@@ -305,7 +313,7 @@ describe("BulkOrdenService.cargarMasiva — mensajero sugerido (R22)", () => {
 describe("BulkOrdenService.cargarMasiva — monto_cobrar (R23)", () => {
   it("vacio -> persiste null", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva([row({ monto_cobrar: "" })], TIENDA);
 
@@ -315,7 +323,7 @@ describe("BulkOrdenService.cargarMasiva — monto_cobrar (R23)", () => {
 
   it("numerico valido -> se persiste como number", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva([row({ monto_cobrar: "12.50" })], TIENDA);
 
@@ -325,7 +333,7 @@ describe("BulkOrdenService.cargarMasiva — monto_cobrar (R23)", () => {
 
   it("no numerico -> error de fila", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row({ monto_cobrar: "abc" })], TIENDA);
 
@@ -336,7 +344,7 @@ describe("BulkOrdenService.cargarMasiva — monto_cobrar (R23)", () => {
 
   it("negativo -> error de fila", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row({ monto_cobrar: "-5" })], TIENDA);
 
@@ -351,7 +359,7 @@ describe("BulkOrdenService.cargarMasiva — deduplicacion (R25/R26)", () => {
     const repo = buildRepo({
       findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-1", "entregada"]])),
     });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -366,7 +374,7 @@ describe("BulkOrdenService.cargarMasiva — deduplicacion (R25/R26)", () => {
 
   it("R26: duplicado intra-archivo -> una creada (primera), el resto duplicada", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row(), row(), row()], TIENDA);
 
@@ -388,7 +396,7 @@ describe("BulkOrdenService.cargarMasiva — deduplicacion (R25/R26)", () => {
 describe("BulkOrdenService.cargarMasiva — estatus por defecto (R7)", () => {
   it("resuelve en_preparacion como estatus de las filas creadas", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -402,7 +410,7 @@ describe("BulkOrdenService.cargarMasiva — estatus por defecto (R7)", () => {
 
   it("estatus por defecto no disponible -> todas las filas quedan en error, sin persistir", async () => {
     const repo = buildRepo({ findEstatusIdByValue: vi.fn().mockResolvedValue(null) });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -419,7 +427,7 @@ describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulf
       findUsuarioFulfillment: vi.fn().mockResolvedValue(true),
       findEstatusIdByValue: vi.fn().mockResolvedValue("os-fulfillment"),
     });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -433,7 +441,7 @@ describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulf
 
   it("R17: tienda con fulfillment=false -> ordenes en_preparacion (no-regresion)", async () => {
     const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(false) });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -445,7 +453,7 @@ describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulf
 
   it("R15/R18: lee fulfillment de la tienda del actor UNA vez por lote", async () => {
     const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva(
       [row({ num_remision: "A" }), row({ num_remision: "B" }), row({ num_remision: "C" })],
@@ -461,7 +469,7 @@ describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulf
       findUsuarioFulfillment: vi.fn().mockResolvedValue(true),
       findEstatusIdByValue: vi.fn().mockResolvedValue("os-fulfillment"),
     });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row(), row()], TIENDA);
 
@@ -476,7 +484,7 @@ describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulf
       findUsuarioFulfillment: vi.fn().mockResolvedValue(true),
       findEstatusIdByValue: vi.fn().mockResolvedValue(null),
     });
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([row()], TIENDA);
 
@@ -492,7 +500,7 @@ describe("BulkOrdenService.cargarMasiva — estatus inicial condicional por fulf
 describe("BulkOrdenService.cargarMasiva — exito parcial (R29)", () => {
   it("filas invalidas no bloquean la persistencia de las validas", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const rows = [
       row({ num_remision: "REM-A" }),
@@ -515,7 +523,7 @@ describe("BulkOrdenService.cargarMasiva — exito parcial (R29)", () => {
 describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () => {
   it("dryRun=true clasifica todas las filas SIN persistir", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const rows = [
       row({ num_remision: "REM-A" }), // válida -> creada
@@ -546,14 +554,14 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
         .fn()
         .mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
     });
-    const real = await new BulkOrdenService(repoReal).cargarMasiva(rows, TIENDA);
+    const real = await new BulkOrdenService(repoReal, tarifaRepoStub).cargarMasiva(rows, TIENDA);
 
     const repoDry = buildRepo({
       findAllProvincias: vi
         .fn()
         .mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
     });
-    const dry = await new BulkOrdenService(repoDry).cargarMasiva(rows, TIENDA, {
+    const dry = await new BulkOrdenService(repoDry, tarifaRepoStub).cargarMasiva(rows, TIENDA, {
       dryRun: true,
     });
 
@@ -569,7 +577,7 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
 
   it("dryRun=false persiste con normalidad (no-regresión)", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva([row()], TIENDA, { dryRun: false });
 
@@ -583,7 +591,7 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
 describe("BulkOrdenService.cargarMasiva — no-regresión frente a la vía API (feature 88/R14)", () => {
   it("persiste vía createManyOrdenes (sin guía inmediata) y NUNCA vía createManyOrdenesConGuia", async () => {
     const repo = buildRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva([row()], TIENDA);
 
@@ -592,5 +600,26 @@ describe("BulkOrdenService.cargarMasiva — no-regresión frente a la vía API (
     // Estado inicial de la vía sesión intacto (en_preparacion), NO en_ruta_bodega_principal.
     expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
     expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_ruta_bodega_principal");
+  });
+});
+
+// Feature 98 (T11) — no-regresión de la vía sesión: cargarMasiva NO resuelve flete ni su
+// BulkSummary gana costoEnvio (R9). El resolver de tarifa jamás se invoca en esta vía.
+describe("BulkOrdenService.cargarMasiva — sin resolución de flete (feature 98/R9)", () => {
+  it("no invoca el resolver de tarifa y el BulkSummary no expone costoEnvio", async () => {
+    const repo = buildRepo();
+    const tarifaSpy: ITarifaVigentePorTiendaRepository = {
+      resolveTarifaPorTienda: vi.fn(async () => null),
+      resolveTarifasPorTiendas: vi.fn(async () => new Map()),
+    };
+    const r = await new BulkOrdenService(repo, tarifaSpy).cargarMasiva([row()], TIENDA);
+
+    expect(tarifaSpy.resolveTarifaPorTienda).not.toHaveBeenCalled();
+    expect(tarifaSpy.resolveTarifasPorTiendas).not.toHaveBeenCalled();
+    if (r.status === "ok") {
+      // El BulkSummary de la vía sesión no tiene bloque `ordenes` ni costoEnvio en sus filas.
+      expect(r.summary).not.toHaveProperty("ordenes");
+      for (const f of r.summary.filas) expect(f).not.toHaveProperty("costoEnvio");
+    }
   });
 });

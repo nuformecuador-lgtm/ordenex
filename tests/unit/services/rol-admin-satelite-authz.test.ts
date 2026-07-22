@@ -5,12 +5,19 @@ import { AsignacionMensajeroService } from "@/lib/services/AsignacionMensajeroSe
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { ITarifaRepository } from "@/lib/interfaces/repositories/ITarifaRepository";
+import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { IUserRepository } from "@/lib/interfaces/repositories/IUserRepository";
 import type { Actor as OrdenActor } from "@/lib/interfaces/services/IOrdenService";
 import type { Actor as TarifaActor } from "@/lib/interfaces/services/ITarifaService";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
+
+// Feature 98: la via sesion no tarifa; stub neutro para el 2do parametro del constructor.
+const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
+  resolveTarifaPorTienda: vi.fn(async () => null),
+  resolveTarifasPorTiendas: vi.fn(async () => new Map()),
+};
 
 // Feature 19 (rol-adminsatelite): R9, R10, R11. `adminSatelite` es un rol SIN
 // permisos nuevos: en toda puerta de autorizacion por rol existente debe caer
@@ -304,7 +311,7 @@ describe("AsignacionMensajeroService.listarMensajeros — adminSatelite sin perm
 describe("BulkOrdenService.cargarMasiva — adminSatelite sin permisos nuevos (R9, R11)", () => {
   it("adminSatelite -> forbidden, no toca datos", async () => {
     const repo = buildOrdenRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([bulkRow()], ADMIN_SATELITE_ORDEN);
 
@@ -315,7 +322,7 @@ describe("BulkOrdenService.cargarMasiva — adminSatelite sin permisos nuevos (R
 
   it("no-regresion: adminTienda conserva su resultado exitoso (R11)", async () => {
     const repo = buildOrdenRepo();
-    const service = new BulkOrdenService(repo);
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva([bulkRow()], TIENDA_ORDEN);
 

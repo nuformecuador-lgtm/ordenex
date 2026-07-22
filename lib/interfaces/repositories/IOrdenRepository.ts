@@ -170,6 +170,10 @@ export interface DistritoRow {
   nombre: string;
   cantonId: string;
   zonaId: string | null; // feature 24/R4: la zona de la orden se deriva del distrito (carga masiva).
+  // Feature 98 (design §3.3, R2): flag `esCentral` de la zona del distrito, para elegir la
+  // columna del flete (`valorFleteGam` si central) al tarifar la carga por API SIN N+1. `false`
+  // cuando el distrito no resuelve UNA zona (0 o >1 zonas -> `zonaId` null -> no se tarifa).
+  esCentral: boolean;
 }
 
 // Feature 32 — fila proyectada para armar la etiqueta de guia (R1). Trae los
