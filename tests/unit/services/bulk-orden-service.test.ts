@@ -83,6 +83,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findParaAsignabilidad: vi.fn(async () => []),
     findParadasEnReparto: vi.fn(async () => []),
     findCausasDevueltaVigentes: vi.fn().mockResolvedValue(new Map()),
+    // Feature 106: canal integrador (API por key), no ejercitado aqui.
+    listByOwner: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    findDetalleByNumGuiaForOwner: vi.fn().mockResolvedValue(null),
+    cancelarViaApi: vi.fn().mockResolvedValue({ status: "not_found" }),
     // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
     countRechazadasSlaByTienda: vi.fn().mockResolvedValue(0),
     findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),

@@ -963,6 +963,7 @@ enum OrdenHistorialOrigenTipo {
   escalado_devuelta_sla // feature 99: cron SLA, devuelta -> rechazada (escalado; enlaza gestion sintetica)
   reprogramacion_tienda // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
   recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite (accion manual, actor admin)
+  cancelacion_api // feature 106: tienda cancela via API key en_bodega/en_ruta_bodega_principal -> devuelta_origen (marcador motivo="cancelada por tienda")
 
   @@map("orden_historial_origen_tipo")
 }

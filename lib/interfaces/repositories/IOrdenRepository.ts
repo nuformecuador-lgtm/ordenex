@@ -272,6 +272,48 @@ export interface CausaDevueltaVigente {
   fecha: Date;
 }
 
+// Feature 106 — fila liviana de una orden para el canal integrador (API por key). Los
+// campos son los PUBLICOS que el DTO expone (sin `id`, sin `tiendaId` en la salida). El
+// repo la produce ya con `estatusValue` y `montoCobrar` como number (Decimal -> number).
+export interface ApiOrdenRow {
+  numGuia: number | null;
+  numRemision: string;
+  estatusValue: string;
+  destinatario: string;
+  telefonoDest: string;
+  producto: string;
+  direccion: string | null;
+  montoCobrar: number | null;
+  createdAt: Date;
+}
+
+export interface ApiOrdenListResult {
+  items: ApiOrdenRow[];
+  total: number;
+}
+
+// Feature 106 — UNA evidencia de la orden en el detalle. El repo devuelve el `storagePath`
+// CRUDO (el service lo firma y NUNCA lo expone). `resultado` acotado a los dos que llevan
+// evidencia (entregada/rechazada), garantizado por el WHERE de la query.
+export interface ApiOrdenEvidenciaRow {
+  resultado: "entregada" | "rechazada";
+  storagePath: string;
+  contentType: string | null;
+}
+
+export interface ApiOrdenDetalleRow extends ApiOrdenRow {
+  evidencias: ApiOrdenEvidenciaRow[];
+}
+
+// Feature 106 — resultado discriminado de `cancelarViaApi` (sin acoplarse a HTTP):
+//   - `ok`        -> transiciono a `devuelta_origen`; `estadoAnterior` = estado previo real.
+//   - `not_found` -> no existe, borrada, o de otro owner (R23/R24).
+//   - `conflict`  -> estado actual no cancelable (incl. ya `devuelta_origen`); NO se modifico (R20).
+export type CancelarViaApiResult =
+  | { status: "ok"; estadoAnterior: string }
+  | { status: "not_found" }
+  | { status: "conflict"; estadoActual: string };
+
 // Feature 102 (T7, design §5.2) — fila de una orden RECHAZADA POR SLA de la tienda, para la
 // superficie derivada de solo-lectura (dentro de /novedades). Molde de `NovedadOrdenRow`, mas el
 // `numRemision` y el `monto` de 56. `monto` = `ingreso_bodega_rechazo` de la gestion sintetica SLA
@@ -287,6 +329,39 @@ export interface RechazoSlaTiendaRow {
 }
 
 export interface IOrdenRepository {
+  /**
+   * Feature 106/R6/R7/R11: pagina de ordenes cuyo `tienda_id` = `ownerId` (owner FORZADO en
+   * el WHERE, no ampliable desde el input) y no borradas (`deleted_at IS NULL`). Opcional
+   * `estatusId` acota por estado. Devuelve `{ items, total }` para la paginacion offset/limit.
+   */
+  listByOwner(params: {
+    ownerId: string;
+    estatusId?: string;
+    skip: number;
+    take: number;
+  }): Promise<ApiOrdenListResult>;
+  /**
+   * Feature 106/R12/R13/R14/R15/R18: detalle de UNA orden por `num_guia` SOLO si su
+   * `tienda_id` = `ownerId` y no esta borrada; `null` en cualquier otro caso (no existe,
+   * borrada, o de otro owner -> el service lo traduce a 404 uniforme). Incluye las gestiones
+   * con `resultado IN ('entregada','rechazada')` y `evidencia_storage_path` no nulo (evidencias);
+   * `[]` si no hay. LEE `gestion_orden`, nunca escribe.
+   */
+  findDetalleByNumGuiaForOwner(numGuia: number, ownerId: string): Promise<ApiOrdenDetalleRow | null>;
+  /**
+   * Feature 106/R19-R26: cancela UNA orden del owner en una sola transaccion (R25). Pre-lee la
+   * orden por `num_guia` DENTRO de la tx exigiendo `tienda_id = ownerId` y `deleted_at IS NULL`
+   * (R23/R24 -> `not_found`); si su estado NO es cancelable (`en_bodega` /
+   * `en_ruta_bodega_principal`) devuelve `conflict` sin tocar nada (R20). En estado cancelable
+   * hace `UPDATE orden.estatus_id = devueltaOrigenEstatusId` e invoca `appendCambioEstado` con
+   * `origenTipo:'cancelacion_api'` y `motivo:'cancelada por tienda'` en la MISMA tx (R21/R22/R26);
+   * NO escribe en `gestion_orden`.
+   */
+  cancelarViaApi(params: {
+    numGuia: number;
+    ownerId: string;
+    devueltaOrigenEstatusId: string;
+  }): Promise<CancelarViaApiResult>;
   /**
    * Feature 49/#2 (R10/R20): crea la orden y su primera fila de historial (origen null =
    * creacion, destino = estado inicial) en la MISMA transaccion (R7). `historial` aporta el
