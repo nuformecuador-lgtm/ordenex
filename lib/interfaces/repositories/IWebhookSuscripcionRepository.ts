@@ -26,6 +26,16 @@ export interface IWebhookSuscripcionRepository {
   /** R6: crea o actualiza la suscripcion del owner (upsert por `owner_usuario_id`). Reactiva. */
   upsertByOwner(data: WebhookSuscripcionUpsertData): Promise<void>;
   /**
+   * R33 (gate P4): actualiza SOLO la URL de una suscripción existente (y la reactiva),
+   * CONSERVANDO el secreto. No-op si el owner no tiene fila. Editar la URL no rota el secreto.
+   */
+  actualizarUrlByOwner(ownerUsuarioId: string, url: string): Promise<void>;
+  /**
+   * R34 (gate P4): actualiza SOLO el ciphertext del secreto de una suscripción existente
+   * (rotación), CONSERVANDO url/activa. No-op si el owner no tiene fila.
+   */
+  actualizarSecretoByOwner(ownerUsuarioId: string, secret: string): Promise<void>;
+  /**
    * R10/R17/R21/R24: suscripcion ACTIVA del owner, con el ciphertext del secreto para
    * firmar. `null` si no existe o esta inactiva. Uso server-side (entrega), no display.
    */

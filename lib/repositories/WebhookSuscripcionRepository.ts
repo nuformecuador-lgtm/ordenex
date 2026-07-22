@@ -35,6 +35,28 @@ export class WebhookSuscripcionRepository implements IWebhookSuscripcionReposito
     });
   }
 
+  /**
+   * R33 (gate P4): actualiza SOLO la url del owner y REACTIVA, conservando el secreto.
+   * `updateMany` no lanza si no hay fila (no-op). No toca `secret`: editar no rota.
+   */
+  async actualizarUrlByOwner(ownerUsuarioId: string, url: string): Promise<void> {
+    await this.prisma.webhookSuscripcion.updateMany({
+      where: { ownerUsuarioId },
+      data: { url, activa: true },
+    });
+  }
+
+  /**
+   * R34 (gate P4): actualiza SOLO el ciphertext del secreto del owner (rotación),
+   * conservando url/activa. `updateMany` no lanza si no hay fila (no-op).
+   */
+  async actualizarSecretoByOwner(ownerUsuarioId: string, secret: string): Promise<void> {
+    await this.prisma.webhookSuscripcion.updateMany({
+      where: { ownerUsuarioId },
+      data: { secret },
+    });
+  }
+
   /** R10/R17/R21/R24: suscripcion ACTIVA con el ciphertext del secreto. `null` si inactiva. */
   async findActivaByOwner(ownerUsuarioId: string): Promise<WebhookSuscripcionActiva | null> {
     const row = await this.prisma.webhookSuscripcion.findUnique({

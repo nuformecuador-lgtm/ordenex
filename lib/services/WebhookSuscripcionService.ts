@@ -3,6 +3,7 @@ import type {
   IWebhookSuscripcionService,
   RegistrarWebhookInput,
   RegistrarWebhookResult,
+  RotarSecretoResult,
   WebhookSuscripcionVistaDTO,
 } from "@/lib/interfaces/services/IWebhookSuscripcionService";
 import { generarWebhookSecret } from "@/lib/utils/webhook-secret-generator";
@@ -41,7 +42,16 @@ export class WebhookSuscripcionService implements IWebhookSuscripcionService {
       };
     }
 
-    // R7/R32: se genera el secreto en claro, se CIFRA y se persiste SOLO el ciphertext.
+    // R33 (gate P4): editar la URL NO rota el secreto. Si el owner YA tiene suscripcion,
+    // solo se actualiza la URL (se conserva el secreto) y NO se devuelve secreto alguno.
+    // R9: keyed por ownerUsuarioId; nunca se toca la de otro owner.
+    const existente = await this.repo.findByOwner(input.ownerUsuarioId);
+    if (existente) {
+      await this.repo.actualizarUrlByOwner(input.ownerUsuarioId, input.url);
+      return { status: "actualizada" };
+    }
+
+    // ALTA (R7/R32): se genera el secreto en claro, se CIFRA y se persiste SOLO el ciphertext.
     const secretoPlano = this.generarSecreto();
     const secretoCifrado = this.cifrar(secretoPlano);
 
@@ -53,6 +63,24 @@ export class WebhookSuscripcionService implements IWebhookSuscripcionService {
     });
 
     // R7: el secreto en claro sale exactamente UNA vez, aqui. No hay lectura que lo devuelva.
+    return { status: "creada", secret: secretoPlano };
+  }
+
+  /**
+   * R34 (gate P4): rotación explícita del secreto. Requiere una suscripción existente;
+   * genera+cifra un secreto NUEVO (invalida el anterior) y lo devuelve en claro una vez.
+   * R9: keyed por owner. `not_found` si el owner no tiene suscripción.
+   */
+  async rotarSecreto(ownerUsuarioId: string): Promise<RotarSecretoResult> {
+    const existente = await this.repo.findByOwner(ownerUsuarioId);
+    if (!existente) return { status: "not_found" };
+
+    // R7/R32: nuevo secreto en claro -> CIFRA -> persiste SOLO el ciphertext (conserva la URL).
+    const secretoPlano = this.generarSecreto();
+    const secretoCifrado = this.cifrar(secretoPlano);
+    await this.repo.actualizarSecretoByOwner(ownerUsuarioId, secretoCifrado);
+
+    // R7: el secreto en claro sale exactamente UNA vez, aqui.
     return { status: "ok", secret: secretoPlano };
   }
 

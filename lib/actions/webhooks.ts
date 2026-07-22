@@ -19,8 +19,12 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
   registrarWebhookSchema,
   desactivarWebhookSchema,
+  rotarSecretoWebhookSchema,
+  obtenerWebhookSchema,
   type DesactivarWebhookActionResult,
   type RegistrarWebhookActionResult,
+  type RotarSecretoWebhookActionResult,
+  type ObtenerWebhookActionResult,
 } from "@/lib/types/webhook";
 
 /** Solo `maestro` opera las suscripciones (patron `ApiKeyService.ALLOWED_ROLES`). */
@@ -49,8 +53,10 @@ function buildService(): IWebhookSuscripcionService {
 }
 
 /**
- * R5/R6/R7/R9 (D1): registra (o re-registra) la suscripcion de un owner de API key. Autoriza
- * a `maestro`, valida que el owner es rol `apiKey` (D3) y devuelve el secreto en claro UNA vez.
+ * R5/R6/R7/R9/R33 (D1, gate P4): registra (alta) o edita (solo URL) la suscripcion de un
+ * owner de API key. Autoriza a `maestro`, valida que el owner es rol `apiKey` (D3). En el ALTA
+ * devuelve el secreto en claro UNA vez (`creada`); en la EDICIÓN conserva el secreto y NO lo
+ * devuelve (`actualizada`): editar la URL no rota el secreto.
  */
 export async function registrarWebhook(
   input: unknown,
@@ -108,4 +114,60 @@ export async function desactivarWebhook(
   const service = deps.service ?? buildService();
   await service.desactivar(parsed.data.ownerUsuarioId);
   return { status: "ok" };
+}
+
+/**
+ * R34/R9 (D1, gate P4): rota explícitamente el secreto de un owner. Autoriza a `maestro`,
+ * genera+cifra un secreto NUEVO (invalida el anterior) y lo devuelve en claro UNA vez.
+ * `not_found` si el owner no tiene suscripción; `config_error` (R32) si falta la clave.
+ */
+export async function rotarSecretoWebhook(
+  input: unknown,
+  deps: WebhookActionDeps = {},
+): Promise<RotarSecretoWebhookActionResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+  if (actor.rol !== ROL_MAESTRO) return { status: "forbidden" };
+
+  const parsed = rotarSecretoWebhookSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      status: "validation_error",
+      fieldErrors: { ownerUsuarioId: parsed.error.flatten().fieldErrors.ownerUsuarioId },
+    };
+  }
+
+  const service = deps.service ?? buildService();
+  try {
+    return await service.rotarSecreto(parsed.data.ownerUsuarioId);
+  } catch (error) {
+    // R32: sin clave de cifrado no se puede persistir el secreto cifrado.
+    if (error instanceof WebhookSecretKeyError) return { status: "config_error" };
+    throw error;
+  }
+}
+
+/**
+ * R35/R9 (D2, gate D2): lectura de la suscripción para la UI (feature 105). Autoriza a
+ * `maestro` y devuelve `{url, activa}` o `null`. NUNCA expone el secreto (ni cifrado).
+ */
+export async function obtenerWebhook(
+  input: unknown,
+  deps: WebhookActionDeps = {},
+): Promise<ObtenerWebhookActionResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+  if (actor.rol !== ROL_MAESTRO) return { status: "forbidden" };
+
+  const parsed = obtenerWebhookSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      status: "validation_error",
+      fieldErrors: { ownerUsuarioId: parsed.error.flatten().fieldErrors.ownerUsuarioId },
+    };
+  }
+
+  const service = deps.service ?? buildService();
+  const webhook = await service.obtener(parsed.data.ownerUsuarioId);
+  return { status: "ok", webhook };
 }

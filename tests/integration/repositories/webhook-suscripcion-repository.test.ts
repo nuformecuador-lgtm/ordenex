@@ -58,6 +58,45 @@ describe("R6 — upsert por owner", () => {
   });
 });
 
+describe("R33 (gate P4) — actualizarUrlByOwner conserva el secreto", () => {
+  it("actualiza solo la url y reactiva, sin tocar el secreto", async () => {
+    const { prisma, filas } = buildPrisma([
+      { ownerUsuarioId: "o1", url: "https://a", secret: "enc-original", activa: false },
+      { ownerUsuarioId: "o2", url: "https://b", secret: "enc-o2", activa: true },
+    ]);
+    const repo = new WebhookSuscripcionRepository(prisma);
+    await repo.actualizarUrlByOwner("o1", "https://nueva");
+    const o1 = filas.find((f) => f.ownerUsuarioId === "o1")!;
+    expect(o1.url).toBe("https://nueva");
+    expect(o1.secret).toBe("enc-original"); // secreto intacto: editar no rota
+    expect(o1.activa).toBe(true); // reactiva
+    expect(filas.find((f) => f.ownerUsuarioId === "o2")!.url).toBe("https://b"); // R9
+  });
+
+  it("es no-op si el owner no tiene fila", async () => {
+    const { prisma, filas } = buildPrisma();
+    const repo = new WebhookSuscripcionRepository(prisma);
+    await repo.actualizarUrlByOwner("inexistente", "https://x");
+    expect(filas).toHaveLength(0);
+  });
+});
+
+describe("R34 (gate P4) — actualizarSecretoByOwner rota solo el secreto", () => {
+  it("actualiza solo el ciphertext del secreto, conservando url y activa", async () => {
+    const { prisma, filas } = buildPrisma([
+      { ownerUsuarioId: "o1", url: "https://a", secret: "enc-viejo", activa: true },
+      { ownerUsuarioId: "o2", url: "https://b", secret: "enc-o2", activa: true },
+    ]);
+    const repo = new WebhookSuscripcionRepository(prisma);
+    await repo.actualizarSecretoByOwner("o1", "enc-nuevo");
+    const o1 = filas.find((f) => f.ownerUsuarioId === "o1")!;
+    expect(o1.secret).toBe("enc-nuevo"); // invalida el anterior
+    expect(o1.url).toBe("https://a"); // url intacta
+    expect(o1.activa).toBe(true);
+    expect(filas.find((f) => f.ownerUsuarioId === "o2")!.secret).toBe("enc-o2"); // R9
+  });
+});
+
 describe("findActivaByOwner / findByOwner (habilita R21/R24, R7)", () => {
   it("findActivaByOwner devuelve el ciphertext solo si esta activa", async () => {
     const { prisma } = buildPrisma([
