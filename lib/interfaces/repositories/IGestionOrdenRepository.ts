@@ -74,6 +74,19 @@ export interface GestionOrdenData {
   causaDevolucion?: GestionCausaDevolucion | null;
 }
 
+// Feature 100 (design §2.1) — entrada de la REPROGRAMACION por la tienda. Los estatus ya vienen
+// resueltos por el service (`findEstatusIdByValue`): `estatusDevueltaId` como guarda de
+// idempotencia/concurrencia (R7/R21) y `estatusReprogramadaId` como destino (R2). `motivo` es
+// OPCIONAL (gate F1.4-Q1: la fecha es el dato critico). `actorUsuarioId` = el adminTienda (R11).
+export interface ReprogramarDesdeDevueltaInput {
+  ordenId: string;
+  estatusDevueltaId: string; // guarda: solo actua si la orden sigue en `devuelta`
+  estatusReprogramadaId: string; // destino de la transicion
+  fechaReprogramacion: string; // YYYY-MM-DD; se persiste como columna DATE en la gestion
+  motivo: string | null; // OPCIONAL (Q1)
+  actorUsuarioId: string; // R11: el adminTienda que reprograma
+}
+
 export interface IGestionOrdenRepository {
   /**
    * R9/R13: ordenes del mensajero (`mensajero_asignado_id = mensajeroId`), no
@@ -145,20 +158,31 @@ export interface IGestionOrdenRepository {
    * bloqueo 1-a-1, R19). Sin logica de negocio: el service valida propiedad/origen
    * y sube la evidencia ANTES de invocar. Devuelve el id de la gestion creada.
    *
-   * Feature 47/R6/R7/R10/R11: `seguimiento` opcional. Cuando el resultado es `devuelta`,
-   * el service resuelve la transicion de SEGUIMIENTO (destino `en_bodega`/
-   * `en_bodega_satelite` para reintentar, o `rechazada` para escalar) y este metodo la
-   * aplica en la MISMA transaccion, tras registrar la transicion a `devuelta`: un segundo
-   * `orden.update` (limpiando `mensajeroAsignadoId` si `limpiaMensajero`) + un segundo
-   * append por el choke point (actor = null/sistema, `origen_tipo = gestion`). Sin
-   * `seguimiento` (las otras 3 ramas), el metodo se comporta EXACTAMENTE como sin este
-   * parametro (R19). Atomico: si el append de seguimiento falla, revierte todo (R10).
+   * Feature 99 (R1/R29): la rama `devuelta` transiciona la orden a `devuelta` y la DEJA ahi
+   * (SIN transicion de seguimiento inmediata). El reintento a bodega / escalado a `rechazada`
+   * que la feature 47 aplicaba aqui se RELOCALIZO al cron SLA (`DevolucionSlaService`); por
+   * eso este metodo ya no acepta el parametro `seguimiento`. La devolucion se contabiliza como
+   * intento por el append a `devuelta` del choke point (R2).
    */
   crearGestionYTransicionar(input: {
     ordenId: string;
     mensajeroId: string;
     gestion: GestionOrdenData;
     nuevoEstatusId: string;
-    seguimiento?: { destinoEstatusId: string; limpiaMensajero: boolean };
   }): Promise<string>;
+
+  /**
+   * Feature 100 (design §2.1, R2/R3/R5/R11/R20/R21): reprograma UNA orden en `devuelta` a
+   * `reprogramada`. Bajo `prisma.$transaction` (todo-o-nada): (a) UPDATE guardado por
+   * `estatus_id = devuelta` + no borrada -> `reprogramada` (R21); (b) SOLO si afecto una fila,
+   * crea la gestion sintetica `resultado = reprogramada` con `fecha_reprogramacion` y `motivo`
+   * (opcional), atribuida al `mensajero_id` de la ULTIMA gestion `devuelta` VIGENTE de la orden
+   * leida DENTRO de la tx (R5); (c) appendea la transicion via el choke point de la 49
+   * (`actor = adminTienda`, `origen_tipo = reprogramacion_tienda`, enlazando la gestion, R11).
+   * Sin logica de negocio (el service valida rol/tienda/estado y resuelve los estatus). Devuelve
+   * `true` si transiciono; `false` si la orden ya salio de `devuelta` (carrera con el cron SLA de
+   * la 99 / doble submit -> no-op, sin efectos, R7). NO cuenta como intento (destino
+   * `reprogramada`, no `devuelta`, R8) ni genera movimiento de dinero (R10).
+   */
+  reprogramarDesdeDevuelta(input: ReprogramarDesdeDevueltaInput): Promise<boolean>;
 }

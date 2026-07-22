@@ -308,6 +308,45 @@ describe("DataTable", () => {
     expect(screen.queryByText("No hay registros")).not.toBeInTheDocument();
   });
 
+  it("B12: sin `rowClassName` cada fila de datos conserva solo `border-b` (retrocompatible, R8-101/T9)", () => {
+    const columns: Column<Row>[] = [{ id: "nombre", value: "Nombre" }];
+
+    render(<DataTable columns={columns} data={baseData} ariaLabel="T" />);
+
+    const rows = bodyRows();
+    expect(rows).toHaveLength(baseData.length);
+    for (const row of rows) {
+      // La clase base sigue intacta y no se cuela ninguna clase derivada de fila.
+      expect(row).toHaveClass("border-b");
+      expect(row.className.trim()).toBe("border-b");
+    }
+  });
+
+  it("B13: con `rowClassName` la fila recibe la clase derivada sin perder `border-b`; filas que devuelven undefined quedan solo con `border-b` (R8-101/T9)", () => {
+    const columns: Column<Row>[] = [{ id: "nombre", value: "Nombre" }];
+
+    render(
+      <DataTable
+        columns={columns}
+        data={baseData}
+        ariaLabel="T"
+        // Resalta solo "Beto": el predicado por fila devuelve la clase o undefined.
+        rowClassName={(row) => (row.nombre === "Beto" ? "bg-warning/15" : undefined)}
+      />,
+    );
+
+    const rows = bodyRows();
+    const [ana, beto, ceci] = rows;
+    // La fila marcada combina la clase base con la derivada.
+    expect(beto).toHaveClass("border-b");
+    expect(beto).toHaveClass("bg-warning/15");
+    // Las no marcadas (undefined) quedan idénticas al comportamiento previo.
+    expect(ana).not.toHaveClass("bg-warning/15");
+    expect(ceci).not.toHaveClass("bg-warning/15");
+    expect(ana.className.trim()).toBe("border-b");
+    expect(ceci.className.trim()).toBe("border-b");
+  });
+
   it("B11: columnas con id único renderizan sin throw (R4)", () => {
     const columns: Column<Row>[] = [
       { id: "id", value: "ID" },

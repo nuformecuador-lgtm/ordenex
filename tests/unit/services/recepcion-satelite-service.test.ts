@@ -57,6 +57,7 @@ function recepcionRow(overrides: Partial<RecepcionSateliteRow> = {}): RecepcionS
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    prioridad: false, // feature 101/R9: el service propaga este flag al DTO (resalte R8)
     ...overrides,
   };
 }
@@ -93,6 +94,7 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
       porRecibir: [],
       recibidas: [],
       porDevolver: [], // Feature 48/T9/R14: sin zona -> tampoco hay por devolver
+      devueltas: [], // Feature 100/T4.1/R12: sin zona -> tampoco hay por recuperar
       zonaNombre: null,
       sinZona: true,
     });
@@ -114,14 +116,18 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(r.recibidas.map((o) => o.id)).toEqual(["b"]);
     // Feature 48/T9/R14: ninguna fila rechazada -> porDevolver vacio.
     expect(r.porDevolver).toEqual([]);
+    // Feature 100/T4.1/R12: ninguna fila devuelta -> devueltas vacio.
+    expect(r.devueltas).toEqual([]);
     expect(r.sinZona).toBe(false);
     expect(r.zonaNombre).toBe("Limon"); // R9: derivado de orden.zonaId
-    // R4 + R14: consulta acotada a la zona del actor con los TRES estados relevantes
-    // (por recibir, recibidas y las rechazada elegibles para devolver a tienda).
+    // R4 + R14 + Feature 100/R12: consulta acotada a la zona del actor con los CUATRO estados
+    // relevantes (por recibir, recibidas, las rechazada por devolver a tienda y las devuelta
+    // por recuperar a bodega).
     expect(repo.findRecepcionSateliteByZona).toHaveBeenCalledWith(ZONA, [
       "en_ruta_bodega_satelite",
       "en_bodega_satelite",
       "rechazada",
+      "devuelta",
     ]);
   });
 
@@ -145,6 +151,21 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(r.sinZona).toBe(false);
   });
 
+  // Feature 101/R9: el service propaga `prioridad` de la fila del repo al DTO del grupo
+  // "Recibidas" (en_bodega_satelite), donde el frontend resalta la fila (R8).
+  it("R9: propaga `prioridad` de la fila al DTO de recibidas", async () => {
+    const repo = fakeRepo({
+      findRecepcionSateliteByZona: vi.fn(async () => [
+        recepcionRow({ id: "p1", estatusValue: "en_bodega_satelite", prioridad: true }),
+        recepcionRow({ id: "n1", estatusValue: "en_bodega_satelite", prioridad: false }),
+      ]),
+    });
+    const r = await newService(repo).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recibidas.find((o) => o.id === "p1")?.prioridad).toBe(true);
+    expect(r.recibidas.find((o) => o.id === "n1")?.prioridad).toBe(false);
+  });
+
   it("R14: una fila rechazada de la MISMA zona aparece en porDevolver; otros estados NO", async () => {
     const repo = fakeRepo({
       findRecepcionSateliteByZona: vi.fn(async () => [
@@ -164,6 +185,72 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.porDevolver).toEqual([]);
     expect(repo.findRecepcionSateliteByZona).not.toHaveBeenCalled();
+  });
+
+  // Feature 100/T4.1/R12: bucket `devueltas` (devuelta de la zona del adminSatelite),
+  // mismo patron que `porDevolver` (48). La recuperacion a bodega la ejecuta luego
+  // RecuperacionBodegaService; aqui solo el LISTADO acotado por zona.
+  it("R12: clasifica en devueltas las ordenes devuelta de SU zona (y NO en los otros 3 grupos)", async () => {
+    const repo = fakeRepo({
+      findRecepcionSateliteByZona: vi.fn(async () => [
+        recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
+        recepcionRow({ id: "b", estatusValue: "en_bodega_satelite" }),
+        recepcionRow({ id: "r1", estatusValue: "rechazada" }),
+        recepcionRow({ id: "d1", estatusValue: "devuelta" }),
+        recepcionRow({ id: "d2", estatusValue: "devuelta" }),
+      ]),
+    });
+    const r = await newService(repo).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // Las devuelta caen SOLO en devueltas.
+    expect(r.devueltas.map((o) => o.id)).toEqual(["d1", "d2"]);
+    // ... y NO se filtran a los otros buckets (no mezcla).
+    expect(r.porRecibir.map((o) => o.id)).toEqual(["a"]);
+    expect(r.recibidas.map((o) => o.id)).toEqual(["b"]);
+    expect(r.porDevolver.map((o) => o.id)).toEqual(["r1"]);
+  });
+
+  it("R12: una fila devuelta de la MISMA zona aparece en devueltas; otros estados NO", async () => {
+    const repo = fakeRepo({
+      findRecepcionSateliteByZona: vi.fn(async () => [
+        recepcionRow({ id: "d1", estatusValue: "devuelta" }),
+      ]),
+    });
+    const r = await newService(repo).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.devueltas.map((o) => o.id)).toEqual(["d1"]);
+    expect(r.porRecibir).toEqual([]);
+    expect(r.recibidas).toEqual([]);
+    expect(r.porDevolver).toEqual([]);
+  });
+
+  it("R12: adminSatelite sin zona -> devueltas vacio (sin consultar ordenes)", async () => {
+    const repo = fakeRepo({ findUsuarioZonaId: vi.fn(async () => null) });
+    const r = await newService(repo).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.devueltas).toEqual([]);
+    expect(repo.findRecepcionSateliteByZona).not.toHaveBeenCalled();
+  });
+
+  it("R12: la consulta se acota SIEMPRE a la zona del actor -> otra zona no ve sus devueltas", async () => {
+    // El adminSatelite `as1` esta en `z-limon`; otra zona `z-otra` tiene su propia devuelta. El
+    // repo (query real, guardado por `zonaId` en el WHERE) SOLO devuelve las de la zona que se le
+    // pasa; el service llama con la zona del actor, asi que la devuelta de `z-otra` no sale.
+    const porZona: Record<string, RecepcionSateliteRow[]> = {
+      [ZONA]: [recepcionRow({ id: "d-mia", estatusValue: "devuelta" })],
+      "z-otra": [recepcionRow({ id: "d-ajena", estatusValue: "devuelta" })],
+    };
+    const repo = fakeRepo({
+      findRecepcionSateliteByZona: vi.fn(async (zonaId: string) => porZona[zonaId] ?? []),
+    });
+    const r = await newService(repo).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // Solo la devuelta de SU zona; la de otra zona no viaja.
+    expect(r.devueltas.map((o) => o.id)).toEqual(["d-mia"]);
+    expect(repo.findRecepcionSateliteByZona).toHaveBeenCalledWith(
+      ZONA,
+      expect.arrayContaining(["devuelta"]),
+    );
   });
 });
 

@@ -1,100 +1,100 @@
-# impl_99 — Webhooks de cambios de estado para integradores con API key
+# Bitácora de implementación — Feature 99: Devolución diferida + cron SLA (liberar/rechazar) + ingreso de bodega del rechazo
 
-Rama: `feature/99-webhooks-cambios-estado` (desde `origin/dev`). Backend puro (la UI es F100).
+Zona: backend. Rama: `feature/99-devolucion-diferida-sla`. Money-critical, sdd:true.
+Gate F1.4 APROBADO (8 recomendadas + confirmación Q1). Implementa T0–T17.
+
+## Decisiones de implementación no obvias
+- **Option A del dinero (Q1):** `DevolucionSlaRepository.escalarDevueltaSla` crea, en la MISMA tx del escalado, una gestión sintética `resultado=rechazada` (actor sistema, `cierre_id=null`, atribuida al mensajero de la última gestión `devuelta` vigente). Reusa BYTE A BYTE el snapshot de la 56 (`derivarIngresoBodega`/`ingresoBodegaPorResultado`) y el feed de wallet 42/69, sin código monetario nuevo. La gestión sintética NO lleva `montoRecibido` ni `ingresoBodegaRechazo` pre-computados: el ingreso lo deriva el cierre desde `resultado`.
+- **Relocalización de la 47 (Q6/R29):** se retiró el parámetro `seguimiento` de `crearGestionYTransicionar` y su bloque; se eliminó `resolverSeguimientoDevuelta`/`catalogoIncompleto` de `MisAsignacionesService` y **sus deps de constructor** `historial` (contarIntentos) + `zonaRepo` (findCentralZonaId) — ahora el constructor tiene 5 params (repo, ordenRepo, storage, signedUrls, rutaRepo). Actualizados los 6 call-sites (1 factory + 5 test constructions).
+- **Anclaje derivado (Q2):** sin columna `devuelta_at`; la ventana se deriva de `gestion_orden.created_at` + `causa_devolucion` de la última gestión `devuelta` vigente (`findDevueltasSla`). La migración es SOLO el `ALTER TYPE` del enum.
+- **Conteos disjuntos:** `evaluadas` = ventana aún viva (no actúa, R14); `liberadas`/`escaladas`/`omitidas` disjuntos. `omitidas` cubre causa null (R28), fallo por orden (R26) y guarda de estado ya no vigente (R24/R25).
+- **/novedades (Q7):** predicado re-anclado al estado real `estatus = devuelta`; se retiró el parámetro `cerrados` de `count/findDevueltasByTienda` y `ESTATUS_CERRADOS` de `NovedadesService` (código muerto tras el re-anclaje). `findCausasDevueltaVigentes` se conserva (causa/recencia, R9).
+- **Cron reloj CRUDO:** a diferencia de `liberar-reprogramadas` (que pasa por `startOfDayCR`), el cron SLA pasa `now()` sin truncar (ventana rolling en ms, R13).
+- **Choke point completo:** los 2 `origen_tipo` nuevos son los puntos #14/#15 del test de cobertura del choke point (49); NO entran en `ORIGEN_TIPOS_CON_GESTION` (su destino no es `devuelta`, no cuentan como intento).
 
 ## Archivos creados
+- `db/migrations/20260721120000_orden_historial_origen_tipo_sla_devuelta/migration.sql` (T0, `ADD VALUE IF NOT EXISTS` x2)
+- `db/migrations/20260721120000_orden_historial_origen_tipo_sla_devuelta/down.sql` (T0, recrea enum con los 13 previos + USING)
+- `lib/interfaces/repositories/IDevolucionSlaRepository.ts` (T5)
+- `lib/interfaces/services/IDevolucionSlaService.ts` (T5)
+- `lib/repositories/DevolucionSlaRepository.ts` (T6/T7/T8)
+- `lib/services/DevolucionSlaService.ts` (T9)
+- `app/api/cron/procesar-devueltas-sla/route.ts` (T11)
+- `tests/integration/db/orden-historial-origen-tipo-sla-devuelta-migration.test.ts` (T0)
+- `tests/unit/repositories/devolucion-sla-repository.test.ts` (T6/T7/T8)
+- `tests/unit/services/devolucion-sla-service.test.ts` (T9/T10)
+- `tests/unit/services/devolucion-sla-dinero.test.ts` (T15 [💰])
+- `tests/integration/actions/procesar-devueltas-sla-route.test.ts` (T11)
 
-**Migraciones**
-- `db/migrations/20260721120000_job_tipo_webhook_estado/{migration,down}.sql` — enum `job_tipo` += `webhook_estado` (sola, por el 55P04). `down.sql` recrea el tipo sin el valor (Postgres no tiene DROP VALUE), borrando antes las filas `jobs` de ese tipo.
-- `db/migrations/20260721130000_webhook_suscripcion/{migration,down}.sql` — tabla `webhook_suscripcion` (owner_usuario_id único, url, secret cifrado, activa, timestamps, FK a usuario, RLS habilitada sin policies). `down.sql`: DROP TABLE.
+## Archivos modificados (producción)
+- `db/schema.prisma` (T1, enum `OrdenHistorialOrigenTipo` +2 valores)
+- `lib/types/orden-historial.ts` (T1, SEED +2 valores; doc de por qué NO en `ORIGEN_TIPOS_CON_GESTION`)
+- `lib/services/MisAsignacionesService.ts` (T2/T3, elimina seguimiento + 2 deps)
+- `lib/repositories/GestionOrdenRepository.ts` (T3, retira param `seguimiento` + bloque)
+- `lib/interfaces/repositories/IGestionOrdenRepository.ts` (T3, firma sin `seguimiento`)
+- `lib/actions/mis-asignaciones.ts` (T3, factory sin las 2 deps + imports)
+- `lib/services/OrdenHistorialService.ts` (doc: contarIntentos alimenta ahora al cron SLA)
+- `lib/repositories/OrdenRepository.ts` (T13, `novedadWhere` anclado a `devuelta`, sin `cerrados`)
+- `lib/interfaces/repositories/IOrdenRepository.ts` (T13, firmas sin `cerrados`)
+- `lib/services/NovedadesService.ts` (T14, sin `ESTATUS_CERRADOS`)
+- `vercel.json` (T12, cron `0 * * * *`)
 
-**Config / crypto / utils / types**
-- `lib/config/webhook.ts` — `loadWebhookConfig()`; ausente/"" → defaults, `WEBHOOK_SECRET_ENC_KEY` → null, nunca lanza.
-- `lib/crypto/webhook-firma.ts` — `firmarWebhook` HMAC-SHA256 sobre `${ts}.${cuerpo}` + `cabecerasFirma`.
-- `lib/crypto/webhook-secret-cipher.ts` — AES-256-GCM `cifrarSecreto`/`descifrarSecreto`, formato `v1:<iv>:<tag>:<ct>`, `WebhookSecretKeyError` recuperable.
-- `lib/utils/webhook-secret-generator.ts` — `generarWebhookSecret` (`ordx_whsec_` + 256 bits).
-- `lib/types/webhook-eventos.ts` — `EVENTOS_PUBLICOS` (política D3) + `esEventoPublico`.
-- `lib/types/webhook.ts` — schemas zod + tipos de resultado de la Server Action.
+## Archivos modificados (tests invertidos, R30 — invertidos, NO aflojados)
+- `tests/unit/services/mis-asignaciones-service.test.ts` (47 invertida: devolver → queda en `devuelta`, sin seguimiento; constructor 5 args)
+- `tests/unit/services/mis-asignaciones-causa-devolucion.test.ts` (constructor 5 args; `seguimiento` ya no definido)
+- `tests/unit/services/mis-asignaciones-orden-ruta.test.ts` (constructor 5 args)
+- `tests/unit/repositories/gestion-orden-repository.test.ts` (seguimiento block invertido: UNA transición/append)
+- `tests/unit/services/NovedadesService.test.ts` (89 invertida: sin `cerrados`)
+- `tests/unit/repositories/orden-repository.novedades.test.ts` (89 invertida: predicado `estatus = devuelta`)
+- `tests/unit/types/orden-historial-types.test.ts` (conjunto cerrado 13 → 15)
+- `tests/unit/repositories/orden-historial-cobertura.test.ts` (choke point 13 → 15 puntos: #14/#15 del cron)
+- `tests/integration/db/gestion-orden-anulacion-migration.test.ts` (set "añadidos después del 67" +2)
+- `tests/integration/db/zonas-migration.test.ts` (exclusión de la migración apéndice de la 99)
 
-**Cliente de entrega**
-- `lib/interfaces/external/IWebhookSender.ts` + `lib/clients/webhook-sender.ts` — POST con `fetch` inyectable + `AbortSignal.timeout`; traduce HTTP a `WebhookOutcome` (ok | transitorio), sin URL/cuerpo en el detalle.
-
-**Repositorios**
-- `lib/interfaces/repositories/IWebhookSuscripcionRepository.ts` + `lib/repositories/WebhookSuscripcionRepository.ts` — upsertByOwner, findActivaByOwner (ciphertext), findByOwner (sin secreto), desactivarByOwner, ownerEsApiKey.
-- `lib/interfaces/repositories/IWebhookOrdenReader.ts` + `lib/repositories/WebhookOrdenReader.ts` — findDatosEntrega (orden + value del destino).
-
-**Servicios / handler / emisión**
-- `lib/interfaces/services/IWebhookSuscripcionService.ts` + `lib/services/WebhookSuscripcionService.ts` — registro: valida URL https (R5), genera+cifra secreto, upsert (R6), retorna secreto una vez (R7), baja (R8), aislamiento por owner (R9).
-- `lib/services/WebhookEstadoService.ts` — handler de entrega (zod, orden borrada→completa, sin sub→completa, descifra→firma→entrega, 2xx→complete, transitorio→lanza con detalle).
-- `lib/services/jobs/webhook-estado-handler.ts` — `crearWebhookEstadoHandler` + `buildWebhookEstadoService`.
-- `lib/services/jobs/webhook-estado-encolado.ts` — `EVENTOS_PUBLICOS` filter + §5 resolución (owner suscrito activo Y rol apiKey) + `dedupeKeyWebhookEstado` (con instante, obligatorio) + `MAX_INTENTOS_WEBHOOK=5` + `emisorWebhookEstadoReal`.
-
-**Controller (Server Action, D1)**
-- `lib/actions/webhooks.ts` — `registrarWebhook`/`desactivarWebhook` autorizadas a `maestro`, guard de owner rol apiKey (D3), secreto una vez; `config_error` si falta la clave de cifrado.
-
-## Archivos modificados
-- `db/schema.prisma` — `model WebhookSuscripcion`, enum `webhook_estado`, relación inversa en `Usuario`.
-- `lib/repositories/registrar-cambio-estado.ts` — choke point: `tx` ensanchado a `OrdenHistorialTxClient & JobTxClient`, emisor inyectable con default real; emite en la MISMA tx tras el append (outbox, R10/R11/R16).
-- `lib/repositories/OrdenHistorialRepository.ts` + `lib/interfaces/repositories/IOrdenHistorialRepository.ts` — `registrarCambioEstado` widen del `tx` (delegación al choke point).
-- `app/api/cron/procesar-jobs/route.ts` — `handlers.set("webhook_estado", …)` en `buildHandlers` (NO en `buildRecurrencias`; `vercel.json` intacto).
-- Tests existentes ajustados por el nuevo comportamiento del choke point / registro de handlers:
-  - `tests/unit/api/procesar-jobs-registro.test.ts` y `tests/integration/api/procesar-jobs-geocodificacion.test.ts` — el set exacto de handlers ahora incluye `webhook_estado`.
-  - `tests/unit/repositories/orden-repository.{asignacion,recepcion}-satelite.test.ts` — el choke point emite una sonda de elegibilidad EN LA MISMA tx (una `$queryRaw` extra, no-op sin owners suscritos); se relajó la aserción de conteo exacto de `$queryRaw`.
-  - `tests/integration/db/zonas-migration.test.ts` — las dos migraciones nuevas añadidas a la whitelist de "apendidas después".
-
-## Mapa R<n> → test
-
+## Mapa R → test
 | R | Test |
 | --- | --- |
-| R1 | tests/integration/db/webhook-suscripcion-migracion.test.ts — "R1 — tabla webhook_suscripcion" |
-| R2 | webhook-suscripcion-migracion.test.ts — "R2 — RLS de la tabla" |
-| R3 | webhook-suscripcion-migracion.test.ts — "R3 — catalogo de tipos de job" |
-| R4 | tests/integration/db/webhook-suscripcion-rollback.test.ts — "R4 — el rollback…" |
-| R5 | tests/unit/services/webhook-suscripcion-service.test.ts — "R5 — validacion de URL" |
-| R6 | webhook-suscripcion-service.test.ts "R6" + tests/integration/repositories/webhook-suscripcion-repository.test.ts "R6 — upsert por owner" |
-| R7 | webhook-suscripcion-service.test.ts "R6/R7/R32" + webhook-suscripcion-repository.test.ts "findByOwner … NUNCA proyecta el secreto" |
-| R8 | webhook-suscripcion-service.test.ts "R8 — baja" + webhook-suscripcion-repository.test.ts "R8 — desactivarByOwner" |
-| R9 | webhook-suscripcion-service.test.ts "R9 — aislamiento por owner" + tests/unit/actions/webhooks-action.test.ts (autorización maestro) |
-| R10 | tests/integration/repositories/orden-webhook-enqueue.test.ts — "R10" |
-| R11 | orden-webhook-enqueue.test.ts — "R11 — si el cambio de estado falla no queda job huerfano" |
-| R12 | orden-webhook-enqueue.test.ts — "R12 — solo owner rol apiKey con suscripcion activa" + webhook-estado-encolado.test.ts "R12" |
-| R13 | tests/unit/services/webhook-estado-encolado.test.ts — "R13/R27 — payload minimo…" |
-| R14 | webhook-estado-encolado.test.ts — "R14 — dedupeKey por evento unico" |
-| R15 | webhook-estado-encolado.test.ts — "R15 — politica EVENTOS_PUBLICOS" |
-| R16 | orden-webhook-enqueue.test.ts — "R16 — transiciones por dos mecanismos encolan por igual" |
-| R17 | tests/unit/services/webhook-estado-service.test.ts — "R17/R19 — entrega y complete" |
-| R18 | tests/unit/crypto/webhook-firma.test.ts — "R18 — firma HMAC-SHA256…" (+ verificación de firma en webhook-estado-service.test.ts) |
-| R19 | webhook-estado-service.test.ts — "una respuesta 2xx completa el job" |
-| R20 | webhook-estado-service.test.ts — "R20/R31 — transitorio -> lanza…" |
-| R21 | webhook-estado-service.test.ts — "R21 — sin suscripcion activa" |
-| R22 | webhook-estado-service.test.ts — "R22 — orden inexistente o borrada" |
-| R23 | webhook-estado-service.test.ts — "R23 — idempotencia" |
-| R24 | webhook-estado-service.test.ts — "R24 — aislamiento por owner" |
-| R25 | orden-webhook-enqueue.test.ts — "R25 — con dos owners suscritos…" |
-| R26 | tests/integration/api/procesar-jobs-webhook-estado.test.ts — "R26 — el drenador resuelve el handler…" |
-| R27 | webhook-estado-encolado.test.ts — "R13/R27 — … maxIntentos=5" |
-| R28 | tests/unit/config/webhook-config.test.ts — "R28 — config ausente/vacia -> defaults sin lanzar" |
-| R29 | webhook-estado-service.test.ts "R29 — logs sin secreto/URL/PII" + webhook-sender.test.ts "R29 — el detalle de error nunca contiene la URL ni el cuerpo" |
-| R30 | webhook-estado-service.test.ts — "R30 — payload invalido" |
-| R31 | webhook-estado-service.test.ts "R20/R31" + procesar-jobs-webhook-estado.test.ts "un fallo transitorio persiste last_error via fail" |
-| R32 | tests/unit/crypto/webhook-secret-cipher.test.ts (round-trip + clave ausente + integridad) + webhook-estado-service.test.ts "R32 — clave de cifrado ausente" + webhook-suscripcion-service.test.ts "R6/R7/R32" |
+| R1 | mis-asignaciones-service.test.ts «R1: devolver transiciona a devuelta… no seguimiento»; gestion-orden-repository.test.ts «R1/R29: devuelta → UN solo update/append» |
+| R2 | gestion-orden-repository.test.ts «R1/R29» (append en_reparto→devuelta, origen_tipo gestion); orden-historial-service.test.ts (contarIntentos cuenta destino devuelta) |
+| R3 | orden-historial-service.test.ts (contarIntentos derivado); devolucion-sla-service.test.ts (usa contarIntentos en not_found) |
+| R4 | mis-asignaciones-causa-devolucion.test.ts (causa en GestionOrdenData); gestion-orden-repository.test.ts «R11: devuelta con causa» |
+| R5 | devolucion-sla-repository.test.ts «R5: findDevueltasSla deriva causa/ancladaAt/mensajero» |
+| R6 | devolucion-sla-service.test.ts (not_found 24h / wrong_* 5d rolling); procesar-devueltas-sla-route.test.ts (schedule `0 * * * *`) |
+| R7 | orden-repository.novedades.test.ts «R7/R8 predicado estatus=devuelta»; NovedadesService.test.ts |
+| R8 | orden-repository.novedades.test.ts «R8 (no doble conteo): sin gestiones.some ni notIn»; NovedadesService.test.ts «R8 mismo universo» |
+| R9 | NovedadesService.test.ts «R10 causa al DTO» (findCausasDevueltaVigentes) |
+| R10 | procesar-devueltas-sla-route.test.ts «R10: 401 sin/ mal secreto, sin construir service» |
+| R11 | procesar-devueltas-sla-route.test.ts «R12/R11 sin PII» + «R11 error sin secreto» |
+| R12 | procesar-devueltas-sla-route.test.ts «R12/R11: 200 con {evaluadas,liberadas,escaladas,omitidas}» |
+| R13 | devolucion-sla-service.test.ts «R13 misma orden viva/vencida»; procesar-devueltas-sla-route.test.ts «R13 reloj crudo» |
+| R14 | devolucion-sla-service.test.ts «R14 not_found viva → evaluada» |
+| R15 | devolucion-sla-service.test.ts «R15 <umbral → reintento» (+ zona central/satélite); devolucion-sla-repository.test.ts «liberar» |
+| R16 | devolucion-sla-service.test.ts «R16 >=umbral → escala» |
+| R17 | devolucion-sla-service.test.ts «R17 wrong_number/wrong_address → rechazo directo, sin conteo» |
+| R18 | devolucion-sla-repository.test.ts (append por choke point en liberar/escalar); orden-historial-cobertura.test.ts (#14/#15) |
+| R19 | devolucion-sla-repository.test.ts (origen_tipo liberacion/escalado_devuelta_sla, actor null); migration + types test |
+| R20 [💰] | devolucion-sla-repository.test.ts «R20/R22 gestión sintética rechazada»; devolucion-sla-dinero.test.ts (snapshot 56 cobra) |
+| R21 [💰] | devolucion-sla-repository.test.ts «R21/R24/R25 2.ª corrida no crea 2.ª gestión»; devolucion-sla-dinero.test.ts (idempotencia = del repo) |
+| R22 [💰] | devolucion-sla-repository.test.ts (mensajeroId de la gestión devuelta); devolucion-sla-service.test.ts «R22 atribución + motivo» |
+| R23 [💰] | devolucion-sla-dinero.test.ts (STRING escala 2, Decimal, sin tarifa → 0.00); devolucion-sla-repository.test.ts (sin montoRecibido/ingreso coercionado) |
+| R24 | devolucion-sla-repository.test.ts (liberar/escalar count 0 → false); devolucion-sla-service.test.ts «R24/R25» |
+| R25 | devolucion-sla-repository.test.ts (updateMany guardado por estado); devolucion-sla-service.test.ts «R24/R25» |
+| R26 | devolucion-sla-service.test.ts «R26 una orden que lanza no aborta» |
+| R27 | devolucion-sla-service.test.ts «R27 catálogo incompleto → 0 + warn» |
+| R28 | devolucion-sla-service.test.ts «R28 causa null → omitida»; devolucion-sla-repository.test.ts (row causa null sale) |
+| R29 | mis-asignaciones-service.test.ts «R29 no deriva bodega»; devolucion-sla-service.test.ts (capacidad en el cron); orden-historial-cobertura.test.ts |
+| R30 | suite 47 invertida (mis-asignaciones-service / gestion-orden-repository) + 89 invertida (NovedadesService / orden-repository.novedades) |
+| migración | orden-historial-origen-tipo-sla-devuelta-migration.test.ts + ROUND-TRIP real (abajo) |
 
-Los 32 requisitos con test concreto. Ninguno huérfano.
+## Verificación medida
+- **`pnpm typecheck`:** 0 errores (baseline previo también 0 → 0 nuevos).
+- **`pnpm lint`:** 0 errores, 143 warnings — TODOS preexistentes en archivos NO tocados por la 99 (ninguno en archivos de la feature).
+- **`pnpm test`:** 397 archivos / 3950 tests PASSED (baseline 392/3917 → +5 archivos, +33 tests de la 99). 0 fallos.
+- **Round-trip real de la migración (localhost:5432, DB `ordenex`, no compartida):**
+  - UP (`prisma migrate deploy`): enum con los 2 valores → assert-present OK.
+  - DOWN (`pnpm db:rollback` = down.sql): enum recreado SIN los 2 valores → assert-absent OK.
+  - UP de nuevo (`prisma migrate deploy`): enum con los 2 valores → assert-present OK; `migrate status` = "Database schema is up to date".
+  - Sin tocar datos (ADD VALUE + recreación de enum con los mismos valores; ninguna fila cambia).
 
-## Verificación
-
-- `pnpm typecheck` → **exit 0** (limpio).
-- `pnpm test` (suite completa) → **2 failed | 3990 passed (3992)**. Los 2 fallos son ambos `tests/components/HomePageRol.test.tsx` (render RSC del home por rol): **pre-existentes y ambientales** (ya fallaban en el baseline de `origin/dev` medido antes de tocar nada, por timeout/aislamiento de jsdom bajo carga); NO tocan nada de esta feature (home page/auth). Todos los tests de la feature 99 y las regresiones del choke point: verdes.
-- Los archivos de test de la feature 99 (15 archivos) corren verdes de forma aislada y dentro de la suite.
-- `db:migrate`/`db:rollback` reales NO se ejecutaron contra la DB compartida de Supabase (precedente 91/92): el SQL up/down se cubre con tests estáticos y el round-trip real es paso de deploy.
-
-## NOTA PARA EL DEPLOY
-Hay que setear **`WEBHOOK_SECRET_ENC_KEY`** en Vercel (clave AES-256-GCM de 32 bytes en base64 o hex) para que la entrega pueda firmar. Sin ella la config NO lanza (R28), pero cada job de entrega falla de forma recuperable (backoff) y espera a que la clave esté puesta; el secreto NUNCA se loguea. Opcionales: `WEBHOOK_TIMEOUT_MS` (default 10000), `WEBHOOK_REPLAY_WINDOW_S` (default 300). Nota: `.env.example` está gitignored en este repo — las tres entradas se documentan aquí; añadirlas al `.env.example` local no se commitea.
-
-## Seguimientos anotados (design §11, fuera de alcance)
-1. Purga de `jobs` (las filas `done` de `webhook_estado` crecen sin límite; con dedupeKey por instante es correcto pero no gratuito). Desbloqueo: política de retención de la cola.
-2. Endurecimiento SSRF del sender (bloquear loopback/rangos privados). Desbloqueo: requisito de seguridad explícito.
-3. Reintentos configurables por cliente + panel de entregas (tabla de entregas por-orden). Desbloqueo: pedido de producto.
-4. N endpoints por owner (quitar el @unique + grano). Desbloqueo: pregunta abierta 1.
-5. Rotación de `WEBHOOK_SECRET_ENC_KEY` (el prefijo `v1:` del ciphertext deja la puerta abierta). Desbloqueo: procedimiento de rotación.
-6. **F100** (UI de registro en Configuración > API) ya está registrada como feature hermana (D4); consume `lib/actions/webhooks.ts`. Coordinar, no re-registrar.
+## Veredicto
+Feature 99 implementada (T0–T15) con typecheck/lint limpios, suite completa verde (incl. tests invertidos de 47 y 89) y round-trip real de la migración up→down→up verificado; pendiente T17 (aprobación humana + `feature_list.json` → done, que NO toco).

@@ -5,14 +5,12 @@ import type {
   MiAsignacionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type {
   IRutaOptimizadaRepository,
   RutaOptimizadaDTO,
 } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
-import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 // Feature 92 (R28/R29) — el ORDEN de las cards, resuelto en el SERVICE.
@@ -90,8 +88,6 @@ function build(rows: MiAsignacionRow[], rutaPrevia: RutaOptimizadaDTO | null) {
     { findEstatusIdByValue: vi.fn(async () => "x") } as unknown as IOrdenRepository,
     {} as IFileStorage,
     {} as ISignedUrlProvider,
-    { contarIntentos: vi.fn(async () => 0) } as Pick<IOrdenHistorialService, "contarIntentos">,
-    { findCentralZonaId: vi.fn(async () => "z") } as Pick<IZonaRepository, "findCentralZonaId">,
     rutaRepo,
   );
 }

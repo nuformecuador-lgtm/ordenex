@@ -1679,3 +1679,75 @@
   geocodificación en asignación (R9). Backend chico: `MiAsignacionDTO` expone lat/lng (feature 91).
 - Leaflet cargado con `next/dynamic` `ssr:false`. `pnpm build` exit 0. **PR #110**, **desplegada a
   prod (PR #117)**.
+
+## 2026-07-21 — devolución diferida + cron SLA de novedades (feature 99, BACKEND, money-critical)
+- Motor del nuevo flujo de devolución. La orden devuelta ya NO se re-rutea de inmediato (feature
+  47): cuenta como intento y QUEDA en `devuelta` (entra a /novedades). Un cron horario
+  (`/api/cron/procesar-devueltas-sla`, `0 * * * *`, auth `CRON_SECRET`) procesa las vencidas sin
+  resolver: not_found 24h con intentos<3 → libera a la bodega dueña (`en_bodega`/
+  `en_bodega_satelite` por zona, sin mensajero); not_found 3er intento tras 24h → `rechazada`;
+  wrong_number/wrong_address al día 6 → `rechazada`. Ventanas rolling en hora CR, ancladas a la
+  última gestión `devuelta` vigente (SIN columna `devuelta_at`).
+- Requisitos R1–R30 (mapa R→test en `progress/impl_99.md`). Migración: SOLO ALTER del enum
+  `orden_historial_origen_tipo` (+`liberacion_devuelta_sla`/`escalado_devuelta_sla`) con `down.sql`
+  que recrea el tipo; round-trip real verificado en DB desechable.
+- **DINERO (Option A, gate F1.4-Q1):** al escalar, el cron crea una gestión SINTÉTICA
+  `resultado=rechazada` (actor sistema, `cierre_id null`, mensajero de la última devuelta) en la
+  misma tx → el snapshot de la 56 y la wallet 42/69 cobran el ingreso de bodega SIN código
+  monetario nuevo. De paso cierra un hueco preexistente de la 47 (los escalados no generaban
+  ingreso: `ingreso-bodega.ts:23` da 0.00 para `resultado !== rechazada`). Verificado POR MUTACIÓN
+  por el reviewer.
+- Reconcilia la 47 (relocaliza `resolverSeguimientoDevuelta` al cron; tests INVERTIDOS al sentido
+  nuevo, no aflojados) y /novedades 89 (predicado ancla a `estatus = devuelta`; tests invertidos).
+  Todas las transiciones por el choke point `appendCambioEstado` (49); los 2 `origen_tipo` nuevos NO
+  cuentan como intento (destino ≠ `devuelta`).
+- Gate F1.4 aprobado por el humano (las 8 recomendadas + confirmación Q1). Ciclo SDD directo del
+  leader (spec_author → backend_dev → reviewer, `model:opus`). **Reviewer APROBADO 0 bloqueantes.**
+  Medido (implementer + reviewer + leader, independiente): typecheck 0, lint 0, **3950/3950 tests**,
+  round-trip real. Base de 100/101/102. **DEUDA ajena:** `./init.sh` rojo por bug preexistente del
+  harness (`login` sin `specs/login/`), medido idéntico en HEAD limpio — no es de esta feature.
+
+## 2026-07-22 — resolver la novedad: reprogramar (tienda) / recuperar a bodega (feature 100, FULLSTACK)
+- Dos acciones MANUALES que RESUELVEN una novedad y sacan la orden de `devuelta` antes de que venza
+  su ventana SLA (la feature 99 la salta, porque su cron solo actúa sobre las que siguen en
+  `devuelta`). (1) **Reprogramar** (adminTienda, en `/novedades`): tras contactar al cliente,
+  reprograma a la fecha que pida; gestión sintética `resultado=reprogramada` + `fecha_reprogramacion`
+  (`origen_tipo=reprogramacion_tienda`) que reusa INTACTO el bloqueo/liberación de la 46. (2)
+  **Recuperar a bodega** (bodega dueña: maestro/admin en `/ordenes`, adminSatelite en
+  `/recepcion-satelite`): pasa la orden a `en_bodega`/`en_bodega_satelite` por zona, sin mensajero,
+  para un nuevo intento (`origen_tipo=recuperacion_manual`, actor=admin).
+- Requisitos R1–R24 (mapa R→test en `progress/impl_100.md`). Migración: solo ALTER del enum
+  `orden_historial_origen_tipo` (+`reprogramacion_tienda`/`recuperacion_manual`) con `down.sql`;
+  round-trip real verificado por el reviewer (up→down→up). Grupo nuevo `devueltas` en
+  `RecepcionSateliteService.listar` (patrón del `porDevolver` de la 48).
+- Gate F1.4 aprobado por el humano (las 5 recomendadas + bonus): Q1 reprogramar money-neutral y sin
+  contar intento; Q2 recuperar limpia mensajero; Q3 authz server-side (tienda dueña /
+  `esBodegaResponsable`); Q4 sin abrir `/novedades` a la bodega; Q5 sin carrera con el cron 99
+  (UPDATE guardado por `estatus_id=devuelta`, `if count>0`). **Bonus:** NO enciende `orden.prioridad`
+  (es la feature 101).
+- Ciclo SDD directo del leader (spec_author → backend_dev ×2 → frontend_dev → reviewer). **Reviewer
+  APROBADO de código** (RECHAZADO inicial SOLO por `impl_100.md` ausente, ya escrito; sin cambios de
+  código; money-neutralidad y authz verificadas de forma adversarial, sin fuga de `prioridad`).
+  Medido: typecheck 0, lint 0, **4039/4039 tests**, round-trip real. Base para 101 (prioridad) y 102
+  (dinero en cierres). `./init.sh` rojo solo por la deuda ajena preexistente del harness (`login`).
+
+## 2026-07-22 — prioridad de reasignación de las órdenes liberadas por SLA (feature 101, FULLSTACK)
+- Nueva columna `orden.prioridad` (bool, default false). El cron SLA de la feature 99 la **enciende**
+  al liberar una devolución vencida `not_found` a la bodega (`DevolucionSlaRepository.liberarDevueltaSla`),
+  y se **apaga** al reasignar mensajero desde la bodega dueña (`asignarBodegaLote` central /
+  `asignarSateliteLote` satélite). Los listados de reasignación de la bodega dueña ordenan
+  `prioridad DESC` primero y el frontend **resalta la fila** (fondo `bg-warning/15` + badge accesible
+  "Prioritaria") en el apartado `en_bodega` de `/ordenes` (maestro/admin) y el grupo "Recibidas" de
+  `/recepcion-satelite` (adminSatelite).
+- Requisitos R1–R12 (mapa R→test en `progress/impl_101-prioridad-reasignacion.md`). Migración aditiva
+  (`ADD COLUMN` NOT NULL DEFAULT false) con `down.sql` (DROP COLUMN); round-trip real verificado por el
+  reviewer. El escalado y la recuperación manual (100) NO encienden prioridad (R3, test negativo).
+  Sin backfill (R11). El resalte NO se filtra a /novedades ni "Devueltas" (R10, test). Helper compartido
+  `components/shared/PrioridadResalte.tsx`; `DataTable` gana la prop opcional retrocompatible `rowClassName`.
+- Gate F1.4 aprobado por el humano (las 5 recomendadas + prop `rowClassName`). Ciclo directo del leader
+  (spec_author → backend_dev → frontend_dev → reviewer). El `frontend_dev` cayó por límite de sesión a
+  mitad de tarea; el leader retomó y cerró el frontend restante (test R10 de no-fuga, helper aislado,
+  test de migración). **Reviewer APROBADO de código** (RECHAZADO inicial solo por artefactos de
+  trazabilidad, ya cerrados; sin cambios de código de dominio). Medido: typecheck 0, lint 0,
+  **4050/4050 tests**, round-trip real. `./init.sh` rojo solo por la deuda ajena preexistente del
+  harness. Base de la feature 102 (dinero de estos rechazos visible en cierres — pendiente, para mañana).

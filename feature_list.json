@@ -1087,33 +1087,33 @@
       "id": 99,
       "name": "devolucion diferida: la orden se queda en `devuelta` + cron SLA (liberar/rechazar) con ingreso de bodega del rechazo",
       "description": "Motor del nuevo flujo de devolucion. Difiere la transicion de seguimiento de la feature 47 (hoy inmediata en la tx de gestionar), CONSERVANDO su contador de intentos: al devolver, la orden cuenta como intento y QUEDA en `devuelta`, anclando la ventana con su causa (feature 73) y el timestamp de devolucion. Un cron (patron liberar-reprogramadas/46) procesa las ordenes en `devuelta` cuya ventana vencio SIN resolverse: not_found (24h) con intentos<umbral(3) -> en_bodega/en_bodega_satelite por zona, sin mensajero (nuevo intento); not_found en el 3er intento, tras 24h -> `rechazada`; wrong_number/wrong_address -> `rechazada` al dia 6. Todas las transiciones por el choke point appendCambioEstado (49). Money-critical: la transicion a `rechazada` registra el ingreso de bodega por rechazo (feature 56) de forma consistente con el cierre/wallet, ya que aca no hay gestion `rechazada` del mensajero. Reconcilia /novedades (87/89) al estado real `devuelta`. Requiere migracion (anclaje de la ventana) + cron nuevo. Base de 100/101/102.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/99-devolucion-diferida-sla",
       "depends_on": null
     },
     {
       "id": 100,
       "name": "resolver la novedad: reprogramar (tienda) o recuperar a bodega (bodega dueña)",
       "description": "Acciones manuales que RESUELVEN una novedad y sacan la orden de `devuelta` antes de que venza su ventana (detienen el cron de la 99). En /novedades, ademas de contactar (llamar/WhatsApp, feature 87), la tienda puede REPROGRAMAR la orden a la fecha que pida el cliente (reusa la transicion `reprogramada`/fecha_reprogramacion de la 46). La bodega dueña puede RECUPERAR la orden -> `en_bodega`/`en_bodega_satelite` por zona (nuevo intento), sacandola de novedades y reiniciando el flujo. Autorizacion por rol (tienda la suya; bodega su zona); transiciones por appendCambioEstado (49).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
-      "branch": null,
+      "branch": "feature/100-resolver-novedad",
       "depends_on": 99
     },
     {
       "id": 101,
       "name": "prioridad de reasignacion de las ordenes liberadas por SLA",
       "description": "Nuevo `orden.prioridad` (bool, default false) que el cron de la 99 enciende al liberar una orden a bodega por vencimiento (not_found). En el listado de REASIGNACION de la bodega dueña de la orden (maestro/admin para la bodega central, adminSatelite para su zona), las ordenes prioritarias se ordenan primero y el frontend resalta su fila (color llamativo). Ciclo de vida a definir en el gate (se apaga al reasignar). Migracion aditiva (orden.prioridad).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "fullstack",
-      "branch": null,
+      "branch": "feature/101-prioridad-reasignacion",
       "depends_on": 99
     },
     {
@@ -1126,6 +1126,42 @@
       "zone": "fullstack",
       "branch": null,
       "depends_on": 99
+    },
+    {
+      "id": 103,
+      "name": "api - devolver el costoEnvio (flete+IVA) en la carga por API",
+      "spec_path": "specs/103-api-carga-valor-pagar",
+      "description": "Registrada 2026-07-21 (pedido del humano: 'al cargar debe ... retornar la respuesta junto con el valor a pagar'). NOTA DE COLISION: se registro primero como id 98, pero sesiones paralelas commitearon a origin/dev las features 98-102 durante esta sesion; se renumero a 103. La RAMA DE CODIGO conserva su slug original `feature/98-api-carga-valor-pagar` (ya pusheada, ae651b7) y el impl vive en `progress/impl_98.md` de esa rama; el spec se movio a `specs/103-api-carga-valor-pagar`. ALCANCE: extiende la carga por API de la feature 88; por cada orden creada devuelve `costoEnvio` = flete + IVA del flete, reusando `derivarIngresoOrden`/`aplicarPorcentaje` (lib/utils/ingreso-ordenex.ts) y la tarifa vigente por tienda (TarifaVigentePorTiendaRepository), columna `valorFleteGam` si la zona es central si no `valorFlete`; resuelta una vez por lote (sin N+1). Tienda sin tarifa vigente -> costoEnvio '0.00' (la orden se crea igual, sin error/null). Money-safe STRING escala 2 ROUND_HALF_UP. Sin migracion. GATE F1.4 APROBADO por el humano 2026-07-21 (D1 costoEnvio 0.00 sin tarifa; D2 flete+IVA; D3 campo costoEnvio). Backend puro. Implementada, tests en verde (3935/3935), pusheada; pendiente PR hacia dev. DEPENDE de la 88.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/98-api-carga-valor-pagar",
+      "depends_on": 88
+    },
+    {
+      "id": 104,
+      "name": "webhooks de cambios de estado para integradores con API key",
+      "spec_path": "specs/104-webhooks-cambios-estado",
+      "description": "Registrada 2026-07-21 (pedido del humano: 'ademas deben registrarse para que el webhook pueda emitir los cambios de estado'). NOTA DE COLISION: se registro primero como id 99, renumerada a 104 porque origin/dev ya tenia las features 98-102 de sesiones paralelas. La RAMA DE CODIGO conserva su slug `feature/99-webhooks-cambios-estado`; el spec se movio a `specs/104-webhooks-cambios-estado`. ALCANCE (backend puro; la UI es la 105): tabla webhook_suscripcion (url + secreto CIFRADO AES-256-GCM, por owner, RLS), nuevo JobTipo `webhook_estado`, emision transactional-outbox desde el choke point appendCambioEstado (feature 49) SOLO para ordenes de owner con suscripcion activa (owner = usuario dedicado de la api key -> sus ordenes son las cargadas por API), entrega POST firmada (HMAC-SHA256) via la cola de jobs (feature 90) con maxIntentos=5, Server Action de registro (rol maestro). 32 requisitos. GATE F1.4 APROBADO 2026-07-21 (D1 UI en Config>API -> nace 105; D2 secreto cifrado; D3 solo ordenes cargadas por API + EVENTOS_PUBLICOS; D5 5 reintentos; R31 persistir desenlace via jobs.last_error). REQUIERE `WEBHOOK_SECRET_ENC_KEY` en Vercel al desplegar. En implementacion (backend_dev). DEPENDE de la 90 y la 88.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "backend",
+      "branch": "feature/99-webhooks-cambios-estado",
+      "depends_on": 90
+    },
+    {
+      "id": 105,
+      "name": "webhooks - UI de registro de la suscripcion (Configuracion > API)",
+      "spec_path": "specs/105-webhooks-ui-registro",
+      "description": "Registrada 2026-07-21. Feature frontend HERMANA de la 104, nace de la decision D1 del gate (UI en config>api). NOTA DE COLISION: se registro primero como id 100, renumerada a 105 (origin/dev ya tenia 98-102). Pantalla en `Configuracion > API` (junto a la gestion de API keys, feature 82) para que el maestro registre/edite/de de baja la URL de callback del webhook y vea el estado (activa) y el secreto (mostrado en claro UNA sola vez al generarse). Consume la Server Action `lib/actions/webhooks.ts` de la 104. FUERA DE ALCANCE: backend (todo en la 104); panel de entregas. Spec pendiente de autoria. DEPENDE de la 104. Zona frontend.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "frontend",
+      "branch": "feature/105-webhooks-ui-registro",
+      "depends_on": 104
     }
   ]
 }

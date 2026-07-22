@@ -415,12 +415,14 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(arg.data[0].gestionOrdenId).toBe("g1");
   });
 
-  // --- Feature 47: transicion de SEGUIMIENTO en la misma tx (R5/R6/R8/R9/R10/R11) ---
+  // --- Feature 99 (R1/R29): la rama `devuelta` DEJA la orden en `devuelta`, sin seguimiento ---
+  // INVIERTE la suite de la 47: antes `crearGestionYTransicionar` aplicaba una 2.ª transicion
+  // (reintento a bodega o escalado a `rechazada`) cuando el llamador pasaba `seguimiento`. Bajo
+  // la 99 ese parametro se retiro y la capacidad se relocalizo al cron SLA
+  // (`DevolucionSlaRepository`, verificado en devolucion-sla-repository.test.ts). Aqui se afirma
+  // que la devolucion produce UNA sola transicion (a `devuelta`) y UN solo append.
 
-  // T2.2 (R5/R6/R11): devuelta bajo umbral -> reintento a bodega. DOS appends
-  // (devuelta + seguimiento), la orden queda en la bodega y se limpia el mensajero;
-  // num_guia NO se toca.
-  it("R5/R6/R11: devuelta con seguimiento (reintento) -> en_bodega, limpia mensajero, DOS appends", async () => {
+  it("R1/R29: devuelta -> UN solo orden.update (a `devuelta`) y UN solo append, sin re-ruteo", async () => {
     const historialCreateMany = vi.fn();
     const { repo, ordenUpdate } = buildTxRepo("os-reparto", historialCreateMany);
 
@@ -429,93 +431,33 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", motivo: "ausente" },
       nuevoEstatusId: "os-devuelta",
-      seguimiento: { destinoEstatusId: "os-en-bodega-satelite", limpiaMensajero: true },
     });
 
-    // Primer orden.update = devuelta; segundo = destino de seguimiento + mensajero null.
+    // La orden REPOSA en `devuelta`: un unico update, sin 2.ª transicion a bodega/rechazada.
+    expect(ordenUpdate).toHaveBeenCalledTimes(1);
     expect((ordenUpdate.mock.calls[0] as unknown[])[0]).toMatchObject({
       where: { id: "o1" },
       data: { estatusId: "os-devuelta" },
     });
-    const segUpdate = (ordenUpdate.mock.calls[1] as unknown[])[0] as {
-      data: Record<string, unknown>;
-    };
-    expect(segUpdate.data.estatusId).toBe("os-en-bodega-satelite");
-    expect(segUpdate.data.mensajeroAsignadoId).toBeNull(); // R6: handoff limpio a la bodega
-    expect(segUpdate.data.asignadoAt).toBeNull(); // feature 76/LC1 (C1): limpia asignado_at
-    expect(segUpdate.data).not.toHaveProperty("numGuia"); // R6: conserva num_guia (no lo toca)
+    // El mensajero NO se limpia aqui (era parte del reintento de la 47, ahora en el cron).
+    const updData = (ordenUpdate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
+    expect(updData.data).not.toHaveProperty("mensajeroAsignadoId");
 
-    // DOS appends por el choke point: en_reparto->devuelta (actor m1) y devuelta->bodega (actor null).
-    expect(historialCreateMany).toHaveBeenCalledTimes(2);
-    const primer = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
-    const segundo = (historialCreateMany.mock.calls[1] as unknown[])[0] as { data: Record<string, unknown>[] };
-    expect(primer.data[0]).toMatchObject({
+    // UN solo append por el choke point: en_reparto -> devuelta (actor m1, origen_tipo gestion).
+    expect(historialCreateMany).toHaveBeenCalledTimes(1);
+    const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
+    expect(arg.data[0]).toMatchObject({
+      estatusOrigenId: "os-reparto",
       estatusDestinoId: "os-devuelta",
       actorUsuarioId: "m1",
       origenTipo: "gestion",
-    });
-    expect(segundo.data[0]).toEqual({
-      ordenId: "o1",
-      estatusOrigenId: "os-devuelta", // origen del seguimiento = destino de la 1a (devuelta)
-      estatusDestinoId: "os-en-bodega-satelite",
-      actorUsuarioId: null, // R10: sistema
-      origenTipo: "gestion", // R14: reutiliza el enum existente
-      motivo: null,
+      motivo: "ausente",
       gestionOrdenId: "g1",
     });
   });
 
-  // T2.3 (R8/R9/R10): N-esima devolucion (escalado) -> rechazada final, actor null en el
-  // seguimiento, y el mensajero se CONSERVA (limpiaMensajero=false).
-  it("R8/R9/R10: devuelta con seguimiento (escalado) -> rechazada, conserva mensajero, actor null", async () => {
-    const historialCreateMany = vi.fn();
-    const { repo, ordenUpdate } = buildTxRepo("os-reparto", historialCreateMany);
-
-    await repo.crearGestionYTransicionar({
-      ordenId: "o1",
-      mensajeroId: "m1",
-      gestion: { resultado: "devuelta", motivo: "3er intento" },
-      nuevoEstatusId: "os-devuelta",
-      seguimiento: { destinoEstatusId: "os-rechazada", limpiaMensajero: false },
-    });
-
-    const segUpdate = (ordenUpdate.mock.calls[1] as unknown[])[0] as {
-      data: Record<string, unknown>;
-    };
-    expect(segUpdate.data.estatusId).toBe("os-rechazada");
-    expect(segUpdate.data).not.toHaveProperty("mensajeroAsignadoId"); // conserva el ultimo mensajero
-
-    const segundo = (historialCreateMany.mock.calls[1] as unknown[])[0] as { data: Record<string, unknown>[] };
-    expect(segundo.data[0]).toMatchObject({
-      estatusOrigenId: "os-devuelta",
-      estatusDestinoId: "os-rechazada",
-      actorUsuarioId: null,
-      origenTipo: "gestion",
-    });
-  });
-
-  // T2.4 (R10): si el 2o appendCambioEstado (seguimiento) lanza, la tx propaga el error
-  // (nada persiste; el $transaction real revierte).
-  it("R10 atomicidad: si el append del seguimiento falla, la tx propaga el error", async () => {
-    const historialCreateMany = vi
-      .fn()
-      .mockResolvedValueOnce(undefined) // append de devuelta: ok
-      .mockRejectedValueOnce(new Error("append seguimiento falla")); // append de seguimiento: rompe
-    const { repo } = buildTxRepo("os-reparto", historialCreateMany);
-
-    await expect(
-      repo.crearGestionYTransicionar({
-        ordenId: "o1",
-        mensajeroId: "m1",
-        gestion: { resultado: "devuelta", motivo: "x" },
-        nuevoEstatusId: "os-devuelta",
-        seguimiento: { destinoEstatusId: "os-en-bodega", limpiaMensajero: true },
-      }),
-    ).rejects.toThrow("append seguimiento falla");
-  });
-
-  // R19: sin seguimiento (las otras 3 ramas), UNA sola transicion y UN solo append (como hoy).
-  it("R19: sin seguimiento -> un solo orden.update y un solo append (comportamiento actual)", async () => {
+  // Las otras 3 ramas: UNA sola transicion y UN solo append (igual que devuelta ahora).
+  it("R19: cualquier rama -> un solo orden.update y un solo append (sin seguimiento)", async () => {
     const historialCreateMany = vi.fn();
     const { repo, ordenUpdate } = buildTxRepo("os-reparto", historialCreateMany);
 
@@ -540,7 +482,6 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", causaDevolucion: "wrong_number", motivo: "telefono errado" },
       nuevoEstatusId: "os-devuelta",
-      seguimiento: { destinoEstatusId: "os-en-bodega", limpiaMensajero: true },
     });
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -565,9 +506,9 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(ordenUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it("R13: si el append de seguimiento (47) falla, el INSERT con causa no se confirma", async () => {
+  it("R13: si el append de la transicion falla, el INSERT con causa no se confirma (atomicidad)", async () => {
     const historialCreateMany = vi.fn(async () => {
-      throw new Error("append seguimiento falla");
+      throw new Error("append falla");
     });
     const { repo } = buildTxRepo("os-reparto", historialCreateMany);
 
@@ -578,9 +519,8 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
         mensajeroId: "m1",
         gestion: { resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "x" },
         nuevoEstatusId: "os-devuelta",
-        seguimiento: { destinoEstatusId: "os-en-bodega", limpiaMensajero: true },
       }),
-    ).rejects.toThrow("append seguimiento falla");
+    ).rejects.toThrow("append falla");
   });
 
   it("R10/R16: una rama sin causa -> la columna se escribe NULL (nunca undefined)", async () => {
