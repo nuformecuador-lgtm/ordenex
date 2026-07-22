@@ -482,7 +482,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
     const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
     expect(arg.where).toEqual({
       id: "c1",
-      estado: { in: ["solicitado", "vencido"] }, // R12 + feature 41/R19: origenes resolubles
+      estado: { in: ["solicitado"] }, // R12 + feature 111/R15 (Q1-B): SOLO `solicitado` (se retiró `vencido`)
       destinoTipo: "bodega_satelite", // R13: guardia de alcance
       destinoZonaId: "z-cartago",
     });
@@ -516,29 +516,30 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
     // el maestro no se acota por zona en el WHERE.
     expect(arg.where).toEqual({
       id: "c1",
-      estado: { in: ["solicitado", "vencido"] },
+      estado: { in: ["solicitado"] },
       destinoTipo: "bodega_central",
     });
   });
 
-  it("feature 41/R19/R15: un vencido es origen resoluble; aprobar/rechazar transiciona y desbloquea", async () => {
+  it("feature 111/R15 (Q1-B): la resolución NORMAL guarda SOLO `solicitado` (un `vencido` no casa)", async () => {
     const prisma = buildPrisma();
-    // El vencido sigue en un estado resoluble -> updateMany afecta 1 fila.
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
     const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
 
-    const r = await repo.resolverCierre({
-      cierreId: "c-vencido",
+    await repo.resolverCierre({
+      cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
 
-    expect(r).toBe("updated"); // R15: resolverlo lo saca de los estados bloqueantes
     const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
-    // R19: la guardia acepta solicitado O vencido como origen.
-    expect(arg.where.estado).toEqual({ in: ["solicitado", "vencido"] });
+    // R15: se RETIRÓ `vencido` de los origenes resolubles del approve/reject normal. Un cierre
+    // `vencido` real no casaría este WHERE (updateMany afectaría 0 filas -> conflict); el flujo
+    // normal exige que pase por `solicitado` (R6) o por la válvula de escape (R16).
+    expect(arg.where.estado).toEqual({ in: ["solicitado"] });
+    expect(arg.where.estado.in).not.toContain("vencido");
     // R4: la transicion NO recalcula totales (solo estado + auditoria).
     expect(arg.data).not.toHaveProperty("totalGeneral");
     expect(arg.data).not.toHaveProperty("totalEfectivo");
@@ -579,6 +580,97 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
     });
 
     expect(r).toBe("fuera_de_alcance");
+  });
+});
+
+// ============================================================================
+// Feature 111 — forzarSolicitudVencido (VÁLVULA DE ESCAPE, A3/R16/R17/R21).
+// ============================================================================
+
+describe("CierresAdminRepository.forzarSolicitudVencido (feature 111/R16)", () => {
+  it("R16: count=1 -> updated; WHERE guarda estado='vencido' + alcance; data SOLO estado='solicitado'", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.forzarSolicitudVencido("c-venc", ALCANCE_SAT);
+
+    expect(r).toBe("updated");
+    const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
+    // R16: guardia por estado ('vencido') + alcance (anti-TOCTOU).
+    expect(arg.where).toEqual({
+      id: "c-venc",
+      estado: "vencido",
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: "z-cartago",
+    });
+    // R16/R21: money-safe — SOLO reescribe `estado`.
+    expect(arg.data).toEqual({ estado: "solicitado" });
+  });
+
+  it("R16/R21/R17: la válvula NO recalcula totales ni registra auditoría (resuelto_por/at)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    await repo.forzarSolicitudVencido("c-venc", ALCANCE_MAESTRO);
+
+    const data = prisma.cierreDia.updateMany.mock.calls[0][0].data;
+    // R17: la auditoría la deja la RESOLUCIÓN posterior (aprobar/rechazar el `solicitado`), no
+    // la válvula. R21: no toca el snapshot money-critical.
+    for (const prohibido of [
+      "resueltoPor",
+      "resueltoAt",
+      "totalGeneral",
+      "totalEfectivo",
+      "totalPagoMensajero",
+      "totalIngresoBodegaRechazos",
+    ]) {
+      expect(data).not.toHaveProperty(prohibido);
+    }
+    // El maestro no se acota por zona.
+    expect(prisma.cierreDia.updateMany.mock.calls[0][0].where).toEqual({
+      id: "c-venc",
+      estado: "vencido",
+      destinoTipo: "bodega_central",
+    });
+  });
+
+  it("R16: count=0 pero existe en alcance (ya no es vencido) -> conflict, sin efectos", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
+    prisma.cierreDia.count.mockResolvedValue(1); // existe en alcance pero ya no `vencido`
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.forzarSolicitudVencido("c-venc", ALCANCE_SAT);
+
+    expect(r).toBe("conflict");
+    const countArg = prisma.cierreDia.count.mock.calls[0][0];
+    expect(countArg.where).toEqual({ id: "c-venc", destinoTipo: "bodega_satelite", destinoZonaId: "z-cartago" });
+    expect(countArg.where).not.toHaveProperty("estado"); // solo alcance
+  });
+
+  it("R16: count=0 y fuera de alcance (otra bodega/zona o inexistente) -> fuera_de_alcance", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
+    prisma.cierreDia.count.mockResolvedValue(0);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.forzarSolicitudVencido("c-ajeno", ALCANCE_SAT);
+
+    expect(r).toBe("fuera_de_alcance");
+  });
+
+  it("R16: NO alimenta wallets ni corre en $transaction (no mueve dinero)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const wallet = buildWalletDeps();
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>, wallet);
+
+    await repo.forzarSolicitudVencido("c-venc", ALCANCE_MAESTRO);
+
+    expect(wallet.walletFeedService.construirMovimientosDeIngreso).not.toHaveBeenCalled();
+    expect(wallet.walletMovimientoRepo.crearMovimientos).not.toHaveBeenCalled();
   });
 });
 

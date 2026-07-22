@@ -80,9 +80,13 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
   };
 }
 
-function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue"> {
+function fakeOrdenRepo(
+  bloqueados: string[] = [],
+): Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados"> {
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
+    // Feature 111/R1-R4: predicado de bloqueo total (default = NO bloqueado).
+    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(bloqueados)),
   };
 }
 
@@ -598,6 +602,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
       });
       const ordenRepo = {
         findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
+        findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
       };
       const service = new MisAsignacionesService(
         repo,
@@ -630,6 +635,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
     const repo = fakeRepo();
     const ordenRepo = {
       findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
     };
     const service = new MisAsignacionesService(
       repo,
@@ -650,6 +656,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
       findEstatusIdByValue: vi.fn(async (v: string) =>
         v === "devuelta" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
       ),
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
     };
     const service = new MisAsignacionesService(
       repo,
@@ -762,5 +769,79 @@ describe("liberarGestion (R35)", () => {
     const repo = fakeRepo({ liberarOrdenEnGestion: vi.fn(async () => false) });
     const r = await newService(repo).liberarGestion("o1", MENSAJERO);
     expect(r.status).toBe("ok");
+  });
+});
+
+// ============================================================================
+// Feature 111 — bloqueo total del mensajero (R1/R2/R3/R4/R20). Un mensajero con un cierre
+// `solicitado`/`vencido` no puede gestionar NI recoger/escoger. MISMO predicado derivado
+// (`findMensajerosBloqueados`), guarda ANTES de cualquier efecto (sin efectos parciales).
+// ============================================================================
+
+describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
+  // Servicio con `ordenRepo` que reporta al mensajero como BLOQUEADO (Set con "m1").
+  function bloqueado(repo = fakeRepo(), storage = fakeStorage(), signed = fakeSignedUrls()) {
+    const ordenRepo = fakeOrdenRepo(["m1"]);
+    const service = new MisAsignacionesService(repo, ordenRepo, storage, signed, fakeRutaRepo());
+    return { service, repo, storage, signed, ordenRepo };
+  }
+
+  const entrega = (): GestionarInput => ({
+    ordenId: "o1",
+    resultado: "entregada",
+    montoRecibido: 100,
+    metodoPago: "efectivo",
+    evidencia: evidencia(),
+  });
+
+  it("R1/R3: gestionar bloqueado -> conflict; NO sube evidencia, NO transiciona, NO crea gestion_orden", async () => {
+    const { service, repo, storage, ordenRepo } = bloqueado();
+
+    const r = await service.gestionar(entrega(), MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status === "conflict") expect(r.motivo).toMatch(/cierre pendiente/i);
+    // R2: reusa el MISMO predicado derivado (doble espía).
+    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    // R3: sin efectos parciales (la guarda está ANTES de la subida y de la tx).
+    expect(storage.upload).not.toHaveBeenCalled();
+    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+  });
+
+  it("R2: rechazado/aprobado NO bloquean (Set vacío) -> gestionar procede normal", async () => {
+    // `fakeOrdenRepo([])` = ningún estado bloqueante presente (rechazado/aprobado no cuentan).
+    const repo = fakeRepo();
+    const r = await newService(repo).gestionar(entrega(), MENSAJERO);
+    expect(r.status).toBe("ok");
+    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+  });
+
+  it("R4: recoger bloqueado -> conflict, sin transición (recogerLote no se invoca)", async () => {
+    const { service, repo, ordenRepo } = bloqueado();
+
+    const r = await service.recogerAsignaciones({ ordenIds: ["o1"] }, MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status === "conflict") expect(r.detalle[0].motivo).toMatch(/cierre pendiente/i);
+    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(repo.recogerLote).not.toHaveBeenCalled();
+  });
+
+  it("R4: escoger bloqueado -> conflict, sin fijar el puntero (setOrdenEnGestion no se invoca)", async () => {
+    const { service, repo, ordenRepo } = bloqueado();
+
+    const r = await service.escogerParaGestion("o1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status === "conflict") expect(r.motivo).toMatch(/cierre pendiente/i);
+    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
+  });
+
+  it("R20: el motivo del bloqueo es texto fijo SIN PII (ni ids del actor/orden/cierre)", async () => {
+    const { service } = bloqueado();
+    const r = await service.gestionar(entrega(), MENSAJERO);
+    if (r.status !== "conflict") throw new Error("esperaba conflict");
+    expect(r.motivo).not.toMatch(/m1|o1|c1/);
   });
 });

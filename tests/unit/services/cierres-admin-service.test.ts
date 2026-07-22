@@ -84,6 +84,8 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     findCierresByAlcance: vi.fn(async () => [] as CierreAdminResumenRow[]),
     findCierreByIdEnAlcance: vi.fn(async () => null),
     resolverCierre: vi.fn(async () => "updated" as const),
+    // Feature 111/R16: válvula de escape (default = updated).
+    forzarSolicitudVencido: vi.fn(async () => "updated" as const),
     ...overrides,
   };
 }
@@ -973,6 +975,72 @@ describe("CierresAdminService.rechazarCierre (R11/R12/R13/R14)", () => {
     const { service, repo } = newService();
     const r = await service.rechazarCierre("c1", "motivo", MENSAJERO);
     expect(r.status).toBe("forbidden");
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+});
+
+// --- feature 111: VÁLVULA DE ESCAPE (R16/R17/R18) ---
+
+describe("CierresAdminService.forzarSolicitudVencido (feature 111/R16/R17/R18)", () => {
+  it("R16: maestro destraba un vencido de su alcance -> ok/solicitado; pasa el alcance al repo", async () => {
+    const repo = fakeRepo({ forzarSolicitudVencido: vi.fn(async () => "updated" as const) });
+    const { service } = newService({ repo });
+
+    const r = await service.forzarSolicitudVencido("c-venc", MAESTRO);
+
+    expect(r).toEqual({ status: "ok", cierreId: "c-venc", estado: "solicitado" });
+    const [cierreId, alcance] = (repo.forzarSolicitudVencido as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(cierreId).toBe("c-venc");
+    expect(alcance).toEqual({ destinoTipo: "bodega_central", destinoZonaId: null });
+  });
+
+  it("R16: adminSatelite -> la válvula queda acotada a SU zona (alcance bodega_satelite)", async () => {
+    const repo = fakeRepo({ forzarSolicitudVencido: vi.fn(async () => "updated" as const) });
+    const { service } = newService({ repo });
+
+    await service.forzarSolicitudVencido("c-venc", ADMIN_SATELITE);
+
+    const alcance = (repo.forzarSolicitudVencido as ReturnType<typeof vi.fn>).mock.calls[0][1] as Alcance;
+    expect(alcance).toEqual({ destinoTipo: "bodega_satelite", destinoZonaId: ZONA_SAT });
+  });
+
+  it("R16: repo conflict (ya no es vencido / carrera) -> conflict", async () => {
+    const repo = fakeRepo({ forzarSolicitudVencido: vi.fn(async () => "conflict" as const) });
+    const { service } = newService({ repo });
+    const r = await service.forzarSolicitudVencido("c-venc", MAESTRO);
+    expect(r.status).toBe("conflict");
+  });
+
+  it("R16: repo fuera_de_alcance (otra bodega/zona) -> no_encontrada", async () => {
+    const repo = fakeRepo({ forzarSolicitudVencido: vi.fn(async () => "fuera_de_alcance" as const) });
+    const { service } = newService({ repo });
+    const r = await service.forzarSolicitudVencido("c-ajeno", MAESTRO);
+    expect(r.status).toBe("no_encontrada");
+  });
+
+  it("R1: rol no admin (mensajero) -> forbidden, sin tocar el repo", async () => {
+    const { service, repo } = newService();
+    const r = await service.forzarSolicitudVencido("c-venc", MENSAJERO);
+    expect(r.status).toBe("forbidden");
+    expect(repo.forzarSolicitudVencido).not.toHaveBeenCalled();
+  });
+
+  it("R13: adminSatelite sin zona -> no_encontrada, sin tocar el repo", async () => {
+    const { service, repo } = newService({ zonaSatelite: null });
+    const r = await service.forzarSolicitudVencido("c-venc", ADMIN_SATELITE);
+    expect(r.status).toBe("no_encontrada");
+    expect(repo.forzarSolicitudVencido).not.toHaveBeenCalled();
+  });
+
+  it("R18: la válvula deja el cierre en `solicitado` (sigue bloqueante); NO lo aprueba directo", async () => {
+    // `vencido -> solicitado` NO desbloquea: el estado resultante SIGUE siendo bloqueante
+    // (findMensajerosBloqueados incluye `solicitado`). El desbloqueo llega al APROBARLO luego.
+    const repo = fakeRepo({ forzarSolicitudVencido: vi.fn(async () => "updated" as const) });
+    const { service } = newService({ repo });
+    const r = await service.forzarSolicitudVencido("c-venc", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.estado).toBe("solicitado"); // no `aprobado`
+    // La válvula NO resuelve: no invoca resolverCierre (no mueve dinero, R21).
     expect(repo.resolverCierre).not.toHaveBeenCalled();
   });
 });

@@ -17,6 +17,10 @@ import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
 const ESTADO_SOLICITADO = "solicitado";
 
+// Feature 111/R6/R7: estado del cierre que el corte diario deja "vencido" (mensajero que
+// debia cerrar y no solicito). `solicitarCierre` lo transiciona a `solicitado`.
+const ESTADO_VENCIDO = "vencido";
+
 // Feature 41/C1: sentinela interno para forzar el rollback de la tx cuando el UPDATE
 // guardado vincula 0 gestiones (carrera). Se captura fuera de la tx -> `crearCierre`
 // devuelve null (sin efectos), NO se propaga como error real.
@@ -220,6 +224,30 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       where: { mensajeroId, estado: ESTADO_SOLICITADO },
     });
     return count > 0;
+  }
+
+  /** Feature 111/R6: existe un cierre `vencido` del mensajero (gemelo del anterior). */
+  async existeCierreVencido(mensajeroId: string): Promise<boolean> {
+    const count = await this.prisma.cierreDia.count({
+      where: { mensajeroId, estado: ESTADO_VENCIDO },
+    });
+    return count > 0;
+  }
+
+  /**
+   * Feature 111/R6/R7/R8/R21 — transiciona `vencido -> solicitado` con escritura guardada por
+   * estado. SOLO reescribe `estado`; NO recalcula ni re-snapshotea los totales money-critical
+   * ni re-vincula gestiones (money-safe). 0 filas -> `false` (carrera: ya resuelto/transicionado).
+   */
+  async transicionarVencidoASolicitado(mensajeroId: string): Promise<boolean> {
+    const { count } = await this.prisma.cierreDia.updateMany({
+      // R7: anti-TOCTOU — solo transiciona si SIGUE en `vencido` (guardia por estado).
+      where: { mensajeroId, estado: ESTADO_VENCIDO },
+      // R8: money-safe — cambia UNICAMENTE `estado`. Los totales, pago, ingreso, cierre_id de
+      // gestiones, resuelto_por/at y solicitado_at quedan INTACTOS (no es una resolución).
+      data: { estado: ESTADO_SOLICITADO },
+    });
+    return count === 1; // 0 = raced/resuelto -> el service devuelve conflict (R7)
   }
 
   /**

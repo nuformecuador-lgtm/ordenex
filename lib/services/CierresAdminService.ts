@@ -14,6 +14,7 @@ import type {
   AprobarCierreServiceResult,
   CierreAdminResumen,
   CierreDetalleAdminServiceResult,
+  ForzarSolicitudVencidoServiceResult,
   ICierresAdminService,
   ListarCierresAdminServiceResult,
   RechazarCierreServiceResult,
@@ -213,6 +214,24 @@ export class CierresAdminService implements ICierresAdminService {
     if (res === "updated") return { status: "ok", cierreId, estado: "rechazado" };
     if (res === "conflict") return { status: "conflict" }; // R12
     return { status: "no_encontrada" }; // fuera_de_alcance (R13)
+  }
+
+  async forzarSolicitudVencido(
+    cierreId: string,
+    actor: Actor,
+  ): Promise<ForzarSolicitudVencidoServiceResult> {
+    // R16: acotada al alcance del admin (rol+zona destino), MISMO resolver que aprobar/rechazar.
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R1
+    if (scope.status === "sinZona") return { status: "no_encontrada" }; // R13
+
+    // R16: transicion guardada por estado ('vencido') + alcance en el repo. Money-safe (R21):
+    // NO recalcula el snapshot ni toca `resuelto_por`/`resuelto_at`. R18: NO desbloquea; el
+    // desbloqueo ocurre al APROBAR el `solicitado` resultante (que registra la auditoria, R17).
+    const res = await this.repo.forzarSolicitudVencido(cierreId, scope.alcance);
+    if (res === "updated") return { status: "ok", cierreId, estado: "solicitado" };
+    if (res === "conflict") return { status: "conflict" }; // ya no es `vencido`
+    return { status: "no_encontrada" }; // fuera_de_alcance / inexistente (R13)
   }
 }
 
