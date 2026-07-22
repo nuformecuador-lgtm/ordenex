@@ -205,6 +205,7 @@ function toDTO(row: OrdenRow): OrdenDTO {
     peso: row.peso ? row.peso.toNumber() : null,
     notas: row.notas,
     mensajeroAsignadoId: row.mensajeroAsignadoId, // feature 49/R27: autoriza al mensajero asignado
+    prioridad: row.prioridad, // feature 101/R9: expone el flag de reasignacion prioritaria (sort R6 + resalte R8)
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -393,6 +394,7 @@ const WITH_RECEPCION_SATELITE = {
     direccion: true,
     producto: true,
     montoCobrar: true,
+    prioridad: true, // feature 101/R9: se pide explicito (es un `select`) para el sort R7 + resalte R8
     estatus: { select: { value: true } },
     tienda: { select: { nombre: true } },
     zona: { select: { nombre: true } },
@@ -423,6 +425,7 @@ function toRecepcionSateliteRow(row: OrdenRecepcionSateliteRow): RecepcionSateli
     provinciaNombre: row.provincia.nombre,
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
+    prioridad: row.prioridad, // feature 101/R9: propaga el flag para el sort R7 + resalte R8
   };
 }
 
@@ -504,7 +507,16 @@ export class OrdenRepository implements IOrdenRepository {
         ? { mensajeroAsignadoId: params.where.mensajeroAsignadoId }
         : {}),
     };
-    const orderBy = { [SORT_COLUMN[params.sortBy]]: params.sortDir };
+    // Feature 101/R6: `prioridad DESC` PRIMERO y LUEGO el orden vigente (lista blanca R31:
+    // created_at/num_guia/num_remision). El sort va en la QUERY para respetar la paginacion
+    // (una orden prioritaria flota a la primera pagina, no queda atrapada en la 2). Es GLOBAL
+    // al listado pero INOCUO fuera de `en_bodega`: solo ahi (y en bodega satelite) hay
+    // `prioridad = true`; en el resto el desempate booleano cae al criterio vigente sin
+    // alterar el orden observable (R10, sin reordenar superficies ajenas).
+    const orderBy: Prisma.OrdenOrderByWithRelationInput[] = [
+      { prioridad: "desc" },
+      { [SORT_COLUMN[params.sortBy]]: params.sortDir },
+    ];
 
     const [items, total] = await Promise.all([
       this.prisma.orden.findMany({
@@ -1175,7 +1187,9 @@ export class OrdenRepository implements IOrdenRepository {
       const result = await tx.orden.updateMany({
         where: { id: { in: ordenIds } },
         // Feature 76/R23 (W2): al fijar el mensajero, estampa `asignado_at = now`.
-        data: { mensajeroAsignadoId: mensajeroId, estatusId, asignadoAt: new Date() },
+        // Feature 101/R5 (gate F1.4-Q1): al reasignar desde la bodega central apaga
+        // `prioridad` en la MISMA escritura (una orden no hereda prioridad a ciclos futuros).
+        data: { mensajeroAsignadoId: mensajeroId, estatusId, asignadoAt: new Date(), prioridad: false },
       });
       // R8: registra SOLO las filas efectivamente afectadas (las existentes).
       await appendCambioEstado(
@@ -1294,6 +1308,13 @@ export class OrdenRepository implements IOrdenRepository {
   /**
    * Feature 33/R6/R8/R9: ordenes NO borradas de `zonaId` cuyo `estatus.value`
    * esta en `estatusValues`, con nombres legibles de tienda/geografia. Solo query.
+   *
+   * Feature 101/R7: ordena `prioridad DESC` PRIMERO y LUEGO `createdAt DESC` (recencia,
+   * criterio vigente). El sort va en la QUERY (no en memoria) para respetar la paginacion:
+   * una orden prioritaria flota a la primera pagina. Solo el grupo "Recibidas"
+   * (`en_bodega_satelite`) tiene prioritarias; los demas grupos que devuelve el mismo query
+   * (por recibir / rechazada / devuelta) tienen `prioridad = false`, asi que el desempate es
+   * inocuo para ellos (R10, sin reordenar por prioridad superficies ajenas).
    */
   async findRecepcionSateliteByZona(
     zonaId: string,
@@ -1306,6 +1327,7 @@ export class OrdenRepository implements IOrdenRepository {
         deletedAt: null, // R6: excluye borradas
         estatus: { value: { in: estatusValues } },
       },
+      orderBy: [{ prioridad: "desc" }, { createdAt: "desc" }], // R7: prioridad-first + recencia
       ...WITH_RECEPCION_SATELITE,
     });
     return rows.map(toRecepcionSateliteRow);
@@ -1461,6 +1483,10 @@ export class OrdenRepository implements IOrdenRepository {
    * `recibirEnSatelite`, concurrencia-segura). Filtra por `estatusId` (id ya
    * resuelto por el service), NO por `estatus.value`. NUNCA toca `numGuia` (R8).
    * Devuelve el numero de filas efectivamente transicionadas.
+   *
+   * Feature 101/R5 (gate F1.4-Q1): al reasignar desde la bodega SATELITE apaga
+   * `"prioridad" = false` en el MISMO `SET` (paridad con `asignarBodegaLote`), asi una
+   * orden liberada por SLA no arrastra prioridad a ciclos futuros.
    */
   async asignarSateliteLote(
     ordenIds: string[],
@@ -1490,6 +1516,7 @@ export class OrdenRepository implements IOrdenRepository {
         SET "mensajero_asignado_id" = ${mensajeroId},
             "asignado_at" = NOW(),
             "estatus_id" = ${destinoEstatusId},
+            "prioridad" = false,
             "updated_at" = NOW()
         WHERE "id" IN (${Prisma.join(ordenIds)})
           AND "estatus_id" = ${origenEstatusId}

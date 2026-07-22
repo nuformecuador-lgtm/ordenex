@@ -217,6 +217,10 @@ export interface RecepcionSateliteRow {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+  // Feature 101/R9: flag de reasignacion prioritaria de la orden (contrato interno repo->
+  // service, siempre presente: el `select` de WITH_RECEPCION_SATELITE lo pide explicito).
+  // Alimenta el sort prioridad-first del grupo "Recibidas" (R7) y el resalte (R8).
+  prioridad: boolean;
 }
 
 // Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite.

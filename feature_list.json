@@ -1109,11 +1109,11 @@
       "id": 101,
       "name": "prioridad de reasignacion de las ordenes liberadas por SLA",
       "description": "Nuevo `orden.prioridad` (bool, default false) que el cron de la 99 enciende al liberar una orden a bodega por vencimiento (not_found). En el listado de REASIGNACION de la bodega dueña de la orden (maestro/admin para la bodega central, adminSatelite para su zona), las ordenes prioritarias se ordenan primero y el frontend resalta su fila (color llamativo). Ciclo de vida a definir en el gate (se apaga al reasignar). Migracion aditiva (orden.prioridad).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "fullstack",
-      "branch": null,
+      "branch": "feature/101-prioridad-reasignacion",
       "depends_on": 99
     },
     {

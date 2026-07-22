@@ -103,10 +103,13 @@ describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
     expect(ok).toBe(true);
     const upd = prisma.orden.updateMany.mock.calls[0][0];
     expect(upd.where).toEqual({ id: "o1", estatusId: "os-devuelta", deletedAt: null });
+    // Feature 101/R2 (gate F1.4-Q5): la liberacion por SLA enciende `prioridad: true` en el
+    // MISMO `data` guardado (junto al destino y el handoff limpio del mensajero).
     expect(upd.data).toEqual({
       estatusId: "os-en-bodega-satelite",
       mensajeroAsignadoId: null, // R15: handoff limpio a la bodega
       asignadoAt: null,
+      prioridad: true, // feature 101/R2
     });
     // R18/R19: append por el choke point, actor NULL, origen_tipo liberacion_devuelta_sla.
     expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
@@ -160,6 +163,8 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
     expect(upd.where).toEqual({ id: "o1", estatusId: "os-devuelta", deletedAt: null });
     expect(upd.data).toEqual({ estatusId: "os-rechazada" });
     expect(upd.data).not.toHaveProperty("mensajeroAsignadoId");
+    // Feature 101/R3: el ESCALADO a `rechazada` NO enciende `prioridad` (solo la liberacion SLA).
+    expect(upd.data).not.toHaveProperty("prioridad");
 
     // R20/R22: UNA gestion sintetica rechazada del mensajero atribuido, sin cierre.
     expect(prisma.gestionOrden.create).toHaveBeenCalledTimes(1);

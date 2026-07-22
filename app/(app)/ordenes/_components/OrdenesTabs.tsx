@@ -91,6 +91,11 @@ const ESTADO_DEVUELTA = "devuelta";
 const MOTIVO_DEVUELTA_NO_CENTRAL =
   "Orden de zona satélite: la recupera el admin de la bodega satélite de su zona.";
 
+// Feature 101/R8/R10: única tab que resalta las órdenes prioritarias (liberadas por
+// el SLA de la 99). Es la superficie de reasignación de la bodega central; el resto de
+// tabs NO resalta por prioridad (el flag `resaltarPrioridad` de OrdenesModule va gateado).
+const ESTADO_EN_BODEGA = "en_bodega";
+
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
 // Derivado de `accionesDe()`: `en_fulfillment`/`en_preparacion` -> "Generar guía"
@@ -449,6 +454,7 @@ export function OrdenesTabs({
         selectable={acc.length > 0}
         bloqueoSeleccion={bloqueoSeleccion}
         acciones={acc}
+        resaltarPrioridad={tab.value === ESTADO_EN_BODEGA}
       />
     );
   }

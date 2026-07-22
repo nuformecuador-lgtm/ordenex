@@ -25,6 +25,7 @@ function ordenRow(overrides: Record<string, unknown> = {}) {
     estatus: { value: "en_bodega" },
     mensajeroSugeridoId: null,
     mensajeroAsignadoId: null,
+    prioridad: false, // feature 101/R9: escalar de la fila que toDTO propaga al DTO
     ...overrides,
   };
 }
@@ -320,7 +321,8 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ deletedAt: null, estatusId: "os-bodega" });
-    expect(arg.orderBy).toEqual({ numGuia: "asc" }); // R31: columna mapeada
+    // Feature 101/R6: prioridad-first PRIMERO, luego la columna mapeada (R31) como desempate.
+    expect(arg.orderBy).toEqual([{ prioridad: "desc" }, { numGuia: "asc" }]);
     expect(arg.skip).toBe(0);
     expect(arg.take).toBe(20);
 
@@ -483,7 +485,54 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ deletedAt: null, tiendaId: "t1" });
-    expect(arg.orderBy).toEqual({ createdAt: "desc" });
+    // Feature 101/R6: prioridad-first PRIMERO, luego la recencia (created_at desc) como desempate.
+    expect(arg.orderBy).toEqual([{ prioridad: "desc" }, { createdAt: "desc" }]);
+  });
+
+  // Feature 101/R6: el listado de reasignacion de la bodega central encabeza por
+  // `prioridad DESC` para que las ordenes liberadas por SLA floten a la primera pagina, sin
+  // perder el criterio de recencia como desempate.
+  it("R6: orderBy encabeza con { prioridad: 'desc' } y conserva el criterio vigente como desempate", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.list({
+      where: { estatusId: "os-bodega" },
+      sortBy: "created_at",
+      sortDir: "desc",
+      skip: 0,
+      take: 20,
+    });
+
+    const arg = prisma.orden.findMany.mock.calls[0][0];
+    expect(Array.isArray(arg.orderBy)).toBe(true);
+    expect(arg.orderBy[0]).toEqual({ prioridad: "desc" }); // prioridad-first
+    expect(arg.orderBy[1]).toEqual({ createdAt: "desc" }); // desempate por recencia
+  });
+
+  // Feature 101/R9: toDTO (y por herencia toListItemDTO) propaga el flag `prioridad` de la
+  // fila al DTO del listado, para el sort (R6) y el resalte de fila (R8) del frontend.
+  it("R9: propaga `prioridad` de la fila al OrdenListItemDTO", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow({ id: "ord-prio", prioridad: true }),
+      ordenListRow({ id: "ord-normal", prioridad: false }),
+    ]);
+    prisma.orden.count.mockResolvedValue(2);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.list({
+      where: { estatusId: "os-bodega" },
+      sortBy: "created_at",
+      sortDir: "desc",
+      skip: 0,
+      take: 20,
+    });
+
+    expect(res.items[0].prioridad).toBe(true);
+    expect(res.items[1].prioridad).toBe(false);
   });
 });
 

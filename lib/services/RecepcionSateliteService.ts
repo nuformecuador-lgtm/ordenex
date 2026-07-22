@@ -209,5 +209,6 @@ function toDTO(row: RecepcionSateliteRow): RecepcionSateliteDTO {
     provinciaNombre: row.provinciaNombre,
     cantonNombre: row.cantonNombre,
     distritoNombre: row.distritoNombre,
+    prioridad: row.prioridad, // feature 101/R9: propaga el flag al DTO (resalte de fila R8)
   };
 }

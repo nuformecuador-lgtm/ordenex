@@ -57,6 +57,7 @@ function recepcionRow(overrides: Partial<RecepcionSateliteRow> = {}): RecepcionS
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    prioridad: false, // feature 101/R9: el service propaga este flag al DTO (resalte R8)
     ...overrides,
   };
 }
@@ -148,6 +149,21 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(r.porRecibir.map((o) => o.id)).toEqual(["a"]);
     expect(r.recibidas.map((o) => o.id)).toEqual(["b"]);
     expect(r.sinZona).toBe(false);
+  });
+
+  // Feature 101/R9: el service propaga `prioridad` de la fila del repo al DTO del grupo
+  // "Recibidas" (en_bodega_satelite), donde el frontend resalta la fila (R8).
+  it("R9: propaga `prioridad` de la fila al DTO de recibidas", async () => {
+    const repo = fakeRepo({
+      findRecepcionSateliteByZona: vi.fn(async () => [
+        recepcionRow({ id: "p1", estatusValue: "en_bodega_satelite", prioridad: true }),
+        recepcionRow({ id: "n1", estatusValue: "en_bodega_satelite", prioridad: false }),
+      ]),
+    });
+    const r = await newService(repo).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.recibidas.find((o) => o.id === "p1")?.prioridad).toBe(true);
+    expect(r.recibidas.find((o) => o.id === "n1")?.prioridad).toBe(false);
   });
 
   it("R14: una fila rechazada de la MISMA zona aparece en porDevolver; otros estados NO", async () => {

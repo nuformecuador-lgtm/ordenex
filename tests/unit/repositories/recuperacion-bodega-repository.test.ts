@@ -7,8 +7,9 @@ import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBod
 // mockResolvedValue). El fake pasa el propio prisma como `tx` (tiene orden.updateMany + el choke
 // point ordenHistorialEstado.createMany). Cubre R13 (destino por zona ya resuelto por el service),
 // R14 (limpia mensajero + asignado_at), R17 (append actor=admin, origen_tipo=recuperacion_manual),
-// R19 (no toca prioridad), R20 (append falla -> revierte), R21 (UPDATE guardado por
-// estatus=devuelta; count 0 -> false).
+// R19 + feature 101/R3 (la recuperacion manual NO enciende prioridad: la columna ya existe pero el
+// data no la toca; solo la liberacion por SLA 99 la enciende), R20 (append falla -> revierte),
+// R21 (UPDATE guardado por estatus=devuelta; count 0 -> false).
 
 function buildPrisma() {
   const prisma = {
@@ -76,7 +77,7 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     );
   });
 
-  it("R19: NO enciende `orden.prioridad` (la columna no existe; feature 101) — data solo trae estatus + mensajero", async () => {
+  it("R19 + feature 101/R3: la recuperacion MANUAL NO enciende `orden.prioridad` (la columna existe, pero el data no la toca) — data solo trae estatus + mensajero", async () => {
     const prisma = buildPrisma();
     await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
