@@ -173,14 +173,40 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(itemsVisibles(SIDEBAR_ITEMS, null)).toEqual([]);
   });
 
-  it("conserva los children del ítem padre visible (Configuración → Usuarios/Tarifas/API)", () => {
+  it("conserva los children del ítem padre visible (Configuración → Usuarios/Tarifas/API/Plantillas)", () => {
     const [visibleConfig] = itemsVisibles(SIDEBAR_ITEMS, actor("maestro"))
       .filter((i) => i.label === "Configuración");
     expect(visibleConfig.children?.map((c) => c.href)).toEqual([
       "/configuracion",
       "/configuracion/tarifas",
       "/configuracion/api",
+      "/configuracion/plantillas",
     ]);
+  });
+
+  it("Feature 107 (R1): el maestro ve el subítem Plantillas en Configuración", () => {
+    const [visibleConfig] = itemsVisibles(SIDEBAR_ITEMS, actor("maestro"))
+      .filter((i) => i.label === "Configuración");
+    const plantillas = visibleConfig.children?.find(
+      (c) => c.label === "Plantillas",
+    );
+    expect(plantillas).toEqual({
+      label: "Plantillas",
+      href: "/configuracion/plantillas",
+    });
+  });
+
+  it("Feature 107 (R2): un rol no maestro no ve Configuración ni su subítem Plantillas", () => {
+    for (const rol of ["admin", "adminTienda", "adminSatelite", "mensajero"] as const) {
+      const visibles = itemsVisibles(SIDEBAR_ITEMS, actor(rol));
+      expect(visibles.some((i) => i.label === "Configuración")).toBe(false);
+      // El subítem Plantillas solo existe bajo Configuración; si el padre se oculta,
+      // el subítem no es alcanzable para el rol.
+      const plantillas = visibles
+        .flatMap((i) => i.children ?? [])
+        .find((c) => c.href === "/configuracion/plantillas");
+      expect(plantillas).toBeUndefined();
+    }
   });
 
   it("Órdenes ya no tiene submenú (el listado vive en el ítem padre)", () => {
