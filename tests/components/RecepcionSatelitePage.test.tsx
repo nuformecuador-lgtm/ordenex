@@ -62,6 +62,7 @@ beforeEach(() => {
     porRecibir: [],
     recibidas: [],
     porDevolver: [],
+    devueltas: [], // Feature 100/T4.1: grupo `devuelta` por recuperar a bodega
     zonaNombre: "Limón",
     sinZona: false,
   });

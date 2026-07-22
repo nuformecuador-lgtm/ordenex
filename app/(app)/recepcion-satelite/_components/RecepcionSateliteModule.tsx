@@ -16,9 +16,11 @@ import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionRe
 
 import { devolverATienda } from "@/lib/actions/devolucion-origen";
 import { recibirLote } from "@/lib/actions/recepcion-satelite";
+import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { devolucionOrigenErrorMessage } from "@/app/(app)/ordenes/_components/devolucion-origen-error-messages";
+import { recuperarBodegaErrorMessage } from "@/app/(app)/ordenes/_components/recuperar-bodega-error-messages";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { RecepcionDetalle } from "./RecepcionDetalle";
 import { recibidasColumns } from "./recibidas-columns";
@@ -50,6 +52,13 @@ export interface RecepcionSateliteModuleProps {
    * órdenes por devolver.
    */
   porDevolver?: RecepcionSateliteDTO[];
+  /**
+   * Feature 100/T4.1 (R12): órdenes en `devuelta` (novedad) de la zona del
+   * adminSatelite, elegibles para "Recuperar a bodega" (transición
+   * `devuelta → en_bodega_satelite`). Acotadas server-side por zona; vacío = sin
+   * órdenes por recuperar.
+   */
+  devueltas?: RecepcionSateliteDTO[];
   /** Nombre de la zona del adminSatelite (para el display, R9); `null` si no tiene. */
   zonaNombre: string | null;
   /** `true` si el adminSatelite no tiene zona asignada (R5). */
@@ -156,10 +165,67 @@ function FilaPorDevolver({
   );
 }
 
+/**
+ * Feature 100 (T4.1, R12): fila de la sección "Devueltas". Cada orden `devuelta` de
+ * la zona ofrece la acción "Recuperar", que ejecuta la recuperación
+ * `devuelta → en_bodega_satelite` vía la Server Action `recuperarABodega`. Espejo
+ * EXACTO de `FilaPorDevolver` (48): estado de carga POR FILA (botón deshabilitado
+ * mientras procesa) y feedback por toast (éxito relee el estado del servidor; un
+ * `status != ok` muestra el error claro por estado sin afectar a las demás filas).
+ */
+function FilaDevuelta({
+  orden,
+  zonaNombre,
+  onRecuperada,
+  onError,
+}: {
+  orden: RecepcionSateliteDTO;
+  zonaNombre: string | null;
+  onRecuperada: () => void;
+  onError: (mensaje: string) => void;
+}) {
+  const [procesando, setProcesando] = useState(false);
+
+  async function handleRecuperar() {
+    setProcesando(true);
+    const result = await recuperarABodega({ ordenId: orden.id });
+    if (result.status !== "ok") {
+      onError(recuperarBodegaErrorMessage(result.status));
+      setProcesando(false);
+      return;
+    }
+    onRecuperada(); // relee el estado del servidor; la fila desaparece del listado
+  }
+
+  return (
+    <li className="flex flex-col gap-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {orden.numRemision} · {orden.destinatario}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <RecepcionDetalle
+            orden={orden}
+            estadoLegible={estadoLegible(orden, zonaNombre)}
+          />
+          <div className="flex justify-end">
+            <Button type="button" onClick={handleRecuperar} disabled={procesando}>
+              {procesando ? "Recuperando…" : "Recuperar"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </li>
+  );
+}
+
 export function RecepcionSateliteModule({
   porRecibir,
   recibidas,
   porDevolver = [],
+  devueltas = [],
   zonaNombre,
   sinZona,
   mensajeros,
@@ -369,6 +435,37 @@ export function RecepcionSateliteModule({
                 orden={orden}
                 zonaNombre={zonaNombre}
                 onDevuelta={() => router.refresh()}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ---------- Sección: Devueltas (devuelta) ---------- */}
+      {/* Feature 100/T4.1 (R12): órdenes `devuelta` (novedad) de la zona; cada una
+          ofrece "Recuperar" (devuelta → en_bodega_satelite) con estado por fila. En
+          éxito se relee el estado del servidor + toast; un error se avisa por toast. */}
+      <section
+        aria-label="Devueltas"
+        className="flex flex-col gap-3 border-t pt-6"
+      >
+        <h2 className="text-lg font-semibold">Devueltas</h2>
+        {devueltas.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hay órdenes por recuperar.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {devueltas.map((orden) => (
+              <FilaDevuelta
+                key={orden.id}
+                orden={orden}
+                zonaNombre={zonaNombre}
+                onRecuperada={() => {
+                  toast.success("Orden recuperada a bodega.");
+                  router.refresh();
+                }}
+                onError={(mensaje) => toast.error(mensaje)}
               />
             ))}
           </ul>

@@ -6,12 +6,11 @@ import {
   ORIGEN_TIPOS_CON_GESTION,
 } from "@/lib/types/orden-historial";
 
-// Feature 99 (T0) — cobertura ESTATICA de la migracion
-// `*_orden_historial_origen_tipo_sla_devuelta` (patron
-// orden-historial-origen-tipo-carga-api / gestion-orden-anulacion): lee migration.sql/down.sql
-// por regex. NO requiere Postgres real; el round-trip up->down->up contra Postgres lo ejecuta el
-// implementer y queda en `progress/impl_99.md`. Cubre R19 (los 2 `origen_tipo` nuevos, aditivos y
-// reversibles).
+// Feature 100 (T0) — cobertura ESTATICA de la migracion
+// `*_orden_historial_origen_tipo_resolver_novedad` (patron de la 99
+// `*_orden_historial_origen_tipo_sla_devuelta`): lee migration.sql/down.sql por regex. NO requiere
+// Postgres real; el round-trip up->down->up contra Postgres lo ejecuta el implementer y queda en
+// `progress/impl_100.md`. Cubre T0.1/T0.2/T0.3 (los 2 `origen_tipo` nuevos, aditivos y reversibles).
 
 const MIGRATIONS_DIR = path.join(__dirname, "..", "..", "..", "db", "migrations");
 
@@ -25,7 +24,7 @@ function migrationDirFor(suffix: string): string {
   return path.join(MIGRATIONS_DIR, dir);
 }
 
-const migrationDir = migrationDirFor("_orden_historial_origen_tipo_sla_devuelta");
+const migrationDir = migrationDirFor("_orden_historial_origen_tipo_resolver_novedad");
 const upSql = fs.readFileSync(path.join(migrationDir, "migration.sql"), "utf8");
 const downSql = fs.readFileSync(path.join(migrationDir, "down.sql"), "utf8");
 const schemaPrisma = fs.readFileSync(
@@ -33,23 +32,23 @@ const schemaPrisma = fs.readFileSync(
   "utf8",
 );
 
-const NUEVOS = ["liberacion_devuelta_sla", "escalado_devuelta_sla"] as const;
+const NUEVOS = ["reprogramacion_tienda", "recuperacion_manual"] as const;
 
-describe("Feature 99 · SEED del enum — los 2 valores nuevos (R19)", () => {
-  it("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED incluye ambos valores del cron SLA", () => {
+describe("Feature 100 · SEED del enum — los 2 valores nuevos (T0.3)", () => {
+  it("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED incluye ambos valores de resolver-novedad", () => {
     for (const v of NUEVOS) expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toContain(v);
   });
 
-  it("NINGUNO entra en ORIGEN_TIPOS_CON_GESTION (no cuentan como intento: destino != devuelta)", () => {
-    // El derivador cuenta filas con destino `devuelta`; el reintento va a bodega y el escalado a
-    // `rechazada`, asi que ninguno debe estar en la familia que enlaza intentos.
+  it("NINGUNO entra en ORIGEN_TIPOS_CON_GESTION (R8: no cuentan como intento; destino != devuelta)", () => {
+    // El derivador cuenta filas con destino `devuelta`; reprogramar va a `reprogramada` y recuperar
+    // a bodega, asi que ninguno debe estar en la familia que enlaza intentos.
     for (const v of NUEVOS) expect([...ORIGEN_TIPOS_CON_GESTION]).not.toContain(v);
     expect([...ORIGEN_TIPOS_CON_GESTION]).toEqual(["gestion", "deshacer_gestion"]);
   });
 });
 
-describe("Feature 99 · UP — ADD VALUE aditivo de los 2 origen_tipo (R19)", () => {
-  it("añade `liberacion_devuelta_sla` y `escalado_devuelta_sla` (fuera de tx via IF NOT EXISTS)", () => {
+describe("Feature 100 · UP — ADD VALUE aditivo de los 2 origen_tipo (T0.1)", () => {
+  it("añade `reprogramacion_tienda` y `recuperacion_manual` (fuera de tx via IF NOT EXISTS)", () => {
     for (const v of NUEVOS) {
       expect(upSql).toMatch(
         new RegExp(`ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS '${v}';`),
@@ -67,8 +66,8 @@ describe("Feature 99 · UP — ADD VALUE aditivo de los 2 origen_tipo (R19)", ()
   });
 });
 
-describe("Feature 99 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)", () => {
-  it("recrea el enum SIN los 2 valores nuevos, con los 13 previos", () => {
+describe("Feature 100 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)", () => {
+  it("recrea el enum SIN los 2 valores nuevos, con los 15 previos", () => {
     // Postgres no soporta DROP VALUE: el tipo se recrea y la columna se migra con USING.
     expect(downSql).toMatch(
       /ALTER TYPE "orden_historial_origen_tipo" RENAME TO "orden_historial_origen_tipo_old";/,
@@ -76,19 +75,11 @@ describe("Feature 99 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
     const match = downSql.match(/CREATE TYPE "orden_historial_origen_tipo" AS ENUM \(([\s\S]*?)\);/);
     expect(match).not.toBeNull();
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-    expect(valores).toHaveLength(13);
+    expect(valores).toHaveLength(15);
     for (const v of NUEVOS) expect(valores).not.toContain(v);
-    // Los 13 previos = el SEED actual menos los valores AÑADIDOS EN O DESPUES de la feature 99. El
-    // down.sql del 99 recrea el enum a su estado PRE-99 (fijo, historico); por eso se descuentan los
-    // dos de la 99 (`liberacion_devuelta_sla`/`escalado_devuelta_sla`) y los dos de la feature 100
-    // (`reprogramacion_tienda`/`recuperacion_manual`), apendidos despues (patron del down del 67).
-    const AÑADIDOS_EN_O_DESPUES_DEL_99 = new Set([
-      ...NUEVOS,
-      "reprogramacion_tienda", // feature 100
-      "recuperacion_manual", // feature 100
-    ]);
+    // Los 15 previos = el SEED actual menos los dos valores de la 100.
     expect(new Set(valores)).toEqual(
-      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_99.has(v))),
+      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !NUEVOS.includes(v as never))),
     );
   });
 
@@ -110,7 +101,7 @@ describe("Feature 99 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
   });
 });
 
-describe("Feature 99 · schema.prisma refleja la migracion (sin drift)", () => {
+describe("Feature 100 · schema.prisma refleja la migracion (sin drift)", () => {
   it("el enum Prisma OrdenHistorialOrigenTipo tiene los 2 valores nuevos", () => {
     const bloque = schemaPrisma.match(/enum OrdenHistorialOrigenTipo \{([\s\S]*?)\n\}/);
     expect(bloque).not.toBeNull();
@@ -121,22 +112,17 @@ describe("Feature 99 · schema.prisma refleja la migracion (sin drift)", () => {
 });
 
 describe("estructura de la carpeta de migracion", () => {
-  it("contiene migration.sql y down.sql, con timestamp posterior a la migracion que la precede", () => {
+  it("contiene migration.sql y down.sql, con timestamp posterior a la ultima migracion previa", () => {
     expect(fs.existsSync(path.join(migrationDir, "migration.sql"))).toBe(true);
     expect(fs.existsSync(path.join(migrationDir, "down.sql"))).toBe(true);
     const dirName = path.basename(migrationDir);
-    // Invariante ORDEN-ROBUSTO: esta migracion sorts DESPUES de la que la precede (no que sea la
-    // ULTIMA del repo). Comparar contra el maximo global rompia cada vez que una feature posterior
-    // apendia una migracion nueva (feature 100). Se compara contra la carpeta inmediatamente
-    // anterior por nombre (la mayor < dirName), que es estable ante añadidos futuros.
-    const previa = fs
+    const todas = fs
       .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
-      .filter((n) => n < dirName)
-      .sort()
-      .pop();
-    expect(previa).toBeDefined();
-    expect(dirName > (previa as string)).toBe(true);
+      .filter((n) => n !== dirName)
+      .sort();
+    const previa = todas[todas.length - 1];
+    expect(dirName > previa).toBe(true);
   });
 });

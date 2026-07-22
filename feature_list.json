@@ -1098,11 +1098,11 @@
       "id": 100,
       "name": "resolver la novedad: reprogramar (tienda) o recuperar a bodega (bodega dueña)",
       "description": "Acciones manuales que RESUELVEN una novedad y sacan la orden de `devuelta` antes de que venza su ventana (detienen el cron de la 99). En /novedades, ademas de contactar (llamar/WhatsApp, feature 87), la tienda puede REPROGRAMAR la orden a la fecha que pida el cliente (reusa la transicion `reprogramada`/fecha_reprogramacion de la 46). La bodega dueña puede RECUPERAR la orden -> `en_bodega`/`en_bodega_satelite` por zona (nuevo intento), sacandola de novedades y reiniciando el flujo. Autorizacion por rol (tienda la suya; bodega su zona); transiciones por appendCambioEstado (49).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
-      "branch": null,
+      "branch": "feature/100-resolver-novedad",
       "depends_on": 99
     },
     {

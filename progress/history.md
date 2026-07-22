@@ -1706,3 +1706,27 @@
   Medido (implementer + reviewer + leader, independiente): typecheck 0, lint 0, **3950/3950 tests**,
   round-trip real. Base de 100/101/102. **DEUDA ajena:** `./init.sh` rojo por bug preexistente del
   harness (`login` sin `specs/login/`), medido idéntico en HEAD limpio — no es de esta feature.
+
+## 2026-07-22 — resolver la novedad: reprogramar (tienda) / recuperar a bodega (feature 100, FULLSTACK)
+- Dos acciones MANUALES que RESUELVEN una novedad y sacan la orden de `devuelta` antes de que venza
+  su ventana SLA (la feature 99 la salta, porque su cron solo actúa sobre las que siguen en
+  `devuelta`). (1) **Reprogramar** (adminTienda, en `/novedades`): tras contactar al cliente,
+  reprograma a la fecha que pida; gestión sintética `resultado=reprogramada` + `fecha_reprogramacion`
+  (`origen_tipo=reprogramacion_tienda`) que reusa INTACTO el bloqueo/liberación de la 46. (2)
+  **Recuperar a bodega** (bodega dueña: maestro/admin en `/ordenes`, adminSatelite en
+  `/recepcion-satelite`): pasa la orden a `en_bodega`/`en_bodega_satelite` por zona, sin mensajero,
+  para un nuevo intento (`origen_tipo=recuperacion_manual`, actor=admin).
+- Requisitos R1–R24 (mapa R→test en `progress/impl_100.md`). Migración: solo ALTER del enum
+  `orden_historial_origen_tipo` (+`reprogramacion_tienda`/`recuperacion_manual`) con `down.sql`;
+  round-trip real verificado por el reviewer (up→down→up). Grupo nuevo `devueltas` en
+  `RecepcionSateliteService.listar` (patrón del `porDevolver` de la 48).
+- Gate F1.4 aprobado por el humano (las 5 recomendadas + bonus): Q1 reprogramar money-neutral y sin
+  contar intento; Q2 recuperar limpia mensajero; Q3 authz server-side (tienda dueña /
+  `esBodegaResponsable`); Q4 sin abrir `/novedades` a la bodega; Q5 sin carrera con el cron 99
+  (UPDATE guardado por `estatus_id=devuelta`, `if count>0`). **Bonus:** NO enciende `orden.prioridad`
+  (es la feature 101).
+- Ciclo SDD directo del leader (spec_author → backend_dev ×2 → frontend_dev → reviewer). **Reviewer
+  APROBADO de código** (RECHAZADO inicial SOLO por `impl_100.md` ausente, ya escrito; sin cambios de
+  código; money-neutralidad y authz verificadas de forma adversarial, sin fuga de `prioridad`).
+  Medido: typecheck 0, lint 0, **4039/4039 tests**, round-trip real. Base para 101 (prioridad) y 102
+  (dinero en cierres). `./init.sh` rojo solo por la deuda ajena preexistente del harness (`login`).

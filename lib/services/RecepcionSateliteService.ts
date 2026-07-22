@@ -18,6 +18,11 @@ const ESTADO_RECIBIDA = "en_bodega_satelite";
 // Feature 48/T9/R14: estado de las ordenes elegibles para "Devolver a la tienda"
 // (retorno a la tienda de origen). Se listan acotadas a la zona del adminSatelite.
 const ESTADO_RECHAZADA = "rechazada";
+// Feature 100/T4.1/R12: estado de las ordenes `devuelta` (novedad que reposa bajo la
+// feature 99) elegibles para "Recuperar a bodega" (nuevo intento). Mismo patron que
+// `porDevolver` (48): SIEMPRE acotadas a la zona del adminSatelite. La transicion la
+// ejecuta RecuperacionBodegaService (autz rol + zona); aqui SOLO listado por zona.
+const ESTADO_DEVUELTA = "devuelta";
 
 // Solo el rol autorizado en el modulo (R3/R17): el adminSatelite, SIEMPRE acotado
 // a su propia zona (R4/R12).
@@ -61,6 +66,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
         porRecibir: [],
         recibidas: [],
         porDevolver: [],
+        devueltas: [], // Feature 100/T4.1: sin zona -> tampoco hay ordenes por recuperar
         zonaNombre: null,
         sinZona: true,
       };
@@ -68,15 +74,19 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
 
     // Feature 48/T9/R14: se anade el 3er estado `rechazada` para listar las ordenes
     // elegibles para "Devolver a la tienda", SIEMPRE acotadas a la zona del actor.
+    // Feature 100/T4.1/R12: se anade el 4to estado `devuelta` para listar las ordenes
+    // elegibles para "Recuperar a bodega", tambien acotadas a la zona del actor.
     const rows = await this.repo.findRecepcionSateliteByZona(zonaId, [
       ORIGEN_RECEPCION,
       ESTADO_RECIBIDA,
       ESTADO_RECHAZADA,
-    ]); // R6/R8 + R14
+      ESTADO_DEVUELTA,
+    ]); // R6/R8 + R14 + Feature 100/R12
 
     const porRecibir: RecepcionSateliteDTO[] = [];
     const recibidas: RecepcionSateliteDTO[] = [];
     const porDevolver: RecepcionSateliteDTO[] = []; // Feature 48/T9/R14
+    const devueltas: RecepcionSateliteDTO[] = []; // Feature 100/T4.1/R12
     let zonaNombre: string | null = null;
     for (const row of rows) {
       zonaNombre = row.zonaNombre; // derivado de orden.zonaId (misma zona para todas)
@@ -84,8 +94,17 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       if (row.estatusValue === ORIGEN_RECEPCION) porRecibir.push(dto);
       else if (row.estatusValue === ESTADO_RECIBIDA) recibidas.push(dto);
       else if (row.estatusValue === ESTADO_RECHAZADA) porDevolver.push(dto);
+      else if (row.estatusValue === ESTADO_DEVUELTA) devueltas.push(dto);
     }
-    return { status: "ok", porRecibir, recibidas, porDevolver, zonaNombre, sinZona: false };
+    return {
+      status: "ok",
+      porRecibir,
+      recibidas,
+      porDevolver,
+      devueltas,
+      zonaNombre,
+      sinZona: false,
+    };
   }
 
   async recibir(numGuia: number, actor: Actor): Promise<RecibirServiceResult> {
