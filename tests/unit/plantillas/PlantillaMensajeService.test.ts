@@ -177,11 +177,11 @@ describe("R27/R29: eliminar marca deletedAt (soft) y no borra; inexistente -> no
   });
 });
 
-describe("R18: preview sustituye con los ejemplos", () => {
-  it("render con ejemplos del catalogo", async () => {
+describe("R18: preview sustituye las variables por su marcador", () => {
+  it("con catalogo vacio toda clave bien formada cae al marcador en MAYUSCULAS", async () => {
     const r = await service.preview("Hola {{usuario}}, orden {{cod}}", MAESTRO);
     expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.texto).toBe("Hola Juan, orden ABC123");
+    if (r.status === "ok") expect(r.texto).toBe("Hola USUARIO, orden COD");
   });
 
   it("cuerpo malformado -> validation_error", async () => {
