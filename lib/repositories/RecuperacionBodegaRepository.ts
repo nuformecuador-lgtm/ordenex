@@ -28,7 +28,9 @@ export class RecuperacionBodegaRepository implements IRecuperacionBodegaReposito
    * destino de bodega y limpia `mensajero_asignado_id` (+ `asignado_at`, R14). Si la orden ya salio
    * de `devuelta` (2.ª corrida / carrera con el cron SLA de la 99) afecta 0 filas -> false, sin
    * efectos. El append (actor = el admin, `origen_tipo = recuperacion_manual`) va DENTRO del
-   * `if (count > 0)` de la MISMA tx. NO toca `orden.prioridad` (R19: la columna no existe).
+   * `if (count > 0)` de la MISMA tx. Feature 101/R3: la recuperacion MANUAL NO enciende
+   * `orden.prioridad` (la columna ya existe, pero el `data` deliberadamente NO la toca); solo
+   * la liberacion por SLA (99) la enciende.
    */
   async recuperarABodega(input: RecuperarABodegaInput): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {

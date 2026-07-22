@@ -69,6 +69,7 @@ describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
       direccion: "calle 1",
       producto: "caja",
       montoCobrar: new Prisma.Decimal(25),
+      prioridad: false, // feature 101/R9: escalar de la fila que toRecepcionSateliteRow propaga
       estatus: { value: "en_ruta_bodega_satelite" },
       tienda: { nombre: "Tienda X" },
       zona: { nombre: "Limon" },
@@ -82,7 +83,7 @@ describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
   it("R6/R8: filtra zona + estatus IN + no borradas; mapea nombres y Decimal->number", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
-      ordenRow(),
+      ordenRow({ prioridad: true }),
       ordenRow({ id: "o2", estatus: { value: "en_bodega_satelite" }, distrito: null, montoCobrar: null }),
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -98,6 +99,11 @@ describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
       deletedAt: null, // R6: excluye borradas
       estatus: { value: { in: ["en_ruta_bodega_satelite", "en_bodega_satelite"] } },
     });
+    // Feature 101/R7: sort prioridad-first en la QUERY (no en memoria), desempate por recencia.
+    expect(arg.orderBy).toEqual([{ prioridad: "desc" }, { createdAt: "desc" }]);
+    // Feature 101/R9: el `select` pide `prioridad` explicitamente (es un select acotado).
+    expect(arg.select.prioridad).toBe(true);
+    // R9: y toRecepcionSateliteRow lo propaga a la fila (aqui la o1 es prioritaria).
     expect(rows[0]).toEqual({
       id: "o1",
       numGuia: 10,
@@ -113,11 +119,13 @@ describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
       provinciaNombre: "Prov",
       cantonNombre: "Canton",
       distritoNombre: "Distrito",
+      prioridad: true, // feature 101/R9
     });
-    // R9: estatusValue distingue "Recibidas"; distrito/monto nullable resueltos.
+    // R9: estatusValue distingue "Recibidas"; distrito/monto nullable resueltos; prioridad default.
     expect(rows[1].estatusValue).toBe("en_bodega_satelite");
     expect(rows[1].distritoNombre).toBeNull();
     expect(rows[1].montoCobrar).toBeNull();
+    expect(rows[1].prioridad).toBe(false);
   });
 
   it("devuelve vacio sin consultar cuando estatusValues esta vacio", async () => {

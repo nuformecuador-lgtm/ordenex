@@ -78,22 +78,22 @@ posible saber qué órdenes vencieron su ventana en el pasado).
 mediante una migración Prisma ADITIVA con su `down.sql`, sin alterar la RLS ni
 las columnas preexistentes de `orden`.
 
-## Trazabilidad R → test (a completar por el implementer)
+## Trazabilidad R → test (T13, rutas reales)
 
-| Req | Tipo de test |
+| Req | Test |
 | --- | --- |
-| R1  | unit repo/schema: default `false` al crear orden |
-| R2  | unit `DevolucionSlaRepository.liberarDevueltaSla`: `data` incluye `prioridad: true` |
-| R3  | unit `escalarDevueltaSla` y repo de recuperación manual (100): NO escriben `prioridad` |
-| R4  | unit liberar con `count = 0`: no hay append ni cambio de `prioridad` |
-| R5  | unit `asignarBodegaLote` y `asignarSateliteLote`: `data` incluye `prioridad: false` |
-| R6  | unit `OrdenRepository.list`: `orderBy` encabeza con `{ prioridad: 'desc' }` |
-| R7  | unit `findRecepcionSateliteByZona`: `orderBy` encabeza con `{ prioridad: 'desc' }` |
-| R8  | component: fila prioritaria recibe la clase/atributo de resalte y nombre accesible |
-| R9  | unit DTO: `toListItemDTO` y `toRecepcionSateliteRow` propagan `prioridad` |
-| R10 | component/unit: `/novedades` y "Devueltas" no ordenan ni resaltan por prioridad |
-| R11 | integration/migration: filas existentes quedan en `false` (sin backfill) |
-| R12 | script `db:rollback`: `down.sql` revierte sin residuos |
+| R1  | `tests/integration/db/orden-prioridad-migration.test.ts` (columna BOOLEAN NOT NULL DEFAULT false + schema sin drift) |
+| R2  | `tests/unit/repositories/devolucion-sla-repository.test.ts` (liberar → `data` incluye `prioridad: true`) |
+| R3  | `tests/unit/repositories/devolucion-sla-repository.test.ts` (escalar `not.toHaveProperty("prioridad")`) + `tests/unit/repositories/recuperacion-bodega-repository.test.ts` (recuperación manual no toca `prioridad`) |
+| R4  | `tests/unit/repositories/devolucion-sla-repository.test.ts` (liberar `count = 0` → false, sin append) |
+| R5  | `tests/unit/repositories/orden-repository.guia.test.ts` (`asignarBodegaLote` `prioridad: false`) + `tests/unit/repositories/orden-repository.asignacion-satelite.test.ts` (`asignarSateliteLote` `"prioridad" = false`) |
+| R6  | `tests/unit/repositories/orden-repository.test.ts` (`orderBy[0] = { prioridad: "desc" }`) |
+| R7  | `tests/unit/repositories/orden-repository.recepcion-satelite.test.ts` (`orderBy [{prioridad:desc},{createdAt:desc}]`) |
+| R8  | `tests/components/PrioridadResalte.test.ts` (clase + badge "Prioritaria") + `tests/components/RecepcionSateliteModule.test.tsx` (R8: Recibidas resalta) + `tests/components/DataTable.test.tsx` (prop `rowClassName`) |
+| R9  | `tests/unit/repositories/orden-repository.test.ts` + `tests/unit/repositories/orden-repository.recepcion-satelite.test.ts` + `tests/unit/services/recepcion-satelite-service.test.ts` (DTO propaga `prioridad`) |
+| R10 | `tests/components/RecepcionSateliteModule.test.tsx` (R10: "Devueltas" no resalta aunque `prioridad=true`) + gateo `en_bodega` en `OrdenesTabs.tsx` (default `resaltarPrioridad=false`) |
+| R11 | `tests/integration/db/orden-prioridad-migration.test.ts` (DEFAULT constante, sin `UPDATE`/backfill) |
+| R12 | `tests/integration/db/orden-prioridad-migration.test.ts` (`down.sql` DROP COLUMN, sin residuos) + round-trip real up→down→up (reviewer, en `progress/impl_101-prioridad-reasignacion.md`) |
 
 ## Preguntas abiertas — gate F1.4 (con recomendación)
 

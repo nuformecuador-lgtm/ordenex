@@ -112,17 +112,23 @@ describe("Feature 100 · schema.prisma refleja la migracion (sin drift)", () => 
 });
 
 describe("estructura de la carpeta de migracion", () => {
-  it("contiene migration.sql y down.sql, con timestamp posterior a la ultima migracion previa", () => {
+  it("contiene migration.sql y down.sql, con timestamp posterior a la migracion que la precede", () => {
     expect(fs.existsSync(path.join(migrationDir, "migration.sql"))).toBe(true);
     expect(fs.existsSync(path.join(migrationDir, "down.sql"))).toBe(true);
     const dirName = path.basename(migrationDir);
-    const todas = fs
+    // Invariante ORDEN-ROBUSTO (mismo criterio que la feature 99): esta migracion sorts DESPUES
+    // de la que la precede, NO que sea la ULTIMA del repo. Comparar contra el maximo global rompia
+    // cada vez que una feature posterior apendia una migracion nueva (feature 101). Se compara
+    // contra la carpeta inmediatamente anterior por nombre (la mayor < dirName), estable ante
+    // añadidos futuros.
+    const previa = fs
       .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
-      .filter((n) => n !== dirName)
-      .sort();
-    const previa = todas[todas.length - 1];
-    expect(dirName > previa).toBe(true);
+      .filter((n) => n < dirName)
+      .sort()
+      .pop();
+    expect(previa).toBeDefined();
+    expect(dirName > (previa as string)).toBe(true);
   });
 });

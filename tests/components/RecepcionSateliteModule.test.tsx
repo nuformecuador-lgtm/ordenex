@@ -762,4 +762,46 @@ describe("RecepcionSateliteModule", () => {
     // La orden sigue listándose aunque no se pueda aceptar.
     expect(within(region).getAllByText(/REM-R1/).length).toBeGreaterThan(0);
   });
+
+  // ---------- Feature 101 (R8/R10) — resalte de prioridad ----------
+  it("R8: una orden PRIORITARIA en 'Recibidas' muestra el badge 'Prioritaria' y resalta su fila", () => {
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "p1",
+          numRemision: "REM-PRIO",
+          estatusValue: "en_bodega_satelite",
+          prioridad: true,
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Recibidas" });
+    // El estado prioritario NO se comunica solo por color: hay un texto accesible.
+    expect(within(region).getByText("Prioritaria")).toBeInTheDocument();
+    // La fila lleva la clase de resalte compartida.
+    const fila = within(region).getByText(/REM-PRIO/).closest("tr");
+    expect(fila).toHaveClass("bg-warning/15");
+  });
+
+  it("R10: el resalte NO se filtra a 'Devueltas' aunque la orden traiga prioridad=true", () => {
+    // 'Devueltas' es recuperación manual (feature 100), NUNCA reasignación por SLA:
+    // no debe resaltar por prioridad aunque el flag venga en el DTO.
+    renderModule({
+      devueltas: [
+        makeOrden({
+          id: "d1",
+          numRemision: "REM-DEV",
+          estatusValue: "devuelta",
+          prioridad: true,
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Devueltas" });
+    // La orden se lista, pero SIN el badge de prioridad y SIN el tinte de resalte.
+    expect(within(region).getAllByText(/REM-DEV/).length).toBeGreaterThan(0);
+    expect(within(region).queryByText("Prioritaria")).toBeNull();
+    expect(region.querySelector(".bg-warning\\/15")).toBeNull();
+  });
 });

@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  conBadgePrioridad,
+  resaltarFilaPrioridad,
+} from "@/components/shared/PrioridadResalte";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
@@ -311,7 +315,11 @@ export function RecepcionSateliteModule({
           />
         ),
       },
-      ...recibidasColumns(zonaNombre),
+      // Feature 101/R8: decora las columnas de datos para anexar el badge "Prioritaria"
+      // a las órdenes liberadas por el SLA (prioridad=true) que esperan reasignación en
+      // ESTE grupo ("Recibidas", en_bodega_satelite). El checkbox va delante del decorado,
+      // así el badge cae en la primera columna de datos (Nº Guía).
+      ...conBadgePrioridad(recibidasColumns(zonaNombre)),
     ],
     [seleccionados, zonaNombre, recibidas],
   );
@@ -410,6 +418,7 @@ export function RecepcionSateliteModule({
           data={recibidas}
           rowKey="id"
           ariaLabel="Recibidas"
+          rowClassName={resaltarFilaPrioridad}
           emptyMessage="Aún no has recibido órdenes."
         />
       </section>

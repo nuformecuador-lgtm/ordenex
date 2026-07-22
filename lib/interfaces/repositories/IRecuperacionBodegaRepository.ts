@@ -22,8 +22,9 @@ export interface IRecuperacionBodegaRepository {
    * `estatus_id = devuelta` + no borrada. El append al historial
    * (`origen_tipo = recuperacion_manual`, actor = el admin) va DENTRO del `if (count > 0)` de la
    * MISMA tx. Devuelve `true` si afecto una fila; `false` si la orden ya salio de `devuelta`
-   * (2.ª corrida / carrera con el cron SLA de la 99 -> no-op, sin efectos). NO toca
-   * `orden.prioridad` (R19: la columna no existe; feature 101).
+   * (2.ª corrida / carrera con el cron SLA de la 99 -> no-op, sin efectos). Feature 101/R3: la
+   * recuperacion MANUAL NO enciende `orden.prioridad` (la columna ya existe, pero el `data` no la
+   * toca); solo la liberacion por SLA (99) la enciende.
    */
   recuperarABodega(input: RecuperarABodegaInput): Promise<boolean>;
 }

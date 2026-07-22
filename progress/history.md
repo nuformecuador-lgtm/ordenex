@@ -1730,3 +1730,24 @@
   código; money-neutralidad y authz verificadas de forma adversarial, sin fuga de `prioridad`).
   Medido: typecheck 0, lint 0, **4039/4039 tests**, round-trip real. Base para 101 (prioridad) y 102
   (dinero en cierres). `./init.sh` rojo solo por la deuda ajena preexistente del harness (`login`).
+
+## 2026-07-22 — prioridad de reasignación de las órdenes liberadas por SLA (feature 101, FULLSTACK)
+- Nueva columna `orden.prioridad` (bool, default false). El cron SLA de la feature 99 la **enciende**
+  al liberar una devolución vencida `not_found` a la bodega (`DevolucionSlaRepository.liberarDevueltaSla`),
+  y se **apaga** al reasignar mensajero desde la bodega dueña (`asignarBodegaLote` central /
+  `asignarSateliteLote` satélite). Los listados de reasignación de la bodega dueña ordenan
+  `prioridad DESC` primero y el frontend **resalta la fila** (fondo `bg-warning/15` + badge accesible
+  "Prioritaria") en el apartado `en_bodega` de `/ordenes` (maestro/admin) y el grupo "Recibidas" de
+  `/recepcion-satelite` (adminSatelite).
+- Requisitos R1–R12 (mapa R→test en `progress/impl_101-prioridad-reasignacion.md`). Migración aditiva
+  (`ADD COLUMN` NOT NULL DEFAULT false) con `down.sql` (DROP COLUMN); round-trip real verificado por el
+  reviewer. El escalado y la recuperación manual (100) NO encienden prioridad (R3, test negativo).
+  Sin backfill (R11). El resalte NO se filtra a /novedades ni "Devueltas" (R10, test). Helper compartido
+  `components/shared/PrioridadResalte.tsx`; `DataTable` gana la prop opcional retrocompatible `rowClassName`.
+- Gate F1.4 aprobado por el humano (las 5 recomendadas + prop `rowClassName`). Ciclo directo del leader
+  (spec_author → backend_dev → frontend_dev → reviewer). El `frontend_dev` cayó por límite de sesión a
+  mitad de tarea; el leader retomó y cerró el frontend restante (test R10 de no-fuga, helper aislado,
+  test de migración). **Reviewer APROBADO de código** (RECHAZADO inicial solo por artefactos de
+  trazabilidad, ya cerrados; sin cambios de código de dominio). Medido: typecheck 0, lint 0,
+  **4050/4050 tests**, round-trip real. `./init.sh` rojo solo por la deuda ajena preexistente del
+  harness. Base de la feature 102 (dinero de estos rechazos visible en cierres — pendiente, para mañana).

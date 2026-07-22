@@ -566,10 +566,12 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     const arg = tx.orden.updateMany.mock.calls[0][0];
     expect(arg.where).toEqual({ id: { in: ["o1", "o2"] } });
     // Feature 76/R23 (W2): asignacion de bodega siempre estampa asignado_at = now.
+    // Feature 101/R5 (gate F1.4-Q1): la reasignacion desde bodega central apaga prioridad: false.
     expect(arg.data).toEqual({
       mensajeroAsignadoId: "m1",
       estatusId: "os-espera",
       asignadoAt: expect.any(Date),
+      prioridad: false, // feature 101/R5
     });
     expect(arg.data).not.toHaveProperty("numGuia");
   });

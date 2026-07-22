@@ -75,6 +75,12 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
    * destino de bodega y limpia `mensajero_asignado_id` (+ `asignado_at`). Si la orden ya salio
    * de `devuelta` (2.ª corrida / carrera) afecta 0 filas -> false. El append (actor NULL,
    * `origen_tipo = liberacion_devuelta_sla`) va DENTRO del `if (count > 0)` de la MISMA tx.
+   *
+   * Feature 101 (R2/R4, gate F1.4-Q5): enciende `prioridad = true` en el MISMO `data` del
+   * `updateMany` GUARDADO. Por estar dentro de la guarda por `estatus_id = devuelta`, una orden
+   * que ya salio de `devuelta` (count 0) NO se toca -> el flag no cambia (R4, idempotencia).
+   * Solo la liberacion por SLA lo enciende: `escalarDevueltaSla` (-> rechazada) y la recuperacion
+   * MANUAL de la feature 100 NO tocan `prioridad` (R3).
    */
   async liberarDevueltaSla(input: LiberarDevueltaSlaInput): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
@@ -88,6 +94,7 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
           estatusId: input.destinoEstatusId, // R15 (destino ya resuelto por el service)
           mensajeroAsignadoId: null, // R15: handoff limpio a la bodega (nuevo intento)
           asignadoAt: null, // limpia el timestamp de asignacion (defensivo, patron 46)
+          prioridad: true, // feature 101/R2: liberada por SLA -> reasignacion prioritaria
         },
       });
       // R24/R25: SOLO si transiciono (count 1); una re-corrida/carrera (count 0) no duplica.
