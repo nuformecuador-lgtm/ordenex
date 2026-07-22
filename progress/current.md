@@ -17,7 +17,7 @@
 
 ### Feature 102 — ingreso de bodega por rechazos SLA visible en cierres + aviso (Fase 2)
 - **Rama:** `feature/102-rechazos-sla-visible` (desde `origin/dev`). Zona `fullstack`, complexity `medium`. `depends_on: 99` ✅.
-- **Estado:** `in_progress` (Fase 2) — spec + impl (backend_dev → frontend_dev) + review COMPLETOS. Reviewer **APROBADO** (18/18 R con test que pasa; sin migración; money-safe; gate cumplido). Merge de `origin/dev` (features 98/103/104/105) resuelto. **Pendiente: push + PR → dev (F2.4).**
+- **Estado:** `in_progress` (Fase 2) — spec + impl (backend_dev → frontend_dev) + review COMPLETOS. Reviewer **APROBADO** (18/18 R con test que pasa; sin migración; money-safe; gate cumplido). Merge de `origin/dev` (features 98/103/104/105) resuelto; post-merge typecheck OK, lint 0 err, **suite 4120/4120**. **PR #131 → dev abierto; esperando merge humano (F2.5).** Al mergear: pasar a `done`, append a `history.md`, limpiar de aquí (F2.6). Sin migración → no requiere `prisma migrate deploy` local.
 - **Gate F1.4 (mecanismo + Q1–Q4, todo default):** aviso = **VISIBILIDAD DERIVADA**. Q1 monto tienda = `ingreso_bodega_rechazo` (snapshot 56); Q2 anclado al snapshot (`null`="pendiente de cierre"); Q3 superficie tienda = sección dentro de `/novedades`; Q4 subtotal SLA solo en el **detalle** del cierre. Sin migración, sin mover dinero, sin infra de notificaciones; desglose por join `origen_tipo='escalado_devuelta_sla'`.
 - **Artefactos:** `specs/102-rechazos-sla-visible/`, `progress/impl_102.md`, `progress/review_102.md`.
 
