@@ -1071,6 +1071,61 @@
       "zone": "fullstack",
       "branch": "feature/97-optimizacion-ruta-frontend",
       "depends_on": null
+    },
+    {
+      "id": 98,
+      "name": "verificar guia (QR o num_guia) antes de gestionar",
+      "description": "En /mis-asignaciones (mensajero), antes de habilitar la gestion de una orden en reparto, exigir que identifique el paquete escaneando el QR de la etiqueta o tecleando el num_guia, y que coincida con la orden del panel. El gate va en el paso 'Gestionar esta orden' de GestionarOrdenPanel: guia correcta -> escogerParaGestion + revela los 4 botones (entregar/reprogramar/devolver/rechazar); guia distinta o vacia -> error, no avanza; si la orden no tiene num_guia, se bloquea con aviso. Reutiliza el patron de la feature 96 (input de guia + escaner de camara). Frontend puro (el backend ya valida pertenencia/estado). Evita gestionar el paquete equivocado.",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "frontend",
+      "branch": null,
+      "depends_on": null
+    },
+    {
+      "id": 99,
+      "name": "devolucion diferida: la orden se queda en `devuelta` + cron SLA (liberar/rechazar) con ingreso de bodega del rechazo",
+      "description": "Motor del nuevo flujo de devolucion. Difiere la transicion de seguimiento de la feature 47 (hoy inmediata en la tx de gestionar), CONSERVANDO su contador de intentos: al devolver, la orden cuenta como intento y QUEDA en `devuelta`, anclando la ventana con su causa (feature 73) y el timestamp de devolucion. Un cron (patron liberar-reprogramadas/46) procesa las ordenes en `devuelta` cuya ventana vencio SIN resolverse: not_found (24h) con intentos<umbral(3) -> en_bodega/en_bodega_satelite por zona, sin mensajero (nuevo intento); not_found en el 3er intento, tras 24h -> `rechazada`; wrong_number/wrong_address -> `rechazada` al dia 6. Todas las transiciones por el choke point appendCambioEstado (49). Money-critical: la transicion a `rechazada` registra el ingreso de bodega por rechazo (feature 56) de forma consistente con el cierre/wallet, ya que aca no hay gestion `rechazada` del mensajero. Reconcilia /novedades (87/89) al estado real `devuelta`. Requiere migracion (anclaje de la ventana) + cron nuevo. Base de 100/101/102.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": null
+    },
+    {
+      "id": 100,
+      "name": "resolver la novedad: reprogramar (tienda) o recuperar a bodega (bodega dueña)",
+      "description": "Acciones manuales que RESUELVEN una novedad y sacan la orden de `devuelta` antes de que venza su ventana (detienen el cron de la 99). En /novedades, ademas de contactar (llamar/WhatsApp, feature 87), la tienda puede REPROGRAMAR la orden a la fecha que pida el cliente (reusa la transicion `reprogramada`/fecha_reprogramacion de la 46). La bodega dueña puede RECUPERAR la orden -> `en_bodega`/`en_bodega_satelite` por zona (nuevo intento), sacandola de novedades y reiniciando el flujo. Autorizacion por rol (tienda la suya; bodega su zona); transiciones por appendCambioEstado (49).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 99
+    },
+    {
+      "id": 101,
+      "name": "prioridad de reasignacion de las ordenes liberadas por SLA",
+      "description": "Nuevo `orden.prioridad` (bool, default false) que el cron de la 99 enciende al liberar una orden a bodega por vencimiento (not_found). En el listado de REASIGNACION de la bodega dueña de la orden (maestro/admin para la bodega central, adminSatelite para su zona), las ordenes prioritarias se ordenan primero y el frontend resalta su fila (color llamativo). Ciclo de vida a definir en el gate (se apaga al reasignar). Migracion aditiva (orden.prioridad).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 99
+    },
+    {
+      "id": 102,
+      "name": "ingreso de bodega por rechazos SLA visible en cierres + aviso a tienda y bodega",
+      "description": "Presenta y avisa el dinero que la 99 registra: las ordenes que llegan a `rechazada` por el cron de SLA generan ingreso de bodega por rechazo (feature 56). Hacerlo VISIBLE en los cierres (desglose de la suma de esos rechazos) y AVISAR a la tienda y a la bodega que esas ordenes llegaron a rechazo con su monto. Mecanismo del aviso a definir en el gate (visibilidad derivada vs notificacion). Reusa el snapshot de 56.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 99
     }
   ]
 }
