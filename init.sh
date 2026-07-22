@@ -27,30 +27,49 @@ else
   warn "no hay package.json todavia (repo recien inicializado)"
 fi
 
-# 3. Regla: una feature por zona a la vez (maximo un in_progress por zone)
+# 3. Regla: maximo 2 features in_progress por zona (frontend / backend / fullstack).
+#    Antes era 1; el humano lo subio a 2 (2026-07-22) para permitir dos peticiones
+#    concurrentes por zona. Coincide con CLAUDE.md regla 1 y AGENTS.md Paralelismo.
 if command -v jq >/dev/null 2>&1 && [ -f feature_list.json ]; then
   IN_PROGRESS_COUNT=$(jq '[.features[] | select(.status=="in_progress")] | length' feature_list.json)
   if [ "$IN_PROGRESS_COUNT" -gt 0 ]; then
-    DUPLICATE_ZONES=$(jq -r '
+    OVER_LIMIT=$(jq -r '
       [.features[] | select(.status=="in_progress" and .zone != null)]
       | group_by(.zone)
-      | map(select(length > 1))[]
-      | "\(.[0].zone): \(map(.name) | join(", "))"
+      | map(select(length > 2))[]
+      | "\(.[0].zone): \(map(.id|tostring) | join(", ")) (\(length) in_progress, max 2)"
     ' feature_list.json)
-    if [ -n "$DUPLICATE_ZONES" ]; then
-      fail "features en in_progress con misma zona: $DUPLICATE_ZONES"
+    if [ -n "$OVER_LIMIT" ]; then
+      fail "mas de 2 features in_progress en la misma zona: $OVER_LIMIT"
     fi
   fi
-  ok "regla una-feature-por-zona respetada (in_progress=$IN_PROGRESS_COUNT)"
+  ok "regla max-2-por-zona respetada (in_progress=$IN_PROGRESS_COUNT)"
 
-  # 4. Toda feature sdd que no este en pending debe tener su carpeta de specs
-  MISSING=$(jq -r '.features[] | select(.sdd==true and .status!="pending") | .name' feature_list.json | while read -r f; do
-    [ -f "specs/$f/requirements.md" ] || echo "$f"
+  # 4. Toda feature sdd EN VUELO (spec_ready o in_progress) debe tener su carpeta
+  #    de specs. Se acota a "en vuelo" a proposito: las `done` tempranas (1-16) son
+  #    previas a la convencion de specs y no tienen carpeta, e incluirlas dejaba el
+  #    gate permanentemente rojo; `pending`/`cancelled` no la necesitan aun/ya.
+  #    La carpeta se resuelve por `spec_path` explicito o, si no, por glob
+  #    `specs/<id>-*` (convencion real `<id>-<slug>`), NO por `.name` (el bug previo:
+  #    `.name` no matchea el slug de la carpeta, p.ej. name "login" vs specs/1-login).
+  MISSING=$(jq -r '
+    .features[]
+    | select(.sdd==true and (.status=="spec_ready" or .status=="in_progress"))
+    | "\(.id)\t\(.spec_path // "")"
+  ' feature_list.json | while IFS=$'\t' read -r id spath; do
+    if [ -n "$spath" ] && [ -f "$spath/requirements.md" ]; then
+      continue
+    fi
+    found=""
+    for d in specs/"$id"-*/; do
+      [ -f "${d}requirements.md" ] && { found=1; break; }
+    done
+    [ -n "$found" ] || echo "$id"
   done)
   if [ -n "$MISSING" ]; then
-    fail "faltan specs para features sdd ya iniciadas: $MISSING"
+    fail "faltan specs para features sdd en vuelo (por id): $MISSING"
   fi
-  ok "specs presentes para features sdd iniciadas"
+  ok "specs presentes para features sdd en vuelo"
 fi
 
 # 5. Calidad de codigo (si los scripts existen)
