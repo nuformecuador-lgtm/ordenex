@@ -79,11 +79,13 @@ listado.
 
 ## Bloque D — Campos variables (catálogo abierto y persistencia del array)
 
-- **R13 (Ubicuo):** El sistema DEBE ofrecer un catálogo ABIERTO y extensible de
-  variables disponibles para insertar (data-driven, NO un tipo cerrado que obligue a
-  migrar código por cada variable nueva). El conjunto es ABIERTO: `usuario` y `cod` son
-  solo la SEMILLA de EJEMPLO (no un catálogo fijo), cada entrada con su clave, etiqueta
-  legible y valor de ejemplo; ampliar es agregar una fila.
+- **R13 (Ubicuo):** El sistema NO DEBE traer variables predefinidas: por defecto el
+  catálogo semilla está VACÍO (Corrección humana 2026-07-22). El usuario DEBE poder
+  INGRESAR/DEFINIR en el cuerpo TANTAS variables como necesite (CERO o más), sin límite
+  y sin lista fija. Cualquier `{{clave}}` bien formada (R14) es una variable válida; el
+  modelo de variables es totalmente ABIERTO/data-driven (sin tipo cerrado ni catálogo
+  fijo de `usuario`/`cod`, que fueron solo un ejemplo del pedido). Una plantilla con CERO
+  variables (cuerpo sin placeholders) es válida.
 - **R14 (Ubicuo):** El sistema DEBE reconocer los campos variables en el cuerpo con la
   sintaxis `{{clave}}` (se admiten espacios internos, p. ej. `{{ clave }}`, que se
   normalizan; `clave` con formato `[a-z0-9_]+`).
@@ -95,7 +97,10 @@ listado.
   `{{}}` o `{{ }}` sin clave, o una clave con caracteres fuera de `[a-z0-9_]`),
   ENTONCES el sistema DEBE rechazarlo con error de validación sobre el campo `cuerpo`.
 - **R17 (Opcional):** DONDE el usuario edita el cuerpo en la UI, el sistema DEBE
-  ofrecer insertar cualquier variable del catálogo en la posición del cursor.
+  permitirle DEFINIR una variable escribiendo su clave (formato `[a-z0-9_]+`) e
+  INSERTARLA como `{{clave}}` en la posición del cursor, tantas veces como quiera (0 o
+  más), sin depender de un catálogo predefinido. Rechaza en la UI una clave con formato
+  inválido antes de insertarla.
 
 ## Bloque E — Vista previa / render
 
