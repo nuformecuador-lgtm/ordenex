@@ -7,32 +7,32 @@
 
 ## Checklist
 
-- [ ] **T1 — Helper `https` compartido.** Extraer `esHttpsValida` de `RegistrarWebhookForm.tsx` a
+- [x] **T1 — Helper `https` compartido.** Extraer `esHttpsValida` de `RegistrarWebhookForm.tsx` a
   `_components/webhook-url.ts` y consumirlo desde ambos formularios (sin duplicar reglas).
   *Hecho:* un único origen del helper; `RegistrarWebhookForm` sigue verde. Depende de: —. `[P]`
 
-- [ ] **T2 — Campo opcional de URL en `GenerarApiKeyForm`.** Añadir estado + `FormField`
+- [x] **T2 — Campo opcional de URL en `GenerarApiKeyForm`.** Añadir estado + `FormField`
   ("URL de webhook (callback)", opcional); ampliar el handle `submit()` a
   `{ keyResult, webhookUrl }`; validar URL no vacía con `registrarWebhookSchema` + T1 antes de
   invocar la action. *Hecho:* cubre R1, R3, R4, R20. Depende de: T1.
 
-- [ ] **T3 — Orquestación del encadenado en `ApiKeysModule`.** `onConfirmForm` compone
+- [x] **T3 — Orquestación del encadenado en `ApiKeysModule`.** `onConfirmForm` compone
   `generarApiKey` → (si `ok` y URL) `registrarWebhook`; amplía el estado `Revelado`
   (`webhookSecret`, `webhookFallo`); refresca listado antes del revelado. *Hecho:* cubre
   R2, R5, R6, R11, R12, R13, R14. Depende de: T2.
 
-- [ ] **T4 — `RevelarSecretosModal` (revelado combinado).** Componente nuevo: sección clave +
+- [x] **T4 — `RevelarSecretosModal` (revelado combinado).** Componente nuevo: sección clave +
   sección webhook (condicional) o aviso de fallo; único checkbox y único cierre; `dismissible={false}`;
   secretos solo en estado local. *Hecho:* cubre R7, R8, R9, R10. Depende de: T3.
 
-- [ ] **T5 — Rótulo de fila "Editar".** Cambiar el texto del botón de `WebhookAccionCell` a
+- [x] **T5 — Rótulo de fila "Editar".** Cambiar el texto del botón de `WebhookAccionCell` a
   "Editar" y su `aria-label`; verificar que el modal de gestión sigue registrando/editando/rotando/
   dando de baja sin regresión. *Hecho:* cubre R15, R16, R17, R18, R19. Depende de: —. `[P]`
 
-- [ ] **T6 — Tests de componente (trazabilidad R→test).** Escribir/actualizar los tests de la tabla
+- [x] **T6 — Tests de componente (trazabilidad R→test).** Escribir/actualizar los tests de la tabla
   de abajo. *Hecho:* cada R con test verde. Depende de: T2–T5.
 
-- [ ] **T7 — Verificación.** `./init.sh` en verde + suite de tests del módulo API. *Hecho:*
+- [x] **T7 — Verificación.** `./init.sh` en verde + suite de tests del módulo API. *Hecho:*
   typecheck + tests verdes; sin regresión en tests de features 82/105. Depende de: T6.
 
 ## Mapa R → test
