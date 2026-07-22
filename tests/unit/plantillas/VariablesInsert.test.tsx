@@ -60,7 +60,12 @@ describe("insertarPlaceholder (helper puro)", () => {
 });
 
 describe("VariablesInsert", () => {
-  it("R17: inserta {{usuario}} en la posición del cursor del textarea", () => {
+  // R13/R17: el catalogo predefinido esta VACIO por defecto, por lo que la botonera de
+  // "Insertar {{clave}}" a partir de una semilla ya no existe. La nueva UI (input para
+  // que el usuario defina sus propias variables) y estos tests los rehace frontend_dev
+  // al reworkear VariablesInsert. La logica de insercion sigue cubierta por los tests de
+  // `insertarPlaceholder` (helper puro) arriba.
+  it.skip("R17: inserta {{usuario}} en la posición del cursor del textarea", () => {
     render(<Harness inicial="AB" />);
     const textarea = screen.getByLabelText<HTMLTextAreaElement>("Cuerpo");
     // Coloca el cursor entre la A y la B.
@@ -73,7 +78,7 @@ describe("VariablesInsert", () => {
     expect(textarea.value).toBe("A{{usuario}}B");
   });
 
-  it("R17: inserta al final cuando no hay selección activa", () => {
+  it.skip("R17: inserta al final cuando no hay selección activa", () => {
     render(<Harness inicial="Hola " />);
     const textarea = screen.getByLabelText<HTMLTextAreaElement>("Cuerpo");
     textarea.setSelectionRange(5, 5);
@@ -83,7 +88,7 @@ describe("VariablesInsert", () => {
     expect(textarea.value).toBe("Hola {{cod}}");
   });
 
-  it("R18: la vista previa muestra el cuerpo con los valores de ejemplo del catálogo", async () => {
+  it("R18: con catalogo vacio la vista previa cae al marcador en mayúsculas", async () => {
     const previewAction = vi.fn(
       async (cuerpo: string): Promise<PreviewPlantillaResult> => ({
         status: "ok",
@@ -101,7 +106,7 @@ describe("VariablesInsert", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("plantilla-preview")).toHaveTextContent(
-        "Hola Juan, tu orden ABC123",
+        "Hola USUARIO, tu orden COD",
       );
     });
     expect(previewAction).toHaveBeenCalledWith("Hola {{usuario}}, tu orden {{cod}}");
