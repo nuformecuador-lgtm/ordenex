@@ -92,16 +92,21 @@ export interface PlantillaVariable {
   ejemplo: string;  // valor de muestra para la vista previa (R18)
 }
 
-// Catálogo de variables DISPONIBLES para insertar. ABIERTO: añadir una fila NO obliga
-// a migrar código ni tipos. `usuario`/`cod` son solo la SEMILLA de EJEMPLO (no un
-// catálogo fijo); el conjunto se amplía libremente.
-export const PLANTILLA_VARIABLES = [
-  { key: "usuario", label: "Nombre del cliente",  ejemplo: "Juan" },
-  { key: "cod",     label: "Código de la orden",  ejemplo: "ABC123" },
-] satisfies PlantillaVariable[];
+// Catálogo de variables predefinidas: VACÍO por defecto (Corrección humana 2026-07-22).
+// El usuario define sus propias variables en la UI (0 o más); NO hay semilla
+// `usuario`/`cod`. Se conserva el tipo por si en el futuro se quiere sembrar sugerencias,
+// pero el modelo es totalmente abierto: cualquier {{clave}} bien formada vale.
+export const PLANTILLA_VARIABLES = [] satisfies PlantillaVariable[];
 
 export const PLANTILLA_VARIABLE_KEYS = new Set(PLANTILLA_VARIABLES.map((v) => v.key));
 ```
+
+> **Sin catálogo semilla (Corrección humana):** el pedido es que el usuario INGRESE las
+> variables que necesite (0 o más), no elegirlas de una lista fija. El backend YA acepta
+> cualquier `{{clave}}` (R14/R15) y persiste las usadas en `variables text[]`; por eso
+> vaciar la semilla no toca dominio ni persistencia. En la preview (R18), al no haber
+> `ejemplo` para claves definidas por el usuario, cada placeholder cae al marcador legible
+> (clave en MAYÚSCULAS) — sigue sin romperse.
 
 - **Sintaxis (R14):** un placeholder es `{{` + espacios opcionales + `clave` + espacios
   opcionales + `}}`, con `clave` = `[a-z0-9_]+`. Regex de extracción:
@@ -208,8 +213,15 @@ idempotente (fijar `inactivo` sobre `pending`/`inactivo`).
   - `PlantillasModule.tsx` (client) — orquesta listado + acciones, usa `AppPage`.
   - `plantillas-columns.tsx` — columnas de la tabla (patrón `api-keys-columns.tsx`).
   - `CrearPlantillaForm.tsx` / `EditarPlantillaForm.tsx` — formularios con el editor.
-  - `VariablesInsert.tsx` — botonera que inserta `{{clave}}` en el cursor (R17) leyendo
-    `PLANTILLA_VARIABLES`; muestra un panel de vista previa que llama a `previewPlantilla`.
+  - `VariablesInsert.tsx` — editor de variables definidas por el usuario (R17,
+    Corrección humana): un input donde el usuario ESCRIBE la clave de una variable
+    (formato `[a-z0-9_]+`) y un botón "Insertar variable" que la coloca como `{{clave}}`
+    en la posición del cursor, tantas veces como quiera (0 o más). NO renderiza una
+    botonera desde `PLANTILLA_VARIABLES` (vacío por defecto); si en el futuro hubiera
+    sugerencias en el catálogo, se muestran como accesos rápidos opcionales, pero el
+    camino principal es la variable escrita por el usuario. Valida el formato de la clave
+    antes de insertar (rechaza `{{}}`/caracteres inválidos). Muestra un panel de vista
+    previa que llama a `previewPlantilla`.
   - Acción de estado (botón/Switch de shadcn/ui): SOLO "Desactivar" (envía destino
     `inactivo`), visible cuando el estado no es ya `inactivo`, llamando a
     `cambiarEstadoPlantilla` (R24). NO hay acción "Activar" en este alcance;
