@@ -261,9 +261,8 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     mensajeroId: string;
     gestion: GestionOrdenData;
     nuevoEstatusId: string;
-    seguimiento?: { destinoEstatusId: string; limpiaMensajero: boolean };
   }): Promise<string> {
-    const { ordenId, mensajeroId, gestion, nuevoEstatusId, seguimiento } = input;
+    const { ordenId, mensajeroId, gestion, nuevoEstatusId } = input;
     return this.prisma.$transaction(async (tx) => {
       // Feature 49/#9 (R20): estatus de ORIGEN (en_reparto) pre-leido dentro de la tx.
       const actual = await tx.orden.findFirst({
@@ -285,8 +284,8 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
             ? new Date(`${gestion.fechaReprogramacion}T00:00:00.000Z`)
             : null,
           // Feature 73/R11/R13: la causa entra en el MISMO INSERT que la gestion, dentro de
-          // la tx que cambia el estatus y aplica la transicion de seguimiento de la 47 -> si
-          // algo falla, la causa NO queda persistida (atomicidad ya provista, sin firma nueva).
+          // la tx que cambia el estatus -> si algo falla, la causa NO queda persistida
+          // (atomicidad ya provista, sin firma nueva).
           causaDevolucion: gestion.causaDevolucion ?? null,
         },
         select: { id: true },
@@ -314,33 +313,11 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           gestionOrdenId: creada.id,
         },
       ]);
-      // Feature 47/#9 (R6/R7/R10/R11): transicion de SEGUIMIENTO de una gestion `devuelta`,
-      // en la MISMA tx. La orden NUNCA reposa en `devuelta`: se resuelve hacia la bodega
-      // responsable (reintento, limpiando el mensajero, R6) o hacia `rechazada` (escalado,
-      // conservando el mensajero). El actor es NULL (sistema, no una persona): la dispara el
-      // sistema como consecuencia sincrona de la devolucion. Origen = `nuevoEstatusId` (= id
-      // de `devuelta`), reutilizando `origen_tipo = gestion` (sin enum nuevo, sin migracion).
-      if (seguimiento) {
-        await tx.orden.update({
-          where: { id: ordenId },
-          data: {
-            estatusId: seguimiento.destinoEstatusId,
-            // Feature 76/LC1 (C1): al limpiar el mensajero (reintento devuelto) limpia tambien
-            // `asignado_at` (defensivo, evita un timestamp huerfano).
-            ...(seguimiento.limpiaMensajero ? { mensajeroAsignadoId: null, asignadoAt: null } : {}),
-          },
-        });
-        await appendCambioEstado(tx, [
-          {
-            ordenId,
-            estatusOrigenId: nuevoEstatusId, // = id de `devuelta` (la fila que el derivador cuenta)
-            estatusDestinoId: seguimiento.destinoEstatusId,
-            actorUsuarioId: null, // R10: sistema, no una persona
-            origenTipo: "gestion", // R14/R21: reutiliza el enum existente (sin migracion)
-            gestionOrdenId: creada.id,
-          },
-        ]);
-      }
+      // Feature 99 (R1/R29): la rama `devuelta` YA NO aplica una transicion de seguimiento
+      // inmediata. La orden REPOSA en `devuelta` (destino = `nuevoEstatusId`) y el cron SLA
+      // (`DevolucionSlaService`/`DevolucionSlaRepository`) decide el reintento a bodega o el
+      // escalado a `rechazada` al vencer la ventana. Antes, aqui vivia un segundo `orden.update`
+      // + append (feature 47); se relocalizo al cron.
       // Feature 92 (R19): la gestion SACA la orden de `en_reparto` -> reoptimizacion
       // INMEDIATA (sin delay), dentro de esta misma transaccion (outbox).
       //

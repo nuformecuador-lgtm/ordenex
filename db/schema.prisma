@@ -920,6 +920,8 @@ enum OrdenHistorialOrigenTipo {
   ajuste_estado // feature 6: OrdenService.actualizar (CRUD generico)
   deshacer_gestion // feature 67 (F1.4-b): CierreDiaRepository.anularGestionYDevolverAGestion
   carga_api // feature 88 (D7): estado inicial en createManyOrdenesConGuia (canal integrador)
+  liberacion_devuelta_sla // feature 99: cron SLA, devuelta -> en_bodega/en_bodega_satelite (reintento)
+  escalado_devuelta_sla // feature 99: cron SLA, devuelta -> rechazada (escalado; enlaza gestion sintetica)
 
   @@map("orden_historial_origen_tipo")
 }

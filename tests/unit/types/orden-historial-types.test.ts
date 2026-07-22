@@ -10,6 +10,8 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // `*_gestion_orden_anulacion` + su down.sql). A diferencia de la 47/48 —que reutilizaron
 // `gestion`/`ajuste_estado`—, el deshacer SI necesita valor propio: el proposito de la feature
 // es el RASTRO, y reusar `gestion` haria la linea de tiempo indistinguible de una gestion real.
+// Feature 99: el conjunto pasa a 15 con `liberacion_devuelta_sla` y `escalado_devuelta_sla` (cron
+// SLA): dos valores propios para que la linea de tiempo distinga el reintento del escalado.
 describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
   const ESPERADOS = [
     "carga_masiva",
@@ -25,10 +27,12 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "ajuste_estado",
     "deshacer_gestion", // feature 67: CierreDiaRepository.anularGestionYDevolverAGestion
     "carga_api", // feature 88 (D7): createManyOrdenesConGuia (canal integrador por API)
+    "liberacion_devuelta_sla", // feature 99: cron SLA, devuelta -> en_bodega/en_bodega_satelite
+    "escalado_devuelta_sla", // feature 99: cron SLA, devuelta -> rechazada (gestion sintetica)
   ];
 
-  it("contiene exactamente los 13 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(13);
+  it("contiene exactamente los 15 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(15);
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

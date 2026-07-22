@@ -131,6 +131,10 @@ const RESULTADO_REPROGRAMADA = "reprogramada";
 // (mismo criterio que `contarPorDestinoVigentes`, feature 67).
 const RESULTADO_DEVUELTA = "devuelta";
 
+// Feature 99 (Q7): `order_status.value` en el que REPOSA una devolucion diferida. El predicado
+// de /novedades se ancla a este estado real (no a la gestion vigente).
+const ESTATUS_DEVUELTA = "devuelta";
+
 /**
  * Serializa una fecha `@db.Date` (guardada a medianoche UTC) a `YYYY-MM-DD`.
  * `null`/`undefined` -> `null`. Convencion del repo (ver CierreDiaRepository).
@@ -1594,45 +1598,41 @@ export class OrdenRepository implements IOrdenRepository {
   // --- Feature 87/89: lista de novedades (devoluciones del mensajero de la tienda) ---
 
   /**
-   * Feature 89/R1-R8: predicado CENTRAL de una NOVEDAD, extraido para que `count` y `find`
-   * usen EXACTAMENTE el mismo `where` (garantiza R8: total y pagina cuentan el mismo universo).
-   * Una orden es novedad si: es de la tienda del actor (R9), no esta borrada (R5), su estatus
-   * ACTUAL NO esta en `cerrados` (R2/R3: `{entregada, devuelta_origen, recibido_origen}`) y
-   * tiene AL MENOS una gestion de devolucion VIGENTE (`resultado="devuelta"`, `anuladaAt IS
-   * NULL`, R1/R7) via la back-relation `gestiones` (`some`). No filtra por estatus actual =
-   * `devuelta` (bug de la feature 87): la feature 47 saca la orden de `devuelta` en la misma tx.
+   * Feature 99/R7-R9 (Q7): predicado CENTRAL de una NOVEDAD, ANCLADO AL ESTADO REAL. Extraido
+   * para que `count` y `find` usen EXACTAMENTE el mismo `where` (R8: total y pagina cuentan el
+   * mismo universo). Una orden es novedad si: es de la tienda del actor (R9), no esta borrada
+   * (R5) y su estatus ACTUAL ES `devuelta` (R7). Bajo la feature 99 la orden REPOSA en `devuelta`
+   * hasta que el cron SLA la libere/escale o la feature 100 la resuelva; al salir de `devuelta`
+   * cae del predicado sin doble conteo (R8). Reemplaza el predicado anterior por gestion vigente
+   * + estatus abierto (feature 89): ya no hace falta, el estado real es la fuente unica.
    */
-  private novedadWhere(tiendaId: string, cerrados: string[]): Prisma.OrdenWhereInput {
+  private novedadWhere(tiendaId: string): Prisma.OrdenWhereInput {
     return {
       tiendaId,
       deletedAt: null, // R5: excluye borradas
-      estatus: { value: { notIn: cerrados } }, // R2/R3: solo mientras no este cerrada
-      gestiones: {
-        some: { resultado: RESULTADO_DEVUELTA, anuladaAt: null }, // R1/R7: gestion devuelta VIGENTE
-      },
+      estatus: { value: ESTATUS_DEVUELTA }, // R7: solo mientras REPOSE en `devuelta`
     };
   }
 
-  /** Feature 89/R1-R8: cuenta las NOVEDADES de `tiendaId` (predicado central, mismo `where` que find). */
-  async countDevueltasByTienda(tiendaId: string, cerrados: string[]): Promise<number> {
+  /** Feature 99/R7/R8: cuenta las NOVEDADES de `tiendaId` (predicado central, mismo `where` que find). */
+  async countDevueltasByTienda(tiendaId: string): Promise<number> {
     return this.prisma.orden.count({
-      where: this.novedadWhere(tiendaId, cerrados),
+      where: this.novedadWhere(tiendaId),
     });
   }
 
   /**
-   * Feature 89/R1-R8/R12: una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado central
-   * que `countDevueltasByTienda` (R8), ordenada por `Orden.createdAt` desc (fallback documentado
-   * de R12; el service reordena por la fecha de la gestion vigente). Select minimo: solo lo que
-   * consume el DTO + `createdAt`.
+   * Feature 99/R7/R8/R9: una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado central
+   * que `countDevueltasByTienda` (R8), ordenada por `Orden.createdAt` desc (fallback documentado;
+   * el service reordena por la fecha de la ultima gestion `devuelta` vigente, R9). Select minimo:
+   * solo lo que consume el DTO + `createdAt`.
    */
   async findDevueltasByTienda(
     tiendaId: string,
-    cerrados: string[],
     pagination: { skip: number; take: number },
   ): Promise<NovedadOrdenRow[]> {
     const rows = await this.prisma.orden.findMany({
-      where: this.novedadWhere(tiendaId, cerrados),
+      where: this.novedadWhere(tiendaId),
       orderBy: { createdAt: "desc" },
       skip: pagination.skip,
       take: pagination.take,

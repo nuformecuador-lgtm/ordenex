@@ -3,11 +3,8 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
-import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
-import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { gestionConfig, type GestionMimeType } from "@/lib/config/gestion";
@@ -74,11 +71,10 @@ function buildService(): IMisAsignacionesService {
     new OrdenRepository(prisma),
     new SupabaseFileStorage(undefined, gestionConfig.EVIDENCIA_BUCKET),
     new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET),
-    // Feature 47: derivador de intentos (49) para la regla de reintento/escalado y la zona
-    // central (54) para derivar la bodega responsable del reintento.
-    new OrdenHistorialService(new OrdenRepository(prisma), new OrdenHistorialRepository(prisma)),
-    new ZonaRepository(prisma),
     // Feature 92 (R23/R28): secuencia optimizada al listar + persistencia del origen `gps`.
+    // Feature 99 (R29): la decision de reintento/escalado de una devolucion ya NO vive aqui
+    // (se relocalizo al cron SLA), por eso el service ya no recibe el derivador de intentos ni
+    // la zona central.
     new RutaOptimizadaRepository(prisma),
   );
 }

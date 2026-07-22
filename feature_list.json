@@ -1087,11 +1087,11 @@
       "id": 99,
       "name": "devolucion diferida: la orden se queda en `devuelta` + cron SLA (liberar/rechazar) con ingreso de bodega del rechazo",
       "description": "Motor del nuevo flujo de devolucion. Difiere la transicion de seguimiento de la feature 47 (hoy inmediata en la tx de gestionar), CONSERVANDO su contador de intentos: al devolver, la orden cuenta como intento y QUEDA en `devuelta`, anclando la ventana con su causa (feature 73) y el timestamp de devolucion. Un cron (patron liberar-reprogramadas/46) procesa las ordenes en `devuelta` cuya ventana vencio SIN resolverse: not_found (24h) con intentos<umbral(3) -> en_bodega/en_bodega_satelite por zona, sin mensajero (nuevo intento); not_found en el 3er intento, tras 24h -> `rechazada`; wrong_number/wrong_address -> `rechazada` al dia 6. Todas las transiciones por el choke point appendCambioEstado (49). Money-critical: la transicion a `rechazada` registra el ingreso de bodega por rechazo (feature 56) de forma consistente con el cierre/wallet, ya que aca no hay gestion `rechazada` del mensajero. Reconcilia /novedades (87/89) al estado real `devuelta`. Requiere migracion (anclaje de la ventana) + cron nuevo. Base de 100/101/102.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/99-devolucion-diferida-sla",
       "depends_on": null
     },
     {
