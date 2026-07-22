@@ -185,6 +185,9 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         // permutacion de la primera (dejaba delta constante entre consecutivas).
         !d.endsWith("_num_guia_no_secuencial") &&
         !d.endsWith("_num_guia_feistel") &&
+        // feature 104 (rama feature/99): apendidas despues (enum de job_tipo + tabla de suscripcion de webhook).
+        !d.endsWith("_job_tipo_webhook_estado") &&
+        !d.endsWith("_webhook_suscripcion") &&
         !d.endsWith("_orden_historial_origen_tipo_sla_devuelta") && // feature 99: apendida despues
         !d.endsWith("_orden_historial_origen_tipo_resolver_novedad") && // feature 100: apendida despues
         !d.endsWith("_orden_prioridad") && // feature 101: apendida despues

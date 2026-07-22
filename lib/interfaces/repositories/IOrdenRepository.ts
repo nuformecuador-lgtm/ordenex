@@ -314,6 +314,20 @@ export type CancelarViaApiResult =
   | { status: "not_found" }
   | { status: "conflict"; estadoActual: string };
 
+// Feature 102 (T7, design §5.2) — fila de una orden RECHAZADA POR SLA de la tienda, para la
+// superficie derivada de solo-lectura (dentro de /novedades). Molde de `NovedadOrdenRow`, mas el
+// `numRemision` y el `monto` de 56. `monto` = `ingreso_bodega_rechazo` de la gestion sintetica SLA
+// de esa orden, YA serializado a STRING escala 2 (money-safe, R14/R18); `null` = pendiente de
+// cierre (la gestion sintetica nace sin snapshot hasta el proximo cierre, Q2 default). NO expone
+// `deletedAt` (el repo ya filtra `deletedAt: null`, R15).
+export interface RechazoSlaTiendaRow {
+  id: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  monto: string | null;
+}
+
 export interface IOrdenRepository {
   /**
    * Feature 106/R6/R7/R11: pagina de ordenes cuyo `tienda_id` = `ownerId` (owner FORZADO en
@@ -732,4 +746,26 @@ export interface IOrdenRepository {
    * -> `Map` vacio.
    */
   findCausasDevueltaVigentes(ordenIds: string[]): Promise<Map<string, CausaDevueltaVigente>>;
+
+  // --- Feature 102: rechazos por SLA de la tienda (superficie derivada de solo-lectura) ---
+
+  /**
+   * Feature 102/R12/R13/R15: cuenta los RECHAZOS POR SLA de `tiendaId`. Predicado (mismo `where`
+   * que `findRechazadasSlaByTienda`, R15): la orden es de la tienda del actor, no esta borrada
+   * (`deleted_at IS NULL`), su estatus ACTUAL es `rechazada` Y existe una transicion del cron SLA
+   * en su historial (`origen_tipo = escalado_devuelta_sla`, feature 99). Al salir de `rechazada` o
+   * al borrarse, cae del conteo (R15). Alimenta el `total` paginado.
+   */
+  countRechazadasSlaByTienda(tiendaId: string): Promise<number>;
+  /**
+   * Feature 102/R12/R14/R15: una PAGINA de RECHAZOS POR SLA de `tiendaId` con el MISMO predicado
+   * que `countRechazadasSlaByTienda`, ordenada por `Orden.createdAt` desc. Por cada orden, el
+   * `monto` = `ingreso_bodega_rechazo` de su gestion sintetica SLA (la enlazada por la transicion
+   * `origen_tipo = escalado_devuelta_sla`), YA serializado a STRING escala 2; `null` mientras no
+   * este snapshoteada (pendiente de cierre, Q2 default). `skip`/`take` para la paginacion.
+   */
+  findRechazadasSlaByTienda(
+    tiendaId: string,
+    pagination: { skip: number; take: number },
+  ): Promise<RechazoSlaTiendaRow[]>;
 }

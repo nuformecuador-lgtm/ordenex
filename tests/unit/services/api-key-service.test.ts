@@ -31,16 +31,33 @@ function listStubs(): Pick<IApiKeyRepository, "list" | "count"> {
   };
 }
 
+/**
+ * Ciclo de vida: `IApiKeyRepository` ahora exige `rotar`/`setEstado`. En los tests de
+ * `generar` no deben invocarse: stubs que fallan ruidosamente.
+ */
+function lifecycleStubs(): Pick<IApiKeyRepository, "rotar" | "setEstado"> {
+  return {
+    rotar: vi.fn(async () => {
+      throw new Error("rotar no debe invocarse desde generar");
+    }),
+    setEstado: vi.fn(async () => {
+      throw new Error("setEstado no debe invocarse desde generar");
+    }),
+  };
+}
+
 function makeRepo() {
   const capturado: CreateApiKeyConUsuarioData[] = [];
   const repo: IApiKeyRepository = {
     ...listStubs(),
+    ...lifecycleStubs(),
     createConUsuario: vi.fn(async (data: CreateApiKeyConUsuarioData) => {
       capturado.push(data);
       return {
         id: `key-${capturado.length}`,
         identificador: data.identificador,
         keyPrefix: data.keyPrefix,
+        estado: "activa" as const,
         usuarioId: `u-dedicado-${capturado.length}`,
         createdAt: new Date("2026-07-16T12:00:00Z"),
       };
@@ -142,6 +159,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
   it("R11: devuelve conflict cuando el email derivado ya existe", async () => {
     const repo: IApiKeyRepository = {
       ...listStubs(),
+      ...lifecycleStubs(),
       createConUsuario: vi.fn(async () => {
         throw new UsuarioDuplicadoError("email");
       }),
@@ -154,6 +172,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
   it("R11: devuelve conflict cuando la cedula derivada ya existe", async () => {
     const repo: IApiKeyRepository = {
       ...listStubs(),
+      ...lifecycleStubs(),
       createConUsuario: vi.fn(async () => {
         throw new UsuarioDuplicadoError("cedula");
       }),
@@ -190,6 +209,7 @@ describe("ApiKeyService.generar — atomicidad (R13)", () => {
   it("R13: si la creacion transaccional falla, no devuelve ok ni filtra el secreto", async () => {
     const repo: IApiKeyRepository = {
       ...listStubs(),
+      ...lifecycleStubs(),
       createConUsuario: vi.fn(async () => {
         throw new Error("transaccion abortada");
       }),
@@ -258,7 +278,7 @@ describe("ApiKeyService.generar — la key (R14..R22)", () => {
     expect(r.apiKey).not.toHaveProperty("keyHash");
     expect(r.apiKey).not.toHaveProperty("plainKey");
     expect(Object.keys(r.apiKey).sort()).toEqual(
-      ["createdAt", "id", "identificador", "keyPrefix", "usuarioId"].sort(),
+      ["createdAt", "estado", "id", "identificador", "keyPrefix", "usuarioId"].sort(),
     );
     // [82] La irrecuperabilidad del secreto A NIVEL DEL REPOSITORIO se verifica ahora en
     // `tests/unit/repositories/api-key-repository.secreto.test.ts`, contra la clase real
@@ -326,5 +346,133 @@ describe("ApiKeyService.generar — no filtra secretos por logs (R9/R20)", () =>
     expect(salida).not.toContain(capturado[0].passwordHash);
     // De hecho, el service no loguea NADA en el camino feliz.
     for (const e of espias) expect(e).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ciclo de vida — rotar / activar / desactivar
+// ---------------------------------------------------------------------------
+
+/** Forma publica que devuelve el repo de rotar/setEstado (con `estado`, sin keyHash). */
+function apiKeyPublico(estado: "activa" | "inactiva" = "activa") {
+  return {
+    id: "key-1",
+    identificador: "Tienda Uno",
+    keyPrefix: "ordx_abc1234",
+    estado: estado as "activa" | "inactiva",
+    usuarioId: "u-dedicado-1",
+    createdAt: new Date("2026-07-16T12:00:00Z"),
+  };
+}
+
+/**
+ * Repo para el ciclo de vida. `rotar`/`setEstado` devuelven la forma publica (o null si
+ * `notFound`). El resto de metodos lanza: no deben tocarse desde estas operaciones.
+ */
+function makeLifecycleRepo(opts: { notFound?: boolean } = {}) {
+  const repo: IApiKeyRepository = {
+    createConUsuario: vi.fn(async () => {
+      throw new Error("createConUsuario no debe invocarse desde el ciclo de vida");
+    }),
+    findByKeyHash: vi.fn(async () => {
+      throw new Error("findByKeyHash no debe invocarse desde el ciclo de vida");
+    }),
+    ...listStubs(),
+    rotar: vi.fn(async () => (opts.notFound ? null : apiKeyPublico())),
+    setEstado: vi.fn(async (_id: string, estado: "activa" | "inactiva") =>
+      opts.notFound ? null : apiKeyPublico(estado),
+    ),
+  };
+  return repo;
+}
+
+describe("ApiKeyService — ciclo de vida: autorizacion (R1)", () => {
+  it.each(["rotar", "activar", "desactivar"] as const)(
+    "R1: %s rechaza con forbidden a todo rol != maestro, sin tocar la DB",
+    async (metodo) => {
+      const noMaestros = Object.values(RolValue).filter((r) => r !== RolValue.maestro);
+      for (const rol of noMaestros) {
+        const repo = makeLifecycleRepo();
+        const service = new ApiKeyService(repo);
+        const r = await service[metodo]({ id: "key-1" }, { usuarioId: "u1", rol });
+        expect(r).toEqual({ status: "forbidden" });
+        expect(repo.rotar).not.toHaveBeenCalled();
+        expect(repo.setEstado).not.toHaveBeenCalled();
+      }
+    },
+  );
+});
+
+describe("ApiKeyService.rotar (R2/R3)", () => {
+  it("R2: genera un secreto nuevo, persiste solo su hash y lo devuelve en claro UNA vez", async () => {
+    const repo = makeLifecycleRepo();
+    const r = await new ApiKeyService(repo).rotar({ id: "key-1" }, MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+
+    // El secreto en claro nuevo con el formato de la 81.
+    expect(r.plainKey).toMatch(/^ordx_[A-Za-z0-9_-]{43}$/);
+    // El repo recibe keyPrefix+keyHash derivados del secreto; el hash es SHA-256 del claro.
+    const args = (repo.rotar as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(args[0]).toBe("key-1");
+    expect(args[1].keyHash).toBe(hashApiKey(r.plainKey));
+    expect(args[1].keyPrefix).toBe(r.plainKey.slice(0, 12));
+    // El claro NO viaja al repo (solo su hash) ni se repite en el objeto publico.
+    expect(JSON.stringify(args[1])).not.toContain(r.plainKey);
+    expect(JSON.stringify(r.apiKey)).not.toContain(r.plainKey);
+  });
+
+  it("R2: no cambia el usuario dedicado ni el estado (el repo no recibe esos campos)", async () => {
+    const repo = makeLifecycleRepo();
+    await new ApiKeyService(repo).rotar({ id: "key-1" }, MAESTRO);
+    const args = (repo.rotar as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(Object.keys(args).sort()).toEqual(["keyHash", "keyPrefix"].sort());
+  });
+
+  it("R3: id inexistente -> not_found (el repo devuelve null)", async () => {
+    const repo = makeLifecycleRepo({ notFound: true });
+    const r = await new ApiKeyService(repo).rotar({ id: "no-existe" }, MAESTRO);
+    expect(r).toEqual({ status: "not_found" });
+  });
+});
+
+describe("ApiKeyService.activar / desactivar (R3/R4)", () => {
+  it("R4: activar fija estado='activa' y devuelve la key publica actualizada", async () => {
+    const repo = makeLifecycleRepo();
+    const r = await new ApiKeyService(repo).activar({ id: "key-1" }, MAESTRO);
+    expect(repo.setEstado).toHaveBeenCalledWith("key-1", "activa");
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.apiKey.estado).toBe("activa");
+  });
+
+  it("R4: desactivar fija estado='inactiva' y devuelve la key publica actualizada", async () => {
+    const repo = makeLifecycleRepo();
+    const r = await new ApiKeyService(repo).desactivar({ id: "key-1" }, MAESTRO);
+    expect(repo.setEstado).toHaveBeenCalledWith("key-1", "inactiva");
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.apiKey.estado).toBe("inactiva");
+  });
+
+  it("R4: activar es idempotente — activar una key ya activa es ok", async () => {
+    // El repo (Postgres) trata fijar el estado actual como no-op valido; el service no
+    // distingue ni exige un estado previo: siempre devuelve ok con la fila resultante.
+    const repo = makeLifecycleRepo();
+    const r = await new ApiKeyService(repo).activar({ id: "key-1" }, MAESTRO);
+    expect(r.status).toBe("ok");
+  });
+
+  it("R3: activar/desactivar de un id inexistente -> not_found", async () => {
+    const repo = makeLifecycleRepo({ notFound: true });
+    const service = new ApiKeyService(repo);
+    expect(await service.activar({ id: "x" }, MAESTRO)).toEqual({ status: "not_found" });
+    expect(await service.desactivar({ id: "x" }, MAESTRO)).toEqual({ status: "not_found" });
+  });
+
+  it("R4: la key publica devuelta nunca expone keyHash ni secreto", async () => {
+    const repo = makeLifecycleRepo();
+    const r = await new ApiKeyService(repo).desactivar({ id: "key-1" }, MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.apiKey).not.toHaveProperty("keyHash");
+    expect(JSON.stringify(r)).not.toContain("keyHash");
   });
 });

@@ -19,6 +19,16 @@ function makeService(result?: ListarApiKeysResult) {
       capturado.push(input);
       return result ?? { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 };
     }),
+    // Ciclo de vida: no lo ejercita este archivo; lanza para delatar una invocacion.
+    rotar: vi.fn(async () => {
+      throw new Error("rotar no debe invocarse desde listarApiKeys");
+    }),
+    activar: vi.fn(async () => {
+      throw new Error("activar no debe invocarse desde listarApiKeys");
+    }),
+    desactivar: vi.fn(async () => {
+      throw new Error("desactivar no debe invocarse desde listarApiKeys");
+    }),
   };
   return { service, capturado };
 }
@@ -118,6 +128,7 @@ describe("listarApiKeys (action) — el secreto no cruza al cliente (R6)", () =>
           id: "key-1",
           identificador: "Tienda Uno",
           keyPrefix: "ordx_abc1234",
+          estado: "activa",
           usuarioId: "u-dedicado",
           usuarioEmail: "apikey+tienda-uno@apikey.invalid",
           createdAt: new Date("2026-07-16T12:00:00Z"),

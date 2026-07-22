@@ -2,10 +2,14 @@ import { UsuarioDuplicadoError } from "@/lib/interfaces/repositories/IUserReposi
 import type { IApiKeyRepository } from "@/lib/interfaces/repositories/IApiKeyRepository";
 import type { Actor, IApiKeyService } from "@/lib/interfaces/services/IApiKeyService";
 import type {
+  ActivarApiKeyResult,
+  ApiKeyIdInput,
+  DesactivarApiKeyResult,
   GenerarApiKeyInput,
   GenerarApiKeyResult,
   ListarApiKeysInput,
   ListarApiKeysResult,
+  RotarApiKeyResult,
 } from "@/lib/types/api-key";
 import { generateApiKey } from "@/lib/utils/api-key-generator";
 import { hashApiKey } from "@/lib/utils/api-key-hash";
@@ -93,5 +97,51 @@ export class ApiKeyService implements IApiKeyService {
 
     // R9: si `skip` supera el final, `items` viene vacio y `total` sigue siendo el real.
     return { status: "ok", items, page: input.page, pageSize: input.pageSize, total };
+  }
+
+  /**
+   * Ciclo de vida/R1/R2/R3: rota el secreto de la key `input.id`. Mismo `ALLOWED_ROLES`
+   * que `generar` (rotar es reemitir): solo `maestro` [D2].
+   */
+  async rotar(input: ApiKeyIdInput, actor: Actor): Promise<RotarApiKeyResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R1
+
+    // R2: secreto nuevo de 256 bits (mismo generador/hasher que `generar`). SHA-256 es lo
+    // UNICO que se persiste; el claro (`plainKey`) sale una sola vez en el retorno.
+    const { plain: plainKey, prefix: keyPrefix } = generateApiKey();
+    const keyHash = hashApiKey(plainKey);
+
+    // R2: reemplazo atomico del prefijo+hash. Si el id no existe -> null -> not_found (R3).
+    // El secreto generado se descarta sin persistirse ni loguearse.
+    const apiKey = await this.repo.rotar(input.id, { keyPrefix, keyHash });
+    if (apiKey === null) return { status: "not_found" }; // R3
+
+    // R2: el nuevo secreto en claro viaja exactamente UNA vez, aqui. El hash viejo ya no
+    // resuelve (feature 88): el secreto anterior queda invalido.
+    return { status: "ok", apiKey, plainKey };
+  }
+
+  /**
+   * Ciclo de vida/R1/R3/R4: pone la key `input.id` en `activa`. Idempotente (activar una
+   * ya activa devuelve `ok` con la fila actual). Solo `maestro`.
+   */
+  async activar(input: ApiKeyIdInput, actor: Actor): Promise<ActivarApiKeyResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R1
+
+    const apiKey = await this.repo.setEstado(input.id, "activa"); // R4
+    if (apiKey === null) return { status: "not_found" }; // R3
+    return { status: "ok", apiKey };
+  }
+
+  /**
+   * Ciclo de vida/R1/R3/R4: pone la key `input.id` en `inactiva` (revocacion). Idempotente.
+   * Solo `maestro`.
+   */
+  async desactivar(input: ApiKeyIdInput, actor: Actor): Promise<DesactivarApiKeyResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R1
+
+    const apiKey = await this.repo.setEstado(input.id, "inactiva"); // R4
+    if (apiKey === null) return { status: "not_found" }; // R3
+    return { status: "ok", apiKey };
   }
 }

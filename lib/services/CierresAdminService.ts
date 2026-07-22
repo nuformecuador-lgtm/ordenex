@@ -24,6 +24,7 @@ import {
   pagoTiendaOrdenex,
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
+import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
 
 // Roles autorizados en el modulo (R1): acceso total (maestro/admin -> bodega central) y el
 // adminSatelite (su bodega). Cualquier otro -> forbidden.
@@ -144,7 +145,26 @@ export class CierresAdminService implements ICierresAdminService {
       totalesIngreso.comisionConIva,
     );
 
-    return { status: "ok", cierre: resumen, grupos, totalesIngreso, ganancia, pagoTienda };
+    // Feature 102/R4-R8/R10: desglose SLA/manual del ingreso de bodega por rechazos, particionando
+    // los montos por gestion YA snapshoteados por su clasificacion (esRechazoSla). SOLO LECTURA
+    // (R6/R16): el `total` se LEE del snapshot del cierre (no se recomputa); la particion asegura
+    // `sla + manual === total` (R5). El alcance satelite recibe este mismo desglose (R10).
+    const desglose = desglosarIngresoBodegaPorOrigen(found.gestiones);
+    const desgloseIngresoBodegaRechazos = {
+      sla: desglose.totalSla,
+      manual: desglose.totalManual,
+      total: resumen.totalIngresoBodegaRechazos, // snapshot leido (R6), no recomputado
+    };
+
+    return {
+      status: "ok",
+      cierre: resumen,
+      grupos,
+      totalesIngreso,
+      desgloseIngresoBodegaRechazos,
+      ganancia,
+      pagoTienda,
+    };
   }
 
   async aprobarCierre(cierreId: string, actor: Actor): Promise<AprobarCierreServiceResult> {

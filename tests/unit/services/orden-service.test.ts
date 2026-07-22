@@ -117,6 +117,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     listByOwner: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     findDetalleByNumGuiaForOwner: vi.fn().mockResolvedValue(null),
     cancelarViaApi: vi.fn().mockResolvedValue({ status: "not_found" }),
+    // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
+    countRechazadasSlaByTienda: vi.fn().mockResolvedValue(0),
+    findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }

@@ -52,6 +52,12 @@ export type CierreDetalleAdminServiceResult =
       grupos: CierreGrupos; // por resultado (reuso 37)
       // Totales por concepto del ingreso de Ordenex del cierre, derivados del snapshot.
       totalesIngreso: TotalesIngresoOrdenex;
+      // Feature 102/R4-R8/R10: desglose money-safe (STRING escala 2) del ingreso de bodega por
+      // rechazos, particionado por origen. `sla` = escalados del cron SLA (99); `manual` =
+      // rechazos del mensajero; `total` = el SNAPSHOT `cierre.totalIngresoBodegaRechazos` (leido,
+      // NO recomputado, R6). Por construccion `sla + manual === total` (R5). Solo en el DETALLE
+      // (Q4); llega igual al alcance satelite por el mismo camino (R10).
+      desgloseIngresoBodegaRechazos: { sla: string; manual: string; total: string };
       // DERIVADO: `totalesIngreso.total` - `cierre.totalPagoMensajero` (STRING money-safe).
       // Lo que le queda a Ordenex del cierre. Puede ser NEGATIVO.
       ganancia: string;

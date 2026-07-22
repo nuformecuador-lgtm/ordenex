@@ -51,6 +51,7 @@ describe("R32 — el drenador resuelve el handler de geocodificacion y no lo re-
       "geocodificacion",
       "liberar_reprogramadas",
       "optimizacion_ruta",
+      "webhook_estado", // feature 99
     ]);
   });
 

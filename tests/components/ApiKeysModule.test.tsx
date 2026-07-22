@@ -19,9 +19,26 @@ import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
 // composición sin DB ni sesión.
 const listarApiKeysMock = vi.fn();
 const generarApiKeyMock = vi.fn();
+const rotarApiKeyMock = vi.fn();
+const activarApiKeyMock = vi.fn();
+const desactivarApiKeyMock = vi.fn();
 vi.mock("@/lib/actions/api-keys", () => ({
   listarApiKeys: (...a: unknown[]) => listarApiKeysMock(...a),
   generarApiKey: (...a: unknown[]) => generarApiKeyMock(...a),
+  rotarApiKey: (...a: unknown[]) => rotarApiKeyMock(...a),
+  activarApiKey: (...a: unknown[]) => activarApiKeyMock(...a),
+  desactivarApiKey: (...a: unknown[]) => desactivarApiKeyMock(...a),
+}));
+
+// Feature 105/R2 + 108: la columna "Webhook" renderiza `WebhookAccionCell` y el
+// alta encadena `registrarWebhook`. Se mockean para no arrastrar el backend.
+const obtenerWebhookMock = vi.fn();
+const registrarWebhookMock = vi.fn();
+vi.mock("@/lib/actions/webhooks", () => ({
+  obtenerWebhook: (...a: unknown[]) => obtenerWebhookMock(...a),
+  registrarWebhook: (...a: unknown[]) => registrarWebhookMock(...a),
+  desactivarWebhook: vi.fn(),
+  rotarSecretoWebhook: vi.fn(),
 }));
 
 import { ApiKeysModule } from "@/app/(app)/configuracion/api/_components/ApiKeysModule";
@@ -30,6 +47,7 @@ const ITEM: ApiKeyListItemDTO = {
   id: "k1",
   identificador: "integracion-erp",
   keyPrefix: "ordx_ab12cd3",
+  estado: "activa",
   usuarioId: "u1",
   usuarioEmail: "apikey+integracion-erp@apikey.invalid",
   createdAt: new Date("2026-01-01T12:00:00Z"),
@@ -75,6 +93,26 @@ function okGeneracion(identificador = "nueva-integracion") {
   };
 }
 
+// Secreto de webhook devuelto UNA vez por `registrarWebhook` → creada.
+const WEBHOOK_SECRET = "whk_9f8e7d6c5b4a3210FEDCBA9876543210deadbeefcafef00d";
+const WEBHOOK_URL = "https://hook.example.com/callback";
+
+/** Abre el modal, escribe identificador y una URL de webhook, y confirma. */
+async function generarConWebhook(
+  user: ReturnType<typeof userEvent.setup>,
+  url = WEBHOOK_URL,
+  identificador = "nueva-integracion",
+) {
+  await user.click(screen.getByRole("button", { name: "Generar API key" }));
+  const dialog = await screen.findByRole("dialog");
+  await user.type(within(dialog).getByLabelText("Identificador"), identificador);
+  await user.type(
+    within(dialog).getByLabelText("URL de webhook (callback)"),
+    url,
+  );
+  await user.click(within(dialog).getByRole("button", { name: "Generar" }));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   listarApiKeysMock.mockImplementation(
@@ -87,6 +125,11 @@ beforeEach(() => {
     }),
   );
   generarApiKeyMock.mockResolvedValue(okGeneracion());
+  obtenerWebhookMock.mockResolvedValue({ status: "ok", webhook: null });
+  registrarWebhookMock.mockResolvedValue({
+    status: "creada",
+    secret: WEBHOOK_SECRET,
+  });
 });
 
 afterEach(() => {
@@ -117,6 +160,44 @@ describe("ApiKeysModule — listado (R14–R19)", () => {
       within(table).getByText("apikey+integracion-erp@apikey.invalid"),
     ).toBeInTheDocument();
     expect(within(table).queryByText("u1")).toBeNull();
+  });
+
+  it("estado y acciones: pinta el badge de estado y los botones de acción por fila", async () => {
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    const table = screen.getByRole("table", { name: "API keys" });
+    for (const header of ["Estado", "Acciones"]) {
+      expect(
+        within(table).getByRole("columnheader", { name: header }),
+      ).toBeInTheDocument();
+    }
+    // Estado legible por texto (no solo color), accesible.
+    expect(await within(table).findByText("Activa")).toBeInTheDocument();
+    // Acciones por fila: rotar y (por estar activa) desactivar.
+    expect(
+      within(table).getByRole("button", {
+        name: "Rotar la API key integracion-erp",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(table).getByRole("button", {
+        name: "Desactivar la API key integracion-erp",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("R2 (105/108): cada fila de API key expone la acción 'Editar' de webhook", async () => {
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    const table = screen.getByRole("table", { name: "API keys" });
+    expect(
+      within(table).getByRole("columnheader", { name: "Webhook" }),
+    ).toBeInTheDocument();
+    expect(
+      await within(table).findByRole("button", {
+        name: "Editar webhook de integracion-erp",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("R15: muestra el prefijo con elipsis y NUNCA la key completa ni el hash", async () => {
@@ -232,7 +313,7 @@ describe("ApiKeysModule — listado (R14–R19)", () => {
 // Generación (R20–R23, R31)
 // ---------------------------------------------------------------------------
 describe("ApiKeysModule — generación (R20–R23, R31)", () => {
-  it("R20: 'Generar API key' abre un modal con un único campo obligatorio", async () => {
+  it("R20: 'Generar API key' abre un modal con el campo obligatorio y (108) la URL opcional", async () => {
     const user = userEvent.setup();
     renderModule(<ApiKeysModule initialData={INITIAL} />);
 
@@ -240,8 +321,12 @@ describe("ApiKeysModule — generación (R20–R23, R31)", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByLabelText("Identificador")).toBeInTheDocument();
-    // Único campo de texto en el formulario del modal.
-    expect(within(dialog).getAllByRole("textbox")).toHaveLength(1);
+    // Feature 108/R1: además del identificador obligatorio, un campo opcional de
+    // URL de webhook. Dos textboxes en total.
+    expect(
+      within(dialog).getByLabelText("URL de webhook (callback)"),
+    ).toBeInTheDocument();
+    expect(within(dialog).getAllByRole("textbox")).toHaveLength(2);
   });
 
   it("R21: validation_error del backend muestra el error del campo y NO cierra el modal", async () => {
@@ -330,7 +415,7 @@ describe("ApiKeysModule — revelado del secreto (R24–R29)", () => {
     const secreto = await screen.findByLabelText("Clave de API generada");
     expect(secreto).toHaveValue(PLAIN_KEY);
     expect(
-      screen.getByText(/única vez que verás esta clave/i),
+      screen.getByText(/única vez que verás estas credenciales/i),
     ).toBeInTheDocument();
   });
 
@@ -386,7 +471,7 @@ describe("ApiKeysModule — revelado del secreto (R24–R29)", () => {
     // Marcar el checkbox habilita el ÚNICO botón de cierre.
     await user.click(
       await screen.findByRole("checkbox", {
-        name: "Ya guardé la clave en un lugar seguro",
+        name: "Ya guardé mis credenciales en un lugar seguro",
       }),
     );
     expect(cerrar).toBeEnabled();
@@ -400,7 +485,7 @@ describe("ApiKeysModule — revelado del secreto (R24–R29)", () => {
     await screen.findByLabelText("Clave de API generada");
     await user.click(
       await screen.findByRole("checkbox", {
-        name: "Ya guardé la clave en un lugar seguro",
+        name: "Ya guardé mis credenciales en un lugar seguro",
       }),
     );
     await user.click(screen.getByRole("button", { name: "Cerrar" }));
@@ -454,7 +539,7 @@ describe("ApiKeysModule — el secreto no se filtra (R30)", () => {
     await user.click(screen.getByRole("button", { name: "Copiar clave de API" }));
     await user.click(
       await screen.findByRole("checkbox", {
-        name: "Ya guardé la clave en un lugar seguro",
+        name: "Ya guardé mis credenciales en un lugar seguro",
       }),
     );
     await user.click(screen.getByRole("button", { name: "Cerrar" }));
@@ -471,5 +556,173 @@ describe("ApiKeysModule — el secreto no se filtra (R30)", () => {
 
     for (const spy of spies) spy.mockRestore();
     localSet.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 108 — alta con webhook opcional + encadenado (R2, R4, R5, R6, R7,
+// R11, R12, R13, R14)
+// ---------------------------------------------------------------------------
+describe("ApiKeysModule — alta con webhook (feature 108)", () => {
+  it("R2: con URL vacía genera la key y NO llama a registrarWebhook", async () => {
+    const user = userEvent.setup();
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    await generar(user); // sin URL de webhook
+
+    await screen.findByLabelText("Clave de API generada");
+    expect(registrarWebhookMock).not.toHaveBeenCalled();
+    // Sin webhook: la sección de secreto de webhook no existe.
+    expect(
+      screen.queryByLabelText("Secreto de webhook generado"),
+    ).toBeNull();
+  });
+
+  it("R7: sin webhook, revela solo el secreto de la key una vez", async () => {
+    const user = userEvent.setup();
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    await generar(user);
+
+    expect(await screen.findByLabelText("Clave de API generada")).toHaveValue(
+      PLAIN_KEY,
+    );
+    expect(
+      screen.queryByLabelText("Secreto de webhook generado"),
+    ).toBeNull();
+  });
+
+  it("R4: con URL no-https marca error de campo y no invoca generarApiKey ni registrarWebhook", async () => {
+    const user = userEvent.setup();
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    await generarConWebhook(user, "http://inseguro.example.com/hook");
+
+    expect(
+      await screen.findByText(/URL de callback debe ser una URL https/i),
+    ).toBeInTheDocument();
+    expect(generarApiKeyMock).not.toHaveBeenCalled();
+    expect(registrarWebhookMock).not.toHaveBeenCalled();
+    // El modal de alta sigue abierto (no se creó nada).
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("R5: tras ok encadena registrarWebhook con ownerUsuarioId = apiKey.usuarioId y la URL", async () => {
+    const user = userEvent.setup();
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    await generarConWebhook(user);
+
+    await screen.findByLabelText("Clave de API generada");
+    expect(registrarWebhookMock).toHaveBeenCalledWith({
+      ownerUsuarioId: "u2", // usuarioId que trae `apiKey` en okGeneracion()
+      url: WEBHOOK_URL,
+    });
+  });
+
+  it("R8 (módulo): con webhook creado revela clave y secreto en un solo modal", async () => {
+    const user = userEvent.setup();
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    await generarConWebhook(user);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByLabelText("Clave de API generada"),
+    ).toHaveValue(PLAIN_KEY);
+    expect(
+      within(dialog).getByLabelText("Secreto de webhook generado"),
+    ).toHaveValue(WEBHOOK_SECRET);
+  });
+
+  it("R6: bloquea el segundo submit mientras corren las dos acciones encadenadas", async () => {
+    // `registrarWebhook` queda pendiente para mantener la fase pending del Modal.
+    let resolver!: (v: { status: "creada"; secret: string }) => void;
+    registrarWebhookMock.mockImplementation(
+      () => new Promise((res) => (resolver = res)),
+    );
+    const user = userEvent.setup();
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    await user.click(screen.getByRole("button", { name: "Generar API key" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(
+      within(dialog).getByLabelText("Identificador"),
+      "una-sola-vez",
+    );
+    await user.type(
+      within(dialog).getByLabelText("URL de webhook (callback)"),
+      WEBHOOK_URL,
+    );
+    const generarBtn = within(dialog).getByRole("button", { name: "Generar" });
+    await user.click(generarBtn);
+    await user.click(generarBtn);
+
+    // Aunque se pulsó dos veces, cada acción encadenada corrió una sola vez.
+    expect(generarApiKeyMock).toHaveBeenCalledTimes(1);
+    expect(registrarWebhookMock).toHaveBeenCalledTimes(1);
+
+    resolver({ status: "creada", secret: WEBHOOK_SECRET });
+    await screen.findByLabelText("Secreto de webhook generado");
+  });
+
+  it("R11/R12: key ok pero registrarWebhook falla → revela igual el secreto de la key y avisa sin internals", async () => {
+    registrarWebhookMock.mockResolvedValue({ status: "config_error" });
+    const user = userEvent.setup();
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    await generarConWebhook(user);
+
+    // R11: la clave se revela igual (su secreto no se pierde).
+    expect(await screen.findByLabelText("Clave de API generada")).toHaveValue(
+      PLAIN_KEY,
+    );
+    // R11: NO hay secreto de webhook.
+    expect(
+      screen.queryByLabelText("Secreto de webhook generado"),
+    ).toBeNull();
+    // R12: aviso claro, sin nombrar variables ni internals del servidor.
+    expect(
+      screen.getAllByText(/el webhook no quedó registrado/i).length,
+    ).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain("config_error");
+    expect(document.body.textContent).not.toContain("WEBHOOK_SECRET_ENC_KEY");
+  });
+
+  it("R13: en fallo parcial la key queda listada y reintentar el webhook es por el botón Editar", async () => {
+    registrarWebhookMock.mockResolvedValue({ status: "forbidden" });
+    const user = userEvent.setup();
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    await generarConWebhook(user);
+    await screen.findByLabelText("Clave de API generada");
+
+    // Cierra el revelado: la key sigue en el listado y su fila ofrece "Editar".
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Ya guardé mis credenciales en un lugar seguro",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
+
+    const table = screen.getByRole("table", { name: "API keys" });
+    expect(
+      await within(table).findByRole("button", {
+        name: "Editar webhook de integracion-erp",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("R14: refresca el listado antes de mostrar el revelado", async () => {
+    const user = userEvent.setup();
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    // El montaje usa el fallback del servidor (no llama a listar). Cualquier
+    // llamada posterior es el `mutate` disparado por el alta.
+    listarApiKeysMock.mockClear();
+    await generarConWebhook(user);
+    await screen.findByLabelText("Clave de API generada");
+
+    await waitFor(() => expect(listarApiKeysMock).toHaveBeenCalled());
   });
 });

@@ -32,12 +32,14 @@ import {
   type OrderStatusLiteRow,
   type ProvinciaRow,
   type RecepcionSateliteRow,
+  type RechazoSlaTiendaRow,
   type UpdateOrdenData,
   type ApiOrdenListResult,
   type ApiOrdenDetalleRow,
   type ApiOrdenRow,
   type CancelarViaApiResult,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
+import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 
@@ -184,12 +186,22 @@ const RESULTADO_DEVUELTA = "devuelta";
 // de /novedades se ancla a este estado real (no a la gestion vigente).
 const ESTATUS_DEVUELTA = "devuelta";
 
+// Feature 102 (T7): `order_status.value` de una orden rechazada. La superficie de rechazos por
+// SLA de la tienda se ancla a este estado real (mientras la orden REPOSE en `rechazada`, R15).
+const ESTATUS_RECHAZADA = "rechazada";
+
 /**
  * Serializa una fecha `@db.Date` (guardada a medianoche UTC) a `YYYY-MM-DD`.
  * `null`/`undefined` -> `null`. Convencion del repo (ver CierreDiaRepository).
  */
 function toFechaISO(fecha: Date | null | undefined): string | null {
   return fecha ? fecha.toISOString().slice(0, 10) : null;
+}
+
+// Feature 102: money-safe Decimal -> STRING escala 2 fija (nunca number/parseFloat). `null` ->
+// `null` (monto aun sin snapshot). Patron `decimalToString` de los repos de cierre.
+function decimalOrNullToString(d: Prisma.Decimal | null): string | null {
+  return d === null ? null : d.toFixed(2);
 }
 
 const WITH_ESTATUS_Y_TIENDA = {
@@ -1877,6 +1889,71 @@ export class OrdenRepository implements IOrdenRepository {
       }
     }
     return map;
+  }
+
+  // --- Feature 102: rechazos por SLA de la tienda (superficie derivada de solo-lectura) ---
+
+  /**
+   * Feature 102/R12-R15: predicado CENTRAL de un RECHAZO POR SLA, ANCLADO AL ESTADO REAL.
+   * Extraido para que `count` y `find` compartan EXACTAMENTE el mismo `where` (R15: total y pagina
+   * sobre el mismo universo). Una orden entra si: es de la tienda del actor (R13), no esta borrada
+   * (R15), su estatus ACTUAL es `rechazada` Y tiene AL MENOS una transicion del cron SLA en su
+   * historial (`origen_tipo = escalado_devuelta_sla`, feature 99). Un rechazo MANUAL del mensajero
+   * (sin esa transicion) NO entra. Al salir de `rechazada` o al borrarse, deja de casar (R15).
+   */
+  private rechazoSlaWhere(tiendaId: string): Prisma.OrdenWhereInput {
+    return {
+      tiendaId, // R13: acotada a la tienda del actor
+      deletedAt: null, // R15: excluye borradas
+      estatus: { value: ESTATUS_RECHAZADA }, // R12/R15: solo mientras REPOSE en `rechazada`
+      historialEstados: { some: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA } }, // R12: alcanzada por el cron SLA
+    };
+  }
+
+  /** Feature 102/R12/R13/R15: cuenta los rechazos por SLA de `tiendaId` (mismo `where` que find). */
+  async countRechazadasSlaByTienda(tiendaId: string): Promise<number> {
+    return this.prisma.orden.count({ where: this.rechazoSlaWhere(tiendaId) });
+  }
+
+  /**
+   * Feature 102/R12/R14/R15: una PAGINA de rechazos por SLA de `tiendaId` con el MISMO predicado
+   * que `countRechazadasSlaByTienda` (R15), ordenada por `Orden.createdAt` desc. El `monto` sale de
+   * la gestion sintetica SLA (la enlazada por la transicion `origen_tipo = escalado_devuelta_sla`),
+   * traida en el MISMO query via la relacion `historialEstados` acotada -> sin N+1. Money-safe:
+   * `ingreso_bodega_rechazo` (Decimal) -> STRING escala 2, o `null` si aun sin snapshot (Q2).
+   */
+  async findRechazadasSlaByTienda(
+    tiendaId: string,
+    pagination: { skip: number; take: number },
+  ): Promise<RechazoSlaTiendaRow[]> {
+    const rows = await this.prisma.orden.findMany({
+      where: this.rechazoSlaWhere(tiendaId),
+      orderBy: { createdAt: "desc" },
+      skip: pagination.skip,
+      take: pagination.take,
+      select: {
+        id: true,
+        numGuia: true,
+        numRemision: true,
+        destinatario: true,
+        // La transicion del cron SLA enlaza la gestion sintetica que porta el monto de 56. Se
+        // acota al origen SLA y a la mas reciente (defensivo: una orden tiene a lo sumo una).
+        historialEstados: {
+          where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { gestion: { select: { ingresoBodegaRechazo: true } } },
+        },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      numGuia: r.numGuia,
+      numRemision: r.numRemision,
+      destinatario: r.destinatario,
+      // Money-safe: el snapshot de 56 (Decimal) -> STRING escala 2; `null` = pendiente de cierre.
+      monto: decimalOrNullToString(r.historialEstados[0]?.gestion?.ingresoBodegaRechazo ?? null),
+    }));
   }
 }
 

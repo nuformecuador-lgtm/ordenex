@@ -125,6 +125,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     listByOwner: vi.fn(async () => ({ items: [], total: 0 })),
     findDetalleByNumGuiaForOwner: vi.fn(async () => null),
     cancelarViaApi: vi.fn(async () => ({ status: "not_found" as const })),
+    // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
+    countRechazadasSlaByTienda: vi.fn(async () => 0),
+    findRechazadasSlaByTienda: vi.fn(async () => []),
     ...overrides,
   };
 }

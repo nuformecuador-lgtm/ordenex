@@ -17,9 +17,11 @@ Cuando abres Claude Code en la raíz de este repo, actúas como **leader**. El l
 
 ## Reglas no negociables
 
-1. **Una feature por zona a la vez.** Solo puede haber una feature en `in_progress`
-   por `zone` en `feature_list.json`. Dos features pueden correr en paralelo si
-   sus zonas son disjuntas (frontend vs backend). `./init.sh` lo valida.
+1. **Máximo 2 features `in_progress` por zona.** Cada `zone` (`frontend`, `backend`,
+   `fullstack`) admite hasta **2** features en `in_progress` a la vez en
+   `feature_list.json`, siempre sin conflicto de archivos entre ellas (ver
+   `AGENTS.md > Paralelismo`). Distintas zonas corren en paralelo sin restricción
+   entre sí. `./init.sh` lo valida.
 2. **SDD obligatorio** para toda feature con `"sdd": true`: requirements (EARS) →
    design → tasks → código. Nunca saltes directo a código.
 3. **Estado en disco, no en el chat.** Cada subagente escribe su resultado en un

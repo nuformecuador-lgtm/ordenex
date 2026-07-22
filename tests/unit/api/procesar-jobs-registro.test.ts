@@ -43,6 +43,7 @@ describe("R21 — registro en el drenador", () => {
       "geocodificacion",
       "liberar_reprogramadas",
       "optimizacion_ruta",
+      "webhook_estado", // feature 99
     ]);
   });
 

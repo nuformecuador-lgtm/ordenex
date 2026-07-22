@@ -356,27 +356,60 @@ consistente con `zone: "backend"`.
 
 ## 9. Bloque B — registro de la suscripción (D1 = Server Action en la UI, RESUELTA)
 
-El **servicio** `WebhookSuscripcionService` (validación de URL R5, generación del secreto y
-cifrado antes de persistir R7/R32, upsert R6, baja R8, autorización por owner R9) es puro y
-testeable sin controller.
+El **servicio** `WebhookSuscripcionService` (validación de URL R5, alta/edición R33, rotación
+R34, baja R8, lectura R7/R35, autorización por owner R9) es puro y testeable sin controller.
+Recibe el repositorio, `cifrar` y `generarSecreto` por constructor (DI por interfaces).
 
 **Controller (D1): Server Action** `lib/actions/webhooks.ts` (`'use server'`), autorizada al
 rol **`maestro`** (patrón de la feature 82, que resuelve el actor server-side y hace
 `notFound()`/forbidden si el rol no es maestro). **NO** es un endpoint por API key. El
-maestro registra la suscripción para un owner de API key (selecciona la API key / usuario
-dedicado en la pantalla F100). La acción:
-1. Autoriza a `maestro`.
-2. Valida la URL (R5) y que el owner objetivo es un usuario de rol `apiKey` (coherente con
-   D3).
-3. Genera el secreto (`ordx_whsec_…`), lo cifra (§3.1) y hace `upsertByOwner`.
-4. Devuelve el secreto en claro UNA vez (R7) para que F100 lo muestre.
+maestro opera la suscripción para un owner de API key (selecciona la API key / usuario
+dedicado en la pantalla de UI). Cuatro acciones:
 
-**F100 (D4, feature frontend hermana, ya registrada):** pantalla en `Configuración > API`
-que consume esta Server Action (registrar/mostrar-una-vez/dar de baja). Fuera del alcance de
-la 99 (backend). El andamiaje del submenú `Configuración > API` ya existe (features 82).
+- **`registrarWebhook({ownerUsuarioId, url})`** — alta o edición (R33):
+  1. Autoriza a `maestro`.
+  2. Valida la URL (R5) y que el owner objetivo es un usuario de rol `apiKey` (coherente
+     con D3).
+  3. **ALTA** (owner sin suscripción): genera el secreto (`ordx_whsec_…`), lo cifra (§3.1)
+     y hace `upsertByOwner`; devuelve `{status:"creada", secret}` (secreto en claro UNA
+     vez, R7).
+  4. **EDICIÓN** (owner con suscripción): `actualizarUrlByOwner` (solo la URL, reactiva y
+     CONSERVA el secreto); devuelve `{status:"actualizada"}` sin secreto. Editar NO rota.
+  Errores: `unauthenticated`/`forbidden`/`validation_error`/`owner_invalido`/`config_error`
+  (R32, si falta `WEBHOOK_SECRET_ENC_KEY` al cifrar en el alta).
+
+- **`rotarSecretoWebhook({ownerUsuarioId})`** — rotación explícita (R34): autoriza a
+  `maestro`; el service `rotarSecreto` genera+cifra un secreto NUEVO (invalida el anterior,
+  vía `actualizarSecretoByOwner`) y lo devuelve en claro UNA vez. Estados:
+  `ok`/`unauthenticated`/`forbidden`/`validation_error`/`not_found` (owner sin
+  suscripción)/`config_error` (R32).
+
+- **`obtenerWebhook({ownerUsuarioId})`** — lectura para la UI (R35, D2): autoriza a
+  `maestro`; envuelve `service.obtener` (`findByOwner`, sin secreto) y devuelve
+  `{status:"ok", webhook: {url, activa} | null}`. NUNCA expone el secreto. Es lo que
+  consume la feature **105** para pintar el estado, también en páginas paginadas por el
+  cliente.
+
+- **`desactivarWebhook({ownerUsuarioId})`** — baja lógica (R8), idempotente.
+
+**Feature 105 (UI hermana, ya registrada):** pantalla en `Configuración > API` que consume
+estas Server Actions (registrar/editar, mostrar-el-secreto-una-vez, rotar, leer estado, dar
+de baja). Fuera del alcance de la 99/104 (backend). El andamiaje del submenú `Configuración
+> API` ya existe (features 82).
 
 `app/api/webhooks/suscripcion/route.ts` (endpoint por API key) queda **descartado** por D1;
 ver §10.6.
+
+### 9.1 Métodos del repositorio (solo queries, sin lógica)
+
+- `upsertByOwner(data)` — alta (crea la fila con secreto cifrado; reactiva).
+- `actualizarUrlByOwner(owner, url)` — R33: `updateMany` de solo `url` + `activa=true`;
+  **no toca `secret`** (editar no rota). No-op si no hay fila.
+- `actualizarSecretoByOwner(owner, secret)` — R34: `updateMany` de solo `secret`; conserva
+  url/activa. No-op si no hay fila.
+- `findByOwner(owner)` — R7/R35: vista `{url, activa}` sin secreto.
+- `findActivaByOwner(owner)` — entrega server-side (ciphertext).
+- `desactivarByOwner(owner)` / `ownerEsApiKey(owner)`.
 
 ---
 
