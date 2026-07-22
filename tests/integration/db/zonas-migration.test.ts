@@ -184,7 +184,10 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         // num_guia no secuencial: apendidas despues. La segunda reemplaza la
         // permutacion de la primera (dejaba delta constante entre consecutivas).
         !d.endsWith("_num_guia_no_secuencial") &&
-        !d.endsWith("_num_guia_feistel"),
+        !d.endsWith("_num_guia_feistel") &&
+        !d.endsWith("_orden_historial_origen_tipo_sla_devuelta") && // feature 99: apendida despues
+        !d.endsWith("_orden_historial_origen_tipo_resolver_novedad") && // feature 100: apendida despues
+        !d.endsWith("_orden_prioridad"), // feature 101: apendida despues
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);

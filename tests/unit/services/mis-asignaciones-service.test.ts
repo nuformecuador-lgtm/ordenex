@@ -6,21 +6,16 @@ import type {
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
-import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const OTRO: Actor = { usuarioId: "m2", rol: "mensajero" };
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
-
-// Feature 47: zona central (para clasificar bodega_central) usada por el doble de zonaRepo.
-const ZONA_CENTRAL = "z-central";
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_espera_aceptacion: "os-espera",
@@ -29,9 +24,6 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   reprogramada: "os-reprogramada",
   devuelta: "os-devuelta",
   rechazada: "os-rechazada",
-  // Feature 47: destinos de la transicion de seguimiento (reintento a bodega).
-  en_bodega: "os-en-bodega",
-  en_bodega_satelite: "os-en-bodega-satelite",
 };
 
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
@@ -83,6 +75,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
     crearGestionYTransicionar: vi.fn(async () => "g1"),
+    reprogramarDesdeDevuelta: vi.fn(async () => true), // feature 100: no lo usa MisAsignacionesService
     ...overrides,
   };
 }
@@ -90,27 +83,6 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue"> {
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-  };
-}
-
-// Feature 47: derivador de intentos (49). Por defecto 0 previos -> intento actual 1 (< umbral
-// default 3 -> reintento). Los tests de escalado inyectan un conteo mayor.
-function fakeHistorial(
-  overrides: Partial<Pick<IOrdenHistorialService, "contarIntentos">> = {},
-): Pick<IOrdenHistorialService, "contarIntentos"> {
-  return {
-    contarIntentos: vi.fn(async () => 0),
-    ...overrides,
-  };
-}
-
-// Feature 47: zona central para la bodega responsable (54). Por defecto ZONA_CENTRAL.
-function fakeZonaRepo(
-  overrides: Partial<Pick<IZonaRepository, "findCentralZonaId">> = {},
-): Pick<IZonaRepository, "findCentralZonaId"> {
-  return {
-    findCentralZonaId: vi.fn(async () => ZONA_CENTRAL),
-    ...overrides,
   };
 }
 
@@ -150,19 +122,9 @@ function newService(
   repo: IGestionOrdenRepository = fakeRepo(),
   storage: IFileStorage = fakeStorage(),
   signed: ISignedUrlProvider = fakeSignedUrls(),
-  historial: Pick<IOrdenHistorialService, "contarIntentos"> = fakeHistorial(),
-  zonaRepo: Pick<IZonaRepository, "findCentralZonaId"> = fakeZonaRepo(),
   rutaRepo: Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen"> = fakeRutaRepo(),
 ) {
-  return new MisAsignacionesService(
-    repo,
-    fakeOrdenRepo(),
-    storage,
-    signed,
-    historial,
-    zonaRepo,
-    rutaRepo,
-  );
+  return new MisAsignacionesService(repo, fakeOrdenRepo(), storage, signed, rutaRepo);
 }
 
 function evidencia() {
@@ -591,13 +553,15 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
   });
 });
 
-// --- FEATURE 47: reintento vs escalado en la rama DEVUELTA (R1/R2/R4/R5/R8/R9/R13/R19) ---
+// --- FEATURE 99 (R1/R29/R30): la devolucion DIFIERE el re-ruteo. INVIERTE la suite de la 47 ---
+// Antes (feature 47) `gestionar` emitia una transicion de SEGUIMIENTO inmediata (reintento a
+// bodega o escalado a `rechazada`) en la misma tx. Bajo la 99 esa logica se RELOCALIZO al cron
+// SLA (`DevolucionSlaService`): al devolver, la orden QUEDA en `devuelta` sin seguimiento, y el
+// intento se contabiliza por el append a `devuelta`. Las aserciones de reintento (<3 libera) /
+// escalado (>=3 rechaza) / wrong_* directo MIGRARON a `tests/unit/services/devolucion-sla-service.test.ts`
+// (no se aflojaron: se movieron al lugar donde ahora vive la capacidad, R30).
 
-describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
-  // Feature 73/R6: la rama `devuelta` ahora exige causa. Se añade al input SIN cambiar nada de
-  // lo que estos tests afirman: la regla de reintento/escalado de la 47 NO lee la causa (R17,
-  // F1.4-e) y `resolverSeguimientoDevuelta` no se toca. La verificacion dedicada de R17 (las 3
-  // causas -> el MISMO seguimiento) es la task T6.1 del bloque 6.
+describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99, R1/R29)", () => {
   const devolucion: GestionarInput = {
     ordenId: "o1",
     resultado: "devuelta",
@@ -609,111 +573,94 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
   function repoCall(repo: IGestionOrdenRepository) {
     return (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       nuevoEstatusId: string;
-      seguimiento?: { destinoEstatusId: string; limpiaMensajero: boolean };
+      seguimiento?: unknown;
     };
   }
 
-  it("R1/R5: bajo umbral + zona satelite -> seguimiento en_bodega_satelite, limpia mensajero", async () => {
+  it("R1: devolver transiciona la orden a `devuelta` y NO pasa transicion de seguimiento", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
     });
-    const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 0) }); // intento actual = 1
-    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-      devolucion,
-      MENSAJERO,
-    );
+    const r = await newService(repo).gestionar(devolucion, MENSAJERO);
     expect(r.status).toBe("ok");
     const call = repoCall(repo);
-    expect(call.nuevoEstatusId).toBe("os-devuelta"); // la orden pasa por devuelta (derivador la cuenta)
-    expect(call.seguimiento).toEqual({ destinoEstatusId: "os-en-bodega-satelite", limpiaMensajero: true });
-    expect(historial.contarIntentos).toHaveBeenCalledWith("o1"); // R1: consume el derivador
+    // R1/R2: la orden REPOSA en `devuelta` (el append a `devuelta` la contabiliza como intento).
+    expect(call.nuevoEstatusId).toBe("os-devuelta");
+    // R29: ni reintento a bodega ni escalado inmediato -> el input ya no lleva `seguimiento`.
+    expect(call).not.toHaveProperty("seguimiento");
   });
 
-  it("R5: bajo umbral + zona CENTRAL -> seguimiento en_bodega (central), limpia mensajero", async () => {
-    const repo = fakeRepo({
-      findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: ZONA_CENTRAL })]),
-    });
-    const zonaRepo = fakeZonaRepo({ findCentralZonaId: vi.fn(async () => ZONA_CENTRAL) });
-    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), fakeHistorial(), zonaRepo).gestionar(
-      devolucion,
-      MENSAJERO,
-    );
-    expect(r.status).toBe("ok");
-    expect(repoCall(repo).seguimiento).toEqual({ destinoEstatusId: "os-en-bodega", limpiaMensajero: true });
+  it("R29: la devolucion NO deriva la bodega responsable en `gestionar` (ni con zona central ni satelite)", async () => {
+    // Antes la 47 resolvia en_bodega/en_bodega_satelite AQUI; ahora es competencia del cron.
+    for (const zonaId of ["z-satelite", "z-central", null] as const) {
+      const repo = fakeRepo({
+        findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId })]),
+      });
+      const ordenRepo = {
+        findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
+      };
+      const service = new MisAsignacionesService(
+        repo,
+        ordenRepo,
+        fakeStorage(),
+        fakeSignedUrls(),
+        fakeRutaRepo(),
+      );
+      const r = await service.gestionar(devolucion, MENSAJERO);
+      expect(r.status).toBe("ok");
+      // `gestionar` solo resuelve el estatus del RESULTADO (`devuelta`), nunca los de bodega.
+      expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_bodega");
+      expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_bodega_satelite");
+      expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("rechazada");
+    }
   });
 
-  it("R5 edge: zonaId null -> fallback en_bodega (central), sin consultar la zona central", async () => {
-    const repo = fakeRepo({
-      findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: null })]),
-    });
-    const zonaRepo = fakeZonaRepo();
-    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), fakeHistorial(), zonaRepo).gestionar(
-      devolucion,
-      MENSAJERO,
-    );
-    expect(r.status).toBe("ok");
-    expect(repoCall(repo).seguimiento).toEqual({ destinoEstatusId: "os-en-bodega", limpiaMensajero: true });
-    expect(zonaRepo.findCentralZonaId).not.toHaveBeenCalled();
-  });
-
-  it("R8/R9: la N-esima devolucion (N = umbral 3) ESCALA a rechazada, NO limpia mensajero", async () => {
+  it("R1: sin importar cuantas devoluciones previas hubo, la orden queda en `devuelta` (no escala aqui)", async () => {
+    // Antes, la N-esima devolucion (N=umbral) escalaba a `rechazada` en esta misma tx. Ese
+    // escalado ahora lo decide el cron: `gestionar` SIEMPRE deja `devuelta`, sin excepcion.
     const repo = fakeRepo();
-    // 2 previos -> intento actual 3 == umbral default 3 -> escalado.
-    const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 2) });
-    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-      devolucion,
-      MENSAJERO,
-    );
+    const r = await newService(repo).gestionar(devolucion, MENSAJERO);
     expect(r.status).toBe("ok");
-    expect(repoCall(repo).seguimiento).toEqual({ destinoEstatusId: "os-rechazada", limpiaMensajero: false });
+    const call = repoCall(repo);
+    expect(call.nuevoEstatusId).toBe("os-devuelta");
+    expect(call).not.toHaveProperty("seguimiento");
   });
 
-  it("R9: la (N-1)-esima devolucion NO escala -> vuelve a la bodega para reintentar", async () => {
+  it("R13: devolver NO escribe devuelta_origen (reservado a la feature 48)", async () => {
     const repo = fakeRepo();
-    // 1 previo -> intento actual 2 < umbral default 3 -> reintento (no rechazada).
-    const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 1) });
-    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-      devolucion,
-      MENSAJERO,
+    const ordenRepo = {
+      findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
+    };
+    const service = new MisAsignacionesService(
+      repo,
+      ordenRepo,
+      fakeStorage(),
+      fakeSignedUrls(),
+      fakeRutaRepo(),
     );
-    expect(r.status).toBe("ok");
-    const seg = repoCall(repo).seguimiento;
-    expect(seg?.destinoEstatusId).toBe("os-en-bodega-satelite"); // no os-rechazada
-    expect(seg?.limpiaMensajero).toBe(true);
+    await service.gestionar(devolucion, MENSAJERO);
+    expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devuelta_origen");
   });
 
-  // --- FEATURE 64 (R27): un intento ANULADO no cuenta para la decision reintento/escalado ---
-
-  it("67/R27: con 2 devueltas de las cuales 1 esta ANULADA, la siguiente es REINTENTO (no escalado)", async () => {
+  it("catalogo incompleto (sin el estado `devuelta`) -> validation_error, sin persistir", async () => {
     const repo = fakeRepo();
-    // El historial tiene 2 filas destino `devuelta`, pero una vino de una gestion que el
-    // mensajero DESHIZO. `contarIntentos` consume `contarPorDestinoVigentes`, que la excluye en
-    // la LECTURA -> devuelve 1 (no 2). Intento actual = 2 < umbral 3 -> REINTENTO.
-    const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 1) });
-    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-      devolucion,
-      MENSAJERO,
+    // ordenRepo que NO resuelve `devuelta` (seed pendiente): la unica resolucion que `gestionar`
+    // hace en la rama devuelta es la del propio resultado.
+    const ordenRepo = {
+      findEstatusIdByValue: vi.fn(async (v: string) =>
+        v === "devuelta" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
+      ),
+    };
+    const service = new MisAsignacionesService(
+      repo,
+      ordenRepo,
+      fakeStorage(),
+      fakeSignedUrls(),
+      fakeRutaRepo(),
     );
-    expect(r.status).toBe("ok");
-    const seg = repoCall(repo).seguimiento;
-    // Sin la correccion de la 64, el conteo crudo seria 2 -> intento 3 == umbral -> la orden
-    // habria escalado sola a `rechazada` y disparado `cobroRechazado` (56): dinero mal cobrado
-    // por un error que el mensajero YA corrigio.
-    expect(seg?.destinoEstatusId).toBe("os-en-bodega-satelite");
-    expect(seg?.destinoEstatusId).not.toBe("os-rechazada");
-    expect(seg?.limpiaMensajero).toBe(true);
-  });
-
-  it("67/R27: el escalado sigue disparando cuando los 3 intentos son VIGENTES (sin regresion de la 47)", async () => {
-    const repo = fakeRepo();
-    // Ninguna anulada: 2 previos vigentes -> intento actual 3 == umbral -> escalado (47/R8).
-    const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 2) });
-    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-      devolucion,
-      MENSAJERO,
-    );
-    expect(r.status).toBe("ok");
-    expect(repoCall(repo).seguimiento?.destinoEstatusId).toBe("os-rechazada");
+    const r = await service.gestionar(devolucion, MENSAJERO);
+    expect(r.status).toBe("validation_error");
+    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
   });
 
   it("67/R31: una orden devuelta a `en_reparto` por un deshacer es escogible (guardia 1-a-1 vigente)", async () => {
@@ -732,8 +679,6 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
   });
 
   it("67/R30: si el mensajero YA tiene OTRA orden activa, escoger la deshecha da conflict (1-a-1 intacta)", async () => {
-    // El deshacer se completa igual (R30, probado en cierre-dia-service.test.ts); lo que sigue
-    // sujeto a la guardia 1-a-1 es RETOMARLA. La invariante de la 36 no se relaja.
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
         gestionRow({ estatusValue: "en_reparto", mensajeroAsignadoId: "m1" }),
@@ -744,156 +689,56 @@ describe("gestionar — DEVUELTA: reintento vs escalado (feature 47)", () => {
     expect(r.status).toBe("conflict");
   });
 
-  it("R2: catalogo incompleto (sin el estado de bodega) -> validation_error, sin persistir", async () => {
+  it("R4: reprogramada tampoco pasa seguimiento (rama intacta)", async () => {
     const repo = fakeRepo();
-    // ordenRepo que resuelve devuelta pero NO en_bodega_satelite (seed pendiente).
-    const ordenRepo = {
-      findEstatusIdByValue: vi.fn(async (v: string) =>
-        v === "en_bodega_satelite" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
-      ),
-    };
-    const service = new MisAsignacionesService(
-      repo,
-      ordenRepo,
-      fakeStorage(),
-      fakeSignedUrls(),
-      fakeHistorial(),
-      fakeZonaRepo(),
-      fakeRutaRepo(),
-    );
-    const r = await service.gestionar(devolucion, MENSAJERO);
-    expect(r.status).toBe("validation_error");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
-  });
-
-  it("R13: la 47 NO escribe devuelta_origen (reservado a la feature 48)", async () => {
-    const repo = fakeRepo();
-    const ordenRepo = {
-      findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-    };
-    const service = new MisAsignacionesService(
-      repo,
-      ordenRepo,
-      fakeStorage(),
-      fakeSignedUrls(),
-      fakeHistorial(),
-      fakeZonaRepo(),
-      fakeRutaRepo(),
-    );
-    await service.gestionar(devolucion, MENSAJERO);
-    expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devuelta_origen");
-  });
-
-  it("R4/R19: reprogramada NO cuenta ni computa seguimiento (rama intacta)", async () => {
-    const repo = fakeRepo();
-    const historial = fakeHistorial();
-    const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+    const r = await newService(repo).gestionar(
       { ordenId: "o1", resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
-    expect(historial.contarIntentos).not.toHaveBeenCalled();
-    const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      seguimiento?: unknown;
-    };
-    expect(call.seguimiento).toBeUndefined(); // R19: sin transicion de seguimiento
+    expect(repoCall(repo)).not.toHaveProperty("seguimiento");
   });
 
-  it("R19: entregada NO computa seguimiento (una sola transicion)", async () => {
+  it("entregada NO pasa seguimiento (una sola transicion)", async () => {
     const repo = fakeRepo();
-    const historial = fakeHistorial();
-    await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+    await newService(repo).gestionar(
       { ordenId: "o1", resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencia: evidencia() },
       MENSAJERO,
     );
-    const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      seguimiento?: unknown;
-    };
-    expect(call.seguimiento).toBeUndefined();
-    expect(historial.contarIntentos).not.toHaveBeenCalled();
+    expect(repoCall(repo)).not.toHaveProperty("seguimiento");
   });
 
-  it("R19: rechazada DIRECTA NO computa seguimiento (una sola transicion)", async () => {
+  it("rechazada DIRECTA NO pasa seguimiento (una sola transicion)", async () => {
     const repo = fakeRepo();
-    const historial = fakeHistorial();
-    await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+    await newService(repo).gestionar(
       { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencia: evidencia() },
       MENSAJERO,
     );
-    const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      seguimiento?: unknown;
-    };
-    expect(call.seguimiento).toBeUndefined();
-    expect(historial.contarIntentos).not.toHaveBeenCalled();
+    expect(repoCall(repo)).not.toHaveProperty("seguimiento");
   });
 
-  // --- FEATURE 73 / R17 (T6.1): la causa NO altera la regla de seguimiento de la 47 ---
-  // F1.4-e: para la MISMA orden y el MISMO conteo previo, las 3 causas
-  // (not_found / wrong_number / wrong_address) producen el MISMO seguimiento. La causa
-  // viaja en su columna propia y NUNCA entra en `resolverSeguimientoDevuelta`, asi que
-  // ni el destino (reintento a bodega / escalado a rechazada) ni el conteo de intentos
-  // dependen de ella. Bug historico que este test cierra: al ampliar los tests de la 47
-  // se dejo pasando SIEMPRE `not_found`, con lo que las otras 2 causas nunca recorrian
-  // esta ruta y R17 quedaba huerfano.
-
+  // --- FEATURE 73 / R17: la causa viaja igual y NO altera el nuevo comportamiento diferido ---
+  // Las 3 causas (not_found / wrong_number / wrong_address) dejan la orden en `devuelta` sin
+  // seguimiento; la causa persiste en su columna (verificado en mis-asignaciones-causa-devolucion.test.ts)
+  // y es el cron SLA quien la usa para elegir la ventana (24h vs 5 dias).
   const CAUSAS = CAUSA_DEVOLUCION_SEED; // ["not_found", "wrong_number", "wrong_address"]
 
   it.each(CAUSAS)(
-    "73/R17: causa '%s' BAJO umbral -> MISMO seguimiento (reintento a en_bodega_satelite, limpia mensajero, cuenta igual)",
+    "73/R17: causa '%s' deja la orden en `devuelta` sin seguimiento (la ventana la decide el cron)",
     async (causa) => {
       const repo = fakeRepo({
         findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
       });
-      const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 0) }); // intento actual = 1 < umbral 3
-      const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
+      const r = await newService(repo).gestionar(
         { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");
       const call = repoCall(repo);
-      // Mismo destino de seguimiento que el caso baseline (independiente de la causa).
-      expect(call.seguimiento).toEqual({ destinoEstatusId: "os-en-bodega-satelite", limpiaMensajero: true });
-      // Mismo efecto sobre el conteo de intento: la decision consume el derivador de la 49
-      // con el id de orden, sin que la causa lo altere.
-      expect(historial.contarIntentos).toHaveBeenCalledTimes(1);
-      expect(historial.contarIntentos).toHaveBeenCalledWith("o1");
+      expect(call.nuevoEstatusId).toBe("os-devuelta");
+      expect(call).not.toHaveProperty("seguimiento");
     },
   );
-
-  it.each(CAUSAS)(
-    "73/R17: causa '%s' EN umbral -> MISMO escalado a rechazada, NO limpia mensajero (causa irrelevante)",
-    async (causa) => {
-      const repo = fakeRepo();
-      const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 2) }); // intento actual = 3 == umbral
-      const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
-        MENSAJERO,
-      );
-      expect(r.status).toBe("ok");
-      expect(repoCall(repo).seguimiento).toEqual({ destinoEstatusId: "os-rechazada", limpiaMensajero: false });
-      expect(historial.contarIntentos).toHaveBeenCalledTimes(1);
-      expect(historial.contarIntentos).toHaveBeenCalledWith("o1");
-    },
-  );
-
-  it("73/R17: las 3 causas colapsan al MISMO seguimiento para la misma orden y conteo (invariante directa)", async () => {
-    async function seguimientoDe(causa: (typeof CAUSAS)[number]) {
-      const repo = fakeRepo({
-        findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
-      });
-      const historial = fakeHistorial({ contarIntentos: vi.fn(async () => 1) }); // intento actual = 2 < umbral
-      const r = await newService(repo, fakeStorage(), fakeSignedUrls(), historial).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
-        MENSAJERO,
-      );
-      expect(r.status).toBe("ok");
-      return repoCall(repo).seguimiento;
-    }
-    const [a, b, c] = await Promise.all(CAUSAS.map(seguimientoDe));
-    expect(a).toEqual(b);
-    expect(b).toEqual(c);
-    expect(a).toEqual({ destinoEstatusId: "os-en-bodega-satelite", limpiaMensajero: true });
-  });
 });
 
 // --- menor-3: liberarGestion (R35) ---

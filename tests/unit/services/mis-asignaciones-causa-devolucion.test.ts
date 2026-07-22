@@ -6,13 +6,11 @@ import type {
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
-import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 
 // Feature 73 (R11/R12/R13) — el SERVICE propaga la causa a los datos de la gestion, en su
@@ -53,6 +51,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
     crearGestionYTransicionar: vi.fn(async () => "g1"),
+    reprogramarDesdeDevuelta: vi.fn(async () => true), // feature 100: no lo usa MisAsignacionesService
     ...overrides,
   };
 }
@@ -69,26 +68,12 @@ function newService(repo: IGestionOrdenRepository) {
     createSignedUrl: vi.fn(async (path: string) => `https://signed/${path}`),
     createSignedUrls: vi.fn(async () => ({})),
   };
-  const historial: Pick<IOrdenHistorialService, "contarIntentos"> = {
-    contarIntentos: vi.fn(async () => 0),
-  };
-  const zonaRepo: Pick<IZonaRepository, "findCentralZonaId"> = {
-    findCentralZonaId: vi.fn(async () => "z-central"),
-  };
   // Feature 92 (R23/R28): sin ruta persistida -> `porGestionar` conserva su orden previo.
   const rutaRepo: Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen"> = {
     findByMensajero: vi.fn(async () => null),
     upsertOrigen: vi.fn(async () => {}),
   };
-  return new MisAsignacionesService(
-    repo,
-    ordenRepo,
-    storage,
-    signed,
-    historial,
-    zonaRepo,
-    rutaRepo,
-  );
+  return new MisAsignacionesService(repo, ordenRepo, storage, signed, rutaRepo);
 }
 
 function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {
@@ -121,25 +106,26 @@ describe("Feature 73 · el service persiste la causa en su campo propio (R11)", 
     },
   );
 
-  it("R13: la causa viaja DENTRO de `gestion` -> misma tx que estado y seguimiento (sin firma nueva)", async () => {
+  it("R13: la causa viaja DENTRO de `gestion` -> misma tx que el estado destino (sin firma nueva)", async () => {
     const repo = fakeRepo();
     await newService(repo).gestionar(devolucion(), MENSAJERO);
     const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    // Un solo argumento con TODO: gestion (con su causa) + estado destino + seguimiento de la 47.
+    // Un solo argumento con la gestion (con su causa) + el estado destino `devuelta`. Feature 99:
+    // ya NO hay transicion de seguimiento inmediata (se relocalizo al cron SLA).
     expect(call.gestion.causaDevolucion).toBe("wrong_address");
     expect(call.nuevoEstatusId).toBe("os-devuelta");
-    expect(call.seguimiento).toBeDefined();
+    expect(call).not.toHaveProperty("seguimiento");
     expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
   });
 
   it("R13: si la tx falla, el service propaga el fallo (no hay causa persistida a medias)", async () => {
     const repo = fakeRepo({
       crearGestionYTransicionar: vi.fn(async () => {
-        throw new Error("fallo del append de seguimiento (47)");
+        throw new Error("fallo de la tx de gestion");
       }),
     });
     await expect(newService(repo).gestionar(devolucion(), MENSAJERO)).rejects.toThrow(
-      "fallo del append de seguimiento (47)",
+      "fallo de la tx de gestion",
     );
   });
 });

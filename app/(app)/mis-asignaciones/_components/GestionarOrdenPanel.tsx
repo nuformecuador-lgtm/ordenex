@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import { PackageCheck, RotateCcw, Undo2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { GESTION_ALLOWED_MIME } from "@/lib/config/gestion";
+import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
@@ -21,6 +22,7 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 import { AsignacionDetalle } from "./AsignacionDetalle";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
+import { VerificarGuiaGate } from "./VerificarGuiaGate";
 
 // Feature 36 / rediseño 63 (pedido humano): detalle GRANDE y centrado de UNA
 // orden en reparto con gestión multi-paso, ahora como PANEL INLINE (no modal /
@@ -143,9 +145,28 @@ export function GestionarOrdenPanel({
   // DEBE escoger una (R6). Es un campo APARTE del `motivo`, que sigue obligatorio (R7).
   const [causaDevolucion, setCausaDevolucion] = useState<CausaDevolucion | "">("");
   const [evidencia, setEvidencia] = useState<File | null>(null);
+  const [comprimiendo, setComprimiendo] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [enviando, setEnviando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+
+  // Comprime la foto en el cliente antes de guardarla en el estado: una foto de
+  // celular sin comprimir revienta el limite de body del Server Action (413).
+  // `comprimirImagen` cae al archivo original ante cualquier fallo, asi que esto
+  // nunca bloquea la gestion. Mientras comprime, "Guardar gestion" se deshabilita.
+  async function handleEvidenciaChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    if (!file) {
+      setEvidencia(null);
+      return;
+    }
+    setComprimiendo(true);
+    try {
+      setEvidencia(await comprimirImagen(file));
+    } finally {
+      setComprimiendo(false);
+    }
+  }
 
   // Orden SIN cobro (montoCobrar 0 o null): no hay COD que recaudar, así que el
   // método de pago no aplica. Se oculta el selector y la entrega se envía con
@@ -236,7 +257,7 @@ export function GestionarOrdenPanel({
   }
 
   async function handleConfirm() {
-    if (enviando) return;
+    if (enviando || comprimiendo) return;
     // R22/R24/R25/R27/R29: validación de borde en cliente (mismo schema que el
     // servidor revalida). Errores → por campo, sin enviar.
     const parsed = gestionarSchema.safeParse(buildRaw());
@@ -300,25 +321,27 @@ export function GestionarOrdenPanel({
         <AsignacionDetalle orden={orden} />
       </div>
 
-      {/* Paso 1: llamar, whatsapp y gestionar. */}
+      {/* Paso 1: llamar, whatsapp y verificar la guía antes de gestionar. */}
       {paso === "detalle" ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Feature 87 (R17): botones de contacto deduplicados en el compuesto
-              compartido `ContactoButtons` (antes inline aqui). Ademas corrige el
-              enlace wa.me para prefijar `506` (R15). */}
-          <ContactoButtons
-            telefono={orden.telefonoDest}
-            nombre={orden.destinatario}
-            size="lg"
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Feature 87 (R17): botones de contacto deduplicados en el compuesto
+                compartido `ContactoButtons` (antes inline aqui). Ademas corrige el
+                enlace wa.me para prefijar `506` (R15). */}
+            <ContactoButtons
+              telefono={orden.telefonoDest}
+              nombre={orden.destinatario}
+              size="lg"
+            />
+          </div>
+          {/* Feature 98: gate de verificación. Antes de fijar el puntero y avanzar
+              a los 4 botones, el mensajero DEBE confirmar la guía del paquete
+              (escaneo o tecleo) y esta debe COINCIDIR con `orden.numGuia`. Solo
+              entonces se dispara `handleGestionarPedido` (escogerParaGestion). */}
+          <VerificarGuiaGate
+            numGuiaEsperado={orden.numGuia}
+            onVerificado={handleGestionarPedido}
           />
-          <Button
-            type="button"
-            size="lg"
-            onClick={handleGestionarPedido}
-            className="h-14 flex-1 text-base font-semibold"
-          >
-            Gestionar esta orden
-          </Button>
         </div>
       ) : null}
 
@@ -398,7 +421,7 @@ export function GestionarOrdenPanel({
                   id="gestion-evidencia"
                   type="file"
                   accept={ACCEPT_MIME}
-                  onChange={(e) => setEvidencia(e.target.files?.[0] ?? null)}
+                  onChange={handleEvidenciaChange}
                   aria-invalid={evidenciaError ? true : undefined}
                   aria-label="Foto de evidencia de entrega"
                   className="text-sm"
@@ -452,7 +475,7 @@ export function GestionarOrdenPanel({
                   id="gestion-evidencia-devolucion"
                   type="file"
                   accept={ACCEPT_MIME}
-                  onChange={(e) => setEvidencia(e.target.files?.[0] ?? null)}
+                  onChange={handleEvidenciaChange}
                   aria-invalid={evidenciaError ? true : undefined}
                   aria-label="Foto de evidencia de la devolución"
                   className="text-sm"
@@ -475,7 +498,7 @@ export function GestionarOrdenPanel({
                   id="gestion-evidencia-rechazo"
                   type="file"
                   accept={ACCEPT_MIME}
-                  onChange={(e) => setEvidencia(e.target.files?.[0] ?? null)}
+                  onChange={handleEvidenciaChange}
                   aria-invalid={evidenciaError ? true : undefined}
                   aria-label="Foto de evidencia del rechazo"
                   className="text-sm"
@@ -499,8 +522,13 @@ export function GestionarOrdenPanel({
             >
               Cancelar gestión
             </Button>
-            <Button type="button" onClick={handleConfirm} loading={enviando}>
-              Guardar gestión
+            <Button
+              type="button"
+              onClick={handleConfirm}
+              loading={enviando}
+              disabled={comprimiendo}
+            >
+              {comprimiendo ? "Procesando foto…" : "Guardar gestión"}
             </Button>
           </div>
         </div>

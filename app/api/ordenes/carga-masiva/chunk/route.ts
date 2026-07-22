@@ -18,6 +18,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IBulkOrdenService } from "@/lib/interfaces/services/IBulkOrdenService";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
@@ -30,7 +31,12 @@ export interface CargaMasivaChunkDeps {
 
 function buildBulkService(): IBulkOrdenService {
   const prisma = getPrismaClient();
-  return new BulkOrdenService(new OrdenRepository(prisma));
+  // La via sesion (`cargarMasiva`) NO usa el resolver de tarifa (feature 98/R9); se inyecta solo
+  // para satisfacer el contrato del constructor (dependencia requerida, compartida con la via API).
+  return new BulkOrdenService(
+    new OrdenRepository(prisma),
+    new TarifaVigentePorTiendaRepository(prisma),
+  );
 }
 
 // Body del lote: filas ya normalizadas (clave = header, valor = texto) + dryRun.

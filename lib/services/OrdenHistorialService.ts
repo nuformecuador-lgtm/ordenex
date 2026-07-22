@@ -59,8 +59,8 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     // contables -> 0.
     // Feature 67/R24/R27/R28: el conteo es de transiciones VIGENTES — excluye las causadas
     // por gestiones ANULADAS (deshechas) sin tocar el historial (append-only, 67/R23). Este
-    // UNICO punto alimenta a la vez la regla de reintento-vs-escalado
-    // (`MisAsignacionesService.resolverSeguimientoDevuelta`, R27) y la linea de tiempo
+    // UNICO punto alimenta a la vez la regla de reintento-vs-escalado (feature 99:
+    // `DevolucionSlaService.ejecutar`, tras relocalizarse desde la 47) y la linea de tiempo
     // (`obtenerHistorial().intentos`, R28): por construccion no pueden divergir.
     const devueltaId = await this.ordenRepo.findEstatusIdByValue(ESTATUS_DEVUELTA);
     if (devueltaId === null) return 0;

@@ -12,6 +12,7 @@ function buildService(overrides: Partial<IRecepcionSateliteService> = {}): IRece
       porRecibir: [],
       recibidas: [],
       porDevolver: [],
+      devueltas: [], // Feature 100/T4.1: grupo `devuelta` por recuperar a bodega
       zonaNombre: "Limon",
       sinZona: false,
     })),

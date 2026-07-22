@@ -331,6 +331,7 @@ model Orden {
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
+  prioridad              Boolean   @default(false) @map("prioridad") // feature 101/R1: flag de reasignacion prioritaria (ON al liberar por SLA 99, OFF al reasignar mensajero desde bodega); default false = sin backfill (R11)
   liberadaReprogramadaAt DateTime? @map("liberada_reprogramada_at") // feature 46/R13/R18: instante de liberacion programada (NULL = nunca liberada por reprogramacion); auditoria + fuente del aviso derivado
   // Feature 91 (design §1.1, R1): resultado de la geocodificacion de `direccion`. TODAS
   // nullable: una orden sin geocodificar las tiene vacias. `geocode_precision` y
@@ -920,6 +921,10 @@ enum OrdenHistorialOrigenTipo {
   ajuste_estado // feature 6: OrdenService.actualizar (CRUD generico)
   deshacer_gestion // feature 67 (F1.4-b): CierreDiaRepository.anularGestionYDevolverAGestion
   carga_api // feature 88 (D7): estado inicial en createManyOrdenesConGuia (canal integrador)
+  liberacion_devuelta_sla // feature 99: cron SLA, devuelta -> en_bodega/en_bodega_satelite (reintento)
+  escalado_devuelta_sla // feature 99: cron SLA, devuelta -> rechazada (escalado; enlaza gestion sintetica)
+  reprogramacion_tienda // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
+  recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite (accion manual, actor admin)
 
   @@map("orden_historial_origen_tipo")
 }

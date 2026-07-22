@@ -66,6 +66,8 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R2
     expect(strings).toMatch(/RETURNING "id"/);
     // Feature 76/R23 (W3): el SET estampa asignado_at = NOW() junto a la asignacion.
     expect(strings).toMatch(/"asignado_at" = NOW\(\)/);
+    // Feature 101/R5 (gate F1.4-Q1): el SET apaga prioridad al reasignar desde bodega satelite.
+    expect(strings).toMatch(/"prioridad" = false/);
   });
 
   // Feature 49/#7 (R15/R8): SOLO las ordenes que ganaron la guarda anti-TOCTOU dejan rastro.

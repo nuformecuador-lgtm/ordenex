@@ -20,6 +20,11 @@ export interface CargaViaApiOrden {
   numRemision: string;
   numGuia: number;
   estado: string;
+  // Feature 98 (design §2, R5/R7/D2/D3): costo del envio que paga la tienda por esta orden =
+  // FLETE + IVA del flete de su tarifa vigente, money-safe STRING escala 2. NUNCA `null`: el
+  // gap de tarifa (tienda sin tarifa vigente) se representa con "0.00" (D1). Distinto de
+  // `monto_cobrar`/COD (que viaja en el input y no se toca).
+  costoEnvio: string;
 }
 
 export interface CargaViaApiSummary {

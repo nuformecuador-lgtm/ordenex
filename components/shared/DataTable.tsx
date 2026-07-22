@@ -98,6 +98,15 @@ export interface DataTableProps<T> {
    * un genérico "Ver detalle" repetido N veces.
    */
   expandAriaLabel?: (row: T) => string;
+  /**
+   * Clase(s) opcional(es) por fila de DATOS, derivadas de la propia fila. Se
+   * combinan con la clase base del `<tr>` vía `cn("border-b", rowClassName?.(row))`,
+   * de modo que la última clase gana (twMerge). Retrocompatible: sin la prop el
+   * `<tr>` conserva exactamente `border-b` (comportamiento previo). Solo afecta a
+   * las filas de datos; los estados skeleton/vacío/error/expandido no la reciben.
+   * La tabla sigue sin conocer dominio (R1): recibe el mapeo fila→clase por prop.
+   */
+  rowClassName?: (row: T) => string | undefined;
 }
 
 /** Chevron del botón de expandir; rota al abrir. Decorativo (el botón ya tiene nombre). */
@@ -185,6 +194,7 @@ export function DataTable<T>({
   emptyState,
   renderExpanded,
   expandAriaLabel,
+  rowClassName,
 }: DataTableProps<T>) {
   // Filas desplegadas, por key de fila. Vive acá (y no en el consumidor) porque es estado
   // de PRESENTACIÓN de la tabla; el consumidor solo dice QUÉ se despliega.
@@ -272,7 +282,7 @@ export function DataTable<T>({
       const abierta = expandidas.has(key);
       return (
         <Fragment key={key}>
-          <tr className="border-b">
+          <tr className={cn("border-b", rowClassName?.(row))}>
             {expandible ? (
               <td className="px-3 py-2 align-middle">
                 {expandido === null ? null : (
