@@ -87,6 +87,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findParaAsignabilidad: vi.fn(async () => []),
     findParadasEnReparto: vi.fn(async () => []),
     findCausasDevueltaVigentes: vi.fn(async () => new Map()),
+    // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
+    countRechazadasSlaByTienda: vi.fn(async () => 0),
+    findRechazadasSlaByTienda: vi.fn(async () => []),
     ...overrides,
   };
 }

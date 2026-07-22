@@ -64,6 +64,7 @@ function gestionDbRow(overrides: Record<string, unknown> = {}) {
     evidenciaStoragePath: "o1/e.jpg",
     pagoMensajero: new Prisma.Decimal("5.00"), // feature 39/R20: snapshot leido
     ingresoBodegaRechazo: new Prisma.Decimal("0.00"), // feature 56/R19: snapshot leido
+    historialEstados: [], // feature 102: acotado al origen SLA (vacio = rechazo NO-SLA/otro resultado)
     ...overrides,
   };
 }

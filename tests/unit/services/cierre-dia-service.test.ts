@@ -46,6 +46,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     evidenciaStoragePath: null,
     pagoMensajero: null, // feature 39: en vivo el snapshot es null; el service lo DERIVA
     ingresoBodegaRechazo: null, // feature 56: en vivo el snapshot es null; el service lo DERIVA
+    esRechazoSla: false, // feature 102/R11: la vista en vivo del mensajero no expone el desglose
     ...overrides,
   };
 }
@@ -624,6 +625,34 @@ describe("listarCierreDia — ingreso de bodega por rechazos derivado (R9/R10)",
     // Feature 56/R2: la tarifa (fuente del cobroRechazado) se resuelve por la zona del mensajero.
     expect(ordenRepo.findUsuarioZonaId).toHaveBeenCalledWith("m1");
     expect(tarifaZonaRepo.resolvePagoTarifa).toHaveBeenCalledWith(ZONA_MENSAJERO, "veh-1");
+  });
+});
+
+describe("listarCierreDia — feature 102: /cierre-dia NO expone el desglose SLA (R11)", () => {
+  it("R11: el resultado del mensajero NO trae `desgloseIngresoBodegaRechazos` (concepto de admin)", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // El desglose SLA/manual solo existe en el detalle del admin (38/40); la vista del mensajero
+    // no lo percibe (mismo criterio que la feature 56: el mensajero no ve el ingreso de bodega).
+    expect(r).not.toHaveProperty("desgloseIngresoBodegaRechazos");
+  });
+
+  it("R11: cada gestion de la vista en vivo llega con esRechazoSla=false (sin clasificar el origen)", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "a", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.rechazada[0].esRechazoSla).toBe(false);
   });
 });
 

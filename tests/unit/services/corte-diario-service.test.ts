@@ -44,6 +44,7 @@ function gestion(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGest
     evidenciaStoragePath: null,
     pagoMensajero: null,
     ingresoBodegaRechazo: null,
+    esRechazoSla: false, // feature 102
     ...overrides,
   };
 }

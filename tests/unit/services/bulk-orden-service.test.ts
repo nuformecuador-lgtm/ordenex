@@ -75,6 +75,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findParaAsignabilidad: vi.fn(async () => []),
     findParadasEnReparto: vi.fn(async () => []),
     findCausasDevueltaVigentes: vi.fn().mockResolvedValue(new Map()),
+    // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
+    countRechazadasSlaByTienda: vi.fn().mockResolvedValue(0),
+    findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),
     // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
     findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
     findZonasConMensajeroBloqueado: vi.fn(async (): Promise<Set<string>> => new Set()),

@@ -15,9 +15,12 @@
 
 ## Features en curso
 
-_Ninguna._ No hay ninguna feature `in_progress` en `feature_list.json`. El último trabajo
-mergeado fue la **feature 97** (optimización de ruta — frontend): en `dev` (PR #110) y
-desplegada a **prod** (PR #117).
+### Feature 102 — ingreso de bodega por rechazos SLA visible en cierres + aviso (Fase 1)
+- **Rama:** `feature/102-rechazos-sla-visible` (desde `origin/dev`). Zona `fullstack`, complexity `medium`. `depends_on: 99` ✅.
+- **Estado:** `in_progress` (Fase 2) — gate F1.4 **aprobado con defaults** (humano, 2026-07-22). `spec_author` dejó los 3 archivos en `specs/102-rechazos-sla-visible/` (18 R, mapa R→test, sin migración). Orquestación: `backend_dev` (T1–T9, T13) → `frontend_dev` (T10–T12, T14) → `reviewer`.
+- **Gate F1.4 (mecanismo + Q1–Q4, todo default):** aviso = **VISIBILIDAD DERIVADA**. Q1 monto tienda = `ingreso_bodega_rechazo` (snapshot 56); Q2 anclado al snapshot (`null`="pendiente de cierre"); Q3 superficie tienda = sección dentro de `/novedades`; Q4 subtotal SLA solo en el **detalle** del cierre. Sin migración, sin mover dinero, sin infra de notificaciones; desglose por join `origen_tipo='escalado_devuelta_sla'`.
+
+_Contexto:_ lo último mergeado antes de 102 fue **feature 101** (prioridad de reasignación, PR #129) y **feature 100** (resolver novedad, PR #128). La app está en prod (PR #117).
 
 ## Backlog pendiente
 

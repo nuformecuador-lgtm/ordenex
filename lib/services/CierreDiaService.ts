@@ -362,6 +362,9 @@ export function toDetalleDTO(
     ingresoBodegaRechazo:
       ingresoBodegaRechazo !== undefined ? ingresoBodegaRechazo : g.ingresoBodegaRechazo,
     tarifaFaltante,
+    // Feature 102/R9/R11: passthrough del flag ya derivado en el repo (admin: del historial;
+    // vista en vivo del mensajero: `false`). El service no re-deriva la clasificacion.
+    esRechazoSla: g.esRechazoSla,
     // Passthrough: solo viene poblado desde los repos de admin (38/40), que lo derivan del
     // snapshot. En la vista en vivo del mensajero es `undefined` y la UI no muestra nada.
     ingresoOrdenex: g.ingresoOrdenex,

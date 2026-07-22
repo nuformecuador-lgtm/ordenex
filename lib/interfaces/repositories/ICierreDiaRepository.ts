@@ -44,6 +44,11 @@ export interface CierreGestionPendienteRow {
   // (R7b) y del dinero recibido (R20). En vivo (37) el service lo DERIVA; en admin (38/40)
   // es el snapshot leido de la columna.
   ingresoBodegaRechazo: string | null;
+  // Feature 102/R1/R3: clasificacion SLA (cron 99) vs manual (mensajero) de una gestion
+  // `rechazada`, DERIVADA del historial inmutable (`origen_tipo = escalado_devuelta_sla`), sin
+  // columna nueva. La pueblan los repos de ADMIN (38/40); en la vista EN VIVO del mensajero (37)
+  // es `false` por defecto (no expone el desglose, R11).
+  esRechazoSla: boolean;
   // Desglose del ingreso de Ordenex + tarifa congelada, DERIVADO del snapshot. Solo lo
   // pueblan los repos de ADMIN (38/40): la vista en vivo del mensajero (37) no lo expone.
   ingresoOrdenex?: IngresoOrdenexDTO | null;
