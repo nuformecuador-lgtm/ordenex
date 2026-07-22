@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/useToast";
 import { plantillasConfig } from "@/lib/config/plantillas";
 import {
   cambiarEstadoPlantilla,
+  eliminarPlantilla,
   listarPlantillas,
 } from "@/lib/actions/plantillas";
 import type { PlantillaListItemDTO } from "@/lib/types/plantilla-mensaje";
@@ -68,6 +69,7 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
   const [desactivar, setDesactivar] = useState<PlantillaListItemDTO | null>(
     null,
   );
+  const [eliminar, setEliminar] = useState<PlantillaListItemDTO | null>(null);
 
   const crearRef = useRef<CrearPlantillaFormHandle>(null);
   const editarRef = useRef<EditarPlantillaFormHandle>(null);
@@ -128,9 +130,29 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
     }
   }
 
+  async function onConfirmEliminar() {
+    if (!eliminar) return;
+    // R27: SOFT DELETE; el backend excluye por `deletedAt IS NULL`, así que basta
+    // con revalidar el listado para que la fila desaparezca.
+    const res = await eliminarPlantilla(eliminar.id);
+    if (res.status === "ok") {
+      toast.success("Plantilla eliminada.");
+      await mutate();
+      setEliminar(null);
+    } else if (res.status === "not_found") {
+      // Ya no existe (borrada por otra sesión): igual sale del listado tras revalidar.
+      toast.error("La plantilla ya no existe.");
+      await mutate();
+      setEliminar(null);
+    } else {
+      toast.error(mensajeError(res.status));
+    }
+  }
+
   const columns = buildPlantillasColumns({
     onEditar: (row) => setEditar(row),
     onDesactivar: (row) => setDesactivar(row),
+    onEliminar: (row) => setEliminar(row),
   });
 
   return (
@@ -222,6 +244,24 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
         confirmVariant="destructive"
         closeOnConfirm={false}
         onConfirm={onConfirmDesactivar}
+      />
+
+      <Modal
+        open={eliminar !== null}
+        onOpenChange={(open) => {
+          if (!open) setEliminar(null);
+        }}
+        title="Eliminar plantilla"
+        description={
+          eliminar
+            ? `La plantilla "${eliminar.nombre}" se eliminará y dejará de aparecer en el listado.`
+            : undefined
+        }
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        confirmVariant="destructive"
+        closeOnConfirm={false}
+        onConfirm={onConfirmEliminar}
       />
     </section>
   );

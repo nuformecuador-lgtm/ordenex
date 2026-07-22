@@ -41,6 +41,8 @@ export interface PlantillasColumnsActions {
    * `inactivo`. Solo se muestra cuando el estado no es ya `inactivo`.
    */
   onDesactivar: (row: PlantillaListItemDTO) => void;
+  /** Elimina la fila (SOFT DELETE, R27): la retira del listado tras confirmar. */
+  onEliminar: (row: PlantillaListItemDTO) => void;
 }
 
 /**
@@ -95,6 +97,14 @@ export function buildPlantillasColumns(
               Desactivar
             </Button>
           ) : null}
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => actions.onEliminar(row)}
+          >
+            Eliminar
+          </Button>
         </div>
       ),
     },
