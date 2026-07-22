@@ -129,6 +129,7 @@ model Usuario {
   apiKey                              ApiKey?                   @relation("ApiKeyUsuario") // feature 81/[D6]: la key dedicada a ESTA cuenta sintetica (1:1)
   apiKeysCreadas                      ApiKey[]                  @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
   rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
+  plantillasCreadas                   PlantillaMensaje[]        @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -136,6 +137,42 @@ model Usuario {
   @@index([zonaId]) // feature 24/R6
   @@index([ordenEnGestionId]) // feature 36
   @@map("usuario")
+}
+
+// Feature 107: estado de una plantilla de mensaje. Enum Postgres nativo (patron
+// EstadoTarifa/RolValue). Cuatro valores EXACTOS (R23). `pending` (estado inicial,
+// Decision humana 1) y `refused` quedan RESERVADOS en el enum aunque este alcance NO
+// los transiciona desde el front; el front SOLO emite el destino `inactivo` (R24/R25).
+enum PlantillaEstado {
+  activo
+  inactivo
+  pending
+  refused
+
+  @@map("plantilla_estado")
+}
+
+// Feature 107: plantilla de mensaje con cuerpo que admite campos variables `{{clave}}`.
+// Configuracion MUTABLE (lleva updatedAt). SOFT DELETE via `deletedAt` (Decision humana
+// 3; R27/R28): los listados filtran `deletedAt IS NULL`. El conjunto de variables usadas
+// por el cuerpo se persiste como ARRAY de claves (Decision humana 4; R15), text[] nativo.
+model PlantillaMensaje {
+  id        String          @id @default(uuid())
+  nombre    String          @unique // R10: identificador unico
+  cuerpo    String // texto con placeholders {{clave}}
+  variables String[] // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
+  estado    PlantillaEstado @default(pending) // R12 (Decision humana 1)
+  createdBy String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
+  deletedAt DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  creador Usuario? @relation("PlantillaMensajeCreador", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([createdAt]) // R6: orden determinista del listado
+  @@index([estado]) // filtro por estado
+  @@index([deletedAt]) // R28: filtro de vigentes (deletedAt IS NULL)
+  @@map("plantilla_mensaje")
 }
 
 // Feature 21: documentos de postulacion del mensajero. 1:N (5 tipos por usuario).
