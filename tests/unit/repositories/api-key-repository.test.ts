@@ -42,6 +42,7 @@ function makePrisma(opts: MockOpts = {}) {
       id: "key-1",
       identificador: DATA.identificador,
       keyPrefix: DATA.keyPrefix,
+      estado: "activa",
       usuarioId: "u-dedicado",
       createdAt: new Date("2026-07-16T12:00:00Z"),
     };
@@ -146,7 +147,7 @@ describe("ApiKeyRepository.createConUsuario — la key (R16/R17/R19/R21)", () =>
     const args = apiKeyCreate.mock.calls[0][0] as { select: Record<string, boolean> };
     expect(args.select).not.toHaveProperty("keyHash");
     expect(Object.keys(args.select).sort()).toEqual(
-      ["createdAt", "id", "identificador", "keyPrefix", "usuarioId"].sort(),
+      ["createdAt", "estado", "id", "identificador", "keyPrefix", "usuarioId"].sort(),
     );
     expect(out).not.toHaveProperty("keyHash");
   });
@@ -162,6 +163,7 @@ describe("ApiKeyRepository.findByKeyHash — lookup por hash sin filtrar el secr
   it("R3: busca por key_hash (UNIQUE) y su select NUNCA proyecta keyHash ni el secreto", async () => {
     const { prisma, findUnique } = makePrismaFind({
       id: "key-1",
+      estado: "activa",
       usuarioId: "u-dedicado",
       usuario: { estado: "activo", rol: { value: "apiKey" } },
     });
@@ -172,9 +174,16 @@ describe("ApiKeyRepository.findByKeyHash — lookup por hash sin filtrar el secr
     expect(args.where).toEqual({ keyHash: "a".repeat(64) });
     // El select NO incluye keyHash ni ningun secreto; solo lo minimo para autorizar.
     expect(args.select).not.toHaveProperty("keyHash");
-    expect(Object.keys(args.select).sort()).toEqual(["id", "usuario", "usuarioId"].sort());
-    // La proyeccion devuelta tampoco expone keyHash.
-    expect(out).toEqual({ apiKeyId: "key-1", usuarioId: "u-dedicado", estado: "activo", rol: "apiKey" });
+    expect(Object.keys(args.select).sort()).toEqual(["estado", "id", "usuario", "usuarioId"].sort());
+    // La proyeccion devuelta tampoco expone keyHash. Incluye el estado PROPIO de la key
+    // (apiKeyEstado), insumo de la palanca de revocacion de la feature 88/R7.
+    expect(out).toEqual({
+      apiKeyId: "key-1",
+      usuarioId: "u-dedicado",
+      estado: "activo",
+      apiKeyEstado: "activa",
+      rol: "apiKey",
+    });
     expect(out).not.toHaveProperty("keyHash");
   });
 
@@ -187,11 +196,90 @@ describe("ApiKeyRepository.findByKeyHash — lookup por hash sin filtrar el secr
   it("proyecta el estado del usuario dedicado (insumo de la palanca de revocacion, R5)", async () => {
     const { prisma } = makePrismaFind({
       id: "key-9",
+      estado: "activa",
       usuarioId: "u-9",
       usuario: { estado: "bloqueado", rol: { value: "apiKey" } },
     });
     const out = await repoDe(prisma).findByKeyHash("c".repeat(64));
-    expect(out).toMatchObject({ estado: "bloqueado" });
+    expect(out).toMatchObject({ estado: "bloqueado", apiKeyEstado: "activa" });
+  });
+});
+
+describe("ApiKeyRepository.rotar / setEstado — ciclo de vida (R2/R3/R4/R6)", () => {
+  function makePrismaUpdate(row: unknown, throwErr?: unknown) {
+    const update = vi.fn(async (args: unknown) => {
+      if (throwErr) throw throwErr;
+      void args;
+      return row;
+    });
+    const prisma = { apiKey: { update } };
+    return { prisma, update };
+  }
+
+  const PUBLIC_ROW = {
+    id: "key-1",
+    identificador: "Tienda Uno",
+    keyPrefix: "ordx_nuevo12",
+    estado: "activa",
+    usuarioId: "u-dedicado",
+    createdAt: new Date("2026-07-16T12:00:00Z"),
+  };
+
+  function p2025() {
+    return new Prisma.PrismaClientKnownRequestError("Record to update not found", {
+      code: "P2025",
+      clientVersion: "7.8.0",
+    });
+  }
+
+  it("R2: rotar reemplaza keyPrefix+keyHash por id, sin tocar usuario ni estado, y su select no pide keyHash (R6)", async () => {
+    const { prisma, update } = makePrismaUpdate(PUBLIC_ROW);
+    const out = await repoDe(prisma).rotar("key-1", { keyPrefix: "ordx_nuevo12", keyHash: "f".repeat(64) });
+
+    const args = update.mock.calls[0][0] as {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+      select: Record<string, boolean>;
+    };
+    expect(args.where).toEqual({ id: "key-1" });
+    expect(args.data).toEqual({ keyPrefix: "ordx_nuevo12", keyHash: "f".repeat(64) });
+    // No toca el usuario dedicado ni el estado propio de la key.
+    expect(args.data).not.toHaveProperty("usuarioId");
+    expect(args.data).not.toHaveProperty("estado");
+    // R6/R19: el retorno nunca proyecta keyHash.
+    expect(args.select).not.toHaveProperty("keyHash");
+    expect(out).not.toHaveProperty("keyHash");
+    expect(out).toEqual(PUBLIC_ROW);
+  });
+
+  it("R3: rotar de un id inexistente (P2025) devuelve null", async () => {
+    const { prisma } = makePrismaUpdate(null, p2025());
+    expect(await repoDe(prisma).rotar("no-existe", { keyPrefix: "ordx_x", keyHash: "a".repeat(64) })).toBeNull();
+  });
+
+  it("R4: setEstado escribe el estado destino por id y devuelve la forma publica sin keyHash", async () => {
+    const { prisma, update } = makePrismaUpdate({ ...PUBLIC_ROW, estado: "inactiva" });
+    const out = await repoDe(prisma).setEstado("key-1", "inactiva");
+
+    const args = update.mock.calls[0][0] as {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+      select: Record<string, boolean>;
+    };
+    expect(args.where).toEqual({ id: "key-1" });
+    expect(args.data).toEqual({ estado: "inactiva" });
+    expect(args.select).not.toHaveProperty("keyHash");
+    expect(out).toMatchObject({ estado: "inactiva" });
+  });
+
+  it("R3: setEstado de un id inexistente (P2025) devuelve null", async () => {
+    const { prisma } = makePrismaUpdate(null, p2025());
+    expect(await repoDe(prisma).setEstado("no-existe", "activa")).toBeNull();
+  });
+
+  it("un error que NO es P2025 se re-lanza tal cual (no se disfraza de not_found)", async () => {
+    const { prisma } = makePrismaUpdate(null, new Error("conexion perdida"));
+    await expect(repoDe(prisma).setEstado("key-1", "activa")).rejects.toThrow("conexion perdida");
   });
 });
 

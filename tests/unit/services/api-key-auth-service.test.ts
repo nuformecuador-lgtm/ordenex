@@ -23,11 +23,25 @@ function makeRepo(findResult: ApiKeyAutenticada | null): IApiKeyRepository {
     count: vi.fn(async () => {
       throw new Error("count no debe invocarse desde la autenticacion");
     }),
+    // Ciclo de vida: la autenticacion es de solo lectura; nunca escribe.
+    rotar: vi.fn(async () => {
+      throw new Error("rotar no debe invocarse desde la autenticacion");
+    }),
+    setEstado: vi.fn(async () => {
+      throw new Error("setEstado no debe invocarse desde la autenticacion");
+    }),
   };
 }
 
 function activa(overrides: Partial<ApiKeyAutenticada> = {}): ApiKeyAutenticada {
-  return { apiKeyId: "key-1", usuarioId: "u-dedicado-1", estado: "activo", rol: "apiKey", ...overrides };
+  return {
+    apiKeyId: "key-1",
+    usuarioId: "u-dedicado-1",
+    estado: "activo",
+    apiKeyEstado: "activa",
+    rol: "apiKey",
+    ...overrides,
+  };
 }
 
 describe("ApiKeyAuthService.autenticar — sin secreto (R2)", () => {
@@ -82,6 +96,27 @@ describe("ApiKeyAuthService.autenticar — estado del usuario (R5)", () => {
       apiKeyId: "key-9",
       actor: { usuarioId: "u-dedicado-9", rol: "apiKey" },
     });
+  });
+});
+
+describe("ApiKeyAuthService.autenticar — estado PROPIO de la key (R7)", () => {
+  it("R7: key desactivada (apiKeyEstado='inactiva') -> forbidden aunque el usuario este activo", async () => {
+    // El usuario dedicado SIGUE activo; la revocacion vive en el estado de la key.
+    const repo = makeRepo(activa({ estado: "activo", apiKeyEstado: "inactiva" }));
+    const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+    expect(r).toEqual({ status: "forbidden" });
+  });
+
+  it("R7: key activa + usuario activo -> ok", async () => {
+    const repo = makeRepo(activa({ estado: "activo", apiKeyEstado: "activa" }));
+    const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+    expect(r.status).toBe("ok");
+  });
+
+  it("R5+R7: usuario no activo Y key inactiva -> forbidden (cualquiera de las dos palancas basta)", async () => {
+    const repo = makeRepo(activa({ estado: "bloqueado", apiKeyEstado: "inactiva" }));
+    const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+    expect(r).toEqual({ status: "forbidden" });
   });
 });
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { EstadoApiKey } from "@prisma/client";
 import { apiKeysConfig } from "@/lib/config/api-keys";
 import type { ApiKeyListItem } from "@/lib/interfaces/repositories/IApiKeyRepository";
 
@@ -25,6 +26,8 @@ export interface ApiKeyPublico {
   identificador: string;
   /** No secreto (R17): permite mostrar `ordx_ab12cd3…` sin revelar nada. */
   keyPrefix: string;
+  /** Ciclo de vida propio de la key: `activa` autoriza la carga, `inactiva` la revoca. */
+  estado: EstadoApiKey;
   usuarioId: string;
   createdAt: Date;
 }
@@ -82,3 +85,44 @@ export type ApiKeyActionErrorResult =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R3
   | { status: "forbidden" } // R2
   | { status: "unauthenticated" }; // R1
+
+// ---------------------------------------------------------------------------
+// Ciclo de vida — rotar / activar / desactivar
+// ---------------------------------------------------------------------------
+
+/**
+ * Entrada comun de rotar/activar/desactivar: solo el id de la fila `api_key`. Se valida
+ * en el borde (la Server Action) con `uuid()`; un id malformado -> `validation_error`
+ * sin tocar la DB.
+ */
+export const apiKeyIdSchema = z.object({
+  id: z.string().uuid("El id de la API key debe ser un uuid valido"),
+});
+
+export type ApiKeyIdInput = z.infer<typeof apiKeyIdSchema>;
+
+/**
+ * Resultado de la ROTACION (R2). `plainKey` es el nuevo secreto en claro y viaja UNA
+ * sola vez (como en la generacion): no se persiste ni se loguea (solo su hash SHA-256).
+ * El secreto anterior deja de resolver en cuanto se reemplaza el hash. `not_found` (R3)
+ * cuando el id no existe. El union es un superconjunto de `ApiKeyActionErrorResult`:
+ * `forbidden` (R1) lo produce el service; `unauthenticated`/`validation_error` el borde.
+ */
+export type RotarApiKeyResult =
+  | { status: "ok"; apiKey: ApiKeyPublico; plainKey: string }
+  | { status: "not_found" } // R3
+  | ApiKeyActionErrorResult;
+
+/**
+ * Resultado de activar/desactivar (R4). Devuelve la key publica ya actualizada (con su
+ * `estado`), sin secreto alguno. Idempotente en el service. `not_found` (R3) si el id no
+ * existe. Ambas operaciones comparten forma: solo cambia el estado destino.
+ */
+export type CambiarEstadoApiKeyResult =
+  | { status: "ok"; apiKey: ApiKeyPublico }
+  | { status: "not_found" } // R3
+  | ApiKeyActionErrorResult;
+
+/** Alias de intencion para la firma de las actions (misma forma que `CambiarEstadoApiKeyResult`). */
+export type ActivarApiKeyResult = CambiarEstadoApiKeyResult;
+export type DesactivarApiKeyResult = CambiarEstadoApiKeyResult;

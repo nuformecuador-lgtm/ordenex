@@ -37,6 +37,7 @@ const FILA_COMPLETA: Record<string, unknown> = {
   slug: "tienda-uno",
   keyPrefix: "ordx_abc1234",
   keyHash: KEY_HASH,
+  estado: "activa", // estado propio de la key (ciclo de vida)
   usuarioId: "u-dedicado",
   createdById: "u-maestro",
   createdAt: new Date("2026-07-16T12:00:00Z"),
@@ -84,6 +85,7 @@ function makePrisma() {
     findMany: vi.fn(async (args: unknown) => [capturar(args)]),
     findUnique: vi.fn(async (args: unknown) => capturar(args)), // [88] findByKeyHash
     create: vi.fn(async (args: unknown) => capturar(args)),
+    update: vi.fn(async (args: unknown) => capturar(args)), // ciclo de vida: rotar/setEstado
     count: vi.fn(async () => 1),
   };
   const tx = {
@@ -123,6 +125,10 @@ const INVOCACIONES: Record<string, (r: ApiKeyRepository) => Promise<unknown>> = 
   // `key_hash` como argumento y lee la fila que lo contiene— asi que es justamente la que
   // tiene que demostrar aqui que no devuelve ni el hash ni el secreto en claro.
   findByKeyHash: (r) => r.findByKeyHash(KEY_HASH),
+  // Ciclo de vida: ambas escriben y DEVUELVEN la forma publica; deben demostrar que su
+  // proyeccion (PUBLIC_SELECT) nunca incluye el hash ni el secreto.
+  rotar: (r) => r.rotar("key-1", { keyPrefix: "ordx_nuevo12", keyHash: KEY_HASH }),
+  setEstado: (r) => r.setEstado("key-1", "inactiva"),
 };
 
 function metodosDelRepositorio(): string[] {
