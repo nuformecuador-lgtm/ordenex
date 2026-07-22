@@ -1041,16 +1041,28 @@ model CierreDetail {
 // para poder identificarla visualmente sin revelarla. 1:1 con su usuario dedicado
 // [D6]: `usuario_id` UNIQUE. Sin `revoked_at`/`expires_at`/`last_used_at`: fuera de
 // alcance (81b), se añaden aditivamente cuando el humano los pida.
+// Ciclo de vida de una API key (rotar/activar/desactivar). El estado de la key es
+// PROPIO de la fila `api_key`, NO se reusa el estado del usuario dedicado: activar o
+// desactivar una key no debe tocar la cuenta (ni al reves). `activa` autoriza la carga
+// (feature 88/R7), `inactiva` la revoca sin borrar la fila (ni el hash ni el rastro).
+enum EstadoApiKey {
+  activa
+  inactiva
+
+  @@map("estado_api_key")
+}
+
 model ApiKey {
-  id            String   @id @default(uuid())
+  id            String       @id @default(uuid())
   identificador String // input crudo (recortado) para mostrar. No unico [D8]
   slug          String // normalizado; base del email/cedula sinteticos (R5)
-  keyPrefix     String   @map("key_prefix") // `ordx_` + 7 chars, en claro (R17)
-  keyHash       String   @unique @map("key_hash") // SHA-256 hex del secreto completo (R16/R25)
-  usuarioId     String   @unique @map("usuario_id") // [D6] 1:1 con la cuenta dedicada (R21)
-  createdById   String   @map("created_by_id") // actor que la genero (R21)
-  createdAt     DateTime @default(now()) @map("created_at") // R21
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  keyPrefix     String       @map("key_prefix") // `ordx_` + 7 chars, en claro (R17)
+  keyHash       String       @unique @map("key_hash") // SHA-256 hex del secreto completo (R16/R25)
+  estado        EstadoApiKey @default(activa) @map("estado") // ciclo de vida propio de la key (activar/desactivar)
+  usuarioId     String       @unique @map("usuario_id") // [D6] 1:1 con la cuenta dedicada (R21)
+  createdById   String       @map("created_by_id") // actor que la genero (R21)
+  createdAt     DateTime     @default(now()) @map("created_at") // R21
+  updatedAt     DateTime     @updatedAt @map("updated_at")
 
   usuario   Usuario @relation("ApiKeyUsuario", fields: [usuarioId], references: [id])
   createdBy Usuario @relation("ApiKeyCreadaPor", fields: [createdById], references: [id])

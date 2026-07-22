@@ -104,7 +104,11 @@ export function ApiKeysModule({ initialData }: ApiKeysModuleProps) {
     }
   }
 
-  const columns = buildApiKeysColumns();
+  // Una sola fuente de verdad de la key SWR: la celda de acciones refresca el
+  // listado a través de este `onMutated` (que llama a `mutate`), en vez de tocar
+  // el caché SWR por su cuenta. El revelado del secreto rotado lo maneja la propia
+  // celda con su `RevelarApiKeyModal`; aquí solo se reusa para el secreto generado.
+  const columns = buildApiKeysColumns({ onMutated: () => mutate().then(() => {}) });
 
   return (
     <section className="flex flex-col gap-4">

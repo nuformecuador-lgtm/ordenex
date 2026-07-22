@@ -19,9 +19,15 @@ import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
 // composición sin DB ni sesión.
 const listarApiKeysMock = vi.fn();
 const generarApiKeyMock = vi.fn();
+const rotarApiKeyMock = vi.fn();
+const activarApiKeyMock = vi.fn();
+const desactivarApiKeyMock = vi.fn();
 vi.mock("@/lib/actions/api-keys", () => ({
   listarApiKeys: (...a: unknown[]) => listarApiKeysMock(...a),
   generarApiKey: (...a: unknown[]) => generarApiKeyMock(...a),
+  rotarApiKey: (...a: unknown[]) => rotarApiKeyMock(...a),
+  activarApiKey: (...a: unknown[]) => activarApiKeyMock(...a),
+  desactivarApiKey: (...a: unknown[]) => desactivarApiKeyMock(...a),
 }));
 
 import { ApiKeysModule } from "@/app/(app)/configuracion/api/_components/ApiKeysModule";
@@ -30,6 +36,7 @@ const ITEM: ApiKeyListItemDTO = {
   id: "k1",
   identificador: "integracion-erp",
   keyPrefix: "ordx_ab12cd3",
+  estado: "activa",
   usuarioId: "u1",
   usuarioEmail: "apikey+integracion-erp@apikey.invalid",
   createdAt: new Date("2026-01-01T12:00:00Z"),
@@ -117,6 +124,30 @@ describe("ApiKeysModule — listado (R14–R19)", () => {
       within(table).getByText("apikey+integracion-erp@apikey.invalid"),
     ).toBeInTheDocument();
     expect(within(table).queryByText("u1")).toBeNull();
+  });
+
+  it("estado y acciones: pinta el badge de estado y los botones de acción por fila", async () => {
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    const table = screen.getByRole("table", { name: "API keys" });
+    for (const header of ["Estado", "Acciones"]) {
+      expect(
+        within(table).getByRole("columnheader", { name: header }),
+      ).toBeInTheDocument();
+    }
+    // Estado legible por texto (no solo color), accesible.
+    expect(await within(table).findByText("Activa")).toBeInTheDocument();
+    // Acciones por fila: rotar y (por estar activa) desactivar.
+    expect(
+      within(table).getByRole("button", {
+        name: "Rotar la API key integracion-erp",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(table).getByRole("button", {
+        name: "Desactivar la API key integracion-erp",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("R15: muestra el prefijo con elipsis y NUNCA la key completa ni el hash", async () => {
