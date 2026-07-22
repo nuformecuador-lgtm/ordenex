@@ -98,6 +98,27 @@ export function derivarIngresoOrden(
 }
 
 /**
+ * Feature 98 (design §3.2, R2/R7/R8/D1/D2) — costo del envio que la tienda paga por UNA orden
+ * creada por la via API: FLETE + IVA del flete. Funcion PURA money-safe: toda la aritmetica
+ * con `Prisma.Decimal`, salida STRING escala 2 (`ROUND_HALF_UP`), nunca number/parseFloat.
+ *
+ * Reutiliza EXACTAMENTE la seleccion de columna de `derivarIngresoOrden` (esCentral ->
+ * variante GAM: `valorFleteGam`; si no `valorFlete`) y el mismo `aplicarPorcentaje(flete,
+ * ivaFlete)` para el IVA del flete, para que "cuanto paga la tienda por una orden" se lea
+ * IGUAL en el cierre (feature 42/69) y en la API. Si un dia divergieran, la misma plata se
+ * leeria distinta.
+ *
+ * `tarifa === null` (tienda sin tarifa vigente) -> "0.00" (gap D1/R8): la orden se crea igual,
+ * nunca `null`, nunca `error` por ausencia de tarifa.
+ */
+export function costoEnvioDeTarifa(tarifa: TarifaVigente | null, esCentral: boolean): string {
+  if (tarifa === null) return "0.00"; // R8/D1: gap seguro, no bloquea la carga.
+  const flete = new Prisma.Decimal(esCentral ? tarifa.valorFleteGam : tarifa.valorFlete);
+  const ivaFlete = aplicarPorcentaje(flete, new Prisma.Decimal(tarifa.ivaFlete));
+  return round2(flete.plus(ivaFlete)).toFixed(2); // D2: flete + IVA del flete.
+}
+
+/**
  * Suma el desglose por orden de un cierre en 1 total por concepto, para la vista de
  * auditoria del admin. NO es `agregarIngresosPorConcepto`: aquel emite movimientos de wallet
  * y OMITE los conceptos en 0.00 (R10); este emite SIEMPRE los 8 campos, porque una tabla de

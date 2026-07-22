@@ -4,6 +4,7 @@ import {
   derivarIngresoOrden,
   agregarIngresosPorConcepto,
   pagoTiendaOrdenex,
+  costoEnvioDeTarifa,
   type OrdenIngresoInput,
 } from "@/lib/utils/ingreso-ordenex";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
@@ -179,5 +180,40 @@ describe("pagoTiendaOrdenex", () => {
   it("resta Decimal exacta (sin drift de float) y sale STRING escala 2", () => {
     // 0.30 - 0.10 - 0.20 en float da 5.55e-17; con Decimal es 0.00 exacto.
     expect(pagoTiendaOrdenex("0.30", "0.10", "0.20")).toBe("0.00");
+  });
+});
+
+// Feature 98 (T2) — costoEnvioDeTarifa: FLETE + IVA del flete (D2), money-safe STRING escala 2
+// (R7), gap -> "0.00" (R8/D1). Mapea R2, R7, R8.
+describe("costoEnvioDeTarifa (feature 98)", () => {
+  it("R2/R7: no-central -> valorFlete + IVA del flete (1000 + 13% = 1130.00)", () => {
+    expect(costoEnvioDeTarifa(TARIFA, false)).toBe("1130.00");
+  });
+
+  it("R2/R7: central (esCentral) -> valorFleteGam + IVA del flete (1500 + 13% = 1695.00)", () => {
+    expect(costoEnvioDeTarifa(TARIFA, true)).toBe("1695.00");
+  });
+
+  it("R8/D1: tarifa null (tienda sin tarifa vigente) -> '0.00', no lanza", () => {
+    expect(costoEnvioDeTarifa(null, false)).toBe("0.00");
+    expect(costoEnvioDeTarifa(null, true)).toBe("0.00");
+  });
+
+  it("R7: ivaFlete = 0 -> costoEnvio == flete base (sin IVA)", () => {
+    const sinIva: TarifaVigente = { ...TARIFA, ivaFlete: "0.00" };
+    expect(costoEnvioDeTarifa(sinIva, false)).toBe("1000.00");
+    expect(costoEnvioDeTarifa(sinIva, true)).toBe("1500.00");
+  });
+
+  it("R7: IVA no trivial (15%) con redondeo ROUND_HALF_UP money-safe", () => {
+    // flete 3.50 * 15% = 0.525 -> HALF_UP 0.53 -> total 4.03 (no 4.02 de truncar).
+    const t: TarifaVigente = { ...TARIFA, valorFlete: "3.50", ivaFlete: "15.00" };
+    expect(costoEnvioDeTarifa(t, false)).toBe("4.03");
+  });
+
+  it("R7: salida SIEMPRE STRING escala 2 (nunca number)", () => {
+    const c = costoEnvioDeTarifa(TARIFA, false);
+    expect(typeof c).toBe("string");
+    expect(c).toMatch(/^\d+\.\d{2}$/);
   });
 });
