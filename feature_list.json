@@ -1168,13 +1168,13 @@
       "name": "registrar webhook en el alta de la API key + boton de fila = editar",
       "spec_path": "specs/108-webhook-en-alta-apikey",
       "description": "Registrada 2026-07-22 (pedido del humano: 'el webhook se debe poder registrar cuando se crea el api key, y ese boton webhook deberia ser editar en su lugar'). ALCANCE (zona FRONTEND; ambas Server Actions ya existen, no hay cambio de backend): refina el flujo de la UI de Configuracion > API (features 82 alta de key + 105 gestion de webhook). (1) El modal 'Generar API key' (GenerarApiKeyForm) suma un campo OPCIONAL de URL de webhook (https); al confirmar, tras generarApiKey -> ok (que ya devuelve apiKey.usuarioId), si se ingreso URL, el cliente encadena registrarWebhook({ownerUsuarioId: apiKey.usuarioId, url}) y el modal de revelado muestra el secreto de la API key Y el secreto del webhook (ambos una sola vez). (2) La columna/boton 'Webhook' de la fila (WebhookAccionCell en api-keys-columns) pasa a rotularse/comportarse como 'Editar': el flujo por fila queda para editar/gestionar la suscripcion existente (editar URL, rotar secreto, dar de baja) en vez de un alta desde cero. ABIERTO PARA EL GATE F1.4: (a) URL de webhook opcional u obligatoria en el alta (recomendado: opcional); (b) si el revelado combinado muestra ambos secretos en un solo modal o en pasos; (c) comportamiento del boton 'Editar' cuando la key NO tiene webhook (registrar desde ahi vs deshabilitado); (d) si un fallo del registro del webhook tras crear la key se maneja sin perder la key ya creada (la key se creo, el webhook no: avisar y permitir reintento por el boton de fila). Reusa GenerarApiKeyForm, RegistrarWebhookForm, WebhookAccionCell, RevelarApiKeyModal, RevelarWebhookSecretoModal, registrarWebhookSchema. Sin backend, sin migracion. DEPENDE de la 82 y la 105 (ambas en dev).",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/108-webhook-en-alta-apikey",
       "depends_on": 105,
-      "status_note": "spec_ready 2026-07-22; 20 req R1-R20; gate F1.4 abierto (5 decisiones)"
+      "status_note": "gate F1.4 APROBADO 2026-07-22 (5 decisiones como recomendadas: URL opcional, un modal, boton Editar crea/actualiza, fallo parcial preserva secreto de la key, anti-doble-submit)"
     }
   ]
 }
