@@ -86,15 +86,15 @@ export const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
 // --- Feature 102 (R8): subtotales del ingreso de bodega por rechazos, particionado por ORIGEN.
 // El total combinado sigue siendo el de la 56 (`INGRESO_BODEGA_RECHAZOS_LABEL`); estos dos son
 // las sublíneas del desglose (SLA del cron 99 vs manual del mensajero). Texto i18n-ready. ---
-export const INGRESO_BODEGA_RECHAZOS_SLA_LABEL = "Por SLA (cron)";
+export const INGRESO_BODEGA_RECHAZOS_SLA_LABEL = "Automático (por plazo vencido)";
 export const INGRESO_BODEGA_RECHAZOS_MANUAL_LABEL = "Manual (mensajero)";
 // --- Feature 102 (R9): marca por fila del ORIGEN de un rechazo, para que cada ingreso de bodega
 // sea auditable. `SLA` = escalado por el cron de vencimiento (99); `Manual` = rechazo del
 // mensajero. Texto i18n-ready + nota accesible (`title`/`aria-label`). ---
 export const RECHAZO_ORIGEN_COL = "Origen";
-export const RECHAZO_SLA_BADGE_LABEL = "SLA";
+export const RECHAZO_SLA_BADGE_LABEL = "Automático";
 export const RECHAZO_SLA_BADGE_NOTA =
-  "Rechazo escalado automáticamente por vencimiento de SLA (cron), no por el mensajero.";
+  "Rechazo automático por vencerse el plazo de la devolución (no lo hizo el mensajero).";
 export const RECHAZO_MANUAL_BADGE_LABEL = "Manual";
 export const RECHAZO_MANUAL_BADGE_NOTA =
   "Rechazo registrado manualmente por el mensajero.";

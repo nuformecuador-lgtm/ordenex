@@ -25,11 +25,11 @@ const GUIA_SIN_ASIGNAR_LABEL = "sin asignar";
 const REMISION_LABEL = "Remisión";
 /** Q2 default: la gestión sintética SLA aún no se snapshotea en un cierre → monto no disponible. */
 const MONTO_PENDIENTE_LABEL = "Pendiente de cierre";
-const LISTA_ARIA_LABEL = "Órdenes rechazadas por SLA";
-const VACIO_TITULO = "No tenés órdenes rechazadas por SLA";
+const LISTA_ARIA_LABEL = "Órdenes rechazadas por plazo vencido";
+const VACIO_TITULO = "No tenés órdenes rechazadas por plazo vencido";
 const VACIO_DETALLE =
-  "Cuando una de tus órdenes en devolución llegue a rechazo por vencimiento de SLA, aparecerá acá con su monto.";
-const PAGINACION_ARIA_LABEL = "Paginación de rechazos por SLA";
+  "Cuando una de tus órdenes en devolución llegue a rechazo por vencerse el plazo, aparecerá acá con su monto.";
+const PAGINACION_ARIA_LABEL = "Paginación de rechazos por plazo vencido";
 
 export interface RechazosSlaModuleProps {
   items: RechazoSlaTiendaDTO[];
@@ -66,7 +66,7 @@ export function RechazosSlaModule({
       const res = await listarRechazosSlaTiendaAction({ page: nextPage });
       if (res.status !== "ok") {
         if (res.status === "forbidden") {
-          toast.error("No tenés permiso para ver los rechazos por SLA.");
+          toast.error("No tenés permiso para ver los rechazos por plazo vencido.");
         } else if (res.status === "unauthenticated") {
           toast.error("Tu sesión expiró. Iniciá sesión de nuevo.");
         } else {
