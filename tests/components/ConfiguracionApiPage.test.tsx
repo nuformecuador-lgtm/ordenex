@@ -62,6 +62,23 @@ describe("ConfiguracionApiPage — control de acceso (R11)", () => {
     expect(listarApiKeysMock).not.toHaveBeenCalled();
   });
 
+  it("R1 (105): rol no maestro no ve la gestión de webhooks", async () => {
+    // La gestión de webhooks vive dentro del módulo (columna "Webhook"); si el
+    // módulo no se renderiza para roles no-maestro, tampoco hay acción de webhook.
+    const otros: RolValue[] = ["admin", "adminTienda", "adminSatelite", "mensajero"];
+    for (const rol of otros) {
+      resolveActorMock.mockResolvedValue({ usuarioId: "x", rol });
+      const ApiPage = await importPage();
+      render(await ApiPage());
+
+      expect(screen.queryByTestId("api-keys-module-stub")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Gestionar webhook/ }),
+      ).toBeNull();
+      cleanup();
+    }
+  });
+
   it("R11: sesión ausente tampoco ve el módulo", async () => {
     resolveActorMock.mockResolvedValue(null);
     const ApiPage = await importPage();

@@ -134,6 +134,9 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       { label: "Usuarios", href: "/configuracion" },
       { label: "Tarifas", href: "/configuracion/tarifas" },
       { label: "API", href: "/configuracion/api" },
+      // Feature 107: CRUD de plantillas de mensaje. Hereda la visibilidad
+      // maestro-only del ítem padre (R1/R2).
+      { label: "Plantillas", href: "/configuracion/plantillas" },
     ],
   },
   {

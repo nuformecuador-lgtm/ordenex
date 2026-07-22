@@ -1,6 +1,8 @@
 import type { Column } from "@/components/shared/DataTable";
 import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
 
+import { WebhookAccionCell } from "./WebhookAccionCell";
+
 // Placeholder para valores ausentes.
 const SIN_DATO = "—";
 
@@ -22,12 +24,15 @@ function formatFechaCreacion(value: Date | string): string {
 
 /**
  * Columnas del listado de API keys (feature 82/R14): identificador · prefijo ·
- * usuario dedicado (email sintético [D1]) · fecha de creación. **Sin columna de
- * acciones**: en este alcance no hay operación por fila.
+ * usuario dedicado (email sintético [D1]) · fecha de creación · webhook.
  *
  * El prefijo se muestra seguido de un elipsis en `font-mono` (R15). El DTO de
  * fila (`ApiKeyListItemDTO`) no declara `keyHash` ni el secreto, así que NUNCA
  * hay forma de que la key completa aparezca en la tabla (R15, por construcción).
+ *
+ * Feature 105/R2 (D1): se añade la columna "Webhook" con `WebhookAccionCell`, que
+ * abre el modal de gestión de la suscripción de ese owner. El estado NO viaja en
+ * la fila: la celda lo lee on-demand con `obtenerWebhook` al abrir el modal (D2).
  */
 export function buildApiKeysColumns(): Column<ApiKeyListItemDTO>[] {
   return [
@@ -52,6 +57,16 @@ export function buildApiKeysColumns(): Column<ApiKeyListItemDTO>[] {
       id: "createdAt",
       value: "Fecha de creación",
       render: (row) => formatFechaCreacion(row.createdAt),
+    },
+    {
+      id: "webhook",
+      value: "Webhook",
+      render: (row) => (
+        <WebhookAccionCell
+          ownerUsuarioId={row.usuarioId}
+          identificador={row.identificador}
+        />
+      ),
     },
   ];
 }

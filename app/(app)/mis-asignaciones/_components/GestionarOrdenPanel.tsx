@@ -22,6 +22,7 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 import { AsignacionDetalle } from "./AsignacionDetalle";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
+import { VerificarGuiaGate } from "./VerificarGuiaGate";
 
 // Feature 36 / rediseño 63 (pedido humano): detalle GRANDE y centrado de UNA
 // orden en reparto con gestión multi-paso, ahora como PANEL INLINE (no modal /
@@ -320,25 +321,27 @@ export function GestionarOrdenPanel({
         <AsignacionDetalle orden={orden} />
       </div>
 
-      {/* Paso 1: llamar, whatsapp y gestionar. */}
+      {/* Paso 1: llamar, whatsapp y verificar la guía antes de gestionar. */}
       {paso === "detalle" ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Feature 87 (R17): botones de contacto deduplicados en el compuesto
-              compartido `ContactoButtons` (antes inline aqui). Ademas corrige el
-              enlace wa.me para prefijar `506` (R15). */}
-          <ContactoButtons
-            telefono={orden.telefonoDest}
-            nombre={orden.destinatario}
-            size="lg"
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Feature 87 (R17): botones de contacto deduplicados en el compuesto
+                compartido `ContactoButtons` (antes inline aqui). Ademas corrige el
+                enlace wa.me para prefijar `506` (R15). */}
+            <ContactoButtons
+              telefono={orden.telefonoDest}
+              nombre={orden.destinatario}
+              size="lg"
+            />
+          </div>
+          {/* Feature 98: gate de verificación. Antes de fijar el puntero y avanzar
+              a los 4 botones, el mensajero DEBE confirmar la guía del paquete
+              (escaneo o tecleo) y esta debe COINCIDIR con `orden.numGuia`. Solo
+              entonces se dispara `handleGestionarPedido` (escogerParaGestion). */}
+          <VerificarGuiaGate
+            numGuiaEsperado={orden.numGuia}
+            onVerificado={handleGestionarPedido}
           />
-          <Button
-            type="button"
-            size="lg"
-            onClick={handleGestionarPedido}
-            className="h-14 flex-1 text-base font-semibold"
-          >
-            Gestionar esta orden
-          </Button>
         </div>
       ) : null}
 

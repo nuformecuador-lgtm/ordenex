@@ -37,6 +37,10 @@ export type ListarRecepcionSateliteResult =
       // elegibles para "Devolver a la tienda". El campo viaja tal cual desde el
       // service result (la action solo reenvia); acotado server-side por zona.
       porDevolver: RecepcionSateliteDTO[];
+      // Feature 100/T4.1/R12: ordenes `devuelta` de la zona del adminSatelite,
+      // elegibles para "Recuperar a bodega". Viaja tal cual desde el service result
+      // (la action solo reenvia); acotado server-side por zona.
+      devueltas: RecepcionSateliteDTO[];
       zonaNombre: string | null;
       sinZona: boolean;
     }

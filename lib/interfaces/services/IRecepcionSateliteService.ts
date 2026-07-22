@@ -25,6 +25,11 @@ export interface RecepcionSateliteDTO {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+  // Feature 101/R9: flag de reasignacion prioritaria. Opcional (`?`, patron aditivo
+  // `zonaEsGam`): no rompe fixtures/mocks de UI que construyen el DTO sin el; el service
+  // SIEMPRE lo envia (boolean desde la fila del repo). El grupo "Recibidas" lo usa para el
+  // resalte de fila (R8); las prioritarias ademas llegan primero por el sort del repo (R7).
+  prioridad?: boolean;
 }
 
 // R3/R4/R5/R6/R8: dos grupos separados (por recibir vs recibidas) + nombre de la
@@ -42,6 +47,13 @@ export type ListarRecepcionSateliteServiceResult =
       // adminSatelite NO ve rechazadas de otra zona. Solo listado, la autz de
       // ejecutar el retorno la impone DevolucionOrigenService (rol + zona).
       porDevolver: RecepcionSateliteDTO[];
+      // Feature 100/T4.1/R12: ordenes en estado `devuelta` (novedad que reposa bajo la
+      // feature 99) de la MISMA zona del adminSatelite, elegibles para "Recuperar a bodega"
+      // (transicion devuelta -> en_bodega_satelite la ejecuta RecuperacionBodegaService).
+      // Acotado server-side por zona (findRecepcionSateliteByZona(zonaId, ...)); un
+      // adminSatelite NO ve devueltas de otra zona. Solo listado; la autz de ejecutar la
+      // recuperacion la impone RecuperacionBodegaService (rol + zona).
+      devueltas: RecepcionSateliteDTO[];
       zonaNombre: string | null;
       sinZona: boolean;
     }

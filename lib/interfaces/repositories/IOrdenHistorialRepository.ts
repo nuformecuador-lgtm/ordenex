@@ -3,6 +3,7 @@ import type {
   OrdenHistorialEntradaDTO,
   OrdenHistorialOrigenTipo,
 } from "@/lib/types/orden-historial";
+import type { JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
 
 // Feature 49 (design §3.1/§4.2) — contrato del repositorio del HISTORIAL de estados de la
 // orden. Solo queries Prisma; sin logica de negocio (la autorizacion vive en el service,
@@ -47,7 +48,13 @@ export interface IOrdenHistorialRepository {
    * atomicos (si una falla, ambas se revierten). El llamador (cada call-site de escritura
    * de estado) DEBE pasar SOLO las ordenes que EFECTIVAMENTE transicionaron (R8).
    */
-  registrarCambioEstado(tx: OrdenHistorialTxClient, entradas: CambioEstadoEntrada[]): Promise<void>;
+  // Feature 99 (design §6.1): el `tx` se ensancha con `JobTxClient` para poder emitir el
+  // webhook en la misma transaccion (transactional-outbox); el `tx` real de Prisma ya lo
+  // satisface.
+  registrarCambioEstado(
+    tx: OrdenHistorialTxClient & JobTxClient,
+    entradas: CambioEstadoEntrada[],
+  ): Promise<void>;
   /**
    * R26: linea de tiempo de UNA orden, ordenada cronologicamente (created_at asc), con los
    * `value` de estado origen/destino y el `nombre` del actor ya resueltos a DTO legible.

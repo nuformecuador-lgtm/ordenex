@@ -29,7 +29,7 @@ import {
   RESULTADO_LABEL,
   RESULTADO_VACIO,
   PagoMensajeroTotal,
-  IngresoBodegaRechazosTotal,
+  IngresoBodegaRechazosDesglose,
   TotalesIngresoPanel,
   MontoDerivadoCard,
   INGRESO_BRUTO_LABEL,
@@ -80,6 +80,12 @@ interface DetalleAbierto {
   grupos: CierreGrupos;
   /** Ingreso de Ordenex del cierre por concepto (derivado del snapshot, money-safe). */
   totalesIngreso: TotalesIngresoOrdenex;
+  /**
+   * Feature 102/R8/R10: desglose del ingreso de bodega por rechazos particionado por origen
+   * (SLA del cron 99 / manual del mensajero). `total` = snapshot leído; `sla + manual === total`
+   * (server-side). Llega igual al alcance satélite por el mismo camino (`verCierreDetalle`).
+   */
+  desgloseIngresoBodegaRechazos: { sla: string; manual: string; total: string };
   /** Ingreso bruto menos el pago al mensajero, derivado server-side (puede ser negativo). */
   ganancia: string;
   /** Total general menos flete + IVA y comisión + IVA, derivado server-side (puede ser negativo). */
@@ -124,6 +130,7 @@ export function CierresAdminModule({
         cierre: result.cierre,
         grupos: result.grupos,
         totalesIngreso: result.totalesIngreso,
+        desgloseIngresoBodegaRechazos: result.desgloseIngresoBodegaRechazos,
         ganancia: result.ganancia,
         pagoTienda: result.pagoTienda,
       });
@@ -335,9 +342,10 @@ export function CierresAdminModule({
               />
             ) : null}
 
-            {/* Feature 56/R16: total snapshot del ingreso de bodega por rechazos, separado. */}
-            <IngresoBodegaRechazosTotal
-              value={detalle.cierre.totalIngresoBodegaRechazos}
+            {/* Feature 56/R16 + 102/R8: total snapshot del ingreso de bodega por rechazos,
+                separado, AHORA con el desglose SLA (cron) vs manual (mensajero) debajo. */}
+            <IngresoBodegaRechazosDesglose
+              desglose={detalle.desgloseIngresoBodegaRechazos}
               ariaLabel="Ingreso de bodega por rechazos del cierre"
             />
 

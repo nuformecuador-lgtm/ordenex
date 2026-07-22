@@ -163,6 +163,9 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
     // Feature 56: snapshot del ingreso de bodega por rechazo (Decimal->string; null si aun
     // sin cerrar o cierre pre-migracion, R21/R22). En la vista EN VIVO (37) el service lo DERIVA.
     ingresoBodegaRechazo: decimalToString(row.ingresoBodegaRechazo),
+    // Feature 102/R11: la vista EN VIVO del mensajero (37) NO expone el desglose SLA -> `false`.
+    // La clasificacion SLA solo la deriva el detalle del admin (38/40) desde el historial.
+    esRechazoSla: false,
   };
 }
 

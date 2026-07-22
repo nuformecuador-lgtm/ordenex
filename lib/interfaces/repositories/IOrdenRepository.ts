@@ -170,6 +170,10 @@ export interface DistritoRow {
   nombre: string;
   cantonId: string;
   zonaId: string | null; // feature 24/R4: la zona de la orden se deriva del distrito (carga masiva).
+  // Feature 98 (design §3.3, R2): flag `esCentral` de la zona del distrito, para elegir la
+  // columna del flete (`valorFleteGam` si central) al tarifar la carga por API SIN N+1. `false`
+  // cuando el distrito no resuelve UNA zona (0 o >1 zonas -> `zonaId` null -> no se tarifa).
+  esCentral: boolean;
 }
 
 // Feature 32 — fila proyectada para armar la etiqueta de guia (R1). Trae los
@@ -217,6 +221,10 @@ export interface RecepcionSateliteRow {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+  // Feature 101/R9: flag de reasignacion prioritaria de la orden (contrato interno repo->
+  // service, siempre presente: el `select` de WITH_RECEPCION_SATELITE lo pide explicito).
+  // Alimenta el sort prioridad-first del grupo "Recibidas" (R7) y el resalte (R8).
+  prioridad: boolean;
 }
 
 // Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite.
@@ -262,6 +270,20 @@ export interface NovedadOrdenRow {
 export interface CausaDevueltaVigente {
   causa: GestionCausaDevolucion | null;
   fecha: Date;
+}
+
+// Feature 102 (T7, design §5.2) — fila de una orden RECHAZADA POR SLA de la tienda, para la
+// superficie derivada de solo-lectura (dentro de /novedades). Molde de `NovedadOrdenRow`, mas el
+// `numRemision` y el `monto` de 56. `monto` = `ingreso_bodega_rechazo` de la gestion sintetica SLA
+// de esa orden, YA serializado a STRING escala 2 (money-safe, R14/R18); `null` = pendiente de
+// cierre (la gestion sintetica nace sin snapshot hasta el proximo cierre, Q2 default). NO expone
+// `deletedAt` (el repo ya filtra `deletedAt: null`, R15).
+export interface RechazoSlaTiendaRow {
+  id: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  monto: string | null;
 }
 
 export interface IOrdenRepository {
@@ -620,27 +642,23 @@ export interface IOrdenRepository {
   // --- Feature 87/89: lista de novedades (devoluciones del mensajero de la tienda) ---
 
   /**
-   * Feature 89/R1-R8 (T2): cuenta las NOVEDADES de `tiendaId`. Una orden es novedad si
-   * tiene una gestion de devolucion VIGENTE (`gestion_orden.resultado = "devuelta"` Y
-   * `anuladaAt IS NULL`, R1/R7), NO esta borrada (R5) y su estatus ACTUAL NO esta en el
-   * conjunto `cerrados` (R2/R3). El predicado se re-ancla a la GESTION, no al estatus actual:
-   * la feature 47 saca la orden de `devuelta` (a `en_bodega`/`rechazada`) en la misma tx, asi
-   * que filtrar por estatus actual `= "devuelta"` daba lista vacia (el bug). `cerrados`
-   * (`["entregada", "devuelta_origen", "recibido_origen"]`) lo pasa el service; el repo no
-   * hardcodea valores de catalogo. Alimenta el `total` paginado; comparte `where` con
-   * `findDevueltasByTienda` (R8).
+   * Feature 99/R7/R8 (Q7): cuenta las NOVEDADES de `tiendaId`. El predicado se ANCLA AL ESTADO
+   * REAL: una orden es novedad si su estatus ACTUAL es `devuelta` (R7), es de la tienda (R9) y no
+   * esta borrada (R5). Bajo la feature 99 la orden REPOSA en `devuelta` hasta que el cron SLA la
+   * libere/escale o la 100 la resuelva; al salir cae del conteo sin doble conteo (R8). Reemplaza
+   * el predicado por gestion vigente + estatus abierto de la feature 89 (ya innecesario).
+   * Alimenta el `total` paginado; comparte `where` con `findDevueltasByTienda` (R8).
    */
-  countDevueltasByTienda(tiendaId: string, cerrados: string[]): Promise<number>;
+  countDevueltasByTienda(tiendaId: string): Promise<number>;
   /**
-   * Feature 89/R1-R8/R12 (T2): una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado
-   * que `countDevueltasByTienda` (gestion devuelta vigente + orden abierta + no borrada, R8),
-   * ordenada por `Orden.createdAt` desc (fallback documentado de R12; el orden estricto por
-   * fecha de gestion lo aplica el service con la fecha traida por `findCausasDevueltaVigentes`).
+   * Feature 99/R7/R8/R9 (Q7): una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado que
+   * `countDevueltasByTienda` (estatus actual `= devuelta` + no borrada, R8), ordenada por
+   * `Orden.createdAt` desc (fallback; el orden estricto por fecha de la ultima gestion `devuelta`
+   * vigente lo aplica el service con la fecha traida por `findCausasDevueltaVigentes`, R9).
    * `skip`/`take` para la paginacion. Solo los campos que consume el DTO + `createdAt`.
    */
   findDevueltasByTienda(
     tiendaId: string,
-    cerrados: string[],
     pagination: { skip: number; take: number },
   ): Promise<NovedadOrdenRow[]>;
   /**
@@ -653,4 +671,26 @@ export interface IOrdenRepository {
    * -> `Map` vacio.
    */
   findCausasDevueltaVigentes(ordenIds: string[]): Promise<Map<string, CausaDevueltaVigente>>;
+
+  // --- Feature 102: rechazos por SLA de la tienda (superficie derivada de solo-lectura) ---
+
+  /**
+   * Feature 102/R12/R13/R15: cuenta los RECHAZOS POR SLA de `tiendaId`. Predicado (mismo `where`
+   * que `findRechazadasSlaByTienda`, R15): la orden es de la tienda del actor, no esta borrada
+   * (`deleted_at IS NULL`), su estatus ACTUAL es `rechazada` Y existe una transicion del cron SLA
+   * en su historial (`origen_tipo = escalado_devuelta_sla`, feature 99). Al salir de `rechazada` o
+   * al borrarse, cae del conteo (R15). Alimenta el `total` paginado.
+   */
+  countRechazadasSlaByTienda(tiendaId: string): Promise<number>;
+  /**
+   * Feature 102/R12/R14/R15: una PAGINA de RECHAZOS POR SLA de `tiendaId` con el MISMO predicado
+   * que `countRechazadasSlaByTienda`, ordenada por `Orden.createdAt` desc. Por cada orden, el
+   * `monto` = `ingreso_bodega_rechazo` de su gestion sintetica SLA (la enlazada por la transicion
+   * `origen_tipo = escalado_devuelta_sla`), YA serializado a STRING escala 2; `null` mientras no
+   * este snapshoteada (pendiente de cierre, Q2 default). `skip`/`take` para la paginacion.
+   */
+  findRechazadasSlaByTienda(
+    tiendaId: string,
+    pagination: { skip: number; take: number },
+  ): Promise<RechazoSlaTiendaRow[]>;
 }

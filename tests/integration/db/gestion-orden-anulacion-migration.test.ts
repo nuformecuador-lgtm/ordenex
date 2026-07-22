@@ -105,9 +105,18 @@ describe("Feature 67 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
     expect(valores).not.toContain("deshacer_gestion");
     // Los 11 originales = el SEED actual menos los valores AÑADIDOS EN O DESPUES de la
     // feature 67. El down.sql del 67 recrea el enum a su estado PRE-67 (fijo, historico);
-    // por eso se descuenta tanto `deshacer_gestion` (67) como `carga_api` (88, apendido
-    // despues). Sin este descuento, el SEED crecido divergiria del enum recreado por el 67.
-    const AÑADIDOS_EN_O_DESPUES_DEL_67 = new Set(["deshacer_gestion", "carga_api"]);
+    // por eso se descuenta `deshacer_gestion` (67), `carga_api` (88), los dos de la feature 99
+    // (`liberacion_devuelta_sla`/`escalado_devuelta_sla`) y los dos de la feature 100
+    // (`reprogramacion_tienda`/`recuperacion_manual`), apendidos despues. Sin este descuento,
+    // el SEED crecido divergiria del enum recreado por el 67.
+    const AÑADIDOS_EN_O_DESPUES_DEL_67 = new Set([
+      "deshacer_gestion",
+      "carga_api",
+      "liberacion_devuelta_sla",
+      "escalado_devuelta_sla",
+      "reprogramacion_tienda", // feature 100
+      "recuperacion_manual", // feature 100
+    ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_67.has(v))),
     );
