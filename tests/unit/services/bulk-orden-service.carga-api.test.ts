@@ -87,6 +87,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findParaAsignabilidad: vi.fn(async () => []),
     findParadasEnReparto: vi.fn(async () => []),
     findCausasDevueltaVigentes: vi.fn(async () => new Map()),
+    // Feature 106: canal integrador (API por key), no ejercitado aqui.
+    listByOwner: vi.fn(async () => ({ items: [], total: 0 })),
+    findDetalleByNumGuiaForOwner: vi.fn(async () => null),
+    cancelarViaApi: vi.fn(async () => ({ status: "not_found" as const })),
     ...overrides,
   };
 }

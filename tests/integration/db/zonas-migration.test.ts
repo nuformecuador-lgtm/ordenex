@@ -187,7 +187,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_num_guia_feistel") &&
         !d.endsWith("_orden_historial_origen_tipo_sla_devuelta") && // feature 99: apendida despues
         !d.endsWith("_orden_historial_origen_tipo_resolver_novedad") && // feature 100: apendida despues
-        !d.endsWith("_orden_prioridad"), // feature 101: apendida despues
+        !d.endsWith("_orden_prioridad") && // feature 101: apendida despues
+        !d.endsWith("_cancelacion_api_por_key"), // feature 106: apendida despues
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);

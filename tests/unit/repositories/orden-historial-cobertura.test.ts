@@ -33,7 +33,7 @@ const REPOS = {
     RecuperacionBodegaRepository.prototype as unknown as Record<string, unknown>,
 };
 
-// Los 17 puntos del mapa (design §2), 1 por familia de transicion.
+// Los 18 puntos del mapa (design §2), 1 por familia de transicion.
 const PUNTOS_DE_ESCRITURA = [
   { n: 1, repo: "OrdenRepository", simbolo: "createManyOrdenes", origenTipo: "carga_masiva" },
   { n: 2, repo: "OrdenRepository", simbolo: "create", origenTipo: "creacion_manual" },
@@ -121,6 +121,18 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "recuperarABodega",
     origenTipo: "recuperacion_manual",
   },
+  // #18: feature 106. La tienda CANCELA una orden por API key: `OrdenRepository.cancelarViaApi`
+  // transiciona `en_bodega`/`en_ruta_bodega_principal -> devuelta_origen` (estado EXISTENTE,
+  // reutilizado) en la MISMA tx que registra el historial. Trae `origen_tipo` NUEVO
+  // (`cancelacion_api`, 18.º valor del enum, migracion `*_cancelacion_api_por_key` + su down) para
+  // que la linea de tiempo distinga esa cancelacion de integrador de una devolucion real (ambas
+  // acaban en `devuelta_origen`); el marcador semantico adicional es `motivo="cancelada por tienda"`.
+  {
+    n: 18,
+    repo: "OrdenRepository",
+    simbolo: "cancelarViaApi",
+    origenTipo: "cancelacion_api",
+  },
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
@@ -142,11 +154,11 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 17 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(17);
-    // numeracion 1..17 sin huecos ni duplicados.
+  it("son EXACTAMENTE 18 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(18);
+    // numeracion 1..18 sin huecos ni duplicados.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
     ]);
   });
 
@@ -157,7 +169,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 17 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
+  it("los 18 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
     const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
     expect(tiposDelMapa).toEqual(tiposDelSeed);

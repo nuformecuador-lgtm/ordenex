@@ -77,9 +77,13 @@ describe("Feature 100 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(valores).toHaveLength(15);
     for (const v of NUEVOS) expect(valores).not.toContain(v);
-    // Los 15 previos = el SEED actual menos los dos valores de la 100.
+    // Los 15 previos = el SEED actual menos los valores AÑADIDOS EN O DESPUES de la feature 100:
+    // los dos de la 100 (`NUEVOS`) y `cancelacion_api` (feature 106), apendido despues. El down.sql
+    // del 100 recrea el enum a su estado PRE-100 (fijo, historico); sin descontar los posteriores el
+    // SEED crecido divergiria (patron del down del 67/99).
+    const AÑADIDOS_EN_O_DESPUES_DEL_100 = new Set<string>([...NUEVOS, "cancelacion_api"]);
     expect(new Set(valores)).toEqual(
-      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !NUEVOS.includes(v as never))),
+      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_100.has(v))),
     );
   });
 
