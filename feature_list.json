@@ -1120,12 +1120,13 @@
       "id": 102,
       "name": "ingreso de bodega por rechazos SLA visible en cierres + aviso a tienda y bodega",
       "description": "Presenta y avisa el dinero que la 99 registra: las ordenes que llegan a `rechazada` por el cron de SLA generan ingreso de bodega por rechazo (feature 56). Hacerlo VISIBLE en los cierres (desglose de la suma de esos rechazos) y AVISAR a la tienda y a la bodega que esas ordenes llegaron a rechazo con su monto. Mecanismo del aviso a definir en el gate (visibilidad derivada vs notificacion). Reusa el snapshot de 56.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
-      "branch": null,
-      "depends_on": 99
+      "branch": "feature/102-rechazos-sla-visible",
+      "depends_on": 99,
+      "gate_note": "Gate F1.4 (2026-07-22): mecanismo del aviso = VISIBILIDAD DERIVADA (humano). Q1-Q4 aprobadas con defaults: Q1 monto tienda = ingreso_bodega_rechazo (snapshot 56); Q2 anclado al snapshot (null='pendiente de cierre'); Q3 superficie tienda = seccion dentro de /novedades; Q4 subtotal SLA solo en el DETALLE del cierre. Sin migracion, sin mover dinero, sin infra de notificaciones; desglose por join origen_tipo='escalado_devuelta_sla'."
     },
     {
       "id": 103,

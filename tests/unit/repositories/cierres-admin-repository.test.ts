@@ -133,6 +133,7 @@ function gestionRow(overrides: Record<string, unknown> = {}) {
     evidenciaStoragePath: "o1/e.jpg",
     pagoMensajero: new Prisma.Decimal("5.00"), // feature 39/R16: snapshot leido
     ingresoBodegaRechazo: new Prisma.Decimal("0.00"), // feature 56/R15: snapshot leido
+    historialEstados: [], // feature 102: acotado al origen SLA (vacio = rechazo NO-SLA/otro resultado)
     ...overrides,
   };
 }
@@ -264,6 +265,37 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
       pagoMensajero: "5.00",
       ingresoBodegaRechazo: "0.00",
     });
+  });
+
+  it("feature 102/R1: pide el historial ACOTADO al origen SLA y deriva esRechazoSla por gestion", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
+    prisma.gestionOrden.findMany.mockResolvedValue([
+      // Rechazo SLA: trae una fila de historial (ya acotada al origen `escalado_devuelta_sla`).
+      gestionRow({
+        id: "g-sla",
+        resultado: "rechazada",
+        historialEstados: [{ origenTipo: "escalado_devuelta_sla" }],
+      }),
+      // Rechazo manual: sin fila de historial de ese origen -> NO-SLA (R2).
+      gestionRow({ id: "g-man", resultado: "rechazada", historialEstados: [] }),
+    ]);
+    prisma.cierreDetail.findMany.mockResolvedValue([detalleRow()]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    // R1: el select del historial va acotado a `origen_tipo = escalado_devuelta_sla`, take 1.
+    const select = prisma.gestionOrden.findMany.mock.calls[0][0].select;
+    expect(select.historialEstados).toEqual({
+      where: { origenTipo: "escalado_devuelta_sla" },
+      take: 1,
+      select: { origenTipo: true },
+    });
+    // R1/R2: la clasificacion sale del historial, no del monto.
+    const byId = Object.fromEntries((r?.gestiones ?? []).map((g) => [g.gestionId, g.esRechazoSla]));
+    expect(byId["g-sla"]).toBe(true);
+    expect(byId["g-man"]).toBe(false);
   });
 
   it("deriva el desglose del ingreso de Ordenex de la TARIFA CONGELADA, con la fórmula de las wallets", async () => {

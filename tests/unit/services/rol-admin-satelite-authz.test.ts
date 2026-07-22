@@ -121,6 +121,9 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findParaAsignabilidad: vi.fn(async () => []),
     findParadasEnReparto: vi.fn(async () => []),
     findCausasDevueltaVigentes: vi.fn().mockResolvedValue(new Map()),
+    // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
+    countRechazadasSlaByTienda: vi.fn().mockResolvedValue(0),
+    findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
