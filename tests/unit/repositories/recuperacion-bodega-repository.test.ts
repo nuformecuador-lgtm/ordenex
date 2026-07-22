@@ -7,9 +7,9 @@ import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBod
 // mockResolvedValue). El fake pasa el propio prisma como `tx` (tiene orden.updateMany + el choke
 // point ordenHistorialEstado.createMany). Cubre R13 (destino por zona ya resuelto por el service),
 // R14 (limpia mensajero + asignado_at), R17 (append actor=admin, origen_tipo=recuperacion_manual),
-// R19 + feature 101/R3 (la recuperacion manual NO enciende prioridad: la columna ya existe pero el
-// data no la toca; solo la liberacion por SLA 99 la enciende), R20 (append falla -> revierte),
-// R21 (UPDATE guardado por estatus=devuelta; count 0 -> false).
+// R20 (append falla -> revierte), R21 (UPDATE guardado por estatus=devuelta; count 0 -> false).
+// Feature 110 (R2/R4/R6): la recuperacion MANUAL SI enciende prioridad=true DENTRO del mismo
+// updateMany.data guardado (invierte la decision de la 101/R3); count 0 -> no toca prioridad (R3).
 
 function buildPrisma() {
   const prisma = {
@@ -42,10 +42,12 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     // R21: guarda por estado + no borrada.
     expect(upd.where).toEqual({ id: "o1", estatusId: "os-devuelta", deletedAt: null });
     // R13/R14: destino de bodega + handoff limpio (mensajero + asignado_at a null).
+    // Feature 110/R2/R4/R6: prioridad=true va DENTRO del mismo data (una sola escritura).
     expect(upd.data).toEqual({
       estatusId: "os-en-bodega-satelite",
       mensajeroAsignadoId: null,
       asignadoAt: null,
+      prioridad: true,
     });
     // R17: append por el choke point, actor = el admin (NO NULL), origen_tipo recuperacion_manual.
     expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
@@ -77,7 +79,7 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     );
   });
 
-  it("R19 + feature 101/R3: la recuperacion MANUAL NO enciende `orden.prioridad` (la columna existe, pero el data no la toca) — data solo trae estatus + mensajero", async () => {
+  it("feature 110/R2/R4: la recuperacion MANUAL SI enciende `orden.prioridad = true` DENTRO del unico updateMany.data (una sola escritura, sin segunda transicion)", async () => {
     const prisma = buildPrisma();
     await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
@@ -85,9 +87,17 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
       estatusDevueltaId: "os-devuelta",
       actorUsuarioId: "maestro-1",
     });
+    // R4: una sola llamada a orden.updateMany (no hay segunda escritura para encender prioridad).
+    expect(prisma.orden.updateMany).toHaveBeenCalledTimes(1);
     const data = prisma.orden.updateMany.mock.calls[0][0].data;
-    expect(data).not.toHaveProperty("prioridad");
-    expect(Object.keys(data).sort()).toEqual(["asignadoAt", "estatusId", "mensajeroAsignadoId"]);
+    // R2: prioridad encendida en el mismo data del updateMany guardado.
+    expect(data.prioridad).toBe(true);
+    expect(Object.keys(data).sort()).toEqual([
+      "asignadoAt",
+      "estatusId",
+      "mensajeroAsignadoId",
+      "prioridad",
+    ]);
   });
 
   it("R21: 2.ª corrida / carrera con el cron 99 -> count 0 -> false, sin append", async () => {
