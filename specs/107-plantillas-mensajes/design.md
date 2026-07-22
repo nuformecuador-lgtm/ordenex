@@ -214,14 +214,15 @@ idempotente (fijar `inactivo` sobre `pending`/`inactivo`).
   - `plantillas-columns.tsx` — columnas de la tabla (patrón `api-keys-columns.tsx`).
   - `CrearPlantillaForm.tsx` / `EditarPlantillaForm.tsx` — formularios con el editor.
   - `VariablesInsert.tsx` — editor de variables definidas por el usuario (R17,
-    Corrección humana): un input donde el usuario ESCRIBE la clave de una variable
-    (formato `[a-z0-9_]+`) y un botón "Insertar variable" que la coloca como `{{clave}}`
-    en la posición del cursor, tantas veces como quiera (0 o más). NO renderiza una
-    botonera desde `PLANTILLA_VARIABLES` (vacío por defecto); si en el futuro hubiera
-    sugerencias en el catálogo, se muestran como accesos rápidos opcionales, pero el
-    camino principal es la variable escrita por el usuario. Valida el formato de la clave
-    antes de insertar (rechaza `{{}}`/caracteres inválidos). Muestra un panel de vista
-    previa que llama a `previewPlantilla`.
+    Corrección humana 2026-07-22): un input DEDICADO donde el usuario ESCRIBE la clave
+    (formato `[a-z0-9_]+`) y un botón "Añadir" que la agrega a una LISTA de variables
+    renderizada como BADGES removibles (cada badge con una "x" para quitarlo). Al hacer
+    CLIC en un badge, inserta `{{clave}}` en la posición del cursor del cuerpo (helper
+    `insertarPlaceholder`), tantas veces como quiera (0 o más). La lista se inicializa con
+    las variables ya presentes en el cuerpo (al editar). Valida formato y duplicados antes
+    de añadir (rechaza `{{}}`/caracteres inválidos, no añade repetidas). NO usa
+    `PLANTILLA_VARIABLES` (vacío por defecto). Muestra un panel de vista previa que llama a
+    `previewPlantilla`.
   - Acción de estado (botón/Switch de shadcn/ui): SOLO "Desactivar" (envía destino
     `inactivo`), visible cuando el estado no es ya `inactivo`, llamando a
     `cambiarEstadoPlantilla` (R24). NO hay acción "Activar" en este alcance;
