@@ -4,6 +4,7 @@ import {
   verCierreDetalle,
   aprobarCierre,
   rechazarCierre,
+  forzarSolicitudVencido,
 } from "@/lib/actions/cierres-admin";
 import type { ICierresAdminService } from "@/lib/interfaces/services/ICierresAdminService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -25,6 +26,8 @@ function fakeService(overrides: Partial<ICierresAdminService> = {}): ICierresAdm
     verCierreDetalle: vi.fn(async () => ({ status: "no_encontrada" })),
     aprobarCierre: vi.fn(async () => ({ status: "ok", cierreId: CIERRE_ID, estado: "aprobado" })),
     rechazarCierre: vi.fn(async () => ({ status: "ok", cierreId: CIERRE_ID, estado: "rechazado" })),
+    // Feature 111/R16: válvula de escape (default = ok/solicitado).
+    forzarSolicitudVencido: vi.fn(async () => ({ status: "ok", cierreId: CIERRE_ID, estado: "solicitado" })),
     ...overrides,
   } as ICierresAdminService;
 }
@@ -59,6 +62,29 @@ describe("cierres-admin actions — unauthenticated en el borde (R1)", () => {
     );
     expect(r.status).toBe("unauthenticated");
     expect(service.rechazarCierre).not.toHaveBeenCalled();
+  });
+
+  it("feature 111/R16: forzarSolicitudVencido sin sesion -> unauthenticated, sin tocar el service", async () => {
+    const service = fakeService();
+    const r = await forzarSolicitudVencido({ cierreId: CIERRE_ID }, { service, getActor: noActor });
+    expect(r.status).toBe("unauthenticated");
+    expect(service.forzarSolicitudVencido).not.toHaveBeenCalled();
+  });
+});
+
+describe("feature 111 · forzarSolicitudVencido action (R16)", () => {
+  it("R16: cierreId no-uuid -> validation_error en el borde, sin tocar el service", async () => {
+    const service = fakeService();
+    const r = await forzarSolicitudVencido({ cierreId: "no-es-uuid" }, { service, getActor: actorMaestro });
+    expect(r.status).toBe("validation_error");
+    expect(service.forzarSolicitudVencido).not.toHaveBeenCalled();
+  });
+
+  it("R16: con actor -> delega con el cierreId parseado + actor", async () => {
+    const service = fakeService();
+    const r = await forzarSolicitudVencido({ cierreId: CIERRE_ID }, { service, getActor: actorMaestro });
+    expect(r).toMatchObject({ status: "ok", estado: "solicitado" });
+    expect(service.forzarSolicitudVencido).toHaveBeenCalledWith(CIERRE_ID, MAESTRO);
   });
 });
 

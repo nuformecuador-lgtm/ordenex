@@ -15,6 +15,14 @@
 
 ## Features en curso
 
+### Feature 111 — cierre vencido: bloqueo total + resolución por el mensajero (Fase 1)
+- **Rama:** `feature/111-cierre-vencido-modelo` (desde `origin/dev`). Zona `fullstack`, complexity `high`. `depends_on: 41` ✅.
+- **Renumeración:** era "108" en el borrador; se renumeró por colisión con la sesión paralela (106/107/108 = API lectura / plantillas / webhook). Cadena registrada: **109** sin_gestionar (depende de 111) · **110** prioridad unificada · **111** este.
+- **Estado:** `in_progress` (Fase 2) — spec + impl (backend_dev → frontend_dev) + review COMPLETOS. Reviewer pidió CAMBIOS (único bloqueante: E2E); resuelto por el leader (E2E `cierre-vencido-modelo.spec.ts` nuevo + `reglas-bloqueos-cierre.spec.ts` actualizado al modelo nuevo; tasks marcadas). Mergeado `origin/dev` (conflicto solo en feature_list, resuelto); post-merge typecheck 0, lint 0, **suite 4480/4481** (1 ajena: `zonas-migration.test.ts`, deuda de allow-list). **PR #139 → dev abierto; esperando merge humano (F2.5).** (Feature 102 reconciliada a `done`: #131/#133 mergeados.)
+- **Nota de sesión:** el API se cortó ~4 veces con los subagentes (spec_author, backend_dev, frontend_dev); cada uno se retomó desde el transcript o el leader terminó el trozo final. Sin impacto en el resultado.
+- **Gate F1.4:** Q1 = el **mensajero solicita su `vencido`** primero (admin aprueba solo `solicitado`; `vencido` fuera de resolubles normales) **+ válvula de escape**: el admin puede destrabar un `vencido` abandonado en nombre del mensajero (auditable). Q2 = bloqueo **total** sobre guías, incluido **deshacer gestión** (guarda explícita). Q3 = también bloquea **recoger/escoger**.
+- **Alcance:** el bloqueo del mensajero pasa a impedir **gestionar y recibir**; el mensajero puede **solicitar su propio `vencido`** (`vencido→solicitado`); invariante: nunca `vencido`+`solicitado` a la vez. Revisa 41/37/38.
+
 ### Feature 102 — ingreso de bodega por rechazos SLA visible en cierres + aviso (Fase 2)
 - **Rama:** `feature/102-rechazos-sla-visible` (desde `origin/dev`). Zona `fullstack`, complexity `medium`. `depends_on: 99` ✅.
 - **Estado:** `in_progress` (Fase 2) — spec + impl (backend_dev → frontend_dev) + review COMPLETOS. Reviewer **APROBADO** (18/18 R con test que pasa; sin migración; money-safe; gate cumplido). Merge de `origin/dev` (features 98/103/104/105) resuelto; post-merge typecheck OK, lint 0 err, **suite 4120/4120**. **PR #131 → dev abierto; esperando merge humano (F2.5).** Al mergear: pasar a `done`, append a `history.md`, limpiar de aquí (F2.6). Sin migración → no requiere `prisma migrate deploy` local.

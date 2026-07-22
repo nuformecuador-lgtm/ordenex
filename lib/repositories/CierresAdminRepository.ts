@@ -22,11 +22,18 @@ import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 
-// Estados de ORIGEN que la resolucion puede transicionar (R12). Feature 41/E1 (R19):
-// ademas de `solicitado`, un `vencido` (creado por el corte diario) es resoluble por la
-// bodega responsable reusando la auditoria existente; resolverlo desbloquea (R15). Los
-// totales NO se recalculan (R4).
-const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado", "vencido"];
+// Estados de ORIGEN que la resolucion NORMAL (aprobar/rechazar) puede transicionar (R12).
+// Feature 111/R15 (Q1-B): se RETIRA `vencido` (revierte parcialmente la 41 R19). El approve/
+// reject normal opera SOLO sobre `solicitado`: el flujo normal de un `vencido` es que el
+// mensajero lo solicite (`vencido -> solicitado`, R6) o que el admin lo destrabe por la
+// VALVULA DE ESCAPE (`forzarSolicitudVencido`, R16) y luego lo apruebe/rechace ya como
+// `solicitado`. Los totales NO se recalculan (R4).
+const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado"];
+
+// Feature 111/R16: estados que la VALVULA DE ESCAPE toca. Solo transiciona un `vencido`
+// ABANDONADO a `solicitado` (en nombre del mensajero ausente); guardada por estado.
+const ESTADO_VENCIDO: CierreEstado = "vencido";
+const ESTADO_SOLICITADO: CierreEstado = "solicitado";
 
 // Feature 42/T8: la resolucion del cierre ahora orquesta una transaccion (para alimentar
 // la wallet atomicamente al aprobar, R5/R7) -> el cliente necesita `$transaction`.
@@ -420,5 +427,30 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       where: { id: cierreId, ...alcanceGuard },
     });
     return enAlcance > 0 ? "conflict" : "fuera_de_alcance"; // R12 vs R13
+  }
+
+  /**
+   * Feature 111/R16 — VALVULA DE ESCAPE. `updateMany` guardado por estado (`vencido`) + alcance;
+   * SOLO cambia `estado` (money-safe, R16/R21: no toca snapshot ni `resuelto_por`/`resuelto_at`).
+   * `count === 0` -> `conflict` (existe en alcance pero ya no es `vencido`) o `fuera_de_alcance`.
+   * NO alimenta wallets ni corre en $transaction: no es una resolucion (no mueve dinero), solo
+   * reencamina el `vencido` al flujo normal de aprobacion. El desbloqueo ocurre al APROBAR (R18).
+   */
+  async forzarSolicitudVencido(cierreId: string, alcance: Alcance): Promise<ResolverCierreResult> {
+    const alcanceGuard = alcanceWhere(alcance);
+
+    // R16: guardia por estado ('vencido') + alcance en el WHERE (anti-TOCTOU). SOLO `estado`.
+    const res = await this.prisma.cierreDia.updateMany({
+      where: { id: cierreId, estado: ESTADO_VENCIDO, ...alcanceGuard },
+      data: { estado: ESTADO_SOLICITADO },
+    });
+    if (res.count === 1) return "updated";
+
+    // count 0: distinguir "existe en alcance pero ya no es vencido" (conflict) de "fuera de
+    // alcance / inexistente" (fuera_de_alcance) — mismo patron que `resolverCierre`.
+    const enAlcance = await this.prisma.cierreDia.count({
+      where: { id: cierreId, ...alcanceGuard },
+    });
+    return enAlcance > 0 ? "conflict" : "fuera_de_alcance";
   }
 }

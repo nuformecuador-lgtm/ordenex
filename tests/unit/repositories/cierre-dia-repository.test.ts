@@ -49,7 +49,7 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       findFirst: vi.fn(),
     },
     orden: { count: vi.fn() },
-    cierreDia: { count: vi.fn(), create: vi.fn(), findMany: vi.fn() },
+    cierreDia: { count: vi.fn(), create: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     // Feature 69/T10: el snapshot y el resolver batch viven en la tx de `crearCierre`.
     cierreDetail: { createMany: vi.fn() },
     tarifa: { findMany: vi.fn(), findFirst: vi.fn() },
@@ -197,6 +197,80 @@ describe("CierreDiaRepository.existeCierreSolicitado (R12)", () => {
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     expect(await repo.existeCierreSolicitado("m1")).toBe(false);
+  });
+});
+
+// ============================================================================
+// Feature 111 — existeCierreVencido (A1, R6) + transicionarVencidoASolicitado (A2, R7/R8/R21).
+// ============================================================================
+
+describe("CierreDiaRepository.existeCierreVencido (feature 111/R6)", () => {
+  it("R6: true si hay un cierre vencido del mensajero; WHERE guarda estado='vencido'", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.count.mockResolvedValue(1);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.existeCierreVencido("m1");
+
+    expect(r).toBe(true);
+    const arg = prisma.cierreDia.count.mock.calls[0][0];
+    expect(arg.where).toMatchObject({ mensajeroId: "m1", estado: "vencido" });
+  });
+
+  it("R6: false si no hay ninguno", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.count.mockResolvedValue(0);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    expect(await repo.existeCierreVencido("m1")).toBe(false);
+  });
+});
+
+describe("CierreDiaRepository.transicionarVencidoASolicitado (feature 111/R7/R8/R21)", () => {
+  it("R7: updateMany guardado por estado='vencido'+mensajero; count=1 -> true", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const ok = await repo.transicionarVencidoASolicitado("m1");
+
+    expect(ok).toBe(true);
+    const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
+    // R7: anti-TOCTOU — solo transiciona si SIGUE en `vencido`.
+    expect(arg.where).toEqual({ mensajeroId: "m1", estado: "vencido" });
+    // R8/R21: money-safe — data SOLO `estado`. Nada de totales, pago, ingreso, resuelto_por/at.
+    expect(arg.data).toEqual({ estado: "solicitado" });
+  });
+
+  it("R8/R21: la escritura NO toca snapshot money-critical ni resuelto_por/at ni solicitado_at", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.transicionarVencidoASolicitado("m1");
+
+    const data = prisma.cierreDia.updateMany.mock.calls[0][0].data;
+    for (const prohibido of [
+      "totalEfectivo",
+      "totalSimpe",
+      "totalTransferencia",
+      "totalGeneral",
+      "totalPagoMensajero",
+      "totalIngresoBodegaRechazos",
+      "resueltoPor",
+      "resueltoAt",
+      "solicitadoAt",
+    ]) {
+      expect(data).not.toHaveProperty(prohibido);
+    }
+  });
+
+  it("R7: count=0 (raced / ya resuelto entre lectura y escritura) -> false, sin efectos", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    expect(await repo.transicionarVencidoASolicitado("m1")).toBe(false);
   });
 });
 

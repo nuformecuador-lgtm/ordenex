@@ -1120,7 +1120,7 @@
       "id": 102,
       "name": "ingreso de bodega por rechazos SLA visible en cierres + aviso a tienda y bodega",
       "description": "Presenta y avisa el dinero que la 99 registra: las ordenes que llegan a `rechazada` por el cron de SLA generan ingreso de bodega por rechazo (feature 56). Hacerlo VISIBLE en los cierres (desglose de la suma de esos rechazos) y AVISAR a la tienda y a la bodega que esas ordenes llegaron a rechazo con su monto. Mecanismo del aviso a definir en el gate (visibilidad derivada vs notificacion). Reusa el snapshot de 56.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
@@ -1187,6 +1187,39 @@
       "zone": "fullstack",
       "branch": "feature/107-plantillas-mensajes",
       "depends_on": null
+    },
+    {
+      "id": 109,
+      "name": "orden sin gestionar: en_reparto que pasa de dia -> cierre vencido + reasignacion prioritaria",
+      "description": "Cierra el hueco del mensajero inactivo. Extiende el corte diario (feature 41): al pasar de dia, TODA orden que siga en `en_reparto` (sin importar cuanto lleve) pasa al NUEVO estatus `sin_gestionar` y entra en un cierre `vencido` que bloquea al mensajero (reusa el bloqueo de la 41). Las `en_espera_aceptacion` NO aplican. `sin_gestionar` NO cuenta como intento de entrega y es money-neutral (no genera pago al mensajero ni cobro). Las ordenes de un cierre sin aprobar quedan CONGELADAS (no reasignables) hasta que se apruebe. Al aprobarse el vencido (flujo de la 38, que ya acepta `vencido` via la 41), esas ordenes se liberan a bodega por zona (`en_bodega`/`en_bodega_satelite`, sin mensajero) con `prioridad=true` (feature 101) para reasignarse ESE dia a otro mensajero o al mismo, igual que reprogramadas/devueltas. Transiciones por el choke point appendCambioEstado (49). Reusa 41/101/99/100/49. Requiere migracion aditiva (nuevo valor del enum `estatus` + su down.sql).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 111
+    },
+    {
+      "id": 110,
+      "name": "prioridad de reasignacion unificada: reprogramadas y recuperadas",
+      "description": "Extiende `orden.prioridad` (101) a TODA orden que vuelve a bodega para reasignar, no solo las liberadas por SLA not_found: las reprogramadas liberadas por su fecha (46/90) y las recuperadas a bodega (100) tambien encienden `prioridad=true`, para que reprogramadas, devueltas y no-gestionadas salgan todas prioritarias en el listado de reasignacion (101). Backend, sin migracion.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": 101
+    },
+    {
+      "id": 111,
+      "name": "cierre vencido: bloqueo total (gestionar + recibir) y resolucion por el mensajero",
+      "description": "Revisa el modelo del cierre `vencido` (41): el bloqueo del mensajero pasa a impedir TAMBIEN gestionar (hoy solo impide recibir asignaciones) — con un `solicitado`/`vencido` sin resolver no puede gestionar ni recibir, debe resolver su cierre primero. El mensajero puede SOLICITAR su propio `vencido` (`vencido -> solicitado`) para enviarlo a aprobacion. Invariante: un mensajero nunca tiene `vencido` y `solicitado` a la vez. Revisa 41/37/38.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/111-cierre-vencido-modelo",
+      "depends_on": 41
     },
     {
       "id": 108,

@@ -61,6 +61,9 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     findGestionesPendientes: vi.fn(async () => [] as CierreGestionPendienteRow[]),
     contarOrdenesPendientesGestion: vi.fn(async () => 0),
     existeCierreSolicitado: vi.fn(async () => false),
+    // Feature 111: por defecto NO hay vencido -> `solicitarCierre` toma el flujo de creación (37).
+    existeCierreVencido: vi.fn(async () => false),
+    transicionarVencidoASolicitado: vi.fn(async () => true),
     crearCierre: vi.fn(async () => "c1"),
     findCierresByMensajero: vi.fn(async () => []),
     // Feature 67: por defecto, una gestion `entregada` vigente del propio mensajero, sin
@@ -105,6 +108,8 @@ function newService(opts: {
   signedUrls?: ISignedUrlProvider;
   // Feature 67: id de `en_reparto` en el catalogo (null = seed pendiente -> validation_error).
   estatusEnRepartoId?: string | null;
+  // Feature 111/R5: ids de mensajeros bloqueados que devuelve `findMensajerosBloqueados`.
+  bloqueados?: string[];
 } = {}) {
   const repo = opts.repo ?? fakeRepo();
   const zonaRepo = {
@@ -117,9 +122,15 @@ function newService(opts: {
     findEstatusIdByValue: vi.fn(async () =>
       opts.estatusEnRepartoId === undefined ? "s-reparto" : opts.estatusEnRepartoId,
     ),
+    // Feature 111/R5: predicado de bloqueo (default = NO bloqueado). Los tests de bloqueo lo
+    // sobreescriben (Set con el mensajero) via `bloqueados`.
+    findMensajerosBloqueados: vi.fn(
+      async (): Promise<Set<string>> =>
+        opts.bloqueados ? new Set(opts.bloqueados) : new Set<string>(),
+    ),
   } as unknown as Pick<
     IOrdenRepository,
-    "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue"
+    "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueados"
   >;
   const tarifa = opts.tarifa === undefined ? TARIFA_DEFECTO : opts.tarifa;
   const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
@@ -1093,5 +1104,145 @@ describe("Feature 67 · gestion anulada ausente de la vista y los totales (R13/R
     expect(Object.keys(input.pagoByGestionId)).toEqual(["g-vigente"]);
     expect(Object.keys(input.ingresoByGestionId)).toEqual(["g-vigente"]);
     expect(input.totales.general).toBe("12.50");
+  });
+});
+
+// ============================================================================
+// Feature 111 — solicitarCierre: rama del `vencido` (R6/R7/R9/R10/R11) + B2 tieneVencido (R13).
+// ============================================================================
+
+describe("Feature 111 · solicitarCierre — transición del vencido (R6/R9/R10)", () => {
+  it("R6: con un vencido -> transiciona (via vencido_solicitado), NO crea un cierre nuevo", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => true),
+      transicionarVencidoASolicitado: vi.fn(async () => true),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "vencido_solicitado" });
+    expect(repo.transicionarVencidoASolicitado).toHaveBeenCalledWith("m1");
+    // R6/R10: no se inserta una segunda fila cierre_dia (no pasa por el flujo de creación).
+    expect(repo.crearCierre).not.toHaveBeenCalled();
+    expect(repo.existeCierreSolicitado).not.toHaveBeenCalled();
+    expect(repo.findGestionesPendientes).not.toHaveBeenCalled(); // R8: sin snapshot nuevo
+  });
+
+  it("R9 (anti-deadlock): con un vencido + órdenes pendientes -> transiciona igual, sin conflict por pendientes", async () => {
+    // El mensajero está bloqueado para gestionar (R1) — si además la precondición de pendientes
+    // aplicara, quedaría atrapado. La rama del vencido NO consulta `contarOrdenesPendientesGestion`.
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => true),
+      transicionarVencidoASolicitado: vi.fn(async () => true),
+      contarOrdenesPendientesGestion: vi.fn(async () => 3), // hay órdenes en_reparto
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    expect(repo.contarOrdenesPendientesGestion).not.toHaveBeenCalled(); // R9
+    expect(repo.crearCierre).not.toHaveBeenCalled();
+  });
+
+  it("R7: el vencido ya fue transicionado (updateMany 0 filas) -> conflict, sin crear", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => true),
+      transicionarVencidoASolicitado: vi.fn(async () => false), // carrera
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    expect(repo.crearCierre).not.toHaveBeenCalled();
+  });
+
+  it("R11: SIN vencido -> flujo de creación de la 37 SIN cambios (crea, via creado)", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => false),
+      findGestionesPendientes: vi.fn(async () => [pendiente({ metodoPago: "efectivo", montoRecibido: "10.00" })]),
+    });
+    const { service } = newService({ repo, centralZonaId: ZONA_CENTRAL });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "creado" });
+    expect(repo.transicionarVencidoASolicitado).not.toHaveBeenCalled();
+    expect(repo.crearCierre).toHaveBeenCalledTimes(1); // flujo 37 intacto
+  });
+});
+
+describe("Feature 111 · listarCierreDia — tieneVencido derivado (R13-datos)", () => {
+  const cierrePasado = (estado: "solicitado" | "aprobado" | "rechazado" | "vencido") => ({
+    cierreId: `c-${estado}`,
+    estado,
+    destinoTipo: "bodega_satelite" as const,
+    destinoZonaId: ZONA_MENSAJERO,
+    totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+    totalPagoMensajero: "0.00",
+    totalIngresoBodegaRechazos: "0.00",
+    solicitadoAt: "2026-07-10T10:00:00.000Z",
+  });
+
+  it("R13: tieneVencido=true cuando hay un cierre vencido en el histórico", async () => {
+    const repo = fakeRepo({
+      findCierresByMensajero: vi.fn(async () => [cierrePasado("vencido")]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.tieneVencido).toBe(true);
+  });
+
+  it("R13: tieneVencido=false sin ningún vencido (solicitado/aprobado/rechazado no cuentan)", async () => {
+    const repo = fakeRepo({
+      findCierresByMensajero: vi.fn(async () => [cierrePasado("aprobado"), cierrePasado("rechazado")]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.tieneVencido).toBe(false);
+  });
+});
+
+// ============================================================================
+// Feature 111 — deshacerGestion: bloqueo total EXPLÍCITO (R5/R20, Q2).
+// ============================================================================
+
+describe("Feature 111 · deshacerGestion — bloqueo total del mensajero (R5/R20)", () => {
+  it("R5: mensajero BLOQUEADO (vencido/solicitado) -> conflict, sin leer ni anular la gestión", async () => {
+    const repo = fakeRepo();
+    const { service, ordenRepo } = newService({ repo, bloqueados: ["m1"] });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    // R5 (Q2, belt-and-suspenders): usa el MISMO predicado derivado, ANTES de cualquier lectura.
+    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(repo.findGestionParaDeshacer).not.toHaveBeenCalled();
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled(); // sin devolver a en_reparto
+  });
+
+  it("R20: el motivo del bloqueo es texto fijo SIN PII (ni ids de cierre ni del actor)", async () => {
+    const repo = fakeRepo();
+    const { service } = newService({ repo, bloqueados: ["m1"] });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    if (r.status !== "conflict") throw new Error("esperaba conflict");
+    expect(r.motivo).toMatch(/cierre pendiente/i);
+    expect(r.motivo).not.toMatch(/m1|g1|c1/); // sin ids del actor/gestión/cierre
+  });
+
+  it("R5: mensajero NO bloqueado -> el deshacer procede (regresión 67 verde)", async () => {
+    const repo = fakeRepo();
+    const { service } = newService({ repo, bloqueados: [] });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
   });
 });

@@ -123,6 +123,23 @@ export interface ICierreDiaRepository {
   /** R12: `true` si el mensajero ya tiene un cierre en estado `solicitado`. */
   existeCierreSolicitado(mensajeroId: string): Promise<boolean>;
   /**
+   * Feature 111/R6 — `true` si el mensajero tiene un cierre en estado `vencido` (gemelo de
+   * `existeCierreSolicitado`, `count WHERE estado='vencido'`). Lo consume `solicitarCierre`
+   * para enrutar al camino de transición en vez de crear un cierre nuevo. Usa el indice
+   * `(mensajero_id, estado)`.
+   */
+  existeCierreVencido(mensajeroId: string): Promise<boolean>;
+  /**
+   * Feature 111/R6/R7/R8 — transiciona el `vencido` del mensajero a `solicitado` con una
+   * escritura GUARDADA por estado (`updateMany WHERE mensajero_id = actor AND estado =
+   * 'vencido' SET estado = 'solicitado'`). SOLO cambia `estado`: NO toca los totales snapshot,
+   * `total_pago_mensajero`, `total_ingreso_bodega_rechazos`, los `cierre_id` de las gestiones,
+   * ni `resuelto_por`/`resuelto_at`/`solicitado_at` (money-safe, R8/R21). Devuelve `true` si
+   * afectó 1 fila; `false` si 0 (el `vencido` ya fue resuelto/transicionado entre la lectura y
+   * la escritura -> el service lo traduce a `conflict`, R7). Anti-TOCTOU sin locks.
+   */
+  transicionarVencidoASolicitado(mensajeroId: string): Promise<boolean>;
+  /**
    * R13/R14: bajo prisma.$transaction (todo-o-nada): (a) INSERT cierre_dia con el
    * destino derivado + los totales snapshot (estado `solicitado` por defecto, o
    * `vencido` para el corte diario, feature 41/C1), (b) UPDATE gestion_orden SET
