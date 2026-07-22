@@ -19,6 +19,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx scripts/seed-catalogos.ts",
     "db:seed:maestro": "tsx scripts/seed-maestro.ts",
+    "db:seed:usuarios": "tsx scripts/seed-usuarios-qa.ts",
     "db:seed:zonas": "tsx scripts/seed-zonas.ts"
   },
   "dependencies": {
