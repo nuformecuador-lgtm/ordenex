@@ -184,7 +184,10 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         // num_guia no secuencial: apendidas despues. La segunda reemplaza la
         // permutacion de la primera (dejaba delta constante entre consecutivas).
         !d.endsWith("_num_guia_no_secuencial") &&
-        !d.endsWith("_num_guia_feistel"),
+        !d.endsWith("_num_guia_feistel") &&
+        // feature 99: apendidas despues (enum de job_tipo + tabla de suscripcion de webhook).
+        !d.endsWith("_job_tipo_webhook_estado") &&
+        !d.endsWith("_webhook_suscripcion"),
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);

@@ -47,7 +47,11 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R2
     // R14/R23: count refleja solo lo transicionado (rows.length del RETURNING).
     expect(count).toBe(2);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    // Feature 99: el choke point (appendCambioEstado) ahora emite, tras el append, una sonda
+    // de elegibilidad de webhook EN LA MISMA tx (transactional-outbox). El UPDATE de dominio
+    // sigue siendo la PRIMERA consulta ($queryRaw call[0], inspeccionada abajo); la 2.a es la
+    // sonda de suscripciones (no-op sin owners suscritos).
+    expect(tx.$queryRaw.mock.calls.length).toBeGreaterThanOrEqual(1);
     // `$queryRaw` se invoca como tagged template: call[0] = fragmentos de texto (SQL),
     // call[1..] = valores interpolados. Se verifica el SQL y los parametros.
     const call = tx.$queryRaw.mock.calls[0] as unknown[];

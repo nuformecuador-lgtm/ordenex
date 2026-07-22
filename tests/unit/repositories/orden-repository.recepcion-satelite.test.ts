@@ -220,7 +220,11 @@ describe("OrdenRepository.recibirLoteEnSatelite (feature 63)", () => {
 
     expect(count).toBe(2);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    // Feature 99: el choke point (appendCambioEstado) ahora emite, tras el append, una sonda
+    // de elegibilidad de webhook EN LA MISMA tx (transactional-outbox). El UPDATE de dominio
+    // sigue siendo la PRIMERA consulta ($queryRaw call[0], inspeccionada abajo); la 2.a es la
+    // sonda de suscripciones (no-op sin owners suscritos).
+    expect(tx.$queryRaw.mock.calls.length).toBeGreaterThanOrEqual(1);
     const call = tx.$queryRaw.mock.calls[0] as unknown[];
     const strings = (call[0] as string[]).join(" ");
     const values = call.slice(1);
