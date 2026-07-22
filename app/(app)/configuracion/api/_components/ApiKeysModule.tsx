@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import { apiKeysConfig } from "@/lib/config/api-keys";
 import { listarApiKeys } from "@/lib/actions/api-keys";
+import { registrarWebhook } from "@/lib/actions/webhooks";
 import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
 
 import { buildApiKeysColumns } from "./api-keys-columns";
@@ -18,7 +19,7 @@ import {
   GenerarApiKeyForm,
   type GenerarApiKeyFormHandle,
 } from "./GenerarApiKeyForm";
-import { RevelarApiKeyModal } from "./RevelarApiKeyModal";
+import { RevelarSecretosModal } from "./RevelarSecretosModal";
 
 // R18/R19: opciones acotadas por MAX_PAGE_SIZE del backend.
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
@@ -36,10 +37,17 @@ export interface ApiKeysModuleProps {
   initialData: ApiKeysPageData;
 }
 
-/** Secreto revelado UNA sola vez tras generar (R24); `null` = sin revelar. */
+/**
+ * Secretos revelados UNA sola vez tras el alta (R7/R8); `null` = sin revelar.
+ * Feature 108: el revelado es combinado (clave de API + secreto de webhook). Si el
+ * webhook no se solicitó o falló, `webhookSecret` es `null`; en el fallo parcial
+ * (R11) `webhookFallo` porta el aviso neutro.
+ */
 interface Revelado {
   plainKey: string;
   identificador: string;
+  webhookSecret: string | null;
+  webhookFallo: string | null;
 }
 
 async function apiKeysFetcher(
@@ -83,24 +91,72 @@ export function ApiKeysModule({ initialData }: ApiKeysModuleProps) {
   }
 
   async function onConfirmForm() {
-    // R31: el `Modal` bloquea el segundo submit mientras esta promesa corre
-    // (anti-doble-submit por fase "pending" + `pendingRef`).
-    const res = await formRef.current?.submit();
-    if (!res) return;
-    if (res.status === "ok") {
-      // R29: refresca el listado al recibir `ok`, ANTES de cerrar; la nueva fila
-      // con su prefijo ya está en la tabla cuando aparece el modal de revelado.
-      await mutate();
+    // R6/R31: la fase "pending" del `Modal` (anti-doble-submit por `pendingRef`)
+    // cubre TODA esta promesa, que abarca las DOS acciones encadenadas.
+    const out = await formRef.current?.submit();
+    if (!out) return;
+    const { keyResult, webhookUrl } = out;
+
+    if (keyResult.status !== "ok") {
+      if (
+        keyResult.status !== "validation_error" &&
+        keyResult.status !== "conflict"
+      ) {
+        // R23: forbidden / unauthenticated → toast; el modal NO se cierra
+        // (validation_error/conflict los pinta el propio formulario por campo).
+        toast.error(mensajeError(keyResult.status));
+      }
+      return;
+    }
+
+    const { plainKey } = keyResult;
+    const identificador = keyResult.apiKey.identificador;
+
+    // R2: sin URL de webhook → una sola acción; se revela solo la clave.
+    if (webhookUrl.length === 0) {
+      await mutate(); // R14: refresca ANTES del revelado.
       setFormOpen(false);
-      // R24: el secreto pasa al modal de revelado (única vez que existe).
       setRevelado({
-        plainKey: res.plainKey,
-        identificador: res.apiKey.identificador,
+        plainKey,
+        identificador,
+        webhookSecret: null,
+        webhookFallo: null,
       });
-    } else if (res.status !== "validation_error" && res.status !== "conflict") {
-      // R23: forbidden / unauthenticated → toast; el modal NO se cierra (R21/R22
-      // los pinta el propio formulario por campo).
-      toast.error(mensajeError(res.status));
+      return;
+    }
+
+    // R5: encadena `registrarWebhook` reusando el `usuarioId` que trae la key.
+    const wh = await registrarWebhook({
+      ownerUsuarioId: keyResult.apiKey.usuarioId,
+      url: webhookUrl,
+    });
+
+    // R14: refresca el listado antes de revelar, en éxito o fallo parcial.
+    await mutate();
+    setFormOpen(false);
+
+    if (wh.status === "creada") {
+      // R8: revelado combinado de ambos secretos, una sola vez.
+      setRevelado({
+        plainKey,
+        identificador,
+        webhookSecret: wh.secret,
+        webhookFallo: null,
+      });
+    } else {
+      // R11/R12/R13: fallo parcial. La key ya existe: se revela igual su secreto,
+      // se avisa (sin internals) que el webhook no quedó registrado y la fila
+      // permite reintentar por el botón "Editar". El secreto NUNCA se pierde.
+      toast.error(
+        "La API key se creó, pero el webhook no quedó registrado. Puedes registrarlo con el botón Editar de la fila.",
+      );
+      setRevelado({
+        plainKey,
+        identificador,
+        webhookSecret: null,
+        webhookFallo:
+          "La API key se creó, pero el webhook no quedó registrado. Puedes registrarlo con el botón Editar de la fila.",
+      });
     }
   }
 
@@ -161,9 +217,11 @@ export function ApiKeysModule({ initialData }: ApiKeysModuleProps) {
       </Modal>
 
       {revelado ? (
-        <RevelarApiKeyModal
+        <RevelarSecretosModal
           plainKey={revelado.plainKey}
           identificador={revelado.identificador}
+          webhookSecret={revelado.webhookSecret}
+          webhookFallo={revelado.webhookFallo}
           onClose={() => setRevelado(null)}
         />
       ) : null}

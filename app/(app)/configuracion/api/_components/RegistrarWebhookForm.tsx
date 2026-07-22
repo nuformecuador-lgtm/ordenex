@@ -8,6 +8,8 @@ import { registrarWebhookSchema } from "@/lib/types/webhook";
 import type { RegistrarWebhookActionResult } from "@/lib/types/webhook";
 import { registrarWebhook } from "@/lib/actions/webhooks";
 
+import { esHttpsValida } from "./webhook-url";
+
 type FieldErrors = { url?: string[]; ownerUsuarioId?: string[] };
 
 /** Handle imperativo: el Modal anfitrión dispara el submit async (R16). */
@@ -20,20 +22,6 @@ export interface RegistrarWebhookFormProps {
   ownerUsuarioId: string;
   /** URL ya registrada, para el modo edición; vacío para el ALTA. */
   initialUrl?: string;
-}
-
-/**
- * R6: la URL de callback debe ser `https` válida. El schema base
- * `registrarWebhookSchema` (reusado, sin duplicar reglas de forma) solo garantiza
- * `min(1)`; R6 exige además `https`, así que la UI lo refuerza en cliente antes de
- * invocar la Server Action. El borde server revalida igualmente.
- */
-function esHttpsValida(url: string): boolean {
-  try {
-    return new URL(url).protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 /**
