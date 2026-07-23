@@ -1751,3 +1751,27 @@
   trazabilidad, ya cerrados; sin cambios de código de dominio). Medido: typecheck 0, lint 0,
   **4050/4050 tests**, round-trip real. `./init.sh` rojo solo por la deuda ajena preexistente del
   harness. Base de la feature 102 (dinero de estos rechazos visible en cierres — pendiente, para mañana).
+
+## 2026-07-22 — 109 orden sin gestionar (cierre vencido + reasignación prioritaria)
+- Al corte diario (41), TODA orden aún en `en_reparto` → nuevo estatus `sin_gestionar` + cierre
+  `vencido` money-neutral que bloquea al mensajero; las órdenes quedan CONGELADAS hasta que se
+  APRUEBE el cierre, ahí se liberan a bodega por zona (`en_bodega`/`en_bodega_satelite`, sin
+  mensajero) con `prioridad=true` (101/110). Todas las transiciones por `appendCambioEstado` (49).
+- **Modelo del cierre revisado (system-wide, 38/111):** solo `aprobado` es TERMINAL;
+  `solicitado`/`vencido`/`rechazado` son abiertos=BLOQUEANTES. Rechazar deja `rechazado` (conserva
+  motivo/auditoría) pero ahora BLOQUEA y es RE-SOLICITABLE (`rechazado→solicitado`, espejo del
+  `vencido`); el conjunto bloqueante pasa a `{solicitado,vencido,rechazado}` en el bloqueo derivado,
+  el SQL anti-TOCTOU de asignación y la exclusión del corte. Invariante: nunca 2 cierres abiertos.
+- Requisitos cubiertos: **R1–R31**. Migraciones aditivas + `down.sql`: `order_status` `sin_gestionar`
+  (es TABLA → `INSERT WHERE NOT EXISTS`) y 2 `origen_tipo` (`corte_sin_gestionar`,
+  `liberacion_sin_gestionar`). SIN migración del enum `CierreEstado`.
+- Gate F1.4 + re-gate cerrados por el humano (3 iteraciones del modelo de rechazo hasta "rechazado
+  bloqueante + re-solicitable, GLOBAL"). typecheck 0, lint 0 err (143 warn baseline), **suite
+  4522/4522**. Reviewer APROBADO (0 bloqueantes). **PR #141 → dev, merge humano 2026-07-22.**
+- **Deuda/decisiones:** (1) los subagentes cayeron por errores de API repetidos (backend ~8,
+  frontend 1, reviewer 4); el leader remató backend/review/verificación a mano (detalle en
+  `impl_109.md`/`review_109.md`). (2) El ripple de los tests-DOWN de enum (67/99/100/106) se saldó
+  agregando los 2 valores nuevos a sus SETS DE EXCLUSIÓN, sin tocar ningún `down.sql` (patrón frágil
+  vivo, como la allow-list de `zonas-migration`). (3) Follow-up no bloqueante: aserción explícita de
+  R13 (aprobar `vencido` money-neutral → 0 wallet), hoy garantizado por construcción. (4) Despliegue:
+  `prisma migrate deploy` en destino (2 migraciones).
