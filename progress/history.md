@@ -1832,3 +1832,15 @@
 - R1–R17 trazados a tests. typecheck 0, lint 0, **4644/4644** (tras sync con 113). Reviewer APROBADO.
   **PR #148 → dev, merge humano 2026-07-23.** Despliegue: `prisma migrate deploy` (tabla + backfill); env
   opcional `GESTION_MAX_EVIDENCIAS` (default 3); bucket `gestion-evidencias`.
+
+## 2026-07-23 — 114 mensajero: buscador de guías asignadas
+- Input de búsqueda **100% cliente** en `MisAsignacionesModule` (sin backend): filtra ambos grupos por
+  numGuía/numRemisión/destinatario, match parcial insensible a mayúsculas/acentos (reusa `normalizeName`);
+  query vacío → sin filtrar; mensaje "sin resultados" por grupo.
+- **Decisión del gate F1.4:** el mapa de ruta y el panel de detalle reflejan el conjunto FILTRADO
+  (coherencia lista↔mapa), con salvaguarda de que la orden en gestión (`ordenEnGestionId`) nunca se oculta.
+  Integra sobre 113 (foco/detalle) y 115 (badge/toggle/sort), preservados; el buscador solo aplica en la
+  vista de lista.
+- R1–R9 trazados a tests. typecheck 0, lint 0, **4657/4657**. Reviewer APROBADO. **PR #150 → dev, merge
+  humano 2026-07-23.** El `frontend_dev` cayó por un error de API a mitad; el leader lo reanudó y remató
+  (tests + push). Sin migraciones ni env nuevas.

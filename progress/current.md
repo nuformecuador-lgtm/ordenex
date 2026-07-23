@@ -28,7 +28,7 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 | # | Feature | Zona | Cx | Dep | Estado |
 |---|---------|------|----|-----|--------|
 | 113 | card en reparto: detalle completo inline + modo foco al gestionar | frontend | med | 36 ✅ | ✅ **done** (PR #147) |
-| 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | **in_progress** (PR #150) |
+| 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | ✅ **done** (PR #150) |
 | 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | ✅ **done** (PR #146) |
 | 116 | notas privadas del mensajero (reusa tabla de 115, sin migración) | fullstack | med | 115 | **in_progress** (backend) |
 | 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | spec_ready |
@@ -42,8 +42,8 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 - **119 (evidencias)** ✅ done (PR #148, merge humano 20:29). Atomicidad storage↔DB con rollback total,
   dual-write de portada, máx 3 fotos. Ya en `history.md`. (Aviso de seguridad repo-público revisado con
   el humano: sin valores de secretos, seguir igual.)
-- **114 (buscador)** ✅ revisada (APROBADO) + sincronizada con `dev` → **PR #150**, falta merge humano.
-  Mapa refleja el filtro (gate F1.4); 113/115 preservados.
+- **114 (buscador)** ✅ done (PR #150, merge humano 21:50). Mapa refleja el filtro (gate F1.4); 113/115
+  preservados. Ya en `history.md`.
 - **116 (notas — backend)** 🟡 en curso, **adelantado en paralelo** con el merge de 114: es disjunto (toca
   service/repo/DTO — reusa la tabla de 115, sin migración — NO el módulo). Su frontend (editor en el detalle
   + indicador en card) va tras el merge de 114.
