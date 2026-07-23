@@ -1596,4 +1596,518 @@ describe("MisAsignacionesModule", () => {
     };
     expect(props.paradas.map((p) => p.id).sort()).toEqual(["g1", "g2"]);
   });
+
+  // ---------------- Feature 117: filtro por cantón y distrito ----------------
+  // Compone en AND con el buscador (114) sobre las MISMAS listas visibles; el mapa y el
+  // panel reflejan el conjunto filtrado (R14) y la orden en gestión nunca se oculta (R10).
+
+  it("117/R1: renderiza los selects de Cantón y Distrito en el módulo del mensajero", () => {
+    renderModule({
+      porRecoger: [makeAsignacion({ id: "r1", numRemision: "REM-R1" })],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    expect(
+      screen.getByRole("combobox", { name: "Filtrar por cantón" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Filtrar por distrito" }),
+    ).toBeInTheDocument();
+  });
+
+  it("117/R1: en modo foco NO se renderiza el filtro cantón/distrito (no hay lista que filtrar)", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      ordenEnGestionId: "g1",
+    });
+
+    expect(
+      screen.queryByRole("combobox", { name: "Filtrar por cantón" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Filtrar por distrito" }),
+    ).toBeNull();
+  });
+
+  it("117/R2: las opciones de Cantón usan la etiqueta 'Cantón (Provincia)', deduplicadas y ordenadas", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-G2",
+          cantonNombre: "Alajuela",
+          provinciaNombre: "Alajuela",
+        }),
+        // Duplicado de Escazú: no debe producir una segunda opción.
+        makeAsignacion({
+          id: "g3",
+          numRemision: "REM-G3",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+        }),
+      ],
+    });
+
+    await user.click(screen.getByRole("combobox", { name: "Filtrar por cantón" }));
+    const listbox = await screen.findByRole("listbox");
+    // Centinela "todos" + dos cantones únicos, ordenados alfabéticamente.
+    const opciones = within(listbox)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(opciones).toEqual([
+      "Todos los cantones",
+      "Alajuela (Alajuela)",
+      "Escazú (San José)",
+    ]);
+  });
+
+  it("117/R3: sin cantón elegido, el select de Distrito está deshabilitado", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    expect(
+      screen.getByRole("combobox", { name: "Filtrar por distrito" }),
+    ).toBeDisabled();
+  });
+
+  it("117/R4: al elegir un cantón, Distrito ofrece solo los distritos de ese cantón", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-G2",
+          cantonNombre: "Central",
+          distritoNombre: "Merced",
+        }),
+        makeAsignacion({
+          id: "g3",
+          numRemision: "REM-G3",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+          distritoNombre: "San Rafael",
+        }),
+      ],
+    });
+
+    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
+    await user.click(screen.getByRole("combobox", { name: "Filtrar por distrito" }));
+    const listbox = await screen.findByRole("listbox");
+    const opciones = within(listbox)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    // Solo los distritos de Central (no "San Rafael" de Escazú), más el centinela.
+    expect(opciones).toEqual(["Todos los distritos", "Carmen", "Merced"]);
+  });
+
+  it("117/R5: cambiar de cantón resetea el distrito a 'todos'", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-G2",
+          cantonNombre: "Central",
+          distritoNombre: "Merced",
+        }),
+        makeAsignacion({
+          id: "g3",
+          numRemision: "REM-G3",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+          distritoNombre: "San Rafael",
+        }),
+      ],
+    });
+
+    // Cantón Central + distrito Carmen ⇒ solo g1 visible.
+    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
+    await elegirEnSelect(user, "Filtrar por distrito", "Carmen");
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeNull();
+
+    // Cambiar de cantón resetea el distrito: vuelve el placeholder y el filtro de
+    // distrito deja de aplicar (g3 de Escazú aparece pese a no ser "Carmen").
+    await elegirEnSelect(user, "Filtrar por cantón", "Escazú (San José)");
+    const distrito = screen.getByRole("combobox", { name: "Filtrar por distrito" });
+    expect(within(distrito).getByText("Todos los distritos")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G3/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeNull();
+  });
+
+  it("117/R6: filtrar por cantón+distrito muestra solo las coincidentes y excluye distrito nulo", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-G2",
+          cantonNombre: "Central",
+          distritoNombre: "Merced",
+        }),
+        makeAsignacion({
+          id: "g3",
+          numRemision: "REM-G3",
+          cantonNombre: "Central",
+          distritoNombre: null,
+        }),
+        makeAsignacion({
+          id: "g4",
+          numRemision: "REM-G4",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+          distritoNombre: "San Rafael",
+        }),
+      ],
+    });
+
+    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
+    await elegirEnSelect(user, "Filtrar por distrito", "Carmen");
+
+    // Solo g1 (Central/Carmen). g2 (otro distrito), g3 (distrito nulo) y g4 (otro cantón) fuera.
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeInTheDocument();
+    for (const rem of ["REM-G2", "REM-G3", "REM-G4"]) {
+      expect(
+        screen.queryByRole("button", { name: new RegExp(`Gestionar orden ${rem}`) }),
+      ).toBeNull();
+    }
+  });
+
+  it("117/R8: 'Limpiar filtros' restaura la lista completa y limpia ambos selects", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-G2",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+          distritoNombre: "San Rafael",
+        }),
+      ],
+    });
+
+    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
+    await elegirEnSelect(user, "Filtrar por distrito", "Carmen");
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+
+    // Reaparecen todas; los selects vuelven a su placeholder y el distrito se deshabilita.
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeInTheDocument();
+    const canton = screen.getByRole("combobox", { name: "Filtrar por cantón" });
+    expect(within(canton).getByText("Todos los cantones")).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Filtrar por distrito" }),
+    ).toBeDisabled();
+  });
+
+  it("117/R8: elegir 'Todos los cantones' desde el desplegable restaura la lista completa", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-G2",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+          distritoNombre: "San Rafael",
+        }),
+      ],
+    });
+
+    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeNull();
+
+    await elegirEnSelect(user, "Filtrar por cantón", "Todos los cantones");
+
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("117/R9: 'Limpiar filtros' solo aparece cuando hay un filtro activo", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          cantonNombre: "Central",
+        }),
+      ],
+    });
+
+    // Sin filtro: no está disponible.
+    expect(
+      screen.queryByRole("button", { name: "Limpiar filtros" }),
+    ).toBeNull();
+
+    // Con un cantón elegido: aparece.
+    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
+    expect(
+      screen.getByRole("button", { name: "Limpiar filtros" }),
+    ).toBeInTheDocument();
+
+    // Al limpiar: vuelve a desaparecer.
+    await user.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+    expect(
+      screen.queryByRole("button", { name: "Limpiar filtros" }),
+    ).toBeNull();
+  });
+
+  it("117/R10: la orden EN GESTIÓN sigue visible (lista y mapa) aunque el filtro no la incluya", async () => {
+    const user = userEvent.setup();
+    // `bloqueado` mantiene la VISTA COMPLETA (grilla + mapa) con el puntero fijado, sin
+    // colapsar a foco: es el escenario donde la salvaguarda R10 es observable.
+    renderModule({
+      bloqueado: true,
+      ordenEnGestionId: "g2",
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-UNO",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+          secuenciaRuta: 1,
+        }),
+        // EN GESTIÓN, en OTRO cantón: no coincide con el filtro pero no se oculta.
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-DOS",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+          distritoNombre: "San Rafael",
+          secuenciaRuta: 2,
+        }),
+        // Control: otro cantón y NO en gestión ⇒ se filtra.
+        makeAsignacion({
+          id: "g3",
+          numRemision: "REM-TRES",
+          cantonNombre: "Cartago",
+          provinciaNombre: "Cartago",
+          distritoNombre: "Oriental",
+          secuenciaRuta: 3,
+        }),
+      ],
+    });
+
+    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
+
+    // g1 coincide; g2 (en gestión) permanece pese a no coincidir; g3 (control) se va.
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-UNO/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-DOS/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-TRES/ }),
+    ).toBeNull();
+
+    // El mapa refleja lo mismo: g1 + g2 (salvaguarda), no g3.
+    const props = rutaMapaMock.mock.calls.at(-1)?.[0] as {
+      paradas: { id: string }[];
+    };
+    expect(props.paradas.map((p) => p.id).sort()).toEqual(["g1", "g2"]);
+  });
+
+  it("117/R11: filtro sin coincidencias muestra el mensaje 'coincide con el filtro' (distinto del vacío base)", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      // Central sale de "Por recoger"; Escazú de "En reparto": así elegir un cantón
+      // vacía SIEMPRE el grupo contrario y se ve el mensaje de "sin coincidencias".
+      porRecoger: [
+        makeAsignacion({
+          id: "r1",
+          numRemision: "REM-R1",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+        }),
+      ],
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+          distritoNombre: "San Rafael",
+        }),
+      ],
+    });
+
+    // Central ⇒ "En reparto" (solo Escazú) queda sin coincidencias.
+    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
+    const reparto = screen.getByRole("region", {
+      name: "En reparto / por gestionar",
+    });
+    expect(
+      within(reparto).getByText("Ninguna guía en reparto coincide con el filtro."),
+    ).toBeInTheDocument();
+    // Distinguible del vacío base y del "sin resultados" del buscador.
+    expect(screen.queryByText("No hay órdenes en reparto.")).toBeNull();
+    expect(
+      screen.queryByText("Ninguna guía en reparto coincide con la búsqueda."),
+    ).toBeNull();
+
+    // Escazú ⇒ "Por recoger" (solo Central) queda sin coincidencias.
+    await elegirEnSelect(user, "Filtrar por cantón", "Escazú (San José)");
+    const recoger = screen.getByRole("region", { name: "Por recoger" });
+    expect(
+      within(recoger).getByText("Ninguna guía por recoger coincide con el filtro."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No hay órdenes por recoger.")).toBeNull();
+  });
+
+  it("117/R14: con filtro activo, panel de detalle y mapa reflejan el conjunto filtrado", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          destinatario: "Uno",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+          secuenciaRuta: 1,
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-G2",
+          destinatario: "Dos",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+          distritoNombre: "San Rafael",
+          secuenciaRuta: 2,
+        }),
+      ],
+    });
+
+    // Por defecto el panel muestra la PRIMERA (g1).
+    expect(
+      within(panelDetalle()).getByText("Orden REM-G1 · Uno"),
+    ).toBeInTheDocument();
+
+    // Al filtrar por Escazú, el conjunto filtrado es [g2]: el panel y el mapa lo reflejan.
+    await elegirEnSelect(user, "Filtrar por cantón", "Escazú (San José)");
+    expect(
+      within(panelDetalle()).getByText("Orden REM-G2 · Dos"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeNull();
+
+    const props = rutaMapaMock.mock.calls.at(-1)?.[0] as {
+      paradas: { id: string }[];
+    };
+    expect(props.paradas.map((p) => p.id)).toEqual(["g2"]);
+  });
+
+  it("117/R12 + 114: el filtro cantón/distrito se COMPONE en AND con el buscador de texto", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          destinatario: "Ana",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-G2",
+          destinatario: "Beto",
+          cantonNombre: "Central",
+          distritoNombre: "Carmen",
+        }),
+        makeAsignacion({
+          id: "g3",
+          numRemision: "REM-G3",
+          destinatario: "Ana",
+          cantonNombre: "Escazú",
+          provinciaNombre: "San José",
+          distritoNombre: "San Rafael",
+        }),
+      ],
+    });
+
+    // Buscador "ana" ⇒ {g1, g3}; filtro cantón Central ⇒ {g1, g2}; AND ⇒ solo g1.
+    await user.type(
+      screen.getByRole("searchbox", { name: "Buscar guías" }),
+      "ana",
+    );
+    await elegirEnSelect(user, "Filtrar por cantón", "Central (San José)");
+
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeInTheDocument();
+    // g2 cae por el buscador (Beto); g3 cae por el filtro (Escazú).
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G3/ }),
+    ).toBeNull();
+  });
 });
