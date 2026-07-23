@@ -35,8 +35,18 @@ vencido', done en dev; 112–119 reclamados por otras sesiones). Slug conservado
   dedupe por `wa_message_id`, excluido del auth en `middleware.ts`), tablas conversación/mensaje
   (migración + down.sql + RLS por asignación), Server Action de envío con ventana 24 h, UI de hilo en
   `mis-asignaciones`.
-- **Próximo:** `backend_dev` (webhook + tablas + repos + server action) → `frontend_dev` (UI de hilo) →
-  `reviewer`, orquestación directa `model: opus`. Luego sync con `dev`, push y PR → dev.
+- **IMPLEMENTADA Y REVISADA (2026-07-23):** backend (bloques A–F, H1, commit `794aab9`) + UI (bloque G,
+  commit `337dac2`) + renumber/bookkeeping (`07af5a8`). Reviewer **APROBADO 0 bloqueantes**
+  (`progress/review_120.md`): **25/25 R con test verde**, **57 tests de la feature verdes**, typecheck
+  **delta CERO** vs el baseline ajeno de flow (30 errores preexistentes en `MisAsignacionesModule` roto /
+  `middleware.test` async / `fallback-route-optimization`, ver `progress/_baseline_typecheck_120.txt`).
+- **⚠️ PENDIENTE DE ATERRIZAJE (decisión humana):** la rama nace de `flow` (base rota que no compila). Un
+  PR directo `feature/120 → dev` arrastraría la divergencia de flow **incluyendo código roto** → reventaría
+  CI. Los 3 commits de la 120 están AISLADOS y solo dependen de `eb50730` (integración WhatsApp). Camino
+  limpio recomendado: rama nueva desde `origin/dev` + cherry-pick `eb50730` + los 3 commits (07af5a8,
+  794aab9, 337dac2) → PR verde y mergeable. **⚠️ Al desplegar:** correr las migraciones
+  `20260723130000_chat_whatsapp` y `20260723130100_job_tipo_whatsapp_chat_envio`, y configurar
+  `WHATSAPP_WEBHOOK_VERIFY_TOKEN` + `WHATSAPP_APP_SECRET` en Vercel.
 
 **Plantillas de mensajes — feature 107 (2026-07-22) → PR #135, falta merge humano.** Subitem
 "Plantillas" en Configuración (rol maestro, `/configuracion/plantillas`): CRUD completo (crear/editar/
