@@ -87,6 +87,8 @@ describe("Feature 99 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
       "reprogramacion_tienda", // feature 100
       "recuperacion_manual", // feature 100
       "cancelacion_api", // feature 106
+      "corte_sin_gestionar", // feature 109
+      "liberacion_sin_gestionar", // feature 109
     ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_99.has(v))),

@@ -48,13 +48,24 @@ export interface MisAsignacionesModuleProps {
   ordenEnGestionId: string | null;
   /** Feature 97 (R27/R28/R30): estado de la ruta optimizada que produjo el orden. */
   ruta: RutaResumenDTO;
+  /**
+   * Feature 111/R12/R14: `true` si el mensajero está BLOQUEADO (cierre pendiente).
+   * El bloqueo es TOTAL: se muestra el aviso y se desactivan/guardan los controles de
+   * recoger, escoger y gestionar. Defensa SUAVE; el backend (R1/R4) es la defensa real.
+   */
+  bloqueado: boolean;
 }
+
+// Feature 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado, i18n-ready).
+const BLOQUEO_AVISO =
+  "No puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente. Ve a «Cierre del día» para resolverlo.";
 
 export function MisAsignacionesModule({
   porRecoger,
   porGestionar,
   ordenEnGestionId,
   ruta,
+  bloqueado,
 }: MisAsignacionesModuleProps) {
   const router = useRouter();
   const toast = useToast();
@@ -116,8 +127,10 @@ export function MisAsignacionesModule({
   }, [porGestionar, ordenEnGestionId, seleccionId]);
 
   // Seleccionar una card la lleva al panel de detalle. Bloqueada si hay otra
-  // gestión activa (R19/R20): no se puede cambiar la orden del panel.
+  // gestión activa (R19/R20): no se puede cambiar la orden del panel. Feature
+  // 111/R14: si el mensajero está BLOQUEADO no se puede escoger (defensa suave).
   function seleccionar(orden: MiAsignacionDTO) {
+    if (bloqueado) return;
     if (ordenEnGestionId !== null && ordenEnGestionId !== orden.id) return;
     setSeleccionId(orden.id);
   }
@@ -127,6 +140,12 @@ export function MisAsignacionesModule({
   // panel revela los 4 botones).
   async function gestionarPedido(): Promise<boolean> {
     if (!detalleOrden) return false;
+    // Feature 111/R14: guarda suave. El mensajero bloqueado no puede escoger para
+    // gestión; se le remite a resolver su cierre. El backend (R1/R4) rechaza igual.
+    if (bloqueado) {
+      toast.error(BLOQUEO_AVISO);
+      return false;
+    }
     const result = await escogerParaGestion({ ordenId: detalleOrden.id });
     if (result.status === "ok") {
       router.refresh(); // refleja el bloqueo de las demás (ordenEnGestionId)
@@ -192,17 +211,36 @@ export function MisAsignacionesModule({
 
   return (
     <div className="flex flex-col gap-8">
+      {/* ---------- Aviso de BLOQUEO TOTAL del mensajero (feature 111/R12) ---------- */}
+      {bloqueado ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          {BLOQUEO_AVISO}
+        </p>
+      ) : null}
+
       {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
       {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
           contra `porRecoger` (restricción "asignada a mí") y aceptan con la MISMA action
           `recogerAsignaciones`, directo al confirmar (sin modal):
             (1) input de número de guía tecleado + Enter/botón;
-            (2) escáner de cámara (QR de la etiqueta -> num_guia). */}
-      <InputRecoger porRecoger={porRecoger} onRecogida={() => router.refresh()} />
-      <EscanerRecoger
-        porRecoger={porRecoger}
-        onRecogida={() => router.refresh()}
-      />
+            (2) escáner de cámara (QR de la etiqueta -> num_guia).
+          Feature 111/R14: BLOQUEADO oculta ambos controles de recogida (defensa suave;
+          la lista de "Por recoger" sigue visible, solo-visualización). */}
+      {bloqueado ? null : (
+        <>
+          <InputRecoger
+            porRecoger={porRecoger}
+            onRecogida={() => router.refresh()}
+          />
+          <EscanerRecoger
+            porRecoger={porRecoger}
+            onRecogida={() => router.refresh()}
+          />
+        </>
+      )}
 
       {/* Lista de SOLO-VISUALIZACIÓN (feature 96): reutiliza la sección compartida "por
           aceptar" con `mostrarAcciones={false}` (ya no hay botones "Recoger todas" /
@@ -292,16 +330,21 @@ export function MisAsignacionesModule({
         ) : (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {porGestionar.map((orden) => {
-              // R19/R20: si hay una orden activa distinta, esta queda bloqueada.
+              // R19/R20: si hay una orden activa distinta, esta queda bloqueada
+              // (oculta sus detalles y muestra el aviso "termina la gestión en curso").
               const bloqueada =
                 ordenEnGestionId !== null && ordenEnGestionId !== orden.id;
+              // Feature 111/R14: con el mensajero BLOQUEADO, TODAS las cards quedan
+              // deshabilitadas (no puede escoger para gestión); el porqué lo explica el
+              // aviso de bloqueo total de arriba, así que la card conserva sus detalles.
+              const deshabilitada = bloqueada || bloqueado;
               const esActiva = ordenEnGestionId === orden.id;
               const esDetalle = detalleOrden?.id === orden.id;
               return (
                 <li key={orden.id}>
                   <button
                     type="button"
-                    disabled={bloqueada}
+                    disabled={deshabilitada}
                     aria-pressed={esDetalle}
                     onClick={() => seleccionar(orden)}
                     aria-label={`Gestionar orden ${orden.numRemision} · ${orden.destinatario}`}
@@ -381,8 +424,10 @@ export function MisAsignacionesModule({
 
         {/* Panel de detalle grande e inline: SIEMPRE muestra una orden mientras
             haya alguna en reparto (la activa o la primera por defecto). Se remonta
-            con `key` al cambiar de orden para reiniciar su estado interno. */}
-        {detalleOrden ? (
+            con `key` al cambiar de orden para reiniciar su estado interno. Feature
+            111/R14: BLOQUEADO no renderiza el panel (no hay gestionar/escoger); el
+            mensajero debe resolver su cierre antes de operar con las guías. */}
+        {detalleOrden && !bloqueado ? (
           <GestionarOrdenPanel
             key={detalleOrden.id}
             orden={detalleOrden}

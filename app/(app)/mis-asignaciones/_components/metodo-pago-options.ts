@@ -7,7 +7,7 @@ import type { SelectOption } from "@/components/ui/select";
 // Record exhaustivo (no silencioso).
 export const METODO_PAGO_LABEL: Record<MetodoPago, string> = {
   efectivo: "Efectivo",
-  SIMPE: "SIMPE",
+  SINPE: "SINPE",
   transferencia: "Transferencia",
 };
 

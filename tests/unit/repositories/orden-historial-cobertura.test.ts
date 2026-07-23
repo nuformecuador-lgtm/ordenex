@@ -5,6 +5,7 @@ import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionR
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaRepository";
 import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
+import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 
 // Feature 49 — T5.2 (R6): TEST DE COBERTURA. Enumera los 12 call-sites que ESCRIBEN
@@ -31,9 +32,10 @@ const REPOS = {
   DevolucionSlaRepository: DevolucionSlaRepository.prototype as unknown as Record<string, unknown>,
   RecuperacionBodegaRepository:
     RecuperacionBodegaRepository.prototype as unknown as Record<string, unknown>,
+  CierresAdminRepository: CierresAdminRepository.prototype as unknown as Record<string, unknown>,
 };
 
-// Los 18 puntos del mapa (design §2), 1 por familia de transicion.
+// Los 20 puntos del mapa (design §2), 1 por familia de transicion.
 const PUNTOS_DE_ESCRITURA = [
   { n: 1, repo: "OrdenRepository", simbolo: "createManyOrdenes", origenTipo: "carga_masiva" },
   { n: 2, repo: "OrdenRepository", simbolo: "create", origenTipo: "creacion_manual" },
@@ -133,6 +135,28 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "cancelarViaApi",
     origenTipo: "cancelacion_api",
   },
+  // #19: feature 109. El corte diario transiciona `en_reparto -> sin_gestionar` DENTRO de
+  // `CierreDiaRepository.crearCierre` (input opcional `corteSinGestionar`), en la MISMA tx, via el
+  // choke point con actor null y `origen_tipo` NUEVO `corte_sin_gestionar` (19.º valor del enum,
+  // migracion `*_orden_historial_origen_sin_gestionar` + su down). crearCierre ahora SI escribe
+  // `orden.estatus_id` (ya no solo `gestion_orden.cierre_id`).
+  {
+    n: 19,
+    repo: "CierreDiaRepository",
+    simbolo: "crearCierre",
+    origenTipo: "corte_sin_gestionar",
+  },
+  // #20: feature 109. Al APROBAR el cierre, `CierresAdminRepository.resolverCierre` libera las
+  // `sin_gestionar` del mensajero a `en_bodega`/`en_bodega_satelite` por zona (limpia mensajero,
+  // prioridad=true) en la MISMA tx, via el choke point con actor=admin y `origen_tipo` NUEVO
+  // `liberacion_sin_gestionar` (20.º valor del enum, misma migracion). Solo en la rama `aprobado`
+  // (rechazar NO libera).
+  {
+    n: 20,
+    repo: "CierresAdminRepository",
+    simbolo: "resolverCierre",
+    origenTipo: "liberacion_sin_gestionar",
+  },
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
@@ -142,7 +166,8 @@ const PUNTOS_DE_ESCRITURA = [
 // Feature 67: las dos LECTURAS del deshacer (`findGestionParaDeshacer`,
 // `findUltimaGestionNoAnuladaId`) tampoco escriben estado — solo consultan la gestion y su
 // orden para que el service decida; la UNICA escritura del deshacer es el punto #12.
-// `crearCierre` (37) escribe `gestion_orden.cierre_id`, NO `orden.estatus_id`.
+// `crearCierre` (37) escribe `gestion_orden.cierre_id`; feature 109 lo convierte ADEMAS en el
+// punto #19 (`corte_sin_gestionar`) cuando recibe el input del corte -> ya NO va en esta lista.
 const NO_ESCRIBEN_ESTADO = [
   { repo: "OrdenRepository", simbolo: "asignarMensajeroSugerido" },
   { repo: "OrdenRepository", simbolo: "softDelete" },
@@ -150,15 +175,14 @@ const NO_ESCRIBEN_ESTADO = [
   { repo: "GestionOrdenRepository", simbolo: "liberarOrdenEnGestion" },
   { repo: "CierreDiaRepository", simbolo: "findGestionParaDeshacer" }, // feature 67: solo query
   { repo: "CierreDiaRepository", simbolo: "findUltimaGestionNoAnuladaId" }, // feature 67: solo query
-  { repo: "CierreDiaRepository", simbolo: "crearCierre" }, // 37: escribe cierre_id, no estatus_id
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 18 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(18);
-    // numeracion 1..18 sin huecos ni duplicados.
+  it("son EXACTAMENTE 20 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(20);
+    // numeracion 1..20 sin huecos ni duplicados.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
     ]);
   });
 
@@ -169,7 +193,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 18 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
+  it("los 20 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
     const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
     expect(tiposDelMapa).toEqual(tiposDelSeed);

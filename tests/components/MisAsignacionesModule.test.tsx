@@ -183,6 +183,7 @@ function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0
       porGestionar={props?.porGestionar ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
       ruta={props?.ruta ?? RUTA_VIGENTE}
+      bloqueado={props?.bloqueado ?? false}
     />,
   );
 }
@@ -1028,5 +1029,84 @@ describe("MisAsignacionesModule", () => {
       paradas: { id: string }[];
     };
     expect(props.paradas.map((p) => p.id)).toEqual(["g1"]);
+  });
+
+  // ---------------- Feature 111 (R12/R14): bloqueo total del mensajero ----------------
+
+  it("R12: bloqueado muestra el aviso accionable de BLOQUEO TOTAL", () => {
+    renderModule({
+      bloqueado: true,
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /no puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente/i,
+    );
+  });
+
+  it("R12: sin bloqueo NO muestra el aviso de bloqueo total", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    expect(
+      screen.queryByText(/no puedes gestionar ni recibir nuevas asignaciones/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("R14: bloqueado desactiva/guarda los controles de recoger (input + escáner)", () => {
+    renderModule({
+      bloqueado: true,
+      porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
+    });
+
+    // Los controles de recogida no se renderizan; sí la lista de solo-visualización.
+    expect(
+      screen.queryByRole("region", { name: "Recoger por número de guía" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recoger por escaneo" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("region", { name: "Por recoger" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R14: bloqueado deshabilita las cards de 'En reparto' y NO renderiza el panel de gestión (escoger/gestionar)", () => {
+    renderModule({
+      bloqueado: true,
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Dos" }),
+      ],
+    });
+
+    // Las cards siguen visibles pero deshabilitadas (no se puede escoger para gestión).
+    const region = screen.getByRole("region", {
+      name: "En reparto / por gestionar",
+    });
+    expect(
+      within(region).getByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeDisabled();
+    expect(
+      within(region).getByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeDisabled();
+    // El panel de detalle/gestión (escoger + gestionar) no se monta.
+    expect(
+      screen.queryByRole("region", { name: "Detalle de la orden" }),
+    ).toBeNull();
+  });
+
+  it("R14: sin bloqueo, los controles de gestión siguen operativos (el panel se monta)", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    expect(
+      screen.getByRole("region", { name: "Detalle de la orden" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Recoger por número de guía" }),
+    ).toBeInTheDocument();
   });
 });

@@ -7,7 +7,6 @@ import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
@@ -21,10 +20,12 @@ import {
   cierreIdSchema,
   aprobarCierreSchema,
   rechazarCierreSchema,
+  forzarSolicitudVencidoSchema,
   type ListarCierresAdminResult,
   type VerCierreDetalleResult,
   type AprobarCierreResult,
   type RechazarCierreResult,
+  type ForzarSolicitudVencidoResult,
 } from "@/lib/types/cierres-admin";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
@@ -149,6 +150,26 @@ export async function rechazarCierre(
     const data = rechazarCierreSchema.parse(input); // R11: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.rechazarCierre(data.cierreId, data.motivo, actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * Feature 111/R16 — VALVULA DE ESCAPE (emergencia, no el flujo normal): destraba un `vencido`
+ * ABANDONADO transicionandolo `vencido -> solicitado` en nombre del mensajero. Mutacion interna
+ * -> Server Action (patron aprobar/rechazar). `unauthenticated` (sin sesion) y `validation_error`
+ * (id no-uuid) en el borde; `forbidden`/`no_encontrada`/`conflict` los devuelve el service.
+ */
+export async function forzarSolicitudVencido(
+  input: unknown,
+  deps: CierresAdminDeps = {},
+): Promise<ForzarSolicitudVencidoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = forzarSolicitudVencidoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.forzarSolicitudVencido(data.cierreId, actor);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }

@@ -25,6 +25,12 @@ import type {
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
 
+// Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo total sobre las guías (texto fijo
+// i18n-ready, SIN PII ni datos del cierre). Mientras el mensajero tenga un cierre
+// `solicitado`/`vencido` sin resolver no puede gestionar NI recoger/escoger.
+const MSG_BLOQUEADO =
+  "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias."; // R1/R4/R20
+
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "en_espera_aceptacion";
 const ESTADO_EN_REPARTO = "en_reparto";
@@ -46,7 +52,13 @@ function distinct(values: string[]): string[] {
 export class MisAsignacionesService implements IMisAsignacionesService {
   constructor(
     private readonly repo: IGestionOrdenRepository,
-    private readonly ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue">,
+    // Feature 111/R1-R4: + `findMensajerosBloqueados` — MISMO predicado derivado de la
+    // asignación (`solicitado`/`vencido`), sin duplicar la derivación ni flag persistido. La
+    // guarda de bloqueo total lo consume en gestionar/recoger/escoger.
+    private readonly ordenRepo: Pick<
+      IOrdenRepository,
+      "findEstatusIdByValue" | "findMensajerosBloqueados"
+    >,
     private readonly storage: IFileStorage,
     private readonly signedUrls: ISignedUrlProvider,
     // Feature 92 (R23/R28): se usa para leer la secuencia optimizada al listar y para
@@ -84,6 +96,16 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       // Silencioso a proposito: no hay nada accionable que decirle al mensajero, y el
       // servicio de optimizacion caera al escalon siguiente del origen (R24).
     }
+  }
+
+  /**
+   * Feature 111/R1-R4/R2 — predicado de bloqueo total: `true` si el mensajero tiene un cierre
+   * en estado bloqueante (`solicitado`/`vencido`). REUSA `findMensajerosBloqueados` (mismo
+   * helper derivado de la asignación); NO duplica la derivación ni introduce un flag persistido.
+   */
+  private async estaBloqueado(usuarioId: string): Promise<boolean> {
+    const bloqueados = await this.ordenRepo.findMensajerosBloqueados([usuarioId]);
+    return bloqueados.has(usuarioId);
   }
 
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
@@ -162,6 +184,16 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     const ordenIds = distinct(input.ordenIds);
     if (ordenIds.length === 0) return { status: "ok", recogidas: [] };
 
+    // Feature 111/R4 (Q3): bloqueo total — un mensajero con un cierre pendiente
+    // (`solicitado`/`vencido`) no puede RECOGER. Guarda al inicio (ANTES de cualquier efecto:
+    // la transición vive en `recogerLote`), MISMO predicado que gestionar. Sin PII (R20).
+    if (await this.estaBloqueado(actor.usuarioId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_BLOQUEADO })),
+      };
+    }
+
     const rows = await this.repo.findByIdsParaGestion(ordenIds);
     const rowById = new Map(rows.map((r) => [r.id, r]));
 
@@ -205,6 +237,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async escogerParaGestion(ordenId: string, actor: Actor): Promise<EscogerServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
+    // Feature 111/R4 (Q3): bloqueo total — mensajero con cierre pendiente no puede ESCOGER una
+    // orden para gestión. Guarda al inicio, ANTES de fijar el puntero (sin efectos parciales).
+    if (await this.estaBloqueado(actor.usuarioId)) {
+      return { status: "conflict", motivo: MSG_BLOQUEADO };
+    }
+
     const guardia = await this.cargarOrdenGestionable(ordenId, actor);
     if (guardia.status !== "ok") return guardia;
 
@@ -218,6 +256,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
   async gestionar(input: GestionarInput, actor: Actor): Promise<GestionarServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
+
+    // Feature 111/R1/R2/R3 (obligatorio): bloqueo total — un mensajero con un cierre pendiente
+    // (`solicitado`/`vencido`) NO puede GESTIONAR. Guarda al INICIO, ANTES de cargar la orden y
+    // de subir la evidencia a Storage -> sin efectos parciales (R3: ni upload, ni transición, ni
+    // fila `gestion_orden`). MISMO predicado derivado de la asignación (R2). Sin PII (R20).
+    if (await this.estaBloqueado(actor.usuarioId)) {
+      return { status: "conflict", motivo: MSG_BLOQUEADO };
+    }
 
     const guardia = await this.cargarOrdenGestionable(input.ordenId, actor);
     if (guardia.status !== "ok") return guardia;

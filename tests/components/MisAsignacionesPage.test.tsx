@@ -5,6 +5,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import MisAsignacionesPage from "@/app/(app)/mis-asignaciones/page";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
+import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 import type { RolValue } from "@prisma/client";
 
 // Feature 36 (T14) — la página resuelve el rol SOLO server-side; rol ≠ mensajero
@@ -18,6 +19,12 @@ vi.mock("@/lib/actions/mis-asignaciones", () => ({
   recogerAsignaciones: vi.fn(),
   escogerParaGestion: vi.fn(),
   gestionar: vi.fn(),
+  liberarGestion: vi.fn(),
+}));
+// Feature 111/R12/R14: la página pre-fetch el flag de bloqueo del mensajero. Se mockea
+// para no arrastrar Prisma en jsdom (default: NO bloqueado).
+vi.mock("@/lib/actions/cierre-dia", () => ({
+  estadoBloqueoMensajero: vi.fn(),
 }));
 
 class NotFoundError extends Error {
@@ -46,9 +53,11 @@ vi.mock("@/hooks/useToast", () => ({
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarMisAsignaciones);
+const bloqueoMock = vi.mocked(estadoBloqueoMensajero);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: false });
   listarMock.mockResolvedValue({
     status: "ok",
     porRecoger: [],

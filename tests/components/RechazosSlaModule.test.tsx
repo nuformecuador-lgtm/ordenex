@@ -53,10 +53,10 @@ describe("RechazosSlaModule", () => {
     render(<RechazosSlaModule items={[]} total={0} page={1} pageSize={10} />);
 
     expect(
-      screen.getByText(/No tenés órdenes rechazadas por SLA/i),
+      screen.getByText(/No tenés órdenes rechazadas por plazo vencido/i),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("list", { name: "Órdenes rechazadas por SLA" }),
+      screen.queryByRole("list", { name: "Órdenes rechazadas por plazo vencido" }),
     ).toBeNull();
   });
 
@@ -77,7 +77,7 @@ describe("RechazosSlaModule", () => {
       />,
     );
 
-    const lista = screen.getByRole("list", { name: "Órdenes rechazadas por SLA" });
+    const lista = screen.getByRole("list", { name: "Órdenes rechazadas por plazo vencido" });
     expect(within(lista).getByText(/12345/)).toBeInTheDocument();
     expect(within(lista).getByText(/REM-777/)).toBeInTheDocument();
     expect(within(lista).getByText("Ana Cliente")).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe("RechazosSlaModule", () => {
 
     // total 25 / pageSize 10 = 3 paginas; page 2 de 3.
     expect(
-      screen.getByRole("navigation", { name: "Paginación de rechazos por SLA" }),
+      screen.getByRole("navigation", { name: "Paginación de rechazos por plazo vencido" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Página 2 de 3")).toBeInTheDocument();
   });

@@ -108,9 +108,11 @@ type OrdenPrismaClient = Pick<
   | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
 >;
 
-// Feature 41 (R12/R16/R17): estados de cierre que BLOQUEAN. `rechazado`/`aprobado` NO
-// bloquean (dinero conciliado o descartado). Fuente de verdad en lib/types/cierre.ts.
-const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido"];
+// Feature 41 (R12/R16/R17) + feature 109 (R29, modelo GLOBAL): estados de cierre ABIERTOS que
+// BLOQUEAN al mensajero. Solo `aprobado` es TERMINAL (dinero conciliado); `rechazado` deja de ser
+// terminal por LOGICA (109) — ahora BLOQUEA y es RE-SOLICITABLE (`rechazado -> solicitado`), igual
+// que `vencido`. Fuente de verdad en lib/types/cierre.ts.
+const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido", "rechazado"];
 const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
 
 // Feature 17/R3: nombre CONSTANTE del generador (nunca interpolar entrada de
@@ -1714,7 +1716,7 @@ export class OrdenRepository implements IOrdenRepository {
           AND NOT EXISTS (
             SELECT 1 FROM "cierre_dia" c
             WHERE c."mensajero_id" = ${mensajeroId}
-              AND c."estado" IN ('solicitado', 'vencido')
+              AND c."estado" IN ('solicitado', 'vencido', 'rechazado')
           )
         RETURNING "id"`;
       await appendCambioEstado(

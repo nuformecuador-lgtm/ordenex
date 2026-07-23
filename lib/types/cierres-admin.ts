@@ -4,6 +4,7 @@ import type {
   CierreDetalleAdminServiceResult,
   AprobarCierreServiceResult,
   RechazarCierreServiceResult,
+  ForzarSolicitudVencidoServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
 
 // Feature 38 — schemas zod del borde de las Server Actions "Cierres del dia" del
@@ -17,6 +18,10 @@ export const cierreIdSchema = z.object({
 });
 
 export const aprobarCierreSchema = cierreIdSchema;
+
+// Feature 111/R16: la valvula de escape identifica el cierre `vencido` a destrabar por su id
+// (mismo shape que aprobar). Un id mal formado -> VALIDATION_ERROR en el borde.
+export const forzarSolicitudVencidoSchema = cierreIdSchema;
 
 // R11: el motivo de rechazo es OBLIGATORIO y no vacio. `.trim().min(1)` rechaza el
 // string en blanco (defensa de borde; el service lo re-valida).
@@ -43,4 +48,10 @@ export type AprobarCierreResult =
   | { status: "unauthenticated" };
 export type RechazarCierreResult =
   | RechazarCierreServiceResult
+  | { status: "unauthenticated" };
+// Feature 111/R16: resultado de la Server Action de la valvula de escape (dominio del service
+// + `validation_error` de zod / `unauthenticated` sin sesion, resueltos en el borde).
+export type ForzarSolicitudVencidoResult =
+  | ForzarSolicitudVencidoServiceResult
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "unauthenticated" };

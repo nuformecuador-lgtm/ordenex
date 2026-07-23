@@ -18,8 +18,8 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("OrdenRepository.findMensajerosBloqueados (R12/R16)", () => {
-  it("R12/R16: consulta estado IN (solicitado, vencido); devuelve el set de bloqueados", async () => {
+describe("OrdenRepository.findMensajerosBloqueados (R12/R16 + feature 109/R29)", () => {
+  it("R29: consulta estado IN (solicitado, vencido, rechazado); devuelve el set de bloqueados", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.findMany.mockResolvedValue([{ mensajeroId: "m1" }, { mensajeroId: "m3" }]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -30,8 +30,27 @@ describe("OrdenRepository.findMensajerosBloqueados (R12/R16)", () => {
     const arg = prisma.cierreDia.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({
       mensajeroId: { in: ["m1", "m2", "m3"] },
-      estado: { in: ["solicitado", "vencido"] }, // R16: rechazado/aprobado NO bloquean
+      // Feature 109/R29 (modelo GLOBAL): SOLO `aprobado` deja de bloquear. `rechazado` YA NO es
+      // terminal -> bloquea (y es re-solicitable), igual que `vencido`/`solicitado`.
+      estado: { in: ["solicitado", "vencido", "rechazado"] },
     });
+  });
+
+  // Feature 109/R29: un mensajero con un cierre `rechazado` SIGUE bloqueado (antes de la 109 el
+  // rechazo desbloqueaba; ahora bloquea hasta re-solicitar + aprobar).
+  it("R29: un cierre `rechazado` bloquea al mensajero (por-mensajero)", async () => {
+    const prisma = buildPrisma();
+    // El WHERE incluye 'rechazado' -> el cierre rechazado de m1 lo devuelve la query.
+    prisma.cierreDia.findMany.mockImplementation(
+      async (args: { where: { estado: { in: string[] } } }) => {
+        expect(args.where.estado.in).toContain("rechazado");
+        return [{ mensajeroId: "m1" }];
+      },
+    );
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const set = await repo.findMensajerosBloqueados(["m1"]);
+    expect(set).toEqual(new Set(["m1"]));
   });
 
   it("ids vacio -> set vacio sin consultar", async () => {
@@ -54,7 +73,7 @@ describe("OrdenRepository.findZonasConMensajeroBloqueado", () => {
     expect(prisma.usuario.findMany).toHaveBeenCalledTimes(1); // sin N+1 por zona
   });
 
-  it("filtra por rol mensajero, zona no nula y cierre solicitado/vencido; distinct por zona", async () => {
+  it("R29: filtra por rol mensajero, zona no nula y cierre solicitado/vencido/rechazado; distinct por zona", async () => {
     const prisma = buildPrisma();
     prisma.usuario.findMany.mockResolvedValue([]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -64,7 +83,8 @@ describe("OrdenRepository.findZonasConMensajeroBloqueado", () => {
     expect(arg.where).toMatchObject({
       rol: { value: "mensajero" },
       zonaId: { not: null },
-      cierresRealizados: { some: { estado: { in: ["solicitado", "vencido"] } } },
+      // Feature 109/R29: el conjunto bloqueante por zona tambien gana `rechazado`.
+      cierresRealizados: { some: { estado: { in: ["solicitado", "vencido", "rechazado"] } } },
     });
     expect(arg.distinct).toEqual(["zonaId"]);
   });
@@ -178,7 +198,7 @@ describe("OrdenRepository.existeBodegaSateliteBloqueada (regla >=1, 2026-07-16)"
     });
     expect(prisma.cierreDia.findMany.mock.calls[0][0].where).toMatchObject({
       mensajeroId: { in: ["m1"] },
-      estado: { in: ["solicitado", "vencido"] },
+      estado: { in: ["solicitado", "vencido", "rechazado"] }, // feature 109/R29
     });
     expect(prisma.cierreBodega.count.mock.calls[0][0].where).toMatchObject({
       zonaId: "z1",

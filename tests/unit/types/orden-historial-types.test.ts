@@ -38,10 +38,12 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "reprogramacion_tienda", // feature 100: adminTienda reprograma devuelta -> reprogramada
     "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite
     "cancelacion_api", // feature 106: OrdenRepository.cancelarViaApi (cancelacion por API key)
+    "corte_sin_gestionar", // feature 109: CierreDiaRepository.crearCierre (corte, en_reparto -> sin_gestionar, actor null)
+    "liberacion_sin_gestionar", // feature 109: CierresAdminRepository.resolverCierre (aprobar, sin_gestionar -> bodega)
   ];
 
-  it("contiene exactamente los 18 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(18);
+  it("contiene exactamente los 20 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(20);
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

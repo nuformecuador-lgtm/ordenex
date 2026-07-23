@@ -418,10 +418,12 @@ model Orden {
 
 // Feature 36 (R5, decision F1.4-c): metodo de pago del recaudo al cliente en una
 // ENTREGA. Enum Postgres nativo (patron RolValue/VehiculoValue), fuente unica de
-// verdad reflejada en lib/types/metodo-pago.ts. OJO 'SIMPE' en mayusculas (F1.4-c).
+// verdad reflejada en lib/types/metodo-pago.ts. OJO 'SINPE' en mayusculas (medio de
+// pago de Costa Rica). Feature 118: corregido el typo historico del valor via
+// ALTER TYPE ... RENAME VALUE (migracion _metodo_pago_rename_simpe_to_sinpe).
 enum MetodoPagoValue {
   efectivo
-  SIMPE
+  SINPE
   transferencia
 
   @@map("metodo_pago_value")
@@ -970,6 +972,8 @@ enum OrdenHistorialOrigenTipo {
   reprogramacion_tienda // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
   recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite (accion manual, actor admin)
   cancelacion_api // feature 106: tienda cancela via API key en_bodega/en_ruta_bodega_principal -> devuelta_origen (marcador motivo="cancelada por tienda")
+  corte_sin_gestionar // feature 109: corte diario transiciona en_reparto -> sin_gestionar (actor null/cron)
+  liberacion_sin_gestionar // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega/en_bodega_satelite (actor admin)
 
   @@map("orden_historial_origen_tipo")
 }

@@ -8,6 +8,7 @@ import {
   verCierreDetalle,
   aprobarCierre,
   rechazarCierre,
+  forzarSolicitudVencido,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
@@ -26,6 +27,8 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
   listarCierresAdmin: vi.fn(),
+  // Feature 111/R16: válvula de escape (destrabar `vencido` abandonado).
+  forzarSolicitudVencido: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -52,6 +55,7 @@ vi.mock("next/navigation", () => ({
 const verDetalleMock = vi.mocked(verCierreDetalle);
 const aprobarMock = vi.mocked(aprobarCierre);
 const rechazarMock = vi.mocked(rechazarCierre);
+const forzarMock = vi.mocked(forzarSolicitudVencido);
 
 const ZERO_TOTALES: CierreTotales = {
   efectivo: "0.00",
@@ -464,7 +468,7 @@ describe("CierresAdminModule", () => {
         gestionId: "g1",
         resultado: "entregada",
         montoRecibido: "1250.50",
-        metodoPago: "SIMPE",
+        metodoPago: "SINPE",
       }),
     ];
     verDetalleMock.mockResolvedValue({
@@ -485,7 +489,7 @@ describe("CierresAdminModule", () => {
     });
     const region = within(dialog).getByRole("region", { name: "Entregadas" });
     expect(within(region).getByText("₡1250.50")).toBeInTheDocument();
-    expect(within(region).getByText("SIMPE")).toBeInTheDocument();
+    expect(within(region).getByText("SINPE")).toBeInTheDocument();
   });
 
   it("feature 56/R23 (Q6): el badge 'Sin tarifa' se muestra por el flag tarifaFaltante en ENTREGAS", async () => {
@@ -654,7 +658,7 @@ describe("CierresAdminModule", () => {
     });
     // El total combinado (56) + las dos sublíneas del desglose por origen (102/R8).
     expect(within(region).getByText("₡9200.00")).toBeInTheDocument();
-    expect(within(region).getByText("Por SLA (cron)")).toBeInTheDocument();
+    expect(within(region).getByText("Automático (por plazo vencido)")).toBeInTheDocument();
     expect(within(region).getByText("₡6000.00")).toBeInTheDocument();
     expect(within(region).getByText("Manual (mensajero)")).toBeInTheDocument();
     expect(within(region).getByText("₡3200.00")).toBeInTheDocument();
@@ -706,7 +710,7 @@ describe("CierresAdminModule", () => {
     const filaManual = within(region).getByText("REM-MAN").closest("tr");
     expect(filaSla).not.toBeNull();
     expect(filaManual).not.toBeNull();
-    expect(within(filaSla as HTMLElement).getByText("SLA")).toBeInTheDocument();
+    expect(within(filaSla as HTMLElement).getByText("Automático")).toBeInTheDocument();
     expect(within(filaManual as HTMLElement).getByText("Manual")).toBeInTheDocument();
   });
 
@@ -925,7 +929,7 @@ describe("CierresAdminModule", () => {
     ).not.toBeInTheDocument();
   });
 
-  // ---------- Feature 41 (F1, R20) ----------
+  // ---------- Feature 41 (F1, R20) + Feature 111 (R15/R16) ----------
 
   it("R20: un cierre 'vencido' se muestra en la cola con badge DIFERENCIADO del 'solicitado'", () => {
     renderModule({
@@ -950,32 +954,32 @@ describe("CierresAdminModule", () => {
     expect(within(region).getByText("Eva Vencida")).toBeInTheDocument();
   });
 
-  it("R20: un 'vencido' es RESOLUBLE — su detalle expone aprobar/rechazar", async () => {
-    const user = userEvent.setup();
-    verDetalleMock.mockResolvedValue({
-      status: "ok",
-      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
-      cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),
-      grupos: emptyGrupos(),
-      totalesIngreso: zeroIngreso(),
-      ganancia: "0.00",
-      pagoTienda: "0.00",
+  it("R16: la acción DIFERENCIADA 'Destrabar cierre vencido' aparece SOLO en las filas 'vencido'", () => {
+    renderModule({
+      pendientes: [
+        makeResumen({ cierreId: "cv", estado: "vencido", mensajeroNombre: "Eva Vencida" }),
+        makeResumen({ cierreId: "cs", estado: "solicitado", mensajeroNombre: "Sol Solicita" }),
+      ],
     });
-    renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
 
-    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
-    const dialog = await screen.findByRole("dialog", {
-      name: "Detalle del cierre",
+    const region = screen.getByRole("region", { name: "Pendientes de decisión" });
+    // Una sola fila (la vencida) ofrece el destrabe; el `solicitado` no.
+    const destrabar = within(region).getAllByRole("button", {
+      name: /Destrabar cierre vencido abandonado de/,
     });
+    expect(destrabar).toHaveLength(1);
     expect(
-      within(dialog).getByRole("button", { name: "Aprobar" }),
+      within(region).getByRole("button", {
+        name: "Destrabar cierre vencido abandonado de Eva Vencida",
+      }),
     ).toBeInTheDocument();
+    // El `solicitado` mantiene su "Ver / decidir"; el `vencido` NO lo ofrece.
     expect(
-      within(dialog).getByRole("button", { name: "Rechazar" }),
+      within(region).getByRole("button", { name: "Ver / decidir" }),
     ).toBeInTheDocument();
   });
 
-  it("R20: aprobar un 'vencido' llama a aprobarCierre y refresca", async () => {
+  it("R15: un 'vencido' NO es resoluble por la vía normal — su detalle NO expone aprobar/rechazar", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
@@ -986,22 +990,148 @@ describe("CierresAdminModule", () => {
       ganancia: "0.00",
       pagoTienda: "0.00",
     });
-    aprobarMock.mockResolvedValue({
-      status: "ok",
-      cierreId: "cv",
-      estado: "aprobado",
-    });
     renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
 
-    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    // La fila `vencido` se ve con "Ver" (solo lectura del detalle).
+    await user.click(screen.getByRole("button", { name: "Ver" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
-    await user.click(within(dialog).getByRole("button", { name: "Aprobar" }));
+    expect(
+      within(dialog).queryByRole("button", { name: "Aprobar" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Rechazar" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("R16: destrabar pide confirmación (excepción) y al confirmar llama a forzarSolicitudVencido y refresca", async () => {
+    const user = userEvent.setup();
+    forzarMock.mockResolvedValue({
+      status: "ok",
+      cierreId: "cv",
+      estado: "solicitado",
+    });
+    renderModule({
+      pendientes: [
+        makeResumen({ cierreId: "cv", estado: "vencido", mensajeroNombre: "Eva Vencida" }),
+      ],
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Destrabar cierre vencido abandonado de Eva Vencida",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Destrabar cierre vencido abandonado",
+    });
+    // Copy de EXCEPCIÓN: deja claro que es en nombre del mensajero y que luego se aprueba/rechaza.
+    expect(dialog).toHaveTextContent(/excepción/i);
+    expect(dialog).toHaveTextContent(/Eva Vencida/);
+    // No se llamó a la action hasta confirmar (confirmación explícita).
+    expect(forzarMock).not.toHaveBeenCalled();
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Destrabar (excepción)" }),
+    );
 
     await vi.waitFor(() =>
-      expect(aprobarMock).toHaveBeenCalledWith({ cierreId: "cv" }),
+      expect(forzarMock).toHaveBeenCalledWith({ cierreId: "cv" }),
     );
+    await vi.waitFor(() => expect(successMock).toHaveBeenCalled());
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  it("R16: cancelar la confirmación del destrabe NO llama a la action", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      pendientes: [
+        makeResumen({ cierreId: "cv", estado: "vencido", mensajeroNombre: "Eva Vencida" }),
+      ],
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Destrabar cierre vencido abandonado de Eva Vencida",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Destrabar cierre vencido abandonado",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    expect(forzarMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("R16: si el destrabe da conflict, muestra toast accionable y refresca", async () => {
+    const user = userEvent.setup();
+    forzarMock.mockResolvedValue({ status: "conflict" });
+    renderModule({
+      pendientes: [
+        makeResumen({ cierreId: "cv", estado: "vencido", mensajeroNombre: "Eva Vencida" }),
+      ],
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Destrabar cierre vencido abandonado de Eva Vencida",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Destrabar cierre vencido abandonado",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Destrabar (excepción)" }),
+    );
+
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(successMock).not.toHaveBeenCalled();
+  });
+
+  // ---------- Feature 109 (R31): `rechazado` del histórico rotulado como bloqueante ----------
+
+  it("R31: un 'rechazado' del histórico se rotula 'Bloqueante hasta re-solicitud' (no resuelto/cerrado)", () => {
+    renderModule({
+      historico: [
+        makeResumen({
+          cierreId: "c-rech",
+          estado: "rechazado",
+          mensajeroNombre: "Rita Rechazada",
+          resueltoAt: "2026-07-20T08:00:00.000Z",
+          motivoRechazo: "Montos no cuadran",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Histórico" });
+    // Conserva su etiqueta "Rechazado"…
+    expect(within(region).getByText("Rechazado")).toBeInTheDocument();
+    // …pero se rotula BLOQUEANTE hasta que el mensajero lo re-solicite (no "resuelto").
+    expect(
+      within(region).getByText("Bloqueante hasta re-solicitud"),
+    ).toBeInTheDocument();
+  });
+
+  it("R31: un 'aprobado' del histórico NO lleva el rótulo de bloqueante (es terminal)", () => {
+    renderModule({
+      historico: [
+        makeResumen({
+          cierreId: "c-apr",
+          estado: "aprobado",
+          mensajeroNombre: "Ada Aprobada",
+          resueltoAt: "2026-07-20T08:00:00.000Z",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Histórico" });
+    expect(within(region).getByText("Aprobado")).toBeInTheDocument();
+    expect(
+      within(region).queryByText("Bloqueante hasta re-solicitud"),
+    ).toBeNull();
   });
 });
