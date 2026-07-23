@@ -32,6 +32,12 @@ vi.mock("@/lib/actions/ruta-mensajero", () => ({
 vi.mock("@/app/(app)/mis-asignaciones/_components/RutaMapa", () => ({
   RutaMapa: () => <div data-testid="ruta-mapa" />,
 }));
+// Feature 116: el panel de detalle del módulo monta `NotaPrivadaMensajero`, que importa estas
+// Server Actions (`"use server"` con Prisma detrás). Se mockean para no cargar Prisma en jsdom.
+vi.mock("@/lib/actions/notas-privadas-mensajero", () => ({
+  guardarNotaPrivada: vi.fn(),
+  limpiarNotaPrivada: vi.fn(),
+}));
 
 const { successMock, errorMock, warningMock, refreshMock } = vi.hoisted(() => ({
   successMock: vi.fn(),

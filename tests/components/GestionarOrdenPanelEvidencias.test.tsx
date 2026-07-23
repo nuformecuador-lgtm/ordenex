@@ -16,6 +16,17 @@ vi.mock("@/lib/actions/mis-asignaciones", () => ({
   gestionar: vi.fn(),
 }));
 
+// Feature 116: el panel monta `NotaPrivadaMensajero`, que usa `useRouter` e importa estas
+// Server Actions (`"use server"` con Prisma detrás). Se mockean el router y las actions para no
+// cargar Prisma en jsdom; el comportamiento del editor se prueba en `NotaPrivadaMensajero.test.tsx`.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
+vi.mock("@/lib/actions/notas-privadas-mensajero", () => ({
+  guardarNotaPrivada: vi.fn(),
+  limpiarNotaPrivada: vi.fn(),
+}));
+
 const { successMock, errorMock } = vi.hoisted(() => ({
   successMock: vi.fn(),
   errorMock: vi.fn(),

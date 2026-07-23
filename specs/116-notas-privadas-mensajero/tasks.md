@@ -59,21 +59,21 @@
 
 ## Bloque F — UI del mensajero (frontend) [depende de D1, E1]
 
-- [ ] **F1. [F]** Crear `app/(app)/mis-asignaciones/_components/NotaPrivadaMensajero.tsx` (cliente):
+- [x] **F1. [F]** Crear `app/(app)/mis-asignaciones/_components/NotaPrivadaMensajero.tsx` (cliente):
   `Textarea` + Guardar + Limpiar (etiqueta "Mi nota", distinta de "Notas"); llama a las Server Actions,
   `toast` + `router.refresh()` en éxito; estado de carga en submit; datos por props
   (`ordenId`, `notaInicial`).
   _Hecho:_ componente: con `notaInicial="x"` muestra "x" y permite editar/limpiar; con `null` muestra
   editor vacío; en éxito refresca. (R11/R14)
 
-- [ ] **F2. [F]** Insertar `<NotaPrivadaMensajero ordenId={orden.id} notaInicial={orden.notaPrivada} />`
+- [x] **F2. [F]** Insertar `<NotaPrivadaMensajero ordenId={orden.id} notaInicial={orden.notaPrivada} />`
   como hermano de `<AsignacionDetalle>` en el detalle del mensajero (panel de `MisAsignacionesModule` /
   `renderDetalle` de "Por recoger"), SIN volver interactivo `AsignacionDetalle` (la "Notas" de tienda
   permanece ahí).
   _Hecho:_ componente/integración de render: el detalle muestra DOS campos distintos y etiquetados
   ("Notas" tienda vs. "Mi nota" privada); la privada solo aparece en el contexto del mensajero. (R7/R11)
 
-- [ ] **F3. [F] [P]** Indicador/badge de nota privada en la card de "En reparto / por gestionar"
+- [x] **F3. [F] [P]** Indicador/badge de nota privada en la card de "En reparto / por gestionar"
   (`MisAsignacionesModule.tsx`) cuando `orden.notaPrivada` no es `null` (preview truncado, P3).
   _Hecho:_ componente: card con `notaPrivada` presente muestra el indicador; sin nota, no. (R12)
 
@@ -88,7 +88,7 @@
   _Hecho:_ unit/lint: motivos sin PII (solo `status` discriminados); `grep` sin `console.*` en los
   archivos nuevos; el service pasa SIEMPRE `actor.usuarioId` (nunca un dato del input). (R17)
 
-- [ ] **G3.** Escribir el mapa `R<n> → test` en `progress/impl_116-*.md` (el implementer al ejecutar;
+- [x] **G3.** Escribir el mapa `R<n> → test` en `progress/impl_116-*.md` (el implementer al ejecutar;
   el reviewer lo verifica).
   _Hecho:_ cada `R1..R17` referencia al menos un test por su ruta. (trazabilidad)
 

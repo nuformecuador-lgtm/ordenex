@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { StickyNote } from "lucide-react";
 
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -488,6 +489,22 @@ export function MisAsignacionesModule({
                                 Gestionar más tarde
                               </Badge>
                             ) : null}
+                          </div>
+                        ) : null}
+                        {/* Feature 116/R12: indicador de la NOTA PRIVADA del mensajero en la card
+                            (badge "Mi nota" + preview truncado de 1 línea, P3). Todas las cards son
+                            órdenes PROPIAS (la page valida rol server-side), así que el preview es
+                            privado por construcción (R6). Es DISTINTO de la "Notas" de la tienda,
+                            que vive dentro del detalle (`AsignacionDetalle`). */}
+                        {orden.notaPrivada ? (
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="secondary" className="shrink-0">
+                              <StickyNote aria-hidden="true" />
+                              Mi nota
+                            </Badge>
+                            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                              {orden.notaPrivada}
+                            </span>
                           </div>
                         ) : null}
                         {/* Feature 113/R1/R2: detalle COMPLETO inline (Pedido/Entrega/Cobro)

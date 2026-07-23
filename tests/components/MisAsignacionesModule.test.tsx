@@ -58,6 +58,14 @@ vi.mock("@/lib/actions/orden-mensajero-meta", () => ({
     .mockResolvedValue({ status: "ok", ordenId: "g1", marcarLuego: true }),
 }));
 
+// Feature 116: el panel de detalle monta `NotaPrivadaMensajero`, que importa estas Server
+// Actions (`"use server"` con Prisma detrás). Se mockean para no cargar Prisma en jsdom; su
+// comportamiento propio se prueba en `NotaPrivadaMensajero.test.tsx`.
+vi.mock("@/lib/actions/notas-privadas-mensajero", () => ({
+  guardarNotaPrivada: vi.fn(),
+  limpiarNotaPrivada: vi.fn(),
+}));
+
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
   successMock: vi.fn(),
   errorMock: vi.fn(),
