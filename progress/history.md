@@ -1844,3 +1844,16 @@
 - R1–R9 trazados a tests. typecheck 0, lint 0, **4657/4657**. Reviewer APROBADO. **PR #150 → dev, merge
   humano 2026-07-23.** El `frontend_dev` cayó por un error de API a mitad; el leader lo reanudó y remató
   (tests + push). Sin migraciones ni env nuevas.
+
+## 2026-07-23 — 116 mensajero: notas privadas por orden
+- Nota de texto libre **privada del mensajero** por orden, distinta de `orden.notas` (nota de la tienda).
+  **SIN migración:** reutiliza la tabla `orden_mensajero_meta` y su columna `nota` de la feature 115.
+- Server Actions `guardarNotaPrivada`/`limpiarNotaPrivada` con authz por mensajero (`usuario_id` SIEMPRE del
+  actor); `upsertNota` PRESERVA `marcar_luego`; `limpiar` = `nota=NULL` idempotente sin borrar la fila;
+  guardar en blanco → limpiar (R5); orden inexistente/ajena → `forbidden` sin excepción cruda. `notaPrivada`
+  en `MiAsignacionDTO` solo del propio actor, vía el `Promise.all` de 115 (sin N+1).
+- UI: editor "Mi nota" en el detalle (separado y etiquetado distinto de "Notas" de tienda) + indicador en la
+  card. Preserva 113/114/115. `orden.notas` nunca se toca (R7).
+- R1–R17 trazados a tests. typecheck 0, lint 0, **4779/4779**. Reviewer APROBADO. **PR #152 → dev, merge
+  humano 2026-07-23.** El backend cayó por un error de API a mitad; el leader lo reanudó y remató. Sin
+  migraciones ni env nuevas.

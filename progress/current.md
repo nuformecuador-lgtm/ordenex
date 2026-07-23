@@ -30,8 +30,8 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 | 113 | card en reparto: detalle completo inline + modo foco al gestionar | frontend | med | 36 ✅ | ✅ **done** (PR #147) |
 | 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | ✅ **done** (PR #150) |
 | 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | ✅ **done** (PR #146) |
-| 116 | notas privadas del mensajero (reusa tabla de 115, sin migración) | fullstack | med | 115 | **in_progress** (backend) |
-| 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | spec_ready |
+| 116 | notas privadas del mensajero (reusa tabla de 115, sin migración) | fullstack | med | 115 | ✅ **done** (PR #152) |
+| 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | **in_progress** |
 | 118 | SIMPE → SINPE (~23 archivos reales, enum Postgres + textos) | fullstack | high | — | ✅ **done** (PR #145) |
 | 119 | evidencias: de 1 a 1..N fotos (tabla nueva `gestion_orden_evidencia`) | fullstack | high | 75 ✅ | ✅ **done** (PR #148) |
 
@@ -44,12 +44,15 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
   el humano: sin valores de secretos, seguir igual.)
 - **114 (buscador)** ✅ done (PR #150, merge humano 21:50). Mapa refleja el filtro (gate F1.4); 113/115
   preservados. Ya en `history.md`.
-- **116 (notas — backend)** 🟡 en curso, **adelantado en paralelo** con el merge de 114: es disjunto (toca
-  service/repo/DTO — reusa la tabla de 115, sin migración — NO el módulo). Su frontend (editor en el detalle
-  + indicador en card) va tras el merge de 114.
-- Cola: **117** (filtro) + el frontend de 116 (ambos tocan `MisAsignacionesModule.tsx`, van tras 114 en `dev`).
-  **Gating: cada PR mergeado desbloquea el siguiente.** Ramas nacen de `origin/dev`; specs vía cherry-pick.
-  Bookkeeping en `chore/registro-features-112-118` (worktree local `.claude/worktrees/chore-bk`; working principal en `dev`).
+- **116 (notas)** ✅ done (PR #152, merge humano 22:57). Editor "Mi nota" + indicador en card; sin migración
+  (reusa la tabla de 115); `orden.notas` intacta. Ya en `history.md`.
+- **117 (filtro cantón/distrito)** 🟡 en curso (frontend) — la **ÚLTIMA** del lote. Etiqueta "Cantón
+  (Provincia)", el mapa refleja el filtro, y se compone en AND con el buscador de 114. Preserva 113/114/115/116.
+- **Deuda AJENA en `dev`** (hallazgo del reviewer de 116): **2 migraciones sin `down.sql`** entraron por otra
+  feature (no del lote 113–119); `init.sh` las marca como *warning* (no bloquea). La regla del arné pide
+  reverso para toda migración → conviene que la sesión dueña lo salde. (También un error de lint de la
+  feature 120 bloqueaba `init.sh`; se saldó con el PR #151.)
+- Bookkeeping en `chore/registro-features-112-118` (worktree local `.claude/worktrees/chore-bk`; working principal en `dev`).
 - Recordatorio a los implementadores: **marcar las tareas `[x]` en `tasks.md`** al completarlas (lo exige
   CHECKPOINTS.md; 113 fue rechazada por esto).
 - Deuda de infra anotada: la DB local arrastra una migración `20260722223329` registrada por otro
