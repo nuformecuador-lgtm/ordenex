@@ -1299,7 +1299,7 @@
       "name": "correccion ortografica SIMPE -> SINPE en toda la app",
       "spec_path": "specs/118-sinpe-correccion",
       "description": "Fullstack (chore, ~59 archivos). Corregir 'SIMPE' -> 'SINPE' (medio de pago de CR). (a) enum Postgres metodo_pago: ALTER TYPE ... RENAME VALUE 'SIMPE' TO 'SINPE' + down.sql inverso; (b) lib/types/metodo-pago.ts y metodo-pago-options.ts; (c) seeds; (d) textos user-facing; (e) tests que lo referencian. NO renombrar columnas internas total_simpe (no user-facing).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",

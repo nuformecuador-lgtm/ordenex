@@ -1775,3 +1775,17 @@
   vivo, como la allow-list de `zonas-migration`). (3) Follow-up no bloqueante: aserción explícita de
   R13 (aprobar `vencido` money-neutral → 0 wallet), hoy garantizado por construcción. (4) Despliegue:
   `prisma migrate deploy` en destino (2 migraciones).
+
+## 2026-07-23 — 118 corrección SIMPE → SINPE (medio de pago CR)
+- Rename del VALOR del enum Postgres/Prisma `metodo_pago_value` `SIMPE`→`SINPE` (typo introducido en la
+  feature 36), **reversible**: migración nueva `ALTER TYPE ... RENAME VALUE 'SIMPE' TO 'SINPE'` +
+  `down.sql` inverso (preserva filas, no reescribe; migración histórica intacta).
+- Alcance real ~27 archivos (8 fuentes + 12 tests + migración up/down + test de rename + guard de
+  censo). Identificadores internos NO tocados por regla explícita (`total_simpe`/`totalSimpe`/clave
+  DTO interna `simpe`). El ripple del test frágil `zonas-migration` se saldó excluyendo la migración
+  nueva (patrón conocido).
+- R1–R12 trazados a tests. Guard de censo case-sensitive de `SIMPE` como test Vitest. typecheck 0,
+  lint 0, **4528/4528 tests**. Reviewer APROBADO (0 bloqueantes). **PR #145 → dev, merge humano
+  2026-07-23.** Despliegue: `prisma migrate deploy`.
+- Contexto: nació en el lote mensajero registrado como 112–118 y **renumerado a 113–119** por colisión
+  del ID 112 con `webhook-payload` (PR #144, de otra sesión); esta feature quedó como **118**.
