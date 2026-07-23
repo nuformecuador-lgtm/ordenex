@@ -33,11 +33,14 @@ import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
 // Action (recoger / escoger / gestionar / liberar) y refrescan la ruta
 // (router.refresh) para releer el estado del servidor.
 //
-// UX "En reparto": grilla de cards arriba + PANEL de detalle grande e inline
-// debajo (no modal). Siempre hay una orden en el panel de detalle mientras haya
-// órdenes en reparto: por defecto la ACTIVA (si hay puntero fijado) o la PRIMERA.
-// Solo la orden del panel es gestionable. El bloqueo 1-a-1 (R19/R20) deshabilita
-// y oculta los detalles de las demás mientras hay una gestión activa.
+// UX "En reparto" (feature 113): cada card muestra el detalle COMPLETO inline
+// (Pedido/Entrega/Cobro, vía `AsignacionDetalle`), no una vista compacta. Cuando el
+// puntero 1-a-1 (`ordenEnGestionId`) queda fijado y el mensajero NO está bloqueado, la
+// vista entra en MODO FOCO y colapsa a SOLO el panel de la orden activa: se ocultan la
+// grilla de cards, el mapa/ruta y la sección "Por recoger" para gestionar sin
+// distracciones. Al liberar/finalizar la gestión el puntero vuelve a `null`
+// (router.refresh) y se restaura la vista completa. El bloqueo 1-a-1 (R19/R20) sigue
+// siendo una restricción de ACCIÓN (no se puede escoger otra orden), no de visibilidad.
 
 export interface MisAsignacionesModuleProps {
   /** Órdenes en `en_espera_aceptacion` (por recoger). */
@@ -141,6 +144,14 @@ export function MisAsignacionesModule({
     return porGestionar[0];
   }, [porGestionar, ordenEnGestionId, seleccionId]);
 
+  // Feature 113/R5 — MODO FOCO: flag DERIVADO de una sola fuente de verdad
+  // (`ordenEnGestionId`, backend, robusto a recarga). Con una gestión activa y sin
+  // bloqueo, la vista colapsa a SOLO el panel de la orden activa (R5–R9). Al volver el
+  // puntero a `null` tras `router.refresh()` deja de cumplirse y se restaura la vista
+  // completa (R10) sin estado extra. `bloqueado` tiene precedencia: anula el foco (R12).
+  const modoFoco =
+    !bloqueado && ordenEnGestionId !== null && detalleOrden !== null;
+
   // Seleccionar una card la lleva al panel de detalle. Bloqueada si hay otra
   // gestión activa (R19/R20): no se puede cambiar la orden del panel. Feature
   // 111/R14: si el mensajero está BLOQUEADO no se puede escoger (defensa suave).
@@ -193,6 +204,9 @@ export function MisAsignacionesModule({
   return (
     <div className="flex flex-col gap-8">
       {/* ---------- Aviso de BLOQUEO TOTAL del mensajero (feature 111/R12) ---------- */}
+      {/* Precede a todo y tiene precedencia sobre el modo foco (feature 113/R12): un
+          mensajero BLOQUEADO no colapsa a foco; ve el aviso, la lista con detalle inline
+          y las cards deshabilitadas, sin panel de gestión. */}
       {bloqueado ? (
         <p
           role="alert"
@@ -202,244 +216,250 @@ export function MisAsignacionesModule({
         </p>
       ) : null}
 
-      {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
-      {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
-          contra `porRecoger` (restricción "asignada a mí") y aceptan con la MISMA action
-          `recogerAsignaciones`, directo al confirmar (sin modal):
-            (1) input de número de guía tecleado + Enter/botón;
-            (2) escáner de cámara (QR de la etiqueta -> num_guia).
-          Feature 111/R14: BLOQUEADO oculta ambos controles de recogida (defensa suave;
-          la lista de "Por recoger" sigue visible, solo-visualización). */}
-      {bloqueado ? null : (
+      {modoFoco && detalleOrden ? (
+        /* ---------- MODO FOCO (feature 113/R5–R9) ---------- */
+        /* Vista sin distracciones para gestionar la orden activa en la calle: SOLO el
+           panel (que ya incluye el detalle completo + el flujo de 4 resultados y
+           "Cancelar gestión"). Se omiten la grilla de cards (R6), el mapa/ruta y
+           "Sincronizar ruta" (R7) y la sección "Por recoger" (R8). Arranca en `yaActiva`
+           (el puntero 1-a-1 ya está fijado). Al liberar/finalizar la gestión el puntero
+           vuelve a `null` y la vista completa se restaura sola (R10). */
+        <GestionarOrdenPanel
+          key={detalleOrden.id}
+          orden={detalleOrden}
+          yaActiva
+          onGestionarPedido={gestionarPedido}
+          onCancelarGestion={cancelarGestion}
+          onSuccess={handleGestionSuccess}
+        />
+      ) : (
+        /* ---------- VISTA COMPLETA (fuera de foco) ---------- */
         <>
-          <InputRecoger
-            porRecoger={porRecoger}
-            onRecogida={() => router.refresh()}
+          {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
+          {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
+              contra `porRecoger` (restricción "asignada a mí") y aceptan con la MISMA action
+              `recogerAsignaciones`, directo al confirmar (sin modal):
+                (1) input de número de guía tecleado + Enter/botón;
+                (2) escáner de cámara (QR de la etiqueta -> num_guia).
+              Feature 111/R14: BLOQUEADO oculta ambos controles de recogida (defensa suave;
+              la lista de "Por recoger" sigue visible, solo-visualización). */}
+          {bloqueado ? null : (
+            <>
+              <InputRecoger
+                porRecoger={porRecoger}
+                onRecogida={() => router.refresh()}
+              />
+              <EscanerRecoger
+                porRecoger={porRecoger}
+                onRecogida={() => router.refresh()}
+              />
+            </>
+          )}
+
+          {/* Lista de SOLO-VISUALIZACIÓN (feature 96): reutiliza la sección compartida "por
+              aceptar" con `mostrarAcciones={false}` (ya no hay botones "Recoger todas" /
+              "Recoger"). El mensajero sigue viendo qué guías tiene por recoger; la acción
+              vive en el input y el escáner de arriba. */}
+          <PorAceptarSection
+            titulo="Por recoger"
+            nuevasLabel={(n) => `${n} Órdenes nuevas asignadas`}
+            ordenes={porRecoger}
+            mostrarAcciones={false}
+            vacio="No hay órdenes por recoger."
+            renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
           />
-          <EscanerRecoger
-            porRecoger={porRecoger}
-            onRecogida={() => router.refresh()}
-          />
-        </>
-      )}
 
-      {/* Lista de SOLO-VISUALIZACIÓN (feature 96): reutiliza la sección compartida "por
-          aceptar" con `mostrarAcciones={false}` (ya no hay botones "Recoger todas" /
-          "Recoger"). El mensajero sigue viendo qué guías tiene por recoger; la acción
-          vive en el input y el escáner de arriba. */}
-      <PorAceptarSection
-        titulo="Por recoger"
-        nuevasLabel={(n) => `${n} Órdenes nuevas asignadas`}
-        ordenes={porRecoger}
-        mostrarAcciones={false}
-        vacio="No hay órdenes por recoger."
-        renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
-      />
-
-      {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
-      {/* Cards COMPACTAS en grilla (1/2/3 col). Seleccionar una la lleva al panel
-          de detalle grande e inline (abajo). El bloqueo 1-a-1 (R19/R20)
-          deshabilita las demás mientras hay una gestión activa. */}
-      <section
-        aria-label="En reparto / por gestionar"
-        className="flex flex-col gap-3"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">En reparto / por gestionar</h2>
-          {/* R31/R32: sincronización manual de la ruta. El botón captura el GPS del
-              navegador (best-effort) y lo eleva aquí para dibujar el origen en el mapa. */}
-          <SincronizarRutaButton onUbicacion={setUbicacionActual} />
-        </div>
-
-        {/* R30: aviso VISIBLE de que el orden mostrado no está actualizado. */}
-        {rutaDesactualizada ? (
-          <Alert variant="destructive">
-            <AlertTitle>El orden mostrado no está actualizado</AlertTitle>
-            <AlertDescription>
-              La ruta cambió desde el último cálculo. Pulsa «Sincronizar ruta»
-              para recalcular el orden de entrega.
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
-        {/* R28/mapa: recorrido optimizado sobre OpenStreetMap. Solo si hay paradas
-            con coordenadas; las paradas sin coords van igual en la lista de abajo. */}
-        {paradasMapa.length > 0 && mostrarMapa ? (
-          <div
-            aria-label="Mapa de ruta"
-            role="group"
-            className="flex flex-col gap-2"
+          {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
+          {/* Feature 113/R1: cada card en grilla (1/2/3 col) muestra el detalle COMPLETO
+              inline (`AsignacionDetalle`). Seleccionar una la lleva también al panel de
+              gestión grande de abajo (donde vive el gate "Gestionar pedido"). El bloqueo
+              1-a-1 (R19/R20) es una restricción de ACCIÓN: en cuanto hay una gestión
+              activa sin bloqueo la vista ya está en foco (R5) y las demás no se muestran. */}
+          <section
+            aria-label="En reparto / por gestionar"
+            className="flex flex-col gap-3"
           >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">
-                Mapa de ruta
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold">
+                En reparto / por gestionar
+              </h2>
+              {/* R31/R32: sincronización manual de la ruta. El botón captura el GPS del
+                  navegador (best-effort) y lo eleva aquí para dibujar el origen en el mapa. */}
+              <SincronizarRutaButton onUbicacion={setUbicacionActual} />
+            </div>
+
+            {/* R30: aviso VISIBLE de que el orden mostrado no está actualizado. */}
+            {rutaDesactualizada ? (
+              <Alert variant="destructive">
+                <AlertTitle>El orden mostrado no está actualizado</AlertTitle>
+                <AlertDescription>
+                  La ruta cambió desde el último cálculo. Pulsa «Sincronizar
+                  ruta» para recalcular el orden de entrega.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            {/* R28/mapa: recorrido optimizado sobre OpenStreetMap. Solo si hay paradas
+                con coordenadas; las paradas sin coords van igual en la lista de abajo. */}
+            {paradasMapa.length > 0 && mostrarMapa ? (
+              <div
+                aria-label="Mapa de ruta"
+                role="group"
+                className="flex flex-col gap-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Mapa de ruta
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setMostrarMapa(false)}
+                  >
+                    Ocultar mapa
+                  </Button>
+                </div>
+                {origenAproximado ? (
+                  <p className="text-xs text-muted-foreground">
+                    El punto de partida es aproximado (no se usó tu ubicación GPS
+                    reciente).
+                  </p>
+                ) : null}
+                <RutaMapa paradas={paradasMapa} origen={ubicacionActual} />
+              </div>
+            ) : null}
+            {paradasMapa.length > 0 && !mostrarMapa ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="xs"
-                onClick={() => setMostrarMapa(false)}
+                className="w-fit"
+                onClick={() => setMostrarMapa(true)}
               >
-                Ocultar mapa
+                Mostrar mapa de ruta
               </Button>
-            </div>
-            {origenAproximado ? (
-              <p className="text-xs text-muted-foreground">
-                El punto de partida es aproximado (no se usó tu ubicación GPS
-                reciente).
-              </p>
             ) : null}
-            <RutaMapa paradas={paradasMapa} origen={ubicacionActual} />
-          </div>
-        ) : null}
-        {paradasMapa.length > 0 && !mostrarMapa ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="w-fit"
-            onClick={() => setMostrarMapa(true)}
-          >
-            Mostrar mapa de ruta
-          </Button>
-        ) : null}
 
-        {porGestionar.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No hay órdenes en reparto.
-          </p>
-        ) : (
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {porGestionarVisual.map((orden) => {
-              // R19/R20: si hay una orden activa distinta, esta queda bloqueada
-              // (oculta sus detalles y muestra el aviso "termina la gestión en curso").
-              const bloqueada =
-                ordenEnGestionId !== null && ordenEnGestionId !== orden.id;
-              // Feature 111/R14: con el mensajero BLOQUEADO, TODAS las cards quedan
-              // deshabilitadas (no puede escoger para gestión); el porqué lo explica el
-              // aviso de bloqueo total de arriba, así que la card conserva sus detalles.
-              const deshabilitada = bloqueada || bloqueado;
-              const esActiva = ordenEnGestionId === orden.id;
-              const esDetalle = detalleOrden?.id === orden.id;
-              return (
-                // Feature 115/T8: la card (un `<button>`) y el toggle "gestionar más tarde"
-                // (otro `<button>`) son HERMANOS dentro del `<li>` — nunca anidados — para no
-                // producir botones dentro de botones (HTML inválido / a11y).
-                <li key={orden.id} className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    disabled={deshabilitada}
-                    aria-pressed={esDetalle}
-                    onClick={() => seleccionar(orden)}
-                    aria-label={`Gestionar orden ${orden.numRemision} · ${orden.destinatario}`}
-                    className={`group flex w-full flex-1 flex-col gap-3 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60 ${
-                      esDetalle
-                        ? "border-primary ring-2 ring-primary/40"
-                        : "border-border"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="flex items-center gap-2 font-semibold text-foreground">
-                        {/* R28: nº de parada en la ruta optimizada. */}
-                        {orden.secuenciaRuta !== null ? (
-                          <>
-                            <span className="sr-only">
-                              Parada {orden.secuenciaRuta} de la ruta
+            {porGestionar.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No hay órdenes en reparto.
+              </p>
+            ) : (
+              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {porGestionarVisual.map((orden) => {
+                  // Feature 111/R14 + 113/R3: con el mensajero BLOQUEADO todas las cards
+                  // quedan deshabilitadas (no puede escoger para gestión); el porqué lo
+                  // explica el aviso de bloqueo total de arriba. La deshabilitación
+                  // restringe la ACCIÓN, no la visibilidad: el detalle completo sigue
+                  // montado (R3). Fuera de foco `ordenEnGestionId` es null (una gestión
+                  // activa sin bloqueo colapsa a foco, R5), así que no existe aquí el estado
+                  // "card visible con detalle oculto" que introducía el spec 36 (eliminado).
+                  const esActiva = ordenEnGestionId === orden.id;
+                  const esDetalle = detalleOrden?.id === orden.id;
+                  return (
+                    // Feature 115/T8: la card (un `<button>`) y el toggle "gestionar más
+                    // tarde" (otro `<button>`) son HERMANOS dentro del `<li>` — nunca
+                    // anidados — para no producir botones dentro de botones (HTML inválido).
+                    <li key={orden.id} className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        disabled={bloqueado}
+                        aria-pressed={esDetalle}
+                        onClick={() => seleccionar(orden)}
+                        aria-label={`Gestionar orden ${orden.numRemision} · ${orden.destinatario}`}
+                        className={`group flex w-full flex-1 flex-col gap-3 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60 ${
+                          esDetalle
+                            ? "border-primary ring-2 ring-primary/40"
+                            : "border-border"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="flex items-center gap-2 font-semibold text-foreground">
+                            {/* R28: nº de parada en la ruta optimizada. */}
+                            {orden.secuenciaRuta !== null ? (
+                              <>
+                                <span className="sr-only">
+                                  Parada {orden.secuenciaRuta} de la ruta
+                                </span>
+                                <span
+                                  aria-hidden="true"
+                                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
+                                >
+                                  {orden.secuenciaRuta}
+                                </span>
+                              </>
+                            ) : null}
+                            {orden.numRemision}
+                          </span>
+                          {esActiva ? (
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                              En gestión
                             </span>
-                            <span
-                              aria-hidden="true"
-                              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
-                            >
-                              {orden.secuenciaRuta}
+                          ) : esDetalle ? (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                              En detalle
                             </span>
-                          </>
-                        ) : null}
-                        {orden.numRemision}
-                      </span>
-                      {esActiva ? (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                          En gestión
-                        </span>
-                      ) : esDetalle ? (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                          En detalle
-                        </span>
-                      ) : null}
-                    </div>
-                    {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más
-                        tarde): ambas son marcas informativas de la card; van juntas en
-                        una fila que envuelve. */}
-                    {orden.secuenciaRuta === null || orden.marcarLuego ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {orden.secuenciaRuta === null ? (
-                          <Badge variant="outline" className="w-fit">
-                            Pendiente de optimizar
-                          </Badge>
-                        ) : null}
-                        {/* R18: mientras la orden esté marcada, su card lo muestra. */}
-                        {orden.marcarLuego ? (
-                          <Badge variant="warning" className="w-fit">
-                            Gestionar más tarde
-                          </Badge>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {/* Mientras hay una gestión activa en OTRA orden, esta card
-                        oculta sus detalles (destinatario/producto/teléfono) y solo
-                        muestra el Nº y el aviso: foco en la orden en gestión. */}
-                    {bloqueada ? (
-                      <p className="mt-auto text-xs text-muted-foreground">
-                        Termina la gestión en curso para gestionar esta orden.
-                      </p>
-                    ) : (
-                      <>
-                        <div className="flex flex-col gap-1 text-sm">
-                          <span className="font-medium text-foreground">
-                            {orden.destinatario}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {orden.producto}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {orden.telefonoDest}
-                          </span>
+                          ) : null}
                         </div>
-                        <span className="mt-auto text-sm font-medium text-primary">
-                          {esDetalle ? "En detalle" : "Ver / Gestionar"}
-                        </span>
-                      </>
-                    )}
-                  </button>
-                  {/* Feature 115/R5/R6: toggle de "gestionar más tarde", HERMANO de la card.
-                      Puramente informativo (no cambia estado ni ruta), así que sigue disponible
-                      aunque la card esté deshabilitada por el bloqueo 1-a-1 o el cierre pendiente. */}
-                  <MarcarLuegoToggle
-                    ordenId={orden.id}
-                    marcada={orden.marcarLuego ?? false}
-                    numRemision={orden.numRemision}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                        {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más
+                            tarde): ambas son marcas informativas de la card; van juntas en
+                            una fila que envuelve. */}
+                        {orden.secuenciaRuta === null || orden.marcarLuego ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {orden.secuenciaRuta === null ? (
+                              <Badge variant="outline" className="w-fit">
+                                Pendiente de optimizar
+                              </Badge>
+                            ) : null}
+                            {/* R18: mientras la orden esté marcada, su card lo muestra. */}
+                            {orden.marcarLuego ? (
+                              <Badge variant="warning" className="w-fit">
+                                Gestionar más tarde
+                              </Badge>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {/* Feature 113/R1/R2: detalle COMPLETO inline (Pedido/Entrega/Cobro)
+                            reutilizando `AsignacionDetalle`. Sustituye a la vista compacta y
+                            elimina la rama "card bloqueada que oculta el detalle" + el texto
+                            "Termina la gestión en curso…" del spec 36. */}
+                        <div className="mt-1 border-t border-border pt-3">
+                          <AsignacionDetalle orden={orden} />
+                        </div>
+                      </button>
+                      {/* Feature 115/R5/R6: toggle de "gestionar más tarde", HERMANO de la
+                          card. Puramente informativo (no cambia estado ni ruta), así que sigue
+                          disponible aunque la card esté deshabilitada por el cierre pendiente. */}
+                      <MarcarLuegoToggle
+                        ordenId={orden.id}
+                        marcada={orden.marcarLuego ?? false}
+                        numRemision={orden.numRemision}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
 
-        {/* Panel de detalle grande e inline: SIEMPRE muestra una orden mientras
-            haya alguna en reparto (la activa o la primera por defecto). Se remonta
-            con `key` al cambiar de orden para reiniciar su estado interno. Feature
-            111/R14: BLOQUEADO no renderiza el panel (no hay gestionar/escoger); el
-            mensajero debe resolver su cierre antes de operar con las guías. */}
-        {detalleOrden && !bloqueado ? (
-          <GestionarOrdenPanel
-            key={detalleOrden.id}
-            orden={detalleOrden}
-            yaActiva={ordenEnGestionId === detalleOrden.id}
-            onGestionarPedido={gestionarPedido}
-            onCancelarGestion={cancelarGestion}
-            onSuccess={handleGestionSuccess}
-          />
-        ) : null}
-      </section>
+            {/* Panel de detalle grande e inline (gate "Gestionar pedido"): muestra la
+                orden seleccionada o la primera. Fuera de foco el puntero está en `null`,
+                así que arranca en el paso de detalle (`yaActiva=false`); al fijarse el
+                puntero la vista pasa a MODO FOCO (arriba). Feature 111/R14: BLOQUEADO no
+                renderiza el panel (debe resolver su cierre antes de operar con las guías). */}
+            {detalleOrden && !bloqueado ? (
+              <GestionarOrdenPanel
+                key={detalleOrden.id}
+                orden={detalleOrden}
+                yaActiva={ordenEnGestionId === detalleOrden.id}
+                onGestionarPedido={gestionarPedido}
+                onCancelarGestion={cancelarGestion}
+                onSuccess={handleGestionSuccess}
+              />
+            ) : null}
+          </section>
+        </>
+      )}
     </div>
   );
 }
