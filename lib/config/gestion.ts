@@ -28,6 +28,11 @@ export interface GestionConfig {
   EVIDENCIA_BUCKET: string;
   /** TTL (segundos) de la URL firmada de una evidencia (R8). Default 5 min. */
   SIGNED_URL_TTL_SECONDS: number;
+  /**
+   * Feature 119 (R7, gate F1.4): maximo de evidencias (fotos) por gestion. Default 3,
+   * sobreescribible por env `GESTION_MAX_EVIDENCIAS` (sin hardcode de cota de negocio).
+   */
+  MAX_EVIDENCIAS_POR_GESTION: number;
 }
 
 export function loadGestionConfig(): GestionConfig {
@@ -35,6 +40,7 @@ export function loadGestionConfig(): GestionConfig {
     MAX_FILE_BYTES: readPositiveInt("GESTION_MAX_FILE_BYTES", 5 * 1024 * 1024),
     EVIDENCIA_BUCKET: process.env.GESTION_EVIDENCIA_BUCKET?.trim() || "gestion-evidencias",
     SIGNED_URL_TTL_SECONDS: readPositiveInt("GESTION_SIGNED_URL_TTL_SECONDS", 5 * 60),
+    MAX_EVIDENCIAS_POR_GESTION: readPositiveInt("GESTION_MAX_EVIDENCIAS", 3),
   };
 }
 

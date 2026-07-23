@@ -766,7 +766,8 @@ describe("MisAsignacionesModule", () => {
     const user = userEvent.setup();
     gestionarMock.mockResolvedValue({
       status: "validation_error",
-      fieldErrors: { evidencia: ["la evidencia no supera la validacion"] },
+      // Feature 119: el borde revalida con el MISMO schema -> el error de foto cuelga de `evidencias`.
+      fieldErrors: { evidencias: ["la evidencia no supera la validacion"] },
     });
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1", montoCobrar: 150 })],
