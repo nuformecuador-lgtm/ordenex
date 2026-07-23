@@ -27,6 +27,8 @@ function plantilla(overrides: Partial<PlantillaPublica> = {}): PlantillaPublica 
     cuerpo: "Hola {{usuario}}",
     variables: ["usuario"],
     estado: "pending",
+    templateId: null,
+    templateIdioma: null,
     createdBy: "m1",
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),

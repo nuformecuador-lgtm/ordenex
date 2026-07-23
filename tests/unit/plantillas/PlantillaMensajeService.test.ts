@@ -21,6 +21,8 @@ function plantilla(overrides: Partial<PlantillaPublica> = {}): PlantillaPublica 
     cuerpo: "Hola {{usuario}}",
     variables: ["usuario"],
     estado: "pending",
+    templateId: null,
+    templateIdioma: null,
     createdBy: "m1",
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
@@ -38,6 +40,12 @@ function buildRepo(overrides: Partial<IPlantillaMensajeRepository> = {}): IPlant
     update: vi.fn().mockResolvedValue(plantilla()),
     updateEstado: vi.fn().mockResolvedValue(plantilla({ estado: "inactivo" })),
     softDelete: vi.fn().mockResolvedValue(true),
+    setTemplate: vi.fn().mockResolvedValue(undefined),
+    sincronizarTemplatePorNombre: vi.fn().mockResolvedValue(true),
+    crearDesdeMeta: vi.fn().mockResolvedValue(true),
+    listarEnviables: vi.fn().mockResolvedValue([]),
+    findEnviableById: vi.fn().mockResolvedValue(null),
+    listarUsablesParaTexto: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }

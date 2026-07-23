@@ -1224,6 +1224,19 @@
       "branch": "feature/108-webhook-en-alta-apikey",
       "depends_on": 105,
       "status_note": "gate F1.4 APROBADO 2026-07-22 (5 decisiones como recomendadas: URL opcional, un modal, boton Editar crea/actualiza, fallo parcial preserva secreto de la key, anti-doble-submit)"
+    },
+    {
+      "id": 109,
+      "name": "chat del mensajero con el cliente via WhatsApp (webhook de entrada)",
+      "spec_path": "specs/109-chat-mensajero-whatsapp",
+      "status": "in_progress",
+      "status_note": "gate F1.4 APROBADO 2026-07-23 (D1 en linea+reintento encolado; D2 bloquear texto libre fuera de ventana 24h y derivar a plantilla; D3 solo mensajero asignado en v1; D4 orden asignada mas reciente del numero; D5 SWR polling ~10s; D6 WHATSAPP_WEBHOOK_VERIFY_TOKEN + WHATSAPP_APP_SECRET; migracion post-merge a mano contra ordenex-db live).",
+      "description": "Registrada 2026-07-23 (pedido del humano: 'necesitamos generar un chat que tiene acceso el mensajero, que usara la implementacion de whatsapp como intermediario y que a traves del webhook registrara las respuestas por parte del cliente'). Spec escrito 2026-07-23 (25 requisitos EARS R1-R25 en specs/109-chat-mensajero-whatsapp/, cada uno mapeado a test en tasks.md). PENDIENTE puerta humana F1.4: 6 decisiones abiertas (D1 envio en linea vs encolado; D2 fuera de ventana 24h bloquear vs forzar plantilla; D3 roles que leen el hilo ademas del mensajero; D4 resolver orden desde el numero entrante con varias ordenes; D5 refresco UI; D6 nombres de env WHATSAPP_WEBHOOK_VERIFY_TOKEN/WHATSAPP_APP_SECRET). ALCANCE (fullstack): (1) NUEVO webhook de ENTRADA de WhatsApp Cloud (`app/api/webhooks/whatsapp/route.ts`): GET para el handshake de verificacion de Meta (hub.mode/hub.verify_token/hub.challenge) y POST para recibir mensajes entrantes del cliente y actualizaciones de estado (sent/delivered/read/failed). Valida la firma X-Hub-Signature-256 (HMAC-SHA256 con el App Secret) antes de procesar. (2) PERSISTENCIA: modelo de conversacion (hilo 1:1 numero-cliente <-> orden/mensajero) + mensajes (direccion entrante/saliente, tipo, cuerpo, id de Meta, timestamp, estado de entrega); reutiliza el WhatsappCloudClient existente (enviarTexto/enviarPlantilla) para lo saliente. (3) UI DE CHAT para el rol MENSAJERO dentro de mis-asignaciones (vista de hilo por orden/cliente): lee el historial y permite responder. Respeta la VENTANA DE 24 H de WhatsApp: texto libre solo dentro de la ventana (ultimo mensaje entrante < 24 h); fuera de ella, solo plantillas aprobadas (feature 107). Reusa la infra WhatsApp WIP (lib/clients/whatsapp-cloud.ts, lib/config/whatsapp.ts, EnviarPlantillaWhatsappButton). Requiere migracion Prisma (tablas de conversacion/mensaje + enums de direccion/estado) con down.sql y RLS (el mensajero solo ve los hilos de SUS asignaciones). Complejidad high (webhook externo firmado + integracion + tablas nuevas + UI). Las decisiones abiertas (alcance de la ventana de 24h, quien ve los hilos ademas del mensajero, dedupe de mensajes por id de Meta, verify_token en env) se resuelven en la puerta humana F1.4 sobre el spec.",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/109-chat-mensajero-whatsapp",
+      "depends_on": null
     }
   ]
 }

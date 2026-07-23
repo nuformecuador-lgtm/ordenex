@@ -18,10 +18,21 @@ export interface ContactoButtonsProps {
   nombre: string;
   /** `lg` = botones grandes (size-14, panel del mensajero); `sm`/default = compacto (lista). */
   size?: "sm" | "lg";
+  /**
+   * Muestra el boton de WhatsApp (wa.me directo). `true` por defecto. En el panel del mensajero
+   * se pone `false` porque alli el WhatsApp lo cubre el selector de plantillas (una sola burbuja,
+   * sin ambiguedad con el enlace directo).
+   */
+  mostrarWhatsapp?: boolean;
 }
 
 /** Botones "Llamar" + "WhatsApp" accesibles, con el telefono normalizado en el enlace wa.me. */
-export function ContactoButtons({ telefono, nombre, size = "sm" }: ContactoButtonsProps) {
+export function ContactoButtons({
+  telefono,
+  nombre,
+  size = "sm",
+  mostrarWhatsapp = true,
+}: ContactoButtonsProps) {
   const iconButtonClass = size === "lg" ? "size-14 shrink-0" : "shrink-0";
   const iconClass = size === "lg" ? "size-5" : "size-4";
 
@@ -37,18 +48,20 @@ export function ContactoButtons({ telefono, nombre, size = "sm" }: ContactoButto
       >
         <Phone className={iconClass} aria-hidden="true" />
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className={iconButtonClass}
-        onClick={() =>
-          window.open(`https://wa.me/${normalizarTelefonoCR(telefono)}`, "_blank")
-        }
-        aria-label={`WhatsApp a ${nombre}`}
-      >
-        <MessageCircle className={iconClass} aria-hidden="true" />
-      </Button>
+      {mostrarWhatsapp ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className={iconButtonClass}
+          onClick={() =>
+            window.open(`https://wa.me/${normalizarTelefonoCR(telefono)}`, "_blank")
+          }
+          aria-label={`WhatsApp a ${nombre}`}
+        >
+          <MessageCircle className={iconClass} aria-hidden="true" />
+        </Button>
+      ) : null}
     </div>
   );
 }

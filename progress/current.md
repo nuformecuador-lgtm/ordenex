@@ -15,6 +15,22 @@
 
 ## Features en curso
 
+**Chat mensajero↔cliente vía WhatsApp — feature 109 (2026-07-23) → EN ESPECIFICACIÓN.** Pedido del
+humano: "chat que tiene acceso el mensajero, que usa la implementación de WhatsApp como intermediario
+y que a través del webhook registra las respuestas del cliente". Fullstack, high, `depends_on: null`.
+- **Fase 1 en curso:** feature registrada en `feature_list.json` (id 109, `pending`); `spec_author`
+  lanzado (`model: opus`) para `specs/109-chat-mensajero-whatsapp/` (requirements EARS + design + tasks).
+- **Infra WhatsApp ya existente (WIP en `flow`, reutilizable):** `lib/clients/whatsapp-cloud.ts`
+  (`WhatsappCloudClient.enviarTexto`/`enviarPlantilla`, saliente), `lib/config/whatsapp.ts`
+  (credenciales por env), plantillas sincronizadas a Meta (feature 107), `EnviarPlantillaWhatsappButton`
+  en `mis-asignaciones`. **NO existe** webhook de ENTRADA ni tablas de chat → es el núcleo nuevo.
+- **Alcance nuevo:** webhook `app/api/webhooks/whatsapp/route.ts` (GET handshake + POST firmado
+  X-Hub-Signature-256), tablas conversación/mensaje (migración + RLS por asignación), UI de hilo en
+  `mis-asignaciones` respetando la ventana de 24 h de WhatsApp (texto libre dentro, plantilla fuera).
+- **Próximo:** al terminar el spec → `spec_ready` + **PARAR en la puerta humana F1.4** (revisar los 3
+  archivos y resolver las decisiones abiertas). Rama/impl se difieren a Fase 2 en worktree aislado
+  desde `origin/dev` (el `flow` actual arrastra WIP ajeno de WhatsApp).
+
 **Plantillas de mensajes — feature 107 (2026-07-22) → PR #135, falta merge humano.** Subitem
 "Plantillas" en Configuración (rol maestro, `/configuracion/plantillas`): CRUD completo (crear/editar/
 eliminar) + editor que inserta campos variables `{{clave}}` + preview + estado

@@ -163,6 +163,12 @@ model PlantillaMensaje {
   cuerpo    String // texto con placeholders {{clave}}
   variables String[] // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
   estado    PlantillaEstado @default(pending) // R12 (Decision humana 1)
+  // Integracion WhatsApp: enlace al Message Template de Meta. NULL = todavia no propagada a
+  // Meta (o Meta no la ha devuelto en la sincronizacion). El envio usa `nombre` + `templateIdioma`
+  // (Meta manda por name+language, no por id); `templateId` es la referencia/traza a Meta y el
+  // marcador de "enviable" (no NULL + estado activo).
+  templateId     String? @map("template_id")
+  templateIdioma String? @map("template_idioma") // code de idioma del template en Meta (p. ej. "es", "es_CO")
   createdBy String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
   deletedAt DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
   createdAt DateTime        @default(now()) @map("created_at")
@@ -1140,6 +1146,7 @@ enum JobTipo {
   geocodificacion // feature 91: geocodifica la direccion de UNA orden (payload { ordenId })
   optimizacion_ruta // feature 92: reoptimiza la ruta de UN mensajero (payload { mensajeroId })
   webhook_estado // feature 99: entrega firmada del cambio de estado de UNA orden a su integrador (payload { ordenId, estatusDestinoId, ocurridoAt })
+  whatsapp_template_sync // integracion WhatsApp: reintenta contra Meta una op de plantilla (create/update/delete) que fallo en linea (payload { plantillaId, operacion })
 
   @@map("job_tipo")
 }
