@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, type ChangeEvent } from "react";
-import { PackageCheck, RotateCcw, Undo2, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { PackageCheck, RotateCcw, Undo2, X, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
-import { GESTION_ALLOWED_MIME } from "@/lib/config/gestion";
+import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
@@ -20,6 +20,11 @@ import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
+import {
+  ChatWhatsappPanel,
+  BORRADOR_CHAT_VACIO,
+  type BorradorChat,
+} from "./ChatWhatsappPanel";
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
@@ -47,6 +52,11 @@ type Resultado = "entregada" | "reprogramada" | "devuelta" | "rechazada";
 type Paso = "detalle" | "resultados" | "formulario";
 
 const ACCEPT_MIME = GESTION_ALLOWED_MIME.join(",");
+
+// Feature 119 (R16): tope de fotos por gestion. El schema (cliente y servidor) usa el
+// mismo `gestionConfig.MAX_EVIDENCIAS_POR_GESTION`; en el navegador la env no es visible
+// (no lleva `NEXT_PUBLIC_`), asi que cae al default 3, igual que el schema en cliente.
+const MAX_EVIDENCIAS = gestionConfig.MAX_EVIDENCIAS_POR_GESTION;
 
 /** Configuración visual de los 4 botones de resultado (jerarquía + color). */
 const RESULTADO_BOTONES: {
@@ -145,28 +155,63 @@ export function GestionarOrdenPanel({
   // Feature 73 (R4): causa TIPIFICADA de la rama `devuelta`. `""` = sin elegir; el mensajero
   // DEBE escoger una (R6). Es un campo APARTE del `motivo`, que sigue obligatorio (R7).
   const [causaDevolucion, setCausaDevolucion] = useState<CausaDevolucion | "">("");
-  const [evidencia, setEvidencia] = useState<File | null>(null);
+  // Feature 119 (R14): la evidencia UNICA pasa a una LISTA de 1..N fotos (tope MAX_EVIDENCIAS).
+  const [evidencias, setEvidencias] = useState<File[]>([]);
   const [comprimiendo, setComprimiendo] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [enviando, setEnviando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  // Feature 120: borrador COMPARTIDO entre la burbuja de plantillas (junto al teléfono) y el
+  // panel de chat. Al elegir una plantilla desde la burbuja, su texto renderizado se "pega" en
+  // el input del chat, listo para editar/enviar. Se remonta limpio al cambiar de orden (`key`).
+  const [borradorChat, setBorradorChat] = useState<BorradorChat>(BORRADOR_CHAT_VACIO);
 
-  // Comprime la foto en el cliente antes de guardarla en el estado: una foto de
-  // celular sin comprimir revienta el limite de body del Server Action (413).
-  // `comprimirImagen` cae al archivo original ante cualquier fallo, asi que esto
-  // nunca bloquea la gestion. Mientras comprime, "Guardar gestion" se deshabilita.
+  // Feature 119 (R14/R16): agrega las fotos SELECCIONADAS a la lista. Cada foto se comprime
+  // en el cliente antes de guardarla (una foto de celular sin comprimir revienta el limite de
+  // body del Server Action, 413); `comprimirImagen` cae al archivo original ante cualquier
+  // fallo, asi que nunca bloquea la gestion. Mientras comprime, "Guardar gestion" se deshabilita.
+  // La seleccion se CONCATENA a lo ya elegido (permite ir sumando en varias tandas). Si el
+  // total supera el tope, se RECORTA a MAX_EVIDENCIAS y se marca el error del campo (R16).
   async function handleEvidenciaChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] ?? null;
-    if (!file) {
-      setEvidencia(null);
-      return;
-    }
+    const input = e.target;
+    const seleccion = Array.from(input.files ?? []);
+    // Limpia el valor del input para permitir volver a elegir la MISMA foto tras quitarla.
+    input.value = "";
+    if (seleccion.length === 0) return;
     setComprimiendo(true);
     try {
-      setEvidencia(await comprimirImagen(file));
+      const comprimidas = await Promise.all(seleccion.map((f) => comprimirImagen(f)));
+      // Updater funcional: concatena sobre el estado MAS reciente (a prueba de tandas
+      // solapadas). El error de tope se deriva del MISMO `prev` para que array y error nunca
+      // se contradigan; setear el error aqui es idempotente (mismo mensaje ante re-invocacion).
+      setEvidencias((prev) => {
+        const combinadas = [...prev, ...comprimidas];
+        setFieldErrors((errs) => {
+          const rest = { ...errs };
+          delete rest.evidencias;
+          return combinadas.length > MAX_EVIDENCIAS
+            ? {
+                ...rest,
+                evidencias: [`Solo puedes adjuntar hasta ${MAX_EVIDENCIAS} fotos.`],
+              }
+            : rest;
+        });
+        return combinadas.slice(0, MAX_EVIDENCIAS);
+      });
     } finally {
       setComprimiendo(false);
     }
+  }
+
+  /** Quita la foto en `index` de la lista (R15) y limpia el error de evidencia. */
+  function quitarEvidencia(index: number) {
+    setEvidencias((prev) => prev.filter((_, i) => i !== index));
+    setFieldErrors((errs) => {
+      if (!errs.evidencias) return errs;
+      const rest = { ...errs };
+      delete rest.evidencias;
+      return rest;
+    });
   }
 
   // Orden SIN cobro (montoCobrar 0 o null): no hay COD que recaudar, así que el
@@ -180,48 +225,57 @@ export function GestionarOrdenPanel({
     const base = { ordenId: orden.id, resultado };
     switch (resultado) {
       case "entregada":
+        // Feature 119 (R5/R6): la evidencia es una LISTA; una lista vacía dispara `min(1)`.
         return {
           ...base,
           montoRecibido: orden.montoCobrar ?? 0,
           metodoPago: metodoPagoEfectivo || undefined,
-          evidencia: evidencia ?? undefined,
+          evidencias,
         };
       case "reprogramada":
         return { ...base, fechaReprogramacion, motivo };
       case "devuelta":
         // Feature 73/R6: `|| undefined` reproduce el patrón de `metodoPago` (:159) para que zod
         // diga "requerido" y no "valor inválido" cuando no se eligió ninguna causa.
-        // Feature 75: la evidencia (foto) es OBLIGATORIA en `devuelta`, igual que en `rechazada`.
+        // Feature 75/119: la evidencia (lista de fotos) es OBLIGATORIA en `devuelta`, igual que
+        // en `rechazada`.
         return {
           ...base,
           causaDevolucion: causaDevolucion || undefined,
           motivo,
-          evidencia: evidencia ?? undefined,
+          evidencias,
         };
       case "rechazada":
-        return { ...base, motivo, evidencia: evidencia ?? undefined };
+        return { ...base, motivo, evidencias };
     }
   }
 
-  /** Empaqueta los campos + File en FormData para la Server Action. */
+  /**
+   * Empaqueta los campos + Files en FormData para la Server Action. Feature 119: cada foto va
+   * como un valor MÁS de la misma clave `evidencia` (`append`, no `set`); el borde las lee con
+   * `getAll("evidencia")` y las reconstruye como lista en el ORDEN en que se enviaron (índice 0..N).
+   */
   function buildFormData(): FormData {
     const fd = new FormData();
     fd.set("ordenId", orden.id);
     fd.set("resultado", resultado);
+    const anexarEvidencias = () => {
+      for (const foto of evidencias) fd.append("evidencia", foto);
+    };
     if (resultado === "entregada") {
       fd.set("montoRecibido", String(orden.montoCobrar ?? 0));
       fd.set("metodoPago", metodoPagoEfectivo);
-      if (evidencia) fd.set("evidencia", evidencia);
+      anexarEvidencias();
     } else if (resultado === "reprogramada") {
       fd.set("fechaReprogramacion", fechaReprogramacion);
       fd.set("motivo", motivo);
     } else if (resultado === "devuelta") {
       fd.set("causaDevolucion", causaDevolucion); // feature 73 (R9)
       fd.set("motivo", motivo);
-      if (evidencia) fd.set("evidencia", evidencia); // feature 75: evidencia obligatoria
+      anexarEvidencias(); // feature 75/119: evidencia obligatoria
     } else {
       fd.set("motivo", motivo);
-      if (evidencia) fd.set("evidencia", evidencia);
+      anexarEvidencias();
     }
     return fd;
   }
@@ -253,7 +307,7 @@ export function GestionarOrdenPanel({
     setFechaReprogramacion(mananaISO());
     setMotivo("");
     setCausaDevolucion(""); // feature 73/R4: cambiar de resultado no arrastra la causa anterior
-    setEvidencia(null);
+    setEvidencias([]); // feature 119: cambiar de resultado limpia las fotos elegidas
     setPaso("formulario");
   }
 
@@ -297,7 +351,9 @@ export function GestionarOrdenPanel({
   }
 
   const metodoError = firstError(fieldErrors, "metodoPago");
-  const evidenciaError = firstError(fieldErrors, "evidencia");
+  // Feature 119: la evidencia es una LISTA -> tanto el cliente (`safeParse`) como el servidor
+  // cuelgan sus errores del campo `evidencias`.
+  const evidenciaError = firstError(fieldErrors, "evidencias");
   const fechaError = firstError(fieldErrors, "fechaReprogramacion");
   const motivoError = firstError(fieldErrors, "motivo");
   const causaError = firstError(fieldErrors, "causaDevolucion");
@@ -326,19 +382,32 @@ export function GestionarOrdenPanel({
       {paso === "detalle" ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Feature 87 (R17): botones de contacto deduplicados en el compuesto
-                compartido `ContactoButtons` (antes inline aqui). Ademas corrige el
-                enlace wa.me para prefijar `506` (R15). */}
+            {/* Feature 87 (R17): botones de contacto (Llamar + WhatsApp wa.me) deduplicados en el
+                compuesto compartido `ContactoButtons`; el enlace wa.me prefija `506` (R15). */}
             <ContactoButtons
               telefono={orden.telefonoDest}
               nombre={orden.destinatario}
               size="lg"
-              mostrarWhatsapp={false}
             />
-            {/* Integracion WhatsApp: burbuja que lista las plantillas, las renderiza con los
-                datos de la orden y abre WhatsApp con el mensaje ya escrito al elegir una. */}
-            <EnviarPlantillaWhatsappButton orden={orden} size="lg" />
+            {/* Integracion WhatsApp + feature 120: burbuja que lista las plantillas, las
+                renderiza con los datos de la orden y, al elegir una, PEGA el mensaje en el
+                input del chat (borrador compartido) listo para enviar. */}
+            <EnviarPlantillaWhatsappButton
+              orden={orden}
+              size="lg"
+              onElegirPlantilla={(p) =>
+                setBorradorChat({ texto: p.textoRenderizado, plantillaId: p.id })
+              }
+            />
           </div>
+          {/* Feature 109 (G4/R22-R24) + 120: chat 1:1 con el cliente vía WhatsApp. Cuelga del
+              paso "detalle"; el propio panel impone la ventana de 24 h y refresca solo. El
+              composer está controlado por el borrador compartido con la burbuja. */}
+          <ChatWhatsappPanel
+            orden={orden}
+            borrador={borradorChat}
+            onBorradorChange={setBorradorChat}
+          />
           {/* Feature 98: gate de verificación. Antes de fijar el puntero y avanzar
               a los 4 botones, el mensajero DEBE confirmar la guía del paquete
               (escaneo o tecleo) y esta debe COINCIDIR con `orden.numGuia`. Solo
@@ -420,23 +489,15 @@ export function GestionarOrdenPanel({
                   ) : null}
                 </div>
               )}
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="gestion-evidencia">Foto de evidencia</Label>
-                <input
-                  id="gestion-evidencia"
-                  type="file"
-                  accept={ACCEPT_MIME}
-                  onChange={handleEvidenciaChange}
-                  aria-invalid={evidenciaError ? true : undefined}
-                  aria-label="Foto de evidencia de entrega"
-                  className="text-sm"
-                />
-                {evidenciaError ? (
-                  <p role="alert" className="text-sm text-destructive">
-                    {evidenciaError}
-                  </p>
-                ) : null}
-              </div>
+              <EvidenciasField
+                inputId="gestion-evidencia"
+                label="Fotos de evidencia"
+                ariaLabel="Foto de evidencia de entrega"
+                files={evidencias}
+                error={evidenciaError}
+                onSelect={handleEvidenciaChange}
+                onRemove={quitarEvidencia}
+              />
             </>
           ) : null}
 
@@ -473,47 +534,31 @@ export function GestionarOrdenPanel({
                 onChange={setCausaDevolucion}
                 error={causaError}
               />
-              {/* Feature 75: evidencia OBLIGATORIA, espejo de la rama `rechazada` (:450-468). */}
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="gestion-evidencia-devolucion">Foto de evidencia</Label>
-                <input
-                  id="gestion-evidencia-devolucion"
-                  type="file"
-                  accept={ACCEPT_MIME}
-                  onChange={handleEvidenciaChange}
-                  aria-invalid={evidenciaError ? true : undefined}
-                  aria-label="Foto de evidencia de la devolución"
-                  className="text-sm"
-                />
-                {evidenciaError ? (
-                  <p role="alert" className="text-sm text-destructive">
-                    {evidenciaError}
-                  </p>
-                ) : null}
-              </div>
+              {/* Feature 75/119: evidencia OBLIGATORIA (lista), espejo de la rama `rechazada`. */}
+              <EvidenciasField
+                inputId="gestion-evidencia-devolucion"
+                label="Fotos de evidencia"
+                ariaLabel="Foto de evidencia de la devolución"
+                files={evidencias}
+                error={evidenciaError}
+                onSelect={handleEvidenciaChange}
+                onRemove={quitarEvidencia}
+              />
               <MotivoField value={motivo} onChange={setMotivo} error={motivoError} />
             </>
           ) : null}
 
           {resultado === "rechazada" ? (
             <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="gestion-evidencia-rechazo">Foto de evidencia</Label>
-                <input
-                  id="gestion-evidencia-rechazo"
-                  type="file"
-                  accept={ACCEPT_MIME}
-                  onChange={handleEvidenciaChange}
-                  aria-invalid={evidenciaError ? true : undefined}
-                  aria-label="Foto de evidencia del rechazo"
-                  className="text-sm"
-                />
-                {evidenciaError ? (
-                  <p role="alert" className="text-sm text-destructive">
-                    {evidenciaError}
-                  </p>
-                ) : null}
-              </div>
+              <EvidenciasField
+                inputId="gestion-evidencia-rechazo"
+                label="Fotos de evidencia"
+                ariaLabel="Foto de evidencia del rechazo"
+                files={evidencias}
+                error={evidenciaError}
+                onSelect={handleEvidenciaChange}
+                onRemove={quitarEvidencia}
+              />
               <MotivoField value={motivo} onChange={setMotivo} error={motivoError} />
             </>
           ) : null}
@@ -570,6 +615,90 @@ function CausaField({
         aria-label="Causa de la devolución"
         aria-invalid={error ? true : undefined}
       />
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Feature 119 (R14/R15/R16): campo de evidencias MÚLTIPLES, reusado en las 3 ramas con foto
+ * (entregada/devuelta/rechazada). Vive en este archivo, como `MotivoField`/`CausaField`: un solo
+ * consumidor (docs/architecture.md "sin sobre-ingeniería"). Ofrece selección múltiple, una
+ * previsualización por foto y un botón para quitarla individualmente antes de enviar. El nombre
+ * accesible del input lo da `ariaLabel` (mismo contrato que el input único anterior, para no
+ * romper a quien lo localiza por ese nombre). El tope y la concatenación los aplica el padre en
+ * `onSelect`; aquí sólo se pinta el estado (`files`) y se avisa del límite.
+ */
+function EvidenciasField({
+  inputId,
+  label,
+  ariaLabel,
+  files,
+  error,
+  onSelect,
+  onRemove,
+}: {
+  inputId: string;
+  label: string;
+  ariaLabel: string;
+  files: File[];
+  error: string | undefined;
+  onSelect: (e: ChangeEvent<HTMLInputElement>) => void;
+  onRemove: (index: number) => void;
+}) {
+  // Una object URL por foto para la previsualización (R15). Se derivan con `useMemo` (sin
+  // `setState` en efecto) y sólo se recalculan cuando cambia `files` —que sólo cambia de
+  // referencia cuando el padre agrega/quita una foto, no en cada re-render—. El efecto de
+  // limpieza REVOCA el lote anterior al cambiar la lista (quitar una foto) y al desmontar, para
+  // no fugar memoria.
+  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => {
+    return () => previews.forEach((u) => URL.revokeObjectURL(u));
+  }, [previews]);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={inputId}>{label}</Label>
+      {previews.length > 0 ? (
+        <ul className="flex flex-wrap gap-2" aria-label="Fotos de evidencia seleccionadas">
+          {previews.map((url, i) => (
+            <li key={url} className="relative">
+              {/* Vista previa local de un object URL: next/image no aplica a un blob del cliente. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`Evidencia ${i + 1}`}
+                className="size-20 rounded-md border border-border object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => onRemove(i)}
+                aria-label={`Quitar evidencia ${i + 1}`}
+                className="absolute -right-1.5 -top-1.5 rounded-full border border-background bg-destructive p-0.5 text-destructive-foreground shadow-xs hover:bg-destructive/90"
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <input
+        id={inputId}
+        type="file"
+        accept={ACCEPT_MIME}
+        multiple
+        onChange={onSelect}
+        aria-invalid={error ? true : undefined}
+        aria-label={ariaLabel}
+        className="text-sm"
+      />
+      <p className="text-xs text-muted-foreground">
+        {`Puedes adjuntar hasta ${MAX_EVIDENCIAS} fotos (${files.length}/${MAX_EVIDENCIAS}).`}
+      </p>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}

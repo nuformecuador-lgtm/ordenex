@@ -163,7 +163,14 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
   async listarEnviables(): Promise<PlantillaEnviable[]> {
     const rows = await this.prisma.plantillaMensaje.findMany({
       where: { ...VIGENTE, estado: "activo", NOT: { templateId: null } },
-      select: { id: true, nombre: true, variables: true, templateId: true, templateIdioma: true },
+      select: {
+        id: true,
+        nombre: true,
+        cuerpo: true,
+        variables: true,
+        templateId: true,
+        templateIdioma: true,
+      },
       orderBy: { nombre: "asc" },
     });
     // El WHERE garantiza templateId no nulo; templateIdioma podria faltar si Meta no lo dio
@@ -171,6 +178,7 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
     return rows.map((r) => ({
       id: r.id,
       nombre: r.nombre,
+      cuerpo: r.cuerpo,
       variables: r.variables,
       templateId: r.templateId as string,
       templateIdioma: r.templateIdioma ?? "",
@@ -209,12 +217,20 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
   async findEnviableById(id: string): Promise<PlantillaEnviable | null> {
     const r = await this.prisma.plantillaMensaje.findFirst({
       where: { id, ...VIGENTE, estado: "activo", NOT: { templateId: null } },
-      select: { id: true, nombre: true, variables: true, templateId: true, templateIdioma: true },
+      select: {
+        id: true,
+        nombre: true,
+        cuerpo: true,
+        variables: true,
+        templateId: true,
+        templateIdioma: true,
+      },
     });
     if (r === null) return null;
     return {
       id: r.id,
       nombre: r.nombre,
+      cuerpo: r.cuerpo,
       variables: r.variables,
       templateId: r.templateId as string,
       templateIdioma: r.templateIdioma ?? "",

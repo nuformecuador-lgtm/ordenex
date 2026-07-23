@@ -86,7 +86,7 @@ export class WebhookEstadoService {
       evento: EVENTO_ESTADO,
       eventoId,
       ocurridoAt,
-      orden: {
+      data: {
         numGuia: datos.numGuia,
         numRemision: datos.numRemision,
         estado: datos.estado,

@@ -31,11 +31,19 @@ export interface EnviarPlantillaWhatsappButtonProps {
   orden: MiAsignacionDTO;
   /** `lg` = burbuja grande (size-14), a juego con ContactoButtons en el panel. */
   size?: "sm" | "lg";
+  /**
+   * Feature 120: cuando se provee, al elegir una plantilla NO se abre wa.me. En su lugar se
+   * "pega" el mensaje ya renderizado en el input del chat (lo hace el padre con el callback)
+   * para enviarlo desde el propio panel. Sin este prop se conserva el comportamiento wa.me
+   * de la feature 87 (abrir WhatsApp del mensajero con el texto listo).
+   */
+  onElegirPlantilla?: (plantilla: { id: string; textoRenderizado: string }) => void;
 }
 
 export function EnviarPlantillaWhatsappButton({
   orden,
   size = "lg",
+  onElegirPlantilla,
 }: Readonly<EnviarPlantillaWhatsappButtonProps>) {
   const toast = useToast();
   const [abierto, setAbierto] = useState(false);
@@ -44,6 +52,9 @@ export function EnviarPlantillaWhatsappButton({
 
   const iconButtonClass = size === "lg" ? "size-14 shrink-0" : "shrink-0";
   const iconClass = size === "lg" ? "size-5" : "size-4";
+
+  // Feature 120: modo "pegar en el chat" cuando el padre pasa el callback; si no, modo wa.me.
+  const modoChat = Boolean(onElegirPlantilla);
 
   // Datos de la orden usados para resolver las variables de cada plantilla.
   const ordenEnvio = useMemo<OrdenEnvioData>(
@@ -86,9 +97,18 @@ export function EnviarPlantillaWhatsappButton({
     void cargarSiHaceFalta();
   }
 
-  /** Abre WhatsApp con el mensaje renderizado hacia el telefono del destinatario. */
+  /**
+   * Feature 120: si hay callback, "pega" el mensaje renderizado en el input del chat (con su
+   * plantillaId) y cierra el sheet; el envio ocurre desde el panel. Si no, conserva el flujo
+   * wa.me de la feature 87: abre WhatsApp con el mensaje hacia el telefono del destinatario.
+   */
   function handleElegir(plantilla: PlantillaTextoDTO) {
     const texto = renderizar(plantilla);
+    if (onElegirPlantilla) {
+      onElegirPlantilla({ id: plantilla.id, textoRenderizado: texto });
+      setAbierto(false);
+      return;
+    }
     const url = `https://wa.me/${normalizarTelefonoCR(orden.telefonoDest)}?text=${encodeURIComponent(texto)}`;
     window.open(url, "_blank");
     setAbierto(false);
@@ -134,7 +154,9 @@ export function EnviarPlantillaWhatsappButton({
           <SheetHeader className="pr-12">
             <SheetTitle>Plantillas de WhatsApp</SheetTitle>
             <SheetDescription>
-              Elige una para abrir WhatsApp con el mensaje listo para {orden.destinatario}.
+              {modoChat
+                ? `Elige una para pegar el mensaje en el chat, listo para enviar a ${orden.destinatario}.`
+                : `Elige una para abrir WhatsApp con el mensaje listo para ${orden.destinatario}.`}
             </SheetDescription>
           </SheetHeader>
 
@@ -155,7 +177,7 @@ export function EnviarPlantillaWhatsappButton({
                     <span className="min-w-0 truncate text-sm font-medium">{p.nombre}</span>
                     <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
                       <Send className="size-3.5" aria-hidden="true" />
-                      Abrir
+                      {modoChat ? "Usar" : "Abrir"}
                     </span>
                   </div>
                   {/* Vista previa. break-words: un texto largo sin espacios no ensancha el sheet. */}

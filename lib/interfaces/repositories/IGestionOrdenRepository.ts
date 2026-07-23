@@ -60,8 +60,20 @@ export interface GestionOrdenData {
   resultado: GestionResultado;
   montoRecibido?: number | null;
   metodoPago?: MetodoPagoValue | null;
+  /**
+   * Feature 119 (R12): columnas singulares CONSERVADAS como PORTADA (indice 0). Las escrituras
+   * nuevas ya NO las fijan aqui: el repo las DERIVA de `evidencias` (indice 0) en el mismo
+   * INSERT. Se mantienen en el tipo por retro-compat (un caller que aun pase la portada suelta
+   * sigue funcionando: el repo cae a estos campos si `evidencias` viene vacio).
+   */
   evidenciaStoragePath?: string | null;
   evidenciaContentType?: string | null;
+  /**
+   * Feature 119 (R1/R2): evidencias 1..N de la gestion, cada una con su `indice` 0-based
+   * (0 = portada). El repo inserta N filas hijas en `gestion_orden_evidencia` dentro de la
+   * MISMA transaccion (R9) y DERIVA de la de indice 0 las columnas singulares (dual-write, R12).
+   */
+  evidencias?: { storagePath: string; contentType: string; indice: number }[];
   motivo?: string | null;
   /** Fecha (YYYY-MM-DD) de reprogramacion; se persiste como columna DATE. */
   fechaReprogramacion?: string | null;

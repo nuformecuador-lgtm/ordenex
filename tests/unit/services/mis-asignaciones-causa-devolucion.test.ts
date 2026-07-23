@@ -77,7 +77,9 @@ function newService(repo: IGestionOrdenRepository) {
     findByMensajero: vi.fn(async () => null),
     upsertOrigen: vi.fn(async () => {}),
   };
-  return new MisAsignacionesService(repo, ordenRepo, storage, signed, rutaRepo);
+  // Feature 115 (R17): sin marcas -> `marcarLuego` false en todas las cards.
+  const metaRepo = { findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()) };
+  return new MisAsignacionesService(repo, ordenRepo, storage, signed, rutaRepo, metaRepo);
 }
 
 function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {
@@ -92,7 +94,7 @@ function devolucion(overrides: Partial<GestionarInput> = {}): GestionarInput {
     causaDevolucion: "wrong_address",
     motivo: "la direccion no existe",
     // Feature 75: la evidencia es obligatoria tambien en devuelta; el service la sube antes de la tx.
-    evidencia: { contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) },
+    evidencias: [{ contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) }],
     ...overrides,
   } as GestionarInput;
 }
@@ -166,7 +168,7 @@ describe("Feature 73 · las otras ramas no emiten causa (R10/R19)", () => {
         resultado: "entregada",
         montoRecibido: 100,
         metodoPago: "efectivo",
-        evidencia: { contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) },
+        evidencias: [{ contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) }],
       },
       MENSAJERO,
     );
@@ -180,7 +182,7 @@ describe("Feature 73 · las otras ramas no emiten causa (R10/R19)", () => {
         ordenId: "o1",
         resultado: "rechazada",
         motivo: "el cliente lo rechazo",
-        evidencia: { contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) },
+        evidencias: [{ contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) }],
       },
       MENSAJERO,
     );

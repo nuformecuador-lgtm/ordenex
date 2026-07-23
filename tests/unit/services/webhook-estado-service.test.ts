@@ -91,7 +91,9 @@ describe("R17/R19 — entrega y complete", () => {
     ];
     expect(url).toBe("https://a.example.com/hook");
     const body = JSON.parse(cuerpo);
-    expect(body.orden).toEqual({ numGuia: 12345, numRemision: NUM_REMISION, estado: "en_reparto" });
+    expect(body.data).toEqual({ numGuia: 12345, numRemision: NUM_REMISION, estado: "en_reparto" });
+    // R2: blindaje del breaking change — la clave vieja `orden` ya no existe en el cuerpo.
+    expect(body.orden).toBeUndefined();
     expect(body.evento).toBe("orden.estado_actualizado");
     expect(body.eventoId).toContain("webhook_estado:orden-1:s-en-reparto:");
     // R18: firma valida sobre `${ts}.${cuerpo}` con el secreto descifrado.
