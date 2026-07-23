@@ -1275,7 +1275,7 @@
       "name": "mensajero: notas privadas por orden",
       "spec_path": "specs/116-notas-privadas-mensajero",
       "description": "Fullstack. Nota de texto libre por orden, privada del mensajero (distinta de orden.notas, que es de la tienda). Crear/editar/borrar; visible solo para su autor en detalle/card. Columna nota (text nullable) en orden_mensajero_meta (tabla de 115). Server Action guardar/limpiar; authz por mensajero. Depende de 115 (misma migracion).",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
