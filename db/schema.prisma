@@ -412,10 +412,12 @@ model Orden {
 
 // Feature 36 (R5, decision F1.4-c): metodo de pago del recaudo al cliente en una
 // ENTREGA. Enum Postgres nativo (patron RolValue/VehiculoValue), fuente unica de
-// verdad reflejada en lib/types/metodo-pago.ts. OJO 'SIMPE' en mayusculas (F1.4-c).
+// verdad reflejada en lib/types/metodo-pago.ts. OJO 'SINPE' en mayusculas (medio de
+// pago de Costa Rica). Feature 118: corregido el typo historico del valor via
+// ALTER TYPE ... RENAME VALUE (migracion _metodo_pago_rename_simpe_to_sinpe).
 enum MetodoPagoValue {
   efectivo
-  SIMPE
+  SINPE
   transferencia
 
   @@map("metodo_pago_value")

@@ -468,7 +468,7 @@ describe("CierresAdminModule", () => {
         gestionId: "g1",
         resultado: "entregada",
         montoRecibido: "1250.50",
-        metodoPago: "SIMPE",
+        metodoPago: "SINPE",
       }),
     ];
     verDetalleMock.mockResolvedValue({
@@ -489,7 +489,7 @@ describe("CierresAdminModule", () => {
     });
     const region = within(dialog).getByRole("region", { name: "Entregadas" });
     expect(within(region).getByText("₡1250.50")).toBeInTheDocument();
-    expect(within(region).getByText("SIMPE")).toBeInTheDocument();
+    expect(within(region).getByText("SINPE")).toBeInTheDocument();
   });
 
   it("feature 56/R23 (Q6): el badge 'Sin tarifa' se muestra por el flag tarifaFaltante en ENTREGAS", async () => {

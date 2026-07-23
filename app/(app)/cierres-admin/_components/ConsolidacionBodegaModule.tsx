@@ -240,7 +240,7 @@ export function ConsolidacionBodegaModule({
 const COLUMNAS_CONSOLIDABLES: Column<CierreBodegaResumenLite>[] = [
   { id: "mensajero", value: "Mensajero", render: (c) => c.mensajeroNombre },
   { id: "efectivo", value: "Efectivo", render: (c) => money(c.totales.efectivo) },
-  { id: "simpe", value: "SIMPE", render: (c) => money(c.totales.simpe) },
+  { id: "simpe", value: "SINPE", render: (c) => money(c.totales.simpe) },
   {
     id: "transferencia",
     value: "Transferencia",

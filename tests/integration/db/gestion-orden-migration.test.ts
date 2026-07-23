@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
-import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
 
 // Feature 36 — cobertura ESTATICA de la migracion
 // `*_gestion_orden_estados_metodo_pago` (patron postulacion/satelite/enum):
@@ -44,12 +43,16 @@ describe("UP — estados nuevos de catalogo (R2/R3)", () => {
   });
 });
 
-describe("UP — enum metodo de pago (R5)", () => {
-  it("crea el enum metodo_pago_value con efectivo/SIMPE/transferencia (SIMPE mayus, F1.4-c)", () => {
+describe("UP — enum metodo de pago (R5, R10)", () => {
+  // Feature 118 (R10): esta migracion es HISTORICA e inmutable. Crea el enum con el
+  // typo original 'SIMPE'. El test afirma el literal HISTORICO y NO se acopla a
+  // METODO_PAGO_SEED (que ya vale 'SINPE' tras la correccion): el rename vive en la
+  // migracion nueva _metodo_pago_rename_simpe_to_sinpe, no aqui.
+  it("crea el enum metodo_pago_value con el literal historico efectivo/SIMPE/transferencia (SIMPE mayus, F1.4-c)", () => {
     const match = upSql.match(/CREATE TYPE "metodo_pago_value" AS ENUM \(([^)]*)\);/);
     expect(match).not.toBeNull();
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-    expect(new Set(valores)).toEqual(new Set(METODO_PAGO_SEED));
+    expect(new Set(valores)).toEqual(new Set(["efectivo", "SIMPE", "transferencia"]));
     expect(valores).toContain("SIMPE");
   });
 });

@@ -61,7 +61,7 @@ export function computeTotales(gestiones: CierreGestionPendienteRow[]): CierreTo
       case "efectivo":
         efectivo = efectivo.plus(monto);
         break;
-      case "SIMPE":
+      case "SINPE":
         simpe = simpe.plus(monto);
         break;
       case "transferencia":
