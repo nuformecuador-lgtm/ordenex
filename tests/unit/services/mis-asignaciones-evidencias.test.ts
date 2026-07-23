@@ -83,8 +83,14 @@ function fakeRutaRepo(): Pick<IRutaOptimizadaRepository, "findByMensajero" | "up
   return { findByMensajero: vi.fn(async () => null), upsertOrigen: vi.fn(async () => {}) };
 }
 
-function fakeMetaRepo(): Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero"> {
-  return { findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()) };
+function fakeMetaRepo(): Pick<
+  IOrdenMensajeroMetaRepository,
+  "findMarcarLuegoByMensajero" | "findNotasByMensajero"
+> {
+  return {
+    findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
+    findNotasByMensajero: vi.fn(async () => new Map<string, string>()), // feature 116
+  };
 }
 
 function newService(
