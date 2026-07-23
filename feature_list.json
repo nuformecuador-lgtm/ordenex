@@ -1311,7 +1311,7 @@
       "name": "evidencias: subir mas de una foto",
       "spec_path": "specs/119-evidencias-multiples-fotos",
       "description": "Fullstack. La evidencia de gestion pasa de 1 a 1..N fotos (hoy gestion_orden.evidencia_storage_path/_content_type, una sola). (a) tabla nueva gestion_orden_evidencia(gestion_id FK, storage_path, content_type, indice) 1:N + migracion/down; migrar el path existente. (b) gestionar (GestionarInput) acepta EvidenciaArchivo[] con la misma atomicidad storage<->DB (rollback total si falla una subida). (c) GestionarOrdenPanel: seleccion multiple + previews + quitar. Max 3 fotos; se conservan validaciones MIME/tamano por archivo. Aplica a entregada/rechazada/devuelta.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",

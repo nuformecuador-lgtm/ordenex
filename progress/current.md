@@ -33,15 +33,15 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 | 116 | notas privadas del mensajero (reusa tabla de 115, sin migración) | fullstack | med | 115 | spec_ready |
 | 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | spec_ready |
 | 118 | SIMPE → SINPE (~23 archivos reales, enum Postgres + textos) | fullstack | high | — | ✅ **done** (PR #145) |
-| 119 | evidencias: de 1 a 1..N fotos (tabla nueva `gestion_orden_evidencia`) | fullstack | high | 75 ✅ | **in_progress** (PR #148) |
+| 119 | evidencias: de 1 a 1..N fotos (tabla nueva `gestion_orden_evidencia`) | fullstack | high | 75 ✅ | ✅ **done** (PR #148) |
 
 **Progreso Fase 2:**
 - **118** ✅ done (PR #145). **115** ✅ done (PR #146). Ambas en `history.md`.
 - **113 (modo foco + detalle inline)** ✅ done (PR #147, merge humano 18:51). Preservó el badge/toggle/sort
   de 115. Ya en `history.md`.
-- **119 (evidencias)** ✅ implementada (backend+frontend) + revisada (APROBADO) + sincronizada con `dev`
-  → **PR #148**, falta merge humano. Atomicidad storage↔DB con rollback total, dual-write de portada,
-  máx 3 fotos. Aviso de seguridad (repo público) revisado con el humano: sin valores de secretos, seguir igual.
+- **119 (evidencias)** ✅ done (PR #148, merge humano 20:29). Atomicidad storage↔DB con rollback total,
+  dual-write de portada, máx 3 fotos. Ya en `history.md`. (Aviso de seguridad repo-público revisado con
+  el humano: sin valores de secretos, seguir igual.)
 - **114 (buscador)** 🟡 en curso (frontend), **adelantada en paralelo** con el merge de 119; integra sobre
   el módulo que ya trae 113+115; el mapa refleja el filtro (decisión del gate F1.4).
 - Cola: **116** (notas), **117** (filtro) — sobre la vista de lista del módulo, en serie. **Gating: cada PR

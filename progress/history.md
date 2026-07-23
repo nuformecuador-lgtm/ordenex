@@ -1815,3 +1815,20 @@
   sort de la feature 115.
 - R1–R12 trazados a tests. typecheck 0, lint 0, **4586/4586**. Reviewer APROBADO (rechazo inicial solo por
   `tasks.md` sin marcar `[x]`, remediado; sin cambios de código). **PR #147 → dev, merge humano 2026-07-23.**
+
+## 2026-07-23 — 119 evidencias de gestión: de 1 a 1..N fotos (máx 3)
+- La evidencia de gestión pasa de 1 foto a **1..3** (entregada/rechazada/devuelta). Tabla nueva
+  `gestion_orden_evidencia` 1:N (FK `gestion_id` CASCADE, `@@unique(gestion_id, indice)`, RLS sin
+  policies) + migración/`down.sql` + **backfill** (portada existente → fila `indice 0`, `content_type`
+  fallback `image/jpeg`).
+- **Expand/contract:** se conservan `gestion_orden.evidencia_storage_path/_content_type` como PORTADA
+  (índice 0) vía dual-write en la misma tx, para NO romper los consumidores de lectura (cierres 37/38/40,
+  API 106, que siguen viendo la portada). Repuntarlos a N fotos = follow-up fuera de alcance.
+- **Atomicidad storage↔DB con compensación:** subida secuencial acumulando lo subido; **rollback total**
+  (`storage.remove` + nada en DB) ante fallo de subida (R10) o de la transacción (R11). Contrato
+  `evidencias: EvidenciaArchivo[]`, `evidenciasSchema` min 1 / max 3, `evidenciaUrls` firmadas; el puente
+  temporal `foldEvidenciaSingular` fue retirado. UI: `GestionarOrdenPanel` multi-select + previews (con
+  revoke) + quitar + tope 3 + bloqueo de envío.
+- R1–R17 trazados a tests. typecheck 0, lint 0, **4644/4644** (tras sync con 113). Reviewer APROBADO.
+  **PR #148 → dev, merge humano 2026-07-23.** Despliegue: `prisma migrate deploy` (tabla + backfill); env
+  opcional `GESTION_MAX_EVIDENCIAS` (default 3); bucket `gestion-evidencias`.
