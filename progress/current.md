@@ -15,21 +15,28 @@
 
 ## Features en curso
 
-**Chat mensajero↔cliente vía WhatsApp — feature 109 (2026-07-23) → EN ESPECIFICACIÓN.** Pedido del
-humano: "chat que tiene acceso el mensajero, que usa la implementación de WhatsApp como intermediario
-y que a través del webhook registra las respuestas del cliente". Fullstack, high, `depends_on: null`.
-- **Fase 1 en curso:** feature registrada en `feature_list.json` (id 109, `pending`); `spec_author`
-  lanzado (`model: opus`) para `specs/109-chat-mensajero-whatsapp/` (requirements EARS + design + tasks).
-- **Infra WhatsApp ya existente (WIP en `flow`, reutilizable):** `lib/clients/whatsapp-cloud.ts`
-  (`WhatsappCloudClient.enviarTexto`/`enviarPlantilla`, saliente), `lib/config/whatsapp.ts`
-  (credenciales por env), plantillas sincronizadas a Meta (feature 107), `EnviarPlantillaWhatsappButton`
-  en `mis-asignaciones`. **NO existe** webhook de ENTRADA ni tablas de chat → es el núcleo nuevo.
-- **Alcance nuevo:** webhook `app/api/webhooks/whatsapp/route.ts` (GET handshake + POST firmado
-  X-Hub-Signature-256), tablas conversación/mensaje (migración + RLS por asignación), UI de hilo en
-  `mis-asignaciones` respetando la ventana de 24 h de WhatsApp (texto libre dentro, plantilla fuera).
-- **Próximo:** al terminar el spec → `spec_ready` + **PARAR en la puerta humana F1.4** (revisar los 3
-  archivos y resolver las decisiones abiertas). Rama/impl se difieren a Fase 2 en worktree aislado
-  desde `origin/dev` (el `flow` actual arrastra WIP ajeno de WhatsApp).
+**Chat mensajero↔cliente vía WhatsApp — feature 120 (2026-07-23) → EN IMPLEMENTACIÓN (Fase 2).**
+Pedido del humano: "chat que tiene acceso el mensajero, que usa la implementación de WhatsApp como
+intermediario y que a través del webhook registra las respuestas del cliente". Fullstack, high,
+`depends_on: null`. **RENUMERADA de 109 a 120** (el id 109 ya lo usaba 'orden sin gestionar / cierre
+vencido', done en dev; 112–119 reclamados por otras sesiones). Slug conservado.
+- **Fase 1 COMPLETA + gate F1.4 APROBADO** (D1–D6 cerradas): D1 envío en línea + reintento encolado;
+  D2 fuera de ventana 24 h bloquear texto libre y derivar a plantilla; D3 solo mensajero asignado (v1);
+  D4 orden asignada más reciente del número; D5 SWR polling ~10 s; D6 `WHATSAPP_WEBHOOK_VERIFY_TOKEN`
+  + `WHATSAPP_APP_SECRET`; migración post-merge a mano contra `ordenex-db` (live).
+- **Spec:** 25 requisitos EARS (R1–R25) en `specs/120-chat-mensajero-whatsapp/`, cada uno mapeado a test.
+- **Base de construcción:** worktree aislado **`ordenex-wt-120`**, rama `feature/120-chat-mensajero-whatsapp`
+  desde `flow` (que tras el merge del humano es superconjunto de `dev`, sin riesgo de revertir). Reutiliza
+  la integración WhatsApp del commit `eb50730` (cliente `whatsapp-cloud.ts`, config, plantillas,
+  `EnviarPlantillaWhatsappButton`) — el envío saliente ya existe; el **núcleo nuevo** es el webhook de
+  ENTRADA + tablas de chat + UI de hilo.
+- **Alcance nuevo:** webhook `app/api/webhooks/whatsapp/route.ts` (GET handshake `hub.challenge` con
+  `WHATSAPP_WEBHOOK_VERIFY_TOKEN`; POST firma `X-Hub-Signature-256` HMAC con `WHATSAPP_APP_SECRET`,
+  dedupe por `wa_message_id`, excluido del auth en `middleware.ts`), tablas conversación/mensaje
+  (migración + down.sql + RLS por asignación), Server Action de envío con ventana 24 h, UI de hilo en
+  `mis-asignaciones`.
+- **Próximo:** `backend_dev` (webhook + tablas + repos + server action) → `frontend_dev` (UI de hilo) →
+  `reviewer`, orquestación directa `model: opus`. Luego sync con `dev`, push y PR → dev.
 
 **Plantillas de mensajes — feature 107 (2026-07-22) → PR #135, falta merge humano.** Subitem
 "Plantillas" en Configuración (rol maestro, `/configuracion/plantillas`): CRUD completo (crear/editar/
