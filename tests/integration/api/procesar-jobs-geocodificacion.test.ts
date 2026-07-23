@@ -52,6 +52,8 @@ describe("R32 — el drenador resuelve el handler de geocodificacion y no lo re-
       "liberar_reprogramadas",
       "optimizacion_ruta",
       "webhook_estado", // feature 99
+      "whatsapp_chat_envio", // feature 109
+      "whatsapp_template_sync", // integracion WhatsApp
     ]);
   });
 

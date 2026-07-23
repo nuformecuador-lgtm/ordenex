@@ -1,0 +1,11 @@
+-- Feature 109 (design §2.2, D1): anade el 6.º valor al enum `job_tipo` —
+-- `whatsapp_chat_envio`, el job que REINTENTA el envio saliente de un mensaje de chat que
+-- devolvio `transitorio` en linea (payload { mensajeChatId }); persiste el saliente como
+-- `queued` y reconcilia su wa_message_id al drenar (R21).
+--
+-- POR QUE ESTA MIGRACION VA SOLA: Postgres NO permite USAR un valor de enum en la misma
+-- transaccion que lo anadio (error 55P04). Prisma Migrate corre cada migration.sql en una
+-- transaccion. Mismo criterio que 20260723120000_job_tipo_whatsapp_template_sync.
+--
+-- Aditiva: no altera ninguna tabla existente.
+ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'whatsapp_chat_envio';

@@ -22,6 +22,13 @@ import type {
 } from "@/lib/interfaces/services/IPlantillaMensajeService";
 import { PlantillaMensajeService } from "@/lib/services/PlantillaMensajeService";
 import { PlantillaMensajeRepository } from "@/lib/repositories/PlantillaMensajeRepository";
+import { JobRepository } from "@/lib/repositories/JobRepository";
+import { WhatsappPlantillasClient } from "@/lib/clients/whatsapp-cloud";
+import { WhatsappTemplatePort } from "@/lib/services/whatsapp/WhatsappTemplatePort";
+import { PlantillaWhatsappPropagator } from "@/lib/services/whatsapp/plantilla-whatsapp-sync";
+import { crearEncolarWhatsappTemplateSync } from "@/lib/services/jobs/whatsapp-template-sync-encolado";
+import { loadWhatsappConfig } from "@/lib/config/whatsapp";
+import type { PrismaClient } from "@prisma/client";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
@@ -49,7 +56,28 @@ function toPlantillaActionError(shape: AppErrorShape): ActionError {
 
 function buildPlantillaService(): IPlantillaMensajeService {
   const prisma = getPrismaClient();
-  return new PlantillaMensajeService(new PlantillaMensajeRepository(prisma));
+  const repo = new PlantillaMensajeRepository(prisma);
+  return new PlantillaMensajeService(repo, buildWhatsappPropagator(prisma, repo));
+}
+
+/**
+ * Propagador local -> Meta. Si WhatsApp NO esta configurado todavia (faltan envs), degrada a
+ * `undefined`: el CRUD local sigue funcionando y simplemente no propaga a Meta hasta que se
+ * llenen las credenciales. Asi el modulo es usable sin la integracion activa.
+ */
+function buildWhatsappPropagator(
+  prisma: PrismaClient,
+  repo: PlantillaMensajeRepository,
+): PlantillaWhatsappPropagator | undefined {
+  let config;
+  try {
+    config = loadWhatsappConfig();
+  } catch {
+    return undefined; // WhatsApp no configurado -> sin propagacion
+  }
+  const port = new WhatsappTemplatePort(new WhatsappPlantillasClient({ config }), config);
+  const encolar = crearEncolarWhatsappTemplateSync(new JobRepository(prisma));
+  return new PlantillaWhatsappPropagator(port, repo, encolar);
 }
 
 export interface PlantillaActionDeps {

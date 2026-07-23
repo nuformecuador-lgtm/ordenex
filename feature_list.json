@@ -1245,6 +1245,19 @@
       "zone": "backend",
       "branch": "feature/112-webhook-payload-data",
       "depends_on": 104
+    },
+    {
+      "id": 120,
+      "name": "chat del mensajero con el cliente via WhatsApp (webhook de entrada)",
+      "spec_path": "specs/120-chat-mensajero-whatsapp",
+      "status": "in_progress",
+      "status_note": "gate F1.4 APROBADO 2026-07-23 (D1 en linea+reintento encolado; D2 bloquear texto libre fuera de ventana 24h y derivar a plantilla; D3 solo mensajero asignado en v1; D4 orden asignada mas reciente del numero; D5 SWR polling ~10s; D6 WHATSAPP_WEBHOOK_VERIFY_TOKEN + WHATSAPP_APP_SECRET; migracion post-merge a mano contra ordenex-db live). Reviewer APROBADO 0 bloqueantes: 25/25 R con test, 57 tests de la feature verdes.",
+      "description": "Pedido del humano 2026-07-23: 'chat que tiene acceso el mensajero, que usa la implementacion de whatsapp como intermediario y que a traves del webhook registra las respuestas del cliente'. RENUMERADA de 109 a 120 (el 109 ya lo usaba 'orden sin gestionar / cierre vencido' done en dev; 112-119 reclamados por otras sesiones). Spec: 25 requisitos EARS R1-R25 en specs/120-chat-mensajero-whatsapp/, cada uno mapeado a test. ALCANCE (fullstack, high): (1) webhook de ENTRADA app/api/webhooks/whatsapp/route.ts (GET handshake hub.challenge con WHATSAPP_WEBHOOK_VERIFY_TOKEN; POST verifica firma X-Hub-Signature-256 HMAC-SHA256 timing-safe sobre el cuerpo crudo ANTES de parsear, dedupe por wa_message_id; en dev todo /api/ ya esta excluido del guard de sesion en middleware.ts). (2) tablas chat_conversacion/chat_mensaje (migracion + down.sql + RLS por asignacion). (3) ChatWhatsappService + repos + Server Actions lib/actions/chat-whatsapp.ts (enviarMensajeChat con ventana 24h, listarHiloChat con scope mensajero; reintento encolado via job whatsapp_chat_envio). (4) ChatWhatsappPanel montado en GestionarOrdenPanel (historial + estado de entrega + ventana 24h + fallback a plantilla 107). Reutiliza la integracion WhatsApp (whatsapp-cloud.ts, config, EnviarPlantillaWhatsappButton) que viaja en este mismo PR. Este PR se armo desde origin/dev + cherry-pick de la integracion WhatsApp para evitar la base rota de flow. Al desplegar: correr migraciones 20260723130000_chat_whatsapp y 20260723130100_job_tipo_whatsapp_chat_envio (post-merge a mano) y configurar WHATSAPP_WEBHOOK_VERIFY_TOKEN + WHATSAPP_APP_SECRET en Vercel.",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/120-chat-whatsapp",
+      "depends_on": null
     }
   ]
 }
