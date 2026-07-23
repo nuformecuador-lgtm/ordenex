@@ -1,0 +1,11 @@
+-- Feature 118 (R2): corrige el typo historico del medio de pago de Costa Rica
+-- renombrando el VALOR del enum de 'SIMPE' a 'SINPE'.
+--
+-- RENAME VALUE preserva el OID del valor en pg_enum, por lo que TODAS las filas de
+-- "gestion_orden" que ya apuntan a 'SIMPE' pasan a leerse 'SINPE' sin reescritura de
+-- filas, sin cambiar el conteo y sin perdida de datos (R4). No recrea el tipo ni toca
+-- columnas que lo referencian; no invalida indices ni FKs.
+--
+-- A diferencia de "ADD VALUE", "RENAME VALUE" SI puede ejecutarse dentro de una
+-- transaccion; el runner del repo lo aplica sin tratamiento especial.
+ALTER TYPE "metodo_pago_value" RENAME VALUE 'SIMPE' TO 'SINPE';

@@ -44,7 +44,7 @@ describe("computeTotales (R8) — money-safe por metodo de pago", () => {
   it("suma solo entregadas con monto, por metodo; STRING escala 2", () => {
     const totales = computeTotales([
       g({ gestionId: "a", montoRecibido: "10.50", metodoPago: "efectivo" }),
-      g({ gestionId: "b", montoRecibido: "4.50", metodoPago: "SIMPE" }),
+      g({ gestionId: "b", montoRecibido: "4.50", metodoPago: "SINPE" }),
       g({ gestionId: "c", montoRecibido: "2.00", metodoPago: "transferencia" }),
       g({ gestionId: "d", resultado: "rechazada", montoRecibido: "99.00", metodoPago: "efectivo" }),
     ]);

@@ -360,7 +360,7 @@ describe("CierreBodegaService — total neto y deuda de la central", () => {
     expect(r.totalNetoAgregado).toBe("2000.00"); // 5000 general - 3000 pagados
   });
 
-  it("el pago a mensajeros NO se paga con SIMPE ni transferencia: solo cuenta el efectivo", async () => {
+  it("el pago a mensajeros NO se paga con SINPE ni transferencia: solo cuenta el efectivo", async () => {
     const repo = fakeRepo({
       findCierresDiaConsolidables: vi.fn(async () => [
         consolidableRow({

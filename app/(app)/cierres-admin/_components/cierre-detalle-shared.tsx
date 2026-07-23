@@ -43,7 +43,7 @@ export const RESULTADO_VACIO: Record<CierreResultado, string> = {
 
 export const METODO_LABEL: Record<MetodoPagoValue, string> = {
   efectivo: "Efectivo",
-  SIMPE: "SIMPE",
+  SINPE: "SINPE",
   transferencia: "Transferencia",
 };
 
@@ -226,7 +226,7 @@ export function TotalItem({
 }
 
 /**
- * Panel de totales snapshot por método (R13): efectivo / SIMPE / transferencia +
+ * Panel de totales snapshot por método (R13): efectivo / SINPE / transferencia +
  * general. Los montos llegan como STRING y se renderizan tal cual (money-safe). Es
  * una `region` accesible con nombre `ariaLabel` para que el E2E la localice.
  */
@@ -256,7 +256,7 @@ export function TotalesPanel({
           className={`grid grid-cols-2 gap-4 pt-6 ${neto === undefined ? "sm:grid-cols-4" : "sm:grid-cols-5"}`}
         >
           <TotalItem label="Efectivo" value={money(totales.efectivo)} />
-          <TotalItem label="SIMPE" value={money(totales.simpe)} />
+          <TotalItem label="SINPE" value={money(totales.simpe)} />
           <TotalItem
             label="Transferencia"
             value={money(totales.transferencia)}
