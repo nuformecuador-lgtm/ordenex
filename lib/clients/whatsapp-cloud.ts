@@ -356,7 +356,7 @@ export class WhatsappPlantillasClient {
       // `message` completo (puede ecoar datos de la peticion).
       const codigo = extraerCodigoError(json);
       throw new WhatsappPlantillaError(
-        `${metodo} HTTP ${respuesta.status}${codigo !== undefined ? ` (code ${codigo}), reason: ${JSON.stringify((json as any)?.error)}` : ""}`,
+        `${metodo} HTTP ${respuesta.status}${codigo !== undefined ? ` (code ${codigo}), reason: ${JSON.stringify((json as { error?: unknown } | null | undefined)?.error)}` : ""}`,
       );
     }
 
