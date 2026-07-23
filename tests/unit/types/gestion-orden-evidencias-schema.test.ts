@@ -6,7 +6,8 @@ import { gestionConfig } from "@/lib/config/gestion";
 // Feature 119 (R5/R6/R7/R8) — el BORDE (zod) de la evidencia MULTIPLE. Mismo schema para
 // cliente (panel) y servidor (Server Action): validarlo aqui valida las dos defensas. La
 // evidencia paso de UNA foto a una LISTA `evidencias` de 1..N (tope R7), con validacion por
-// archivo (R8). El fold `evidencia`->`evidencias` (bridge de entrega escalonada) tambien se cubre.
+// archivo (R8). El panel ya migro a multi-seleccion (envia `evidencias`), asi que el puente
+// singular `evidencia`->`evidencias` se retiro y aqui solo se valida el contrato de lista.
 
 const MAX = gestionConfig.MAX_EVIDENCIAS_POR_GESTION;
 
@@ -104,10 +105,11 @@ describe("R8: validacion POR ARCHIVO — una foto invalida invalida el envio", (
   });
 });
 
-// Bridge de entrega escalonada: el panel sin migrar (T11) aun envia el campo SINGULAR
-// `evidencia`; el schema lo pliega a `evidencias: [evidencia]` para no romperlo en el intervalo.
-describe("bridge: el campo singular `evidencia` se pliega a la lista `evidencias`", () => {
-  it.each(["entregada", "rechazada", "devuelta"] as const)("%s: `evidencia` (una foto) -> valido, normalizado a lista de 1", (nombre) => {
+// El puente singular `evidencia`->`evidencias` se RETIRO al migrar el panel a multi-seleccion:
+// el schema ya NO acepta el campo singular. Un objeto con `evidencia` (y sin `evidencias`) cae
+// en `min(1)` -> invalido, con el error colgando del campo lista `evidencias`.
+describe("sin puente: el campo singular `evidencia` ya no se pliega", () => {
+  it.each(["entregada", "rechazada", "devuelta"] as const)("%s: `evidencia` sin `evidencias` -> invalido", (nombre) => {
     const raw =
       nombre === "entregada"
         ? { ordenId: "o1", resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencia: fotoValida() }
@@ -115,26 +117,7 @@ describe("bridge: el campo singular `evidencia` se pliega a la lista `evidencias
           ? { ordenId: "o1", resultado: "rechazada", motivo: "x", evidencia: fotoValida() }
           : { ordenId: "o1", resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "x", evidencia: fotoValida() };
     const r = gestionarSchema.safeParse(raw);
-    expect(r.success).toBe(true);
-    if (r.success) {
-      const data = r.data as { evidencias: unknown[] };
-      expect(Array.isArray(data.evidencias)).toBe(true);
-      expect(data.evidencias).toHaveLength(1);
-    }
-  });
-
-  it("si vienen AMBOS, gana la lista `evidencias` (no se duplica con `evidencia`)", () => {
-    const r = gestionarSchema.safeParse({
-      ordenId: "o1",
-      resultado: "rechazada",
-      motivo: "x",
-      evidencias: fotos(2),
-      evidencia: fotoValida(),
-    });
-    expect(r.success).toBe(true);
-    if (r.success) {
-      const data = r.data as { evidencias: unknown[] };
-      expect(data.evidencias).toHaveLength(2);
-    }
+    expect(r.success).toBe(false);
+    if (!r.success) expect(fieldErrorsDe(r.error).evidencias).toBeDefined();
   });
 });

@@ -64,22 +64,6 @@ const evidenciasSchema = z
     `maximo ${gestionConfig.MAX_EVIDENCIAS_POR_GESTION} fotos de evidencia`,
   ); // R7
 
-/**
- * Feature 119 (bridge de entrega escalonada): normaliza el campo SINGULAR historico
- * `evidencia` a la LISTA `evidencias`. El panel del mensajero (T11, frontend) todavia envia
- * `evidencia` (una foto) hasta que migre a multi-seleccion; mientras tanto, tanto el cliente
- * (`safeParse` en el panel) como el servidor aceptan AMBAS formas y las unifican a `evidencias`.
- * La Server Action ya arma `evidencias` via `getAll("evidencia")`; este fold cubre el cliente
- * que aun arma `evidencia`. Sin este puente el panel sin migrar quedaria roto en el intervalo.
- */
-function foldEvidenciaSingular(raw: unknown): unknown {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
-  const obj = raw as Record<string, unknown>;
-  if (obj.evidencias !== undefined || obj.evidencia === undefined) return raw;
-  const { evidencia, ...rest } = obj;
-  return { ...rest, evidencias: [evidencia] };
-}
-
 // R16: recoger recibe un conjunto NO vacio de ordenIds (lote o de a una).
 // Feature 92/R22: + `ubicacion` OPCIONAL. Al ser opcional, ninguna llamada existente se
 // rompe: un cliente que no la envie sigue validando igual.
@@ -176,10 +160,11 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
   }),
 ]);
 
-// Feature 119: el schema publico envuelve la union con el fold `evidencia`->`evidencias`
-// (bridge de entrega escalonada; ver `foldEvidenciaSingular`). Cliente y servidor usan el
-// MISMO schema (R8): una peticion que evite la UI se revalida igual.
-export const gestionarSchema = z.preprocess(foldEvidenciaSingular, gestionarUnionSchema);
+// Feature 119: el contrato de gestion recibe la LISTA `evidencias` (1..N fotos). Cliente (panel)
+// y servidor (Server Action) usan el MISMO schema (R8): el panel envia `evidencias` en su
+// `safeParse` y el borde arma `evidencias` con `getAll("evidencia")`, asi que ninguno depende ya
+// del campo singular historico (el puente `foldEvidenciaSingular` se retiro al migrar el panel).
+export const gestionarSchema = gestionarUnionSchema;
 export type GestionarActionInput = z.infer<typeof gestionarSchema>;
 
 // --- Resultados expuestos por la Server Action (agregan `unauthenticated`) ---

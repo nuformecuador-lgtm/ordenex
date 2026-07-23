@@ -59,15 +59,15 @@
 
 ## Bloque C — Frontend (depende de T7)
 
-- [ ] **T11 — `GestionarOrdenPanel`: multi-select + previews + quitar.** (PENDIENTE — zona frontend,
-  la implementa `frontend_dev` DESPUES; el contrato/service backend ya quedan listos. El schema
-  acepta transitoriamente el campo singular `evidencia` (bridge) para que el panel sin migrar siga
-  funcionando; al migrar, el panel debe enviar `evidencias`/`append("evidencia", …)` por foto.)
+- [x] **T11 — `GestionarOrdenPanel`: multi-select + previews + quitar.** (HECHA por `frontend_dev`.)
   Estado `evidencias: File[]`; componente local `EvidenciasField` (`multiple`, previews con
   `createObjectURL` + revoke, botón quitar, tope); `handleEvidenciaChange` concatena+comprime+recorta;
   `buildRaw`/`buildFormData` (`append` por foto); bloqueo de envío (R16/R17). Aplica a entregada/
-  rechazada/devuelta (design §4).
-  Hecho: test de componente cubre R14/R15/R16/R17; `reprogramada` sin cambios.
+  rechazada/devuelta (design §4). El panel ya envía `evidencias`/`append("evidencia", …)` por foto,
+  así que el **puente `foldEvidenciaSingular` se retiró** (ningún consumidor de producción manda el
+  campo singular; tests del schema ajustados al contrato de lista).
+  Hecho: test de componente `GestionarOrdenPanelEvidencias.test.tsx` cubre R14/R15/R16/R17;
+  `reprogramada` sin cambios; `./init.sh` verde.
 
 ## Bloque D — Tests y verificación (depende de sus fuentes)
 

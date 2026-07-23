@@ -30,13 +30,13 @@ function devuelta(extra: Record<string, unknown> = {}) {
     resultado: "devuelta",
     causaDevolucion: "not_found",
     motivo: MOTIVO,
-    evidencia: evidenciaValida(),
+    evidencias: [evidenciaValida()],
     ...extra,
   };
 }
 
 /** `devuelta()` sin el campo indicado (para probar su ausencia en el borde). */
-function devueltaSin(campo: "causaDevolucion" | "motivo" | "evidencia") {
+function devueltaSin(campo: "causaDevolucion" | "motivo" | "evidencias") {
   const base: Record<string, unknown> = devuelta();
   delete base[campo];
   return base;
@@ -74,7 +74,7 @@ describe("Feature 73 · rama `devuelta` — causa obligatoria (R1/R6)", () => {
   });
 
   it("pedido: SIN evidencia -> invalido con el error asociado al campo lista `evidencias`", () => {
-    const r = gestionarSchema.safeParse(devueltaSin("evidencia"));
+    const r = gestionarSchema.safeParse(devueltaSin("evidencias"));
     expect(r.success).toBe(false);
     if (!r.success) {
       // Feature 119 (R6): la evidencia es una LISTA -> el error cuelga de `evidencias`.
@@ -128,7 +128,7 @@ describe("Feature 75 · la evidencia (foto) pasa a ser obligatoria en `devuelta`
   });
 
   it("SIN evidencia -> invalido, con el error asociado al campo lista `evidencias`", () => {
-    const r = gestionarSchema.safeParse(devueltaSin("evidencia"));
+    const r = gestionarSchema.safeParse(devueltaSin("evidencias"));
     expect(r.success).toBe(false);
     if (!r.success) {
       // Feature 119 (R6): la evidencia es una LISTA -> el error cuelga de `evidencias`.
@@ -137,7 +137,7 @@ describe("Feature 75 · la evidencia (foto) pasa a ser obligatoria en `devuelta`
   });
 
   it("evidencia no-imagen (pdf) -> invalido en el campo lista `evidencias`", () => {
-    const r = gestionarSchema.safeParse(devuelta({ evidencia: { type: "application/pdf", size: 10 } }));
+    const r = gestionarSchema.safeParse(devuelta({ evidencias: [{ type: "application/pdf", size: 10 }] }));
     expect(r.success).toBe(false);
     if (!r.success) {
       // Feature 119 (R8): la foto invalida cuelga del campo lista `evidencias` (validacion por archivo).
@@ -153,7 +153,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
       resultado: "entregada",
       montoRecibido: 1000,
       metodoPago: "efectivo",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
       causaDevolucion: "not_found",
     });
     expect(r.success).toBe(true);
@@ -165,7 +165,7 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
       ordenId: "o1",
       resultado: "rechazada",
       motivo: "cliente rechazo",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
       causaDevolucion: "wrong_address",
     });
     expect(r.success).toBe(true);
@@ -190,13 +190,13 @@ describe("Feature 73 · la causa vive SOLO en la rama `devuelta` (R10/R19)", () 
       resultado: "entregada",
       montoRecibido: 1000,
       metodoPago: "efectivo",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     const rechazada = gestionarSchema.safeParse({
       ordenId: "o1",
       resultado: "rechazada",
       motivo: "cliente rechazo",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     const reprogramada = gestionarSchema.safeParse({
       ordenId: "o1",

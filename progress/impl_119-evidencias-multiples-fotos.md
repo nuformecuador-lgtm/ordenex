@@ -87,7 +87,77 @@ R14–R17 (frontend): **pendientes**, los cubrirá `frontend_dev` con el test de
 - `pnpm test` (vitest run) → `Test Files 464 passed (464)` · `Tests 4625 passed (4625)`.
 - `./init.sh` → `== init OK ==` (verde; typecheck + lint + test + down.sql de todas las migraciones).
 
-## Veredicto
+## Veredicto (backend)
 
 Backend de la 119 completo y verde (contrato 1..N, atomicidad storage↔DB con compensación,
 migración + RLS + backfill, tope 3); falta solo la parte frontend (T11/R14–R17) para `frontend_dev`.
+
+---
+
+# Impl 119 — parte FRONTEND (T11, R14–R17)
+
+> Zona frontend. Migra `GestionarOrdenPanel` de la foto ÚNICA a la LISTA de 1..N fotos (tope 3).
+> `./init.sh` verde. No se tocó backend, migraciones ni service.
+
+## Archivos tocados (frontend)
+
+**Modificados (código):**
+- `app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx` — estado
+  `evidencia: File | null` → `evidencias: File[]` (`[]` inicial); nuevo componente local
+  `EvidenciasField` (input `multiple`, previews con `URL.createObjectURL` + revoke, botón
+  "Quitar evidencia N", hint de tope) reusado en las 3 ramas con foto; `handleEvidenciaChange`
+  comprime cada archivo (`comprimirImagen`) y **concatena** al array, recortando a
+  `MAX_EVIDENCIAS_POR_GESTION` y marcando error de campo si excede (R16); `quitarEvidencia(index)`
+  (R15); `buildRaw` pasa `evidencias`; `buildFormData` hace `append("evidencia", foto)` por foto;
+  `handleConfirm` sigue validando con `gestionarSchema.safeParse` (R16/R17, min 1 / max 3);
+  `elegirResultado` resetea `evidencias` a `[]`. La clave de error de foto pasó de `evidencia` a
+  `evidencias`. `reprogramada` sin cambios.
+- `lib/types/gestion-orden.ts` — **retirado el puente `foldEvidenciaSingular`**; `gestionarSchema`
+  ahora es la unión directa (`gestionarUnionSchema`), sin `z.preprocess`.
+- `tests/setup/jest-dom.ts` — polyfill benigno de `URL.createObjectURL`/`revokeObjectURL` para
+  jsdom (los usa el panel para previsualizar); URLs únicas para no colisionar `key`s de lista.
+
+**Nuevos (tests):**
+- `tests/components/GestionarOrdenPanelEvidencias.test.tsx` — R14/R15/R16/R17.
+
+**Modificados (tests, por el retiro del puente / cambio de clave de error):**
+- `tests/unit/types/gestion-orden-schemas.test.ts`, `tests/unit/types/gestion-orden-causa-devolucion.test.ts`
+  — el campo singular `evidencia` de los fixtures pasa a la lista `evidencias: [...]`.
+- `tests/unit/types/gestion-orden-evidencias-schema.test.ts` — el bloque "bridge" (que probaba el
+  plegado singular) se reemplaza por "sin puente: el campo singular ya no se pliega → inválido".
+- `tests/components/MisAsignacionesModule.test.tsx` — el mock de `validation_error` del servidor
+  usa la clave `evidencias` (el borde revalida con el mismo schema).
+
+## Qué pasó con el puente `foldEvidenciaSingular`
+
+**ELIMINADO.** Tras migrar el panel, los únicos consumidores de `gestionarSchema` son (1) el panel,
+que en su `safeParse` construye `evidencias: File[]`, y (2) la Server Action, que arma
+`raw.evidencias` con `getAll("evidencia")`. Ningún consumidor de producción envía ya el campo
+singular `evidencia` al schema, así que el plegado quedó como código muerto y se retiró. La clave
+`evidencia` sigue siendo la del FormData (N valores, misma clave) — eso NO cambió; lo que se retiró
+es solo el fold del OBJETO de zod. Los tests del schema que se apoyaban en el puente se ajustaron al
+contrato de lista.
+
+## Trazabilidad R14–R17 → test
+
+| R | Test |
+| -- | --- |
+| R14 | `GestionarOrdenPanelEvidencias.test.tsx`: "el input permite selección MÚLTIPLE en las 3 ramas" (attr `multiple`), "la selección se CONCATENA", "cada foto viaja como un valor de la clave `evidencia` (getAll → N)" |
+| R15 | `GestionarOrdenPanelEvidencias.test.tsx`: "seleccionar varias fotos muestra una previsualización por cada una", "'Quitar' elimina esa foto de la lista y revoca su object URL" |
+| R16 | `GestionarOrdenPanelEvidencias.test.tsx`: "seleccionar MÁS del tope (3) recorta a 3 y marca el error, sin llamar la action", "tras recortar y quitar una foto, se puede enviar con las 3 permitidas" |
+| R17 | `GestionarOrdenPanelEvidencias.test.tsx`: "sin ninguna foto, 'Guardar gestión' NO llama la action y muestra el error de campo" |
+
+## Verificación (salida real)
+
+- `pnpm run typecheck` → sin errores (tsc --noEmit, salida vacía).
+- `pnpm run lint` → `✖ 143 problems (0 errors, 143 warnings)` — 0 errores; los warnings son
+  preexistentes (el `<img>` de la preview lleva `eslint-disable-next-line @next/next/no-img-element`,
+  convención ya usada por los módulos de cierre; el efecto de previews usa `useMemo`, sin
+  `setState`-en-efecto).
+- `pnpm test` (vitest run) → `Test Files 465 passed (465)` · `Tests 4632 passed (4632)`.
+- `./init.sh` → `== init OK ==` (verde: typecheck + lint + test + down.sql).
+
+## Veredicto (frontend)
+
+Panel migrado a evidencias múltiples (1..3 fotos) con previews/quitar/tope y bloqueo de envío;
+puente `foldEvidenciaSingular` retirado; suite completa verde.

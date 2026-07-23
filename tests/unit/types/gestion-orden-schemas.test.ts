@@ -61,7 +61,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
       resultado: "entregada",
       montoRecibido: 100,
       metodoPago: "efectivo",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     expect(r.success).toBe(true);
   });
@@ -82,7 +82,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
       resultado: "entregada",
       montoRecibido: 0,
       metodoPago: "efectivo",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     expect(r.success).toBe(true);
   });
@@ -93,7 +93,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
       resultado: "entregada",
       montoRecibido: -1,
       metodoPago: "efectivo",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     expect(r.success).toBe(false);
   });
@@ -104,7 +104,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
       resultado: "entregada",
       montoRecibido: 100,
       metodoPago: "tarjeta",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     expect(r.success).toBe(false);
   });
@@ -115,7 +115,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
       resultado: "entregada",
       montoRecibido: 100,
       metodoPago: "SINPE",
-      evidencia: { type: "application/pdf", size: 10 },
+      evidencias: [{ type: "application/pdf", size: 10 }],
     });
     expect(r.success).toBe(false);
   });
@@ -167,7 +167,7 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia 
       resultado: "devuelta",
       causaDevolucion: "wrong_address",
       motivo: "direccion inexistente",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     expect(r.success).toBe(true);
   });
@@ -178,7 +178,7 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia 
       resultado: "devuelta",
       causaDevolucion: "wrong_address",
       motivo: "",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     expect(r.success).toBe(false);
   });
@@ -204,7 +204,7 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia 
       resultado: "devuelta",
       causaDevolucion: "wrong_address",
       motivo: "direccion inexistente",
-      evidencia: { type: "application/pdf", size: 10 },
+      evidencias: [{ type: "application/pdf", size: 10 }],
     });
     expect(r.success).toBe(false);
   });
@@ -216,7 +216,7 @@ describe("gestionarSchema — RECHAZO (R29)", () => {
       ordenId: "o1",
       resultado: "rechazada",
       motivo: "cliente rechazo",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     expect(r.success).toBe(true);
   });
@@ -235,7 +235,7 @@ describe("gestionarSchema — RECHAZO (R29)", () => {
       ordenId: "o1",
       resultado: "rechazada",
       motivo: "",
-      evidencia: evidenciaValida(),
+      evidencias: [evidenciaValida()],
     });
     expect(r.success).toBe(false);
   });
