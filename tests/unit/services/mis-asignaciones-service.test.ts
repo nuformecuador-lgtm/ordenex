@@ -6,6 +6,7 @@ import type {
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { IOrdenMensajeroMetaRepository } from "@/lib/interfaces/repositories/IOrdenMensajeroMetaRepository";
 import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
@@ -122,13 +123,24 @@ function fakeRutaRepo(
   };
 }
 
+// Feature 115: doble del meta-repo. Por defecto SIN marcas (Set vacio) -> `marcarLuego` false
+// en todas las cards, que es el estado previo a la 115; los tests heredados miden lo mismo.
+function fakeMetaRepo(
+  over: Partial<Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero">> = {},
+): Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero"> {
+  return {
+    findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
+    ...over,
+  };
+}
+
 function newService(
   repo: IGestionOrdenRepository = fakeRepo(),
   storage: IFileStorage = fakeStorage(),
   signed: ISignedUrlProvider = fakeSignedUrls(),
   rutaRepo: Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen"> = fakeRutaRepo(),
 ) {
-  return new MisAsignacionesService(repo, fakeOrdenRepo(), storage, signed, rutaRepo);
+  return new MisAsignacionesService(repo, fakeOrdenRepo(), storage, signed, rutaRepo, fakeMetaRepo());
 }
 
 function evidencia() {
@@ -610,6 +622,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
         fakeStorage(),
         fakeSignedUrls(),
         fakeRutaRepo(),
+        fakeMetaRepo(),
       );
       const r = await service.gestionar(devolucion, MENSAJERO);
       expect(r.status).toBe("ok");
@@ -643,6 +656,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
       fakeStorage(),
       fakeSignedUrls(),
       fakeRutaRepo(),
+      fakeMetaRepo(),
     );
     await service.gestionar(devolucion, MENSAJERO);
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devuelta_origen");
@@ -664,6 +678,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
       fakeStorage(),
       fakeSignedUrls(),
       fakeRutaRepo(),
+      fakeMetaRepo(),
     );
     const r = await service.gestionar(devolucion, MENSAJERO);
     expect(r.status).toBe("validation_error");
@@ -782,7 +797,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
   // Servicio con `ordenRepo` que reporta al mensajero como BLOQUEADO (Set con "m1").
   function bloqueado(repo = fakeRepo(), storage = fakeStorage(), signed = fakeSignedUrls()) {
     const ordenRepo = fakeOrdenRepo(["m1"]);
-    const service = new MisAsignacionesService(repo, ordenRepo, storage, signed, fakeRutaRepo());
+    const service = new MisAsignacionesService(repo, ordenRepo, storage, signed, fakeRutaRepo(), fakeMetaRepo());
     return { service, repo, storage, signed, ordenRepo };
   }
 

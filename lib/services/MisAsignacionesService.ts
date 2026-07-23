@@ -9,6 +9,7 @@ import type {
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { IOrdenMensajeroMetaRepository } from "@/lib/interfaces/repositories/IOrdenMensajeroMetaRepository";
 import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -72,6 +73,13 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       IRutaOptimizadaRepository,
       "findByMensajero" | "upsertOrigen"
     >,
+    // Feature 115 (R17/R20): meta privada del mensajero. Solo LECTURA aqui (findMarcarLuegoByMensajero)
+    // para reflejar la marca "gestionar mas tarde" del PROPIO actor en el listado; la escritura vive
+    // en OrdenMensajeroMetaService.
+    private readonly metaRepo: Pick<
+      IOrdenMensajeroMetaRepository,
+      "findMarcarLuegoByMensajero"
+    >,
   ) {}
 
   /**
@@ -111,13 +119,16 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta] = await Promise.all([
-      this.repo.getOrdenEnGestion(actor.usuarioId), // R20
-      this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
-      this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
-      this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
-      this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
-    ]);
+    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta, marcadasLuego] =
+      await Promise.all([
+        this.repo.getOrdenEnGestion(actor.usuarioId), // R20
+        this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
+        this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
+        this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
+        this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
+        // Feature 115 (R17/R20): marcas "gestionar mas tarde" del PROPIO actor (Set<ordenId>).
+        this.metaRepo.findMarcarLuegoByMensajero(actor.usuarioId),
+      ]);
 
     // Feature 92 (R28): posicion por orden. Vacio si nunca se optimizo -> todas las cards
     // quedan "sin posicion" y conservan el orden actual, que es el comportamiento previo.
@@ -126,7 +137,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
     for (const row of rows) {
-      const dto = toDTO(row);
+      // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
+      // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
+      const dto = { ...toDTO(row), marcarLuego: marcadasLuego.has(row.id) };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
         porRecoger.push(dto);
@@ -409,6 +422,9 @@ function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     // Feature 92 (R28): la posicion la resuelve el llamador con el mapa de la ruta; el
     // default `null` es correcto para "Por recoger", que nunca tiene posicion.
     secuenciaRuta: null,
+    // Feature 115 (R17): default `false`; el llamador lo sobreescribe con la marca real del
+    // actor (`marcadasLuego.has(row.id)`). Aqui SIEMPRE nace un boolean concreto.
+    marcarLuego: false,
   };
 }
 
