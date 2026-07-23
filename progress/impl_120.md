@@ -176,3 +176,23 @@ type EnviarPlantillaChatResult =
 ## Veredicto (bloque H)
 `enviarPlantillaChat` enviada y persistida en el hilo como saliente `tipo=plantilla`; typecheck
 en 0 y 11 tests nuevos en verde, sin filtrar token/numero.
+
+## Refinamiento UI (pedido humano) — burbuja de plantillas → input del chat
+La burbuja de plantillas (junto al teléfono) ya NO abre wa.me cuando se usa dentro del chat:
+al elegir una plantilla PEGA su texto renderizado en el input del composer, listo para
+editar/enviar. Decisión de envío del humano:
+- Ventana ABIERTA → `enviarMensajeChat(ordenId, texto)` (texto libre, editable).
+- Ventana CERRADA + plantilla elegida → `enviarPlantillaChat(ordenId, plantillaId)` (badge
+  "Se enviará como plantilla"); sin plantilla → no se envía texto libre (se invita a elegir).
+
+Cambios:
+- `EnviarPlantillaWhatsappButton`: nuevo prop opcional `onElegirPlantilla({id, textoRenderizado})`.
+  Sin el prop conserva el flujo wa.me (feature 87 intacta).
+- `ChatWhatsappPanel`: composer CONTROLADO por un borrador `{ texto, plantillaId }` (props
+  `borrador` + `onBorradorChange`); envía por texto o por plantilla según la ventana.
+- `GestionarOrdenPanel`: levanta el borrador y lo comparte entre la burbuja (junto al teléfono)
+  y el panel de chat.
+
+Verificación: `pnpm run typecheck` en 0 errores; `pnpm vitest run` completo verde
+(475 archivos / 4716 tests), incluidos los 4 casos nuevos del composer (a-d) en
+`ChatWhatsappPanel.test.tsx` y `MisAsignacionesModule.test.tsx` intacto.

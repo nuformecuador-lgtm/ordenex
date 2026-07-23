@@ -8,7 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/useToast";
-import { enviarMensajeChat, listarHiloChat } from "@/lib/actions/chat-whatsapp";
+import {
+  enviarMensajeChat,
+  enviarPlantillaChat,
+  listarHiloChat,
+} from "@/lib/actions/chat-whatsapp";
 import type {
   ChatMensajeVista,
   ListarHiloChatResult,
@@ -33,9 +37,28 @@ import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 /** Refresco del hilo cada 10 s (design.md D5). */
 const REFRESH_INTERVAL_MS = 10_000;
 
+/**
+ * Feature 120: borrador CONTROLADO del composer del chat. `texto` es lo que se ve en el input;
+ * `plantillaId` != null marca que ese texto provino de una plantilla (se eligio desde la
+ * burbuja). Fuera de la ventana de 24 h ese `plantillaId` decide si se puede enviar (Meta solo
+ * acepta plantillas fuera de ventana). Vive en el padre (`GestionarOrdenPanel`) para que la
+ * burbuja "junto al telefono" y este panel compartan el mismo borrador.
+ */
+export interface BorradorChat {
+  texto: string;
+  plantillaId: string | null;
+}
+
+/** Borrador vacio: input limpio y sin plantilla asociada. */
+export const BORRADOR_CHAT_VACIO: BorradorChat = { texto: "", plantillaId: null };
+
 export interface ChatWhatsappPanelProps {
   /** Orden en gestion: define el hilo (por su id) y el destino del fallback de plantilla. */
   orden: MiAsignacionDTO;
+  /** Borrador controlado del composer (texto del input + plantilla asociada). */
+  borrador: BorradorChat;
+  /** Actualiza el borrador (al teclear, al elegir plantilla o al limpiar tras enviar). */
+  onBorradorChange: (borrador: BorradorChat) => void;
 }
 
 /** Etiqueta y variante del badge segun el estado de entrega del saliente (R22). */
@@ -95,9 +118,12 @@ function Burbuja({ mensaje }: { mensaje: ChatMensajeVista }) {
  * automatico y, dentro de la ventana de 24 h, permite responder con texto libre; fuera
  * de ella exige plantilla aprobada (feature 107).
  */
-export function ChatWhatsappPanel({ orden }: Readonly<ChatWhatsappPanelProps>) {
+export function ChatWhatsappPanel({
+  orden,
+  borrador,
+  onBorradorChange,
+}: Readonly<ChatWhatsappPanelProps>) {
   const toast = useToast();
-  const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
 
   // R24 / D5: polling con SWR. La Server Action `listarHiloChat` impone el scope del
@@ -112,38 +138,94 @@ export function ChatWhatsappPanel({ orden }: Readonly<ChatWhatsappPanelProps>) {
   const mensajes = hiloOk?.mensajes ?? [];
   const ventanaAbierta = hiloOk?.ventanaAbierta ?? false;
 
+  /** Feature 120: al elegir una plantilla desde la burbuja, se pega su texto en el input. */
+  function pegarPlantilla(plantilla: { id: string; textoRenderizado: string }) {
+    onBorradorChange({ texto: plantilla.textoRenderizado, plantillaId: plantilla.id });
+  }
+
+  /** Feature 120: teclear texto libre desmarca la plantilla (pasa a ser un texto propio). */
+  function editarTexto(texto: string) {
+    onBorradorChange({ texto, plantillaId: null });
+  }
+
+  function limpiarBorrador() {
+    onBorradorChange(BORRADOR_CHAT_VACIO);
+  }
+
+  /**
+   * Feature 120 — envio DENTRO de la ventana: texto libre (`enviarMensajeChat`). El backend
+   * sigue siendo la defensa (revalida la ventana); aqui solo el flujo feliz + `transitorio`.
+   */
+  async function enviarTextoLibre() {
+    const limpio = borrador.texto.trim();
+    if (!limpio) return;
+    const res = await enviarMensajeChat(orden.id, limpio);
+    switch (res.status) {
+      case "ok":
+        limpiarBorrador();
+        await mutate();
+        break;
+      case "transitorio":
+        // R21: el mensaje quedo persistido (queued) y encolado para reintento.
+        limpiarBorrador();
+        toast.info("Mensaje en cola; se reintentará el envío.");
+        await mutate();
+        break;
+      case "fuera_ventana":
+        // R19/R23: la ventana se cerró; refresca para revelar el envío por plantilla.
+        toast.error("La ventana de 24 h expiró. Envía una plantilla.");
+        await mutate();
+        break;
+      case "no_configurado":
+        toast.error("El envío por WhatsApp no está configurado.");
+        break;
+      case "forbidden":
+        toast.error("No puedes responder este chat.");
+        break;
+      default:
+        toast.error("Tu sesión expiró. Vuelve a entrar.");
+    }
+  }
+
+  /**
+   * Feature 120 — envio FUERA de la ventana: solo plantilla aprobada (`enviarPlantillaChat`).
+   * Requiere que el borrador provenga de una plantilla (`plantillaId`); nunca envia texto libre.
+   */
+  async function enviarComoPlantilla(plantillaId: string) {
+    const res = await enviarPlantillaChat(orden.id, plantillaId);
+    switch (res.status) {
+      case "ok":
+        limpiarBorrador();
+        await mutate();
+        break;
+      case "transitorio":
+        limpiarBorrador();
+        toast.info("Plantilla en cola; se reintentará el envío.");
+        await mutate();
+        break;
+      case "not_found":
+        toast.error("Esa plantilla ya no está disponible.");
+        break;
+      case "no_configurado":
+        toast.error("El envío por WhatsApp no está configurado.");
+        break;
+      case "forbidden":
+        toast.error("No puedes responder este chat.");
+        break;
+      default:
+        toast.error("Tu sesión expiró. Vuelve a entrar.");
+    }
+  }
+
   async function handleEnviar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const limpio = texto.trim();
-    if (!limpio || enviando) return;
-
+    if (enviando) return;
     setEnviando(true);
     try {
-      const res = await enviarMensajeChat(orden.id, limpio);
-      switch (res.status) {
-        case "ok":
-          setTexto("");
-          await mutate();
-          break;
-        case "transitorio":
-          // R21: el mensaje quedo persistido (queued) y encolado para reintento.
-          setTexto("");
-          toast.info("Mensaje en cola; se reintentará el envío.");
-          await mutate();
-          break;
-        case "fuera_ventana":
-          // R19/R23: la ventana se cerró; refresca para revelar el fallback de plantilla.
-          toast.error("La ventana de 24 h expiró. Envía una plantilla.");
-          await mutate();
-          break;
-        case "no_configurado":
-          toast.error("El envío por WhatsApp no está configurado.");
-          break;
-        case "forbidden":
-          toast.error("No puedes responder este chat.");
-          break;
-        default:
-          toast.error("Tu sesión expiró. Vuelve a entrar.");
+      if (ventanaAbierta) {
+        await enviarTextoLibre();
+      } else if (borrador.plantillaId !== null) {
+        await enviarComoPlantilla(borrador.plantillaId);
       }
     } finally {
       setEnviando(false);
@@ -179,36 +261,85 @@ export function ChatWhatsappPanel({ orden }: Readonly<ChatWhatsappPanelProps>) {
         </ul>
       )}
 
-      {/* R23: dentro de la ventana -> texto libre; fuera -> fallback a plantilla (107). */}
+      {/* R23 + feature 120: dentro de la ventana -> texto libre (editable, con la burbuja para
+          pegar una plantilla); fuera -> solo plantilla. Si ya se eligió una (plantillaId), se
+          muestra su texto pegado con un aviso y el botón envía como plantilla; si no, se invita
+          a elegir una. Nunca se envía texto libre fuera de la ventana (R19). */}
       {ventanaAbierta ? (
         <form onSubmit={handleEnviar} className="flex items-center gap-2">
           <Input
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
+            value={borrador.texto}
+            onChange={(e) => editarTexto(e.target.value)}
             placeholder="Escribe un mensaje…"
             aria-label="Mensaje para el cliente"
             maxLength={4096}
             disabled={enviando}
+          />
+          {/* Burbuja: pega una plantilla renderizada en el input (feature 120). */}
+          <EnviarPlantillaWhatsappButton
+            orden={orden}
+            size="sm"
+            onElegirPlantilla={pegarPlantilla}
           />
           <Button
             type="submit"
             size="icon"
             className="shrink-0"
             loading={enviando}
-            disabled={enviando || texto.trim().length === 0}
+            disabled={enviando || borrador.texto.trim().length === 0}
             aria-label="Enviar mensaje"
           >
             <Send className="size-4" aria-hidden="true" />
           </Button>
         </form>
+      ) : borrador.plantillaId !== null ? (
+        <form onSubmit={handleEnviar} className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            {/* Fuera de ventana el texto no es editable: se enviará la plantilla tal cual. */}
+            <Input
+              value={borrador.texto}
+              readOnly
+              aria-label="Mensaje para el cliente"
+            />
+            <EnviarPlantillaWhatsappButton
+              orden={orden}
+              size="sm"
+              onElegirPlantilla={pegarPlantilla}
+            />
+            <Button
+              type="submit"
+              size="icon"
+              className="shrink-0"
+              loading={enviando}
+              disabled={enviando}
+              aria-label="Enviar plantilla"
+            >
+              <Send className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <Badge variant="secondary">Se enviará como plantilla</Badge>
+            <button
+              type="button"
+              onClick={limpiarBorrador}
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              Quitar
+            </button>
+          </div>
+        </form>
       ) : (
         <div className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">
-            Fuera de la ventana de 24 h. Envía una plantilla aprobada para retomar
+            Fuera de la ventana de 24 h. Elige una plantilla aprobada para retomar
             la conversación.
           </p>
           <div>
-            <EnviarPlantillaWhatsappButton orden={orden} size="sm" />
+            <EnviarPlantillaWhatsappButton
+              orden={orden}
+              size="sm"
+              onElegirPlantilla={pegarPlantilla}
+            />
           </div>
         </div>
       )}

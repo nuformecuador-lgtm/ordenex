@@ -117,4 +117,17 @@
 | R23 | G2.T `input habilitado dentro / plantilla fuera de la ventana` | component |
 | R24 | G3.T `refresca el hilo sin recarga manual` | component |
 | R25 | D1.T `resuelve la orden por número y no rompe el 200 si no resuelve` | unit |
+
+## Refinamiento UI (pedido humano): burbuja de plantillas → input del chat
+
+La burbuja de plantillas pega el mensaje renderizado en el input del chat (no wa.me dentro del
+panel). Envío: ventana abierta → texto libre; ventana cerrada → plantilla aprobada.
+
+| Comportamiento | Test | Tipo |
+| --- | --- | --- |
+| Elegir plantilla pega su texto en el input | `pega el texto de la plantilla elegida en el input del chat` | component |
+| Ventana abierta → envía texto libre (`enviarMensajeChat`) | `con la ventana abierta, envía el texto del input como texto libre` | component |
+| Ventana cerrada + plantilla → `enviarPlantillaChat(ordenId, plantillaId)` | `con la ventana cerrada y plantilla elegida, envía como plantilla` | component |
+| Ventana cerrada sin plantilla → no envía texto libre | `con la ventana cerrada y sin plantilla, no permite enviar texto libre` | component |
+| Sin callback la burbuja conserva wa.me (feature 87) | `R17/R15: el detalle reusa ContactoButtons y su WhatsApp abre wa.me…` | component |
 </content>

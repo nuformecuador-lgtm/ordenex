@@ -20,7 +20,11 @@ import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
-import { ChatWhatsappPanel } from "./ChatWhatsappPanel";
+import {
+  ChatWhatsappPanel,
+  BORRADOR_CHAT_VACIO,
+  type BorradorChat,
+} from "./ChatWhatsappPanel";
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
@@ -157,6 +161,10 @@ export function GestionarOrdenPanel({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [enviando, setEnviando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  // Feature 120: borrador COMPARTIDO entre la burbuja de plantillas (junto al teléfono) y el
+  // panel de chat. Al elegir una plantilla desde la burbuja, su texto renderizado se "pega" en
+  // el input del chat, listo para editar/enviar. Se remonta limpio al cambiar de orden (`key`).
+  const [borradorChat, setBorradorChat] = useState<BorradorChat>(BORRADOR_CHAT_VACIO);
 
   // Feature 119 (R14/R16): agrega las fotos SELECCIONADAS a la lista. Cada foto se comprime
   // en el cliente antes de guardarla (una foto de celular sin comprimir revienta el limite de
@@ -381,13 +389,25 @@ export function GestionarOrdenPanel({
               nombre={orden.destinatario}
               size="lg"
             />
-            {/* Integracion WhatsApp: burbuja que lista las plantillas, las renderiza con los
-                datos de la orden y abre WhatsApp con el mensaje ya escrito al elegir una. */}
-            <EnviarPlantillaWhatsappButton orden={orden} size="lg" />
+            {/* Integracion WhatsApp + feature 120: burbuja que lista las plantillas, las
+                renderiza con los datos de la orden y, al elegir una, PEGA el mensaje en el
+                input del chat (borrador compartido) listo para enviar. */}
+            <EnviarPlantillaWhatsappButton
+              orden={orden}
+              size="lg"
+              onElegirPlantilla={(p) =>
+                setBorradorChat({ texto: p.textoRenderizado, plantillaId: p.id })
+              }
+            />
           </div>
-          {/* Feature 109 (G4/R22-R24): chat 1:1 con el cliente vía WhatsApp. Cuelga del
-              paso "detalle"; el propio panel impone la ventana de 24 h y refresca solo. */}
-          <ChatWhatsappPanel orden={orden} />
+          {/* Feature 109 (G4/R22-R24) + 120: chat 1:1 con el cliente vía WhatsApp. Cuelga del
+              paso "detalle"; el propio panel impone la ventana de 24 h y refresca solo. El
+              composer está controlado por el borrador compartido con la burbuja. */}
+          <ChatWhatsappPanel
+            orden={orden}
+            borrador={borradorChat}
+            onBorradorChange={setBorradorChat}
+          />
           {/* Feature 98: gate de verificación. Antes de fijar el puntero y avanzar
               a los 4 botones, el mensajero DEBE confirmar la guía del paquete
               (escaneo o tecleo) y esta debe COINCIDIR con `orden.numGuia`. Solo
