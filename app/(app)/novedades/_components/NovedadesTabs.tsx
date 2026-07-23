@@ -16,7 +16,7 @@ import {
 // por Server Action, que debe sobrevivir al cambio de pestaña. Etiquetas i18n-ready.
 
 const TAB_NOVEDADES_LABEL = "En devolución";
-const TAB_RECHAZOS_SLA_LABEL = "Rechazadas por SLA";
+const TAB_RECHAZOS_SLA_LABEL = "Rechazadas por plazo vencido";
 const TABS_ARIA_LABEL = "Vistas de novedades";
 
 export interface NovedadesTabsProps {

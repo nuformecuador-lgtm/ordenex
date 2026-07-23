@@ -34,6 +34,10 @@ import {
   type RecepcionSateliteRow,
   type RechazoSlaTiendaRow,
   type UpdateOrdenData,
+  type ApiOrdenListResult,
+  type ApiOrdenDetalleRow,
+  type ApiOrdenRow,
+  type CancelarViaApiResult,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
@@ -41,6 +45,51 @@ import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenReposito
 
 /** Feature 92: unico estatus cuyas ordenes son paradas de la ruta de un mensajero. */
 const ESTATUS_EN_REPARTO = "en_reparto";
+
+// Feature 106 (design §4, R19/R20): unicos estados desde los que la tienda puede cancelar
+// una orden via API; cualquier otro (incl. una orden ya en `devuelta_origen`) es 409.
+const ESTADOS_CANCELABLES_API: readonly string[] = ["en_bodega", "en_ruta_bodega_principal"];
+
+// Feature 106 — `select` de los campos PUBLICOS de una orden para el canal integrador, y su
+// mapeo a `ApiOrdenRow` (Decimal -> number, estatus.value plano). Un solo lugar para que el
+// listado y el detalle no diverjan en las columnas que exponen.
+const API_ORDEN_SELECT = {
+  numGuia: true,
+  numRemision: true,
+  destinatario: true,
+  telefonoDest: true,
+  producto: true,
+  direccion: true,
+  montoCobrar: true,
+  createdAt: true,
+  estatus: { select: { value: true } },
+} as const;
+
+type ApiOrdenSelectRow = {
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  telefonoDest: string;
+  producto: string;
+  direccion: string | null;
+  montoCobrar: Prisma.Decimal | null;
+  createdAt: Date;
+  estatus: { value: string };
+};
+
+function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
+  return {
+    numGuia: r.numGuia,
+    numRemision: r.numRemision,
+    estatusValue: r.estatus.value,
+    destinatario: r.destinatario,
+    telefonoDest: r.telefonoDest,
+    producto: r.producto,
+    direccion: r.direccion,
+    montoCobrar: r.montoCobrar !== null ? r.montoCobrar.toNumber() : null,
+    createdAt: r.createdAt,
+  };
+}
 
 type OrdenPrismaClient = Pick<
   PrismaClient,
@@ -59,9 +108,11 @@ type OrdenPrismaClient = Pick<
   | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
 >;
 
-// Feature 41 (R12/R16/R17): estados de cierre que BLOQUEAN. `rechazado`/`aprobado` NO
-// bloquean (dinero conciliado o descartado). Fuente de verdad en lib/types/cierre.ts.
-const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido"];
+// Feature 41 (R12/R16/R17) + feature 109 (R29, modelo GLOBAL): estados de cierre ABIERTOS que
+// BLOQUEAN al mensajero. Solo `aprobado` es TERMINAL (dinero conciliado); `rechazado` deja de ser
+// terminal por LOGICA (109) — ahora BLOQUEA y es RE-SOLICITABLE (`rechazado -> solicitado`), igual
+// que `vencido`. Fuente de verdad en lib/types/cierre.ts.
+const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido", "rechazado"];
 const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
 
 // Feature 17/R3: nombre CONSTANTE del generador (nunca interpolar entrada de
@@ -1078,6 +1129,124 @@ export class OrdenRepository implements IOrdenRepository {
     };
   }
 
+  // --- Feature 106: canal integrador de lectura/cancelacion por API key ---
+
+  /**
+   * Feature 106/R6/R7/R11: pagina de ordenes del owner. El scope va FORZADO en el WHERE
+   * (`tienda_id = ownerId` no opcional) + `deleted_at IS NULL`; ningun parametro externo
+   * puede ampliarlo. `estatusId` opcional acota por estado. `total` con el MISMO where para
+   * paginar de forma determinista.
+   */
+  async listByOwner(params: {
+    ownerId: string;
+    estatusId?: string;
+    skip: number;
+    take: number;
+  }): Promise<ApiOrdenListResult> {
+    const where: Prisma.OrdenWhereInput = {
+      tiendaId: params.ownerId, // R6/R7: owner FORZADO
+      deletedAt: null, // R11
+      ...(params.estatusId ? { estatusId: params.estatusId } : {}),
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.orden.findMany({
+        where,
+        orderBy: { createdAt: "desc" }, // orden estable entre paginas (R10)
+        skip: params.skip,
+        take: params.take,
+        select: API_ORDEN_SELECT,
+      }),
+      this.prisma.orden.count({ where }),
+    ]);
+    return { items: rows.map(toApiOrdenRow), total };
+  }
+
+  /**
+   * Feature 106/R12/R13/R14/R15/R18: detalle de una orden del owner por `num_guia`. El scope
+   * va en el WHERE (`tienda_id = ownerId` + `deleted_at IS NULL`): una orden inexistente,
+   * borrada o de OTRO owner devuelve `null` (el service -> 404 uniforme, no filtra existencia).
+   * Incluye (join, sin N+1) las gestiones con evidencia de entrega/rechazo; `[]` si no hay. LEE
+   * `gestion_orden`, nunca escribe.
+   */
+  async findDetalleByNumGuiaForOwner(
+    numGuia: number,
+    ownerId: string,
+  ): Promise<ApiOrdenDetalleRow | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { numGuia, tiendaId: ownerId, deletedAt: null }, // R12/R14/R24: scope forzado
+      select: {
+        ...API_ORDEN_SELECT,
+        gestiones: {
+          where: {
+            resultado: { in: ["entregada", "rechazada"] }, // R15: solo entrega/rechazo
+            evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
+          },
+          select: {
+            resultado: true,
+            evidenciaStoragePath: true,
+            evidenciaContentType: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+    if (!row) return null;
+    return {
+      ...toApiOrdenRow(row),
+      evidencias: row.gestiones.map((g) => ({
+        // `resultado` esta acotado por el WHERE a estos dos valores.
+        resultado: g.resultado as "entregada" | "rechazada",
+        // El WHERE exige `evidencia_storage_path` no nulo; el `!` es seguro.
+        storagePath: g.evidenciaStoragePath!,
+        contentType: g.evidenciaContentType,
+      })),
+    };
+  }
+
+  /**
+   * Feature 106/R19-R26: cancela una orden del owner en UNA transaccion (R25). Pre-lee la
+   * orden por `num_guia` DENTRO de la tx exigiendo `tienda_id = ownerId` + `deleted_at IS NULL`
+   * (R23/R24 -> `not_found`). Si su estado no es cancelable -> `conflict` sin escribir (R20).
+   * En estado cancelable: `UPDATE orden.estatus_id = devueltaOrigenEstatusId` + `appendCambioEstado`
+   * (`origenTipo:'cancelacion_api'`, `motivo:'cancelada por tienda'`, actor = ownerId) en la MISMA
+   * tx (R21/R22/R26). NO escribe en `gestion_orden`. El outbox de webhooks (feature 104) viaja
+   * dentro de `appendCambioEstado`.
+   */
+  async cancelarViaApi(params: {
+    numGuia: number;
+    ownerId: string;
+    devueltaOrigenEstatusId: string;
+  }): Promise<CancelarViaApiResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const orden = await tx.orden.findFirst({
+        where: { numGuia: params.numGuia, tiendaId: params.ownerId, deletedAt: null },
+        select: { id: true, estatusId: true, estatus: { select: { value: true } } },
+      });
+      if (!orden) return { status: "not_found" }; // R23/R24
+      const estadoActual = orden.estatus.value;
+      if (!ESTADOS_CANCELABLES_API.includes(estadoActual)) {
+        return { status: "conflict", estadoActual }; // R20 (incl. ya devuelta_origen)
+      }
+      // R19/R25: transiciona y registra en la MISMA tx.
+      await tx.orden.update({
+        where: { id: orden.id },
+        data: { estatusId: params.devueltaOrigenEstatusId },
+      });
+      await appendCambioEstado(tx, [
+        {
+          ordenId: orden.id,
+          estatusOrigenId: orden.estatusId, // R22: estado previo real
+          estatusDestinoId: params.devueltaOrigenEstatusId, // devuelta_origen
+          actorUsuarioId: params.ownerId, // R22: actor = actor.usuarioId (= owner)
+          origenTipo: "cancelacion_api", // R22
+          motivo: "cancelada por tienda", // R26: marcador semantico en la bitacora
+        },
+      ]);
+      return { status: "ok", estadoAnterior: estadoActual };
+    });
+  }
+
   /** R28: subconjunto de `ids` con rol `mensajero`, SIN filtro de zona. */
   async findMensajeroIdsValidos(ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
@@ -1547,7 +1716,7 @@ export class OrdenRepository implements IOrdenRepository {
           AND NOT EXISTS (
             SELECT 1 FROM "cierre_dia" c
             WHERE c."mensajero_id" = ${mensajeroId}
-              AND c."estado" IN ('solicitado', 'vencido')
+              AND c."estado" IN ('solicitado', 'vencido', 'rechazado')
           )
         RETURNING "id"`;
       await appendCambioEstado(

@@ -80,3 +80,38 @@ describe("PrioridadResalte (feature 101)", () => {
     expect(decoradas[1]).toBe(columnas[1]);
   });
 });
+
+// ---------- Feature 109 (R26): `sin_gestionar` congelada no resalta por prioridad ----------
+//
+// Guard "por construcción": el resalte de prioridad keyea ÚNICAMENTE por el flag
+// `prioridad` (nunca por el estatus). Una orden `sin_gestionar` es la que dejó el corte
+// del día: queda CONGELADA y NO enciende `prioridad` — la prioridad se enciende recién al
+// LIBERARLA a bodega (`en_bodega`/`en_bodega_satelite`) al APROBAR el cierre (109/R16-R17).
+// Por eso, fuera de la reasignación de bodega, una `sin_gestionar` no resalta ni reordena
+// (R26); solo la orden ya liberada (con `prioridad = true`) entra en el resalte EXISTENTE
+// (101/R8). Además, `sin_gestionar` está ausente de los listados de reasignación por
+// construcción del server (R15), así que nunca llega a una superficie que resalte.
+describe("PrioridadResalte — feature 109 (R26): `sin_gestionar` congelada", () => {
+  it("una `sin_gestionar` congelada (sin flag `prioridad`) NO resalta ni lleva badge; solo la orden ya liberada a bodega (prioridad=true) entra en el resalte", () => {
+    const congelada: Fila = { id: "sg", nombre: "Sin gestionar" };
+    const liberada: Fila = { id: "lb", nombre: "En bodega", prioridad: true };
+
+    // Congelada → sin clase de resalte; liberada a bodega con prioridad → sí resalta.
+    expect(resaltarFilaPrioridad(congelada)).toBeUndefined();
+    expect(resaltarFilaPrioridad(liberada)).toBe(PRIORIDAD_RESALTE_CLASS);
+
+    // La celda líder de la `sin_gestionar` conserva su texto pero SIN el badge "Prioritaria".
+    const [primera] = conBadgePrioridad(columnas);
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <td>{(primera.render as (r: Fila) => React.ReactNode)(congelada)}</td>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    expect(screen.getByText("Sin gestionar")).toBeInTheDocument();
+    expect(screen.queryByText("Prioritaria")).toBeNull();
+  });
+});

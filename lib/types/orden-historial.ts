@@ -26,6 +26,9 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "escalado_devuelta_sla", // feature 99: cron SLA, devuelta -> rechazada (escalado; enlaza gestion sintetica)
   "reprogramacion_tienda", // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
   "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite (accion manual del admin)
+  "cancelacion_api", // feature 106: cancelacion por API key (OrdenRepository.cancelarViaApi), en_bodega/en_ruta_bodega_principal -> devuelta_origen
+  "corte_sin_gestionar", // feature 109: corte diario, en_reparto -> sin_gestionar (actor null/cron). NO enlaza gestion; destino != devuelta -> no altera contarIntentos (R12)
+  "liberacion_sin_gestionar", // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega/en_bodega_satelite (actor admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];
@@ -58,6 +61,12 @@ export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)
 //   - `recuperacion_manual` (devuelta -> en_bodega/en_bodega_satelite) NUNCA enlaza una gestion
 //     (`gestion_orden_id` siempre NULL, molde de `liberacion_devuelta_sla`) y su destino no es
 //     `devuelta`.
+//
+// Feature 109 (design §2.2, R12): los dos valores nuevos TAMPOCO entran aqui, por el mismo criterio.
+//   - `corte_sin_gestionar` (en_reparto -> sin_gestionar) y `liberacion_sin_gestionar`
+//     (sin_gestionar -> en_bodega/en_bodega_satelite) NUNCA enlazan una gestion (nacen con
+//     `gestion_orden_id = NULL`) y sus destinos no son `devuelta`, asi que jamas caen en el conteo
+//     de intentos (`contarPorDestinoVigentes` cuenta destino = `devuelta`). Dejarlos fuera es INOCUO.
 export const ORIGEN_TIPOS_CON_GESTION = [
   "gestion",
   "deshacer_gestion",

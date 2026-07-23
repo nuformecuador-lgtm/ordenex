@@ -26,6 +26,7 @@ interface OrdenRow {
   zonaId: string;
   mensajeroAsignadoId: string | null;
   asignadoAt: Date | null;
+  prioridad: boolean; // feature 101/110: flag de reasignacion prioritaria
 }
 interface GestionRow {
   id: string;
@@ -54,6 +55,7 @@ function makeDb(zonaId: string) {
       zonaId,
       mensajeroAsignadoId: "m1",
       asignadoAt: new Date("2026-07-20T10:00:00.000Z"),
+      prioridad: false, // parte no prioritaria; la recuperacion manual la enciende (feature 110/R2)
     },
   ];
   const gestiones: GestionRow[] = [
@@ -182,6 +184,8 @@ describe("Feature 100 T5.2 — recuperar (satelite) saca la orden de `devuelta`:
     // R14/R18: handoff limpio -> asignable de nuevo por la bodega (nuevo intento).
     expect(orden.mensajeroAsignadoId).toBeNull();
     expect(orden.asignadoAt).toBeNull();
+    // Feature 110/R2: la recuperacion manual dejo la orden PRIORITARIA para la reasignacion.
+    expect(orden.prioridad).toBe(true);
     // El cron SLA 99 filtra `estatus = devuelta`: ya no la incluye (la salta).
     expect(await slaRepo(db).findDevueltasSla()).toEqual([]);
   });
@@ -197,6 +201,8 @@ describe("Feature 100 T5.2 — recuperar (central) rutea a en_bodega y tambien s
     expect(orden.estatusId).toBe(ESTATUS.en_bodega);
     expect(orden.mensajeroAsignadoId).toBeNull();
     expect(orden.asignadoAt).toBeNull();
+    // Feature 110/R2: recuperada a bodega central -> tambien prioritaria.
+    expect(orden.prioridad).toBe(true);
     expect(await slaRepo(db).findDevueltasSla()).toEqual([]);
   });
 

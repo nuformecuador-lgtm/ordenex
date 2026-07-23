@@ -12,6 +12,7 @@ import {
   verCierreDetalle,
   aprobarCierre,
   rechazarCierre,
+  forzarSolicitudVencido,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
@@ -21,8 +22,8 @@ import type {
 import type { CierreDestinoTipo } from "@/lib/types/cierre";
 import {
   money,
-  ESTADO_LABEL,
   EstadoCierreBadge,
+  EstadoHistoricoRotulo,
   ORDEN_RESULTADOS,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
@@ -109,6 +110,9 @@ export function CierresAdminModule({
   // Motivo del rechazo (obligatorio, R11) + su error de validación.
   const [motivo, setMotivo] = useState("");
   const [motivoError, setMotivoError] = useState<string | null>(null);
+  // Feature 111/R16 (VÁLVULA DE ESCAPE): cierre `vencido` pendiente de confirmar el
+  // destrabe; null = modal cerrado. Acción de EXCEPCIÓN, separada de aprobar/rechazar.
+  const [destrabar, setDestrabar] = useState<CierreAdminResumen | null>(null);
 
   // R3: adminSatelite sin zona → aviso accionable, sin tablas de acción.
   if (sinZona) {
@@ -218,12 +222,46 @@ export function CierresAdminModule({
     manejarErrorDecision(result.status);
   }
 
+  /**
+   * Feature 111/R16 (VÁLVULA DE ESCAPE, emergencia): destraba un `vencido` ABANDONADO
+   * transicionándolo `vencido → solicitado` en nombre del mensajero. Es la EXCEPCIÓN al
+   * flujo normal (para cuando el mensajero nunca lo solicita y quedan bloqueados él y su
+   * bodega). Tras destrabar, el cierre queda `solicitado` y se resuelve por la vía normal
+   * (aprobar/rechazar), que registra la auditoría (R17). NO recalcula montos (R21).
+   */
+  async function confirmarDestrabar() {
+    const cierre = destrabar;
+    if (!cierre) return;
+    const result = await forzarSolicitudVencido({ cierreId: cierre.cierreId });
+    if (result.status === "ok") {
+      toast.success(
+        "Cierre vencido destrabado; quedó como solicitado para aprobación.",
+      );
+      setDestrabar(null);
+      router.refresh();
+      return;
+    }
+    if (result.status === "conflict") {
+      toast.error("El cierre ya no está vencido (otro proceso lo resolvió).");
+    } else if (result.status === "no_encontrada") {
+      toast.error("El cierre ya no está disponible.");
+    } else if (result.status === "forbidden") {
+      toast.error("No tenés permiso para destrabar este cierre.");
+    } else if (result.status === "unauthenticated") {
+      toast.error("Tu sesión expiró. Iniciá sesión de nuevo.");
+    } else {
+      toast.error("No se pudo destrabar el cierre. Intentá de nuevo.");
+    }
+    setDestrabar(null);
+    router.refresh();
+  }
+
   const cierreAbierto = detalle?.cierre ?? null;
-  // Feature 41 (R20): los dos estados RESOLUBLES (`solicitado` y `vencido`) exponen
-  // los botones aprobar/rechazar; el backend permite resolver un `vencido` igual que
-  // un `solicitado` (guardia de transicion extendida). El histórico es solo lectura.
-  const esPendiente =
-    cierreAbierto?.estado === "solicitado" || cierreAbierto?.estado === "vencido";
+  // Feature 111/R15 (Q1-B): la vía NORMAL aprobar/rechazar aplica SOLO a `solicitado`.
+  // Un `vencido` YA NO es resoluble por la vía normal (revierte la 41 R20): su único
+  // camino normal es que el mensajero lo solicite (→ `solicitado`); la excepción es la
+  // válvula de escape del admin (R16). El histórico sigue siendo solo lectura.
+  const esResoluble = cierreAbierto?.estado === "solicitado";
 
   return (
     <div className="flex flex-col gap-8">
@@ -240,7 +278,7 @@ export function CierresAdminModule({
         </h2>
         <div className="overflow-x-auto">
           <DataTable
-            columns={columnasPendientes(abrirDetalle)}
+            columns={columnasPendientes(abrirDetalle, setDestrabar)}
             data={pendientes}
             rowKey="cierreId"
             ariaLabel="Pendientes de decisión"
@@ -402,8 +440,9 @@ export function CierresAdminModule({
               );
             })}
 
-            {/* Acciones: solo en un cierre PENDIENTE (`solicitado`); histórico = solo lectura. */}
-            {esPendiente ? (
+            {/* Acciones: solo en un cierre `solicitado` (feature 111/R15); histórico y
+                `vencido` = sin decisión aquí (el `vencido` se destraba desde la cola, R16). */}
+            {esResoluble ? (
               <section
                 aria-label="Decisión del cierre"
                 className="flex flex-wrap justify-end gap-3 border-t pt-4"
@@ -473,6 +512,26 @@ export function CierresAdminModule({
         </div>
       </Modal>
 
+      {/* ---------- Confirmación de la VÁLVULA DE ESCAPE (feature 111/R16) ----------
+          Acción de EXCEPCIÓN, diferenciada de aprobar/rechazar: destraba un `vencido`
+          abandonado en nombre del mensajero. El copy lo deja claro. */}
+      <Modal
+        open={destrabar !== null}
+        onOpenChange={(next) => {
+          if (!next) setDestrabar(null);
+        }}
+        title="Destrabar cierre vencido abandonado"
+        description={
+          destrabar
+            ? `Acción de excepción. Enviarás a aprobación el cierre vencido de ${destrabar.mensajeroNombre} en su nombre, porque no lo solicitó. Después deberás aprobarlo o rechazarlo por la vía normal. No se recalculan los montos ya registrados.`
+            : undefined
+        }
+        confirmLabel="Destrabar (excepción)"
+        confirmVariant="destructive"
+        onConfirm={confirmarDestrabar}
+        closeOnConfirm={false}
+      />
+
       {/* ---------- Visor de evidencia (URL firmada, R7) ---------- */}
       <Modal
         open={evidencia !== null}
@@ -500,6 +559,7 @@ export function CierresAdminModule({
 // --- Columnas de la cola de pendientes (R4) ---
 function columnasPendientes(
   abrir: (cierreId: string) => void,
+  pedirDestrabar: (c: CierreAdminResumen) => void,
 ): Column<CierreAdminResumen>[] {
   return [
     // Feature 41 (R20): estado diferenciado (`solicitado` vs `vencido`) en la cola.
@@ -533,11 +593,36 @@ function columnasPendientes(
     {
       id: "acciones",
       value: "Acciones",
-      render: (c) => (
-        <Button type="button" size="sm" onClick={() => abrir(c.cierreId)}>
-          Ver / decidir
-        </Button>
-      ),
+      // Feature 111/R15/R16: un `solicitado` es resoluble por la vía normal ("Ver /
+      // decidir" abre el detalle con aprobar/rechazar). Un `vencido` NO es resoluble por
+      // esa vía; se ofrece SOLO en sus filas la acción DIFERENCIADA de excepción
+      // "Destrabar cierre vencido" (con confirmación), separada de aprobar/rechazar.
+      render: (c) =>
+        c.estado === "vencido" ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => abrir(c.cierreId)}
+            >
+              Ver
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={() => pedirDestrabar(c)}
+              aria-label={`Destrabar cierre vencido abandonado de ${c.mensajeroNombre}`}
+            >
+              Destrabar cierre vencido
+            </Button>
+          </div>
+        ) : (
+          <Button type="button" size="sm" onClick={() => abrir(c.cierreId)}>
+            Ver / decidir
+          </Button>
+        ),
     },
   ];
 }
@@ -547,7 +632,13 @@ function columnasHistorico(
   abrir: (cierreId: string) => void,
 ): Column<CierreAdminResumen>[] {
   return [
-    { id: "estado", value: "Estado", render: (c) => ESTADO_LABEL[c.estado] },
+    // Feature 109/R31: un `rechazado` del histórico se rotula "bloqueante hasta
+    // re-solicitud" (no "resuelto/cerrado"); el resto conserva su etiqueta.
+    {
+      id: "estado",
+      value: "Estado",
+      render: (c) => <EstadoHistoricoRotulo estado={c.estado} />,
+    },
     { id: "mensajero", value: "Mensajero", render: (c) => c.mensajeroNombre },
     {
       id: "resueltoAt",

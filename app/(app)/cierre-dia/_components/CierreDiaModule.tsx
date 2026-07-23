@@ -36,15 +36,54 @@ export interface CierreDiaModuleProps {
   cierresPasados: CierrePasadoDTO[];
   /**
    * Feature 41/R21: `true` si el mensajero está BLOQUEADO (tiene un cierre
-   * `solicitado`/`vencido` pendiente) para recibir nuevas asignaciones. Derivado
-   * server-side y pasado por props; el módulo solo muestra el aviso accionable.
+   * `solicitado`/`vencido` pendiente). Derivado server-side y pasado por props; el
+   * módulo solo muestra el aviso accionable. Feature 111/R12: el bloqueo es TOTAL
+   * (no puede gestionar NI recibir); el aviso lo comunica.
    */
   bloqueado: boolean;
+  /**
+   * Feature 111/R13: `true` si el mensajero tiene un cierre `vencido`. Habilita un
+   * CTA diferenciado para SOLICITAR (enviar a aprobación) ese vencido, con
+   * INDEPENDENCIA del gate de creación (`puedesSolicitar`). Derivado server-side.
+   */
+  tieneVencido: boolean;
+  /**
+   * Feature 109/R31: `true` si el mensajero tiene un cierre `rechazado`. En el modelo
+   * GLOBAL un `rechazado` NO es terminal: bloquea y es RE-SOLICITABLE. Habilita el MISMO
+   * CTA de re-solicitud que el `vencido` (misma Server Action `solicitarCierre`, que el
+   * backend enruta a la transición `rechazado → solicitado`), con INDEPENDENCIA del gate
+   * de creación (`puedesSolicitar`). Derivado server-side. Excluyente del `vencido` en la
+   * práctica (invariante R30: nunca 2 cierres abiertos a la vez).
+   */
+  tieneRechazado: boolean;
 }
 
-// Feature 41/R21: aviso accionable de bloqueo (texto separado, i18n-ready).
+// Feature 41/R21 + 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado,
+// i18n-ready). El bloqueo abarca gestionar Y recibir: el mensajero debe resolver su
+// cierre pendiente antes de operar con las guías.
 const BLOQUEO_AVISO =
-  "No puedes recibir nuevas asignaciones hasta que tu cierre pendiente sea resuelto por tu bodega.";
+  "No puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente.";
+
+// Feature 111/R13: CTA + aviso del cierre `vencido` (texto separado, i18n-ready).
+const VENCIDO_AVISO =
+  "Tienes un cierre vencido sin resolver. Envíalo a aprobación para destrabar tu operación.";
+const VENCIDO_CTA_LABEL = "Solicitar aprobación del cierre vencido";
+const VENCIDO_CONFIRM_TITULO = "Solicitar aprobación del cierre vencido";
+const VENCIDO_CONFIRM_DETALLE =
+  "Se enviará tu cierre vencido a tu bodega para aprobación. No se recalculan los montos ya registrados.";
+const VENCIDO_OK = "Cierre vencido enviado a aprobación.";
+
+// Feature 109/R31: CTA + aviso del cierre `rechazado` (texto separado, i18n-ready).
+// En el modelo GLOBAL un cierre `rechazado` NO es terminal: sigue bloqueando la operación
+// hasta que el mensajero lo VUELVA A SOLICITAR y su bodega lo APRUEBE (espejo del `vencido`).
+// El copy lo deja explícito para que no se lea como "resuelto/cerrado".
+const RECHAZADO_AVISO =
+  "Tu cierre fue rechazado, pero no queda cerrado: sigue bloqueando tu operación hasta que lo vuelvas a enviar a aprobación y tu bodega lo apruebe.";
+const RECHAZADO_CTA_LABEL = "Solicitar aprobación del cierre rechazado";
+const RECHAZADO_CONFIRM_TITULO = "Solicitar aprobación del cierre rechazado";
+const RECHAZADO_CONFIRM_DETALLE =
+  "Se enviará de nuevo tu cierre rechazado a tu bodega para aprobación. No se recalculan los montos ya registrados.";
+const RECHAZADO_OK = "Cierre rechazado enviado a aprobación.";
 
 /** Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready). */
 const PAGO_MENSAJERO_LABEL = "Ganancia";
@@ -128,12 +167,18 @@ export function CierreDiaModule({
   motivoBloqueo,
   cierresPasados,
   bloqueado,
+  tieneVencido,
+  tieneRechazado,
 }: CierreDiaModuleProps) {
   const router = useRouter();
   const toast = useToast();
 
   // Confirmación de "Solicitar cierre"; true = modal abierto.
   const [confirmar, setConfirmar] = useState(false);
+  // Feature 111/R13: confirmación del CTA del cierre `vencido`; true = modal abierto.
+  const [confirmarVencido, setConfirmarVencido] = useState(false);
+  // Feature 109/R31: confirmación del CTA del cierre `rechazado`; true = modal abierto.
+  const [confirmarRechazado, setConfirmarRechazado] = useState(false);
   // Evidencia (URL firmada, R5) en el visor; null = cerrado.
   const [evidencia, setEvidencia] = useState<string | null>(null);
   // Feature 67/R36: fila pendiente de confirmar el deshacer; null = modal cerrado.
@@ -144,11 +189,26 @@ export function CierreDiaModule({
   // (anti-doble-submit en la UI; el WHERE guardado del repo lo cubre igual).
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
 
+  /**
+   * Feature 37 + 111/R13 + 109/R31: envía el cierre. Un mismo camino sirve para
+   * "Solicitar cierre" (crea) y los CTA de re-solicitud del `vencido`/`rechazado`
+   * (transiciones vencido→solicitado / rechazado→solicitado): el backend enruta según
+   * el estado abierto del mensajero. El toast distingue por `via` (P2). Cierra los tres
+   * modales pase lo que pase.
+   */
   async function confirmarSolicitud() {
     const result = await solicitarCierre();
     if (result.status === "ok") {
-      toast.success("Cierre solicitado correctamente.");
+      toast.success(
+        result.via === "vencido_solicitado"
+          ? VENCIDO_OK
+          : result.via === "rechazado_solicitado"
+            ? RECHAZADO_OK
+            : "Cierre solicitado correctamente.",
+      );
       setConfirmar(false);
+      setConfirmarVencido(false);
+      setConfirmarRechazado(false);
       router.refresh();
       return;
     }
@@ -160,6 +220,8 @@ export function CierreDiaModule({
           : "No se pudo solicitar el cierre. Intentá de nuevo.";
     toast.error(mensaje);
     setConfirmar(false);
+    setConfirmarVencido(false);
+    setConfirmarRechazado(false);
   }
 
   /**
@@ -196,7 +258,7 @@ export function CierreDiaModule({
 
   return (
     <div className="flex flex-col gap-8">
-      {/* ---------- Aviso de bloqueo del mensajero (feature 41/R21) ---------- */}
+      {/* ---------- Aviso de bloqueo TOTAL del mensajero (feature 41/R21 + 111/R12) ---------- */}
       {bloqueado ? (
         <p
           role="alert"
@@ -204,6 +266,50 @@ export function CierreDiaModule({
         >
           {BLOQUEO_AVISO}
         </p>
+      ) : null}
+
+      {/* ---------- CTA del cierre vencido (feature 111/R13) ----------
+          Se ofrece SIEMPRE que haya un `vencido`, con INDEPENDENCIA del gate de
+          creación (`puedesSolicitar`): solicitar el vencido es la vía para destrabar
+          la operación. Llama a la MISMA action `solicitarCierre()`; el backend la
+          enruta a la transición vencido→solicitado. */}
+      {tieneVencido ? (
+        <section
+          aria-label="Cierre vencido"
+          className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3"
+        >
+          <p className="text-sm text-destructive">{VENCIDO_AVISO}</p>
+          <Button
+            type="button"
+            variant="destructive"
+            className="w-fit"
+            onClick={() => setConfirmarVencido(true)}
+          >
+            {VENCIDO_CTA_LABEL}
+          </Button>
+        </section>
+      ) : null}
+
+      {/* ---------- CTA del cierre rechazado (feature 109/R31) ----------
+          Mismo patrón que el `vencido` (mismo action `solicitarCierre()` → el backend
+          enruta a la transición rechazado→solicitado). Se ofrece SIEMPRE que haya un
+          `rechazado`, con INDEPENDENCIA del gate de creación (`puedesSolicitar`). El copy
+          comunica que un `rechazado` NO es terminal: bloquea hasta re-solicitar + aprobar. */}
+      {tieneRechazado ? (
+        <section
+          aria-label="Cierre rechazado"
+          className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3"
+        >
+          <p className="text-sm text-destructive">{RECHAZADO_AVISO}</p>
+          <Button
+            type="button"
+            variant="destructive"
+            className="w-fit"
+            onClick={() => setConfirmarRechazado(true)}
+          >
+            {RECHAZADO_CTA_LABEL}
+          </Button>
+        </section>
       ) : null}
 
       {/* ---------- Panel de totales por método de pago (R7) ---------- */}
@@ -319,6 +425,30 @@ export function CierreDiaModule({
         title="Solicitar cierre del día"
         description="Se agruparán todas tus gestiones pendientes en una solicitud de cierre. Esta acción no se puede deshacer."
         confirmLabel="Solicitar cierre"
+        onConfirm={confirmarSolicitud}
+        closeOnConfirm={false}
+      />
+
+      {/* Feature 111/R13: confirmación del CTA del cierre vencido (differente del
+          "Solicitar cierre" del día). Misma action; el backend transiciona el vencido. */}
+      <Modal
+        open={confirmarVencido}
+        onOpenChange={setConfirmarVencido}
+        title={VENCIDO_CONFIRM_TITULO}
+        description={VENCIDO_CONFIRM_DETALLE}
+        confirmLabel="Solicitar aprobación"
+        onConfirm={confirmarSolicitud}
+        closeOnConfirm={false}
+      />
+
+      {/* Feature 109/R31: confirmación del CTA del cierre rechazado (espejo del vencido).
+          Misma action; el backend transiciona rechazado→solicitado. */}
+      <Modal
+        open={confirmarRechazado}
+        onOpenChange={setConfirmarRechazado}
+        title={RECHAZADO_CONFIRM_TITULO}
+        description={RECHAZADO_CONFIRM_DETALLE}
+        confirmLabel="Solicitar aprobación"
         onConfirm={confirmarSolicitud}
         closeOnConfirm={false}
       />

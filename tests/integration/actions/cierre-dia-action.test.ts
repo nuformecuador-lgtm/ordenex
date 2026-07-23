@@ -58,6 +58,12 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
     findGestionesPendientes: vi.fn(async () => [...pendientes]),
     contarOrdenesPendientesGestion: vi.fn(async () => 0),
     existeCierreSolicitado: vi.fn(async () => false),
+    // Feature 111: sin vencido por defecto -> `solicitarCierre` crea (flujo 37).
+    existeCierreVencido: vi.fn(async () => false),
+    transicionarVencidoASolicitado: vi.fn(async () => true),
+    // Feature 109: sin rechazado por defecto (gemelo del vencido).
+    existeCierreRechazado: vi.fn(async () => false),
+    transicionarRechazadoASolicitado: vi.fn(async () => true),
     // Feature 67: el deshacer sobre el repo en memoria (caso feliz).
     findGestionParaDeshacer: vi.fn(async () => GESTION_DESHACIBLE),
     findUltimaGestionNoAnuladaId: vi.fn(async () => GESTION_DESHACIBLE.gestionId),
@@ -87,6 +93,7 @@ function realService(repo: ICierreDiaRepository): ICierreDiaService {
     findUsuarioZonaId: vi.fn(async () => "z-satelite"),
     findUsuarioVehiculoId: vi.fn(async () => null), // feature 39
     findEstatusIdByValue: vi.fn(async () => "s-reparto"), // feature 67/R18
+    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111/R5
   } as unknown as IOrdenRepository;
   // Feature 39: tarifa por defecto (cobroEntregado 5.00); resuelve el pago en vivo/snapshot.
   const tarifaZonaRepo = {

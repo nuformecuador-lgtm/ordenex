@@ -1,8 +1,12 @@
 import type {
+  ActivarApiKeyResult,
+  ApiKeyIdInput,
+  DesactivarApiKeyResult,
   GenerarApiKeyInput,
   GenerarApiKeyResult,
   ListarApiKeysInput,
   ListarApiKeysResult,
+  RotarApiKeyResult,
 } from "@/lib/types/api-key";
 import type { Actor } from "@/lib/interfaces/services/IUsuarioService";
 
@@ -32,4 +36,29 @@ export interface IApiKeyService {
    * NO conoce HTTP ni Prisma: la autenticacion (R1) la resuelve la Server Action.
    */
   listar(input: ListarApiKeysInput, actor: Actor): Promise<ListarApiKeysResult>;
+
+  /**
+   * Ciclo de vida/R1/R2/R3: rota el secreto de una key existente.
+   *
+   * - Solo `maestro` (R1); el resto -> `forbidden` SIN tocar la DB.
+   * - Genera un secreto nuevo y reemplaza `keyPrefix`+`keyHash` (R2); el anterior deja de
+   *   resolver. No cambia el usuario dedicado ni el `estado`.
+   * - Devuelve el nuevo secreto en claro (`plainKey`) UNA sola vez (R2).
+   * - id inexistente -> `not_found` (R3).
+   */
+  rotar(input: ApiKeyIdInput, actor: Actor): Promise<RotarApiKeyResult>;
+
+  /**
+   * Ciclo de vida/R1/R3/R4: pone la key en `activa`. Solo `maestro` (R1); id inexistente
+   * -> `not_found` (R3). Idempotente: activar una key ya activa es `ok` (R4). Devuelve la
+   * key publica actualizada.
+   */
+  activar(input: ApiKeyIdInput, actor: Actor): Promise<ActivarApiKeyResult>;
+
+  /**
+   * Ciclo de vida/R1/R3/R4: pone la key en `inactiva` (palanca de revocacion; la carga
+   * queda rechazada por la feature 88/R7). Solo `maestro` (R1); id inexistente ->
+   * `not_found` (R3). Idempotente. Devuelve la key publica actualizada.
+   */
+  desactivar(input: ApiKeyIdInput, actor: Actor): Promise<DesactivarApiKeyResult>;
 }

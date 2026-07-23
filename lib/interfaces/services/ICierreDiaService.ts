@@ -171,6 +171,16 @@ export type ListarCierreDiaServiceResult =
       puedesSolicitar: boolean; // R10/R11: false si hay pendientes o no hay gestiones
       motivoBloqueo: string | null; // texto accionable si !puedesSolicitar
       cierresPasados: CierrePasadoDTO[]; // R18
+      // Feature 111/R13 (datos): `true` si el mensajero tiene un cierre `vencido` en el
+      // histórico (derivado de `cierresPasados`, sin query extra). Habilita el CTA
+      // diferenciado "Solicitar aprobación del cierre vencido" en la UI, con independencia de
+      // `puedesSolicitar`. El service SIEMPRE lo puebla; opcional en el tipo por retrocompat.
+      tieneVencido?: boolean;
+      // Feature 109/R31 (datos): `true` si el mensajero tiene un cierre `rechazado` en el
+      // histórico. En el modelo GLOBAL un `rechazado` NO es terminal: bloquea y es RE-SOLICITABLE.
+      // Habilita el MISMO CTA de re-solicitud que el `vencido` (111/R13). SIEMPRE poblado;
+      // opcional por retrocompat.
+      tieneRechazado?: boolean;
     }
   | { status: "forbidden" };
 
@@ -178,9 +188,21 @@ export type ListarCierreDiaServiceResult =
 // determinan todo). `conflict` cubre R10 (pendientes) / R11 (vacio) / R12
 // (duplicado); `validation_error` cubre R16 (sin zona).
 export type SolicitarCierreServiceResult =
-  | { status: "ok"; cierreId: string; totales: CierreTotales; destinoTipo: CierreDestinoTipo }
+  | {
+      status: "ok";
+      // Feature 111/R6/P2 + feature 109/R28: distingue el toast del cliente. `creado` = cierre nuevo
+      // (flujo 37); `vencido_solicitado` = transición vencido→solicitado (R6/R8);
+      // `rechazado_solicitado` = transición rechazado→solicitado (109/R28), ambas SIN cierre nuevo
+      // ni snapshot. El service SIEMPRE lo puebla; opcional en el tipo por retrocompat.
+      via?: "creado" | "vencido_solicitado" | "rechazado_solicitado";
+      // Presentes SOLO en la rama de creación (`via: "creado"`); ausentes al transicionar un
+      // vencido (R8: no se re-lee ni recalcula el snapshot money-critical del cierre).
+      cierreId?: string;
+      totales?: CierreTotales;
+      destinoTipo?: CierreDestinoTipo;
+    }
   | { status: "forbidden" } // rol != mensajero (R1)
-  | { status: "conflict"; motivo: string } // R10 pendientes / R11 vacio / R12 duplicado
+  | { status: "conflict"; motivo: string } // R10 pendientes / R11 vacio / R12 duplicado / 111 R7
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }; // R16 sin zona
 
 // Feature 67/R1-R6/R8-R10 — resultado del deshacer. `ok` devuelve el `ordenId` para que la

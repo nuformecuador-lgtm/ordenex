@@ -77,6 +77,39 @@ export function EstadoCierreBadge({ estado }: { estado: CierreEstado }) {
   return <Badge variant={ESTADO_BADGE_VARIANT[estado]}>{ESTADO_LABEL[estado]}</Badge>;
 }
 
+// Feature 109 (R31): en el modelo GLOBAL un cierre `rechazado` NO es terminal. Aunque el
+// admin ya actuó (por eso vive en el histórico), sigue BLOQUEANDO al mensajero hasta que
+// éste lo RE-SOLICITE (`rechazado → solicitado`) y se APRUEBE. El histórico lo rotula así
+// para que no se lea como "resuelto/cerrado". Texto separado, i18n-ready.
+export const RECHAZADO_BLOQUEANTE_LABEL = "Bloqueante hasta re-solicitud";
+export const RECHAZADO_BLOQUEANTE_NOTA =
+  "Un cierre rechazado no es terminal: sigue bloqueando al mensajero hasta que lo vuelva a solicitar y su bodega lo apruebe.";
+
+/**
+ * Feature 109 (R31): rótulo del estado de un cierre en el HISTÓRICO de `/cierres-admin`.
+ * Un `rechazado` conserva su etiqueta ("Rechazado") pero se anexa el marcador visible
+ * "Bloqueante hasta re-solicitud" (con nota accesible), porque NO es un estado resuelto:
+ * bloquea hasta que el mensajero lo re-solicite y se apruebe. El resto de estados
+ * (`aprobado`) se rotula tal cual. Texto i18n-ready; el marcador no comunica solo por color.
+ */
+export function EstadoHistoricoRotulo({ estado }: { estado: CierreEstado }) {
+  if (estado === "rechazado") {
+    return (
+      <span className="inline-flex flex-col items-start gap-1">
+        <span>{ESTADO_LABEL[estado]}</span>
+        <Badge
+          variant="destructive"
+          title={RECHAZADO_BLOQUEANTE_NOTA}
+          aria-label={RECHAZADO_BLOQUEANTE_NOTA}
+        >
+          {RECHAZADO_BLOQUEANTE_LABEL}
+        </Badge>
+      </span>
+    );
+  }
+  return <>{ESTADO_LABEL[estado]}</>;
+}
+
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
 export const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
 export const PAGO_MENSAJERO_COL = "Pago mensajero";
@@ -86,15 +119,15 @@ export const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
 // --- Feature 102 (R8): subtotales del ingreso de bodega por rechazos, particionado por ORIGEN.
 // El total combinado sigue siendo el de la 56 (`INGRESO_BODEGA_RECHAZOS_LABEL`); estos dos son
 // las sublíneas del desglose (SLA del cron 99 vs manual del mensajero). Texto i18n-ready. ---
-export const INGRESO_BODEGA_RECHAZOS_SLA_LABEL = "Por SLA (cron)";
+export const INGRESO_BODEGA_RECHAZOS_SLA_LABEL = "Automático (por plazo vencido)";
 export const INGRESO_BODEGA_RECHAZOS_MANUAL_LABEL = "Manual (mensajero)";
 // --- Feature 102 (R9): marca por fila del ORIGEN de un rechazo, para que cada ingreso de bodega
 // sea auditable. `SLA` = escalado por el cron de vencimiento (99); `Manual` = rechazo del
 // mensajero. Texto i18n-ready + nota accesible (`title`/`aria-label`). ---
 export const RECHAZO_ORIGEN_COL = "Origen";
-export const RECHAZO_SLA_BADGE_LABEL = "SLA";
+export const RECHAZO_SLA_BADGE_LABEL = "Automático";
 export const RECHAZO_SLA_BADGE_NOTA =
-  "Rechazo escalado automáticamente por vencimiento de SLA (cron), no por el mensajero.";
+  "Rechazo automático por vencerse el plazo de la devolución (no lo hizo el mensajero).";
 export const RECHAZO_MANUAL_BADGE_LABEL = "Manual";
 export const RECHAZO_MANUAL_BADGE_NOTA =
   "Rechazo registrado manualmente por el mensajero.";

@@ -34,6 +34,7 @@ interface OrdenRow {
   zonaId: string;
   mensajeroAsignadoId: string | null;
   asignadoAt: Date | null;
+  prioridad: boolean; // feature 110/R1: la liberacion de la reprogramada la enciende
 }
 interface GestionRow {
   id: string;
@@ -66,6 +67,7 @@ function makeDb() {
       zonaId: "z1",
       mensajeroAsignadoId: "m1",
       asignadoAt: new Date("2026-07-20T10:00:00.000Z"),
+      prioridad: false, // parte no prioritaria; la liberacion del cron 46 la enciende (feature 110/R1)
     },
   ];
   const gestiones: GestionRow[] = [
@@ -277,5 +279,26 @@ describe("Feature 100 T5.1 — el cron 46 mantiene bloqueada la reprogramada y l
     expect(liberables[0].fechaReprogramacion).toEqual(new Date("2026-07-25T00:00:00.000Z"));
     // Y el cron SLA 99 sigue sin verla en ese mismo momento (esta en `reprogramada`, no `devuelta`).
     expect(await slaRepo(db).findDevueltasSla()).toEqual([]);
+  });
+
+  // Feature 110/R1 — al LIBERAR la reprogramada, el repo REAL la deja en bodega y PRIORITARIA.
+  it("R1: liberar la reprogramada la lleva a bodega y la deja PRIORITARIA (prioridad=true)", async () => {
+    const db = makeDb();
+    await reprogramar(db, "2026-07-25");
+
+    const ok = await cron46Repo(db).liberarOrden({
+      ordenId: "o1",
+      destinoEstatusId: ESTATUS.en_bodega,
+      estatusReprogramadaId: ESTATUS.reprogramada,
+      corridaAt: new Date("2026-07-25T06:00:00.000Z"),
+    });
+
+    expect(ok).toBe(true);
+    const orden = db.ordenes[0];
+    expect(orden.estatusId).toBe(ESTATUS.en_bodega);
+    // Feature 110/R1: la orden liberada sale prioritaria para la reasignacion desde bodega.
+    expect(orden.prioridad).toBe(true);
+    // Handoff limpio (sigue vigente): sin mensajero asignado.
+    expect(orden.mensajeroAsignadoId).toBeNull();
   });
 });

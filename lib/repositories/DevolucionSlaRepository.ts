@@ -79,8 +79,9 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
    * Feature 101 (R2/R4, gate F1.4-Q5): enciende `prioridad = true` en el MISMO `data` del
    * `updateMany` GUARDADO. Por estar dentro de la guarda por `estatus_id = devuelta`, una orden
    * que ya salio de `devuelta` (count 0) NO se toca -> el flag no cambia (R4, idempotencia).
-   * Solo la liberacion por SLA lo enciende: `escalarDevueltaSla` (-> rechazada) y la recuperacion
-   * MANUAL de la feature 100 NO tocan `prioridad` (R3).
+   * Feature 110: la liberacion de reprogramadas (46/90) y la recuperacion MANUAL (100) TAMBIEN
+   * encienden `prioridad` (misma superficie de reasignacion); el unico retorno a bodega que NO la
+   * enciende es el escalado a `rechazada` (`escalarDevueltaSla`), que no vuelve a reasignarse (R9).
    */
   async liberarDevueltaSla(input: LiberarDevueltaSlaInput): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {

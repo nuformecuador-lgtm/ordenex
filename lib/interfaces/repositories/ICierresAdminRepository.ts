@@ -36,6 +36,17 @@ export interface CierreAdminResumenRow {
   motivoRechazo: string | null;
 }
 
+// Feature 109 (T3.1, R16-R19): config OPCIONAL de la LIBERACION de ordenes `sin_gestionar` a
+// bodega. Presente SOLO al APROBAR (la resuelve el service via `findEstatusIdByValue`/
+// `findCentralZonaId`); ausente al rechazar (R27: un rechazo NO libera). Los estatus ids del
+// catalogo + la zona central se pasan por input (el repo no re-resuelve catalogo).
+export interface LiberacionSinGestionarConfig {
+  sinGestionarEstatusId: string;
+  enBodegaEstatusId: string; // destino central
+  enBodegaSateliteEstatusId: string; // destino satelite
+  centralZonaId: string | null; // null = ningun mensajero clasifica central (fallback satelite)
+}
+
 // Datos de la transicion guardada (aprobar/rechazar). `motivoRechazo` = null al
 // aprobar; el motivo (ya validado) al rechazar.
 export interface ResolverCierreInput {
@@ -44,6 +55,10 @@ export interface ResolverCierreInput {
   nuevoEstado: "aprobado" | "rechazado";
   resueltoPor: string;
   motivoRechazo: string | null;
+  // Feature 109 (T3.1, R16-R19): presente SOLO al aprobar -> DENTRO de la MISMA tx libera las
+  // ordenes `sin_gestionar` del mensajero del cierre a bodega (por zona, con `prioridad = true`),
+  // via el choke point. Ausente = no hay liberacion (rechazo, o cierres sin la config).
+  liberacionSinGestionar?: LiberacionSinGestionarConfig;
 }
 
 // Resultado de la transicion guardada: `updated` (aplicada), `conflict` (existe en
@@ -73,4 +88,15 @@ export interface ICierresAdminRepository {
    * gestion_orden ni otra tabla (R15). Distingue updated/conflict/fuera_de_alcance.
    */
   resolverCierre(input: ResolverCierreInput): Promise<ResolverCierreResult>;
+  /**
+   * Feature 111/R16 — VALVULA DE ESCAPE: destraba un `vencido` ABANDONADO transicionandolo
+   * `vencido -> solicitado` en NOMBRE del mensajero (para el mensajero que nunca lo solicita y
+   * dejaria a su bodega bloqueada, 41 R17). Escritura GUARDADA por estado + alcance:
+   * `updateMany WHERE id = cierreId AND estado = 'vencido' AND <alcance>` `SET estado =
+   * 'solicitado'`. SOLO cambia `estado`: NO recalcula ni muta el snapshot money-critical, ni
+   * toca `resuelto_por`/`resuelto_at` (money-safe, R16/R21; la auditoria la deja la resolucion
+   * posterior, R17). `count === 0` -> `conflict` (ya no es `vencido`) o `fuera_de_alcance` (no
+   * existe / otra bodega-zona), como `resolverCierre`.
+   */
+  forzarSolicitudVencido(cierreId: string, alcance: Alcance): Promise<ResolverCierreResult>;
 }

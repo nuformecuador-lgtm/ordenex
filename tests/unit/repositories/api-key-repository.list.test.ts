@@ -8,6 +8,7 @@ interface Row {
   id: string;
   identificador: string;
   keyPrefix: string;
+  estado: "activa" | "inactiva";
   usuarioId: string;
   createdAt: Date;
   usuario: { email: string };
@@ -18,6 +19,7 @@ function row(n: number): Row {
     id: `key-${n}`,
     identificador: `Tienda ${n}`,
     keyPrefix: `ordx_abc123${n}`,
+    estado: "activa",
     usuarioId: `u-dedicado-${n}`,
     createdAt: new Date(`2026-07-1${n}T12:00:00Z`),
     usuario: { email: `apikey+tienda-${n}@apikey.invalid` },
@@ -45,7 +47,7 @@ describe("ApiKeyRepository.list — proyeccion (R6)", () => {
     // agrega `keyHash: true` al select, este test cae.
     expect(args.select).not.toHaveProperty("keyHash");
     expect(Object.keys(args.select).sort()).toEqual(
-      ["createdAt", "id", "identificador", "keyPrefix", "usuario", "usuarioId"].sort(),
+      ["createdAt", "estado", "id", "identificador", "keyPrefix", "usuario", "usuarioId"].sort(),
     );
   });
 
@@ -65,10 +67,11 @@ describe("ApiKeyRepository.list — proyeccion (R6)", () => {
     const { items } = await new ApiKeyRepository(prisma).list({ skip: 0, take: 25 });
 
     expect(Object.keys(items[0]).sort()).toEqual(
-      ["createdAt", "id", "identificador", "keyPrefix", "usuarioEmail", "usuarioId"].sort(),
+      ["createdAt", "estado", "id", "identificador", "keyPrefix", "usuarioEmail", "usuarioId"].sort(),
     );
     // [D1]: el email sintetico, no el uuid crudo del include.
     expect(items[0].usuarioEmail).toBe("apikey+tienda-1@apikey.invalid");
+    expect(items[0].estado).toBe("activa"); // ciclo de vida: el listado expone el estado
     expect(items[0]).not.toHaveProperty("usuario");
   });
 });
