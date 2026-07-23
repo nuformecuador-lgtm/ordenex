@@ -1192,7 +1192,7 @@
       "id": 109,
       "name": "orden sin gestionar: en_reparto que pasa de dia -> cierre vencido + reasignacion prioritaria",
       "description": "Cierra el hueco del mensajero inactivo. Extiende el corte diario (feature 41): al pasar de dia, TODA orden que siga en `en_reparto` (sin importar cuanto lleve) pasa al NUEVO estatus `sin_gestionar` y entra en un cierre `vencido` que bloquea al mensajero (reusa el bloqueo de la 41). Las `en_espera_aceptacion` NO aplican. `sin_gestionar` NO cuenta como intento de entrega y es money-neutral (no genera pago al mensajero ni cobro). Las ordenes de un cierre sin aprobar quedan CONGELADAS (no reasignables) hasta que se apruebe. Al aprobarse el vencido (flujo de la 38, que ya acepta `vencido` via la 41), esas ordenes se liberan a bodega por zona (`en_bodega`/`en_bodega_satelite`, sin mensajero) con `prioridad=true` (feature 101) para reasignarse ESE dia a otro mensajero o al mismo, igual que reprogramadas/devueltas. Transiciones por el choke point appendCambioEstado (49). Reusa 41/101/99/100/49. Requiere migracion aditiva (nuevo valor del enum `estatus` + su down.sql).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
