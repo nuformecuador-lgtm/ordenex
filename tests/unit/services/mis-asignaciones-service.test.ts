@@ -102,7 +102,11 @@ function fakeStorage(overrides: Partial<IFileStorage> = {}): IFileStorage {
 function fakeSignedUrls(): ISignedUrlProvider {
   return {
     createSignedUrl: vi.fn(async (path: string) => `https://signed/${path}`),
-    createSignedUrls: vi.fn(async () => ({})),
+    // Feature 119 (R13): el service firma las N evidencias con `createSignedUrls`; el doble
+    // devuelve el mapa path -> url para que el resultado pueda mapearlas en orden.
+    createSignedUrls: vi.fn(async (paths: string[]) =>
+      Object.fromEntries(paths.map((p) => [p, `https://signed/${p}`])),
+    ),
   };
 }
 
@@ -321,7 +325,7 @@ describe("escogerParaGestion (R19-R21)", () => {
 describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R12: rol != mensajero -> forbidden", async () => {
     const r = await newService().gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MAESTRO,
     );
     expect(r.status).toBe("forbidden");
@@ -334,7 +338,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -346,7 +350,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ mensajeroAsignadoId: "m2" })]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("forbidden");
@@ -356,7 +360,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R21: otra orden activa distinta -> conflict, sin persistir", async () => {
     const repo = fakeRepo({ getOrdenEnGestion: vi.fn(async () => "o-otra") });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -372,7 +376,7 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
@@ -386,7 +390,7 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
     resultado: "entregada",
     montoRecibido: monto,
     metodoPago: "efectivo",
-    evidencia: evidencia(),
+    evidencias: [evidencia()],
   });
 
   it("R22 (h): monto != montoCobrar -> validation_error, NO sube ni persiste", async () => {
@@ -456,13 +460,16 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.estado).toBe("entregada");
-    expect(r.evidenciaUrl).toMatch(/^https:\/\/signed\//);
+    // Feature 119 (R13): el resultado devuelve la lista de URLs firmadas (una por foto).
+    expect(r.evidenciaUrls?.[0]).toMatch(/^https:\/\/signed\//);
     expect(storage.upload).toHaveBeenCalledTimes(1);
     const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(gArg.gestion.resultado).toBe("entregada");
     expect(gArg.gestion.montoRecibido).toBe(100);
     expect(gArg.gestion.metodoPago).toBe("efectivo");
-    expect(gArg.gestion.evidenciaStoragePath).toContain("o1/entregada-");
+    // Feature 119 (R1): la portada (indice 0) viaja como primera evidencia de la lista.
+    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/entregada-");
+    expect(gArg.gestion.evidencias[0].indice).toBe(0);
     expect(gArg.nuevoEstatusId).toBe("os-entregada");
   });
 
@@ -470,7 +477,7 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
     const repo = fakeRepo();
     await newService(repo).gestionar(entrega(100), MENSAJERO);
     const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(gArg.gestion.evidenciaStoragePath).not.toMatch(/^https?:\/\//);
+    expect(gArg.gestion.evidencias[0].storagePath).not.toMatch(/^https?:\/\//);
   });
 
   it("R23: si la transaccion falla tras subir -> limpia el objeto (best-effort) y propaga", async () => {
@@ -506,7 +513,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "no estaba", evidencia: evidencia() },
+      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "no estaba", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
@@ -514,8 +521,8 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     expect(storage.upload).toHaveBeenCalledTimes(1);
     const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(gArg.gestion.resultado).toBe("devuelta");
-    expect(gArg.gestion.evidenciaStoragePath).toContain("o1/devuelta-");
-    expect(gArg.gestion.evidenciaContentType).toBe("image/jpeg");
+    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/devuelta-");
+    expect(gArg.gestion.evidencias[0].contentType).toBe("image/jpeg");
     expect(gArg.nuevoEstatusId).toBe("os-devuelta");
   });
 
@@ -528,7 +535,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     });
     await expect(
       newService(repo, storage).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencia: evidencia() },
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
         MENSAJERO,
       ),
     ).rejects.toThrow("db caida");
@@ -539,7 +546,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
-      { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencia: evidencia() },
+      { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
@@ -548,7 +555,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     expect(storage.upload).toHaveBeenCalledTimes(1);
     const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(gArg.gestion.resultado).toBe("rechazada");
-    expect(gArg.gestion.evidenciaStoragePath).toContain("o1/rechazada-");
+    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/rechazada-");
     expect(gArg.nuevoEstatusId).toBe("os-rechazada");
   });
 
@@ -561,7 +568,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     });
     await expect(
       newService(repo, storage).gestionar(
-        { ordenId: "o1", resultado: "rechazada", motivo: "x", evidencia: evidencia() },
+        { ordenId: "o1", resultado: "rechazada", motivo: "x", evidencias: [evidencia()] },
         MENSAJERO,
       ),
     ).rejects.toThrow("db caida");
@@ -583,7 +590,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
     resultado: "devuelta",
     causaDevolucion: "not_found",
     motivo: "ausente",
-    evidencia: evidencia(),
+    evidencias: [evidencia()],
   };
 
   function repoCall(repo: IGestionOrdenRepository) {
@@ -724,7 +731,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
   it("entregada NO pasa seguimiento (una sola transicion)", async () => {
     const repo = fakeRepo();
     await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencia: evidencia() },
+      { ordenId: "o1", resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(repoCall(repo)).not.toHaveProperty("seguimiento");
@@ -733,7 +740,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
   it("rechazada DIRECTA NO pasa seguimiento (una sola transicion)", async () => {
     const repo = fakeRepo();
     await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencia: evidencia() },
+      { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(repoCall(repo)).not.toHaveProperty("seguimiento");
@@ -752,7 +759,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
         findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
       });
       const r = await newService(repo).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencia: evidencia() },
+        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencias: [evidencia()] },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");
@@ -806,7 +813,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     resultado: "entregada",
     montoRecibido: 100,
     metodoPago: "efectivo",
-    evidencia: evidencia(),
+    evidencias: [evidencia()],
   });
 
   it("R1/R3: gestionar bloqueado -> conflict; NO sube evidencia, NO transiciona, NO crea gestion_orden", async () => {

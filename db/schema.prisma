@@ -512,6 +512,9 @@ model GestionOrden {
   // (49/R21): borrar al usuario no borra el rastro de la anulacion.
   anuladaPorUsuario Usuario?               @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
   historialEstados  OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
+  // Feature 119 (R1): evidencias 1..N de esta gestion (la portada = indice 0 se conserva
+  // ademas denormalizada en evidencia_storage_path/_content_type por retro-compat, R12).
+  evidencias        GestionOrdenEvidencia[]
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
@@ -522,6 +525,26 @@ model GestionOrden {
   // diario) NO se expresa aqui: Prisma no soporta indices parciales -> vive en el SQL de la
   // migracion `*_gestion_orden_anulacion` (patron orden_liberada_reprogramada_at_idx).
   @@map("gestion_orden")
+}
+
+// Feature 119 (R1/R2/R4): evidencias 1..N de una gestion. Reemplaza la foto UNICA de
+// gestion_orden.evidencia_storage_path/_content_type como fuente de verdad del CONJUNTO;
+// el path unico se conserva como PORTADA (indice 0) por retro-compat (design §2), via
+// dual-write en la misma transaccion. RLS habilitada sin policies (solo service role,
+// patron gestion_orden).
+model GestionOrdenEvidencia {
+  id          String   @id @default(uuid())
+  gestionId   String   @map("gestion_id")
+  storagePath String   @map("storage_path") // path bucket privado, NO URL
+  contentType String   @map("content_type") // image/jpeg|png|webp
+  indice      Int // 0-based, orden de captura; 0 = portada
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  gestion GestionOrden @relation(fields: [gestionId], references: [id], onDelete: Cascade)
+
+  @@unique([gestionId, indice]) // R2: no dos filas con el mismo indice por gestion
+  @@index([gestionId]) // lectura de las evidencias de una gestion
+  @@map("gestion_orden_evidencia")
 }
 
 // Feature 37 (R13/R18, decision F1.4-d): estado del cierre del dia del mensajero.

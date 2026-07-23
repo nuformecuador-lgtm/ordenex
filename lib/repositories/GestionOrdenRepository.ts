@@ -26,7 +26,9 @@ const RESULTADO_REPROGRAMADA = "reprogramada";
 
 type GestionPrismaClient = Pick<
   PrismaClient,
-  "orden" | "usuario" | "gestionOrden" | "$transaction"
+  // Feature 119 (R1/R9): + `gestionOrdenEvidencia` para insertar las N filas hijas dentro de
+  // la MISMA transaccion que crea la gestion y transiciona la orden.
+  "orden" | "usuario" | "gestionOrden" | "gestionOrdenEvidencia" | "$transaction"
 >;
 
 // Proyeccion de "mis asignaciones": la orden + nombres legibles via relaciones ya
@@ -276,6 +278,13 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         where: { id: ordenId },
         select: { estatusId: true },
       });
+      // Feature 119 (R12): PORTADA denormalizada = evidencia indice 0 (o la primera si no hay
+      // un 0 explicito). Retro-compat: si el caller aun pasa la portada suelta y no la lista,
+      // se cae a `evidenciaStoragePath/_content_type`. La escriben el MISMO INSERT que las hijas.
+      const cover =
+        gestion.evidencias?.find((e) => e.indice === 0) ?? gestion.evidencias?.[0] ?? null;
+      const coverStoragePath = cover?.storagePath ?? gestion.evidenciaStoragePath ?? null;
+      const coverContentType = cover?.contentType ?? gestion.evidenciaContentType ?? null;
       const creada = await tx.gestionOrden.create({
         data: {
           ordenId,
@@ -284,8 +293,10 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           montoRecibido:
             gestion.montoRecibido != null ? new Prisma.Decimal(gestion.montoRecibido) : null,
           metodoPago: gestion.metodoPago ?? null,
-          evidenciaStoragePath: gestion.evidenciaStoragePath ?? null,
-          evidenciaContentType: gestion.evidenciaContentType ?? null,
+          // Feature 119 (R12): dual-write de la portada (indice 0) en las columnas viejas para que
+          // los consumidores actuales (cierres 37/38/40, API 106) sigan mostrando UNA foto sin cambios.
+          evidenciaStoragePath: coverStoragePath,
+          evidenciaContentType: coverContentType,
           motivo: gestion.motivo ?? null,
           fechaReprogramacion: gestion.fechaReprogramacion
             ? new Date(`${gestion.fechaReprogramacion}T00:00:00.000Z`)
@@ -297,6 +308,18 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         },
         select: { id: true },
       });
+      // Feature 119 (R1/R2/R9): las N filas hijas se insertan en la MISMA transaccion (todo-o-nada
+      // con la gestion + la transicion). Vacio (reprogramada / sin fotos) no inserta nada.
+      if (gestion.evidencias && gestion.evidencias.length > 0) {
+        await tx.gestionOrdenEvidencia.createMany({
+          data: gestion.evidencias.map((e) => ({
+            gestionId: creada.id,
+            storagePath: e.storagePath,
+            contentType: e.contentType,
+            indice: e.indice,
+          })),
+        });
+      }
       await tx.orden.update({
         where: { id: ordenId },
         data: { estatusId: nuevoEstatusId },
