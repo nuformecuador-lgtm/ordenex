@@ -51,7 +51,7 @@ y la API de lectura (106) `lib/repositories/OrdenRepository.ts:1182-1202`.
   menos de 1 elemento, ENTONCES el sistema DEBE rechazar la gestión con `validation_error` en el
   campo de evidencia, sin subir nada al storage ni escribir en la base.
 
-- **R7** — SI la lista de evidencias supera el máximo configurado (por defecto **5**), ENTONCES el
+- **R7** — SI la lista de evidencias supera el máximo configurado (por defecto **3**), ENTONCES el
   sistema DEBE rechazar la gestión con `validation_error`, sin subir nada al storage ni escribir en
   la base.
 
@@ -125,8 +125,8 @@ y la API de lectura (106) `lib/repositories/OrdenRepository.ts:1182-1202`.
    viendo solo la portada?
 2. **Orden de las fotos:** se asume que el `indice` refleja el orden de selección del mensajero y no
    tiene semántica de "principal vs secundaria" más allá de que índice 0 es la portada. ¿Correcto?
-3. **Máximo de fotos:** se fija **5** por defecto, sobreescribible por variable de entorno (patrón
-   `lib/config/gestion.ts`). ¿5 es el número acordado?
+3. **Máximo de fotos:** RESUELTA (gate F1.4) — **3** por defecto, sobreescribible por variable de
+   entorno `GESTION_MAX_EVIDENCIAS` (patrón `lib/config/gestion.ts`).
 4. **`content_type` en el backfill:** si existiera alguna gestión histórica con `storage_path` NO
    nulo pero `content_type` nulo, el backfill usa un fallback (`image/jpeg`). ¿Aceptable, o se
    prefiere `content_type` NULLABLE en la tabla nueva?

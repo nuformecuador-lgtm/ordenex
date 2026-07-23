@@ -142,8 +142,8 @@ El panel hoy ignora ese campo; el cambio es de contrato, sin consumidor UI que r
 Añadir a `GestionConfig` el tope, sobreescribible por env (sin hardcode, patrón `:33-39`):
 
 ```ts
-/** Maximo de evidencias por gestion (R7). Default 5. */
-MAX_EVIDENCIAS_POR_GESTION: number; // readPositiveInt("GESTION_MAX_EVIDENCIAS", 5)
+/** Maximo de evidencias por gestion (R7). Default 3. */
+MAX_EVIDENCIAS_POR_GESTION: number; // readPositiveInt("GESTION_MAX_EVIDENCIAS", 3)
 ```
 
 ### 3.3 Validación de borde (`lib/types/gestion-orden.ts`)
@@ -206,7 +206,7 @@ error (`:336-340`). Secuencia:
 ```
 
 - **Subida secuencial** (bucle `for await`): hace la compensación trivial y determinista (`uploaded`
-  contiene EXACTAMENTE lo subido hasta el fallo). Para máx 5 fotos el costo de no paralelizar es
+  contiene EXACTAMENTE lo subido hasta el fallo). Para máx 3 fotos el costo de no paralelizar es
   despreciable y evita el enredo de rastrear cuáles resolvieron en un `Promise.all` que rechaza.
 - `buildGestionData` (`:416-457`) deja de recibir `(storagePath, contentType)` singulares y pasa a
   recibir `evidencias`; para las ramas con foto arma `{ evidencias }`, para `reprogramada` sin foto.

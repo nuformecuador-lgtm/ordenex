@@ -89,26 +89,38 @@ Notas de contrato:
   tres para subcadenas que no cruzan el separador (se usa un espacio como separador y
   `numGuia` no contiene espacios); mantiene el matcher O(1) por orden y trivial de testear.
 
-### 3. Memoización
+### 3. Memoización (coherencia lista ↔ mapa ↔ panel)
 
-En el módulo, dos `useMemo` derivan las listas filtradas (patrón ya usado ahí para
-`paradasMapa` y `detalleOrden`):
+Decisión del gate F1.4: el mapa y el panel de detalle reflejan el conjunto FILTRADO
+(coherencia con la feature 117). En el módulo, dos `useMemo` derivan las listas
+filtradas, con la salvaguarda de mantener siempre la orden en gestión:
 
 ```ts
 const porRecogerFiltrado = useMemo(
   () => filtrarAsignaciones(porRecoger, query),
   [porRecoger, query],
 );
+
+// R8 + R9: filtra la lista pero CONSERVA la orden en gestión aunque no coincida.
 const porGestionarFiltrado = useMemo(
-  () => filtrarAsignaciones(porGestionar, query),
-  [porGestionar, query],
+  () =>
+    porGestionar.filter(
+      (o) => o.id === ordenEnGestionId || coincideBusqueda(o, normalizeName(query)),
+    ),
+  [porGestionar, query, ordenEnGestionId],
 );
 ```
 
-- Se recomputan solo al cambiar la lista fuente o el `query`.
-- `paradasMapa`, `detalleOrden` y toda la lógica de puntero/bloqueo siguen
-  dependiendo de los arrays **SIN filtrar** (`porGestionar`/`porRecoger`). Esto
-  materializa **R8**: la búsqueda solo cambia lo que se lista.
+- `porGestionarFiltrado` es la ÚNICA fuente de "En reparto": la grilla, el mapa
+  (`paradasMapa`) y el panel (`detalleOrden`) DEBEN derivarse de ella (no de
+  `porGestionar` crudo). Así el mapa y el panel reflejan el filtro (**R8**).
+- **Salvaguarda R9:** la condición `o.id === ordenEnGestionId` mantiene la orden en
+  gestión dentro del conjunto filtrado aunque el texto no coincida, para no ocultar la
+  gestión en curso. Con `ordenEnGestionId === null` la condición no aplica a nadie.
+- `paradasMapa` y `detalleOrden` se recablean para leer de `porGestionarFiltrado`
+  (hoy leen de `porGestionar`, `MisAsignacionesModule.tsx:83-95` y `:114-126`).
+- La búsqueda **no** toca `ordenEnGestionId` (el puntero de bloqueo lo sigue fijando
+  solo el flujo de gestión) ni los KPIs (**R8**).
 
 ### 4. Render de cada grupo (scope R8)
 
@@ -121,9 +133,9 @@ const porGestionarFiltrado = useMemo(
   (hoy "No hay órdenes en reparto." en `:291-294`) pasa a ser dependiente del query:
   con query activo y sin coincidencias muestra
   "Ninguna guía en reparto coincide con la búsqueda." (**R6**).
-- El panel de detalle (`GestionarOrdenPanel`) y el mapa (`RutaMapa`) NO cambian su
-  fuente de datos: siguen sobre `detalleOrden`/`paradasMapa` derivados del array
-  completo (**R8**).
+- El panel de detalle (`detalleOrden` → `GestionarOrdenPanel`) y el mapa
+  (`paradasMapa` → `RutaMapa`) DERIVAN de `porGestionarFiltrado` para reflejar el
+  filtro (**R8**), con la salvaguarda de R9 (la orden en gestión nunca se oculta).
 
 ### 5. i18n / textos
 
@@ -131,18 +143,19 @@ Textos en español, extraídos como constantes junto al módulo (patrón `BLOQUE
 en `MisAsignacionesModule.tsx:59`). Nada de la sigla "SLA" ni jerga; lenguaje claro
 (memoria del proyecto).
 
+## Decisión elegida (gate F1.4): coherencia lista ↔ mapa ↔ panel
+
+El humano decidió (gate F1.4) que el mapa de ruta y el panel de detalle SÍ reflejan el
+conjunto filtrado, unificando el criterio con la feature 117. Por eso `paradasMapa` y
+`detalleOrden` derivan de `porGestionarFiltrado` (§3), y NO de la lista cruda. La
+única concesión es la salvaguarda R9: la orden en gestión (`ordenEnGestionId`)
+permanece visible en lista y mapa aunque no coincida con el texto, para no ocultar la
+gestión en curso ni chocar con el puntero de bloqueo 1-a-1 (features 36/98/111). El
+invariante "siempre hay una orden en el panel mientras haya órdenes en reparto" se
+mantiene salvo que el filtro deje "En reparto" sin coincidencias, caso en el que la
+grilla y el panel muestran el estado "sin resultados" (R6).
+
 ## Alternativas descartadas
-
-### A. Filtrar TAMBIÉN el mapa de ruta y el panel de detalle (descartada)
-
-Se consideró que la búsqueda redujera `paradasMapa` y forzara `detalleOrden` a una
-orden coincidente.
-**Rechazada** porque: (1) rompe el invariante "siempre hay una orden en el panel
-mientras haya órdenes en reparto" y podría chocar con el puntero de bloqueo 1-a-1
-(`ordenEnGestionId`), reabriendo un flujo ya cerrado (features 36/98/111); (2) la ruta
-optimizada es un recorrido completo — recortarlo por un texto de búsqueda confunde más
-de lo que ayuda; (3) amplía el riesgo y el alcance de una feature declarada `low` y
-"buscador de listas". El buscador filtra LISTAS, no el estado de gestión ni el mapa (R8).
 
 ### B. Crear un `SearchInput` compartido o dar capacidad de búsqueda a `PorAceptarSection` (descartada)
 

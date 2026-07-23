@@ -59,11 +59,18 @@ mensaje de grupo vacío sin búsqueda.
 una guía se evalúa y se muestra dentro de su propio grupo ("Por recoger" o "En
 reparto"), sin mezclar grupos.
 
-**R8 (Ubicuo).** El sistema DEBE limitar el efecto de la búsqueda a las LISTAS
-renderizadas de ambos grupos. La búsqueda NO DEBE alterar el mapa de ruta, la orden
-mostrada en el panel de detalle, el puntero de bloqueo de gestión (`ordenEnGestionId`)
-ni los KPIs. Verificable: el mapa de ruta sigue recibiendo TODAS las paradas en
-reparto con coordenadas aunque el texto buscado excluya algunas de la lista.
+**R8 (Ubicuo).** El sistema DEBE mantener COHERENTE el conjunto filtrado entre la
+lista, el mapa de ruta y el panel de detalle: el mapa (`paradasMapa`) y la orden del
+panel de detalle (`detalleOrden`) DEBEN derivarse de la lista FILTRADA por la
+búsqueda (unificado con la feature 117). La búsqueda NO DEBE alterar el puntero de
+bloqueo de gestión (`ordenEnGestionId`) ni los KPIs. Verificable: con un texto que
+excluye una parada de la lista, esa parada tampoco se envía al mapa de ruta.
+
+**R9 (De estado / salvaguarda).** MIENTRAS haya una orden en gestión
+(`ordenEnGestionId !== null`), el sistema DEBE mantener esa orden VISIBLE en la lista
+de "En reparto" y en el mapa aunque no coincida con el texto buscado, para no ocultar
+la gestión en curso. Verificable: con `ordenEnGestionId` fijado y un texto que no
+coincide con esa orden, la card y su parada siguen presentes.
 
 ## Trazabilidad sugerida (R → test)
 
@@ -76,7 +83,8 @@ reparto con coordenadas aunque el texto buscado excluya algunas de la lista.
 | R5 | "R5: query vacía o solo-espacios muestra todas las guías" — `tests/unit/components/mis-asignaciones-buscador.test.ts` + component test |
 | R6 | "R6: sin coincidencias muestra 'sin resultados' distinguible del vacío" — `tests/components/MisAsignacionesModule.test.tsx` |
 | R7 | "R7: el filtro aplica por grupo de forma independiente" — `tests/components/MisAsignacionesModule.test.tsx` |
-| R8 | "R8: la búsqueda no altera el mapa de ruta (recibe todas las paradas)" — `tests/components/MisAsignacionesModule.test.tsx` |
+| R8 | "R8: filtrar excluye la parada de la lista Y del mapa de ruta" — `tests/components/MisAsignacionesModule.test.tsx` |
+| R9 | "R9: la orden en gestión permanece en lista/mapa aunque no coincida con la búsqueda" — `tests/components/MisAsignacionesModule.test.tsx` |
 
 ## Preguntas abiertas
 

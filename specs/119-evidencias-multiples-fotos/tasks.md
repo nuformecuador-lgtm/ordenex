@@ -23,8 +23,8 @@
 ## Bloque B — Contrato y backend (depende de A)
 
 - [ ] **T4 [P] — Config: `MAX_EVIDENCIAS_POR_GESTION`.**
-  `lib/config/gestion.ts`: campo nuevo con `readPositiveInt("GESTION_MAX_EVIDENCIAS", 5)` (design §3.2).
-  Hecho: `gestionConfig.MAX_EVIDENCIAS_POR_GESTION === 5` sin env; override por env respetado.
+  `lib/config/gestion.ts`: campo nuevo con `readPositiveInt("GESTION_MAX_EVIDENCIAS", 3)` (design §3.2).
+  Hecho: `gestionConfig.MAX_EVIDENCIAS_POR_GESTION === 3` sin env; override por env respetado.
 
 - [ ] **T5 [P] — Tipos del service:** `GestionarInput.evidencias: EvidenciaArchivo[]` (3 ramas) y
   `GestionarServiceResult.evidenciaUrls?: string[]` en `IMisAsignacionesService.ts` (design §3.1).

@@ -31,10 +31,13 @@
   - **Hecho:** `getByRole("searchbox")` / `getByLabelText("Buscar guías")` lo encuentra (R1).
   - Depende de: —
 
-- [ ] **T4. Derivar listas filtradas con `useMemo`.**
+- [ ] **T4. Derivar listas filtradas con `useMemo` (coherencia lista↔mapa↔panel).**
   - `porRecogerFiltrado = useMemo(() => filtrarAsignaciones(porRecoger, query), [porRecoger, query])`.
-  - `porGestionarFiltrado = useMemo(() => filtrarAsignaciones(porGestionar, query), [porGestionar, query])`.
-  - **Hecho:** ambas memos existen y dependen solo de su lista fuente + `query`.
+  - `porGestionarFiltrado`: filtra `porGestionar` por el query PERO conserva la orden
+    en gestión (`o.id === ordenEnGestionId || coincideBusqueda(o, normalizeName(query))`);
+    deps `[porGestionar, query, ordenEnGestionId]` (R8 + R9, ver `design.md §3`).
+  - **Hecho:** ambas memos existen; `porGestionarFiltrado` mantiene la orden en
+    gestión aunque no coincida.
   - Depende de: T1, T3.
 
 - [ ] **T5. Cablear "Por recoger" al filtrado + mensaje sin resultados.**
@@ -46,15 +49,16 @@
   - **Hecho:** con query sin match, el grupo muestra el mensaje "coincide con la búsqueda".
   - Depende de: T4.
 
-- [ ] **T6. Cablear "En reparto" al filtrado + mensaje sin resultados.**
+- [ ] **T6. Cablear "En reparto" (grilla + mapa + panel) al filtrado.**
   - La grilla mapea `porGestionarFiltrado` (reemplaza `porGestionar.map` en la grilla).
+  - Recablear `paradasMapa` y `detalleOrden` para que DERIVEN de `porGestionarFiltrado`
+    (hoy leen `porGestionar`, `MisAsignacionesModule.tsx:83-95` y `:114-126`) → mapa y
+    panel reflejan el filtro (R8).
   - Mensaje inline de vacío dinámico: con query activo y sin coincidencias →
     "Ninguna guía en reparto coincide con la búsqueda." (R6); sin query →
     "No hay órdenes en reparto." (texto actual).
-  - **NO** cambiar la fuente de `paradasMapa` ni de `detalleOrden` (siguen sobre
-    `porGestionar` sin filtrar) (R8).
-  - **Hecho:** filtrar excluye cards de la grilla pero el mapa (`RutaMapa`) sigue
-    recibiendo todas las paradas con coordenadas.
+  - **Hecho:** filtrar excluye la card de la grilla Y su parada del mapa; la orden en
+    gestión (`ordenEnGestionId`) permanece en grilla y mapa aunque no coincida (R9).
   - Depende de: T4.
 
 ## Bloque 3 — Tests de componente y cierre
@@ -67,8 +71,10 @@
   - R6: query sin coincidencias muestra el mensaje "coincide con la búsqueda" en el
     grupo afectado, distinto del vacío sin búsqueda.
   - R7: una guía que coincide en un grupo no aparece en el otro.
-  - R8: con query que excluye una parada, `rutaMapaMock` sigue recibiendo todas las
-    paradas con coords (reusar el mock de `RutaMapa` ya presente en el archivo).
+  - R8: con query que excluye una parada, esa parada NO aparece en la grilla y
+    `rutaMapaMock` NO la recibe (reusar el mock de `RutaMapa` ya presente en el archivo).
+  - R9: con `ordenEnGestionId` fijado y un query que no coincide con esa orden, su card
+    y su parada (en `rutaMapaMock`) siguen presentes.
   - **Hecho:** todos pasan y los tests previos del archivo siguen verdes.
   - Depende de: T3, T5, T6.
 

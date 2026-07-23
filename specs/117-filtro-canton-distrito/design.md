@@ -33,7 +33,14 @@ import { normalizeName } from "@/lib/utils/normalize";
 
 export interface OpcionFiltro { value: string; label: string } // value = nombre original
 
-/** R2/R13: cantones únicos (dedup por nombre normalizado), ordenados alfabéticamente. */
+/**
+ * R2/R13: cantones únicos, ordenados alfabéticamente.
+ *   - value = `cantonNombre` (el filtrado es por nombre de cantón).
+ *   - label = `"<cantonNombre> (<provinciaNombre>)"` para desambiguar homónimos.
+ *   - dedup por la clave cantón+provincia (normalizada), no solo por cantón.
+ * Ej.: [{ value: "Central", label: "Central (San José)" },
+ *       { value: "Central", label: "Central (Alajuela)" }]  // homónimos reales
+ */
 export function derivarCantones(ordenes: MiAsignacionDTO[]): OpcionFiltro[];
 
 /** R4: distritos únicos (no nulos) del cantón dado, dedup + ordenados. */
@@ -51,15 +58,23 @@ export function filtrarAsignaciones(
 
 Reglas de las funciones:
 
-- **Dedup y orden.** Se agrupa por `normalizeName(nombre)` conservando el primer nombre
-  visto como etiqueta; se ordena con `localeCompare("es", { sensitivity: "base" })`.
-- **`derivarDistritos`** compara `cantonNombre` con `normalizeName` para tolerar
-  diferencias de acento/caso, y omite `distritoNombre === null`.
+- **`derivarCantones` — dedup y etiqueta (R2, gate F1.4).** Se agrupa por la clave
+  `normalizeName(canton) + "|" + normalizeName(provincia)` (cantón+provincia), conservando
+  los primeros nombres originales vistos. El `label` de cada opción es
+  `"<cantonNombre> (<provinciaNombre>)"`; el `value` es el `cantonNombre` original (el
+  filtrado es por nombre de cantón). Homónimos reales (mismo cantón en dos provincias)
+  producen DOS opciones con etiquetas distintas pero el mismo `value`; como un mensajero
+  opera en una sola zona (feature 24), esa colisión es prácticamente nula en su carga y el
+  filtro por nombre de cantón sigue siendo correcto para su caso de uso.
+- **Orden.** Se ordena con `localeCompare("es", { sensitivity: "base" })`.
+- **`derivarDistritos`** deduplica por `normalizeName(distrito)`, compara el `cantonNombre`
+  con `normalizeName` para tolerar diferencias de acento/caso, y omite
+  `distritoNombre === null`. `value` = `label` = nombre original del distrito.
 - **`filtrarAsignaciones`**: si `canton === ""` devuelve la lista intacta (R7). Con
-  cantón, compara por `normalizeName`. Con distrito, exige además
+  cantón, compara `cantonNombre` por `normalizeName`. Con distrito, exige además
   `distritoNombre !== null` y coincidencia por `normalizeName` (R6).
-- El `value` de cada opción es el **nombre original** (no normalizado), que es también
-  el valor guardado en el estado del filtro; la comparación siempre re-normaliza.
+- El `value` guardado en el estado del filtro es siempre un **nombre original** (no
+  normalizado); toda comparación re-normaliza.
 
 ## 4. Estado, encadenamiento y memoización (React)
 

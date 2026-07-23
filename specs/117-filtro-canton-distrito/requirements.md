@@ -30,8 +30,11 @@ se ve afectada por esta feature (alcance: solo la lista del mensajero).
 
 **R2 (Ubicuo).** El sistema DEBE derivar las opciones del select de **Cantón** a
 partir de las asignaciones ya cargadas (la unión de `porRecoger` y `porGestionar`),
-con **una opción por `cantonNombre` distinto**, deduplicadas de forma insensible a
-mayúsculas/acentos y ordenadas alfabéticamente.
+con **una opción por cantón distinto** (deduplicado por cantón+provincia, insensible a
+mayúsculas/acentos) y ordenadas alfabéticamente. La **etiqueta** de cada opción DEBE ser
+`"<Cantón> (<Provincia>)"` usando `provinciaNombre` del DTO para desambiguar cantones
+homónimos (p. ej. "Central (San José)" vs "Central (Alajuela)"); el **valor** usado para
+filtrar sigue siendo el nombre del cantón.
 
 **R3 (De estado).** MIENTRAS no haya un cantón seleccionado, el sistema DEBE mantener
 el select de **Distrito deshabilitado** y sin filtro de distrito aplicado.
@@ -82,14 +85,14 @@ selección actual no elimine otras opciones de cantón disponibles.
 **R14 (De estado).** MIENTRAS haya un filtro activo, el panel de detalle y el mapa de
 ruta de "En reparto" DEBEN reflejar el conjunto filtrado de órdenes (respetando la
 salvaguarda R10), de forma que lo mostrado en el panel/mapa sea coherente con las cards
-visibles.
+visibles. [CONFIRMADO — gate F1.4: criterio único del portal, alineado con la feature 114.]
 
 ## Trazabilidad (requisito → prueba prevista)
 
 | Req | Prueba prevista (nombre descriptivo del test) |
 | --- | --- |
 | R1  | "renderiza los selects de Cantón y Distrito en el módulo del mensajero" |
-| R2  | "las opciones de Cantón son los cantones únicos de las órdenes cargadas, ordenados" |
+| R2  | "las opciones de Cantón son los cantones únicos con etiqueta 'Cantón (Provincia)', ordenados" |
 | R3  | "sin cantón elegido, el select de Distrito está deshabilitado" |
 | R4  | "al elegir un cantón, Distrito ofrece solo los distritos de ese cantón" |
 | R5  | "cambiar de cantón resetea el distrito a todos" |
@@ -111,18 +114,16 @@ visibles.
    grupos y las opciones se derivan de la unión de ambos, por coherencia con la feature
    hermana 114 (buscador, que filtra ambos grupos) y con la redacción "las asignaciones
    cargadas". ¿Se confirma, o el filtro debe limitarse solo a "En reparto"?
-2. **Cantones homónimos.** El DTO solo expone `cantonNombre` (string), sin id de cantón.
-   En Costa Rica hay cantones con el mismo nombre en distintas provincias (p. ej. "Central"
-   en San José, Alajuela, Cartago, Heredia). Como cada mensajero opera en una sola zona
-   (feature 24), la colisión es prácticamente nula en su carga; por eso se deduplica por
-   nombre. ¿Debe la etiqueta incluir la provincia (`provinciaNombre`, también en el DTO)
-   para desambiguar, o basta el nombre del cantón?
+2. **Cantones homónimos. [RESUELTA — gate F1.4]** Con provincia: la etiqueta de cada
+   opción de cantón es `"<Cantón> (<Provincia>)"` (ver R2), usando `provinciaNombre` del
+   DTO para desambiguar homónimos (p. ej. "Central"). La deduplicación de opciones es por
+   cantón+provincia y el valor de filtrado sigue siendo el nombre del cantón.
 3. **Órdenes sin distrito.** ¿Se desea una opción explícita "Sin distrito" para filtrar
    órdenes con `distritoNombre === null`? Por defecto NO se incluye (esas órdenes solo
    aparecen bajo "Todos los distritos").
-4. **Mapa/panel bajo filtro.** R14 hace que el mapa de ruta y el panel de detalle reflejen
-   el subconjunto filtrado (con la salvaguarda R10). ¿Se confirma, o se prefiere que el
-   mapa muestre SIEMPRE la ruta completa aunque las cards estén filtradas?
+4. **Mapa/panel bajo filtro. [RESUELTA — gate F1.4]** Confirmado: el mapa de ruta y el
+   panel de detalle reflejan el subconjunto filtrado (con la salvaguarda R10). Es el
+   criterio único del portal, alineado con la feature 114.
 5. **Composición con el buscador (114).** Cuando aterrice la feature 114, ambos filtros de
    cliente deberían componerse en AND sobre las mismas listas. No bloquea a la 117, pero
    conviene confirmar el orden de integración (ver conflicto de archivos en `tasks.md`).
