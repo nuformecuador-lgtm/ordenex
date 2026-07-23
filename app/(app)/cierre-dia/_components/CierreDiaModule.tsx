@@ -120,7 +120,7 @@ const RESULTADO_VACIO: Record<CierreResultado, string> = {
 
 const METODO_LABEL: Record<MetodoPagoValue, string> = {
   efectivo: "Efectivo",
-  SIMPE: "SIMPE",
+  SINPE: "SINPE",
   transferencia: "Transferencia",
 };
 
@@ -318,7 +318,7 @@ export function CierreDiaModule({
         <Card>
           <CardContent className="grid grid-cols-2 gap-4 pt-6 sm:grid-cols-4">
             <TotalItem label="Efectivo" value={money(totales.efectivo)} />
-            <TotalItem label="SIMPE" value={money(totales.simpe)} />
+            <TotalItem label="SINPE" value={money(totales.simpe)} />
             <TotalItem
               label="Transferencia"
               value={money(totales.transferencia)}
@@ -668,7 +668,7 @@ const COLUMNAS_PASADOS: Column<CierrePasadoDTO>[] = [
     value: "Efectivo",
     render: (c) => money(c.totales.efectivo),
   },
-  { id: "simpe", value: "SIMPE", render: (c) => money(c.totales.simpe) },
+  { id: "simpe", value: "SINPE", render: (c) => money(c.totales.simpe) },
   {
     id: "transferencia",
     value: "Transferencia",

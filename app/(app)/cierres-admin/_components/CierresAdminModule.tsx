@@ -334,7 +334,7 @@ export function CierresAdminModule({
                     value={money(detalle.cierre.totales.efectivo)}
                   />
                   <TotalItem
-                    label="SIMPE"
+                    label="SINPE"
                     value={money(detalle.cierre.totales.simpe)}
                   />
                   <TotalItem
