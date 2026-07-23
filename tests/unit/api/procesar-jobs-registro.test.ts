@@ -44,6 +44,7 @@ describe("R21 — registro en el drenador", () => {
       "liberar_reprogramadas",
       "optimizacion_ruta",
       "webhook_estado", // feature 99
+      "whatsapp_template_sync", // integracion WhatsApp
     ]);
   });
 

@@ -20,6 +20,7 @@ import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
+import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
 import { VerificarGuiaGate } from "./VerificarGuiaGate";
@@ -379,7 +380,11 @@ export function GestionarOrdenPanel({
               telefono={orden.telefonoDest}
               nombre={orden.destinatario}
               size="lg"
+              mostrarWhatsapp={false}
             />
+            {/* Integracion WhatsApp: burbuja que lista las plantillas, las renderiza con los
+                datos de la orden y abre WhatsApp con el mensaje ya escrito al elegir una. */}
+            <EnviarPlantillaWhatsappButton orden={orden} size="lg" />
           </div>
           {/* Feature 98: gate de verificación. Antes de fijar el puntero y avanzar
               a los 4 botones, el mensajero DEBE confirmar la guía del paquete

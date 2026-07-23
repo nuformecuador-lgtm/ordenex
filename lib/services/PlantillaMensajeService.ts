@@ -21,6 +21,7 @@ import type {
   ListarPlantillasInput,
 } from "@/lib/types/plantilla-mensaje";
 import { previewConEjemplos, validarCuerpo } from "@/lib/utils/plantilla-mensaje";
+import type { PlantillaWhatsappPropagator } from "@/lib/services/whatsapp/plantilla-whatsapp-sync";
 
 // R5: SOLO `maestro` tiene lectura Y escritura del modulo. Cualquier otro rol (incluido
 // uno no reconocido) -> forbidden. Patron `UsuarioService.ALLOWED_ROLES`.
@@ -30,7 +31,13 @@ const ALLOWED_ROLES = new Set<string>(["maestro"]);
 const CUERPO_MALFORMADO = "El cuerpo tiene una llave doble malformada";
 
 export class PlantillaMensajeService implements IPlantillaMensajeService {
-  constructor(private readonly repo: IPlantillaMensajeRepository) {}
+  // Integracion WhatsApp: propagador OPCIONAL. Sin el, el CRUD local se comporta igual que
+  // antes (no toca Meta) — asi las suites existentes que construyen el service con solo el
+  // repo siguen pasando. El borde real (buildPlantillaService) lo inyecta.
+  constructor(
+    private readonly repo: IPlantillaMensajeRepository,
+    private readonly whatsapp?: PlantillaWhatsappPropagator,
+  ) {}
 
   async crear(input: CrearPlantillaInput, actor: Actor): Promise<CrearPlantillaServiceResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R5
@@ -48,6 +55,8 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
         variables: validado.variables, // R15
         createdBy: actor.usuarioId, // FK -> usuario creador (R8)
       });
+      // Propaga a Meta (sincrono; encola reintento si falla). No bloquea el resultado local.
+      await this.whatsapp?.trasCrear(plantilla);
       return { status: "ok", plantilla }; // nace `pending` (R12, default del schema)
     } catch (error) {
       if (error instanceof PlantillaDuplicadaError) {
@@ -108,6 +117,8 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     try {
       const plantilla = await this.repo.update(id, data);
       if (!plantilla) return { status: "not_found" }; // R21
+      // Propaga el cambio a Meta (crea el template si aun no estaba enlazado, o lo actualiza).
+      await this.whatsapp?.trasActualizar(plantilla);
       return { status: "ok", plantilla };
     } catch (error) {
       if (error instanceof PlantillaDuplicadaError) {
@@ -133,8 +144,17 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
   async eliminar(id: string, actor: Actor): Promise<EliminarPlantillaServiceResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R5
 
+    // Se lee el nombre ANTES del soft-delete: el borrado en Meta es por nombre y despues del
+    // soft-delete la fila deja de ser visible para el propagador/job.
+    const actual = await this.repo.findById(id);
+    if (!actual) return { status: "not_found" }; // R29
+
     const ok = await this.repo.softDelete(id); // R27: soft delete
-    if (!ok) return { status: "not_found" }; // R29
+    if (!ok) return { status: "not_found" }; // R29 (carrera)
+    // Solo tiene sentido borrar en Meta si la plantilla llego a enlazarse alli.
+    if (actual.templateId !== null) {
+      await this.whatsapp?.trasEliminar(id, actual.nombre);
+    }
     return { status: "ok" };
   }
 

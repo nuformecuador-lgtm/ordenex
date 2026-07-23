@@ -3,11 +3,16 @@ import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import {
   PlantillaDuplicadaError,
   type CreatePlantillaData,
+  type CrearDesdeMetaData,
   type IPlantillaMensajeRepository,
   type ListPlantillasParams,
   type ListPlantillasResult,
+  type PlantillaEnviable,
   type PlantillaListItem,
   type PlantillaPublica,
+  type PlantillaTextoEnviable,
+  type SetTemplateData,
+  type SincronizarTemplateData,
   type UpdatePlantillaData,
 } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 
@@ -19,6 +24,8 @@ const PUBLIC_SELECT = {
   cuerpo: true,
   variables: true,
   estado: true,
+  templateId: true,
+  templateIdioma: true,
   createdBy: true,
   createdAt: true,
   updatedAt: true,
@@ -30,6 +37,7 @@ const LIST_SELECT = {
   cuerpo: true,
   estado: true,
   variables: true,
+  templateId: true,
   createdAt: true,
 } as const;
 
@@ -121,6 +129,96 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
       data: { deletedAt: new Date() }, // R27: soft delete, no borra la fila
     });
     return result.count > 0;
+  }
+
+  // --- Integracion WhatsApp ---
+
+  async setTemplate(id: string, data: SetTemplateData): Promise<void> {
+    await this.prisma.plantillaMensaje.updateMany({
+      where: { id, ...VIGENTE },
+      data: { templateId: data.templateId, templateIdioma: data.idioma },
+    });
+  }
+
+  async sincronizarTemplatePorNombre(
+    nombre: string,
+    data: SincronizarTemplateData,
+  ): Promise<boolean> {
+    // El id/idioma del template SIEMPRE se refresca desde Meta.
+    const result = await this.prisma.plantillaMensaje.updateMany({
+      where: { nombre, ...VIGENTE },
+      data: { templateId: data.templateId, templateIdioma: data.idioma },
+    });
+    if (result.count === 0) return false; // no habia plantilla local con ese nombre
+
+    // El estado de Meta manda SALVO un `inactivo` puesto por el usuario: la desactivacion
+    // local (controla si el mensajero puede enviarla) no se revierte desde Meta.
+    await this.prisma.plantillaMensaje.updateMany({
+      where: { nombre, ...VIGENTE, NOT: { estado: "inactivo" } },
+      data: { estado: data.estado },
+    });
+    return true;
+  }
+
+  async listarEnviables(): Promise<PlantillaEnviable[]> {
+    const rows = await this.prisma.plantillaMensaje.findMany({
+      where: { ...VIGENTE, estado: "activo", NOT: { templateId: null } },
+      select: { id: true, nombre: true, variables: true, templateId: true, templateIdioma: true },
+      orderBy: { nombre: "asc" },
+    });
+    // El WHERE garantiza templateId no nulo; templateIdioma podria faltar si Meta no lo dio
+    // (defensivo): se cae al idioma configurado por defecto en el service de envio.
+    return rows.map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      variables: r.variables,
+      templateId: r.templateId as string,
+      templateIdioma: r.templateIdioma ?? "",
+    }));
+  }
+
+  async crearDesdeMeta(data: CrearDesdeMetaData): Promise<boolean> {
+    try {
+      await this.prisma.plantillaMensaje.create({
+        data: {
+          nombre: data.nombre,
+          cuerpo: data.cuerpo,
+          variables: data.variables,
+          estado: data.estado, // importada: refleja el status de Meta (mapeado)
+          templateId: data.templateId,
+          templateIdioma: data.idioma,
+          // createdBy queda null: la origino la sincronizacion, no un usuario.
+        },
+      });
+      return true;
+    } catch (error) {
+      // Nombre ya en uso (incluye borradas: el indice unico las cuenta). No se resucita.
+      if (mapDuplicadoError(error) instanceof PlantillaDuplicadaError) return false;
+      throw error;
+    }
+  }
+
+  async listarUsablesParaTexto(): Promise<PlantillaTextoEnviable[]> {
+    return this.prisma.plantillaMensaje.findMany({
+      where: { ...VIGENTE, NOT: { estado: "inactivo" } },
+      select: { id: true, nombre: true, cuerpo: true, variables: true },
+      orderBy: { nombre: "asc" },
+    });
+  }
+
+  async findEnviableById(id: string): Promise<PlantillaEnviable | null> {
+    const r = await this.prisma.plantillaMensaje.findFirst({
+      where: { id, ...VIGENTE, estado: "activo", NOT: { templateId: null } },
+      select: { id: true, nombre: true, variables: true, templateId: true, templateIdioma: true },
+    });
+    if (r === null) return null;
+    return {
+      id: r.id,
+      nombre: r.nombre,
+      variables: r.variables,
+      templateId: r.templateId as string,
+      templateIdioma: r.templateIdioma ?? "",
+    };
   }
 }
 
