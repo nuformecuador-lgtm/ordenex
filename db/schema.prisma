@@ -132,6 +132,7 @@ model Usuario {
   plantillasCreadas                   PlantillaMensaje[]        @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
   webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
   ordenMensajeroMetas                 OrdenMensajeroMeta[]      @relation("OrdenMensajeroMetaMensajero") // feature 115: marcas privadas ("gestionar mas tarde") de ESTE mensajero sobre sus ordenes
+  chatConversaciones                  ChatConversacion[]        @relation("ChatConversacionMensajero") // feature 120/R13/R16: hilos de chat asignados a ESTE mensajero
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -181,6 +182,88 @@ model PlantillaMensaje {
   @@index([estado]) // filtro por estado
   @@index([deletedAt]) // R28: filtro de vigentes (deletedAt IS NULL)
   @@map("plantilla_mensaje")
+
+  chatMensajes ChatMensaje[] @relation("ChatMensajePlantilla") // feature 109: salientes de tipo plantilla que referencian esta plantilla
+}
+
+// Feature 109 (design §1.1): direccion de un mensaje del chat. Enum Postgres nativo
+// (patron RolValue/PlantillaEstado). `entrante` = del cliente (llega por el webhook);
+// `saliente` = del mensajero (se envia por la Graph API).
+enum ChatMensajeDireccion {
+  entrante
+  saliente
+
+  @@map("chat_mensaje_direccion")
+}
+
+// Feature 109 (design §1.1): tipo de un mensaje del chat. `texto` (cuerpo libre),
+// `plantilla` (Message Template de Meta), `otro` (multimedia entrante no expandido en v1).
+enum ChatMensajeTipo {
+  texto
+  plantilla
+  otro
+
+  @@map("chat_mensaje_tipo")
+}
+
+// Feature 109 (design §1.1): estado de entrega de un mensaje SALIENTE (R7/R14). Solo
+// aplica a salientes (nullable en entrantes). `queued` = pendiente de reintento por la
+// cola de jobs; el resto lo reporta Meta via el webhook de statuses.
+enum ChatMensajeEstado {
+  queued
+  sent
+  delivered
+  read
+  failed
+
+  @@map("chat_mensaje_estado")
+}
+
+// Feature 109 (design §1.2, R13): hilo de chat 1:1 entre el mensajero y el cliente
+// destinatario de una orden, identificado por el numero E.164 del cliente. Un hilo por
+// (orden, numero) (ver D4). `ultimoEntranteAt` es la fuente de la ventana de 24 h
+// (R18/R19). RLS habilitada sin policies (solo service role): la autorizacion de negocio
+// (scope por mensajero, R16) vive en el service, no en la DB.
+model ChatConversacion {
+  id               String    @id @default(uuid())
+  telefonoE164     String    @map("telefono_e164") // numero del cliente normalizado E.164 (sin `+`, formato del cliente de envio)
+  ordenId          String    @map("orden_id") // FK -> orden; ON DELETE RESTRICT (no huerfanos)
+  mensajeroId      String    @map("mensajero_id") // FK -> usuario (mensajero asignado del hilo); ON DELETE RESTRICT
+  ultimoEntranteAt DateTime? @map("ultimo_entrante_at") // marca del ultimo mensaje ENTRANTE; NULL = sin entrantes (fuera de ventana)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  orden     Orden       @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  mensajero Usuario     @relation("ChatConversacionMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict)
+  mensajes  ChatMensaje[]
+
+  @@unique([ordenId, telefonoE164]) // D4: un hilo por orden+numero
+  @@index([mensajeroId]) // R16: scope por mensajero
+  @@index([telefonoE164]) // R25: resolucion del entrante desde el numero
+  @@map("chat_conversacion")
+}
+
+// Feature 109 (design §1.3, R14): un mensaje del hilo. Fila casi inmutable (sin
+// updatedAt/deletedAt): lo unico que muta es `estado` de un saliente al llegar su status
+// de Meta (R7). `waMessageId` es UNICO (indice parcial en la migracion) para el dedupe
+// (R8) y para localizar el saliente al llegar un status (R7). RLS habilitada sin policies.
+model ChatMensaje {
+  id             String               @id @default(uuid())
+  conversacionId String               @map("conversacion_id") // FK -> chat_conversacion; ON DELETE CASCADE
+  direccion      ChatMensajeDireccion
+  tipo           ChatMensajeTipo
+  cuerpo         String? // texto plano; NULL para tipos sin cuerpo
+  plantillaId    String?              @map("plantilla_id") // solo salientes de tipo plantilla; ON DELETE SET NULL
+  waMessageId    String?              @map("wa_message_id") // id de Meta; UNICO (parcial) para dedupe (R8)
+  estado         ChatMensajeEstado? // solo salientes (R7)
+  ocurridoAt     DateTime             @map("ocurrido_at") // timestamp del evento (de Meta en entrantes)
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  conversacion ChatConversacion  @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  plantilla    PlantillaMensaje? @relation("ChatMensajePlantilla", fields: [plantillaId], references: [id], onDelete: SetNull)
+
+  @@index([conversacionId, ocurridoAt]) // R22: historial ordenado
+  @@map("chat_mensaje")
 }
 
 // Feature 21: documentos de postulacion del mensajero. 1:N (5 tipos por usuario).
@@ -408,6 +491,7 @@ model Orden {
   cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
   rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
   mensajeroMetas        OrdenMensajeroMeta[]   @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
+  chatConversaciones    ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -1200,6 +1284,7 @@ enum JobTipo {
   optimizacion_ruta // feature 92: reoptimiza la ruta de UN mensajero (payload { mensajeroId })
   webhook_estado // feature 99: entrega firmada del cambio de estado de UNA orden a su integrador (payload { ordenId, estatusDestinoId, ocurridoAt })
   whatsapp_template_sync // integracion WhatsApp: reintenta contra Meta una op de plantilla (create/update/delete) que fallo en linea (payload { plantillaId, operacion })
+  whatsapp_chat_envio // feature 109/D1: reintenta el envio saliente de un mensaje de chat que devolvio `transitorio` (payload { mensajeChatId })
 
   @@map("job_tipo")
 }

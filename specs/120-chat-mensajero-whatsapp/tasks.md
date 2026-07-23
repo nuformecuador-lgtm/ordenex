@@ -7,38 +7,38 @@
 
 ## Bloque A — Datos y migración
 
-- [ ] **A1.** Añadir a `db/schema.prisma` los enums `ChatMensajeDireccion`,
+- [x] **A1.** Añadir a `db/schema.prisma` los enums `ChatMensajeDireccion`,
   `ChatMensajeTipo`, `ChatMensajeEstado` y los modelos `ChatConversacion` y `ChatMensaje`
   (§1). *Hecho:* `pnpm db:generate` compila y los tipos aparecen en `@prisma/client`.
-- [ ] **A2.** Crear migración `db/migrations/<ts>_chat_whatsapp/migration.sql` (UP): enums,
+- [x] **A2.** Crear migración `db/migrations/<ts>_chat_whatsapp/migration.sql` (UP): enums,
   dos tablas, FKs, índice único parcial sobre `wa_message_id`, índices de §1.2/§1.3, y
   `ENABLE ROW LEVEL SECURITY` en ambas tablas (R15). Depende de A1. *Hecho:* migración
   aplica en DB de test sin error.
-- [ ] **A3.** Escribir `down.sql` que revierte EXACTAMENTE A2 (DROP TABLE en orden inverso
+- [x] **A3.** Escribir `down.sql` que revierte EXACTAMENTE A2 (DROP TABLE en orden inverso
   por FKs, DROP TYPE de los enums) (R15). Depende de A2. *Hecho:* `pnpm db:rollback` deja el
   esquema como antes.
 
 ## Bloque B — Config y borde tipado
 
-- [ ] **B1. [P]** `loadWhatsappWebhookConfig()` que lee `WHATSAPP_WEBHOOK_VERIFY_TOKEN` y
+- [x] **B1. [P]** `loadWhatsappWebhookConfig()` que lee `WHATSAPP_WEBHOOK_VERIFY_TOKEN` y
   `WHATSAPP_APP_SECRET` con `readRequired` (cita nombre, nunca valor) lanzando
   `WhatsappNoConfiguradoError` (R12). *Hecho:* test B1.T verde.
-- [ ] **B2. [P]** Esquema zod del payload de Meta en `lib/types/whatsapp-webhook.ts` con
+- [x] **B2. [P]** Esquema zod del payload de Meta en `lib/types/whatsapp-webhook.ts` con
   strip de campos extra; normaliza a un tipo de dominio (mensajes entrantes + statuses)
   (R5). *Hecho:* test B2.T verde.
 
 ## Bloque C — Repositorios e interfaces
 
-- [ ] **C1. [P]** Interfaces `IChatConversacionRepository` / `IChatMensajeRepository` en
+- [x] **C1. [P]** Interfaces `IChatConversacionRepository` / `IChatMensajeRepository` en
   `lib/interfaces/repositories/`. Depende de A1. *Hecho:* typecheck ok.
-- [ ] **C2.** `ChatConversacionRepository` y `ChatMensajeRepository` (solo Prisma): upsert de
+- [x] **C2.** `ChatConversacionRepository` y `ChatMensajeRepository` (solo Prisma): upsert de
   hilo, insert idempotente de mensaje (dedupe `wa_message_id`), update de `estado` por
   `wa_message_id`, listar hilo por `ordenId` con scope `mensajeroId`. Depende de C1.
   *Hecho:* tests de repo (integration) verdes.
 
 ## Bloque D — Service (lógica pura)
 
-- [ ] **D1.** `ChatWhatsappService` (`lib/services/ChatWhatsappService.ts`): ingesta de
+- [x] **D1.** `ChatWhatsappService` (`lib/services/ChatWhatsappService.ts`): ingesta de
   entrantes (R6), aplicación de statuses (R7), dedupe (R8), resolución de hilo desde número
   (R25/D4), regla de ventana 24 h (R18/R19/D2), orquestación del envío saliente (R20/R21).
   Deps por constructor (repos + `WhatsappCloudClient`). Depende de C2, B2. *Hecho:* tests
@@ -46,25 +46,25 @@
 
 ## Bloque E — Webhook (Controller)
 
-- [ ] **E1.** `app/api/webhooks/whatsapp/route.ts` GET: handshake (R1/R2) contra
+- [x] **E1.** `app/api/webhooks/whatsapp/route.ts` GET: handshake (R1/R2) contra
   `WHATSAPP_WEBHOOK_VERIFY_TOKEN`. Depende de B1. *Hecho:* test E1.T verde.
-- [ ] **E2.** `route.ts` POST: leer cuerpo crudo, verificar `X-Hub-Signature-256` con
+- [x] **E2.** `route.ts` POST: leer cuerpo crudo, verificar `X-Hub-Signature-256` con
   `timingSafeEqual` ANTES de procesar (R3/R4), zod strip (R5), delegar al service (R6/R7/R8),
   responder 200 (R9), sin log de secretos/PII (R11). Depende de D1, E1, B2. *Hecho:* tests
   E2.T verdes.
-- [ ] **E3.** Añadir `/api/webhooks` a `SELF_AUTH_ROUTES` en `middleware.ts` con comentario
+- [x] **E3.** Añadir `/api/webhooks` a `SELF_AUTH_ROUTES` en `middleware.ts` con comentario
   del matcher (R10). Depende de E2. *Hecho:* test E3.T (integration) confirma que el POST no
   redirige a `/login`.
 
 ## Bloque F — Envío saliente (Server Actions)
 
-- [ ] **F1.** `lib/actions/chat-whatsapp.ts`: `enviarMensajeChat(ordenId, texto)` con
+- [x] **F1.** `lib/actions/chat-whatsapp.ts`: `enviarMensajeChat(ordenId, texto)` con
   resolución de actor + scope `OrdenEnvioReader` (R17), ventana 24 h (R18/R19), persistencia
   saliente (R20), manejo de `transitorio` según D1 (R21). Depende de D1. *Hecho:* tests
   F1.T verdes.
-- [ ] **F2. [P]** `listarHiloChat(ordenId)` con scope del mensajero (R16/R22). Depende de C2.
+- [x] **F2. [P]** `listarHiloChat(ordenId)` con scope del mensajero (R16/R22). Depende de C2.
   *Hecho:* test F2.T verde.
-- [ ] **F3. (condicional D1)** Si D1 = encolar: `JobTipo whatsapp_chat_envio` + handler en
+- [x] **F3. (condicional D1)** Si D1 = encolar: `JobTipo whatsapp_chat_envio` + handler en
   `lib/services/jobs/` registrado en `procesar-jobs/route.ts` para reintento de
   `transitorio` (R21). Depende de F1. *Hecho:* test de registro del handler verde.
 
@@ -82,7 +82,7 @@
 
 ## Bloque H — Verificación final
 
-- [ ] **H1.** `.env.example` documenta las dos variables nuevas (D6/R12, sin valores).
+- [x] **H1.** `.env.example` documenta las dos variables nuevas (D6/R12, sin valores).
 - [ ] **H2.** `./init.sh` en verde + suite de tests completa. *Hecho:* CI local verde.
 - [ ] **H3.** Actualizar `progress/impl_109.md` con el mapa R→test completo.
 

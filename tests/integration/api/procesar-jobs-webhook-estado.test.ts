@@ -45,6 +45,7 @@ describe("R26 — el drenador resuelve el handler de webhook_estado y no lo re-a
       "liberar_reprogramadas",
       "optimizacion_ruta",
       "webhook_estado",
+      "whatsapp_chat_envio", // feature 109
       "whatsapp_template_sync", // integracion WhatsApp
     ]);
   });

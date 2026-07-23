@@ -59,6 +59,30 @@ function readRequired(name: string): string {
 }
 
 /**
+ * Feature 109 (design §4, R12): configuracion del WEBHOOK de entrada de WhatsApp. Son
+ * secretos DISTINTOS de los del envio: el token de verificacion del handshake GET y el App
+ * Secret con el que Meta firma el POST (`X-Hub-Signature-256`). Se leen aparte porque el
+ * webhook puede estar operativo sin credencial de envio y viceversa.
+ */
+export interface WhatsappWebhookConfig {
+  /** Token del handshake GET (`hub.verify_token`); se compara, jamas se loguea. */
+  verifyToken: string;
+  /** App Secret con el que se calcula el HMAC-SHA256 del cuerpo crudo del POST. */
+  appSecret: string;
+}
+
+/**
+ * Lee y valida la config del webhook. Lanza WhatsappNoConfiguradoError citando el NOMBRE de
+ * la variable ausente, nunca su valor (R12). Llamar en el borde del route handler.
+ */
+export function loadWhatsappWebhookConfig(): WhatsappWebhookConfig {
+  return {
+    verifyToken: readRequired("WHATSAPP_WEBHOOK_VERIFY_TOKEN"),
+    appSecret: readRequired("WHATSAPP_APP_SECRET"),
+  };
+}
+
+/**
  * Lee y valida la configuracion de WhatsApp. Lanza WhatsappNoConfiguradoError si
  * falta el token o el numeroId. Llamar en el borde, justo antes de construir el
  * cliente; asi un fallo de configuracion se detecta sin tocar la red.

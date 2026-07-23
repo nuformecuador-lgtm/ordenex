@@ -1,0 +1,36 @@
+// Feature 109 — tipos del chat de WhatsApp que cruzan la frontera Server Action <-> UI.
+import type { ChatMensajeDireccion, ChatMensajeEstado, ChatMensajeTipo } from "@prisma/client";
+
+/** Una burbuja del hilo tal como la consume la UI del mensajero (R22). */
+export interface ChatMensajeVista {
+  id: string;
+  direccion: ChatMensajeDireccion;
+  tipo: ChatMensajeTipo;
+  cuerpo: string | null;
+  /** Estado de entrega (solo salientes; `null` en entrantes). */
+  estado: ChatMensajeEstado | null;
+  /** Instante del evento en ISO 8601 (serializable a la UI). */
+  ocurridoAt: string;
+}
+
+/** Resultado del envio de un texto libre desde el chat (R17-R21). */
+export type EnviarMensajeChatResult =
+  | { status: "ok"; mensajeChatId: string }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" } // la orden no esta asignada a este mensajero (R17)
+  | { status: "fuera_ventana" } // R19/D2: fuera de la ventana 24 h -> exige plantilla
+  | { status: "no_configurado" } // WhatsApp aun sin credenciales de envio
+  | { status: "transitorio"; mensajeChatId: string }; // R21: reintentable, encolado
+
+/** Resultado del listado del hilo de una orden (R16/R22/R24). */
+export type ListarHiloChatResult =
+  | {
+      status: "ok";
+      /** True si el ultimo entrante ocurrio hace < 24 h (habilita texto libre, R23). */
+      ventanaAbierta: boolean;
+      /** Marca del ultimo entrante en ISO, o `null` si no hay ninguno. */
+      ultimoEntranteAt: string | null;
+      mensajes: ChatMensajeVista[];
+    }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" }; // la orden no esta asignada a este mensajero (R16)
