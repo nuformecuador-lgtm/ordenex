@@ -20,6 +20,7 @@ import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
+import { ChatWhatsappPanel } from "./ChatWhatsappPanel";
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
@@ -386,6 +387,9 @@ export function GestionarOrdenPanel({
                 datos de la orden y abre WhatsApp con el mensaje ya escrito al elegir una. */}
             <EnviarPlantillaWhatsappButton orden={orden} size="lg" />
           </div>
+          {/* Feature 109 (G4/R22-R24): chat 1:1 con el cliente vía WhatsApp. Cuelga del
+              paso "detalle"; el propio panel impone la ventana de 24 h y refresca solo. */}
+          <ChatWhatsappPanel orden={orden} />
           {/* Feature 98: gate de verificación. Antes de fijar el puntero y avanzar
               a los 4 botones, el mensajero DEBE confirmar la guía del paquete
               (escaneo o tecleo) y esta debe COINCIDIR con `orden.numGuia`. Solo
