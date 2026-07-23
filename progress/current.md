@@ -37,9 +37,10 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 
 **Progreso Fase 2:**
 - **118** ✅ mergeado a `dev` (PR #145, 2026-07-23). Entrada en `history.md`.
-- **115** implementada (backend + frontend) y reviewer **APROBADO** → **PR #146**. `dev` avanzó con 118,
-  así que la rama se está **sincronizando** (conflictos triviales resueltos por unión: `schema.prisma`
-  enum SINPE + modelo nuevo; `zonas-migration.test.ts` ambas exclusiones). Falta merge humano de #146.
+- **115** implementada + revisada + **sincronizada con `dev`** (solo `zonas-migration.test.ts` conflictó;
+  unión de ambas exclusiones; `schema.prisma` auto-merge con SINPE + modelo nuevo). Suite verde **4574**.
+  **PR #146 listo para merge humano.** Deuda de infra anotada: la DB local arrastra una migración
+  `20260722223329` registrada por otro worktree sin carpeta; `migrate deploy` la ignora (no afecta suite).
 - **116/119/113/114/117** en cola: todas comparten `MisAsignacionesModule.tsx` o el núcleo backend con
   115, así que arrancan sobre un `dev` que ya tenga 115 mergeada. **Gating: cada PR mergeado desbloquea
   el siguiente.** Cada feature branch nace de `origin/dev` y trae su propio spec (cherry-pick del commit
