@@ -3,6 +3,7 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenMensajeroMetaRepository } from "@/lib/repositories/OrdenMensajeroMetaRepository";
 import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
@@ -76,6 +77,8 @@ function buildService(): IMisAsignacionesService {
     // (se relocalizo al cron SLA), por eso el service ya no recibe el derivador de intentos ni
     // la zona central.
     new RutaOptimizadaRepository(prisma),
+    // Feature 115 (R17/R20): meta-repo para reflejar la marca "gestionar mas tarde" del actor.
+    new OrdenMensajeroMetaRepository(prisma),
   );
 }
 

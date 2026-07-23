@@ -77,7 +77,9 @@ function newService(repo: IGestionOrdenRepository) {
     findByMensajero: vi.fn(async () => null),
     upsertOrigen: vi.fn(async () => {}),
   };
-  return new MisAsignacionesService(repo, ordenRepo, storage, signed, rutaRepo);
+  // Feature 115 (R17): sin marcas -> `marcarLuego` false en todas las cards.
+  const metaRepo = { findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()) };
+  return new MisAsignacionesService(repo, ordenRepo, storage, signed, rutaRepo, metaRepo);
 }
 
 function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {
