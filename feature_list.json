@@ -1251,7 +1251,7 @@
       "name": "mensajero: buscador de guias asignadas",
       "spec_path": "specs/114-buscador-guias-mensajero",
       "description": "Frontend, sin backend. Input de busqueda en MisAsignacionesModule que filtra en cliente las guias asignadas (grupos 'Por recoger' + 'En reparto') por numGuia, numRemision o destinatario. Match parcial, insensible a mayusculas/acentos. Campos ya presentes en MiAsignacionDTO.",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "low",
       "zone": "frontend",

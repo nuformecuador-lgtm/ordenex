@@ -28,24 +28,25 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 | # | Feature | Zona | Cx | Dep | Estado |
 |---|---------|------|----|-----|--------|
 | 113 | card en reparto: detalle completo inline + modo foco al gestionar | frontend | med | 36 ✅ | ✅ **done** (PR #147) |
-| 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | spec_ready |
+| 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | **in_progress** |
 | 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | ✅ **done** (PR #146) |
 | 116 | notas privadas del mensajero (reusa tabla de 115, sin migración) | fullstack | med | 115 | spec_ready |
 | 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | spec_ready |
 | 118 | SIMPE → SINPE (~23 archivos reales, enum Postgres + textos) | fullstack | high | — | ✅ **done** (PR #145) |
-| 119 | evidencias: de 1 a 1..N fotos (tabla nueva `gestion_orden_evidencia`) | fullstack | high | 75 ✅ | **in_progress** (backend) |
+| 119 | evidencias: de 1 a 1..N fotos (tabla nueva `gestion_orden_evidencia`) | fullstack | high | 75 ✅ | **in_progress** (PR #148) |
 
 **Progreso Fase 2:**
 - **118** ✅ done (PR #145). **115** ✅ done (PR #146). Ambas en `history.md`.
 - **113 (modo foco + detalle inline)** ✅ done (PR #147, merge humano 18:51). Preservó el badge/toggle/sort
   de 115. Ya en `history.md`.
-- **119 (evidencias — backend)** 🟡 en curso, **adelantada en paralelo** con el ciclo de merge de 113:
-  es disjunta (toca `GestionarOrdenPanel` + núcleo backend, NO `MisAsignacionesModule.tsx`). Su frontend
-  (`GestionarOrdenPanel` multi-select/previews) va después del backend.
-- Cola: **116** (notas), **114** (buscador), **117** (filtro) — todas sobre la vista de lista del módulo,
-  en serie tras 113. **Gating: cada PR mergeado desbloquea el siguiente.** Ramas nacen de `origin/dev`;
-  specs vía cherry-pick. Bookkeeping en `chore/registro-features-112-118` (worktree local
-  `.claude/worktrees/chore-bk`, porque el working principal quedó en `dev`).
+- **119 (evidencias)** ✅ implementada (backend+frontend) + revisada (APROBADO) + sincronizada con `dev`
+  → **PR #148**, falta merge humano. Atomicidad storage↔DB con rollback total, dual-write de portada,
+  máx 3 fotos. Aviso de seguridad (repo público) revisado con el humano: sin valores de secretos, seguir igual.
+- **114 (buscador)** 🟡 en curso (frontend), **adelantada en paralelo** con el merge de 119; integra sobre
+  el módulo que ya trae 113+115; el mapa refleja el filtro (decisión del gate F1.4).
+- Cola: **116** (notas), **117** (filtro) — sobre la vista de lista del módulo, en serie. **Gating: cada PR
+  mergeado desbloquea el siguiente.** Ramas nacen de `origin/dev`; specs vía cherry-pick. Bookkeeping en
+  `chore/registro-features-112-118` (worktree local `.claude/worktrees/chore-bk`; el working principal quedó en `dev`).
 - Recordatorio a los implementadores: **marcar las tareas `[x]` en `tasks.md`** al completarlas (lo exige
   CHECKPOINTS.md; 113 fue rechazada por esto).
 - Deuda de infra anotada: la DB local arrastra una migración `20260722223329` registrada por otro
