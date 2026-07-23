@@ -1287,7 +1287,7 @@
       "name": "filtro de ordenes por canton y distrito (mensajero)",
       "spec_path": "specs/117-filtro-canton-distrito",
       "description": "Frontend, sin backend. Filtro por Canton y Distrito en la lista del mensajero (MisAsignacionesModule); cantonNombre/distritoNombre ya en MiAsignacionDTO. Selects encadenados (distrito depende del canton). Filtro en cliente. Alcance: solo la lista del mensajero.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "frontend",

@@ -1857,3 +1857,13 @@
 - R1–R17 trazados a tests. typecheck 0, lint 0, **4779/4779**. Reviewer APROBADO. **PR #152 → dev, merge
   humano 2026-07-23.** El backend cayó por un error de API a mitad; el leader lo reanudó y remató. Sin
   migraciones ni env nuevas.
+
+## 2026-07-23 — 117 mensajero: filtro por cantón y distrito
+- Filtro **100% cliente** por Cantón y Distrito en `MisAsignacionesModule` (sin backend). Dos `Select`
+  encadenados (distrito `disabled` sin cantón; cambiar de cantón resetea distrito; opción "todos" /
+  "Limpiar filtros"); opciones de cantón derivadas del conjunto COMPLETO.
+- **Decisión del gate F1.4:** etiqueta **"Cantón (Provincia)"** (dedup cantón+provincia); el mapa y el panel
+  reflejan el conjunto FILTRADO (R14) con salvaguarda de la orden en gestión (R10). Se **compone en AND** con
+  el buscador de la feature 114 sobre las mismas listas visibles.
+- Preserva 113/114/115/116. R1–R14 trazados a tests. typecheck 0, lint 0, **4804/4804**. Reviewer APROBADO.
+  **PR #153 → dev, merge humano 2026-07-23.** Cierra el lote mensajero 113–119. Sin migraciones ni env nuevas.

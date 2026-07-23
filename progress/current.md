@@ -31,7 +31,7 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 | 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | ✅ **done** (PR #150) |
 | 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | ✅ **done** (PR #146) |
 | 116 | notas privadas del mensajero (reusa tabla de 115, sin migración) | fullstack | med | 115 | ✅ **done** (PR #152) |
-| 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | **in_progress** |
+| 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | ✅ **done** (PR #153) |
 | 118 | SIMPE → SINPE (~23 archivos reales, enum Postgres + textos) | fullstack | high | — | ✅ **done** (PR #145) |
 | 119 | evidencias: de 1 a 1..N fotos (tabla nueva `gestion_orden_evidencia`) | fullstack | high | 75 ✅ | ✅ **done** (PR #148) |
 
@@ -46,8 +46,11 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
   preservados. Ya en `history.md`.
 - **116 (notas)** ✅ done (PR #152, merge humano 22:57). Editor "Mi nota" + indicador en card; sin migración
   (reusa la tabla de 115); `orden.notas` intacta. Ya en `history.md`.
-- **117 (filtro cantón/distrito)** 🟡 en curso (frontend) — la **ÚLTIMA** del lote. Etiqueta "Cantón
-  (Provincia)", el mapa refleja el filtro, y se compone en AND con el buscador de 114. Preserva 113/114/115/116.
+- **117 (filtro cantón/distrito)** ✅ done (PR #153, merge humano 23:38). Etiqueta "Cantón (Provincia)",
+  mapa refleja el filtro, compuesto en AND con el buscador de 114. Ya en `history.md`.
+- 🎉 **LOTE 113–119 COMPLETO** — las 7 mergeadas a `dev`: 113 #147 · 114 #150 · 115 #146 · 116 #152 ·
+  117 #153 · 118 #145 · 119 #148 (+ fix lint 120 #151). Despliegue: `prisma migrate deploy` (migraciones de
+  115/118/119). Pendiente opcional: reconciliar/limpiar esta sección de `current.md` hacia `history.md`.
 - **Deuda AJENA en `dev`** (hallazgo del reviewer de 116): **2 migraciones sin `down.sql`** entraron por otra
   feature (no del lote 113–119); `init.sh` las marca como *warning* (no bloquea). La regla del arné pide
   reverso para toda migración → conviene que la sesión dueña lo salde. (También un error de lint de la
