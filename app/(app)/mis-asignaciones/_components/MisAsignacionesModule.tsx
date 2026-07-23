@@ -25,6 +25,8 @@ import {
   coincideBusqueda,
   filtrarAsignaciones,
 } from "./mis-asignaciones-buscador";
+import { FiltroCantonDistrito } from "./FiltroCantonDistrito";
+import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
 import { EscanerRecoger } from "./EscanerRecoger";
 import { InputRecoger } from "./InputRecoger";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
@@ -81,6 +83,12 @@ const BUSCADOR_PLACEHOLDER = "Filtra por número de guía, remisión o destinata
 const SIN_RESULTADOS_RECOGER = "Ninguna guía por recoger coincide con la búsqueda.";
 const SIN_RESULTADOS_REPARTO = "Ninguna guía en reparto coincide con la búsqueda.";
 
+// Feature 117/R11: mensajes de "sin coincidencias con el filtro" (cantón/distrito),
+// distintos del vacío base ("No hay órdenes…") y del "sin resultados" del buscador (114).
+// Contienen la frase «coincide con el filtro» para ser reconocibles.
+const SIN_COINCIDENCIAS_RECOGER = "Ninguna guía por recoger coincide con el filtro.";
+const SIN_COINCIDENCIAS_REPARTO = "Ninguna guía en reparto coincide con el filtro.";
+
 export function MisAsignacionesModule({
   porRecoger,
   porGestionar,
@@ -107,24 +115,53 @@ export function MisAsignacionesModule({
   const buscarId = useId();
   const buscando = query.trim() !== "";
 
-  // Feature 114/R2/R7: "Por recoger" filtrado por el query (parcial, insensible a
-  // mayúsculas/acentos). Query vacío ⇒ misma lista sin filtrar (R5). Independiente de
-  // "En reparto".
+  // Feature 117: filtro por cantón/distrito (100% cliente, R12). Las OPCIONES se derivan
+  // de la UNIÓN de ambos grupos SIN filtrar (R13: el conjunto COMPLETO cargado, para que
+  // la selección actual no borre otras opciones de cantón disponibles). Se compone en AND
+  // con el buscador (114) sobre las MISMAS listas visibles (ver `porRecogerFiltrado` /
+  // `porGestionarFiltrado`); la orden en gestión nunca se oculta (salvaguarda R10/R14).
+  const unionAsignaciones = useMemo<MiAsignacionDTO[]>(
+    () => [...porRecoger, ...porGestionar],
+    [porRecoger, porGestionar],
+  );
+  const filtro = useFiltroCantonDistrito(unionAsignaciones);
+  const aplicarFiltroZona = filtro.aplicar;
+
+  // Feature 114/R2/R7 + 117/R6: "Por recoger" = buscador(texto) ∧ filtro(cantón/distrito),
+  // compuestos en AND sobre la misma lista. Query vacío y filtro vacío ⇒ lista intacta
+  // (R5/R7). Independiente de "En reparto" (no comparte salvaguarda: la orden en gestión
+  // solo existe en reparto).
   const porRecogerFiltrado = useMemo<MiAsignacionDTO[]>(
-    () => filtrarAsignaciones(porRecoger, query),
-    [porRecoger, query],
+    () => aplicarFiltroZona(filtrarAsignaciones(porRecoger, query)),
+    [porRecoger, query, aplicarFiltroZona],
   );
 
-  // Feature 114/R8+R9: "En reparto" filtrado, ÚNICA fuente para grilla, mapa y panel de
-  // detalle (coherencia lista↔mapa↔panel, gate F1.4). Salvaguarda R9: la orden EN GESTIÓN
-  // (`ordenEnGestionId`) permanece SIEMPRE aunque no coincida con el texto, para no ocultar
-  // la gestión en curso. Con `ordenEnGestionId === null` la salvaguarda no aplica a nadie.
+  // Feature 114/R8+R9 + 117/R6/R14: "En reparto" filtrado, ÚNICA fuente para grilla, mapa
+  // y panel de detalle (coherencia lista↔mapa↔panel, gate F1.4). Composición EN AND:
+  // primero el buscador (114) y sobre su salida el filtro cantón/distrito (117). Salvaguarda
+  // (R9 de 114 / R10 de 117): la orden EN GESTIÓN (`ordenEnGestionId`) permanece SIEMPRE,
+  // aunque no coincida con el texto NI con el filtro; ningún filtro oculta la gestión en
+  // curso. Con `ordenEnGestionId === null` la salvaguarda no aplica a nadie.
   const porGestionarFiltrado = useMemo<MiAsignacionDTO[]>(() => {
     const q = normalizeName(query);
-    return porGestionar.filter(
+    // 114: buscador, con la orden en gestión siempre incluida.
+    const trasBuscador = porGestionar.filter(
       (o) => o.id === ordenEnGestionId || coincideBusqueda(o, q),
     );
-  }, [porGestionar, query, ordenEnGestionId]);
+    // 117: filtro cantón/distrito EN AND sobre la misma lista.
+    const trasFiltro = aplicarFiltroZona(trasBuscador);
+    if (
+      ordenEnGestionId === null ||
+      trasFiltro.some((o) => o.id === ordenEnGestionId)
+    ) {
+      return trasFiltro;
+    }
+    // La orden en gestión quedó fuera del filtro cantón/distrito: reinsertarla
+    // preservando el orden de ruta (salvaguarda R10 — nunca se oculta la gestión).
+    const visibles = new Set(trasFiltro.map((o) => o.id));
+    visibles.add(ordenEnGestionId);
+    return trasBuscador.filter((o) => visibles.has(o.id));
+  }, [porGestionar, query, ordenEnGestionId, aplicarFiltroZona]);
 
   // R28/mapa: paradas dibujables = las en reparto CON coordenadas (feature 91). Las que no
   // tienen coords se omiten del mapa pero siguen en la lista (no se pierden). Feature
@@ -306,6 +343,23 @@ export function MisAsignacionesModule({
             />
           </section>
 
+          {/* ---------- Feature 117: filtro por cantón y distrito (solo vista de lista) ----------
+              Se compone en AND con el buscador sobre AMBOS grupos. Las opciones se derivan del
+              conjunto completo cargado (R13); elegir cantón resetea el distrito (R5) y el
+              distrito va deshabilitado sin cantón (R3). En modo foco no se renderiza (no hay
+              cards que filtrar). Puro filtro de cliente, así que permanece aunque el mensajero
+              esté bloqueado (la lista sigue como solo-visualización). */}
+          <FiltroCantonDistrito
+            canton={filtro.canton}
+            distrito={filtro.distrito}
+            cantones={filtro.cantones}
+            distritos={filtro.distritos}
+            hayFiltro={filtro.hayFiltro}
+            onCantonChange={filtro.setCantonYReset}
+            onDistritoChange={filtro.setDistrito}
+            onLimpiar={filtro.limpiar}
+          />
+
           {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
           {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
               contra `porRecoger` (restricción "asignada a mí") y aceptan con la MISMA action
@@ -336,7 +390,13 @@ export function MisAsignacionesModule({
             nuevasLabel={(n) => `${n} Órdenes nuevas asignadas`}
             ordenes={porRecogerFiltrado}
             mostrarAcciones={false}
-            vacio={buscando ? SIN_RESULTADOS_RECOGER : "No hay órdenes por recoger."}
+            vacio={
+              buscando
+                ? SIN_RESULTADOS_RECOGER
+                : filtro.hayFiltro
+                  ? SIN_COINCIDENCIAS_RECOGER
+                  : "No hay órdenes por recoger."
+            }
             renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
           />
 
@@ -414,7 +474,11 @@ export function MisAsignacionesModule({
 
             {porGestionarFiltrado.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {buscando ? SIN_RESULTADOS_REPARTO : "No hay órdenes en reparto."}
+                {buscando
+                  ? SIN_RESULTADOS_REPARTO
+                  : filtro.hayFiltro
+                    ? SIN_COINCIDENCIAS_REPARTO
+                    : "No hay órdenes en reparto."}
               </p>
             ) : (
               <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
