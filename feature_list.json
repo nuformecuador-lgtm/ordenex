@@ -1233,6 +1233,18 @@
       "branch": "feature/108-webhook-en-alta-apikey",
       "depends_on": 105,
       "status_note": "gate F1.4 APROBADO 2026-07-22 (5 decisiones como recomendadas: URL opcional, un modal, boton Editar crea/actualiza, fallo parcial preserva secreto de la key, anti-doble-submit)"
+    },
+    {
+      "id": 112,
+      "name": "webhook - sobre generico del payload (orden -> data)",
+      "spec_path": "specs/112-webhook-payload-data",
+      "description": "Registrada 2026-07-23 (pedido del humano: 'deberiamos retornar data en lugar de orden, ya que no sabemos si agregaremos mas eventos a los que suscribirse; dejalo como data'). ALCANCE (backend, cambio de CONTRATO del webhook de la feature 104): el cuerpo de entrega del webhook `orden.estado_actualizado` deja de usar la clave especifica `orden` y pasa a un SOBRE GENERICO con `data`, para no atar el payload al recurso y permitir futuros tipos de evento discriminados por `evento`. Cuerpo nuevo: { evento, eventoId, ocurridoAt, data: { numGuia, numRemision, estado } } (antes `orden:` en vez de `data:`). El discriminador sigue siendo `evento`; el sobre (evento/eventoId/ocurridoAt/data) queda estable entre tipos de evento futuros. Es un cambio BREAKING del contrato, pero se hace AHORA que la 104 recien se mergeo y (probablemente) no hay integradores reales, que es el momento mas barato. Toca: lib/services/WebhookEstadoService.ts (construccion del cuerpo `orden`->`data`), sus tests, y la doc OpenAPI (lib/api/openapi-spec.ts + docs/api/api-key-openapi.yaml) donde se documente el payload del webhook. GATE F1.4 APROBADO por el humano 2026-07-23 (nombre = `data`, no body/response; hacerlo ya; rama separada). Backend puro, sin migracion. DEPENDE de la 104 (webhooks, en dev).",
+      "status": "spec_ready",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "backend",
+      "branch": "feature/112-webhook-payload-data",
+      "depends_on": 104
     }
   ]
 }
