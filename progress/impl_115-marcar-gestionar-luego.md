@@ -94,7 +94,74 @@ Prisma y asserts estáticos sobre el SQL, no levanta Postgres).
 El backend deja todo listo: la Server Action `marcarGestionarLuego` y `MiAsignacionDTO.marcarLuego`
 (siempre presente) están disponibles para la UI. NO se tocó ningún `.tsx` ni `MisAsignacionesModule.tsx`.
 
-## Veredicto
+## Veredicto (backend)
 
 Backend de la feature 115 COMPLETO y verificado (typecheck/lint/test en verde, 4561 tests);
 falta solo la capa visual (T8/T9) a cargo de frontend_dev.
+
+---
+
+# Implementación 115 — FRONTEND (T8)
+
+Zona FRONTEND (tasks.md T8: badge R18 + orden visual R19 + toggle R5/R6). Continúa sobre la
+misma rama `feature/115-marcar-gestionar-luego`, encima del backend ya mergeado.
+
+## Archivos creados (frontend)
+
+- `app/(app)/mis-asignaciones/_components/MarcarLuegoToggle.tsx` — control de card. Llama a
+  `marcarGestionarLuego({ ordenId, marcarLuego: !marcada })` (valor NEGADO, R5/R6), refresca
+  con `router.refresh()` en el happy path (SIN toast) y traduce los rechazos del dominio
+  (`forbidden`/`not_found`/`unauthenticated`/`validation_error`) a `useToast().error`. Cerrojo
+  síncrono anti-doble-click (ref), patrón de `SincronizarRutaButton`. Toggle accesible con
+  `aria-pressed` + `aria-label` descriptivo por orden.
+- `tests/components/MarcarLuegoToggle.test.tsx` — 7 tests (R5/R6/R18/R19 + rechazo + cerrojo).
+
+## Archivos modificados (frontend)
+
+- `app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx`:
+  - **R18:** `Badge variant="warning"` "Gestionar más tarde" en la card cuando
+    `orden.marcarLuego` (junto al de "Pendiente de optimizar", en una fila que envuelve).
+  - **R19:** `useMemo` `porGestionarVisual` con `sort` ESTABLE secundario que hunde las
+    marcadas al final, DESPUÉS del orden de ruta del server. Copia (`[...porGestionar]`), NO
+    muta `porGestionar` ni la ruta; el mapa (`paradasMapa`) y la secuencia siguen leyendo
+    `porGestionar` (orden de ruta intacto).
+  - **Montaje del toggle (R5/R6):** el `<li>` pasa a `flex flex-col gap-2`; la card
+    (`<button>`) baja a `flex-1` y el `MarcarLuegoToggle` (otro `<button>`) es su HERMANO —
+    nunca anidado (HTML válido / a11y).
+- `tests/components/MisAsignacionesModule.test.tsx` — se añade `vi.mock` de
+  `@/lib/actions/orden-mensajero-meta` (la card ahora importa el toggle, que arrastra esa
+  Server Action con Prisma; se mockea para no cargar Prisma en jsdom). Sin cambios de aserción
+  en los tests existentes (el sort es no-op sin marcas, el toggle es hermano fuera de la card).
+
+## Decisión de UI (documentada)
+
+El toggle NO se deshabilita bajo el bloqueo 1-a-1 (`ordenEnGestionId`) ni bajo el cierre
+pendiente (`bloqueado`, feature 111): la marca es puramente informativa (no gestiona/recoge/
+escoge), coherente con la pregunta abierta #3 del `requirements.md` (por defecto: permitido).
+
+## Mapa R<n> → test (frontend: R18, R19, R5, R6)
+
+| R | Descripción | Test |
+| - | ----------- | ---- |
+| R5 | marcar → action con `marcarLuego=true` (valor negado) + refresh | `MarcarLuegoToggle.test.tsx` › "R5: sobre una orden NO marcada…" |
+| R6 | quitar → action con `marcarLuego=false` + refresh | `MarcarLuegoToggle.test.tsx` › "R6: sobre una orden YA marcada…" |
+| R18 | la card marcada muestra el badge; la no marcada no | `MarcarLuegoToggle.test.tsx` › "R18: la card marcada muestra el badge…" |
+| R19 | las marcadas se ordenan al final sin cambiar la secuencia de ruta | `MarcarLuegoToggle.test.tsx` › "R19: las órdenes marcadas se muestran DESPUÉS…", "R19: sin órdenes marcadas…" |
+
+Refuerzos: rechazo del server (`forbidden`) → `toast.error` sin refresh; cerrojo
+anti-doble-click. T9 (E2E) NO se implementó (opcional; el patrón E2E del repo requeriría
+sesión de mensajero real y no aporta sobre la cobertura de T8).
+
+## Salida real de verificación (`./init.sh` en verde)
+
+- `pnpm run typecheck` (`tsc --noEmit`): sin errores.
+- `pnpm run lint` (`eslint`): `✖ 143 problems (0 errors, 143 warnings)` — 0 errores; los
+  warnings son preexistentes, ninguno de los archivos de esta feature.
+- `pnpm run test` (`vitest run`): `Test Files 457 passed (457)` · `Tests 4568 passed (4568)`
+  (+7 de `MarcarLuegoToggle.test.tsx`).
+- `== init OK ==`.
+
+## Veredicto (frontend)
+
+Frontend de la feature 115 (T8) COMPLETO y verificado: badge (R18), orden visual (R19) y
+toggle (R5/R6) montados en el módulo del mensajero; `./init.sh` en verde (4568 tests).

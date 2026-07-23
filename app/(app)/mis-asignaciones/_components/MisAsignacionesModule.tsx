@@ -20,6 +20,7 @@ import type {
 import { AsignacionDetalle } from "./AsignacionDetalle";
 import { EscanerRecoger } from "./EscanerRecoger";
 import { InputRecoger } from "./InputRecoger";
+import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { RutaMapa } from "./RutaMapa";
 import { SincronizarRutaButton } from "./SincronizarRutaButton";
@@ -91,6 +92,21 @@ export function MisAsignacionesModule({
           lng: o.longitud as number,
           etiqueta: `${o.numRemision} · ${o.destinatario}`,
         })),
+    [porGestionar],
+  );
+
+  // Feature 115/R19 — orden VISUAL de las cards. El server ya manda `porGestionar` en el
+  // orden de la ruta (feature 92). Aquí SOLO se añade un criterio secundario de PRESENTACIÓN:
+  // hundir al final las marcadas como "gestionar más tarde", preservando entre las no
+  // marcadas (y entre las marcadas) el orden de ruta que ya llega. El `sort` de JS es ESTABLE
+  // (ES2019), así que comparar solo por la marca conserva el orden previo dentro de cada grupo.
+  // Copia (`[...]`) para NO mutar `porGestionar` ni la ruta persistida (R16/R19). NO afecta al
+  // mapa ni a la secuencia de ruta (siguen leyendo `porGestionar`).
+  const porGestionarVisual = useMemo<MiAsignacionDTO[]>(
+    () =>
+      [...porGestionar].sort(
+        (a, b) => Number(a.marcarLuego ?? false) - Number(b.marcarLuego ?? false),
+      ),
     [porGestionar],
   );
 
@@ -294,7 +310,7 @@ export function MisAsignacionesModule({
           </p>
         ) : (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {porGestionar.map((orden) => {
+            {porGestionarVisual.map((orden) => {
               // R19/R20: si hay una orden activa distinta, esta queda bloqueada
               // (oculta sus detalles y muestra el aviso "termina la gestión en curso").
               const bloqueada =
@@ -306,14 +322,17 @@ export function MisAsignacionesModule({
               const esActiva = ordenEnGestionId === orden.id;
               const esDetalle = detalleOrden?.id === orden.id;
               return (
-                <li key={orden.id}>
+                // Feature 115/T8: la card (un `<button>`) y el toggle "gestionar más tarde"
+                // (otro `<button>`) son HERMANOS dentro del `<li>` — nunca anidados — para no
+                // producir botones dentro de botones (HTML inválido / a11y).
+                <li key={orden.id} className="flex flex-col gap-2">
                   <button
                     type="button"
                     disabled={deshabilitada}
                     aria-pressed={esDetalle}
                     onClick={() => seleccionar(orden)}
                     aria-label={`Gestionar orden ${orden.numRemision} · ${orden.destinatario}`}
-                    className={`group flex h-full w-full flex-col gap-3 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60 ${
+                    className={`group flex w-full flex-1 flex-col gap-3 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60 ${
                       esDetalle
                         ? "border-primary ring-2 ring-primary/40"
                         : "border-border"
@@ -347,13 +366,23 @@ export function MisAsignacionesModule({
                         </span>
                       ) : null}
                     </div>
-                    {/* R28: las paradas que entraron tras la última optimización
-                        no tienen posición todavía; el backend ya las ordena al
-                        final, aquí solo se marcan. */}
-                    {orden.secuenciaRuta === null ? (
-                      <Badge variant="outline" className="w-fit">
-                        Pendiente de optimizar
-                      </Badge>
+                    {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más
+                        tarde): ambas son marcas informativas de la card; van juntas en
+                        una fila que envuelve. */}
+                    {orden.secuenciaRuta === null || orden.marcarLuego ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {orden.secuenciaRuta === null ? (
+                          <Badge variant="outline" className="w-fit">
+                            Pendiente de optimizar
+                          </Badge>
+                        ) : null}
+                        {/* R18: mientras la orden esté marcada, su card lo muestra. */}
+                        {orden.marcarLuego ? (
+                          <Badge variant="warning" className="w-fit">
+                            Gestionar más tarde
+                          </Badge>
+                        ) : null}
+                      </div>
                     ) : null}
                     {/* Mientras hay una gestión activa en OTRA orden, esta card
                         oculta sus detalles (destinatario/producto/teléfono) y solo
@@ -381,6 +410,14 @@ export function MisAsignacionesModule({
                       </>
                     )}
                   </button>
+                  {/* Feature 115/R5/R6: toggle de "gestionar más tarde", HERMANO de la card.
+                      Puramente informativo (no cambia estado ni ruta), así que sigue disponible
+                      aunque la card esté deshabilitada por el bloqueo 1-a-1 o el cierre pendiente. */}
+                  <MarcarLuegoToggle
+                    ordenId={orden.id}
+                    marcada={orden.marcarLuego ?? false}
+                    numRemision={orden.numRemision}
+                  />
                 </li>
               );
             })}

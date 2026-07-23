@@ -49,6 +49,15 @@ vi.mock("@/lib/actions/ruta-mensajero", () => ({
   sincronizarRuta: vi.fn().mockResolvedValue({ status: "ok", omitida: false }),
 }));
 
+// Feature 115: la card monta `MarcarLuegoToggle`, que importa esta Server Action
+// (`"use server"` con Prisma detrás). Se mockea para no cargar Prisma en jsdom; su
+// comportamiento propio se prueba en `MarcarLuegoToggle.test.tsx`.
+vi.mock("@/lib/actions/orden-mensajero-meta", () => ({
+  marcarGestionarLuego: vi
+    .fn()
+    .mockResolvedValue({ status: "ok", ordenId: "g1", marcarLuego: true }),
+}));
+
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
   successMock: vi.fn(),
   errorMock: vi.fn(),
