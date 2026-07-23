@@ -314,28 +314,45 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       };
     }
 
-    // R23/R30: subir evidencia (entrega/rechazo/devolucion) ANTES de la transaccion.
-    let storagePath: string | null = null;
-    let contentType: string | null = null;
+    // Feature 119 (R9/R10): subida SECUENCIAL y determinista de las N evidencias ANTES de la
+    // transaccion, acumulando en `uploaded` los paths ya subidos para poder COMPENSAR
+    // (storage.remove) ante cualquier fallo. El bucle secuencial hace la compensacion trivial:
+    // `uploaded` contiene EXACTAMENTE lo subido hasta el fallo (sin rastrear promesas de un
+    // Promise.all que rechaza). Para el tope de 3 fotos el costo de no paralelizar es despreciable.
+    const uploaded: string[] = [];
+    const evidencias: { storagePath: string; contentType: string; indice: number }[] = [];
     if (
       input.resultado === "entregada" ||
       input.resultado === "rechazada" ||
       input.resultado === "devuelta" // feature 75: evidencia obligatoria tambien en Devolver
     ) {
-      const ext = GESTION_MIME_EXTENSION[input.evidencia.contentType as GestionMimeType] ?? "bin";
-      const path = `${input.ordenId}/${input.resultado}-${Date.now()}.${ext}`;
-      storagePath = await this.storage.upload({
-        path,
-        bytes: input.evidencia.bytes,
-        contentType: input.evidencia.contentType,
-      });
-      contentType = input.evidencia.contentType;
+      try {
+        for (let i = 0; i < input.evidencias.length; i++) {
+          const ev = input.evidencias[i];
+          const ext = GESTION_MIME_EXTENSION[ev.contentType as GestionMimeType] ?? "bin";
+          // `-i` garantiza unicidad del path entre las fotos de la MISMA gestion (mismo `Date.now()`).
+          const path = `${input.ordenId}/${input.resultado}-${Date.now()}-${i}.${ext}`;
+          const stored = await this.storage.upload({
+            path,
+            bytes: ev.bytes,
+            contentType: ev.contentType,
+          });
+          uploaded.push(stored);
+          evidencias.push({ storagePath: stored, contentType: ev.contentType, indice: i });
+        }
+      } catch (error) {
+        // R10: falla la subida #k -> borrar las k-1 ya subidas y NO persistir NADA (el repo ni
+        // se invoca). El fallo se propaga como error, no como resultado de dominio.
+        if (uploaded.length > 0) await this.storage.remove(uploaded);
+        throw error;
+      }
     }
 
-    const gestion = buildGestionData(input, storagePath, contentType);
+    const gestion = buildGestionData(input, evidencias);
 
     try {
-      // R23/R26/R28/R30: INSERT gestion + UPDATE estatus + limpiar puntero, atomico.
+      // R23/R26/R28/R30 + R9: INSERT gestion + N filas de evidencia + UPDATE estatus + limpiar
+      // puntero, TODO en una unica transaccion (todo-o-nada).
       // Feature 99 (R1/R29): la rama `devuelta` transiciona la orden a `devuelta` y la DEJA
       // ahi (sin transicion de seguimiento inmediata: ni reintento a bodega ni escalado). La
       // devolucion se contabiliza como intento (R2) por el append a `devuelta` del choke
@@ -347,23 +364,28 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         nuevoEstatusId,
       });
     } catch (error) {
-      // R23/R30: si la transaccion falla tras subir, limpiar el objeto (best-effort).
-      if (storagePath) await this.storage.remove([storagePath]);
+      // R11: la transaccion fallo DESPUES de subir -> borrar las N evidencias subidas
+      // (best-effort) y propagar; no queda ninguna fila persistida.
+      if (uploaded.length > 0) await this.storage.remove(uploaded);
       throw error;
     }
 
     // Feature 92 (R23): igual que en `recogerAsignaciones`, tras la transaccion.
     await this.registrarUbicacion(actor.usuarioId, input.ubicacion);
 
-    // R8: la evidencia se muestra con URL firmada de TTL acotado, nunca el path crudo.
-    let evidenciaUrl: string | undefined;
-    if (storagePath) {
-      evidenciaUrl = await this.signedUrls.createSignedUrl(
-        storagePath,
+    // R13: cada evidencia se muestra con URL firmada de TTL acotado, NUNCA el path crudo ni el
+    // bucket. Se mapea en el ORDEN de `uploaded` (indice 0..N-1) para preservar la portada primero.
+    let evidenciaUrls: string[] | undefined;
+    if (uploaded.length > 0) {
+      const urlByPath = await this.signedUrls.createSignedUrls(
+        uploaded,
         gestionConfig.SIGNED_URL_TTL_SECONDS,
       );
+      evidenciaUrls = uploaded
+        .map((p) => urlByPath[p])
+        .filter((u): u is string => typeof u === "string");
     }
-    return { status: "ok", ordenId: input.ordenId, estado: input.resultado, evidenciaUrl };
+    return { status: "ok", ordenId: input.ordenId, estado: input.resultado, evidenciaUrls };
   }
 
   async liberarGestion(ordenId: string, actor: Actor): Promise<LiberarServiceResult> {
@@ -428,11 +450,14 @@ function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
   };
 }
 
-/** Arma los campos nullable de gestion_orden segun el resultado (R23/R26/R28/R30). */
+/**
+ * Arma los campos nullable de gestion_orden segun el resultado (R23/R26/R28/R30). Feature 119:
+ * las ramas con foto pasan la LISTA `evidencias` (1..N); el repo deriva de ella la portada
+ * (indice 0) hacia las columnas viejas (dual-write, R12) e inserta las N filas hijas.
+ */
 function buildGestionData(
   input: GestionarInput,
-  storagePath: string | null,
-  contentType: string | null,
+  evidencias: { storagePath: string; contentType: string; indice: number }[],
 ): GestionOrdenData {
   switch (input.resultado) {
     case "entregada":
@@ -440,8 +465,7 @@ function buildGestionData(
         resultado: "entregada",
         montoRecibido: input.montoRecibido,
         metodoPago: input.metodoPago,
-        evidenciaStoragePath: storagePath,
-        evidenciaContentType: contentType,
+        evidencias,
       };
     case "reprogramada":
       return {
@@ -452,22 +476,18 @@ function buildGestionData(
     case "devuelta":
       // Feature 73/R11/R12: la causa va en su COLUMNA propia, APARTE del texto libre; el
       // `motivo` se persiste EXACTAMENTE como lo escribio el mensajero, sin decoracion.
-      // Pedido: la devolucion ahora persiste la FOTO de evidencia (obligatoria), igual que
-      // entrega/rechazo (mismas columnas genericas de gestion_orden).
+      // Feature 75/119: la devolucion persiste sus 1..N fotos de evidencia (obligatorias).
       return {
         resultado: "devuelta",
         causaDevolucion: input.causaDevolucion,
         motivo: input.motivo,
-        // Feature 75: la evidencia (subida ANTES de la tx, espejo de rechazada) entra al INSERT.
-        evidenciaStoragePath: storagePath,
-        evidenciaContentType: contentType,
+        evidencias,
       };
     case "rechazada":
       return {
         resultado: "rechazada",
         motivo: input.motivo,
-        evidenciaStoragePath: storagePath,
-        evidenciaContentType: contentType,
+        evidencias,
       };
   }
 }
