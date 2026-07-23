@@ -131,6 +131,7 @@ model Usuario {
   rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
   plantillasCreadas                   PlantillaMensaje[]        @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
   webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
+  ordenMensajeroMetas                 OrdenMensajeroMeta[]      @relation("OrdenMensajeroMetaMensajero") // feature 115: marcas privadas ("gestionar mas tarde") de ESTE mensajero sobre sus ordenes
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -400,6 +401,7 @@ model Orden {
   historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
   rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
+  mensajeroMetas        OrdenMensajeroMeta[]   @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -408,6 +410,30 @@ model Orden {
   @@index([mensajeroAsignadoId]) // feature 17/R7
   @@index([mensajeroAsignadoId, asignadoAt]) // feature 76/R1: denominador del ranking diario (asignadas HOY por mensajero)
   @@map("orden")
+}
+
+// Feature 115 — meta PRIVADA por (mensajero, orden). `marcar_luego` (115) = "gestionar
+// mas tarde", solo informativa (no cambia estatus ni ruta). `nota` (text NULL) NACE aqui
+// para la feature 116 (notas privadas), que NO crea migracion propia. UNIQUE(usuario_id,
+// orden_id): una fila por pareja -> idempotencia del toggle (upsert). Ambas FK ON DELETE
+// CASCADE: la meta es dato derivado, se va con el mensajero o la orden. RLS habilitada sin
+// policies (patron api_key/plantilla_mensaje); la autorizacion de negocio vive en el service.
+model OrdenMensajeroMeta {
+  id          String   @id @default(uuid())
+  usuarioId   String   @map("usuario_id")
+  ordenId     String   @map("orden_id")
+  marcarLuego Boolean  @default(false) @map("marcar_luego") // feature 115
+  nota        String? // feature 116: columna nace aqui (115), la USA la 116
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  usuario Usuario @relation("OrdenMensajeroMetaMensajero", fields: [usuarioId], references: [id], onDelete: Cascade)
+  orden   Orden   @relation("OrdenMensajeroMetaOrden", fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, ordenId]) // R1/R7: una fila por (mensajero, orden)
+  @@index([usuarioId]) // R17: leer todas las metas del mensajero al listar
+  @@index([ordenId])
+  @@map("orden_mensajero_meta")
 }
 
 // Feature 36 (R5, decision F1.4-c): metodo de pago del recaudo al cliente en una
