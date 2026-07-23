@@ -8,8 +8,11 @@ import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/
 import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { WebhookEventos } from "@/lib/types/whatsapp-webhook";
 
-/** Cliente minimo consumido: solo el envio de texto libre (el saliente del chat). */
-type ChatClient = Pick<WhatsappCloudClient, "enviarTexto">;
+/**
+ * Cliente minimo consumido: el envio de texto libre (saliente del chat) y el envio de una
+ * PLANTILLA aprobada (saliente fuera de la ventana de 24 h). Ambos exigen credencial de ENVIO.
+ */
+type ChatClient = Pick<WhatsappCloudClient, "enviarTexto" | "enviarPlantilla">;
 
 /** Resumen de la ingesta de un lote (conteos agregados, sin PII). */
 export interface IngestaResumen {
@@ -31,6 +34,32 @@ export interface EnviarTextoChatInput {
   /** Numero del cliente en E.164 sin `+` (lo aporta el `OrdenEnvioReader`). */
   telefonoE164: string;
   texto: string;
+}
+
+/**
+ * Desenlace de un envio saliente de PLANTILLA desde el chat. A diferencia del texto libre NO
+ * tiene `fuera_ventana`: una plantilla aprobada es justamente lo que se puede enviar dentro Y
+ * fuera de la ventana de 24 h (ese es su proposito).
+ */
+export type EnviarPlantillaChatResult =
+  | { status: "ok"; mensajeId: string; mensajeChatId: string }
+  | { status: "transitorio"; detalle: string; mensajeChatId: string }; // R21: reintentable
+
+export interface EnviarPlantillaChatInput {
+  ordenId: string;
+  mensajeroId: string;
+  /** Numero del cliente en E.164 sin `+` (lo aporta el `OrdenEnvioReader`). */
+  telefonoE164: string;
+  /** Plantilla local que origina el saliente (se persiste en `plantilla_id`). */
+  plantillaId: string;
+  /** Nombre del template en Meta. */
+  nombre: string;
+  /** Codigo de idioma del template (p. ej. "es" o "es_CO"). */
+  idioma: string;
+  /** Componentes del body ya construidos (formato Graph API), en el orden de las variables. */
+  componentes: unknown[];
+  /** Texto ya renderizado con los datos de la orden, para mostrarlo en el historial. */
+  cuerpoRenderizado: string;
 }
 
 export interface ChatWhatsappServiceDeps {
@@ -156,6 +185,57 @@ export class ChatWhatsappService {
       conversacionId: hilo.id,
       tipo: "texto",
       cuerpo: input.texto,
+      waMessageId: null,
+      estado: "queued",
+      ocurridoAt: ahora,
+    });
+    if (this.deps.encolarReintento) await this.deps.encolarReintento(encolado.id);
+    return { status: "transitorio", detalle: outcome.detalle, mensajeChatId: encolado.id };
+  }
+
+  /**
+   * Envia una PLANTILLA aprobada como saliente del chat y la persiste en el hilo. A diferencia
+   * de `enviarTexto` NO aplica el bloqueo de la ventana de 24 h: la plantilla es la via valida
+   * para escribir fuera de ventana (y tambien sirve dentro). `ok` persiste el saliente
+   * `tipo=plantilla` con su `plantilla_id`, el texto renderizado y el `wa_message_id`;
+   * `transitorio` lo persiste como `queued` (no se pierde) y encola el reintento (D1/R21).
+   */
+  async enviarPlantilla(input: EnviarPlantillaChatInput): Promise<EnviarPlantillaChatResult> {
+    const client = this.requireClient();
+    const hilo = await this.deps.conversacionRepo.upsertParaOrden({
+      ordenId: input.ordenId,
+      mensajeroId: input.mensajeroId,
+      telefonoE164: input.telefonoE164,
+    });
+
+    const ahora = this.now();
+    const outcome = await client.enviarPlantilla(
+      input.telefonoE164,
+      input.nombre,
+      input.idioma,
+      input.componentes,
+    );
+
+    if (outcome.status === "ok") {
+      const guardado = await this.deps.mensajeRepo.insertarSaliente({
+        conversacionId: hilo.id,
+        tipo: "plantilla",
+        cuerpo: input.cuerpoRenderizado,
+        plantillaId: input.plantillaId,
+        waMessageId: outcome.mensajeId,
+        estado: "sent",
+        ocurridoAt: ahora,
+      });
+      return { status: "ok", mensajeId: outcome.mensajeId, mensajeChatId: guardado.id };
+    }
+
+    // R21/D1: `transitorio`. Se persiste como `queued` (sin perder la plantilla) y se encola el
+    // reintento. El detalle del cliente ya viene sin secretos ni numero destino.
+    const encolado = await this.deps.mensajeRepo.insertarSaliente({
+      conversacionId: hilo.id,
+      tipo: "plantilla",
+      cuerpo: input.cuerpoRenderizado,
+      plantillaId: input.plantillaId,
       waMessageId: null,
       estado: "queued",
       ocurridoAt: ahora,

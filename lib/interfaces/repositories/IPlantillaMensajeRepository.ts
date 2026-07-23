@@ -30,11 +30,13 @@ export interface PlantillaListItem {
 
 /**
  * Plantilla ENVIABLE por el mensajero: vigente, `activo` y ENLAZADA con Meta (templateId no
- * nulo). Lleva lo justo para construir el envio (nombre + idioma del template + variables).
+ * nulo). Lleva lo justo para construir el envio (nombre + idioma del template + variables) y
+ * el `cuerpo` local para RENDERIZAR el texto que se persiste en el historial del chat.
  */
 export interface PlantillaEnviable {
   id: string;
   nombre: string;
+  cuerpo: string;
   variables: string[];
   templateId: string;
   templateIdioma: string;

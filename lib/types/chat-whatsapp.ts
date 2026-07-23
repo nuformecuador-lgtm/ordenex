@@ -22,6 +22,19 @@ export type EnviarMensajeChatResult =
   | { status: "no_configurado" } // WhatsApp aun sin credenciales de envio
   | { status: "transitorio"; mensajeChatId: string }; // R21: reintentable, encolado
 
+/**
+ * Resultado del envio de una PLANTILLA desde el chat. Sirve dentro Y fuera de la ventana de
+ * 24 h, por eso NO tiene `fuera_ventana`. `not_found` = la plantilla no existe o no es enviable
+ * (no vigente / sin `template_id`).
+ */
+export type EnviarPlantillaChatResult =
+  | { status: "ok"; mensajeChatId: string }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" } // la orden no esta asignada a este mensajero
+  | { status: "not_found" } // plantilla inexistente o no enviable
+  | { status: "no_configurado" } // WhatsApp aun sin credenciales de envio
+  | { status: "transitorio"; mensajeChatId: string }; // R21: reintentable, encolado
+
 /** Resultado del listado del hilo de una orden (R16/R22/R24). */
 export type ListarHiloChatResult =
   | {

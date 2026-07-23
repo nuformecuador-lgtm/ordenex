@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { enviarMensajeChat, listarHiloChat } from "@/lib/actions/chat-whatsapp";
+import { enviarMensajeChat, enviarPlantillaChat, listarHiloChat } from "@/lib/actions/chat-whatsapp";
+import type { PlantillaEnviable } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
@@ -112,6 +113,128 @@ describe("enviarMensajeChat (R17/R20/R21)", () => {
       service,
     });
     expect(res.status).toBe("forbidden");
+  });
+});
+
+describe("enviarPlantillaChat (envio de plantilla por el chat)", () => {
+  const PLANTILLA: PlantillaEnviable = {
+    id: "plt-1",
+    nombre: "recordatorio_entrega",
+    cuerpo: "Hola {{nombre}}, tu pedido llega hoy",
+    variables: ["nombre"],
+    templateId: "meta-tpl-1",
+    templateIdioma: "es",
+  };
+
+  function plantillaRepo(p: PlantillaEnviable | null) {
+    return { findEnviableById: vi.fn(async () => p) };
+  }
+
+  it("sin sesion -> unauthenticated", async () => {
+    const res = await enviarPlantillaChat("orden-1", "plt-1", { getActor: getActor(null) });
+    expect(res).toEqual({ status: "unauthenticated" });
+  });
+
+  it("rechaza (forbidden) si la orden no esta asignada al actor, sin enviar", async () => {
+    const service = { enviarPlantilla: vi.fn() } as unknown as ChatWhatsappService;
+    const res = await enviarPlantillaChat("orden-1", "plt-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(null),
+      plantillaRepo: plantillaRepo(PLANTILLA),
+      service,
+    });
+    expect(res).toEqual({ status: "forbidden" });
+    expect((service.enviarPlantilla as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+  });
+
+  it("plantilla inexistente / no enviable -> not_found, sin enviar", async () => {
+    const service = { enviarPlantilla: vi.fn() } as unknown as ChatWhatsappService;
+    const res = await enviarPlantillaChat("orden-1", "plt-x", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      plantillaRepo: plantillaRepo(null),
+      service,
+    });
+    expect(res).toEqual({ status: "not_found" });
+    expect((service.enviarPlantilla as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+  });
+
+  it("ok: mapea variables->orden, construye componentes y persiste el saliente plantilla", async () => {
+    const service = {
+      enviarPlantilla: vi.fn(async () => ({
+        status: "ok",
+        mensajeId: "wamid.PLT",
+        mensajeChatId: "msg-plt",
+      })),
+    } as unknown as ChatWhatsappService;
+
+    const res = await enviarPlantillaChat("orden-1", "plt-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      plantillaRepo: plantillaRepo(PLANTILLA),
+      service,
+    });
+
+    const arg = (service.enviarPlantilla as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({
+      ordenId: "orden-1",
+      mensajeroId: "men-1",
+      telefonoE164: "573001112233",
+      plantillaId: "plt-1",
+      nombre: "recordatorio_entrega",
+      idioma: "es",
+      cuerpoRenderizado: "Hola Ana, tu pedido llega hoy", // {{nombre}} -> destinatario
+    });
+    // Componentes construidos a partir de las variables (formato Graph API).
+    expect(arg.componentes).toEqual([
+      { type: "body", parameters: [{ type: "text", text: "Ana" }] },
+    ]);
+    expect(res).toEqual({ status: "ok", mensajeChatId: "msg-plt" });
+  });
+
+  it("se permite dentro Y fuera de la ventana: la action nunca devuelve fuera_ventana", async () => {
+    const service = {
+      enviarPlantilla: vi.fn(async () => ({ status: "ok", mensajeId: "w", mensajeChatId: "m" })),
+    } as unknown as ChatWhatsappService;
+
+    const res = await enviarPlantillaChat("orden-1", "plt-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      plantillaRepo: plantillaRepo(PLANTILLA),
+      service,
+    });
+    expect(res.status).toBe("ok");
+    expect(res).not.toHaveProperty("fuera_ventana");
+  });
+
+  it("transitorio: reintentable, sin filtrar el detalle (numero/secreto) a la UI", async () => {
+    const service = {
+      enviarPlantilla: vi.fn(async () => ({
+        status: "transitorio",
+        detalle: "enviar mensaje de whatsapp: HTTP 503",
+        mensajeChatId: "msg-q",
+      })),
+    } as unknown as ChatWhatsappService;
+
+    const res = await enviarPlantillaChat("orden-1", "plt-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      plantillaRepo: plantillaRepo(PLANTILLA),
+      service,
+    });
+
+    expect(res).toEqual({ status: "transitorio", mensajeChatId: "msg-q" });
+    expect(res).not.toHaveProperty("detalle");
+  });
+
+  it("service null (sin credencial) -> no_configurado", async () => {
+    const res = await enviarPlantillaChat("orden-1", "plt-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      plantillaRepo: plantillaRepo(PLANTILLA),
+      service: null,
+    });
+    expect(res).toEqual({ status: "no_configurado" });
   });
 });
 

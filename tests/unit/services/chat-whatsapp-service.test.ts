@@ -59,7 +59,10 @@ function fakeMensajeRepo(over: Partial<IChatMensajeRepository> = {}): IChatMensa
 }
 
 function fakeClient(outcome: WhatsappEnvioOutcome) {
-  return { enviarTexto: vi.fn(async () => outcome) };
+  return {
+    enviarTexto: vi.fn(async () => outcome),
+    enviarPlantilla: vi.fn(async () => outcome),
+  };
 }
 
 function eventos(over: Partial<WebhookEventos> = {}): WebhookEventos {
@@ -297,6 +300,142 @@ describe("enviarTexto (R18/R19/R20/R21)", () => {
     expect(encolarReintento).toHaveBeenCalledWith("msg-queued"); // D1: reintento encolado
     expect(res).toMatchObject({ status: "transitorio", mensajeChatId: "msg-queued" });
     // El detalle no filtra el numero destino.
+    if (res.status === "transitorio") expect(res).not.toHaveProperty("telefonoE164");
+  });
+});
+
+describe("enviarPlantilla (envio + persistencia tipo plantilla)", () => {
+  const INPUT = {
+    ordenId: "orden-1",
+    mensajeroId: "men-1",
+    telefonoE164: "573001112233",
+    plantillaId: "plt-1",
+    nombre: "recordatorio_entrega",
+    idioma: "es",
+    componentes: [{ type: "body", parameters: [{ type: "text", text: "Ana" }] }],
+    cuerpoRenderizado: "Hola Ana, tu pedido llega hoy",
+  };
+
+  it("ok: persiste el saliente tipo plantilla con plantilla_id, cuerpo y wa_message_id", async () => {
+    const conv = fakeConversacionRepo();
+    const msg = fakeMensajeRepo({
+      insertarSaliente: vi.fn(async () => ({
+        id: "msg-plt",
+        conversacionId: "hilo-1",
+        direccion: "saliente" as const,
+        tipo: "plantilla" as const,
+        cuerpo: INPUT.cuerpoRenderizado,
+        plantillaId: "plt-1",
+        waMessageId: "wamid.PLT1",
+        estado: "sent" as const,
+        ocurridoAt: AHORA,
+        createdAt: AHORA,
+      })),
+    });
+    const client = fakeClient({ status: "ok", mensajeId: "wamid.PLT1" });
+    const service = new ChatWhatsappService({
+      conversacionRepo: conv,
+      mensajeRepo: msg,
+      client,
+      now: () => AHORA,
+    });
+
+    const res = await service.enviarPlantilla(INPUT);
+
+    expect(client.enviarPlantilla).toHaveBeenCalledWith(
+      "573001112233",
+      "recordatorio_entrega",
+      "es",
+      INPUT.componentes,
+    );
+    const arg = (msg.insertarSaliente as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({
+      tipo: "plantilla",
+      plantillaId: "plt-1",
+      cuerpo: INPUT.cuerpoRenderizado,
+      estado: "sent",
+      waMessageId: "wamid.PLT1",
+    });
+    expect(res).toEqual({ status: "ok", mensajeId: "wamid.PLT1", mensajeChatId: "msg-plt" });
+  });
+
+  it("se puede enviar FUERA de la ventana de 24 h (no aplica bloqueo)", async () => {
+    const conv = fakeConversacionRepo({
+      upsertParaOrden: vi.fn(async () => ({
+        id: "hilo-1",
+        telefonoE164: "573001112233",
+        ordenId: "orden-1",
+        mensajeroId: "men-1",
+        // hace 30 h -> fuera de ventana; el texto libre bloquearia, la plantilla NO.
+        ultimoEntranteAt: new Date(AHORA.getTime() - 30 * 60 * 60 * 1000),
+      })),
+    });
+    const client = fakeClient({ status: "ok", mensajeId: "wamid.PLT2" });
+    const service = new ChatWhatsappService({
+      conversacionRepo: conv,
+      mensajeRepo: fakeMensajeRepo(),
+      client,
+      now: () => AHORA,
+    });
+
+    const res = await service.enviarPlantilla(INPUT);
+
+    expect(client.enviarPlantilla).toHaveBeenCalledTimes(1); // no se bloqueo
+    expect(res.status).toBe("ok");
+  });
+
+  it("se puede enviar tambien SIN ningun entrante (ultimoEntranteAt null)", async () => {
+    const conv = fakeConversacionRepo({
+      upsertParaOrden: vi.fn(async () => ({
+        id: "hilo-1",
+        telefonoE164: "573001112233",
+        ordenId: "orden-1",
+        mensajeroId: "men-1",
+        ultimoEntranteAt: null,
+      })),
+    });
+    const client = fakeClient({ status: "ok", mensajeId: "wamid.PLT3" });
+    const service = new ChatWhatsappService({
+      conversacionRepo: conv,
+      mensajeRepo: fakeMensajeRepo(),
+      client,
+      now: () => AHORA,
+    });
+
+    const res = await service.enviarPlantilla(INPUT);
+    expect(res.status).toBe("ok");
+  });
+
+  it("transitorio: persiste queued (no se pierde), encola reintento y no filtra el numero", async () => {
+    const msg = fakeMensajeRepo({
+      insertarSaliente: vi.fn(async () => ({
+        id: "msg-plt-q",
+        conversacionId: "hilo-1",
+        direccion: "saliente" as const,
+        tipo: "plantilla" as const,
+        cuerpo: INPUT.cuerpoRenderizado,
+        plantillaId: "plt-1",
+        waMessageId: null,
+        estado: "queued" as const,
+        ocurridoAt: AHORA,
+        createdAt: AHORA,
+      })),
+    });
+    const encolarReintento = vi.fn(async () => {});
+    const service = new ChatWhatsappService({
+      conversacionRepo: fakeConversacionRepo(),
+      mensajeRepo: msg,
+      client: fakeClient({ status: "transitorio", detalle: "enviar mensaje de whatsapp: HTTP 503" }),
+      encolarReintento,
+      now: () => AHORA,
+    });
+
+    const res = await service.enviarPlantilla(INPUT);
+
+    const arg = (msg.insertarSaliente as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ tipo: "plantilla", plantillaId: "plt-1", estado: "queued", waMessageId: null });
+    expect(encolarReintento).toHaveBeenCalledWith("msg-plt-q");
+    expect(res).toMatchObject({ status: "transitorio", mensajeChatId: "msg-plt-q" });
     if (res.status === "transitorio") expect(res).not.toHaveProperty("telefonoE164");
   });
 });

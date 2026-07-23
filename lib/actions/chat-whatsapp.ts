@@ -13,15 +13,21 @@ import { ChatMensajeRepository } from "@/lib/repositories/ChatMensajeRepository"
 import { ChatWhatsappService } from "@/lib/services/ChatWhatsappService";
 import { crearEncolarReintentoChatEnvio } from "@/lib/services/jobs/whatsapp-chat-envio-encolado";
 import { JobRepository } from "@/lib/repositories/JobRepository";
+import { PlantillaMensajeRepository } from "@/lib/repositories/PlantillaMensajeRepository";
 import { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
 import { loadWhatsappConfig } from "@/lib/config/whatsapp";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { construirComponentsEnvio } from "@/lib/utils/whatsapp-template";
+import { resolverValoresOrden } from "@/lib/utils/whatsapp-envio-valores";
+import { renderPlantilla } from "@/lib/utils/plantilla-mensaje";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
 import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
+import type { IPlantillaMensajeRepository } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 import type {
   EnviarMensajeChatResult,
+  EnviarPlantillaChatResult,
   ListarHiloChatResult,
 } from "@/lib/types/chat-whatsapp";
 
@@ -35,8 +41,12 @@ export interface ChatWhatsappDeps {
   ordenReader?: IOrdenEnvioReader;
   conversacionRepo?: IChatConversacionRepository;
   mensajeRepo?: IChatMensajeRepository;
+  /** Repo de plantillas (solo lo usa `enviarPlantillaChat`). */
+  plantillaRepo?: Pick<IPlantillaMensajeRepository, "findEnviableById">;
   /** Service de envio; `null` explicito = WhatsApp no configurado. */
   service?: ChatWhatsappService | null;
+  /** Idioma por defecto si el template local no trae idioma sincronizado. */
+  idiomaPorDefecto?: string;
   now?: () => Date;
 }
 
@@ -92,6 +102,71 @@ export async function enviarMensajeChat(
   if (outcome.status === "fuera_ventana") return { status: "fuera_ventana" };
   // R21: transitorio -> ya persistido `queued` y encolado; la UI lo trata como reintentable.
   // No se filtra el detalle del cliente (podria ecoar el destino): solo el desenlace.
+  return { status: "transitorio", mensajeChatId: outcome.mensajeChatId };
+}
+
+/** Idioma por defecto de los templates si la config esta disponible; `undefined` si no. */
+function idiomaPorDefectoDeConfig(): string | undefined {
+  try {
+    return loadWhatsappConfig().templateIdioma;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Envia la PLANTILLA `plantillaId` al cliente de la orden `ordenId` y la persiste en el hilo
+ * del chat (`tipo=plantilla`). La orden DEBE estar asignada al actor (scope `OrdenEnvioReader`,
+ * R16/R17); si no, rechaza sin enviar. A diferencia del texto libre, una plantilla se puede
+ * enviar DENTRO y FUERA de la ventana de 24 h: aqui NO se aplica el bloqueo de ventana. El
+ * `transitorio` se maneja como el texto libre (persiste `queued` + encola reintento, R21).
+ */
+export async function enviarPlantillaChat(
+  ordenId: unknown,
+  plantillaId: unknown,
+  deps: ChatWhatsappDeps = {},
+): Promise<EnviarPlantillaChatResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+
+  const oId = idSchema.safeParse(ordenId);
+  const pId = idSchema.safeParse(plantillaId);
+  if (!oId.success || !pId.success) return { status: "forbidden" };
+
+  const prisma = getPrismaClient();
+  const ordenReader = deps.ordenReader ?? new OrdenEnvioReader(prisma);
+  const orden = await ordenReader.findParaEnvio(oId.data, actor.usuarioId);
+  if (orden === null) return { status: "forbidden" }; // R17: inexistente o de otro mensajero
+
+  const plantillaRepo = deps.plantillaRepo ?? new PlantillaMensajeRepository(prisma);
+  const plantilla = await plantillaRepo.findEnviableById(pId.data);
+  if (plantilla === null) return { status: "not_found" }; // no existe o no es enviable
+
+  const service = deps.service !== undefined ? deps.service : buildEnvioService();
+  if (service === null) return { status: "no_configurado" };
+
+  // Mapeo variables->orden y construccion de componentes: MISMA logica que el envio server-side
+  // de la feature 107 (no se reinventa). El cuerpo renderizado se persiste para el historial.
+  const valores = resolverValoresOrden(plantilla.variables, orden);
+  const componentes = construirComponentsEnvio(plantilla.variables, valores);
+  const cuerpoRenderizado = renderPlantilla(plantilla.cuerpo, valores);
+  const idioma =
+    plantilla.templateIdioma || deps.idiomaPorDefecto || idiomaPorDefectoDeConfig() || "es";
+
+  const outcome = await service.enviarPlantilla({
+    ordenId: oId.data,
+    mensajeroId: actor.usuarioId,
+    telefonoE164: orden.telefonoDest,
+    plantillaId: plantilla.id,
+    nombre: plantilla.nombre,
+    idioma,
+    componentes,
+    cuerpoRenderizado,
+  });
+
+  if (outcome.status === "ok") return { status: "ok", mensajeChatId: outcome.mensajeChatId };
+  // R21: transitorio -> ya persistido `queued` y encolado; la UI lo trata como reintentable.
+  // No se filtra el detalle (podria ecoar el destino): solo el desenlace.
   return { status: "transitorio", mensajeChatId: outcome.mensajeChatId };
 }
 

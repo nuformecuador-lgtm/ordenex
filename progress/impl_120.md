@@ -120,3 +120,59 @@ reutilizadas: `Badge` (estado de entrega), `Input`, `Button`. Fallback fuera de 
 ## Veredicto (bloque G)
 UI del chat (G1–G4) completa: panel enganchado en `GestionarOrdenPanel`, ventana de 24 h y
 refresco SWR; delta de typecheck cero y 3 tests de componente en verde.
+
+---
+
+## Bloque H (append) — enviar PLANTILLA por el chat y persistirla en el hilo
+
+**Objetivo:** camino de envio de una PLANTILLA aprobada POR EL CHAT (para escribir fuera de la
+ventana de 24 h, donde Meta rechaza el texto libre). Reutiliza la logica de la feature 107
+(mapeo variables->orden + construccion de componentes Graph API), sin reinventarla.
+
+**Archivos creados/modificados:**
+- `lib/actions/chat-whatsapp.ts` — nueva Server Action `enviarPlantillaChat(ordenId, plantillaId)`:
+  resuelve actor por sesion, valida propiedad con `OrdenEnvioReader`, carga la plantilla enviable,
+  mapea variables/componentes/cuerpo renderizado y delega en el service. NO aplica bloqueo de
+  ventana (la plantilla sirve dentro Y fuera). `transitorio` -> reintentable sin filtrar detalle.
+- `lib/services/ChatWhatsappService.ts` — nuevo metodo puro `enviarPlantilla(input)`: upsert del
+  hilo, envio via `client.enviarPlantilla`, persistencia del saliente `tipo=plantilla` con
+  `plantilla_id`, cuerpo renderizado y `wa_message_id` (`sent`) o `queued`+encolado (`transitorio`).
+  `ChatClient` ampliado a `enviarTexto | enviarPlantilla`.
+- `lib/types/chat-whatsapp.ts` — nuevo tipo `EnviarPlantillaChatResult` (lo consume la UI).
+- `lib/interfaces/repositories/IPlantillaMensajeRepository.ts` + `lib/repositories/PlantillaMensajeRepository.ts`
+  — `PlantillaEnviable` ahora incluye `cuerpo` (para renderizar el texto del historial);
+  `findEnviableById` y `listarEnviables` lo seleccionan.
+- `tests/unit/services/chat-whatsapp-service.test.ts` — `fakeClient` con `enviarPlantilla` + 4 tests nuevos.
+- `tests/unit/actions/chat-whatsapp-actions.test.ts` — 7 tests nuevos de la action.
+
+**Firma exacta de la Server Action (la UI consume esto):**
+```ts
+enviarPlantillaChat(ordenId: unknown, plantillaId: unknown, deps?: ChatWhatsappDeps): Promise<EnviarPlantillaChatResult>
+
+type EnviarPlantillaChatResult =
+  | { status: "ok"; mensajeChatId: string }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" }
+  | { status: "not_found" }        // plantilla inexistente o no enviable
+  | { status: "no_configurado" }
+  | { status: "transitorio"; mensajeChatId: string };
+```
+
+**Mapa test:**
+| Caso | Test |
+| --- | --- |
+| Envio OK persiste saliente `tipo=plantilla` con `plantilla_id`+`wa_message_id` | service: `ok: persiste el saliente tipo plantilla...`; action: `ok: mapea variables->orden...` |
+| Rechazo si la orden no es del actor | action: `rechaza (forbidden) si la orden no esta asignada...` |
+| Plantilla no enviable -> not_found | action: `plantilla inexistente / no enviable -> not_found...` |
+| `transitorio` reintentable sin filtrar secretos | service: `transitorio: persiste queued...`; action: `transitorio: reintentable, sin filtrar el detalle...` |
+| Se permite dentro Y fuera de la ventana | service: `se puede enviar FUERA de la ventana...` + `...SIN ningun entrante`; action: `se permite dentro Y fuera de la ventana...` |
+| Sin credencial -> no_configurado | action: `service null (sin credencial) -> no_configurado` |
+
+**typecheck** (`pnpm run typecheck`): **0 errores**.
+**tests** (`pnpm vitest run tests/unit/services/chat-whatsapp-service.test.ts tests/unit/actions/chat-whatsapp-actions.test.ts`): **32 passed / 32**.
+**suite completa** (`pnpm vitest run`): 4711 passed; 1 fallo flaky ajeno
+(`recuperar-contrasena-form.test.tsx`, pasa en aislamiento, no toca mi codigo).
+
+## Veredicto (bloque H)
+`enviarPlantillaChat` enviada y persistida en el hilo como saliente `tipo=plantilla`; typecheck
+en 0 y 11 tests nuevos en verde, sin filtrar token/numero.
