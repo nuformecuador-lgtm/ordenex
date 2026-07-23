@@ -81,7 +81,12 @@ describe("Feature 100 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
     // los dos de la 100 (`NUEVOS`) y `cancelacion_api` (feature 106), apendido despues. El down.sql
     // del 100 recrea el enum a su estado PRE-100 (fijo, historico); sin descontar los posteriores el
     // SEED crecido divergiria (patron del down del 67/99).
-    const AÑADIDOS_EN_O_DESPUES_DEL_100 = new Set<string>([...NUEVOS, "cancelacion_api"]);
+    const AÑADIDOS_EN_O_DESPUES_DEL_100 = new Set<string>([
+      ...NUEVOS,
+      "cancelacion_api", // feature 106
+      "corte_sin_gestionar", // feature 109
+      "liberacion_sin_gestionar", // feature 109
+    ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_100.has(v))),
     );

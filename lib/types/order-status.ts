@@ -31,6 +31,7 @@ export const ORDER_STATUS_SEED = [
   "rechazada", // feature 36: resultado RECHAZO de la gestion
   "en_bodega_satelite", // feature 33: recibida en la bodega satelite de su zona
   "recibido_origen", // 14mo valor: cierre del flujo de devolucion, la tienda de origen la recibio
+  "sin_gestionar", // feature 109 (15mo valor): orden que quedo en en_reparto al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

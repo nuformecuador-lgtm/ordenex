@@ -1091,4 +1091,47 @@ describe("CierresAdminModule", () => {
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
     expect(successMock).not.toHaveBeenCalled();
   });
+
+  // ---------- Feature 109 (R31): `rechazado` del histórico rotulado como bloqueante ----------
+
+  it("R31: un 'rechazado' del histórico se rotula 'Bloqueante hasta re-solicitud' (no resuelto/cerrado)", () => {
+    renderModule({
+      historico: [
+        makeResumen({
+          cierreId: "c-rech",
+          estado: "rechazado",
+          mensajeroNombre: "Rita Rechazada",
+          resueltoAt: "2026-07-20T08:00:00.000Z",
+          motivoRechazo: "Montos no cuadran",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Histórico" });
+    // Conserva su etiqueta "Rechazado"…
+    expect(within(region).getByText("Rechazado")).toBeInTheDocument();
+    // …pero se rotula BLOQUEANTE hasta que el mensajero lo re-solicite (no "resuelto").
+    expect(
+      within(region).getByText("Bloqueante hasta re-solicitud"),
+    ).toBeInTheDocument();
+  });
+
+  it("R31: un 'aprobado' del histórico NO lleva el rótulo de bloqueante (es terminal)", () => {
+    renderModule({
+      historico: [
+        makeResumen({
+          cierreId: "c-apr",
+          estado: "aprobado",
+          mensajeroNombre: "Ada Aprobada",
+          resueltoAt: "2026-07-20T08:00:00.000Z",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Histórico" });
+    expect(within(region).getByText("Aprobado")).toBeInTheDocument();
+    expect(
+      within(region).queryByText("Bloqueante hasta re-solicitud"),
+    ).toBeNull();
+  });
 });

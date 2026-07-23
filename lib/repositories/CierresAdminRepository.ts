@@ -21,6 +21,8 @@ import type {
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
+import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 
 // Estados de ORIGEN que la resolucion NORMAL (aprobar/rechazar) puede transicionar (R12).
 // Feature 111/R15 (Q1-B): se RETIRA `vencido` (revierte parcialmente la 41 R19). El approve/
@@ -30,9 +32,10 @@ import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-f
 // `solicitado`. Los totales NO se recalculan (R4).
 const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado"];
 
-// Feature 111/R16: estados que la VALVULA DE ESCAPE toca. Solo transiciona un `vencido`
-// ABANDONADO a `solicitado` (en nombre del mensajero ausente); guardada por estado.
-const ESTADO_VENCIDO: CierreEstado = "vencido";
+// Feature 111/R16 + feature 109/R28: estados que la VALVULA DE ESCAPE toca. Transiciona un cierre
+// ABIERTO ABANDONADO (`vencido` o —modelo GLOBAL 109— `rechazado`) a `solicitado`, en nombre del
+// mensajero ausente que dejaria su bodega bloqueada; guardada por estado. Solo cambia `estado`.
+const ESTADOS_REABRIBLES: CierreEstado[] = ["vencido", "rechazado"];
 const ESTADO_SOLICITADO: CierreEstado = "solicitado";
 
 // Feature 42/T8: la resolucion del cierre ahora orquesta una transaccion (para alimentar
@@ -374,7 +377,8 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * igual.
    */
   async resolverCierre(input: ResolverCierreInput): Promise<ResolverCierreResult> {
-    const { cierreId, alcance, nuevoEstado, resueltoPor, motivoRechazo } = input;
+    const { cierreId, alcance, nuevoEstado, resueltoPor, motivoRechazo, liberacionSinGestionar } =
+      input;
     const alcanceGuard = alcanceWhere(alcance);
 
     const count = await this.prisma.$transaction(async (tx) => {
@@ -416,6 +420,73 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         if (movsMensajero.egresoCaja.length > 0) {
           await this.walletMovimientoRepo.crearMovimientos(tx, movsMensajero.egresoCaja);
         }
+
+        // Feature 109 (T3.1, R16-R19/R22/R27): LIBERA a bodega las ordenes `sin_gestionar` del
+        // mensajero del cierre, EXCLUSIVAMENTE en esta rama `aprobado` (un RECHAZO no libera, R27) y
+        // en la MISMA tx (atomico con la transicion del cierre y los wallets). Money-neutral: solo
+        // toca `orden.*` (NO recalcula snapshots, R23). Un cierre NORMAL (sin `sin_gestionar`) o una
+        // 2.ª corrida encuentran 0 filas -> no-op sin tocar `prioridad` (R19/R20).
+        if (liberacionSinGestionar) {
+          const cierre = await tx.cierreDia.findUnique({
+            where: { id: cierreId },
+            select: { mensajeroId: true },
+          });
+          if (cierre !== null) {
+            const {
+              sinGestionarEstatusId,
+              enBodegaEstatusId,
+              enBodegaSateliteEstatusId,
+              centralZonaId,
+            } = liberacionSinGestionar;
+            // R16/R19: ordenes `sin_gestionar` del mensajero (guarda por estatus + propiedad).
+            const ordenes = await tx.orden.findMany({
+              where: {
+                mensajeroAsignadoId: cierre.mensajeroId,
+                estatusId: sinGestionarEstatusId,
+                deletedAt: null,
+              },
+              select: { id: true, zonaId: true },
+            });
+            if (ordenes.length > 0) {
+              // R16: destino por ZONA de la ORDEN (resolverDestinoCierre, misma regla 99/100).
+              const idsByDestino = new Map<string, string[]>();
+              for (const o of ordenes) {
+                const { destinoTipo } = resolverDestinoCierre(o.zonaId, centralZonaId);
+                const destinoEstatusId =
+                  destinoTipo === "bodega_central" ? enBodegaEstatusId : enBodegaSateliteEstatusId;
+                const arr = idsByDestino.get(destinoEstatusId);
+                if (arr) arr.push(o.id);
+                else idsByDestino.set(destinoEstatusId, [o.id]);
+              }
+              for (const [destinoEstatusId, ids] of idsByDestino) {
+                // R16/R17/R19: molde de `recuperarABodega` — updateMany GUARDADO por
+                // `estatus_id = sin_gestionar`, limpia mensajero/asignado_at + `prioridad = true`.
+                const movidas = await tx.orden.updateMany({
+                  where: { id: { in: ids }, estatusId: sinGestionarEstatusId, deletedAt: null },
+                  data: {
+                    estatusId: destinoEstatusId,
+                    mensajeroAsignadoId: null, // R16: handoff limpio a la bodega
+                    asignadoAt: null, // R16
+                    prioridad: true, // R17: reasignacion prioritaria (101/110)
+                  },
+                });
+                // R18/R22: choke point SOLO de las que transicionaron; actor = admin, origen dedicado.
+                if (movidas.count > 0) {
+                  await appendCambioEstado(
+                    tx,
+                    ids.map((ordenId) => ({
+                      ordenId,
+                      estatusOrigenId: sinGestionarEstatusId,
+                      estatusDestinoId: destinoEstatusId,
+                      actorUsuarioId: resueltoPor, // R18: el admin que aprobo
+                      origenTipo: "liberacion_sin_gestionar", // R18
+                    })),
+                  );
+                }
+              }
+            }
+          }
+        }
       }
       return res.count;
     });
@@ -439,9 +510,10 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   async forzarSolicitudVencido(cierreId: string, alcance: Alcance): Promise<ResolverCierreResult> {
     const alcanceGuard = alcanceWhere(alcance);
 
-    // R16: guardia por estado ('vencido') + alcance en el WHERE (anti-TOCTOU). SOLO `estado`.
+    // R16 + feature 109/R28: guardia por estado ABIERTO ('vencido'|'rechazado') + alcance en el
+    // WHERE (anti-TOCTOU). SOLO `estado` (money-safe).
     const res = await this.prisma.cierreDia.updateMany({
-      where: { id: cierreId, estado: ESTADO_VENCIDO, ...alcanceGuard },
+      where: { id: cierreId, estado: { in: ESTADOS_REABRIBLES }, ...alcanceGuard },
       data: { estado: ESTADO_SOLICITADO },
     });
     if (res.count === 1) return "updated";

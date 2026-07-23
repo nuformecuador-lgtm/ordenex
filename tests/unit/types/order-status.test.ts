@@ -8,7 +8,7 @@ import { seedOrderStatus } from "@/scripts/seed-catalogos";
 // en_reparto/rechazada (feature 36/R1/R3), en_bodega_satelite (feature 33/R1) y
 // recibido_origen (PR #75, flujo QR); en_bodega se conserva como historico.
 describe("ORDER_STATUS_SEED (R2/R5/R9 · feature 30/R1 · feature 36/R1/R3 · feature 33/R1 · PR #75)", () => {
-  it("contiene exactamente los 14 valores esperados", () => {
+  it("contiene exactamente los 15 valores esperados", () => {
     expect([...ORDER_STATUS_SEED].sort()).toEqual(
       [
         "devuelta",
@@ -25,6 +25,7 @@ describe("ORDER_STATUS_SEED (R2/R5/R9 · feature 30/R1 · feature 36/R1/R3 · fe
         "reprogramada",
         "en_bodega_satelite",
         "recibido_origen",
+        "sin_gestionar",
       ].sort(),
     );
   });
@@ -58,9 +59,14 @@ describe("ORDER_STATUS_SEED (R2/R5/R9 · feature 30/R1 · feature 36/R1/R3 · fe
     expect(ORDER_STATUS_SEED[13]).toBe("recibido_origen");
   });
 
+  it("feature 109/R1: incluye sin_gestionar como 15mo valor", () => {
+    expect(ORDER_STATUS_SEED).toContain("sin_gestionar");
+    expect(ORDER_STATUS_SEED[14]).toBe("sin_gestionar");
+  });
+
   it("no tiene valores duplicados", () => {
     expect(new Set(ORDER_STATUS_SEED).size).toBe(ORDER_STATUS_SEED.length);
-    expect(ORDER_STATUS_SEED).toHaveLength(14);
+    expect(ORDER_STATUS_SEED).toHaveLength(15);
   });
 });
 
@@ -105,11 +111,12 @@ describe("seedOrderStatus siembra en_espera_aceptacion de forma idempotente (R9)
     expect(fake.rows.has("rechazada")).toBe(true); // feature 36/R3
     expect(fake.rows.has("en_bodega_satelite")).toBe(true); // feature 33/R1
     expect(fake.rows.has("recibido_origen")).toBe(true); // PR #75
-    expect(fake.rows.size).toBe(14);
+    expect(fake.rows.has("sin_gestionar")).toBe(true); // feature 109
+    expect(fake.rows.size).toBe(15);
     const idPrimera = fake.rows.get("en_espera_aceptacion")?.id;
 
     await seedOrderStatus(client); // segunda ejecucion: idempotente
-    expect(fake.rows.size).toBe(14); // no crece
+    expect(fake.rows.size).toBe(15); // no crece
     expect(fake.rows.get("en_espera_aceptacion")?.id).toBe(idPrimera); // id conservado
   });
 });

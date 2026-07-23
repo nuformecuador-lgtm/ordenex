@@ -64,6 +64,9 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     // Feature 111: por defecto NO hay vencido -> `solicitarCierre` toma el flujo de creación (37).
     existeCierreVencido: vi.fn(async () => false),
     transicionarVencidoASolicitado: vi.fn(async () => true),
+    // Feature 109: por defecto NO hay rechazado (mismo criterio que el vencido).
+    existeCierreRechazado: vi.fn(async () => false),
+    transicionarRechazadoASolicitado: vi.fn(async () => true),
     crearCierre: vi.fn(async () => "c1"),
     findCierresByMensajero: vi.fn(async () => []),
     // Feature 67: por defecto, una gestion `entregada` vigente del propio mensajero, sin
@@ -1204,6 +1207,118 @@ describe("Feature 111 · listarCierreDia — tieneVencido derivado (R13-datos)",
     const r = await service.listarCierreDia(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.tieneVencido).toBe(false);
+  });
+});
+
+// ============================================================================
+// Feature 109 — solicitarCierre: rama `rechazado -> solicitado` (R28) + tieneRechazado (R31-datos).
+// Modelo GLOBAL: un `rechazado` YA NO es terminal — bloquea y es RE-SOLICITABLE (espejo del vencido).
+// ============================================================================
+
+describe("Feature 109 · solicitarCierre — re-solicitar un `rechazado` (R28)", () => {
+  it("R28: con un rechazado -> transiciona (via rechazado_solicitado), NO crea un cierre nuevo", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => false),
+      existeCierreRechazado: vi.fn(async () => true),
+      transicionarRechazadoASolicitado: vi.fn(async () => true),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "rechazado_solicitado" });
+    expect(repo.transicionarRechazadoASolicitado).toHaveBeenCalledWith("m1");
+    // R28: NO pasa por el flujo de creación (no crea un cierre nuevo).
+    expect(repo.crearCierre).not.toHaveBeenCalled();
+  });
+
+  it("R28: EXENTO de la precondición de pendientes (anti-deadlock): re-solicita aunque haya pendientes", async () => {
+    const repo = fakeRepo({
+      contarOrdenesPendientesGestion: vi.fn(async () => 3), // pendientes: el vencido/rechazado los ignora
+      existeCierreVencido: vi.fn(async () => false),
+      existeCierreRechazado: vi.fn(async () => true),
+      transicionarRechazadoASolicitado: vi.fn(async () => true),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "rechazado_solicitado" });
+  });
+
+  it("R28: carrera (transición afecta 0 filas) -> conflict, sin crear", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => false),
+      existeCierreRechazado: vi.fn(async () => true),
+      transicionarRechazadoASolicitado: vi.fn(async () => false), // ya re-solicitado/resuelto
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    expect(repo.crearCierre).not.toHaveBeenCalled();
+  });
+
+  it("R28: el `vencido` tiene prioridad sobre el `rechazado` (a lo sumo uno abierto, R30)", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => true),
+      transicionarVencidoASolicitado: vi.fn(async () => true),
+      existeCierreRechazado: vi.fn(async () => true),
+      transicionarRechazadoASolicitado: vi.fn(async () => true),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "vencido_solicitado" });
+    // R30: nunca coexisten; se toma el vencido y no se toca el rechazado.
+    expect(repo.transicionarRechazadoASolicitado).not.toHaveBeenCalled();
+  });
+
+  it("R11: sin vencido ni rechazado -> flujo de creación normal (regresión 37/111 verde)", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => false),
+      existeCierreRechazado: vi.fn(async () => false),
+      findGestionesPendientes: vi.fn(async () => [pendiente()]),
+    });
+    const { service } = newService({ repo, zonaMensajero: ZONA_MENSAJERO, centralZonaId: ZONA_CENTRAL });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "creado" });
+    expect(repo.transicionarRechazadoASolicitado).not.toHaveBeenCalled();
+  });
+});
+
+describe("Feature 109 · listarCierreDia — tieneRechazado derivado (R31-datos)", () => {
+  const cierrePasado = (estado: "solicitado" | "aprobado" | "rechazado" | "vencido") => ({
+    cierreId: `c-${estado}`,
+    estado,
+    destinoTipo: "bodega_satelite" as const,
+    destinoZonaId: ZONA_MENSAJERO,
+    totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+    totalPagoMensajero: "0.00",
+    totalIngresoBodegaRechazos: "0.00",
+    solicitadoAt: "2026-07-10T10:00:00.000Z",
+  });
+
+  it("R31: tieneRechazado=true cuando hay un cierre rechazado en el histórico", async () => {
+    const repo = fakeRepo({ findCierresByMensajero: vi.fn(async () => [cierrePasado("rechazado")]) });
+    const { service } = newService({ repo });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.tieneRechazado).toBe(true);
+  });
+
+  it("R31: tieneRechazado=false sin ningún rechazado (solicitado/aprobado/vencido no cuentan)", async () => {
+    const repo = fakeRepo({
+      findCierresByMensajero: vi.fn(async () => [cierrePasado("aprobado"), cierrePasado("vencido")]),
+    });
+    const { service } = newService({ repo });
+    const r = await service.listarCierreDia(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.tieneRechazado).toBe(false);
   });
 });
 

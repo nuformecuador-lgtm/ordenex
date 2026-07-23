@@ -185,6 +185,10 @@ export class CierreDiaService implements ICierreDiaService {
     // Habilita el CTA "Solicitar aprobación del cierre vencido" con independencia del gate de
     // creación (`puedesSolicitar`), que sigue siendo el del flujo de la 37.
     const tieneVencido = cierresPasados.some((c) => c.estado === "vencido");
+    // Feature 109/R31 (datos): `true` si hay un cierre `rechazado` en el historico (derivado de
+    // `cierresPasados`, sin query extra). Habilita el MISMO CTA de re-solicitud que el `vencido`
+    // (111/R13): un `rechazado` NO es terminal (bloquea hasta re-solicitar + aprobar).
+    const tieneRechazado = cierresPasados.some((c) => c.estado === "rechazado");
 
     return {
       status: "ok",
@@ -196,6 +200,7 @@ export class CierreDiaService implements ICierreDiaService {
       motivoBloqueo,
       cierresPasados,
       tieneVencido, // feature 111/R13
+      tieneRechazado, // feature 109/R31
     };
   }
 
@@ -214,6 +219,17 @@ export class CierreDiaService implements ICierreDiaService {
       // R7: 0 filas = el vencido ya fue resuelto/transicionado entre la lectura y la escritura.
       if (!ok) return { status: "conflict", motivo: MSG_DUPLICADO };
       return { status: "ok", via: "vencido_solicitado" }; // R8: sin snapshot nuevo
+    }
+
+    // Feature 109/R28 (modelo GLOBAL): un cierre `rechazado` ya NO es terminal — BLOQUEA (R29) y es
+    // RE-SOLICITABLE (`rechazado -> solicitado`, espejo EXACTO del `vencido`). Misma rama, mismo gate
+    // (EXENTO de la precondicion de "sin pendientes", anti-deadlock: el mensajero esta bloqueado y
+    // quedaria atrapado). Money-safe (R28: el repo solo cambia `estado`). El desbloqueo definitivo y
+    // la liberacion de `sin_gestionar` ocurren SOLO al APROBAR (R16).
+    if (await this.repo.existeCierreRechazado(actor.usuarioId)) {
+      const ok = await this.repo.transicionarRechazadoASolicitado(actor.usuarioId);
+      if (!ok) return { status: "conflict", motivo: MSG_DUPLICADO };
+      return { status: "ok", via: "rechazado_solicitado" }; // R28: sin snapshot nuevo
     }
 
     // R11: sin `vencido` -> flujo de creación de la 37 SIN CAMBIOS (precondiciones + snapshot).

@@ -44,6 +44,9 @@ export default async function CierreDiaPage() {
         // Feature 111/R13: habilita el CTA diferenciado del cierre vencido (derivado
         // server-side de `cierresPasados`; `undefined` en cierres pre-migración → false).
         tieneVencido={result.tieneVencido ?? false}
+        // Feature 109/R31: habilita el MISMO CTA de re-solicitud para un cierre `rechazado`
+        // (modelo GLOBAL: `rechazado` NO es terminal, bloquea hasta re-solicitar + aprobar).
+        tieneRechazado={result.tieneRechazado ?? false}
       />
     </AppPage>
   );

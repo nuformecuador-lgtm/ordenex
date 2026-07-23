@@ -47,6 +47,15 @@ export interface CierreDiaModuleProps {
    * INDEPENDENCIA del gate de creación (`puedesSolicitar`). Derivado server-side.
    */
   tieneVencido: boolean;
+  /**
+   * Feature 109/R31: `true` si el mensajero tiene un cierre `rechazado`. En el modelo
+   * GLOBAL un `rechazado` NO es terminal: bloquea y es RE-SOLICITABLE. Habilita el MISMO
+   * CTA de re-solicitud que el `vencido` (misma Server Action `solicitarCierre`, que el
+   * backend enruta a la transición `rechazado → solicitado`), con INDEPENDENCIA del gate
+   * de creación (`puedesSolicitar`). Derivado server-side. Excluyente del `vencido` en la
+   * práctica (invariante R30: nunca 2 cierres abiertos a la vez).
+   */
+  tieneRechazado: boolean;
 }
 
 // Feature 41/R21 + 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado,
@@ -63,6 +72,18 @@ const VENCIDO_CONFIRM_TITULO = "Solicitar aprobación del cierre vencido";
 const VENCIDO_CONFIRM_DETALLE =
   "Se enviará tu cierre vencido a tu bodega para aprobación. No se recalculan los montos ya registrados.";
 const VENCIDO_OK = "Cierre vencido enviado a aprobación.";
+
+// Feature 109/R31: CTA + aviso del cierre `rechazado` (texto separado, i18n-ready).
+// En el modelo GLOBAL un cierre `rechazado` NO es terminal: sigue bloqueando la operación
+// hasta que el mensajero lo VUELVA A SOLICITAR y su bodega lo APRUEBE (espejo del `vencido`).
+// El copy lo deja explícito para que no se lea como "resuelto/cerrado".
+const RECHAZADO_AVISO =
+  "Tu cierre fue rechazado, pero no queda cerrado: sigue bloqueando tu operación hasta que lo vuelvas a enviar a aprobación y tu bodega lo apruebe.";
+const RECHAZADO_CTA_LABEL = "Solicitar aprobación del cierre rechazado";
+const RECHAZADO_CONFIRM_TITULO = "Solicitar aprobación del cierre rechazado";
+const RECHAZADO_CONFIRM_DETALLE =
+  "Se enviará de nuevo tu cierre rechazado a tu bodega para aprobación. No se recalculan los montos ya registrados.";
+const RECHAZADO_OK = "Cierre rechazado enviado a aprobación.";
 
 /** Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready). */
 const PAGO_MENSAJERO_LABEL = "Ganancia";
@@ -147,6 +168,7 @@ export function CierreDiaModule({
   cierresPasados,
   bloqueado,
   tieneVencido,
+  tieneRechazado,
 }: CierreDiaModuleProps) {
   const router = useRouter();
   const toast = useToast();
@@ -155,6 +177,8 @@ export function CierreDiaModule({
   const [confirmar, setConfirmar] = useState(false);
   // Feature 111/R13: confirmación del CTA del cierre `vencido`; true = modal abierto.
   const [confirmarVencido, setConfirmarVencido] = useState(false);
+  // Feature 109/R31: confirmación del CTA del cierre `rechazado`; true = modal abierto.
+  const [confirmarRechazado, setConfirmarRechazado] = useState(false);
   // Evidencia (URL firmada, R5) en el visor; null = cerrado.
   const [evidencia, setEvidencia] = useState<string | null>(null);
   // Feature 67/R36: fila pendiente de confirmar el deshacer; null = modal cerrado.
@@ -166,9 +190,10 @@ export function CierreDiaModule({
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
 
   /**
-   * Feature 37 + 111/R13: envía el cierre. Un mismo camino sirve para "Solicitar
-   * cierre" (crea) y el CTA del vencido (transiciona vencido→solicitado): el backend
-   * enruta según haya un `vencido`. El toast distingue por `via` (P2). Cierra ambos
+   * Feature 37 + 111/R13 + 109/R31: envía el cierre. Un mismo camino sirve para
+   * "Solicitar cierre" (crea) y los CTA de re-solicitud del `vencido`/`rechazado`
+   * (transiciones vencido→solicitado / rechazado→solicitado): el backend enruta según
+   * el estado abierto del mensajero. El toast distingue por `via` (P2). Cierra los tres
    * modales pase lo que pase.
    */
   async function confirmarSolicitud() {
@@ -177,10 +202,13 @@ export function CierreDiaModule({
       toast.success(
         result.via === "vencido_solicitado"
           ? VENCIDO_OK
-          : "Cierre solicitado correctamente.",
+          : result.via === "rechazado_solicitado"
+            ? RECHAZADO_OK
+            : "Cierre solicitado correctamente.",
       );
       setConfirmar(false);
       setConfirmarVencido(false);
+      setConfirmarRechazado(false);
       router.refresh();
       return;
     }
@@ -193,6 +221,7 @@ export function CierreDiaModule({
     toast.error(mensaje);
     setConfirmar(false);
     setConfirmarVencido(false);
+    setConfirmarRechazado(false);
   }
 
   /**
@@ -257,6 +286,28 @@ export function CierreDiaModule({
             onClick={() => setConfirmarVencido(true)}
           >
             {VENCIDO_CTA_LABEL}
+          </Button>
+        </section>
+      ) : null}
+
+      {/* ---------- CTA del cierre rechazado (feature 109/R31) ----------
+          Mismo patrón que el `vencido` (mismo action `solicitarCierre()` → el backend
+          enruta a la transición rechazado→solicitado). Se ofrece SIEMPRE que haya un
+          `rechazado`, con INDEPENDENCIA del gate de creación (`puedesSolicitar`). El copy
+          comunica que un `rechazado` NO es terminal: bloquea hasta re-solicitar + aprobar. */}
+      {tieneRechazado ? (
+        <section
+          aria-label="Cierre rechazado"
+          className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3"
+        >
+          <p className="text-sm text-destructive">{RECHAZADO_AVISO}</p>
+          <Button
+            type="button"
+            variant="destructive"
+            className="w-fit"
+            onClick={() => setConfirmarRechazado(true)}
+          >
+            {RECHAZADO_CTA_LABEL}
           </Button>
         </section>
       ) : null}
@@ -385,6 +436,18 @@ export function CierreDiaModule({
         onOpenChange={setConfirmarVencido}
         title={VENCIDO_CONFIRM_TITULO}
         description={VENCIDO_CONFIRM_DETALLE}
+        confirmLabel="Solicitar aprobación"
+        onConfirm={confirmarSolicitud}
+        closeOnConfirm={false}
+      />
+
+      {/* Feature 109/R31: confirmación del CTA del cierre rechazado (espejo del vencido).
+          Misma action; el backend transiciona rechazado→solicitado. */}
+      <Modal
+        open={confirmarRechazado}
+        onOpenChange={setConfirmarRechazado}
+        title={RECHAZADO_CONFIRM_TITULO}
+        description={RECHAZADO_CONFIRM_DETALLE}
         confirmLabel="Solicitar aprobación"
         onConfirm={confirmarSolicitud}
         closeOnConfirm={false}

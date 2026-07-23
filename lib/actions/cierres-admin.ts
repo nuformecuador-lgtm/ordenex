@@ -7,7 +7,6 @@ import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";

@@ -22,8 +22,8 @@ import type {
 import type { CierreDestinoTipo } from "@/lib/types/cierre";
 import {
   money,
-  ESTADO_LABEL,
   EstadoCierreBadge,
+  EstadoHistoricoRotulo,
   ORDEN_RESULTADOS,
   PAGO_MENSAJERO_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
@@ -632,7 +632,13 @@ function columnasHistorico(
   abrir: (cierreId: string) => void,
 ): Column<CierreAdminResumen>[] {
   return [
-    { id: "estado", value: "Estado", render: (c) => ESTADO_LABEL[c.estado] },
+    // Feature 109/R31: un `rechazado` del histórico se rotula "bloqueante hasta
+    // re-solicitud" (no "resuelto/cerrado"); el resto conserva su etiqueta.
+    {
+      id: "estado",
+      value: "Estado",
+      render: (c) => <EstadoHistoricoRotulo estado={c.estado} />,
+    },
     { id: "mensajero", value: "Mensajero", render: (c) => c.mensajeroNombre },
     {
       id: "resueltoAt",
