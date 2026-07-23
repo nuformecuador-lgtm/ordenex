@@ -1239,7 +1239,7 @@
       "name": "mensajero: card en reparto con detalle completo + modo foco al gestionar",
       "spec_path": "specs/113-card-detalle-modo-foco",
       "description": "Frontend. Portal del mensajero (mis-asignaciones). (1) Cada card de 'En reparto' muestra inline el detalle completo (Pedido/Entrega/Cobro de AsignacionDetalle), incluidas las que hoy ocultan el detalle bajo una gestion activa: se elimina ese ocultamiento (R19/R20 restringe acciones, no visibilidad). (2) Modo foco: con ordenEnGestionId fijado, la vista colapsa a solo esa orden (detalle + controles de GestionarOrdenPanel) y oculta las demas cards, el mapa y las listas. El bloqueo 1-a-1 del backend no cambia; solo la presentacion. Reusa AsignacionDetalle y GestionarOrdenPanel.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",

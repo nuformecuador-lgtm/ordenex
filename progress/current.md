@@ -27,7 +27,7 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 
 | # | Feature | Zona | Cx | Dep | Estado |
 |---|---------|------|----|-----|--------|
-| 113 | card en reparto: detalle completo inline + modo foco al gestionar | frontend | med | 36 ✅ | **in_progress** (PR #147) |
+| 113 | card en reparto: detalle completo inline + modo foco al gestionar | frontend | med | 36 ✅ | ✅ **done** (PR #147) |
 | 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | spec_ready |
 | 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | ✅ **done** (PR #146) |
 | 116 | notas privadas del mensajero (reusa tabla de 115, sin migración) | fullstack | med | 115 | spec_ready |
@@ -37,9 +37,8 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 
 **Progreso Fase 2:**
 - **118** ✅ done (PR #145). **115** ✅ done (PR #146). Ambas en `history.md`.
-- **113 (modo foco + detalle inline)** implementada + revisada (APROBADO) → **PR #147**, falta merge
-  humano. Preservó el badge/toggle/sort de 115. (El reviewer rechazó primero por tasks sin marcar `[x]`;
-  remediado.)
+- **113 (modo foco + detalle inline)** ✅ done (PR #147, merge humano 18:51). Preservó el badge/toggle/sort
+  de 115. Ya en `history.md`.
 - **119 (evidencias — backend)** 🟡 en curso, **adelantada en paralelo** con el ciclo de merge de 113:
   es disjunta (toca `GestionarOrdenPanel` + núcleo backend, NO `MisAsignacionesModule.tsx`). Su frontend
   (`GestionarOrdenPanel` multi-select/previews) va después del backend.

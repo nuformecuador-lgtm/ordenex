@@ -1804,3 +1804,14 @@
   APROBADO (0 bloqueantes). **PR #146 → dev, merge humano 2026-07-23.** Sync trivial con 118
   (`schema.prisma` auto-merge SINPE+modelo; `zonas-migration` unión de exclusiones). Despliegue:
   `prisma migrate deploy`. Base de la feature 116 (notas privadas, reusa esta tabla).
+
+## 2026-07-23 — 113 mensajero: card con detalle inline + modo foco al gestionar
+- Cambio de PRESENTACIÓN en `MisAsignacionesModule.tsx` (sin backend/contratos; el bloqueo 1-a-1 no
+  cambia). Cada card de "En reparto" muestra `AsignacionDetalle` inline (Pedido/Entrega/Cobro); se
+  ELIMINA el ocultamiento "Termina la gestión en curso" → la restricción por gestión activa vuelve a ser
+  de ACCIÓN, no de visibilidad.
+- **Modo foco** derivado de `ordenEnGestionId` (sin estado nuevo): colapsa a solo `GestionarOrdenPanel`,
+  oculta cards/mapa/"Por recoger"; se restaura al liberar el puntero. Preserva intactos el badge/toggle/
+  sort de la feature 115.
+- R1–R12 trazados a tests. typecheck 0, lint 0, **4586/4586**. Reviewer APROBADO (rechazo inicial solo por
+  `tasks.md` sin marcar `[x]`, remediado; sin cambios de código). **PR #147 → dev, merge humano 2026-07-23.**
