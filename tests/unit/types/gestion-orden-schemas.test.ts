@@ -183,7 +183,7 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia 
     expect(r.success).toBe(false);
   });
 
-  it("Feature 75: sin foto -> invalido, con el error en el campo `evidencia`", () => {
+  it("Feature 75/119: sin foto -> invalido, con el error en el campo lista `evidencias`", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       resultado: "devuelta",
@@ -193,7 +193,8 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia 
     expect(r.success).toBe(false);
     if (!r.success) {
       const fieldErrors = r.error.flatten().fieldErrors as Record<string, string[] | undefined>;
-      expect(fieldErrors.evidencia).toBeDefined();
+      // Feature 119 (R6): la evidencia es ahora una LISTA -> el error cuelga de `evidencias`.
+      expect(fieldErrors.evidencias).toBeDefined();
     }
   });
 

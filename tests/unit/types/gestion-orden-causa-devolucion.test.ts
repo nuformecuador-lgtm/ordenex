@@ -73,11 +73,12 @@ describe("Feature 73 · rama `devuelta` — causa obligatoria (R1/R6)", () => {
     }
   });
 
-  it("pedido: SIN evidencia -> invalido con el error asociado al campo `evidencia`", () => {
+  it("pedido: SIN evidencia -> invalido con el error asociado al campo lista `evidencias`", () => {
     const r = gestionarSchema.safeParse(devueltaSin("evidencia"));
     expect(r.success).toBe(false);
     if (!r.success) {
-      expect(fieldErrorsDe(r.error).evidencia).toBeDefined();
+      // Feature 119 (R6): la evidencia es una LISTA -> el error cuelga de `evidencias`.
+      expect(fieldErrorsDe(r.error).evidencias).toBeDefined();
     }
   });
 });
@@ -126,19 +127,21 @@ describe("Feature 75 · la evidencia (foto) pasa a ser obligatoria en `devuelta`
     expect(r.success).toBe(true);
   });
 
-  it("SIN evidencia -> invalido, con el error asociado al campo `evidencia`", () => {
+  it("SIN evidencia -> invalido, con el error asociado al campo lista `evidencias`", () => {
     const r = gestionarSchema.safeParse(devueltaSin("evidencia"));
     expect(r.success).toBe(false);
     if (!r.success) {
-      expect(fieldErrorsDe(r.error).evidencia).toBeDefined();
+      // Feature 119 (R6): la evidencia es una LISTA -> el error cuelga de `evidencias`.
+      expect(fieldErrorsDe(r.error).evidencias).toBeDefined();
     }
   });
 
-  it("evidencia no-imagen (pdf) -> invalido en el campo `evidencia`", () => {
+  it("evidencia no-imagen (pdf) -> invalido en el campo lista `evidencias`", () => {
     const r = gestionarSchema.safeParse(devuelta({ evidencia: { type: "application/pdf", size: 10 } }));
     expect(r.success).toBe(false);
     if (!r.success) {
-      expect(fieldErrorsDe(r.error).evidencia).toBeDefined();
+      // Feature 119 (R8): la foto invalida cuelga del campo lista `evidencias` (validacion por archivo).
+      expect(fieldErrorsDe(r.error).evidencias).toBeDefined();
     }
   });
 });
