@@ -15,7 +15,26 @@
 
 ## Features en curso
 
-_Ninguna en curso._ Cerradas y mergeadas a `dev` esta tanda: **109** sin_gestionar / cierre vencido (PR #141), **110** prioridad unificada (PR #140), **111** cierre vencido modelo (PR #139), **102** rechazos SLA visibles (PR #131).
+**Lote mensajero 113–119 (esta sesión, Fase 1 — specs).** Renumerado desde 112–118: el ID 112 lo
+tomó otra sesión (`feature/112-webhook-payload-data`, PR #144 abierto, ya con specs+código), así que
+**todo el lote se corrió +1** (decisión del humano). Ramas nacen de `origin/dev`.
+
+| # | Feature | Zona | Cx | Dep | Estado |
+|---|---------|------|----|-----|--------|
+| 113 | card en reparto: detalle completo inline + modo foco al gestionar | frontend | med | 36 ✅ | spec |
+| 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | spec |
+| 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | spec |
+| 116 | notas privadas del mensajero (misma tabla/migración que 115) | fullstack | med | 115 | spec |
+| 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | spec |
+| 118 | SIMPE → SINPE (~59 archivos, enum Postgres + textos) | fullstack | high | — | spec |
+| 119 | evidencias: de 1 a 1..N fotos (tabla nueva `gestion_orden_evidencia`) | fullstack | high | 75 ✅ | spec |
+
+_Cierres previos mergeados a `dev`:_ **109** (PR #141), **110** (PR #140), **111** (PR #139),
+**102** (PR #131).
+
+> ⚠️ **Drift en `feature_list.json`:** 107, 108 y 110 figuran `in_progress` pero las tres ya están
+> **mergeadas** (PRs #135, #136, #140). Pendiente reconciliarlas a `done` (no consumen slots de
+> paralelismo reales; lo tuve en cuenta para el conteo del lote).
 
 ---
 
