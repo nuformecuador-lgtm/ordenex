@@ -401,29 +401,33 @@ describe("MisAsignacionesModule", () => {
     expect(escogerMock).not.toHaveBeenCalled();
   });
 
-  it("R19/R20: con una orden activa, las DEMÁS cards quedan bloqueadas y OCULTAN sus detalles", () => {
+  // Feature 113 (T6) reescribe el antiguo test de R19/R20: el spec 36 dejaba las demás
+  // cards VISIBLES pero con el detalle OCULTO tras "Termina la gestión en curso…". Ahora,
+  // con una gestión activa (y sin bloqueo), la vista COLAPSA a modo foco: solo se muestra
+  // el panel de la orden activa; las demás cards ni siquiera se renderizan (R6) y el texto
+  // de ocultamiento ya no existe (R2). El bloqueo 1-a-1 sigue siendo restricción de acción.
+  it("R6/R2 (113): con una orden activa la vista COLAPSA a foco — las demás cards no están en el DOM y no hay 'Termina la gestión en curso'", () => {
     renderModule({
       porGestionar: [
-        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Bloqueada Uno" }),
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Otra Uno" }),
         makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Activa Dos" }),
       ],
       ordenEnGestionId: "g2",
     });
 
-    // g2 es la activa: su card sigue seleccionable y muestra sus detalles.
-    const cardActiva = screen.getByRole("button", { name: /Gestionar orden REM-G2/ });
-    expect(cardActiva).toBeEnabled();
-    expect(within(cardActiva).getByText("Activa Dos")).toBeInTheDocument();
-    // g1 queda bloqueada.
-    const cardBloqueada = screen.getByRole("button", { name: /Gestionar orden REM-G1/ });
-    expect(cardBloqueada).toBeDisabled();
-    // ...y oculta sus detalles (destinatario), mostrando solo el aviso.
-    expect(within(cardBloqueada).queryByText("Bloqueada Uno")).toBeNull();
+    // Modo foco: la grilla de cards no se renderiza (ni la activa ni las demás).
     expect(
-      within(cardBloqueada).getByText(/Termina la gestión en curso/),
+      screen.queryByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeNull();
+    // El ocultamiento del spec 36 se eliminó: el texto no existe en ningún estado (R2).
+    expect(screen.queryByText(/Termina la gestión en curso/)).toBeNull();
+    // Solo queda el panel de la orden ACTIVA (g2).
+    expect(
+      within(panelDetalle()).getByText("Orden REM-G2 · Activa Dos"),
     ).toBeInTheDocument();
-    // El panel de detalle muestra la orden ACTIVA (g2).
-    expect(within(panelDetalle()).getByText("Orden REM-G2 · Activa Dos")).toBeInTheDocument();
   });
 
   it("R17 + F98: verificar con la guía CORRECTA fija el puntero (escogerParaGestion) y revela los 4 botones", async () => {
@@ -1051,5 +1055,285 @@ describe("MisAsignacionesModule", () => {
     expect(
       screen.getByRole("region", { name: "Recoger por número de guía" }),
     ).toBeInTheDocument();
+  });
+
+  // ---------------- Feature 113: detalle inline en cada card + modo foco ----------------
+
+  it("R1: cada card en reparto muestra el detalle COMPLETO (Pedido/Entrega/Cobro) de SU orden", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          destinatario: "Uno",
+          direccion: "Calle Uno 111",
+          montoCobrar: 111,
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-G2",
+          destinatario: "Dos",
+          direccion: "Calle Dos 222",
+          montoCobrar: 222,
+        }),
+      ],
+    });
+
+    const card1 = screen.getByRole("button", { name: /Gestionar orden REM-G1/ });
+    const card2 = screen.getByRole("button", { name: /Gestionar orden REM-G2/ });
+
+    // Cada card trae las 3 secciones de AsignacionDetalle y sus labels.
+    for (const card of [card1, card2]) {
+      expect(within(card).getByText("Pedido")).toBeInTheDocument();
+      expect(within(card).getByText("Entrega")).toBeInTheDocument();
+      expect(within(card).getByText("Cobro")).toBeInTheDocument();
+      expect(within(card).getByText("Valor a cobrar")).toBeInTheDocument();
+      expect(within(card).getByText("Dirección")).toBeInTheDocument();
+    }
+    // ...con los datos propios de cada orden (no los del vecino).
+    expect(within(card1).getByText("Calle Uno 111")).toBeInTheDocument();
+    expect(within(card2).getByText("Calle Dos 222")).toBeInTheDocument();
+  });
+
+  it("R2: el texto 'Termina la gestión en curso' no aparece en NINGÚN estado", () => {
+    // Sin gestión activa (vista completa con detalle inline).
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2" }),
+      ],
+    });
+    expect(screen.queryByText(/Termina la gestión en curso/)).toBeNull();
+    cleanup();
+
+    // Con gestión activa (modo foco).
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2" }),
+      ],
+      ordenEnGestionId: "g2",
+    });
+    expect(screen.queryByText(/Termina la gestión en curso/)).toBeNull();
+  });
+
+  it("R3: bloqueado sin gestión — las cards están deshabilitadas y AÚN muestran el detalle completo", () => {
+    renderModule({
+      bloqueado: true,
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          destinatario: "Uno",
+          direccion: "Calle Uno 111",
+        }),
+      ],
+    });
+
+    const card = screen.getByRole("button", { name: /Gestionar orden REM-G1/ });
+    // La deshabilitación restringe la ACCIÓN, no la visibilidad.
+    expect(card).toBeDisabled();
+    expect(within(card).getByText("Pedido")).toBeInTheDocument();
+    expect(within(card).getByText("Valor a cobrar")).toBeInTheDocument();
+    expect(within(card).getByText("Calle Uno 111")).toBeInTheDocument();
+  });
+
+  it("R4: con una gestión activa NO se ofrece gestionar OTRA orden (sus cards no están en el DOM)", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2" }),
+      ],
+      ordenEnGestionId: "g2",
+    });
+
+    // La única superficie es el panel de la activa; no hay cards para escoger otra orden.
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeNull();
+    expect(escogerMock).not.toHaveBeenCalled();
+  });
+
+  it("R4b: el flujo 'verificar guía → Gestionar' llama escogerParaGestion con el MISMO payload y sin llamadas nuevas", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", numGuia: 1001 }),
+      ],
+    });
+
+    const panel = panelDetalle();
+    await user.type(within(panel).getByLabelText("Número de guía"), "1001");
+    await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
+
+    // Contrato del bloqueo 1-a-1 sin cambios: mismo payload y una sola llamada.
+    await vi.waitFor(() =>
+      expect(escogerMock).toHaveBeenCalledWith({ ordenId: "g1" }),
+    );
+    expect(escogerMock).toHaveBeenCalledTimes(1);
+    // No aparecen llamadas nuevas a otras Server Actions.
+    expect(liberarMock).not.toHaveBeenCalled();
+    expect(gestionarMock).not.toHaveBeenCalled();
+    expect(recogerMock).not.toHaveBeenCalled();
+  });
+
+  it("R5: con una gestión activa la vista entra en foco y el panel muestra la orden ACTIVA", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Activa Dos" }),
+      ],
+      ordenEnGestionId: "g2",
+    });
+
+    expect(
+      within(panelDetalle()).getByText("Orden REM-G2 · Activa Dos"),
+    ).toBeInTheDocument();
+  });
+
+  it("R7: en foco NO se renderiza el mapa de ruta ni 'Sincronizar ruta'", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", secuenciaRuta: 1 }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", secuenciaRuta: 2 }),
+      ],
+      ordenEnGestionId: "g2",
+    });
+
+    expect(screen.queryByTestId("ruta-mapa")).toBeNull();
+    expect(screen.queryByText("Mapa de ruta")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Sincronizar ruta" }),
+    ).toBeNull();
+  });
+
+  it("R8: en foco se oculta la sección 'Por recoger' y sus controles de recogida", () => {
+    renderModule({
+      porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      ordenEnGestionId: "g1",
+    });
+
+    expect(screen.queryByRole("region", { name: "Por recoger" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recoger por número de guía" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Recoger por escaneo" }),
+    ).toBeNull();
+  });
+
+  it("R9: en foco (yaActiva) se ven los 4 botones de resultado y 'Cancelar gestión'", async () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      ordenEnGestionId: "g1",
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Entregar" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rechazar" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reprogramar" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Devolver" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cancelar gestión" }),
+    ).toBeInTheDocument();
+    // El puntero ya está fijado: no se re-escoge ni se pide de nuevo la guía.
+    expect(escogerMock).not.toHaveBeenCalled();
+    expect(
+      within(panelDetalle()).queryByLabelText("Número de guía"),
+    ).toBeNull();
+  });
+
+  it("R10: al volver ordenEnGestionId a null se SALE del foco y se restaura la vista completa", () => {
+    const porRecoger = [makeAsignacion({ id: "r1", numGuia: 1001 })];
+    const porGestionar = [
+      makeAsignacion({ id: "g1", numRemision: "REM-G1", secuenciaRuta: 1 }),
+      makeAsignacion({ id: "g2", numRemision: "REM-G2", secuenciaRuta: 2 }),
+    ];
+    const { rerender } = render(
+      <MisAsignacionesModule
+        porRecoger={porRecoger}
+        porGestionar={porGestionar}
+        ordenEnGestionId="g2"
+        ruta={RUTA_VIGENTE}
+        bloqueado={false}
+      />,
+    );
+
+    // En foco: grilla, mapa y "Por recoger" ocultos.
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeNull();
+    expect(screen.queryByRole("region", { name: "Por recoger" })).toBeNull();
+    expect(screen.queryByTestId("ruta-mapa")).toBeNull();
+
+    // Puntero liberado (gestión finalizada/cancelada) → vuelve la vista completa.
+    rerender(
+      <MisAsignacionesModule
+        porRecoger={porRecoger}
+        porGestionar={porGestionar}
+        ordenEnGestionId={null}
+        ruta={RUTA_VIGENTE}
+        bloqueado={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Por recoger" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("ruta-mapa")).toBeInTheDocument();
+  });
+
+  it("R11: sin órdenes en reparto muestra el vacío y NO entra en foco (aunque haya puntero)", () => {
+    renderModule({ porGestionar: [], ordenEnGestionId: "gX" });
+
+    expect(
+      screen.getByText("No hay órdenes en reparto."),
+    ).toBeInTheDocument();
+    // Ni panel de gestión ni colapso a foco: la vista completa sigue montada.
+    expect(
+      screen.queryByRole("region", { name: "Detalle de la orden" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("region", { name: "En reparto / por gestionar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R12: bloqueado con puntero fijado NO entra en foco (precede el aviso de bloqueo total, sin panel)", () => {
+    renderModule({
+      bloqueado: true,
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Dos" }),
+      ],
+      ordenEnGestionId: "g2",
+    });
+
+    // El aviso de bloqueo total tiene precedencia.
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /no puedes gestionar ni recibir nuevas asignaciones/i,
+    );
+    // NO hay foco: las cards siguen en la grilla (deshabilitadas) y NO se monta el panel.
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole("region", { name: "Detalle de la orden" }),
+    ).toBeNull();
   });
 });
