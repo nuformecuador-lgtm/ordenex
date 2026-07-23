@@ -26,6 +26,7 @@ import {
   EditarPlantillaForm,
   type EditarPlantillaFormHandle,
 } from "./EditarPlantillaForm";
+import { SincronizarPlantillasButton } from "./SincronizarPlantillasButton";
 
 // Opciones acotadas por MAX_PAGE_SIZE del backend (nunca una consulta sin límite).
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
@@ -157,7 +158,8 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <SincronizarPlantillasButton onSincronizado={() => void mutate()} />
         <Button type="button" onClick={() => setCrearOpen(true)}>
           Nueva plantilla
         </Button>

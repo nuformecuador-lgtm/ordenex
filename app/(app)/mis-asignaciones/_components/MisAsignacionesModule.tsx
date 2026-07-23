@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/useToast";
 import {
   escogerParaGestion,
@@ -16,8 +17,13 @@ import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { normalizeName } from "@/lib/utils/normalize";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
+import {
+  coincideBusqueda,
+  filtrarAsignaciones,
+} from "./mis-asignaciones-buscador";
 import { EscanerRecoger } from "./EscanerRecoger";
 import { InputRecoger } from "./InputRecoger";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
@@ -63,6 +69,17 @@ export interface MisAsignacionesModuleProps {
 const BLOQUEO_AVISO =
   "No puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente. Ve a «Cierre del día» para resolverlo.";
 
+// Feature 114: textos del buscador (separados para i18n futura, lenguaje claro). La
+// región y la etiqueta del campo son DISTINTAS a propósito: si coincidieran, el nombre
+// accesible del `searchbox` (de su `<label>`) chocaría con el de la región.
+const BUSCADOR_REGION = "Buscar guías asignadas";
+const BUSCADOR_LABEL = "Buscar guías";
+const BUSCADOR_PLACEHOLDER = "Filtra por número de guía, remisión o destinatario";
+// R6: mensajes de "sin resultados", distintos del vacío sin búsqueda; contienen la
+// frase «coincide con la búsqueda» para ser reconocibles.
+const SIN_RESULTADOS_RECOGER = "Ninguna guía por recoger coincide con la búsqueda.";
+const SIN_RESULTADOS_REPARTO = "Ninguna guía en reparto coincide con la búsqueda.";
+
 export function MisAsignacionesModule({
   porRecoger,
   porGestionar,
@@ -82,11 +99,39 @@ export function MisAsignacionesModule({
   );
   const [mostrarMapa, setMostrarMapa] = useState(true);
 
+  // Feature 114: texto del buscador de guías. Estado de UI EFÍMERO, de un solo consumidor
+  // (no sube a URL ni a contexto). Se muestra solo en la VISTA COMPLETA; en modo foco no
+  // hay cards que filtrar. `buscando` distingue "hay búsqueda activa" de "grupo vacío".
+  const [query, setQuery] = useState("");
+  const buscarId = useId();
+  const buscando = query.trim() !== "";
+
+  // Feature 114/R2/R7: "Por recoger" filtrado por el query (parcial, insensible a
+  // mayúsculas/acentos). Query vacío ⇒ misma lista sin filtrar (R5). Independiente de
+  // "En reparto".
+  const porRecogerFiltrado = useMemo<MiAsignacionDTO[]>(
+    () => filtrarAsignaciones(porRecoger, query),
+    [porRecoger, query],
+  );
+
+  // Feature 114/R8+R9: "En reparto" filtrado, ÚNICA fuente para grilla, mapa y panel de
+  // detalle (coherencia lista↔mapa↔panel, gate F1.4). Salvaguarda R9: la orden EN GESTIÓN
+  // (`ordenEnGestionId`) permanece SIEMPRE aunque no coincida con el texto, para no ocultar
+  // la gestión en curso. Con `ordenEnGestionId === null` la salvaguarda no aplica a nadie.
+  const porGestionarFiltrado = useMemo<MiAsignacionDTO[]>(() => {
+    const q = normalizeName(query);
+    return porGestionar.filter(
+      (o) => o.id === ordenEnGestionId || coincideBusqueda(o, q),
+    );
+  }, [porGestionar, query, ordenEnGestionId]);
+
   // R28/mapa: paradas dibujables = las en reparto CON coordenadas (feature 91). Las que no
-  // tienen coords se omiten del mapa pero siguen en la lista (no se pierden).
+  // tienen coords se omiten del mapa pero siguen en la lista (no se pierden). Feature
+  // 114/R8: deriva del conjunto FILTRADO, así el mapa refleja la búsqueda (con la orden en
+  // gestión siempre presente por R9).
   const paradasMapa = useMemo<RutaMapaParada[]>(
     () =>
-      porGestionar
+      porGestionarFiltrado
         .filter((o) => o.latitud !== null && o.longitud !== null)
         .map((o) => ({
           id: o.id,
@@ -95,7 +140,7 @@ export function MisAsignacionesModule({
           lng: o.longitud as number,
           etiqueta: `${o.numRemision} · ${o.destinatario}`,
         })),
-    [porGestionar],
+    [porGestionarFiltrado],
   );
 
   // Feature 115/R19 — orden VISUAL de las cards. El server ya manda `porGestionar` en el
@@ -103,14 +148,15 @@ export function MisAsignacionesModule({
   // hundir al final las marcadas como "gestionar más tarde", preservando entre las no
   // marcadas (y entre las marcadas) el orden de ruta que ya llega. El `sort` de JS es ESTABLE
   // (ES2019), así que comparar solo por la marca conserva el orden previo dentro de cada grupo.
-  // Copia (`[...]`) para NO mutar `porGestionar` ni la ruta persistida (R16/R19). NO afecta al
-  // mapa ni a la secuencia de ruta (siguen leyendo `porGestionar`).
+  // Copia (`[...]`) para NO mutar la lista ni la ruta persistida (R16/R19). Feature 114:
+  // ordena sobre el conjunto FILTRADO (la grilla muestra lo filtrado), preservando el
+  // reordenado de 115 dentro de ese subconjunto.
   const porGestionarVisual = useMemo<MiAsignacionDTO[]>(
     () =>
-      [...porGestionar].sort(
+      [...porGestionarFiltrado].sort(
         (a, b) => Number(a.marcarLuego ?? false) - Number(b.marcarLuego ?? false),
       ),
-    [porGestionar],
+    [porGestionarFiltrado],
   );
 
   // R30: la ruta no refleja el estado real si la última optimización falló
@@ -130,19 +176,24 @@ export function MisAsignacionesModule({
   // reparto. Prioridad: (1) la ACTIVA (puntero fijado); (2) la elegida por el
   // mensajero si sigue existiendo; (3) la PRIMERA de la lista. Derivada en cada
   // render → estable ante cambios de `porGestionar`/`ordenEnGestionId`.
+  // Feature 114/R8: deriva del conjunto FILTRADO (coherencia lista↔panel). La orden en
+  // gestión siempre está en `porGestionarFiltrado` (salvaguarda R9), así que el puntero
+  // sigue mandando en el panel. Si el filtro deja "En reparto" sin coincidencias, no hay
+  // orden en el panel (la grilla muestra el estado "sin resultados", R6).
   const detalleOrden = useMemo<MiAsignacionDTO | null>(() => {
-    if (porGestionar.length === 0) return null;
+    if (porGestionarFiltrado.length === 0) return null;
     if (ordenEnGestionId !== null) {
       return (
-        porGestionar.find((o) => o.id === ordenEnGestionId) ?? porGestionar[0]
+        porGestionarFiltrado.find((o) => o.id === ordenEnGestionId) ??
+        porGestionarFiltrado[0]
       );
     }
     if (seleccionId !== null) {
-      const elegida = porGestionar.find((o) => o.id === seleccionId);
+      const elegida = porGestionarFiltrado.find((o) => o.id === seleccionId);
       if (elegida) return elegida;
     }
-    return porGestionar[0];
-  }, [porGestionar, ordenEnGestionId, seleccionId]);
+    return porGestionarFiltrado[0];
+  }, [porGestionarFiltrado, ordenEnGestionId, seleccionId]);
 
   // Feature 113/R5 — MODO FOCO: flag DERIVADO de una sola fuente de verdad
   // (`ordenEnGestionId`, backend, robusto a recarga). Con una gestión activa y sin
@@ -235,6 +286,25 @@ export function MisAsignacionesModule({
       ) : (
         /* ---------- VISTA COMPLETA (fuera de foco) ---------- */
         <>
+          {/* ---------- Feature 114: buscador de guías (solo en vista de lista) ----------
+              Filtra AMBOS grupos por número de guía, remisión o destinatario (parcial,
+              insensible a mayúsculas/acentos). En modo foco no se renderiza: no hay cards
+              que filtrar. Es un filtro puro de cliente, así que permanece visible aunque el
+              mensajero esté bloqueado (la lista sigue como solo-visualización). */}
+          <section aria-label={BUSCADOR_REGION} className="flex flex-col gap-1">
+            <label htmlFor={buscarId} className="text-sm font-medium">
+              {BUSCADOR_LABEL}
+            </label>
+            <Input
+              id={buscarId}
+              type="search"
+              autoComplete="off"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={BUSCADOR_PLACEHOLDER}
+            />
+          </section>
+
           {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
           {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
               contra `porRecoger` (restricción "asignada a mí") y aceptan con la MISMA action
@@ -263,9 +333,9 @@ export function MisAsignacionesModule({
           <PorAceptarSection
             titulo="Por recoger"
             nuevasLabel={(n) => `${n} Órdenes nuevas asignadas`}
-            ordenes={porRecoger}
+            ordenes={porRecogerFiltrado}
             mostrarAcciones={false}
-            vacio="No hay órdenes por recoger."
+            vacio={buscando ? SIN_RESULTADOS_RECOGER : "No hay órdenes por recoger."}
             renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
           />
 
@@ -341,9 +411,9 @@ export function MisAsignacionesModule({
               </Button>
             ) : null}
 
-            {porGestionar.length === 0 ? (
+            {porGestionarFiltrado.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No hay órdenes en reparto.
+                {buscando ? SIN_RESULTADOS_REPARTO : "No hay órdenes en reparto."}
               </p>
             ) : (
               <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

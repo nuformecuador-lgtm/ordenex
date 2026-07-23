@@ -11,10 +11,12 @@ const PUBLIC_ROUTES = [
   "/api/health",
   "/recuperar-contrasena",
   "/postulacion",
-  // Feature 106: documentacion publica de la API por API key (Swagger UI). El spec JSON vive en
-  // `/api/docs/openapi` y ya pasa por la salida de la rama `/api/*`; `/api-docs` (la pagina) NO,
-  // asi que se lista aqui para que la doc no quede detras del login.
+  // Feature 106: documentacion publica de la API por API key (Swagger UI). Ambas rutas deben ser
+  // publicas: `/api-docs` (la pagina que renderiza Swagger UI) y `/api/docs/openapi` (el spec JSON
+  // que la pagina consume). El middleware NO deja pasar `/api/*` por defecto, asi que hay que
+  // listar el prefijo `/api/docs` explicitamente o el spec redirige a /login y la UI no renderiza.
   "/api-docs",
+  "/api/docs",
 ];
 
 export function middleware(request: NextRequest) {

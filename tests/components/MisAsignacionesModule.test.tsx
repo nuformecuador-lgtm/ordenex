@@ -1336,4 +1336,256 @@ describe("MisAsignacionesModule", () => {
       screen.queryByRole("region", { name: "Detalle de la orden" }),
     ).toBeNull();
   });
+
+  // ---------------- Feature 114: buscador de guías asignadas ----------------
+
+  /** El campo de búsqueda de guías (input type="search" con label "Buscar guías"). */
+  function buscador() {
+    return screen.getByRole("searchbox", { name: "Buscar guías" });
+  }
+
+  it("114/R1: renderiza un campo de búsqueda de guías (searchbox) sobre ambos grupos", () => {
+    renderModule({
+      porRecoger: [makeAsignacion({ id: "r1", numRemision: "REM-R1" })],
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    // Rol accesible (searchbox) + etiqueta accesible (label "Buscar guías").
+    expect(buscador()).toBeInTheDocument();
+    expect(screen.getByLabelText("Buscar guías")).toBeInTheDocument();
+    // Ambos grupos siguen presentes (el buscador va por encima, no los reemplaza).
+    expect(
+      screen.getByRole("region", { name: "Por recoger" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "En reparto / por gestionar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("114/R1: en modo foco NO se renderiza el buscador (no hay cards que filtrar)", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+      ordenEnGestionId: "g1",
+    });
+
+    expect(screen.queryByRole("searchbox", { name: "Buscar guías" })).toBeNull();
+  });
+
+  it("114/R2: teclear texto filtra AMBOS grupos por guía / remisión / destinatario", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-RA", destinatario: "Ana" }),
+        makeAsignacion({ id: "r2", numRemision: "REM-RB", destinatario: "Beto" }),
+      ],
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-GA", destinatario: "Ana Torres" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-GB", destinatario: "Carlos" }),
+      ],
+    });
+
+    await user.type(buscador(), "ana");
+
+    // "Por recoger": queda r1 (destinatario Ana); se va r2.
+    const recoger = screen.getByRole("region", { name: "Por recoger" });
+    expect(within(recoger).getByText(/REM-RA/)).toBeInTheDocument();
+    expect(within(recoger).queryByText(/REM-RB/)).toBeNull();
+
+    // "En reparto": queda g1 (Ana Torres); se va g2 (Carlos).
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-GA/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-GB/ }),
+    ).toBeNull();
+  });
+
+  it("114/R5: limpiar la búsqueda restaura TODAS las guías de ambos grupos", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-R1", destinatario: "Ana" }),
+        makeAsignacion({ id: "r2", numRemision: "REM-R2", destinatario: "Beto" }),
+      ],
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Ana" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Beto" }),
+      ],
+    });
+
+    const input = buscador();
+    await user.type(input, "beto");
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeInTheDocument();
+
+    await user.clear(input);
+
+    // Sin búsqueda: reaparecen todas las guías de ambos grupos.
+    const recoger = screen.getByRole("region", { name: "Por recoger" });
+    expect(within(recoger).getByText(/REM-R1/)).toBeInTheDocument();
+    expect(within(recoger).getByText(/REM-R2/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G1/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-G2/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("114/R6: sin coincidencias muestra 'sin resultados' por grupo, distinto del vacío sin búsqueda", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-R1", destinatario: "Ana" }),
+      ],
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Beto" }),
+      ],
+    });
+
+    await user.type(buscador(), "zzzinexistente");
+
+    const recoger = screen.getByRole("region", { name: "Por recoger" });
+    expect(
+      within(recoger).getByText(
+        "Ninguna guía por recoger coincide con la búsqueda.",
+      ),
+    ).toBeInTheDocument();
+
+    const reparto = screen.getByRole("region", {
+      name: "En reparto / por gestionar",
+    });
+    expect(
+      within(reparto).getByText(
+        "Ninguna guía en reparto coincide con la búsqueda.",
+      ),
+    ).toBeInTheDocument();
+
+    // DISTINGUIBLE del vacío sin búsqueda: esos textos no aparecen.
+    expect(screen.queryByText("No hay órdenes por recoger.")).toBeNull();
+    expect(screen.queryByText("No hay órdenes en reparto.")).toBeNull();
+  });
+
+  it("114/R7: el filtro aplica por grupo — una coincidencia de un grupo no cruza al otro", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-RECOGER", destinatario: "Ana" }),
+      ],
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-REPARTO", destinatario: "Ana" }),
+      ],
+    });
+
+    // "recoger" solo coincide con la remisión del grupo "Por recoger".
+    await user.type(buscador(), "recoger");
+
+    const recoger = screen.getByRole("region", { name: "Por recoger" });
+    const reparto = screen.getByRole("region", {
+      name: "En reparto / por gestionar",
+    });
+    // Aparece en su grupo...
+    expect(within(recoger).getByText(/REM-RECOGER/)).toBeInTheDocument();
+    // ...y NO cruza a "En reparto", que muestra su propio "sin resultados".
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-REPARTO/ }),
+    ).toBeNull();
+    expect(
+      within(reparto).getByText(
+        "Ninguna guía en reparto coincide con la búsqueda.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("114/R8: filtrar excluye la parada de la grilla Y del mapa de ruta", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-UNO",
+          destinatario: "Ana",
+          secuenciaRuta: 1,
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-DOS",
+          destinatario: "Beto",
+          secuenciaRuta: 2,
+        }),
+      ],
+    });
+
+    await user.type(buscador(), "uno");
+
+    // La card de g2 sale de la grilla...
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-UNO/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-DOS/ }),
+    ).toBeNull();
+
+    // ...y su parada NO llega al mapa: RutaMapa recibe SOLO g1 (coherencia R8).
+    const props = rutaMapaMock.mock.calls.at(-1)?.[0] as {
+      paradas: { id: string }[];
+    };
+    expect(props.paradas.map((p) => p.id)).toEqual(["g1"]);
+  });
+
+  it("114/R9: la orden EN GESTIÓN permanece en la lista y en el mapa aunque no coincida", async () => {
+    const user = userEvent.setup();
+    // `bloqueado` mantiene la VISTA COMPLETA (grilla + mapa) con el puntero fijado, sin
+    // colapsar a modo foco: es el escenario donde la salvaguarda R9 es observable.
+    renderModule({
+      bloqueado: true,
+      ordenEnGestionId: "g2",
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-UNO",
+          destinatario: "Ana",
+          secuenciaRuta: 1,
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-DOS",
+          destinatario: "Beto",
+          secuenciaRuta: 2,
+        }),
+        makeAsignacion({
+          id: "g3",
+          numRemision: "REM-TRES",
+          destinatario: "Carla",
+          secuenciaRuta: 3,
+        }),
+      ],
+    });
+
+    // "uno" solo coincide con g1; NO con g2 (en gestión) ni con g3.
+    await user.type(buscador(), "uno");
+
+    // g2 (en gestión) NO se oculta pese a no coincidir; g1 (coincide) también está.
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-DOS/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Gestionar orden REM-UNO/ }),
+    ).toBeInTheDocument();
+    // Control: g3 (ni coincide ni está en gestión) SÍ se filtra → prueba que el filtro
+    // actúa y que la permanencia de g2 se debe a la salvaguarda, no a falta de filtro.
+    expect(
+      screen.queryByRole("button", { name: /Gestionar orden REM-TRES/ }),
+    ).toBeNull();
+
+    // Y la parada de g2 sigue en el mapa junto a la de g1 (no la de g3).
+    const props = rutaMapaMock.mock.calls.at(-1)?.[0] as {
+      paradas: { id: string }[];
+    };
+    expect(props.paradas.map((p) => p.id).sort()).toEqual(["g1", "g2"]);
+  });
 });
