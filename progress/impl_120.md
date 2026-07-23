@@ -88,3 +88,35 @@ se validó con `pnpm db:generate` (no conecta). El `migration.sql`/`down.sql` si
 
 ## Veredicto
 Backend de la feature 120 completo (A–F, H1), typecheck con delta cero y 54 tests nuevos en verde.
+
+---
+
+## Bloque G — UI (frontend_dev)
+
+**Archivos creados/tocados:**
+- `app/(app)/mis-asignaciones/_components/ChatWhatsappPanel.tsx` (nuevo, `'use client'`).
+- `app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx` (G4: import + montaje del
+  panel en el paso "detalle", bajo los botones de contacto).
+- `tests/components/ChatWhatsappPanel.test.tsx` (nuevo, 3 tests).
+
+**Diseño:** panel co-ubicado (un solo consumidor, §5). Consume las Server Actions del backend
+(`listarHiloChat` / `enviarMensajeChat`) — sin `fetch` a `/api/*`. Primitivas shadcn/ui
+reutilizadas: `Badge` (estado de entrega), `Input`, `Button`. Fallback fuera de ventana =
+`EnviarPlantillaWhatsappButton` (feature 107). Refresco D5 con `useSWR` `refreshInterval`=10 s.
+
+**Mapa R→test (component):**
+| Requisito | Test (G) | Nombre |
+| --- | --- | --- |
+| R22 | G1.T | `muestra historial ordenado con entrante/saliente y estado` |
+| R23 | G2.T | `habilita el input dentro de la ventana y ofrece plantilla fuera de ella` |
+| R24 | G3.T | `refresca el hilo sin recarga manual` |
+
+**typecheck** (`pnpm run typecheck`): 30 errores, TODOS del baseline preexistente ajeno
+(`_baseline_typecheck_120.txt`). **Delta = 0**: ningún error nuevo en `ChatWhatsappPanel.tsx`,
+`GestionarOrdenPanel.tsx` ni el test.
+
+**tests** (`pnpm vitest run tests/components/ChatWhatsappPanel.test.tsx`): **3 passed / 3**.
+
+## Veredicto (bloque G)
+UI del chat (G1–G4) completa: panel enganchado en `GestionarOrdenPanel`, ventana de 24 h y
+refresco SWR; delta de typecheck cero y 3 tests de componente en verde.

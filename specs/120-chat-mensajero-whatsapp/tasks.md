@@ -70,14 +70,14 @@
 
 ## Bloque G — UI
 
-- [ ] **G1.** `ChatWhatsappPanel.tsx` en `mis-asignaciones/_components/`: historial ordenado,
+- [x] **G1.** `ChatWhatsappPanel.tsx` en `mis-asignaciones/_components/`: historial ordenado,
   burbujas entrante/saliente, badge de estado (R22). Depende de F2. *Hecho:* test de
   componente G1.T verde.
-- [ ] **G2.** Control de input según ventana 24 h + fallback a `EnviarPlantillaWhatsappButton`
+- [x] **G2.** Control de input según ventana 24 h + fallback a `EnviarPlantillaWhatsappButton`
   (R23). Depende de G1. *Hecho:* test G2.T verde.
-- [ ] **G3.** Refresco del hilo según D5 (SWR `refreshInterval`) (R24). Depende de G1.
+- [x] **G3.** Refresco del hilo según D5 (SWR `refreshInterval`) (R24). Depende de G1.
   *Hecho:* test G3.T verde.
-- [ ] **G4.** Enganchar `ChatWhatsappPanel` en `GestionarOrdenPanel`. Depende de G1.
+- [x] **G4.** Enganchar `ChatWhatsappPanel` en `GestionarOrdenPanel`. Depende de G1.
   *Hecho:* la vista de asignación renderiza el chat.
 
 ## Bloque H — Verificación final
