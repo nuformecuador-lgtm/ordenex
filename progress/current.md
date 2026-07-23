@@ -17,18 +17,27 @@
 
 **Lote mensajero 113–119 (esta sesión).** Renumerado desde 112–118: el ID 112 lo tomó otra sesión
 (`feature/112-webhook-payload-data`, PR #144 abierto, ya con specs+código), así que **todo el lote se
-corrió +1** (decisión del humano). Ramas nacen de `origin/dev`. **Fase 1 completa: los 7 specs escritos
-y en `spec_ready`. PARADO en gate F1.4 (aprobación humana) — nada de código aún.**
+corrió +1** (decisión del humano). Ramas nacen de `origin/dev`. **Gate F1.4 APROBADO por el humano.
+Fase 2 en curso.**
+
+**Decisiones del gate F1.4:** (1) el mapa de ruta **refleja el conjunto filtrado** (criterio único para
+114 buscador y 117 filtro; salvaguarda: la orden en gestión nunca desaparece); (2) etiqueta del cantón =
+**"Cantón (Provincia)"** (117); (3) máximo **3** fotos de evidencia (119); (4) resto de defaults según la
+lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de implementarse.
 
 | # | Feature | Zona | Cx | Dep | Estado |
 |---|---------|------|----|-----|--------|
 | 113 | card en reparto: detalle completo inline + modo foco al gestionar | frontend | med | 36 ✅ | spec_ready |
 | 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | spec_ready |
-| 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | spec_ready |
+| 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | **in_progress** |
 | 116 | notas privadas del mensajero (reusa tabla de 115, sin migración) | fullstack | med | 115 | spec_ready |
 | 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | spec_ready |
-| 118 | SIMPE → SINPE (~23 archivos reales, enum Postgres + textos) | fullstack | high | — | spec_ready |
+| 118 | SIMPE → SINPE (~23 archivos reales, enum Postgres + textos) | fullstack | high | — | **in_progress** |
 | 119 | evidencias: de 1 a 1..N fotos (tabla nueva `gestion_orden_evidencia`) | fullstack | high | 75 ✅ | spec_ready |
+
+**Tanda 1 en vuelo:** 115 (backend primero) + 118 (chore rename, independiente), ambas fullstack (límite
+de 2 alcanzado). Cada feature branch nace de `origin/dev` y trae su propio spec (cherry-pick del commit
+de specs); el bookkeeping vive en `chore/registro-features-112-118`.
 
 **Conflicto de archivos clave (para la Fase 2):** `MisAsignacionesModule.tsx` lo tocan 113/114/115/116/117
 (imán de drift). El núcleo backend del mensajero (`MisAsignacionesService.ts`, `IMisAsignacionesService.ts`,
