@@ -1789,3 +1789,18 @@
   2026-07-23.** Despliegue: `prisma migrate deploy`.
 - Contexto: nació en el lote mensajero registrado como 112–118 y **renumerado a 113–119** por colisión
   del ID 112 con `webhook-payload` (PR #144, de otra sesión); esta feature quedó como **118**.
+
+## 2026-07-23 — 115 mensajero: marcar orden para "gestionar más tarde"
+- Marca privada por `(mensajero, orden)`, **solo informativa** (badge + orden visual); no cambia
+  estado/ruta/prioridad ni escribe en el historial. Tabla nueva
+  `orden_mensajero_meta(usuario_id, orden_id, marcar_luego bool default false, nota text NULL,
+  UNIQUE(usuario_id, orden_id))` con RLS habilitada sin policies + 2 FK `ON DELETE CASCADE` +
+  `down.sql`. La columna `nota` **nace aquí** para la feature 116 (que NO crea migración).
+- Server Action `marcarGestionarLuego` con authz por mensajero (`usuario_id` SIEMPRE del actor; valida
+  propiedad de la orden; idempotente por el UNIQUE). `marcarLuego` en `MiAsignacionDTO` (opcional en el
+  tipo, siempre emitido). UI: badge + toggle en la card + `sort` estable que hunde las marcadas al final
+  sin mutar la ruta persistida.
+- R1–R20 trazados a tests. typecheck 0, lint 0, **4568/4568** (4574 tras sync con dev). Reviewer
+  APROBADO (0 bloqueantes). **PR #146 → dev, merge humano 2026-07-23.** Sync trivial con 118
+  (`schema.prisma` auto-merge SINPE+modelo; `zonas-migration` unión de exclusiones). Despliegue:
+  `prisma migrate deploy`. Base de la feature 116 (notas privadas, reusa esta tabla).

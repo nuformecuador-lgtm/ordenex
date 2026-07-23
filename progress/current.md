@@ -29,22 +29,24 @@ lista del gate. Los specs 114/117/119 se actualizan a estas decisiones antes de 
 |---|---------|------|----|-----|--------|
 | 113 | card en reparto: detalle completo inline + modo foco al gestionar | frontend | med | 36 ✅ | spec_ready |
 | 114 | buscador de guías asignadas (filtro en cliente) | frontend | low | 36 ✅ | spec_ready |
-| 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | **in_progress** |
+| 115 | marcar "gestionar más tarde" (tabla nueva `orden_mensajero_meta`) | fullstack | med | 36 ✅ | ✅ **done** (PR #146) |
 | 116 | notas privadas del mensajero (reusa tabla de 115, sin migración) | fullstack | med | 115 | spec_ready |
 | 117 | filtro por cantón y distrito (mensajero) | frontend | low | 59 ✅ | spec_ready |
 | 118 | SIMPE → SINPE (~23 archivos reales, enum Postgres + textos) | fullstack | high | — | ✅ **done** (PR #145) |
 | 119 | evidencias: de 1 a 1..N fotos (tabla nueva `gestion_orden_evidencia`) | fullstack | high | 75 ✅ | spec_ready |
 
 **Progreso Fase 2:**
-- **118** ✅ mergeado a `dev` (PR #145, 2026-07-23). Entrada en `history.md`.
-- **115** implementada + revisada + **sincronizada con `dev`** (solo `zonas-migration.test.ts` conflictó;
-  unión de ambas exclusiones; `schema.prisma` auto-merge con SINPE + modelo nuevo). Suite verde **4574**.
-  **PR #146 listo para merge humano.** Deuda de infra anotada: la DB local arrastra una migración
-  `20260722223329` registrada por otro worktree sin carpeta; `migrate deploy` la ignora (no afecta suite).
-- **116/119/113/114/117** en cola: todas comparten `MisAsignacionesModule.tsx` o el núcleo backend con
-  115, así que arrancan sobre un `dev` que ya tenga 115 mergeada. **Gating: cada PR mergeado desbloquea
-  el siguiente.** Cada feature branch nace de `origin/dev` y trae su propio spec (cherry-pick del commit
-  de specs); el bookkeeping vive en `chore/registro-features-112-118`.
+- **118** ✅ done (PR #145). **115** ✅ done (PR #146). Ambas en `history.md`.
+- **113 (modo foco + detalle inline)** 🟡 arrancando (frontend). Es el cambio estructural más grande del
+  `MisAsignacionesModule.tsx`, va **primero** para minimizar rework; el `frontend_dev` integra sobre el
+  módulo que ya trae el badge/toggle/sort de 115.
+- Cola tras 113: **116** (notas), **114** (buscador), **117** (filtro) — sobre la vista de lista del
+  módulo, en serie; **119** (evidencias, toca `GestionarOrdenPanel` + backend, no el módulo) intercalable.
+  Serializadas por la DB de test única y por el archivo imán. **Gating: cada PR mergeado desbloquea el
+  siguiente.** Ramas nacen de `origin/dev`; specs vía cherry-pick del commit de specs. Bookkeeping en
+  `chore/registro-features-112-118`.
+- Deuda de infra anotada: la DB local arrastra una migración `20260722223329` registrada por otro
+  worktree sin carpeta; `migrate deploy` la ignora (no afecta la suite).
 
 **Conflicto de archivos clave (para la Fase 2):** `MisAsignacionesModule.tsx` lo tocan 113/114/115/116/117
 (imán de drift). El núcleo backend del mensajero (`MisAsignacionesService.ts`, `IMisAsignacionesService.ts`,
