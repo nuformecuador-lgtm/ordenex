@@ -183,14 +183,14 @@ describe("CierreDiaModule", () => {
         resultado: "entregada",
         numRemision: "REM-ENT",
         montoRecibido: "1250.50",
-        metodoPago: "SIMPE",
+        metodoPago: "SINPE",
       }),
     ];
     renderModule({ grupos });
 
     const region = screen.getByRole("region", { name: "Entregadas" });
     expect(within(region).getByText("₡1250.50")).toBeInTheDocument();
-    expect(within(region).getByText("SIMPE")).toBeInTheDocument();
+    expect(within(region).getByText("SINPE")).toBeInTheDocument();
   });
 
   it("R5: la evidencia se muestra vía URL firmada en el visor (nunca el path crudo)", async () => {

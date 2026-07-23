@@ -114,7 +114,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
       ordenId: "o1",
       resultado: "entregada",
       montoRecibido: 100,
-      metodoPago: "SIMPE",
+      metodoPago: "SINPE",
       evidencia: { type: "application/pdf", size: 10 },
     });
     expect(r.success).toBe(false);

@@ -394,7 +394,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
       findCierreByIdEnAlcance: vi.fn(async () => ({
         cierre: resumenRow(),
         gestiones: [
-          gestionRow({ gestionId: "a", resultado: "entregada", montoRecibido: "30.00", metodoPago: "SIMPE" }),
+          gestionRow({ gestionId: "a", resultado: "entregada", montoRecibido: "30.00", metodoPago: "SINPE" }),
           gestionRow({
             gestionId: "b",
             resultado: "reprogramada",

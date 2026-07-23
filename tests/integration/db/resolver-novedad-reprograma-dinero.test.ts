@@ -92,7 +92,7 @@ describe("Feature 100 [💰] T5.3 — la gestion sintetica `reprogramada` aporta
     expect(movimientos).toEqual([]);
   });
 
-  it("COD recaudado: una reprogramada (montoRecibido null) no suma efectivo/SIMPE/transferencia", () => {
+  it("COD recaudado: una reprogramada (montoRecibido null) no suma efectivo/SINPE/transferencia", () => {
     const totales = computeTotales([GESTION_REPROGRAMADA_SINTETICA]);
     expect(totales).toEqual({
       efectivo: "0.00",
@@ -137,7 +137,7 @@ describe("Feature 100 [💰] T5.3 — cerrar un dia CON la reprogramada da los M
     expect(con.ingresoByGestionId["g-reprogramada"]).toBe("0.00");
   });
 
-  it("COD recaudado (efectivo/SIMPE/transferencia/general) no cambia", () => {
+  it("COD recaudado (efectivo/SINPE/transferencia/general) no cambia", () => {
     const sin = computeTotales(diaSinReprogramada);
     const con = computeTotales(diaConReprogramada);
     expect(con).toEqual(sin);
