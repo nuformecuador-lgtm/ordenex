@@ -23,10 +23,13 @@ const PUBLIC_ROUTES = [
 // por `Authorization: Bearer ...`, validada dentro del route handler:
 //  - `/api/cron/*`  -> CRON_SECRET (features 41 y siguientes)
 //  - `/api/ordenes/api-key/*` -> API key `ordx_...` (feature 88)
+//  - `/api/webhooks/*` -> firma HMAC del proveedor externo (feature 109: WhatsApp valida
+//    `X-Hub-Signature-256` sobre el cuerpo crudo; el handshake GET valida `hub.verify_token`).
+//    Meta llama sin cookie; el guard de sesion lo mandaba a /login, que Meta nunca alcanza.
 // El guard de sesion los dejaba en 307 a /login, es decir: se autenticaban
 // contra una puerta que nunca alcanzaban. Se excluyen aqui; su auth real vive
 // en el handler y sigue siendo obligatoria.
-const SELF_AUTH_ROUTES = ["/api/cron", "/api/ordenes/api-key"];
+const SELF_AUTH_ROUTES = ["/api/cron", "/api/ordenes/api-key", "/api/webhooks"];
 
 // Rutas privadas cuyo rechazo va a `/` en vez de a `/login`: el rastreo de un
 // paquete es cara al publico, mandar a un formulario de login a quien solo

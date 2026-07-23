@@ -32,6 +32,7 @@ import {
   crearWebhookEstadoHandler,
 } from "@/lib/services/jobs/webhook-estado-handler";
 import { crearWhatsappTemplateSyncHandler } from "@/lib/services/jobs/whatsapp-template-sync-handler";
+import { crearWhatsappChatEnvioHandler } from "@/lib/services/jobs/whatsapp-chat-envio-handler";
 
 export interface ProcesarJobsDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -77,6 +78,11 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
   // `buildRecurrencias()`. Las deps (config de WhatsApp) se cargan perezosamente en el handler:
   // un env ausente falla ESTE job (recuperable), no el drenado de los demas tipos.
   handlers.set("whatsapp_template_sync", crearWhatsappTemplateSyncHandler());
+  // Feature 109 (D1/F3): reintento del envio saliente de un mensaje de chat que devolvio
+  // `transitorio` en linea. Encolado por EVENTO (fallo transitorio), no por reloj -> fuera de
+  // `buildRecurrencias()`. Las deps (config de WhatsApp) se cargan perezosamente en el
+  // handler: un env ausente falla ESTE job (recuperable), no el drenado de los demas tipos.
+  handlers.set("whatsapp_chat_envio", crearWhatsappChatEnvioHandler());
   return handlers;
 }
 
