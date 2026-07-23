@@ -374,14 +374,12 @@ export function GestionarOrdenPanel({
       {paso === "detalle" ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Feature 87 (R17): botones de contacto deduplicados en el compuesto
-                compartido `ContactoButtons` (antes inline aqui). Ademas corrige el
-                enlace wa.me para prefijar `506` (R15). */}
+            {/* Feature 87 (R17): botones de contacto (Llamar + WhatsApp wa.me) deduplicados en el
+                compuesto compartido `ContactoButtons`; el enlace wa.me prefija `506` (R15). */}
             <ContactoButtons
               telefono={orden.telefonoDest}
               nombre={orden.destinatario}
               size="lg"
-              mostrarWhatsapp={false}
             />
             {/* Integracion WhatsApp: burbuja que lista las plantillas, las renderiza con los
                 datos de la orden y abre WhatsApp con el mensaje ya escrito al elegir una. */}
