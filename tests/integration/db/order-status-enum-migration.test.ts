@@ -59,6 +59,7 @@ describe("order_status_value migration.sql (UP) — enum standalone (R9)", () =>
     seedOriginal.delete("rechazada"); // feature 36
     seedOriginal.delete("en_bodega_satelite"); // feature 33
     seedOriginal.delete("recibido_origen"); // PR #75
+    seedOriginal.delete("sin_gestionar"); // feature 109
     expect(new Set(enumValues)).toEqual(seedOriginal);
   });
 });

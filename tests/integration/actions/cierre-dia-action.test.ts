@@ -61,6 +61,9 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
     // Feature 111: sin vencido por defecto -> `solicitarCierre` crea (flujo 37).
     existeCierreVencido: vi.fn(async () => false),
     transicionarVencidoASolicitado: vi.fn(async () => true),
+    // Feature 109: sin rechazado por defecto (gemelo del vencido).
+    existeCierreRechazado: vi.fn(async () => false),
+    transicionarRechazadoASolicitado: vi.fn(async () => true),
     // Feature 67: el deshacer sobre el repo en memoria (caso feliz).
     findGestionParaDeshacer: vi.fn(async () => GESTION_DESHACIBLE),
     findUltimaGestionNoAnuladaId: vi.fn(async () => GESTION_DESHACIBLE.gestionId),

@@ -274,6 +274,212 @@ describe("CierreDiaRepository.transicionarVencidoASolicitado (feature 111/R7/R8/
   });
 });
 
+// ============================================================================
+// Feature 109 — existeCierreRechazado + transicionarRechazadoASolicitado (R28, modelo GLOBAL).
+// Gemelos EXACTOS del `vencido`: `rechazado` ya NO es terminal (bloquea + re-solicitable).
+// ============================================================================
+
+describe("CierreDiaRepository.existeCierreRechazado (feature 109/R28)", () => {
+  it("R28: true si hay un cierre rechazado del mensajero; WHERE guarda estado='rechazado'", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.count.mockResolvedValue(1);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.existeCierreRechazado("m1");
+
+    expect(r).toBe(true);
+    const arg = prisma.cierreDia.count.mock.calls[0][0];
+    expect(arg.where).toMatchObject({ mensajeroId: "m1", estado: "rechazado" });
+  });
+
+  it("R28: false si no hay ninguno", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.count.mockResolvedValue(0);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    expect(await repo.existeCierreRechazado("m1")).toBe(false);
+  });
+});
+
+describe("CierreDiaRepository.transicionarRechazadoASolicitado (feature 109/R28)", () => {
+  it("R28: updateMany guardado por estado='rechazado'+mensajero; count=1 -> true; data SOLO estado", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const ok = await repo.transicionarRechazadoASolicitado("m1");
+
+    expect(ok).toBe(true);
+    const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
+    // Anti-TOCTOU: solo transiciona si SIGUE en `rechazado`.
+    expect(arg.where).toEqual({ mensajeroId: "m1", estado: "rechazado" });
+    // Money-safe: data SOLO `estado`. Nada de totales, pago, ingreso, resuelto_por/at, motivo.
+    expect(arg.data).toEqual({ estado: "solicitado" });
+  });
+
+  it("R28: money-safe — NO toca snapshot, resuelto_por/at, motivo_rechazo ni solicitado_at", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.transicionarRechazadoASolicitado("m1");
+
+    const data = prisma.cierreDia.updateMany.mock.calls[0][0].data;
+    for (const prohibido of [
+      "totalEfectivo",
+      "totalGeneral",
+      "totalPagoMensajero",
+      "totalIngresoBodegaRechazos",
+      "resueltoPor",
+      "resueltoAt",
+      "motivoRechazo",
+      "solicitadoAt",
+    ]) {
+      expect(data).not.toHaveProperty(prohibido);
+    }
+  });
+
+  it("R28: count=0 (raced / ya re-solicitado) -> false, sin efectos", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    expect(await repo.transicionarRechazadoASolicitado("m1")).toBe(false);
+  });
+});
+
+// ============================================================================
+// Feature 109 — crearCierre con corteSinGestionar (R4/R6/R8/R22): transiciona en_reparto ->
+// sin_gestionar EN LA MISMA tx, via el choke point (actor null), y relaja la guarda "algo paso".
+// ============================================================================
+
+describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/R6/R8/R22)", () => {
+  // tx con lo que la transicion del corte + el flujo normal necesitan. SIN $queryRaw -> el emisor
+  // de webhooks del choke point es no-op (guard defensivo de `emisorWebhookEstadoReal`).
+  function buildCorteTx(opts: { enReparto?: { id: string }[]; movidas?: number; vinculadas?: number } = {}) {
+    const enReparto = opts.enReparto ?? [{ id: "o1" }, { id: "o2" }];
+    const tx = {
+      cierreDia: { create: vi.fn() },
+      orden: { findMany: vi.fn(), updateMany: vi.fn() },
+      gestionOrden: { updateMany: vi.fn(), findMany: vi.fn() },
+      cierreDetail: { createMany: vi.fn() },
+      ordenHistorialEstado: { createMany: vi.fn() },
+    };
+    tx.cierreDia.create.mockResolvedValue({ id: "cv1" });
+    tx.orden.findMany.mockResolvedValue(enReparto);
+    tx.orden.updateMany.mockResolvedValue({ count: opts.movidas ?? enReparto.length });
+    tx.gestionOrden.updateMany.mockResolvedValue({ count: opts.vinculadas ?? 0 });
+    tx.gestionOrden.findMany.mockResolvedValue([]);
+    tx.cierreDetail.createMany.mockResolvedValue({ count: 0 });
+    tx.ordenHistorialEstado.createMany.mockResolvedValue({ count: 0 });
+    return tx;
+  }
+
+  const CORTE = { enRepartoEstatusId: "s-reparto", sinGestionarEstatusId: "s-sin-gestionar" };
+  function corteInput(overrides: Record<string, unknown> = {}) {
+    return {
+      mensajeroId: "m1",
+      estado: "vencido" as const,
+      destinoTipo: "bodega_satelite" as const,
+      destinoZonaId: "z1",
+      corteSinGestionar: CORTE,
+      totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+      pagoByGestionId: {},
+      totalPagoMensajero: "0.00",
+      ingresoByGestionId: {},
+      totalIngresoBodegaRechazos: "0.00",
+      ...overrides,
+    };
+  }
+
+  it("R4/R22: transiciona en_reparto -> sin_gestionar GUARDADO por estatus_id=en_reparto; conserva mensajero", async () => {
+    const tx = buildCorteTx();
+    const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.crearCierre(corteInput());
+
+    // Pre-SELECT de las ordenes del mensajero en en_reparto.
+    expect(tx.orden.findMany.mock.calls[0][0].where).toEqual({
+      mensajeroAsignadoId: "m1",
+      estatusId: "s-reparto",
+      deletedAt: null,
+    });
+    // updateMany GUARDADO por estatus_id=en_reparto -> sin_gestionar; NO limpia mensajero (Q1).
+    const upd = tx.orden.updateMany.mock.calls[0][0];
+    expect(upd.where).toEqual({ id: { in: ["o1", "o2"] }, estatusId: "s-reparto", deletedAt: null });
+    expect(upd.data).toEqual({ estatusId: "s-sin-gestionar" });
+    expect(upd.data).not.toHaveProperty("mensajeroAsignadoId"); // se conserva
+    expect(upd.data).not.toHaveProperty("prioridad"); // money-safe: no toca prioridad
+  });
+
+  it("R6/R22: choke point con actor null + origen `corte_sin_gestionar`, SOLO de las transicionadas", async () => {
+    const tx = buildCorteTx();
+    const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.crearCierre(corteInput());
+
+    const arg = tx.ordenHistorialEstado.createMany.mock.calls[0][0];
+    expect(arg.data).toEqual([
+      {
+        ordenId: "o1",
+        estatusOrigenId: "s-reparto",
+        estatusDestinoId: "s-sin-gestionar",
+        actorUsuarioId: null, // R6: sistema/cron
+        origenTipo: "corte_sin_gestionar", // R6
+        motivo: null,
+        gestionOrdenId: null,
+      },
+      {
+        ordenId: "o2",
+        estatusOrigenId: "s-reparto",
+        estatusDestinoId: "s-sin-gestionar",
+        actorUsuarioId: null,
+        origenTipo: "corte_sin_gestionar",
+        motivo: null,
+        gestionOrdenId: null,
+      },
+    ]);
+  });
+
+  it("R8: 0 gestiones vinculadas + >=1 sin_gestionar -> crea el `vencido` money-neutral (no null)", async () => {
+    const tx = buildCorteTx({ vinculadas: 0, movidas: 2 });
+    const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const id = await repo.crearCierre(corteInput());
+
+    expect(id).toBe("cv1"); // NO se hace rollback pese a 0 gestiones
+    expect(tx.cierreDia.create.mock.calls[0][0].data.estado).toBe("vencido");
+  });
+
+  it("R8/R9: 0 gestiones + 0 en_reparto -> rollback -> null (no-op real)", async () => {
+    const tx = buildCorteTx({ enReparto: [], vinculadas: 0 });
+    const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const id = await repo.crearCierre(corteInput());
+
+    expect(id).toBeNull();
+    // sin en_reparto no se hace updateMany de orden ni append.
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
+    expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+  });
+
+  it("sin corteSinGestionar (flujo 37): NO toca `orden` ni el historial", async () => {
+    const tx = buildCorteTx({ vinculadas: 1 });
+    const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.crearCierre(corteInput({ estado: "solicitado", corteSinGestionar: undefined }));
+
+    expect(tx.orden.findMany).not.toHaveBeenCalled();
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
+    expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+  });
+});
+
 describe("CierreDiaRepository.crearCierre (R13/R14)", () => {
   it("en $transaction: INSERT cierre_dia (Decimal snapshot) + vincular gestiones + snapshot pago; devuelve id", async () => {
     const tx = {

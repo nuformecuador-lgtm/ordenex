@@ -66,6 +66,9 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R2
     // R23: el NOT EXISTS de cierre bloqueante sobre cierre_dia sigue INTACTO (anti-TOCTOU).
     expect(strings).toMatch(/NOT EXISTS/);
     expect(strings).toMatch(/cierre_dia/);
+    // Feature 109/R29: el conjunto bloqueante del SQL crudo incluye los 3 estados ABIERTOS
+    // (solicitado/vencido/rechazado). `rechazado` YA bloquea una asignacion (modelo GLOBAL).
+    expect(strings).toMatch(/'solicitado', 'vencido', 'rechazado'/);
     // Feature 49/#7: RETURNING "id" para atar el historial a las filas realmente transicionadas.
     expect(strings).toMatch(/RETURNING "id"/);
     // Feature 76/R23 (W3): el SET estampa asignado_at = NOW() junto a la asignacion.

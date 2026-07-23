@@ -67,9 +67,17 @@ describe("Feature 106 · DOWN — reversible con irreversibilidad parcial docume
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(valores).toHaveLength(17);
     expect(valores).not.toContain(NUEVO);
-    // Los 17 previos = el SEED actual menos cancelacion_api.
+    // Los 17 previos = el SEED actual menos los valores AÑADIDOS EN O DESPUES de la feature 106:
+    // `cancelacion_api` (106) y los dos de la feature 109 (`corte_sin_gestionar`/
+    // `liberacion_sin_gestionar`), apendidos despues (patron del down del 67/99/100). El down.sql
+    // del 106 recrea el enum a su estado PRE-106 (fijo, historico).
+    const AÑADIDOS_EN_O_DESPUES_DEL_106 = new Set([
+      NUEVO,
+      "corte_sin_gestionar", // feature 109
+      "liberacion_sin_gestionar", // feature 109
+    ]);
     expect(new Set(valores)).toEqual(
-      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => v !== NUEVO)),
+      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_106.has(v))),
     );
   });
 

@@ -49,11 +49,19 @@ function gestion(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGest
   };
 }
 
+// Feature 109 (T1.3): ids del catalogo que el service resuelve UNA vez por corrida para la
+// transicion `en_reparto -> sin_gestionar`. Por defecto ambos presentes; `null` simula seed pendiente.
+const ESTATUS_IDS: Record<string, string | null> = {
+  en_reparto: "s-reparto",
+  sin_gestionar: "s-sin-gestionar",
+};
+
 function build(opts: {
   mensajeros?: MensajeroSinCierreRow[];
   gestionesByMensajero?: Record<string, CierreGestionPendienteRow[]>;
   centralZonaId?: string | null;
   crearCierre?: ReturnType<typeof vi.fn>;
+  estatusIds?: Record<string, string | null>; // feature 109: override en_reparto/sin_gestionar
 } = {}) {
   const corteRepo: ICorteDiarioRepository = {
     findMensajerosConActividadSinCierre: vi.fn(async () => opts.mensajeros ?? []),
@@ -70,9 +78,13 @@ function build(opts: {
       opts.centralZonaId === undefined ? ZONA_CENTRAL : opts.centralZonaId,
     ),
   } as unknown as Pick<IZonaRepository, "findCentralZonaId">;
+  const estatusIds = opts.estatusIds ?? ESTATUS_IDS;
+  const findEstatusIdByValue = vi.fn(async (v: string) => estatusIds[v] ?? null);
   const ordenRepo = {
     findUsuarioVehiculoId: vi.fn(async () => null),
-  } as unknown as Pick<IOrdenRepository, "findUsuarioVehiculoId">;
+    // Feature 109/T1.3: resuelve en_reparto/sin_gestionar para la transicion del corte.
+    findEstatusIdByValue,
+  } as unknown as Pick<IOrdenRepository, "findUsuarioVehiculoId" | "findEstatusIdByValue">;
   const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
     resolvePagoTarifa: vi.fn(async () => TARIFA),
   };
@@ -85,7 +97,7 @@ function build(opts: {
     tarifaZonaRepo,
     logger,
   );
-  return { service, corteRepo, cierreRepo, crearCierre, logger };
+  return { service, corteRepo, cierreRepo, crearCierre, findEstatusIdByValue, logger };
 }
 
 describe("CorteDiarioService.ejecutarCorte", () => {
@@ -152,16 +164,57 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     expect((logger.warn as ReturnType<typeof vi.fn>).mock.calls[0][0]).not.toContain("m1");
   });
 
-  it("R9 (idempotencia): si ya no hay gestiones pendientes -> no crea vencido", async () => {
+  // Feature 109 (R8): 0 gestiones YA NO corta el flujo (antes hacia `continue`). El mensajero
+  // puede estar en la lista SOLO por ordenes `en_reparto` -> se llama crearCierre igual (con
+  // corteSinGestionar) para el `vencido` money-neutral. El null (verdadero no-op) lo decide el repo.
+  it("R8: 0 gestiones NO corta el flujo — llama crearCierre con corteSinGestionar (vencido money-neutral)", async () => {
     const { service, crearCierre } = build({
       mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
-      gestionesByMensajero: { m1: [] }, // una corrida previa ya las vinculo
+      gestionesByMensajero: { m1: [] },
     });
 
     const res = await service.ejecutarCorte();
 
-    expect(res.vencidosCreados).toBe(0);
-    expect(crearCierre).not.toHaveBeenCalled();
+    expect(crearCierre).toHaveBeenCalledTimes(1);
+    const arg = crearCierre.mock.calls[0][0];
+    expect(arg.estado).toBe("vencido"); // R7
+    // R4/R6: la transicion en_reparto -> sin_gestionar viaja en el input del corte.
+    expect(arg.corteSinGestionar).toEqual({
+      enRepartoEstatusId: "s-reparto",
+      sinGestionarEstatusId: "s-sin-gestionar",
+    });
+    // El doble por defecto devuelve "cv" -> cuenta 1 (el repo decidiria null si nada paso).
+    expect(res.vencidosCreados).toBe(1);
+  });
+
+  // Feature 109 (R5): la transicion aplica EXCLUSIVAMENTE a `en_reparto`. El service resuelve y
+  // pasa el id de `en_reparto` como `enRepartoEstatusId` (guarda del updateMany en el repo); NUNCA
+  // resuelve/pasa `en_espera_aceptacion` -> una orden en ese estado no puede transicionar.
+  it("R5: el corte solo apunta a `en_reparto` (nunca `en_espera_aceptacion`)", async () => {
+    const { service, crearCierre, findEstatusIdByValue } = build({
+      mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
+    });
+
+    await service.ejecutarCorte();
+
+    const pedidos = findEstatusIdByValue.mock.calls.map((c) => c[0]);
+    expect(pedidos).toContain("en_reparto");
+    expect(pedidos).toContain("sin_gestionar");
+    expect(pedidos).not.toContain("en_espera_aceptacion");
+    expect(crearCierre.mock.calls[0][0].corteSinGestionar.enRepartoEstatusId).toBe("s-reparto");
+  });
+
+  // Feature 109 (defensivo): catalogo sin `sin_gestionar` (seed pendiente) -> no se pasa
+  // corteSinGestionar; el corte se comporta como la 41 (solo `vencido` por gestiones).
+  it("catalogo sin `sin_gestionar` -> crearCierre SIN corteSinGestionar (fallback 41)", async () => {
+    const { service, crearCierre } = build({
+      mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
+      estatusIds: { en_reparto: "s-reparto", sin_gestionar: null },
+    });
+
+    await service.ejecutarCorte();
+
+    expect(crearCierre.mock.calls[0][0].corteSinGestionar).toBeUndefined();
   });
 
   it("R9/R23: crearCierre null (carrera) NO cuenta como creado", async () => {

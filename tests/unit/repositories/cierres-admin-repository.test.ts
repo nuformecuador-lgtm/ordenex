@@ -597,10 +597,10 @@ describe("CierresAdminRepository.forzarSolicitudVencido (feature 111/R16)", () =
 
     expect(r).toBe("updated");
     const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
-    // R16: guardia por estado ('vencido') + alcance (anti-TOCTOU).
+    // R16 + feature 109/R28: guardia por estado ABIERTO ('vencido'|'rechazado') + alcance (anti-TOCTOU).
     expect(arg.where).toEqual({
       id: "c-venc",
-      estado: "vencido",
+      estado: { in: ["vencido", "rechazado"] },
       destinoTipo: "bodega_satelite",
       destinoZonaId: "z-cartago",
     });
@@ -631,9 +631,23 @@ describe("CierresAdminRepository.forzarSolicitudVencido (feature 111/R16)", () =
     // El maestro no se acota por zona.
     expect(prisma.cierreDia.updateMany.mock.calls[0][0].where).toEqual({
       id: "c-venc",
-      estado: "vencido",
+      estado: { in: ["vencido", "rechazado"] }, // feature 109/R28
       destinoTipo: "bodega_central",
     });
+  });
+
+  // Feature 109/R28: la valvula generalizada tambien destraba un `rechazado` ABANDONADO.
+  it("R28: destraba un `rechazado` de su alcance -> updated (guarda estado IN vencido/rechazado)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.forzarSolicitudVencido("c-rech", ALCANCE_MAESTRO);
+
+    expect(r).toBe("updated");
+    const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
+    expect(arg.where.estado).toEqual({ in: ["vencido", "rechazado"] });
+    expect(arg.data).toEqual({ estado: "solicitado" });
   });
 
   it("R16: count=0 pero existe en alcance (ya no es vencido) -> conflict, sin efectos", async () => {
@@ -1015,5 +1029,170 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
     // 42 y 43 alcanzaron a insertarse, pero el fallo del 44 revierte TODA la tx (todo-o-nada).
     expect(wallet.walletMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1); // solo el ingreso 42
     expect(wallet.walletTiendaMovimientoRepo.crearMovimientos).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ============================================================================
+// Feature 109 — LIBERACION de `sin_gestionar` al APROBAR (R16/R17/R18/R19/R20/R27).
+// SOLO en la rama `aprobado` de resolverCierre; molde de recuperarABodega (guardado por estado).
+// ============================================================================
+
+describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestionar` (feature 109/R16-R20)", () => {
+  const LIBERACION = {
+    sinGestionarEstatusId: "s-sg",
+    enBodegaEstatusId: "s-bodega",
+    enBodegaSateliteEstatusId: "s-bodega-sat",
+    centralZonaId: "z-central",
+  };
+
+  // Prisma con lo que la liberacion + los wallets necesitan. SIN $queryRaw -> el emisor de
+  // webhooks del choke point es no-op (guard defensivo). tx === prisma (makeRepo).
+  function buildLiberacionPrisma(
+    ordenes: { id: string; zonaId: string }[],
+    opts: { mensajeroId?: string | null; movidas?: number } = {},
+  ) {
+    const prisma = {
+      cierreDia: {
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        count: vi.fn(),
+        findUnique: vi.fn(),
+      },
+      gestionOrden: { findMany: vi.fn() },
+      cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
+      orden: { findMany: vi.fn(), updateMany: vi.fn() },
+      ordenHistorialEstado: { createMany: vi.fn() },
+    };
+    prisma.cierreDia.findUnique.mockResolvedValue(
+      opts.mensajeroId === null ? null : { mensajeroId: opts.mensajeroId ?? "m1" },
+    );
+    prisma.orden.findMany.mockResolvedValue(ordenes);
+    prisma.orden.updateMany.mockImplementation((args: { where: { id: { in: string[] } } }) =>
+      Promise.resolve({ count: opts.movidas ?? args.where.id.in.length }),
+    );
+    prisma.ordenHistorialEstado.createMany.mockResolvedValue({ count: 0 });
+    return prisma;
+  }
+
+  function aprobar(repo: CierresAdminRepository) {
+    return repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_MAESTRO,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-maestro",
+      motivoRechazo: null,
+      liberacionSinGestionar: LIBERACION,
+    });
+  }
+
+  it("R16/R17: transiciona por ZONA (central->en_bodega / satelite->en_bodega_satelite), limpia mensajero + prioridad=true", async () => {
+    const prisma = buildLiberacionPrisma([
+      { id: "o1", zonaId: "z-central" }, // -> en_bodega
+      { id: "o2", zonaId: "z-sat" }, // -> en_bodega_satelite
+    ]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await aprobar(repo);
+
+    expect(r).toBe("updated");
+    // R16/R19: pre-SELECT de las `sin_gestionar` del mensajero del cierre.
+    expect(prisma.orden.findMany.mock.calls[0][0].where).toEqual({
+      mensajeroAsignadoId: "m1",
+      estatusId: "s-sg",
+      deletedAt: null,
+    });
+    // dos updateMany (uno por destino), cada uno GUARDADO por estatus_id=sin_gestionar.
+    const calls = prisma.orden.updateMany.mock.calls.map((c) => c[0]);
+    const central = calls.find((c) => c.data.estatusId === "s-bodega");
+    const sat = calls.find((c) => c.data.estatusId === "s-bodega-sat");
+    expect(central.where).toEqual({ id: { in: ["o1"] }, estatusId: "s-sg", deletedAt: null });
+    expect(sat.where).toEqual({ id: { in: ["o2"] }, estatusId: "s-sg", deletedAt: null });
+    // R16/R17: limpia mensajero/asignado_at + prioridad=true en la MISMA escritura.
+    for (const c of [central, sat]) {
+      expect(c.data).toMatchObject({
+        mensajeroAsignadoId: null,
+        asignadoAt: null,
+        prioridad: true,
+      });
+    }
+  });
+
+  it("R18/R22: append por el choke point con actor=admin + origen `liberacion_sin_gestionar`", async () => {
+    const prisma = buildLiberacionPrisma([{ id: "o1", zonaId: "z-sat" }]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    await aprobar(repo);
+
+    const entradas = prisma.ordenHistorialEstado.createMany.mock.calls.flatMap((c) => c[0].data);
+    expect(entradas).toEqual([
+      {
+        ordenId: "o1",
+        estatusOrigenId: "s-sg",
+        estatusDestinoId: "s-bodega-sat",
+        actorUsuarioId: "adm-maestro", // R18: el admin que aprobo
+        origenTipo: "liberacion_sin_gestionar", // R18
+        motivo: null,
+        gestionOrdenId: null,
+      },
+    ]);
+  });
+
+  it("R19/R20: cierre NORMAL (0 `sin_gestionar`) -> no-op: no updateMany de orden ni append", async () => {
+    const prisma = buildLiberacionPrisma([]); // el mensajero no tiene ordenes congeladas
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await aprobar(repo);
+
+    expect(r).toBe("updated"); // el flujo de aprobacion (wallets) NO se ve afectado
+    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
+    expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+  });
+
+  it("R19: la liberación SOLO corre en la rama `aprobado` — un rechazo NO libera (R27)", async () => {
+    const prisma = buildLiberacionPrisma([{ id: "o1", zonaId: "z-sat" }]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    // Rechazar NO pasa liberacionSinGestionar (el service no lo hace); aunque lo pasara, la
+    // liberacion vive DENTRO del `if (nuevoEstado === 'aprobado')`.
+    await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_MAESTRO,
+      nuevoEstado: "rechazado",
+      resueltoPor: "adm-maestro",
+      motivoRechazo: "cuadre",
+      liberacionSinGestionar: LIBERACION,
+    });
+
+    expect(prisma.orden.findMany).not.toHaveBeenCalled();
+    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
+    expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+  });
+
+  it("R19: sin `liberacionSinGestionar` en el input -> no hay liberación (aunque apruebe)", async () => {
+    const prisma = buildLiberacionPrisma([{ id: "o1", zonaId: "z-sat" }]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    await repo.resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE_MAESTRO,
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-maestro",
+      motivoRechazo: null,
+    });
+
+    expect(prisma.orden.findMany).not.toHaveBeenCalled();
+  });
+
+  it("R19: count=0 (conflict) NO libera aunque el destino sea aprobado", async () => {
+    const prisma = buildLiberacionPrisma([{ id: "o1", zonaId: "z-sat" }]);
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
+    prisma.cierreDia.count.mockResolvedValue(1);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await aprobar(repo);
+
+    expect(r).toBe("conflict");
+    expect(prisma.orden.findMany).not.toHaveBeenCalled();
   });
 });

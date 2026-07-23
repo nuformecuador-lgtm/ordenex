@@ -77,6 +77,39 @@ export function EstadoCierreBadge({ estado }: { estado: CierreEstado }) {
   return <Badge variant={ESTADO_BADGE_VARIANT[estado]}>{ESTADO_LABEL[estado]}</Badge>;
 }
 
+// Feature 109 (R31): en el modelo GLOBAL un cierre `rechazado` NO es terminal. Aunque el
+// admin ya actuó (por eso vive en el histórico), sigue BLOQUEANDO al mensajero hasta que
+// éste lo RE-SOLICITE (`rechazado → solicitado`) y se APRUEBE. El histórico lo rotula así
+// para que no se lea como "resuelto/cerrado". Texto separado, i18n-ready.
+export const RECHAZADO_BLOQUEANTE_LABEL = "Bloqueante hasta re-solicitud";
+export const RECHAZADO_BLOQUEANTE_NOTA =
+  "Un cierre rechazado no es terminal: sigue bloqueando al mensajero hasta que lo vuelva a solicitar y su bodega lo apruebe.";
+
+/**
+ * Feature 109 (R31): rótulo del estado de un cierre en el HISTÓRICO de `/cierres-admin`.
+ * Un `rechazado` conserva su etiqueta ("Rechazado") pero se anexa el marcador visible
+ * "Bloqueante hasta re-solicitud" (con nota accesible), porque NO es un estado resuelto:
+ * bloquea hasta que el mensajero lo re-solicite y se apruebe. El resto de estados
+ * (`aprobado`) se rotula tal cual. Texto i18n-ready; el marcador no comunica solo por color.
+ */
+export function EstadoHistoricoRotulo({ estado }: { estado: CierreEstado }) {
+  if (estado === "rechazado") {
+    return (
+      <span className="inline-flex flex-col items-start gap-1">
+        <span>{ESTADO_LABEL[estado]}</span>
+        <Badge
+          variant="destructive"
+          title={RECHAZADO_BLOQUEANTE_NOTA}
+          aria-label={RECHAZADO_BLOQUEANTE_NOTA}
+        >
+          {RECHAZADO_BLOQUEANTE_LABEL}
+        </Badge>
+      </span>
+    );
+  }
+  return <>{ESTADO_LABEL[estado]}</>;
+}
+
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
 export const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
 export const PAGO_MENSAJERO_COL = "Pago mensajero";

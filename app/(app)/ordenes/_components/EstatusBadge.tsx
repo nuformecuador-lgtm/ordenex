@@ -25,6 +25,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   rechazada: "Rechazada", // feature 36
   en_bodega_satelite: "En satélite", // feature 33 (R9: la UI puede derivar la zona)
   recibido_origen: "En tienda", // cierre del flujo de devolución: la tienda de origen la recibió
+  sin_gestionar: "Sin gestionar", // feature 109/R25: orden que quedó en reparto al pasar de día (congelada hasta aprobar el cierre)
 };
 
 /**
@@ -51,6 +52,8 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   // Terminal y NO error: reusa la variante de `entregada` (success), el otro cierre
   // sano del flujo. `devuelta_origen` sigue en danger por ser el tránsito.
   recibido_origen: "success",
+  // Feature 109/R25: estado de EXCEPCIÓN (orden sin gestionar, congelada) -> variante de alerta.
+  sin_gestionar: "warning",
 };
 
 /**

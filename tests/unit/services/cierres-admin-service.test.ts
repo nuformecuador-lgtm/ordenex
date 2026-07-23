@@ -100,18 +100,33 @@ function fakeSignedUrls(overrides: Partial<ISignedUrlProvider> = {}): ISignedUrl
   };
 }
 
+// Feature 109 (T3.1): ids del catalogo que `aprobarCierre` resuelve para la config de liberacion.
+const ESTATUS_IDS: Record<string, string | null> = {
+  sin_gestionar: "s-sin-gestionar",
+  en_bodega: "s-en-bodega",
+  en_bodega_satelite: "s-en-bodega-sat",
+};
+
 function newService(
-  opts: { repo?: Repo; zonaSatelite?: string | null; signedUrls?: ISignedUrlProvider } = {},
+  opts: {
+    repo?: Repo;
+    zonaSatelite?: string | null;
+    signedUrls?: ISignedUrlProvider;
+    estatusIds?: Record<string, string | null>; // feature 109: override para el defensivo (seed pendiente)
+  } = {},
 ) {
   const repo = opts.repo ?? fakeRepo();
   const zonaRepo = {
     findCentralZonaId: vi.fn(async () => "z-central"),
   } as unknown as Pick<IZonaRepository, "findCentralZonaId">;
+  const estatusIds = opts.estatusIds ?? ESTATUS_IDS;
   const ordenRepo = {
     findUsuarioZonaId: vi.fn(async () =>
       opts.zonaSatelite === undefined ? ZONA_SAT : opts.zonaSatelite,
     ),
-  } as unknown as Pick<IOrdenRepository, "findUsuarioZonaId">;
+    // Feature 109/T3.1: resuelve sin_gestionar/en_bodega/en_bodega_satelite para la liberacion.
+    findEstatusIdByValue: vi.fn(async (v: string) => estatusIds[v] ?? null),
+  } as unknown as Pick<IOrdenRepository, "findUsuarioZonaId" | "findEstatusIdByValue">;
   const signedUrls = opts.signedUrls ?? fakeSignedUrls();
   const service = new CierresAdminService(
     repo,
@@ -667,6 +682,38 @@ describe("CierresAdminService.aprobarCierre (R10/R12/R13)", () => {
   });
 });
 
+// Feature 109 — la APROBACION pasa la config de LIBERACION de `sin_gestionar` (R16/R20); el RECHAZO no.
+describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestionar` (R16/R20)", () => {
+  it("R16: resuelve los estatus destino (sin_gestionar/en_bodega/satelite) + zona central y los pasa", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
+    const { service, ordenRepo } = newService({ repo });
+
+    await service.aprobarCierre("c1", MAESTRO);
+
+    const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.liberacionSinGestionar).toEqual({
+      sinGestionarEstatusId: "s-sin-gestionar",
+      enBodegaEstatusId: "s-en-bodega",
+      enBodegaSateliteEstatusId: "s-en-bodega-sat",
+      centralZonaId: "z-central",
+    });
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("sin_gestionar");
+  });
+
+  it("R16 defensivo: catálogo sin `sin_gestionar` (seed pendiente) -> liberacionSinGestionar undefined", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
+    const { service } = newService({
+      repo,
+      estatusIds: { sin_gestionar: null, en_bodega: "s-b", en_bodega_satelite: "s-bs" },
+    });
+
+    await service.aprobarCierre("c1", MAESTRO);
+
+    const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.liberacionSinGestionar).toBeUndefined();
+  });
+});
+
 // --- feature 43/T11: aprobar CierreDia genera movimientos por tienda (end-to-end con el repo real) ---
 
 describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (feature 43: R5/R13)", () => {
@@ -704,6 +751,11 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
           totalPagoMensajero: new Prisma.Decimal(cierre.totalPagoMensajero),
           totalEfectivo: new Prisma.Decimal(cierre.totalEfectivo),
         })),
+      },
+      // Feature 109/R20: cierre NORMAL (sin ordenes `sin_gestionar`) -> la liberacion afecta 0 filas.
+      orden: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
       gestionOrden: {
         // Feature 69/R12/R13: de la gestion, los feeds solo toman lo que ES de la gestion.
@@ -853,6 +905,11 @@ describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (f
         })),
       },
       gestionOrden: { findMany: vi.fn().mockResolvedValue([]) }, // el pago no depende de gestiones (snapshot)
+      // Feature 109/R20: cierre NORMAL -> la liberacion de `sin_gestionar` no encuentra ordenes.
+      orden: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
       // Feature 69: cierre sin gestiones -> snapshot vacio. El libro del pago al mensajero
       // (44) sale de los snapshots del `cierre_dia`, no de `cierre_detail`: la 69 no lo toca.
       cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
@@ -955,6 +1012,9 @@ describe("CierresAdminService.rechazarCierre (R11/R12/R13/R14)", () => {
       resueltoPor: "adm-maestro", // R14
       motivoRechazo: "cuadre no coincide", // trim aplicado
     });
+    // Feature 109/R27: rechazar conserva `estado:'rechazado'` (escritura SIN cambio) y NO libera
+    // `sin_gestionar` -> NO pasa la config de liberacion (solo la aprobacion lo hace, R16).
+    expect(arg.liberacionSinGestionar).toBeUndefined();
   });
 
   it("R12: repo devuelve conflict -> conflict", async () => {

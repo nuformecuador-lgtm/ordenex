@@ -98,6 +98,7 @@ function renderModule(props?: Partial<Parameters<typeof CierreDiaModule>[0]>) {
       cierresPasados={props?.cierresPasados ?? []}
       bloqueado={props?.bloqueado ?? false}
       tieneVencido={props?.tieneVencido ?? false}
+      tieneRechazado={props?.tieneRechazado ?? false}
     />,
   );
 }
@@ -450,6 +451,70 @@ describe("CierreDiaModule", () => {
     await vi.waitFor(() =>
       expect(successMock).toHaveBeenCalledWith(
         "Cierre vencido enviado a aprobación.",
+      ),
+    );
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  // ---------- Feature 109 (R31): CTA re-solicitar el cierre `rechazado` ----------
+
+  it("R31: con un cierre rechazado aparece el CTA 'Solicitar aprobación del cierre rechazado', habilitado aunque no pueda solicitar", () => {
+    renderModule({ tieneRechazado: true, puedesSolicitar: false });
+
+    const cta = screen.getByRole("button", {
+      name: "Solicitar aprobación del cierre rechazado",
+    });
+    expect(cta).toBeInTheDocument();
+    // R31: habilitado con INDEPENDENCIA del gate de creación (`puedesSolicitar`),
+    // espejo del CTA del `vencido`.
+    expect(cta).toBeEnabled();
+    // El botón normal de "Solicitar cierre" sigue deshabilitado por el gate.
+    expect(
+      screen.getByRole("button", { name: "Solicitar cierre" }),
+    ).toBeDisabled();
+  });
+
+  it("R31: el aviso comunica que un cierre rechazado NO es terminal (bloquea hasta re-solicitar + aprobar)", () => {
+    renderModule({ tieneRechazado: true });
+
+    const region = screen.getByRole("region", { name: "Cierre rechazado" });
+    // No se lee como "resuelto/cerrado": sigue bloqueando hasta re-enviarlo y que lo aprueben.
+    expect(region).toHaveTextContent(/no queda cerrado/i);
+    expect(region).toHaveTextContent(/sigue bloqueando/i);
+    expect(region).toHaveTextContent(/apruebe/i);
+  });
+
+  it("R31: sin cierre rechazado NO aparece el CTA del rechazado", () => {
+    renderModule({ tieneRechazado: false });
+
+    expect(
+      screen.queryByRole("button", {
+        name: "Solicitar aprobación del cierre rechazado",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("R31: al confirmar el CTA del rechazado invoca solicitarCierre (misma action) y muestra el toast del rechazado", async () => {
+    const user = userEvent.setup();
+    solicitarMock.mockResolvedValue({ status: "ok", via: "rechazado_solicitado" });
+    renderModule({ tieneRechazado: true, puedesSolicitar: false });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Solicitar aprobación del cierre rechazado",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Solicitar aprobación del cierre rechazado",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Solicitar aprobación" }),
+    );
+
+    await vi.waitFor(() => expect(solicitarMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(successMock).toHaveBeenCalledWith(
+        "Cierre rechazado enviado a aprobación.",
       ),
     );
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
