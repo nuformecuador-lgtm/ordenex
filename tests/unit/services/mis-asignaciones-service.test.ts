@@ -130,10 +130,13 @@ function fakeRutaRepo(
 // Feature 115: doble del meta-repo. Por defecto SIN marcas (Set vacio) -> `marcarLuego` false
 // en todas las cards, que es el estado previo a la 115; los tests heredados miden lo mismo.
 function fakeMetaRepo(
-  over: Partial<Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero">> = {},
-): Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero"> {
+  over: Partial<
+    Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero" | "findNotasByMensajero">
+  > = {},
+): Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero" | "findNotasByMensajero"> {
   return {
     findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
+    findNotasByMensajero: vi.fn(async () => new Map<string, string>()), // feature 116
     ...over,
   };
 }

@@ -11,18 +11,18 @@
 
 ## Bloque A — Contratos y tipos (backend) [precede a B]
 
-- [ ] **A1. [B]** Crear `lib/types/nota-privada-mensajero.ts`: `guardarNotaSchema`
+- [x] **A1. [B]** Crear `lib/types/nota-privada-mensajero.ts`: `guardarNotaSchema`
   (`ordenId` uuid, `nota` string `max(NOTA_MAX)`), `limpiarNotaSchema` (`ordenId` uuid) y los tipos
   de resultado `GuardarNotaResult` / `LimpiarNotaResult` (ver design §4). `NOTA_MAX = 2000` (P1).
   _Hecho:_ `pnpm typecheck` verde; los schemas rechazan `ordenId` inválido y `nota` sobre el máximo. (R13)
 
-- [ ] **A2. [B]** Crear `lib/interfaces/services/INotaPrivadaMensajeroService.ts`:
+- [x] **A2. [B]** Crear `lib/interfaces/services/INotaPrivadaMensajeroService.ts`:
   `guardar(ordenId, nota, actor)` y `limpiar(ordenId, actor)` con sus result types.
   _Hecho:_ interfaz compila y es mockeable en tests. (contrato)
 
 ## Bloque B — Repositorio de la tabla meta (backend) [comparte archivos con 115; 116 tras 115 done]
 
-- [ ] **B1. [B]** Añadir a `IOrdenMensajeroMetaRepository` + `OrdenMensajeroMetaRepository` (repo de
+- [x] **B1. [B]** Añadir a `IOrdenMensajeroMetaRepository` + `OrdenMensajeroMetaRepository` (repo de
   la tabla meta de 115; adoptar el nombre real que fije 115): `upsertNota(usuarioId, ordenId, nota)`
   (`upsert` por `usuarioId_ordenId`; `update` toca SOLO `nota`) y `limpiarNota(usuarioId, ordenId)`
   (`updateMany SET nota = null`).
@@ -31,7 +31,7 @@
 
 ## Bloque C — Service (backend) [depende de A, B1]
 
-- [ ] **C1. [B]** Crear `lib/services/NotaPrivadaMensajeroService.ts` implementando la interfaz A2:
+- [x] **C1. [B]** Crear `lib/services/NotaPrivadaMensajeroService.ts` implementando la interfaz A2:
   `guardar` (rol mensajero → si no `forbidden`; recorta `nota`, vacío → `limpiar`; `upsertNota`;
   FK inexistente → `forbidden`) y `limpiar` (rol mensajero; `limpiarNota`; `ok` idempotente).
   _Hecho:_ unit con doble del repo: crea/edita/limpia; texto en blanco → `nota=NULL`; rol ≠ mensajero
@@ -39,7 +39,7 @@
 
 ## Bloque D — Server Actions (backend) [depende de C1]
 
-- [ ] **D1. [B]** Crear `lib/actions/notas-privadas-mensajero.ts` (`'use server'`): `guardarNotaPrivada`
+- [x] **D1. [B]** Crear `lib/actions/notas-privadas-mensajero.ts` (`'use server'`): `guardarNotaPrivada`
   y `limpiarNotaPrivada` con el patrón de `mis-asignaciones.ts` (resolver actor, zod, `withErrorHandler`,
   traducir `VALIDATION_ERROR`/`UNAUTHORIZED`; DI `{ service?, getActor? }`).
   _Hecho:_ unit action: sin sesión → `unauthenticated`; `ordenId`/`nota` inválidos → `validation_error`
@@ -47,12 +47,15 @@
 
 ## Bloque E — Lectura del DTO (backend) [comparte archivos con 115]
 
-- [ ] **E1. [B]** Añadir `notaPrivada: string | null` a `MiAsignacionRow` (`IGestionOrdenRepository.ts`)
-  y a `MiAsignacionDTO` (`IMisAsignacionesService.ts`); en `GestionOrdenRepository.findMisAsignaciones`
-  incluir `nota` en el include filtrado por `usuario_id = mensajeroId` (el MISMO que 115 usa para
-  `marcar_luego`) y mapear `notaPrivada = meta?.nota ?? null`; propagar en `MisAsignacionesService.toDTO`.
-  _Hecho:_ unit repo: la fila del mensajero A trae SU nota y NUNCA la de B (proyección por
-  `usuario_id`); `MiAsignacionDTO.notaPrivada` poblado; una sola query (sin N+1). (R6/R8)
+- [x] **E1. [B]** Añadir `notaPrivada: string | null` a `MiAsignacionDTO` (`IMisAsignacionesService.ts`);
+  reflejo vía el `Promise.all` de 115 (patrón real, NO JOIN): `findNotasByMensajero(usuarioId):
+  Promise<Map<ordenId,nota>>` en el meta-repo (proyección por `usuario_id = actor`) y merge de
+  `notaPrivada = notas.get(row.id) ?? null` en `MisAsignacionesService.listarMisAsignaciones` (default
+  `null` en `toDTO`). NOTA de reconciliación: 115 refleja `marcarLuego` con un Set del meta-repo dentro
+  del `Promise.all`, NO con un JOIN en `MiAsignacionRow`; 116 espeja ese patrón, así que `MiAsignacionRow`
+  NO se toca (el spec asumía el JOIN, superado por el código real de 115).
+  _Hecho:_ unit servicio: la nota del mensajero A trae SU nota y NUNCA la de B (proyección por
+  `usuario_id`); `MiAsignacionDTO.notaPrivada` poblado; una sola query extra (sin N+1). (R6/R8)
 
 ## Bloque F — UI del mensajero (frontend) [depende de D1, E1]
 
@@ -76,13 +79,14 @@
 
 ## Bloque G — Verificación y trazabilidad [depende de A–F]
 
-- [ ] **G1. [B]** Confirmar **sin migración**: la rama NO añade `db/migrations/*`; `prisma validate`,
+- [x] **G1. [B]** Confirmar **sin migración**: la rama NO añade `db/migrations/*`; `prisma validate`,
   `pnpm typecheck`, `pnpm lint`, `pnpm test`, `./init.sh` verdes contra el esquema de 115.
   _Hecho:_ `git status` sin archivos en `db/migrations/`; CI/local verdes. (R15)
 
-- [ ] **G2. [B]** Revisión de seguridad: mensajes de rechazo fijos i18n-ready sin PII; sin
+- [x] **G2. [B]** Revisión de seguridad: mensajes de rechazo fijos i18n-ready sin PII; sin
   `console.log` del contenido de la nota; `usuario_id` siempre del actor (nunca del cliente).
-  _Hecho:_ unit/lint: motivos sin PII; grep sin logs de nota. (R17)
+  _Hecho:_ unit/lint: motivos sin PII (solo `status` discriminados); `grep` sin `console.*` en los
+  archivos nuevos; el service pasa SIEMPRE `actor.usuarioId` (nunca un dato del input). (R17)
 
 - [ ] **G3.** Escribir el mapa `R<n> → test` en `progress/impl_116-*.md` (el implementer al ejecutar;
   el reviewer lo verifica).
