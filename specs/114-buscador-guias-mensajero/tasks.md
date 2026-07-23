@@ -5,7 +5,7 @@
 
 ## Bloque 1 — Helper puro de búsqueda
 
-- [ ] **T1. Crear el helper de matching** `app/(app)/mis-asignaciones/_components/mis-asignaciones-buscador.ts`.
+- [x] **T1. Crear el helper de matching** `app/(app)/mis-asignaciones/_components/mis-asignaciones-buscador.ts`.
   - Exporta `textoBuscable(orden)`, `coincideBusqueda(orden, queryNormalizado)` y
     `filtrarAsignaciones(ordenes, query)` con las firmas de `design.md §2`.
   - Reutiliza `normalizeName` de `lib/utils/normalize.ts` (NO duplicar normalización).
@@ -14,7 +14,7 @@
   - **Hecho:** el archivo compila en TS strict, sin `any`, y es importable sin arrastrar DOM.
   - Depende de: —
 
-- [ ] **T2. [P] Test unitario del helper** `tests/unit/components/mis-asignaciones-buscador.test.ts`.
+- [x] **T2. [P] Test unitario del helper** `tests/unit/components/mis-asignaciones-buscador.test.ts`.
   - Casos: R3 (parcial + `perez`↔`Pérez` + `rem-0`↔`REM-001`), R4 (`numGuia` null no
     coincide por guía pero sí por remisión/destinatario; `10`↔`1001`), R5 (query `""`
     y `"   "` devuelven la lista completa).
@@ -23,7 +23,7 @@
 
 ## Bloque 2 — Integración en el módulo
 
-- [ ] **T3. Estado + input de búsqueda en `MisAsignacionesModule.tsx`.**
+- [x] **T3. Estado + input de búsqueda en `MisAsignacionesModule.tsx`.**
   - `const [query, setQuery] = useState("")`.
   - Render de una `<section aria-label="Buscar guías">` con `<label>` + `components/ui/input`
     (`type="search"`), por encima de "Por recoger" y "En reparto" (dentro del `div` raíz,
@@ -31,7 +31,7 @@
   - **Hecho:** `getByRole("searchbox")` / `getByLabelText("Buscar guías")` lo encuentra (R1).
   - Depende de: —
 
-- [ ] **T4. Derivar listas filtradas con `useMemo` (coherencia lista↔mapa↔panel).**
+- [x] **T4. Derivar listas filtradas con `useMemo` (coherencia lista↔mapa↔panel).**
   - `porRecogerFiltrado = useMemo(() => filtrarAsignaciones(porRecoger, query), [porRecoger, query])`.
   - `porGestionarFiltrado`: filtra `porGestionar` por el query PERO conserva la orden
     en gestión (`o.id === ordenEnGestionId || coincideBusqueda(o, normalizeName(query))`);
@@ -40,7 +40,7 @@
     gestión aunque no coincida.
   - Depende de: T1, T3.
 
-- [ ] **T5. Cablear "Por recoger" al filtrado + mensaje sin resultados.**
+- [x] **T5. Cablear "Por recoger" al filtrado + mensaje sin resultados.**
   - `PorAceptarSection` recibe `ordenes={porRecogerFiltrado}`.
   - `vacio` dinámico: con query activo y sin coincidencias →
     "Ninguna guía por recoger coincide con la búsqueda." (R6); sin query →
@@ -49,7 +49,7 @@
   - **Hecho:** con query sin match, el grupo muestra el mensaje "coincide con la búsqueda".
   - Depende de: T4.
 
-- [ ] **T6. Cablear "En reparto" (grilla + mapa + panel) al filtrado.**
+- [x] **T6. Cablear "En reparto" (grilla + mapa + panel) al filtrado.**
   - La grilla mapea `porGestionarFiltrado` (reemplaza `porGestionar.map` en la grilla).
   - Recablear `paradasMapa` y `detalleOrden` para que DERIVEN de `porGestionarFiltrado`
     (hoy leen `porGestionar`, `MisAsignacionesModule.tsx:83-95` y `:114-126`) → mapa y
@@ -63,7 +63,7 @@
 
 ## Bloque 3 — Tests de componente y cierre
 
-- [ ] **T7. Tests de componente** en `tests/components/MisAsignacionesModule.test.tsx`
+- [x] **T7. Tests de componente** en `tests/components/MisAsignacionesModule.test.tsx`
     (ampliar el archivo existente, no reescribirlo).
   - R1: el `searchbox` está visible sobre ambos grupos.
   - R2: teclear filtra ambos grupos por `numGuia` / `numRemision` / `destinatario`.
@@ -78,7 +78,7 @@
   - **Hecho:** todos pasan y los tests previos del archivo siguen verdes.
   - Depende de: T3, T5, T6.
 
-- [ ] **T8. Verificación final.**
+- [x] **T8. Verificación final.**
   - `./init.sh` en verde + `pnpm test` (o el runner del repo) con la suite completa.
   - Mapa R→test completo (para `progress/impl_114.md` del implementer).
   - **Hecho:** init verde, suite verde, cada R con su test.
