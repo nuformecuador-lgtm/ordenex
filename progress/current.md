@@ -26,9 +26,14 @@ patrón 103/104/105). `./init.sh` **verde** antes del merge (484 archivos / 4815
 `no-embalaje` verdes; reviewer **APROBADO-CON-NOTAS**, 0 bloqueantes, trazabilidad R1–R13 completa
 (`progress/review_137-...md`). Se reinició de cero desde el spec del gate (se descartó una WIP pre-gate
 que usaba `en_tienda`).
-- **⏳ En curso:** mergeado `origin/dev` (34 commits del flow); `backend_dev` re-verifica el verde y
-  extiende el rename al código nuevo de dev (etiquetas/analítica/chat) para que el guard R13 y la suite
-  sigan verdes.
+- **✅ Merge de `dev` resuelto + re-verificado (`fix f99e44c`):** census R13 + `no-embalaje` verdes,
+  **cero regresiones** (+11 tests nuevos del rename pasan); los 3 literales viejos que trajo dev,
+  renombrados. Rama pusheada, PR #157 mergeable.
+- **⚠️ `./init.sh` local ROJO por breakage PRE-EXISTENTE de `dev`**, NO del rename: 34 errores de
+  typecheck + 30 tests en features de dev (feat-92 auth, chat/ubicación, zonas, `RUTA_VIGENTE`
+  duplicado + `sincronizarRuta` en MisAsignacionesModule). Demostrado idéntico contra un worktree
+  limpio de `origin/dev`. `dev` pasa en Vercel porque `next build` no type-chequea tests; el rojo
+  local se coló al trunk. **Requiere fix aparte (dueño de flow/feat-92), no en el PR del rename.**
 - **Deuda post-merge (Nota-3):** `prisma migrate deploy` + verificar `down.sql` con `db:rollback`
   (migración `db/migrations/20260724120000_order_status_rename_nomenclatura/`).
 - **138/139/140** (recepción central / devolución rechazadas / guardia) siguen `spec_ready`, encadenadas.
