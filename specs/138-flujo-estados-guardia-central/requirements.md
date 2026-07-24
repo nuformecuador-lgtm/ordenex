@@ -17,9 +17,9 @@ registra historial + encola el webhook (feature 99) pero **NO valida** que la tr
   `origen = null` para la creación (null -> X).
 - **Disparador / familia:** el `origen_tipo` (enum `orden_historial_origen_tipo`,
   `lib/types/orden-historial.ts`) y el rol/actor que ejecuta la transición.
-- **Estado terminal:** estado sin salida esperada en el flujo normal. Por decisión de
-  la feature: `entregada` y `en_tienda` (ver Pregunta abierta Q1 sobre `en_tienda` vs
-  `recibido_origen`).
+- **Estado terminal:** estado sin salida esperada en el flujo normal. Por decisión del
+  gate: `entregada` y `devuelta_a_tienda` (Q1 RESUELTA; 135 renombra
+  `recibido_origen -> devuelta_a_tienda`).
 - **Estado de creación / entrada:** estado en el que una orden puede NACER (null -> X).
   Hoy: `en_preparacion` (default), `en_fulfillment` (tienda fulfillment), y el estado
   inicial del canal integrador (`carga_api`). Ver Q5.
@@ -96,7 +96,7 @@ inmutable y se resuelve una vez por proceso).
 
 **R14** — El sistema DEBE proveer un test que recorra el grafo de `TRANSICIONES` y verifique
 que **todo estado NO terminal** tenga al menos UNA entrada y al menos UNA salida, donde:
-- los estados terminales (`entregada`, `en_tienda`) están exentos de necesitar salida;
+- los estados terminales (`entregada`, `devuelta_a_tienda`) están exentos de necesitar salida (Q1 resuelta);
 - los estados de creación (R3) se consideran con entrada desde un nodo virtual `START`.
 
 **R15** — El test de R14 DEBE FALLAR SI aparece un **callejón sin salida** (estado no
@@ -120,20 +120,21 @@ feature (docs/specs.md, trazabilidad).
 > Estas ambigüedades NO se resuelven inventando supuestos; se elevan para la puerta de
 > aprobación. El diseño propone una respuesta por defecto donde es seguro, marcada `[def]`.
 
-**Q1 — `en_tienda` vs `recibido_origen`.** El catálogo ACTUAL (`ORDER_STATUS_SEED`) NO
-contiene `en_tienda`; el terminal del flujo de devolución hoy es `recibido_origen`
-(14.º valor, "la tienda de origen la recibió"). El enunciado de la feature nombra el
-terminal como `en_tienda`. Se asume que el **renombre 135** hace `recibido_origen ->
-en_tienda`. `[def]` El mapa se escribe con `en_tienda` como terminal; si 135 aún no está
-mergeado, el terminal efectivo es `recibido_origen`. Confirmar el renombre exacto de 135.
+**Q1 — [RESUELTA por el gate] terminal del flujo de devolución.** El catálogo ACTUAL
+(`ORDER_STATUS_SEED`) tiene `recibido_origen` como terminal del flujo de devolución
+(14.º valor). El **renombre 135** hace `recibido_origen -> devuelta_a_tienda`. Los estados
+terminales son `entregada` y `devuelta_a_tienda`. El mapa se escribe con la nomenclatura
+post-135; el implementer aterriza 138 sobre un catálogo que ya tiene los renombres (135 es
+dependencia).
 
-**Q2 — `en_ruta_bodega_principal` (estado sin entrada natural).** El inventario revela
-que `en_ruta_bodega_principal` (6.º valor) NO tiene ninguna transición natural de ENTRADA
-en el código actual: su única entrada posible es el escape hatch genérico o la carga, y su
-única salida es la cancelación por API (`cancelacion_api -> devuelta_origen`). Es un
-cuello de botella real que el test de R14/R15 detectaría. ¿Es un estado vestigial/legado a
-declarar como excepción (allowlist) o hay que darle una entrada de flujo? Esta feature lo
-inventaría y lo expone; NO decide unilateralmente eliminarlo.
+**Q2 — `en_ruta_bodega_central` (estado sin entrada natural).** El inventario revela que
+`en_ruta_bodega_central` (post-135; hoy `en_ruta_bodega_principal`, 6.º valor) NO tiene
+ninguna transición natural de ENTRADA en el código actual: su única entrada posible es el
+escape hatch genérico o la carga, y su única salida es la cancelación por API
+(`cancelacion_api -> devolviendo_a_tienda`). Es un cuello de botella real que el test de
+R14/R15 detectaría. ¿Es un estado vestigial/legado a declarar como excepción (allowlist) o
+hay que darle una entrada de flujo? Esta feature lo inventaría y lo expone; NO decide
+unilateralmente eliminarlo.
 
 **Q3 — Política del escape hatch.** ¿El humano quiere un override administrativo amplio
 (maestro/admin puede forzar cualquier `origen -> destino`) o incluso el ajuste
@@ -142,13 +143,19 @@ guardia y las aristas de ajuste legítimas se declaren; un override amplio debil
 garantía de conectividad. Si se quiere el override, definir cómo mantener R14/R15
 significativo.
 
-**Q4 — Alcance de 135/136/137.** Estas features aún no están en `feature_list.json` ni en
-`src`/`lib`. El mapa DEBE incluir sus transiciones (renombres de 135, recepción central de
-136, devolución de rechazadas de 137), pero su lista concreta no es verificable hoy contra
-código. Se necesita la lista exacta de: (a) valores renombrados por 135; (b) estado(s) y
-aristas nuevas de la recepción central (136); (c) aristas del flujo de devolución de
-rechazadas (137). Sin ellas, el mapa se entrega para el catálogo ACTUAL y con marcadores
-`TODO(135/136/137)` en las aristas afectadas.
+**Q4 — Alcance de 135/136/137.** Nomenclatura final confirmada por el gate:
+- **135 (renombres):** `en_reparto -> en_ruta`, `en_espera_aceptacion -> por_recoger`,
+  `en_bodega -> en_bodega_central`, `en_ruta_bodega_principal -> en_ruta_bodega_central`,
+  `devuelta_origen -> devolviendo_a_tienda`, `recibido_origen -> devuelta_a_tienda`. El
+  mapa (apéndice A) ya usa estos nombres.
+- **137 (devolución de rechazadas):** introduce el estado `devolviendo_a_bodega_central`
+  ("en ruta de devolución a central"). Sus aristas concretas (origen/destino) no son
+  verificables hoy contra código; quedan marcadas `TODO(137)` en el mapa hasta que 137
+  aterrice.
+- **136 (recepción central):** estado(s) y aristas nuevas aún por confirmar; marcadas
+  `TODO(136)`.
+Falta cerrar: (a) las aristas exactas de 137 alrededor de `devolviendo_a_bodega_central`;
+(b) el/los estado(s) y aristas de 136.
 
 **Q5 — Validación de la creación (`null -> X`).** ¿Debe la guardia rechazar crear una
 orden directamente en un estado no-inicial (p. ej. `en_reparto`), o la validación de

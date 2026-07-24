@@ -7,7 +7,7 @@
 ## Bloque 0 — Migraciones y catálogo (fundacional, bloquea casi todo lo demás)
 
 - [ ] **T0.1 — Catálogo TS + 3 valores (R1).** Añadir `por_devolver`,
-  `en_ruta_devolucion_central`, `por_devolver_a_tienda` a `ORDER_STATUS_SEED`.
+  `devolviendo_a_bodega_central`, `por_devolver_a_tienda` a `ORDER_STATUS_SEED`.
   - Archivos: `lib/types/order-status.ts`.
   - Hecho: los 3 valores están en la lista tipada; `OrderStatusValue` los incluye; typecheck verde.
 
@@ -58,19 +58,20 @@
     (mensajero/prioridad intactos), `rechazado` no dispara nada (R10), y que una rechazada de
     origen SLA (con mensajero intacto) es recogida (R12).
 
-## Bloque 2 — Backend: transiciones manuales (depende de Bloque 0; T2.x entre sí en paralelo)
+## Bloque 2 — Backend: envíos (lote) y recepciones (depende de Bloque 0; T2.x en paralelo)
 
-- [ ] **T2.1 [P] — Service `por_devolver → en_ruta_devolucion_central` (R13/R14/R20/R21).** Nuevo
-  service + interfaz + Server Action, molde `DevolucionOrigenService`/`devolucion-origen.ts`. Autz
-  adminSatelite de la zona de la orden; guarda de estado; `ajuste_estado`.
+- [ ] **T2.1 [P] — Service ENVÍO satélite `por_devolver → devolviendo_a_bodega_central`
+  (R13/R14/R22/R23).** Nuevo service + interfaz + Server Action, molde
+  `DevolucionOrigenService`/`devolucion-origen.ts`. Autz adminSatelite de la zona; guarda de estado;
+  `ajuste_estado`.
   - Archivos: `lib/services/EnvioDevolucionCentralService.ts`,
     `lib/interfaces/services/IEnvioDevolucionCentralService.ts`,
     `lib/actions/envio-devolucion-central.ts`.
   - Hecho: transición guardada; forbidden sin efecto para no-adminSatelite / zona ajena;
-    idempotente en `en_ruta_devolucion_central`.
+    idempotente en `devolviendo_a_bodega_central`.
 
-- [ ] **T2.2 [P] — Repurpose `DevolucionOrigenService` → `por_devolver_a_tienda →
-  devolviendo_a_tienda` (R9/R17/R18/R20/R21).** Cambiar constante de origen `rechazada →
+- [ ] **T2.2 [P] — Repurpose `DevolucionOrigenService` → ENVÍO central `por_devolver_a_tienda →
+  devolviendo_a_tienda` (R9/R15/R16/R22/R23).** Cambiar constante de origen `rechazada →
   por_devolver_a_tienda`; autz maestro/admin (central), reemplazando `esBodegaResponsable` por-zona
   por check central directo; actualizar doc-comments.
   - Archivos: `lib/services/DevolucionOrigenService.ts`,
@@ -78,23 +79,32 @@
   - Hecho: origen `por_devolver_a_tienda`; solo maestro/admin autoriza; ya no existe salida directa
     desde `rechazada`.
 
-- [ ] **T2.3 — Reuso recepción central 136 (R15/R16).** Registrar/gobernar el par
-  `en_ruta_devolucion_central → por_devolver_a_tienda` en el mecanismo de recepción central de la
-  136. Depende del contrato final de la 136 (pregunta abierta #3).
+- [ ] **T2.3 — Reuso recepción central 136 `devolviendo_a_bodega_central → por_devolver_a_tienda`
+  (R17).** Registrar/gobernar el par en el mecanismo de recepción central de la 136. Depende del
+  contrato final de la 136 (pregunta abierta #2).
   - Archivos: los del service/repo de recepción central de la 136 (a confirmar).
-  - Hecho: escanear en central una orden `en_ruta_devolucion_central` la deja en
+  - Hecho: recibir en central una orden `devolviendo_a_bodega_central` la deja en
     `por_devolver_a_tienda`; autz maestro/admin; guarda de estado; idempotente.
 
-- [ ] **T2.4 — Verificar tramo final tienda `devolviendo_a_tienda → en_tienda` (R19).** Sin lógica
-  nueva: confirmar que `RecepcionOrigenService` opera con los nombres renombrados por 135.
+- [ ] **T2.4 — Verificar tramo final tienda `devolviendo_a_tienda → devuelta_a_tienda` (R18).** Sin
+  lógica nueva: confirmar que `RecepcionOrigenService` opera con los nombres renombrados por 135.
   - Archivos: `lib/services/RecepcionOrigenService.ts` (solo verificación/constantes vía 135).
-  - Hecho: test existente de recepción tienda pasa con `devolviendo_a_tienda`/`en_tienda`.
+  - Hecho: test de recepción tienda pasa con `devolviendo_a_tienda`/`devuelta_a_tienda`.
 
-- [ ] **T2.5 — Tests unit de las transiciones manuales (R13–R21).**
+- [ ] **T2.5 — Backend visibilidad satélite: scope `por_devolver` + grupo en tránsito (R21).**
+  `RecepcionSateliteService.listar`: cambiar el scope de `porDevolver` de `rechazada` a
+  `por_devolver` y añadir grupo `enTransitoACentral` = `devolviendo_a_bodega_central` de la zona.
+  - Archivos: `lib/services/RecepcionSateliteService.ts`, su repositorio (query por estado),
+    interfaz del DTO (`IRecepcionSateliteService`).
+  - Hecho: la acción devuelve `por_devolver` (accionable) y `devolviendo_a_bodega_central`
+    (informativo), acotados a la zona.
+
+- [ ] **T2.6 — Tests unit de servicios de envío/recepción/scope (R13–R18/R21).**
   - Archivos: `tests/unit/services/EnvioDevolucionCentralService.test.ts`,
     `tests/unit/services/DevolucionOrigenService.test.ts` (actualizar al nuevo origen),
+    `tests/unit/services/RecepcionSateliteService.listar.test.ts` (scope nuevo),
     tests de la recepción central 136 (extender con el par nuevo).
-  - Hecho: cada guarda de estado, autz y camino de idempotencia/conflict tiene su test.
+  - Hecho: cada guarda de estado, autz y camino idempotencia/conflict tiene su test.
 
 ## Bloque 3 — Frontend (depende de Bloque 0 para labels; de Bloque 2 para acciones)
 
@@ -102,35 +112,51 @@
   - Archivos: `app/(app)/ordenes/_components/EstatusBadge.tsx`.
   - Hecho: los 3 estados renderizan etiqueta legible + variante; sin `any`; sin sigla "SLA".
 
-- [ ] **T3.2 — `OrdenesTabs`: retirar acción en `rechazada`, añadir en `por_devolver_a_tienda`
-  (R9/R17).** Quitar "Devolver a la tienda" de la tab `rechazada`; añadir "Enviar a la tienda" en
-  la tab `por_devolver_a_tienda` reusando el modal (textos actualizados).
+- [ ] **T3.2 — `OrdenesTabs` (central): retirar acción en `rechazada`, añadir lote en
+  `por_devolver_a_tienda` (R9/R15).** Quitar "Devolver a la tienda" de la tab `rechazada`; añadir
+  "Enviar a la tienda" en la tab `por_devolver_a_tienda` reusando el checkbox de `accionesLote` + el
+  modal (textos actualizados) sobre la Server Action existente.
   - Archivos: `app/(app)/ordenes/_components/OrdenesTabs.tsx`,
     `app/(app)/ordenes/_components/DevolverATiendaModal.tsx` (labels/target).
   - Hecho: la tab `rechazada` no ofrece devolución manual; `por_devolver_a_tienda` ofrece "Enviar a
-    la tienda" y dispara la Server Action repurposada.
+    la tienda" por lote y dispara la Server Action repurposada.
 
-- [ ] **T3.3 — Superficie adminSatelite "Enviar a central" (R13, pregunta abierta #2).** Listado de
-  `por_devolver` de su zona + acción "Enviar a central" en `/recepcion-satelite`.
-  - Archivos: `app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx` (+ componente
-    modal/acción si aplica).
-  - Hecho: el adminSatelite ve sus `por_devolver` y las envía a central; feedback por toast.
+- [ ] **T3.3 — `RecepcionSateliteModule` (satélite): sección "Por devolver" por lote + sección en
+  tránsito (R13/R21).** Convertir "Por devolver" de cards per-fila a `DataTable` seleccionable
+  (reusar `SelectAllCheckbox` + `Checkbox` + `Set` propio, patrón "Recibidas") con botón "Enviar a
+  central" → loop `enviarACentral`. Eliminar `FilaPorDevolver` + `devolverATienda`. Añadir sección
+  informativa read-only para `devolviendo_a_bodega_central`. Pasar el nuevo grupo por props desde
+  `page.tsx`.
+  - Archivos: `app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx`,
+    `app/(app)/recepcion-satelite/page.tsx`.
+  - Hecho: el adminSatelite selecciona `por_devolver` y las envía a central por lote; ve las
+    `devolviendo_a_bodega_central` en tránsito; feedback por toast.
 
-- [ ] **T3.4 — Recepción central UI 136 (R15).** El escáner/página central de la 136 acepta órdenes
-  `en_ruta_devolucion_central` y muestra el resultado `por_devolver_a_tienda`.
+- [ ] **T3.4 — Visibilidad central/tienda en `OrdenesTabs` (R19/R20).** Verificar que los 4 estados
+  del flujo aparecen como tabs para maestro/admin (exclude `["pendiente"]`) y que los del tramo
+  tienda no quedan excluidos para adminTienda; ajustar `EXCLUDE_POR_ROL` solo si hiciera falta
+  (incluida la nota 135 de `en_bodega` → `en_bodega_central`).
+  - Archivos: `app/(app)/ordenes/page.tsx`.
+  - Hecho: central ve los 4 estados; tienda ve `por_devolver_a_tienda`/`devolviendo_a_tienda`/
+    `devuelta_a_tienda` de sus órdenes.
+
+- [ ] **T3.5 — Recepción central UI 136 (R17).** El escáner/página central de la 136 acepta órdenes
+  `devolviendo_a_bodega_central` y muestra el resultado `por_devolver_a_tienda`.
   - Archivos: los de la UI de recepción central de la 136 (a confirmar).
-  - Hecho: flujo QR central deja la orden en `por_devolver_a_tienda` con feedback.
+  - Hecho: flujo QR/guía central deja la orden en `por_devolver_a_tienda` con feedback.
 
 ## Bloque 4 — Cierre
 
-- [ ] **T4.1 — Test de integración del recorrido completo (R5, R13–R19).** Cierre con rechazadas
-  central+satélite aprobado → estados iniciales correctos → recorrido por-orden hasta `en_tienda`.
+- [ ] **T4.1 — Test de integración del recorrido completo (R5, R13–R18).** Cierre con rechazadas
+  central+satélite aprobado → estados iniciales correctos → recorrido por-orden hasta
+  `devuelta_a_tienda`.
   - Archivos: `tests/integration/devolucion-rechazadas.flow.test.ts`.
-  - Hecho: ambas ramas (central/satélite) llegan a `en_tienda`; historial completo y coherente.
+  - Hecho: ambas ramas (central/satélite) llegan a `devuelta_a_tienda`; historial completo y
+    coherente.
 
 - [ ] **T4.2 — Mapa de trazabilidad R→test + verificación ejecutable.**
   - Archivos: `progress/impl_137-devolucion-rechazadas-estados.md`.
-  - Hecho: cada `R1..R22` mapeado a un test concreto; `./init.sh` y la suite en verde.
+  - Hecho: cada `R1..R24` mapeado a un test concreto; `./init.sh` y la suite en verde.
 
 ## Archivos esperados (resumen)
 
@@ -147,14 +173,17 @@
 - `lib/actions/envio-devolucion-central.ts` (N)
 - `lib/services/DevolucionOrigenService.ts` (M: origen `por_devolver_a_tienda` + autz central)
 - `lib/interfaces/services/IDevolucionOrigenService.ts` (M: doc/semántica)
+- `lib/services/RecepcionSateliteService.ts` (M: scope `por_devolver` + grupo en tránsito) + su repo + `IRecepcionSateliteService` (M)
 - `lib/services/RecepcionOrigenService.ts` (verificación vía 135)
-- Recepción central 136 (M: registrar par `en_ruta_devolucion_central → por_devolver_a_tienda`)
+- Recepción central 136 (M: registrar par `devolviendo_a_bodega_central → por_devolver_a_tienda`)
 
 **Frontend**
 - `app/(app)/ordenes/_components/EstatusBadge.tsx` (M)
 - `app/(app)/ordenes/_components/OrdenesTabs.tsx` (M)
 - `app/(app)/ordenes/_components/DevolverATiendaModal.tsx` (M: labels/target)
+- `app/(app)/ordenes/page.tsx` (M: verificar/ajustar `EXCLUDE_POR_ROL`)
 - `app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx` (M)
+- `app/(app)/recepcion-satelite/page.tsx` (M)
 - UI recepción central 136 (M)
 
 **Tests**
@@ -163,6 +192,7 @@
 - `tests/unit/services/CierresAdminService.aprobar.devolucion.test.ts` (N)
 - `tests/unit/services/EnvioDevolucionCentralService.test.ts` (N)
 - `tests/unit/services/DevolucionOrigenService.test.ts` (M)
+- `tests/unit/services/RecepcionSateliteService.listar.test.ts` (M)
 - `tests/integration/devolucion-rechazadas.flow.test.ts` (N)
 - `progress/impl_137-devolucion-rechazadas-estados.md` (N)
 
@@ -173,6 +203,6 @@
 ```
 Bloque 0 ──► Bloque 1 ──► T4.1
    │            │
-   └──► Bloque 2 ──► Bloque 3 (T3.2/T3.3/T3.4) ──► T4.1 ──► T4.2
+   ├──► Bloque 2 ──► Bloque 3 (T3.2/T3.3/T3.4/T3.5) ──► T4.1 ──► T4.2
    └──► T3.1 (labels, solo necesita Bloque 0)
 ```

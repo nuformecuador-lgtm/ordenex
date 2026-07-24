@@ -5,10 +5,10 @@
 
 ## Bloque 0 — Preludio (bloqueante)
 
-- [ ] **T0.1 Confirmar las preguntas abiertas Q1–Q6** con el humano en la puerta de
-  aprobación. En especial Q1 (`en_tienda` vs `recibido_origen`), Q2
-  (`en_ruta_bodega_principal` vestigial), Q3 (política escape hatch), Q4 (alcance
-  135/136/137).
+- [ ] **T0.1 Confirmar las preguntas abiertas** con el humano en la puerta de aprobación.
+  Q1 ya RESUELTA por el gate (terminales `entregada`/`devuelta_a_tienda`; renombres 135
+  aplicados). Pendientes: Q2 (`en_ruta_bodega_central` vestigial), Q3 (política escape
+  hatch), Q4 (aristas de 136/137 alrededor de `devolviendo_a_bodega_central`), Q5/Q6.
   - Hecho: respuestas registradas; el mapa se ajusta a ellas antes de T2.
   - Depende de: —
 
@@ -51,8 +51,9 @@
 - [ ] **T3.1 Test de conectividad del grafo** (`START` virtual + creación/terminales):
   todo no-terminal con `inDegree>=1` y `outDegree>=1`; terminales con `inDegree>=1`;
   cobertura del SEED salvo allowlist vestigial. (R14, R15, R16)
-  - Hecho: pasa con el mapa actual (o falla nombrando `en_ruta_bodega_principal` si Q2 no
-    lo allowlista); el nombre del test describe el comportamiento.
+  - Hecho: pasa con el mapa (o falla nombrando `en_ruta_bodega_central` si Q2 no lo
+    allowlista); terminales `entregada`/`devuelta_a_tienda`; el nombre del test describe el
+    comportamiento.
   - Depende de: T1.1.
 
 - [ ] **T3.2 `[P]` Test unit de `assertTransicionValida`**: acepta cada arista del

@@ -2,8 +2,9 @@
 
 > Requisitos: ver `requirements.md` (R1–R13). Este documento fija el CÓMO técnico y el
 > inventario real clasificado (Apéndice A). Regla de oro: **se renombra el `value` (el
-> identificador que backend y frontend comparten); las etiquetas visibles, el orden del
-> seed, `orden.estatus_id` y las migraciones históricas NO se tocan.**
+> identificador único que comparten backend, frontend y contrato externo) y se ALINEA la
+> etiqueta UI a ese value legible (R8); el orden del seed, `orden.estatus_id` y las
+> migraciones históricas NO se tocan.**
 
 ## 0. Corrección de premisa (por el censo)
 La descripción habla de `ALTER TYPE order_status_value RENAME VALUE`. **No aplica**: el
@@ -49,7 +50,7 @@ UPDATE "order_status" SET "value" = 'por_recoger'            WHERE "value" = 'en
 UPDATE "order_status" SET "value" = 'en_bodega_central'      WHERE "value" = 'en_bodega';
 UPDATE "order_status" SET "value" = 'en_ruta_bodega_central' WHERE "value" = 'en_ruta_bodega_principal';
 UPDATE "order_status" SET "value" = 'devolviendo_a_tienda'   WHERE "value" = 'devuelta_origen';
-UPDATE "order_status" SET "value" = 'en_tienda'              WHERE "value" = 'recibido_origen';
+UPDATE "order_status" SET "value" = 'devuelta_a_tienda'      WHERE "value" = 'recibido_origen';
 ```
 
 `down.sql` (DOWN):
@@ -60,7 +61,7 @@ UPDATE "order_status" SET "value" = 'en_espera_aceptacion'     WHERE "value" = '
 UPDATE "order_status" SET "value" = 'en_bodega'                WHERE "value" = 'en_bodega_central';
 UPDATE "order_status" SET "value" = 'en_ruta_bodega_principal' WHERE "value" = 'en_ruta_bodega_central';
 UPDATE "order_status" SET "value" = 'devuelta_origen'          WHERE "value" = 'devolviendo_a_tienda';
-UPDATE "order_status" SET "value" = 'recibido_origen'          WHERE "value" = 'en_tienda';
+UPDATE "order_status" SET "value" = 'recibido_origen'          WHERE "value" = 'devuelta_a_tienda';
 ```
 
 **Por qué el `WHERE` por igualdad exacta es seguro:** `WHERE "value" = 'en_bodega'` NO
@@ -78,7 +79,7 @@ catálogo (≤15 filas), no reescribe `orden` ni el historial ni invalida índic
 3. Actualizar mapas `Record<OrderStatusValue,…>` (EstatusBadge) — el compilador los
    FUERZA por exhaustividad (clave faltante/sobrante = error).
 4. Actualizar constantes/sets/uniones-literal de la lógica (§Apéndice A.d) y los
-   contratos externos si el gate aprueba (§A.b, R9).
+   contratos externos (§A.b, R9, aprobado por el gate).
 5. Actualizar tests y seeds de QA (§A.e/A.f).
 6. `pnpm run db:migrate` en local (memoria del repo: migrar tras merge). Regenerar
    cliente Prisma si el type-check da falso negativo (memoria del repo).
@@ -94,6 +95,10 @@ catálogo (≤15 filas), no reescribe `orden` ni el historial ni invalida índic
 - **Compilador (parcial):** `OrderStatusValue = (typeof ORDER_STATUS_SEED)[number]`; los
   mapas `Record<OrderStatusValue,…>` (LABELS/VARIANT/CLASS) y las uniones que asignan
   desde `OrderStatusValue` fallan a compilar si una clave no se actualiza.
+- **Etiquetas (R8, no compilables):** el compilador fuerza las CLAVES pero NO el TEXTO de
+  los labels (son strings arbitrarios). El alineamiento value↔label se verifica con los
+  tests de UI (`tests/components/EstatusLabel.test.ts` y los tests de badge/columnas), no
+  con el guard de censo.
 - **Guard de censo (R13, la red real):** las constantes string sueltas, los `Set`/arrays,
   las uniones tipadas por literal crudo (`estado: "recibido_origen"`) y los datos de test
   son **strings** que el compilador NO valida. Un test guard hace un grep case-sensitive
@@ -108,13 +113,19 @@ catálogo (≤15 filas), no reescribe `orden` ni el historial ni invalida índic
   `ROLES_SEED`). El seed idempotente (`scripts/seed-catalogos.ts:seedOrderStatus`) itera
   la tupla por `upsert` sobre `value`: al cambiar los literales sembrará los nuevos values
   sin lista duplicada (NO requiere edición de `seed-catalogos.ts`).
-- **Presentación** (`EstatusBadge.tsx`): cambian solo las CLAVES de los 3 mapas; las
-  etiquetas de texto y la variante/clase se conservan. El case especial de línea ~96
-  (`value === "en_ruta_bodega_satelite"`) NO cambia (ese value no se renombra).
+- **Presentación** (`EstatusBadge.tsx`): cambian las CLAVES de los 3 mapas Y el TEXTO de
+  las etiquetas, que pasan a ser la versión legible directa del `value` (R8); la variante y
+  la clase se conservan. Cambian de texto 5 labels: `en_bodega_central`
+  ("En bodega central"), `en_ruta_bodega_central` ("En ruta a bodega central"),
+  `devuelta_a_tienda` ("Devuelta a tienda") — renombrados — y `en_ruta_bodega_satelite`
+  ("En ruta a bodega satélite"), `en_bodega_satelite` ("En bodega satélite") — NO
+  renombrados, pero su etiqueta divergía del value. El case especial de línea ~96
+  (`value === "en_ruta_bodega_satelite"`, label dinámico con `zonaNombre`) NO cambia su
+  lógica y queda coherente con la nueva etiqueta estática.
 - **Lógica** (services/repositories/actions): decenas de constantes/sets pasan al nuevo
   value (§Apéndice A.d). El resolver de transiciones (`findEstatusIdByValue`) es agnóstico
   al nombre; solo importa que la constante y la fila DB coincidan.
-- **Contrato externo** (API/webhook): condicionado por R9/Q2.
+- **Contrato externo** (API/webhook): renombrado en TODAS las capas (R9, aprobado; breaking).
 - **RLS:** no aplica — no se crean tablas ni policies; el rename no cambia RLS de `orden`
   ni de `order_status`.
 
@@ -199,11 +210,16 @@ Clasificación: **(a)** catálogo/tabla · **(b)** tipos TS/constantes + contrat
   `lib/types/orden-historial.ts:25,28-31,47,61,66-67`, `lib/types/orden-guia.ts:7` —
   uniones/comentarios tipados por literal. **CAMBIA (literales; comentarios cosméticos).**
 
-### (c) Labels UI → CAMBIA la CLAVE, NO el texto
+### (c) Labels UI → CAMBIA la CLAVE (6) y el TEXTO de 5 etiquetas (R8)
 - `app/(app)/ordenes/_components/EstatusBadge.tsx:16,17,20,22,24,27` — claves de
   `ORDER_STATUS_LABELS`; `:41,42,45,47,49,54` — claves de `ORDER_STATUS_VARIANT`;
-  `:67,69` — claves de `ORDER_STATUS_CLASS`. **CAMBIA la clave; la etiqueta y la variante
-  se conservan.** El case especial `en_ruta_bodega_satelite` (~:96) NO cambia.
+  `:67,69` — claves de `ORDER_STATUS_CLASS`. **CAMBIA la clave (6 renombrados); la variante
+  y la clase se conservan.** ADEMÁS el TEXTO de 5 labels se alinea al value (R8):
+  `en_bodega_central`="En bodega central", `en_ruta_bodega_central`="En ruta a bodega
+  central", `devuelta_a_tienda`="Devuelta a tienda", y —sin renombrar el value—
+  `en_ruta_bodega_satelite`="En ruta a bodega satélite" (:23) y `en_bodega_satelite`="En
+  bodega satélite" (:26). El case especial `en_ruta_bodega_satelite` (~:96) mantiene su
+  lógica (label dinámico con `zonaNombre`).
 - `components/shared/PrioridadResalte.tsx`, `components/private/BodegaLiberadasHoy.tsx`
   y ~18 componentes bajo `app/(app)/**` (ver counts en tasks §Archivos). **CAMBIA** claves/
   comparaciones/comentarios según cada archivo (p. ej. `estatusValue="en_bodega"` en
@@ -249,9 +265,14 @@ Constantes de estado (resolver value→id): **CAMBIA cada literal.**
 Alto volumen. Se actualizan datos de entrada, seeds de fixtures y aserciones. Dos casos
 especiales:
 - `tests/unit/types/order-status.test.ts` — aserción de set (:12-30) a los nuevos values y
-  aserciones POSICIONALES (`[8]`→`por_recoger`, `[10]`→`en_ruta`, `[13]`→`en_tienda`),
+  aserciones POSICIONALES (`[8]`→`por_recoger`, `[10]`→`en_ruta`, `[13]`→`devuelta_a_tienda`),
   conservando el índice; el segundo `describe` (`seedOrderStatus`, :100-121) a los nuevos
   `rows.has(...)`.
+- `tests/components/EstatusLabel.test.ts` (:15,16,19,22,23) y demás tests de badge/columnas
+  que afirman TEXTO de etiqueta — actualizar a los nuevos labels (R8): "En bodega central",
+  "En ruta a bodega central", "Devuelta a tienda", "En ruta a bodega satélite", "En bodega
+  satélite" (antes "En B. Central"/"Enviando a B. Central"/"En tienda"/"Por recibir en
+  satélite"/"En satélite").
 - `tests/integration/db/order-status-enum-migration.test.ts` — **desacoplar** de
   `ORDER_STATUS_SEED` y afirmar los 8 literales HISTÓRICOS del enum (R10), ya que 3 de los
   6 renombrados (`en_bodega`, `en_ruta_bodega_principal`, `devuelta_origen`) están entre

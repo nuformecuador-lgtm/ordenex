@@ -10,8 +10,8 @@
   - `TRANSICIONES`: mapa `OrderStatusValue -> Destino[]` (cada destino con su metadato
     de familia/rol, R2).
   - `ESTADOS_CREACION`: `readonly OrderStatusValue[]` (destinos válidos de `null -> X`).
-  - `ESTADOS_TERMINALES`: `readonly OrderStatusValue[]` = `["entregada", "en_tienda"]`
-    (ver Q1).
+  - `ESTADOS_TERMINALES`: `readonly OrderStatusValue[]` = `["entregada", "devuelta_a_tienda"]`
+    (Q1 resuelta por el gate; 135 renombra `recibido_origen -> devuelta_a_tienda`).
   - `assertTransicionValida(origen: OrderStatusValue | null, destino: OrderStatusValue): void`
     — función PURA que lanza `TransicionIlegalError` si la arista no existe (R6/R12/R13).
 - **El choke point** (`appendCambioEstado`) valida cada entrada del lote ANTES del
@@ -40,7 +40,7 @@ type Familia = OrdenHistorialOrigenTipo;         // reutiliza el enum existente
 interface Destino { to: OrderStatusValue; via: Familia; rol: string }
 export const TRANSICIONES: Readonly<Record<OrderStatusValue, readonly Destino[]>>;
 export const ESTADOS_CREACION: readonly OrderStatusValue[];
-export const ESTADOS_TERMINALES: readonly OrderStatusValue[]; // entregada, en_tienda
+export const ESTADOS_TERMINALES: readonly OrderStatusValue[]; // entregada, devuelta_a_tienda
 export class TransicionIlegalError extends Error {}            // R12
 export function assertTransicionValida(
   origen: OrderStatusValue | null,
@@ -97,9 +97,9 @@ cualquier valor del catálogo (sólo valida `existsEstatus`), y persiste vía el
 con `origen_tipo = ajuste_estado`. Al pasar por `appendCambioEstado`, **quedará sujeto a la
 guardia (R9)**: las aristas de ajuste administrativo legítimas se declaran explícitamente
 en `TRANSICIONES` (familia `ajuste_estado`). Hoy el código usa `ajuste_estado` para dos
-transiciones de flujo reales (devolver-a-tienda `rechazada -> devuelta_origen` y
-recibir-en-origen `devuelta_origen -> en_tienda`), que ya quedan cubiertas. Un override
-amplio `ANY -> ANY` NO se declara por defecto (debilitaría R14/R15); ver Q3.
+transiciones de flujo reales (devolver-a-tienda `rechazada -> devolviendo_a_tienda` y
+recibir-en-tienda `devolviendo_a_tienda -> devuelta_a_tienda`), que ya quedan cubiertas. Un
+override amplio `ANY -> ANY` NO se declara por defecto (debilitaría R14/R15); ver Q3.
 
 ## 6. Rutas / endpoints / integraciones
 
@@ -158,7 +158,24 @@ auditar N services a mano — justamente la deuda que esta feature salda.
 > `CierreDiaService`(deshacer)+`CierreDiaRepository`, `OrdenRepository`(cancelarViaApi/carga),
 > `OrdenService`(update/crear), `GestionOrdenRepository`, `RecuperacionBodegaRepository`,
 > `lib/types/order-status.ts`, `lib/types/orden-historial.ts`, `lib/config/ordenes.ts`.
-> Nomenclatura del catálogo ACTUAL. `en_tienda` = `recibido_origen` bajo el renombre 135 (Q1).
+> **Nomenclatura POST-135 (final, la que usa 138).** El mapa se escribe con los nombres
+> finales; la tabla A.0 da la correspondencia con los nombres del código de HOY para el
+> implementer (135 es dependencia de 138).
+
+### A.0 — Renombres 135 (nombre de hoy -> nombre final)
+
+| Código de hoy | Final (post-135) |
+| --- | --- |
+| `en_reparto` | `en_ruta` |
+| `en_espera_aceptacion` | `por_recoger` |
+| `en_bodega` | `en_bodega_central` |
+| `en_ruta_bodega_principal` | `en_ruta_bodega_central` |
+| `devuelta_origen` | `devolviendo_a_tienda` |
+| `recibido_origen` | `devuelta_a_tienda` (terminal) |
+
+Sin renombre: `entregada`, `devuelta`, `reprogramada`, `en_fulfillment`, `en_preparacion`,
+`en_ruta_bodega_satelite`, `rechazada`, `en_bodega_satelite`, `sin_gestionar`.
+137 añade el estado `devolviendo_a_bodega_central` (aristas `TODO(137)`).
 
 ### A.1 — Creación (null -> X)
 
@@ -173,44 +190,47 @@ auditar N services a mano — justamente la deuda que esta feature salda.
 
 ### A.2 — Transiciones de flujo (origen no nulo)
 
+> Nombres POST-135 (ver A.0 para la correspondencia con el código de hoy).
+
 | # | Origen | Destino | Familia | Actor | Call-site |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `en_fulfillment` | `en_espera_aceptacion` | `generacion_guia` | maestro/admin | `GuiaAsignacionService.generarGuia` (GAM+mensajero) |
-| 2 | `en_fulfillment` | `en_bodega` | `generacion_guia` | maestro/admin | `generarGuia` (GAM sin mensajero) |
+| 1 | `en_fulfillment` | `por_recoger` | `generacion_guia` | maestro/admin | `GuiaAsignacionService.generarGuia` (GAM+mensajero) |
+| 2 | `en_fulfillment` | `en_bodega_central` | `generacion_guia` | maestro/admin | `generarGuia` (GAM sin mensajero) |
 | 3 | `en_fulfillment` | `en_ruta_bodega_satelite` | `generacion_guia` | maestro/admin | `generarGuia` (no-GAM) |
-| 4 | `en_preparacion` | `en_espera_aceptacion` | `generacion_guia` | maestro/admin | `generarGuia` (GAM+mensajero) |
-| 5 | `en_preparacion` | `en_bodega` | `generacion_guia` | maestro/admin | `generarGuia` (GAM sin mensajero) |
+| 4 | `en_preparacion` | `por_recoger` | `generacion_guia` | maestro/admin | `generarGuia` (GAM+mensajero) |
+| 5 | `en_preparacion` | `en_bodega_central` | `generacion_guia` | maestro/admin | `generarGuia` (GAM sin mensajero) |
 | 6 | `en_preparacion` | `en_ruta_bodega_satelite` | `generacion_guia` | maestro/admin | `generarGuia` (no-GAM) |
-| 7 | `en_bodega` | `en_ruta_bodega_satelite` | `ruteo_satelite` | maestro/admin | `GuiaAsignacionService.rutearABodegaSatelite` |
-| 8 | `en_bodega` | `en_espera_aceptacion` | `asignacion_bodega` | maestro/admin | `GuiaAsignacionService.asignarDesdeBodega` |
-| 9 | `en_bodega_satelite` | `en_espera_aceptacion` | `asignacion_satelite` | adminSatelite | `AsignacionSateliteService.asignar` |
+| 7 | `en_bodega_central` | `en_ruta_bodega_satelite` | `ruteo_satelite` | maestro/admin | `GuiaAsignacionService.rutearABodegaSatelite` |
+| 8 | `en_bodega_central` | `por_recoger` | `asignacion_bodega` | maestro/admin | `GuiaAsignacionService.asignarDesdeBodega` |
+| 9 | `en_bodega_satelite` | `por_recoger` | `asignacion_satelite` | adminSatelite | `AsignacionSateliteService.asignar` |
 | 10 | `en_ruta_bodega_satelite` | `en_bodega_satelite` | `recepcion_satelite` | adminSatelite | `RecepcionSateliteService.recibir`/`recibirLote` |
-| 11 | `en_espera_aceptacion` | `en_reparto` | `recoleccion` | mensajero | `MisAsignacionesService.recogerAsignaciones` |
-| 12 | `en_reparto` | `entregada` | `gestion` | mensajero | `MisAsignacionesService.gestionar` |
-| 13 | `en_reparto` | `reprogramada` | `gestion` | mensajero | `gestionar` |
-| 14 | `en_reparto` | `devuelta` | `gestion` | mensajero | `gestionar` |
-| 15 | `en_reparto` | `rechazada` | `gestion` | mensajero | `gestionar` |
-| 16 | `en_reparto` | `sin_gestionar` | `corte_sin_gestionar` | sistema/cron | `CorteDiarioService` -> `CierreDiaRepository.crearCierre` |
-| 17 | `sin_gestionar` | `en_bodega` | `liberacion_sin_gestionar` | admin (aprobar) | `CierresAdminService.aprobarCierre` -> `resolverCierre` |
+| 11 | `por_recoger` | `en_ruta` | `recoleccion` | mensajero | `MisAsignacionesService.recogerAsignaciones` |
+| 12 | `en_ruta` | `entregada` | `gestion` | mensajero | `MisAsignacionesService.gestionar` |
+| 13 | `en_ruta` | `reprogramada` | `gestion` | mensajero | `gestionar` |
+| 14 | `en_ruta` | `devuelta` | `gestion` | mensajero | `gestionar` |
+| 15 | `en_ruta` | `rechazada` | `gestion` | mensajero | `gestionar` |
+| 16 | `en_ruta` | `sin_gestionar` | `corte_sin_gestionar` | sistema/cron | `CorteDiarioService` -> `CierreDiaRepository.crearCierre` |
+| 17 | `sin_gestionar` | `en_bodega_central` | `liberacion_sin_gestionar` | admin (aprobar) | `CierresAdminService.aprobarCierre` -> `resolverCierre` |
 | 18 | `sin_gestionar` | `en_bodega_satelite` | `liberacion_sin_gestionar` | admin (aprobar) | `resolverCierre` |
-| 19 | `devuelta` | `en_bodega` | `liberacion_devuelta_sla` | sistema/cron | `DevolucionSlaService` -> `liberarDevueltaSla` (reintento) |
+| 19 | `devuelta` | `en_bodega_central` | `liberacion_devuelta_sla` | sistema/cron | `DevolucionSlaService` -> `liberarDevueltaSla` (reintento) |
 | 20 | `devuelta` | `en_bodega_satelite` | `liberacion_devuelta_sla` | sistema/cron | `liberarDevueltaSla` (reintento) |
 | 21 | `devuelta` | `rechazada` | `escalado_devuelta_sla` | sistema/cron | `escalarDevueltaSla` (escalado + gestión sintética) |
 | 22 | `devuelta` | `reprogramada` | `reprogramacion_tienda` | adminTienda | `ReprogramacionTiendaService.reprogramar` |
-| 23 | `devuelta` | `en_bodega` | `recuperacion_manual` | maestro/admin/adminSatelite | `RecuperacionBodegaService.recuperar` |
+| 23 | `devuelta` | `en_bodega_central` | `recuperacion_manual` | maestro/admin/adminSatelite | `RecuperacionBodegaService.recuperar` |
 | 24 | `devuelta` | `en_bodega_satelite` | `recuperacion_manual` | adminSatelite | `recuperar` |
-| 25 | `reprogramada` | `en_bodega` | `liberacion_reprogramada` | sistema/cron | `LiberacionReprogramadaService` -> `liberarOrden` |
+| 25 | `reprogramada` | `en_bodega_central` | `liberacion_reprogramada` | sistema/cron | `LiberacionReprogramadaService` -> `liberarOrden` |
 | 26 | `reprogramada` | `en_bodega_satelite` | `liberacion_reprogramada` | sistema/cron | `liberarOrden` |
-| 27 | `rechazada` | `devuelta_origen` | `ajuste_estado` | maestro/admin/adminSatelite | `DevolucionOrigenService.devolverATienda` |
-| 28 | `devuelta_origen` | `en_tienda` (`recibido_origen`) | `ajuste_estado` | adminTienda | `RecepcionOrigenService.recibirEnOrigen` |
-| 29 | `en_bodega` | `devuelta_origen` | `cancelacion_api` | apiKey (tienda) | `OrdenRepository.cancelarViaApi` |
-| 30 | `en_ruta_bodega_principal` | `devuelta_origen` | `cancelacion_api` | apiKey (tienda) | `cancelarViaApi` |
-| 31 | `entregada` | `en_reparto` | `deshacer_gestion` | mensajero | `CierreDiaService.deshacerGestion` |
-| 32 | `reprogramada` | `en_reparto` | `deshacer_gestion` | mensajero | `deshacerGestion` |
-| 33 | `rechazada` | `en_reparto` | `deshacer_gestion` | mensajero | `deshacerGestion` |
-| 34 | `en_bodega` | `en_reparto` | `deshacer_gestion` | mensajero | `deshacerGestion` (defensa rama `devuelta`) |
-| 35 | `en_bodega_satelite` | `en_reparto` | `deshacer_gestion` | mensajero | `deshacerGestion` (defensa rama `devuelta`) |
-| 36 | `devuelta` | `en_reparto` | `deshacer_gestion` | mensajero | `deshacerGestion` (defensa filas legadas) |
+| 27 | `rechazada` | `devolviendo_a_tienda` | `ajuste_estado` | maestro/admin/adminSatelite | `DevolucionOrigenService.devolverATienda` |
+| 28 | `devolviendo_a_tienda` | `devuelta_a_tienda` | `ajuste_estado` | adminTienda | `RecepcionOrigenService.recibirEnOrigen` |
+| 29 | `en_bodega_central` | `devolviendo_a_tienda` | `cancelacion_api` | apiKey (tienda) | `OrdenRepository.cancelarViaApi` |
+| 30 | `en_ruta_bodega_central` | `devolviendo_a_tienda` | `cancelacion_api` | apiKey (tienda) | `cancelarViaApi` |
+| 31 | `entregada` | `en_ruta` | `deshacer_gestion` | mensajero | `CierreDiaService.deshacerGestion` |
+| 32 | `reprogramada` | `en_ruta` | `deshacer_gestion` | mensajero | `deshacerGestion` |
+| 33 | `rechazada` | `en_ruta` | `deshacer_gestion` | mensajero | `deshacerGestion` |
+| 34 | `en_bodega_central` | `en_ruta` | `deshacer_gestion` | mensajero | `deshacerGestion` (defensa rama `devuelta`) |
+| 35 | `en_bodega_satelite` | `en_ruta` | `deshacer_gestion` | mensajero | `deshacerGestion` (defensa rama `devuelta`) |
+| 36 | `devuelta` | `en_ruta` | `deshacer_gestion` | mensajero | `deshacerGestion` (defensa filas legadas) |
+| — | `devolviendo_a_bodega_central` | `TODO(137)` | `TODO(137)` | — | flujo devolución de rechazadas (137), aristas por confirmar (Q4) |
 
 **Escape hatch:** `OrdenService.actualizar` (`ajuste_estado`) puede hoy producir cualquier
 `origen -> destino` del catálogo; en el mapa NO se declara `ANY -> ANY` (R9/Q3). Las
@@ -223,12 +243,13 @@ aristas #27 y #28 ya cubren los usos de `ajuste_estado` de flujo real.
   comparten par pero difieren en familia). Más **3 familias de creación** (null -> X).
 - **20 familias `origen_tipo`** involucradas (de las 21 del enum): las 17 de flujo + 3 de
   creación; `ajuste_estado` aparece en aristas de flujo (#27/#28) y en el escape hatch.
-- **Anomalía detectada (Q2):** `en_ruta_bodega_principal` sólo aparece como ORIGEN
-  (arista #30); no tiene ninguna entrada de flujo -> el test de R14/R15 lo marcaría como
-  cuello de botella. Se documenta, no se resuelve aquí.
-- **Terminales:** `entregada` y `en_tienda`(`recibido_origen`). `entregada` tiene salida
-  vía deshacer (#31), lo cual es legítimo; el test exime a los terminales de necesitar
-  salida (R14) pero exige que tengan entrada.
-- **TODO(135/136/137):** los renombres (135), la recepción central (136) y la devolución
-  de rechazadas (137) añaden/renombran aristas no verificables contra código hoy (Q4); se
-  marcan en el mapa para completarse cuando esas features aterricen.
+- **Anomalía detectada (Q2):** `en_ruta_bodega_central` (hoy `en_ruta_bodega_principal`)
+  sólo aparece como ORIGEN (arista #30); no tiene ninguna entrada de flujo -> el test de
+  R14/R15 lo marcaría como cuello de botella. Se documenta, no se resuelve aquí.
+- **Terminales:** `entregada` y `devuelta_a_tienda` (post-135; hoy `recibido_origen`).
+  `entregada` tiene salida vía deshacer (#31), lo cual es legítimo; el test exime a los
+  terminales de necesitar salida (R14) pero exige que tengan entrada.
+- **135 (renombres):** ya aplicados a todo el mapa (ver A.0). **136/137:** la recepción
+  central (136) y la devolución de rechazadas (137, estado `devolviendo_a_bodega_central`)
+  añaden aristas no verificables contra código hoy (Q4); se marcan `TODO(136)`/`TODO(137)`
+  en el mapa para completarse cuando esas features aterricen.

@@ -2,8 +2,9 @@
 
 > `[P]` = paralelizable con otras `[P]` del mismo bloque (no comparten archivo).
 > Cada task cierra con su criterio de "hecho". Requisitos en `requirements.md`, diseño y
-> censo clasificado en `design.md`. **Prerequisito de gate:** confirmar Q1 (mapeo) y Q2
-> (alcance del contrato externo) antes de tocar código.
+> censo clasificado en `design.md`. **Gate resuelto:** Q1 (mapeo, con 6.º =
+> `devuelta_a_tienda`), Q2 (contrato externo renombrado, breaking) y Q3 (etiquetas = value
+> legible) están confirmados; listo para implementar.
 
 ## Bloque A — fuente de verdad TS + migración · debe ir PRIMERO
 Al editar la tupla, `OrderStatusValue` cambia y el compilador empieza a exigir los mapas.
@@ -11,8 +12,8 @@ Al editar la tupla, `OrderStatusValue` cambia y el compilador empieza a exigir l
 - [ ] **T1** — `lib/types/order-status.ts`: renombrar los 6 literales de `ORDER_STATUS_SEED`
   (`en_reparto`→`en_ruta`, `en_espera_aceptacion`→`por_recoger`, `en_bodega`→`en_bodega_central`,
   `en_ruta_bodega_principal`→`en_ruta_bodega_central`, `devuelta_origen`→`devolviendo_a_tienda`,
-  `recibido_origen`→`en_tienda`) **conservando la posición** (índices 8/10/13 intactos) y
-  actualizar comentarios. *Hecho:* la tupla tiene 15 elementos, mismos índices, nuevos
+  `recibido_origen`→`devuelta_a_tienda`) **conservando la posición** (índices 8/10/13 intactos)
+  y actualizar comentarios. *Hecho:* la tupla tiene 15 elementos, mismos índices, nuevos
   literales; `OrderStatusValue` compila.
 - [ ] **T2** (depende de T1) — Crear `db/migrations/<ts>_order_status_rename_nomenclatura/migration.sql`
   con los 6 `UPDATE "order_status" SET value=... WHERE value=...` (R2), sin `ALTER TYPE`.
@@ -24,12 +25,16 @@ Al editar la tupla, `OrderStatusValue` cambia y el compilador empieza a exigir l
   `order_status` muestra los nuevos values; el rollback restituye los viejos conservando
   `id`; conteo estable (R3/R4 a mano).
 
-## Bloque B — mapas de presentación (forzados por el compilador) · depende de T1
-- [ ] **T5** — `app/(app)/ordenes/_components/EstatusBadge.tsx`: renombrar las CLAVES de
-  `ORDER_STATUS_LABELS`, `ORDER_STATUS_VARIANT` y `ORDER_STATUS_CLASS` a los nuevos values,
-  **sin cambiar** las etiquetas de texto ni la variante/clase. NO tocar el case especial
-  `en_ruta_bodega_satelite` (~línea 96). *Hecho:* build type-check verde (exhaustividad
-  `Record<OrderStatusValue,…>`); ninguna cadena visible cambió (R6/R8).
+## Bloque B — mapas de presentación (claves forzadas por el compilador) · depende de T1
+- [ ] **T5** — `app/(app)/ordenes/_components/EstatusBadge.tsx`: (a) renombrar las CLAVES de
+  `ORDER_STATUS_LABELS`, `ORDER_STATUS_VARIANT` y `ORDER_STATUS_CLASS` a los nuevos values
+  (variante/clase se conservan); (b) ALINEAR el TEXTO de los labels al value legible (R8):
+  `en_bodega_central`="En bodega central", `en_ruta_bodega_central`="En ruta a bodega
+  central", `devuelta_a_tienda`="Devuelta a tienda", y —aunque NO se renombran—
+  `en_ruta_bodega_satelite`="En ruta a bodega satélite" y `en_bodega_satelite`="En bodega
+  satélite". Mantener funcional el case especial `en_ruta_bodega_satelite` (~línea 96,
+  label dinámico con `zonaNombre`). *Hecho:* build type-check verde (exhaustividad
+  `Record<OrderStatusValue,…>`); labels = value legible, sin abreviaturas (R6/R8).
 
 ## Bloque C — lógica: constantes / sets / uniones-literal (categoría d) · depende de T1 · [P] por archivo
 Regla: cambiar cada literal de estado; NO cambiar nombres de constante ni de columna.
@@ -67,17 +72,18 @@ Regla: cambiar cada literal de estado; NO cambiar nombres de constante ni de col
   `components/shared/PrioridadResalte.tsx`; `components/private/BodegaLiberadasHoy.tsx`.
   *Hecho (T11–T13):* build verde; la UI muestra las mismas etiquetas de siempre (R8).
 
-## Bloque E — contrato externo (categoría b, R9/Q2) · depende de gate Q2 · [P]
+## Bloque E — contrato externo (categoría b, R9 APROBADO por el gate) · depende de T1 · [P]
 - [ ] **T14** [P] — `lib/api/openapi-spec.ts` (enum de estado + ejemplos),
   `docs/api/api-key-openapi.yaml` (enums publicados), `lib/types/webhook-eventos.ts`
   (lista de eventos), `app/api/ordenes/api-key/[numGuia]/cancelar/route.ts` y
-  `.../carga/route.ts` (comentarios/literales). *Hecho:* el contrato expone los nuevos
-  values (o queda sin cambios si el gate elige capa de traducción — anotar la decisión).
+  `.../carga/route.ts` (comentarios/literales). *Hecho:* el contrato externo expone los
+  nuevos values en todas las capas (breaking aceptado); sin capa de traducción.
 
 ## Bloque F — tests + seeds (categorías e/f) · depende de Bloques A–E
 - [ ] **T15** — `tests/unit/types/order-status.test.ts`: set (:12-30) y aserciones
-  POSICIONALES (`[8]`,`[10]`,`[13]`) a los nuevos values conservando índice; segundo
-  `describe` (`rows.has(...)`) a los nuevos. *Hecho:* verde con 15 nuevos values.
+  POSICIONALES a los nuevos values conservando índice (`[8]`→`por_recoger`, `[10]`→`en_ruta`,
+  `[13]`→`devuelta_a_tienda`); segundo `describe` (`rows.has(...)`) a los nuevos. *Hecho:*
+  verde con 15 nuevos values.
 - [ ] **T16** — `tests/integration/db/order-status-enum-migration.test.ts`: **desacoplar**
   de `ORDER_STATUS_SEED`; afirmar los 8 literales HISTÓRICOS del enum
   (`{entregada, devuelta, devuelta_origen, reprogramada, en_fulfillment,
@@ -90,8 +96,12 @@ Regla: cambiar cada literal de estado; NO cambiar nombres de constante ni de col
 - [ ] **T18** [P] — `scripts/seed-ordenes-qa.ts`: literales `estatusValue`/`origenValue`/
   `destinoValue`/`in:[...]` a los nuevos values. *Hecho:* el seed de QA usa los nuevos.
 - [ ] **T19** [P] — Resto de tests (89 archivos, ver §Archivos esperados): actualizar datos
-  de entrada, fixtures y aserciones a los nuevos values. Repartir en sub-tandas por carpeta
-  para paralelizar sin conflicto. *Hecho:* cada suite verde con los nuevos values.
+  de entrada, fixtures y aserciones a los nuevos values. Los tests que afirman TEXTO de
+  etiqueta (empezando por `tests/components/EstatusLabel.test.ts` y los de badge/columnas)
+  DEBEN usar los nuevos labels (R8): "En bodega central", "En ruta a bodega central",
+  "Devuelta a tienda", "En ruta a bodega satélite", "En bodega satélite". Repartir en
+  sub-tandas por carpeta para paralelizar sin conflicto. *Hecho:* cada suite verde con los
+  nuevos values y labels.
 - [ ] **T20** — Crear guard de censo `tests/unit/guards/censo-order-status-rename.test.ts`:
   grep case-sensitive de los 6 values ANTIGUOS sobre `app/ lib/ components/ hooks/ scripts/
   tests/ e2e/`, excluyendo `db/migrations/**` y el `down.sql` de esta feature; falla si hay
@@ -135,7 +145,7 @@ lib/types/orden.ts
 lib/types/orden-historial.ts
 lib/types/orden-guia.ts
 lib/api/openapi-spec.ts
-docs/api/api-key-openapi.yaml    # depende de Q2
+docs/api/api-key-openapi.yaml    # R9 aprobado (breaking)
 ```
 Services:
 ```

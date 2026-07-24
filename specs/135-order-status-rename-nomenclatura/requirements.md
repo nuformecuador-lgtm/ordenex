@@ -4,28 +4,31 @@
 > Fundacional del lote 135–138.
 
 ## Alcance en una frase
-Renombrar el **`value`** de 6 estatus de orden cuyo identificador diverge de su
-etiqueta UI, para que backend y frontend compartan un único identificador canónico
+Renombrar el **`value`** de 6 estatus de orden cuyo identificador diverge de su etiqueta
+UI y **alinear las etiquetas** para que sean la versión legible directa del `value`, de
+modo que backend, frontend y contrato externo compartan un único nombre canónico
 (**opción A**), de forma **reversible**, **sin tocar `orden.estatus_id`** (la FK es por
-`id`), **sin cambiar el orden** de `ORDER_STATUS_SEED` y **sin cambiar ninguna etiqueta
-visible** (el rename es del `value`, no del label).
+`id`) y **sin cambiar el orden** de `ORDER_STATUS_SEED`.
 
-## Mapeo propuesto (a CONFIRMAR en el gate)
-Cada nuevo `value` ya coincide con la etiqueta que la UI muestra hoy
-(`ORDER_STATUS_LABELS`, `app/(app)/ordenes/_components/EstatusBadge.tsx`):
+## Mapeo (CONFIRMADO en el gate)
+El rename unifica el identificador y, además, la etiqueta UI pasa a ser la versión legible
+DIRECTA del `value` (sin abreviaturas), de modo que código y pantalla usen el mismo nombre
+(ver R8):
 
-| # | `value` actual | `value` nuevo | Label UI vigente (no cambia) |
-|---|----------------|---------------|------------------------------|
+| # | `value` actual | `value` nuevo | Label UI nuevo (= value legible) |
+|---|----------------|---------------|----------------------------------|
 | 1 | `en_reparto` | `en_ruta` | "En ruta" |
 | 2 | `en_espera_aceptacion` | `por_recoger` | "Por recoger" |
-| 3 | `en_bodega` | `en_bodega_central` | "En B. Central" |
-| 4 | `en_ruta_bodega_principal` | `en_ruta_bodega_central` | "Enviando a B. Central" |
+| 3 | `en_bodega` | `en_bodega_central` | "En bodega central" |
+| 4 | `en_ruta_bodega_principal` | `en_ruta_bodega_central` | "En ruta a bodega central" |
 | 5 | `devuelta_origen` | `devolviendo_a_tienda` | "Devolviendo a tienda" |
-| 6 | `recibido_origen` | `en_tienda` | "En tienda" |
+| 6 | `recibido_origen` | `devuelta_a_tienda` | "Devuelta a tienda" |
 
-Los otros 9 valores NO cambian: `entregada`, `devuelta`, `reprogramada`,
-`en_fulfillment`, `en_preparacion`, `en_ruta_bodega_satelite`, `rechazada`,
-`en_bodega_satelite`, `sin_gestionar`.
+Los otros 9 valores NO se renombran, pero SÍ se alinea su etiqueta si diverge del value
+(R8): `en_ruta_bodega_satelite` → "En ruta a bodega satélite" (antes "Por recibir en
+satélite") y `en_bodega_satelite` → "En bodega satélite" (antes "En satélite"). Los 7
+restantes ya tienen etiqueta legible alineada y no cambian: `entregada`, `devuelta`,
+`reprogramada`, `en_fulfillment`, `en_preparacion`, `rechazada`, `sin_gestionar`.
 
 **Cuidado case-sensitive (confirmado en el censo):** el rename de `en_bodega` es por
 igualdad EXACTA; NO debe tocar `en_bodega_satelite` ni `en_ruta_bodega_satelite`. No
@@ -80,8 +83,10 @@ Hoy `order_status` es una **tabla de catálogo** con `value String @unique`
 - **R6 (Ubicuo — mapas por `value`).** El sistema DEBE actualizar las CLAVES de todos los
   mapas `Record<OrderStatusValue, …>` a los nuevos `value`: `ORDER_STATUS_LABELS`,
   `ORDER_STATUS_VARIANT` y `ORDER_STATUS_CLASS`
-  (`app/(app)/ordenes/_components/EstatusBadge.tsx`), preservando **sin cambio** las
-  etiquetas de texto y la semántica de variante/clase asociada a cada estado.
+  (`app/(app)/ordenes/_components/EstatusBadge.tsx`), preservando **sin cambio** la
+  semántica de variante/clase asociada a cada estado (el texto de las etiquetas se rige por
+  R8). El case especial de `en_ruta_bodega_satelite` en `EstatusBadge` (label dinámico con
+  `zonaNombre`) DEBE mantenerse funcional y coherente con la nueva etiqueta estática.
 
 - **R7 (Por evento — resolución/comparación por `value` en la lógica).** CUANDO la lógica
   de negocio resuelva o compare un estatus por `value` (constantes `ESTADO_*`/`ORIGEN_*`/
@@ -91,18 +96,24 @@ Hoy `order_status` es una **tabla de catálogo** con `value String @unique`
   `value`, de modo que `findEstatusIdByValue` y las guardas de transición sigan
   resolviendo al `id` correcto y ninguna resolución `value → id` devuelva `null`.
 
-- **R8 (Por evento — etiqueta visible intacta).** CUANDO la UI muestre un estado
-  renombrado, el sistema DEBE presentar la MISMA etiqueta legible que hoy (p. ej. "Por
-  recoger", "En ruta", "En B. Central", "Devolviendo a tienda", "En tienda"). Ninguna
-  cadena de texto renderizada DEBE cambiar por efecto de esta feature.
+- **R8 (Ubicuo — etiqueta UI = value legible).** El sistema DEBE presentar como etiqueta de
+  cada estatus la versión legible DIRECTA de su `value`, sin abreviaturas, de modo que
+  código y pantalla se llamen igual. `ORDER_STATUS_LABELS`
+  (`app/(app)/ordenes/_components/EstatusBadge.tsx`) DEBE quedar alineado con los `value`
+  según la tabla del mapeo. Cambian de texto: `en_bodega_central` → "En bodega central",
+  `en_ruta_bodega_central` → "En ruta a bodega central", `devuelta_a_tienda` → "Devuelta a
+  tienda", y —aunque NO se renombran— `en_ruta_bodega_satelite` → "En ruta a bodega
+  satélite" y `en_bodega_satelite` → "En bodega satélite". Los demás labels ya están
+  alineados y no cambian su texto. Los tests de UI que afirmaban las etiquetas abreviadas
+  antiguas ("En B. Central", "Enviando a B. Central", "Por recibir en satélite", "En
+  satélite", "En tienda") DEBEN actualizarse a las nuevas.
 
-- **R9 (Condicional — contrato externo API/webhook).** SI el gate aprueba unificar también
-  el contrato externo, ENTONCES el sistema DEBE exponer los nuevos `value` en el enum de
-  estado de la API (`lib/api/openapi-spec.ts`), en su documento OpenAPI
-  (`docs/api/api-key-openapi.yaml`) y en la lista de eventos de webhook
-  (`lib/types/webhook-eventos.ts`). Ver "Preguntas abiertas Q2": estos son valores
-  visibles para integradores; el default propuesto es renombrarlos (opción A unifica en
-  todas las capas).
+- **R9 (Ubicuo — contrato externo API/webhook, APROBADO por el gate).** El sistema DEBE
+  exponer los nuevos `value` en TODAS las capas externas (cambio breaking aceptado): el
+  enum de estado de la API (`lib/api/openapi-spec.ts`), su documento OpenAPI publicado
+  (`docs/api/api-key-openapi.yaml`), la lista de eventos de webhook
+  (`lib/types/webhook-eventos.ts`) y las respuestas de `app/api/ordenes/api-key/**`. NO se
+  mantiene ninguna capa de traducción a nombres antiguos.
 
 - **R10 (NEGATIVO — migraciones históricas inmutables).** El sistema NO DEBE modificar
   migraciones ya versionadas/aplicadas (la creación del enum
@@ -146,36 +157,28 @@ Hoy `order_status` es una **tabla de catálogo** con `value String @unique`
 | R5 | `order-status.test.ts` + build type-check verde (`OrderStatusValue` deriva de la tupla). |
 | R6 | `tests/components/EstatusLabel.test.ts`, `OrdenesEstatusLabelAdminTienda.test.tsx`: label por nueva key. |
 | R7 | Suites de services/repositories que ejercen guardas de transición y sets de estado (ver design §Apéndice). |
-| R8 | Tests de UI que afirman `getByText(<label>)` siguen verdes con el MISMO texto. |
-| R9 | Tests de API/webhook (`ordenes-api-key-*`, `webhook-estado-*`) con nuevos valores (si gate aprueba). |
+| R8 | `tests/components/EstatusLabel.test.ts` + tests de badge: labels = value legible (textos nuevos). |
+| R9 | Tests de API/webhook (`ordenes-api-key-*`, `webhook-estado-*`) exponen los nuevos valores. |
 | R10 | `tests/integration/db/order-status-enum-migration.test.ts` desacoplado: afirma los 8 literales históricos. |
 | R11 | Guard R13 no marca `en_bodega_satelite`/`en_ruta_bodega_satelite`; `orden-repository`/config tests verdes. |
 | R12 | Todas las suites de la tabla en verde + test NUEVO de la migración rename. |
 | R13 | Test/guard de censo case-sensitive de los 6 valores antiguos (excepciones de R10/R3). |
 
-## Preguntas abiertas (resolver en el gate antes de implementar)
+## Decisiones del gate (resueltas) y preguntas restantes
 
-1. **Confirmación del mapeo (Q1).** ¿Se confirman los 6 nuevos `value` de la tabla?
-   Cada uno se derivó para coincidir con la etiqueta UI vigente. Ambigüedades menores a
-   validar: `en_bodega_central` vs. `en_bodega` (label "En B. Central") y
-   `en_ruta_bodega_central` vs. `en_ruta_bodega_principal` (label "Enviando a B.
-   Central") — se propone "central" por consistencia con la satélite (`en_bodega_satelite`).
+- **Q1 — Mapeo: RESUELTO.** Confirmado el mapeo de la tabla, con el ajuste del 6.º:
+  `recibido_origen` → `devuelta_a_tienda` (NO `en_tienda`).
+- **Q2 — Contrato externo: RESUELTO.** Se renombra en TODAS las capas (breaking aceptado);
+  gobierna R9. Sin capa de traducción a nombres antiguos.
+- **Q3 — Etiquetas: RESUELTO.** Las etiquetas se unifican con los `value` (versión legible
+  directa, sin abreviaturas); gobierna R8. Aplica también a los 2 estatus satélite no
+  renombrados cuya etiqueta divergía (`en_ruta_bodega_satelite`, `en_bodega_satelite`).
 
-2. **Alcance del contrato externo (Q2, gobierna R9).** Renombrar `value` cambia lo que ven
-   los integradores de la API key y los suscriptores de webhooks (`lib/api/openapi-spec.ts`,
-   `docs/api/api-key-openapi.yaml`, `lib/types/webhook-eventos.ts`, respuestas de
-   `app/api/ordenes/api-key/**`). Es un cambio **breaking** del contrato externo.
-   Propuesta por defecto: **renombrar también en el contrato externo** (opción A =
-   identificador único en todas las capas). Alternativa si hay consumidores en producción:
-   mantener nombres externos estables vía una capa de traducción en el borde de la API
-   (contradice la unificación; solo si el gate lo exige).
+Preguntas restantes (default asumido; confirmar solo si se desea otra cosa):
 
-3. **Guard de censo (Q3) en CI.** El repo no tiene GitHub Actions (CI = build de Vercel).
-   ¿Se acepta el guard R13 como test de la suite (Vitest) en vez de un check de CI
-   dedicado? Propuesta por defecto: sí, como test.
-
-4. **Barrido de comentarios (Q4).** Cientos de comentarios y nombres de test citan los
-   valores antiguos (p. ej. `// origen = en_reparto`). Se propone actualizarlos por
-   consistencia aunque no sean literales de runtime (mismo criterio que la feature 118).
-   Confirmar que se desea este barrido cosmético (asumido: sí; el guard R13 lo exige salvo
-   que se acote su alcance a solo literales de código).
+1. **Guard de censo en CI.** El repo no tiene GitHub Actions (CI = build de Vercel). Se
+   implementa el guard R13 como test de la suite (Vitest). (Asumido: sí.)
+2. **Barrido de comentarios.** Cientos de comentarios y nombres de test citan los valores
+   antiguos (p. ej. `// origen = en_reparto`). Se actualizan por consistencia aunque no
+   sean literales de runtime (mismo criterio que la feature 118); el guard R13 lo exige
+   salvo que se acote su alcance a solo literales de código. (Asumido: sí.)
