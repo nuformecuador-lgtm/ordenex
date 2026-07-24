@@ -9,6 +9,12 @@ export interface ChatMensajeVista {
   cuerpo: string | null;
   /** Estado de entrega (solo salientes; `null` en entrantes). */
   estado: ChatMensajeEstado | null;
+  /**
+   * Feature 121 (R8): coordenadas de un mensaje de ubicacion; `null` en todo mensaje que no
+   * sea de tipo `ubicacion`. La UI las usa para el minimapa de la burbuja de ubicacion.
+   */
+  latitud: number | null;
+  longitud: number | null;
   /** Instante del evento en ISO 8601 (serializable a la UI). */
   ocurridoAt: string;
 }

@@ -1258,6 +1258,32 @@
       "zone": "fullstack",
       "branch": "feature/120-chat-whatsapp",
       "depends_on": null
+    },
+    {
+      "id": 112,
+      "name": "etiquetas PDF consolidadas en la carga por API (a Supabase Storage + URL en la respuesta)",
+      "spec_path": "specs/112-etiquetas-pdf-carga-api",
+      "description": "Registrada 2026-07-23 (pedido del humano: 'generar las etiquetas de las ordenes cuando se realice la carga masiva, un unico PDF almacenado en el storage de supabase' + 'retorna la url donde estan los PDF del bucket en la respuesta de la carga'). ALCANCE (zona BACKEND): cuando la carga por API (POST /api/ordenes/api-key/carga, cargarViaApi, rol apiKey) crea ordenes con num_guia asignado en el acto, generar SERVER-SIDE un unico PDF consolidado del lote (una etiqueta 100x100mm por pagina, mismo layout que la impresion de cliente de la feature 32: QR a /paquete/<numGuia> + barcode CODE128 + datos), subirlo a un bucket PRIVADO nuevo de Supabase Storage y devolver una URL firmada en la respuesta del endpoint. La generacion es BEST-EFFORT: si falla, la carga (ya commiteada) no se revierte y la respuesta trae etiquetasPdf: null. Reusa EtiquetaGuiaService.generarEtiquetas (arma los EtiquetaGuiaDTO), SupabaseFileStorage (upload) y SupabaseSignedUrlProvider (signed URL), buildPaqueteUrl. Deps nuevas ya instaladas: qrcode + bwip-js (pure-JS, server-side; el generador de cliente jspdf+jsbarcode+qrcode.react depende del DOM/canvas y no sirve en Node). NO toca la carga masiva por sesion (esa no asigna num_guia). Decisiones ya tomadas con el humano: (a) momento = carga via API; (b) generacion = server-side; (c) almacenamiento = un PDF consolidado por lote; (d) devolver la URL firmada en la respuesta. DEPENDE de la 88 (carga via API, done) y reusa la feature 32 (etiquetas, done).",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/112-etiquetas-pdf-carga-api",
+      "depends_on": 88,
+      "status_note": "in_progress 2026-07-23: gate F1.4 APROBADO (R12 hace el fallo VISIBLE: etiquetasPdf { error }). Implementado por backend_dev (model opus): lib/config/etiquetas.ts, lib/pdf/etiquetas-pdf-lote.ts, lib/services/EtiquetasLotePdfService.ts (+interface), route api-key/carga, .env.example + 4 tests. 29/29 verdes, typecheck 0 en archivos 112. reviewer APROBADO 0 bloqueantes (3 menores: T0.1 bucket Ops, R4 cobertura parcial, init.sh rojo por drift ajeno). PENDIENTE: PR hacia dev (leader, worktree aislado desde origin/dev)."
+    },
+    {
+      "id": 121,
+      "name": "ubicacion compartida por el cliente en el chat de WhatsApp (webhook + minimapa)",
+      "spec_path": "specs/121-ubicacion-chat-whatsapp",
+      "description": "Pedido del humano 2026-07-24: 'en el webhook que consume las respuestas de whatsapp agregar soporte para ubicacion (mensajes type=location con location.latitude/longitude); almacenar la ubicacion enviada; y en el front agregar un icono en el chat que al dar click despliegue a modo de modal/popup dentro de la misma ventana un minimapa con la ubicacion actual del repartidor y el punto compartido por el usuario'. EXTIENDE el chat de WhatsApp (feature 120/109). ALCANCE (fullstack, high): (BACKEND) (1) el esquema zod del webhook (lib/types/whatsapp-webhook.ts, metaMessageSchema) pasa a LEER el objeto location {latitude, longitude, name?, address?} de los mensajes type=location, hoy descartados a tipo=otro con cuerpo null; (2) normalizar a WebhookMensajeEntrante con tipo=ubicacion + lat/lng; (3) nuevo valor de enum ChatMensajeTipo.ubicacion + columnas latitud/longitud nullable en chat_mensaje (migracion + down.sql), con el mismo insert idempotente por wa_message_id (dedupe R8 de la 120); (4) el DTO/vista del hilo (ChatMensajeVista, listarHiloChat) expone lat/lng de los entrantes de tipo ubicacion. (FRONTEND) (5) en ChatWhatsappPanel la burbuja de un mensaje de ubicacion muestra un icono clicable (pin) que abre un modal/popup DENTRO de la misma ventana (Dialog de shadcn) con un MINIMAPA que reutiliza el stack Leaflet + react-leaflet + OpenStreetMap de la feature 97 (RutaMapaInner) dibujando DOS marcadores: el punto compartido por el cliente y la ubicacion ACTUAL del repartidor tomada del GPS del navegador via el hook useUbicacionActual (feature 93). DECISIONES CERRADAS CON EL HUMANO (pre-spec, 2026-07-24): (D1) la 'ubicacion actual del repartidor' = GPS del navegador EN VIVO (useUbicacionActual); si el permiso esta denegado/timeout el mapa muestra SOLO el punto del cliente + un aviso, nunca bloquea. (D2) v1 = SOLO VISUALIZAR: se almacena y se pinta; NO hay boton para adoptar la ubicacion como coordenadas de entrega de la orden (diferido). Reutiliza: parseWebhookEventos/ChatWhatsappService.ingerirEventos (120), insert idempotente por wa_message_id (120), RutaMapa/RutaMapaInner/ruta-mapa-tipos (97), useUbicacionActual (93), Dialog shadcn. DEPENDE de la 120 (chat WhatsApp) — cuya infraestructura (webhook, tablas, service, panel) vive como WIP en la rama flow y aun NO esta en dev: la rama/impl de esta feature se difiere a Fase 2 sobre la base donde aterrice la 120.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": 120,
+      "status_note": "in_progress 2026-07-24: gate F1.4 APROBADO (P1=solo lat/lng, P2=pin + texto 'Ubicacion compartida' text-xs, P3=GPS al abrir el modal lazy). IMPLEMENTADA (orquestacion directa backend_dev -> frontend_dev -> reviewer, model opus) sobre el arbol flow. Backend: enum ChatMensajeTipo.ubicacion + columnas latitud/longitud (migracion up/down 20260724_chat_mensaje_ubicacion), normalizacion type=location en whatsapp-webhook.ts, propagacion service/repo/DTO/vista (impl_121_backend.md). Frontend: burbuja con pin+MapPin, Dialog nuevo (components/ui/dialog.tsx sobre @base-ui/react), UbicacionMapa/UbicacionMapaInner (Leaflet+OSM anti-SSR patron feature 97), GPS lazy via useUbicacionActual con degradacion (impl_121_frontend.md). reviewer APROBADO 0 bloqueantes: 16/16 R con test, 156/156 verdes, typecheck 0 en archivos 121 (review_121.md). Deuda menor: migracion validada solo por forma (falta apply/db:rollback real); G2 quedo como impl_121_backend.md + impl_121_frontend.md. PENDIENTE (leader): aterrizaje limpio diferido al merge de la 120 (rama desde origin/dev + cherry-pick de la 120 + de la 121). Al desplegar: correr la migracion 20260724_chat_mensaje_ubicacion (post-merge a mano, .env apunta a DB compartida)."
     }
   ]
 }

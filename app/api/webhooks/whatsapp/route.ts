@@ -54,7 +54,7 @@ export async function handleGet(req: Request, deps: WebhookDeps = {}): Promise<R
     config = (deps.getConfig ?? loadWhatsappWebhookConfig)();
   } catch {
     // Sin token configurado no se puede verificar; se rechaza sin filtrar el nombre al cliente.
-    return new NextResponse("forbidden", { status: 403 });
+    return new Response("forbidden", { status: 403 });
   }
 
   const params = new URL(req.url).searchParams;
@@ -63,12 +63,12 @@ export async function handleGet(req: Request, deps: WebhookDeps = {}): Promise<R
   const challenge = params.get("hub.challenge");
 
   if (mode === "subscribe" && token !== null && challenge !== null && token === config.verifyToken) {
-    return new NextResponse(challenge, {
+    return new Response(challenge, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
     });
   }
-  return new NextResponse("forbidden", { status: 403 });
+  return new Response("forbidden", { status: 403 });
 }
 
 /**

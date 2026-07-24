@@ -214,6 +214,9 @@ export async function listarHiloChat(
       tipo: m.tipo,
       cuerpo: m.cuerpo,
       estado: m.estado,
+      // Feature 121 (R8): coords del entrante de ubicacion; null en el resto (columnas nullable).
+      latitud: m.latitud,
+      longitud: m.longitud,
       ocurridoAt: m.ocurridoAt.toISOString(),
     })),
   };

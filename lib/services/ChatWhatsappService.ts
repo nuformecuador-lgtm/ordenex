@@ -7,6 +7,7 @@ import type { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
 import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { WebhookEventos } from "@/lib/types/whatsapp-webhook";
+import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
 
 /**
  * Cliente minimo consumido: el envio de texto libre (saliente del chat) y el envio de una
@@ -103,8 +104,10 @@ export class ChatWhatsappService {
     let sinResolver = 0;
 
     for (const mensaje of eventos.mensajes) {
+      // Normaliza el numero entrante (Meta lo entrega con o sin `+`) antes de resolver/keyear:
+      // asi el mismo cliente cae SIEMPRE en el mismo hilo (raiz del bug de duplicados).
       const resolucion = await this.deps.conversacionRepo.resolverOrdenActivaPorNumero(
-        mensaje.telefonoE164,
+        normalizarTelefonoWa(mensaje.telefonoE164),
       );
       if (resolucion === null) {
         // R25/D4: el numero no mapea a ninguna orden viva y asignada. No se pierde el 200:
@@ -124,6 +127,10 @@ export class ChatWhatsappService {
         tipo: mensaje.tipo,
         cuerpo: mensaje.cuerpo,
         waMessageId: mensaje.waMessageId,
+        // Feature 121 (R4): un entrante de ubicacion trae sus coords; el resto queda null. Un
+        // entrante de ubicacion es un entrante mas: no toca el dedupe ni el sellado (R5/R6).
+        latitud: mensaje.ubicacion?.latitud ?? null,
+        longitud: mensaje.ubicacion?.longitud ?? null,
         ocurridoAt: mensaje.ocurridoAt,
       });
 
@@ -153,19 +160,25 @@ export class ChatWhatsappService {
    */
   async enviarTexto(input: EnviarTextoChatInput): Promise<EnviarTextoChatResult> {
     const client = this.requireClient();
+    // Numero normalizado (solo digitos): misma clave del hilo y mismo destino en la Graph API.
+    const telefonoE164 = normalizarTelefonoWa(input.telefonoE164);
     const hilo = await this.deps.conversacionRepo.upsertParaOrden({
       ordenId: input.ordenId,
       mensajeroId: input.mensajeroId,
-      telefonoE164: input.telefonoE164,
+      telefonoE164,
     });
 
-    if (!this.dentroDeVentana(hilo.ultimoEntranteAt)) {
+    // La ventana se decide por el ULTIMO ENTRANTE REAL del hilo (no la columna, que puede
+    // quedar desincronizada): asi el envio coincide con el panel, que habilita el input cuando
+    // hay mensajes entrantes.
+    const ultimoEntranteAt = await this.deps.mensajeRepo.ultimoEntranteAt(hilo.id);
+    if (!this.dentroDeVentana(ultimoEntranteAt)) {
       // R19/D2: sin entrante reciente, el texto libre lo rechazaria Meta; se bloquea aqui.
       return { status: "fuera_ventana" };
     }
 
     const ahora = this.now();
-    const outcome = await client.enviarTexto(input.telefonoE164, input.texto);
+    const outcome = await client.enviarTexto(telefonoE164, input.texto);
 
     if (outcome.status === "ok") {
       const guardado = await this.deps.mensajeRepo.insertarSaliente({
@@ -202,15 +215,17 @@ export class ChatWhatsappService {
    */
   async enviarPlantilla(input: EnviarPlantillaChatInput): Promise<EnviarPlantillaChatResult> {
     const client = this.requireClient();
+    // Numero normalizado (solo digitos): misma clave del hilo y mismo destino en la Graph API.
+    const telefonoE164 = normalizarTelefonoWa(input.telefonoE164);
     const hilo = await this.deps.conversacionRepo.upsertParaOrden({
       ordenId: input.ordenId,
       mensajeroId: input.mensajeroId,
-      telefonoE164: input.telefonoE164,
+      telefonoE164,
     });
 
     const ahora = this.now();
     const outcome = await client.enviarPlantilla(
-      input.telefonoE164,
+      telefonoE164,
       input.nombre,
       input.idioma,
       input.componentes,

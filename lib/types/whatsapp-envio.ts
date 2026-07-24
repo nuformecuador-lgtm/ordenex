@@ -9,6 +9,12 @@ export interface OrdenEnvioData {
   producto: string;
   direccion: string | null;
   montoCobrar: number | null;
+  /**
+   * Nombre para mostrar del mensajero ASIGNADO a la orden (variable `mensajero` de las
+   * plantillas). Cadena vacia si la orden no tiene mensajero asignado o el flujo no lo aporta
+   * (p. ej. el camino wa.me del boton del cliente, donde no viaja el nombre del mensajero).
+   */
+  mensajeroNombre: string;
 }
 
 /** Fila del listado de plantillas enviables que consume la UI del mensajero. */

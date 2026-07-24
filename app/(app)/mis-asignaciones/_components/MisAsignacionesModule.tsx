@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/useToast";
-import { useUbicacionActual } from "@/hooks/useUbicacionActual";
 import {
   escogerParaGestion,
   liberarGestion,
@@ -251,40 +250,6 @@ export function MisAsignacionesModule({
     if (!detalleOrden) return;
     await liberarGestion({ ordenId: detalleOrden.id });
     router.refresh();
-  }
-
-  // R31/R32: sincronización manual. R25 es el punto delicado: si el permiso de
-  // geolocalización se deniega o expira, `pedirUbicacion()` resuelve `null` y la
-  // action se llama IGUAL, solo que sin `ubicacion`; el backend degrada al
-  // fallback de origen (R24). La denegación NUNCA aborta la sincronización.
-  async function sincronizar() {
-    if (sincronizando) return;
-    setSincronizando(true);
-    try {
-      const coords = await pedirUbicacion();
-      // Solo `ubicacion` (contrato de la 92): la ruta la lee el servidor de la
-      // DB. Mandar los ids de lo que la UI está pintando dejaría al cliente
-      // influir en un orden que es decisión exclusiva del servidor.
-      const result = await sincronizarRuta(coords ? { ubicacion: coords } : {});
-      if (result.status === "ok") {
-        // `omitida` es un desenlace CORRECTO (guarda de coste del service): la
-        // ruta vigente sigue siendo válida, así que no se reporta como error.
-        toast.success("Ruta sincronizada.");
-        router.refresh(); // R32: el orden nuevo llega por el camino que ya existe
-        return;
-      }
-      toast.error(
-        result.status === "conflict"
-          ? "Espera unos segundos antes de volver a sincronizar."
-          : result.status === "forbidden"
-            ? "No tienes permiso para sincronizar la ruta."
-            : result.status === "unauthenticated"
-              ? "Tu sesión expiró. Inicia sesión de nuevo."
-              : "No se pudo sincronizar la ruta.",
-      );
-    } finally {
-      setSincronizando(false);
-    }
   }
 
   return (

@@ -15,6 +15,63 @@
 
 ## Features en curso
 
+**Ubicación compartida por el cliente en el chat de WhatsApp — feature 121 (2026-07-24) → EN
+ESPECIFICACIÓN / puerta F1.4.** Pedido del humano: "en el webhook que consume las respuestas de
+WhatsApp agregar soporte para ubicación (mensajes `type=location`); almacenar la ubicación enviada;
+y en el front un icono en el chat que al dar click despliegue, en modal/popup dentro de la misma
+ventana, un minimapa con la ubicación actual del repartidor y el punto compartido por el usuario".
+Fullstack, high, `depends_on: 120`.
+- **Decisiones cerradas pre-spec (AskUserQuestion):** D1 = la posición del repartidor es el **GPS del
+  navegador EN VIVO** (`useUbicacionActual`, feature 93), con degradación (solo punto del cliente +
+  aviso) si se deniega/expira; no hay rastreo server-side. D2 = v1 **solo visualizar** (no adoptar la
+  ubicación como coordenadas de entrega de la orden).
+- **Reúso clave:** borde tipado del webhook `lib/types/whatsapp-webhook.ts` (`metaMessageSchema` +
+  `parseWebhookEventos`, hoy `type=location`→`otro` sin coords), `ChatWhatsappService.ingerirEventos`
+  + insert idempotente por `wa_message_id` (dedupe R8 de la 120), stack Leaflet+react-leaflet+OSM de la
+  feature 97 (`RutaMapa`/`RutaMapaInner`/`ruta-mapa-tipos`, patrón anti-SSR `next/dynamic({ssr:false})`),
+  `Dialog` de shadcn, `useUbicacionActual` (93).
+- **Cambio de esquema:** enum `ChatMensajeTipo` += `ubicacion` + columnas `latitud`/`longitud` nullable
+  en `chat_mensaje` (migración + `down.sql`, patrón `ALTER TYPE ADD VALUE` como `cancelacion_api` de la
+  106).
+- **Gate F1.4 APROBADO** con P1=solo lat/lng, P2=pin + texto "Ubicación compartida" en `text-xs`,
+  P3=GPS al abrir el modal (lazy).
+- **IMPLEMENTADA + reviewer APROBADO 0 bloqueantes** (orquestación directa `backend_dev` →
+  `frontend_dev` → `reviewer`, model opus, sobre el árbol `flow`). Backend: enum
+  `ChatMensajeTipo.ubicacion` + columnas `latitud/longitud` (migración up/down
+  `20260724_chat_mensaje_ubicacion`), normalización `type=location` en `whatsapp-webhook.ts`,
+  propagación service/repo/DTO/vista. Frontend: burbuja con `MapPin`, **`components/ui/dialog.tsx`
+  nuevo** (sobre `@base-ui/react`, modelado en `sheet.tsx`), `UbicacionMapa/UbicacionMapaInner`
+  (Leaflet+OSM anti-SSR, patrón feature 97), GPS lazy vía `useUbicacionActual` con degradación no
+  bloqueante. **16/16 R con test, 156/156 verdes, typecheck 0 en archivos 121.** Detalle en
+  `progress/impl_121_backend.md`, `impl_121_frontend.md`, `review_121.md`.
+- **Deuda menor:** la migración se validó solo por forma estática (falta `apply`/`db:rollback` real);
+  G2 quedó como dos archivos `impl_121_*` en vez de un `impl_121.md`.
+- **⚠️ PENDIENTE (leader) — aterrizaje diferido:** la infraestructura del chat que esto extiende vive
+  como **WIP en `flow`, aún NO en `dev`** (feature 120, hecha, sin PR). Sin commitear todavía. El PR
+  limpio de la 121 se arma cuando aterrice la 120: rama desde `origin/dev` + cherry-pick de la 120 +
+  de la 121. **Al desplegar:** correr la migración `20260724_chat_mensaje_ubicacion` (post-merge a
+  mano; el `.env` apunta a DB compartida).
+
+
+**Etiquetas PDF en la carga por API — feature 112 (2026-07-23) → EN ESPECIFICACIÓN.** Pedido del
+humano: "generar las etiquetas de las órdenes cuando se realice la carga masiva, un único PDF
+almacenado en el storage de Supabase" + "retorna la url donde están los PDF del bucket en la
+respuesta de la carga". Backend, `medium`, `depends_on: 88` (done).
+- **Decisiones ya cerradas con el humano** (antes del spec, vía AskUserQuestion): (a) momento = la
+  **carga vía API** (`cargarViaApi`, que ya asigna `num_guia` en el acto; la carga masiva por sesión
+  NO numera, no aplica); (b) generación **server-side**; (c) **un PDF consolidado por lote**;
+  (d) devolver la **URL firmada** en la respuesta del endpoint.
+- **Reúso clave:** `EtiquetaGuiaService.generarEtiquetas` (arma los `EtiquetaGuiaDTO`),
+  `SupabaseFileStorage`/`SupabaseSignedUrlProvider` (`lib/storage/`), `buildPaqueteUrl`. Layout de
+  etiqueta 100×100 mm de `app/(app)/ordenes/_components/etiquetas-pdf.ts` (cliente, feature 32).
+- **Deps nuevas ya instaladas** durante la exploración: `qrcode` + `bwip-js` (pure-JS server-side; el
+  generador de cliente `jspdf`+`jsbarcode`+`qrcode.react` depende del DOM/canvas y no corre en Node).
+- **Fase 1 en curso:** feature 112 en `feature_list.json` (`pending`); `spec_author` (`model: opus`)
+  lanzado para `specs/112-etiquetas-pdf-carga-api/` (requirements EARS + design + tasks).
+- **Próximo:** al terminar el spec → `spec_ready` + **PARAR en la puerta humana F1.4**. Rama/impl se
+  difieren a Fase 2 en worktree aislado desde `origin/dev` (el `flow` actual arrastra WIP ajeno).
+- **⚠️ Tarea humana al desplegar:** crear el bucket **privado** `etiquetas-guia` en Supabase.
+
 **Chat mensajero↔cliente vía WhatsApp — feature 109 (2026-07-23) → EN ESPECIFICACIÓN.** Pedido del
 humano: "chat que tiene acceso el mensajero, que usa la implementación de WhatsApp como intermediario
 y que a través del webhook registra las respuestas del cliente". Fullstack, high, `depends_on: null`.

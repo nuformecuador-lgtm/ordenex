@@ -12,6 +12,20 @@ export interface IOrdenEnvioReader {
   findParaEnvio(ordenId: string, mensajeroId: string): Promise<OrdenEnvioData | null>;
 }
 
+/**
+ * Arma el nombre para mostrar del mensajero (feature 21: `primerApellido`/`segundoApellido`
+ * nullable). Concatena los que existan; cadena vacia si no hay mensajero asignado.
+ */
+function nombreMensajero(
+  m: { nombre: string; primerApellido: string | null; segundoApellido: string | null } | null,
+): string {
+  if (m === null) return "";
+  return [m.nombre, m.primerApellido, m.segundoApellido]
+    .filter((parte): parte is string => Boolean(parte && parte.trim()))
+    .join(" ")
+    .trim();
+}
+
 export class OrdenEnvioReader implements IOrdenEnvioReader {
   constructor(private readonly prisma: OrdenPrismaClient) {}
 
@@ -30,6 +44,10 @@ export class OrdenEnvioReader implements IOrdenEnvioReader {
         producto: true,
         direccion: true,
         montoCobrar: true,
+        // Mensajero asignado: fuente de la variable `mensajero` de las plantillas.
+        mensajeroAsignado: {
+          select: { nombre: true, primerApellido: true, segundoApellido: true },
+        },
       },
     });
     if (row === null) return null;
@@ -42,6 +60,7 @@ export class OrdenEnvioReader implements IOrdenEnvioReader {
       direccion: row.direccion,
       // Decimal de Prisma -> number para el resolver de variables.
       montoCobrar: row.montoCobrar === null ? null : Number(row.montoCobrar),
+      mensajeroNombre: nombreMensajero(row.mensajeroAsignado),
     };
   }
 }
