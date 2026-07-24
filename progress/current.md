@@ -21,7 +21,7 @@
 Backend `e044e05` + frontend `36d12bd` en `feature/135-order-status-rename-nomenclatura`.
 `./init.sh` **verde** (484 archivos / 4815 tests); guards R13 (censo) y `no-embalaje` verdes.
 Reviewer **APROBADO-CON-NOTAS**, 0 bloqueantes, trazabilidad R1–R13 completa
-(`progress/review_135-...md`). **PR-135-PLACEHOLDER**. Se reinició de cero desde el spec del
+(`progress/review_135-...md`). **PR #157 → `dev`** (falta merge humano). Se reinició de cero desde el spec del
 gate (se descartó una WIP pre-gate que usaba `en_tienda`/etiquetas abreviadas; el worktree
 suelto `agent-a2b3…` quedó como directorio huérfano en disco por ruta-larga de Windows).
 - **Deuda post-merge (Nota-3 del reviewer):** correr `prisma migrate deploy` + verificar
