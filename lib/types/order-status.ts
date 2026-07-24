@@ -20,6 +20,12 @@
 // indices 5/6/8/10/13 y el 2). El mapeo antiguo->nuevo y su reversion viven en la
 // migracion nueva 20260724120000_order_status_rename_nomenclatura (UPDATE sobre la
 // tabla catalogo order_status: id/FK preservados, R4); los otros 9 values no cambian.
+// Feature 139/R1: suma los TRES estados del flujo de DEVOLUCION de rechazadas
+// (indices 15/16/17, APENDICE sin alterar posiciones previas): "por_devolver" (satelite
+// tras aprobar el cierre, elegible para "enviar a central"), "devolviendo_a_bodega_central"
+// (en transito satelite->central) y "por_devolver_a_tienda" (en la central, elegible para
+// "enviar a la tienda"). Sembrados idempotentemente por seedOrderStatus + migracion
+// 20260724140000_order_status_devolucion_rechazadas (INSERT ... WHERE NOT EXISTS por value).
 export const ORDER_STATUS_SEED = [
   "entregada",
   "devuelta",
@@ -36,6 +42,9 @@ export const ORDER_STATUS_SEED = [
   "en_bodega_satelite", // feature 33: recibida en la bodega satelite de su zona
   "devuelta_a_tienda", // 14mo valor: cierre del flujo de devolucion, la tienda de origen la recibio (renombrado en feature 135)
   "sin_gestionar", // feature 109 (15mo valor): orden que quedo en en_ruta al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
+  "por_devolver", // feature 139 (16mo valor): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
+  "devolviendo_a_bodega_central", // feature 139 (17mo valor): en transito satelite -> central (tras "enviar a central")
+  "por_devolver_a_tienda", // feature 139 (18mo valor): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

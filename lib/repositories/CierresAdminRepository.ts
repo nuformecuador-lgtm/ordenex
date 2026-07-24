@@ -377,8 +377,15 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * igual.
    */
   async resolverCierre(input: ResolverCierreInput): Promise<ResolverCierreResult> {
-    const { cierreId, alcance, nuevoEstado, resueltoPor, motivoRechazo, liberacionSinGestionar } =
-      input;
+    const {
+      cierreId,
+      alcance,
+      nuevoEstado,
+      resueltoPor,
+      motivoRechazo,
+      liberacionSinGestionar,
+      devolucionRechazadas,
+    } = input;
     const alcanceGuard = alcanceWhere(alcance);
 
     const count = await this.prisma.$transaction(async (tx) => {
@@ -480,6 +487,71 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                       estatusDestinoId: destinoEstatusId,
                       actorUsuarioId: resueltoPor, // R18: el admin que aprobo
                       origenTipo: "liberacion_sin_gestionar", // R18
+                    })),
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        // Feature 139 (T1.3, R5/R6/R7/R8/R11): DISPARA la devolucion de las `rechazada` del
+        // mensajero del cierre, DESPUES de la liberacion `sin_gestionar` y EN LA MISMA tx
+        // `aprobado` (atomico con la transicion del cierre + wallets + liberacion, R6). Un RECHAZO
+        // no dispara (vive dentro del `if (nuevoEstado === 'aprobado')`, R10). Money-neutral (R8):
+        // SOLO cambia `estatus_id` — a diferencia de la liberacion 109, NO limpia
+        // mensajero/asignado_at ni marca `prioridad` (aqui la orden va a DEVOLUCION, no se reasigna).
+        // Idempotente (R7): la guarda `estatus_id = rechazada` del updateMany + el hecho de que un
+        // cierre ya `aprobado` no vuelve a entrar por la guarda del updateMany del propio cierre
+        // (count=0) garantizan que una 2.a corrida encuentra 0 filas. `findUnique` propio (no reusa
+        // el de la liberacion): ambas ramas son independientes y cada una puede venir sola.
+        if (devolucionRechazadas) {
+          const cierreDev = await tx.cierreDia.findUnique({
+            where: { id: cierreId },
+            select: { mensajeroId: true },
+          });
+          if (cierreDev !== null) {
+            const { rechazadaId, porDevolverId, porDevolverATiendaId, centralZonaId } =
+              devolucionRechazadas;
+            // R5: `rechazada` del mensajero del cierre (guarda por estatus + propiedad).
+            const rechazadas = await tx.orden.findMany({
+              where: {
+                mensajeroAsignadoId: cierreDev.mensajeroId,
+                estatusId: rechazadaId,
+                deletedAt: null,
+              },
+              select: { id: true, zonaId: true },
+            });
+            if (rechazadas.length > 0) {
+              // R5: destino por ZONA de la ORDEN (misma regla 99/100): central ->
+              // por_devolver_a_tienda; satelite -> por_devolver.
+              const idsByDestino = new Map<string, string[]>();
+              for (const o of rechazadas) {
+                const { destinoTipo } = resolverDestinoCierre(o.zonaId, centralZonaId);
+                const destinoEstatusId =
+                  destinoTipo === "bodega_central" ? porDevolverATiendaId : porDevolverId;
+                const arr = idsByDestino.get(destinoEstatusId);
+                if (arr) arr.push(o.id);
+                else idsByDestino.set(destinoEstatusId, [o.id]);
+              }
+              for (const [destinoEstatusId, ids] of idsByDestino) {
+                // R7/R8/R22: updateMany GUARDADO por `estatus_id = rechazada`. NO toca
+                // mensajero/asignado_at ni prioridad (money-neutral; diferencia deliberada con la
+                // liberacion `sin_gestionar`, que SI limpia mensajero + prioridad por ir a RE-reparto).
+                const movidas = await tx.orden.updateMany({
+                  where: { id: { in: ids }, estatusId: rechazadaId, deletedAt: null },
+                  data: { estatusId: destinoEstatusId },
+                });
+                // R11/R22: choke point SOLO de las que transicionaron; actor = admin, origen dedicado.
+                if (movidas.count > 0) {
+                  await appendCambioEstado(
+                    tx,
+                    ids.map((ordenId) => ({
+                      ordenId,
+                      estatusOrigenId: rechazadaId,
+                      estatusDestinoId: destinoEstatusId,
+                      actorUsuarioId: resueltoPor, // R11: el admin que aprobo
+                      origenTipo: "devolucion_rechazada", // R11
                     })),
                   );
                 }

@@ -23,6 +23,8 @@ const NUM_GUIA = 77;
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_bodega_central: "os-en-bodega-central",
   en_ruta_bodega_central: "os-en-ruta-bodega-central",
+  // feature 139: destino del caso satelite (devolviendo_a_bodega_central -> por_devolver_a_tienda)
+  por_devolver_a_tienda: "os-por-devolver-a-tienda",
 };
 
 type RepoMethods = Pick<
@@ -78,16 +80,65 @@ describe("RecepcionBodegaCentralService.recibirEnBodegaCentral", () => {
     expect(res.status).toBe("ok");
   });
 
-  // R3/R17: persiste con la guarda por estado y marca el historial con el tipo propio.
-  it("R3/R17: persiste con destino resuelto y origenTipo recepcion_bodega_central", async () => {
+  // R3/R17: persiste con la guarda por estado de ORIGEN (state-aware) y marca el historial con el
+  // tipo propio. El service pasa el origen RECIBIDO (en_ruta_bodega_central) + el destino resuelto.
+  it("R3/R17 (138): persiste con origen `en_ruta_bodega_central`, destino resuelto y origenTipo recepcion_bodega_central", async () => {
     const repo = fakeRepo();
     await newService(repo).recibirEnBodegaCentral(NUM_GUIA, MAESTRO);
 
     expect(repo.recibirEnBodegaCentral).toHaveBeenCalledWith(
       "o1",
+      "en_ruta_bodega_central",
       "os-en-bodega-central",
       { actorUsuarioId: "u-maestro", origenTipo: "recepcion_bodega_central" },
     );
+  });
+
+  // --- Caso 139 (STATE-AWARE): devolviendo_a_bodega_central -> por_devolver_a_tienda ---
+
+  it("R17 (139): ok — transiciona devolviendo_a_bodega_central -> por_devolver_a_tienda", async () => {
+    const repo = fakeRepo({
+      findByNumGuiaForTransicion: vi.fn(async () =>
+        transicionRow({ estatusValue: "devolviendo_a_bodega_central" }),
+      ),
+    });
+    const res = await newService(repo).recibirEnBodegaCentral(NUM_GUIA, MAESTRO);
+
+    expect(res).toEqual({ status: "ok", ordenId: "o1", estado: "por_devolver_a_tienda" });
+    // Guarda por el origen 139 + destino resuelto por el estado, mismo origenTipo.
+    expect(repo.recibirEnBodegaCentral).toHaveBeenCalledWith(
+      "o1",
+      "devolviendo_a_bodega_central",
+      "os-por-devolver-a-tienda",
+      { actorUsuarioId: "u-maestro", origenTipo: "recepcion_bodega_central" },
+    );
+  });
+
+  it("R7 (139): ya_recibida si ya esta en por_devolver_a_tienda (idempotente), sin escritura", async () => {
+    const repo = fakeRepo({
+      findByNumGuiaForTransicion: vi.fn(async () =>
+        transicionRow({ estatusValue: "por_devolver_a_tienda" }),
+      ),
+    });
+    const res = await newService(repo).recibirEnBodegaCentral(NUM_GUIA, MAESTRO);
+
+    expect(res).toEqual({ status: "ya_recibida" });
+    expect(repo.recibirEnBodegaCentral).not.toHaveBeenCalled();
+  });
+
+  it("R9 (139): pierde la carrera y otro la recibio primero (ahora por_devolver_a_tienda) -> ya_recibida", async () => {
+    const lecturas = [
+      transicionRow({ estatusValue: "devolviendo_a_bodega_central" }), // elegible
+      transicionRow({ estatusValue: "por_devolver_a_tienda" }), // re-lectura: ya en destino 139
+    ];
+    let i = 0;
+    const repo = fakeRepo({
+      findByNumGuiaForTransicion: vi.fn(async () => lecturas[i++] ?? null),
+      recibirEnBodegaCentral: vi.fn(async () => false),
+    });
+    const res = await newService(repo).recibirEnBodegaCentral(NUM_GUIA, MAESTRO);
+
+    expect(res).toEqual({ status: "ya_recibida" });
   });
 
   // --- Rol (R4) ---

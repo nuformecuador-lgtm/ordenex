@@ -8,8 +8,8 @@ import { seedOrderStatus } from "@/scripts/seed-catalogos";
 // 2/5/6): por_recoger (feature 17), en_ruta (feature 36), en_bodega_central,
 // en_ruta_bodega_central, devolviendo_a_tienda y devuelta_a_tienda. Los otros 9 no
 // cambian (en_ruta_bodega_satelite feature 30, en_bodega_satelite feature 33, etc.).
-describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename de nomenclatura)", () => {
-  it("contiene exactamente los 15 valores esperados", () => {
+describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename · feature 139 devolucion)", () => {
+  it("contiene exactamente los 18 valores esperados", () => {
     expect([...ORDER_STATUS_SEED].sort()).toEqual(
       [
         "devuelta",
@@ -27,8 +27,24 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename de nomenclatura)", 
         "en_bodega_satelite",
         "devuelta_a_tienda",
         "sin_gestionar",
+        // feature 139: los 3 estados del flujo de devolucion de rechazadas
+        "por_devolver",
+        "devolviendo_a_bodega_central",
+        "por_devolver_a_tienda",
       ].sort(),
     );
+  });
+
+  it("feature 139/R1: incluye los 3 estados del flujo de devolucion como APENDICE (indices 15/16/17)", () => {
+    // Se APENDEN al final: conservan las posiciones previas intactas (los otros 15 no se mueven).
+    expect(ORDER_STATUS_SEED[15]).toBe("por_devolver");
+    expect(ORDER_STATUS_SEED[16]).toBe("devolviendo_a_bodega_central");
+    expect(ORDER_STATUS_SEED[17]).toBe("por_devolver_a_tienda");
+    // El set completo incluye los 3 nuevos.
+    const set = new Set(ORDER_STATUS_SEED);
+    expect(set.has("por_devolver")).toBe(true);
+    expect(set.has("devolviendo_a_bodega_central")).toBe(true);
+    expect(set.has("por_devolver_a_tienda")).toBe(true);
   });
 
   it("incluye en_preparacion (default de creacion GLOBAL, feature 15/R7/R8)", () => {
@@ -67,7 +83,7 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename de nomenclatura)", 
 
   it("no tiene valores duplicados", () => {
     expect(new Set(ORDER_STATUS_SEED).size).toBe(ORDER_STATUS_SEED.length);
-    expect(ORDER_STATUS_SEED).toHaveLength(15);
+    expect(ORDER_STATUS_SEED).toHaveLength(18);
   });
 });
 
@@ -113,11 +129,14 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
     expect(fake.rows.has("en_bodega_satelite")).toBe(true); // feature 33/R1
     expect(fake.rows.has("devuelta_a_tienda")).toBe(true); // cierre de devolucion
     expect(fake.rows.has("sin_gestionar")).toBe(true); // feature 109
-    expect(fake.rows.size).toBe(15);
+    expect(fake.rows.has("por_devolver")).toBe(true); // feature 139
+    expect(fake.rows.has("devolviendo_a_bodega_central")).toBe(true); // feature 139
+    expect(fake.rows.has("por_devolver_a_tienda")).toBe(true); // feature 139
+    expect(fake.rows.size).toBe(18);
     const idPrimera = fake.rows.get("por_recoger")?.id;
 
     await seedOrderStatus(client); // segunda ejecucion: idempotente
-    expect(fake.rows.size).toBe(15); // no crece
+    expect(fake.rows.size).toBe(18); // no crece
     expect(fake.rows.get("por_recoger")?.id).toBe(idPrimera); // id conservado
   });
 });

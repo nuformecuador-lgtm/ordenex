@@ -17,10 +17,12 @@ export type RecibirEnBodegaCentralActionInput = z.infer<
 /**
  * Resultado expuesto por `recibirEnBodegaCentralPorQr`. Espeja
  * `RecibirEnBodegaCentralServiceResult` agregando `unauthenticated` (borde, R5). NO incluye
- * `tienda_ajena`/`zona_ajena`/`sin_zona`: la bodega central es global (R11).
+ * `tienda_ajena`/`zona_ajena`/`sin_zona`: la bodega central es global (R11). STATE-AWARE (feature
+ * 138 + 139): el `estado` del `ok` es el destino resuelto por el estado de origen
+ * (`en_bodega_central` para el caso 138, `por_devolver_a_tienda` para el 139).
  */
 export type RecibirEnBodegaCentralResult =
-  | { status: "ok"; ordenId: string; estado: "en_bodega_central" }
+  | { status: "ok"; ordenId: string; estado: "en_bodega_central" | "por_devolver_a_tienda" }
   | { status: "forbidden" }
   | { status: "estado_invalido"; estado: string }
   | { status: "ya_recibida" }
