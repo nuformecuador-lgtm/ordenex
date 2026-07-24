@@ -101,7 +101,60 @@ Pendiente (R12–R16, incl. R14):
 La acción `recibirEnBodegaCentralPorQr` y el tipo `RecibirEnBodegaCentralResult` ya están listos y
 tipados para el consumo del componente.
 
+---
+
+# impl_138 — Recepción en bodega central (FRONTEND, Fase 2 de 2)
+
+> Rama: `feature/138-recepcion-bodega-central`. Fase 2 = Bloque 3 (T8/T9) + test de componente (T10 UI).
+> Consume la Server Action `recibirEnBodegaCentralPorQr` y el tipo `RecibirEnBodegaCentralResult` de la
+> Fase 1 (backend), sin tocarlos.
+
+## Archivos creados (frontend)
+
+- `app/(app)/ordenes/_components/EscanerRecepcionBodegaCentral.tsx` — `"use client"`, espejo de
+  `EscanerRecepcionOrigen`. DOS entradas equivalentes (R12): (a) escaneo QR por cámara (`QrScanner` +
+  `extractNumGuiaFromScan`, R13) y (b) entrada manual `<Input type="number">` + botón "Recibir" (R12b).
+  Ambas funelan a `recibirEnBodegaCentralPorQr({ numGuia })`; toast por cada uno de los 8 resultados
+  (R15); `onRecibida` en `ok`/`ya_recibida` (R14); guard `procesando` anti-doble-submit; código
+  inválido (QR sin num_guia o guía manual no-entera-positiva) cortado en cliente con "Código
+  inválido" sin llamar a la acción (R10 lado UI).
+- `tests/components/EscanerRecepcionBodegaCentral.test.tsx` — 13 tests (R12/R13/R14/R15/R10).
+
+## Archivos modificados (frontend)
+
+- `app/(app)/ordenes/_components/OrdenesTabs.tsx` — nueva prop `puedeRecibirBodegaCentral?: boolean`;
+  monta `EscanerRecepcionBodegaCentral` en el encabezado a nivel de contenedor (junto a la carga
+  masiva/recepción en origen) con `onRecibida={handleSuccess}` (revalida las tablas por tab, R14).
+- `app/(app)/ordenes/page.tsx` — gate `puedeRecibirBodegaCentral = rol ? esAccesoTotal(rol) : false`
+  (maestro/admin, R16), pasada a `OrdenesTabs`. `adminTienda` NO la recibe.
+- `tests/components/OrdenesPage.test.tsx` — 2 tests de visibilidad (R16): el receptor (input "Número
+  de guía" + botón "Recibir") aparece para maestro/admin y NO para adminTienda ni sin sesión.
+
+## Mapa R → test (parte frontend: R12–R16)
+
+| Req | Test |
+| --- | --- |
+| R12 (dos entradas: cámara + manual) | componente `R13: al decodificar el QR llama a la acción ...` + `R12b: la entrada manual dispara la MISMA acción con el num_guia tecleado` |
+| R13 (QR `/paquete/<numGuia>` → num_guia) | componente `R13: al decodificar el QR llama a la acción con el num_guia de la URL` |
+| R14 (refresco en ok/ya_recibida) | componente `ok -> ... dispara onRecibida` + `ya_recibida -> ... dispara onRecibida (idempotente, R14)`; wiring: `OrdenesTabs` monta con `onRecibida={handleSuccess}` (revalida `ordenes:list`) |
+| R15 (toast distinto por resultado) | componente `toast por resultado (R15)` — 8 casos: ok, ya_recibida, estado_invalido (label legible), no_encontrada, forbidden, unauthenticated, conflict, validation_error |
+| R16 (solo maestro/admin) | page `recepción bodega central (R16): el receptor se ofrece a maestro y admin` + `... NO se ofrece a adminTienda ni sin sesión` |
+| R10 (UI: código inválido cortado) | componente `corte en cliente del código inválido (R10)` — QR sin num_guia, guía "0", guía vacía; ninguno llama a la acción |
+
+## Trazabilidad R1–R18 (completa, Fase 1 + Fase 2)
+
+Dominio/borde **R1–R11, R17, R18** → tests backend (tabla de la Fase 1, arriba).
+UI **R12–R16** → tests frontend (tabla de esta fase). Ningún requisito queda sin ≥1 test.
+
+## Verificación ejecutable (Fase 2, cierre)
+
+- `./init.sh` → **VERDE** (typecheck 0 · lint limpio · suite completa verde). Resultado exacto en el
+  reporte de cierre.
+- Migración real up/down contra Postgres: sigue siendo **deuda post-merge** (sin `.env`/DB en el
+  entorno), ya documentada en la Fase 1; no bloquea el verde de la suite.
+
 ## Veredicto
 
-Backend de la feature 138 completo y verde (typecheck 0, 39 tests backend propios, suite 4964 verde);
-migración creada + `prisma generate` OK, con su aplicación real como deuda post-merge documentada.
+Feature 138 completa (backend Fase 1 + frontend Fase 2): recepción en bodega central con disparador
+en el encabezado de `/ordenes` (escaneo QR + entrada manual), solo maestro/admin, 1-a-1. Trazabilidad
+R1–R18 completa; `./init.sh` verde. Migración real = deuda post-merge documentada.

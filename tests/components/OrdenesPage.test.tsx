@@ -368,6 +368,56 @@ describe("OrdenesPage", () => {
     ).toBeNull();
   });
 
+  it("recepción bodega central (R16): el receptor se ofrece a maestro y admin", async () => {
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      page: 1,
+      pageSize: 25,
+      total: 0,
+    });
+
+    for (const rol of [RolValue.maestro, RolValue.admin]) {
+      resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
+      await renderPage();
+      // El receptor de bodega central aporta la entrada manual: input "Número de
+      // guía" + botón "Recibir" (distinto del escáner de origen del adminTienda,
+      // que solo tiene cámara).
+      expect(screen.getByLabelText("Número de guía")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Recibir" }),
+      ).toBeInTheDocument();
+      cleanup();
+    }
+  });
+
+  it("recepción bodega central (R16): NO se ofrece a adminTienda ni sin sesión", async () => {
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      page: 1,
+      pageSize: 25,
+      total: 0,
+    });
+
+    // adminTienda opera la recepción en ORIGEN (cámara), NO la de bodega central:
+    // no debe ver la entrada manual de guía.
+    resolveActorMock.mockResolvedValueOnce({
+      usuarioId: "t1",
+      rol: RolValue.adminTienda,
+    });
+    await renderPage();
+    expect(screen.queryByLabelText("Número de guía")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Recibir" })).toBeNull();
+    cleanup();
+
+    // Sin sesión (actor null): tampoco.
+    resolveActorMock.mockResolvedValueOnce(null);
+    await renderPage();
+    expect(screen.queryByLabelText("Número de guía")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Recibir" })).toBeNull();
+  });
+
   it("seguridad: mensajero y adminSatelite NO alcanzan /ordenes (notFound)", async () => {
     // El mensajero opera en /mis-asignaciones y el adminSatelite en /recepcion-satelite;
     // ninguno debe ver el listado plano de todas las ordenes. La pagina llama notFound()
