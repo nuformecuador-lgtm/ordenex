@@ -23,10 +23,10 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     duplicadas: 0,
     conError: 0,
     filas: [
-      { fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "en_ruta_bodega_principal", numGuia: 1042 },
+      { fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "en_ruta_bodega_central", numGuia: 1042 },
     ],
     ordenes: [
-      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_principal", costoEnvio: "3.92" },
+      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
     ],
     ...overrides,
   };
