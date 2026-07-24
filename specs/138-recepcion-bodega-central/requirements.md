@@ -1,7 +1,9 @@
-# Feature 136 — Recepción en bodega central · requirements.md
+# Feature 138 (Recepción en bodega central) · requirements.md
 
-> Zona: fullstack · Complexity: medium · Rama: `feature/136-recepcion-bodega-central`
-> Depende de: **135** (renombre de estados).
+> Zona: fullstack · Complexity: medium · Rama: `feature/138-recepcion-bodega-central`
+> Depende de: **137** (renombre de estados, ya mergeado a dev). Renumerada 136→138 por colisión de IDs.
+> Nota: el cuerpo del spec puede citar los números viejos (136/135) como artefacto de la renumeración;
+> el canónico es 138 (esta feature) y 137 (el rename del que depende).
 
 ## Contexto y nombres de estado (leer antes de los requisitos)
 
@@ -106,6 +108,12 @@ componente. R9 → test de concurrencia/guardia del repo.
 ---
 
 ## Preguntas abiertas
+
+> **GATE F1.4 RESUELTO (2026-07-24, por el humano):** Q1 = **sin acotar por zona** (R11 tal cual).
+> Q2 = **solo dejar en `en_bodega_central`** (sin auto-reruteo; lo maneja el flujo de asignación
+> existente). Q3 = **control en el header de `/ordenes`** (espejo de `EscanerRecepcionOrigen`, sin
+> página dedicada). Q4 = **solo 1-a-1 en v1**. Q5 (dep 135/137) = satisfecha (rename mergeado). Todas
+> confirman el "supuesto actual" descrito abajo.
 
 1. **Alcance por zona.** ¿La recepción central recibe CUALQUIER orden en `en_ruta_bodega_central`
    sin importar la zona (supuesto de R11), o debe acotarse a órdenes de zona central/GAM
