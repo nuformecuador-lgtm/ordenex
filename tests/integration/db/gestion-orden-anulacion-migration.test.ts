@@ -119,6 +119,7 @@ describe("Feature 67 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
       "cancelacion_api", // feature 106
       "corte_sin_gestionar", // feature 109
       "liberacion_sin_gestionar", // feature 109
+      "recepcion_bodega_central", // feature 138
     ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_67.has(v))),

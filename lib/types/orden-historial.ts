@@ -29,6 +29,7 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "cancelacion_api", // feature 106: cancelacion por API key (OrdenRepository.cancelarViaApi), en_bodega_central/en_ruta_bodega_central -> devolviendo_a_tienda
   "corte_sin_gestionar", // feature 109: corte diario, en_ruta -> sin_gestionar (actor null/cron). NO enlaza gestion; destino != devuelta -> no altera contarIntentos (R12)
   "liberacion_sin_gestionar", // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
+  "recepcion_bodega_central", // feature 138: recepcion fisica en bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];

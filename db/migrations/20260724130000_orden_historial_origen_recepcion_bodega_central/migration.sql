@@ -1,0 +1,18 @@
+-- Feature 138 (design §2.2, R17): añade el valor `recepcion_bodega_central` al enum
+-- `orden_historial_origen_tipo`. Es la clasificacion propia de la transicion de RECEPCION
+-- EN BODEGA CENTRAL (`en_ruta_bodega_central` -> `en_bodega_central`), distinguible en el
+-- historial de la recepcion satelite (`recepcion_satelite`) y de la recepcion en origen
+-- (`ajuste_estado`). La PRIMERA fila de historial de estas transiciones usa
+-- `origen_tipo = recepcion_bodega_central`.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite
+-- USAR un valor de enum recien añadido en la misma transaccion que lo añadio (error 55P04
+-- "unsafe use of new value of enum type"). Prisma Migrate corre cada migration.sql en una
+-- transaccion. Aqui SOLO se añade el valor; su primer uso ocurre en tiempo de aplicacion
+-- (`OrdenRepository.recibirEnBodegaCentral`), en transacciones posteriores. Mismo precedente
+-- que 20260717120000_..._carga_api y 20260721130000_..._resolver_novedad.
+-- `IF NOT EXISTS` lo hace idempotente si se reintenta.
+--
+-- Aditiva: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado`
+-- conserva su RLS de la feature 49).
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'recepcion_bodega_central';

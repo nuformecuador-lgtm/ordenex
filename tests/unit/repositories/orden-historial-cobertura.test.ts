@@ -35,7 +35,7 @@ const REPOS = {
   CierresAdminRepository: CierresAdminRepository.prototype as unknown as Record<string, unknown>,
 };
 
-// Los 20 puntos del mapa (design §2), 1 por familia de transicion.
+// Los 21 puntos del mapa (design §2), 1 por familia de transicion.
 const PUNTOS_DE_ESCRITURA = [
   { n: 1, repo: "OrdenRepository", simbolo: "createManyOrdenes", origenTipo: "carga_masiva" },
   { n: 2, repo: "OrdenRepository", simbolo: "create", origenTipo: "creacion_manual" },
@@ -157,6 +157,19 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "resolverCierre",
     origenTipo: "liberacion_sin_gestionar",
   },
+  // #21: feature 138. La recepcion en la BODEGA CENTRAL transiciona
+  // `en_ruta_bodega_central -> en_bodega_central` dentro de `OrdenRepository.recibirEnBodegaCentral`
+  // (escaneo QR del maestro/admin), en la MISMA tx, via el choke point con actor = el que recibe y
+  // `origen_tipo` NUEVO `recepcion_bodega_central` (21.º valor del enum, migracion
+  // `*_orden_historial_origen_recepcion_bodega_central` + su down). Cierra el dead-end de la carga por
+  // API; distinguible en la linea de tiempo de la recepcion satelite (`recepcion_satelite`) y de la
+  // recepcion en origen (`ajuste_estado`). NO enlaza gestion; destino != devuelta -> no altera intentos.
+  {
+    n: 21,
+    repo: "OrdenRepository",
+    simbolo: "recibirEnBodegaCentral",
+    origenTipo: "recepcion_bodega_central",
+  },
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
@@ -178,11 +191,11 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 20 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(20);
-    // numeracion 1..20 sin huecos ni duplicados.
+  it("son EXACTAMENTE 21 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(21);
+    // numeracion 1..21 sin huecos ni duplicados.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
     ]);
   });
 
@@ -193,7 +206,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 20 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
+  it("los 21 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
     const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
     expect(tiposDelMapa).toEqual(tiposDelSeed);
