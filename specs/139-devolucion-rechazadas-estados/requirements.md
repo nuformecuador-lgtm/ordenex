@@ -1,7 +1,8 @@
-# Feature 137 — Flujo de devolución de RECHAZADAS (estados + transiciones + UI)
+# Feature 139 (Flujo de devolución de RECHAZADAS · estados + transiciones + UI)
 
-> Zona: fullstack · Complejidad: high · Rama: `feature/137-devolucion-rechazadas-estados`
-> Depende de: 135 (renombrado de estados) y 136 (recepción central).
+> Zona: fullstack · Complejidad: high · Rama: `feature/139-devolucion-rechazadas-estados`
+> Depende de: **137** (rename, en dev) y **138** (recepción central, en dev). Renumerada 137→139.
+> Nota: el cuerpo cita a veces los números viejos (137/136/135) — canónico: 139 (esta), 138 (recepción), 137 (rename).
 
 ## Nomenclatura (post-135)
 
@@ -170,6 +171,19 @@ Cada `R<n>` se mapea a su test en `tasks.md` y el implementer lo documenta en
 feature.
 
 ## Preguntas abiertas
+
+> **GATE F1.4 RESUELTO (2026-07-24, por el humano):**
+> - **Q1/R4 (etiquetas):** textos propuestos tal cual ("Por devolver", "Devolviendo a bodega central",
+>   "Por devolver a tienda").
+> - **Q2/R17 (recepción central):** **extender la recepción central de la 138 a _state-aware_** — un
+>   solo escáner en central resuelve el destino por el estado de origen:
+>   `en_ruta_bodega_central → en_bodega_central` (138) y
+>   `devolviendo_a_bodega_central → por_devolver_a_tienda` (139). Generaliza el service/repo de la 138
+>   (RecepcionBodegaCentralService/OrdenRepository.recibirEnBodegaCentral) SIN romper el caso 138.
+> - **Q3/R15-R16 (autz envío a tienda):** maestro/admin (central), NO `esBodegaResponsable` por-zona.
+> - **Q4/R20 (visibilidad tienda):** el adminTienda ve **TODOS** los estados del retorno de sus órdenes,
+>   incluidos los internos de bodega (`por_devolver`, `devolviendo_a_bodega_central`), no solo el tramo
+>   tienda. (Amplía el default del diseño; "no excluirlos".)
 
 1. **Confirmar textos de etiqueta (R4).** Riesgo de confusión entre `devolviendo_a_bodega_central`
    = "Devolviendo a bodega central" y el existente `en_ruta_bodega_principal` = "Enviando a B.
