@@ -15,7 +15,21 @@
 
 ## Features en curso
 
-_Ninguna en curso._ Cerradas y mergeadas a `dev` esta tanda: **109** sin_gestionar / cierre vencido (PR #141), **110** prioridad unificada (PR #140), **111** cierre vencido modelo (PR #139), **102** rechazos SLA visibles (PR #131).
+_Ninguna del lote mensajero en curso._
+
+**Lote mensajero 113–119 — COMPLETO (7/7 mergeadas a `dev`, 2026-07-23).** Detalle en `history.md`.
+113 card detalle+foco (PR #147) · 114 buscador (#150) · 115 marcar-luego (#146) · 116 notas privadas
+(#152) · 117 filtro cantón/distrito (#153) · 118 SINPE (#145) · 119 evidencias 1..N (#148). Nació como
+112–118 y se **renumeró a 113–119** (colisión del ID 112 con `webhook-payload`). Migraciones nuevas:
+115 `orden_mensajero_meta`, 119 `gestion_orden_evidencia`; rename del enum SINPE (118). Se saldó de paso
+un error de lint ajeno de la 120-chat con el PR #151. Despliegue: `prisma migrate deploy`.
+
+**Renumeración del backlog de analítica (2026-07-23).** La cadena de analítica registrada en la rama de
+registro usaba `120`, que **colisionaba** con `120 = chat-whatsapp` (ya en `dev` con código). Se
+**desplazó +1 → 121–134** (dependencias internas reajustadas); es **puro registro** (sin specs, ramas ni
+código), así que renumerar es inocuo. El `120` queda para `chat-whatsapp`.
+
+_Cierres previos mergeados a `dev`:_ **109** (PR #141), **110** (PR #140), **111** (PR #139), **102** (PR #131).
 
 ---
 
