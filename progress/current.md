@@ -53,7 +53,7 @@ Fullstack, high, `depends_on: 120`.
   mano; el `.env` apunta a DB compartida).
 
 
-**Etiquetas PDF en la carga por API — feature 112 (2026-07-23) → EN ESPECIFICACIÓN.** Pedido del
+**Etiquetas PDF en la carga por API — feature 136 (2026-07-23; renumerada de 112 en el merge dev→flow por colisión con `112-webhook-payload-data`) → EN ESPECIFICACIÓN.** Pedido del
 humano: "generar las etiquetas de las órdenes cuando se realice la carga masiva, un único PDF
 almacenado en el storage de Supabase" + "retorna la url donde están los PDF del bucket en la
 respuesta de la carga". Backend, `medium`, `depends_on: 88` (done).
@@ -66,8 +66,8 @@ respuesta de la carga". Backend, `medium`, `depends_on: 88` (done).
   etiqueta 100×100 mm de `app/(app)/ordenes/_components/etiquetas-pdf.ts` (cliente, feature 32).
 - **Deps nuevas ya instaladas** durante la exploración: `qrcode` + `bwip-js` (pure-JS server-side; el
   generador de cliente `jspdf`+`jsbarcode`+`qrcode.react` depende del DOM/canvas y no corre en Node).
-- **Fase 1 en curso:** feature 112 en `feature_list.json` (`pending`); `spec_author` (`model: opus`)
-  lanzado para `specs/112-etiquetas-pdf-carga-api/` (requirements EARS + design + tasks).
+- **Fase 1 en curso:** feature 136 en `feature_list.json`; `spec_author` (`model: opus`)
+  lanzado para `specs/136-etiquetas-pdf-carga-api/` (requirements EARS + design + tasks).
 - **Próximo:** al terminar el spec → `spec_ready` + **PARAR en la puerta humana F1.4**. Rama/impl se
   difieren a Fase 2 en worktree aislado desde `origin/dev` (el `flow` actual arrastra WIP ajeno).
 - **⚠️ Tarea humana al desplegar:** crear el bucket **privado** `etiquetas-guia` en Supabase.
@@ -108,6 +108,24 @@ eliminar) + editor que inserta campos variables `{{clave}}` + preview + estado
   humano. ⚠️ Al desplegar: correr la migración `20260722130000_plantilla_mensaje`.
 - Deuda menor diferida: `progress/impl_107.md` no se escribió (M1 del review); tasks.md sin marcas `[x]`.
 
+_Ninguna del lote mensajero en curso._
+
+**Lote mensajero 113–119 — COMPLETO (7/7 mergeadas a `dev`, 2026-07-23).** Detalle en `history.md`.
+113 card detalle+foco (PR #147) · 114 buscador (#150) · 115 marcar-luego (#146) · 116 notas privadas
+(#152) · 117 filtro cantón/distrito (#153) · 118 SINPE (#145) · 119 evidencias 1..N (#148). Nació como
+112–118 y se **renumeró a 113–119** (colisión del ID 112 con `webhook-payload`). Migraciones nuevas:
+115 `orden_mensajero_meta`, 119 `gestion_orden_evidencia`; rename del enum SINPE (118). Se saldó de paso
+un error de lint ajeno de la 120-chat con el PR #151. Despliegue: `prisma migrate deploy`.
+
+**Renumeración del backlog de analítica (2026-07-23, reajustada en el merge dev→flow 2026-07-24).** La
+cadena de analítica (puro registro, sin specs/ramas/código) usaba `120`, que colisionaba con
+`120 = chat-whatsapp`; se desplazó +1 → 121–134. Al mergear `dev` en `flow` el `121` volvió a colisionar,
+ahora con `121 = ubicación-chat-whatsapp` (feature real, con spec + código en disco). Se movió el
+**catálogo de KPIs a `135`** (era 121), y sus dependientes (`122`, `123`) apuntan ahora a `135`; el resto
+de la cadena (122–134) queda intacto. Estado final: `120` = chat-whatsapp, `121` = ubicación,
+`122–134` + `135` = analítica.
+
+_Cierres previos mergeados a `dev`:_ **109** (PR #141), **110** (PR #140), **111** (PR #139), **102** (PR #131).
 
 
 **Flujo de API key — verificación + huecos (2026-07-21).** A pedido del humano se verificó el flujo

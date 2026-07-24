@@ -73,12 +73,13 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       IRutaOptimizadaRepository,
       "findByMensajero" | "upsertOrigen"
     >,
-    // Feature 115 (R17/R20): meta privada del mensajero. Solo LECTURA aqui (findMarcarLuegoByMensajero)
-    // para reflejar la marca "gestionar mas tarde" del PROPIO actor en el listado; la escritura vive
-    // en OrdenMensajeroMetaService.
+    // Feature 115 (R17/R20): meta privada del mensajero. Solo LECTURA aqui para reflejar en el
+    // listado, del PROPIO actor: la marca "gestionar mas tarde" (`findMarcarLuegoByMensajero`,
+    // 115) y la nota privada (`findNotasByMensajero`, feature 116/R6/R8). La ESCRITURA vive en
+    // OrdenMensajeroMetaService (marca) y NotaPrivadaMensajeroService (nota).
     private readonly metaRepo: Pick<
       IOrdenMensajeroMetaRepository,
-      "findMarcarLuegoByMensajero"
+      "findMarcarLuegoByMensajero" | "findNotasByMensajero"
     >,
   ) {}
 
@@ -119,7 +120,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta, marcadasLuego] =
+    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta, marcadasLuego, notasPrivadas] =
       await Promise.all([
         this.repo.getOrdenEnGestion(actor.usuarioId), // R20
         this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
@@ -128,6 +129,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
         // Feature 115 (R17/R20): marcas "gestionar mas tarde" del PROPIO actor (Set<ordenId>).
         this.metaRepo.findMarcarLuegoByMensajero(actor.usuarioId),
+        // Feature 116 (R6/R8): notas privadas del PROPIO actor (Map<ordenId, nota>). Misma query
+        // acotada por `usuario_id = actor` que garantiza que nunca trae la nota de otro mensajero.
+        this.metaRepo.findNotasByMensajero(actor.usuarioId),
       ]);
 
     // Feature 92 (R28): posicion por orden. Vacio si nunca se optimizo -> todas las cards
@@ -139,7 +143,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     for (const row of rows) {
       // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
       // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
-      const dto = { ...toDTO(row), marcarLuego: marcadasLuego.has(row.id) };
+      // Feature 116 (R6/R8): merge de la nota privada del propio actor (`null` si no hay nota).
+      const dto = {
+        ...toDTO(row),
+        marcarLuego: marcadasLuego.has(row.id),
+        notaPrivada: notasPrivadas.get(row.id) ?? null,
+      };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
         porRecoger.push(dto);
@@ -447,6 +456,9 @@ function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     // Feature 115 (R17): default `false`; el llamador lo sobreescribe con la marca real del
     // actor (`marcadasLuego.has(row.id)`). Aqui SIEMPRE nace un boolean concreto.
     marcarLuego: false,
+    // Feature 116 (R6/R8): default `null`; el llamador lo sobreescribe con la nota real del
+    // actor (`notasPrivadas.get(row.id)`). Aqui SIEMPRE nace un `string | null` concreto.
+    notaPrivada: null,
   };
 }
 

@@ -1,4 +1,4 @@
-# Feature 112 — Etiquetas PDF consolidadas en la carga por API
+# Feature 136 — Etiquetas PDF consolidadas en la carga por API
 
 > Requisitos en notación EARS. Cada `R<n>` es testeable y se mapea a un test en
 > `tasks.md`. Sin detalles de implementación (esos viven en `design.md`).

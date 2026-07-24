@@ -11,7 +11,9 @@ import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
-// Feature 115 — T6: reflejo de `marcarLuego` en el listado (R17) y privacidad por actor (R20).
+// Feature 116 — E1: reflejo de `notaPrivada` en el listado (R6/R8). Espejo del test de
+// `marcarLuego` (115): el service mergea la nota del PROPIO actor por orden, y la privacidad es
+// estructural (consulta acotada por `usuario_id = actor`).
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
@@ -28,7 +30,7 @@ function row(over: Partial<MiAsignacionRow> & { id: string }): MiAsignacionRow {
     montoCobrar: 100,
     latitud: null,
     longitud: null,
-    notas: null,
+    notas: null, // nota de la TIENDA (orden.notas): DISTINTA de la privada
     tiendaNombre: "T",
     zonaNombre: "Z",
     provinciaNombre: "P",
@@ -64,13 +66,13 @@ const fakeRutaRepo = {
   upsertOrigen: vi.fn(async () => {}),
 } as unknown as Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen">;
 
-function build(rows: MiAsignacionRow[], marcadas: Set<string>) {
+function build(rows: MiAsignacionRow[], notas: Map<string, string>) {
   const metaRepo: Pick<
     IOrdenMensajeroMetaRepository,
     "findMarcarLuegoByMensajero" | "findNotasByMensajero"
   > = {
-    findMarcarLuegoByMensajero: vi.fn(async () => marcadas),
-    findNotasByMensajero: vi.fn(async () => new Map<string, string>()), // feature 116
+    findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
+    findNotasByMensajero: vi.fn(async () => notas),
   };
   const service = new MisAsignacionesService(
     fakeRepo(rows),
@@ -83,55 +85,60 @@ function build(rows: MiAsignacionRow[], marcadas: Set<string>) {
   return { service, metaRepo };
 }
 
-describe("R17 — el DTO refleja marcar_luego del mensajero", () => {
-  it("marcarLuego=true para las ordenes con fila marcada; false para el resto", async () => {
+describe("R6 — el DTO refleja la nota privada del mensajero", () => {
+  it("notaPrivada con el texto para las ordenes con nota; null para el resto", async () => {
     const rows = [
       row({ id: "o1", estatusValue: "en_reparto" }),
       row({ id: "o2", estatusValue: "en_reparto" }),
     ];
-    const { service } = build(rows, new Set(["o1"]));
+    const { service } = build(rows, new Map([["o1", "recoger atras"]]));
     const r = await service.listarMisAsignaciones(MENSAJERO);
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") return;
-    const byId = new Map(r.porGestionar.map((d) => [d.id, d.marcarLuego]));
-    expect(byId.get("o1")).toBe(true);
-    expect(byId.get("o2")).toBe(false);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    const byId = new Map(r.porGestionar.map((d) => [d.id, d.notaPrivada]));
+    expect(byId.get("o1")).toBe("recoger atras");
+    expect(byId.get("o2")).toBeNull();
   });
 
-  it("R17: false por defecto cuando no existe NINGUNA fila de marca", async () => {
+  it("null por defecto cuando no existe NINGUNA nota", async () => {
     const rows = [row({ id: "o1", estatusValue: "en_reparto" })];
-    const { service } = build(rows, new Set());
+    const { service } = build(rows, new Map());
     const r = await service.listarMisAsignaciones(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.porGestionar[0].marcarLuego).toBe(false);
+    expect(r.porGestionar[0].notaPrivada).toBeNull();
   });
 
-  it("R17: la marca tambien viaja en 'Por recoger' (dato de la pareja mensajero/orden)", async () => {
-    const rows = [row({ id: "o3", estatusValue: "en_espera_aceptacion" })];
-    const { service } = build(rows, new Set(["o3"]));
+  it("la nota privada NO altera `notas` (nota de la tienda): son campos distintos (R7)", async () => {
+    const rows = [row({ id: "o1", estatusValue: "en_reparto", notas: "nota de la tienda" })];
+    const { service } = build(rows, new Map([["o1", "mi nota privada"]]));
     const r = await service.listarMisAsignaciones(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.porRecoger[0].marcarLuego).toBe(true);
+    expect(r.porGestionar[0].notas).toBe("nota de la tienda");
+    expect(r.porGestionar[0].notaPrivada).toBe("mi nota privada");
   });
 });
 
-describe("R20 — privacidad: el listado solo refleja las marcas del propio actor", () => {
-  it("solo consulta las marcas del actor (usuarioId) y no las de otro mensajero", async () => {
+describe("R8 — privacidad: el listado solo consulta y refleja las notas del propio actor", () => {
+  it("consulta findNotasByMensajero EXCLUSIVAMENTE con el usuarioId del actor", async () => {
     const rows = [row({ id: "o1", estatusValue: "en_reparto" })];
-    // El repo mock devolveria un Set solo con las del actor; aqui verificamos que el service
-    // consulta EXCLUSIVAMENTE con el usuarioId del actor (nunca con otro).
-    const { service, metaRepo } = build(rows, new Set(["o1"]));
+    const { service, metaRepo } = build(rows, new Map([["o1", "x"]]));
     await service.listarMisAsignaciones(MENSAJERO);
-    expect(metaRepo.findMarcarLuegoByMensajero).toHaveBeenCalledWith("m1");
-    expect(metaRepo.findMarcarLuegoByMensajero).toHaveBeenCalledTimes(1);
+    expect(metaRepo.findNotasByMensajero).toHaveBeenCalledWith("m1");
+    expect(metaRepo.findNotasByMensajero).toHaveBeenCalledTimes(1);
   });
 
-  it("una marca de otra orden (no listada) no ensucia el DTO de las ordenes del actor", async () => {
+  it("una nota de otra orden (no listada) no ensucia el DTO de las ordenes del actor", async () => {
     const rows = [row({ id: "o1", estatusValue: "en_reparto" })];
-    // El Set del actor trae "o9" (otra orden suya no presente en el listado): no debe afectar o1.
-    const { service } = build(rows, new Set(["o9"]));
+    const { service } = build(rows, new Map([["o9", "nota de otra orden"]]));
     const r = await service.listarMisAsignaciones(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.porGestionar[0].marcarLuego).toBe(false);
+    expect(r.porGestionar[0].notaPrivada).toBeNull();
+  });
+
+  it("la nota tambien viaja en 'Por recoger' (dato de la pareja mensajero/orden)", async () => {
+    const rows = [row({ id: "o3", estatusValue: "en_espera_aceptacion" })];
+    const { service } = build(rows, new Map([["o3", "nota por recoger"]]));
+    const r = await service.listarMisAsignaciones(MENSAJERO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecoger[0].notaPrivada).toBe("nota por recoger");
   });
 });

@@ -1,9 +1,9 @@
-# Feature 112 — Tasks
+# Feature 136 — Tasks
 
 > Checklist discreto y verificable. `[P]` = paralelizable con otras `[P]` del mismo
 > bloque (sin conflicto de archivos). Cada task lleva su criterio de "hecho". La
 > trazabilidad `R<n> → test` se consolida al final y se copia a
-> `progress/impl_112.md`.
+> `progress/impl_136.md`.
 
 ## Bloque 0 — Preparación (Ops / entorno)
 
@@ -81,16 +81,16 @@
 ## Bloque 4 — Verificación y cierre (depende de todo lo anterior)
 
 - [x] **T4.1** Correr `pnpm run typecheck`, `pnpm run lint`, `pnpm test`. **Hecho:**
-  feature 112 verde en typecheck/lint/test; los tests existentes del endpoint de
+  feature 136 verde en typecheck/lint/test; los tests existentes del endpoint de
   carga por API siguen verdes (regresión R16). Las fallas restantes de la suite son
   drift pre-existente ajeno (SINPE→SIMPE, enum orden_historial), no de esta feature.
 - [x] **T4.2** Verificar que la carga masiva por sesión (`carga-masiva/chunk`) NO
   cambió: revisar que no hay diffs en `cargarMasiva` ni en su ruta. **Hecho:** solo
   se tocó `app/api/ordenes/api-key/carga/route.ts`; `cargarMasiva` intacto. (R15)
-- [x] **T4.3** Escribir el mapa `R<n> → test` en `progress/impl_112.md`. **Hecho:**
+- [x] **T4.3** Escribir el mapa `R<n> → test` en `progress/impl_136.md`. **Hecho:**
   mapa completo (R1–R18 cubiertos).
 
-## Mapa de trazabilidad R → test (borrador para `progress/impl_112.md`)
+## Mapa de trazabilidad R → test (borrador para `progress/impl_136.md`)
 
 | R | Test |
 | --- | --- |

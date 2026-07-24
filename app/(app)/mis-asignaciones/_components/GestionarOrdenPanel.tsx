@@ -20,6 +20,7 @@ import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
+import { NotaPrivadaMensajero } from "./NotaPrivadaMensajero";
 import {
   ChatWhatsappPanel,
   BORRADOR_CHAT_VACIO,
@@ -377,6 +378,16 @@ export function GestionarOrdenPanel({
       <div className="rounded-lg border border-border bg-muted/30 p-4">
         <AsignacionDetalle orden={orden} />
       </div>
+
+      {/* Feature 116 (R7/R11/R14): editor de la NOTA PRIVADA del mensajero, HERMANO de
+          `AsignacionDetalle` (que sigue como presentación pura). Queda claramente separado de la
+          "Notas" de la tienda (dentro del detalle) y acompaña a la orden activa también en modo
+          foco. `notaPrivada` viaja en el DTO filtrada por el actor; el panel se remonta con
+          `key={orden.id}` al cambiar de orden, así que el editor arranca con la nota correcta. */}
+      <NotaPrivadaMensajero
+        ordenId={orden.id}
+        notaInicial={orden.notaPrivada ?? null}
+      />
 
       {/* Paso 1: llamar, whatsapp y verificar la guía antes de gestionar. */}
       {paso === "detalle" ? (

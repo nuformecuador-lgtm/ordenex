@@ -48,6 +48,19 @@ export interface MiAsignacionDTO {
    * consume para el badge y el reordenado de presentacion.
    */
   marcarLuego?: boolean;
+  /**
+   * Feature 116 (R6/R8): nota PRIVADA del mensajero actual sobre esta orden. `string` con el
+   * texto de su nota, o `null` si el propio actor no tiene nota para la orden. DISTINTA de
+   * `notas` (nota de la TIENDA, `orden.notas`): esta viaja SOLO por (usuario_id, orden_id) de
+   * `orden_mensajero_meta.nota`, se resuelve con `findNotasByMensajero(actor.usuarioId)` y NUNCA
+   * expone la nota de otro mensajero para la misma orden (R8).
+   *
+   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`: no rompe los fixtures que
+   * construyen `MiAsignacionDTO` sin el; `toDTO` SIEMPRE lo envia (`null` por defecto y el
+   * llamador lo sobreescribe con la nota real del actor). La UI del mensajero (feature 116/
+   * Bloque F) lo consume para el editor del detalle y el indicador de la card.
+   */
+  notaPrivada?: string | null;
 }
 
 /**

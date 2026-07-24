@@ -1,4 +1,4 @@
-# Feature 112 — Diseño técnico
+# Feature 136 — Diseño técnico
 
 > Cubre R1–R18 de `requirements.md`. Reusa piezas ya existentes (feature 32 y 88);
 > no introduce tabla nueva ni migración (el PDF es un derivado, vive en Storage).
