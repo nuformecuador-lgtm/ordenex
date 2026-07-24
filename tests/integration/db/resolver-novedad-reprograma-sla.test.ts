@@ -21,7 +21,7 @@ const noopJobRepo = {} as unknown as ConstructorParameters<typeof GestionOrdenRe
 const ESTATUS: Record<string, string> = {
   devuelta: "os-devuelta",
   reprogramada: "os-reprogramada",
-  en_bodega: "os-en-bodega",
+  en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
 };
 const valueByEstatusId = (id: string): string =>
@@ -288,14 +288,14 @@ describe("Feature 100 T5.1 — el cron 46 mantiene bloqueada la reprogramada y l
 
     const ok = await cron46Repo(db).liberarOrden({
       ordenId: "o1",
-      destinoEstatusId: ESTATUS.en_bodega,
+      destinoEstatusId: ESTATUS.en_bodega_central,
       estatusReprogramadaId: ESTATUS.reprogramada,
       corridaAt: new Date("2026-07-25T06:00:00.000Z"),
     });
 
     expect(ok).toBe(true);
     const orden = db.ordenes[0];
-    expect(orden.estatusId).toBe(ESTATUS.en_bodega);
+    expect(orden.estatusId).toBe(ESTATUS.en_bodega_central);
     // Feature 110/R1: la orden liberada sale prioritaria para la reasignacion desde bodega.
     expect(orden.prioridad).toBe(true);
     // Handoff limpio (sigue vigente): sin mensajero asignado.

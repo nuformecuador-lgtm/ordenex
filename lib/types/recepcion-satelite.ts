@@ -84,7 +84,7 @@ export type AsignarSateliteActionInput = z.infer<typeof asignarSateliteSchema>;
 // del borde; el resto son resultados de dominio del service). Espejo de
 // `AsignarSateliteServiceResult`.
 export type AsignarSateliteResult =
-  | { status: "ok"; resultados: { ordenId: string; estado: "en_espera_aceptacion" }[] }
+  | { status: "ok"; resultados: { ordenId: string; estado: "por_recoger" }[] }
   | { status: "forbidden" }
   | { status: "sin_zona" }
   // Feature 41/R18: bodega bloqueada (regla estricta R17). La causa (porMensajeros /

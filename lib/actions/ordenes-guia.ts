@@ -119,7 +119,7 @@ export async function generarGuia(
   return isAppErrorShape(r) ? toGuiaActionError(r) : r;
 }
 
-/** R26-R29: asigna mensajero a ordenes en_bodega (solo maestro). */
+/** R26-R29: asigna mensajero a ordenes en_bodega_central (solo maestro). */
 export async function asignarDesdeBodega(
   input: unknown,
   deps: GuiaActionDeps = {},

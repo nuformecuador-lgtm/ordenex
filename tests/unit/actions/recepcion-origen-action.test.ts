@@ -16,7 +16,7 @@ function buildService(
     recibirEnOrigen: vi.fn(async () => ({
       status: "ok" as const,
       ordenId: "o1",
-      estado: "recibido_origen" as const,
+      estado: "devuelta_a_tienda" as const,
     })),
     ...overrides,
   };
@@ -42,7 +42,7 @@ describe("recibirEnOrigenPorQr — borde", () => {
     );
 
     expect(service.recibirEnOrigen).toHaveBeenCalledWith(14, TIENDA);
-    expect(r).toEqual({ status: "ok", ordenId: "o1", estado: "recibido_origen" });
+    expect(r).toEqual({ status: "ok", ordenId: "o1", estado: "devuelta_a_tienda" });
   });
 
   it("reenvía los resultados de dominio tal cual (no los reinterpreta)", async () => {

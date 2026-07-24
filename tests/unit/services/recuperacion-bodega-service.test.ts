@@ -7,7 +7,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenDTO } from "@/lib/types/orden";
 
 // Feature 100 (T2.3) — regla de la RECUPERACION a bodega (calcada de DevolucionOrigenService).
-// Cubre R13 (destino por zona: central -> en_bodega; satelite -> en_bodega_satelite), R15 (autz por
+// Cubre R13 (destino por zona: central -> en_bodega_central; satelite -> en_bodega_satelite), R15 (autz por
 // bodega responsable, matriz rol×zona), R16 (fuera de `devuelta` -> conflict; carrera -> conflict),
 // config_error, not_found.
 
@@ -51,7 +51,7 @@ type ZonaRepoDoble = Pick<IZonaRepository, "findCentralZonaId">;
 
 const ESTATUS: Record<string, string> = {
   devuelta: "os-devuelta",
-  en_bodega: "os-en-bodega",
+  en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
 };
 
@@ -80,7 +80,7 @@ function buildRecuperacionRepo(
 }
 
 describe("RecuperacionBodegaService · bodega central (R13/R15)", () => {
-  // zona de la orden = central -> permite maestro/admin, niega el resto; destino en_bodega.
+  // zona de la orden = central -> permite maestro/admin, niega el resto; destino en_bodega_central.
   function centralSetup() {
     const ordenRepo = buildOrdenRepo({
       findById: vi.fn(async () => ordenDTO({ zonaId: "z-central" })),
@@ -88,7 +88,7 @@ describe("RecuperacionBodegaService · bodega central (R13/R15)", () => {
     return { ordenRepo, zonaRepo: buildZonaRepo("z-central") };
   }
 
-  it("R13/R15: maestro y admin recuperan a `en_bodega`", async () => {
+  it("R13/R15: maestro y admin recuperan a `en_bodega_central`", async () => {
     for (const actor of [MAESTRO, ADMIN]) {
       const { ordenRepo, zonaRepo } = centralSetup();
       const recuperacionRepo = buildRecuperacionRepo();
@@ -190,7 +190,7 @@ describe("RecuperacionBodegaService · bodega satelite (R13/R15)", () => {
 describe("RecuperacionBodegaService · guardia de estado y bordes (R16)", () => {
   it("R16: orden fuera de `devuelta` -> conflict, sin autz ni escritura", async () => {
     const ordenRepo = buildOrdenRepo({
-      findById: vi.fn(async () => ordenDTO({ estatusValue: "en_bodega" })),
+      findById: vi.fn(async () => ordenDTO({ estatusValue: "en_bodega_central" })),
     });
     const recuperacionRepo = buildRecuperacionRepo();
     const r = await new RecuperacionBodegaService(

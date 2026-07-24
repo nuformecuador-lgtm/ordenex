@@ -23,7 +23,7 @@ export interface OrdenesConfig {
   /**
    * Valor de estatus inicial por defecto al crear si no se especifica
    * (N1/R10/R27). Feature 15/R7/R8: default GLOBAL "en_preparacion" (antes
-   * "en_bodega"), compartido por el CRUD (feature 6) y la carga masiva.
+   * "en_bodega_central"), compartido por el CRUD (feature 6) y la carga masiva.
    */
   DEFAULT_ESTATUS_VALUE: string;
   /**

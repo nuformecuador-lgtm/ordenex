@@ -48,8 +48,8 @@ export interface OrdenGestionRow {
   montoCobrar: number | null;
   /**
    * Feature 47/R5 (insumo): zona de la orden para derivar la bodega responsable de un
-   * reintento (`en_bodega`/`en_bodega_satelite` via `resolverDestinoCierre`). `null` =
-   * orden sin zona -> el service cae al fallback central (`en_bodega`).
+   * reintento (`en_bodega_central`/`en_bodega_satelite` via `resolverDestinoCierre`). `null` =
+   * orden sin zona -> el service cae al fallback central (`en_bodega_central`).
    */
   zonaId: string | null;
 }
@@ -117,7 +117,7 @@ export interface IGestionOrdenRepository {
   /**
    * Suma de `montoCobrar` (COD) de las ordenes ENTREGADAS del mensajero (mismas
    * condiciones que `contarEntregadas`: propias, `entregada`, no borradas). Alimenta el
-   * KPI "Total a cobrar" (acumulado): junto al COD de `en_reparto` mantiene el total
+   * KPI "Total a cobrar" (acumulado): junto al COD de `en_ruta` mantiene el total
    * estable al entregar (la orden sale de reparto pero sigue sumando aqui) y lo descuenta
    * cuando se gestiona como reprogramada/devuelta/rechazada (no entra en ningun set).
    * `null` (sin entregadas o montos nulos) cuenta 0.

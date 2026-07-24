@@ -22,7 +22,7 @@ function fakeAsignacionRow(overrides: Record<string, unknown> = {}) {
     longitud: new Prisma.Decimal("-84.0907246"),
     notas: null,
     mensajeroAsignadoId: "m1",
-    estatus: { value: "en_espera_aceptacion" },
+    estatus: { value: "por_recoger" },
     tienda: { nombre: "Tienda X" },
     zona: { nombre: "Centro" },
     provincia: { nombre: "Pichincha" },
@@ -37,17 +37,17 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
     const findMany = vi.fn(async () => [fakeAsignacionRow()]);
     const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
 
-    const rows = await repo.findMisAsignaciones("m1", ["en_espera_aceptacion", "en_reparto"]);
+    const rows = await repo.findMisAsignaciones("m1", ["por_recoger", "en_ruta"]);
 
     expect(findMany).toHaveBeenCalledTimes(1);
     const arg = (findMany.mock.calls[0] as unknown[])[0] as { where: Record<string, unknown> };
     expect(arg.where.mensajeroAsignadoId).toBe("m1");
     expect(arg.where.deletedAt).toBeNull();
-    expect(arg.where.estatus).toEqual({ value: { in: ["en_espera_aceptacion", "en_reparto"] } });
+    expect(arg.where.estatus).toEqual({ value: { in: ["por_recoger", "en_ruta"] } });
     // Proyeccion: nombres legibles + montoCobrar como number.
     expect(rows[0].tiendaNombre).toBe("Tienda X");
     expect(rows[0].montoCobrar).toBe(100);
-    expect(rows[0].estatusValue).toBe("en_espera_aceptacion");
+    expect(rows[0].estatusValue).toBe("por_recoger");
   });
 
   it("R9: estados vacios -> no consulta y devuelve []", async () => {
@@ -63,7 +63,7 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
     const findMany = vi.fn(async () => [fakeAsignacionRow()]);
     const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
 
-    const rows = await repo.findMisAsignaciones("m1", ["en_reparto"]);
+    const rows = await repo.findMisAsignaciones("m1", ["en_ruta"]);
 
     const arg = (findMany.mock.calls[0] as unknown[])[0] as { select: Record<string, unknown> };
     expect(arg.select.latitud).toBe(true);
@@ -82,7 +82,7 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
     ]);
     const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
 
-    const rows = await repo.findMisAsignaciones("m1", ["en_reparto"]);
+    const rows = await repo.findMisAsignaciones("m1", ["en_ruta"]);
 
     expect(rows[0].latitud).toBeNull();
     expect(rows[0].longitud).toBeNull();
@@ -114,7 +114,7 @@ describe("GestionOrdenRepository.findByIdsParaGestion (feature 47/R5 · zonaId)"
         mensajeroAsignadoId: "m1",
         montoCobrar: new Prisma.Decimal(100),
         zonaId: "z-satelite",
-        estatus: { value: "en_reparto" },
+        estatus: { value: "en_ruta" },
       },
     ]);
     const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
@@ -126,7 +126,7 @@ describe("GestionOrdenRepository.findByIdsParaGestion (feature 47/R5 · zonaId)"
     expect(arg.select.zonaId).toBe(true);
     // ...y lo mapea a la fila.
     expect(rows[0].zonaId).toBe("z-satelite");
-    expect(rows[0].estatusValue).toBe("en_reparto");
+    expect(rows[0].estatusValue).toBe("en_ruta");
     expect(rows[0].montoCobrar).toBe(100);
   });
 
@@ -138,7 +138,7 @@ describe("GestionOrdenRepository.findByIdsParaGestion (feature 47/R5 · zonaId)"
         mensajeroAsignadoId: "m1",
         montoCobrar: null,
         zonaId: null,
-        estatus: { value: "en_reparto" },
+        estatus: { value: "en_ruta" },
       },
     ]);
     const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
@@ -203,7 +203,7 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
     expect(strings).toMatch(/RETURNING "id"/);
     expect(values).toContain("m1"); // propiedad
     expect(values).toContain("os-espera"); // origen
-    expect(values).toContain("os-reparto"); // destino en_reparto
+    expect(values).toContain("os-reparto"); // destino en_ruta
   });
 
   // Feature 49/#8 (R16/R8): 1 historial por orden recogida (actor = el mensajero); una
@@ -443,7 +443,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     const updData = (ordenUpdate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(updData.data).not.toHaveProperty("mensajeroAsignadoId");
 
-    // UN solo append por el choke point: en_reparto -> devuelta (actor m1, origen_tipo gestion).
+    // UN solo append por el choke point: en_ruta -> devuelta (actor m1, origen_tipo gestion).
     expect(historialCreateMany).toHaveBeenCalledTimes(1);
     const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
     expect(arg.data[0]).toMatchObject({

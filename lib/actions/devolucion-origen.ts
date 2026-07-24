@@ -66,7 +66,7 @@ function toDevolucionOrigenActionError(
 
 /**
  * R4/R11: la bodega responsable ejecuta "Devolver a la tienda" sobre una orden `rechazada`
- * (transicion a `devuelta_origen`). `unauthenticated` (sin sesion) y `validation_error`
+ * (transicion a `devolviendo_a_tienda`). `unauthenticated` (sin sesion) y `validation_error`
  * (ordenId no-uuid) se resuelven en el borde; forbidden/not_found/conflict/config_error
  * los devuelve el service. Patron `recibirPorQr`.
  */

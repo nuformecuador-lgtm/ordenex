@@ -24,7 +24,7 @@ const DIA = 24 * HORA;
 
 const ESTATUS: Record<string, string> = {
   devuelta: "os-devuelta",
-  en_bodega: "os-en-bodega",
+  en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
   rechazada: "os-rechazada",
 };
@@ -108,7 +108,7 @@ describe("ejecutar — not_found: ventana de 24h (R14/R15/R16)", () => {
     expect(arg.estatusDevueltaId).toBe("os-devuelta");
   });
 
-  it("R15: zona CENTRAL -> reintento a en_bodega (central)", async () => {
+  it("R15: zona CENTRAL -> reintento a en_bodega_central (central)", async () => {
     const repo = fakeRepo({
       findDevueltasSla: vi.fn(async () => [row({ zonaId: CENTRAL })]),
     });

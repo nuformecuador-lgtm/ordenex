@@ -170,7 +170,7 @@ export async function recibirLote(
 /**
  * Feature 34/R1/R7/R15/R19: asigna un lote de ordenes `en_bodega_satelite` de la
  * zona del adminSatelite a un mensajero de su zona (transicion a
- * `en_espera_aceptacion`). `unauthenticated` (R1) y `validation_error` de zod
+ * `por_recoger`). `unauthenticated` (R1) y `validation_error` de zod
  * (R19) se resuelven en el borde; `forbidden`/`sin_zona`/`conflict`/
  * `validation_error` de dominio los devuelve el service. Patron `recibirPorQr`.
  */

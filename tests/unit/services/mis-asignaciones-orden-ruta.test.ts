@@ -110,7 +110,7 @@ describe("R28 — todas con posicion", () => {
   it("ordena por secuencia ASC, ignorando el orden de llegada", async () => {
     // El repo devuelve C, A, B (createdAt desc); la ruta dice A=1, B=2, C=3.
     const r = await listar(
-      [row("C", "en_reparto"), row("A", "en_reparto"), row("B", "en_reparto")],
+      [row("C", "en_ruta"), row("A", "en_ruta"), row("B", "en_ruta")],
       ruta({
         secuenciaPorOrden: new Map([
           ["A", 1],
@@ -132,10 +132,10 @@ describe("R28 — mezcla de con y sin posicion", () => {
     // Ruta: A=1, B=2. NUEVA1 y NUEVA2 entraron despues de la ultima optimizacion.
     const r = await listar(
       [
-        row("NUEVA2", "en_reparto"),
-        row("NUEVA1", "en_reparto"),
-        row("B", "en_reparto"),
-        row("A", "en_reparto"),
+        row("NUEVA2", "en_ruta"),
+        row("NUEVA1", "en_ruta"),
+        row("B", "en_ruta"),
+        row("A", "en_ruta"),
       ],
       ruta({
         secuenciaPorOrden: new Map([
@@ -153,11 +153,11 @@ describe("R28 — mezcla de con y sin posicion", () => {
 
   it("una secuencia con huecos (orden ya entregada) sigue ordenando bien", async () => {
     const r = await listar(
-      [row("C", "en_reparto"), row("A", "en_reparto")],
+      [row("C", "en_ruta"), row("A", "en_ruta")],
       ruta({
         secuenciaPorOrden: new Map([
           ["A", 1],
-          ["C", 5], // la 2, 3 y 4 ya se entregaron y salieron de en_reparto
+          ["C", 5], // la 2, 3 y 4 ya se entregaron y salieron de en_ruta
         ]),
       }),
     );
@@ -167,7 +167,7 @@ describe("R28 — mezcla de con y sin posicion", () => {
 
 describe("R28 — ninguna con posicion: orden IDENTICO al actual", () => {
   it("sin ruta persistida, `porGestionar` conserva exactamente el orden previo", async () => {
-    const rows = [row("C", "en_reparto"), row("B", "en_reparto"), row("A", "en_reparto")];
+    const rows = [row("C", "en_ruta"), row("B", "en_ruta"), row("A", "en_ruta")];
     const r = await listar(rows, null);
 
     expect(r.porGestionar.map((o) => o.id)).toEqual(["C", "B", "A"]);
@@ -179,7 +179,7 @@ describe("R28 — ninguna con posicion: orden IDENTICO al actual", () => {
   });
 
   it("con ruta persistida pero sin paradas, tampoco se altera el orden", async () => {
-    const rows = [row("C", "en_reparto"), row("B", "en_reparto")];
+    const rows = [row("C", "en_ruta"), row("B", "en_ruta")];
     const r = await listar(rows, ruta({ secuenciaPorOrden: new Map() }));
     expect(r.porGestionar.map((o) => o.id)).toEqual(["C", "B"]);
   });
@@ -189,10 +189,10 @@ describe("R29 — 'Por recoger' NO se toca", () => {
   it("conserva su orden de llegada y su secuenciaRuta es siempre null", async () => {
     const r = await listar(
       [
-        row("P2", "en_espera_aceptacion"),
-        row("A", "en_reparto"),
-        row("P1", "en_espera_aceptacion"),
-        row("B", "en_reparto"),
+        row("P2", "por_recoger"),
+        row("A", "en_ruta"),
+        row("P1", "por_recoger"),
+        row("B", "en_ruta"),
       ],
       ruta({
         secuenciaPorOrden: new Map([
@@ -215,7 +215,7 @@ describe("bloque `ruta` del resultado y KPIs", () => {
   it("expone estado, calculadaAt, origenFuente y paradasSinOptimizar", async () => {
     const calculada = new Date("2026-07-20T12:00:00.000Z");
     const r = await listar(
-      [row("A", "en_reparto"), row("N", "en_reparto")],
+      [row("A", "en_ruta"), row("N", "en_ruta")],
       ruta({
         estado: "desactualizada",
         calculadaAt: calculada,
@@ -234,12 +234,12 @@ describe("bloque `ruta` del resultado y KPIs", () => {
 
   it("los KPIs de la feature 61 NO se alteran por el reordenado", async () => {
     const r = await listar(
-      [row("A", "en_reparto"), row("B", "en_reparto"), row("P", "en_espera_aceptacion")],
+      [row("A", "en_ruta"), row("B", "en_ruta"), row("P", "por_recoger")],
       ruta({ secuenciaPorOrden: new Map([["B", 1]]) }),
     );
 
     expect(r.kpis).toEqual({
-      pendientes: 2, // las dos en_reparto
+      pendientes: 2, // las dos en_ruta
       entregadas: 7,
       porCobrar: 200, // 100 + 100
       totalACobrar: 700, // 200 + 500 ya entregado

@@ -29,7 +29,7 @@ function ordenSelectRow(overrides: Record<string, unknown> = {}) {
     direccion: "Calle 1",
     montoCobrar: new Prisma.Decimal(1500),
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
-    estatus: { value: "en_bodega" },
+    estatus: { value: "en_bodega_central" },
     ...overrides,
   };
 }
@@ -73,7 +73,7 @@ describe("OrdenRepository.listByOwner (feature 106, T5)", () => {
     expect(res.items[0]).toEqual({
       numGuia: 10234,
       numRemision: "REM-1",
-      estatusValue: "en_bodega",
+      estatusValue: "en_bodega_central",
       destinatario: "Ana",
       telefonoDest: "0991234567",
       producto: "Caja",
@@ -111,7 +111,7 @@ describe("OrdenRepository.findDetalleByNumGuiaForOwner (feature 106, T6)", () =>
     expect(where).toMatchObject({ numGuia: 10234, tiendaId: OWNER, deletedAt: null });
     expect(res).not.toBeNull();
     expect(res!.numGuia).toBe(10234);
-    expect(res!.estatusValue).toBe("en_bodega");
+    expect(res!.estatusValue).toBe("en_bodega_central");
   });
 
   it("R13/R14/R24: no existe / ajena / borrada -> null (findFirst null)", async () => {

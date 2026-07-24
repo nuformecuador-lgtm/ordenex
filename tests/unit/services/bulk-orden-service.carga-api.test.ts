@@ -43,7 +43,7 @@ function buildService(
 
 // Feature 88 — BulkOrdenService.cargarViaApi: reusa la resolucion/dedup/validacion de la
 // carga masiva pero autoriza SOLO al rol apiKey, fija el estado inicial en
-// en_ruta_bodega_principal y persiste con num_guia inmediato.
+// en_ruta_bodega_central y persiste con num_guia inmediato.
 
 const APIKEY: Actor = { usuarioId: "key-user-1", rol: "apiKey" as RolValue };
 const TIENDA: Actor = { usuarioId: "store1", rol: "adminTienda" };
@@ -57,7 +57,7 @@ function conGuiaEco(data: CreateOrdenData[]): CreateOrdenConGuiaResultRow[] {
     ordenId: `ord-${d.numRemision}`,
     numRemision: d.numRemision,
     numGuia: 1000 + i,
-    estatusValue: "en_ruta_bodega_principal",
+    estatusValue: "en_ruta_bodega_central",
   }));
 }
 
@@ -176,14 +176,14 @@ describe("cargarViaApi — dueño y estado inicial (R8, D4)", () => {
     expect(conGuiaArg(repo)[0].tiendaId).toBe("key-user-1");
   });
 
-  it("R8: estado inicial FIJO en_ruta_bodega_principal (no consulta fulfillment)", async () => {
+  it("R8: estado inicial FIJO en_ruta_bodega_central (no consulta fulfillment)", async () => {
     const repo = buildRepo();
     const r = await buildService(repo).cargarViaApi([row()], APIKEY);
 
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_ruta_bodega_principal");
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_ruta_bodega_central");
     expect(repo.findUsuarioFulfillment).not.toHaveBeenCalled(); // la via API no ramifica por fulfillment
     if (r.status === "ok") {
-      expect(r.summary.filas[0].estatus).toBe("en_ruta_bodega_principal");
+      expect(r.summary.filas[0].estatus).toBe("en_ruta_bodega_central");
     }
     expect(conGuiaArg(repo)[0].estatusId).toBe("os-erbp");
   });
@@ -201,13 +201,13 @@ describe("cargarViaApi — resultado con num_guia (R10)", () => {
     if (r.status === "ok") {
       expect(r.summary.creadas).toBe(2);
       // Filas creadas extendidas con numGuia.
-      expect(r.summary.filas[0]).toMatchObject({ resultado: "creada", numGuia: 1000, estatus: "en_ruta_bodega_principal" });
+      expect(r.summary.filas[0]).toMatchObject({ resultado: "creada", numGuia: 1000, estatus: "en_ruta_bodega_central" });
       expect(r.summary.filas[1]).toMatchObject({ resultado: "creada", numGuia: 1001 });
       // Bloque plano `ordenes` (R10): id + numGuia + estado + costoEnvio (feature 98/R5) por
       // creada. No-central con TARIFA por defecto -> 3.50 + 12% = "3.92".
       expect(r.summary.ordenes).toEqual([
-        { id: "ord-REM-1", numRemision: "REM-1", numGuia: 1000, estado: "en_ruta_bodega_principal", costoEnvio: "3.92" },
-        { id: "ord-REM-2", numRemision: "REM-2", numGuia: 1001, estado: "en_ruta_bodega_principal", costoEnvio: "3.92" },
+        { id: "ord-REM-1", numRemision: "REM-1", numGuia: 1000, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
+        { id: "ord-REM-2", numRemision: "REM-2", numGuia: 1001, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
       ]);
     }
   });
@@ -406,7 +406,7 @@ describe("cargarViaApi — no-regresión del contrato 88 (feature 98/R10)", () =
       APIKEY,
     );
     // Estado inicial FIJO (no consulta fulfillment) y num_guia inmediato (via createManyOrdenesConGuia).
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_ruta_bodega_principal");
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_ruta_bodega_central");
     expect(repo.findUsuarioFulfillment).not.toHaveBeenCalled();
     expect(repo.createManyOrdenesConGuia).toHaveBeenCalledTimes(1);
     if (r.status === "ok") {
@@ -416,7 +416,7 @@ describe("cargarViaApi — no-regresión del contrato 88 (feature 98/R10)", () =
         id: "ord-REM-1",
         numRemision: "REM-1",
         numGuia: 1000,
-        estado: "en_ruta_bodega_principal",
+        estado: "en_ruta_bodega_central",
         costoEnvio: "3.92",
       });
     }

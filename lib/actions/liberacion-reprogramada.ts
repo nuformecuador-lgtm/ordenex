@@ -19,7 +19,7 @@ import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/e
 // (reprogramacion)" de la bodega responsable. NO crea tabla de notificaciones: lee las
 // ordenes que el cron marco con `liberada_reprogramada_at` HOY (CR) via
 // `findLiberadasHoy`. El destinatario se deriva del rol del actor (R16):
-//   - maestro       -> bodega CENTRAL: `{ zona: central, estatus: en_bodega }`.
+//   - maestro       -> bodega CENTRAL: `{ zona: central, estatus: en_bodega_central }`.
 //   - adminSatelite  -> su bodega satelite: `{ zona: suZona, estatus: en_bodega_satelite }`.
 // El mensajero previo NO es destinatario (perdio el vinculo en la liberacion, R13).
 // Patron de `recepcion-satelite.ts`: `withErrorHandler` + `resolveActorFromSession` +
@@ -27,7 +27,7 @@ import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/e
 // AppErrorShape posible en este borde (sin zod); el resto son resultados de dominio.
 
 // Estatus destino de cada bodega (catalogo ya sembrado; esta feature no crea estados).
-const ESTATUS_BODEGA_CENTRAL = "en_bodega";
+const ESTATUS_BODEGA_CENTRAL = "en_bodega_central";
 const ESTATUS_BODEGA_SATELITE = "en_bodega_satelite";
 
 export type ListarLiberadasHoyResult =

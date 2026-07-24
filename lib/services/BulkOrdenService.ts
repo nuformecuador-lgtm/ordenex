@@ -29,7 +29,7 @@ import { costoEnvioDeTarifa } from "@/lib/utils/ingreso-ordenex";
 // Feature 88/R8: estado inicial FIJO de las ordenes cargadas por API (canal integrador),
 // distinto del default de la carga masiva por sesion (en_preparacion/en_fulfillment). Valor
 // de enum EXISTENTE (order-status.ts), sin migracion de estado.
-const ESTATUS_INICIAL_API = "en_ruta_bodega_principal";
+const ESTATUS_INICIAL_API = "en_ruta_bodega_central";
 
 // La resolucion geografica compara nombres del archivo contra los de la DB con el
 // MISMO normalizador que indexa el arbol de zonas (lib/utils/normalize): minusculas,
@@ -291,7 +291,7 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     const tiendaId = actor.usuarioId; // D4: el usuario dedicado de la key es el dueño.
 
-    // R8: estado inicial FIJO `en_ruta_bodega_principal` (no se consulta `fulfillment`).
+    // R8: estado inicial FIJO `en_ruta_bodega_central` (no se consulta `fulfillment`).
     const ctx = await this.precargar(rows, ESTATUS_INICIAL_API);
 
     if (ctx.estatusId === null) {

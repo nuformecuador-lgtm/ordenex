@@ -9,7 +9,7 @@ import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaReposit
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 // Feature 46 (R12/R13/R14/R17) — service de la liberacion programada. Dobles de repo
-// (sin DB/HTTP). Cubre: destino correcto por zona (central -> en_bodega, satelite ->
+// (sin DB/HTTP). Cubre: destino correcto por zona (central -> en_bodega_central, satelite ->
 // en_bodega_satelite); limpia mensajero + marca (via los args a liberarOrden); resumen
 // de conteos; una orden que falla -> omitidas++ y continua; segunda corrida no re-libera.
 
@@ -19,7 +19,7 @@ const HOY = new Date("2026-07-15T00:00:00.000Z");
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   reprogramada: "os-reprogramada",
-  en_bodega: "os-en-bodega",
+  en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
 };
 
@@ -67,7 +67,7 @@ function newService(
 }
 
 describe("ejecutarLiberacion — destino por zona (R12)", () => {
-  it("R12: orden de la zona central -> destino en_bodega", async () => {
+  it("R12: orden de la zona central -> destino en_bodega_central", async () => {
     const liberar = vi.fn<(input: LiberarOrdenInput) => Promise<boolean>>(async () => true);
     const repo = fakeRepo({
       findOrdenesLiberables: vi.fn(async () => [liberableRow({ id: "o-central", zonaId: CENTRAL })]),

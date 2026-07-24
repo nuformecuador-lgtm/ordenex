@@ -12,7 +12,7 @@ import type { CierreDestinoTipo } from "@/lib/types/cierre";
 // (paquete fisico de vuelta en la tienda). La elegibilidad es por ESTADO
 // (`rechazada`), agnostica del camino (rechazo directo 36 o escalado 47), R1/R2.
 const ESTADO_ORIGEN = "rechazada";
-const ESTADO_DESTINO = "devuelta_origen";
+const ESTADO_DESTINO = "devolviendo_a_tienda";
 
 // Metodos de repo que consume el service (inyeccion por constructor). Se declaran
 // como Pick para dobles de test sin DB/HTTP (patron RecepcionSateliteService).
@@ -24,7 +24,7 @@ type DevolucionZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 
 /**
  * Feature 48 — logica de negocio del RETORNO a la tienda de origen. Impone la GUARDIA
- * de estado (solo desde `rechazada`, idempotente en `devuelta_origen`) y la AUTZ por
+ * de estado (solo desde `rechazada`, idempotente en `devolviendo_a_tienda`) y la AUTZ por
  * bodega responsable (maestro/admin en la central, adminSatelite de la zona de la
  * orden), y persiste la transicion via el choke point de la feature 49
  * (`OrdenRepository.update`, #11, `origen_tipo = ajuste_estado`) en su misma tx. No

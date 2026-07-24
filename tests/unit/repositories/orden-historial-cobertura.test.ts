@@ -19,7 +19,7 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // `anularGestionYDevolverAGestion` / `deshacer_gestion`). A diferencia de la 47 y la 48 —que
 // reutilizaron `gestion` y `ajuste_estado`—, esta SI trae valor de enum nuevo + migracion +
 // down: el proposito de la feature es el RASTRO, y reusar `gestion` haria que la linea de
-// tiempo mostrara "en_bodega -> en_reparto, origen: gestion", indistinguible de una gestion
+// tiempo mostrara "en_bodega_central -> en_ruta, origen: gestion", indistinguible de una gestion
 // real (F1.4-b).
 
 // Repositorio -> clase (para verificar que cada simbolo existe como metodo real).
@@ -46,9 +46,9 @@ const PUNTOS_DE_ESCRITURA = [
   { n: 7, repo: "OrdenRepository", simbolo: "asignarSateliteLote", origenTipo: "asignacion_satelite" },
   { n: 8, repo: "GestionOrdenRepository", simbolo: "recogerLote", origenTipo: "recoleccion" },
   // #9: feature 47 lo convierte en una transicion COMPUESTA cuando el resultado es `devuelta`:
-  // ademas del append de la gestion (en_reparto->devuelta, actor=mensajero), emite en la MISMA
+  // ademas del append de la gestion (en_ruta->devuelta, actor=mensajero), emite en la MISMA
   // tx un SEGUIMIENTO automatico (actor=null/sistema) hacia la bodega responsable
-  // (en_bodega/en_bodega_satelite, reintento) o hacia rechazada (escalado). Reutiliza el mismo
+  // (en_bodega_central/en_bodega_satelite, reintento) o hacia rechazada (escalado). Reutiliza el mismo
   // `origen_tipo=gestion` (sin enum nuevo, sin migracion, R14/R21): sigue siendo UN punto.
   { n: 9, repo: "GestionOrdenRepository", simbolo: "crearGestionYTransicionar", origenTipo: "gestion" },
   {
@@ -58,11 +58,11 @@ const PUNTOS_DE_ESCRITURA = [
     origenTipo: "liberacion_reprogramada",
   },
   // #11: feature 48 (F1.4-e) DOCUMENTA que este punto (`OrdenRepository.update`/`ajuste_estado`)
-  // TAMBIEN sirve el RETORNO a la tienda de origen (`rechazada -> devuelta_origen` via
+  // TAMBIEN sirve el RETORNO a la tienda de origen (`rechazada -> devolviendo_a_tienda` via
   // `DevolucionOrigenService`), igual que la 47 documento que #9 sirve el seguimiento. NO se
   // agrega un call-site nuevo ni un `origen_tipo` nuevo: sigue siendo UN punto `ajuste_estado`.
   { n: 11, repo: "OrdenRepository", simbolo: "update", origenTipo: "ajuste_estado" },
-  // #12: feature 67 (F1.4-b). El DESHACER devuelve la orden a `en_reparto` reponiendo la
+  // #12: feature 67 (F1.4-b). El DESHACER devuelve la orden a `en_ruta` reponiendo la
   // asignacion al mensajero autor, en la MISMA tx que anula la gestion (R20/R21/R22). Trae
   // `origen_tipo` NUEVO (`deshacer_gestion`, 12.º valor del enum) para que la auditoria
   // distinga un deshacer de una gestion real: la migracion `*_gestion_orden_anulacion` lo
@@ -74,7 +74,7 @@ const PUNTOS_DE_ESCRITURA = [
     origenTipo: "deshacer_gestion",
   },
   // #13: feature 88 (D7). La carga por API crea la orden y, en la MISMA tx, fija su estado
-  // inicial (`en_ruta_bodega_principal`) con `origen_tipo` NUEVO `carga_api` (13.º valor del
+  // inicial (`en_ruta_bodega_central`) con `origen_tipo` NUEVO `carga_api` (13.º valor del
   // enum) para distinguir el canal integrador de la `carga_masiva` por sesion en metricas. La
   // migracion `*_orden_historial_origen_tipo_carga_api` lo añade y su `down.sql` recrea el enum
   // sin el. Es un NUEVO call-site de escritura de estado (no reusa createManyOrdenes: ese no
@@ -86,7 +86,7 @@ const PUNTOS_DE_ESCRITURA = [
     origenTipo: "carga_api",
   },
   // #14/#15: feature 99. El cron SLA DIFIERE el re-ruteo de una devolucion: `DevolucionSlaRepository`
-  // libera (`devuelta -> en_bodega/en_bodega_satelite`, reintento) o escala (`devuelta -> rechazada`,
+  // libera (`devuelta -> en_bodega_central/en_bodega_satelite`, reintento) o escala (`devuelta -> rechazada`,
   // con gestion sintetica que dispara el ingreso de bodega). Dos `origen_tipo` propios (aditivos,
   // migracion `*_orden_historial_origen_tipo_sla_devuelta` + su down) para que la linea de tiempo
   // distinga el reintento del escalado. Reemplazan la 2.ª transicion que la 47 emitia en
@@ -107,7 +107,7 @@ const PUNTOS_DE_ESCRITURA = [
   // SLA (99). Reprogramar (adminTienda): `GestionOrdenRepository.reprogramarDesdeDevuelta` transiciona
   // `devuelta -> reprogramada` con gestion sintetica (`reprogramacion_tienda`). Recuperar (bodega
   // dueña): `RecuperacionBodegaRepository.recuperarABodega` transiciona `devuelta ->
-  // en_bodega/en_bodega_satelite` limpiando el mensajero (`recuperacion_manual`, molde de
+  // en_bodega_central/en_bodega_satelite` limpiando el mensajero (`recuperacion_manual`, molde de
   // `liberarDevueltaSla` pero con actor y origen_tipo propios, gate F1.4-Q2). Dos `origen_tipo`
   // propios (aditivos, migracion `*_orden_historial_origen_tipo_resolver_novedad` + su down) para que
   // la linea de tiempo distinga tienda vs bodega vs cron.
@@ -124,18 +124,18 @@ const PUNTOS_DE_ESCRITURA = [
     origenTipo: "recuperacion_manual",
   },
   // #18: feature 106. La tienda CANCELA una orden por API key: `OrdenRepository.cancelarViaApi`
-  // transiciona `en_bodega`/`en_ruta_bodega_principal -> devuelta_origen` (estado EXISTENTE,
+  // transiciona `en_bodega_central`/`en_ruta_bodega_central -> devolviendo_a_tienda` (estado EXISTENTE,
   // reutilizado) en la MISMA tx que registra el historial. Trae `origen_tipo` NUEVO
   // (`cancelacion_api`, 18.º valor del enum, migracion `*_cancelacion_api_por_key` + su down) para
   // que la linea de tiempo distinga esa cancelacion de integrador de una devolucion real (ambas
-  // acaban en `devuelta_origen`); el marcador semantico adicional es `motivo="cancelada por tienda"`.
+  // acaban en `devolviendo_a_tienda`); el marcador semantico adicional es `motivo="cancelada por tienda"`.
   {
     n: 18,
     repo: "OrdenRepository",
     simbolo: "cancelarViaApi",
     origenTipo: "cancelacion_api",
   },
-  // #19: feature 109. El corte diario transiciona `en_reparto -> sin_gestionar` DENTRO de
+  // #19: feature 109. El corte diario transiciona `en_ruta -> sin_gestionar` DENTRO de
   // `CierreDiaRepository.crearCierre` (input opcional `corteSinGestionar`), en la MISMA tx, via el
   // choke point con actor null y `origen_tipo` NUEVO `corte_sin_gestionar` (19.º valor del enum,
   // migracion `*_orden_historial_origen_sin_gestionar` + su down). crearCierre ahora SI escribe
@@ -147,7 +147,7 @@ const PUNTOS_DE_ESCRITURA = [
     origenTipo: "corte_sin_gestionar",
   },
   // #20: feature 109. Al APROBAR el cierre, `CierresAdminRepository.resolverCierre` libera las
-  // `sin_gestionar` del mensajero a `en_bodega`/`en_bodega_satelite` por zona (limpia mensajero,
+  // `sin_gestionar` del mensajero a `en_bodega_central`/`en_bodega_satelite` por zona (limpia mensajero,
   // prioridad=true) en la MISMA tx, via el choke point con actor=admin y `origen_tipo` NUEVO
   // `liberacion_sin_gestionar` (20.º valor del enum, misma migracion). Solo en la rama `aprobado`
   // (rechazar NO libera).
@@ -233,7 +233,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     expect(familiasDelCron.sort()).toEqual(["escalado_devuelta_sla", "liberacion_devuelta_sla"]);
   });
 
-  // Feature 48 (R9/F1.4-e recomendada): el retorno a la tienda (`rechazada -> devuelta_origen`)
+  // Feature 48 (R9/F1.4-e recomendada): el retorno a la tienda (`rechazada -> devolviendo_a_tienda`)
   // REUTILIZA `origen_tipo=ajuste_estado` (#11), NO agrega un `origen_tipo` dedicado. Este test
   // guarda esa decision: si alguien introdujera `devolucion_origen`, deberia venir con su
   // migracion de enum + down y el mapa creceria un punto (F1.4-e alternativa).

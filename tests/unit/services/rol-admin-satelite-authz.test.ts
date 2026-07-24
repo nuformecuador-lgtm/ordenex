@@ -37,7 +37,7 @@ function ordenDto(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
     numGuia: 1,
     numRemision: "REM-1",
     estatusId: "os-bodega",
-    estatusValue: "en_bodega",
+    estatusValue: "en_bodega_central",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "store1",

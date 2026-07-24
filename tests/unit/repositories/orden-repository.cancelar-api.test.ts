@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 
 // Feature 106 (T7 + T14) — cancelarViaApi: transaccion que valida owner+estado, transiciona a
-// `devuelta_origen` y registra en la bitacora via appendCambioEstado (origen_tipo cancelacion_api,
+// `devolviendo_a_tienda` y registra en la bitacora via appendCambioEstado (origen_tipo cancelacion_api,
 // motivo 'cancelada por tienda') EN LA MISMA tx, SIN tocar gestion_orden. El fake de $transaction
 // invoca el callback con el propio prisma como tx.
 
@@ -37,8 +37,8 @@ function ordenEn(estatusValue: string) {
 }
 
 describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
-  it.each(["en_bodega", "en_ruta_bodega_principal"])(
-    "R19/R25: transiciona desde %s a devuelta_origen (update + append en la MISMA tx)",
+  it.each(["en_bodega_central", "en_ruta_bodega_central"])(
+    "R19/R25: transiciona desde %s a devolviendo_a_tienda (update + append en la MISMA tx)",
     async (estadoOrigen) => {
       const prisma = buildPrisma(ordenEn(estadoOrigen));
       const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -56,7 +56,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
         tiendaId: OWNER,
         deletedAt: null,
       });
-      // UPDATE del estatus a devuelta_origen.
+      // UPDATE del estatus a devolviendo_a_tienda.
       expect(prisma.orden.update).toHaveBeenCalledWith({
         where: { id: "ord-1" },
         data: { estatusId: DEVUELTA_ORIGEN_ID },
@@ -67,7 +67,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
   );
 
   it("R22/R26: appendCambioEstado registra origen/destino/actor/origen_tipo y motivo='cancelada por tienda'", async () => {
-    const prisma = buildPrisma(ordenEn("en_bodega"));
+    const prisma = buildPrisma(ordenEn("en_bodega_central"));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     await repo.cancelarViaApi({
@@ -82,7 +82,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
       {
         ordenId: "ord-1",
         estatusOrigenId: "os-origen", // estado previo real (R22)
-        estatusDestinoId: DEVUELTA_ORIGEN_ID, // devuelta_origen (R22)
+        estatusDestinoId: DEVUELTA_ORIGEN_ID, // devolviendo_a_tienda (R22)
         actorUsuarioId: OWNER, // actor = owner (R22)
         origenTipo: "cancelacion_api", // R22
         motivo: "cancelada por tienda", // R26
@@ -92,7 +92,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
   });
 
   it("R26/T14: NO escribe ninguna fila en gestion_orden al cancelar", async () => {
-    const prisma = buildPrisma(ordenEn("en_bodega"));
+    const prisma = buildPrisma(ordenEn("en_bodega_central"));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     await repo.cancelarViaApi({
@@ -107,7 +107,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
     expect(prisma.gestionOrden.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each(["en_reparto", "devuelta_origen", "entregada", "rechazada", "en_bodega_satelite"])(
+  it.each(["en_ruta", "devolviendo_a_tienda", "entregada", "rechazada", "en_bodega_satelite"])(
     "R20: %s no es cancelable -> conflict; no toca estado ni bitacora",
     async (estado) => {
       const prisma = buildPrisma(ordenEn(estado));

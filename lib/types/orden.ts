@@ -131,7 +131,7 @@ export type ActionError =
 // obtener/actualizar siguen devolviendo OrdenDTO sin `tiendaNombre`.
 // Feature 17/R20: agrega `mensajeroSugeridoId`/`mensajeroAsignadoId` (solo el
 // listado, para que el modal "Generar guia" agrupe por sugerido y las secciones
-// en_espera_aceptacion/en_bodega muestren el mensajero asignado). Cambio aditivo:
+// por_recoger/en_bodega_central muestren el mensajero asignado). Cambio aditivo:
 // NO se agrega a OrdenDTO base para no ampliar el contrato del CRUD. Opcionales
 // (`?`) para no romper mocks/fixtures de UI existentes que construyen
 // OrdenListItemDTO sin estos campos; el repositorio SIEMPRE los envia (string|null).

@@ -14,7 +14,7 @@ function okListado(): ApiOrdenListadoDTO {
       {
         numGuia: 10234,
         numRemision: "REM-1",
-        estado: "en_bodega",
+        estado: "en_bodega_central",
         destinatario: "Ana",
         telefonoDest: "099",
         producto: "Caja",
@@ -84,7 +84,7 @@ describe("GET /api/ordenes/api-key — listado (R8/R9/R10)", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.pagination).toEqual({ limit: 50, offset: 0, total: 173 });
-    expect(json.items[0]).toMatchObject({ numGuia: 10234, estado: "en_bodega" });
+    expect(json.items[0]).toMatchObject({ numGuia: 10234, estado: "en_bodega_central" });
   });
 
   it("R8: ignora tiendaId de la query (el service recibe el actor, no el input)", async () => {

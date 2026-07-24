@@ -22,7 +22,7 @@ function ordenRow(overrides: Record<string, unknown> = {}) {
     deletedAt: null,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
-    estatus: { value: "en_bodega" },
+    estatus: { value: "en_bodega_central" },
     mensajeroSugeridoId: null,
     mensajeroAsignadoId: null,
     prioridad: false, // feature 101/R9: escalar de la fila que toDTO propaga al DTO
@@ -56,7 +56,7 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
 function ordenListRow(overrides: Record<string, unknown> = {}) {
   return {
     ...ordenRow(),
-    estatus: { id: "os-bodega", value: "en_bodega" },
+    estatus: { id: "os-bodega", value: "en_bodega_central" },
     tienda: {
       id: "t1",
       nombre: "Tienda Uno",
@@ -133,7 +133,7 @@ describe("OrdenRepository.create", () => {
     const dto = await repo.create(baseCreateData(), HIST_CREACION);
 
     expect(dto.peso).toBe(1.5);
-    expect(dto.estatusValue).toBe("en_bodega");
+    expect(dto.estatusValue).toBe("en_bodega_central");
     expect(dto).not.toHaveProperty("deletedAt");
   });
 
@@ -366,7 +366,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
   });
 
   // Feature 17/R20: el modal "Generar guia" agrupa por mensajero sugerido y las
-  // secciones en_espera_aceptacion/en_bodega muestran el mensajero asignado.
+  // secciones por_recoger/en_bodega_central muestran el mensajero asignado.
   it("R20: mapea mensajeroSugeridoId y mensajeroAsignadoId en el DTO del listado", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
@@ -443,7 +443,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     });
 
     const rel = res.items[0].relaciones!;
-    expect(rel.estatus).toEqual({ id: "os-bodega", value: "en_bodega" });
+    expect(rel.estatus).toEqual({ id: "os-bodega", value: "en_bodega_central" });
     expect(rel.zona).toEqual({ id: "z1", nombre: "GAM", esCentral: true });
     expect(rel.provincia).toEqual({ id: "p1", nombre: "San José" });
     expect(rel.canton).toEqual({ id: "c1", nombre: "Central" });
@@ -664,10 +664,10 @@ describe("OrdenRepository.existsGeo / existsEstatus / findEstatusIdByValue", () 
 
   it("findEstatusIdByValue resuelve el id por value", async () => {
     const prisma = buildPrisma();
-    prisma.orderStatus.findUnique.mockResolvedValue({ id: "os-bodega", value: "en_bodega" });
+    prisma.orderStatus.findUnique.mockResolvedValue({ id: "os-bodega", value: "en_bodega_central" });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.findEstatusIdByValue("en_bodega")).toBe("os-bodega");
+    expect(await repo.findEstatusIdByValue("en_bodega_central")).toBe("os-bodega");
   });
 
   it("existsEstatus devuelve false cuando no existe", async () => {

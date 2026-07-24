@@ -13,11 +13,11 @@ import { computeTotales, derivarPagos, derivarIngresoBodega } from "@/lib/utils/
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 109 (T1.3): + `findEstatusIdByValue` para resolver los estatus ids de
-// `en_reparto`/`sin_gestionar` que consume la transicion del corte (una vez por corrida).
+// `en_ruta`/`sin_gestionar` que consume la transicion del corte (una vez por corrida).
 type OrdenRepo = Pick<IOrdenRepository, "findUsuarioVehiculoId" | "findEstatusIdByValue">;
 
 // Feature 109 (R4): estados del catalogo que consume la transicion del corte diario.
-const ESTADO_EN_REPARTO = "en_reparto";
+const ESTADO_EN_REPARTO = "en_ruta";
 const ESTADO_SIN_GESTIONAR = "sin_gestionar";
 // Reusa la 37: gestiones pendientes del mensajero + creacion transaccional del cierre
 // (parametrizada con estado='vencido', feature 41/C1).
@@ -63,7 +63,7 @@ export class CorteDiarioService implements ICorteDiarioService {
         ? { enRepartoEstatusId, sinGestionarEstatusId }
         : undefined;
     // R4/R7/R10: mensajeros que "debian cerrar" (gestiones sin cerrar) O que dejaron ordenes en
-    // `en_reparto` al pasar de dia; sin un cierre ABIERTO (R10/R29).
+    // `en_ruta` al pasar de dia; sin un cierre ABIERTO (R10/R29).
     const mensajeros = await this.corteRepo.findMensajerosConActividadSinCierre();
 
     let vencidosCreados = 0;
@@ -78,7 +78,7 @@ export class CorteDiarioService implements ICorteDiarioService {
 
       // R7/R9: relee las gestiones aun sin cerrar (una corrida previa pudo vincularlas). Feature
       // 109 (R8): YA NO se hace `continue` si son 0 — el mensajero puede estar en la lista SOLO por
-      // ordenes `en_reparto` (money-neutral). `crearCierre` decide via la guarda "algo paso": si no
+      // ordenes `en_ruta` (money-neutral). `crearCierre` decide via la guarda "algo paso": si no
       // vincula gestiones NI transiciona `sin_gestionar`, devuelve null (idempotencia R9).
       const gestiones = await this.cierreRepo.findGestionesPendientes(m.mensajeroId);
 
@@ -102,7 +102,7 @@ export class CorteDiarioService implements ICorteDiarioService {
         estado: "vencido",
         destinoTipo,
         destinoZonaId: m.zonaId,
-        // Feature 109 (T1.3, R4/R6): en la MISMA tx transiciona `en_reparto -> sin_gestionar` del
+        // Feature 109 (T1.3, R4/R6): en la MISMA tx transiciona `en_ruta -> sin_gestionar` del
         // mensajero (via choke point). undefined si el catalogo no lo soporta (seed pendiente).
         corteSinGestionar,
         totales,
