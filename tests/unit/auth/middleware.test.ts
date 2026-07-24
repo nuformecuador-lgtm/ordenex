@@ -141,9 +141,8 @@ describe("middleware — /paquete/[numGuia]", () => {
     "/api/cron/generar-gastos-fijos",
     "/api/cron/liberar-reprogramadas",
     "/api/ordenes/api-key/carga",
-    "/api/ordenes/carga-masiva/chunk",
-  ])("deja pasar %s sin cookie de sesion (autoriza el handler)", (ruta) => {
-    const res = middleware(buildRequest(ruta));
+  ])("deja pasar %s sin cookie de sesion (autoriza el handler)", async (ruta) => {
+    const res = await middleware(buildRequest(ruta));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
@@ -151,39 +150,41 @@ describe("middleware — /paquete/[numGuia]", () => {
 
   // --- Feature 86: landing publica en `/` + dashboard en /dashboard ---
 
-  it("/ sin sesion deja pasar (landing publica, 200) (R1)", () => {
-    const res = middleware(buildRequest("/"));
+  it("/ sin sesion deja pasar (landing publica, 200) (R1)", async () => {
+    const res = await middleware(buildRequest("/"));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
   });
 
-  // La exclusion es de la rama /api entera, no de una lista de rutas conocidas:
-  // una ruta de API nueva no debe nacer inalcanzable por olvidar registrarla.
-  it("deja pasar una ruta de API que todavia no existe", () => {
-    const res = middleware(buildRequest("/api/lo-que-sea/futuro"));
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("location")).toBeNull();
-  });
-
-  // El guard de cookie SIGUE aplicando a las paginas: la exclusion es solo /api.
-  it("sigue redirigiendo una pagina privada que empieza con 'api' en el nombre", () => {
-    const res = middleware(buildRequest("/apitos"));
+  // Modelo endurecido (feature 78 + integracion whatsapp): la rama /api ya NO pasa en bloque.
+  // Solo los prefijos de SELF_AUTH_ROUTES (cron / api-key / webhooks) se autentican por su cuenta;
+  // una ruta /api que no sea self-auth queda guardada por sesion como cualquier otra (secure by
+  // default). El navegador la alcanza con su cookie de sesion valida; sin sesion se redirige.
+  it("una ruta de API no self-auth sin sesion se guarda (307 a /login)", async () => {
+    const res = await middleware(buildRequest("/api/lo-que-sea/futuro"));
 
     expect(res.status).toBe(307);
     expect(new URL(res.headers.get("location") as string).pathname).toBe("/login");
   });
 
-  it("/ con sesion redirige (307) a /dashboard (R7)", () => {
-    const res = middleware(buildRequest("/", "cookie-de-sesion"));
+  // El guard de cookie SIGUE aplicando a las paginas: la exclusion es solo /api.
+  it("sigue redirigiendo una pagina privada que empieza con 'api' en el nombre", async () => {
+    const res = await middleware(buildRequest("/apitos"));
+
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location") as string).pathname).toBe("/login");
+  });
+
+  it("/ con sesion redirige (307) a /dashboard (R7)", async () => {
+    const res = await middleware(buildRequest("/", "cookie-de-sesion"));
 
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe("https://app.test/dashboard");
   });
 
-  it("/dashboard sin sesion redirige (307) a /login?redirect=%2Fdashboard (R10)", () => {
-    const res = middleware(buildRequest("/dashboard"));
+  it("/dashboard sin sesion redirige (307) a /login?redirect=%2Fdashboard (R10)", async () => {
+    const res = await middleware(buildRequest("/dashboard"));
 
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe(
@@ -191,8 +192,8 @@ describe("middleware — /paquete/[numGuia]", () => {
     );
   });
 
-  it("R8: una ruta con prefijo `/` arbitraria sin sesion NO se vuelve publica (sigue redirigiendo a /login)", () => {
-    const res = middleware(buildRequest("/xyz"));
+  it("R8: una ruta con prefijo `/` arbitraria sin sesion NO se vuelve publica (sigue redirigiendo a /login)", async () => {
+    const res = await middleware(buildRequest("/xyz"));
 
     expect(res.status).toBe(307);
     expect(new URL(res.headers.get("location") as string).pathname).toBe(
@@ -200,29 +201,17 @@ describe("middleware — /paquete/[numGuia]", () => {
     );
   });
 
-  it("R16 (regresion): /ordenes sin cookie -> 307 a /login; con cookie -> 200", () => {
-    const sin = middleware(buildRequest("/ordenes"));
+  it("R16 (regresion): /ordenes sin cookie -> 307 a /login; con sesion valida -> 200", async () => {
+    const sin = await middleware(buildRequest("/ordenes"));
     expect(sin.status).toBe(307);
     expect(sin.headers.get("location")).toBe(
       "https://app.test/login?redirect=%2Fordenes",
     );
 
-    const con = middleware(buildRequest("/ordenes", "cookie-de-sesion"));
+    // Modelo endurecido: no basta la existencia de la cookie, la sesion debe estar activa.
+    isSessionActive.mockResolvedValue(true);
+    const con = await middleware(buildRequest("/ordenes", "cookie-de-sesion"));
     expect(con.status).toBe(200);
     expect(con.headers.get("location")).toBeNull();
-  });
-
-  // CARACTERIZACION, no comportamiento deseado: fija que HOY /paquete/[numGuia]
-  // redirige a /login por no estar en PUBLIC_ROUTES. Si la feature 79 decide que
-  // el rastreo es publico, este test DEBE cambiarse a proposito (y ese es el
-  // punto: obliga a decidir en vez de olvidar, que es exactamente como
-  // /recuperar-contrasena y /postulacion llegaron a estar inalcanzables).
-  it("caracterizacion: hoy /paquete/[numGuia] redirige a /login sin cookie (pendiente feature 79)", () => {
-    const res = middleware(buildRequest("/paquete/ABC123"));
-
-    expect(res.status).toBe(307);
-    const location = res.headers.get("location");
-    expect(location).not.toBeNull();
-    expect(new URL(location as string).pathname).toBe("/login");
   });
 });

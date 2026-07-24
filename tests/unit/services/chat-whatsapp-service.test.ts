@@ -47,6 +47,8 @@ function fakeMensajeRepo(over: Partial<IChatMensajeRepository> = {}): IChatMensa
       plantillaId: null,
       waMessageId: null,
       estado: "queued" as const,
+      latitud: null,
+      longitud: null,
       ocurridoAt: AHORA,
       createdAt: AHORA,
     })),
@@ -54,6 +56,9 @@ function fakeMensajeRepo(over: Partial<IChatMensajeRepository> = {}): IChatMensa
     reconciliarSaliente: vi.fn(async () => {}),
     findById: vi.fn(async () => null),
     listarHilo: vi.fn(async () => []),
+    // La ventana de 24 h se decide por el ULTIMO ENTRANTE real del hilo (contrato nuevo del
+    // service): por defecto "ahora" -> dentro de ventana, consistente con el hilo por defecto.
+    ultimoEntranteAt: vi.fn(async () => AHORA),
     ...over,
   };
 }
@@ -174,6 +179,8 @@ describe("enviarTexto (R18/R19/R20/R21)", () => {
         plantillaId: null,
         waMessageId: "wamid.OUT9",
         estado: "sent" as const,
+        latitud: null,
+        longitud: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -213,7 +220,10 @@ describe("enviarTexto (R18/R19/R20/R21)", () => {
     const client = fakeClient({ status: "ok", mensajeId: "no-deberia" });
     const service = new ChatWhatsappService({
       conversacionRepo: conv,
-      mensajeRepo: fakeMensajeRepo(),
+      // La ventana la decide el ULTIMO ENTRANTE real del hilo (contrato nuevo): hace 25 h -> fuera.
+      mensajeRepo: fakeMensajeRepo({
+        ultimoEntranteAt: vi.fn(async () => new Date(AHORA.getTime() - 25 * 60 * 60 * 1000)),
+      }),
       client,
       now: () => AHORA,
     });
@@ -241,7 +251,8 @@ describe("enviarTexto (R18/R19/R20/R21)", () => {
     });
     const service = new ChatWhatsappService({
       conversacionRepo: conv,
-      mensajeRepo: fakeMensajeRepo(),
+      // Sin ningun entrante en el hilo -> ultimoEntranteAt null -> fuera de ventana (bloquea).
+      mensajeRepo: fakeMensajeRepo({ ultimoEntranteAt: vi.fn(async () => null) }),
       client: fakeClient({ status: "ok", mensajeId: "x" }),
       now: () => AHORA,
     });
@@ -275,6 +286,8 @@ describe("enviarTexto (R18/R19/R20/R21)", () => {
         plantillaId: null,
         waMessageId: null,
         estado: "queued" as const,
+        latitud: null,
+        longitud: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -328,6 +341,8 @@ describe("enviarPlantilla (envio + persistencia tipo plantilla)", () => {
         plantillaId: "plt-1",
         waMessageId: "wamid.PLT1",
         estado: "sent" as const,
+        latitud: null,
+        longitud: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -417,6 +432,8 @@ describe("enviarPlantilla (envio + persistencia tipo plantilla)", () => {
         plantillaId: "plt-1",
         waMessageId: null,
         estado: "queued" as const,
+        latitud: null,
+        longitud: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -452,6 +469,8 @@ describe("reintentarEnvio (D1/F3)", () => {
         plantillaId: null,
         waMessageId: null,
         estado: "queued" as const,
+        latitud: null,
+        longitud: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -487,6 +506,8 @@ describe("reintentarEnvio (D1/F3)", () => {
         plantillaId: null,
         waMessageId: null,
         estado: "queued" as const,
+        latitud: null,
+        longitud: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),

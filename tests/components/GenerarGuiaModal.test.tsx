@@ -284,7 +284,7 @@ describe("GenerarGuiaModal", () => {
 
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith(
-        "La dirección aún se está validando. Intenta de nuevo en unos minutos.",
+        "La dirección aún se está validando. Vuelve a intentarlo en unos minutos.",
       ),
     );
   });
