@@ -22,6 +22,7 @@ const ORDEN_DATA: OrdenEnvioData = {
   producto: "caja",
   direccion: "calle 1",
   montoCobrar: 100,
+  mensajeroNombre: "Carlos",
 };
 
 function ordenReader(data: OrdenEnvioData | null): IOrdenEnvioReader {
@@ -271,6 +272,7 @@ describe("listarHiloChat (R16/R22)", () => {
       findById: vi.fn(),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       listarHilo: vi.fn(async () => lista as any),
+      ultimoEntranteAt: vi.fn(async () => null),
     };
   }
 

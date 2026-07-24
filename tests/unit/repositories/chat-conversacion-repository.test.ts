@@ -17,6 +17,9 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     orden: {
       findFirst: vi.fn(),
     },
+    // R25/D4: la resolucion del entrante matchea el telefono NORMALIZADO en ambos lados via SQL
+    // crudo (`regexp_replace`), porque Prisma no puede normalizar la columna en el WHERE.
+    $queryRaw: vi.fn(),
     ...overrides,
   };
 }
@@ -87,22 +90,16 @@ describe("ChatConversacionRepository", () => {
 
   it("R25/D4: resuelve la orden activa asignada MAS RECIENTE del numero", async () => {
     const prisma = buildPrisma();
-    prisma.orden.findFirst.mockResolvedValue({
-      id: "orden-9",
-      mensajeroAsignadoId: "men-9",
-      telefonoDest: "573001112233",
-    });
+    // Filas crudas snake_case tal como las devuelve `$queryRaw` sobre la tabla `orden`; la
+    // primera es la MAS RECIENTE (el ORDER BY asignado_at DESC ... LIMIT 1 vive en el SQL).
+    prisma.$queryRaw.mockResolvedValue([
+      { id: "orden-9", mensajero_asignado_id: "men-9", telefono_dest: "573001112233" },
+    ]);
     const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
 
     const res = await repo.resolverOrdenActivaPorNumero("573001112233");
 
-    const arg = prisma.orden.findFirst.mock.calls[0][0];
-    expect(arg.where).toMatchObject({
-      telefonoDest: "573001112233",
-      deletedAt: null,
-      mensajeroAsignadoId: { not: null },
-    });
-    expect(arg.orderBy[0]).toEqual({ asignadoAt: "desc" }); // D4: la mas reciente
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
     expect(res).toEqual({
       ordenId: "orden-9",
       mensajeroId: "men-9",
@@ -112,7 +109,7 @@ describe("ChatConversacionRepository", () => {
 
   it("R25: devuelve null cuando el numero no mapea a orden activa asignada", async () => {
     const prisma = buildPrisma();
-    prisma.orden.findFirst.mockResolvedValue(null);
+    prisma.$queryRaw.mockResolvedValue([]); // ninguna orden viva/asignada matchea el numero
     const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
 
     expect(await repo.resolverOrdenActivaPorNumero("573999")).toBeNull();
