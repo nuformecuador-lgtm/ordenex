@@ -202,6 +202,7 @@ enum ChatMensajeTipo {
   texto
   plantilla
   otro
+  ubicacion // Feature 121: mensaje entrante `type=location` con coordenadas lat/lng
 
   @@map("chat_mensaje_tipo")
 }
@@ -256,6 +257,8 @@ model ChatMensaje {
   plantillaId    String?              @map("plantilla_id") // solo salientes de tipo plantilla; ON DELETE SET NULL
   waMessageId    String?              @map("wa_message_id") // id de Meta; UNICO (parcial) para dedupe (R8)
   estado         ChatMensajeEstado? // solo salientes (R7)
+  latitud        Float?               @map("latitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
+  longitud       Float?               @map("longitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
   ocurridoAt     DateTime             @map("ocurrido_at") // timestamp del evento (de Meta en entrantes)
   createdAt      DateTime             @default(now()) @map("created_at")
 

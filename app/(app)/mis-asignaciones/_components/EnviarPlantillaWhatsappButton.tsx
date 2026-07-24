@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MessageCircle, Send, X } from "lucide-react";
+import { MessageSquarePlus, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -38,12 +38,18 @@ export interface EnviarPlantillaWhatsappButtonProps {
    * de la feature 87 (abrir WhatsApp del mensajero con el texto listo).
    */
   onElegirPlantilla?: (plantilla: { id: string; textoRenderizado: string }) => void;
+  /**
+   * Feature 120 (pedido humano): deshabilita el boton (y no abre el sheet). Lo usa la burbuja
+   * del chat para no reenviar otra plantilla mientras se espera la respuesta del cliente.
+   */
+  disabled?: boolean;
 }
 
 export function EnviarPlantillaWhatsappButton({
   orden,
   size = "lg",
   onElegirPlantilla,
+  disabled = false,
 }: Readonly<EnviarPlantillaWhatsappButtonProps>) {
   const toast = useToast();
   const [abierto, setAbierto] = useState(false);
@@ -56,6 +62,13 @@ export function EnviarPlantillaWhatsappButton({
   // Feature 120: modo "pegar en el chat" cuando el padre pasa el callback; si no, modo wa.me.
   const modoChat = Boolean(onElegirPlantilla);
 
+  // Iconos y etiquetas DISTINTOS por modo (pedido humano): en wa.me el globo "envia fuera"
+  // (abre WhatsApp); en el chat "redacta/pega" el mensaje en el propio input del panel.
+  const Icono = modoChat ? MessageSquarePlus : Send;
+  const ariaLabel = modoChat
+    ? `Usar plantilla en el chat con ${orden.destinatario}`
+    : `Enviar plantilla por WhatsApp a ${orden.destinatario}`;
+
   // Datos de la orden usados para resolver las variables de cada plantilla.
   const ordenEnvio = useMemo<OrdenEnvioData>(
     () => ({
@@ -66,6 +79,9 @@ export function EnviarPlantillaWhatsappButton({
       producto: orden.producto,
       direccion: orden.direccion,
       montoCobrar: orden.montoCobrar,
+      // Flujo wa.me del cliente: el DTO de la asignacion no trae el nombre del mensajero.
+      // La variable `mensajero` queda vacia aqui; el camino real es el envio server-side del chat.
+      mensajeroNombre: "",
     }),
     [orden],
   );
@@ -93,6 +109,8 @@ export function EnviarPlantillaWhatsappButton({
   }
 
   function handleAbrir() {
+    // Deshabilitado (p. ej. esperando la respuesta del cliente): no abre el sheet.
+    if (disabled) return;
     setAbierto(true);
     void cargarSiHaceFalta();
   }
@@ -122,9 +140,10 @@ export function EnviarPlantillaWhatsappButton({
         size="icon"
         className={iconButtonClass}
         onClick={handleAbrir}
-        aria-label={`Enviar plantilla de WhatsApp a ${orden.destinatario}`}
+        disabled={disabled}
+        aria-label={ariaLabel}
       >
-        <MessageCircle className={iconClass} aria-hidden="true" />
+        <Icono className={iconClass} aria-hidden="true" />
       </Button>
       <Sheet open={abierto} onOpenChange={setAbierto}>
         {/* X propia (showCloseButton={false} desactiva la del componente compartido): la

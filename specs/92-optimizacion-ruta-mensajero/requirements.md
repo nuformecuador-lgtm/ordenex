@@ -85,7 +85,23 @@ devolver `conflict` con un `detalle` por orden cuyo `motivo` identifique el esta
 encontrada"**; y CUANDO el motivo sea `geocodificacion_en_curso`, `geocodificacion_encolada` o
 `geocodificacion_no_encolable`, DEBE mostrar un mensaje distinto que indique que la dirección aún se
 está validando.
-→ `tests/components/GenerarGuiaModal.test.tsx`, `tests/components/AsignarBodegaModal.test.tsx`
+🔴 **HALLAZGO VERIFICADO 2026-07-20 (leader, al preparar la 93) — R9 NO es "añadir un toast".**
+Los tres modales **no leen `detalle` en absoluto**: los tres hacen
+`toast.error(guiaDecisionErrorMessage(error))` y ese mapper
+(`app/(app)/ordenes/_components/guia-decision-error-messages.ts:47-56`) ramifica **solo por
+`status`** (`isGuiaErrorStatus(status) ? GUIA_ERROR_MESSAGES[status] : "No se pudo completar la
+operación."`). Un `conflict` con `motivo: "direccion_no_geocodificable"` cae hoy en el mensaje
+genérico de `conflict` y **el motivo se descarta antes de llegar al toast**. R9 exige una rama nueva
+que inspeccione `detalle[].motivo` ANTES del switch por `status`. El trabajo vive en el **mapper
+compartido**, no en los tres modales por separado → se escribe una vez.
+🔴 **CUARTO CONSUMIDOR NO DECLARADO:** `RutearSateliteModal.tsx:64` **también** usa
+`guiaDecisionErrorMessage`. Al tocar el mapper compartido hereda el comportamiento nuevo
+automáticamente. Probablemente deseable, pero **no está decidido ni testeado** → es el patrón de
+drift "cambio el comportamiento y dejo un consumidor atrás" que ya golpeó al repo 8 veces. **Debe
+resolverse explícitamente en la gate F1.4:** o entra en alcance con su test, o se documenta por qué
+queda fuera. Ver **Q10**.
+→ `tests/components/GenerarGuiaModal.test.tsx`, `tests/components/AsignarBodegaModal.test.tsx`,
+  `tests/unit/components/guia-decision-error-messages.test.ts` (mapper: los 5 `motivo` → 2 mensajes)
 
 ---
 
@@ -298,7 +314,7 @@ usar un valor de enum en la misma transacción que lo añadió (55P04).
 | R1–R7 | `tests/unit/services/asignabilidad-coordenadas.test.ts` |
 | R4 | + `tests/integration/repositories/job-find-by-dedupe-keys.test.ts` |
 | R8 | `tests/unit/services/guia-asignacion-gate-coordenadas.test.ts`, `tests/unit/services/asignacion-satelite-gate-coordenadas.test.ts` |
-| R9 | `tests/components/GenerarGuiaModal.test.tsx`, `tests/components/AsignarBodegaModal.test.tsx` |
+| R9 | `tests/components/GenerarGuiaModal.test.tsx`, `tests/components/AsignarBodegaModal.test.tsx`, `tests/unit/components/guia-decision-error-messages.test.ts` |
 | R10 | `tests/unit/config/route-optimization-config.test.ts` |
 | R11 | `tests/unit/auth/google-sa-token.test.ts` |
 | R12, R20, R27, R34–R38 | `tests/unit/services/optimizacion-ruta-service.test.ts` |
@@ -364,3 +380,16 @@ por evento el crecimiento se acelera. ¿Se abre feature de retención?
 **Q9 — Coste real del SKU de Route Optimization.** No está en `docs/` ni en el repo. El humano
 aceptó el SKU a sabiendas, pero el spec no puede dimensionar el gasto mensual sin ese dato.
 **Recomendación: confirmar precio por `optimizeTours` antes de habilitar en producción.**
+
+**Q10 — `RutearSateliteModal`, el cuarto consumidor del mapper (R9).** Añadida 2026-07-20 tras el
+hallazgo del leader. R9 obliga a extender `guia-decision-error-messages.ts`, que es **compartido por
+cuatro** modales, no por los tres que nombra el alcance: `GenerarGuiaModal`, `AsignarBodegaModal`,
+`AsignarSateliteModal` y **`RutearSateliteModal` (`:64`)**. Extender el mapper le cambia el
+comportamiento al cuarto **quiera o no** — no hay forma de tocar el mapper y dejarlo fuera salvo
+duplicar la lógica, que es peor.
+**Recomendación: que entre en alcance CON su test.** El ruteo a satélite puede toparse con los
+mismos 5 `motivo`, y un mensaje específico es estrictamente mejor que el genérico actual; el coste
+es un archivo de test. La alternativa (documentarlo como fuera de alcance) deja un consumidor con
+comportamiento cambiado y sin cobertura, que es justo la forma del drift que este repo ya sufrió 8
+veces.
+🔴 **Es criterio de producto, no hecho verificado** → merece segunda mirada del reviewer.

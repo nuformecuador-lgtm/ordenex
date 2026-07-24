@@ -1,13 +1,21 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Send } from "lucide-react";
+import { MapPin, Send } from "lucide-react";
 import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useToast";
+import { useUbicacionActual, type Coords } from "@/hooks/useUbicacionActual";
 import {
   enviarMensajeChat,
   enviarPlantillaChat,
@@ -20,6 +28,8 @@ import type {
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
+import { UbicacionMapa } from "./UbicacionMapa";
+import type { UbicacionPunto } from "./ubicacion-mapa-tipos";
 
 // Feature 109 (design §5, R22-R24) — panel del chat del mensajero con el cliente de la
 // orden en gestion. Co-ubicado en `mis-asignaciones/_components` (un solo consumidor:
@@ -82,9 +92,23 @@ function horaCorta(iso: string): string {
 }
 
 /** Una burbuja del hilo: alineacion y color segun la direccion (R22). */
-function Burbuja({ mensaje }: { mensaje: ChatMensajeVista }) {
+function Burbuja({
+  mensaje,
+  onAbrirUbicacion,
+}: {
+  mensaje: ChatMensajeVista;
+  /** Feature 121: abre el minimapa con las coordenadas de una burbuja de ubicacion (R10). */
+  onAbrirUbicacion: (punto: UbicacionPunto) => void;
+}) {
   const esSaliente = mensaje.direccion === "saliente";
   const estadoInfo = mensaje.estado ? ESTADO_BADGE[mensaje.estado] : null;
+  // Feature 121 (R9): un entrante de tipo `ubicacion` con coordenadas se pinta como un boton
+  // con pin en lugar de un cuerpo de texto vacio. Las coordenadas NUNCA se vuelcan al DOM
+  // visible (R15): solo alimentan el `onClick` que abre el minimapa.
+  const esUbicacion =
+    mensaje.tipo === "ubicacion" &&
+    mensaje.latitud !== null &&
+    mensaje.longitud !== null;
 
   return (
     <li
@@ -98,7 +122,24 @@ function Burbuja({ mensaje }: { mensaje: ChatMensajeVista }) {
             : "rounded-bl-sm bg-muted text-foreground"
         }`}
       >
-        {mensaje.cuerpo ?? ""}
+        {esUbicacion ? (
+          <button
+            type="button"
+            onClick={() =>
+              onAbrirUbicacion({
+                lat: mensaje.latitud as number,
+                lng: mensaje.longitud as number,
+              })
+            }
+            aria-label="Ver ubicación compartida"
+            className="flex items-center gap-1.5 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm"
+          >
+            <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+            Ubicación compartida
+          </button>
+        ) : (
+          (mensaje.cuerpo ?? "")
+        )}
       </div>
       <div className="flex items-center gap-1.5 px-1">
         <span className="text-[0.6875rem] text-muted-foreground">
@@ -126,6 +167,34 @@ export function ChatWhatsappPanel({
   const toast = useToast();
   const [enviando, setEnviando] = useState(false);
 
+  // Feature 121 (R10-R13): una sola ubicacion seleccionada a la vez. `ubicacionCliente != null`
+  // = modal abierto con ese punto. El GPS del repartidor se pide LAZY al abrir (P3), nunca al
+  // montar el panel; `gpsPedido` distingue "aun capturando" de "ya se intento y fallo" (R12).
+  const { pedirUbicacion, denegado } = useUbicacionActual();
+  const [ubicacionCliente, setUbicacionCliente] = useState<UbicacionPunto | null>(
+    null,
+  );
+  const [gpsRepartidor, setGpsRepartidor] = useState<Coords | null>(null);
+  const [gpsPedido, setGpsPedido] = useState(false);
+
+  /**
+   * Feature 121 (R10/R11): abre el modal con el punto del cliente y, en el acto, pide el GPS
+   * EN VIVO del repartidor (lazy, P3). `pedirUbicacion` nunca lanza: resuelve `Coords` o `null`.
+   */
+  async function abrirUbicacion(punto: UbicacionPunto) {
+    setUbicacionCliente(punto);
+    setGpsRepartidor(null);
+    setGpsPedido(false);
+    const coords = await pedirUbicacion();
+    setGpsRepartidor(coords);
+    setGpsPedido(true);
+  }
+
+  /** Cierra el modal sin recargar (R13); el hilo y su refresco siguen vivos. */
+  function cerrarUbicacion(abierto: boolean) {
+    if (!abierto) setUbicacionCliente(null);
+  }
+
   // R24 / D5: polling con SWR. La Server Action `listarHiloChat` impone el scope del
   // mensajero (R16); aqui solo se consume su resultado tipado.
   const { data, isLoading, mutate } = useSWR<ListarHiloChatResult>(
@@ -136,7 +205,16 @@ export function ChatWhatsappPanel({
 
   const hiloOk = data?.status === "ok" ? data : null;
   const mensajes = hiloOk?.mensajes ?? [];
-  const ventanaAbierta = hiloOk?.ventanaAbierta ?? false;
+  // Feature 120 (pedido humano): en cuanto el cliente respondio AL MENOS UNA vez (hay un
+  // mensaje entrante en el hilo) se habilita el input de texto libre y se OCULTA la burbuja de
+  // plantillas: ya se puede conversar. El backend sigue siendo la defensa de la ventana de 24 h.
+  const hayEntrante = mensajes.some((m) => m.direccion === "entrante");
+  // Feature 120 (pedido humano): si YA se envio una plantilla (hay un saliente) y el cliente
+  // AUN NO respondio (no hay entrante), se BLOQUEA la burbuja para no reenviar otra plantilla
+  // hasta que conteste. Como este bloque solo se pinta cuando `!hayEntrante`, basta con mirar
+  // si existe algun saliente en el hilo.
+  const haySaliente = mensajes.some((m) => m.direccion === "saliente");
+  const burbujaBloqueada = !hayEntrante && haySaliente;
 
   /** Feature 120: al elegir una plantilla desde la burbuja, se pega su texto en el input. */
   function pegarPlantilla(plantilla: { id: string; textoRenderizado: string }) {
@@ -222,7 +300,7 @@ export function ChatWhatsappPanel({
     if (enviando) return;
     setEnviando(true);
     try {
-      if (ventanaAbierta) {
+      if (hayEntrante) {
         await enviarTextoLibre();
       } else if (borrador.plantillaId !== null) {
         await enviarComoPlantilla(borrador.plantillaId);
@@ -256,7 +334,7 @@ export function ChatWhatsappPanel({
           className="flex max-h-72 flex-col gap-2 overflow-y-auto"
         >
           {mensajes.map((m) => (
-            <Burbuja key={m.id} mensaje={m} />
+            <Burbuja key={m.id} mensaje={m} onAbrirUbicacion={abrirUbicacion} />
           ))}
         </ul>
       )}
@@ -265,7 +343,7 @@ export function ChatWhatsappPanel({
           pegar una plantilla); fuera -> solo plantilla. Si ya se eligió una (plantillaId), se
           muestra su texto pegado con un aviso y el botón envía como plantilla; si no, se invita
           a elegir una. Nunca se envía texto libre fuera de la ventana (R19). */}
-      {ventanaAbierta ? (
+      {hayEntrante ? (
         <form onSubmit={handleEnviar} className="flex items-center gap-2">
           <Input
             value={borrador.texto}
@@ -275,12 +353,8 @@ export function ChatWhatsappPanel({
             maxLength={4096}
             disabled={enviando}
           />
-          {/* Burbuja: pega una plantilla renderizada en el input (feature 120). */}
-          <EnviarPlantillaWhatsappButton
-            orden={orden}
-            size="sm"
-            onElegirPlantilla={pegarPlantilla}
-          />
+          {/* Feature 120 (pedido humano): con el cliente ya respondiendo, la burbuja de
+              plantillas se oculta; se conversa con texto libre. */}
           <Button
             type="submit"
             size="icon"
@@ -305,6 +379,7 @@ export function ChatWhatsappPanel({
               orden={orden}
               size="sm"
               onElegirPlantilla={pegarPlantilla}
+              disabled={burbujaBloqueada}
             />
             <Button
               type="submit"
@@ -331,18 +406,55 @@ export function ChatWhatsappPanel({
       ) : (
         <div className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">
-            Fuera de la ventana de 24 h. Elige una plantilla aprobada para retomar
-            la conversación.
+            {burbujaBloqueada
+              ? "Ya enviaste una plantilla. Espera la respuesta del cliente para continuar."
+              : "El cliente aún no ha respondido. Elige una plantilla aprobada para iniciar la conversación."}
           </p>
           <div>
             <EnviarPlantillaWhatsappButton
               orden={orden}
               size="sm"
               onElegirPlantilla={pegarPlantilla}
+              disabled={burbujaBloqueada}
             />
           </div>
+          {/* Hint corto mientras se espera al cliente (burbuja deshabilitada). */}
+          {burbujaBloqueada ? (
+            <p className="text-xs text-muted-foreground">
+              Esperando la respuesta del cliente…
+            </p>
+          ) : null}
         </div>
       )}
+
+      {/* Feature 121 (R10-R13): modal con el minimapa de una ubicacion compartida. Se abre
+          DENTRO de la misma ventana (Dialog) y se cierra sin recargar. El minimapa (Leaflet) se
+          monta via `next/dynamic({ ssr:false })` en `UbicacionMapa` (R14). */}
+      <Dialog open={ubicacionCliente !== null} onOpenChange={cerrarUbicacion}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Ubicación compartida</DialogTitle>
+            <DialogDescription>
+              El punto compartido por el cliente y tu ubicación actual.
+            </DialogDescription>
+          </DialogHeader>
+          {ubicacionCliente ? (
+            <UbicacionMapa
+              cliente={ubicacionCliente}
+              repartidor={gpsRepartidor}
+            />
+          ) : null}
+          {/* R12: sin GPS del repartidor (denegado/timeout) el mapa pinta solo el punto del
+              cliente y se avisa, sin bloquear apertura ni cierre. */}
+          {gpsPedido && gpsRepartidor === null ? (
+            <p role="status" className="text-xs text-muted-foreground">
+              {denegado
+                ? "No se pudo obtener tu ubicación actual: el permiso de ubicación está denegado."
+                : "No se pudo obtener tu ubicación actual."}
+            </p>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

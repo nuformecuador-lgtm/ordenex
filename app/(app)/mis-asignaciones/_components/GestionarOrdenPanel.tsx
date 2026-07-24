@@ -393,16 +393,21 @@ export function GestionarOrdenPanel({
       {paso === "detalle" ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Feature 87 (R17): botones de contacto (Llamar + WhatsApp wa.me) deduplicados en el
-                compuesto compartido `ContactoButtons`; el enlace wa.me prefija `506` (R15). */}
+            {/* Feature 87 (R17): boton "Llamar". El WhatsApp wa.me plano se reemplaza (pedido
+                humano) por el boton de plantilla->wa.me de abajo, que abre WhatsApp con el texto
+                de la plantilla elegida. */}
             <ContactoButtons
               telefono={orden.telefonoDest}
               nombre={orden.destinatario}
               size="lg"
+              mostrarWhatsapp={false}
             />
-            {/* Integracion WhatsApp + feature 120: burbuja que lista las plantillas, las
-                renderiza con los datos de la orden y, al elegir una, PEGA el mensaje en el
-                input del chat (borrador compartido) listo para enviar. */}
+            {/* Pedido humano (Option 1): el "globo" ahora elige una plantilla y REDIRIGE FUERA
+                abriendo WhatsApp (wa.me) con el texto renderizado. Sin `onElegirPlantilla` usa
+                ese flujo wa.me. Funciona con plantillas `pending` (no valida estado activo). */}
+            <EnviarPlantillaWhatsappButton orden={orden} size="lg" />
+            {/* Feature 120: burbuja que, al elegir una plantilla, PEGA el mensaje en el input del
+                chat (borrador compartido) listo para enviar EN LA APP. */}
             <EnviarPlantillaWhatsappButton
               orden={orden}
               size="lg"
