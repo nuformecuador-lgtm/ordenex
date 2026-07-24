@@ -79,18 +79,20 @@ describe("Feature 75 · la action lee la foto del FormData y la propaga al servi
     expect(r.status).toBe("ok");
     const input = inputRecibido(service);
     expect(input.resultado).toBe("devuelta");
-    expect(input.evidencia).toBeDefined();
-    expect(input.evidencia.contentType).toBe("image/jpeg");
+    // Feature 119 (R5): la evidencia llega ahora como LISTA (una foto por defecto en el helper).
+    expect(input.evidencias[0]).toBeDefined();
+    expect(input.evidencias[0].contentType).toBe("image/jpeg");
   });
 
-  it("FormData SIN evidencia -> validation_error con fieldErrors.evidencia y el service NO se invoca", async () => {
+  it("FormData SIN evidencia -> validation_error con fieldErrors.evidencias y el service NO se invoca", async () => {
     const service = buildService();
     const fd = fdDevuelta();
     fd.delete("evidencia");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
     expect(r.status).toBe("validation_error");
     if (r.status === "validation_error") {
-      expect(r.fieldErrors.evidencia).toBeDefined();
+      // Feature 119 (R6): el error de "sin foto" cuelga del campo LISTA `evidencias`.
+      expect(r.fieldErrors.evidencias).toBeDefined();
     }
     expect(service.gestionar).not.toHaveBeenCalled();
   });
@@ -145,14 +147,15 @@ describe("Feature 73 · la action rechaza en el borde, sin efectos (R6/R9)", () 
     expect(service.gestionar).not.toHaveBeenCalled();
   });
 
-  it("pedido: devuelta SIN evidencia -> validation_error en `evidencia`, service NO invocado", async () => {
+  it("pedido: devuelta SIN evidencia -> validation_error en `evidencias`, service NO invocado", async () => {
     const service = buildService();
     const fd = fdDevuelta();
     fd.delete("evidencia");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
     expect(r.status).toBe("validation_error");
     if (r.status === "validation_error") {
-      expect(r.fieldErrors.evidencia).toBeDefined();
+      // Feature 119 (R6): sin foto -> error en el campo lista `evidencias`.
+      expect(r.fieldErrors.evidencias).toBeDefined();
     }
     expect(service.gestionar).not.toHaveBeenCalled();
   });

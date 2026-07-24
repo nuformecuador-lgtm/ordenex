@@ -39,6 +39,7 @@ const ITEM: PlantillaListItemDTO = {
   cuerpo: "Hola {{usuario}}, tu orden {{cod}}",
   estado: "pending",
   variables: ["usuario", "cod"],
+  templateId: null,
   createdAt: new Date("2026-01-01T12:00:00Z"),
 };
 

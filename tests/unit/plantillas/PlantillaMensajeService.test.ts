@@ -21,6 +21,8 @@ function plantilla(overrides: Partial<PlantillaPublica> = {}): PlantillaPublica 
     cuerpo: "Hola {{usuario}}",
     variables: ["usuario"],
     estado: "pending",
+    templateId: null,
+    templateIdioma: null,
     createdBy: "m1",
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
@@ -38,6 +40,12 @@ function buildRepo(overrides: Partial<IPlantillaMensajeRepository> = {}): IPlant
     update: vi.fn().mockResolvedValue(plantilla()),
     updateEstado: vi.fn().mockResolvedValue(plantilla({ estado: "inactivo" })),
     softDelete: vi.fn().mockResolvedValue(true),
+    setTemplate: vi.fn().mockResolvedValue(undefined),
+    sincronizarTemplatePorNombre: vi.fn().mockResolvedValue(true),
+    crearDesdeMeta: vi.fn().mockResolvedValue(true),
+    listarEnviables: vi.fn().mockResolvedValue([]),
+    findEnviableById: vi.fn().mockResolvedValue(null),
+    listarUsablesParaTexto: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
@@ -177,11 +185,11 @@ describe("R27/R29: eliminar marca deletedAt (soft) y no borra; inexistente -> no
   });
 });
 
-describe("R18: preview sustituye con los ejemplos", () => {
-  it("render con ejemplos del catalogo", async () => {
+describe("R18: preview sustituye las variables por su marcador", () => {
+  it("con catalogo vacio toda clave bien formada cae al marcador en MAYUSCULAS", async () => {
     const r = await service.preview("Hola {{usuario}}, orden {{cod}}", MAESTRO);
     expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.texto).toBe("Hola Juan, orden ABC123");
+    if (r.status === "ok") expect(r.texto).toBe("Hola USUARIO, orden COD");
   });
 
   it("cuerpo malformado -> validation_error", async () => {

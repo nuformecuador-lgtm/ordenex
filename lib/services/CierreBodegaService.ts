@@ -76,7 +76,7 @@ function sumIngresoBodega(items: { totalIngresoBodegaRechazos: string }[]): stri
 
 /**
  * Reparto del EFECTIVO entre los pagos a mensajeros. Al mensajero se le paga SOLO con el
- * efectivo de la consolidacion (SIMPE/transferencia no son plata en mano en la bodega), y el
+ * efectivo de la consolidacion (SINPE/transferencia no son plata en mano en la bodega), y el
  * pago es ATOMICO: o se le paga completo o no se le paga (no hay pago parcial). Con el
  * efectivo insuficiente se paga de MENOR a MAYOR monto, para pagarle a la mayor cantidad
  * posible de mensajeros; lo que queda sin pagar lo debe la central.

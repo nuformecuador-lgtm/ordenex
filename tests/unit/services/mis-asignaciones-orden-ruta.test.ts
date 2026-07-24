@@ -83,12 +83,20 @@ function build(rows: MiAsignacionRow[], rutaPrevia: RutaOptimizadaDTO | null) {
     upsertOrigen: vi.fn(async () => {}),
   } as unknown as Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen">;
 
+  // Feature 115 (R17): sin marcas -> `marcarLuego` false; este test mide el orden por ruta.
+  // Feature 116: sin notas -> `notaPrivada` null en todas las cards.
+  const metaRepo = {
+    findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
+    findNotasByMensajero: vi.fn(async () => new Map<string, string>()),
+  };
+
   return new MisAsignacionesService(
     repo,
     { findEstatusIdByValue: vi.fn(async () => "x") } as unknown as IOrdenRepository,
     {} as IFileStorage,
     {} as ISignedUrlProvider,
     rutaRepo,
+    metaRepo,
   );
 }
 

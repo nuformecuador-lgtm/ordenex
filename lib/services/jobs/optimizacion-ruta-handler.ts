@@ -9,6 +9,8 @@ import type { JobHandler } from "@/lib/interfaces/services/IJobQueueService";
 import type { IRouteOptimizationClient } from "@/lib/interfaces/external/IRouteOptimizationClient";
 import { OptimizacionRutaService } from "@/lib/services/OptimizacionRutaService";
 import { GoogleRouteOptimizationClient } from "@/lib/clients/google-route-optimization";
+import { HaversineRouteOptimizationClient } from "@/lib/clients/haversine-route-optimization";
+import { FallbackRouteOptimizationClient } from "@/lib/clients/fallback-route-optimization";
 import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
@@ -55,7 +57,7 @@ export function buildOptimizacionRutaService(now: () => Date = () => new Date())
   const config = loadRouteOptimizationConfig();
 
   let tokenProvider: ReturnType<typeof construirTokenProvider> | null = null;
-  const client: IRouteOptimizationClient = new GoogleRouteOptimizationClient({
+  const google = new GoogleRouteOptimizationClient({
     projectId: config.GOOGLE_ROUTE_OPT_PROJECT_ID ?? "",
     timeoutMs: config.ROUTE_OPT_TIMEOUT_MS,
     getToken: async () => {
@@ -64,6 +66,15 @@ export function buildOptimizacionRutaService(now: () => Date = () => new Date())
       return tokenProvider.obtener();
     },
   });
+
+  // Fallback (design §9.A): si falta la credencial, `google.optimizar` propaga
+  // `RutaNoConfiguradoError` (perezoso, dentro de `getToken`) y el compuesto cae a un orden
+  // local aproximado (Haversine + vecino mas cercano) en vez de dejar la ruta sin ordenar.
+  // Cualquier otro fallo del proveedor se propaga tal cual.
+  const client: IRouteOptimizationClient = new FallbackRouteOptimizationClient(
+    google,
+    new HaversineRouteOptimizationClient(),
+  );
 
   return new OptimizacionRutaService(
     new RutaOptimizadaRepository(prisma),

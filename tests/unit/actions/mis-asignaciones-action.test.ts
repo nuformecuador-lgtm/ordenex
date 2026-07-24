@@ -122,7 +122,8 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     expect(input.resultado).toBe("entregada");
     expect(input.montoRecibido).toBe(100);
     expect(input.metodoPago).toBe("efectivo");
-    expect(input.evidencia.bytes).toBeInstanceOf(Uint8Array);
+    // Feature 119 (R5): la evidencia llega como LISTA de 1..N; el borde la lee via getAll.
+    expect(input.evidencias[0].bytes).toBeInstanceOf(Uint8Array);
   });
 
   it("R22: entrega sin foto -> validation_error, sin service", async () => {
@@ -213,7 +214,7 @@ describe("gestionar — validacion de borde (R22/R24/R25/R27/R29)", () => {
     expect(r.status).toBe("ok");
     const [input] = (service.gestionar as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(input.resultado).toBe("rechazada");
-    expect(input.evidencia.bytes).toBeInstanceOf(Uint8Array);
+    expect(input.evidencias[0].bytes).toBeInstanceOf(Uint8Array);
   });
 });
 

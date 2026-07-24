@@ -37,6 +37,30 @@ export interface MiAsignacionDTO {
    * Siempre `null` en las ordenes de "Por recoger": no estan en reparto, no son paradas.
    */
   secuenciaRuta: number | null;
+  /**
+   * Feature 115 (R17): marca PRIVADA "gestionar mas tarde" del mensajero actual sobre esta
+   * orden. `true` si el propio actor la marco (`false` cuando no existe fila para la pareja,
+   * R17). Solo informativa: no cambia el estatus ni la ruta de la orden (R15/R16).
+   *
+   * Opcional (`?`) por el patron aditivo ya usado por `OrdenDTO.mensajeroAsignadoId?`/
+   * `prioridad?`: no rompe los fixtures que construyen `MiAsignacionDTO` sin el; `toDTO`
+   * SIEMPRE lo envia (boolean, `false` por defecto). La UI del mensajero (feature 115/T8) lo
+   * consume para el badge y el reordenado de presentacion.
+   */
+  marcarLuego?: boolean;
+  /**
+   * Feature 116 (R6/R8): nota PRIVADA del mensajero actual sobre esta orden. `string` con el
+   * texto de su nota, o `null` si el propio actor no tiene nota para la orden. DISTINTA de
+   * `notas` (nota de la TIENDA, `orden.notas`): esta viaja SOLO por (usuario_id, orden_id) de
+   * `orden_mensajero_meta.nota`, se resuelve con `findNotasByMensajero(actor.usuarioId)` y NUNCA
+   * expone la nota de otro mensajero para la misma orden (R8).
+   *
+   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`: no rompe los fixtures que
+   * construyen `MiAsignacionDTO` sin el; `toDTO` SIEMPRE lo envia (`null` por defecto y el
+   * llamador lo sobreescribe con la nota real del actor). La UI del mensajero (feature 116/
+   * Bloque F) lo consume para el editor del detalle y el indicador de la card.
+   */
+  notaPrivada?: string | null;
 }
 
 /**
@@ -146,13 +170,15 @@ export interface EvidenciaArchivo {
 // propiedad/origen/bloqueo y la regla (h) monto == montoCobrar.
 // Feature 92 (R22): `ubicacion` opcional en las CUATRO ramas. Va como interseccion para no
 // repetirla en cada variante ni tocar el discriminante.
+// Feature 119 (R5): la evidencia UNICA (`evidencia`) pasa a una LISTA `evidencias`
+// (1..N, tope R7) en las 3 ramas con foto. `reprogramada` sigue sin evidencia.
 export type GestionarInput = { ubicacion?: UbicacionInput } & (
   | {
       ordenId: string;
       resultado: "entregada";
       montoRecibido: number;
       metodoPago: MetodoPago;
-      evidencia: EvidenciaArchivo;
+      evidencias: EvidenciaArchivo[];
     }
   | { ordenId: string; resultado: "reprogramada"; fechaReprogramacion: string; motivo: string }
   // Feature 73/R10: la causa tipificada es un campo de la rama `devuelta` y SOLO de ella.
@@ -162,13 +188,14 @@ export type GestionarInput = { ubicacion?: UbicacionInput } & (
       resultado: "devuelta";
       causaDevolucion: CausaDevolucion;
       motivo: string;
-      evidencia: EvidenciaArchivo;
+      evidencias: EvidenciaArchivo[];
     }
-  | { ordenId: string; resultado: "rechazada"; motivo: string; evidencia: EvidenciaArchivo }
+  | { ordenId: string; resultado: "rechazada"; motivo: string; evidencias: EvidenciaArchivo[] }
 );
 
 export type GestionarServiceResult =
-  | { status: "ok"; ordenId: string; estado: string; evidenciaUrl?: string }
+  // Feature 119 (R13): URLs firmadas de las N evidencias (TTL acotado), NUNCA el path crudo.
+  | { status: "ok"; ordenId: string; estado: string; evidenciaUrls?: string[] }
   | { status: "forbidden" } // R12 / orden ajena
   | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R22/R24 (monto != montoCobrar, etc.)
   | { status: "conflict"; motivo: string }; // R18/R21 origen invalido / otra orden activa

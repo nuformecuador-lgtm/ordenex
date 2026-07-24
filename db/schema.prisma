@@ -131,6 +131,8 @@ model Usuario {
   rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
   plantillasCreadas                   PlantillaMensaje[]        @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
   webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
+  ordenMensajeroMetas                 OrdenMensajeroMeta[]      @relation("OrdenMensajeroMetaMensajero") // feature 115: marcas privadas ("gestionar mas tarde") de ESTE mensajero sobre sus ordenes
+  chatConversaciones                  ChatConversacion[]        @relation("ChatConversacionMensajero") // feature 120/R13/R16: hilos de chat asignados a ESTE mensajero
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -163,6 +165,12 @@ model PlantillaMensaje {
   cuerpo    String // texto con placeholders {{clave}}
   variables String[] // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
   estado    PlantillaEstado @default(pending) // R12 (Decision humana 1)
+  // Integracion WhatsApp: enlace al Message Template de Meta. NULL = todavia no propagada a
+  // Meta (o Meta no la ha devuelto en la sincronizacion). El envio usa `nombre` + `templateIdioma`
+  // (Meta manda por name+language, no por id); `templateId` es la referencia/traza a Meta y el
+  // marcador de "enviable" (no NULL + estado activo).
+  templateId     String? @map("template_id")
+  templateIdioma String? @map("template_idioma") // code de idioma del template en Meta (p. ej. "es", "es_CO")
   createdBy String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
   deletedAt DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
   createdAt DateTime        @default(now()) @map("created_at")
@@ -174,6 +182,91 @@ model PlantillaMensaje {
   @@index([estado]) // filtro por estado
   @@index([deletedAt]) // R28: filtro de vigentes (deletedAt IS NULL)
   @@map("plantilla_mensaje")
+
+  chatMensajes ChatMensaje[] @relation("ChatMensajePlantilla") // feature 109: salientes de tipo plantilla que referencian esta plantilla
+}
+
+// Feature 109 (design §1.1): direccion de un mensaje del chat. Enum Postgres nativo
+// (patron RolValue/PlantillaEstado). `entrante` = del cliente (llega por el webhook);
+// `saliente` = del mensajero (se envia por la Graph API).
+enum ChatMensajeDireccion {
+  entrante
+  saliente
+
+  @@map("chat_mensaje_direccion")
+}
+
+// Feature 109 (design §1.1): tipo de un mensaje del chat. `texto` (cuerpo libre),
+// `plantilla` (Message Template de Meta), `otro` (multimedia entrante no expandido en v1).
+enum ChatMensajeTipo {
+  texto
+  plantilla
+  otro
+  ubicacion // Feature 121: mensaje entrante `type=location` con coordenadas lat/lng
+
+  @@map("chat_mensaje_tipo")
+}
+
+// Feature 109 (design §1.1): estado de entrega de un mensaje SALIENTE (R7/R14). Solo
+// aplica a salientes (nullable en entrantes). `queued` = pendiente de reintento por la
+// cola de jobs; el resto lo reporta Meta via el webhook de statuses.
+enum ChatMensajeEstado {
+  queued
+  sent
+  delivered
+  read
+  failed
+
+  @@map("chat_mensaje_estado")
+}
+
+// Feature 109 (design §1.2, R13): hilo de chat 1:1 entre el mensajero y el cliente
+// destinatario de una orden, identificado por el numero E.164 del cliente. Un hilo por
+// (orden, numero) (ver D4). `ultimoEntranteAt` es la fuente de la ventana de 24 h
+// (R18/R19). RLS habilitada sin policies (solo service role): la autorizacion de negocio
+// (scope por mensajero, R16) vive en el service, no en la DB.
+model ChatConversacion {
+  id               String    @id @default(uuid())
+  telefonoE164     String    @map("telefono_e164") // numero del cliente normalizado E.164 (sin `+`, formato del cliente de envio)
+  ordenId          String    @map("orden_id") // FK -> orden; ON DELETE RESTRICT (no huerfanos)
+  mensajeroId      String    @map("mensajero_id") // FK -> usuario (mensajero asignado del hilo); ON DELETE RESTRICT
+  ultimoEntranteAt DateTime? @map("ultimo_entrante_at") // marca del ultimo mensaje ENTRANTE; NULL = sin entrantes (fuera de ventana)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  orden     Orden       @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  mensajero Usuario     @relation("ChatConversacionMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict)
+  mensajes  ChatMensaje[]
+
+  @@unique([ordenId, telefonoE164]) // D4: un hilo por orden+numero
+  @@index([mensajeroId]) // R16: scope por mensajero
+  @@index([telefonoE164]) // R25: resolucion del entrante desde el numero
+  @@map("chat_conversacion")
+}
+
+// Feature 109 (design §1.3, R14): un mensaje del hilo. Fila casi inmutable (sin
+// updatedAt/deletedAt): lo unico que muta es `estado` de un saliente al llegar su status
+// de Meta (R7). `waMessageId` es UNICO (indice parcial en la migracion) para el dedupe
+// (R8) y para localizar el saliente al llegar un status (R7). RLS habilitada sin policies.
+model ChatMensaje {
+  id             String               @id @default(uuid())
+  conversacionId String               @map("conversacion_id") // FK -> chat_conversacion; ON DELETE CASCADE
+  direccion      ChatMensajeDireccion
+  tipo           ChatMensajeTipo
+  cuerpo         String? // texto plano; NULL para tipos sin cuerpo
+  plantillaId    String?              @map("plantilla_id") // solo salientes de tipo plantilla; ON DELETE SET NULL
+  waMessageId    String?              @map("wa_message_id") // id de Meta; UNICO (parcial) para dedupe (R8)
+  estado         ChatMensajeEstado? // solo salientes (R7)
+  latitud        Float?               @map("latitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
+  longitud       Float?               @map("longitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
+  ocurridoAt     DateTime             @map("ocurrido_at") // timestamp del evento (de Meta en entrantes)
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  conversacion ChatConversacion  @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  plantilla    PlantillaMensaje? @relation("ChatMensajePlantilla", fields: [plantillaId], references: [id], onDelete: SetNull)
+
+  @@index([conversacionId, ocurridoAt]) // R22: historial ordenado
+  @@map("chat_mensaje")
 }
 
 // Feature 21: documentos de postulacion del mensajero. 1:N (5 tipos por usuario).
@@ -400,6 +493,8 @@ model Orden {
   historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
   rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
+  mensajeroMetas        OrdenMensajeroMeta[]   @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
+  chatConversaciones    ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -410,12 +505,38 @@ model Orden {
   @@map("orden")
 }
 
+// Feature 115 — meta PRIVADA por (mensajero, orden). `marcar_luego` (115) = "gestionar
+// mas tarde", solo informativa (no cambia estatus ni ruta). `nota` (text NULL) NACE aqui
+// para la feature 116 (notas privadas), que NO crea migracion propia. UNIQUE(usuario_id,
+// orden_id): una fila por pareja -> idempotencia del toggle (upsert). Ambas FK ON DELETE
+// CASCADE: la meta es dato derivado, se va con el mensajero o la orden. RLS habilitada sin
+// policies (patron api_key/plantilla_mensaje); la autorizacion de negocio vive en el service.
+model OrdenMensajeroMeta {
+  id          String   @id @default(uuid())
+  usuarioId   String   @map("usuario_id")
+  ordenId     String   @map("orden_id")
+  marcarLuego Boolean  @default(false) @map("marcar_luego") // feature 115
+  nota        String? // feature 116: columna nace aqui (115), la USA la 116
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  usuario Usuario @relation("OrdenMensajeroMetaMensajero", fields: [usuarioId], references: [id], onDelete: Cascade)
+  orden   Orden   @relation("OrdenMensajeroMetaOrden", fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, ordenId]) // R1/R7: una fila por (mensajero, orden)
+  @@index([usuarioId]) // R17: leer todas las metas del mensajero al listar
+  @@index([ordenId])
+  @@map("orden_mensajero_meta")
+}
+
 // Feature 36 (R5, decision F1.4-c): metodo de pago del recaudo al cliente en una
 // ENTREGA. Enum Postgres nativo (patron RolValue/VehiculoValue), fuente unica de
-// verdad reflejada en lib/types/metodo-pago.ts. OJO 'SIMPE' en mayusculas (F1.4-c).
+// verdad reflejada en lib/types/metodo-pago.ts. OJO 'SINPE' en mayusculas (medio de
+// pago de Costa Rica). Feature 118: corregido el typo historico del valor via
+// ALTER TYPE ... RENAME VALUE (migracion _metodo_pago_rename_simpe_to_sinpe).
 enum MetodoPagoValue {
   efectivo
-  SIMPE
+  SINPE
   transferencia
 
   @@map("metodo_pago_value")
@@ -484,6 +605,9 @@ model GestionOrden {
   // (49/R21): borrar al usuario no borra el rastro de la anulacion.
   anuladaPorUsuario Usuario?               @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
   historialEstados  OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
+  // Feature 119 (R1): evidencias 1..N de esta gestion (la portada = indice 0 se conserva
+  // ademas denormalizada en evidencia_storage_path/_content_type por retro-compat, R12).
+  evidencias        GestionOrdenEvidencia[]
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
@@ -494,6 +618,26 @@ model GestionOrden {
   // diario) NO se expresa aqui: Prisma no soporta indices parciales -> vive en el SQL de la
   // migracion `*_gestion_orden_anulacion` (patron orden_liberada_reprogramada_at_idx).
   @@map("gestion_orden")
+}
+
+// Feature 119 (R1/R2/R4): evidencias 1..N de una gestion. Reemplaza la foto UNICA de
+// gestion_orden.evidencia_storage_path/_content_type como fuente de verdad del CONJUNTO;
+// el path unico se conserva como PORTADA (indice 0) por retro-compat (design §2), via
+// dual-write en la misma transaccion. RLS habilitada sin policies (solo service role,
+// patron gestion_orden).
+model GestionOrdenEvidencia {
+  id          String   @id @default(uuid())
+  gestionId   String   @map("gestion_id")
+  storagePath String   @map("storage_path") // path bucket privado, NO URL
+  contentType String   @map("content_type") // image/jpeg|png|webp
+  indice      Int // 0-based, orden de captura; 0 = portada
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  gestion GestionOrden @relation(fields: [gestionId], references: [id], onDelete: Cascade)
+
+  @@unique([gestionId, indice]) // R2: no dos filas con el mismo indice por gestion
+  @@index([gestionId]) // lectura de las evidencias de una gestion
+  @@map("gestion_orden_evidencia")
 }
 
 // Feature 37 (R13/R18, decision F1.4-d): estado del cierre del dia del mensajero.
@@ -1142,6 +1286,8 @@ enum JobTipo {
   geocodificacion // feature 91: geocodifica la direccion de UNA orden (payload { ordenId })
   optimizacion_ruta // feature 92: reoptimiza la ruta de UN mensajero (payload { mensajeroId })
   webhook_estado // feature 99: entrega firmada del cambio de estado de UNA orden a su integrador (payload { ordenId, estatusDestinoId, ocurridoAt })
+  whatsapp_template_sync // integracion WhatsApp: reintenta contra Meta una op de plantilla (create/update/delete) que fallo en linea (payload { plantillaId, operacion })
+  whatsapp_chat_envio // feature 109/D1: reintenta el envio saliente de un mensaje de chat que devolvio `transitorio` (payload { mensajeChatId })
 
   @@map("job_tipo")
 }

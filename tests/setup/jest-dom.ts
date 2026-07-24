@@ -34,4 +34,16 @@ if (typeof window !== "undefined") {
     (globalThis as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver =
       ResizeObserverStub;
   }
+
+  // jsdom no implementa `URL.createObjectURL`/`revokeObjectURL` (los usa el panel del mensajero
+  // para previsualizar las fotos de evidencia, feature 119). Se stubbean con URLs UNICAS para no
+  // colisionar `key`s de lista y para que las llamadas no revienten. Tests que necesiten espiar
+  // estas llamadas (p. ej. BulkUpload) las redefinen con `Object.defineProperty(configurable)`.
+  if (typeof URL.createObjectURL !== "function") {
+    let objectUrlSeq = 0;
+    URL.createObjectURL = () => `blob:mock/${objectUrlSeq++}`;
+  }
+  if (typeof URL.revokeObjectURL !== "function") {
+    URL.revokeObjectURL = () => {};
+  }
 }

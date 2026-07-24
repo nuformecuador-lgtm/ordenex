@@ -30,6 +30,12 @@ export interface EnqueueOpts {
   maxIntentos?: number;
   /** Clave de idempotencia; si ya existe una fila con ella, el insert se omite (R8). */
   dedupeKey?: string;
+  /**
+   * Motivo del fallo que motivo el encolado, para dejarlo en `last_error` DESDE la creacion
+   * (no solo tras el primer drenado). Sin secretos. Util cuando el job nace de un fallo
+   * sincrono ya diagnosticado (p. ej. la propagacion de plantillas a Meta).
+   */
+  lastError?: string;
 }
 
 /** Reloj/umbrales inyectados al claim para tests deterministas (R12/R13). */

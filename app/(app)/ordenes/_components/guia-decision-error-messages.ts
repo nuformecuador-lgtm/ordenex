@@ -3,6 +3,8 @@
 // usuario, sin filtrar `fieldErrors`/`detalle` internos ni PII. Patrón
 // `app/(app)/_components/decision-error-messages.ts` (feature 23).
 
+import { geocodificacionMotivoMessage } from "@/app/(app)/_components/geocodificacion-motivo-messages";
+
 type GuiaErrorStatus =
   | "unauthenticated"
   | "forbidden"

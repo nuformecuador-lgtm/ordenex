@@ -194,7 +194,7 @@ describe("listarCierreDia — agrupacion y detalle (R3/R4/R6)", () => {
   it("R4/R6: entregada expone monto+metodo; reprogramada expone fecha+motivo", async () => {
     const repo = fakeRepo({
       findGestionesPendientes: vi.fn(async () => [
-        pendiente({ gestionId: "a", resultado: "entregada", montoRecibido: "30.00", metodoPago: "SIMPE" }),
+        pendiente({ gestionId: "a", resultado: "entregada", montoRecibido: "30.00", metodoPago: "SINPE" }),
         pendiente({
           gestionId: "b",
           resultado: "reprogramada",
@@ -210,7 +210,7 @@ describe("listarCierreDia — agrupacion y detalle (R3/R4/R6)", () => {
     if (r.status !== "ok") throw new Error("esperaba ok");
     const entregada = r.grupos.entregada[0];
     expect(entregada.montoRecibido).toBe("30.00"); // R6
-    expect(entregada.metodoPago).toBe("SIMPE");
+    expect(entregada.metodoPago).toBe("SINPE");
     const reprog = r.grupos.reprogramada[0];
     expect(reprog.fechaReprogramacion).toBe("2026-07-20"); // R4
     expect(reprog.motivo).toBe("ausente");
@@ -256,7 +256,7 @@ describe("listarCierreDia — totales money-critical (R7/R8/R9)", () => {
       findGestionesPendientes: vi.fn(async () => [
         pendiente({ gestionId: "a", metodoPago: "efectivo", montoRecibido: "10.00" }),
         pendiente({ gestionId: "b", metodoPago: "efectivo", montoRecibido: "5.25" }),
-        pendiente({ gestionId: "c", metodoPago: "SIMPE", montoRecibido: "20.00" }),
+        pendiente({ gestionId: "c", metodoPago: "SINPE", montoRecibido: "20.00" }),
         pendiente({ gestionId: "d", metodoPago: "transferencia", montoRecibido: "0.75" }),
       ]),
     });
@@ -416,7 +416,7 @@ describe("solicitarCierre — ruteo por zona (R15/R16) y snapshot (R13/R14)", ()
     const repo = fakeRepo({
       findGestionesPendientes: vi.fn(async () => [
         pendiente({ metodoPago: "efectivo", montoRecibido: "10.00" }),
-        pendiente({ gestionId: "g2", metodoPago: "SIMPE", montoRecibido: "5.00" }),
+        pendiente({ gestionId: "g2", metodoPago: "SINPE", montoRecibido: "5.00" }),
       ]),
     });
     const { service } = newService({ repo, zonaMensajero: ZONA_MENSAJERO, centralZonaId: ZONA_CENTRAL });
@@ -477,7 +477,7 @@ describe("listarCierreDia — pago al mensajero derivado (R10/R11/R21)", () => {
     const repo = fakeRepo({
       findGestionesPendientes: vi.fn(async () => [
         pendiente({ gestionId: "a", resultado: "entregada", metodoPago: "efectivo", montoRecibido: "12.00" }),
-        pendiente({ gestionId: "b", resultado: "entregada", metodoPago: "SIMPE", montoRecibido: "8.00" }),
+        pendiente({ gestionId: "b", resultado: "entregada", metodoPago: "SINPE", montoRecibido: "8.00" }),
         pendiente({ gestionId: "c", resultado: "rechazada", montoRecibido: null, metodoPago: null }),
       ]),
     });
@@ -486,7 +486,7 @@ describe("listarCierreDia — pago al mensajero derivado (R10/R11/R21)", () => {
     if (r.status !== "ok") throw new Error("esperaba ok");
     // R11: total del pago al mensajero (separado).
     expect(r.totalPagoMensajero).toBe("10.00");
-    // R21: dinero recibido intacto (12 efectivo + 8 SIMPE), sin mezclar con el pago.
+    // R21: dinero recibido intacto (12 efectivo + 8 SINPE), sin mezclar con el pago.
     expect(r.totales).toEqual({
       efectivo: "12.00",
       simpe: "8.00",

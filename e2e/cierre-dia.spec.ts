@@ -8,7 +8,7 @@ import { test, expect, type Page } from "@playwright/test";
  * Covers the critical money flow happy path of the courier's day closing:
  *  Happy path: mensajero logs in → /cierre-dia → sees the managed orders grouped
  *  by result (Entregadas / Reprogramadas / Devueltas / Rechazadas) and the totals
- *  panel (efectivo / SIMPE / transferencia / general) → clicks "Solicitar cierre"
+ *  panel (efectivo / SINPE / transferencia / general) → clicks "Solicitar cierre"
  *  → confirms in the modal → a success toast is shown and the newly created
  *  closing appears in the "Cierres solicitados" history in state `Solicitado`
  *  with the derived destination.

@@ -1775,3 +1775,95 @@
   vivo, como la allow-list de `zonas-migration`). (3) Follow-up no bloqueante: aserción explícita de
   R13 (aprobar `vencido` money-neutral → 0 wallet), hoy garantizado por construcción. (4) Despliegue:
   `prisma migrate deploy` en destino (2 migraciones).
+
+## 2026-07-23 — 118 corrección SIMPE → SINPE (medio de pago CR)
+- Rename del VALOR del enum Postgres/Prisma `metodo_pago_value` `SIMPE`→`SINPE` (typo introducido en la
+  feature 36), **reversible**: migración nueva `ALTER TYPE ... RENAME VALUE 'SIMPE' TO 'SINPE'` +
+  `down.sql` inverso (preserva filas, no reescribe; migración histórica intacta).
+- Alcance real ~27 archivos (8 fuentes + 12 tests + migración up/down + test de rename + guard de
+  censo). Identificadores internos NO tocados por regla explícita (`total_simpe`/`totalSimpe`/clave
+  DTO interna `simpe`). El ripple del test frágil `zonas-migration` se saldó excluyendo la migración
+  nueva (patrón conocido).
+- R1–R12 trazados a tests. Guard de censo case-sensitive de `SIMPE` como test Vitest. typecheck 0,
+  lint 0, **4528/4528 tests**. Reviewer APROBADO (0 bloqueantes). **PR #145 → dev, merge humano
+  2026-07-23.** Despliegue: `prisma migrate deploy`.
+- Contexto: nació en el lote mensajero registrado como 112–118 y **renumerado a 113–119** por colisión
+  del ID 112 con `webhook-payload` (PR #144, de otra sesión); esta feature quedó como **118**.
+
+## 2026-07-23 — 115 mensajero: marcar orden para "gestionar más tarde"
+- Marca privada por `(mensajero, orden)`, **solo informativa** (badge + orden visual); no cambia
+  estado/ruta/prioridad ni escribe en el historial. Tabla nueva
+  `orden_mensajero_meta(usuario_id, orden_id, marcar_luego bool default false, nota text NULL,
+  UNIQUE(usuario_id, orden_id))` con RLS habilitada sin policies + 2 FK `ON DELETE CASCADE` +
+  `down.sql`. La columna `nota` **nace aquí** para la feature 116 (que NO crea migración).
+- Server Action `marcarGestionarLuego` con authz por mensajero (`usuario_id` SIEMPRE del actor; valida
+  propiedad de la orden; idempotente por el UNIQUE). `marcarLuego` en `MiAsignacionDTO` (opcional en el
+  tipo, siempre emitido). UI: badge + toggle en la card + `sort` estable que hunde las marcadas al final
+  sin mutar la ruta persistida.
+- R1–R20 trazados a tests. typecheck 0, lint 0, **4568/4568** (4574 tras sync con dev). Reviewer
+  APROBADO (0 bloqueantes). **PR #146 → dev, merge humano 2026-07-23.** Sync trivial con 118
+  (`schema.prisma` auto-merge SINPE+modelo; `zonas-migration` unión de exclusiones). Despliegue:
+  `prisma migrate deploy`. Base de la feature 116 (notas privadas, reusa esta tabla).
+
+## 2026-07-23 — 113 mensajero: card con detalle inline + modo foco al gestionar
+- Cambio de PRESENTACIÓN en `MisAsignacionesModule.tsx` (sin backend/contratos; el bloqueo 1-a-1 no
+  cambia). Cada card de "En reparto" muestra `AsignacionDetalle` inline (Pedido/Entrega/Cobro); se
+  ELIMINA el ocultamiento "Termina la gestión en curso" → la restricción por gestión activa vuelve a ser
+  de ACCIÓN, no de visibilidad.
+- **Modo foco** derivado de `ordenEnGestionId` (sin estado nuevo): colapsa a solo `GestionarOrdenPanel`,
+  oculta cards/mapa/"Por recoger"; se restaura al liberar el puntero. Preserva intactos el badge/toggle/
+  sort de la feature 115.
+- R1–R12 trazados a tests. typecheck 0, lint 0, **4586/4586**. Reviewer APROBADO (rechazo inicial solo por
+  `tasks.md` sin marcar `[x]`, remediado; sin cambios de código). **PR #147 → dev, merge humano 2026-07-23.**
+
+## 2026-07-23 — 119 evidencias de gestión: de 1 a 1..N fotos (máx 3)
+- La evidencia de gestión pasa de 1 foto a **1..3** (entregada/rechazada/devuelta). Tabla nueva
+  `gestion_orden_evidencia` 1:N (FK `gestion_id` CASCADE, `@@unique(gestion_id, indice)`, RLS sin
+  policies) + migración/`down.sql` + **backfill** (portada existente → fila `indice 0`, `content_type`
+  fallback `image/jpeg`).
+- **Expand/contract:** se conservan `gestion_orden.evidencia_storage_path/_content_type` como PORTADA
+  (índice 0) vía dual-write en la misma tx, para NO romper los consumidores de lectura (cierres 37/38/40,
+  API 106, que siguen viendo la portada). Repuntarlos a N fotos = follow-up fuera de alcance.
+- **Atomicidad storage↔DB con compensación:** subida secuencial acumulando lo subido; **rollback total**
+  (`storage.remove` + nada en DB) ante fallo de subida (R10) o de la transacción (R11). Contrato
+  `evidencias: EvidenciaArchivo[]`, `evidenciasSchema` min 1 / max 3, `evidenciaUrls` firmadas; el puente
+  temporal `foldEvidenciaSingular` fue retirado. UI: `GestionarOrdenPanel` multi-select + previews (con
+  revoke) + quitar + tope 3 + bloqueo de envío.
+- R1–R17 trazados a tests. typecheck 0, lint 0, **4644/4644** (tras sync con 113). Reviewer APROBADO.
+  **PR #148 → dev, merge humano 2026-07-23.** Despliegue: `prisma migrate deploy` (tabla + backfill); env
+  opcional `GESTION_MAX_EVIDENCIAS` (default 3); bucket `gestion-evidencias`.
+
+## 2026-07-23 — 114 mensajero: buscador de guías asignadas
+- Input de búsqueda **100% cliente** en `MisAsignacionesModule` (sin backend): filtra ambos grupos por
+  numGuía/numRemisión/destinatario, match parcial insensible a mayúsculas/acentos (reusa `normalizeName`);
+  query vacío → sin filtrar; mensaje "sin resultados" por grupo.
+- **Decisión del gate F1.4:** el mapa de ruta y el panel de detalle reflejan el conjunto FILTRADO
+  (coherencia lista↔mapa), con salvaguarda de que la orden en gestión (`ordenEnGestionId`) nunca se oculta.
+  Integra sobre 113 (foco/detalle) y 115 (badge/toggle/sort), preservados; el buscador solo aplica en la
+  vista de lista.
+- R1–R9 trazados a tests. typecheck 0, lint 0, **4657/4657**. Reviewer APROBADO. **PR #150 → dev, merge
+  humano 2026-07-23.** El `frontend_dev` cayó por un error de API a mitad; el leader lo reanudó y remató
+  (tests + push). Sin migraciones ni env nuevas.
+
+## 2026-07-23 — 116 mensajero: notas privadas por orden
+- Nota de texto libre **privada del mensajero** por orden, distinta de `orden.notas` (nota de la tienda).
+  **SIN migración:** reutiliza la tabla `orden_mensajero_meta` y su columna `nota` de la feature 115.
+- Server Actions `guardarNotaPrivada`/`limpiarNotaPrivada` con authz por mensajero (`usuario_id` SIEMPRE del
+  actor); `upsertNota` PRESERVA `marcar_luego`; `limpiar` = `nota=NULL` idempotente sin borrar la fila;
+  guardar en blanco → limpiar (R5); orden inexistente/ajena → `forbidden` sin excepción cruda. `notaPrivada`
+  en `MiAsignacionDTO` solo del propio actor, vía el `Promise.all` de 115 (sin N+1).
+- UI: editor "Mi nota" en el detalle (separado y etiquetado distinto de "Notas" de tienda) + indicador en la
+  card. Preserva 113/114/115. `orden.notas` nunca se toca (R7).
+- R1–R17 trazados a tests. typecheck 0, lint 0, **4779/4779**. Reviewer APROBADO. **PR #152 → dev, merge
+  humano 2026-07-23.** El backend cayó por un error de API a mitad; el leader lo reanudó y remató. Sin
+  migraciones ni env nuevas.
+
+## 2026-07-23 — 117 mensajero: filtro por cantón y distrito
+- Filtro **100% cliente** por Cantón y Distrito en `MisAsignacionesModule` (sin backend). Dos `Select`
+  encadenados (distrito `disabled` sin cantón; cambiar de cantón resetea distrito; opción "todos" /
+  "Limpiar filtros"); opciones de cantón derivadas del conjunto COMPLETO.
+- **Decisión del gate F1.4:** etiqueta **"Cantón (Provincia)"** (dedup cantón+provincia); el mapa y el panel
+  reflejan el conjunto FILTRADO (R14) con salvaguarda de la orden en gestión (R10). Se **compone en AND** con
+  el buscador de la feature 114 sobre las mismas listas visibles.
+- Preserva 113/114/115/116. R1–R14 trazados a tests. typecheck 0, lint 0, **4804/4804**. Reviewer APROBADO.
+  **PR #153 → dev, merge humano 2026-07-23.** Cierra el lote mensajero 113–119. Sin migraciones ni env nuevas.

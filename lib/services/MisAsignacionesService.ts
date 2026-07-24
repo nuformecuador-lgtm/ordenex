@@ -9,6 +9,7 @@ import type {
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { IOrdenMensajeroMetaRepository } from "@/lib/interfaces/repositories/IOrdenMensajeroMetaRepository";
 import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -72,6 +73,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       IRutaOptimizadaRepository,
       "findByMensajero" | "upsertOrigen"
     >,
+    // Feature 115 (R17/R20): meta privada del mensajero. Solo LECTURA aqui para reflejar en el
+    // listado, del PROPIO actor: la marca "gestionar mas tarde" (`findMarcarLuegoByMensajero`,
+    // 115) y la nota privada (`findNotasByMensajero`, feature 116/R6/R8). La ESCRITURA vive en
+    // OrdenMensajeroMetaService (marca) y NotaPrivadaMensajeroService (nota).
+    private readonly metaRepo: Pick<
+      IOrdenMensajeroMetaRepository,
+      "findMarcarLuegoByMensajero" | "findNotasByMensajero"
+    >,
   ) {}
 
   /**
@@ -111,13 +120,19 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta] = await Promise.all([
-      this.repo.getOrdenEnGestion(actor.usuarioId), // R20
-      this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
-      this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
-      this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
-      this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
-    ]);
+    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta, marcadasLuego, notasPrivadas] =
+      await Promise.all([
+        this.repo.getOrdenEnGestion(actor.usuarioId), // R20
+        this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
+        this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
+        this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
+        this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
+        // Feature 115 (R17/R20): marcas "gestionar mas tarde" del PROPIO actor (Set<ordenId>).
+        this.metaRepo.findMarcarLuegoByMensajero(actor.usuarioId),
+        // Feature 116 (R6/R8): notas privadas del PROPIO actor (Map<ordenId, nota>). Misma query
+        // acotada por `usuario_id = actor` que garantiza que nunca trae la nota de otro mensajero.
+        this.metaRepo.findNotasByMensajero(actor.usuarioId),
+      ]);
 
     // Feature 92 (R28): posicion por orden. Vacio si nunca se optimizo -> todas las cards
     // quedan "sin posicion" y conservan el orden actual, que es el comportamiento previo.
@@ -126,7 +141,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
     for (const row of rows) {
-      const dto = toDTO(row);
+      // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
+      // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
+      // Feature 116 (R6/R8): merge de la nota privada del propio actor (`null` si no hay nota).
+      const dto = {
+        ...toDTO(row),
+        marcarLuego: marcadasLuego.has(row.id),
+        notaPrivada: notasPrivadas.get(row.id) ?? null,
+      };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
         porRecoger.push(dto);
@@ -301,28 +323,45 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       };
     }
 
-    // R23/R30: subir evidencia (entrega/rechazo/devolucion) ANTES de la transaccion.
-    let storagePath: string | null = null;
-    let contentType: string | null = null;
+    // Feature 119 (R9/R10): subida SECUENCIAL y determinista de las N evidencias ANTES de la
+    // transaccion, acumulando en `uploaded` los paths ya subidos para poder COMPENSAR
+    // (storage.remove) ante cualquier fallo. El bucle secuencial hace la compensacion trivial:
+    // `uploaded` contiene EXACTAMENTE lo subido hasta el fallo (sin rastrear promesas de un
+    // Promise.all que rechaza). Para el tope de 3 fotos el costo de no paralelizar es despreciable.
+    const uploaded: string[] = [];
+    const evidencias: { storagePath: string; contentType: string; indice: number }[] = [];
     if (
       input.resultado === "entregada" ||
       input.resultado === "rechazada" ||
       input.resultado === "devuelta" // feature 75: evidencia obligatoria tambien en Devolver
     ) {
-      const ext = GESTION_MIME_EXTENSION[input.evidencia.contentType as GestionMimeType] ?? "bin";
-      const path = `${input.ordenId}/${input.resultado}-${Date.now()}.${ext}`;
-      storagePath = await this.storage.upload({
-        path,
-        bytes: input.evidencia.bytes,
-        contentType: input.evidencia.contentType,
-      });
-      contentType = input.evidencia.contentType;
+      try {
+        for (let i = 0; i < input.evidencias.length; i++) {
+          const ev = input.evidencias[i];
+          const ext = GESTION_MIME_EXTENSION[ev.contentType as GestionMimeType] ?? "bin";
+          // `-i` garantiza unicidad del path entre las fotos de la MISMA gestion (mismo `Date.now()`).
+          const path = `${input.ordenId}/${input.resultado}-${Date.now()}-${i}.${ext}`;
+          const stored = await this.storage.upload({
+            path,
+            bytes: ev.bytes,
+            contentType: ev.contentType,
+          });
+          uploaded.push(stored);
+          evidencias.push({ storagePath: stored, contentType: ev.contentType, indice: i });
+        }
+      } catch (error) {
+        // R10: falla la subida #k -> borrar las k-1 ya subidas y NO persistir NADA (el repo ni
+        // se invoca). El fallo se propaga como error, no como resultado de dominio.
+        if (uploaded.length > 0) await this.storage.remove(uploaded);
+        throw error;
+      }
     }
 
-    const gestion = buildGestionData(input, storagePath, contentType);
+    const gestion = buildGestionData(input, evidencias);
 
     try {
-      // R23/R26/R28/R30: INSERT gestion + UPDATE estatus + limpiar puntero, atomico.
+      // R23/R26/R28/R30 + R9: INSERT gestion + N filas de evidencia + UPDATE estatus + limpiar
+      // puntero, TODO en una unica transaccion (todo-o-nada).
       // Feature 99 (R1/R29): la rama `devuelta` transiciona la orden a `devuelta` y la DEJA
       // ahi (sin transicion de seguimiento inmediata: ni reintento a bodega ni escalado). La
       // devolucion se contabiliza como intento (R2) por el append a `devuelta` del choke
@@ -334,23 +373,28 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         nuevoEstatusId,
       });
     } catch (error) {
-      // R23/R30: si la transaccion falla tras subir, limpiar el objeto (best-effort).
-      if (storagePath) await this.storage.remove([storagePath]);
+      // R11: la transaccion fallo DESPUES de subir -> borrar las N evidencias subidas
+      // (best-effort) y propagar; no queda ninguna fila persistida.
+      if (uploaded.length > 0) await this.storage.remove(uploaded);
       throw error;
     }
 
     // Feature 92 (R23): igual que en `recogerAsignaciones`, tras la transaccion.
     await this.registrarUbicacion(actor.usuarioId, input.ubicacion);
 
-    // R8: la evidencia se muestra con URL firmada de TTL acotado, nunca el path crudo.
-    let evidenciaUrl: string | undefined;
-    if (storagePath) {
-      evidenciaUrl = await this.signedUrls.createSignedUrl(
-        storagePath,
+    // R13: cada evidencia se muestra con URL firmada de TTL acotado, NUNCA el path crudo ni el
+    // bucket. Se mapea en el ORDEN de `uploaded` (indice 0..N-1) para preservar la portada primero.
+    let evidenciaUrls: string[] | undefined;
+    if (uploaded.length > 0) {
+      const urlByPath = await this.signedUrls.createSignedUrls(
+        uploaded,
         gestionConfig.SIGNED_URL_TTL_SECONDS,
       );
+      evidenciaUrls = uploaded
+        .map((p) => urlByPath[p])
+        .filter((u): u is string => typeof u === "string");
     }
-    return { status: "ok", ordenId: input.ordenId, estado: input.resultado, evidenciaUrl };
+    return { status: "ok", ordenId: input.ordenId, estado: input.resultado, evidenciaUrls };
   }
 
   async liberarGestion(ordenId: string, actor: Actor): Promise<LiberarServiceResult> {
@@ -409,14 +453,23 @@ function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     // Feature 92 (R28): la posicion la resuelve el llamador con el mapa de la ruta; el
     // default `null` es correcto para "Por recoger", que nunca tiene posicion.
     secuenciaRuta: null,
+    // Feature 115 (R17): default `false`; el llamador lo sobreescribe con la marca real del
+    // actor (`marcadasLuego.has(row.id)`). Aqui SIEMPRE nace un boolean concreto.
+    marcarLuego: false,
+    // Feature 116 (R6/R8): default `null`; el llamador lo sobreescribe con la nota real del
+    // actor (`notasPrivadas.get(row.id)`). Aqui SIEMPRE nace un `string | null` concreto.
+    notaPrivada: null,
   };
 }
 
-/** Arma los campos nullable de gestion_orden segun el resultado (R23/R26/R28/R30). */
+/**
+ * Arma los campos nullable de gestion_orden segun el resultado (R23/R26/R28/R30). Feature 119:
+ * las ramas con foto pasan la LISTA `evidencias` (1..N); el repo deriva de ella la portada
+ * (indice 0) hacia las columnas viejas (dual-write, R12) e inserta las N filas hijas.
+ */
 function buildGestionData(
   input: GestionarInput,
-  storagePath: string | null,
-  contentType: string | null,
+  evidencias: { storagePath: string; contentType: string; indice: number }[],
 ): GestionOrdenData {
   switch (input.resultado) {
     case "entregada":
@@ -424,8 +477,7 @@ function buildGestionData(
         resultado: "entregada",
         montoRecibido: input.montoRecibido,
         metodoPago: input.metodoPago,
-        evidenciaStoragePath: storagePath,
-        evidenciaContentType: contentType,
+        evidencias,
       };
     case "reprogramada":
       return {
@@ -436,22 +488,18 @@ function buildGestionData(
     case "devuelta":
       // Feature 73/R11/R12: la causa va en su COLUMNA propia, APARTE del texto libre; el
       // `motivo` se persiste EXACTAMENTE como lo escribio el mensajero, sin decoracion.
-      // Pedido: la devolucion ahora persiste la FOTO de evidencia (obligatoria), igual que
-      // entrega/rechazo (mismas columnas genericas de gestion_orden).
+      // Feature 75/119: la devolucion persiste sus 1..N fotos de evidencia (obligatorias).
       return {
         resultado: "devuelta",
         causaDevolucion: input.causaDevolucion,
         motivo: input.motivo,
-        // Feature 75: la evidencia (subida ANTES de la tx, espejo de rechazada) entra al INSERT.
-        evidenciaStoragePath: storagePath,
-        evidenciaContentType: contentType,
+        evidencias,
       };
     case "rechazada":
       return {
         resultado: "rechazada",
         motivo: input.motivo,
-        evidenciaStoragePath: storagePath,
-        evidenciaContentType: contentType,
+        evidencias,
       };
   }
 }

@@ -249,7 +249,7 @@ describe("cierre-dia actions — flujo solicitarCierre ok (R13/R18)", () => {
   it("crea un cierre solicitado y lo deja visible en el historico del mensajero", async () => {
     const repo = inMemoryRepo([
       pendiente({ gestionId: "a", metodoPago: "efectivo", montoRecibido: "12.50" }),
-      pendiente({ gestionId: "b", metodoPago: "SIMPE", montoRecibido: "7.50" }),
+      pendiente({ gestionId: "b", metodoPago: "SINPE", montoRecibido: "7.50" }),
     ]);
     const service = realService(repo);
 

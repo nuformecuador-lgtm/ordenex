@@ -12,15 +12,10 @@ import {
 
 // Feature 107 — T2 (R13, R14, R15, R16, R18, R19).
 
-describe("R13: el catalogo abierto incluye usuario y cod y se amplia con una fila", () => {
-  it("trae la semilla usuario/cod con clave, etiqueta y ejemplo", () => {
-    expect(PLANTILLA_VARIABLE_KEYS.has("usuario")).toBe(true);
-    expect(PLANTILLA_VARIABLE_KEYS.has("cod")).toBe(true);
-    for (const v of PLANTILLA_VARIABLES) {
-      expect(typeof v.key).toBe("string");
-      expect(v.label.length).toBeGreaterThan(0);
-      expect(v.ejemplo.length).toBeGreaterThan(0);
-    }
+describe("R13/R17: el catalogo predefinido esta VACIO por defecto (modelo abierto)", () => {
+  it("no trae variables sembradas: el catalogo y el set de claves estan vacios", () => {
+    expect(PLANTILLA_VARIABLES).toHaveLength(0);
+    expect(PLANTILLA_VARIABLE_KEYS.size).toBe(0);
   });
 
   it("es data-driven: `key` es string libre (no un union cerrado), ampliar = una fila", () => {
@@ -28,6 +23,22 @@ describe("R13: el catalogo abierto incluye usuario y cod y se amplia con una fil
     const nueva = { key: "direccion", label: "Direccion", ejemplo: "Av. Siempre Viva" };
     const ampliado = [...PLANTILLA_VARIABLES, nueva];
     expect(ampliado.map((v) => v.key)).toContain("direccion");
+  });
+
+  it("acepta y extrae CUALQUIER clave bien formada definida por el usuario", () => {
+    const r = validarCuerpo("Hola {{usuario}}, tu orden {{cod}}");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.variables).toEqual(["usuario", "cod"]);
+  });
+
+  it("un cuerpo con CERO variables es valido (variables = [])", () => {
+    const r = validarCuerpo("Mensaje sin variables");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.variables).toEqual([]);
+  });
+
+  it("la preview de una clave definida por el usuario cae al marcador en MAYUSCULAS", () => {
+    expect(previewConEjemplos("Hola {{usuario}}")).toBe("Hola USUARIO");
   });
 });
 
@@ -78,14 +89,17 @@ describe("R16: rechaza {{}} y claves con caracteres invalidos", () => {
 });
 
 describe("R18/R19: render sustituye todas las ocurrencias sin tocar el resto", () => {
-  it("sustituye por los ejemplos del catalogo", () => {
-    const out = previewConEjemplos("Hola {{usuario}}, orden {{cod}}");
+  it("sustituye por el valor cuando la clave esta en el mapa de valores", () => {
+    const out = renderPlantilla("Hola {{usuario}}, orden {{cod}}", {
+      usuario: "Juan",
+      cod: "ABC123",
+    });
     expect(out).toBe("Hola Juan, orden ABC123");
   });
 
-  it("clave bien formada fuera del catalogo -> marcador en MAYUSCULAS, sin romper", () => {
-    const out = previewConEjemplos("Envio a {{direccion}}");
-    expect(out).toBe("Envio a DIRECCION");
+  it("con catalogo vacio toda clave bien formada -> marcador en MAYUSCULAS, sin romper", () => {
+    expect(previewConEjemplos("Hola {{usuario}}, orden {{cod}}")).toBe("Hola USUARIO, orden COD");
+    expect(previewConEjemplos("Envio a {{direccion}}")).toBe("Envio a DIRECCION");
   });
 
   it("reemplaza TODAS las ocurrencias y NO altera el texto no-placeholder", () => {
