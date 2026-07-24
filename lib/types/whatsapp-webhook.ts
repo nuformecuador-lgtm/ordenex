@@ -18,6 +18,15 @@ const metaMessageSchema = z.object({
   timestamp: z.string().min(1),
   type: z.string().min(1),
   text: z.object({ body: z.string() }).optional(),
+  // Feature 121 (design §2, R1/R2): ubicacion compartida por el cliente (`type=location`).
+  // Solo lat/lng; el strip por defecto de zod DESCARTA `name`/`address` de Meta (R2/P1). Un
+  // `latitude`/`longitude` NO numerico hace fallar ESE campo; `.catch(undefined)` degrada el
+  // `location` entero a `undefined` (location SIN coords) en vez de romper el parseo del lote,
+  // que luego `parseWebhookEventos` normaliza a tipo `otro` (R3). No lanza.
+  location: z
+    .object({ latitude: z.number(), longitude: z.number() })
+    .optional()
+    .catch(undefined),
 });
 
 // Una actualizacion de ESTADO de un saliente. `status` es vocabulario de Meta.
@@ -57,6 +66,12 @@ export interface WebhookMensajeEntrante {
   tipo: ChatMensajeTipo;
   /** Texto plano si el mensaje lo trae; `null` para tipos sin cuerpo. */
   cuerpo: string | null;
+  /**
+   * Feature 121 (design §2, R1): coordenadas de un mensaje de ubicacion. Presente SOLO cuando
+   * `tipo === "ubicacion"` con coords validas; ausente en cualquier otro caso (o vienen ambas
+   * o ninguna, por eso un sub-objeto y no dos campos sueltos).
+   */
+  ubicacion?: { latitud: number; longitud: number };
   ocurridoAt: Date;
 }
 
@@ -87,9 +102,32 @@ function timestampAMeta(ts: string): Date {
   return Number.isFinite(segundos) ? new Date(segundos * 1000) : new Date(0);
 }
 
-/** Mapea el `type` de Meta al enum de dominio. Solo "text" es cuerpo libre en v1. */
+/**
+ * Feature 121 (design §2, R3): una coordenada es valida si es finita y cae en el rango
+ * geografico (lat ∈ [-90, 90], lng ∈ [-180, 180]). Helper PURO y testeable: fuera de rango o
+ * no finita -> se descarta la ubicacion (se degrada a `otro` sin coords), sin lanzar.
+ */
+export function esCoordenadaValida(latitud: number, longitud: number): boolean {
+  return (
+    Number.isFinite(latitud) &&
+    Number.isFinite(longitud) &&
+    latitud >= -90 &&
+    latitud <= 90 &&
+    longitud >= -180 &&
+    longitud <= 180
+  );
+}
+
+/**
+ * Mapea el `type` de Meta al enum de dominio. "text" es cuerpo libre; "location" es una
+ * ubicacion compartida (Feature 121). El resto (image, audio, ...) se registra como `otro`.
+ * Nota: un `type=location` SIN coords validas se degrada a `otro` en `parseWebhookEventos`
+ * (R3); esta funcion solo mapea el `type` crudo.
+ */
 function tipoDeMeta(type: string): ChatMensajeTipo {
-  return type === "text" ? "texto" : "otro";
+  if (type === "text") return "texto";
+  if (type === "location") return "ubicacion";
+  return "otro";
 }
 
 /**
@@ -106,11 +144,26 @@ export function parseWebhookEventos(raw: unknown): WebhookEventos {
   for (const entry of parsed.entry) {
     for (const change of entry.changes) {
       for (const m of change.value.messages ?? []) {
+        // Feature 121 (design §2, R1/R3): normaliza `type=location`. Si trae coords numericas
+        // VALIDAS (rango geografico), es un entrante `ubicacion` con sus lat/lng; si no (coords
+        // ausentes, no numericas -zod las descarta- o fuera de rango), se DEGRADA a `otro` sin
+        // coords, sin lanzar (no rompe el 200 del lote). No se loguea la coordenada (R15).
+        let tipo = tipoDeMeta(m.type);
+        let ubicacion: WebhookMensajeEntrante["ubicacion"];
+        if (tipo === "ubicacion") {
+          const loc = m.location;
+          if (loc !== undefined && esCoordenadaValida(loc.latitude, loc.longitude)) {
+            ubicacion = { latitud: loc.latitude, longitud: loc.longitude };
+          } else {
+            tipo = "otro"; // location sin coords validas: se degrada (R3)
+          }
+        }
         mensajes.push({
           waMessageId: m.id,
           telefonoE164: m.from,
-          tipo: tipoDeMeta(m.type),
+          tipo,
           cuerpo: m.text?.body ?? null,
+          ...(ubicacion !== undefined ? { ubicacion } : {}),
           ocurridoAt: timestampAMeta(m.timestamp),
         });
       }

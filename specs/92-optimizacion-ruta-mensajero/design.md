@@ -356,6 +356,19 @@ Esto responde el punto duro E: **el orden nuevo llega por el mismo camino que ya
 Server Component → Server Action de prefetch → props → `router.refresh()`. No se introduce SWR ni un
 fetcher de cliente.
 
+### §6.1.b — El toast de R9 pasa por el mapper compartido (hallazgo 2026-07-20)
+
+`GenerarGuiaModal:184`, `AsignarBodegaModal:81`, `AsignarSateliteModal:86` y **`RutearSateliteModal:64`**
+no leen `detalle`: delegan en `guiaDecisionErrorMessage(error)` /
+`asignacionSateliteErrorMessage(error)`, que ramifican **solo por `status`**. El `motivo` que la 92
+puebla en `DetalleConflicto` **se descarta antes del toast**.
+
+→ R9 se implementa **en el mapper** (`guia-decision-error-messages.ts`), con una rama que inspeccione
+`detalle[].motivo` antes del switch por `status`, y el mapeo de los 5 motivos a los 2 mensajes
+(`direccion_no_geocodificable` + `geocodificacion_agotada` → "Dirección no encontrada"; los 3
+transitorios → "aún se está validando"). Escrito una vez, no tres. El alcance de `RutearSateliteModal`
+lo decide **Q10**.
+
 ### §6.2 — Botón de sincronización manual
 
 `lib/actions/ruta-mensajero.ts` → `sincronizarRuta({ ubicacion? })`:

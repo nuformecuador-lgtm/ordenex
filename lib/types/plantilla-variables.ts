@@ -12,13 +12,11 @@ export interface PlantillaVariable {
   ejemplo: string;
 }
 
-// R13: catalogo de variables DISPONIBLES para insertar. ABIERTO: añadir una fila NO
-// obliga a migrar codigo ni tipos. `usuario`/`cod` son solo la SEMILLA de EJEMPLO (no un
-// catalogo fijo); el conjunto se amplia libremente agregando entradas aqui.
-export const PLANTILLA_VARIABLES = [
-  { key: "usuario", label: "Nombre del cliente", ejemplo: "Juan" },
-  { key: "cod", label: "Codigo de la orden", ejemplo: "ABC123" },
-] satisfies PlantillaVariable[];
+// R13/R17: catalogo de variables predefinidas DISPONIBLES para insertar. VACIO por
+// defecto: el modelo es ABIERTO y data-driven, el usuario define TODAS las variables que
+// necesite (0 o mas) escribiendo `{{clave}}` en el cuerpo. Agregar una fila aqui (opcional)
+// NO obliga a migrar codigo ni tipos; solo aporta etiqueta/ejemplo a una clave concreta.
+export const PLANTILLA_VARIABLES: PlantillaVariable[] = [];
 
 /** Claves del catalogo, para lookup O(1) en el render de la vista previa (R18). */
 export const PLANTILLA_VARIABLE_KEYS = new Set(PLANTILLA_VARIABLES.map((v) => v.key));

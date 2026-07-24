@@ -15,10 +15,13 @@ export function resolverValoresOrden(
   variables: string[],
   orden: OrdenEnvioData,
 ): Record<string, string> {
+  const montoCobrar = orden.montoCobrar === null ? "" : String(orden.montoCobrar);
   const catalogo: Record<string, string> = {
     nombre: orden.destinatario,
     destinatario: orden.destinatario,
     cliente: orden.destinatario,
+    // Nombre del mensajero asignado (vacio si la orden no lo trae / flujo cliente).
+    mensajero: orden.mensajeroNombre,
     telefono: orden.telefonoDest,
     direccion: orden.direccion ?? "",
     producto: orden.producto,
@@ -26,7 +29,14 @@ export function resolverValoresOrden(
     num_guia: orden.numGuia === null ? "" : String(orden.numGuia),
     remision: orden.numRemision,
     num_remision: orden.numRemision,
-    monto: orden.montoCobrar === null ? "" : String(orden.montoCobrar),
+    monto: montoCobrar,
+    // `total` = valor a cobrar (alias de montoCobrar); es lo que pide la plantilla del negocio.
+    total: montoCobrar,
+    // SINPE del negocio (numero y titular al que el cliente transfiere): datos de config, NO de
+    // la orden. Vienen de env (`NEXT_PUBLIC_SINPE_NUMERO`/`NEXT_PUBLIC_SINPE_NOMBRE`) para que
+    // funcionen server-side (envio real) y client-side (flujo wa.me). Ausentes -> "".
+    sinpe: process.env.NEXT_PUBLIC_SINPE_NUMERO ?? "",
+    sinpe_nombre: process.env.NEXT_PUBLIC_SINPE_NOMBRE ?? "",
   };
   const valores: Record<string, string> = {};
   for (const clave of variables) {

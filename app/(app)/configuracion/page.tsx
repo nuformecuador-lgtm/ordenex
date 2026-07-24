@@ -1,12 +1,9 @@
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarUsuarios } from "@/lib/actions/usuarios";
-import { listarZonas } from "@/lib/actions/zonas";
 import { usuariosConfig } from "@/lib/config/usuarios";
-import { zonasConfig } from "@/lib/config/zonas";
 
 import { UsuariosModule, type UsuariosPageData } from "./_components/UsuariosModule";
-import { ZonasModule, type ZonasPageData } from "./_components/ZonasModule";
 
 /**
  * Página de configuración (Server Component). Autoriza server-side: SOLO el rol
@@ -42,36 +39,16 @@ export default async function ConfiguracionPage() {
         }
       : { items: [], total: 0, pageSize: usuariosConfig.DEFAULT_PAGE_SIZE };
 
-  const resZonas = await listarZonas({
-    page: 1,
-    pageSize: zonasConfig.DEFAULT_PAGE_SIZE,
-  });
-
-  const zonasData: ZonasPageData =
-    resZonas.status === "ok"
-      ? {
-          items: resZonas.items,
-          total: resZonas.total,
-          pageSize: resZonas.pageSize,
-        }
-      : { items: [], total: 0, pageSize: zonasConfig.DEFAULT_PAGE_SIZE };
-
   return (
     <AppPage
       title="Configuración"
-      description="Gestión de usuarios y zonas del sistema"
+      description="Gestión de usuarios del sistema"
     >
       <section aria-labelledby="config-usuarios-heading" className="flex flex-col gap-4">
         <h2 id="config-usuarios-heading" className="text-lg font-semibold">
           Usuarios
         </h2>
         <UsuariosModule initialData={usuariosData} />
-      </section>
-      <section aria-labelledby="config-zonas-heading" className="flex flex-col gap-4">
-        <h2 id="config-zonas-heading" className="text-lg font-semibold">
-          Zonas
-        </h2>
-        <ZonasModule initialData={zonasData} />
       </section>
     </AppPage>
   );

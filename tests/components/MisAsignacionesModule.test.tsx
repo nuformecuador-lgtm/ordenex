@@ -87,17 +87,80 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: refreshMock, push: vi.fn() }),
 }));
 
+// Feature 93 (R31/R32): la Server Action REAL de la feature 92 se MOCKEA. Su
+// contrato es `{ status: "ok"; omitida: boolean }` — NO devuelve la ruta ni la
+// secuencia: el orden nuevo llega SIEMPRE por `router.refresh()` (R32).
+vi.mock("@/lib/actions/ruta-mensajero", () => ({
+  sincronizarRuta: vi.fn(),
+}));
+
 const recogerMock = vi.mocked(recogerAsignaciones);
 const escogerMock = vi.mocked(escogerParaGestion);
 const gestionarMock = vi.mocked(gestionar);
 const liberarMock = vi.mocked(liberarGestion);
+const sincronizarMock = vi.mocked(sincronizarRuta);
+
+// --- Feature 93 (R25): mock de `navigator.geolocation` con los TRES desenlaces --
+type DesenlaceGeo =
+  | { tipo: "concedido"; lat: number; lng: number }
+  | { tipo: "denegado" }
+  | { tipo: "timeout" }
+  | { tipo: "ausente" };
+
+const getCurrentPositionMock = vi.fn();
+
+function mockGeolocation(desenlace: DesenlaceGeo) {
+  if (desenlace.tipo === "ausente") {
+    Object.defineProperty(navigator, "geolocation", {
+      value: undefined,
+      configurable: true,
+    });
+    return;
+  }
+  getCurrentPositionMock.mockImplementation(
+    (
+      onOk: (p: { coords: { latitude: number; longitude: number } }) => void,
+      onErr: (e: { code: number; message: string }) => void,
+    ) => {
+      if (desenlace.tipo === "concedido") {
+        onOk({ coords: { latitude: desenlace.lat, longitude: desenlace.lng } });
+        return;
+      }
+      // 1 = PERMISSION_DENIED, 3 = TIMEOUT (constantes de GeolocationPositionError)
+      onErr(
+        desenlace.tipo === "denegado"
+          ? { code: 1, message: "User denied Geolocation" }
+          : { code: 3, message: "Timeout expired" },
+      );
+    },
+  );
+  Object.defineProperty(navigator, "geolocation", {
+    value: { getCurrentPosition: getCurrentPositionMock },
+    configurable: true,
+  });
+}
+
+const RUTA_VIGENTE: RutaResumenDTO = {
+  estado: "vigente",
+  calculadaAt: new Date("2026-07-20T10:00:00Z"),
+  origenFuente: "gps",
+  paradasSinOptimizar: 0,
+};
+
+/** Nombres accesibles de las cards de "En reparto", EN EL ORDEN DEL DOM. */
+function ordenCardsEnReparto(): string[] {
+  const region = screen.getByRole("region", {
+    name: "En reparto / por gestionar",
+  });
+  return within(region)
+    .getAllByRole("button", { name: /^Gestionar orden / })
+    .map((b) => b.getAttribute("aria-label") ?? "");
+}
 
 function makeAsignacion(
   over: Partial<MiAsignacionDTO> & { id: string },
 ): MiAsignacionDTO {
   return {
-    // Feature 92/R28: sin posicion en la ruta salvo que el test la fije.
-    secuenciaRuta: null,
     numGuia: 1001,
     numRemision: "REM-001",
     estatusValue: "en_espera_aceptacion",
@@ -116,6 +179,8 @@ function makeAsignacion(
     provinciaNombre: "San José",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    // Feature 92/R28: sin posicion en la ruta salvo que el test la fije.
+    secuenciaRuta: null,
     ...over,
   };
 }
@@ -129,7 +194,7 @@ const RUTA_VIGENTE: RutaResumenDTO = {
 };
 
 function renderModule(props?: Partial<Parameters<typeof MisAsignacionesModule>[0]>) {
-  render(
+  return render(
     <MisAsignacionesModule
       porRecoger={props?.porRecoger ?? []}
       porGestionar={props?.porGestionar ?? []}
@@ -197,6 +262,8 @@ beforeEach(() => {
   });
   recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
   liberarMock.mockResolvedValue({ status: "ok" });
+  sincronizarMock.mockResolvedValue({ status: "ok", omitida: false });
+  mockGeolocation({ tipo: "concedido", lat: 9.93, lng: -84.08 });
 });
 
 afterEach(() => {

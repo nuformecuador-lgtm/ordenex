@@ -21,6 +21,8 @@ const SELECT = {
   plantillaId: true,
   waMessageId: true,
   estado: true,
+  latitud: true,
+  longitud: true,
   ocurridoAt: true,
   createdAt: true,
 } as const;
@@ -34,6 +36,8 @@ type Row = {
   plantillaId: string | null;
   waMessageId: string | null;
   estado: ChatMensajeEstado | null;
+  latitud: number | null;
+  longitud: number | null;
   ocurridoAt: Date;
   createdAt: Date;
 };
@@ -48,6 +52,8 @@ function toDTO(row: Row): ChatMensajeDTO {
     plantillaId: row.plantillaId,
     waMessageId: row.waMessageId,
     estado: row.estado,
+    latitud: row.latitud,
+    longitud: row.longitud,
     ocurridoAt: row.ocurridoAt,
     createdAt: row.createdAt,
   };
@@ -67,6 +73,9 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
           tipo: input.tipo,
           cuerpo: input.cuerpo,
           waMessageId: input.waMessageId,
+          // Feature 121 (R4): coords del entrante de ubicacion; NULL en los demas entrantes.
+          latitud: input.latitud ?? null,
+          longitud: input.longitud ?? null,
           ocurridoAt: input.ocurridoAt,
           // `estado` no aplica a entrantes (queda NULL).
         },
@@ -125,6 +134,18 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
       select: SELECT,
     });
     return row === null ? null : toDTO(row);
+  }
+
+  async ultimoEntranteAt(conversacionId: string): Promise<Date | null> {
+    // Ventana de 24 h calculada desde el ULTIMO mensaje entrante REAL del hilo (no la columna
+    // `ultimo_entrante_at`, que puede quedar desincronizada). Asi el envio (backend) y el panel
+    // (que habilita el input al haber entrantes) usan la MISMA fuente: los mensajes.
+    const row = await this.prisma.chatMensaje.findFirst({
+      where: { conversacionId, direccion: "entrante" },
+      orderBy: { ocurridoAt: "desc" },
+      select: { ocurridoAt: true },
+    });
+    return row?.ocurridoAt ?? null;
   }
 
   async listarHilo(conversacionId: string): Promise<ChatMensajeDTO[]> {
