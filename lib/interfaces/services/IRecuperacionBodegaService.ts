@@ -10,7 +10,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // de la zona), patron `DevolucionOrigenService.esBodegaResponsable` (feature 48).
 
 // Maquina de resultados de dominio (patron DevolverATiendaResult). Todos los rechazos son SIN
-// efectos en datos. `ok` transiciona `devuelta` -> `en_bodega`/`en_bodega_satelite`. `conflict` =
+// efectos en datos. `ok` transiciona `devuelta` -> `en_bodega_central`/`en_bodega_satelite`. `conflict` =
 // la orden ya no esta en `devuelta` (el cron SLA la movio, o doble submit): idempotente, sin
 // efectos (R16). `forbidden` = el actor no es la bodega responsable (R15). `config_error` =
 // catalogo sin el destino de bodega. `not_found` = orden inexistente o borrada.
@@ -23,7 +23,7 @@ export type RecuperarABodegaResult =
 
 export interface IRecuperacionBodegaService {
   /**
-   * R13/R14/R15/R16/R17: recupera una orden en `devuelta` a bodega. Ruteo a `en_bodega` (zona
+   * R13/R14/R15/R16/R17: recupera una orden en `devuelta` a bodega. Ruteo a `en_bodega_central` (zona
    * central) o `en_bodega_satelite` (satelite) con la MISMA regla de zona del cron
    * (`resolverDestinoCierre` + `findCentralZonaId`). Autoriza SOLO a la bodega responsable
    * (maestro/admin en la central; `adminSatelite` cuya zona coincide con la de la orden).

@@ -33,7 +33,7 @@ function buildRepo(
 }
 
 describe("listarLiberadasHoy — filtro por rol (R16)", () => {
-  it("maestro => filtro {zona: central, estatus: en_bodega}", async () => {
+  it("maestro => filtro {zona: central, estatus: en_bodega_central}", async () => {
     const repo = buildRepo([makeRow("a")]);
     const zonaRepo = { findCentralZonaId: vi.fn(async () => "zona-central") };
     const r = await listarLiberadasHoy({
@@ -46,7 +46,7 @@ describe("listarLiberadasHoy — filtro por rol (R16)", () => {
     expect(r.status).toBe("ok");
     expect(zonaRepo.findCentralZonaId).toHaveBeenCalled();
     expect(repo.findLiberadasHoy).toHaveBeenCalledWith(
-      { zonaId: "zona-central", estatusValue: "en_bodega" },
+      { zonaId: "zona-central", estatusValue: "en_bodega_central" },
       HOY,
     );
     if (r.status === "ok") expect(r.liberadas).toHaveLength(1);

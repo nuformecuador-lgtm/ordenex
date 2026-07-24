@@ -8,7 +8,7 @@ import { asignarDesdeBodega } from "@/lib/actions/ordenes-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
-// Feature 17 (T19) — Modal "Asignar mensajero" desde en_bodega (R26): un único
+// Feature 17 (T19) — Modal "Asignar mensajero" desde en_bodega_central (R26): un único
 // mensajero para todo el lote seleccionado.
 vi.mock("@/lib/actions/ordenes-guia", () => ({
   asignarDesdeBodega: vi.fn(),
@@ -44,7 +44,7 @@ function makeOrden(
     numGuia: 100,
     numRemision: "REM-000",
     estatusId: "id-bodega",
-    estatusValue: "en_bodega",
+    estatusValue: "en_bodega_central",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",
@@ -93,8 +93,8 @@ describe("AsignarBodegaModal", () => {
     asignarDesdeBodegaMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "en_espera_aceptacion" },
-        { ordenId: "o2", estado: "en_espera_aceptacion" },
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o2", estado: "por_recoger" },
       ],
     });
 

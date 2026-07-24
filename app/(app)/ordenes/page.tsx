@@ -30,7 +30,7 @@ const ROLES_CON_TABS = new Set<string>([
 const EXCLUDE_POR_ROL: Record<string, string[]> = {
   [RolValue.maestro]: ["pendiente"],
   [RolValue.admin]: ["pendiente"],
-  [RolValue.adminTienda]: ["pendiente", "devuelta", "en_bodega", "en_bodega_satelite", "en_ruta_bodega_satelite"],
+  [RolValue.adminTienda]: ["pendiente", "devuelta", "en_bodega_central", "en_bodega_satelite", "en_ruta_bodega_satelite"],
 };
 
 export default async function OrdenesPage() {

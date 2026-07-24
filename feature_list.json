@@ -1536,6 +1536,54 @@
       "zone": "fullstack",
       "branch": "feature/134-analitica-export-csv",
       "depends_on": 127
+    },
+    {
+      "id": 137,
+      "name": "unificar nomenclatura de order_status (rename de values)",
+      "spec_path": "specs/137-order-status-rename-nomenclatura",
+      "description": "Fullstack (chore). Rename de los value de order_status que divergen de su label UI, para unificar backend<->frontend (opcion A). Mapeo (confirmar en gate): en_reparto->en_ruta, en_espera_aceptacion->por_recoger, en_bodega->en_bodega_central, en_ruta_bodega_principal->en_ruta_bodega_central, devuelta_origen->devolviendo_a_tienda, recibido_origen->en_tienda (el resto sin cambio). Migracion reversible: UPDATE order_status.value + ALTER TYPE order_status_value RENAME VALUE por cada uno + down; ORDER_STATUS_SEED, ORDER_STATUS_LABELS, seeds, tests. NO cambia orden.estatusId (FK por id). Patron feature 118. Fundacional del lote 137-140.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/135-order-status-rename-nomenclatura",
+      "depends_on": null
+    },
+    {
+      "id": 138,
+      "name": "recepcion en bodega central",
+      "spec_path": "specs/138-recepcion-bodega-central",
+      "description": "Fullstack. Cierra el callejon de en_ruta_bodega_central (orden de carga API sin recepcion). Disparador de recepcion por QR + input de guia (rol maestro/admin), analogo a RecepcionSateliteService (feature 33). Transicion en_ruta_bodega_central -> en_bodega_central + appendCambioEstado. UI en modulo de bodega. Depende de 137.",
+      "status": "spec_ready",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": "feature/138-recepcion-bodega-central",
+      "depends_on": 137
+    },
+    {
+      "id": 139,
+      "name": "flujo de devolucion de rechazadas (estados + transiciones + UI)",
+      "spec_path": "specs/139-devolucion-rechazadas-estados",
+      "description": "Fullstack. Flujo de devolucion de RECHAZADAS (solo rechazada; las devueltas entran solo si escalan a rechazada por SLA). Agrega al catalogo: por_devolver, en_ruta_devolucion_central, por_devolver_a_tienda (+ migracion/down). Al APROBAR el cierre, cada rechazada transiciona segun la bodega responsable (resolverDestinoCierre): satelite -> por_devolver; central -> por_devolver_a_tienda (modifica CierresAdminService/resolverCierre). Transiciones + disparadores UI: por_devolver -> en_ruta_devolucion_central (adminSatelite 'enviar a central'); en_ruta_devolucion_central -> por_devolver_a_tienda (recepcion central, reusa 138); por_devolver_a_tienda -> devolviendo_a_tienda (bodega responsable 'enviar a tienda'); devolviendo_a_tienda -> en_tienda (recepcion QR tienda existente). Guardias WHERE por transicion. Depende de 137 y 138.",
+      "status": "spec_ready",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/139-devolucion-rechazadas-estados",
+      "depends_on": 138
+    },
+    {
+      "id": 140,
+      "name": "guardia central de transiciones de order_status",
+      "spec_path": "specs/140-flujo-estados-guardia-central",
+      "description": "Backend. Centraliza el mapa de transiciones validas de order_status (hoy disperso por service) en un modulo unico consumido por appendCambioEstado; valida origen->destino y rechaza transiciones ilegales. Test que verifica que todo estado tiene entrada y salida salvo terminales (entregada, en_tienda) -> sin cuellos de botella. Depende de 137-139.",
+      "status": "spec_ready",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "backend",
+      "branch": "feature/140-flujo-estados-guardia-central",
+      "depends_on": 139
     }
   ]
 }

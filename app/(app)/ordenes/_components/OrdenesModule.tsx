@@ -114,7 +114,7 @@ export function OrdenesModule({
   /**
    * Feature 101/R8: resalta las filas de órdenes con `prioridad === true` (color
    * llamativo + badge "Prioritaria" accesible). Se activa SOLO en la superficie de
-   * reasignación de la bodega dueña (apartado `en_bodega` de `/ordenes`, gateado por
+   * reasignación de la bodega dueña (apartado `en_bodega_central` de `/ordenes`, gateado por
    * `OrdenesTabs`); por defecto `false`, de modo que el resto de listados (otras tabs,
    * "Todas", dashboard adminTienda, listado plano) no resaltan por prioridad (R10).
    */
@@ -153,7 +153,7 @@ export function OrdenesModule({
   const items = data?.items ?? [];
 
   const columnasEfectivas = useMemo<Column<OrdenListItemDTO>[]>(() => {
-    // Feature 101/R8: en la superficie de reasignación (`en_bodega`) las columnas de
+    // Feature 101/R8: en la superficie de reasignación (`en_bodega_central`) las columnas de
     // DATOS se decoran para anexar el badge "Prioritaria" a las filas prioritarias.
     // Se decora ANTES de anteponer el checkbox, así el badge cae en la primera columna
     // de datos (Nº Guía), no en la de selección. Sin `resaltarPrioridad`, sin cambio.

@@ -31,8 +31,8 @@ function createFakeOrderStatus() {
 }
 
 // Feature 17/R9 + feature 30/R1 + feature 33/R1 + PR #75: ORDER_STATUS_SEED paso
-// de 8 a 9 (en_espera_aceptacion), de 9 a 10 (en_ruta_bodega_satelite), de 12 a
-// 13 (en_bodega_satelite) y de 13 a 14 (recibido_origen).
+// de 8 a 9 (por_recoger), de 9 a 10 (en_ruta_bodega_satelite), de 12 a
+// 13 (en_bodega_satelite) y de 13 a 14 (devuelta_a_tienda).
 describe("seedOrderStatus siembra los 15 estatus por value (R2/R5/R9 · feature 30/R1 · feature 33/R1 · PR #75 · feature 109)", () => {
   it("crea una fila por cada valor de ORDER_STATUS_SEED", async () => {
     const fake = createFakeOrderStatus();

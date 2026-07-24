@@ -175,7 +175,7 @@ describe("findLiberadasHoy (R15/R16)", () => {
     ]);
 
     const rows = await repoWith(prisma).findLiberadasHoy(
-      { zonaId: "z-central", estatusValue: "en_bodega" },
+      { zonaId: "z-central", estatusValue: "en_bodega_central" },
       HOY,
     );
 
@@ -183,7 +183,7 @@ describe("findLiberadasHoy (R15/R16)", () => {
     expect(arg.where).toMatchObject({
       zonaId: "z-central",
       deletedAt: null,
-      estatus: { value: "en_bodega" },
+      estatus: { value: "en_bodega_central" },
     });
     // ventana [hoyCR, hoyCR + 24h).
     expect(arg.where.liberadaReprogramadaAt.gte).toEqual(HOY);

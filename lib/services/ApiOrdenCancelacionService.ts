@@ -8,13 +8,13 @@ import type {
 // Estado destino de la cancelacion: EXISTENTE en ORDER_STATUS_SEED (decision (a) del gate; NO
 // se crea `cancelada`). La cancelacion de integrador se distingue de una devolucion real por el
 // marcador `motivo = 'cancelada por tienda'` que el repo persiste en la bitacora.
-const ESTADO_DESTINO_CANCELACION = "devuelta_origen";
+const ESTADO_DESTINO_CANCELACION = "devolviendo_a_tienda";
 
 // Subconjunto del repo que este service consume.
 type CancelacionRepo = Pick<IOrdenRepository, "cancelarViaApi" | "findEstatusIdByValue">;
 
 /**
- * Feature 106 (design §4) — CANCELACION del canal integrador. Resuelve `devuelta_origen` ->
+ * Feature 106 (design §4) — CANCELACION del canal integrador. Resuelve `devolviendo_a_tienda` ->
  * `estatusId` y delega en el repo (transaccion atomica). Fuerza el owner = `actor.usuarioId`
  * (R4) y traduce la union del repo (`ok | not_found | conflict`) al resultado de dominio.
  */

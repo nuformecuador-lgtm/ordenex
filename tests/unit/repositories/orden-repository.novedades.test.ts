@@ -9,7 +9,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 //   R7 `estatus.value = "devuelta"` (solo mientras la orden REPOSE en ese estado);
 //   R8 `deletedAt: null` (excluye borradas) + `count` y `find` con el MISMO `where`;
 //   R8 (no doble conteo) el predicado YA NO usa `gestiones.some` ni `notIn`: una orden liberada a
-//      `en_bodega`/escalada a `rechazada` sale del predicado por su estado real.
+//      `en_bodega_central`/escalada a `rechazada` sale del predicado por su estado real.
 // La causa (R9) la sigue resolviendo `findCausasDevueltaVigentes` (sin cambios).
 
 // El `where` que ambos metodos DEBEN construir con el predicado anclado al estado real (§3.5).
@@ -58,7 +58,7 @@ describe("OrdenRepository.countDevueltasByTienda (R7/R8)", () => {
     // Ya no se filtra por gestion vigente: el ancla es el estado real.
     expect(where).not.toHaveProperty("gestiones");
     // Y no hay lista `notIn`: solo `estatus.value = "devuelta"`. Una orden liberada a
-    // `en_bodega`/`en_bodega_satelite` o escalada a `rechazada` deja de casar (sale de novedades).
+    // `en_bodega_central`/`en_bodega_satelite` o escalada a `rechazada` deja de casar (sale de novedades).
     expect(where.estatus.value).toBe("devuelta");
     expect(where.estatus).not.toHaveProperty("notIn");
   });

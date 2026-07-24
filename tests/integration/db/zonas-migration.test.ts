@@ -203,7 +203,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_plantilla_template_id") && // integracion WhatsApp: apendida despues
         !d.endsWith("_chat_whatsapp") && // feature 120: apendida despues
         !d.endsWith("_job_tipo_whatsapp_chat_envio") && // feature 120: apendida despues
-        !d.endsWith("_chat_mensaje_ubicacion"), // feature 121: apendida despues
+        !d.endsWith("_chat_mensaje_ubicacion") && // feature 121: apendida despues
+        !d.endsWith("_order_status_rename_nomenclatura"), // feature 137 (rename order_status): apendida despues
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);

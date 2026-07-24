@@ -114,7 +114,7 @@ describe("MisAsignacionesPage — control de acceso por rol (R9/R12)", () => {
     expect(kpis).toHaveTextContent("7");
     expect(kpis).toHaveTextContent("Por cobrar");
     expect(kpis).toHaveTextContent("350");
-    // Nuevo KPI acumulado: COD en_reparto (350) + COD entregado (400) = 750.
+    // Nuevo KPI acumulado: COD en_ruta (350) + COD entregado (400) = 750.
     expect(kpis).toHaveTextContent("Total a cobrar");
     expect(kpis).toHaveTextContent("750");
   });

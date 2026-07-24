@@ -124,7 +124,7 @@ export async function reprogramarNovedad(
 
 /**
  * R13/R14/R15/R22/R23: la bodega responsable recupera una orden en `devuelta` a bodega (transicion
- * a `en_bodega`/`en_bodega_satelite`, limpia mensajero). `unauthenticated` (sin sesion) y
+ * a `en_bodega_central`/`en_bodega_satelite`, limpia mensajero). `unauthenticated` (sin sesion) y
  * `validation_error` (ordenId no-uuid) se resuelven en el borde; forbidden/not_found/conflict/
  * config_error los devuelve el service. Patron `devolverATienda`.
  */

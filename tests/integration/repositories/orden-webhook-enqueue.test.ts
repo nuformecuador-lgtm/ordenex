@@ -15,7 +15,7 @@ import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHi
 
 const VALUE_POR_ID: Record<string, string> = {
   "s-entregada": "entregada",
-  "s-en-reparto": "en_reparto",
+  "s-en-reparto": "en_ruta",
 };
 
 function buildTx(elegibles: Set<string>) {

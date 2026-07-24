@@ -156,15 +156,15 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
   // gestion anulada y la del propio `deshacer_gestion`). La verdad historica se conserva.
   it("67/R23: `findHistorialByOrden` devuelve TODAS las filas (no filtra las de gestiones anuladas)", async () => {
     const eGestion = entrada({
-      estatusOrigenValue: "en_reparto",
+      estatusOrigenValue: "en_ruta",
       estatusDestinoValue: "devuelta",
       origenTipo: "gestion",
       motivo: "cliente ausente",
       createdAt: new Date("2026-07-14T12:00:00.000Z"),
     });
     const eDeshacer = entrada({
-      estatusOrigenValue: "en_bodega",
-      estatusDestinoValue: "en_reparto",
+      estatusOrigenValue: "en_bodega_central",
+      estatusDestinoValue: "en_ruta",
       origenTipo: "deshacer_gestion", // 12.º valor del enum (F1.4-b)
       actorNombre: "Mensajero 1",
       createdAt: new Date("2026-07-14T13:00:00.000Z"),
@@ -256,7 +256,7 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
   it("R26: devuelve las entradas ordenadas tal como las provee el repo (cronologico)", async () => {
     const e1 = entrada({ estatusDestinoValue: "en_preparacion", createdAt: new Date("2026-07-13T10:00:00.000Z") });
     const e2 = entrada({
-      estatusOrigenValue: "en_reparto",
+      estatusOrigenValue: "en_ruta",
       estatusDestinoValue: "devuelta",
       origenTipo: "gestion",
       actorNombre: null,

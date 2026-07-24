@@ -36,14 +36,14 @@ import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadg
 // se verifica es "la tab muestra la etiqueta del estado", no un texto concreto:
 // así un rebrand de etiquetas no rompe este archivo. Los literales del mapa los
 // blinda `tests/components/EstatusLabel.test.ts`.
-const TAB_EN_BODEGA = ORDER_STATUS_LABELS.en_bodega;
+const TAB_EN_BODEGA = ORDER_STATUS_LABELS.en_bodega_central;
 const TAB_ENTREGADA = ORDER_STATUS_LABELS.entregada;
 const TAB_DEVUELTA = ORDER_STATUS_LABELS.devuelta;
 
 // Catálogo con `pendiente` (excluido por default) + 3 estados mostrables.
 const CATALOGO = [
   { id: "est-pendiente", value: "pendiente" },
-  { id: "est-en_bodega", value: "en_bodega" },
+  { id: "est-en_bodega_central", value: "en_bodega_central" },
   { id: "est-entregada", value: "entregada" },
   { id: "est-devuelta", value: "devuelta" },
 ];
@@ -53,8 +53,8 @@ function makeOrden(id: string, numGuia: number): OrdenListItemDTO {
     id,
     numGuia,
     numRemision: `REM-${id}`,
-    estatusId: "est-en_bodega",
-    estatusValue: "en_bodega",
+    estatusId: "est-en_bodega_central",
+    estatusValue: "en_bodega_central",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "tienda-1",
@@ -130,7 +130,7 @@ describe("OrdenesTabs — exclude (R13)", () => {
     renderTabs(<OrdenesTabs exclude={["pendiente", "devuelta"]} />);
 
     await screen.findByRole("tab", { name: TAB_EN_BODEGA });
-    expect(tabs()).toHaveLength(2); // en_bodega + entregada
+    expect(tabs()).toHaveLength(2); // en_bodega_central + entregada
     expect(screen.queryByRole("tab", { name: TAB_DEVUELTA })).toBeNull();
   });
 });
@@ -140,12 +140,12 @@ describe("OrdenesTabs — lazy loading duro (R16) + tab activa (R15)", () => {
     renderTabs(<OrdenesTabs />);
 
     await screen.findByRole("tab", { name: TAB_EN_BODEGA });
-    // La tab activa (primera: en_bodega) consulta con su `status_id`.
+    // La tab activa (primera: en_bodega_central) consulta con su `status_id`.
     await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalled());
     expect(listarOrdenesMock).toHaveBeenCalledWith({
       page: 1,
       pageSize: 25,
-      filter: { status_id: "est-en_bodega" },
+      filter: { status_id: "est-en_bodega_central" },
     });
     // R16 (duro): NUNCA se consultó por las tabs no visitadas.
     const statusIds = listarOrdenesMock.mock.calls.map(

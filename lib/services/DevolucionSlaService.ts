@@ -16,7 +16,7 @@ import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 // Estatus destino de las transiciones del cron (valores de catalogo YA sembrados; esta feature
 // NO agrega estados). Origen SIEMPRE `devuelta` (guarda de idempotencia en el repo).
 const ESTATUS_DEVUELTA = "devuelta";
-const ESTATUS_EN_BODEGA = "en_bodega"; // reintento -> bodega central
+const ESTATUS_EN_BODEGA = "en_bodega_central"; // reintento -> bodega central
 const ESTATUS_EN_BODEGA_SATELITE = "en_bodega_satelite"; // reintento -> bodega satelite
 const ESTATUS_RECHAZADA = "rechazada"; // escalado (final)
 

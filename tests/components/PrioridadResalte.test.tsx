@@ -10,7 +10,7 @@ import {
 } from "@/components/shared/PrioridadResalte";
 
 // Feature 101 (R8/R10): las 3 piezas del resalte de prioridad que reusan idénticas
-// las dos superficies de reasignación (apartado `en_bodega` de /ordenes y grupo
+// las dos superficies de reasignación (apartado `en_bodega_central` de /ordenes y grupo
 // "Recibidas" de /recepcion-satelite). Se prueban aisladas; el comportamiento real
 // end-to-end (una superficie resalta, la hermana NO) se cubre en
 // RecepcionSateliteModule.test.tsx.
@@ -86,7 +86,7 @@ describe("PrioridadResalte (feature 101)", () => {
 // Guard "por construcción": el resalte de prioridad keyea ÚNICAMENTE por el flag
 // `prioridad` (nunca por el estatus). Una orden `sin_gestionar` es la que dejó el corte
 // del día: queda CONGELADA y NO enciende `prioridad` — la prioridad se enciende recién al
-// LIBERARLA a bodega (`en_bodega`/`en_bodega_satelite`) al APROBAR el cierre (109/R16-R17).
+// LIBERARLA a bodega (`en_bodega_central`/`en_bodega_satelite`) al APROBAR el cierre (109/R16-R17).
 // Por eso, fuera de la reasignación de bodega, una `sin_gestionar` no resalta ni reordena
 // (R26); solo la orden ya liberada (con `prioridad = true`) entra en el resalte EXISTENTE
 // (101/R8). Además, `sin_gestionar` está ausente de los listados de reasignación por

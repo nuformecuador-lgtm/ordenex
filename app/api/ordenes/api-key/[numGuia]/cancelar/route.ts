@@ -1,6 +1,6 @@
 // Feature 106 — Endpoint 3: CANCELACION de una orden por API key. PUT (decision (c) del gate)
-// `/api/ordenes/api-key/[numGuia]/cancelar`. Solo procede si el estado actual es `en_bodega` o
-// `en_ruta_bodega_principal` -> transiciona al estado EXISTENTE `devuelta_origen` (R19); cualquier
+// `/api/ordenes/api-key/[numGuia]/cancelar`. Solo procede si el estado actual es `en_bodega_central` o
+// `en_ruta_bodega_central` -> transiciona al estado EXISTENTE `devolviendo_a_tienda` (R19); cualquier
 // otro estado -> 409 (R20). La transicion pasa por `appendCambioEstado` con
 // `motivo='cancelada por tienda'` y `origen_tipo='cancelacion_api'` en la MISMA tx (dispara el
 // webhook de la feature 104). Owner = usuario dedicado de la key (R4). La key NUNCA se loguea (R5).

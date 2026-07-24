@@ -21,8 +21,8 @@ const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const GAM = "z-gam";
 
 const ESTATUS: Record<string, string> = {
-  en_espera_aceptacion: "os-espera",
-  en_bodega: "os-bodega",
+  por_recoger: "os-espera",
+  en_bodega_central: "os-bodega",
   en_ruta_bodega_satelite: "os-ruta-satelite",
 };
 
@@ -186,8 +186,8 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
   function repoBodega(over: Record<string, unknown> = {}) {
     return fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega" }),
-        ordenRow({ id: "o2", estatusValue: "en_bodega" }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central" }),
       ]),
       ...over,
     });

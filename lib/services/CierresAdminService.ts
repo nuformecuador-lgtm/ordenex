@@ -37,7 +37,7 @@ const MSG_MOTIVO_REQUERIDO = "El motivo de rechazo es obligatorio.";
 // Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
 // aprobar (destinos de bodega por zona de la orden).
 const ESTADO_SIN_GESTIONAR = "sin_gestionar";
-const ESTADO_EN_BODEGA = "en_bodega";
+const ESTADO_EN_BODEGA = "en_bodega_central";
 const ESTADO_EN_BODEGA_SATELITE = "en_bodega_satelite";
 
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).

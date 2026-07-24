@@ -52,7 +52,7 @@ export interface RecepcionSateliteModuleProps {
   /**
    * Feature 48/T9 (R10/R14): órdenes en `rechazada` de la zona del adminSatelite,
    * elegibles para la acción "Devolver a la tienda" (transición
-   * `rechazada → devuelta_origen`). Acotadas server-side por zona; vacío = sin
+   * `rechazada → devolviendo_a_tienda`). Acotadas server-side por zona; vacío = sin
    * órdenes por devolver.
    */
   porDevolver?: RecepcionSateliteDTO[];
@@ -107,7 +107,7 @@ function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): 
 /**
  * Feature 48 (T9, R10/R14): fila de la sección "Por devolver a tienda". Cada orden
  * `rechazada` de la zona ofrece la acción "Devolver a la tienda", que ejecuta el
- * retorno `rechazada → devuelta_origen` vía la Server Action `devolverATienda`. El
+ * retorno `rechazada → devolviendo_a_tienda` vía la Server Action `devolverATienda`. El
  * estado de carga y el error son POR FILA (aislados): el botón se deshabilita
  * mientras procesa y un `status != ok` muestra el aviso sin afectar a las demás
  * filas. En éxito, el padre releé el estado del servidor (`router.refresh`).
@@ -425,7 +425,7 @@ export function RecepcionSateliteModule({
 
       {/* ---------- Sección: Por devolver a tienda (rechazada) ---------- */}
       {/* Feature 48 (R10/R14): órdenes `rechazada` de la zona; cada una ofrece
-          "Devolver a la tienda" (rechazada → devuelta_origen) con estado/error por
+          "Devolver a la tienda" (rechazada → devolviendo_a_tienda) con estado/error por
           fila. Tras el éxito se releé el estado del servidor. */}
       <section
         aria-label="Por devolver a tienda"

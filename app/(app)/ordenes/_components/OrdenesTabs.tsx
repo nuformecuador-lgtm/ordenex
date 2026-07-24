@@ -74,7 +74,7 @@ const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"])
 const ESTADO_REPROGRAMADA = "reprogramada";
 
 // Estado cuya tab bloquea la seleccion de las ordenes NO centrales: "Devolver a la
-// tienda" (rechazada -> devuelta_origen) la ejecuta la bodega RESPONSABLE, y para el
+// tienda" (rechazada -> devolviendo_a_tienda) la ejecuta la bodega RESPONSABLE, y para el
 // maestro/admin eso es solo la bodega central (zonaEsGam). Las satelite las devuelve
 // el adminSatelite de la zona (en /recepcion-satelite), asi que su check se bloquea
 // en vez de dejar seleccionarlas y vaciar el modal.
@@ -83,7 +83,7 @@ const MOTIVO_RECHAZADA_NO_CENTRAL =
   "Orden de zona satélite: la devuelve el admin de la bodega satélite de su zona.";
 
 // Feature 100/T4.2: estado cuya tab ofrece "Recuperar a bodega"
-// (devuelta -> en_bodega). Igual que `rechazada`, la ejecuta la bodega RESPONSABLE:
+// (devuelta -> en_bodega_central). Igual que `rechazada`, la ejecuta la bodega RESPONSABLE:
 // para maestro/admin eso es SOLO la bodega central (zonaEsGam). Las devueltas de zona
 // satélite las recupera el adminSatelite de la zona (en /recepcion-satelite), así que
 // su check se bloquea en vez de dejar seleccionarlas y vaciar el modal (R15).
@@ -94,20 +94,20 @@ const MOTIVO_DEVUELTA_NO_CENTRAL =
 // Feature 101/R8/R10: única tab que resalta las órdenes prioritarias (liberadas por
 // el SLA de la 99). Es la superficie de reasignación de la bodega central; el resto de
 // tabs NO resalta por prioridad (el flag `resaltarPrioridad` de OrdenesModule va gateado).
-const ESTADO_EN_BODEGA = "en_bodega";
+const ESTADO_EN_BODEGA = "en_bodega_central";
 
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
 // Derivado de `accionesDe()`: `en_fulfillment`/`en_preparacion` -> "Generar guía"
-// (asigna mensajero) y `en_bodega` -> "Asignar mensajero".
-// Las tabs que solo imprimen etiquetas (`en_espera_aceptacion`,
+// (asigna mensajero) y `en_bodega_central` -> "Asignar mensajero".
+// Las tabs que solo imprimen etiquetas (`por_recoger`,
 // `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
-// Nota: en `en_bodega` el bloqueo también alcanza a "Imprimir etiquetas" (comparte el
+// Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas" (comparte el
 // checkbox); es el precio de una única columna de selección por tab.
 const ESTADOS_ASIGNACION = new Set([
   "en_fulfillment",
   "en_preparacion",
-  "en_bodega",
+  "en_bodega_central",
 ]);
 const MOTIVO_ZONA_CIERRE_ABIERTO =
   "La bodega de esta zona tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar la orden.";
@@ -163,7 +163,7 @@ export function OrdenesTabs({
   /**
    * Ofrece "Escanear con cámara" junto a la carga masiva: el adminTienda escanea el
    * QR de la etiqueta de una orden que vuelve ("En ruta a origen") y la marca como
-   * recibida en su tienda (`devuelta_origen` -> `recibido_origen`), sin salir del
+   * recibida en su tienda (`devolviendo_a_tienda` -> `devuelta_a_tienda`), sin salir del
    * listado. NO navega (para eso está `/qr`).
    */
   puedeEscanearQr?: boolean;
@@ -279,7 +279,7 @@ export function OrdenesTabs({
 
   // Mapeo estado -> acciones por lote. Sin `accionesLote` no hay acciones (undefined).
   // Nota: "Rutear a bodega satélite" NO se ofrece en esta vista de tabs (se retiró de
-  // `en_bodega` por decisión humana). La vista legacy OrdenesRevisionMaestro sí la
+  // `en_bodega_central` por decisión humana). La vista legacy OrdenesRevisionMaestro sí la
   // ofrece, así que la paridad con esa vista ya no es total.
   function accionesDe(estatusValue: string): AccionLote[] {
     switch (estatusValue) {
@@ -288,11 +288,11 @@ export function OrdenesTabs({
         return [
           { key: "guia", label: "Generar guía", onRun: abrirGenerarGuia },
         ];
-      case "en_espera_aceptacion":
+      case "por_recoger":
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
         ];
-      case "en_bodega":
+      case "en_bodega_central":
         return [
           {
             key: "asignar",

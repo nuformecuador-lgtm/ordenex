@@ -20,18 +20,18 @@ import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  en_reparto: "os-reparto",
+  en_ruta: "os-reparto",
   entregada: "os-entregada",
   devuelta: "os-devuelta",
   rechazada: "os-rechazada",
-  en_bodega: "os-en-bodega",
+  en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
 };
 
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
   return {
     id: "o1",
-    estatusValue: "en_reparto",
+    estatusValue: "en_ruta",
     deletedAt: null,
     mensajeroAsignadoId: "m1",
     montoCobrar: 100,

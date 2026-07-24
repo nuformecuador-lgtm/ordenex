@@ -27,7 +27,7 @@ function makeOrden(
     numGuia,
     numRemision: `REM-${id}`,
     estatusId: "est-1",
-    estatusValue: "en_bodega",
+    estatusValue: "en_bodega_central",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "tienda-1",

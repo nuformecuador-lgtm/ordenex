@@ -10,7 +10,7 @@
 // ORIGEN esperado (`devuelta`) como guarda de idempotencia/concurrencia (R16/R21) y el actor.
 export interface RecuperarABodegaInput {
   ordenId: string;
-  destinoEstatusId: string; // en_bodega | en_bodega_satelite (resuelto por el service)
+  destinoEstatusId: string; // en_bodega_central | en_bodega_satelite (resuelto por el service)
   estatusDevueltaId: string; // guarda: solo actua si la orden sigue en `devuelta`
   actorUsuarioId: string; // R17: el admin que ejecuta la recuperacion (para auditoria)
 }
