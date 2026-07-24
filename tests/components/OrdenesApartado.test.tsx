@@ -29,8 +29,8 @@ const listarOrdenesMock = vi.mocked(listarOrdenes);
 const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
 
 const ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_reparto",
-  estatusDestinoValue: "en_bodega",
+  estatusOrigenValue: "en_ruta",
+  estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,
   motivo: null,
@@ -73,7 +73,7 @@ function renderApartado(props: Partial<Parameters<typeof OrdenesApartado>[0]> = 
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <OrdenesApartado
         titulo="En bodega"
-        estatusValue="en_bodega"
+        estatusValue="en_bodega_central"
         estatusId="id-bodega"
         {...props}
       />
@@ -145,9 +145,9 @@ describe("OrdenesApartado — acción 'Ver historial' por fila (feature 49, R27/
     // R30: etiqueta legible del estado destino, no el value crudo (se aserta contra
     // el mapa de presentación, blindado aparte en `EstatusLabel.test.ts`).
     expect(
-      await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega),
+      await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega_central),
     ).toBeInTheDocument();
-    expect(within(dialog).queryByText("en_bodega")).toBeNull();
+    expect(within(dialog).queryByText("en_bodega_central")).toBeNull();
     // R28: la lectura pasó por la Server Action (import perezoso interceptado),
     // con la ordenId de la fila.
     expect(obtenerHistorialMock).toHaveBeenCalledWith("o1");

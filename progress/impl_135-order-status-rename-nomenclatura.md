@@ -98,6 +98,65 @@ tests/unit/guards/censo-simpe.test.ts → passed
   `_rename_order_status_embalaje_en_fulfillment`). Son archivos del spec_author (commit previo), no
   del backend; `specs/` esta fuera de mi alcance.
 
-## Veredicto
+## Veredicto (Fase 1)
 Backend del rename COMPLETO y verde en sus suites dirigidas (322 archivos / 3488 tests); el guard R13
 y el build quedan rojos por diseno hasta que frontend_dev cierre la Fase 2.
+
+---
+
+# impl 135 · FRONTEND (Fase 2 de 2) — COMPLETA
+
+## Archivos modificados (frontend, 62)
+### Producción — presentación y lógica de UI (19)
+- **Bloque B (T5)** `app/(app)/ordenes/_components/EstatusBadge.tsx`: renombradas las CLAVES de
+  `ORDER_STATUS_LABELS`, `ORDER_STATUS_VARIANT`, `ORDER_STATUS_CLASS` a los 6 nuevos values
+  (variante/clase CONSERVADAS); TEXTO de labels alineado al value legible (R8): "En bodega central",
+  "En ruta a bodega central", "Devuelta a tienda", "En ruta a bodega satélite", "En bodega satélite".
+  El case dinámico `en_ruta_bodega_satelite` (`En ruta a bodega ${zonaNombre}`) queda coherente con la
+  etiqueta estática nueva.
+- **Bloque D (T11-T13)** literales/comparaciones/comentarios al nuevo value:
+  `app/(app)/ordenes/_components/{OrdenesTabs,OrdenesRevisionMaestro,GenerarGuiaModal,OrdenesModule,
+  OrdenesApartado,AsignarBodegaModal,DevolverATiendaModal,RecuperarABodegaModal,EscanerRecepcionOrigen}.tsx`,
+  `app/(app)/ordenes/page.tsx` (array `EXCLUDE_POR_ROL` adminTienda: `en_bodega`→`en_bodega_central`),
+  `app/(app)/mis-asignaciones/_components/{MisAsignacionesModule,EscanerRecoger,InputRecoger,useRecogerPorGuia}.ts(x)`,
+  `app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx`,
+  `components/shared/PrioridadResalte.tsx`, `components/private/BodegaLiberadasHoy.tsx`.
+  Runtime tocado: `ESTADO_EN_BODEGA`/`ESTADOS_ASIGNACION` y `case` en OrdenesTabs; `estatusValue`/
+  `.get("<value>")` en OrdenesRevisionMaestro; `r.estado === "<value>"` en GenerarGuiaModal.
+  Los vecinos `en_bodega_satelite`/`en_ruta_bodega_satelite` NO se tocaron (R11).
+
+### Tests UI + e2e (43)
+- `tests/components/*` (23) y `tests/unit/components/*` (3): datos/fixtures/aserciones a los nuevos
+  values; los tests de TEXTO de etiqueta usan los labels R8 (`EstatusLabel.test.ts` reescrito a mano:
+  claves nuevas + textos legibles).
+- `e2e/*` (7 specs listados): values en comentarios/constantes al nuevo nombre.
+- Guard `no-embalaje` (T de saneo): whitelisted `specs/135-order-status-rename-nomenclatura/` (cita el
+  folder histórico `_rename_order_status_embalaje_en_fulfillment` como precedente; no reintroduce valor).
+
+## Mapa R → test (frontend)
+| R | Verificación (verde) |
+|---|----------------------|
+| R6 | `tests/components/{EstatusLabel,OrdenesEstatusLabelAdminTienda,OrdenesRevisionMaestro,OrdenesApartado,HistorialOrdenTimeline,HistorialOrdenSheet}.test.tsx` — label por nueva key; variante/clase conservadas. |
+| R8 | `tests/components/EstatusLabel.test.ts` (mapa hardcodeado = value legible: "En bodega central", "En ruta a bodega central", "Devuelta a tienda", "En ruta a bodega satélite", "En bodega satélite") + tests de badge/columnas. |
+| R13 | `tests/unit/guards/censo-order-status-rename.test.ts` **VERDE**: offenders == []; los únicos archivos con literales viejos son los 5 de la allowlist (migraciones históricas/rename, territorio backend). |
+
+## Salida real de la verificación (frontend)
+- `pnpm run typecheck` (`tsc --noEmit`) — **VERDE** (Prisma regenerado antes; exhaustividad
+  `Record<OrderStatusValue,…>` satisfecha).
+- `pnpm run lint` — **0 errores** (143 warnings preexistentes, ninguno introducido).
+- `pnpm run test` (`vitest run`, suite COMPLETA) — **VERDE**: `Test Files 484 passed (484)`,
+  `Tests 4815 passed (4815)`.
+- Guards clave: `censo-order-status-rename` (R13) y `no-embalaje` — ambos VERDES.
+
+## Desviación (bloqueo de orquestación, NO de frontend)
+- `./init.sh` NO alcanza la suite: corta en el gate "máx 2 in_progress por zona" —
+  `fullstack: 107, 120, 135 (3 in_progress)`. Es estado de `feature_list.json` (lista de exclusión,
+  territorio del leader), preexistente a esta fase (107 y 120 ya estaban in_progress; el leader marcó
+  135 in_progress en el commit `3ab58a4`). Los pasos de calidad de init.sh (typecheck+lint+test) se
+  corrieron por separado y están VERDES. Requiere que el leader baje una fullstack a `done`/otro estado
+  antes de que init.sh imprima "== init OK ==". No lo resuelvo por no tocar `feature_list.json`.
+
+## Veredicto (Fase 2)
+Frontend del rename COMPLETO: type-check verde, lint sin errores, suite completa verde (484/4815),
+guards R13 y no-embalaje verdes. Único pendiente ajeno al frontend: el gate max-2-por-zona de
+`feature_list.json` (leader).

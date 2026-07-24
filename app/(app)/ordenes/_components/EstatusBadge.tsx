@@ -13,19 +13,19 @@ type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   en_preparacion: "En preparación",
   en_fulfillment: "En fulfillment",
-  en_bodega: "En B. Central",
-  en_ruta_bodega_principal: "Enviando a B. Central",
+  en_bodega_central: "En bodega central", // feature 135 (R8): value legible directo
+  en_ruta_bodega_central: "En ruta a bodega central", // feature 135 (R8)
   entregada: "Entregada",
   devuelta: "Devuelta",
-  devuelta_origen: "Devolviendo a tienda",
+  devolviendo_a_tienda: "Devolviendo a tienda", // feature 135
   reprogramada: "Reprogramada",
-  en_espera_aceptacion: "Por recoger", // feature 17
-  en_ruta_bodega_satelite: "Por recibir en satélite", // feature 30
-  en_reparto: "En ruta", // feature 36
+  por_recoger: "Por recoger", // feature 17 (renombrado en feature 135)
+  en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30 (R8: value legible directo)
+  en_ruta: "En ruta", // feature 36 (renombrado en feature 135)
   rechazada: "Rechazada", // feature 36
-  en_bodega_satelite: "En satélite", // feature 33 (R9: la UI puede derivar la zona)
-  recibido_origen: "En tienda", // cierre del flujo de devolución: la tienda de origen la recibió
-  sin_gestionar: "Sin gestionar", // feature 109/R25: orden que quedó en reparto al pasar de día (congelada hasta aprobar el cierre)
+  en_bodega_satelite: "En bodega satélite", // feature 33 (R8: value legible directo)
+  devuelta_a_tienda: "Devuelta a tienda", // feature 135: cierre del flujo de devolución, la tienda de origen la recibió
+  sin_gestionar: "Sin gestionar", // feature 109/R25: orden que quedó en en_ruta al pasar de día (congelada hasta aprobar el cierre)
 };
 
 /**
@@ -38,20 +38,20 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
 const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   en_preparacion: "secondary",
   en_fulfillment: "secondary",
-  en_bodega: "secondary",
-  en_ruta_bodega_principal: "info",
+  en_bodega_central: "secondary",
+  en_ruta_bodega_central: "info",
   entregada: "success",
   devuelta: "warning",
-  devuelta_origen: "danger",
+  devolviendo_a_tienda: "danger",
   reprogramada: "warning",
-  en_espera_aceptacion: "info", // feature 17
+  por_recoger: "info", // feature 17
   en_ruta_bodega_satelite: "info", // feature 30
-  en_reparto: "secondary", // feature 36
+  en_ruta: "secondary", // feature 36
   rechazada: "danger", // feature 36
   en_bodega_satelite: "info", // feature 33
   // Terminal y NO error: reusa la variante de `entregada` (success), el otro cierre
-  // sano del flujo. `devuelta_origen` sigue en danger por ser el tránsito.
-  recibido_origen: "success",
+  // sano del flujo. `devolviendo_a_tienda` sigue en danger por ser el tránsito.
+  devuelta_a_tienda: "success",
   // Feature 109/R25: estado de EXCEPCIÓN (orden sin gestionar, congelada) -> variante de alerta.
   sin_gestionar: "warning",
 };
@@ -64,9 +64,9 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
 const ORDER_STATUS_CLASS: Partial<Record<OrderStatusValue, string>> = {
   en_fulfillment:
     "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light",
-  en_reparto:
+  en_ruta:
     "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light",
-  en_bodega: "text-navy dark:bg-navy/20 dark:text-asfalto-2",
+  en_bodega_central: "text-navy dark:bg-navy/20 dark:text-asfalto-2",
   reprogramada: "border-hivis/60 dark:border-hivis/40",
 };
 

@@ -61,6 +61,10 @@ const WHITELIST_PREFIXES = [
   // Feature 27: el spec cita 'embalaje' solo para documentar el rename historico
   // (embalaje -> en_fulfillment, feature 28) como contexto; no reintroduce el valor.
   "specs/27-fulfillment-tienda/",
+  // Feature 135: el spec cita el folder historico *_rename_order_status_embalaje_en_fulfillment
+  // como PRECEDENTE del rename por UPDATE (order_status es tabla catalogo, no enum); no
+  // reintroduce el valor 'embalaje'. Mismo patron que specs/27 y specs/rename-embalaje-fulfillment.
+  "specs/135-order-status-rename-nomenclatura/",
 ];
 const WHITELIST_FILES = new Set([
   "feature_list.json",

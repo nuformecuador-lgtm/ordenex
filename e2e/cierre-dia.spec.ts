@@ -14,7 +14,7 @@ import { test, expect, type Page } from "@playwright/test";
  *  with the derived destination.
  *
  * PRECONDITION (seed): the courier must have ALL their assigned orders already
- * managed (no order in `en_espera_aceptacion` nor `en_reparto`) so that
+ * managed (no order in `por_recoger` nor `en_ruta`) so that
  * "Solicitar cierre" is enabled (R10); and at least one managed gestion pending
  * of closing (`cierre_id IS NULL`) so the day is non-empty (R11).
  *
@@ -25,7 +25,7 @@ import { test, expect, type Page } from "@playwright/test";
  *   (feature 37 migration) plus the gestion/order catalog values seeded
  * - A seeded `mensajero` user WITH a `zonaId`, with all their assigned orders
  *   already managed (at least one `entregada` with a known amount+method so the
- *   totals are non-zero), and NO order left in `en_espera_aceptacion`/`en_reparto`
+ *   totals are non-zero), and NO order left in `por_recoger`/`en_ruta`
  * - The expected total amount for one method, injected as TOTAL_EFECTIVO below
  *
  * If the environment lacks .env or a real database, these tests are WRITTEN but
@@ -101,13 +101,13 @@ test.describe("Cierre del día — mensajero solicita el cierre", () => {
 /**
  * Feature 64 (T21, R35–R38) — el mensajero DESHACE una gestión errónea antes de
  * solicitar el cierre: la gestión se anula (con rastro) y su orden vuelve a
- * `en_reparto` con él, lista para re-gestionar.
+ * `en_ruta` con él, lista para re-gestionar.
  *
  * Happy path del flujo crítico (toca recaudo: la fila sale de los totales del día):
  *  mensajero en /cierre-dia → la orden entregada aparece en "Entregadas" y suma al
  *  total → "Devolver a gestión" en SU fila → confirma en el modal → toast de éxito,
  *  la fila desaparece de la tabla, el total baja y la orden reaparece en
- *  /mis-asignaciones como `en_reparto` (lista para "Escoger para gestión": el
+ *  /mis-asignaciones como `en_ruta` (lista para "Escoger para gestión": el
  *  deshacer NO repone el puntero `orden_en_gestion_id`, F1.4-c/R29).
  *
  * PRECONDICIÓN (seed), además de la del bloque de arriba: la gestión `entregada` de
@@ -161,7 +161,7 @@ test.describe("Cierre del día — mensajero deshace una gestión (feature 64)",
     await expect(entregadas.getByText(ORDEN_A_DESHACER)).toBeHidden();
     await expect(totales.getByText(TOTAL_EFECTIVO_TRAS_DESHACER)).toBeVisible();
 
-    // R18/R19/R31: la orden volvió a `en_reparto` asignada al mismo mensajero, así que
+    // R18/R19/R31: la orden volvió a `en_ruta` asignada al mismo mensajero, así que
     // reaparece en su lista por gestionar y puede volver a escogerla (guardia 1-a-1).
     await page.goto("/mis-asignaciones");
     const porGestionar = page.getByRole("region", {

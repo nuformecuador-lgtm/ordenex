@@ -54,11 +54,11 @@ describe("Listado del adminTienda — etiquetas de los estados del retorno (R12/
     expect(screen.queryByText("rechazada")).toBeNull();
   });
 
-  it("R13: 'devuelta_origen' se muestra con su etiqueta legible (no el value crudo)", () => {
-    renderEstatus("devuelta_origen");
+  it("R13: 'devolviendo_a_tienda' se muestra con su etiqueta legible (no el value crudo)", () => {
+    renderEstatus("devolviendo_a_tienda");
     expect(
-      screen.getByText(ORDER_STATUS_LABELS.devuelta_origen),
+      screen.getByText(ORDER_STATUS_LABELS.devolviendo_a_tienda),
     ).toBeInTheDocument();
-    expect(screen.queryByText("devuelta_origen")).toBeNull();
+    expect(screen.queryByText("devolviendo_a_tienda")).toBeNull();
   });
 });

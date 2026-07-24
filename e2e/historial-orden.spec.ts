@@ -40,11 +40,11 @@ import { test, expect, type Page } from "@playwright/test";
  *   orden cronológico (la creación primero, la liberación del cron al final):
  *     1. CREACIÓN (carga masiva, R9): origen vacío → `en_preparacion`
  *        ("En preparación"), actor HUMANO (el adminTienda que la subió).
- *     2. GESTIÓN del mensajero (feature 36, R17/R22): `en_reparto` →
+ *     2. GESTIÓN del mensajero (feature 36, R17/R22): `en_ruta` →
  *        `reprogramada` ("Reprogramada"), actor HUMANO = ACTOR_HUMANO, con MOTIVO.
- *     3. LIBERACIÓN del cron (feature 46, R18/R21): `reprogramada` → `en_bodega`
+ *     3. LIBERACIÓN del cron (feature 46, R18/R21): `reprogramada` → `en_bodega_central`
  *        ("En bodega"), actor VACÍO → se muestra "Sistema", sin motivo; es la más
- *        reciente y la orden QUEDA en `en_bodega` (no hay transiciones posteriores).
+ *        reciente y la orden QUEDA en `en_bodega_central` (no hay transiciones posteriores).
  *   (Puede haber transiciones intermedias — generar guía, recoger — que añadan más
  *   `<li>`; las aserciones apuntan a entradas concretas, no a todas. "Sistema" y el
  *   MOTIVO son únicos en este seed, lo que hace robustas las aserciones de orden.)
@@ -57,7 +57,7 @@ import { test, expect, type Page } from "@playwright/test";
  * - A test database with Supabase/Postgres and the feature 49 migration
  *   (`orden_historial_estado` + índice `(orden_id, created_at)` + RLS) applied,
  *   plus the order-status catalog seeded (incl. `en_preparacion`, `reprogramada`,
- *   `en_bodega`).
+ *   `en_bodega_central`).
  * - The two seeded adminTienda users and the order per PRECONDITION above.
  *
  * If the environment lacks .env or a real database, these tests are WRITTEN but
@@ -162,7 +162,7 @@ test.describe.serial("Historial de estados — línea de tiempo (R26/R27/R29/R30
     await expect(primera.getByText(LABEL_CREACION_DESTINO)).toBeVisible();
 
     // …y la LIBERACIÓN del cron (actor "Sistema") es la ÚLTIMA (la más reciente),
-    // demostrando que la primera (creación) precede a la última (Sistema/en_bodega).
+    // demostrando que la primera (creación) precede a la última (Sistema/en_bodega_central).
     const ultima = entradas.last();
     await expect(ultima.getByText(LABEL_FINAL)).toBeVisible();
     await expect(ultima.getByText(`Por ${ACTOR_SISTEMA}`)).toBeVisible();

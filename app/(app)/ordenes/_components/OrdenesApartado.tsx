@@ -34,7 +34,7 @@ export interface OrdenesApartadoProps {
   estatusId: string | undefined;
   /**
    * R17: habilita checkbox por fila + botón de acción. `false` para `admin`
-   * (R12-UI, solo-lectura) y para el apartado `en_espera_aceptacion` (sin
+   * (R12-UI, solo-lectura) y para el apartado `por_recoger` (sin
    * acción de este flujo, feature 36 la modela más adelante).
    */
   selectable?: boolean;
@@ -45,14 +45,14 @@ export interface OrdenesApartadoProps {
   /**
    * Feature 30/R13: acción secundaria opcional ("Rutear a bodega satélite") que
    * comparte la misma selección por checkbox. Convive con la acción primaria en
-   * los apartados de revisión y `en_bodega`.
+   * los apartados de revisión y `en_bodega_central`.
    */
   secondaryActionLabel?: string;
   /** Se invoca con las órdenes seleccionadas (snapshot) al pulsar la acción secundaria. */
   onSecondaryAction?: (seleccionadas: OrdenListItemDTO[]) => void;
   /**
    * Feature 32/R11/R13: acción terciaria opcional ("Imprimir etiquetas") que
-   * comparte la misma selección por checkbox. Se añade porque `en_bodega` ya usa
+   * comparte la misma selección por checkbox. Se añade porque `en_bodega_central` ya usa
    * la primaria ("Asignar mensajero") y la secundaria ("Rutear a bodega
    * satélite"): la terciaria da un tercer slot sin romper los existentes.
    */
