@@ -1867,3 +1867,19 @@
   el buscador de la feature 114 sobre las mismas listas visibles.
 - Preserva 113/114/115/116. R1–R14 trazados a tests. typecheck 0, lint 0, **4804/4804**. Reviewer APROBADO.
   **PR #153 → dev, merge humano 2026-07-23.** Cierra el lote mensajero 113–119. Sin migraciones ni env nuevas.
+
+## 2026-07-24 — 137 unificar nomenclatura de order_status (rename, opción A del gate)
+- Rename reversible del `value` de 6 estatus para unificar backend↔frontend↔contrato externo:
+  `en_reparto→en_ruta`, `en_espera_aceptacion→por_recoger`, `en_bodega→en_bodega_central`,
+  `en_ruta_bodega_principal→en_ruta_bodega_central`, `devuelta_origen→devolviendo_a_tienda`,
+  `recibido_origen→devuelta_a_tienda`. Migración por `UPDATE order_status.value` (+down.sql), tupla fuente
+  de verdad `ORDER_STATUS_SEED`, etiquetas R8 (= value legible directo), contrato externo API/webhook
+  (breaking R9), barrido de ~180 archivos guardado por censo case-sensitive (R13). NO cambia
+  `orden.estatus_id` (FK por id).
+- Requisitos R1–R13 trazados a tests (`progress/impl_137-order-status-rename-nomenclatura.md`). Reviewer
+  APROBADO-CON-NOTAS, 0 bloqueantes. typecheck 0, lint 0, suite verde.
+- Renumerada 135→137 por colisión de IDs (dev reclamó 135=analítica, 136=etiquetas vía #155 flow); la rama
+  conserva el slug `feature/135-...` (pusheada), patrón 103/104/105. **PR #157 → dev, merge humano 2026-07-24.**
+- DEUDA: la migración NO se aplicó contra DB real (entorno sin `.env`; R2/R3/R4 por test estático +
+  round-trip en memoria). **Al desplegar: `prisma migrate deploy` + verificar `down.sql` con `db:rollback`,
+  coordinado con el deploy** (rename de valores: código y DB deben coincidir). Fundacional del lote 137–140.

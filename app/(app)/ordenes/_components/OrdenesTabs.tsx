@@ -17,6 +17,7 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
+import { EscanerRecepcionBodegaCentral } from "./EscanerRecepcionBodegaCentral";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
 import {
   ordenesColumnsMensajeroSugerido,
@@ -146,6 +147,7 @@ export function OrdenesTabs({
   exclude = DEFAULT_EXCLUDE,
   puedeCargarMasiva = false,
   puedeEscanearQr = false,
+  puedeRecibirBodegaCentral = false,
   mostrarHistorial = false,
   accionesLote = false,
   incluirTodas = false,
@@ -167,6 +169,14 @@ export function OrdenesTabs({
    * listado. NO navega (para eso está `/qr`).
    */
   puedeEscanearQr?: boolean;
+  /**
+   * Feature 138 (R12/R16): ofrece el receptor de la BODEGA CENTRAL (escaneo por
+   * cámara + entrada manual de guía) en el encabezado, junto al resto de acciones a
+   * nivel del contenedor. Cierra el callejón `en_ruta_bodega_central` transicionando
+   * a `en_bodega_central`. Solo para maestro/admin (`esAccesoTotal`); el service
+   * revalida server-side. `adminTienda` y otros roles NO lo reciben.
+   */
+  puedeRecibirBodegaCentral?: boolean;
   mostrarHistorial?: boolean;
   /**
    * Habilita la selección por checkbox + barra de acciones por lote por estado
@@ -362,13 +372,18 @@ export function OrdenesTabs({
     });
   }
 
-  // La carga masiva y el escaneo viven a nivel del contenedor (no por tab): son
-  // acciones independientes del estado activo. Se ofrecen solo al adminTienda
-  // (feature 26), vía `puedeCargarMasiva` / `puedeEscanearQr`.
+  // La carga masiva y los escáneres viven a nivel del contenedor (no por tab): son
+  // acciones independientes del estado activo. La carga masiva y la recepción en
+  // origen se ofrecen al adminTienda (feature 26); la recepción en bodega central
+  // (feature 138) al maestro/admin. `onRecibida={handleSuccess}` revalida las tablas
+  // por tab (R14), de modo que la orden recibida deja de figurar en la vista.
   const header =
-    puedeCargarMasiva || puedeEscanearQr ? (
+    puedeCargarMasiva || puedeEscanearQr || puedeRecibirBodegaCentral ? (
       <div className="flex flex-col items-end gap-3">
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {puedeRecibirBodegaCentral ? (
+            <EscanerRecepcionBodegaCentral onRecibida={handleSuccess} />
+          ) : null}
           {puedeEscanearQr ? (
             <EscanerRecepcionOrigen onRecibida={handleSuccess} />
           ) : null}

@@ -644,6 +644,24 @@ export interface IOrdenRepository {
     historial: HistorialContexto,
   ): Promise<boolean>;
 
+  // --- Feature 138: recepcion por QR en la bodega CENTRAL (R2/R3/R9/R18) ---
+
+  /**
+   * Feature 138/R2/R3/R9/R18: recepcion en la BODEGA CENTRAL: transicion atomica y
+   * concurrencia-segura de UNA orden a `en_bodega_central`, cerrando el dead-end de la
+   * carga por API. Espejo de `recibirEnOrigen`/`recibirEnSatelite` pero SIN guarda de tienda
+   * ni de zona: la bodega central es global (R11). UPDATE guardado SOLO por estado de origen
+   * (sigue en `en_ruta_bodega_central`) + no borrada (`deletedAt IS NULL`); origen pre-leido
+   * bajo la misma guarda y append del historial (`origenTipo = recepcion_bodega_central`) en la
+   * MISMA tx, SOLO si transiciono. Devuelve `true` si afecto 1 fila (recibida), `false` si 0
+   * (ya no estaba en el origen -> race). NO toca `mensajeroAsignadoId` ni `numGuia` (R18).
+   */
+  recibirEnBodegaCentral(
+    ordenId: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean>;
+
   /**
    * Feature 63 — recepcion EN LOTE en la bodega satelite (paridad con el "Recoger
    * todas" del mensajero). Transiciona un lote de ordenes a `en_bodega_satelite`
