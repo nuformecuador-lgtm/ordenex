@@ -15,6 +15,27 @@
 
 ## Features en curso
 
+### Lote 135–138 (flujo de estados) — 135 implementada, reviewer APROBADO, PR a `dev` (pendiente merge humano)
+
+**135 — rename nomenclatura `order_status` (fullstack, opción A del gate) — code-complete + verde.**
+Backend `e044e05` + frontend `36d12bd` en `feature/135-order-status-rename-nomenclatura`.
+`./init.sh` **verde** (484 archivos / 4815 tests); guards R13 (censo) y `no-embalaje` verdes.
+Reviewer **APROBADO-CON-NOTAS**, 0 bloqueantes, trazabilidad R1–R13 completa
+(`progress/review_135-...md`). **PR-135-PLACEHOLDER**. Se reinició de cero desde el spec del
+gate (se descartó una WIP pre-gate que usaba `en_tienda`/etiquetas abreviadas; el worktree
+suelto `agent-a2b3…` quedó como directorio huérfano en disco por ruta-larga de Windows).
+- **Deuda post-merge (Nota-3 del reviewer):** correr `prisma migrate deploy` + verificar
+  `down.sql` con `db:rollback` contra la DB real (el entorno no tenía `.env`/DB; R2/R3/R4
+  quedaron trazados por test estático + round-trip en-memoria). Migración
+  `db/migrations/20260724120000_order_status_rename_nomenclatura/`.
+- **Deuda menor de UI (opcional):** títulos de sección estáticos ("En bodega", etc.) siguen
+  con su texto propio; R8 rige el badge (`ORDER_STATUS_LABELS`), no los headings de región.
+- **136/137/138** siguen `spec_ready`, bloqueadas por la cadena hasta que la 135 mergee.
+
+**Reconciliación de estado stale (commit `2f460e3`):** 107/108/110/120 estaban `in_progress`
+pero ya mergeadas a `dev` (PRs #135/#136/#140/#149) → reconciliadas a `done`. Con esto solo la
+135 queda `in_progress` (arregla el gate "máx 2 in_progress por zona" que rompía `init.sh`).
+
 _Ninguna del lote mensajero en curso._
 
 **Lote mensajero 113–119 — COMPLETO (7/7 mergeadas a `dev`, 2026-07-23).** Detalle en `history.md`.

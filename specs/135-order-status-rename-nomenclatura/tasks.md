@@ -9,24 +9,24 @@
 ## Bloque A — fuente de verdad TS + migración · debe ir PRIMERO
 Al editar la tupla, `OrderStatusValue` cambia y el compilador empieza a exigir los mapas.
 
-- [ ] **T1** — `lib/types/order-status.ts`: renombrar los 6 literales de `ORDER_STATUS_SEED`
+- [x] **T1** — `lib/types/order-status.ts`: renombrar los 6 literales de `ORDER_STATUS_SEED`
   (`en_reparto`→`en_ruta`, `en_espera_aceptacion`→`por_recoger`, `en_bodega`→`en_bodega_central`,
   `en_ruta_bodega_principal`→`en_ruta_bodega_central`, `devuelta_origen`→`devolviendo_a_tienda`,
   `recibido_origen`→`devuelta_a_tienda`) **conservando la posición** (índices 8/10/13 intactos)
   y actualizar comentarios. *Hecho:* la tupla tiene 15 elementos, mismos índices, nuevos
   literales; `OrderStatusValue` compila.
-- [ ] **T2** (depende de T1) — Crear `db/migrations/<ts>_order_status_rename_nomenclatura/migration.sql`
+- [x] **T2** (depende de T1) — Crear `db/migrations/<ts>_order_status_rename_nomenclatura/migration.sql`
   con los 6 `UPDATE "order_status" SET value=... WHERE value=...` (R2), sin `ALTER TYPE`.
   *Hecho:* archivo con las 6 sentencias exactas + comentario que explica id/FK preservados (R4).
-- [ ] **T3** (depende de T2) — Crear `down.sql` con los 6 UPDATE inversos (R3).
+- [x] **T3** (depende de T2) — Crear `down.sql` con los 6 UPDATE inversos (R3).
   *Hecho:* `down.sql` es el inverso exacto (contiene los values viejos por diseño).
-- [ ] **T4** (depende de T2/T3) — Aplicar en local (`pnpm run db:migrate`) y verificar
+- [x] **T4** (depende de T2/T3) — Aplicar en local (`pnpm run db:migrate`) y verificar
   rollback (`pnpm run db:rollback` aplica `down.sql`) + re-migrar limpio. *Hecho:* la tabla
   `order_status` muestra los nuevos values; el rollback restituye los viejos conservando
   `id`; conteo estable (R3/R4 a mano).
 
 ## Bloque B — mapas de presentación (claves forzadas por el compilador) · depende de T1
-- [ ] **T5** — `app/(app)/ordenes/_components/EstatusBadge.tsx`: (a) renombrar las CLAVES de
+- [x] **T5** — `app/(app)/ordenes/_components/EstatusBadge.tsx`: (a) renombrar las CLAVES de
   `ORDER_STATUS_LABELS`, `ORDER_STATUS_VARIANT` y `ORDER_STATUS_CLASS` a los nuevos values
   (variante/clase se conservan); (b) ALINEAR el TEXTO de los labels al value legible (R8):
   `en_bodega_central`="En bodega central", `en_ruta_bodega_central`="En ruta a bodega
@@ -40,76 +40,76 @@ Al editar la tupla, `OrderStatusValue` cambia y el compilador empieza a exigir l
 Regla: cambiar cada literal de estado; NO cambiar nombres de constante ni de columna.
 (Referencias `archivo:línea` en `design.md §A.d`.)
 
-- [ ] **T6** [P] — `lib/repositories/`: `OrdenRepository.ts` (incl. `ESTADOS_CANCELABLES_API`,
+- [x] **T6** [P] — `lib/repositories/`: `OrdenRepository.ts` (incl. `ESTADOS_CANCELABLES_API`,
   `ORIGEN_RECEPCION_ORIGEN`), `CorteDiarioRepository.ts`, `CierreDiaRepository.ts`,
   `GestionOrdenRepository.ts`, `LiberacionReprogramadaRepository.ts`, `RecuperacionBodegaRepository.ts`.
-- [ ] **T7** [P] — `lib/services/`: `MisAsignacionesService.ts`, `GuiaAsignacionService.ts`
+- [x] **T7** [P] — `lib/services/`: `MisAsignacionesService.ts`, `GuiaAsignacionService.ts`
   (incl. `ORIGEN_RUTEO_SATELITE` Set), `CierreDiaService.ts` (`ESTADOS_PENDIENTES` + mapa
   `devuelta:[…]`), `CorteDiarioService.ts`, `CierresAdminService.ts`, `DevolucionSlaService.ts`,
   `RecuperacionBodegaService.ts`, `LiberacionReprogramadaService.ts`, `DevolucionOrigenService.ts`,
   `ApiOrdenCancelacionService.ts`, `RecepcionOrigenService.ts`, `AsignacionSateliteService.ts`
   (incl. cast `as "en_espera_aceptacion"`), `BulkOrdenService.ts`, `OrdenService.ts`.
-- [ ] **T8** [P] — `lib/actions/`: `mis-asignaciones.ts`, `resolver-novedad.ts`, `cierre-dia.ts`,
+- [x] **T8** [P] — `lib/actions/`: `mis-asignaciones.ts`, `resolver-novedad.ts`, `cierre-dia.ts`,
   `devolucion-origen.ts`, `liberacion-reprogramada.ts` (`ESTATUS_BODEGA_CENTRAL`),
   `recepcion-origen.ts`, `recepcion-satelite.ts`, `ordenes-guia.ts`.
-- [ ] **T9** [P] — `lib/interfaces/` (services + repositories): literales de unión y
+- [x] **T9** [P] — `lib/interfaces/` (services + repositories): literales de unión y
   comentarios en los `I*` listados en `design.md §A.d` (p. ej. `IAsignacionSateliteService.ts`,
   `IRecepcionOrigenService.ts`, `IDevolucionOrigenService.ts`, `IOrdenRepository.ts`, etc.).
-- [ ] **T10** [P] — `lib/types/`: `orden-historial.ts`, `api-orden.ts`, `recepcion-origen.ts`,
+- [x] **T10** [P] — `lib/types/`: `orden-historial.ts`, `api-orden.ts`, `recepcion-origen.ts`,
   `recepcion-satelite.ts`, `orden.ts`, `orden-guia.ts` (literales de unión + comentarios).
   *Hecho (T6–T10):* build verde; `findEstatusIdByValue` y las guardas resuelven al nuevo
   value; ninguna resolución `value→id` devuelve `null` (R7).
 
 ## Bloque D — UI adicional (app/components) · depende de T1 · [P] por archivo
-- [ ] **T11** [P] — `app/(app)/ordenes/_components/`: `OrdenesTabs.tsx` (`ESTADO_EN_BODEGA`,
+- [x] **T11** [P] — `app/(app)/ordenes/_components/`: `OrdenesTabs.tsx` (`ESTADO_EN_BODEGA`,
   arrays, `case`), `OrdenesRevisionMaestro.tsx` (`estatusValue`/`.get("<value>")`),
   `GenerarGuiaModal.tsx` (comparaciones `r.estado===`), `OrdenesModule.tsx`, `OrdenesApartado.tsx`,
   `AsignarBodegaModal.tsx`, `DevolverATiendaModal.tsx`, `RecuperarABodegaModal.tsx`,
   `EscanerRecepcionOrigen.tsx`, y `page.tsx` (array de estados por rol, :33).
-- [ ] **T12** [P] — `app/(app)/mis-asignaciones/_components/`: `MisAsignacionesModule.tsx`,
+- [x] **T12** [P] — `app/(app)/mis-asignaciones/_components/`: `MisAsignacionesModule.tsx`,
   `EscanerRecoger.tsx`, `InputRecoger.tsx`, `useRecogerPorGuia.ts`.
-- [ ] **T13** [P] — `app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx`;
+- [x] **T13** [P] — `app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx`;
   `components/shared/PrioridadResalte.tsx`; `components/private/BodegaLiberadasHoy.tsx`.
   *Hecho (T11–T13):* build verde; la UI muestra las mismas etiquetas de siempre (R8).
 
 ## Bloque E — contrato externo (categoría b, R9 APROBADO por el gate) · depende de T1 · [P]
-- [ ] **T14** [P] — `lib/api/openapi-spec.ts` (enum de estado + ejemplos),
+- [x] **T14** [P] — `lib/api/openapi-spec.ts` (enum de estado + ejemplos),
   `docs/api/api-key-openapi.yaml` (enums publicados), `lib/types/webhook-eventos.ts`
   (lista de eventos), `app/api/ordenes/api-key/[numGuia]/cancelar/route.ts` y
   `.../carga/route.ts` (comentarios/literales). *Hecho:* el contrato externo expone los
   nuevos values en todas las capas (breaking aceptado); sin capa de traducción.
 
 ## Bloque F — tests + seeds (categorías e/f) · depende de Bloques A–E
-- [ ] **T15** — `tests/unit/types/order-status.test.ts`: set (:12-30) y aserciones
+- [x] **T15** — `tests/unit/types/order-status.test.ts`: set (:12-30) y aserciones
   POSICIONALES a los nuevos values conservando índice (`[8]`→`por_recoger`, `[10]`→`en_ruta`,
   `[13]`→`devuelta_a_tienda`); segundo `describe` (`rows.has(...)`) a los nuevos. *Hecho:*
   verde con 15 nuevos values.
-- [ ] **T16** — `tests/integration/db/order-status-enum-migration.test.ts`: **desacoplar**
+- [x] **T16** — `tests/integration/db/order-status-enum-migration.test.ts`: **desacoplar**
   de `ORDER_STATUS_SEED`; afirmar los 8 literales HISTÓRICOS del enum
   (`{entregada, devuelta, devuelta_origen, reprogramada, en_fulfillment,
   en_ruta_bodega_principal, en_bodega, en_preparacion}`) (R10). *Hecho:* el test valida la
   migración histórica sin depender del seed vigente.
-- [ ] **T17** — Crear test NUEVO
+- [x] **T17** — Crear test NUEVO
   `tests/integration/db/order-status-rename-nomenclatura-migration.test.ts`: UP afirma los
   6 UPDATE, DOWN afirma los inversos (R2/R3) y, con DB de test, fila antigua→nueva con `id`
   y conteo estables (R4). *Hecho:* R2/R3/R4 trazados a este test.
-- [ ] **T18** [P] — `scripts/seed-ordenes-qa.ts`: literales `estatusValue`/`origenValue`/
+- [x] **T18** [P] — `scripts/seed-ordenes-qa.ts`: literales `estatusValue`/`origenValue`/
   `destinoValue`/`in:[...]` a los nuevos values. *Hecho:* el seed de QA usa los nuevos.
-- [ ] **T19** [P] — Resto de tests (89 archivos, ver §Archivos esperados): actualizar datos
+- [x] **T19** [P] — Resto de tests (89 archivos, ver §Archivos esperados): actualizar datos
   de entrada, fixtures y aserciones a los nuevos values. Los tests que afirman TEXTO de
   etiqueta (empezando por `tests/components/EstatusLabel.test.ts` y los de badge/columnas)
   DEBEN usar los nuevos labels (R8): "En bodega central", "En ruta a bodega central",
   "Devuelta a tienda", "En ruta a bodega satélite", "En bodega satélite". Repartir en
   sub-tandas por carpeta para paralelizar sin conflicto. *Hecho:* cada suite verde con los
   nuevos values y labels.
-- [ ] **T20** — Crear guard de censo `tests/unit/guards/censo-order-status-rename.test.ts`:
+- [x] **T20** — Crear guard de censo `tests/unit/guards/censo-order-status-rename.test.ts`:
   grep case-sensitive de los 6 values ANTIGUOS sobre `app/ lib/ components/ hooks/ scripts/
   tests/ e2e/`, excluyendo `db/migrations/**` y el `down.sql` de esta feature; falla si hay
   coincidencias (contempla `en_bodega` exacto sin marcar `en_bodega_satelite`). *Hecho:*
   guard en verde (R13).
 
 ## Bloque G — cierre
-- [ ] **T21** (depende de todo) — `./init.sh` verde + suite completa verde
+- [x] **T21** (depende de todo) — `./init.sh` verde + suite completa verde
   (`docs/verification.md`). Regenerar cliente Prisma si el type-check da falso negativo
   (memoria del repo). Mapear cada R→test en
   `progress/impl_135-order-status-rename-nomenclatura.md`. *Hecho:* init + tests verdes;
