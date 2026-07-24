@@ -14,13 +14,13 @@ function fakeRepo(cancelarResult: unknown, overrides: Record<string, unknown> = 
 }
 
 describe("ApiOrdenCancelacionService.cancelar (feature 106, T9)", () => {
-  it("R19: ok desde en_bodega -> destino devuelta_origen; resuelve el estatusId del catalogo", async () => {
-    const repo = fakeRepo({ status: "ok", estadoAnterior: "en_bodega" });
+  it("R19: ok desde en_bodega_central -> destino devolviendo_a_tienda; resuelve el estatusId del catalogo", async () => {
+    const repo = fakeRepo({ status: "ok", estadoAnterior: "en_bodega_central" });
     const svc = new ApiOrdenCancelacionService(repo as never);
 
     const res = await svc.cancelar(ACTOR, 10234);
 
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("devuelta_origen");
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("devolviendo_a_tienda");
     // R4: owner = actor.usuarioId; el destino resuelto se pasa al repo.
     expect(repo.cancelarViaApi).toHaveBeenCalledWith({
       numGuia: 10234,
@@ -29,26 +29,26 @@ describe("ApiOrdenCancelacionService.cancelar (feature 106, T9)", () => {
     });
     expect(res).toEqual({
       status: "ok",
-      data: { numGuia: 10234, estadoAnterior: "en_bodega", estado: "devuelta_origen" },
+      data: { numGuia: 10234, estadoAnterior: "en_bodega_central", estado: "devolviendo_a_tienda" },
     });
   });
 
-  it("R19: ok desde en_ruta_bodega_principal -> devuelta_origen", async () => {
-    const repo = fakeRepo({ status: "ok", estadoAnterior: "en_ruta_bodega_principal" });
+  it("R19: ok desde en_ruta_bodega_central -> devolviendo_a_tienda", async () => {
+    const repo = fakeRepo({ status: "ok", estadoAnterior: "en_ruta_bodega_central" });
     const svc = new ApiOrdenCancelacionService(repo as never);
     const res = await svc.cancelar(ACTOR, 10234);
     expect(res).toEqual({
       status: "ok",
       data: {
         numGuia: 10234,
-        estadoAnterior: "en_ruta_bodega_principal",
-        estado: "devuelta_origen",
+        estadoAnterior: "en_ruta_bodega_central",
+        estado: "devolviendo_a_tienda",
       },
     });
   });
 
-  it("R20: conflict del repo (incl. ya devuelta_origen) -> conflict de dominio", async () => {
-    const repo = fakeRepo({ status: "conflict", estadoActual: "devuelta_origen" });
+  it("R20: conflict del repo (incl. ya devolviendo_a_tienda) -> conflict de dominio", async () => {
+    const repo = fakeRepo({ status: "conflict", estadoActual: "devolviendo_a_tienda" });
     const svc = new ApiOrdenCancelacionService(repo as never);
     const res = await svc.cancelar(ACTOR, 10234);
     expect(res).toEqual({ status: "conflict" });
@@ -61,13 +61,13 @@ describe("ApiOrdenCancelacionService.cancelar (feature 106, T9)", () => {
     expect(res).toEqual({ status: "not_found" });
   });
 
-  it("falla ruidosamente si el catalogo no tiene devuelta_origen (fallo de infra, no de negocio)", async () => {
+  it("falla ruidosamente si el catalogo no tiene devolviendo_a_tienda (fallo de infra, no de negocio)", async () => {
     const repo = fakeRepo(
-      { status: "ok", estadoAnterior: "en_bodega" },
+      { status: "ok", estadoAnterior: "en_bodega_central" },
       { findEstatusIdByValue: vi.fn().mockResolvedValue(null) },
     );
     const svc = new ApiOrdenCancelacionService(repo as never);
-    await expect(svc.cancelar(ACTOR, 10234)).rejects.toThrow(/devuelta_origen/);
+    await expect(svc.cancelar(ACTOR, 10234)).rejects.toThrow(/devolviendo_a_tienda/);
     expect(repo.cancelarViaApi).not.toHaveBeenCalled();
   });
 });

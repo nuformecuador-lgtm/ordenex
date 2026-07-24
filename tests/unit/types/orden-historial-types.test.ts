@@ -16,7 +16,7 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // `devuelta`) y `recuperacion_manual` (bodega recupera desde `devuelta`): dos valores propios para
 // que la linea de tiempo distinga las acciones MANUALES que resuelven una novedad del cron SLA (99).
 // Feature 106: el conjunto pasa a 18 con `cancelacion_api` (cancelacion de la tienda por API key:
-// en_bodega/en_ruta_bodega_principal -> devuelta_origen con motivo="cancelada por tienda"): valor
+// en_bodega_central/en_ruta_bodega_central -> devolviendo_a_tienda con motivo="cancelada por tienda"): valor
 // propio para que la linea de tiempo distinga esa cancelacion de integrador de una devolucion real.
 describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
   const ESPERADOS = [
@@ -33,12 +33,12 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "ajuste_estado",
     "deshacer_gestion", // feature 67: CierreDiaRepository.anularGestionYDevolverAGestion
     "carga_api", // feature 88 (D7): createManyOrdenesConGuia (canal integrador por API)
-    "liberacion_devuelta_sla", // feature 99: cron SLA, devuelta -> en_bodega/en_bodega_satelite
+    "liberacion_devuelta_sla", // feature 99: cron SLA, devuelta -> en_bodega_central/en_bodega_satelite
     "escalado_devuelta_sla", // feature 99: cron SLA, devuelta -> rechazada (gestion sintetica)
     "reprogramacion_tienda", // feature 100: adminTienda reprograma devuelta -> reprogramada
-    "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite
+    "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite
     "cancelacion_api", // feature 106: OrdenRepository.cancelarViaApi (cancelacion por API key)
-    "corte_sin_gestionar", // feature 109: CierreDiaRepository.crearCierre (corte, en_reparto -> sin_gestionar, actor null)
+    "corte_sin_gestionar", // feature 109: CierreDiaRepository.crearCierre (corte, en_ruta -> sin_gestionar, actor null)
     "liberacion_sin_gestionar", // feature 109: CierresAdminRepository.resolverCierre (aprobar, sin_gestionar -> bodega)
   ];
 

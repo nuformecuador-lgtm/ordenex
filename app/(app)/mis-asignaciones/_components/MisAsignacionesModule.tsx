@@ -52,9 +52,9 @@ import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
 // siendo una restricción de ACCIÓN (no se puede escoger otra orden), no de visibilidad.
 
 export interface MisAsignacionesModuleProps {
-  /** Órdenes en `en_espera_aceptacion` (por recoger). */
+  /** Órdenes en `por_recoger`. */
   porRecoger: MiAsignacionDTO[];
-  /** Órdenes en `en_reparto` (por gestionar), YA ordenadas por la ruta (R28). */
+  /** Órdenes en `en_ruta` (por gestionar), YA ordenadas por la ruta (R28). */
   porGestionar: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
   ordenEnGestionId: string | null;
@@ -360,7 +360,7 @@ export function MisAsignacionesModule({
             onLimpiar={filtro.limpiar}
           />
 
-          {/* ---------- Apartado: Por recoger (en_espera_aceptacion) ---------- */}
+          {/* ---------- Apartado: Por recoger (por_recoger) ---------- */}
           {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
               contra `porRecoger` (restricción "asignada a mí") y aceptan con la MISMA action
               `recogerAsignaciones`, directo al confirmar (sin modal):
@@ -400,7 +400,7 @@ export function MisAsignacionesModule({
             renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
           />
 
-          {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
+          {/* ---------- Apartado: En reparto / por gestionar (en_ruta) ---------- */}
           {/* Feature 113/R1: cada card en grilla (1/2/3 col) muestra el detalle COMPLETO
               inline (`AsignacionDetalle`). Seleccionar una la lleva también al panel de
               gestión grande de abajo (donde vive el gate "Gestionar pedido"). El bloqueo

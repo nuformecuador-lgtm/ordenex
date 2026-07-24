@@ -8,7 +8,7 @@ import { test, expect, type Page } from "@playwright/test";
  * These tests cover the critical happy path of the recaudo (cash-on-delivery)
  * flow plus the rejection and reschedule branches:
  * (a) Happy path (delivery): mensajero logs in → /mis-asignaciones → "Por
- *     recoger" → "Recoger" (en_espera_aceptacion → en_reparto) → the order shows
+ *     recoger" → "Recoger" (por_recoger → en_ruta) → the order shows
  *     up under "En reparto / por gestionar" → "Gestionar" (sets the 1-to-1 lock)
  *     → in the "Gestionar orden" modal, result "Entregada" + monto == montoCobrar
  *     + método de pago + evidence photo → "Guardar gestión" → order becomes
@@ -22,7 +22,7 @@ import { test, expect, type Page } from "@playwright/test";
  * These tests require:
  * - A running Next.js dev server (pnpm dev)
  * - A test database with Supabase/Postgres
- * - A seeded `mensajero` user with several orders in `en_espera_aceptacion`
+ * - A seeded `mensajero` user with several orders in `por_recoger`
  *   assigned to them (so "Por recoger" is non-empty)
  * - The private Supabase Storage bucket `gestion-evidencias` created (evidence
  *   uploads target it)
@@ -37,7 +37,7 @@ import { test, expect, type Page } from "@playwright/test";
  * 1. Copy .env.example to .env and fill database credentials
  * 2. Run migrations: pnpm run db:migrate
  * 3. Create the `gestion-evidencias` private bucket
- * 4. Seed a mensajero user with orders in `en_espera_aceptacion`
+ * 4. Seed a mensajero user with orders in `por_recoger`
  * 5. Add the fixture image at e2e/fixtures/evidencia.jpg
  * 6. Run tests: pnpm run test:e2e
  */
@@ -58,7 +58,7 @@ async function loginMensajero(page: Page) {
   await page.waitForURL("/", { timeout: 5000 });
 }
 
-/** Picks up the first order under "Por recoger" (en_espera_aceptacion → en_reparto). */
+/** Picks up the first order under "Por recoger" (por_recoger → en_ruta). */
 async function recogerPrimeraOrden(page: Page) {
   const porRecoger = page.getByRole("region", { name: "Por recoger" });
   await expect(porRecoger).toBeVisible();

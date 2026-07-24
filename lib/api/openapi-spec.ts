@@ -12,18 +12,18 @@
 const ORDER_STATUS_ENUM = [
   "entregada",
   "devuelta",
-  "devuelta_origen",
+  "devolviendo_a_tienda",
   "reprogramada",
   "en_fulfillment",
-  "en_ruta_bodega_principal",
-  "en_bodega",
+  "en_ruta_bodega_central",
+  "en_bodega_central",
   "en_preparacion",
-  "en_espera_aceptacion",
+  "por_recoger",
   "en_ruta_bodega_satelite",
-  "en_reparto",
+  "en_ruta",
   "rechazada",
   "en_bodega_satelite",
-  "recibido_origen",
+  "devuelta_a_tienda",
 ];
 
 // Tope duro de filas por lote de carga (cargaMasivaConfig.MAX_CHUNK_ROWS, default 5000).
@@ -71,7 +71,7 @@ export const openApiSpec = {
         operationId: "cargarOrdenes",
         description: [
           "Crea una o más órdenes en firme. Cada orden nueva arranca en estado",
-          "`en_ruta_bodega_principal` y recibe un `num_guia` en el acto. La respuesta incluye,",
+          "`en_ruta_bodega_central` y recibe un `num_guia` en el acto. La respuesta incluye,",
           "por cada orden creada, su `costoEnvio` (flete + IVA de la tarifa vigente de la tienda;",
           "`\"0.00\"` si la tienda no tiene tarifa vigente).",
           "",
@@ -137,7 +137,7 @@ export const openApiSpec = {
                       duplicadas: 0,
                       conError: 1,
                       filas: [
-                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "en_ruta_bodega_principal", numGuia: 100234 },
+                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "en_ruta_bodega_central", numGuia: 100234 },
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { telefono: ["requerido"] } },
                       ],
                       ordenes: [
@@ -145,7 +145,7 @@ export const openApiSpec = {
                           id: "6f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
                           numRemision: "REM-0001",
                           numGuia: 100234,
-                          estado: "en_ruta_bodega_principal",
+                          estado: "en_ruta_bodega_central",
                           costoEnvio: "3.39",
                         },
                       ],
@@ -208,7 +208,7 @@ export const openApiSpec = {
                         {
                           numGuia: 100234,
                           numRemision: "REM-0001",
-                          estado: "en_ruta_bodega_principal",
+                          estado: "en_ruta_bodega_central",
                           destinatario: "Juan Pérez",
                           telefonoDest: "88887777",
                           producto: "Camiseta talla M",
@@ -304,8 +304,8 @@ export const openApiSpec = {
         summary: "Cancelar una orden propia",
         operationId: "cancelarOrden",
         description: [
-          "Cancela una orden propia. Solo procede si el estado actual es `en_bodega` o",
-          "`en_ruta_bodega_principal`; en ese caso transiciona a `devuelta_origen`. Cualquier otro",
+          "Cancela una orden propia. Solo procede si el estado actual es `en_bodega_central` o",
+          "`en_ruta_bodega_central`; en ese caso transiciona a `devolviendo_a_tienda`. Cualquier otro",
           "estado devuelve 409. Sin cuerpo. Una orden inexistente o de otro dueño devuelve 404.",
         ].join("\n"),
         responses: {
@@ -316,11 +316,11 @@ export const openApiSpec = {
                 schema: { $ref: "#/components/schemas/CancelacionResponse" },
                 examples: {
                   cancelada: {
-                    summary: "Cancelación desde en_ruta_bodega_principal",
+                    summary: "Cancelación desde en_ruta_bodega_central",
                     value: {
                       numGuia: 100234,
-                      estadoAnterior: "en_ruta_bodega_principal",
-                      estado: "devuelta_origen",
+                      estadoAnterior: "en_ruta_bodega_central",
+                      estado: "devolviendo_a_tienda",
                     },
                   },
                 },
@@ -534,7 +534,7 @@ export const openApiSpec = {
         properties: {
           numGuia: { type: "integer" },
           estadoAnterior: { type: "string", enum: ORDER_STATUS_ENUM },
-          estado: { type: "string", const: "devuelta_origen" },
+          estado: { type: "string", const: "devolviendo_a_tienda" },
         },
       },
     },

@@ -12,7 +12,7 @@ import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
 // value crudo". Se aserta contra el mapa de presentación (fuente de verdad) en vez
 // de un literal, para que un rebrand de etiquetas no rompa estos tests. Los
 // literales del mapa los blinda `tests/components/EstatusLabel.test.ts`.
-const LABEL_DESTINO = ORDER_STATUS_LABELS.en_bodega;
+const LABEL_DESTINO = ORDER_STATUS_LABELS.en_bodega_central;
 
 // Feature 49 (T6.2) — drawer "Ver historial". Cubre R28 (la lectura corre en el servidor via
 // Server Action; el drawer NO fetchea datos sensibles con fetch a la API) y R29 (al abrir se
@@ -25,8 +25,8 @@ afterEach(() => {
 });
 
 const ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_reparto",
-  estatusDestinoValue: "en_bodega",
+  estatusOrigenValue: "en_ruta",
+  estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,
   motivo: null,
@@ -87,7 +87,7 @@ describe("HistorialOrdenSheet (feature 49, R28/R29)", () => {
     expect(within(dialog).getByText("Historial de la orden REM-1")).toBeInTheDocument();
     // Timeline con la etiqueta legible del estado destino (R30) — no el value crudo.
     expect(await within(dialog).findByText(LABEL_DESTINO)).toBeInTheDocument();
-    expect(within(dialog).queryByText("en_bodega")).toBeNull();
+    expect(within(dialog).queryByText("en_bodega_central")).toBeNull();
 
     // R28: la lectura pasó por la Server Action inyectada, con la ordenId de la fila.
     expect(obtenerHistorial).toHaveBeenCalledTimes(1);

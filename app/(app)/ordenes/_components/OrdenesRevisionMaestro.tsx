@@ -23,7 +23,7 @@ export interface OrdenesRevisionMaestroProps {
   readOnly?: boolean;
   /**
    * Feature 46 (R15/R16): órdenes liberadas HOY (CR) por el cron para la bodega
-   * central (`en_bodega`), pre-resueltas server-side por el Server Component padre.
+   * central (`en_bodega_central`), pre-resueltas server-side por el Server Component padre.
    * Alimentan el aviso derivado "Liberadas hoy (reprogramación)". Vacío = sin aviso.
    */
   liberadasHoy?: LiberadaHoyRow[];
@@ -57,14 +57,14 @@ async function mensajerosFetcher() {
  * design.md §4) y la lista de mensajeros (R28), y renderiza los apartados por
  * estado (R15/R16) con selección por lote (R17) y las acciones "Generar guía"
  * (R18, sobre `en_fulfillment`/`en_preparacion`) y "Asignar mensajero" (R26,
- * sobre `en_bodega`). El apartado `en_espera_aceptacion` es de solo lectura en
+ * sobre `en_bodega_central`). El apartado `por_recoger` es de solo lectura en
  * esta feature: no tiene acción propia (la respuesta del mensajero es de la
  * feature 36).
  *
  * Feature 30 (T16, R13/R15): añade un 5.º apartado solo-lectura para
  * `en_ruta_bodega_satelite` ("En ruta a bodega satélite") y una acción
  * secundaria "Rutear a bodega satélite" en los apartados de revisión y
- * `en_bodega` que rutea las órdenes NO-GAM seleccionadas vía
+ * `en_bodega_central` que rutea las órdenes NO-GAM seleccionadas vía
  * `rutearABodegaSatelite`.
  *
  * `readOnly` (R12-UI, `admin`): ningún apartado es seleccionable y no se montan
@@ -199,8 +199,8 @@ export function OrdenesRevisionMaestro({
           maestro aquí es "Imprimir etiquetas". */}
       <OrdenesApartado
         titulo="En espera de aceptación del mensajero"
-        estatusValue="en_espera_aceptacion"
-        estatusId={estatusIdPorValue.get("en_espera_aceptacion")}
+        estatusValue="por_recoger"
+        estatusId={estatusIdPorValue.get("por_recoger")}
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Imprimir etiquetas"}
         onAction={readOnly ? undefined : abrirEtiquetas}
@@ -208,8 +208,8 @@ export function OrdenesRevisionMaestro({
       />
       <OrdenesApartado
         titulo="En bodega"
-        estatusValue="en_bodega"
-        estatusId={estatusIdPorValue.get("en_bodega")}
+        estatusValue="en_bodega_central"
+        estatusId={estatusIdPorValue.get("en_bodega_central")}
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Asignar mensajero"}
         onAction={readOnly ? undefined : abrirAsignarBodega}
@@ -220,7 +220,7 @@ export function OrdenesRevisionMaestro({
         mostrarHistorial
       />
       {/* Feature 46 (R15/R16): aviso derivado "Liberadas hoy (reprogramación)" de la
-          bodega central (en_bodega). Datos por props; se oculta si no hay. */}
+          bodega central (en_bodega_central). Datos por props; se oculta si no hay. */}
       <BodegaLiberadasHoy liberadas={liberadasHoy} />
       {/* Feature 30/R15: 5.º apartado. Feature 32/R13/F1.4(f): sus órdenes ya
           tienen `num_guia`, así que el maestro puede "Imprimir etiquetas"
@@ -235,7 +235,7 @@ export function OrdenesRevisionMaestro({
         mostrarHistorial
       />
       {/* Feature 48/R4/R10: apartado de las órdenes RECHAZADA con la acción
-          "Devolver a la tienda" (transición rechazada → devuelta_origen). El maestro
+          "Devolver a la tienda" (transición rechazada → devolviendo_a_tienda). El maestro
           solo puede devolver las de la bodega central; `abrirDevolver` filtra a zona
           central antes de abrir el modal y el backend revalida (defensa en
           profundidad). En `readOnly` (admin) no hay acción (solo "Ver historial"). */}
@@ -253,8 +253,8 @@ export function OrdenesRevisionMaestro({
           escritura (no re-transiciona); solo listado + "Ver historial". */}
       <OrdenesApartado
         titulo="Devueltas a origen"
-        estatusValue="devuelta_origen"
-        estatusId={estatusIdPorValue.get("devuelta_origen")}
+        estatusValue="devolviendo_a_tienda"
+        estatusId={estatusIdPorValue.get("devolviendo_a_tienda")}
         selectable={!readOnly}
         mostrarHistorial
       />

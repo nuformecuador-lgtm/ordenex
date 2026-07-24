@@ -172,7 +172,7 @@ describe("OrdenesCargaMasivaButton — validación", () => {
 
     validar({
       numRemisionesNuevas: ["REM-A", "REM-B"],
-      existentes: [{ numRemision: "REM-C", estatus: "en_bodega" }],
+      existentes: [{ numRemision: "REM-C", estatus: "en_bodega_central" }],
     });
 
     expect(screen.getByTestId("preview-double")).toBeInTheDocument();

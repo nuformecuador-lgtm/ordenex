@@ -25,7 +25,7 @@ export interface DevueltaSlaRow {
 // ORIGEN esperado (`devuelta`) como guarda de idempotencia/concurrencia (R24/R25).
 export interface LiberarDevueltaSlaInput {
   ordenId: string;
-  destinoEstatusId: string; // en_bodega | en_bodega_satelite (resuelto por el service)
+  destinoEstatusId: string; // en_bodega_central | en_bodega_satelite (resuelto por el service)
   estatusDevueltaId: string; // guarda: solo actua si la orden sigue en `devuelta`
 }
 

@@ -124,7 +124,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
         motivo: "cliente ausente",
         gestionOrdenId: "g1",
         createdAt: new Date("2026-07-13T12:00:00.000Z"),
-        estatusOrigen: { value: "en_reparto" },
+        estatusOrigen: { value: "en_ruta" },
         estatusDestino: { value: "devuelta" },
         actor: null,
       },
@@ -152,7 +152,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
         createdAt: new Date("2026-07-13T10:00:00.000Z"),
       },
       {
-        estatusOrigenValue: "en_reparto",
+        estatusOrigenValue: "en_ruta",
         estatusDestinoValue: "devuelta",
         origenTipo: "gestion",
         actorNombre: null, // sistema (R21)

@@ -80,8 +80,8 @@ const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
 const devolverATiendaMock = vi.mocked(devolverATienda);
 
 const HISTORIAL_ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_reparto",
-  estatusDestinoValue: "en_bodega",
+  estatusOrigenValue: "en_ruta",
+  estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,
   motivo: null,
@@ -91,12 +91,12 @@ const HISTORIAL_ENTRADA: OrdenHistorialEntradaDTO = {
 const ESTATUS: EstatusLiteDTO[] = [
   { id: "id-fulfillment", value: "en_fulfillment" },
   { id: "id-preparacion", value: "en_preparacion" },
-  { id: "id-espera", value: "en_espera_aceptacion" },
-  { id: "id-bodega", value: "en_bodega" },
+  { id: "id-espera", value: "por_recoger" },
+  { id: "id-bodega", value: "en_bodega_central" },
   { id: "id-satelite", value: "en_ruta_bodega_satelite" },
   // Feature 48 (T8): apartados "Rechazadas" y "Devueltas a origen".
   { id: "id-rechazada", value: "rechazada" },
-  { id: "id-devuelta-origen", value: "devuelta_origen" },
+  { id: "id-devuelta-origen", value: "devolviendo_a_tienda" },
 ];
 
 const MENSAJEROS: MensajeroLiteDTO[] = [{ id: "m1", nombre: "Juan Mensajero" }];
@@ -222,7 +222,7 @@ describe("OrdenesRevisionMaestro", () => {
     ).toBeInTheDocument();
   });
 
-  it("R16: muestra los apartados en_espera_aceptacion y en_bodega", async () => {
+  it("R16: muestra los apartados por_recoger y en_bodega_central", async () => {
     renderComponent();
 
     await screen.findByText("REM-F1");
@@ -278,7 +278,7 @@ describe("OrdenesRevisionMaestro", () => {
     // caso verifica es que se muestre la etiqueta legible en vez del `value`
     // crudo, no una redacción concreta (que ya cambió una vez y rompió 27 tests).
     expect(
-      await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega),
+      await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega_central),
     ).toBeInTheDocument();
     expect(obtenerHistorialMock).toHaveBeenCalledWith("of1");
   });
@@ -297,7 +297,7 @@ describe("OrdenesRevisionMaestro", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(
-      await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega),
+      await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega_central),
     ).toBeInTheDocument();
     expect(obtenerHistorialMock).toHaveBeenCalledWith("ob1");
   });
@@ -353,7 +353,7 @@ describe("OrdenesRevisionMaestro", () => {
     ).toBeInTheDocument();
   });
 
-  it("en_espera_aceptacion: solo ofrece 'Imprimir etiquetas' (la respuesta del mensajero sigue fuera de alcance, feature 36)", async () => {
+  it("por_recoger: solo ofrece 'Imprimir etiquetas' (la respuesta del mensajero sigue fuera de alcance, feature 36)", async () => {
     renderComponent();
 
     await screen.findByText("REM-E1");
@@ -374,7 +374,7 @@ describe("OrdenesRevisionMaestro", () => {
     ).toBeNull();
   });
 
-  it("R26 (composición): el botón 'Asignar mensajero' de en_bodega abre AsignarBodegaModal", async () => {
+  it("R26 (composición): el botón 'Asignar mensajero' de en_bodega_central abre AsignarBodegaModal", async () => {
     const user = userEvent.setup();
     renderComponent();
 
@@ -415,7 +415,7 @@ describe("OrdenesRevisionMaestro", () => {
     ).toBeNull();
   });
 
-  it("Feature 32/R11: 'Imprimir etiquetas' de en_bodega abre el modal de etiquetas con la selección", async () => {
+  it("Feature 32/R11: 'Imprimir etiquetas' de en_bodega_central abre el modal de etiquetas con la selección", async () => {
     const user = userEvent.setup();
     renderComponent();
 

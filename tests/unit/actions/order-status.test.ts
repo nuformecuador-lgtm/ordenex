@@ -5,7 +5,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 const CATALOGO: OrderStatusLiteRow[] = [
-  { id: "os-1", value: "en_bodega" },
+  { id: "os-1", value: "en_bodega_central" },
   { id: "os-2", value: "en_preparacion" },
   { id: "os-3", value: "entregada" },
 ];

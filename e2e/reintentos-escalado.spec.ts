@@ -10,7 +10,7 @@ import { test, expect, type Page } from "@playwright/test";
  *    (estado FINAL) de forma síncrona, en la misma operación de la gestión, en vez
  *    de devolverla a la bodega.
  *  - R9: las devoluciones 1ª y 2ª (por debajo del umbral) devuelven la orden a su
- *    bodega responsable para reintentar (queda `en_bodega`, "En bodega"); SÓLO la
+ *    bodega responsable para reintentar (queda `en_bodega_central`, "En bodega"); SÓLO la
  *    3ª escala a `rechazada` ("Rechazada").
  *  - R15: al abrir "Ver historial", el drawer muestra cuántos intentos lleva la
  *    orden como badge "Intento 3 de 3" (conteo DERIVADO del historial, no
@@ -19,15 +19,15 @@ import { test, expect, type Page } from "@playwright/test";
  *
  * SUPERFICIE (verificada en el código, features 36/47/49):
  *  - GESTIÓN (mensajero): `/mis-asignaciones` → "Por recoger" → botón "Recoger"
- *    (en_espera_aceptacion → en_reparto) → "En reparto / por gestionar" →
+ *    (por_recoger → en_ruta) → "En reparto / por gestionar" →
  *    "Gestionar" (candado 1-a-1) → modal role="dialog" name="Gestionar orden" →
  *    Select "Resultado de la gestión" opción "Devolución" (value `devuelta`) →
  *    campo "Motivo" → "Guardar gestión". Tras una devolución BAJO umbral la orden
- *    vuelve a `en_bodega` con el mensajero liberado (handoff a bodega, R6).
+ *    vuelve a `en_bodega_central` con el mensajero liberado (handoff a bodega, R6).
  *  - RE-ASIGNACIÓN (maestro/admin de bodega): `/ordenes` (revisión por apartados)
  *    → region "En bodega" → seleccionar la orden → "Asignar mensajero" → modal
  *    role="dialog" name="Asignar mensajero" → elegir mensajero → confirmar. Vuelve
- *    a `en_espera_aceptacion` para el siguiente intento.
+ *    a `por_recoger` para el siguiente intento.
  *  - VISUALIZACIÓN del historial (adminTienda dueño de la tienda, ve la orden en
  *    cualquier estado, feature 49/R27): `/ordenes` (listado plano) → cada fila con
  *    `aria-label="Ver historial de la orden <remisión>"` (HistorialOrdenSheet) →
@@ -44,7 +44,7 @@ import { test, expect, type Page } from "@playwright/test";
  * PRECONDITION (seed):
  * - Umbral de intentos = 3 (default por ley; `REINTENTOS_MIN_INTENTOS` sin definir
  *   o = 3). Con umbral 3, la 3ª devolución es la que escala (R9).
- * - Un `mensajero` AUTORIZADO con la orden semilla asignada en `en_espera_aceptacion`:
+ * - Un `mensajero` AUTORIZADO con la orden semilla asignada en `por_recoger`:
  *   MENSAJERO_EMAIL / MENSAJERO_PASSWORD. (Puede re-asignarse a él mismo entre
  *   intentos; lo relevante es que gestione la orden cada vez.)
  * - Un `maestro`/admin de bodega para RE-ASIGNAR la orden entre devoluciones:
@@ -53,7 +53,7 @@ import { test, expect, type Page } from "@playwright/test";
  *   estado en el listado plano de `/ordenes`, feature 49/R27):
  *   ADMIN_TIENDA_EMAIL / ADMIN_TIENDA_PASSWORD.
  * - Una orden de esa tienda con numRemisión = REMISION, zona CENTRAL (para que el
- *   reintento la devuelva a `en_bodega` — no satélite), guía ya generada y sin
+ *   reintento la devuelva a `en_bodega_central` — no satélite), guía ya generada y sin
  *   devoluciones previas (contador de intentos = 0 al empezar).
  * - El bucket privado de Supabase Storage `gestion-evidencias` creado (aunque la
  *   rama `devuelta` no sube evidencia, el modal comparte infraestructura).
@@ -63,10 +63,10 @@ import { test, expect, type Page } from "@playwright/test";
  * - A running Next.js dev server (pnpm dev).
  * - A test database with Supabase/Postgres and the feature 49 migration
  *   (`orden_historial_estado` + índices + RLS) applied, plus the order-status
- *   catalog seeded (incl. `en_espera_aceptacion`, `en_reparto`, `devuelta`,
- *   `en_bodega`, `rechazada`).
+ *   catalog seeded (incl. `por_recoger`, `en_ruta`, `devuelta`,
+ *   `en_bodega_central`, `rechazada`).
  * - The seeded mensajero, maestro and adminTienda users, and the order in
- *   `en_espera_aceptacion` per PRECONDITION above, with the retry threshold = 3.
+ *   `por_recoger` per PRECONDITION above, with the retry threshold = 3.
  *
  * If the environment lacks .env or a real database, these tests are WRITTEN but
  * NOT EXECUTED. Execution is deferred until the test environment is fully set up
@@ -80,7 +80,7 @@ import { test, expect, type Page } from "@playwright/test";
  * 3. Ensure the retry threshold is 3 (leave REINTENTOS_MIN_INTENTOS unset or = 3).
  * 4. Create the `gestion-evidencias` private bucket.
  * 5. Seed the mensajero, maestro and adminTienda users and the order in
- *    `en_espera_aceptacion` per PRECONDITION; set the constants below.
+ *    `por_recoger` per PRECONDITION; set the constants below.
  * 6. Run tests: pnpm run test:e2e
  */
 
@@ -148,14 +148,14 @@ async function elegirEnSelect(
 
 /**
  * El mensajero registra UNA devolución de la orden semilla:
- * Recoger (en_espera_aceptacion → en_reparto) → Gestionar → resultado "Devolución"
+ * Recoger (por_recoger → en_ruta) → Gestionar → resultado "Devolución"
  * (value `devuelta`) + Motivo → Guardar gestión.
  */
 async function mensajeroDevuelveOrden(page: Page) {
   await login(page, MENSAJERO_EMAIL, MENSAJERO_PASSWORD);
   await page.goto("/mis-asignaciones");
 
-  // Recoger la orden (pasa a en_reparto).
+  // Recoger la orden (pasa a en_ruta).
   const porRecoger = page.getByRole("region", { name: "Por recoger" });
   await expect(porRecoger).toBeVisible();
   await porRecoger.getByRole("button", { name: "Recoger" }).first().click();
@@ -183,7 +183,7 @@ async function mensajeroDevuelveOrden(page: Page) {
 
 /**
  * El maestro re-asigna la orden desde "En bodega" a un mensajero, dejándola lista
- * para el siguiente intento (en_espera_aceptacion). Sólo aplica cuando la orden
+ * para el siguiente intento (por_recoger). Sólo aplica cuando la orden
  * volvió a la bodega (devolución bajo umbral).
  */
 async function maestroReasignaDesdeBodega(page: Page) {
@@ -263,7 +263,7 @@ test.describe.serial("Reintentos y escalado — 3 devoluciones → rechazada (R8
     // R9 — las TRES devoluciones (una por intento) aparecen en la línea de tiempo.
     await expect(dialog.getByText(LABEL_DEVUELTA)).toHaveCount(UMBRAL);
     // R9 — los reintentos 1º y 2º dejaron la orden en bodega (seguimiento a
-    // `en_bodega`): dos filas "En bodega".
+    // `en_bodega_central`): dos filas "En bodega".
     await expect(dialog.getByText(LABEL_BODEGA)).toHaveCount(UMBRAL - 1);
 
     // R8 — la 3ª devolución escaló a "Rechazada" (estado FINAL), disparada por el

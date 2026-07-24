@@ -108,7 +108,7 @@ export async function listarMisAsignaciones(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
-/** R14-R17: recoger (lote o de a una) en_espera_aceptacion -> en_reparto. */
+/** R14-R17: recoger (lote o de a una) por_recoger -> en_ruta. */
 export async function recogerAsignaciones(
   input: unknown,
   deps: MisAsignacionesDeps = {},

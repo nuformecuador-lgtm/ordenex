@@ -28,7 +28,7 @@ describe("guiaDecisionErrorMessage", () => {
   it("conflict de otro motivo -> mensaje generico de conflict", () => {
     const error = {
       status: "conflict",
-      detalle: [{ ordenId: "o1", motivo: "estado de origen no permitido: en_bodega" }],
+      detalle: [{ ordenId: "o1", motivo: "estado de origen no permitido: en_bodega_central" }],
     };
     expect(guiaDecisionErrorMessage(error)).toMatch(/estado válido para esta acción/i);
   });

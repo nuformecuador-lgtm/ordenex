@@ -83,7 +83,7 @@ describe("EscanerRecepcionOrigen", () => {
     recibirMock.mockResolvedValue({
       status: "ok",
       ordenId: "o1",
-      estado: "recibido_origen",
+      estado: "devuelta_a_tienda",
     });
     render(<EscanerRecepcionOrigen onRecibida={vi.fn()} />);
 
@@ -100,7 +100,7 @@ describe("EscanerRecepcionOrigen", () => {
     recibirMock.mockResolvedValue({
       status: "ok",
       ordenId: "54f84b2a-391b-4726-b8a4-358a02f2e8a6",
-      estado: "recibido_origen",
+      estado: "devuelta_a_tienda",
     });
     render(<EscanerRecepcionOrigen onRecibida={onRecibida} />);
 
@@ -140,7 +140,7 @@ describe("EscanerRecepcionOrigen", () => {
 
   it("estado_invalido -> error con el estado actual en legible", async () => {
     const user = userEvent.setup();
-    recibirMock.mockResolvedValue({ status: "estado_invalido", estado: "en_reparto" });
+    recibirMock.mockResolvedValue({ status: "estado_invalido", estado: "en_ruta" });
     render(<EscanerRecepcionOrigen onRecibida={vi.fn()} />);
 
     await escanear(user, qrDeGuia(14));
@@ -148,8 +148,8 @@ describe("EscanerRecepcionOrigen", () => {
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     // Legible, no el value crudo: la etiqueta sale del mapa de presentación
     // (fuente de verdad), blindado aparte en `EstatusLabel.test.ts`.
-    expect(errorMock.mock.calls[0][0]).toMatch(ORDER_STATUS_LABELS.en_reparto);
-    expect(errorMock.mock.calls[0][0]).not.toMatch("en_reparto");
+    expect(errorMock.mock.calls[0][0]).toMatch(ORDER_STATUS_LABELS.en_ruta);
+    expect(errorMock.mock.calls[0][0]).not.toMatch("en_ruta");
   });
 
   // Un QR ajeno (o el UUID de una etiqueta vieja) se rechaza en cliente.

@@ -23,8 +23,8 @@ const GAM_ZONA_ID = "z-gam";
 const NO_GAM_ZONA_ID = "z-limon";
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  en_espera_aceptacion: "os-espera",
-  en_bodega: "os-bodega",
+  por_recoger: "os-espera",
+  en_bodega_central: "os-bodega",
   en_ruta_bodega_satelite: "os-ruta-satelite", // feature 30
 };
 
@@ -186,7 +186,7 @@ describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", 
 
   it("R13: asignarDesdeBodega hacia mensajero bloqueado -> conflict, sin persistir", async () => {
     const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega" })]),
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega_central" })]),
       findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
       findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
     });
@@ -306,7 +306,7 @@ describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R2
     expect(r.status).toBe("ok");
   });
 
-  it("R19: TODAS las ordenes del lote reciben num_guia, incluidas las que van a en_bodega", async () => {
+  it("R19: TODAS las ordenes del lote reciben num_guia, incluidas las que van a en_bodega_central", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
@@ -318,8 +318,8 @@ describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R2
     const r = await service.generarGuia(
       {
         decisiones: [
-          { ordenId: "o1", mensajeroId: "m1" }, // -> en_espera_aceptacion
-          { ordenId: "o2", mensajeroId: null }, // -> en_bodega
+          { ordenId: "o1", mensajeroId: "m1" }, // -> por_recoger
+          { ordenId: "o2", mensajeroId: null }, // -> en_bodega_central
         ],
       },
       MAESTRO,
@@ -333,7 +333,7 @@ describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R2
     }
   });
 
-  it("R21: confirmar mensajero sugerido -> mensajero_asignado_id=sugerido, en_espera_aceptacion", async () => {
+  it("R21: confirmar mensajero sugerido -> mensajero_asignado_id=sugerido, por_recoger", async () => {
     const repo = fakeRepo();
     const service = newService(repo);
 
@@ -344,14 +344,14 @@ describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R2
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_espera_aceptacion" });
+    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "por_recoger" });
     expect(repo.generarGuiaLote).toHaveBeenCalledWith(
       [{ ordenId: "o1", estatusId: "os-espera", mensajeroAsignadoId: "m-sugerido" }],
       { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
     );
   });
 
-  it("R22: override a otro mensajero -> mensajero_asignado_id=elegido, en_espera_aceptacion", async () => {
+  it("R22: override a otro mensajero -> mensajero_asignado_id=elegido, por_recoger", async () => {
     const repo = fakeRepo();
     const service = newService(repo);
 
@@ -362,14 +362,14 @@ describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R2
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_espera_aceptacion" });
+    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "por_recoger" });
     expect(repo.generarGuiaLote).toHaveBeenCalledWith(
       [{ ordenId: "o1", estatusId: "os-espera", mensajeroAsignadoId: "m-override" }],
       { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
     );
   });
 
-  it("R23: sin mensajero -> mensajero_asignado_id NULL, en_bodega, con num_guia igual", async () => {
+  it("R23: sin mensajero -> mensajero_asignado_id NULL, en_bodega_central, con num_guia igual", async () => {
     const repo = fakeRepo();
     const service = newService(repo);
 
@@ -380,7 +380,7 @@ describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R2
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_bodega" });
+    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_bodega_central" });
     expect(typeof r.resultados[0].numGuia).toBe("number");
     expect(repo.generarGuiaLote).toHaveBeenCalledWith(
       [{ ordenId: "o1", estatusId: "os-bodega", mensajeroAsignadoId: null }],
@@ -577,10 +577,10 @@ describe("GuiaAsignacionService.generarGuia — validation_error si falta el see
 });
 
 describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
-  it("R26: en_bodega + mensajero -> en_espera_aceptacion, sin reasignar guia", async () => {
+  it("R26: en_bodega_central + mensajero -> por_recoger, sin reasignar guia", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", numGuia: 55 }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", numGuia: 55 }),
       ]),
     });
     const service = newService(repo);
@@ -589,7 +589,7 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados).toEqual([{ ordenId: "o1", estado: "en_espera_aceptacion" }]);
+    expect(r.resultados).toEqual([{ ordenId: "o1", estado: "por_recoger" }]);
     expect(repo.asignarBodegaLote).toHaveBeenCalledWith(["o1"], "m1", "os-espera", {
       actorUsuarioId: "u-maestro",
       origenTipo: "asignacion_bodega",
@@ -598,7 +598,7 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
     expect(repo.generarGuiaLote).not.toHaveBeenCalled();
   });
 
-  it("R27: origen distinto de en_bodega -> conflict, sin efectos", async () => {
+  it("R27: origen distinto de en_bodega_central -> conflict, sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
@@ -630,7 +630,7 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
   it("feature 94: admin tiene paridad con maestro en asignarDesdeBodega", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", numGuia: 55 }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", numGuia: 55 }),
       ]),
     });
     const service = newService(repo);
@@ -792,7 +792,7 @@ describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () =>
       { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
     );
     const estados = r.resultados.map((x) => x.estado);
-    expect(estados).toEqual(["en_espera_aceptacion", "en_bodega", "en_ruta_bodega_satelite"]);
+    expect(estados).toEqual(["por_recoger", "en_bodega_central", "en_ruta_bodega_satelite"]);
   });
 
   it("R11/R17: lote mixto con una orden invalida -> conflict todo-o-nada (ni GAM ni no-GAM se tocan)", async () => {
@@ -820,10 +820,10 @@ describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () =>
 });
 
 describe("Feature 30 — asignarDesdeBodega rechaza no-GAM (R12)", () => {
-  it("R12: orden no-GAM en el lote (origen en_bodega) -> conflict, sin efectos", async () => {
+  it("R12: orden no-GAM en el lote (origen en_bodega_central) -> conflict, sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", numGuia: 10, zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", numGuia: 10, zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
     });
     const service = newService(repo);
@@ -841,7 +841,7 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
   it("R13: rutea N ordenes no-GAM desde origen permitido -> en_ruta_bodega_satelite", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
         ordenRow({ id: "o2", estatusValue: "en_preparacion", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
         ordenRow({ id: "o3", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
@@ -867,8 +867,8 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
   it("una orden GAM en el lote -> conflict 'orden GAM no se rutea a satelite', sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-        ordenRow({ id: "o2", estatusValue: "en_bodega", zonaId: GAM_ZONA_ID }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central", zonaId: GAM_ZONA_ID }),
       ]),
     });
     const service = newService(repo);
@@ -885,7 +885,7 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "entregada", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-        ordenRow({ id: "o2", estatusValue: "en_bodega", deletedAt: new Date(), zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central", deletedAt: new Date(), zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
     });
     const service = newService(repo);
@@ -915,7 +915,7 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
   it("feature 94: admin tiene paridad con maestro y rutea a bodega satelite", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
     });
     const service = newService(repo);
@@ -928,7 +928,7 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
 });
 
 describe("Feature 30 — no-regresion camino GAM feature 17 (R18)", () => {
-  it("R18: orden GAM con mensajero GAM -> en_espera_aceptacion (regla 17 intacta)", async () => {
+  it("R18: orden GAM con mensajero GAM -> por_recoger (regla 17 intacta)", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
@@ -943,10 +943,10 @@ describe("Feature 30 — no-regresion camino GAM feature 17 (R18)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_espera_aceptacion" });
+    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "por_recoger" });
   });
 
-  it("R18: orden GAM sin mensajero -> en_bodega (regla 17 intacta)", async () => {
+  it("R18: orden GAM sin mensajero -> en_bodega_central (regla 17 intacta)", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
@@ -961,7 +961,7 @@ describe("Feature 30 — no-regresion camino GAM feature 17 (R18)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_bodega" });
+    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_bodega_central" });
   });
 });
 
@@ -1064,7 +1064,7 @@ describe("Ajuste maestro — no rutear a bodega satelite con >=1 mensajero en ci
   it("rutearABodegaSatelite: zona destino con TODOS los mensajeros en cierre -> conflict, sin persistir", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_bodega", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
       findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
       findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1", "m-lim2"])),

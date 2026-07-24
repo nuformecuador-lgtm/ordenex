@@ -56,7 +56,7 @@ function buildOrdenRepo(overrides: Partial<OrdenRepoDoble> = {}): OrdenRepoDoble
       usuarioId === "sat-z1" ? "z1" : usuarioId === "sat-z2" ? "z2" : null,
     ),
     update: vi.fn(async () =>
-      ordenDTO({ estatusId: "os-devuelta-origen", estatusValue: "devuelta_origen" }),
+      ordenDTO({ estatusId: "os-devuelta-origen", estatusValue: "devolviendo_a_tienda" }),
     ),
     ...overrides,
   };
@@ -71,7 +71,7 @@ function buildZonaRepo(overrides: Partial<ZonaRepoDoble> = {}): ZonaRepoDoble {
 }
 
 describe("DevolucionOrigenService · transicion (R4)", () => {
-  it("transiciona una orden rechazada a devuelta_origen (zona central, maestro)", async () => {
+  it("transiciona una orden rechazada a devolviendo_a_tienda (zona central, maestro)", async () => {
     // zona de la orden = central -> bodega central -> maestro autorizado.
     const ordenRepo = buildOrdenRepo({ findById: vi.fn(async () => ordenDTO({ zonaId: "z-central" })) });
     const zonaRepo = buildZonaRepo({ findCentralZonaId: vi.fn(async () => "z-central") });
@@ -144,7 +144,7 @@ describe("DevolucionOrigenService · transicion (R4)", () => {
 describe("DevolucionOrigenService · guardia de estado (R5)", () => {
   it("estado != rechazada devuelve conflict, sin escribir", async () => {
     const ordenRepo = buildOrdenRepo({
-      findById: vi.fn(async () => ordenDTO({ zonaId: "z-central", estatusValue: "en_reparto" })),
+      findById: vi.fn(async () => ordenDTO({ zonaId: "z-central", estatusValue: "en_ruta" })),
     });
     const service = new DevolucionOrigenService(ordenRepo, buildZonaRepo());
 
@@ -157,9 +157,9 @@ describe("DevolucionOrigenService · guardia de estado (R5)", () => {
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalled();
   });
 
-  it("devuelta_origen es idempotente: ok sin re-transicionar (no llama update ni historial)", async () => {
+  it("devolviendo_a_tienda es idempotente: ok sin re-transicionar (no llama update ni historial)", async () => {
     const ordenRepo = buildOrdenRepo({
-      findById: vi.fn(async () => ordenDTO({ estatusValue: "devuelta_origen", estatusId: "os-devuelta-origen" })),
+      findById: vi.fn(async () => ordenDTO({ estatusValue: "devolviendo_a_tienda", estatusId: "os-devuelta-origen" })),
     });
     const service = new DevolucionOrigenService(ordenRepo, buildZonaRepo());
 
@@ -256,7 +256,7 @@ describe("DevolucionOrigenService · autz bodega satelite (R10/R11)", () => {
 });
 
 describe("DevolucionOrigenService · catalogo (R4)", () => {
-  it("catalogo sin devuelta_origen -> config_error, sin escribir", async () => {
+  it("catalogo sin devolviendo_a_tienda -> config_error, sin escribir", async () => {
     const ordenRepo = buildOrdenRepo({
       findById: vi.fn(async () => ordenDTO({ zonaId: "z-central" })),
       findEstatusIdByValue: vi.fn(async () => null),

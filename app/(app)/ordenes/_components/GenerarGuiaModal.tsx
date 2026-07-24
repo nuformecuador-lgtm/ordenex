@@ -73,7 +73,7 @@ function groupByZona(
  * "sin mensajero") y (b) SIN sugerido (elige mensajero o deja "sin"). Al
  * confirmar construye `decisiones: [{ ordenId, mensajeroId | null }]` y hace
  * UNA sola llamada a `generarGuia` (R19/R21-R24), con independencia de que la
- * orden termine en `en_espera_aceptacion` o `en_bodega` (R23).
+ * orden termine en `por_recoger` o `en_bodega_central` (R23).
  *
  * Feature 30 (T17, R7/R8/R9/R11): las órdenes NO-GAM (`zonaEsGam === false`) NO
  * pueden llevar mensajero. Se listan en un grupo aparte "Se enviarán a la bodega
@@ -166,10 +166,10 @@ export function GenerarGuiaModal({
     }
 
     const espera = result.resultados.filter(
-      (r) => r.estado === "en_espera_aceptacion",
+      (r) => r.estado === "por_recoger",
     ).length;
     const bodega = result.resultados.filter(
-      (r) => r.estado === "en_bodega",
+      (r) => r.estado === "en_bodega_central",
     ).length;
     const satelite = result.resultados.filter(
       (r) => r.estado === "en_ruta_bodega_satelite",

@@ -1086,9 +1086,9 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     });
   }
 
-  it("R16/R17: transiciona por ZONA (central->en_bodega / satelite->en_bodega_satelite), limpia mensajero + prioridad=true", async () => {
+  it("R16/R17: transiciona por ZONA (central->en_bodega_central / satelite->en_bodega_satelite), limpia mensajero + prioridad=true", async () => {
     const prisma = buildLiberacionPrisma([
-      { id: "o1", zonaId: "z-central" }, // -> en_bodega
+      { id: "o1", zonaId: "z-central" }, // -> en_bodega_central
       { id: "o2", zonaId: "z-sat" }, // -> en_bodega_satelite
     ]);
     const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);

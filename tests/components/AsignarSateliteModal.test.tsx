@@ -89,8 +89,8 @@ describe("AsignarSateliteModal", () => {
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "en_espera_aceptacion" },
-        { ordenId: "o2", estado: "en_espera_aceptacion" },
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o2", estado: "por_recoger" },
       ],
     });
 

@@ -7,9 +7,9 @@ import type {
 
 // Estado de ORIGEN elegible (la orden viaja de vuelta a la tienda) y destino
 // (la tienda la recibio fisicamente). Cierra el flujo de devolucion:
-//   rechazada --(adminSatelite)--> devuelta_origen --(adminTienda)--> recibido_origen
-const ORIGEN_RECEPCION = "devuelta_origen";
-const ESTADO_RECIBIDA = "recibido_origen";
+//   rechazada --(adminSatelite)--> devolviendo_a_tienda --(adminTienda)--> devuelta_a_tienda
+const ORIGEN_RECEPCION = "devolviendo_a_tienda";
+const ESTADO_RECIBIDA = "devuelta_a_tienda";
 
 // Solo la TIENDA recibe de vuelta su propio paquete. Para el adminTienda su
 // `usuarioId` ES el `tiendaId` de la orden (misma identidad que usa
@@ -53,7 +53,7 @@ export class RecepcionOrigenService implements IRecepcionOrigenService {
     // 4. Idempotencia: ya recibida -> no re-transiciona ni toca el historial.
     if (row.estatusValue === ESTADO_RECIBIDA) return { status: "ya_recibida" };
 
-    // 5. Guardia de estado: elegible SOLO desde `devuelta_origen`. Lleva el estado
+    // 5. Guardia de estado: elegible SOLO desde `devolviendo_a_tienda`. Lleva el estado
     //    actual para que la UI pueda nombrarlo.
     if (row.estatusValue !== ORIGEN_RECEPCION) {
       return { status: "estado_invalido", estado: row.estatusValue };

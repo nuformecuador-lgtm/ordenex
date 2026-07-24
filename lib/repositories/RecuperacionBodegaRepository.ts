@@ -32,7 +32,7 @@ export class RecuperacionBodegaRepository implements IRecuperacionBodegaReposito
    *
    * Feature 110 (R2/R4, gate F1.4-Q1): la recuperacion MANUAL SI enciende `orden.prioridad = true`
    * en el MISMO `data` del `updateMany` GUARDADO (invierte la decision previa de la 101/R3). La
-   * orden recuperada vuelve exactamente a la misma superficie de reasignacion (`en_bodega` /
+   * orden recuperada vuelve exactamente a la misma superficie de reasignacion (`en_bodega_central` /
    * `en_bodega_satelite`) que la liberada por SLA, y quien recupera no es necesariamente quien
    * reasigna; el flag evita que se pierda en el backlog. Por estar dentro de la guarda por
    * `estatus_id = devuelta`, una orden que ya salio de `devuelta` (count 0) NO se toca (R3).

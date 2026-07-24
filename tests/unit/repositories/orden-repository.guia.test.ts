@@ -426,7 +426,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
     expect(ordenId).toBe("o1");
   });
 
-  it("fija estatusId y mensajeroAsignadoId (con mensajero -> en_espera_aceptacion, R21/R22)", async () => {
+  it("fija estatusId y mensajeroAsignadoId (con mensajero -> por_recoger, R21/R22)", async () => {
     const { prisma, tx } = buildPrisma();
     tx.orden.update.mockResolvedValue({ numGuia: 7 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -445,7 +445,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
     expect(resultados).toEqual([{ ordenId: "o1", numGuia: 7 }]);
   });
 
-  it("sin mensajero -> mensajeroAsignadoId NULL, estatus en_bodega, igual recibe num_guia (R23/R19)", async () => {
+  it("sin mensajero -> mensajeroAsignadoId NULL, estatus en_bodega_central, igual recibe num_guia (R23/R19)", async () => {
     const { prisma, tx } = buildPrisma();
     tx.orden.update.mockResolvedValue({ numGuia: 8 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -488,7 +488,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
   });
 
   // Feature 49/#3 (R11/R7/R8): lote mixto deja historial con el destino REAL por orden
-  // (en_espera_aceptacion / en_bodega) y el origen pre-leido; en la misma tx.
+  // (por_recoger / en_bodega_central) y el origen pre-leido; en la misma tx.
   it("R11: registra historial con destino real por orden y origen pre-leido", async () => {
     const { prisma, tx } = buildPrisma();
     tx.orden.findMany.mockResolvedValue([

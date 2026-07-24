@@ -22,7 +22,7 @@ type LiberacionPrismaClient = Pick<PrismaClient, "orden" | "$transaction">;
 
 /**
  * Feature 46 — repositorio de la liberacion programada. SOLO queries Prisma (sin logica
- * de negocio: quien va a `en_bodega`/`en_bodega_satelite` y los conteos los decide el
+ * de negocio: quien va a `en_bodega_central`/`en_bodega_satelite` y los conteos los decide el
  * service). Reutiliza `orden` + `gestion_orden`; no introduce tablas nuevas.
  */
 export class LiberacionReprogramadaRepository implements ILiberacionReprogramadaRepository {
@@ -46,7 +46,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
         gestiones: {
           // gestion vigente = la mas reciente. Feature 67 (design §3-#6): `anuladaAt: null`
           // por DEFENSA, sin cambio funcional — una orden en `reprogramada` no puede tener su
-          // ultima gestion `reprogramada` anulada (deshacerla la devuelve a `en_reparto`, con
+          // ultima gestion `reprogramada` anulada (deshacerla la devuelve a `en_ruta`, con
           // lo que ya no casa el filtro de estado de arriba). Explicito > implicito.
           where: { resultado: RESULTADO_REPROGRAMADA, anuladaAt: null },
           orderBy: { createdAt: "desc" },
@@ -74,13 +74,13 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
    * Feature 110 (R1/R4): enciende `prioridad = true` en el MISMO `data` del `updateMany`
    * GUARDADO. Por estar dentro de la guarda por `estatusId = reprogramada`, una orden que ya
    * salio de `reprogramada` (count 0) NO se toca -> el flag no cambia (R3, idempotencia). La
-   * reprogramada liberada vuelve a la misma superficie de reasignacion (`en_bodega` /
+   * reprogramada liberada vuelve a la misma superficie de reasignacion (`en_bodega_central` /
    * `en_bodega_satelite`) que la liberacion por SLA (99/101), por eso sale prioritaria.
    */
   async liberarOrden(input: LiberarOrdenInput): Promise<boolean> {
     // Feature 49/#10 (R7/R8/R18/R21): UPDATE guardado + append en la MISMA tx. El actor es
     // NULL (la origina el cron/sistema, no una persona) y `origenTipo` = liberacion_reprogramada;
-    // origen = `reprogramada` (fijado por la guarda), destino = en_bodega/en_bodega_satelite.
+    // origen = `reprogramada` (fijado por la guarda), destino = en_bodega_central/en_bodega_satelite.
     return this.prisma.$transaction(async (tx) => {
       const result = await tx.orden.updateMany({
         where: {

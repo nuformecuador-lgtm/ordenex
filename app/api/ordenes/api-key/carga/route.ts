@@ -1,7 +1,7 @@
 // Feature 88 — Carga de órdenes por API (canal integrador). A diferencia de la carga
 // masiva por sesión (`carga-masiva/chunk`), este endpoint se autentica por API KEY en el
 // header `Authorization: Bearer ordx_...` (no por cookie de sesión), fija el estado inicial
-// en `en_ruta_bodega_principal`, asigna `num_guia` en el acto y devuelve cada orden con su
+// en `en_ruta_bodega_central`, asigna `num_guia` en el acto y devuelve cada orden con su
 // guía. Reutiliza `BulkOrdenService` por dentro (misma validación/dedup/geo).
 //
 // SEGURIDAD (R6): la key viaja en cada request. NUNCA se loguea (ni la key ni su hash), ni

@@ -15,7 +15,7 @@ import { guiaDecisionErrorMessage } from "./guia-decision-error-messages";
 
 export interface AsignarBodegaModalProps {
   open: boolean;
-  /** Órdenes de `en_bodega` seleccionadas al abrir (snapshot, R17/R26). */
+  /** Órdenes de `en_bodega_central` seleccionadas al abrir (snapshot, R17/R26). */
   ordenes: OrdenListItemDTO[];
   /** TODOS los mensajeros, sin filtro de zona (R28). */
   mensajeros: MensajeroLiteDTO[];
@@ -26,7 +26,7 @@ export interface AsignarBodegaModalProps {
 }
 
 /**
- * Modal async "Asignar mensajero" desde `en_bodega` (feature 17, T19, R26): un
+ * Modal async "Asignar mensajero" desde `en_bodega_central` (feature 17, T19, R26): un
  * único mensajero para todo el lote seleccionado (design.md §3.2,
  * `asignarDesdeBodega({ ordenIds, mensajeroId })`); NO reasigna `num_guia`
  * (R5/R26, ya asignado en "Generar guía").

@@ -15,6 +15,32 @@
 
 ## Features en curso
 
+### Lote 137–140 (flujo de estados) — 137 implementada + reviewer APROBADO, PR #157; mergeando `dev`
+
+> Renumerado desde **135–138** por colisión de IDs: `dev` (merge de #155 `flow`) reclamó
+> **135 = analítica-KPIs** y **136 = etiquetas-PDF**. El lote se desplazó al bloque libre 137–140.
+
+**137 — rename nomenclatura `order_status` (fullstack, opción A del gate) — code-complete + verde.**
+Rama `feature/135-order-status-rename-nomenclatura` (conserva slug `135`, pusheada; **PR #157 → `dev`**,
+patrón 103/104/105). `./init.sh` **verde** antes del merge (484 archivos / 4815 tests); guards R13 +
+`no-embalaje` verdes; reviewer **APROBADO-CON-NOTAS**, 0 bloqueantes, trazabilidad R1–R13 completa
+(`progress/review_137-...md`). Se reinició de cero desde el spec del gate (se descartó una WIP pre-gate
+que usaba `en_tienda`).
+- **✅ Merge de `dev` resuelto + re-verificado (`fix f99e44c`):** census R13 + `no-embalaje` verdes,
+  **cero regresiones** (+11 tests nuevos del rename pasan); los 3 literales viejos que trajo dev,
+  renombrados. Rama pusheada, PR #157 mergeable.
+- **⚠️ `./init.sh` local ROJO por breakage PRE-EXISTENTE de `dev`**, NO del rename: 34 errores de
+  typecheck + 30 tests en features de dev (feat-92 auth, chat/ubicación, zonas, `RUTA_VIGENTE`
+  duplicado + `sincronizarRuta` en MisAsignacionesModule). Demostrado idéntico contra un worktree
+  limpio de `origin/dev`. `dev` pasa en Vercel porque `next build` no type-chequea tests; el rojo
+  local se coló al trunk. **Requiere fix aparte (dueño de flow/feat-92), no en el PR del rename.**
+- **Deuda post-merge (Nota-3):** `prisma migrate deploy` + verificar `down.sql` con `db:rollback`
+  (migración `db/migrations/20260724120000_order_status_rename_nomenclatura/`).
+- **138/139/140** (recepción central / devolución rechazadas / guardia) siguen `spec_ready`, encadenadas.
+
+**Reconciliación de estado stale (pre-merge):** 107/108/110/120 estaban `in_progress` pese a estar
+mergeadas a `dev` (PRs #135/#136/#140/#149) → reconciliadas a `done`.
+
 **Ubicación compartida por el cliente en el chat de WhatsApp — feature 121 (2026-07-24) → EN
 ESPECIFICACIÓN / puerta F1.4.** Pedido del humano: "en el webhook que consume las respuestas de
 WhatsApp agregar soporte para ubicación (mensajes `type=location`); almacenar la ubicación enviada;

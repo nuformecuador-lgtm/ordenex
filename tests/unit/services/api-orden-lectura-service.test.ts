@@ -14,7 +14,7 @@ function row(overrides: Partial<ApiOrdenRow> = {}): ApiOrdenRow {
   return {
     numGuia: 10234,
     numRemision: "REM-1",
-    estatusValue: "en_bodega",
+    estatusValue: "en_bodega_central",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     producto: "Caja",
@@ -57,8 +57,8 @@ describe("ApiOrdenLecturaService.listar (feature 106, T8)", () => {
   it("R8: el filtro estado se resuelve a estatusId; no amplia scope", async () => {
     const repo = fakeRepo();
     const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
-    await svc.listar(ACTOR, { limit: 20, offset: 40, estado: "en_bodega" });
-    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_bodega");
+    await svc.listar(ACTOR, { limit: 20, offset: 40, estado: "en_bodega_central" });
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_bodega_central");
     expect(repo.listByOwner).toHaveBeenCalledWith({
       ownerId: "store-1",
       estatusId: "os-bodega",
@@ -70,7 +70,7 @@ describe("ApiOrdenLecturaService.listar (feature 106, T8)", () => {
   it("estado valido sin id en el catalogo -> pagina vacia con total 0 (no consulta el listado)", async () => {
     const repo = fakeRepo({ findEstatusIdByValue: vi.fn().mockResolvedValue(null) });
     const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
-    const res = await svc.listar(ACTOR, { limit: 50, offset: 0, estado: "recibido_origen" });
+    const res = await svc.listar(ACTOR, { limit: 50, offset: 0, estado: "devuelta_a_tienda" });
     expect(res).toEqual({ items: [], pagination: { limit: 50, offset: 0, total: 0 } });
     expect(repo.listByOwner).not.toHaveBeenCalled();
   });
@@ -80,7 +80,7 @@ describe("ApiOrdenLecturaService.listar (feature 106, T8)", () => {
     const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
     const res = await svc.listar(ACTOR, { limit: 50, offset: 0 });
     expect(res.pagination).toEqual({ limit: 50, offset: 0, total: 1 });
-    expect(res.items[0]).toMatchObject({ numGuia: 10234, estado: "en_bodega" });
+    expect(res.items[0]).toMatchObject({ numGuia: 10234, estado: "en_bodega_central" });
     expect(res.items[0]).not.toHaveProperty("estatusValue");
   });
 });
