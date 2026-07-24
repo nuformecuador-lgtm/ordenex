@@ -1516,7 +1516,7 @@
       "name": "unificar nomenclatura de order_status (rename de values)",
       "spec_path": "specs/135-order-status-rename-nomenclatura",
       "description": "Fullstack (chore). Rename de los value de order_status que divergen de su label UI, para unificar backend<->frontend (opcion A). Mapeo (confirmar en gate): en_reparto->en_ruta, en_espera_aceptacion->por_recoger, en_bodega->en_bodega_central, en_ruta_bodega_principal->en_ruta_bodega_central, devuelta_origen->devolviendo_a_tienda, recibido_origen->en_tienda (el resto sin cambio). Migracion reversible: UPDATE order_status.value + ALTER TYPE order_status_value RENAME VALUE por cada uno + down; ORDER_STATUS_SEED, ORDER_STATUS_LABELS, seeds, tests. NO cambia orden.estatusId (FK por id). Patron feature 118. Fundacional del lote 135-138.",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
