@@ -147,12 +147,15 @@
 
 ## Bloque 4 — Cierre
 
-- [ ] **T4.1 — Test de integración del recorrido completo (R5, R13–R18).** ⏳ DEUDA aceptada por el reviewer (no escrito; follow-up — cada transición ya tiene unit test asertivo). Cierre con rechazadas
+- [x] **T4.1 — Test de integración del recorrido completo (R5, R13–R18).** (Deuda del reviewer
+  CERRADA en el cierre del lote 137–140.) Cierre con rechazadas
   central+satélite aprobado → estados iniciales correctos → recorrido por-orden hasta
   `devuelta_a_tienda`.
-  - Archivos: `tests/integration/devolucion-rechazadas.flow.test.ts`.
+  - Archivos: `tests/integration/db/devolucion-rechazadas-flow.test.ts` (ubicación según el patrón
+    del repo para tests que encadenan repos/services REALES sobre una "base" en memoria con
+    semántica Prisma: `resolver-novedad-recupera-sla.test.ts`, `cierre-detail-congelado.test.ts`).
   - Hecho: ambas ramas (central/satélite) llegan a `devuelta_a_tienda`; historial completo y
-    coherente.
+    coherente (origen de cada salto = destino del anterior) con su `origen_tipo` por salto.
 
 - [x] **T4.2 — Mapa de trazabilidad R→test + verificación ejecutable.**
   - Archivos: `progress/impl_137-devolucion-rechazadas-estados.md`.

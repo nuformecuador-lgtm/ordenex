@@ -25,11 +25,11 @@ const VALUE_POR_ID: Record<string, string> = {
 // `TRANSICIONES` (fallo CERRADO), asi que cada destino de este test se emite desde SU origen
 // legal del mapa: `en_ruta -> entregada` (#12) y `por_recoger -> en_ruta` (#11). La creacion
 // (`carga_api`) nace en `en_ruta_bodega_central`, uno de los tres ESTADOS_CREACION (A.1) y
-// ademas evento publico, que es lo que este test necesita para ver el encolado.
+// ademas evento publico, que es lo que este test necesita para ver el encolado; ese caso NO
+// lleva entrada aqui: su `estatusOrigenId` es `null` (A.1), asi que nunca consulta este mapa.
 const ORIGEN_LEGAL: Record<string, OrderStatusValue> = {
   [idEstado("entregada")]: "en_ruta",
   [idEstado("en_ruta")]: "por_recoger",
-  [idEstado("en_ruta_bodega_central")]: "en_ruta_bodega_central",
 };
 
 beforeEach(async () => {

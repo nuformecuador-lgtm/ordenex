@@ -1910,9 +1910,40 @@
 - R1–R24 trazados a tests (`progress/impl_139-...md`). Reviewer APROBADO-CON-NOTAS, 0 bloqueantes;
   typecheck 0, lint 0, 271 tests dirigidos verdes; `./init.sh` verde (508 archivos / 5012 tests).
   Renumerada 137→139. **PR #160 → dev, mergeado 2026-07-25.**
-- DEUDAS: T4.1 (test de integración del recorrido completo) queda como follow-up — cada transición
-  tiene unit test y el flujo no está en la lista E2E-obligatoria de CHECKPOINTS; migraciones no
+- DEUDAS: ~~T4.1 (test de integración del recorrido completo)~~ **SALDADA 2026-07-25** en
+  `chore/cierre-lote-137-140`: `tests/integration/db/devolucion-rechazadas-flow.test.ts` (9 tests)
+  encadena services y repos reales por las dos ramas del mismo cierre y verifica el historial exacto
+  por salto; la guardia de la 140 no reveló ningún hueco (los 5 pares son legales); migraciones no
   aplicadas contra DB real (post-merge `prisma migrate deploy` + `db:rollback`); R22 en los envíos por
   lote usa `update` guardado solo por `{id, deletedAt}` con pre-check en el service (desviación
   prescrita por el design §4.1/§4.4, precedente feature 48) → endurecer a `updateMany WHERE
   estatus_id = origen` en el futuro.
+
+## 2026-07-25 — 140 guardia central de transiciones de `order_status` (cierra el lote 137–140)
+- Salda la deuda de fondo del lote: **no existía máquina de estados**. Cada service declaraba sus
+  orígenes/destinos y la única guardia real era el `WHERE estatus_id = <origen>` de cada UPDATE; el
+  choke point `appendCambioEstado` (feature 49, ~18 call-sites) registraba historial + encolaba webhook
+  **sin validar legalidad**. Ahora el mapa vive en `lib/types/order-status-transiciones.ts` y se valida
+  en el choke point, cubriendo los ~18 call-sites de una vez.
+- **43 aristas de flujo → 39 pares dirigidos únicos + 3 de creación**, 22/22 familias `origen_tipo`,
+  conectividad 18/18 (sin callejones sin salida ni estados inalcanzables). Exhaustividad estática por
+  `satisfies`: el build rompe si el catálogo gana un value sin clasificar. **Sin migraciones, sin
+  `down.sql`, sin RLS, sin endpoints nuevos** (dominio puro + choke point).
+- **Gate F1.4, 4 decisiones:** todo pasa por la guardia (sin override `ANY→ANY` ni para maestro/admin
+  → rescatar una orden atascada exige declarar la arista y desplegar); activación **estricta desde el
+  día 1** (sin shadow/flag/env); se valida también la creación `null→X` contra `ESTADOS_CREACION`;
+  `throw` tipado sin PII con la firma intacta para los call-sites. Q1/Q2/Q4 se cerraron **contra el
+  código** al aterrizar 138/139 (`en_ruta_bodega_central` dejó de ser vestigial → allowlist vacía; el
+  catálogo pasó a 18 values). `rechazada → devolviendo_a_tienda` NO se declara: la 139 la retiró (R9).
+- **El reviewer RECHAZÓ la 1.ª entrega:** la guardia **fallaba abierta** — un `value` presente en la DB
+  pero ausente del `ORDER_STATUS_SEED` del build pasaba sin validar (drift DB↔código, justo donde la
+  guardia hace falta), y quedaba OFF en las ~25 suites que modelan los call-sites reales, con un test
+  que consagraba el fail-open como contrato. Corregido a **fallo cerrado** (`TransicionNoValidableError`)
+  + catálogo explícito inyectado en 24 suites vía fixture derivada del SEED real (no permisiva).
+- Re-review **APROBADO 0 bloqueantes**, verificado **por mutación** (borrar una arista pone en rojo los
+  tests de sus call-sites; antes del fix seguían verdes). R1–R17 trazados, 151 tests nuevos, suite 511
+  archivos / 5163 verdes, `./init.sh` OK. **PR #161 → dev, mergeado 2026-07-25.**
+- **Lote 137–140 COMPLETO** (4/4 mergeadas). Deuda viva del lote: las migraciones de 137/138/139 no se
+  han aplicado contra DB real (entorno sin `.env`) → al desplegar `prisma migrate deploy` + verificar
+  `down.sql` con `db:rollback`, **coordinado con el deploy** porque la 137 renombra valores del catálogo
+  y código y DB deben coincidir.

@@ -15,7 +15,22 @@
 
 ## Features en curso
 
-### Lote 137–140 (flujo de estados) — 137/138/139 MERGEADAS a `dev`; **140 en implementación**
+### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
+
+> Detalle de las 4 en `history.md`. PRs #157 (137) · #159 (138) · #160 (139) · #161 (140).
+> **Deuda viva del lote (tarea humana):** las migraciones de 137/138/139 NO se han aplicado contra DB
+> real (entorno sin `.env`) → al desplegar, `prisma migrate deploy` + verificar `down.sql` con
+> `db:rollback`, **coordinado con el deploy**: la 137 renombra values del catálogo y código y DB deben
+> coincidir. La 140 no trae migraciones.
+>
+> Cierre de deuda en `chore/cierre-lote-137-140`: T4.1 de la 139 saldada (test de integración del
+> recorrido completo), los 2 `down.sql` que faltaban en el repo (deuda ajena de WhatsApp) escritos y
+> respaldados por tests → `./init.sh` ya no avisa `migraciones sin down.sql`.
+
+<details>
+<summary>Bitácora del lote (histórico de la sesión)</summary>
+
+#### Estado durante la sesión — 137/138/139 mergeadas; 140 en implementación
 
 > Renumerado desde **135–138** por colisión de IDs: `dev` (merge de #155 `flow`) reclamó
 > **135 = analítica-KPIs** y **136 = etiquetas-PDF**. El lote se desplazó al bloque libre 137–140.
@@ -54,6 +69,10 @@ mapa (`lib/types/order-status-transiciones.ts`) y lo valida ahí.
   marcar. En corrección por `backend_dev` (fail-CLOSED + inyectar catálogo explícito en las suites, sin
   relajar la guardia para que pasen).
 - **Sin migraciones, sin `down.sql`, sin RLS, sin endpoints nuevos** (es dominio puro + choke point).
+- **Cierre:** re-review APROBADO 0 bloqueantes tras el fix a fallo cerrado, verificado por mutación.
+  PR #161 mergeado a `dev`.
+
+</details>
 
 **Reconciliación de estado stale (pre-merge):** 107/108/110/120 estaban `in_progress` pese a estar
 mergeadas a `dev` (PRs #135/#136/#140/#149) → reconciliadas a `done`.
