@@ -74,14 +74,10 @@ const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"])
 // reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
 const ESTADO_REPROGRAMADA = "reprogramada";
 
-// Estado cuya tab bloquea la seleccion de las ordenes NO centrales: "Devolver a la
-// tienda" (rechazada -> devolviendo_a_tienda) la ejecuta la bodega RESPONSABLE, y para el
-// maestro/admin eso es solo la bodega central (zonaEsGam). Las satelite las devuelve
-// el adminSatelite de la zona (en /recepcion-satelite), asi que su check se bloquea
-// en vez de dejar seleccionarlas y vaciar el modal.
-const ESTADO_RECHAZADA = "rechazada";
-const MOTIVO_RECHAZADA_NO_CENTRAL =
-  "Orden de zona satélite: la devuelve el admin de la bodega satélite de su zona.";
+// Feature 139/R9: `rechazada` YA NO ofrece salida manual ("Devolver a la tienda" se
+// retiró). Su única salida es la APROBACIÓN DEL CIERRE (backend), que la deja en
+// `por_devolver` (satélite) o `por_devolver_a_tienda` (central). La tab queda como
+// espera pasiva (sin acción por lote, sin checkbox).
 
 // Feature 100/T4.2: estado cuya tab ofrece "Recuperar a bodega"
 // (devuelta -> en_bodega_central). Igual que `rechazada`, la ejecuta la bodega RESPONSABLE:
@@ -229,10 +225,13 @@ export function OrdenesTabs({
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("etiquetas");
   }
-  // "Devolver a la tienda" solo aplica a órdenes de la bodega CENTRAL
-  // (`zonaEsGam === true`); se filtra antes de abrir (el backend revalida).
-  function abrirDevolver(seleccionadas: OrdenListItemDTO[]) {
-    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
+  // Feature 139/R15: "Enviar a la tienda" desde `por_devolver_a_tienda`
+  // (`por_devolver_a_tienda → devolviendo_a_tienda`). La autz es maestro/admin central
+  // DIRECTA (no por zona): estas órdenes están, por construcción, físicamente en la
+  // central (las de zona satélite llegan aquí solo tras la recepción central), así que
+  // NO se filtra por `zonaEsGam`. El backend revalida (rol central).
+  function abrirEnviarTienda(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("devolver-tienda");
   }
   // "Recuperar a bodega" (feature 100) solo aplica a órdenes `devuelta` de la bodega
@@ -320,12 +319,15 @@ export function OrdenesTabs({
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
         ];
-      case "rechazada":
+      case "por_devolver_a_tienda":
+        // Feature 139/R15: envío por lote a la tienda de origen
+        // (por_devolver_a_tienda -> devolviendo_a_tienda). Reusa el modal
+        // `DevolverATiendaModal` (relabelado) + la Server Action `devolverATienda`.
         return [
           {
-            key: "devolver",
-            label: "Devolver a la tienda",
-            onRun: abrirDevolver,
+            key: "enviar-tienda",
+            label: "Enviar a la tienda",
+            onRun: abrirEnviarTienda,
           },
         ];
       case "devuelta":
@@ -430,20 +432,18 @@ export function OrdenesTabs({
     } else if (tab.value === ESTADO_REPROGRAMADA) {
       columns = ordenesColumnsReprogramada;
     }
-    // Bloqueo de selección por tab (dos reglas distintas que conviven):
-    // - `rechazada`: bloquea el check de las órdenes NO centrales (el
-    //   maestro/admin solo devuelve a la tienda las de la bodega central).
-    //   Es la regla MÁS ESPECÍFICA de esa tab (la acción "Devolver a la
-    //   tienda" no asigna mensajero), así que se evalúa primero y gana; en
-    //   la práctica no se solapan porque `rechazada` no es tab de asignación.
+    // Bloqueo de selección por tab (reglas que conviven):
+    // - `devuelta`: bloquea el check de las órdenes NO centrales (el maestro/admin
+    //   solo recupera a bodega las de la bodega central). La acción no asigna
+    //   mensajero, así que no se solapa con el bloqueo de asignación.
     // - tabs de asignación/ruteo: bloqueo POR ORDEN si la ZONA de esa orden
     //   tiene ≥1 mensajero con cierre abierto. No es global: en la misma tab
     //   conviven órdenes de zona bloqueada (check off) y de zona libre (on).
+    // Nota (139/R15): `por_devolver_a_tienda` NO se bloquea por zona: su acción
+    // "Enviar a la tienda" es maestro/admin central directa y estas órdenes están
+    // siempre físicamente en la central (incluidas las de origen satélite ya recibidas).
     let bloqueoSeleccion: ((row: OrdenListItemDTO) => string | null) | undefined;
-    if (tab.value === ESTADO_RECHAZADA) {
-      bloqueoSeleccion = (o) =>
-        o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL;
-    } else if (tab.value === ESTADO_DEVUELTA) {
+    if (tab.value === ESTADO_DEVUELTA) {
       // Feature 100/T4.2 (R15): maestro/admin solo recupera a bodega las devueltas
       // de la zona central; las satélite se bloquean (las recupera el adminSatelite).
       bloqueoSeleccion = (o) =>

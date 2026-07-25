@@ -89,7 +89,7 @@
 | R1 | catálogo TS + migración idempotente | `tests/unit/types/order-status.test.ts`, `tests/unit/scripts/seed-order-status.test.ts` (+ migración creada; aplicación = deuda) |
 | R2 | down.sql catálogo reversible | migración `20260724140000_.../down.sql` (patrón 109; sin test ejecutable sin DB = deuda) |
 | R3 | enum `devolucion_rechazada` + down | `tests/unit/types/orden-historial-types.test.ts`, `tests/unit/repositories/orden-historial-cobertura.test.ts` (+ migración; aplicación = deuda) |
-| R4 | labels UI | **FRONTEND (Fase 2)** |
+| R4 | labels UI | `tests/components/EstatusLabel.test.ts` (mapa exhaustivo con los 3 labels), `EstatusBadge.tsx` (Record exhaustivo variantes) |
 | R5 | disparo por aprobación, ruteo por zona | `CierresAdminService.aprobar.devolucion.test.ts`, `CierresAdminRepository.resolverCierre.devolucion.test.ts` |
 | R6 | atómico en la MISMA tx `aprobado` | `CierresAdminRepository.resolverCierre.devolucion.test.ts` (bloque dentro del `$transaction`/rama aprobado) |
 | R7 | idempotente (guarda estatus_id=rechazada) | `CierresAdminRepository.resolverCierre.devolucion.test.ts` (no-op 0 filas / count=0 conflict / sin config) |
@@ -104,8 +104,8 @@
 | R16 | autz maestro/admin central | `devolucion-origen-service.test.ts` (autz central directa) |
 | R17 | recepción central state-aware `devolviendo_a_bodega_central → por_devolver_a_tienda` | `recepcion-bodega-central-service.test.ts` (R17 139), `orden-repository.recepcion-bodega-central.test.ts` (R17 139) |
 | R18 | recepción tienda `devolviendo_a_tienda → devuelta_a_tienda` | `recepcion-origen-service.test.ts` (existente, verde; T2.4 verificación) |
-| R19 | visibilidad central tabs | **FRONTEND (Fase 2)** |
-| R20 | visibilidad tienda tabs | **FRONTEND (Fase 2)** |
+| R19 | visibilidad central tabs | `tests/components/OrdenesExcludePorRol.test.ts` (maestro/admin excluyen solo `pendiente`; ningún estado del flujo excluido) |
+| R20 | visibilidad tienda tabs | `tests/components/OrdenesExcludePorRol.test.ts` (adminTienda NO excluye NINGÚN estado del retorno, incluidos los internos de bodega — gate F1.4-Q4) |
 | R21 | scope satélite `por_devolver` + `enTransitoACentral` | `recepcion-satelite-service.test.ts` (R21) |
 | R22 | guarda de estado anti-TOCTOU | recepción: `orden-repository.recepcion-bodega-central.test.ts` (updateMany guardado por origen); envío (lote): guarda por pre-check del service + `OrdenRepository.update` (id+not-deleted) — ver desviación |
 | R23 | append `ajuste_estado` con actor (envíos/recepciones lote) | `envio-devolucion-central-service.test.ts`, `devolucion-origen-service.test.ts`, `orden-historial-cobertura.test.ts` |
@@ -143,21 +143,76 @@
   valores para las 4 transiciones de lote/recepción). El hint del brief listaba
   `recepcion_bodega_central` como opción primaria.
 
-## Pendiente para FRONTEND (Fase 2)
+## FASE 2 / FRONTEND (Bloque 3) — implementado
 
-- **R4 — labels + variantes** de los 3 estados en `EstatusBadge.tsx` / `estatus-label.ts`
-  ("Por devolver", "Devolviendo a bodega central", "Por devolver a tienda"). Esto ES lo que hoy
-  deja rojo el typecheck (por diseño).
-- **R19/R20 — visibilidad** de tabs central/tienda (`app/(app)/ordenes/page.tsx`,
-  `OrdenesTabs.tsx`): verificar/ajustar `EXCLUDE_POR_ROL` para que los estados del flujo aparezcan.
-- **T3.2** `OrdenesTabs` (central): retirar acción en `rechazada`, añadir lote "Enviar a la tienda"
-  en `por_devolver_a_tienda` (reusa `DevolverATiendaModal` relabelado + Server Action `devolverATienda`).
-- **T3.3** `RecepcionSateliteModule` (satélite): sección "Por devolver" por lote sobre `por_devolver`
-  con botón "Enviar a central" → loop `enviarACentral` (nueva action `lib/actions/envio-devolucion-central.ts`),
-  + sección informativa read-only `enTransitoACentral`. Pasar el nuevo grupo por props desde `page.tsx`.
-- **T3.5** UI de recepción central 138 (`EscanerRecepcionBodegaCentral`): el escáner ya funciona
-  state-aware por backend; conviene refinar el toast del `ok` para nombrar el destino real
-  (`por_devolver_a_tienda` vs "recibida en bodega central") — hoy dice "recibida en bodega central".
+- **T3.1 — labels + variantes (R4).** `EstatusBadge.tsx`: `ORDER_STATUS_LABELS` + `ORDER_STATUS_VARIANT`
+  ahora cubren los 3 estados (`por_devolver`="Por devolver"/warning, `devolviendo_a_bodega_central`=
+  "Devolviendo a bodega central"/info, `por_devolver_a_tienda`="Por devolver a tienda"/warning). Cierra
+  los 2 `Record<OrderStatusValue,…>` exhaustivos que dejaban ROJO el typecheck. Test:
+  `tests/components/EstatusLabel.test.ts` (mapa exhaustivo hardcodeado con los 3 labels).
+- **T3.2 — OrdenesTabs + DevolverATiendaModal (R9/R15).** `accionesDe`: RETIRADA "Devolver a la tienda"
+  de la tab `rechazada` (pasa a espera pasiva, sin checkbox); AÑADIDA "Enviar a la tienda" por LOTE en la
+  tab `por_devolver_a_tienda` (reusa `accionesLote` + `DevolverATiendaModal` relabelado + Server Action
+  existente `devolverATienda`). El modal ya NO filtra por `zonaEsGam` (autz maestro/admin central directa,
+  R15/R16; la orden está siempre físicamente en la central). Relabelado del modal a "Enviar a la tienda" +
+  mensajes de error (`devolucion-origen-error-messages.ts`: conflict → "Por devolver a tienda"). Tests:
+  `tests/components/OrdenesTabsDevolucion.test.tsx` (R15 aparece la acción al seleccionar; R9 `rechazada`
+  sin checkbox ni acción), `tests/components/DevolverATiendaModal.test.tsx` (labels/mensajes nuevos).
+- **T3.3 — RecepcionSateliteModule + page (R13/R21).** La sección "Por devolver" pasa de cards
+  (`FilaPorDevolver`, ELIMINADO) a `DataTable` seleccionable (patrón "Recibidas": `SelectAllCheckbox` +
+  `Checkbox` + `Set` propio `seleccionadosPorDevolver`) con botón "Enviar a central" → loop
+  `enviarACentral({ ordenId })` sobre la selección (nueva action `envio-devolucion-central.ts`) + toast +
+  `router.refresh`. Nueva sección informativa read-only "En tránsito a central" (`enTransitoACentral`,
+  `devolviendo_a_bodega_central`), sin acción. `page.tsx` pasa `enTransitoACentral={result.enTransitoACentral}`.
+  Nuevo helper `envio-devolucion-central-error-messages.ts`. Tests:
+  `tests/components/RecepcionSateliteModule.test.tsx` (tabla seleccionable + "Enviar a central" por lote +
+  informativa read-only), `tests/components/RecepcionSatelitePage.test.tsx` (mock con `enTransitoACentral`).
+- **T3.4 — visibilidad central/tienda (R19/R20).** `EXCLUDE_POR_ROL` extraído a
+  `app/(app)/ordenes/exclude-por-rol.ts` (módulo testeable sin arrastrar deps server-only de la page).
+  maestro/admin excluyen solo `pendiente` → los 4 estados del flujo auto-aparecen (R19). adminTienda NO
+  excluye NINGÚN estado del retorno, incluidos los internos de bodega `por_devolver`/
+  `devolviendo_a_bodega_central` (R20, gate F1.4-Q4). Test: `tests/components/OrdenesExcludePorRol.test.ts`.
+- **T3.5 — escáner central state-aware (R17 UI).** `EscanerRecepcionBodegaCentral.tsx`: el toast del `ok`
+  ahora nombra el destino real — si `result.estado === "por_devolver_a_tienda"` dice "queda por devolver a
+  la tienda" (no "bodega central"); el caso 138 (`en_bodega_central`) conserva su mensaje. Test añadido en
+  `tests/components/EscanerRecepcionBodegaCentral.test.tsx`.
+
+## Desviaciones de la Fase 2 (frontend)
+
+- **OrdenesRevisionMaestro (vista legacy) — R9.** `OrdenesRevisionMaestro.tsx` era una TERCERA superficie
+  (no enumerada en el diseño, no renderizada por ninguna ruta hoy) que ofrecía "Devolver a la tienda" sobre
+  `rechazada` vía el mismo `devolverATienda`. Como el backend repurposó esa action (origen `rechazada` →
+  `conflict`), el botón habría quedado roto. Por R9 se RETIRÓ esa acción (apartado "Rechazadas" ahora
+  solo-lectura; se quitó `abrirDevolver`, el `DevolverATiendaModal` y el estado `devolver-tienda`). Test
+  actualizado (`tests/components/OrdenesRevisionMaestro.test.tsx`: el ex-test R4/R10 pasa a verificar R9).
+- **Alineación de contrato `ListarRecepcionSateliteResult` (types-only).** El backend ensanchó la interfaz
+  del service (`ListarRecepcionSateliteServiceResult.ok` con `enTransitoACentral`) pero NO el tipo espejo de
+  la action en `lib/types/recepcion-satelite.ts`, aunque la action reenvía el resultado del service VERBATIM
+  (`return service.listar(actor)`) — el campo YA viaja en runtime. Para que la page (frontend) lo consuma
+  con tipo, se añadió `enTransitoACentral: RecepcionSateliteDTO[]` a `ListarRecepcionSateliteResult.ok` (y
+  se re-documentó `porDevolver` como `por_devolver`). Es un archivo SOLO-DE-TIPOS, sin lógica; no toca
+  services/repos. Se marca como completación de contrato que la Fase 1 dejó a medias.
+
+## BLOQUEO al VERDE de `./init.sh` (NO frontend — Fase 1 backend / db)
+
+`./init.sh` corre `typecheck → lint → test`. **typecheck: VERDE. lint: 0 errores.** El paso `test` (suite
+completa) tiene **6 fallos PRE-EXISTENTES de la Fase 1 backend**, en tests de reversibilidad de migraciones
+de enum `orden_historial_origen_tipo` (+ 1 de orden de timestamp de `zonas`):
+
+- `tests/integration/db/orden-historial-origen-tipo-sla-devuelta-migration.test.ts` (feature 99)
+- `tests/integration/db/orden-historial-origen-tipo-resolver-novedad-migration.test.ts` (feature 100)
+- `tests/integration/db/orden-historial-origen-tipo-cancelacion-api-migration.test.ts` (feature 106)
+- `tests/integration/db/orden-historial-origen-recepcion-bodega-central-migration.test.ts` (feature 138)
+- `tests/integration/db/gestion-orden-anulacion-migration.test.ts` (feature 67)
+- `tests/integration/db/zonas-migration.test.ts` (orden de timestamp)
+
+**Causa raíz:** el commit backend `10ad903` añadió `devolucion_rechazada` a `ORDEN_HISTORIAL_ORIGEN_TIPO_SEED`
+(`lib/types/orden-historial.ts`) y creó la migración nueva, pero NO actualizó los `down.sql` PREVIOS (cada
+uno debe listar TODOS los valores del enum salvo los que ESA migración añadió — incluidos los añadidos por
+migraciones posteriores). Estos tests comparan el `down.sql` (texto) contra `SEED.filter(...)`; al ensanchar
+el SEED sin tocar los `down.sql` viejos, fallan. La Fase 1 solo corrió `tests/unit` (no `./init.sh`), por eso
+no se detectó. **Fuera del alcance frontend** (requiere editar `db/migrations/**/down.sql` y tests de
+`tests/integration/db/**`, explícitamente vedados). Reportado al leader para que lo cierre el rol backend.
 
 ## Contratos cambiados que el frontend debe absorber
 - `RecibirEnBodegaCentralResult.ok.estado`: `"en_bodega_central"` → `"en_bodega_central" | "por_devolver_a_tienda"`.

@@ -17,7 +17,6 @@ import {
 } from "@/lib/actions/ordenes-guia";
 import { generarEtiquetas } from "@/lib/actions/etiquetas-guia";
 import { obtenerHistorialOrden } from "@/lib/actions/orden-historial";
-import { devolverATienda } from "@/lib/actions/devolucion-origen";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { EstatusLiteDTO, MensajeroLiteDTO } from "@/lib/types/orden-guia";
 import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
@@ -52,11 +51,8 @@ vi.mock("@/lib/actions/orden-historial", () => ({
   obtenerHistorialOrden: vi.fn(),
 }));
 
-// Feature 48 (T8): el apartado "Rechazadas" monta `DevolverATiendaModal`, que
-// consume la Server Action del retorno. Se mockea para verificar la composición.
-vi.mock("@/lib/actions/devolucion-origen", () => ({
-  devolverATienda: vi.fn(),
-}));
+// Feature 139/R9: el apartado "Rechazadas" YA NO ofrece la salida manual "Devolver a
+// la tienda" (se retiró; la única salida de `rechazada` es la aprobación del cierre).
 vi.mock("@/app/(app)/ordenes/_components/etiquetas-pdf", () => ({
   descargarEtiquetasPdf: vi.fn(),
 }));
@@ -77,7 +73,6 @@ const asignarDesdeBodegaMock = vi.mocked(asignarDesdeBodega);
 const rutearABodegaSateliteMock = vi.mocked(rutearABodegaSatelite);
 const generarEtiquetasMock = vi.mocked(generarEtiquetas);
 const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
-const devolverATiendaMock = vi.mocked(devolverATienda);
 
 const HISTORIAL_ENTRADA: OrdenHistorialEntradaDTO = {
   estatusOrigenValue: "en_ruta",
@@ -193,7 +188,6 @@ beforeEach(() => {
     intentos: 0,
     umbral: 3,
   });
-  devolverATiendaMock.mockResolvedValue({ status: "ok" });
   listarOrdenesMock.mockImplementation(async (input) => {
     const { estatusId, page, pageSize } = input as {
       estatusId?: string;
@@ -515,10 +509,10 @@ describe("OrdenesRevisionMaestro", () => {
     ).toBeInTheDocument();
   });
 
-  it("Feature 48/R4/R10: 'Devolver a la tienda' abre el modal SOLO con las órdenes de zona central (zonaEsGam=true)", async () => {
-    const user = userEvent.setup();
-    // En rechazada: una orden de zona central (devolvible por el maestro) y una de
-    // zona satélite (NO debe ir al lote del maestro; su bodega la devuelve).
+  it("Feature 139/R9: el apartado 'Rechazadas' NO ofrece la salida manual 'Devolver a la tienda'", async () => {
+    // La única salida de `rechazada` es ahora la aprobación del cierre (backend); la
+    // acción manual se retiró de esta vista (y de OrdenesTabs). El apartado sigue
+    // listando las órdenes, pero sin acción de escritura ni modal.
     listarOrdenesMock.mockImplementation(async (input) => {
       const { estatusId, page, pageSize } = input as {
         estatusId?: string;
@@ -535,13 +529,6 @@ describe("OrdenesRevisionMaestro", () => {
                 zonaEsGam: true,
                 zonaNombre: "GAM",
               }),
-              makeOrden({
-                id: "satelite-1",
-                numRemision: "REM-SATELITE",
-                estatusId: "id-rechazada",
-                zonaEsGam: false,
-                zonaNombre: "Limón",
-              }),
             ]
           : [];
       return { status: "ok", items, page, pageSize, total: items.length };
@@ -551,37 +538,14 @@ describe("OrdenesRevisionMaestro", () => {
 
     await screen.findByText("REM-CENTRAL");
     const rechazadas = screen.getByRole("region", { name: "Rechazadas" });
-    // Selecciona AMBAS órdenes; solo la de zona central debe pasar al modal.
-    const checkboxes = checkboxesDeFila(rechazadas);
-    await user.click(checkboxes[0]);
-    await user.click(checkboxes[1]);
-
-    await user.click(
-      within(rechazadas).getByRole("button", { name: "Devolver a la tienda" }),
-    );
-
-    const dialog = await screen.findByRole("dialog", {
-      name: "Devolver a la tienda",
-    });
-    // El modal lista SOLO la orden de zona central.
-    expect(within(dialog).getByText(/REM-CENTRAL/)).toBeInTheDocument();
-    expect(within(dialog).queryByText(/REM-SATELITE/)).toBeNull();
-    // Confirmar → una única llamada, con el ordenId de la orden central.
-    await user.click(
-      within(dialog).getByRole("button", { name: "Devolver a la tienda" }),
-    );
-    await vi.waitFor(() =>
-      expect(devolverATiendaMock).toHaveBeenCalledTimes(1),
-    );
-    expect(devolverATiendaMock).toHaveBeenCalledWith({ ordenId: "central-1" });
-  });
-
-  it("Feature 48/R10 (readOnly/admin): no se muestra la acción 'Devolver a la tienda'", async () => {
-    renderComponent(true);
-
-    await screen.findByText("REM-F1");
+    // Se lista la orden, pero NO hay botón de devolución manual.
+    expect(within(rechazadas).getAllByText(/REM-CENTRAL/).length).toBeGreaterThan(0);
     expect(
-      screen.queryByRole("button", { name: "Devolver a la tienda" }),
+      within(rechazadas).queryByRole("button", { name: "Devolver a la tienda" }),
+    ).toBeNull();
+    // Y no se monta ningún diálogo de devolución.
+    expect(
+      screen.queryByRole("dialog", { name: "Devolver a la tienda" }),
     ).toBeNull();
   });
 

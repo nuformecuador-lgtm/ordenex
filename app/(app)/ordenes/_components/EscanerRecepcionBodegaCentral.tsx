@@ -41,7 +41,15 @@ export function EscanerRecepcionBodegaCentral({
     (result: RecibirEnBodegaCentralResult, numGuia: number) => {
       switch (result.status) {
         case "ok":
-          toast.success(`Guía ${numGuia} recibida en bodega central.`);
+          // Feature 139/T3.5: la recepción central es STATE-AWARE. Si la orden venía
+          // en `devolviendo_a_bodega_central`, la acción la deja en `por_devolver_a_tienda`
+          // (no en bodega central): el toast nombra ese destino real. El caso 138
+          // (`en_bodega_central`) conserva su mensaje.
+          toast.success(
+            result.estado === "por_devolver_a_tienda"
+              ? `Guía ${numGuia} recibida; queda por devolver a la tienda.`
+              : `Guía ${numGuia} recibida en bodega central.`,
+          );
           onRecibida();
           break;
         case "ya_recibida":
