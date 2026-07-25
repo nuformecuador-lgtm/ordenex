@@ -17,7 +17,7 @@ export type RecibirEnOrigenActionInput = z.infer<typeof recibirEnOrigenSchema>;
  * `RecibirEnOrigenServiceResult` agregando `unauthenticated` (borde).
  */
 export type RecibirEnOrigenResult =
-  | { status: "ok"; ordenId: string; estado: "recibido_origen" }
+  | { status: "ok"; ordenId: string; estado: "devuelta_a_tienda" }
   | { status: "forbidden" }
   | { status: "tienda_ajena" }
   | { status: "ya_recibida" }

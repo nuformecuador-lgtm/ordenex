@@ -37,8 +37,15 @@ const MSG_MOTIVO_REQUERIDO = "El motivo de rechazo es obligatorio.";
 // Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
 // aprobar (destinos de bodega por zona de la orden).
 const ESTADO_SIN_GESTIONAR = "sin_gestionar";
-const ESTADO_EN_BODEGA = "en_bodega";
+const ESTADO_EN_BODEGA = "en_bodega_central";
 const ESTADO_EN_BODEGA_SATELITE = "en_bodega_satelite";
+
+// Feature 139 (T1.2, R5): estados del catalogo que consume el DISPARO de la devolucion de
+// RECHAZADAS al aprobar. Origen `rechazada`; destinos por zona de la orden: bodega satelite ->
+// `por_devolver`, bodega central -> `por_devolver_a_tienda` (misma regla `resolverDestinoCierre`).
+const ESTADO_RECHAZADA = "rechazada";
+const ESTADO_POR_DEVOLVER = "por_devolver";
+const ESTADO_POR_DEVOLVER_A_TIENDA = "por_devolver_a_tienda";
 
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
@@ -184,18 +191,37 @@ export class CierresAdminService implements ICierresAdminService {
     // destino por zona + zona central). Se pasa SOLO al aprobar; el repo la corre DENTRO de la tx,
     // guardada por `estatus_id = sin_gestionar` (no-op si el cierre no tiene ordenes congeladas,
     // R20). Si el catalogo no tiene los estados (seed pendiente) -> undefined (no libera, defensivo).
-    const [sinGestionarEstatusId, enBodegaEstatusId, enBodegaSateliteEstatusId, centralZonaId] =
-      await Promise.all([
-        this.ordenRepo.findEstatusIdByValue(ESTADO_SIN_GESTIONAR),
-        this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA),
-        this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA_SATELITE),
-        this.zonaRepo.findCentralZonaId(),
-      ]);
+    // Feature 139 (T1.2, R5): + resuelve la config del DISPARO de la devolucion de `rechazada`
+    // (origen `rechazada`; destinos `por_devolver`/`por_devolver_a_tienda` por zona; reusa
+    // `centralZonaId`). Se pasa SOLO al aprobar; el repo la corre DENTRO de la misma tx, tras la
+    // liberacion `sin_gestionar`, guardada por `estatus_id = rechazada` (no-op si el mensajero no
+    // tiene rechazadas, R7). Catalogo incompleto (seed pendiente) -> undefined (no dispara, defensivo).
+    const [
+      sinGestionarEstatusId,
+      enBodegaEstatusId,
+      enBodegaSateliteEstatusId,
+      rechazadaId,
+      porDevolverId,
+      porDevolverATiendaId,
+      centralZonaId,
+    ] = await Promise.all([
+      this.ordenRepo.findEstatusIdByValue(ESTADO_SIN_GESTIONAR),
+      this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA),
+      this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA_SATELITE),
+      this.ordenRepo.findEstatusIdByValue(ESTADO_RECHAZADA),
+      this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER),
+      this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER_A_TIENDA),
+      this.zonaRepo.findCentralZonaId(),
+    ]);
     const liberacionSinGestionar =
       sinGestionarEstatusId !== null &&
       enBodegaEstatusId !== null &&
       enBodegaSateliteEstatusId !== null
         ? { sinGestionarEstatusId, enBodegaEstatusId, enBodegaSateliteEstatusId, centralZonaId }
+        : undefined;
+    const devolucionRechazadas =
+      rechazadaId !== null && porDevolverId !== null && porDevolverATiendaId !== null
+        ? { rechazadaId, porDevolverId, porDevolverATiendaId, centralZonaId }
         : undefined;
 
     // R10/R12-R15: transicion guardada. Aprobar limpia motivoRechazo (null).
@@ -206,6 +232,7 @@ export class CierresAdminService implements ICierresAdminService {
       resueltoPor: actor.usuarioId, // R14
       motivoRechazo: null,
       liberacionSinGestionar, // feature 109/R16: libera `sin_gestionar` en la misma tx
+      devolucionRechazadas, // feature 139/R5: dispara la devolucion de `rechazada` en la misma tx
     });
     if (res === "updated") return { status: "ok", cierreId, estado: "aprobado" };
     if (res === "conflict") return { status: "conflict" }; // R12

@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { type PrismaClient } from "@prisma/client";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 49 — tests unit del OrdenHistorialRepository (mockea Prisma, sin DB real, patron
 // wallet-movimiento-repository.test.ts). Cubre R6 (choke point centralizado), R7 (escribe
@@ -19,6 +20,10 @@ function buildPrisma() {
   };
 }
 
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO
+});
+
 describe("registrarCambioEstado (R6/R7)", () => {
   it("R7: hace createMany en el `tx` recibido (no en el prisma del constructor)", async () => {
     const prisma = buildPrisma(); // cliente de lectura del constructor
@@ -29,8 +34,8 @@ describe("registrarCambioEstado (R6/R7)", () => {
     await repo.registrarCambioEstado(tx as never, [
       {
         ordenId: "o1",
-        estatusOrigenId: "s-origen",
-        estatusDestinoId: "s-destino",
+        estatusOrigenId: idEstado("en_ruta"),
+        estatusDestinoId: idEstado("entregada"),
         actorUsuarioId: "u1",
         origenTipo: "gestion",
         motivo: "cliente ausente",
@@ -52,15 +57,15 @@ describe("registrarCambioEstado (R6/R7)", () => {
       {
         ordenId: "o1",
         estatusOrigenId: null, // R1/R20: creacion
-        estatusDestinoId: "s-inicial",
+        estatusDestinoId: idEstado("en_preparacion"),
         actorUsuarioId: "u-tienda",
         origenTipo: "carga_masiva",
         // sin motivo ni gestionOrdenId
       },
       {
         ordenId: "o2",
-        estatusOrigenId: "s-reprogramada",
-        estatusDestinoId: "s-bodega",
+        estatusOrigenId: idEstado("reprogramada"),
+        estatusDestinoId: idEstado("en_bodega_central"),
         actorUsuarioId: null, // R21: sistema/cron
         origenTipo: "liberacion_reprogramada",
       },
@@ -71,7 +76,7 @@ describe("registrarCambioEstado (R6/R7)", () => {
     expect(arg.data[0]).toEqual({
       ordenId: "o1",
       estatusOrigenId: null,
-      estatusDestinoId: "s-inicial",
+      estatusDestinoId: idEstado("en_preparacion"),
       actorUsuarioId: "u-tienda",
       origenTipo: "carga_masiva",
       motivo: null, // defaulteado a null cuando no viene
@@ -79,8 +84,8 @@ describe("registrarCambioEstado (R6/R7)", () => {
     });
     expect(arg.data[1]).toEqual({
       ordenId: "o2",
-      estatusOrigenId: "s-reprogramada",
-      estatusDestinoId: "s-bodega",
+      estatusOrigenId: idEstado("reprogramada"),
+      estatusDestinoId: idEstado("en_bodega_central"),
       actorUsuarioId: null,
       origenTipo: "liberacion_reprogramada",
       motivo: null,
@@ -104,7 +109,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
         id: "h1",
         ordenId: "o1",
         estatusOrigenId: null,
-        estatusDestinoId: "s-inicial",
+        estatusDestinoId: idEstado("en_preparacion"),
         actorUsuarioId: "u-tienda",
         origenTipo: "carga_masiva",
         motivo: null,
@@ -117,14 +122,14 @@ describe("findHistorialByOrden (R26/R5)", () => {
       {
         id: "h2",
         ordenId: "o1",
-        estatusOrigenId: "s-reparto",
-        estatusDestinoId: "s-devuelta",
+        estatusOrigenId: idEstado("en_ruta"),
+        estatusDestinoId: idEstado("devuelta"),
         actorUsuarioId: null, // sistema
         origenTipo: "gestion",
         motivo: "cliente ausente",
         gestionOrdenId: "g1",
         createdAt: new Date("2026-07-13T12:00:00.000Z"),
-        estatusOrigen: { value: "en_reparto" },
+        estatusOrigen: { value: "en_ruta" },
         estatusDestino: { value: "devuelta" },
         actor: null,
       },
@@ -152,7 +157,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
         createdAt: new Date("2026-07-13T10:00:00.000Z"),
       },
       {
-        estatusOrigenValue: "en_reparto",
+        estatusOrigenValue: "en_ruta",
         estatusDestinoValue: "devuelta",
         origenTipo: "gestion",
         actorNombre: null, // sistema (R21)
@@ -169,11 +174,11 @@ describe("contarPorDestinoVigentes (49/R24 + 67/R24-R26)", () => {
     prisma.ordenHistorialEstado.count.mockResolvedValue(3);
     const repo = new OrdenHistorialRepository(prisma as unknown as PrismaClient);
 
-    const n = await repo.contarPorDestinoVigentes("o1", "s-devuelta");
+    const n = await repo.contarPorDestinoVigentes("o1", idEstado("devuelta"));
 
     expect(n).toBe(3);
     const arg = prisma.ordenHistorialEstado.count.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ ordenId: "o1", estatusDestinoId: "s-devuelta" });
+    expect(arg.where).toMatchObject({ ordenId: "o1", estatusDestinoId: idEstado("devuelta") });
   });
 
   // Feature 67 (F1.4-a, design §4.2): el predicado discrimina por `origen_tipo`, NO por la
@@ -184,7 +189,7 @@ describe("contarPorDestinoVigentes (49/R24 + 67/R24-R26)", () => {
     prisma.ordenHistorialEstado.count.mockResolvedValue(0);
     const repo = new OrdenHistorialRepository(prisma as unknown as PrismaClient);
 
-    await repo.contarPorDestinoVigentes("o1", "s-devuelta");
+    await repo.contarPorDestinoVigentes("o1", idEstado("devuelta"));
 
     const arg = prisma.ordenHistorialEstado.count.mock.calls[0][0];
     expect(arg.where.OR).toEqual([
@@ -239,7 +244,7 @@ describe("contarPorDestinoVigentes — semantica del predicado (67/R24-R26)", ()
     const prisma = buildPrisma();
     prisma.ordenHistorialEstado.count.mockResolvedValue(0);
     const repo = new OrdenHistorialRepository(prisma as unknown as PrismaClient);
-    await repo.contarPorDestinoVigentes("o1", "s-devuelta");
+    await repo.contarPorDestinoVigentes("o1", idEstado("devuelta"));
     return prisma.ordenHistorialEstado.count.mock.calls[0][0].where;
   }
 

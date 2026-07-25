@@ -87,18 +87,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: refreshMock, push: vi.fn() }),
 }));
 
-// Feature 93 (R31/R32): la Server Action REAL de la feature 92 se MOCKEA. Su
-// contrato es `{ status: "ok"; omitida: boolean }` — NO devuelve la ruta ni la
-// secuencia: el orden nuevo llega SIEMPRE por `router.refresh()` (R32).
-vi.mock("@/lib/actions/ruta-mensajero", () => ({
-  sincronizarRuta: vi.fn(),
-}));
-
 const recogerMock = vi.mocked(recogerAsignaciones);
 const escogerMock = vi.mocked(escogerParaGestion);
 const gestionarMock = vi.mocked(gestionar);
 const liberarMock = vi.mocked(liberarGestion);
-const sincronizarMock = vi.mocked(sincronizarRuta);
 
 // --- Feature 93 (R25): mock de `navigator.geolocation` con los TRES desenlaces --
 type DesenlaceGeo =
@@ -140,13 +132,6 @@ function mockGeolocation(desenlace: DesenlaceGeo) {
   });
 }
 
-const RUTA_VIGENTE: RutaResumenDTO = {
-  estado: "vigente",
-  calculadaAt: new Date("2026-07-20T10:00:00Z"),
-  origenFuente: "gps",
-  paradasSinOptimizar: 0,
-};
-
 /** Nombres accesibles de las cards de "En reparto", EN EL ORDEN DEL DOM. */
 function ordenCardsEnReparto(): string[] {
   const region = screen.getByRole("region", {
@@ -163,7 +148,7 @@ function makeAsignacion(
   return {
     numGuia: 1001,
     numRemision: "REM-001",
-    estatusValue: "en_espera_aceptacion",
+    estatusValue: "por_recoger",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",
@@ -262,7 +247,6 @@ beforeEach(() => {
   });
   recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
   liberarMock.mockResolvedValue({ status: "ok" });
-  sincronizarMock.mockResolvedValue({ status: "ok", omitida: false });
   mockGeolocation({ tipo: "concedido", lat: 9.93, lng: -84.08 });
 });
 
@@ -897,12 +881,11 @@ describe("MisAsignacionesModule", () => {
     expect(escogerMock).not.toHaveBeenCalled();
   });
 
-  // Feature 87 (R17): el panel de detalle NO tiene botones de contacto inline; reusa el
-  // compuesto compartido `ContactoButtons` (que además prefija `506` en el enlace wa.me, R15).
-  // Este test se ata al COMPORTAMIENTO real de `ContactoButtons` (no se mockea): si alguien
-  // revirtiera el panel a los botones inline heredados —que abrían `wa.me/<telefono>` SIN el
-  // `506`—, la aserción sobre `window.open` se rompería.
-  it("R17/R15: el detalle reusa ContactoButtons y su WhatsApp abre wa.me con el número normalizado (506)", async () => {
+  // Feature 87 (R17) + feature 120 (pedido humano, commit "feat(chat: wp integration)"): el panel
+  // de detalle reusa `ContactoButtons` para "Llamar" (tel:), pero YA NO ofrece el WhatsApp wa.me
+  // PLANO (`mostrarWhatsapp={false}`): el contacto por WhatsApp pasó al botón de plantilla->wa.me
+  // y al chat en la app. Se ata al comportamiento real de `ContactoButtons` (no se mockea).
+  it("R17: el detalle reusa ContactoButtons para Llamar (tel:) y ya no ofrece el WhatsApp wa.me plano", async () => {
     const user = userEvent.setup();
     const openSpy = vi
       .spyOn(window, "open")
@@ -919,20 +902,25 @@ describe("MisAsignacionesModule", () => {
       ],
     });
 
-    // El panel arranca en el paso "detalle" y ahí viven los botones de contacto.
+    // El panel arranca en el paso "detalle" y ahí vive el botón de Llamar.
     const panel = panelDetalle();
     const llamar = within(panel).getByRole("button", { name: "Llamar a Ana Pérez" });
-    const whatsapp = within(panel).getByRole("button", { name: "WhatsApp a Ana Pérez" });
     expect(llamar).toBeInTheDocument();
-    expect(whatsapp).toBeInTheDocument();
 
     // Llamar usa el teléfono crudo en un enlace tel:.
     await user.click(llamar);
     expect(openSpy).toHaveBeenCalledWith("tel:88880000", "_self");
 
-    // WhatsApp usa el número NORMALIZADO con prefijo país 506 (bug corregido por ContactoButtons).
-    await user.click(whatsapp);
-    expect(openSpy).toHaveBeenCalledWith("https://wa.me/50688880000", "_blank");
+    // El WhatsApp wa.me PLANO ya no se ofrece (pedido humano); en su lugar está el botón de
+    // plantilla->WhatsApp. No se abre `wa.me/<telefono>` de forma directa desde el detalle.
+    expect(
+      within(panel).queryByRole("button", { name: "WhatsApp a Ana Pérez" }),
+    ).toBeNull();
+    expect(
+      within(panel).getByRole("button", {
+        name: "Enviar plantilla por WhatsApp a Ana Pérez",
+      }),
+    ).toBeInTheDocument();
 
     openSpy.mockRestore();
   });

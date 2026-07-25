@@ -21,7 +21,7 @@ function dto(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
     numGuia: 1,
     numRemision: "REM-1",
     estatusId: "os-bodega",
-    estatusValue: "en_bodega",
+    estatusValue: "en_bodega_central",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "store1",
@@ -103,6 +103,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
     recibirEnOrigen: vi.fn().mockResolvedValue(false),
+    recibirEnBodegaCentral: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
@@ -402,16 +403,16 @@ describe("listar — filtro generico filter.status_id (feature 63, R8/R9/R10)", 
   });
 });
 
-// Feature 48/T10.1 (R12/R14): la tienda de origen ve sus ordenes `rechazada`/`devuelta_origen`
+// Feature 48/T10.1 (R12/R14): la tienda de origen ve sus ordenes `rechazada`/`devolviendo_a_tienda`
 // reutilizando el scope server-side ya existente (where.tiendaId = actor.usuarioId). NO cambia
 // la autz de las features 6/26; solo verifica que las ordenes retornadas viajan por ese filtro.
 describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", () => {
-  it("adminTienda ve sus ordenes rechazada/devuelta_origen acotadas por where.tiendaId", async () => {
+  it("adminTienda ve sus ordenes rechazada/devolviendo_a_tienda acotadas por where.tiendaId", async () => {
     repo = buildRepo({
       list: vi.fn().mockResolvedValue({
         items: [
           listItem({ id: "o-rech", estatusValue: "rechazada", tiendaId: "store1" }),
-          listItem({ id: "o-dev", estatusValue: "devuelta_origen", tiendaId: "store1" }),
+          listItem({ id: "o-dev", estatusValue: "devolviendo_a_tienda", tiendaId: "store1" }),
         ],
         total: 2,
       }),
@@ -425,7 +426,7 @@ describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", 
 
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
-      expect(r.items.map((i) => i.estatusValue)).toEqual(["rechazada", "devuelta_origen"]);
+      expect(r.items.map((i) => i.estatusValue)).toEqual(["rechazada", "devolviendo_a_tienda"]);
     }
     // R12: el alcance server-side es la propia tienda (no un parametro del cliente).
     const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -444,7 +445,7 @@ describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", 
     expect(arg.where.tiendaId).not.toBe(OTRA_TIENDA_ID);
   });
 
-  it("filtro por estado devuelta_origen se pasa al where junto con el scope de la tienda", async () => {
+  it("filtro por estado devolviendo_a_tienda se pasa al where junto con el scope de la tienda", async () => {
     await service.listar(
       { page: 1, pageSize: 20, estatusId: "os-devuelta-origen", sortBy: "created_at", sortDir: "desc" },
       TIENDA,

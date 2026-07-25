@@ -46,8 +46,19 @@ export async function middleware(request: NextRequest) {
   if (matches(pathname, PUBLIC_ROUTES)) return NextResponse.next();
   if (matches(pathname, SELF_AUTH_ROUTES)) return NextResponse.next();
 
-  // Validacion REAL contra la DB: existencia de la cookie no es autenticacion.
   const sessionId = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+
+  // Feature 86: `/` es la landing publica. Se resuelve por coincidencia EXACTA (no entra en
+  // PUBLIC_ROUTES, cuyo `startsWith` volveria publica la app entera, R8). Con cookie de sesion
+  // la home autenticada vive en /dashboard (R7) —cuyo propio guard revalida la sesion contra la
+  // DB, asi que basta la presencia de la cookie para el redirect—; sin cookie se sirve la
+  // landing publica (R1). Sin este caso la landing quedaba detras del login (regresion del merge).
+  if (pathname === "/") {
+    if (sessionId) return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.next();
+  }
+
+  // Validacion REAL contra la DB: existencia de la cookie no es autenticacion.
   if (sessionId && (await isSessionActive(sessionId))) {
     return NextResponse.next();
   }

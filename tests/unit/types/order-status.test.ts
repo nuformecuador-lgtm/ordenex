@@ -3,40 +3,57 @@ import type { PrismaClient } from "@prisma/client";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import { seedOrderStatus } from "@/scripts/seed-catalogos";
 
-// R2/R5/R9: valores canonicos, incluido en_preparacion (feature 15),
-// en_espera_aceptacion (feature 17), en_ruta_bodega_satelite (feature 30/R1),
-// en_reparto/rechazada (feature 36/R1/R3), en_bodega_satelite (feature 33/R1) y
-// recibido_origen (PR #75, flujo QR); en_bodega se conserva como historico.
-describe("ORDER_STATUS_SEED (R2/R5/R9 · feature 30/R1 · feature 36/R1/R3 · feature 33/R1 · PR #75)", () => {
-  it("contiene exactamente los 15 valores esperados", () => {
+// R1/R5/R12: valores canonicos tras el rename de nomenclatura (feature 135). Seis
+// values se renombraron conservando su POSICION en la tupla (indices 8/10/13, y el
+// 2/5/6): por_recoger (feature 17), en_ruta (feature 36), en_bodega_central,
+// en_ruta_bodega_central, devolviendo_a_tienda y devuelta_a_tienda. Los otros 9 no
+// cambian (en_ruta_bodega_satelite feature 30, en_bodega_satelite feature 33, etc.).
+describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename · feature 139 devolucion)", () => {
+  it("contiene exactamente los 18 valores esperados", () => {
     expect([...ORDER_STATUS_SEED].sort()).toEqual(
       [
         "devuelta",
-        "devuelta_origen",
+        "devolviendo_a_tienda",
         "en_fulfillment",
-        "en_bodega",
+        "en_bodega_central",
         "en_preparacion",
-        "en_espera_aceptacion",
-        "en_ruta_bodega_principal",
+        "por_recoger",
+        "en_ruta_bodega_central",
         "en_ruta_bodega_satelite",
-        "en_reparto",
+        "en_ruta",
         "rechazada",
         "entregada",
         "reprogramada",
         "en_bodega_satelite",
-        "recibido_origen",
+        "devuelta_a_tienda",
         "sin_gestionar",
+        // feature 139: los 3 estados del flujo de devolucion de rechazadas
+        "por_devolver",
+        "devolviendo_a_bodega_central",
+        "por_devolver_a_tienda",
       ].sort(),
     );
+  });
+
+  it("feature 139/R1: incluye los 3 estados del flujo de devolucion como APENDICE (indices 15/16/17)", () => {
+    // Se APENDEN al final: conservan las posiciones previas intactas (los otros 15 no se mueven).
+    expect(ORDER_STATUS_SEED[15]).toBe("por_devolver");
+    expect(ORDER_STATUS_SEED[16]).toBe("devolviendo_a_bodega_central");
+    expect(ORDER_STATUS_SEED[17]).toBe("por_devolver_a_tienda");
+    // El set completo incluye los 3 nuevos.
+    const set = new Set(ORDER_STATUS_SEED);
+    expect(set.has("por_devolver")).toBe(true);
+    expect(set.has("devolviendo_a_bodega_central")).toBe(true);
+    expect(set.has("por_devolver_a_tienda")).toBe(true);
   });
 
   it("incluye en_preparacion (default de creacion GLOBAL, feature 15/R7/R8)", () => {
     expect(ORDER_STATUS_SEED).toContain("en_preparacion");
   });
 
-  it("incluye en_espera_aceptacion como 9no valor (feature 17/R9)", () => {
-    expect(ORDER_STATUS_SEED).toContain("en_espera_aceptacion");
-    expect(ORDER_STATUS_SEED[8]).toBe("en_espera_aceptacion");
+  it("R5/R12: por_recoger conserva el 9no lugar (indice 8, feature 17)", () => {
+    expect(ORDER_STATUS_SEED).toContain("por_recoger");
+    expect(ORDER_STATUS_SEED[8]).toBe("por_recoger");
   });
 
   it("R1: incluye en_ruta_bodega_satelite como 10mo valor (feature 30)", () => {
@@ -44,8 +61,8 @@ describe("ORDER_STATUS_SEED (R2/R5/R9 · feature 30/R1 · feature 36/R1/R3 · fe
     expect(ORDER_STATUS_SEED[9]).toBe("en_ruta_bodega_satelite");
   });
 
-  it("feature 36/R1/R3: incluye en_reparto (11mo) y rechazada (12mo)", () => {
-    expect(ORDER_STATUS_SEED[10]).toBe("en_reparto");
+  it("R5/R12: en_ruta conserva el 11mo lugar (indice 10) y rechazada el 12mo (feature 36)", () => {
+    expect(ORDER_STATUS_SEED[10]).toBe("en_ruta");
     expect(ORDER_STATUS_SEED[11]).toBe("rechazada");
   });
 
@@ -54,9 +71,9 @@ describe("ORDER_STATUS_SEED (R2/R5/R9 · feature 30/R1 · feature 36/R1/R3 · fe
     expect(ORDER_STATUS_SEED[12]).toBe("en_bodega_satelite");
   });
 
-  it("PR #75: incluye recibido_origen como 14mo valor (flujo QR)", () => {
-    expect(ORDER_STATUS_SEED).toContain("recibido_origen");
-    expect(ORDER_STATUS_SEED[13]).toBe("recibido_origen");
+  it("R5/R12: devuelta_a_tienda conserva el 14mo lugar (indice 13, cierre de devolucion)", () => {
+    expect(ORDER_STATUS_SEED).toContain("devuelta_a_tienda");
+    expect(ORDER_STATUS_SEED[13]).toBe("devuelta_a_tienda");
   });
 
   it("feature 109/R1: incluye sin_gestionar como 15mo valor", () => {
@@ -66,13 +83,13 @@ describe("ORDER_STATUS_SEED (R2/R5/R9 · feature 30/R1 · feature 36/R1/R3 · fe
 
   it("no tiene valores duplicados", () => {
     expect(new Set(ORDER_STATUS_SEED).size).toBe(ORDER_STATUS_SEED.length);
-    expect(ORDER_STATUS_SEED).toHaveLength(15);
+    expect(ORDER_STATUS_SEED).toHaveLength(18);
   });
 });
 
-// R9: seedOrderStatus (upsert por value) siembra el nuevo valor de forma
-// idempotente, sin duplicar ni alterar los 8 valores existentes.
-describe("seedOrderStatus siembra en_espera_aceptacion de forma idempotente (R9)", () => {
+// R9: seedOrderStatus (upsert por value) siembra los values canonicos de forma
+// idempotente, sin duplicar ni alterar los existentes.
+describe("seedOrderStatus siembra los values renombrados de forma idempotente (R9)", () => {
   interface OrderStatusRow {
     id: string;
     value: string;
@@ -97,7 +114,7 @@ describe("seedOrderStatus siembra en_espera_aceptacion de forma idempotente (R9)
     return { rows, upsert };
   }
 
-  it("agrega en_espera_aceptacion sin duplicar tras dos ejecuciones", async () => {
+  it("agrega por_recoger sin duplicar tras dos ejecuciones", async () => {
     const fake = createFakeOrderStatus();
     const client = { orderStatus: { upsert: fake.upsert } } as unknown as Pick<
       PrismaClient,
@@ -105,18 +122,21 @@ describe("seedOrderStatus siembra en_espera_aceptacion de forma idempotente (R9)
     >;
 
     await seedOrderStatus(client);
-    expect(fake.rows.has("en_espera_aceptacion")).toBe(true);
+    expect(fake.rows.has("por_recoger")).toBe(true);
     expect(fake.rows.has("en_ruta_bodega_satelite")).toBe(true); // feature 30/R1
-    expect(fake.rows.has("en_reparto")).toBe(true); // feature 36/R1
+    expect(fake.rows.has("en_ruta")).toBe(true); // feature 36/R1
     expect(fake.rows.has("rechazada")).toBe(true); // feature 36/R3
     expect(fake.rows.has("en_bodega_satelite")).toBe(true); // feature 33/R1
-    expect(fake.rows.has("recibido_origen")).toBe(true); // PR #75
+    expect(fake.rows.has("devuelta_a_tienda")).toBe(true); // cierre de devolucion
     expect(fake.rows.has("sin_gestionar")).toBe(true); // feature 109
-    expect(fake.rows.size).toBe(15);
-    const idPrimera = fake.rows.get("en_espera_aceptacion")?.id;
+    expect(fake.rows.has("por_devolver")).toBe(true); // feature 139
+    expect(fake.rows.has("devolviendo_a_bodega_central")).toBe(true); // feature 139
+    expect(fake.rows.has("por_devolver_a_tienda")).toBe(true); // feature 139
+    expect(fake.rows.size).toBe(18);
+    const idPrimera = fake.rows.get("por_recoger")?.id;
 
     await seedOrderStatus(client); // segunda ejecucion: idempotente
-    expect(fake.rows.size).toBe(15); // no crece
-    expect(fake.rows.get("en_espera_aceptacion")?.id).toBe(idPrimera); // id conservado
+    expect(fake.rows.size).toBe(18); // no crece
+    expect(fake.rows.get("por_recoger")?.id).toBe(idPrimera); // id conservado
   });
 });

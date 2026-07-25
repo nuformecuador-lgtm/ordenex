@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import {
   emitirWebhooksEstado,
@@ -6,6 +6,8 @@ import {
 } from "@/lib/services/jobs/webhook-estado-encolado";
 import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
 import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
+import type { OrderStatusValue } from "@/lib/types/order-status";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 99 (R10/R11/R12/R16/R25) — emision transactional-outbox desde el choke point
 // `appendCambioEstado`. Prisma/tx mockeados con SEMANTICA (patron tests/integration): el
@@ -14,9 +16,25 @@ import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHi
 // asi el test recorre append -> emitir -> enqueue de punta a punta.
 
 const VALUE_POR_ID: Record<string, string> = {
-  "s-entregada": "entregada",
-  "s-en-reparto": "en_reparto",
+  [idEstado("entregada")]: "entregada",
+  [idEstado("en_ruta")]: "en_ruta",
+  [idEstado("en_ruta_bodega_central")]: "en_ruta_bodega_central",
 };
+
+// Feature 140: la guardia del choke point valida el par `origen -> destino` contra
+// `TRANSICIONES` (fallo CERRADO), asi que cada destino de este test se emite desde SU origen
+// legal del mapa: `en_ruta -> entregada` (#12) y `por_recoger -> en_ruta` (#11). La creacion
+// (`carga_api`) nace en `en_ruta_bodega_central`, uno de los tres ESTADOS_CREACION (A.1) y
+// ademas evento publico, que es lo que este test necesita para ver el encolado; ese caso NO
+// lleva entrada aqui: su `estatusOrigenId` es `null` (A.1), asi que nunca consulta este mapa.
+const ORIGEN_LEGAL: Record<string, OrderStatusValue> = {
+  [idEstado("entregada")]: "en_ruta",
+  [idEstado("en_ruta")]: "por_recoger",
+};
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados();
+});
 
 function buildTx(elegibles: Set<string>) {
   const createMany = vi.fn(async () => ({ count: 1 }));
@@ -56,7 +74,10 @@ function entrada(
 ): CambioEstadoEntrada {
   return {
     ordenId,
-    estatusOrigenId: origenTipo === "carga_masiva" ? null : "s-previo",
+    estatusOrigenId:
+      origenTipo === "carga_masiva" || origenTipo === "carga_api"
+        ? null // creacion (A.1)
+        : idEstado(ORIGEN_LEGAL[estatusDestinoId]),
     estatusDestinoId,
     actorUsuarioId: "u1",
     origenTipo,
@@ -69,7 +90,7 @@ describe("R10 — transicion de orden con owner suscrito deja job pendiente", ()
     const { repo, enqueue } = buildRepo();
     await appendCambioEstado(
       tx as never,
-      [entrada("o1", "s-entregada")],
+      [entrada("o1", idEstado("entregada"))],
       emisorReal(repo, () => new Date("2026-07-21T10:00:00.000Z")),
     );
     expect(createMany).toHaveBeenCalledTimes(1); // append del historial
@@ -85,7 +106,7 @@ describe("R11 — si el cambio de estado falla no queda job huerfano", () => {
     createMany.mockRejectedValueOnce(new Error("tx abortada"));
     const { repo, enqueue } = buildRepo();
     await expect(
-      appendCambioEstado(tx as never, [entrada("o1", "s-entregada")], emisorReal(repo)),
+      appendCambioEstado(tx as never, [entrada("o1", idEstado("entregada"))], emisorReal(repo)),
     ).rejects.toThrow("tx abortada");
     expect(enqueue).not.toHaveBeenCalled(); // ningun job encolado
   });
@@ -95,7 +116,7 @@ describe("R12 — solo owner rol apiKey con suscripcion activa", () => {
   it("no encola para una orden cuyo owner no es elegible (sin sub / no apiKey)", async () => {
     const { tx } = buildTx(new Set()); // §5 devuelve vacio (adminTienda o sin suscripcion)
     const { repo, enqueue } = buildRepo();
-    await appendCambioEstado(tx as never, [entrada("o1", "s-entregada")], emisorReal(repo));
+    await appendCambioEstado(tx as never, [entrada("o1", idEstado("entregada"))], emisorReal(repo));
     expect(enqueue).not.toHaveBeenCalled();
   });
 
@@ -104,7 +125,7 @@ describe("R12 — solo owner rol apiKey con suscripcion activa", () => {
     const { repo, enqueue } = buildRepo();
     await appendCambioEstado(
       tx as never,
-      [entrada("o-api", "s-entregada"), entrada("o-adminTienda", "s-entregada")],
+      [entrada("o-api", idEstado("entregada")), entrada("o-adminTienda", idEstado("entregada"))],
       emisorReal(repo),
     );
     expect(enqueue).toHaveBeenCalledTimes(1);
@@ -113,18 +134,18 @@ describe("R12 — solo owner rol apiKey con suscripcion activa", () => {
 });
 
 describe("R16 — transiciones por dos mecanismos encolan por igual", () => {
-  it("creacion (carga_masiva) y gestion encolan ambas al pasar por el mismo choke point", async () => {
+  it("creacion (carga por API) y gestion encolan ambas al pasar por el mismo choke point", async () => {
     const { repo, enqueue } = buildRepo();
     const a = buildTx(new Set(["o-creada"]));
     await appendCambioEstado(
       a.tx as never,
-      [entrada("o-creada", "s-en-reparto", "carga_masiva")],
+      [entrada("o-creada", idEstado("en_ruta_bodega_central"), "carga_api")],
       emisorReal(repo),
     );
     const b = buildTx(new Set(["o-gestion"]));
     await appendCambioEstado(
       b.tx as never,
-      [entrada("o-gestion", "s-entregada", "gestion")],
+      [entrada("o-gestion", idEstado("entregada"), "gestion")],
       emisorReal(repo),
     );
     expect(enqueue).toHaveBeenCalledTimes(2);
@@ -141,7 +162,7 @@ describe("R25 — con dos owners suscritos cada job lleva su propia orden", () =
     const { repo, enqueue } = buildRepo();
     await appendCambioEstado(
       tx as never,
-      [entrada("o-ownerA", "s-entregada"), entrada("o-ownerB", "s-en-reparto")],
+      [entrada("o-ownerA", idEstado("entregada")), entrada("o-ownerB", idEstado("en_ruta"))],
       emisorReal(repo),
     );
     expect(enqueue).toHaveBeenCalledTimes(2);

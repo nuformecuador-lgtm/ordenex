@@ -62,7 +62,7 @@ export class OrdenService implements IOrdenService {
       if (!exists) fieldErrors.estatusId = ["estatusId no existe en el catalogo"];
       estatusId = input.estatusId;
     } else {
-      // N1/R27: default en_bodega (configurable) resuelto por value.
+      // N1/R27: default en_bodega_central (configurable) resuelto por value.
       const defaultId = await this.repo.findEstatusIdByValue(
         ordenesConfig.DEFAULT_ESTATUS_VALUE,
       );

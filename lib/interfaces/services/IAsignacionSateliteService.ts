@@ -2,7 +2,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 // Feature 34 — contrato del servicio de asignacion de la bodega satelite: el
 // adminSatelite asigna un lote de ordenes `en_bodega_satelite` de SU zona a un
-// mensajero de SU zona, transicionando cada orden a `en_espera_aceptacion`
+// mensajero de SU zona, transicionando cada orden a `por_recoger`
 // (mismo destino del flujo del maestro, feature 17). Logica de negocio pura (sin
 // HTTP ni Prisma); el borde (Server Action) la traduce a resultado tipado. Solo
 // el rol `adminSatelite`, SIEMPRE acotado a su `usuario.zonaId` (server-side).
@@ -18,7 +18,7 @@ export interface AsignarSateliteInput {
 
 // R7/R3/R9/R10/R13: maquina de resultados de la asignacion. Todos los rechazos son
 // SIN efectos en datos (todo-o-nada, R10/R14). `ok` transiciona todas a
-// `en_espera_aceptacion`. `forbidden` = rol != adminSatelite (R13). `sin_zona` =
+// `por_recoger`. `forbidden` = rol != adminSatelite (R13). `sin_zona` =
 // adminSatelite sin zona (R3). `validation_error` cubre `mensajero_invalido` (R9)
 // y el catalogo de estados incompleto (seed pendiente). `conflict` cubre las
 // guardias por orden (R10-R12) y la carrera de escritura (R14); el motivo por
@@ -33,7 +33,7 @@ export interface BodegaBloqueadaCausa {
 }
 
 export type AsignarSateliteServiceResult =
-  | { status: "ok"; resultados: { ordenId: string; estado: "en_espera_aceptacion" }[] } // R7
+  | { status: "ok"; resultados: { ordenId: string; estado: "por_recoger" }[] } // R7
   | { status: "forbidden" } // R13
   | { status: "sin_zona" } // R3
   | { status: "bodega_bloqueada"; causa: BodegaBloqueadaCausa } // feature 41/R18: bodega bloqueada (i)||(ii)

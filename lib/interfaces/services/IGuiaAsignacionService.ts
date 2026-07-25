@@ -5,7 +5,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // Action, `lib/actions/ordenes-guia.ts`) la traduce a resultado tipado.
 
 // R24/decision 5: decision FINAL por orden en una sola llamada; `mensajeroId:
-// null` significa "sin mensajero" (destino en_bodega, R23).
+// null` significa "sin mensajero" (destino en_bodega_central, R23).
 export interface GenerarGuiaDecision {
   ordenId: string;
   mensajeroId: string | null;
@@ -74,13 +74,13 @@ export interface IGuiaAsignacionService {
   /**
    * R18-R25/R27-R29: asigna num_guia (idempotente, R5) a TODAS las ordenes del
    * lote elegibles (origen en_fulfillment | en_preparacion) y transiciona cada
-   * una a en_espera_aceptacion (con mensajero) o en_bodega (sin mensajero),
+   * una a por_recoger (con mensajero) o en_bodega_central (sin mensajero),
    * transaccional (todo-o-nada). Solo `maestro`.
    */
   generarGuia(input: GenerarGuiaInput, actor: Actor): Promise<GenerarGuiaServiceResult>;
   /**
-   * R26-R29: asigna mensajero a ordenes en en_bodega (origen unico permitido),
-   * pasan a en_espera_aceptacion; NUNCA toca num_guia (ya asignado). Solo `maestro`.
+   * R26-R29: asigna mensajero a ordenes en en_bodega_central (origen unico permitido),
+   * pasan a por_recoger; NUNCA toca num_guia (ya asignado). Solo `maestro`.
    */
   asignarDesdeBodega(
     input: AsignarBodegaInput,
@@ -89,7 +89,7 @@ export interface IGuiaAsignacionService {
   /**
    * Feature 30/R13/R16/R17: rutea una o varias ordenes no-GAM a
    * `en_ruta_bodega_satelite` desde los origenes permitidos (`en_fulfillment`,
-   * `en_preparacion`, `en_bodega`), asignando `num_guia` (R10) y dejando el
+   * `en_preparacion`, `en_bodega_central`), asignando `num_guia` (R10) y dejando el
    * mensajero en NULL (R9). Guardia R4 (zona GAM configurada). Una orden GAM en
    * el lote -> `conflict` ("orden GAM no se rutea a satelite"). Solo `maestro`.
    */

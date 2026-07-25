@@ -52,7 +52,7 @@ describe("OrdenesCargaPreview — confirmación", () => {
     render(
       <OrdenesCargaPreview
         clasificacion={clasif({
-          existentes: [{ numRemision: "REM-X", estatus: "en_bodega" }],
+          existentes: [{ numRemision: "REM-X", estatus: "en_bodega_central" }],
         })}
         confirmando={false}
         onConfirmar={vi.fn()}

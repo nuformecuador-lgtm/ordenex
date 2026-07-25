@@ -28,7 +28,7 @@ function buildService(
   return {
     asignar: vi.fn(async () => ({
       status: "ok" as const,
-      resultados: [{ ordenId: ORDEN, estado: "en_espera_aceptacion" as const }],
+      resultados: [{ ordenId: ORDEN, estado: "por_recoger" as const }],
     })),
     ...overrides,
   };
@@ -75,7 +75,7 @@ describe("asignarDesdeSatelite — borde (R1/R15/R19)", () => {
     );
     expect(r).toEqual({
       status: "ok",
-      resultados: [{ ordenId: ORDEN, estado: "en_espera_aceptacion" }],
+      resultados: [{ ordenId: ORDEN, estado: "por_recoger" }],
     });
     expect(service.asignar).toHaveBeenCalledWith(
       { ordenIds: [ORDEN], mensajeroId: MENSAJERO },

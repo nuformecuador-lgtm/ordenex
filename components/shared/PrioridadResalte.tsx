@@ -7,7 +7,7 @@ import type { Column } from "@/components/shared/DataTable";
  * Feature 101 (R8) — resalte de fila para las órdenes PRIORITARIAS (liberadas por
  * el SLA de la 99 y a la espera de reasignación en la bodega dueña). Concentra en
  * un solo módulo compartido las tres piezas del resalte para que las dos
- * superficies de reasignación (apartado `en_bodega` de `/ordenes` y grupo
+ * superficies de reasignación (apartado `en_bodega_central` de `/ordenes` y grupo
  * "Recibidas" de `/recepcion-satelite`) las reusen idénticas:
  *   1. la CLASE de fondo de la fila (color llamativo, contrast-safe claro/oscuro),
  *   2. el BADGE visible "Prioritaria" (a11y: el estado no se comunica SOLO por color),

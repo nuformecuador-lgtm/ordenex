@@ -16,14 +16,13 @@ import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { RutearSateliteModal } from "./RutearSateliteModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
-import { DevolverATiendaModal } from "./DevolverATiendaModal";
 
 export interface OrdenesRevisionMaestroProps {
   /** R12-UI: `admin` es solo-lectura (sin checkboxes ni botones/modales de acción). */
   readOnly?: boolean;
   /**
    * Feature 46 (R15/R16): órdenes liberadas HOY (CR) por el cron para la bodega
-   * central (`en_bodega`), pre-resueltas server-side por el Server Component padre.
+   * central (`en_bodega_central`), pre-resueltas server-side por el Server Component padre.
    * Alimentan el aviso derivado "Liberadas hoy (reprogramación)". Vacío = sin aviso.
    */
   liberadasHoy?: LiberadaHoyRow[];
@@ -34,7 +33,6 @@ type ModalAbierto =
   | "asignar-bodega"
   | "rutear-satelite"
   | "etiquetas"
-  | "devolver-tienda"
   | null;
 
 async function catalogoEstatusFetcher() {
@@ -57,14 +55,14 @@ async function mensajerosFetcher() {
  * design.md §4) y la lista de mensajeros (R28), y renderiza los apartados por
  * estado (R15/R16) con selección por lote (R17) y las acciones "Generar guía"
  * (R18, sobre `en_fulfillment`/`en_preparacion`) y "Asignar mensajero" (R26,
- * sobre `en_bodega`). El apartado `en_espera_aceptacion` es de solo lectura en
+ * sobre `en_bodega_central`). El apartado `por_recoger` es de solo lectura en
  * esta feature: no tiene acción propia (la respuesta del mensajero es de la
  * feature 36).
  *
  * Feature 30 (T16, R13/R15): añade un 5.º apartado solo-lectura para
  * `en_ruta_bodega_satelite` ("En ruta a bodega satélite") y una acción
  * secundaria "Rutear a bodega satélite" en los apartados de revisión y
- * `en_bodega` que rutea las órdenes NO-GAM seleccionadas vía
+ * `en_bodega_central` que rutea las órdenes NO-GAM seleccionadas vía
  * `rutearABodegaSatelite`.
  *
  * `readOnly` (R12-UI, `admin`): ningún apartado es seleccionable y no se montan
@@ -134,16 +132,6 @@ export function OrdenesRevisionMaestro({
     setModalAbierto("etiquetas");
   }
 
-  // Feature 48/R4/R10: "Devolver a la tienda" solo aplica a órdenes de la bodega
-  // CENTRAL. En el DTO del listado `zonaEsGam` mapea a `esCentral`, así que el
-  // maestro filtra a `zonaEsGam === true` (inverso de `abrirRutearSatelite`, que
-  // toma las no-GAM). El backend rechaza con `forbidden` una orden de zona satélite
-  // (defensa en profundidad); aquí no se ofrece al modal.
-  function abrirDevolver(seleccionadas: OrdenListItemDTO[]) {
-    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
-    setModalAbierto("devolver-tienda");
-  }
-
   function cerrarModal(open: boolean) {
     if (!open) setModalAbierto(null);
   }
@@ -199,8 +187,8 @@ export function OrdenesRevisionMaestro({
           maestro aquí es "Imprimir etiquetas". */}
       <OrdenesApartado
         titulo="En espera de aceptación del mensajero"
-        estatusValue="en_espera_aceptacion"
-        estatusId={estatusIdPorValue.get("en_espera_aceptacion")}
+        estatusValue="por_recoger"
+        estatusId={estatusIdPorValue.get("por_recoger")}
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Imprimir etiquetas"}
         onAction={readOnly ? undefined : abrirEtiquetas}
@@ -208,8 +196,8 @@ export function OrdenesRevisionMaestro({
       />
       <OrdenesApartado
         titulo="En bodega"
-        estatusValue="en_bodega"
-        estatusId={estatusIdPorValue.get("en_bodega")}
+        estatusValue="en_bodega_central"
+        estatusId={estatusIdPorValue.get("en_bodega_central")}
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Asignar mensajero"}
         onAction={readOnly ? undefined : abrirAsignarBodega}
@@ -220,7 +208,7 @@ export function OrdenesRevisionMaestro({
         mostrarHistorial
       />
       {/* Feature 46 (R15/R16): aviso derivado "Liberadas hoy (reprogramación)" de la
-          bodega central (en_bodega). Datos por props; se oculta si no hay. */}
+          bodega central (en_bodega_central). Datos por props; se oculta si no hay. */}
       <BodegaLiberadasHoy liberadas={liberadasHoy} />
       {/* Feature 30/R15: 5.º apartado. Feature 32/R13/F1.4(f): sus órdenes ya
           tienen `num_guia`, así que el maestro puede "Imprimir etiquetas"
@@ -234,18 +222,15 @@ export function OrdenesRevisionMaestro({
         onAction={readOnly ? undefined : abrirEtiquetas}
         mostrarHistorial
       />
-      {/* Feature 48/R4/R10: apartado de las órdenes RECHAZADA con la acción
-          "Devolver a la tienda" (transición rechazada → devuelta_origen). El maestro
-          solo puede devolver las de la bodega central; `abrirDevolver` filtra a zona
-          central antes de abrir el modal y el backend revalida (defensa en
-          profundidad). En `readOnly` (admin) no hay acción (solo "Ver historial"). */}
+      {/* Feature 139/R9: apartado de las órdenes RECHAZADA, ahora SOLO LECTURA. La
+          salida manual "Devolver a la tienda" se retiró: la única salida de `rechazada`
+          es la APROBACIÓN DEL CIERRE (backend), que la deja en `por_devolver` (satélite)
+          o `por_devolver_a_tienda` (central). Solo listado + "Ver historial". */}
       <OrdenesApartado
         titulo="Rechazadas"
         estatusValue="rechazada"
         estatusId={estatusIdPorValue.get("rechazada")}
         selectable={!readOnly}
-        actionLabel={readOnly ? undefined : "Devolver a la tienda"}
-        onAction={readOnly ? undefined : abrirDevolver}
         mostrarHistorial
       />
       {/* Feature 48/R14: apartado de solo lectura del terminal del retorno para que
@@ -253,8 +238,8 @@ export function OrdenesRevisionMaestro({
           escritura (no re-transiciona); solo listado + "Ver historial". */}
       <OrdenesApartado
         titulo="Devueltas a origen"
-        estatusValue="devuelta_origen"
-        estatusId={estatusIdPorValue.get("devuelta_origen")}
+        estatusValue="devolviendo_a_tienda"
+        estatusId={estatusIdPorValue.get("devolviendo_a_tienda")}
         selectable={!readOnly}
         mostrarHistorial
       />
@@ -287,12 +272,6 @@ export function OrdenesRevisionMaestro({
             open={modalAbierto === "etiquetas"}
             ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
-          />
-          <DevolverATiendaModal
-            open={modalAbierto === "devolver-tienda"}
-            ordenes={ordenesSeleccionadas}
-            onOpenChange={cerrarModal}
-            onSuccess={handleSuccess}
           />
         </>
       ) : null}

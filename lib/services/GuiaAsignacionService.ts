@@ -30,15 +30,15 @@ import { esAccesoTotal } from "@/lib/auth/acceso-total";
 // R27: unicos estados de origen validos para "Generar guia".
 const ORIGEN_GENERAR_GUIA = new Set(["en_fulfillment", "en_preparacion"]);
 // R27: unico estado de origen valido para "asignar desde bodega".
-const ORIGEN_BODEGA = "en_bodega";
+const ORIGEN_BODEGA = "en_bodega_central";
 // Feature 30/R13 (decision (d)): origenes validos para rutear a satelite.
-const ORIGEN_RUTEO_SATELITE = new Set(["en_fulfillment", "en_preparacion", "en_bodega"]);
+const ORIGEN_RUTEO_SATELITE = new Set(["en_fulfillment", "en_preparacion", "en_bodega_central"]);
 
 // Feature 46/R2: estatus bloqueado por reprogramacion (guardia explicito y tipado).
 const ESTATUS_REPROGRAMADA = "reprogramada";
 
-const ESTATUS_EN_ESPERA_ACEPTACION = "en_espera_aceptacion"; // R21/R22/R26
-const ESTATUS_EN_BODEGA = "en_bodega"; // R23
+const ESTATUS_EN_ESPERA_ACEPTACION = "por_recoger"; // R21/R22/R26
+const ESTATUS_EN_BODEGA = "en_bodega_central"; // R23
 const ESTATUS_EN_RUTA_BODEGA_SATELITE = "en_ruta_bodega_satelite"; // feature 30/R9
 
 // Feature 30/R4: mensaje del guardia de zona GAM no configurada (accionable, sin
@@ -344,7 +344,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
-    // --- Validacion por orden (R27): origen en_bodega + zona GAM (R12) ---
+    // --- Validacion por orden (R27): origen en_bodega_central + zona GAM (R12) ---
     const ordenes = await this.repo.findByIdsForTransicion(ordenIds);
     const ordenMap = new Map(ordenes.map((o) => [o.id, o]));
 
@@ -371,7 +371,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         });
         continue;
       }
-      // R12: por construccion en_bodega solo tiene ordenes GAM, pero se valida.
+      // R12: por construccion en_bodega_central solo tiene ordenes GAM, pero se valida.
       if (orden.zonaId !== centralZonaId) {
         detalle.push({ ordenId: id, motivo: "orden de zona no-GAM" });
       }
@@ -402,7 +402,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
 
     // R26/R5: NO reasigna num_guia, ya lo tienen de "Generar guia".
-    // Feature 49/#4 (R12): actor = el maestro; destino en_espera_aceptacion.
+    // Feature 49/#4 (R12): actor = el maestro; destino por_recoger.
     await this.repo.asignarBodegaLote(ordenIds, input.mensajeroId, estatusEsperaId, {
       actorUsuarioId: actor.usuarioId,
       origenTipo: "asignacion_bodega",

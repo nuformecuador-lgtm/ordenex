@@ -48,5 +48,5 @@ export interface ApiOrdenDetalleDTO extends ApiOrdenListItemDTO {
 export interface ApiOrdenCancelacionDTO {
   numGuia: number;
   estadoAnterior: string;
-  estado: string; // "devuelta_origen"
+  estado: string; // "devolviendo_a_tienda"
 }

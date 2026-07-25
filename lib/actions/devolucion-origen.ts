@@ -3,7 +3,6 @@
 import { z } from "zod";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { DevolucionOrigenService } from "@/lib/services/DevolucionOrigenService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -42,7 +41,8 @@ export interface DevolucionOrigenDeps {
 
 function buildService(): IDevolucionOrigenService {
   const prisma = getPrismaClient();
-  return new DevolucionOrigenService(new OrdenRepository(prisma), new ZonaRepository(prisma));
+  // Feature 139: la autz dejo de ser por-zona (maestro/admin central directo) -> ya no necesita ZonaRepository.
+  return new DevolucionOrigenService(new OrdenRepository(prisma));
 }
 
 // Traduce el AppErrorShape que puede producir este borde: solo ZodError
@@ -65,10 +65,11 @@ function toDevolucionOrigenActionError(
 }
 
 /**
- * R4/R11: la bodega responsable ejecuta "Devolver a la tienda" sobre una orden `rechazada`
- * (transicion a `devuelta_origen`). `unauthenticated` (sin sesion) y `validation_error`
- * (ordenId no-uuid) se resuelven en el borde; forbidden/not_found/conflict/config_error
- * los devuelve el service. Patron `recibirPorQr`.
+ * R9/R15/R16 (feature 139): maestro/admin (central) ejecuta "Enviar a la tienda" sobre una orden
+ * `por_devolver_a_tienda` (transicion a `devolviendo_a_tienda`; el ORIGEN paso de `rechazada`, cuya
+ * unica salida es ahora el cierre). Mismo input `{ ordenId }`; la UI lo invoca en loop sobre la
+ * seleccion (por lote). `unauthenticated` (sin sesion) y `validation_error` (ordenId no-uuid) se
+ * resuelven en el borde; forbidden/not_found/conflict/config_error los devuelve el service.
  */
 export async function devolverATienda(
   input: unknown,

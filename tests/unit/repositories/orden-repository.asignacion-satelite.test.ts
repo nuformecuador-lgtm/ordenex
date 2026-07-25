@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 34 — repo de la asignacion satelite. `asignarSateliteLote` es un UPDATE
 // guardado por estado de origen + zona (patron `recibirEnSatelite`). Feature 41/R23:
@@ -28,6 +29,10 @@ const HIST_ASIGNACION = {
   origenTipo: "asignacion_satelite",
 } as const;
 
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
+
 describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R23 + feature 49/#7)", () => {
   it("ejecuta un UPDATE raw con guardia estado+zona+NOT EXISTS y RETURNING; count = filas transicionadas", async () => {
     const { prisma, tx } = buildPrisma();
@@ -39,8 +44,8 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R2
       ["o1", "o2", "o3"],
       "m-1",
       "z-satelite",
-      "os-espera",
-      "os-bodega-satelite",
+      idEstado("por_recoger"),
+      idEstado("en_bodega_satelite"),
       HIST_ASIGNACION,
     );
 
@@ -58,8 +63,8 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R2
     const strings = (call[0] as string[]).join(" ");
     const values = call.slice(1);
     expect(values).toContain("m-1");
-    expect(values).toContain("os-espera");
-    expect(values).toContain("os-bodega-satelite");
+    expect(values).toContain(idEstado("por_recoger"));
+    expect(values).toContain(idEstado("en_bodega_satelite"));
     expect(values).toContain("z-satelite");
     // R8: la sentencia NO menciona num_guia.
     expect(strings).not.toMatch(/num_guia/);
@@ -88,8 +93,8 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R2
       ["o1", "o2"],
       "m-1",
       "z-satelite",
-      "os-espera",
-      "os-bodega-satelite",
+      idEstado("por_recoger"),
+      idEstado("en_bodega_satelite"),
       HIST_ASIGNACION,
     );
 
@@ -100,8 +105,8 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R2
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-bodega-satelite",
-        estatusDestinoId: "os-espera",
+        estatusOrigenId: idEstado("en_bodega_satelite"),
+        estatusDestinoId: idEstado("por_recoger"),
         actorUsuarioId: "adminsat-1",
         origenTipo: "asignacion_satelite",
         motivo: null,
@@ -119,8 +124,8 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R2
       ["o1"],
       "m-1",
       "z-satelite",
-      "os-espera",
-      "os-bodega-satelite",
+      idEstado("por_recoger"),
+      idEstado("en_bodega_satelite"),
       HIST_ASIGNACION,
     );
 
@@ -137,8 +142,8 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 41/R2
         [],
         "m-1",
         "z-satelite",
-        "os-espera",
-        "os-bodega-satelite",
+        idEstado("por_recoger"),
+        idEstado("en_bodega_satelite"),
         HIST_ASIGNACION,
       ),
     ).toBe(0);

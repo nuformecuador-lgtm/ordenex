@@ -350,8 +350,9 @@ model EmailOtpChallenge {
 // por `value` (8 valores, ORDER_STATUS_SEED), patron rol/tipo_identificacion.
 model OrderStatus {
   id    String @id @default(uuid())
-  value String @unique // seed (8): entregada, devuelta, devuelta_origen,
-  //   reprogramada, en_fulfillment, en_ruta_bodega_principal, en_bodega, en_preparacion
+  value String @unique // seed (15, ver ORDER_STATUS_SEED). Feature 135 renombro 6
+  //   values: p.ej. devolviendo_a_tienda, en_ruta_bodega_central, en_bodega_central,
+  //   por_recoger, en_ruta, devuelta_a_tienda (id/FK preservados por UPDATE de catalogo).
 
   ordenes Orden[]
 
@@ -1103,13 +1104,15 @@ enum OrdenHistorialOrigenTipo {
   ajuste_estado // feature 6: OrdenService.actualizar (CRUD generico)
   deshacer_gestion // feature 67 (F1.4-b): CierreDiaRepository.anularGestionYDevolverAGestion
   carga_api // feature 88 (D7): estado inicial en createManyOrdenesConGuia (canal integrador)
-  liberacion_devuelta_sla // feature 99: cron SLA, devuelta -> en_bodega/en_bodega_satelite (reintento)
+  liberacion_devuelta_sla // feature 99: cron SLA, devuelta -> en_bodega_central/en_bodega_satelite (reintento)
   escalado_devuelta_sla // feature 99: cron SLA, devuelta -> rechazada (escalado; enlaza gestion sintetica)
   reprogramacion_tienda // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
-  recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega/en_bodega_satelite (accion manual, actor admin)
-  cancelacion_api // feature 106: tienda cancela via API key en_bodega/en_ruta_bodega_principal -> devuelta_origen (marcador motivo="cancelada por tienda")
-  corte_sin_gestionar // feature 109: corte diario transiciona en_reparto -> sin_gestionar (actor null/cron)
-  liberacion_sin_gestionar // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega/en_bodega_satelite (actor admin)
+  recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite (accion manual, actor admin)
+  cancelacion_api // feature 106: tienda cancela via API key en_bodega_central/en_ruta_bodega_central -> devolviendo_a_tienda (marcador motivo="cancelada por tienda")
+  corte_sin_gestionar // feature 109: corte diario transiciona en_ruta -> sin_gestionar (actor null/cron)
+  liberacion_sin_gestionar // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin)
+  recepcion_bodega_central // feature 138: recepcion fisica en la bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin)
+  devolucion_rechazada // feature 139: al APROBAR el cierre, rechazada -> por_devolver (satelite) / por_devolver_a_tienda (central) (actor admin)
 
   @@map("orden_historial_origen_tipo")
 }

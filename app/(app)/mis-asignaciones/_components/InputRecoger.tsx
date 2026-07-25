@@ -16,7 +16,7 @@ import { useRecogerPorGuia } from "./useRecogerPorGuia";
 // modal), consistente con la cámara; limpia el input y revalida la lista en éxito.
 
 export interface InputRecogerProps {
-  /** Órdenes en `en_espera_aceptacion` (por recoger): resuelven numGuia -> id. */
+  /** Órdenes en `por_recoger`: resuelven numGuia -> id. */
   porRecoger: MiAsignacionDTO[];
   /** Se invoca tras una recogida exitosa (el módulo lo conecta a router.refresh()). */
   onRecogida: () => void;

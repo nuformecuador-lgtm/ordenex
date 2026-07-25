@@ -21,7 +21,7 @@ import { useRecogerPorGuia } from "./useRecogerPorGuia";
 // número tecleado directo contra `numGuia`).
 
 export interface EscanerRecogerProps {
-  /** Órdenes en `en_espera_aceptacion` (por recoger): resuelven numGuia -> id. */
+  /** Órdenes en `por_recoger`: resuelven numGuia -> id. */
   porRecoger: MiAsignacionDTO[];
   /** Se invoca tras una recogida exitosa (el módulo lo conecta a router.refresh()). */
   onRecogida: () => void;

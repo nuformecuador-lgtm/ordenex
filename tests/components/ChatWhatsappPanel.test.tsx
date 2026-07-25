@@ -43,7 +43,7 @@ const ORDEN: MiAsignacionDTO = {
   id: "orden-1",
   numGuia: 12345,
   numRemision: "R-001",
-  estatusValue: "en_reparto",
+  estatusValue: "en_ruta",
   destinatario: "María López",
   telefonoDest: "88887777",
   direccion: "Calle 1",
@@ -67,6 +67,8 @@ const ENTRANTE: ChatMensajeVista = {
   tipo: "texto",
   cuerpo: "Hola, ¿cuándo llega mi paquete?",
   estado: null,
+  latitud: null,
+  longitud: null,
   ocurridoAt: "2026-07-23T15:00:00.000Z",
 };
 
@@ -76,6 +78,8 @@ const SALIENTE: ChatMensajeVista = {
   tipo: "texto",
   cuerpo: "En camino, llego en 20 minutos.",
   estado: "delivered",
+  latitud: null,
+  longitud: null,
   ocurridoAt: "2026-07-23T15:05:00.000Z",
 };
 
@@ -177,30 +181,31 @@ describe("ChatWhatsappPanel", () => {
     expect(within(items[0]).queryByText("Entregado")).toBeNull();
   });
 
-  // R23 (G2.T)
-  it("habilita el input dentro de la ventana y exige plantilla fuera de ella", async () => {
-    // Dentro de la ventana: input de texto libre habilitado (y la burbuja para pegar plantillas).
+  // R23 (G2.T) — feature 120 (pedido humano, commit "feat(chat: wp integration)"): el composer
+  // se decide por si el cliente YA respondió (hay un mensaje ENTRANTE), no por la ventana de 24 h.
+  // Con entrante: texto libre y se OCULTA la burbuja de plantilla; sin entrante: solo plantilla.
+  it("con respuesta del cliente habilita el texto libre; sin respuesta exige plantilla", async () => {
+    // Cliente ya respondió (hay entrante): input de texto libre habilitado y SIN burbuja de plantilla.
     listarHiloChatMock.mockResolvedValue(okHilo(true, [ENTRANTE]));
     const { unmount } = renderPanel(<PanelHarness orden={ORDEN} />);
 
     expect(
       await screen.findByLabelText("Mensaje para el cliente"),
     ).toBeEnabled();
-    // Feature 120: la burbuja de plantillas también se ofrece dentro de la ventana (para pegar).
     expect(
-      screen.getByRole("button", { name: /Enviar plantilla de WhatsApp/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /Usar plantilla en el chat/i }),
+    ).toBeNull();
 
     unmount();
     cleanup();
 
-    // Fuera de la ventana y SIN plantilla elegida: sin input libre, con la burbuja para elegir.
-    listarHiloChatMock.mockResolvedValue(okHilo(false, [ENTRANTE]));
+    // Cliente aún NO respondió (sin entrante): sin input libre, con la burbuja para elegir plantilla.
+    listarHiloChatMock.mockResolvedValue(okHilo(false, []));
     renderPanel(<PanelHarness orden={ORDEN} />);
 
     expect(
       await screen.findByRole("button", {
-        name: /Enviar plantilla de WhatsApp/i,
+        name: /Usar plantilla en el chat/i,
       }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Mensaje para el cliente")).toBeNull();
@@ -239,10 +244,11 @@ describe("ChatWhatsappPanel", () => {
     }
   });
 
-  // Feature 120 (a): elegir una plantilla desde la burbuja pega su texto en el input.
-  it("pega el texto de la plantilla elegida en el input del chat", async () => {
+  // Feature 120 (a): elegir una plantilla desde la burbuja pega su texto en el composer. La
+  // burbuja se ofrece cuando el cliente AÚN NO respondió (sin entrante), para iniciar el hilo.
+  it("pega el texto de la plantilla elegida en el composer del chat", async () => {
     const user = userEvent.setup();
-    listarHiloChatMock.mockResolvedValue(okHilo(true, [ENTRANTE]));
+    listarHiloChatMock.mockResolvedValue(okHilo(false, []));
     listarPlantillasParaEnvioMock.mockResolvedValue({
       status: "ok",
       items: [PLANTILLA],
@@ -250,20 +256,18 @@ describe("ChatWhatsappPanel", () => {
 
     renderPanel(<PanelHarness orden={ORDEN} />);
 
-    // Espera a que el composer (dentro de la ventana) esté montado antes de abrir la burbuja.
-    const input = await screen.findByLabelText<HTMLInputElement>(
-      "Mensaje para el cliente",
-    );
-
     // Abre la burbuja y elige la plantilla.
     await user.click(
-      screen.getByRole("button", {
-        name: /Enviar plantilla de WhatsApp/i,
+      await screen.findByRole("button", {
+        name: /Usar plantilla en el chat/i,
       }),
     );
     await user.click(await screen.findByText(PLANTILLA.nombre));
 
-    // El texto renderizado quedó pegado en el input, listo para editar/enviar.
+    // El texto renderizado quedó pegado en el composer (readonly), listo para enviar como plantilla.
+    const input = await screen.findByLabelText<HTMLInputElement>(
+      "Mensaje para el cliente",
+    );
     expect(input.value).toBe(PLANTILLA.cuerpo);
   });
 
@@ -283,10 +287,10 @@ describe("ChatWhatsappPanel", () => {
     expect(enviarPlantillaChatMock).not.toHaveBeenCalled();
   });
 
-  // Feature 120 (c): ventana CERRADA + plantilla elegida -> enviar manda la plantilla.
-  it("con la ventana cerrada y plantilla elegida, envía como plantilla", async () => {
+  // Feature 120 (c): cliente sin responder + plantilla elegida -> enviar manda la plantilla.
+  it("sin respuesta del cliente y con plantilla elegida, envía como plantilla", async () => {
     const user = userEvent.setup();
-    listarHiloChatMock.mockResolvedValue(okHilo(false, [ENTRANTE]));
+    listarHiloChatMock.mockResolvedValue(okHilo(false, []));
     enviarPlantillaChatMock.mockResolvedValue({
       status: "ok",
       mensajeChatId: "x",
@@ -312,16 +316,16 @@ describe("ChatWhatsappPanel", () => {
     expect(enviarMensajeChatMock).not.toHaveBeenCalled();
   });
 
-  // Feature 120 (d): ventana CERRADA sin plantilla -> no hay envío de texto libre.
-  it("con la ventana cerrada y sin plantilla, no permite enviar texto libre", async () => {
-    listarHiloChatMock.mockResolvedValue(okHilo(false, [ENTRANTE]));
+  // Feature 120 (d): cliente sin responder y sin plantilla -> no hay envío de texto libre.
+  it("sin respuesta del cliente y sin plantilla, no permite enviar texto libre", async () => {
+    listarHiloChatMock.mockResolvedValue(okHilo(false, []));
 
     renderPanel(<PanelHarness orden={ORDEN} />);
 
     // No hay input de texto libre ni botón de enviar: solo la burbuja para elegir plantilla.
     expect(
       await screen.findByRole("button", {
-        name: /Enviar plantilla de WhatsApp/i,
+        name: /Usar plantilla en el chat/i,
       }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Mensaje para el cliente")).toBeNull();

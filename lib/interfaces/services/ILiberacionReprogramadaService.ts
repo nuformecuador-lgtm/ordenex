@@ -15,7 +15,7 @@ export interface LiberacionResult {
 export interface ILiberacionReprogramadaService {
   /**
    * R12-R14/R17: libera las ordenes reprogramadas cuya fecha ya llego (`hoyCR`),
-   * derivando la bodega responsable por zona (central -> `en_bodega`, satelite ->
+   * derivando la bodega responsable por zona (central -> `en_bodega_central`, satelite ->
    * `en_bodega_satelite`), limpiando el mensajero y marcando `liberada_reprogramada_at`.
    * Resiliente por orden (un fallo no aborta la corrida). Idempotente (una re-corrida no
    * re-libera: la orden ya salio de `reprogramada`). No conoce HTTP; la fecha se inyecta.

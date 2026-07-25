@@ -4,7 +4,7 @@
 import { z } from "zod";
 
 // R24/decision 5: decision FINAL por orden en una sola llamada. `mensajeroId:
-// null` = "sin mensajero" (destino en_bodega, R23).
+// null` = "sin mensajero" (destino en_bodega_central, R23).
 export const generarGuiaSchema = z.object({
   decisiones: z.array(
     z.object({

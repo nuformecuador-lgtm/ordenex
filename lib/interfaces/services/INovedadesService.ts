@@ -4,7 +4,7 @@ import type { NovedadDTO } from "@/lib/types/novedad";
 // Feature 87/89 (T3, design §2.2) — contrato del servicio de NOVEDADES: lista paginada de las
 // devoluciones del mensajero de la tienda del adminTienda. Una orden es novedad si tiene una
 // gestion de devolucion VIGENTE y AUN NO esta cerrada (estatus fuera de
-// `{entregada, devuelta_origen, recibido_origen}`), independientemente de su estatus ACTUAL
+// `{entregada, devolviendo_a_tienda, devuelta_a_tienda}`), independientemente de su estatus ACTUAL
 // (la feature 47 la mueve fuera de `devuelta`). Cada una con su causa de devolucion vigente.
 // Logica de negocio pura (sin HTTP ni Prisma); el borde (Server Action) la traduce a resultado
 // tipado. Solo el rol `adminTienda` (R11).

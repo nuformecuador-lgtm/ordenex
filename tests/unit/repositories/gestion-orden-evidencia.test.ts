@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 119 (R9/R12) — `crearGestionYTransicionar` con Prisma mockeado (sin DB). Verifica que
 // las N filas hijas (`gestion_orden_evidencia`) se insertan en la MISMA transaccion que crea la
@@ -20,7 +21,7 @@ function buildTxRepo() {
   const gestionCreate = vi.fn(async () => ({ id: "g1" }));
   const evidenciaCreateMany = vi.fn(async () => ({ count: 0 }));
   const ordenUpdate = vi.fn(async () => ({}));
-  const ordenFindFirst = vi.fn(async () => ({ estatusId: "os-reparto" }));
+  const ordenFindFirst = vi.fn(async () => ({ estatusId: idEstado("en_ruta") }));
   const usuarioUpdate = vi.fn(async () => ({}));
   const historialCreateMany = vi.fn();
   const tx = {
@@ -41,6 +42,10 @@ const evidencias3 = [
   { storagePath: "o1/entregada-1-2.webp", contentType: "image/webp", indice: 2 },
 ];
 
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
+
 describe("crearGestionYTransicionar — N filas hijas en la misma tx (R9)", () => {
   it("R9: gestion + createMany de las N evidencias + UPDATE estatus, todo bajo un unico $transaction", async () => {
     const { repo, gestionCreate, evidenciaCreateMany, ordenUpdate, $transaction } = buildTxRepo();
@@ -49,7 +54,7 @@ describe("crearGestionYTransicionar — N filas hijas en la misma tx (R9)", () =
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencias: evidencias3 },
-      nuevoEstatusId: "os-entregada",
+      nuevoEstatusId: idEstado("entregada"),
     });
 
     expect(id).toBe("g1");
@@ -73,7 +78,7 @@ describe("crearGestionYTransicionar — N filas hijas en la misma tx (R9)", () =
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "rechazada", motivo: "x", evidencias: evidencias3 },
-      nuevoEstatusId: "os-rechazada",
+      nuevoEstatusId: idEstado("rechazada"),
     });
     const arg = (evidenciaCreateMany.mock.calls[0] as unknown[])[0] as { data: { indice: number }[] };
     expect(arg.data.map((e) => e.indice)).toEqual([0, 1, 2]);
@@ -87,7 +92,7 @@ describe("crearGestionYTransicionar — dual-write de la portada (R12)", () => {
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo", evidencias: evidencias3 },
-      nuevoEstatusId: "os-entregada",
+      nuevoEstatusId: idEstado("entregada"),
     });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.evidenciaStoragePath).toBe("o1/entregada-1-0.jpg");
@@ -104,7 +109,7 @@ describe("crearGestionYTransicionar — dual-write de la portada (R12)", () => {
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "rechazada", motivo: "x", evidencias: desordenadas },
-      nuevoEstatusId: "os-rechazada",
+      nuevoEstatusId: idEstado("rechazada"),
     });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.evidenciaStoragePath).toBe("p0");
@@ -119,7 +124,7 @@ describe("crearGestionYTransicionar — ramas sin foto (reprogramada)", () => {
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
-      nuevoEstatusId: "os-reprogramada",
+      nuevoEstatusId: idEstado("reprogramada"),
     });
     expect(evidenciaCreateMany).not.toHaveBeenCalled();
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };

@@ -1,14 +1,24 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import type { OrderStatusValue } from "@/lib/types/order-status";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 106 (T7 + T14) — cancelarViaApi: transaccion que valida owner+estado, transiciona a
-// `devuelta_origen` y registra en la bitacora via appendCambioEstado (origen_tipo cancelacion_api,
+// `devolviendo_a_tienda` y registra en la bitacora via appendCambioEstado (origen_tipo cancelacion_api,
 // motivo 'cancelada por tienda') EN LA MISMA tx, SIN tocar gestion_orden. El fake de $transaction
 // invoca el callback con el propio prisma como tx.
+//
+// Feature 140: la guardia del choke point es de FALLO CERRADO, asi que los ids de estatus son
+// los del catalogo (`idEstado`) y el catalogo se siembra antes de cada test. El par
+// `en_bodega_central`/`en_ruta_bodega_central -> devolviendo_a_tienda` son las aristas #29/#30.
 
 const OWNER = "store-1";
-const DEVUELTA_ORIGEN_ID = "os-devuelta-origen";
+const DEVUELTA_ORIGEN_ID = idEstado("devolviendo_a_tienda");
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados();
+});
 
 function buildPrisma(ordenActual: Record<string, unknown> | null) {
   const prisma = {
@@ -33,12 +43,16 @@ function buildPrisma(ordenActual: Record<string, unknown> | null) {
 }
 
 function ordenEn(estatusValue: string) {
-  return { id: "ord-1", estatusId: "os-origen", estatus: { value: estatusValue } };
+  return {
+    id: "ord-1",
+    estatusId: idEstado(estatusValue as OrderStatusValue),
+    estatus: { value: estatusValue },
+  };
 }
 
 describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
-  it.each(["en_bodega", "en_ruta_bodega_principal"])(
-    "R19/R25: transiciona desde %s a devuelta_origen (update + append en la MISMA tx)",
+  it.each(["en_bodega_central", "en_ruta_bodega_central"])(
+    "R19/R25: transiciona desde %s a devolviendo_a_tienda (update + append en la MISMA tx)",
     async (estadoOrigen) => {
       const prisma = buildPrisma(ordenEn(estadoOrigen));
       const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -56,7 +70,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
         tiendaId: OWNER,
         deletedAt: null,
       });
-      // UPDATE del estatus a devuelta_origen.
+      // UPDATE del estatus a devolviendo_a_tienda.
       expect(prisma.orden.update).toHaveBeenCalledWith({
         where: { id: "ord-1" },
         data: { estatusId: DEVUELTA_ORIGEN_ID },
@@ -67,7 +81,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
   );
 
   it("R22/R26: appendCambioEstado registra origen/destino/actor/origen_tipo y motivo='cancelada por tienda'", async () => {
-    const prisma = buildPrisma(ordenEn("en_bodega"));
+    const prisma = buildPrisma(ordenEn("en_bodega_central"));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     await repo.cancelarViaApi({
@@ -81,8 +95,8 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
     expect(arg.data).toEqual([
       {
         ordenId: "ord-1",
-        estatusOrigenId: "os-origen", // estado previo real (R22)
-        estatusDestinoId: DEVUELTA_ORIGEN_ID, // devuelta_origen (R22)
+        estatusOrigenId: idEstado("en_bodega_central"), // estado previo real (R22)
+        estatusDestinoId: DEVUELTA_ORIGEN_ID, // devolviendo_a_tienda (R22)
         actorUsuarioId: OWNER, // actor = owner (R22)
         origenTipo: "cancelacion_api", // R22
         motivo: "cancelada por tienda", // R26
@@ -92,7 +106,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
   });
 
   it("R26/T14: NO escribe ninguna fila en gestion_orden al cancelar", async () => {
-    const prisma = buildPrisma(ordenEn("en_bodega"));
+    const prisma = buildPrisma(ordenEn("en_bodega_central"));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     await repo.cancelarViaApi({
@@ -107,7 +121,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
     expect(prisma.gestionOrden.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each(["en_reparto", "devuelta_origen", "entregada", "rechazada", "en_bodega_satelite"])(
+  it.each(["en_ruta", "devolviendo_a_tienda", "entregada", "rechazada", "en_bodega_satelite"])(
     "R20: %s no es cancelable -> conflict; no toca estado ni bitacora",
     async (estado) => {
       const prisma = buildPrisma(ordenEn(estado));

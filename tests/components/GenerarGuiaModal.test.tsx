@@ -115,9 +115,9 @@ describe("GenerarGuiaModal", () => {
     generarGuiaMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "o1", numGuia: 1, estado: "en_espera_aceptacion" },
-        { ordenId: "o2", numGuia: 2, estado: "en_espera_aceptacion" },
-        { ordenId: "o3", numGuia: 3, estado: "en_bodega" },
+        { ordenId: "o1", numGuia: 1, estado: "por_recoger" },
+        { ordenId: "o2", numGuia: 2, estado: "por_recoger" },
+        { ordenId: "o3", numGuia: 3, estado: "en_bodega_central" },
       ],
     });
 
@@ -126,7 +126,7 @@ describe("GenerarGuiaModal", () => {
       makeOrden({ id: "o1", numRemision: "REM-001", mensajeroSugeridoId: "m1" }),
       // (b) sin sugerido: el maestro elige otro mensajero (override).
       makeOrden({ id: "o2", numRemision: "REM-002", mensajeroSugeridoId: null }),
-      // (b) sin sugerido: el maestro deja "sin mensajero" -> en_bodega.
+      // (b) sin sugerido: el maestro deja "sin mensajero" -> en_bodega_central.
       makeOrden({ id: "o3", numRemision: "REM-003", mensajeroSugeridoId: null }),
     ];
     const { onSuccess } = renderModal(ordenes);
@@ -147,7 +147,7 @@ describe("GenerarGuiaModal", () => {
       decisiones: [
         { ordenId: "o1", mensajeroId: "m1" }, // sugerido confirmado
         { ordenId: "o2", mensajeroId: "m2" }, // override
-        { ordenId: "o3", mensajeroId: null }, // sin mensajero -> en_bodega
+        { ordenId: "o3", mensajeroId: null }, // sin mensajero -> en_bodega_central
       ],
     });
 
@@ -159,7 +159,7 @@ describe("GenerarGuiaModal", () => {
     generarGuiaMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "o1", numGuia: 1, estado: "en_espera_aceptacion" },
+        { ordenId: "o1", numGuia: 1, estado: "por_recoger" },
         { ordenId: "o2", numGuia: 2, estado: "en_ruta_bodega_satelite" },
       ],
     });
@@ -284,7 +284,7 @@ describe("GenerarGuiaModal", () => {
 
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith(
-        "La dirección aún se está validando. Intenta de nuevo en unos minutos.",
+        "La dirección aún se está validando. Vuelve a intentarlo en unos minutos.",
       ),
     );
   });

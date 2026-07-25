@@ -1,11 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 88 — createManyOrdenesConGuia: inserta el lote y, en la MISMA tx, asigna
 // num_guia inmediato (misma secuencia `orden_num_guia_seq` que "Generar guia") y deja el
-// historial (origen null -> en_ruta_bodega_principal, origenTipo carga_api). El fake de
+// historial (origen null -> en_ruta_bodega_central, origenTipo carga_api). El fake de
 // prisma invoca el callback de `$transaction` con el propio prisma como `tx`.
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   const prisma = {
@@ -29,7 +30,7 @@ const HIST_API = { actorUsuarioId: "key-user-1", origenTipo: "carga_api" } as co
 function baseCreateData(overrides: Partial<CreateOrdenData> = {}): CreateOrdenData {
   return {
     numRemision: "REM-1",
-    estatusId: "os-erbp", // en_ruta_bodega_principal ya resuelto por el service
+    estatusId: idEstado("en_ruta_bodega_central"), // en_ruta_bodega_central ya resuelto por el service
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "key-user-1",
@@ -42,14 +43,18 @@ function baseCreateData(overrides: Partial<CreateOrdenData> = {}): CreateOrdenDa
   };
 }
 
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
+
 describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
   it("R9: N ordenes nuevas -> N num_guia distintos y consecutivos desde la secuencia", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany
       .mockResolvedValueOnce([]) // before: ninguna existe
       .mockResolvedValueOnce([
-        { id: "o1", numRemision: "REM-1", estatusId: "os-erbp", estatus: { value: "en_ruta_bodega_principal" } },
-        { id: "o2", numRemision: "REM-2", estatusId: "os-erbp", estatus: { value: "en_ruta_bodega_principal" } },
+        { id: "o1", numRemision: "REM-1", estatusId: idEstado("en_ruta_bodega_central"), estatus: { value: "en_ruta_bodega_central" } },
+        { id: "o2", numRemision: "REM-2", estatusId: idEstado("en_ruta_bodega_central"), estatus: { value: "en_ruta_bodega_central" } },
       ]); // after: ambas nuevas
     // La secuencia real es atomica; aqui la simulamos consecutiva por orden numerada.
     prisma.orden.findUniqueOrThrow
@@ -64,8 +69,8 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     );
 
     expect(creadas).toEqual([
-      { ordenId: "o1", numRemision: "REM-1", numGuia: 1001, estatusValue: "en_ruta_bodega_principal" },
-      { ordenId: "o2", numRemision: "REM-2", numGuia: 1002, estatusValue: "en_ruta_bodega_principal" },
+      { ordenId: "o1", numRemision: "REM-1", numGuia: 1001, estatusValue: "en_ruta_bodega_central" },
+      { ordenId: "o2", numRemision: "REM-2", numGuia: 1002, estatusValue: "en_ruta_bodega_central" },
     ]);
     // Guias distintas.
     expect(new Set(creadas.map((c) => c.numGuia)).size).toBe(2);
@@ -76,7 +81,7 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     prisma.orden.findMany
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
-        { id: "o1", numRemision: "REM-1", estatusId: "os-erbp", estatus: { value: "en_ruta_bodega_principal" } },
+        { id: "o1", numRemision: "REM-1", estatusId: idEstado("en_ruta_bodega_central"), estatus: { value: "en_ruta_bodega_central" } },
       ]);
     prisma.orden.findUniqueOrThrow.mockResolvedValueOnce({ numGuia: 5 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -97,7 +102,7 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     prisma.orden.findMany
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
-        { id: "o1", numRemision: "REM-1", estatusId: "os-erbp", estatus: { value: "en_ruta_bodega_principal" } },
+        { id: "o1", numRemision: "REM-1", estatusId: idEstado("en_ruta_bodega_central"), estatus: { value: "en_ruta_bodega_central" } },
       ]);
     prisma.orden.findUniqueOrThrow.mockResolvedValueOnce({ numGuia: 7 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -110,7 +115,7 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
       {
         ordenId: "o1",
         estatusOrigenId: null, // creacion (R20)
-        estatusDestinoId: "os-erbp", // en_ruta_bodega_principal (R8)
+        estatusDestinoId: idEstado("en_ruta_bodega_central"), // en_ruta_bodega_central (R8)
         actorUsuarioId: "key-user-1",
         origenTipo: "carga_api", // D7
         motivo: null,
@@ -125,7 +130,7 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     prisma.orden.findMany
       .mockResolvedValueOnce([{ id: "o-existing" }])
       .mockResolvedValueOnce([
-        { id: "o-existing", numRemision: "REM-1", estatusId: "os-x", estatus: { value: "en_bodega" } },
+        { id: "o-existing", numRemision: "REM-1", estatusId: idEstado("en_bodega_central"), estatus: { value: "en_bodega_central" } },
       ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
@@ -143,8 +148,8 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     prisma.orden.findMany
       .mockResolvedValueOnce([{ id: "o-existing" }]) // REM-2 preexiste
       .mockResolvedValueOnce([
-        { id: "o-existing", numRemision: "REM-2", estatusId: "os-x", estatus: { value: "en_bodega" } },
-        { id: "o-new", numRemision: "REM-1", estatusId: "os-erbp", estatus: { value: "en_ruta_bodega_principal" } },
+        { id: "o-existing", numRemision: "REM-2", estatusId: idEstado("en_bodega_central"), estatus: { value: "en_bodega_central" } },
+        { id: "o-new", numRemision: "REM-1", estatusId: idEstado("en_ruta_bodega_central"), estatus: { value: "en_ruta_bodega_central" } },
       ]);
     prisma.orden.findUniqueOrThrow.mockResolvedValueOnce({ numGuia: 9 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -156,7 +161,7 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     );
 
     expect(creadas).toEqual([
-      { ordenId: "o-new", numRemision: "REM-1", numGuia: 9, estatusValue: "en_ruta_bodega_principal" },
+      { ordenId: "o-new", numRemision: "REM-1", numGuia: 9, estatusValue: "en_ruta_bodega_central" },
     ]);
     expect(prisma.$executeRawUnsafe).toHaveBeenCalledTimes(1); // solo la nueva consume guia
     expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);

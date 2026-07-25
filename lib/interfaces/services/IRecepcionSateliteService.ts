@@ -40,13 +40,18 @@ export type ListarRecepcionSateliteServiceResult =
       status: "ok";
       porRecibir: RecepcionSateliteDTO[];
       recibidas: RecepcionSateliteDTO[];
-      // Feature 48/T9/R14: ordenes en estado `rechazada` de la MISMA zona del
-      // adminSatelite, elegibles para la accion "Devolver a la tienda"
-      // (transicion rechazada -> devuelta_origen la ejecuta DevolucionOrigenService).
-      // Acotado server-side por zona (findRecepcionSateliteByZona(zonaId, ...)); un
-      // adminSatelite NO ve rechazadas de otra zona. Solo listado, la autz de
-      // ejecutar el retorno la impone DevolucionOrigenService (rol + zona).
+      // Feature 139/T2.5/R21: ordenes en estado `por_devolver` de la MISMA zona del adminSatelite,
+      // elegibles para la accion (por lote) "Enviar a central" (transicion
+      // por_devolver -> devolviendo_a_bodega_central la ejecuta EnvioDevolucionCentralService).
+      // REEMPLAZA el viejo scope `rechazada` (feature 48): la rechazada sale de ese estado solo al
+      // aprobar el cierre, que la deja en `por_devolver`. Acotado server-side por zona
+      // (findRecepcionSateliteByZona(zonaId, ...)); un adminSatelite NO ve las de otra zona. Solo
+      // listado; la autz de ejecutar el envio la impone EnvioDevolucionCentralService (rol + zona).
       porDevolver: RecepcionSateliteDTO[];
+      // Feature 139/T2.5/R21: ordenes en estado `devolviendo_a_bodega_central` de la MISMA zona,
+      // INFORMATIVAS (ya enviadas y en transito a la central; la recepcion la hace la central por QR,
+      // no el satelite). Acotado server-side por zona; solo lectura, sin accion desde satelite.
+      enTransitoACentral: RecepcionSateliteDTO[];
       // Feature 100/T4.1/R12: ordenes en estado `devuelta` (novedad que reposa bajo la
       // feature 99) de la MISMA zona del adminSatelite, elegibles para "Recuperar a bodega"
       // (transicion devuelta -> en_bodega_satelite la ejecuta RecuperacionBodegaService).

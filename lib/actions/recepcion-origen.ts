@@ -55,7 +55,7 @@ export interface RecepcionOrigenDeps {
 
 /**
  * Recibe en la tienda de origen la orden del `num_guia` escaneado (el QR codifica
- * `/paquete/<numGuia>`): `devuelta_origen` -> `recibido_origen`. El alcance por
+ * `/paquete/<numGuia>`): `devolviendo_a_tienda` -> `devuelta_a_tienda`. El alcance por
  * tienda y la guardia de estado los impone el service, server-side.
  */
 export async function recibirEnOrigenPorQr(

@@ -15,6 +15,68 @@
 
 ## Features en curso
 
+### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
+
+> Detalle de las 4 en `history.md`. PRs #157 (137) · #159 (138) · #160 (139) · #161 (140).
+> **Deuda viva del lote (tarea humana):** las migraciones de 137/138/139 NO se han aplicado contra DB
+> real (entorno sin `.env`) → al desplegar, `prisma migrate deploy` + verificar `down.sql` con
+> `db:rollback`, **coordinado con el deploy**: la 137 renombra values del catálogo y código y DB deben
+> coincidir. La 140 no trae migraciones.
+>
+> Cierre de deuda en `chore/cierre-lote-137-140`: T4.1 de la 139 saldada (test de integración del
+> recorrido completo), los 2 `down.sql` que faltaban en el repo (deuda ajena de WhatsApp) escritos y
+> respaldados por tests → `./init.sh` ya no avisa `migraciones sin down.sql`.
+
+<details>
+<summary>Bitácora del lote (histórico de la sesión)</summary>
+
+#### Estado durante la sesión — 137/138/139 mergeadas; 140 en implementación
+
+> Renumerado desde **135–138** por colisión de IDs: `dev` (merge de #155 `flow`) reclamó
+> **135 = analítica-KPIs** y **136 = etiquetas-PDF**. El lote se desplazó al bloque libre 137–140.
+
+**137 rename nomenclatura (PR #157) · 138 recepción central (PR #159) · 139 devolución de rechazadas
+(PR #160) — las tres `done` y mergeadas.** Detalle de cada una en `history.md`. La 139 se reconcilió a
+`done` el 2026-07-25 (figuraba `in_progress` con su PR ya mergeado).
+
+**140 — guardia central de transiciones de `order_status` (backend, high) — EN IMPLEMENTACIÓN.**
+Rama `feature/140-flujo-estados-guardia-central` desde `origin/dev`. Cierra la deuda de fondo del lote:
+hoy NO existe máquina de estados central — cada service declara sus orígenes/destinos y la única guardia
+real es el `WHERE estatus_id = <origen>` de cada UPDATE. El choke point `appendCambioEstado` (feature 49,
+~18 call-sites) registra historial + encola webhook pero **no valida legalidad**. La 140 centraliza el
+mapa (`lib/types/order-status-transiciones.ts`) y lo valida ahí.
+
+- **Gate F1.4 APROBADO (2026-07-25), 4 decisiones:** (Q3) TODO pasa por la guardia, **sin override
+  `ANY→ANY`** ni para maestro/admin — rescatar una orden atascada exigirá declarar la arista y desplegar;
+  (activación) **estricta desde el día 1**, sin shadow/flag/env; (Q5) se valida también la creación
+  `null→X` contra `ESTADOS_CREACION = {en_preparacion, en_fulfillment, en_ruta_bodega_central}`;
+  (Q6) `throw` tipado `TransicionIlegalError` sin PII, firma intacta para los ~18 call-sites.
+- **Q1/Q2/Q4 se cerraron CONTRA CÓDIGO al aterrizar 138/139** (ya no eran preguntas): terminales
+  `entregada`/`devuelta_a_tienda`; `en_ruta_bodega_central` dejó de ser vestigial (entrada por `carga_api`,
+  salida por la recepción central de la 138) → **allowlist vestigial VACÍA**; y el catálogo pasó a **18
+  values** (la 139 sumó 3, no 1: `por_devolver`, `devolviendo_a_bodega_central`, `por_devolver_a_tienda`).
+- **Spec reconciliado (`spec_author`):** estaba escrito con la numeración vieja (se titulaba "138";
+  135/136/137 = hoy 137/138/139) y con `TODO(136)/TODO(137)` sin resolver. Inventario re-derivado del
+  código: **41 aristas de flujo → 39 pares únicos + 3 de creación**, 22/22 familias `origen_tipo`,
+  conectividad 18/18 sin callejones ni cuellos de botella. **La 139 RETIRÓ `rechazada →
+  devolviendo_a_tienda`** (su R9): declararla reabriría un camino cerrado a propósito.
+- **Reviewer RECHAZÓ la 1.ª entrega (`progress/review_140.md`), 2 bloqueantes.** Inventario R8
+  CONFIRMADO correcto y R1–R17 trazados, pero **BLOQ-1: la guardia falla ABIERTA** — `esOrderStatusValue`
+  descarta las filas de `order_status` cuyo `value` no esté en el `ORDER_STATUS_SEED` del build y esa
+  transición pasa **sin validar** (drift DB↔build, justo donde la guardia hace falta); agravante: de 26
+  suites que mockean el `tx` la guardia queda **OFF** en los ~25 archivos que modelan los call-sites
+  reales, y un test consagraba el fail-open como contrato. **BLOQ-2:** `tasks.md` con las 11 tareas sin
+  marcar. En corrección por `backend_dev` (fail-CLOSED + inyectar catálogo explícito en las suites, sin
+  relajar la guardia para que pasen).
+- **Sin migraciones, sin `down.sql`, sin RLS, sin endpoints nuevos** (es dominio puro + choke point).
+- **Cierre:** re-review APROBADO 0 bloqueantes tras el fix a fallo cerrado, verificado por mutación.
+  PR #161 mergeado a `dev`.
+
+</details>
+
+**Reconciliación de estado stale (pre-merge):** 107/108/110/120 estaban `in_progress` pese a estar
+mergeadas a `dev` (PRs #135/#136/#140/#149) → reconciliadas a `done`.
+
 **Ubicación compartida por el cliente en el chat de WhatsApp — feature 121 (2026-07-24) → EN
 ESPECIFICACIÓN / puerta F1.4.** Pedido del humano: "en el webhook que consume las respuestas de
 WhatsApp agregar soporte para ubicación (mensajes `type=location`); almacenar la ubicación enviada;

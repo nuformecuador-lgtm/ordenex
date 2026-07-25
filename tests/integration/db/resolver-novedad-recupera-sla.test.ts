@@ -1,20 +1,21 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
 import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 100 (T5.2) — INTEGRACION de la recuperacion a bodega con el cron SLA vecino, con los repos
 // REALES (`RecuperacionBodegaRepository.recuperarABodega` de la 100 y
 // `DevolucionSlaRepository.findDevueltasSla` de la 99). Propiedad probada (R18): tras recuperar, la
-// orden sale de `devuelta` a `en_bodega`/`en_bodega_satelite` y SIN mensajero -> el cron SLA 99 la
+// orden sale de `devuelta` a `en_bodega_central`/`en_bodega_satelite` y SIN mensajero -> el cron SLA 99 la
 // SALTA (su query filtra `estatus = devuelta`) y queda ASIGNABLE por la bodega (handoff limpio:
 // mensajero_asignado_id + asignado_at a null). Patron `cierre-detail-congelado.test.ts`: no hay
 // Postgres en la suite; se usa una "base" en memoria con la semantica de las queries Prisma.
 
 const ESTATUS: Record<string, string> = {
-  devuelta: "os-devuelta",
-  en_bodega: "os-en-bodega",
-  en_bodega_satelite: "os-en-bodega-satelite",
+  devuelta: idEstado("devuelta"),
+  en_bodega_central: idEstado("en_bodega_central"),
+  en_bodega_satelite: idEstado("en_bodega_satelite"),
 };
 const valueByEstatusId = (id: string): string =>
   Object.keys(ESTATUS).find((v) => ESTATUS[v] === id) ?? "desconocido";
@@ -155,7 +156,7 @@ function makeDb(zonaId: string) {
 
 type Db = ReturnType<typeof makeDb>;
 
-function recuperar(db: Db, destinoValue: "en_bodega" | "en_bodega_satelite") {
+function recuperar(db: Db, destinoValue: "en_bodega_central" | "en_bodega_satelite") {
   const repo = new RecuperacionBodegaRepository(db.prisma as unknown as PrismaClient);
   return repo.recuperarABodega({
     ordenId: "o1",
@@ -166,6 +167,10 @@ function recuperar(db: Db, destinoValue: "en_bodega" | "en_bodega_satelite") {
 }
 
 const slaRepo = (db: Db) => new DevolucionSlaRepository(db.prisma as unknown as PrismaClient);
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("Feature 100 T5.2 — recuperar (satelite) saca la orden de `devuelta`: el cron SLA 99 la salta + queda asignable (R18)", () => {
   it("ANTES de recuperar, el cron SLA 99 SI ve la orden `devuelta`", async () => {
@@ -191,14 +196,14 @@ describe("Feature 100 T5.2 — recuperar (satelite) saca la orden de `devuelta`:
   });
 });
 
-describe("Feature 100 T5.2 — recuperar (central) rutea a en_bodega y tambien sale del radar del cron SLA (R13/R18)", () => {
-  it("DESPUES de recuperar a bodega central: en_bodega, SIN mensajero, el cron SLA 99 la salta", async () => {
+describe("Feature 100 T5.2 — recuperar (central) rutea a en_bodega_central y tambien sale del radar del cron SLA (R13/R18)", () => {
+  it("DESPUES de recuperar a bodega central: en_bodega_central, SIN mensajero, el cron SLA 99 la salta", async () => {
     const db = makeDb("z-central");
-    const ok = await recuperar(db, "en_bodega");
+    const ok = await recuperar(db, "en_bodega_central");
     expect(ok).toBe(true);
 
     const orden = db.ordenes[0];
-    expect(orden.estatusId).toBe(ESTATUS.en_bodega);
+    expect(orden.estatusId).toBe(ESTATUS.en_bodega_central);
     expect(orden.mensajeroAsignadoId).toBeNull();
     expect(orden.asignadoAt).toBeNull();
     // Feature 110/R2: recuperada a bodega central -> tambien prioritaria.
@@ -208,9 +213,9 @@ describe("Feature 100 T5.2 — recuperar (central) rutea a en_bodega y tambien s
 
   it("R21: una 2.a recuperacion (o carrera con el cron 99) es no-op -> false, sin re-salir de un estado ajeno", async () => {
     const db = makeDb("z-central");
-    expect(await recuperar(db, "en_bodega")).toBe(true);
+    expect(await recuperar(db, "en_bodega_central")).toBe(true);
     // La orden ya no esta en `devuelta`: el UPDATE guardado no afecta filas -> false (idempotente).
-    expect(await recuperar(db, "en_bodega")).toBe(false);
-    expect(db.ordenes[0].estatusId).toBe(ESTATUS.en_bodega);
+    expect(await recuperar(db, "en_bodega_central")).toBe(false);
+    expect(db.ordenes[0].estatusId).toBe(ESTATUS.en_bodega_central);
   });
 });

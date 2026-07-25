@@ -44,11 +44,11 @@ import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabil
 import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 /** Feature 92: unico estatus cuyas ordenes son paradas de la ruta de un mensajero. */
-const ESTATUS_EN_REPARTO = "en_reparto";
+const ESTATUS_EN_REPARTO = "en_ruta";
 
 // Feature 106 (design §4, R19/R20): unicos estados desde los que la tienda puede cancelar
-// una orden via API; cualquier otro (incl. una orden ya en `devuelta_origen`) es 409.
-const ESTADOS_CANCELABLES_API: readonly string[] = ["en_bodega", "en_ruta_bodega_principal"];
+// una orden via API; cualquier otro (incl. una orden ya en `devolviendo_a_tienda`) es 409.
+const ESTADOS_CANCELABLES_API: readonly string[] = ["en_bodega_central", "en_ruta_bodega_central"];
 
 // Feature 106 — `select` de los campos PUBLICOS de una orden para el canal integrador, y su
 // mapeo a `ApiOrdenRow` (Decimal -> number, estatus.value plano). Un solo lugar para que el
@@ -133,7 +133,11 @@ const NUM_GUIA_GENERATOR = "siguiente_num_guia()";
 const ORIGEN_RECEPCION_SATELITE = "en_ruta_bodega_satelite";
 // Estado de ORIGEN de la recepcion en la tienda: la orden viaja de vuelta a la
 // tienda ("En ruta a origen") y esta la recibe fisicamente.
-const ORIGEN_RECEPCION_ORIGEN = "devuelta_origen";
+const ORIGEN_RECEPCION_ORIGEN = "devolviendo_a_tienda";
+// Feature 138 + 139: la recepcion en la BODEGA CENTRAL es STATE-AWARE: el estado de ORIGEN
+// (`en_ruta_bodega_central` para el caso 138, `devolviendo_a_bodega_central` para el 139) lo
+// resuelve el SERVICE y lo pasa como `origenValue` a `recibirEnBodegaCentral`, que guarda el UPDATE
+// por ese estado. La guarda NO se acota por zona ni por tienda (R11): la bodega central es global.
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
 const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
@@ -573,7 +577,7 @@ export class OrdenRepository implements IOrdenRepository {
     // Feature 101/R6: `prioridad DESC` PRIMERO y LUEGO el orden vigente (lista blanca R31:
     // created_at/num_guia/num_remision). El sort va en la QUERY para respetar la paginacion
     // (una orden prioritaria flota a la primera pagina, no queda atrapada en la 2). Es GLOBAL
-    // al listado pero INOCUO fuera de `en_bodega`: solo ahi (y en bodega satelite) hay
+    // al listado pero INOCUO fuera de `en_bodega_central`: solo ahi (y en bodega satelite) hay
     // `prioridad = true`; en el resto el desempate booleano cae al criterio vigente sin
     // alterar el orden observable (R10, sin reordenar superficies ajenas).
     const orderBy: Prisma.OrdenOrderByWithRelationInput[] = [
@@ -1226,7 +1230,7 @@ export class OrdenRepository implements IOrdenRepository {
       if (!orden) return { status: "not_found" }; // R23/R24
       const estadoActual = orden.estatus.value;
       if (!ESTADOS_CANCELABLES_API.includes(estadoActual)) {
-        return { status: "conflict", estadoActual }; // R20 (incl. ya devuelta_origen)
+        return { status: "conflict", estadoActual }; // R20 (incl. ya devolviendo_a_tienda)
       }
       // R19/R25: transiciona y registra en la MISMA tx.
       await tx.orden.update({
@@ -1237,7 +1241,7 @@ export class OrdenRepository implements IOrdenRepository {
         {
           ordenId: orden.id,
           estatusOrigenId: orden.estatusId, // R22: estado previo real
-          estatusDestinoId: params.devueltaOrigenEstatusId, // devuelta_origen
+          estatusDestinoId: params.devueltaOrigenEstatusId, // devolviendo_a_tienda
           actorUsuarioId: params.ownerId, // R22: actor = actor.usuarioId (= owner)
           origenTipo: "cancelacion_api", // R22
           motivo: "cancelada por tienda", // R26: marcador semantico en la bitacora
@@ -1312,7 +1316,7 @@ export class OrdenRepository implements IOrdenRepository {
     if (decisiones.length === 0) return [];
     return this.prisma.$transaction(async (tx) => {
       // Feature 49/#3 (R20): estatus de ORIGEN por orden, leido dentro de la tx antes de
-      // escribir (cada orden puede venir de en_fulfillment/en_preparacion/en_bodega).
+      // escribir (cada orden puede venir de en_fulfillment/en_preparacion/en_bodega_central).
       const origenRows = await tx.orden.findMany({
         where: { id: { in: decisiones.map((d) => d.ordenId) } },
         select: { id: true, estatusId: true },
@@ -1344,7 +1348,7 @@ export class OrdenRepository implements IOrdenRepository {
           throw new Error(`num_guia no asignado para la orden ${d.ordenId}`);
         }
         resultados.push({ ordenId: d.ordenId, numGuia: updated.numGuia });
-        // R11: destino real por orden (en_espera_aceptacion/en_bodega/en_ruta_bodega_satelite).
+        // R11: destino real por orden (por_recoger/en_bodega_central/en_ruta_bodega_satelite).
         entradas.push({
           ordenId: d.ordenId,
           estatusOrigenId: origenById.get(d.ordenId) ?? null,
@@ -1574,7 +1578,7 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * Recepcion en la tienda de ORIGEN (`devuelta_origen` -> `recibido_origen`), cierre
+   * Recepcion en la tienda de ORIGEN (`devolviendo_a_tienda` -> `devuelta_a_tienda`), cierre
    * del flujo de devolucion. Espejo EXACTO de `recibirEnSatelite` cambiando la guarda
    * de zona por la de tienda: updateMany guardado + append del historial en la MISMA
    * tx (choke point de la feature 49), con el origen pre-leido bajo la misma guarda.
@@ -1588,7 +1592,7 @@ export class OrdenRepository implements IOrdenRepository {
     historial: HistorialContexto,
   ): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
-      // Origen pre-leido con la MISMA guarda (estado devuelta_origen + tienda).
+      // Origen pre-leido con la MISMA guarda (estado devolviendo_a_tienda + tienda).
       const actual = await tx.orden.findFirst({
         where: {
           id: ordenId,
@@ -1616,6 +1620,60 @@ export class OrdenRepository implements IOrdenRepository {
             estatusDestinoId: destinoEstatusId,
             actorUsuarioId: historial.actorUsuarioId,
             origenTipo: historial.origenTipo, // ajuste_estado (como la devolucion)
+          },
+        ]);
+      }
+      return result.count === 1;
+    });
+  }
+
+  /**
+   * Feature 138/R2/R3/R9/R18 + feature 139/R17 (STATE-AWARE): recepcion en la BODEGA CENTRAL. El par
+   * ORIGEN->DESTINO lo resuelve el SERVICE por el estado de origen de la orden y lo pasa como
+   * `origenValue`/`destinoEstatusId`: `en_ruta_bodega_central -> en_bodega_central` (138) o
+   * `devolviendo_a_bodega_central -> por_devolver_a_tienda` (139). Espejo de
+   * `recibirEnOrigen`/`recibirEnSatelite` pero SIN guarda de tienda ni de zona: la bodega central es
+   * global (R11). La UNICA guarda es el estado de ORIGEN (`estatus.value = origenValue`) + no borrada,
+   * impuesta en el propio `updateMany` (concurrencia-segura, R9): a lo sumo UNA de dos recepciones
+   * concurrentes afecta 1 fila. Origen pre-leido bajo la misma guarda; append del historial
+   * (`origenTipo` = el pasado en `historial`, `recepcion_bodega_central`) SOLO si transiciono (count 1),
+   * en la MISMA tx (choke point feature 49: historial + outbox de webhook). NO toca
+   * `mensajeroAsignadoId` ni `numGuia` (R18).
+   */
+  async recibirEnBodegaCentral(
+    ordenId: string,
+    origenValue: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      // Origen pre-leido con la MISMA guarda (estado `origenValue` + no borrada). SIN zona/tienda:
+      // cualquier orden en el origen es elegible (R11).
+      const actual = await tx.orden.findFirst({
+        where: {
+          id: ordenId,
+          deletedAt: null,
+          estatus: { value: origenValue },
+        },
+        select: { estatusId: true },
+      });
+      const result = await tx.orden.updateMany({
+        where: {
+          id: ordenId,
+          deletedAt: null,
+          estatus: { value: origenValue },
+        },
+        data: { estatusId: destinoEstatusId },
+      });
+      // R3/R9: SOLO si transiciono (count 1); una orden que perdio la carrera no deja rastro.
+      if (result.count === 1 && actual !== null) {
+        await appendCambioEstado(tx, [
+          {
+            ordenId,
+            estatusOrigenId: actual.estatusId,
+            estatusDestinoId: destinoEstatusId,
+            actorUsuarioId: historial.actorUsuarioId,
+            origenTipo: historial.origenTipo, // recepcion_bodega_central
           },
         ]);
       }
@@ -1668,7 +1726,7 @@ export class OrdenRepository implements IOrdenRepository {
   // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
 
   /**
-   * Feature 34/R7/R14: transiciona el lote a `en_espera_aceptacion` fijando
+   * Feature 34/R7/R14: transiciona el lote a `por_recoger` fijando
    * `mensajeroAsignadoId`, con escritura guardada por estado de ORIGEN + zona (solo
    * las que sigan en `origenEstatusId`, de `zonaId` y no borradas; patron
    * `recibirEnSatelite`, concurrencia-segura). Filtra por `estatusId` (id ya

@@ -83,7 +83,7 @@ const ORDENES: ResumenCargaOrdenDTO[] = [
 
 const CLASIFICACION: ClasificacionCarga = {
   numRemisionesNuevas: ["REM-0001"],
-  existentes: [{ numRemision: "REM-0100", estatus: "en_bodega" }],
+  existentes: [{ numRemision: "REM-0100", estatus: "en_bodega_central" }],
   errores: [
     { fila: 5, numRemision: "REM-0500", errores: { telefono: ["obligatorio"] } },
   ],
@@ -114,9 +114,9 @@ describe("OrdenesCargaResumenPaso — tres secciones (R4, R7, R8, R9, R10, R18)"
     expect(await screen.findByText("REM-0001")).toBeInTheDocument();
 
     // Sección de existentes (solo lectura, etiqueta legible del mapa de
-    // presentación — no el value crudo `en_bodega`).
+    // presentación — no el value crudo `en_bodega_central`).
     expect(screen.getByText("REM-0100")).toBeInTheDocument();
-    expect(screen.getByText(ORDER_STATUS_LABELS.en_bodega)).toBeInTheDocument();
+    expect(screen.getByText(ORDER_STATUS_LABELS.en_bodega_central)).toBeInTheDocument();
 
     // Sección de errores (detalle por fila).
     expect(screen.getByText("REM-0500")).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe("OrdenesCargaResumenPaso — tres secciones (R4, R7, R8, R9, R10, R18)"
   it("con creadas===0 muestra solo existentes, sin resumen de mensajero (R11)", async () => {
     const soloExistentes: ClasificacionCarga = {
       numRemisionesNuevas: [],
-      existentes: [{ numRemision: "REM-0100", estatus: "en_bodega" }],
+      existentes: [{ numRemision: "REM-0100", estatus: "en_bodega_central" }],
       errores: [],
     };
     render(<OrdenesCargaResumenPaso clasificacion={soloExistentes} />);

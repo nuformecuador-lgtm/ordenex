@@ -15,9 +15,15 @@ import type {
 // para el display (R9/R20).
 const ORIGEN_RECEPCION = "en_ruta_bodega_satelite";
 const ESTADO_RECIBIDA = "en_bodega_satelite";
-// Feature 48/T9/R14: estado de las ordenes elegibles para "Devolver a la tienda"
-// (retorno a la tienda de origen). Se listan acotadas a la zona del adminSatelite.
-const ESTADO_RECHAZADA = "rechazada";
+// Feature 139/T2.5/R21: estado de las ordenes elegibles para "Enviar a central" (primer tramo del
+// retorno satelite). REEMPLAZA a `rechazada` (feature 48): con la 139 una rechazada sale de ese
+// estado SOLO al aprobar el cierre, que la deja en `por_devolver`; la accion satelite opera ahora
+// sobre `por_devolver` (accionable por lote). Se listan acotadas a la zona del adminSatelite.
+const ESTADO_POR_DEVOLVER = "por_devolver";
+// Feature 139/T2.5/R21: estado INFORMATIVO de las ordenes ya enviadas a central y en transito
+// (`devolviendo_a_bodega_central`). Se listan acotadas a la zona; no accionables desde satelite
+// (la recepcion la hace la central por QR).
+const ESTADO_EN_TRANSITO_CENTRAL = "devolviendo_a_bodega_central";
 // Feature 100/T4.1/R12: estado de las ordenes `devuelta` (novedad que reposa bajo la
 // feature 99) elegibles para "Recuperar a bodega" (nuevo intento). Mismo patron que
 // `porDevolver` (48): SIEMPRE acotadas a la zona del adminSatelite. La transicion la
@@ -60,32 +66,35 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R4
     if (zonaId === null) {
       // R5: adminSatelite sin zona -> modulo vacio + aviso accionable (sinZona).
-      // Feature 48/T9/R14: sin zona tampoco hay ordenes por devolver.
       return {
         status: "ok",
         porRecibir: [],
         recibidas: [],
-        porDevolver: [],
+        porDevolver: [], // Feature 139/R21: sin zona -> tampoco hay `por_devolver`
+        enTransitoACentral: [], // Feature 139/R21: sin zona -> tampoco hay `devolviendo_a_bodega_central`
         devueltas: [], // Feature 100/T4.1: sin zona -> tampoco hay ordenes por recuperar
         zonaNombre: null,
         sinZona: true,
       };
     }
 
-    // Feature 48/T9/R14: se anade el 3er estado `rechazada` para listar las ordenes
-    // elegibles para "Devolver a la tienda", SIEMPRE acotadas a la zona del actor.
-    // Feature 100/T4.1/R12: se anade el 4to estado `devuelta` para listar las ordenes
-    // elegibles para "Recuperar a bodega", tambien acotadas a la zona del actor.
+    // Feature 139/T2.5/R21: se listan `por_devolver` (accionable: "Enviar a central") y
+    // `devolviendo_a_bodega_central` (informativo: en transito a central), SIEMPRE acotadas a la zona
+    // del actor. `por_devolver` REEMPLAZA al viejo `rechazada` (feature 48): la rechazada sale de ese
+    // estado solo al aprobar el cierre. Feature 100/T4.1/R12: `devuelta` sigue listandose para
+    // "Recuperar a bodega".
     const rows = await this.repo.findRecepcionSateliteByZona(zonaId, [
       ORIGEN_RECEPCION,
       ESTADO_RECIBIDA,
-      ESTADO_RECHAZADA,
+      ESTADO_POR_DEVOLVER,
+      ESTADO_EN_TRANSITO_CENTRAL,
       ESTADO_DEVUELTA,
-    ]); // R6/R8 + R14 + Feature 100/R12
+    ]); // R6/R8 + Feature 139/R21 + Feature 100/R12
 
     const porRecibir: RecepcionSateliteDTO[] = [];
     const recibidas: RecepcionSateliteDTO[] = [];
-    const porDevolver: RecepcionSateliteDTO[] = []; // Feature 48/T9/R14
+    const porDevolver: RecepcionSateliteDTO[] = []; // Feature 139/R21: por_devolver (accionable)
+    const enTransitoACentral: RecepcionSateliteDTO[] = []; // Feature 139/R21: en transito (informativo)
     const devueltas: RecepcionSateliteDTO[] = []; // Feature 100/T4.1/R12
     let zonaNombre: string | null = null;
     for (const row of rows) {
@@ -93,7 +102,8 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       const dto = toDTO(row);
       if (row.estatusValue === ORIGEN_RECEPCION) porRecibir.push(dto);
       else if (row.estatusValue === ESTADO_RECIBIDA) recibidas.push(dto);
-      else if (row.estatusValue === ESTADO_RECHAZADA) porDevolver.push(dto);
+      else if (row.estatusValue === ESTADO_POR_DEVOLVER) porDevolver.push(dto);
+      else if (row.estatusValue === ESTADO_EN_TRANSITO_CENTRAL) enTransitoACentral.push(dto);
       else if (row.estatusValue === ESTADO_DEVUELTA) devueltas.push(dto);
     }
     return {
@@ -101,6 +111,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       porRecibir,
       recibidas,
       porDevolver,
+      enTransitoACentral,
       devueltas,
       zonaNombre,
       sinZona: false,

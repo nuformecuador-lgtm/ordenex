@@ -1,0 +1,19 @@
+-- Feature 139 (T0.3, R3): añade el valor `devolucion_rechazada` al enum
+-- `orden_historial_origen_tipo`. Es la clasificacion propia de la transicion DISPARADA POR LA
+-- APROBACION DEL CIERRE (`rechazada` -> `por_devolver` / `por_devolver_a_tienda`, actor = el
+-- admin que aprobo), paralela a `liberacion_sin_gestionar` de la 109. Distinguible en la linea
+-- de tiempo de las cuatro transiciones de lote/recepcion del flujo (que reusan
+-- `ajuste_estado` / `recepcion_bodega_central`). La PRIMERA fila de historial de la salida de
+-- `rechazada` usa `origen_tipo = devolucion_rechazada`.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR
+-- un valor de enum recien añadido en la misma transaccion que lo añadio (error 55P04 "unsafe
+-- use of new value of enum type"). Prisma Migrate corre cada migration.sql en una transaccion.
+-- Aqui SOLO se añade el valor; su primer uso ocurre en runtime (`CierresAdminRepository.
+-- resolverCierre` al aprobar), en transacciones posteriores. Mismo precedente que
+-- 20260722150000_..._sin_gestionar y 20260724130000_..._recepcion_bodega_central.
+-- `IF NOT EXISTS` lo hace idempotente si se reintenta.
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva
+-- su RLS de la feature 49).
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'devolucion_rechazada';

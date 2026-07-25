@@ -7,7 +7,7 @@ import type {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 // Recepción en la tienda de ORIGEN: cierra el flujo de devolución
-// (`devuelta_origen` -> `recibido_origen`) cuando el adminTienda escanea el QR.
+// (`devolviendo_a_tienda` -> `devuelta_a_tienda`) cuando el adminTienda escanea el QR.
 // Espejo de `recepcion-satelite-service.test.ts` cambiando el alcance de ZONA por
 // el de TIENDA. Cada guardia asegura además "sin efectos": no se escribe.
 
@@ -21,8 +21,8 @@ const ADMIN_SATELITE: Actor = { usuarioId: "as1", rol: "adminSatelite" };
 const NUM_GUIA = 14;
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  recibido_origen: "os-recibido-origen",
-  devuelta_origen: "os-devuelta-origen",
+  devuelta_a_tienda: "os-recibido-origen",
+  devolviendo_a_tienda: "os-devuelta-origen",
 };
 
 type RepoMethods = Pick<
@@ -35,7 +35,7 @@ function transicionRow(
 ): OrdenTransicionRow {
   return {
     id: "o1",
-    estatusValue: "devuelta_origen",
+    estatusValue: "devolviendo_a_tienda",
     numGuia: NUM_GUIA,
     deletedAt: null,
     zonaId: "z-limon",
@@ -59,14 +59,14 @@ function newService(repo: RepoMethods = fakeRepo()) {
 }
 
 describe("RecepcionOrigenService.recibirEnOrigen", () => {
-  it("ok: transiciona devuelta_origen -> recibido_origen", async () => {
+  it("ok: transiciona devolviendo_a_tienda -> devuelta_a_tienda", async () => {
     const repo = fakeRepo();
     const res = await newService(repo).recibirEnOrigen(NUM_GUIA, TIENDA);
 
     expect(res).toEqual({
       status: "ok",
       ordenId: "o1",
-      estado: "recibido_origen",
+      estado: "devuelta_a_tienda",
     });
   });
 
@@ -137,7 +137,7 @@ describe("RecepcionOrigenService.recibirEnOrigen", () => {
   it("una orden AJENA y ya recibida sigue siendo tienda_ajena (no ya_recibida)", async () => {
     const repo = fakeRepo({
       findByNumGuiaForTransicion: vi.fn(async () =>
-        transicionRow({ estatusValue: "recibido_origen" }),
+        transicionRow({ estatusValue: "devuelta_a_tienda" }),
       ),
     });
     const res = await newService(repo).recibirEnOrigen(NUM_GUIA, OTRA_TIENDA);
@@ -147,10 +147,10 @@ describe("RecepcionOrigenService.recibirEnOrigen", () => {
 
   // --- Estado ---
 
-  it("ya_recibida si ya está en recibido_origen: idempotente, sin escritura", async () => {
+  it("ya_recibida si ya está en devuelta_a_tienda: idempotente, sin escritura", async () => {
     const repo = fakeRepo({
       findByNumGuiaForTransicion: vi.fn(async () =>
-        transicionRow({ estatusValue: "recibido_origen" }),
+        transicionRow({ estatusValue: "devuelta_a_tienda" }),
       ),
     });
     const res = await newService(repo).recibirEnOrigen(NUM_GUIA, TIENDA);
@@ -162,17 +162,17 @@ describe("RecepcionOrigenService.recibirEnOrigen", () => {
   it("estado_invalido lleva el estado actual, sin efectos", async () => {
     const repo = fakeRepo({
       findByNumGuiaForTransicion: vi.fn(async () =>
-        transicionRow({ estatusValue: "en_reparto" }),
+        transicionRow({ estatusValue: "en_ruta" }),
       ),
     });
     const res = await newService(repo).recibirEnOrigen(NUM_GUIA, TIENDA);
 
-    expect(res).toEqual({ status: "estado_invalido", estado: "en_reparto" });
+    expect(res).toEqual({ status: "estado_invalido", estado: "en_ruta" });
     expect(repo.recibirEnOrigen).not.toHaveBeenCalled();
   });
 
   // Una orden que la tienda aún no recibió de vuelta (`rechazada`, esperando que el
-  // adminSatelite la despache) NO es elegible: el flujo pasa por `devuelta_origen`.
+  // adminSatelite la despache) NO es elegible: el flujo pasa por `devolviendo_a_tienda`.
   it("estado_invalido si sigue en rechazada (aún no salió hacia la tienda)", async () => {
     const repo = fakeRepo({
       findByNumGuiaForTransicion: vi.fn(async () =>
@@ -187,7 +187,7 @@ describe("RecepcionOrigenService.recibirEnOrigen", () => {
 
   // --- Config ---
 
-  it("validation_error si el catálogo no tiene recibido_origen, sin efectos", async () => {
+  it("validation_error si el catálogo no tiene devuelta_a_tienda, sin efectos", async () => {
     const repo = fakeRepo({ findEstatusIdByValue: vi.fn(async () => null) });
     const res = await newService(repo).recibirEnOrigen(NUM_GUIA, TIENDA);
 
@@ -200,7 +200,7 @@ describe("RecepcionOrigenService.recibirEnOrigen", () => {
   it("si pierde la carrera y otro la recibió primero -> ya_recibida", async () => {
     const lecturas = [
       transicionRow(), // lectura inicial: elegible
-      transicionRow({ estatusValue: "recibido_origen" }), // re-lectura: ya recibida
+      transicionRow({ estatusValue: "devuelta_a_tienda" }), // re-lectura: ya recibida
     ];
     let i = 0;
     const repo = fakeRepo({
@@ -215,7 +215,7 @@ describe("RecepcionOrigenService.recibirEnOrigen", () => {
   it("si pierde la carrera y el estado es otro -> conflict", async () => {
     const lecturas = [
       transicionRow(),
-      transicionRow({ estatusValue: "en_reparto" }), // cambió a otra cosa
+      transicionRow({ estatusValue: "en_ruta" }), // cambió a otra cosa
     ];
     let i = 0;
     const repo = fakeRepo({

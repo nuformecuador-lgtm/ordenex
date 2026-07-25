@@ -33,7 +33,7 @@ const ROL_AUTORIZADO = "mensajero";
 
 // R10: estados de una orden asignada que aun cuenta como "pendiente de gestion".
 // Mientras el mensajero tenga alguna en estos estados, no puede cerrar.
-const ESTADOS_PENDIENTES = ["en_espera_aceptacion", "en_reparto"];
+const ESTADOS_PENDIENTES = ["por_recoger", "en_ruta"];
 
 // Mensajes accionables del gate/precondicion (R10/R11) y del ruteo (R12/R16).
 const MSG_PENDIENTES = "Tenes ordenes sin gestionar; gestionalas antes de cerrar."; // R10
@@ -57,7 +57,7 @@ const MSG_CATALOGO = "catalogo de estados incompleto (seed pendiente)"; // patro
 
 // Feature 67/R18: unico estado desde el que se puede volver a gestionar (`ORIGEN_GESTION` de
 // MisAsignacionesService, guardia `cargarOrdenGestionable`). Destino del deshacer.
-const ESTADO_EN_REPARTO = "en_reparto";
+const ESTADO_EN_REPARTO = "en_ruta";
 
 /**
  * Feature 67/R5 (design §5.3) — REGLA: estado en el que la orden DEBE estar para que su gestion
@@ -67,21 +67,21 @@ const ESTADO_EN_REPARTO = "en_reparto";
  * Derivado de `crearGestionYTransicionar` + `resolverSeguimientoDevuelta` (verificado):
  *   - entregada/reprogramada/rechazada: destino = `resultado`, sin seguimiento.
  *   - devuelta: la 47 emite un SEGUIMIENTO en la MISMA tx y la orden NUNCA reposa en `devuelta`
- *     (reintento -> `en_bodega`/`en_bodega_satelite`; escalado -> `rechazada`). `devuelta` se
+ *     (reintento -> `en_bodega_central`/`en_bodega_satelite`; escalado -> `rechazada`). `devuelta` se
  *     acepta SOLO por defensa ante filas anteriores a la 47.
  */
 const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
   entregada: ["entregada"],
   reprogramada: ["reprogramada"],
   rechazada: ["rechazada"],
-  devuelta: ["en_bodega", "en_bodega_satelite", "rechazada", "devuelta"],
+  devuelta: ["en_bodega_central", "en_bodega_satelite", "rechazada", "devuelta"],
 };
 
 // Metodos de repo que consume el service (inyeccion por constructor). Se declaran
 // como Pick para dobles de test sin DB/red (patron RecepcionSateliteService).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 39: ademas de la zona (37), el service resuelve el vehiculo del mensajero
-// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_reparto`).
+// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_ruta`).
 // Feature 111/R5: + `findMensajerosBloqueados` (guarda de bloqueo EXPLICITA de `deshacerGestion`,
 // mismo predicado derivado que la asignacion; sin duplicar la derivacion ni flag persistido).
 type OrdenRepo = Pick<

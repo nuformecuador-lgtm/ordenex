@@ -1,8 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaRepository";
 import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionReprogramadaRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 100 (T5.1) — INTEGRACION de la reprogramacion de la tienda con los dos crons vecinos, con
 // los repos REALES (`GestionOrdenRepository.reprogramarDesdeDevuelta` de la 100,
@@ -19,10 +20,10 @@ const noopJobRepo = {} as unknown as ConstructorParameters<typeof GestionOrdenRe
 
 // --- Catalogo de estados (value <-> id), como el seed de order_status ---
 const ESTATUS: Record<string, string> = {
-  devuelta: "os-devuelta",
-  reprogramada: "os-reprogramada",
-  en_bodega: "os-en-bodega",
-  en_bodega_satelite: "os-en-bodega-satelite",
+  devuelta: idEstado("devuelta"),
+  reprogramada: idEstado("reprogramada"),
+  en_bodega_central: idEstado("en_bodega_central"),
+  en_bodega_satelite: idEstado("en_bodega_satelite"),
 };
 const valueByEstatusId = (id: string): string =>
   Object.keys(ESTATUS).find((v) => ESTATUS[v] === id) ?? "desconocido";
@@ -231,6 +232,10 @@ const slaRepo = (db: Db) => new DevolucionSlaRepository(db.prisma as unknown as 
 const cron46Repo = (db: Db) =>
   new LiberacionReprogramadaRepository(db.prisma as unknown as PrismaClient);
 
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
+
 describe("Feature 100 T5.1 — reprogramar saca la orden de `devuelta`: el cron SLA 99 la salta (R9)", () => {
   it("ANTES de reprogramar, el cron SLA 99 SI ve la orden `devuelta`", async () => {
     const db = makeDb();
@@ -288,14 +293,14 @@ describe("Feature 100 T5.1 — el cron 46 mantiene bloqueada la reprogramada y l
 
     const ok = await cron46Repo(db).liberarOrden({
       ordenId: "o1",
-      destinoEstatusId: ESTATUS.en_bodega,
+      destinoEstatusId: ESTATUS.en_bodega_central,
       estatusReprogramadaId: ESTATUS.reprogramada,
       corridaAt: new Date("2026-07-25T06:00:00.000Z"),
     });
 
     expect(ok).toBe(true);
     const orden = db.ordenes[0];
-    expect(orden.estatusId).toBe(ESTATUS.en_bodega);
+    expect(orden.estatusId).toBe(ESTATUS.en_bodega_central);
     // Feature 110/R1: la orden liberada sale prioritaria para la reasignacion desde bodega.
     expect(orden.prioridad).toBe(true);
     // Handoff limpio (sigue vigente): sin mensajero asignado.

@@ -7,18 +7,18 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 //
 // Se INCLUYEN los estados relevantes al integrador y se EXCLUYEN los internos de
 // fulfillment/ruteo satelite que no consume (`en_fulfillment`, `en_preparacion`,
-// `en_espera_aceptacion`, `en_ruta_bodega_satelite`, `en_bodega_satelite`). Lista FIJADA en
+// `por_recoger`, `en_ruta_bodega_satelite`, `en_bodega_satelite`). Lista FIJADA en
 // el gate F1.4 (D3): cambiarla es cambiar el contrato publico de la feature.
 export const EVENTOS_PUBLICOS: ReadonlySet<OrderStatusValue> = new Set<OrderStatusValue>([
-  "en_ruta_bodega_principal",
-  "en_bodega",
-  "en_reparto",
+  "en_ruta_bodega_central",
+  "en_bodega_central",
+  "en_ruta",
   "entregada",
   "reprogramada",
   "devuelta",
   "rechazada",
-  "devuelta_origen",
-  "recibido_origen",
+  "devolviendo_a_tienda",
+  "devuelta_a_tienda",
 ]);
 
 /** `true` si el valor de estado destino es un evento publico emitible (R15). */

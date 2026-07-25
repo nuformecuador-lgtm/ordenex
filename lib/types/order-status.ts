@@ -2,36 +2,49 @@
 // El seed idempotente (seedOrderStatus) itera esta lista con upsert por `value`.
 // Feature 15/R5: suma "en_preparacion" (8vo valor), nuevo default GLOBAL de
 // creacion (ordenesConfig.DEFAULT_ESTATUS_VALUE, ver lib/config/ordenes.ts).
-// Feature 17/R9: suma "en_espera_aceptacion" (9no valor) — la orden ya tiene
+// Feature 17/R9: suma "por_recoger" (9no valor) — la orden ya tiene
 // num_guia y mensajero_asignado_id pero espera que el mensajero la acepte
 // (feature 36 modela esa respuesta).
 // Feature 30/R1: suma "en_ruta_bodega_satelite" (10mo valor) — orden no-GAM
 // ruteada hacia la bodega satelite de su zona (nombre de zona derivado de
 // orden.zonaId para el display, R15/R20). Recibe num_guia en el ruteo (R10).
 // Feature 36/R1/R3 (decision F1.4-a,b): suma dos valores del flujo del mensajero:
-// "en_reparto" (11mo) — la orden fue RECOGIDA por el mensajero (transiciona desde
-// en_espera_aceptacion al pulsar "Recoger") y sale a reparto; "rechazada" (12mo)
-// — resultado RECHAZO de la gestion (NO se mapea a devuelta/devuelta_origen, que
-// pertenecen a los flujos 47/48). Sembrados idempotentemente por seedOrderStatus.
+// "en_ruta" (11mo) — la orden fue RECOGIDA por el mensajero (transiciona desde
+// por_recoger al pulsar "Recoger") y sale a reparto; "rechazada" (12mo)
+// — resultado RECHAZO de la gestion (NO se mapea a devuelta/devolviendo_a_tienda,
+// que pertenecen a los flujos 47/48). Sembrados idempotentemente por seedOrderStatus.
 // Feature 33/R1: suma "en_bodega_satelite" (13mo valor) — la orden ruteada a la
 // satelite (feature 30, en_ruta_bodega_satelite) es RECIBIDA por el adminSatelite
 // al escanear su QR (nombre de zona derivado de orden.zonaId para el display, R9).
+// Feature 135/R1/R5: rename de nomenclatura de 6 values (conservando su POSICION,
+// indices 5/6/8/10/13 y el 2). El mapeo antiguo->nuevo y su reversion viven en la
+// migracion nueva 20260724120000_order_status_rename_nomenclatura (UPDATE sobre la
+// tabla catalogo order_status: id/FK preservados, R4); los otros 9 values no cambian.
+// Feature 139/R1: suma los TRES estados del flujo de DEVOLUCION de rechazadas
+// (indices 15/16/17, APENDICE sin alterar posiciones previas): "por_devolver" (satelite
+// tras aprobar el cierre, elegible para "enviar a central"), "devolviendo_a_bodega_central"
+// (en transito satelite->central) y "por_devolver_a_tienda" (en la central, elegible para
+// "enviar a la tienda"). Sembrados idempotentemente por seedOrderStatus + migracion
+// 20260724140000_order_status_devolucion_rechazadas (INSERT ... WHERE NOT EXISTS por value).
 export const ORDER_STATUS_SEED = [
   "entregada",
   "devuelta",
-  "devuelta_origen",
+  "devolviendo_a_tienda", // feature 135 (antes en el flujo de devolucion)
   "reprogramada",
   "en_fulfillment",
-  "en_ruta_bodega_principal",
-  "en_bodega",
+  "en_ruta_bodega_central", // feature 135
+  "en_bodega_central", // feature 135
   "en_preparacion",
-  "en_espera_aceptacion", // feature 17
+  "por_recoger", // feature 17 (renombrado en feature 135)
   "en_ruta_bodega_satelite", // feature 30
-  "en_reparto", // feature 36: recogida por el mensajero / en reparto
+  "en_ruta", // feature 36: recogida por el mensajero / en reparto (renombrado en feature 135)
   "rechazada", // feature 36: resultado RECHAZO de la gestion
   "en_bodega_satelite", // feature 33: recibida en la bodega satelite de su zona
-  "recibido_origen", // 14mo valor: cierre del flujo de devolucion, la tienda de origen la recibio
-  "sin_gestionar", // feature 109 (15mo valor): orden que quedo en en_reparto al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
+  "devuelta_a_tienda", // 14mo valor: cierre del flujo de devolucion, la tienda de origen la recibio (renombrado en feature 135)
+  "sin_gestionar", // feature 109 (15mo valor): orden que quedo en en_ruta al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
+  "por_devolver", // feature 139 (16mo valor): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
+  "devolviendo_a_bodega_central", // feature 139 (17mo valor): en transito satelite -> central (tras "enviar a central")
+  "por_devolver_a_tienda", // feature 139 (18mo valor): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

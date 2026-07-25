@@ -75,6 +75,8 @@ describe("Feature 106 · DOWN — reversible con irreversibilidad parcial docume
       NUEVO,
       "corte_sin_gestionar", // feature 109
       "liberacion_sin_gestionar", // feature 109
+      "recepcion_bodega_central", // feature 138
+      "devolucion_rechazada", // feature 139
     ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_106.has(v))),

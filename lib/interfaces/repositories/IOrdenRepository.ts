@@ -142,7 +142,7 @@ export interface GenerarGuiaResultRow {
 
 // Feature 88 — fila devuelta por `createManyOrdenesConGuia`: por cada orden EFECTIVAMENTE
 // creada (no las duplicadas que `skipDuplicates` salto), su `numGuia` YA asignado en la
-// misma tx (R9/R10) y el `value` del estado inicial fijado (`en_ruta_bodega_principal`).
+// misma tx (R9/R10) y el `value` del estado inicial fijado (`en_ruta_bodega_central`).
 export interface CreateOrdenConGuiaResultRow {
   ordenId: string;
   numRemision: string;
@@ -306,9 +306,9 @@ export interface ApiOrdenDetalleRow extends ApiOrdenRow {
 }
 
 // Feature 106 — resultado discriminado de `cancelarViaApi` (sin acoplarse a HTTP):
-//   - `ok`        -> transiciono a `devuelta_origen`; `estadoAnterior` = estado previo real.
+//   - `ok`        -> transiciono a `devolviendo_a_tienda`; `estadoAnterior` = estado previo real.
 //   - `not_found` -> no existe, borrada, o de otro owner (R23/R24).
-//   - `conflict`  -> estado actual no cancelable (incl. ya `devuelta_origen`); NO se modifico (R20).
+//   - `conflict`  -> estado actual no cancelable (incl. ya `devolviendo_a_tienda`); NO se modifico (R20).
 export type CancelarViaApiResult =
   | { status: "ok"; estadoAnterior: string }
   | { status: "not_found" }
@@ -351,8 +351,8 @@ export interface IOrdenRepository {
   /**
    * Feature 106/R19-R26: cancela UNA orden del owner en una sola transaccion (R25). Pre-lee la
    * orden por `num_guia` DENTRO de la tx exigiendo `tienda_id = ownerId` y `deleted_at IS NULL`
-   * (R23/R24 -> `not_found`); si su estado NO es cancelable (`en_bodega` /
-   * `en_ruta_bodega_principal`) devuelve `conflict` sin tocar nada (R20). En estado cancelable
+   * (R23/R24 -> `not_found`); si su estado NO es cancelable (`en_bodega_central` /
+   * `en_ruta_bodega_central`) devuelve `conflict` sin tocar nada (R20). En estado cancelable
    * hace `UPDATE orden.estatus_id = devueltaOrigenEstatusId` e invoca `appendCambioEstado` con
    * `origenTipo:'cancelacion_api'` y `motivo:'cancelada por tienda'` en la MISMA tx (R21/R22/R26);
    * NO escribe en `gestion_orden`.
@@ -436,10 +436,10 @@ export interface IOrdenRepository {
    * EFECTIVAMENTE creada un `num_guia = siguiente_num_guia()` SOLO si `num_guia IS
    * NULL` (idempotente, misma secuencia y guarda que `generarGuiaLote` -> ninguna guia puede
    * colisionar con la feature 17/30) y registra su primera fila de historial (origen null,
-   * destino = estado inicial `en_ruta_bodega_principal`, `origenTipo` = `carga_api`). Las
+   * destino = estado inicial `en_ruta_bodega_central`, `origenTipo` = `carga_api`). Las
    * filas duplicadas (saltadas por `skipDuplicates`) NO consumen `num_guia` (R11). Devuelve
    * una fila por orden creada con su `num_guia` asignado. El estado inicial ya viene resuelto
-   * en `data[].estatusId` (el service lo fija a `en_ruta_bodega_principal`).
+   * en `data[].estatusId` (el service lo fija a `en_ruta_bodega_central`).
    */
   createManyOrdenesConGuia(
     data: CreateOrdenData[],
@@ -484,7 +484,7 @@ export interface IOrdenRepository {
   findParaAsignabilidad(ids: string[]): Promise<OrdenAsignabilidadRow[]>;
   /**
    * Feature 92 (design §5, R35/R37/R38): paradas candidatas de la ruta de UN mensajero —
-   * sus ordenes en `en_reparto` no borradas, con sus coordenadas (nullable: una orden sin
+   * sus ordenes en `en_ruta` no borradas, con sus coordenadas (nullable: una orden sin
    * coordenadas NO se excluye aqui, el service la registra como parada sin posicion, R37).
    * Ordenadas por `createdAt asc`, que es el criterio de recorte de R38.
    */
@@ -529,7 +529,7 @@ export interface IOrdenRepository {
    * R5/R19/R25: transaccional (todo-o-nada). Por cada decision, asigna
    * `num_guia = siguiente_num_guia()` SOLO si `num_guia IS NULL`
    * (idempotente, R5) y fija `estatusId`/`mensajeroAsignadoId`; TODAS las
-   * decisiones reciben `num_guia` (incluidas las que van a en_bodega, R19). El
+   * decisiones reciben `num_guia` (incluidas las que van a en_bodega_central, R19). El
    * llamador DEBE haber validado el lote completo antes de invocar este metodo
    * (sin validaciones de negocio aqui, solo persistencia).
    */
@@ -541,7 +541,7 @@ export interface IOrdenRepository {
    * R26: fija `mensajeroAsignadoId`/`estatusId` en lote; NUNCA toca `numGuia`
    * (idempotencia R5, esas ordenes ya lo tienen). Devuelve el numero de filas
    * afectadas.
-   * Feature 49/#4 (R12/R7/R8): registra la transicion (destino `en_espera_aceptacion`,
+   * Feature 49/#4 (R12/R7/R8): registra la transicion (destino `por_recoger`,
    * `origenTipo` = `asignacion_bodega`) SOLO de las ordenes afectadas, en la MISMA tx.
    */
   asignarBodegaLote(
@@ -630,9 +630,9 @@ export interface IOrdenRepository {
   ): Promise<boolean>;
   /**
    * Recepcion en la tienda de ORIGEN: transicion atomica y concurrencia-segura de
-   * UNA orden a `recibido_origen`, cerrando el flujo de devolucion. Espejo de
+   * UNA orden a `devuelta_a_tienda`, cerrando el flujo de devolucion. Espejo de
    * `recibirEnSatelite` cambiando la guarda de zona por la de TIENDA: UPDATE
-   * guardado por estado de origen (solo si sigue en `devuelta_origen`), tienda
+   * guardado por estado de origen (solo si sigue en `devolviendo_a_tienda`), tienda
    * duenna (`tiendaId`) y no borrada. Devuelve `true` si afecto 1 fila, `false` si
    * 0 (ya no estaba en el origen -> race). NO toca `mensajeroAsignadoId` ni
    * `numGuia`.
@@ -640,6 +640,29 @@ export interface IOrdenRepository {
   recibirEnOrigen(
     ordenId: string,
     tiendaId: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean>;
+
+  // --- Feature 138 + 139: recepcion por QR en la bodega CENTRAL (STATE-AWARE) ---
+
+  /**
+   * Feature 138/R2/R3/R9/R18 + feature 139/R17 (STATE-AWARE): recepcion en la BODEGA CENTRAL:
+   * transicion atomica y concurrencia-segura de UNA orden a `destinoEstatusId`, con el par
+   * ORIGEN->DESTINO resuelto por el SERVICE segun el estado de origen de la orden:
+   *   - `en_ruta_bodega_central` -> `en_bodega_central` (caso 138: cierra el dead-end de la carga API).
+   *   - `devolviendo_a_bodega_central` -> `por_devolver_a_tienda` (caso 139: retorno satelite).
+   * UN solo escaner/accion. Espejo de `recibirEnOrigen`/`recibirEnSatelite` pero SIN guarda de
+   * tienda ni de zona: la bodega central es global (R11). UPDATE guardado SOLO por estado de ORIGEN
+   * (`estatus.value = origenValue`, pasado por el service) + no borrada (`deletedAt IS NULL`); origen
+   * pre-leido bajo la misma guarda y append del historial (`origenTipo` = el pasado en `historial`,
+   * `recepcion_bodega_central` en ambos casos) en la MISMA tx, SOLO si transiciono. Devuelve `true`
+   * si afecto 1 fila (recibida), `false` si 0 (ya no estaba en el origen -> race). NO toca
+   * `mensajeroAsignadoId` ni `numGuia` (R18).
+   */
+  recibirEnBodegaCentral(
+    ordenId: string,
+    origenValue: string,
     destinoEstatusId: string,
     historial: HistorialContexto,
   ): Promise<boolean>;
@@ -667,7 +690,7 @@ export interface IOrdenRepository {
   // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
 
   /**
-   * Feature 34/R7/R14: transiciona un lote de ordenes a `en_espera_aceptacion`
+   * Feature 34/R7/R14: transiciona un lote de ordenes a `por_recoger`
    * fijando `mensajeroAsignadoId`, con escritura GUARDADA por estado de origen +
    * zona (patron `recibirEnSatelite`): `updateMany` con
    * `WHERE id IN (ordenIds) AND estatusId = origenEstatusId AND zonaId AND

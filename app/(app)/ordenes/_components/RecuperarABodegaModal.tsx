@@ -27,7 +27,7 @@ export interface RecuperarABodegaModalProps {
 /**
  * Feature 100 (T4.2, R12/R15) — Modal "Recuperar a bodega". Toma las órdenes
  * `devuelta` de zona central seleccionadas y ejecuta la recuperación
- * `devuelta → en_bodega` llamando a `recuperarABodega({ ordenId })` por cada una
+ * `devuelta → en_bodega_central` llamando a `recuperarABodega({ ordenId })` por cada una
  * (loop `await`), acumulando los resultados no-"ok". Si TODAS salen `ok` →
  * `onSuccess()`; si alguna falla, el primer error se lanza al canal de error del
  * `Modal` y se traduce a un mensaje de usuario por estado. El botón queda

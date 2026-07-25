@@ -13,7 +13,7 @@ import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCo
 // (feature 17). Esta feature NO agrega estados ni `num_guia` (R8): usa exclusivamente
 // estos dos valores de catalogo, ya sembrados.
 const ORIGEN_ASIGNACION = "en_bodega_satelite";
-const ESTADO_ASIGNADA = "en_espera_aceptacion";
+const ESTADO_ASIGNADA = "por_recoger";
 
 // Feature 46/R3: estatus bloqueado por reprogramacion (guardia explicito y tipado).
 const ESTATUS_REPROGRAMADA = "reprogramada";
@@ -43,7 +43,7 @@ type AsignacionSateliteRepo = Pick<
 /**
  * Feature 34 — logica de negocio de la asignacion de la bodega satelite. Servicio
  * PARALELO al `GuiaAsignacionService` del maestro (decision F1.4-a): mismo destino
- * (`en_espera_aceptacion`) pero cableado al adminSatelite (origen
+ * (`por_recoger`) pero cableado al adminSatelite (origen
  * `en_bodega_satelite`, zona propia por `findUsuarioZonaId`, escritura guardada por
  * estado+zona). No conoce HTTP ni Prisma; testeable con dobles sin red/DB.
  */
@@ -196,12 +196,12 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       return { status: "conflict", detalle: detalleCarrera };
     }
 
-    // 7. R7: todas transicionadas a en_espera_aceptacion.
+    // 7. R7: todas transicionadas a por_recoger.
     return {
       status: "ok",
       resultados: ordenIds.map((ordenId) => ({
         ordenId,
-        estado: ESTADO_ASIGNADA as "en_espera_aceptacion",
+        estado: ESTADO_ASIGNADA as "por_recoger",
       })),
     };
   }

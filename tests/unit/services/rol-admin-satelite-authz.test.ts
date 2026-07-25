@@ -37,7 +37,7 @@ function ordenDto(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
     numGuia: 1,
     numRemision: "REM-1",
     estatusId: "os-bodega",
-    estatusValue: "en_bodega",
+    estatusValue: "en_bodega_central",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "store1",
@@ -111,6 +111,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
     recibirEnOrigen: vi.fn().mockResolvedValue(false),
+    recibirEnBodegaCentral: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.

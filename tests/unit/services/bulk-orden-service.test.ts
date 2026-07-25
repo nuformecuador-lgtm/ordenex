@@ -73,6 +73,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
     recibirEnOrigen: vi.fn().mockResolvedValue(false),
+    recibirEnBodegaCentral: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
@@ -601,9 +602,9 @@ describe("BulkOrdenService.cargarMasiva — no-regresión frente a la vía API (
 
     expect(repo.createManyOrdenes).toHaveBeenCalledTimes(1);
     expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
-    // Estado inicial de la vía sesión intacto (en_preparacion), NO en_ruta_bodega_principal.
+    // Estado inicial de la vía sesión intacto (en_preparacion), NO en_ruta_bodega_central.
     expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
-    expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_ruta_bodega_principal");
+    expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_ruta_bodega_central");
   });
 });
 

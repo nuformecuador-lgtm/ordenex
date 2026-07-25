@@ -103,7 +103,7 @@ function fakeSignedUrls(overrides: Partial<ISignedUrlProvider> = {}): ISignedUrl
 // Feature 109 (T3.1): ids del catalogo que `aprobarCierre` resuelve para la config de liberacion.
 const ESTATUS_IDS: Record<string, string | null> = {
   sin_gestionar: "s-sin-gestionar",
-  en_bodega: "s-en-bodega",
+  en_bodega_central: "s-en-bodega",
   en_bodega_satelite: "s-en-bodega-sat",
 };
 
@@ -124,7 +124,7 @@ function newService(
     findUsuarioZonaId: vi.fn(async () =>
       opts.zonaSatelite === undefined ? ZONA_SAT : opts.zonaSatelite,
     ),
-    // Feature 109/T3.1: resuelve sin_gestionar/en_bodega/en_bodega_satelite para la liberacion.
+    // Feature 109/T3.1: resuelve sin_gestionar/en_bodega_central/en_bodega_satelite para la liberacion.
     findEstatusIdByValue: vi.fn(async (v: string) => estatusIds[v] ?? null),
   } as unknown as Pick<IOrdenRepository, "findUsuarioZonaId" | "findEstatusIdByValue">;
   const signedUrls = opts.signedUrls ?? fakeSignedUrls();
@@ -684,7 +684,7 @@ describe("CierresAdminService.aprobarCierre (R10/R12/R13)", () => {
 
 // Feature 109 — la APROBACION pasa la config de LIBERACION de `sin_gestionar` (R16/R20); el RECHAZO no.
 describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestionar` (R16/R20)", () => {
-  it("R16: resuelve los estatus destino (sin_gestionar/en_bodega/satelite) + zona central y los pasa", async () => {
+  it("R16: resuelve los estatus destino (sin_gestionar/en_bodega_central/satelite) + zona central y los pasa", async () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service, ordenRepo } = newService({ repo });
 
@@ -704,7 +704,7 @@ describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestion
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service } = newService({
       repo,
-      estatusIds: { sin_gestionar: null, en_bodega: "s-b", en_bodega_satelite: "s-bs" },
+      estatusIds: { sin_gestionar: null, en_bodega_central: "s-b", en_bodega_satelite: "s-bs" },
     });
 
     await service.aprobarCierre("c1", MAESTRO);

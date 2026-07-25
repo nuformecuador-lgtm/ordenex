@@ -147,7 +147,7 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
     const user = userEvent.setup();
     generarGuiaMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "id-o1", numGuia: 5001, estado: "en_bodega" }],
+      resultados: [{ ordenId: "id-o1", numGuia: 5001, estado: "en_bodega_central" }],
     });
     generarEtiquetasMock.mockResolvedValue({
       status: "ok",
@@ -166,7 +166,7 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
     );
     await user.click(screen.getByRole("button", { name: "Generar guía" }));
 
-    // Confirma dentro del modal "Generar guía" (sin mensajero -> en_bodega).
+    // Confirma dentro del modal "Generar guía" (sin mensajero -> en_bodega_central).
     const guiaDialog = await screen.findByRole("dialog", { name: "Generar guía" });
     await user.click(
       within(guiaDialog).getByRole("button", { name: "Generar guía" }),
@@ -193,7 +193,7 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
     const user = userEvent.setup();
     asignarDesdeBodegaMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "id-o2", estado: "en_espera_aceptacion" }],
+      resultados: [{ ordenId: "id-o2", estado: "por_recoger" }],
     });
     generarEtiquetasMock.mockResolvedValue({
       status: "ok",
@@ -202,13 +202,13 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
     });
 
     renderTabs(
-      { id: "est-bodega", value: "en_bodega" },
+      { id: "est-bodega", value: "en_bodega_central" },
       [
         makeOrden({
           id: "id-o2",
           numRemision: "REM-2",
           estatusId: "est-bodega",
-          estatusValue: "en_bodega",
+          estatusValue: "en_bodega_central",
           numGuia: 5002,
         }),
       ],
@@ -250,7 +250,7 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
     const user = userEvent.setup();
     generarGuiaMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "id-o1", numGuia: 5001, estado: "en_bodega" }],
+      resultados: [{ ordenId: "id-o1", numGuia: 5001, estado: "en_bodega_central" }],
     });
     generarEtiquetasMock.mockResolvedValue({
       status: "ok",

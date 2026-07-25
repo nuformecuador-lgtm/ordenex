@@ -6,6 +6,7 @@ import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 import { OrdenesModule } from "./_components/OrdenesModule";
 import { OrdenesTabs } from "./_components/OrdenesTabs";
+import { EXCLUDE_POR_ROL } from "./exclude-por-rol";
 
 /**
  * Feature 63/C5 (R12/R20, design.md §4.3, F1.4-h): el rol se resuelve SOLO
@@ -25,13 +26,8 @@ const ROLES_CON_TABS = new Set<string>([
   RolValue.adminTienda,
 ]);
 
-// F1.4-c (R13): `exclude` por rol, por `value` del estado. Default `["pendiente"]`
-// (borrador transitorio recién sembrado). Un rol sin override cae al default.
-const EXCLUDE_POR_ROL: Record<string, string[]> = {
-  [RolValue.maestro]: ["pendiente"],
-  [RolValue.admin]: ["pendiente"],
-  [RolValue.adminTienda]: ["pendiente", "devuelta", "en_bodega", "en_bodega_satelite", "en_ruta_bodega_satelite"],
-};
+// F1.4-c (R13) + Feature 139 (R19/R20): `exclude` por rol vive en `./exclude-por-rol`
+// (módulo aparte para blindarlo con test sin arrastrar las deps server-only de la page).
 
 export default async function OrdenesPage() {
   const actor = await resolveActorFromSession();
@@ -44,6 +40,11 @@ export default async function OrdenesPage() {
   const puedeCargarMasiva = rol === RolValue.adminTienda;
   // Escaneo del QR de la etiqueta para saltar a la orden: solo adminTienda.
   const puedeEscanearQr = rol === RolValue.adminTienda;
+  // Feature 138 (R16): recepción en la BODEGA CENTRAL (escaneo + entrada manual de
+  // guía en el encabezado) solo para roles de ACCESO TOTAL (maestro/admin). Cierra
+  // el callejón `en_ruta_bodega_central`; el service revalida el rol server-side.
+  // `adminTienda` NO la recibe (conserva su recepción en origen `puedeEscanearQr`).
+  const puedeRecibirBodegaCentral = rol ? esAccesoTotal(rol) : false;
   const usaTabs = rol ? ROLES_CON_TABS.has(rol) : false;
   // Feature 94 (paridad adm↔maestro): selección por checkbox + acciones por lote
   // (asignar mensajero, rutear a bodega satélite, etc.) para roles de ACCESO TOTAL
@@ -59,6 +60,7 @@ export default async function OrdenesPage() {
           exclude={EXCLUDE_POR_ROL[rol as string] ?? ["pendiente"]}
           puedeCargarMasiva={puedeCargarMasiva}
           puedeEscanearQr={puedeEscanearQr}
+          puedeRecibirBodegaCentral={puedeRecibirBodegaCentral}
           mostrarHistorial
           accionesLote={accionesLote}
           incluirTodas={rol ? esAccesoTotal(rol) : false}
