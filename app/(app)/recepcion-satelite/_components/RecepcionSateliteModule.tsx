@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  conBadgePrioridad,
+  resaltarFilaPrioridad,
+} from "@/components/shared/PrioridadResalte";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
@@ -16,9 +20,11 @@ import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionRe
 
 import { devolverATienda } from "@/lib/actions/devolucion-origen";
 import { recibirLote } from "@/lib/actions/recepcion-satelite";
+import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { devolucionOrigenErrorMessage } from "@/app/(app)/ordenes/_components/devolucion-origen-error-messages";
+import { recuperarBodegaErrorMessage } from "@/app/(app)/ordenes/_components/recuperar-bodega-error-messages";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { RecepcionDetalle } from "./RecepcionDetalle";
 import { recibidasColumns } from "./recibidas-columns";
@@ -46,10 +52,17 @@ export interface RecepcionSateliteModuleProps {
   /**
    * Feature 48/T9 (R10/R14): órdenes en `rechazada` de la zona del adminSatelite,
    * elegibles para la acción "Devolver a la tienda" (transición
-   * `rechazada → devuelta_origen`). Acotadas server-side por zona; vacío = sin
+   * `rechazada → devolviendo_a_tienda`). Acotadas server-side por zona; vacío = sin
    * órdenes por devolver.
    */
   porDevolver?: RecepcionSateliteDTO[];
+  /**
+   * Feature 100/T4.1 (R12): órdenes en `devuelta` (novedad) de la zona del
+   * adminSatelite, elegibles para "Recuperar a bodega" (transición
+   * `devuelta → en_bodega_satelite`). Acotadas server-side por zona; vacío = sin
+   * órdenes por recuperar.
+   */
+  devueltas?: RecepcionSateliteDTO[];
   /** Nombre de la zona del adminSatelite (para el display, R9); `null` si no tiene. */
   zonaNombre: string | null;
   /** `true` si el adminSatelite no tiene zona asignada (R5). */
@@ -94,7 +107,7 @@ function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): 
 /**
  * Feature 48 (T9, R10/R14): fila de la sección "Por devolver a tienda". Cada orden
  * `rechazada` de la zona ofrece la acción "Devolver a la tienda", que ejecuta el
- * retorno `rechazada → devuelta_origen` vía la Server Action `devolverATienda`. El
+ * retorno `rechazada → devolviendo_a_tienda` vía la Server Action `devolverATienda`. El
  * estado de carga y el error son POR FILA (aislados): el botón se deshabilita
  * mientras procesa y un `status != ok` muestra el aviso sin afectar a las demás
  * filas. En éxito, el padre releé el estado del servidor (`router.refresh`).
@@ -156,10 +169,67 @@ function FilaPorDevolver({
   );
 }
 
+/**
+ * Feature 100 (T4.1, R12): fila de la sección "Devueltas". Cada orden `devuelta` de
+ * la zona ofrece la acción "Recuperar", que ejecuta la recuperación
+ * `devuelta → en_bodega_satelite` vía la Server Action `recuperarABodega`. Espejo
+ * EXACTO de `FilaPorDevolver` (48): estado de carga POR FILA (botón deshabilitado
+ * mientras procesa) y feedback por toast (éxito relee el estado del servidor; un
+ * `status != ok` muestra el error claro por estado sin afectar a las demás filas).
+ */
+function FilaDevuelta({
+  orden,
+  zonaNombre,
+  onRecuperada,
+  onError,
+}: {
+  orden: RecepcionSateliteDTO;
+  zonaNombre: string | null;
+  onRecuperada: () => void;
+  onError: (mensaje: string) => void;
+}) {
+  const [procesando, setProcesando] = useState(false);
+
+  async function handleRecuperar() {
+    setProcesando(true);
+    const result = await recuperarABodega({ ordenId: orden.id });
+    if (result.status !== "ok") {
+      onError(recuperarBodegaErrorMessage(result.status));
+      setProcesando(false);
+      return;
+    }
+    onRecuperada(); // relee el estado del servidor; la fila desaparece del listado
+  }
+
+  return (
+    <li className="flex flex-col gap-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {orden.numRemision} · {orden.destinatario}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <RecepcionDetalle
+            orden={orden}
+            estadoLegible={estadoLegible(orden, zonaNombre)}
+          />
+          <div className="flex justify-end">
+            <Button type="button" onClick={handleRecuperar} disabled={procesando}>
+              {procesando ? "Recuperando…" : "Recuperar"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </li>
+  );
+}
+
 export function RecepcionSateliteModule({
   porRecibir,
   recibidas,
   porDevolver = [],
+  devueltas = [],
   zonaNombre,
   sinZona,
   mensajeros,
@@ -245,7 +315,11 @@ export function RecepcionSateliteModule({
           />
         ),
       },
-      ...recibidasColumns(zonaNombre),
+      // Feature 101/R8: decora las columnas de datos para anexar el badge "Prioritaria"
+      // a las órdenes liberadas por el SLA (prioridad=true) que esperan reasignación en
+      // ESTE grupo ("Recibidas", en_bodega_satelite). El checkbox va delante del decorado,
+      // así el badge cae en la primera columna de datos (Nº Guía).
+      ...conBadgePrioridad(recibidasColumns(zonaNombre)),
     ],
     [seleccionados, zonaNombre, recibidas],
   );
@@ -344,13 +418,14 @@ export function RecepcionSateliteModule({
           data={recibidas}
           rowKey="id"
           ariaLabel="Recibidas"
+          rowClassName={resaltarFilaPrioridad}
           emptyMessage="Aún no has recibido órdenes."
         />
       </section>
 
       {/* ---------- Sección: Por devolver a tienda (rechazada) ---------- */}
       {/* Feature 48 (R10/R14): órdenes `rechazada` de la zona; cada una ofrece
-          "Devolver a la tienda" (rechazada → devuelta_origen) con estado/error por
+          "Devolver a la tienda" (rechazada → devolviendo_a_tienda) con estado/error por
           fila. Tras el éxito se releé el estado del servidor. */}
       <section
         aria-label="Por devolver a tienda"
@@ -369,6 +444,37 @@ export function RecepcionSateliteModule({
                 orden={orden}
                 zonaNombre={zonaNombre}
                 onDevuelta={() => router.refresh()}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ---------- Sección: Devueltas (devuelta) ---------- */}
+      {/* Feature 100/T4.1 (R12): órdenes `devuelta` (novedad) de la zona; cada una
+          ofrece "Recuperar" (devuelta → en_bodega_satelite) con estado por fila. En
+          éxito se relee el estado del servidor + toast; un error se avisa por toast. */}
+      <section
+        aria-label="Devueltas"
+        className="flex flex-col gap-3 border-t pt-6"
+      >
+        <h2 className="text-lg font-semibold">Devueltas</h2>
+        {devueltas.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hay órdenes por recuperar.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {devueltas.map((orden) => (
+              <FilaDevuelta
+                key={orden.id}
+                orden={orden}
+                zonaNombre={zonaNombre}
+                onRecuperada={() => {
+                  toast.success("Orden recuperada a bodega.");
+                  router.refresh();
+                }}
+                onError={(mensaje) => toast.error(mensaje)}
               />
             ))}
           </ul>

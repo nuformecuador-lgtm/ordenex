@@ -129,6 +129,10 @@ model Usuario {
   apiKey                              ApiKey?                   @relation("ApiKeyUsuario") // feature 81/[D6]: la key dedicada a ESTA cuenta sintetica (1:1)
   apiKeysCreadas                      ApiKey[]                  @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
   rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
+  plantillasCreadas                   PlantillaMensaje[]        @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
+  webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
+  ordenMensajeroMetas                 OrdenMensajeroMeta[]      @relation("OrdenMensajeroMetaMensajero") // feature 115: marcas privadas ("gestionar mas tarde") de ESTE mensajero sobre sus ordenes
+  chatConversaciones                  ChatConversacion[]        @relation("ChatConversacionMensajero") // feature 120/R13/R16: hilos de chat asignados a ESTE mensajero
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -136,6 +140,133 @@ model Usuario {
   @@index([zonaId]) // feature 24/R6
   @@index([ordenEnGestionId]) // feature 36
   @@map("usuario")
+}
+
+// Feature 107: estado de una plantilla de mensaje. Enum Postgres nativo (patron
+// EstadoTarifa/RolValue). Cuatro valores EXACTOS (R23). `pending` (estado inicial,
+// Decision humana 1) y `refused` quedan RESERVADOS en el enum aunque este alcance NO
+// los transiciona desde el front; el front SOLO emite el destino `inactivo` (R24/R25).
+enum PlantillaEstado {
+  activo
+  inactivo
+  pending
+  refused
+
+  @@map("plantilla_estado")
+}
+
+// Feature 107: plantilla de mensaje con cuerpo que admite campos variables `{{clave}}`.
+// Configuracion MUTABLE (lleva updatedAt). SOFT DELETE via `deletedAt` (Decision humana
+// 3; R27/R28): los listados filtran `deletedAt IS NULL`. El conjunto de variables usadas
+// por el cuerpo se persiste como ARRAY de claves (Decision humana 4; R15), text[] nativo.
+model PlantillaMensaje {
+  id        String          @id @default(uuid())
+  nombre    String          @unique // R10: identificador unico
+  cuerpo    String // texto con placeholders {{clave}}
+  variables String[] // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
+  estado    PlantillaEstado @default(pending) // R12 (Decision humana 1)
+  // Integracion WhatsApp: enlace al Message Template de Meta. NULL = todavia no propagada a
+  // Meta (o Meta no la ha devuelto en la sincronizacion). El envio usa `nombre` + `templateIdioma`
+  // (Meta manda por name+language, no por id); `templateId` es la referencia/traza a Meta y el
+  // marcador de "enviable" (no NULL + estado activo).
+  templateId     String? @map("template_id")
+  templateIdioma String? @map("template_idioma") // code de idioma del template en Meta (p. ej. "es", "es_CO")
+  createdBy String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
+  deletedAt DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  creador Usuario? @relation("PlantillaMensajeCreador", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([createdAt]) // R6: orden determinista del listado
+  @@index([estado]) // filtro por estado
+  @@index([deletedAt]) // R28: filtro de vigentes (deletedAt IS NULL)
+  @@map("plantilla_mensaje")
+
+  chatMensajes ChatMensaje[] @relation("ChatMensajePlantilla") // feature 109: salientes de tipo plantilla que referencian esta plantilla
+}
+
+// Feature 109 (design §1.1): direccion de un mensaje del chat. Enum Postgres nativo
+// (patron RolValue/PlantillaEstado). `entrante` = del cliente (llega por el webhook);
+// `saliente` = del mensajero (se envia por la Graph API).
+enum ChatMensajeDireccion {
+  entrante
+  saliente
+
+  @@map("chat_mensaje_direccion")
+}
+
+// Feature 109 (design §1.1): tipo de un mensaje del chat. `texto` (cuerpo libre),
+// `plantilla` (Message Template de Meta), `otro` (multimedia entrante no expandido en v1).
+enum ChatMensajeTipo {
+  texto
+  plantilla
+  otro
+  ubicacion // Feature 121: mensaje entrante `type=location` con coordenadas lat/lng
+
+  @@map("chat_mensaje_tipo")
+}
+
+// Feature 109 (design §1.1): estado de entrega de un mensaje SALIENTE (R7/R14). Solo
+// aplica a salientes (nullable en entrantes). `queued` = pendiente de reintento por la
+// cola de jobs; el resto lo reporta Meta via el webhook de statuses.
+enum ChatMensajeEstado {
+  queued
+  sent
+  delivered
+  read
+  failed
+
+  @@map("chat_mensaje_estado")
+}
+
+// Feature 109 (design §1.2, R13): hilo de chat 1:1 entre el mensajero y el cliente
+// destinatario de una orden, identificado por el numero E.164 del cliente. Un hilo por
+// (orden, numero) (ver D4). `ultimoEntranteAt` es la fuente de la ventana de 24 h
+// (R18/R19). RLS habilitada sin policies (solo service role): la autorizacion de negocio
+// (scope por mensajero, R16) vive en el service, no en la DB.
+model ChatConversacion {
+  id               String    @id @default(uuid())
+  telefonoE164     String    @map("telefono_e164") // numero del cliente normalizado E.164 (sin `+`, formato del cliente de envio)
+  ordenId          String    @map("orden_id") // FK -> orden; ON DELETE RESTRICT (no huerfanos)
+  mensajeroId      String    @map("mensajero_id") // FK -> usuario (mensajero asignado del hilo); ON DELETE RESTRICT
+  ultimoEntranteAt DateTime? @map("ultimo_entrante_at") // marca del ultimo mensaje ENTRANTE; NULL = sin entrantes (fuera de ventana)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  orden     Orden       @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  mensajero Usuario     @relation("ChatConversacionMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict)
+  mensajes  ChatMensaje[]
+
+  @@unique([ordenId, telefonoE164]) // D4: un hilo por orden+numero
+  @@index([mensajeroId]) // R16: scope por mensajero
+  @@index([telefonoE164]) // R25: resolucion del entrante desde el numero
+  @@map("chat_conversacion")
+}
+
+// Feature 109 (design §1.3, R14): un mensaje del hilo. Fila casi inmutable (sin
+// updatedAt/deletedAt): lo unico que muta es `estado` de un saliente al llegar su status
+// de Meta (R7). `waMessageId` es UNICO (indice parcial en la migracion) para el dedupe
+// (R8) y para localizar el saliente al llegar un status (R7). RLS habilitada sin policies.
+model ChatMensaje {
+  id             String               @id @default(uuid())
+  conversacionId String               @map("conversacion_id") // FK -> chat_conversacion; ON DELETE CASCADE
+  direccion      ChatMensajeDireccion
+  tipo           ChatMensajeTipo
+  cuerpo         String? // texto plano; NULL para tipos sin cuerpo
+  plantillaId    String?              @map("plantilla_id") // solo salientes de tipo plantilla; ON DELETE SET NULL
+  waMessageId    String?              @map("wa_message_id") // id de Meta; UNICO (parcial) para dedupe (R8)
+  estado         ChatMensajeEstado? // solo salientes (R7)
+  latitud        Float?               @map("latitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
+  longitud       Float?               @map("longitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
+  ocurridoAt     DateTime             @map("ocurrido_at") // timestamp del evento (de Meta en entrantes)
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  conversacion ChatConversacion  @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  plantilla    PlantillaMensaje? @relation("ChatMensajePlantilla", fields: [plantillaId], references: [id], onDelete: SetNull)
+
+  @@index([conversacionId, ocurridoAt]) // R22: historial ordenado
+  @@map("chat_mensaje")
 }
 
 // Feature 21: documentos de postulacion del mensajero. 1:N (5 tipos por usuario).
@@ -219,8 +350,9 @@ model EmailOtpChallenge {
 // por `value` (8 valores, ORDER_STATUS_SEED), patron rol/tipo_identificacion.
 model OrderStatus {
   id    String @id @default(uuid())
-  value String @unique // seed (8): entregada, devuelta, devuelta_origen,
-  //   reprogramada, en_fulfillment, en_ruta_bodega_principal, en_bodega, en_preparacion
+  value String @unique // seed (15, ver ORDER_STATUS_SEED). Feature 135 renombro 6
+  //   values: p.ej. devolviendo_a_tienda, en_ruta_bodega_central, en_bodega_central,
+  //   por_recoger, en_ruta, devuelta_a_tienda (id/FK preservados por UPDATE de catalogo).
 
   ordenes Orden[]
 
@@ -331,6 +463,7 @@ model Orden {
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
+  prioridad              Boolean   @default(false) @map("prioridad") // feature 101/R1: flag de reasignacion prioritaria (ON al liberar por SLA 99, OFF al reasignar mensajero desde bodega); default false = sin backfill (R11)
   liberadaReprogramadaAt DateTime? @map("liberada_reprogramada_at") // feature 46/R13/R18: instante de liberacion programada (NULL = nunca liberada por reprogramacion); auditoria + fuente del aviso derivado
   // Feature 91 (design §1.1, R1): resultado de la geocodificacion de `direccion`. TODAS
   // nullable: una orden sin geocodificar las tiene vacias. `geocode_precision` y
@@ -361,6 +494,8 @@ model Orden {
   historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
   rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
+  mensajeroMetas        OrdenMensajeroMeta[]   @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
+  chatConversaciones    ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -371,12 +506,38 @@ model Orden {
   @@map("orden")
 }
 
+// Feature 115 — meta PRIVADA por (mensajero, orden). `marcar_luego` (115) = "gestionar
+// mas tarde", solo informativa (no cambia estatus ni ruta). `nota` (text NULL) NACE aqui
+// para la feature 116 (notas privadas), que NO crea migracion propia. UNIQUE(usuario_id,
+// orden_id): una fila por pareja -> idempotencia del toggle (upsert). Ambas FK ON DELETE
+// CASCADE: la meta es dato derivado, se va con el mensajero o la orden. RLS habilitada sin
+// policies (patron api_key/plantilla_mensaje); la autorizacion de negocio vive en el service.
+model OrdenMensajeroMeta {
+  id          String   @id @default(uuid())
+  usuarioId   String   @map("usuario_id")
+  ordenId     String   @map("orden_id")
+  marcarLuego Boolean  @default(false) @map("marcar_luego") // feature 115
+  nota        String? // feature 116: columna nace aqui (115), la USA la 116
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  usuario Usuario @relation("OrdenMensajeroMetaMensajero", fields: [usuarioId], references: [id], onDelete: Cascade)
+  orden   Orden   @relation("OrdenMensajeroMetaOrden", fields: [ordenId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, ordenId]) // R1/R7: una fila por (mensajero, orden)
+  @@index([usuarioId]) // R17: leer todas las metas del mensajero al listar
+  @@index([ordenId])
+  @@map("orden_mensajero_meta")
+}
+
 // Feature 36 (R5, decision F1.4-c): metodo de pago del recaudo al cliente en una
 // ENTREGA. Enum Postgres nativo (patron RolValue/VehiculoValue), fuente unica de
-// verdad reflejada en lib/types/metodo-pago.ts. OJO 'SIMPE' en mayusculas (F1.4-c).
+// verdad reflejada en lib/types/metodo-pago.ts. OJO 'SINPE' en mayusculas (medio de
+// pago de Costa Rica). Feature 118: corregido el typo historico del valor via
+// ALTER TYPE ... RENAME VALUE (migracion _metodo_pago_rename_simpe_to_sinpe).
 enum MetodoPagoValue {
   efectivo
-  SIMPE
+  SINPE
   transferencia
 
   @@map("metodo_pago_value")
@@ -445,6 +606,9 @@ model GestionOrden {
   // (49/R21): borrar al usuario no borra el rastro de la anulacion.
   anuladaPorUsuario Usuario?               @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
   historialEstados  OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
+  // Feature 119 (R1): evidencias 1..N de esta gestion (la portada = indice 0 se conserva
+  // ademas denormalizada en evidencia_storage_path/_content_type por retro-compat, R12).
+  evidencias        GestionOrdenEvidencia[]
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
@@ -455,6 +619,26 @@ model GestionOrden {
   // diario) NO se expresa aqui: Prisma no soporta indices parciales -> vive en el SQL de la
   // migracion `*_gestion_orden_anulacion` (patron orden_liberada_reprogramada_at_idx).
   @@map("gestion_orden")
+}
+
+// Feature 119 (R1/R2/R4): evidencias 1..N de una gestion. Reemplaza la foto UNICA de
+// gestion_orden.evidencia_storage_path/_content_type como fuente de verdad del CONJUNTO;
+// el path unico se conserva como PORTADA (indice 0) por retro-compat (design §2), via
+// dual-write en la misma transaccion. RLS habilitada sin policies (solo service role,
+// patron gestion_orden).
+model GestionOrdenEvidencia {
+  id          String   @id @default(uuid())
+  gestionId   String   @map("gestion_id")
+  storagePath String   @map("storage_path") // path bucket privado, NO URL
+  contentType String   @map("content_type") // image/jpeg|png|webp
+  indice      Int // 0-based, orden de captura; 0 = portada
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  gestion GestionOrden @relation(fields: [gestionId], references: [id], onDelete: Cascade)
+
+  @@unique([gestionId, indice]) // R2: no dos filas con el mismo indice por gestion
+  @@index([gestionId]) // lectura de las evidencias de una gestion
+  @@map("gestion_orden_evidencia")
 }
 
 // Feature 37 (R13/R18, decision F1.4-d): estado del cierre del dia del mensajero.
@@ -920,6 +1104,14 @@ enum OrdenHistorialOrigenTipo {
   ajuste_estado // feature 6: OrdenService.actualizar (CRUD generico)
   deshacer_gestion // feature 67 (F1.4-b): CierreDiaRepository.anularGestionYDevolverAGestion
   carga_api // feature 88 (D7): estado inicial en createManyOrdenesConGuia (canal integrador)
+  liberacion_devuelta_sla // feature 99: cron SLA, devuelta -> en_bodega_central/en_bodega_satelite (reintento)
+  escalado_devuelta_sla // feature 99: cron SLA, devuelta -> rechazada (escalado; enlaza gestion sintetica)
+  reprogramacion_tienda // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
+  recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite (accion manual, actor admin)
+  cancelacion_api // feature 106: tienda cancela via API key en_bodega_central/en_ruta_bodega_central -> devolviendo_a_tienda (marcador motivo="cancelada por tienda")
+  corte_sin_gestionar // feature 109: corte diario transiciona en_ruta -> sin_gestionar (actor null/cron)
+  liberacion_sin_gestionar // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin)
+  recepcion_bodega_central // feature 138: recepcion fisica en la bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin)
 
   @@map("orden_historial_origen_tipo")
 }
@@ -1036,22 +1228,56 @@ model CierreDetail {
 // para poder identificarla visualmente sin revelarla. 1:1 con su usuario dedicado
 // [D6]: `usuario_id` UNIQUE. Sin `revoked_at`/`expires_at`/`last_used_at`: fuera de
 // alcance (81b), se añaden aditivamente cuando el humano los pida.
+// Ciclo de vida de una API key (rotar/activar/desactivar). El estado de la key es
+// PROPIO de la fila `api_key`, NO se reusa el estado del usuario dedicado: activar o
+// desactivar una key no debe tocar la cuenta (ni al reves). `activa` autoriza la carga
+// (feature 88/R7), `inactiva` la revoca sin borrar la fila (ni el hash ni el rastro).
+enum EstadoApiKey {
+  activa
+  inactiva
+
+  @@map("estado_api_key")
+}
+
 model ApiKey {
-  id            String   @id @default(uuid())
+  id            String       @id @default(uuid())
   identificador String // input crudo (recortado) para mostrar. No unico [D8]
   slug          String // normalizado; base del email/cedula sinteticos (R5)
-  keyPrefix     String   @map("key_prefix") // `ordx_` + 7 chars, en claro (R17)
-  keyHash       String   @unique @map("key_hash") // SHA-256 hex del secreto completo (R16/R25)
-  usuarioId     String   @unique @map("usuario_id") // [D6] 1:1 con la cuenta dedicada (R21)
-  createdById   String   @map("created_by_id") // actor que la genero (R21)
-  createdAt     DateTime @default(now()) @map("created_at") // R21
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  keyPrefix     String       @map("key_prefix") // `ordx_` + 7 chars, en claro (R17)
+  keyHash       String       @unique @map("key_hash") // SHA-256 hex del secreto completo (R16/R25)
+  estado        EstadoApiKey @default(activa) @map("estado") // ciclo de vida propio de la key (activar/desactivar)
+  usuarioId     String       @unique @map("usuario_id") // [D6] 1:1 con la cuenta dedicada (R21)
+  createdById   String       @map("created_by_id") // actor que la genero (R21)
+  createdAt     DateTime     @default(now()) @map("created_at") // R21
+  updatedAt     DateTime     @updatedAt @map("updated_at")
 
   usuario   Usuario @relation("ApiKeyUsuario", fields: [usuarioId], references: [id])
   createdBy Usuario @relation("ApiKeyCreadaPor", fields: [createdById], references: [id])
 
   @@index([createdById])
   @@map("api_key")
+}
+
+// Feature 99 (design §1.1, R1/R2) — suscripcion de webhook por OWNER (el usuario dueno de
+// las ordenes; para integradores, el usuario dedicado de la API key). El identificador del
+// suscriptor NO se inventa: es `owner_usuario_id` (unico -> a lo sumo UNA suscripcion por
+// owner, R1; el re-registro es un upsert por esa clave, R6). `secret` guarda el CIPHERTEXT
+// del secreto de firma (AES-256-GCM, design §1.3/§3.1, D2/R32): NUNCA texto plano. RLS
+// habilitada SIN policies (R2), patron api_key / jobs / geocode_cache: la tabla guarda un
+// secreto y solo es accesible desde el rol de servicio. El vinculo con las ordenes ya
+// existe (`orden.tienda_id = owner_usuario_id`), no se crea uno nuevo.
+model WebhookSuscripcion {
+  id             String   @id @default(uuid())
+  ownerUsuarioId String   @unique @map("owner_usuario_id") // R1: 1 por owner; R6: upsert por esta clave
+  url            String // callback https absoluta (validada en el borde, R5)
+  secret         String // CIPHERTEXT del secreto de firma HMAC (design §1.3, D2/R32) — nunca en claro
+  activa         Boolean  @default(true) // R8: baja = activa=false
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  owner Usuario @relation("WebhookSuscripcionOwner", fields: [ownerUsuarioId], references: [id], onDelete: Restrict)
+
+  @@map("webhook_suscripcion")
 }
 
 // Feature 90 (design §1.1): tipo de un background job. Enum NATIVO de Postgres con
@@ -1061,6 +1287,9 @@ enum JobTipo {
   liberar_reprogramadas // 91/92 anaden valores aditivamente
   geocodificacion // feature 91: geocodifica la direccion de UNA orden (payload { ordenId })
   optimizacion_ruta // feature 92: reoptimiza la ruta de UN mensajero (payload { mensajeroId })
+  webhook_estado // feature 99: entrega firmada del cambio de estado de UNA orden a su integrador (payload { ordenId, estatusDestinoId, ocurridoAt })
+  whatsapp_template_sync // integracion WhatsApp: reintenta contra Meta una op de plantilla (create/update/delete) que fallo en linea (payload { plantillaId, operacion })
+  whatsapp_chat_envio // feature 109/D1: reintenta el envio saliente de un mensaje de chat que devolvio `transitorio` (payload { mensajeChatId })
 
   @@map("job_tipo")
 }

@@ -1,0 +1,23 @@
+-- Feature 100 (T0.1, design §1.1/§2): dos valores NUEVOS del enum de origen del historial para
+-- que la linea de tiempo distinga las acciones MANUALES que RESUELVEN una novedad antes de que
+-- venza su ventana SLA (feature 99):
+--   - `reprogramacion_tienda`: devuelta -> reprogramada     (adminTienda; gestion sintetica
+--                              `resultado = reprogramada` con `fecha_reprogramacion`, R2/R3/R11)
+--   - `recuperacion_manual`:   devuelta -> en_bodega/en_bodega_satelite (bodega dueña; actor = el
+--                              admin que ejecuta, molde de `liberacion_devuelta_sla`, R13/R17)
+-- `reprogramacion_tienda` lleva actor = adminTienda y enlaza su gestion sintetica; su destino es
+-- `reprogramada`, NO `devuelta`, asi que NO cuenta como intento (R8). `recuperacion_manual` lleva
+-- actor = el admin y NO enlaza gestion (handoff limpio a la bodega, R14).
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR
+-- un valor de enum recien añadido en la misma transaccion que lo añadio (error 55P04 "unsafe
+-- use of new value of enum type"). Prisma Migrate corre cada migration.sql en una transaccion.
+-- Aqui SOLO se añaden los valores; su primer uso ocurre en tiempo de aplicacion (las Server
+-- Actions `reprogramarNovedad` / `recuperarABodega`), en transacciones posteriores. Mismo
+-- precedente que 20260721120000_..._sla_devuelta y 20260717120000_..._carga_api.
+-- `IF NOT EXISTS` lo hace idempotente si se reintenta.
+--
+-- Aditiva: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado`
+-- conserva su RLS de la feature 49).
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'reprogramacion_tienda';
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'recuperacion_manual';

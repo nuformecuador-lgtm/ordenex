@@ -27,6 +27,12 @@ import {
   buildOptimizacionRutaService,
   crearOptimizacionRutaHandler,
 } from "@/lib/services/jobs/optimizacion-ruta-handler";
+import {
+  buildWebhookEstadoService,
+  crearWebhookEstadoHandler,
+} from "@/lib/services/jobs/webhook-estado-handler";
+import { crearWhatsappTemplateSyncHandler } from "@/lib/services/jobs/whatsapp-template-sync-handler";
+import { crearWhatsappChatEnvioHandler } from "@/lib/services/jobs/whatsapp-chat-envio-handler";
 
 export interface ProcesarJobsDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -61,6 +67,22 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
     "optimizacion_ruta",
     crearOptimizacionRutaHandler(buildOptimizacionRutaService(now)),
   );
+  // Feature 99 (R26): entrega firmada del cambio de estado a un integrador suscrito. Como la
+  // geocodificacion y la optimizacion, NO se registra en `buildRecurrencias()`: se encola por
+  // EVENTO (transicion de estado con owner suscrito), nunca por reloj. Un fallo suyo (callback
+  // caido, clave de cifrado ausente) lo captura `JobQueueService.drenar` job a job, asi que NO
+  // afecta al drenado de los otros tipos, que comparten este cron.
+  handlers.set("webhook_estado", crearWebhookEstadoHandler(buildWebhookEstadoService(now)));
+  // Integracion WhatsApp: reintento de una op de plantilla (create/update/delete) que fallo en
+  // linea. Encolado por EVENTO (fallo de la propagacion sincrona), no por reloj -> fuera de
+  // `buildRecurrencias()`. Las deps (config de WhatsApp) se cargan perezosamente en el handler:
+  // un env ausente falla ESTE job (recuperable), no el drenado de los demas tipos.
+  handlers.set("whatsapp_template_sync", crearWhatsappTemplateSyncHandler());
+  // Feature 109 (D1/F3): reintento del envio saliente de un mensaje de chat que devolvio
+  // `transitorio` en linea. Encolado por EVENTO (fallo transitorio), no por reloj -> fuera de
+  // `buildRecurrencias()`. Las deps (config de WhatsApp) se cargan perezosamente en el
+  // handler: un env ausente falla ESTE job (recuperable), no el drenado de los demas tipos.
+  handlers.set("whatsapp_chat_envio", crearWhatsappChatEnvioHandler());
   return handlers;
 }
 

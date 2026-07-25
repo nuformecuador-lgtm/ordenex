@@ -78,6 +78,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     evidenciaStoragePath: null,
     pagoMensajero: "5.00", // feature 39/R20: snapshot del pago de la gestion
     ingresoBodegaRechazo: "0.00", // feature 56/R19: snapshot del ingreso de la gestion
+    esRechazoSla: false, // feature 102
     ...overrides,
   };
 }

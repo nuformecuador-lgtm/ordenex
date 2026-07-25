@@ -27,7 +27,7 @@ export interface DevolverATiendaModalProps {
 /**
  * Feature 48 (T8, R4/R10/R14) — Modal de confirmación "Devolver a la tienda".
  * Toma las órdenes `rechazada` de zona central seleccionadas y ejecuta el retorno
- * `rechazada → devuelta_origen` llamando a `devolverATienda({ ordenId })` por cada
+ * `rechazada → devolviendo_a_tienda` llamando a `devolverATienda({ ordenId })` por cada
  * una (loop `await`), acumulando los resultados no-"ok". Si TODAS salen `ok` →
  * `onSuccess()`; si alguna falla, el primer error se lanza al canal de error del
  * `Modal` y se traduce a un mensaje de usuario. El botón queda deshabilitado

@@ -22,7 +22,7 @@ type LiberacionPrismaClient = Pick<PrismaClient, "orden" | "$transaction">;
 
 /**
  * Feature 46 — repositorio de la liberacion programada. SOLO queries Prisma (sin logica
- * de negocio: quien va a `en_bodega`/`en_bodega_satelite` y los conteos los decide el
+ * de negocio: quien va a `en_bodega_central`/`en_bodega_satelite` y los conteos los decide el
  * service). Reutiliza `orden` + `gestion_orden`; no introduce tablas nuevas.
  */
 export class LiberacionReprogramadaRepository implements ILiberacionReprogramadaRepository {
@@ -46,7 +46,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
         gestiones: {
           // gestion vigente = la mas reciente. Feature 67 (design §3-#6): `anuladaAt: null`
           // por DEFENSA, sin cambio funcional — una orden en `reprogramada` no puede tener su
-          // ultima gestion `reprogramada` anulada (deshacerla la devuelve a `en_reparto`, con
+          // ultima gestion `reprogramada` anulada (deshacerla la devuelve a `en_ruta`, con
           // lo que ya no casa el filtro de estado de arriba). Explicito > implicito.
           where: { resultado: RESULTADO_REPROGRAMADA, anuladaAt: null },
           orderBy: { createdAt: "desc" },
@@ -70,11 +70,17 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
    * R13/R17: UPDATE guardado por `estatusId = reprogramada` + no borrada. Si la orden ya
    * salio de `reprogramada` (segunda corrida / carrera) afecta 0 filas -> devuelve false
    * (idempotencia derivada del estado). NO toca `num_guia`.
+   *
+   * Feature 110 (R1/R4): enciende `prioridad = true` en el MISMO `data` del `updateMany`
+   * GUARDADO. Por estar dentro de la guarda por `estatusId = reprogramada`, una orden que ya
+   * salio de `reprogramada` (count 0) NO se toca -> el flag no cambia (R3, idempotencia). La
+   * reprogramada liberada vuelve a la misma superficie de reasignacion (`en_bodega_central` /
+   * `en_bodega_satelite`) que la liberacion por SLA (99/101), por eso sale prioritaria.
    */
   async liberarOrden(input: LiberarOrdenInput): Promise<boolean> {
     // Feature 49/#10 (R7/R8/R18/R21): UPDATE guardado + append en la MISMA tx. El actor es
     // NULL (la origina el cron/sistema, no una persona) y `origenTipo` = liberacion_reprogramada;
-    // origen = `reprogramada` (fijado por la guarda), destino = en_bodega/en_bodega_satelite.
+    // origen = `reprogramada` (fijado por la guarda), destino = en_bodega_central/en_bodega_satelite.
     return this.prisma.$transaction(async (tx) => {
       const result = await tx.orden.updateMany({
         where: {
@@ -87,6 +93,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
           mensajeroAsignadoId: null, // R13: handoff limpio a la bodega
           asignadoAt: null, // feature 76/LC1 (C3): limpia el timestamp de asignacion (defensivo)
           liberadaReprogramadaAt: input.corridaAt, // R13: marca de auditoria/aviso
+          prioridad: true, // feature 110/R1: liberada de reprogramada -> reasignacion prioritaria
         },
       });
       // R8: SOLO si libero (count 1); una segunda corrida idempotente (count 0) no duplica.

@@ -7,19 +7,19 @@ import { test, expect, type Page } from "@playwright/test";
  * Cubre el RETORNO de una orden `rechazada` a su tienda de origen:
  *  - R1/R4: una orden que reposa en `rechazada` (por escalado 47 o rechazo directo
  *    36) es elegible; la BODEGA RESPONSABLE ejecuta "Devolver a la tienda" y la
- *    orden transiciona `rechazada → devuelta_origen`.
+ *    orden transiciona `rechazada → devolviendo_a_tienda`.
  *  - R10: sólo el administrador de la bodega responsable puede ejecutar el retorno
  *    (maestro/admin para zona central; adminSatelite para su zona).
- *  - R12/R13: el `adminTienda` dueño ve la orden `devuelta_origen` en su módulo con
+ *  - R12/R13: el `adminTienda` dueño ve la orden `devolviendo_a_tienda` en su módulo con
  *    la etiqueta legible "Devuelta a origen" (nunca el value crudo).
  *  - R15: la línea de tiempo de la orden (feature 49) muestra la transición
- *    `rechazada → devuelta_origen` como una entrada más (etiqueta legible).
+ *    `rechazada → devolviendo_a_tienda` como una entrada más (etiqueta legible).
  *
  * SUPERFICIE (verificada en el código, features 48/49):
  *  - BODEGA CENTRAL (maestro/admin): `/ordenes` (revisión por apartados) → region
  *    "Rechazadas" → seleccionar la orden (de zona CENTRAL) → botón "Devolver a la
  *    tienda" → modal role="dialog" name="Devolver a la tienda" → confirmar
- *    ("Devolver a la tienda"). La orden pasa a `devuelta_origen` y aparece en la
+ *    ("Devolver a la tienda"). La orden pasa a `devolviendo_a_tienda` y aparece en la
  *    region de solo lectura "Devueltas a origen".
  *  - BODEGA SATÉLITE (adminSatelite): `/recepcion-satelite` → region "Por devolver
  *    a tienda" → cada fila con botón "Devolver a la tienda" (acota por zona).
@@ -43,7 +43,7 @@ import { test, expect, type Page } from "@playwright/test";
  * These tests require:
  * - A running Next.js dev server (pnpm dev).
  * - A test database with Supabase/Postgres and the feature 49 migration applied,
- *   plus the order-status catalog seeded (incl. `rechazada`, `devuelta_origen`).
+ *   plus the order-status catalog seeded (incl. `rechazada`, `devolviendo_a_tienda`).
  * - The seeded maestro and adminTienda users, and the order in `rechazada` per
  *   PRECONDITION above.
  *
@@ -99,7 +99,7 @@ async function logout(page: Page) {
   await page.waitForURL(/\/login/, { timeout: 5000 });
 }
 
-test.describe.serial("Devolución a la tienda de origen — rechazada → devuelta_origen (R1/R4/R12/R15)", () => {
+test.describe.serial("Devolución a la tienda de origen — rechazada → devolviendo_a_tienda (R1/R4/R12/R15)", () => {
   test("la bodega central devuelve una orden rechazada de zona central", async ({
     page,
   }) => {
@@ -139,7 +139,7 @@ test.describe.serial("Devolución a la tienda de origen — rechazada → devuel
     await expect(fila).toBeVisible();
     await expect(fila.getByText(LABEL_DEVUELTA_ORIGEN)).toBeVisible();
 
-    // R15 — la línea de tiempo incluye la transición rechazada → devuelta_origen.
+    // R15 — la línea de tiempo incluye la transición rechazada → devolviendo_a_tienda.
     await page.getByRole("button", { name: TRIGGER_NAME }).click();
     const dialog = page.getByRole("dialog", { name: DIALOG_TITLE });
     await expect(dialog).toBeVisible();

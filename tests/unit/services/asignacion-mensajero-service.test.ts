@@ -83,6 +83,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     recibirEnSatelite: vi.fn().mockResolvedValue(false),
     recibirEnOrigen: vi.fn().mockResolvedValue(false),
+    recibirEnBodegaCentral: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
@@ -93,6 +94,13 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findParaAsignabilidad: vi.fn(async () => []),
     findParadasEnReparto: vi.fn(async () => []),
     findCausasDevueltaVigentes: vi.fn().mockResolvedValue(new Map()),
+    // Feature 106: canal integrador (API por key), no ejercitado aqui.
+    listByOwner: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    findDetalleByNumGuiaForOwner: vi.fn().mockResolvedValue(null),
+    cancelarViaApi: vi.fn().mockResolvedValue({ status: "not_found" }),
+    // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
+    countRechazadasSlaByTienda: vi.fn().mockResolvedValue(0),
+    findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }

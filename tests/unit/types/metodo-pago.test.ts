@@ -7,8 +7,8 @@ import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
 // exhaustividad frente al enum Prisma es de compile-time (satisfies + chequeo de
 // tipo en lib/types/metodo-pago.ts); aqui se verifica el contenido en runtime.
 describe("METODO_PAGO_SEED (R5)", () => {
-  it("contiene exactamente efectivo, SIMPE y transferencia (F1.4-c, SIMPE en mayusculas)", () => {
-    expect([...METODO_PAGO_SEED].sort()).toEqual(["SIMPE", "efectivo", "transferencia"].sort());
+  it("contiene exactamente efectivo, SINPE y transferencia (F1.4-c, SINPE en mayusculas)", () => {
+    expect([...METODO_PAGO_SEED].sort()).toEqual(["SINPE", "efectivo", "transferencia"].sort());
   });
 
   it("coincide 1:1 con los valores del enum Prisma metodo_pago_value", () => {

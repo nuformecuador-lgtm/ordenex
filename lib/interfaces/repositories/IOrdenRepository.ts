@@ -142,7 +142,7 @@ export interface GenerarGuiaResultRow {
 
 // Feature 88 — fila devuelta por `createManyOrdenesConGuia`: por cada orden EFECTIVAMENTE
 // creada (no las duplicadas que `skipDuplicates` salto), su `numGuia` YA asignado en la
-// misma tx (R9/R10) y el `value` del estado inicial fijado (`en_ruta_bodega_principal`).
+// misma tx (R9/R10) y el `value` del estado inicial fijado (`en_ruta_bodega_central`).
 export interface CreateOrdenConGuiaResultRow {
   ordenId: string;
   numRemision: string;
@@ -170,6 +170,10 @@ export interface DistritoRow {
   nombre: string;
   cantonId: string;
   zonaId: string | null; // feature 24/R4: la zona de la orden se deriva del distrito (carga masiva).
+  // Feature 98 (design §3.3, R2): flag `esCentral` de la zona del distrito, para elegir la
+  // columna del flete (`valorFleteGam` si central) al tarifar la carga por API SIN N+1. `false`
+  // cuando el distrito no resuelve UNA zona (0 o >1 zonas -> `zonaId` null -> no se tarifa).
+  esCentral: boolean;
 }
 
 // Feature 32 — fila proyectada para armar la etiqueta de guia (R1). Trae los
@@ -217,6 +221,10 @@ export interface RecepcionSateliteRow {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+  // Feature 101/R9: flag de reasignacion prioritaria de la orden (contrato interno repo->
+  // service, siempre presente: el `select` de WITH_RECEPCION_SATELITE lo pide explicito).
+  // Alimenta el sort prioridad-first del grupo "Recibidas" (R7) y el resalte (R8).
+  prioridad: boolean;
 }
 
 // Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite.
@@ -264,7 +272,96 @@ export interface CausaDevueltaVigente {
   fecha: Date;
 }
 
+// Feature 106 — fila liviana de una orden para el canal integrador (API por key). Los
+// campos son los PUBLICOS que el DTO expone (sin `id`, sin `tiendaId` en la salida). El
+// repo la produce ya con `estatusValue` y `montoCobrar` como number (Decimal -> number).
+export interface ApiOrdenRow {
+  numGuia: number | null;
+  numRemision: string;
+  estatusValue: string;
+  destinatario: string;
+  telefonoDest: string;
+  producto: string;
+  direccion: string | null;
+  montoCobrar: number | null;
+  createdAt: Date;
+}
+
+export interface ApiOrdenListResult {
+  items: ApiOrdenRow[];
+  total: number;
+}
+
+// Feature 106 — UNA evidencia de la orden en el detalle. El repo devuelve el `storagePath`
+// CRUDO (el service lo firma y NUNCA lo expone). `resultado` acotado a los dos que llevan
+// evidencia (entregada/rechazada), garantizado por el WHERE de la query.
+export interface ApiOrdenEvidenciaRow {
+  resultado: "entregada" | "rechazada";
+  storagePath: string;
+  contentType: string | null;
+}
+
+export interface ApiOrdenDetalleRow extends ApiOrdenRow {
+  evidencias: ApiOrdenEvidenciaRow[];
+}
+
+// Feature 106 — resultado discriminado de `cancelarViaApi` (sin acoplarse a HTTP):
+//   - `ok`        -> transiciono a `devolviendo_a_tienda`; `estadoAnterior` = estado previo real.
+//   - `not_found` -> no existe, borrada, o de otro owner (R23/R24).
+//   - `conflict`  -> estado actual no cancelable (incl. ya `devolviendo_a_tienda`); NO se modifico (R20).
+export type CancelarViaApiResult =
+  | { status: "ok"; estadoAnterior: string }
+  | { status: "not_found" }
+  | { status: "conflict"; estadoActual: string };
+
+// Feature 102 (T7, design §5.2) — fila de una orden RECHAZADA POR SLA de la tienda, para la
+// superficie derivada de solo-lectura (dentro de /novedades). Molde de `NovedadOrdenRow`, mas el
+// `numRemision` y el `monto` de 56. `monto` = `ingreso_bodega_rechazo` de la gestion sintetica SLA
+// de esa orden, YA serializado a STRING escala 2 (money-safe, R14/R18); `null` = pendiente de
+// cierre (la gestion sintetica nace sin snapshot hasta el proximo cierre, Q2 default). NO expone
+// `deletedAt` (el repo ya filtra `deletedAt: null`, R15).
+export interface RechazoSlaTiendaRow {
+  id: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  monto: string | null;
+}
+
 export interface IOrdenRepository {
+  /**
+   * Feature 106/R6/R7/R11: pagina de ordenes cuyo `tienda_id` = `ownerId` (owner FORZADO en
+   * el WHERE, no ampliable desde el input) y no borradas (`deleted_at IS NULL`). Opcional
+   * `estatusId` acota por estado. Devuelve `{ items, total }` para la paginacion offset/limit.
+   */
+  listByOwner(params: {
+    ownerId: string;
+    estatusId?: string;
+    skip: number;
+    take: number;
+  }): Promise<ApiOrdenListResult>;
+  /**
+   * Feature 106/R12/R13/R14/R15/R18: detalle de UNA orden por `num_guia` SOLO si su
+   * `tienda_id` = `ownerId` y no esta borrada; `null` en cualquier otro caso (no existe,
+   * borrada, o de otro owner -> el service lo traduce a 404 uniforme). Incluye las gestiones
+   * con `resultado IN ('entregada','rechazada')` y `evidencia_storage_path` no nulo (evidencias);
+   * `[]` si no hay. LEE `gestion_orden`, nunca escribe.
+   */
+  findDetalleByNumGuiaForOwner(numGuia: number, ownerId: string): Promise<ApiOrdenDetalleRow | null>;
+  /**
+   * Feature 106/R19-R26: cancela UNA orden del owner en una sola transaccion (R25). Pre-lee la
+   * orden por `num_guia` DENTRO de la tx exigiendo `tienda_id = ownerId` y `deleted_at IS NULL`
+   * (R23/R24 -> `not_found`); si su estado NO es cancelable (`en_bodega_central` /
+   * `en_ruta_bodega_central`) devuelve `conflict` sin tocar nada (R20). En estado cancelable
+   * hace `UPDATE orden.estatus_id = devueltaOrigenEstatusId` e invoca `appendCambioEstado` con
+   * `origenTipo:'cancelacion_api'` y `motivo:'cancelada por tienda'` en la MISMA tx (R21/R22/R26);
+   * NO escribe en `gestion_orden`.
+   */
+  cancelarViaApi(params: {
+    numGuia: number;
+    ownerId: string;
+    devueltaOrigenEstatusId: string;
+  }): Promise<CancelarViaApiResult>;
   /**
    * Feature 49/#2 (R10/R20): crea la orden y su primera fila de historial (origen null =
    * creacion, destino = estado inicial) en la MISMA transaccion (R7). `historial` aporta el
@@ -339,10 +436,10 @@ export interface IOrdenRepository {
    * EFECTIVAMENTE creada un `num_guia = siguiente_num_guia()` SOLO si `num_guia IS
    * NULL` (idempotente, misma secuencia y guarda que `generarGuiaLote` -> ninguna guia puede
    * colisionar con la feature 17/30) y registra su primera fila de historial (origen null,
-   * destino = estado inicial `en_ruta_bodega_principal`, `origenTipo` = `carga_api`). Las
+   * destino = estado inicial `en_ruta_bodega_central`, `origenTipo` = `carga_api`). Las
    * filas duplicadas (saltadas por `skipDuplicates`) NO consumen `num_guia` (R11). Devuelve
    * una fila por orden creada con su `num_guia` asignado. El estado inicial ya viene resuelto
-   * en `data[].estatusId` (el service lo fija a `en_ruta_bodega_principal`).
+   * en `data[].estatusId` (el service lo fija a `en_ruta_bodega_central`).
    */
   createManyOrdenesConGuia(
     data: CreateOrdenData[],
@@ -387,7 +484,7 @@ export interface IOrdenRepository {
   findParaAsignabilidad(ids: string[]): Promise<OrdenAsignabilidadRow[]>;
   /**
    * Feature 92 (design §5, R35/R37/R38): paradas candidatas de la ruta de UN mensajero —
-   * sus ordenes en `en_reparto` no borradas, con sus coordenadas (nullable: una orden sin
+   * sus ordenes en `en_ruta` no borradas, con sus coordenadas (nullable: una orden sin
    * coordenadas NO se excluye aqui, el service la registra como parada sin posicion, R37).
    * Ordenadas por `createdAt asc`, que es el criterio de recorte de R38.
    */
@@ -432,7 +529,7 @@ export interface IOrdenRepository {
    * R5/R19/R25: transaccional (todo-o-nada). Por cada decision, asigna
    * `num_guia = siguiente_num_guia()` SOLO si `num_guia IS NULL`
    * (idempotente, R5) y fija `estatusId`/`mensajeroAsignadoId`; TODAS las
-   * decisiones reciben `num_guia` (incluidas las que van a en_bodega, R19). El
+   * decisiones reciben `num_guia` (incluidas las que van a en_bodega_central, R19). El
    * llamador DEBE haber validado el lote completo antes de invocar este metodo
    * (sin validaciones de negocio aqui, solo persistencia).
    */
@@ -444,7 +541,7 @@ export interface IOrdenRepository {
    * R26: fija `mensajeroAsignadoId`/`estatusId` en lote; NUNCA toca `numGuia`
    * (idempotencia R5, esas ordenes ya lo tienen). Devuelve el numero de filas
    * afectadas.
-   * Feature 49/#4 (R12/R7/R8): registra la transicion (destino `en_espera_aceptacion`,
+   * Feature 49/#4 (R12/R7/R8): registra la transicion (destino `por_recoger`,
    * `origenTipo` = `asignacion_bodega`) SOLO de las ordenes afectadas, en la MISMA tx.
    */
   asignarBodegaLote(
@@ -533,9 +630,9 @@ export interface IOrdenRepository {
   ): Promise<boolean>;
   /**
    * Recepcion en la tienda de ORIGEN: transicion atomica y concurrencia-segura de
-   * UNA orden a `recibido_origen`, cerrando el flujo de devolucion. Espejo de
+   * UNA orden a `devuelta_a_tienda`, cerrando el flujo de devolucion. Espejo de
    * `recibirEnSatelite` cambiando la guarda de zona por la de TIENDA: UPDATE
-   * guardado por estado de origen (solo si sigue en `devuelta_origen`), tienda
+   * guardado por estado de origen (solo si sigue en `devolviendo_a_tienda`), tienda
    * duenna (`tiendaId`) y no borrada. Devuelve `true` si afecto 1 fila, `false` si
    * 0 (ya no estaba en el origen -> race). NO toca `mensajeroAsignadoId` ni
    * `numGuia`.
@@ -543,6 +640,24 @@ export interface IOrdenRepository {
   recibirEnOrigen(
     ordenId: string,
     tiendaId: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean>;
+
+  // --- Feature 138: recepcion por QR en la bodega CENTRAL (R2/R3/R9/R18) ---
+
+  /**
+   * Feature 138/R2/R3/R9/R18: recepcion en la BODEGA CENTRAL: transicion atomica y
+   * concurrencia-segura de UNA orden a `en_bodega_central`, cerrando el dead-end de la
+   * carga por API. Espejo de `recibirEnOrigen`/`recibirEnSatelite` pero SIN guarda de tienda
+   * ni de zona: la bodega central es global (R11). UPDATE guardado SOLO por estado de origen
+   * (sigue en `en_ruta_bodega_central`) + no borrada (`deletedAt IS NULL`); origen pre-leido
+   * bajo la misma guarda y append del historial (`origenTipo = recepcion_bodega_central`) en la
+   * MISMA tx, SOLO si transiciono. Devuelve `true` si afecto 1 fila (recibida), `false` si 0
+   * (ya no estaba en el origen -> race). NO toca `mensajeroAsignadoId` ni `numGuia` (R18).
+   */
+  recibirEnBodegaCentral(
+    ordenId: string,
     destinoEstatusId: string,
     historial: HistorialContexto,
   ): Promise<boolean>;
@@ -570,7 +685,7 @@ export interface IOrdenRepository {
   // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
 
   /**
-   * Feature 34/R7/R14: transiciona un lote de ordenes a `en_espera_aceptacion`
+   * Feature 34/R7/R14: transiciona un lote de ordenes a `por_recoger`
    * fijando `mensajeroAsignadoId`, con escritura GUARDADA por estado de origen +
    * zona (patron `recibirEnSatelite`): `updateMany` con
    * `WHERE id IN (ordenIds) AND estatusId = origenEstatusId AND zonaId AND
@@ -620,27 +735,23 @@ export interface IOrdenRepository {
   // --- Feature 87/89: lista de novedades (devoluciones del mensajero de la tienda) ---
 
   /**
-   * Feature 89/R1-R8 (T2): cuenta las NOVEDADES de `tiendaId`. Una orden es novedad si
-   * tiene una gestion de devolucion VIGENTE (`gestion_orden.resultado = "devuelta"` Y
-   * `anuladaAt IS NULL`, R1/R7), NO esta borrada (R5) y su estatus ACTUAL NO esta en el
-   * conjunto `cerrados` (R2/R3). El predicado se re-ancla a la GESTION, no al estatus actual:
-   * la feature 47 saca la orden de `devuelta` (a `en_bodega`/`rechazada`) en la misma tx, asi
-   * que filtrar por estatus actual `= "devuelta"` daba lista vacia (el bug). `cerrados`
-   * (`["entregada", "devuelta_origen", "recibido_origen"]`) lo pasa el service; el repo no
-   * hardcodea valores de catalogo. Alimenta el `total` paginado; comparte `where` con
-   * `findDevueltasByTienda` (R8).
+   * Feature 99/R7/R8 (Q7): cuenta las NOVEDADES de `tiendaId`. El predicado se ANCLA AL ESTADO
+   * REAL: una orden es novedad si su estatus ACTUAL es `devuelta` (R7), es de la tienda (R9) y no
+   * esta borrada (R5). Bajo la feature 99 la orden REPOSA en `devuelta` hasta que el cron SLA la
+   * libere/escale o la 100 la resuelva; al salir cae del conteo sin doble conteo (R8). Reemplaza
+   * el predicado por gestion vigente + estatus abierto de la feature 89 (ya innecesario).
+   * Alimenta el `total` paginado; comparte `where` con `findDevueltasByTienda` (R8).
    */
-  countDevueltasByTienda(tiendaId: string, cerrados: string[]): Promise<number>;
+  countDevueltasByTienda(tiendaId: string): Promise<number>;
   /**
-   * Feature 89/R1-R8/R12 (T2): una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado
-   * que `countDevueltasByTienda` (gestion devuelta vigente + orden abierta + no borrada, R8),
-   * ordenada por `Orden.createdAt` desc (fallback documentado de R12; el orden estricto por
-   * fecha de gestion lo aplica el service con la fecha traida por `findCausasDevueltaVigentes`).
+   * Feature 99/R7/R8/R9 (Q7): una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado que
+   * `countDevueltasByTienda` (estatus actual `= devuelta` + no borrada, R8), ordenada por
+   * `Orden.createdAt` desc (fallback; el orden estricto por fecha de la ultima gestion `devuelta`
+   * vigente lo aplica el service con la fecha traida por `findCausasDevueltaVigentes`, R9).
    * `skip`/`take` para la paginacion. Solo los campos que consume el DTO + `createdAt`.
    */
   findDevueltasByTienda(
     tiendaId: string,
-    cerrados: string[],
     pagination: { skip: number; take: number },
   ): Promise<NovedadOrdenRow[]>;
   /**
@@ -653,4 +764,26 @@ export interface IOrdenRepository {
    * -> `Map` vacio.
    */
   findCausasDevueltaVigentes(ordenIds: string[]): Promise<Map<string, CausaDevueltaVigente>>;
+
+  // --- Feature 102: rechazos por SLA de la tienda (superficie derivada de solo-lectura) ---
+
+  /**
+   * Feature 102/R12/R13/R15: cuenta los RECHAZOS POR SLA de `tiendaId`. Predicado (mismo `where`
+   * que `findRechazadasSlaByTienda`, R15): la orden es de la tienda del actor, no esta borrada
+   * (`deleted_at IS NULL`), su estatus ACTUAL es `rechazada` Y existe una transicion del cron SLA
+   * en su historial (`origen_tipo = escalado_devuelta_sla`, feature 99). Al salir de `rechazada` o
+   * al borrarse, cae del conteo (R15). Alimenta el `total` paginado.
+   */
+  countRechazadasSlaByTienda(tiendaId: string): Promise<number>;
+  /**
+   * Feature 102/R12/R14/R15: una PAGINA de RECHAZOS POR SLA de `tiendaId` con el MISMO predicado
+   * que `countRechazadasSlaByTienda`, ordenada por `Orden.createdAt` desc. Por cada orden, el
+   * `monto` = `ingreso_bodega_rechazo` de su gestion sintetica SLA (la enlazada por la transicion
+   * `origen_tipo = escalado_devuelta_sla`), YA serializado a STRING escala 2; `null` mientras no
+   * este snapshoteada (pendiente de cierre, Q2 default). `skip`/`take` para la paginacion.
+   */
+  findRechazadasSlaByTienda(
+    tiendaId: string,
+    pagination: { skip: number; take: number },
+  ): Promise<RechazoSlaTiendaRow[]>;
 }

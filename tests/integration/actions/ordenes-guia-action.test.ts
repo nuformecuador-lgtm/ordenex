@@ -138,7 +138,7 @@ describe("generarGuia — camino ok delega al service con el actor resuelto", ()
     const service = fakeGuiaService({
       generarGuia: vi.fn().mockResolvedValue({
         status: "ok",
-        resultados: [{ ordenId: "o1", numGuia: 10, estado: "en_bodega" }],
+        resultados: [{ ordenId: "o1", numGuia: 10, estado: "en_bodega_central" }],
       }),
     });
 
@@ -149,7 +149,7 @@ describe("generarGuia — camino ok delega al service con el actor resuelto", ()
 
     expect(r).toEqual({
       status: "ok",
-      resultados: [{ ordenId: "o1", numGuia: 10, estado: "en_bodega" }],
+      resultados: [{ ordenId: "o1", numGuia: 10, estado: "en_bodega_central" }],
     });
   });
 });
@@ -263,8 +263,8 @@ describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, 
     const listOrderStatus = vi.fn().mockResolvedValue([
       { id: "os-1", value: "en_fulfillment" },
       { id: "os-2", value: "en_preparacion" },
-      { id: "os-3", value: "en_espera_aceptacion" },
-      { id: "os-4", value: "en_bodega" },
+      { id: "os-3", value: "por_recoger" },
+      { id: "os-4", value: "en_bodega_central" },
     ]);
     const r = await listarCatalogoEstatus({
       ordenRepo: { listOrderStatus },
@@ -276,8 +276,8 @@ describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, 
       estatus: [
         { id: "os-1", value: "en_fulfillment" },
         { id: "os-2", value: "en_preparacion" },
-        { id: "os-3", value: "en_espera_aceptacion" },
-        { id: "os-4", value: "en_bodega" },
+        { id: "os-3", value: "por_recoger" },
+        { id: "os-4", value: "en_bodega_central" },
       ],
     });
     expect(listOrderStatus).toHaveBeenCalledWith();

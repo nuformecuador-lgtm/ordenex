@@ -43,7 +43,7 @@ export const RESULTADO_VACIO: Record<CierreResultado, string> = {
 
 export const METODO_LABEL: Record<MetodoPagoValue, string> = {
   efectivo: "Efectivo",
-  SIMPE: "SIMPE",
+  SINPE: "SINPE",
   transferencia: "Transferencia",
 };
 
@@ -77,12 +77,60 @@ export function EstadoCierreBadge({ estado }: { estado: CierreEstado }) {
   return <Badge variant={ESTADO_BADGE_VARIANT[estado]}>{ESTADO_LABEL[estado]}</Badge>;
 }
 
+// Feature 109 (R31): en el modelo GLOBAL un cierre `rechazado` NO es terminal. Aunque el
+// admin ya actuó (por eso vive en el histórico), sigue BLOQUEANDO al mensajero hasta que
+// éste lo RE-SOLICITE (`rechazado → solicitado`) y se APRUEBE. El histórico lo rotula así
+// para que no se lea como "resuelto/cerrado". Texto separado, i18n-ready.
+export const RECHAZADO_BLOQUEANTE_LABEL = "Bloqueante hasta re-solicitud";
+export const RECHAZADO_BLOQUEANTE_NOTA =
+  "Un cierre rechazado no es terminal: sigue bloqueando al mensajero hasta que lo vuelva a solicitar y su bodega lo apruebe.";
+
+/**
+ * Feature 109 (R31): rótulo del estado de un cierre en el HISTÓRICO de `/cierres-admin`.
+ * Un `rechazado` conserva su etiqueta ("Rechazado") pero se anexa el marcador visible
+ * "Bloqueante hasta re-solicitud" (con nota accesible), porque NO es un estado resuelto:
+ * bloquea hasta que el mensajero lo re-solicite y se apruebe. El resto de estados
+ * (`aprobado`) se rotula tal cual. Texto i18n-ready; el marcador no comunica solo por color.
+ */
+export function EstadoHistoricoRotulo({ estado }: { estado: CierreEstado }) {
+  if (estado === "rechazado") {
+    return (
+      <span className="inline-flex flex-col items-start gap-1">
+        <span>{ESTADO_LABEL[estado]}</span>
+        <Badge
+          variant="destructive"
+          title={RECHAZADO_BLOQUEANTE_NOTA}
+          aria-label={RECHAZADO_BLOQUEANTE_NOTA}
+        >
+          {RECHAZADO_BLOQUEANTE_LABEL}
+        </Badge>
+      </span>
+    );
+  }
+  return <>{ESTADO_LABEL[estado]}</>;
+}
+
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
 export const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
 export const PAGO_MENSAJERO_COL = "Pago mensajero";
 // --- Feature 56: etiquetas del ingreso de bodega por rechazos (texto separado, i18n-ready) ---
 export const INGRESO_BODEGA_RECHAZOS_LABEL = "Ingreso de bodega por rechazos";
 export const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
+// --- Feature 102 (R8): subtotales del ingreso de bodega por rechazos, particionado por ORIGEN.
+// El total combinado sigue siendo el de la 56 (`INGRESO_BODEGA_RECHAZOS_LABEL`); estos dos son
+// las sublíneas del desglose (SLA del cron 99 vs manual del mensajero). Texto i18n-ready. ---
+export const INGRESO_BODEGA_RECHAZOS_SLA_LABEL = "Automático (por plazo vencido)";
+export const INGRESO_BODEGA_RECHAZOS_MANUAL_LABEL = "Manual (mensajero)";
+// --- Feature 102 (R9): marca por fila del ORIGEN de un rechazo, para que cada ingreso de bodega
+// sea auditable. `SLA` = escalado por el cron de vencimiento (99); `Manual` = rechazo del
+// mensajero. Texto i18n-ready + nota accesible (`title`/`aria-label`). ---
+export const RECHAZO_ORIGEN_COL = "Origen";
+export const RECHAZO_SLA_BADGE_LABEL = "Automático";
+export const RECHAZO_SLA_BADGE_NOTA =
+  "Rechazo automático por vencerse el plazo de la devolución (no lo hizo el mensajero).";
+export const RECHAZO_MANUAL_BADGE_LABEL = "Manual";
+export const RECHAZO_MANUAL_BADGE_NOTA =
+  "Rechazo registrado manualmente por el mensajero.";
 // --- Neto DERIVADO (total general - lo pagado a mensajeros): texto separado, i18n-ready ---
 export const NETO_LABEL = "Total neto";
 // --- Deuda de la central: el pago a mensajeros que el efectivo no cubrió (i18n-ready) ---
@@ -178,7 +226,7 @@ export function TotalItem({
 }
 
 /**
- * Panel de totales snapshot por método (R13): efectivo / SIMPE / transferencia +
+ * Panel de totales snapshot por método (R13): efectivo / SINPE / transferencia +
  * general. Los montos llegan como STRING y se renderizan tal cual (money-safe). Es
  * una `region` accesible con nombre `ariaLabel` para que el E2E la localice.
  */
@@ -208,7 +256,7 @@ export function TotalesPanel({
           className={`grid grid-cols-2 gap-4 pt-6 ${neto === undefined ? "sm:grid-cols-4" : "sm:grid-cols-5"}`}
         >
           <TotalItem label="Efectivo" value={money(totales.efectivo)} />
-          <TotalItem label="SIMPE" value={money(totales.simpe)} />
+          <TotalItem label="SINPE" value={money(totales.simpe)} />
           <TotalItem
             label="Transferencia"
             value={money(totales.transferencia)}
@@ -355,6 +403,57 @@ export function IngresoBodegaRechazosTotal({
 }
 
 /**
+ * Feature 102 (R8): desglose del ingreso de bodega por rechazos, particionado por ORIGEN.
+ * Hermano de `IngresoBodegaRechazosTotal` (misma card dashed) pero, DEBAJO del total combinado
+ * ya existente (56), muestra las dos sublíneas del desglose: subtotal SLA (cron 99) y subtotal
+ * manual (mensajero). Por construcción `sla + manual === total` (server-side, R5): acá NO se hace
+ * aritmética. Los tres montos llegan como STRING (money-safe) y se renderizan con `money()`.
+ * `region` accesible por `ariaLabel` (mismo nombre que `IngresoBodegaRechazosTotal` para que los
+ * consumidores existentes lo sigan localizando).
+ */
+export function IngresoBodegaRechazosDesglose({
+  desglose,
+  ariaLabel,
+  label = INGRESO_BODEGA_RECHAZOS_LABEL,
+}: {
+  desglose: { sla: string; manual: string; total: string };
+  ariaLabel: string;
+  label?: string;
+}) {
+  return (
+    <section aria-label={ariaLabel} className="flex flex-col gap-3">
+      <Card className="border-dashed">
+        <CardContent className="flex flex-col gap-2 pt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm font-medium text-muted-foreground">
+              {label}
+            </span>
+            <span className="text-lg font-semibold">{money(desglose.total)}</span>
+          </div>
+          {/* Sublíneas del desglose (R8): separan el origen del ingreso sin recomputar el total. */}
+          <div className="flex flex-col gap-1 border-t pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="secondary">{RECHAZO_SLA_BADGE_LABEL}</Badge>
+                {INGRESO_BODEGA_RECHAZOS_SLA_LABEL}
+              </span>
+              <span className="text-sm font-medium">{money(desglose.sla)}</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="outline">{RECHAZO_MANUAL_BADGE_LABEL}</Badge>
+                {INGRESO_BODEGA_RECHAZOS_MANUAL_LABEL}
+              </span>
+              <span className="text-sm font-medium">{money(desglose.manual)}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+/**
  * Feature 39/56 (R16/R20/R23): render del pago al mensajero por orden. Money-safe: el
  * monto llega como STRING y se muestra tal cual. El aviso "Sin tarifa" ahora se decide
  * por el flag `tarifaFaltante` resuelto SERVER-SIDE (F1.4-Q6): reemplaza la heurística
@@ -393,6 +492,41 @@ export const COLUMNA_INGRESO_BODEGA_RECHAZOS: Column<CierreDetalleGestion> = {
   id: "ingresoBodegaRechazo",
   value: INGRESO_BODEGA_RECHAZOS_COL,
   render: (g) => money(g.ingresoBodegaRechazo),
+};
+
+/**
+ * Feature 102 (R9): marca por fila del ORIGEN de un rechazo — `SLA` (escalado por el cron 99)
+ * o `Manual` (rechazo del mensajero), según `g.esRechazoSla`. El badge trae su nota accesible
+ * (`title`/`aria-label`) para que el origen de cada ingreso de bodega sea auditable.
+ */
+export function renderRechazoOrigen(g: CierreDetalleGestion): ReactNode {
+  return g.esRechazoSla ? (
+    <Badge
+      variant="secondary"
+      title={RECHAZO_SLA_BADGE_NOTA}
+      aria-label={RECHAZO_SLA_BADGE_NOTA}
+    >
+      {RECHAZO_SLA_BADGE_LABEL}
+    </Badge>
+  ) : (
+    <Badge
+      variant="outline"
+      title={RECHAZO_MANUAL_BADGE_NOTA}
+      aria-label={RECHAZO_MANUAL_BADGE_NOTA}
+    >
+      {RECHAZO_MANUAL_BADGE_LABEL}
+    </Badge>
+  );
+}
+
+/**
+ * Feature 102 (R9): columna del origen del rechazo. Solo aplica a la sección `rechazada`.
+ * Marca cada fila como SLA o manual, sin exponer ningún subtotal (el desglose vive en el panel).
+ */
+export const COLUMNA_RECHAZO_ORIGEN: Column<CierreDetalleGestion> = {
+  id: "rechazoOrigen",
+  value: RECHAZO_ORIGEN_COL,
+  render: renderRechazoOrigen,
 };
 
 /**
@@ -655,10 +789,11 @@ export function columnasPara(
       COLUMNA_PAGO_MENSAJERO,
     ];
   }
-  // rechazada: motivo + evidencia firmada (R12) + ingreso de bodega por rechazos (56/R12).
-  // Un rechazo deriva los MISMOS conceptos que una devolución (flete de devolución + IVA).
+  // rechazada: origen SLA/manual (102/R9) + motivo + evidencia firmada (R12) + ingreso de bodega
+  // por rechazos (56/R12). Un rechazo deriva los MISMOS conceptos que una devolución (flete + IVA).
   return [
     ...COLUMNAS_COMUNES,
+    COLUMNA_RECHAZO_ORIGEN,
     COLUMNA_MONTO_COBRAR,
     { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
     {

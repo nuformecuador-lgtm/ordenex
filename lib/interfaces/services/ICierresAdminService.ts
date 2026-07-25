@@ -52,6 +52,12 @@ export type CierreDetalleAdminServiceResult =
       grupos: CierreGrupos; // por resultado (reuso 37)
       // Totales por concepto del ingreso de Ordenex del cierre, derivados del snapshot.
       totalesIngreso: TotalesIngresoOrdenex;
+      // Feature 102/R4-R8/R10: desglose money-safe (STRING escala 2) del ingreso de bodega por
+      // rechazos, particionado por origen. `sla` = escalados del cron SLA (99); `manual` =
+      // rechazos del mensajero; `total` = el SNAPSHOT `cierre.totalIngresoBodegaRechazos` (leido,
+      // NO recomputado, R6). Por construccion `sla + manual === total` (R5). Solo en el DETALLE
+      // (Q4); llega igual al alcance satelite por el mismo camino (R10).
+      desgloseIngresoBodegaRechazos: { sla: string; manual: string; total: string };
       // DERIVADO: `totalesIngreso.total` - `cierre.totalPagoMensajero` (STRING money-safe).
       // Lo que le queda a Ordenex del cierre. Puede ser NEGATIVO.
       ganancia: string;
@@ -76,6 +82,16 @@ export type RechazarCierreServiceResult =
   | { status: "no_encontrada" } // id inexistente / otra bodega-zona (R13)
   | { status: "conflict" } // ya no esta `solicitado` (R12)
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }; // motivo vacio (R11)
+
+// Feature 111/R16 — VALVULA DE ESCAPE: destrabar un `vencido` abandonado (transicion
+// `vencido -> solicitado` en nombre del mensajero). `ok` deja el cierre en `solicitado` (se
+// aprueba/rechaza luego por la via normal). `conflict` = ya no es `vencido`; `no_encontrada` =
+// id inexistente o fuera de alcance (R13); `forbidden` = rol no admin (R1).
+export type ForzarSolicitudVencidoServiceResult =
+  | { status: "ok"; cierreId: string; estado: "solicitado" }
+  | { status: "forbidden" }
+  | { status: "no_encontrada" }
+  | { status: "conflict" };
 
 export interface ICierresAdminService {
   /**
@@ -106,4 +122,16 @@ export interface ICierresAdminService {
     motivo: string,
     actor: Actor,
   ): Promise<RechazarCierreServiceResult>;
+  /**
+   * Feature 111/R16/R17/R18 — VALVULA DE ESCAPE (emergencia): destraba un `vencido`
+   * ABANDONADO de su alcance transicionandolo `vencido -> solicitado` en nombre del mensajero.
+   * Acotada por rol+zona destino (mismo `resolveAlcance` que aprobar/rechazar) y guardada por
+   * estado en el repo (0 filas -> conflict). NO recalcula el snapshot (R21) y NO desbloquea
+   * (R18: el desbloqueo ocurre al aprobar el `solicitado` resultante, que registra
+   * `resuelto_por`/`resuelto_at`, R17). Fuera de alcance -> no_encontrada.
+   */
+  forzarSolicitudVencido(
+    cierreId: string,
+    actor: Actor,
+  ): Promise<ForzarSolicitudVencidoServiceResult>;
 }

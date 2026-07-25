@@ -68,6 +68,7 @@ export default async function RecepcionSatelitePage() {
         porRecibir={result.porRecibir}
         recibidas={result.recibidas}
         porDevolver={result.porDevolver}
+        devueltas={result.devueltas}
         zonaNombre={result.zonaNombre}
         sinZona={result.sinZona}
         mensajeros={mensajeros}

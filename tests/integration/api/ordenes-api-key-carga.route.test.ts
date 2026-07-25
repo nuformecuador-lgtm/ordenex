@@ -17,8 +17,10 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     creadas: 1,
     duplicadas: 0,
     conError: 0,
-    filas: [{ fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "en_ruta_bodega_principal", numGuia: 1042 }],
-    ordenes: [{ id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_principal" }],
+    filas: [{ fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "en_ruta_bodega_central", numGuia: 1042 }],
+    ordenes: [
+      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
+    ],
     ...overrides,
   };
 }
@@ -119,10 +121,49 @@ describe("carga API: happy path (R10)", () => {
     );
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.ordenes[0]).toMatchObject({ numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_principal" });
+    expect(json.ordenes[0]).toMatchObject({ numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central" });
     expect(json.filas[0].numGuia).toBe(1042);
     // El service recibe el actor del usuario dedicado de la key.
     expect(service.cargarViaApi).toHaveBeenCalledWith(BODY.ordenes, KEY_ACTOR);
+  });
+
+  // Feature 98 (T10) — la respuesta incluye costoEnvio (flete + IVA) por orden creada (R5).
+  it("R5: cada orden creada del bloque `ordenes` lleva su costoEnvio", async () => {
+    const service = fakeService();
+    const res = await handleCargaApi(
+      reqConBearer(BODY, SECRETO),
+      deps({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }, service),
+    );
+    const json = await res.json();
+    expect(json.ordenes[0].costoEnvio).toBe("3.92");
+    expect(typeof json.ordenes[0].costoEnvio).toBe("string");
+  });
+
+  // Feature 98 (T10) — la forma de las filas error/duplicada NO cambia: no ganan costoEnvio (R6).
+  it("R6: filas error/duplicada conservan su shape (sin costoEnvio)", async () => {
+    const summary = okSummary({
+      total: 2,
+      creadas: 0,
+      duplicadas: 1,
+      conError: 1,
+      filas: [
+        { fila: 1, numRemision: "REM-D", resultado: "duplicada", estatus: "entregada" },
+        { fila: 2, numRemision: "REM-E", resultado: "error", errores: { provincia: ["no encontrada"] } },
+      ],
+      ordenes: [],
+    });
+    const service = fakeService({
+      cargarViaApi: vi.fn().mockResolvedValue({ status: "ok", summary } satisfies CargaViaApiResult),
+    });
+    const res = await handleCargaApi(
+      reqConBearer(BODY, SECRETO),
+      deps({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }, service),
+    );
+    const json = await res.json();
+    expect(json.filas[0]).not.toHaveProperty("costoEnvio");
+    expect(json.filas[1]).not.toHaveProperty("costoEnvio");
+    expect(json.filas[1].errores).toHaveProperty("provincia");
+    expect(json.ordenes).toEqual([]);
   });
 });
 

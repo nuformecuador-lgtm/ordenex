@@ -108,6 +108,12 @@ export interface OrdenDTO {
   // mismo motivo que en OrdenListItemDTO: no romper mocks/fixtures que construyen OrdenDTO
   // sin el; `findById`/`toDTO` SIEMPRE lo envian (string|null desde la columna orden).
   mensajeroAsignadoId?: string | null;
+  // Feature 101/R9: flag de reasignacion prioritaria (orden liberada por SLA que espera
+  // reasignacion en la bodega dueña). Opcional (`?`) por el patron aditivo ya usado por
+  // `mensajeroAsignadoId?`/`zonaEsGam?`: no rompe mocks/fixtures que construyen OrdenDTO sin
+  // el; `toDTO` SIEMPRE lo envia (boolean desde la columna orden). Alimenta el sort
+  // prioridad-first (R6) y el resalte de fila (R8) del listado de reasignacion.
+  prioridad?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -125,7 +131,7 @@ export type ActionError =
 // obtener/actualizar siguen devolviendo OrdenDTO sin `tiendaNombre`.
 // Feature 17/R20: agrega `mensajeroSugeridoId`/`mensajeroAsignadoId` (solo el
 // listado, para que el modal "Generar guia" agrupe por sugerido y las secciones
-// en_espera_aceptacion/en_bodega muestren el mensajero asignado). Cambio aditivo:
+// por_recoger/en_bodega_central muestren el mensajero asignado). Cambio aditivo:
 // NO se agrega a OrdenDTO base para no ampliar el contrato del CRUD. Opcionales
 // (`?`) para no romper mocks/fixtures de UI existentes que construyen
 // OrdenListItemDTO sin estos campos; el repositorio SIEMPRE los envia (string|null).

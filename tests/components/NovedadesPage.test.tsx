@@ -6,19 +6,23 @@ import type { RolValue } from "@prisma/client";
 import NovedadesPage from "@/app/(app)/novedades/page";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarNovedadesAction } from "@/lib/actions/novedades";
+import { listarRechazosSlaTiendaAction } from "@/lib/actions/rechazos-sla-tienda";
 
-// Feature 87 (T15) — la page resuelve el rol SOLO server-side. Cubre R18 (rol != adminTienda
-// / sin sesion -> notFound) y R19 (action != ok -> notFound). Se mockean el resolver, la
-// action y next/navigation (notFound lanza). El modulo cliente se mockea (aqui solo se
-// prueba la guardia, no su render).
+// Feature 87 (T15) + Feature 102 (T12) — la page resuelve el rol SOLO server-side. Cubre R18 (rol
+// != adminTienda / sin sesion -> notFound) y R19 (action principal != ok -> notFound). Se mockean
+// el resolver, las dos actions (novedades + rechazos SLA) y next/navigation (notFound lanza). El
+// modulo cliente de pestañas se mockea (aqui solo se prueba la guardia, no su render).
 vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(),
 }));
 vi.mock("@/lib/actions/novedades", () => ({
   listarNovedadesAction: vi.fn(),
 }));
-vi.mock("@/app/(app)/novedades/_components/NovedadesModule", () => ({
-  NovedadesModule: () => <div data-testid="novedades-module" />,
+vi.mock("@/lib/actions/rechazos-sla-tienda", () => ({
+  listarRechazosSlaTiendaAction: vi.fn(),
+}));
+vi.mock("@/app/(app)/novedades/_components/NovedadesTabs", () => ({
+  NovedadesTabs: () => <div data-testid="novedades-module" />,
 }));
 
 class NotFoundError extends Error {
@@ -48,10 +52,18 @@ vi.mock("@/hooks/useToast", () => ({
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarNovedadesAction);
+const listarRechazosSlaMock = vi.mocked(listarRechazosSlaTiendaAction);
 
 beforeEach(() => {
   vi.clearAllMocks();
   listarMock.mockResolvedValue({
+    status: "ok",
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 10,
+  });
+  listarRechazosSlaMock.mockResolvedValue({
     status: "ok",
     items: [],
     total: 0,

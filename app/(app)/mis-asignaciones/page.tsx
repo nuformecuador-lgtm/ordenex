@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
+import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 
 import { KpisMensajero } from "./_components/KpisMensajero";
 import { MisAsignacionesModule } from "./_components/MisAsignacionesModule";
@@ -19,8 +20,19 @@ export default async function MisAsignacionesPage() {
   const actor = await resolveActorFromSession();
   if (actor?.rol !== "mensajero") notFound(); // R9/R12
 
+  // Feature 92 (R28/R30): `porGestionar` llega YA ORDENADO por la secuencia
+  // optimizada (posición asc; las sin posición al final) y `ruta` trae el estado
+  // de esa ruta. Los resuelve el service SERVER-SIDE: ni esta página ni el
+  // módulo reordenan nada ni derivan el estado de la ruta por su cuenta.
   const result = await listarMisAsignaciones();
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
+
+  // Feature 111/R12/R14: flag DERIVADO server-side de si el mensajero está BLOQUEADO
+  // (cierre `solicitado`/`vencido` pendiente). El bloqueo es TOTAL: el módulo muestra
+  // el aviso y desactiva/guarda los controles de gestionar/recoger/escoger (defensa
+  // suave; el backend R1/R4 es la defensa real). Si la acción degrada, no se bloquea.
+  const bloqueo = await estadoBloqueoMensajero();
+  const bloqueado = bloqueo.status === "ok" && bloqueo.bloqueado;
 
   return (
     <AppPage
@@ -34,6 +46,7 @@ export default async function MisAsignacionesPage() {
         porGestionar={result.porGestionar}
         ordenEnGestionId={result.ordenEnGestionId}
         ruta={result.ruta}
+        bloqueado={bloqueado}
       />
     </AppPage>
   );

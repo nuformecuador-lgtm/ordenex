@@ -1,4 +1,4 @@
-import type { EstadoUsuario } from "@prisma/client";
+import type { EstadoApiKey, EstadoUsuario } from "@prisma/client";
 import type { ApiKeyPublico } from "@/lib/types/api-key";
 
 /**
@@ -13,6 +13,11 @@ export interface ApiKeyAutenticada {
   usuarioId: string;
   /** Estado del usuario dedicado: la carga solo procede si es `activo` (R5). */
   estado: EstadoUsuario;
+  /**
+   * Estado PROPIO de la key (activar/desactivar): la carga solo procede si es `activa`.
+   * Palanca de revocacion independiente del estado del usuario dedicado (R7).
+   */
+  apiKeyEstado: EstadoApiKey;
   /** `value` del rol del usuario dedicado (`apiKey`); el service revalida (defensa en profundidad). */
   rol: string;
 }
@@ -52,6 +57,8 @@ export interface ApiKeyListItem {
   identificador: string;
   /** No secreto (81/R17): permite mostrar `ordx_ab12cd3…` sin revelar nada. */
   keyPrefix: string;
+  /** Estado propio de la key (activar/desactivar): `activa` | `inactiva`. */
+  estado: EstadoApiKey;
   usuarioId: string;
   /** Email sintetico del usuario dedicado (`apikey+<slug>@apikey.invalid`). [D1] */
   usuarioEmail: string;
@@ -105,4 +112,19 @@ export interface IApiKeyRepository {
    * en claro contra la DB (el lookup es siempre por hash).
    */
   findByKeyHash(keyHash: string): Promise<ApiKeyAutenticada | null>;
+
+  /**
+   * Ciclo de vida/R2: reemplaza ATOMICAMENTE el `key_prefix` y el `key_hash` de la fila
+   * `id` por los de un secreto nuevo (ya generados por el service). No toca el usuario
+   * dedicado ni el `estado`. Devuelve la forma publica actualizada, o `null` si el id no
+   * existe (R3). NUNCA proyecta `keyHash` ni el secreto (R6/R19).
+   */
+  rotar(id: string, data: { keyPrefix: string; keyHash: string }): Promise<ApiKeyPublico | null>;
+
+  /**
+   * Ciclo de vida/R4: fija el `estado` propio de la key (`activa`/`inactiva`). Idempotente
+   * a nivel de fila (fijar el estado que ya tiene es un no-op valido). Devuelve la forma
+   * publica actualizada, o `null` si el id no existe (R3). NUNCA proyecta `keyHash`.
+   */
+  setEstado(id: string, estado: EstadoApiKey): Promise<ApiKeyPublico | null>;
 }

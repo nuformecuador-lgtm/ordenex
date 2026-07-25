@@ -17,6 +17,14 @@ import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
 const ESTADO_SOLICITADO = "solicitado";
 
+// Feature 111/R6/R7: estado del cierre que el corte diario deja "vencido" (mensajero que
+// debia cerrar y no solicito). `solicitarCierre` lo transiciona a `solicitado`.
+const ESTADO_VENCIDO = "vencido";
+
+// Feature 109/R28 (modelo GLOBAL): estado del cierre RECHAZADO por el admin. Ya NO es terminal:
+// BLOQUEA (R29) y es RE-SOLICITABLE (`rechazado -> solicitado`), espejo EXACTO del `vencido`.
+const ESTADO_RECHAZADO = "rechazado";
+
 // Feature 41/C1: sentinela interno para forzar el rollback de la tx cuando el UPDATE
 // guardado vincula 0 gestiones (carrera). Se captura fuera de la tx -> `crearCierre`
 // devuelve null (sin efectos), NO se propaga como error real.
@@ -163,6 +171,9 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
     // Feature 56: snapshot del ingreso de bodega por rechazo (Decimal->string; null si aun
     // sin cerrar o cierre pre-migracion, R21/R22). En la vista EN VIVO (37) el service lo DERIVA.
     ingresoBodegaRechazo: decimalToString(row.ingresoBodegaRechazo),
+    // Feature 102/R11: la vista EN VIVO del mensajero (37) NO expone el desglose SLA -> `false`.
+    // La clasificacion SLA solo la deriva el detalle del admin (38/40) desde el historial.
+    esRechazoSla: false,
   };
 }
 
@@ -219,6 +230,55 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     return count > 0;
   }
 
+  /** Feature 111/R6: existe un cierre `vencido` del mensajero (gemelo del anterior). */
+  async existeCierreVencido(mensajeroId: string): Promise<boolean> {
+    const count = await this.prisma.cierreDia.count({
+      where: { mensajeroId, estado: ESTADO_VENCIDO },
+    });
+    return count > 0;
+  }
+
+  /**
+   * Feature 111/R6/R7/R8/R21 — transiciona `vencido -> solicitado` con escritura guardada por
+   * estado. SOLO reescribe `estado`; NO recalcula ni re-snapshotea los totales money-critical
+   * ni re-vincula gestiones (money-safe). 0 filas -> `false` (carrera: ya resuelto/transicionado).
+   */
+  async transicionarVencidoASolicitado(mensajeroId: string): Promise<boolean> {
+    const { count } = await this.prisma.cierreDia.updateMany({
+      // R7: anti-TOCTOU — solo transiciona si SIGUE en `vencido` (guardia por estado).
+      where: { mensajeroId, estado: ESTADO_VENCIDO },
+      // R8: money-safe — cambia UNICAMENTE `estado`. Los totales, pago, ingreso, cierre_id de
+      // gestiones, resuelto_por/at y solicitado_at quedan INTACTOS (no es una resolución).
+      data: { estado: ESTADO_SOLICITADO },
+    });
+    return count === 1; // 0 = raced/resuelto -> el service devuelve conflict (R7)
+  }
+
+  /** Feature 109/R28 — existe un cierre `rechazado` del mensajero (gemelo de `existeCierreVencido`). */
+  async existeCierreRechazado(mensajeroId: string): Promise<boolean> {
+    const count = await this.prisma.cierreDia.count({
+      where: { mensajeroId, estado: ESTADO_RECHAZADO },
+    });
+    return count > 0;
+  }
+
+  /**
+   * Feature 109/R28 — transiciona `rechazado -> solicitado` con escritura guardada por estado
+   * (espejo EXACTO de `transicionarVencidoASolicitado`). SOLO reescribe `estado`; NO recalcula ni
+   * re-snapshotea los totales money-critical ni re-vincula gestiones (money-safe). 0 filas ->
+   * `false` (carrera: ya re-solicitado/resuelto).
+   */
+  async transicionarRechazadoASolicitado(mensajeroId: string): Promise<boolean> {
+    const { count } = await this.prisma.cierreDia.updateMany({
+      // Anti-TOCTOU: solo transiciona si SIGUE en `rechazado`.
+      where: { mensajeroId, estado: ESTADO_RECHAZADO },
+      // Money-safe: cambia UNICAMENTE `estado`. Totales, pago, ingreso, cierre_id de gestiones,
+      // resuelto_por/at, motivo_rechazo y solicitado_at quedan INTACTOS (no es una resolucion).
+      data: { estado: ESTADO_SOLICITADO },
+    });
+    return count === 1; // 0 = raced/resuelto -> el service devuelve conflict
+  }
+
   /**
    * R13/R14 + feature 41/C1 (R8/R9/R23): INSERT cierre_dia (estado `solicitado` por
    * defecto o `vencido` para el corte) + vincular gestiones pendientes + snapshot pago,
@@ -230,6 +290,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       destinoTipo,
       destinoZonaId,
       estado = ESTADO_SOLICITADO,
+      corteSinGestionar,
       totales,
       pagoByGestionId,
       totalPagoMensajero,
@@ -255,6 +316,47 @@ export class CierreDiaRepository implements ICierreDiaRepository {
           },
           select: { id: true },
         });
+
+        // Feature 109 (T1.2, R4/R6/R22): CORTE DIARIO — transiciona en la MISMA tx las ordenes que
+        // siguen en `en_ruta` del mensajero a `sin_gestionar`, CONSERVANDO
+        // `mensajero_asignado_id` (asociacion orden<->cierre por mensajero, Q1: se limpia SOLO al
+        // liberar al aprobar, R16) y registrando el cambio por el CHOKE POINT (49) con actor null y
+        // `origen_tipo = corte_sin_gestionar`. Pre-SELECT de ids + updateMany GUARDADO por
+        // `estatus_id = en_ruta` (money-safe: NO toca prioridad ni totales) -> el append es SOLO
+        // de las que efectivamente transicionaron (R6/R8). Ausente el input = flujo 37 sin cambios.
+        let sinGestionarTransicionadas = 0;
+        if (corteSinGestionar) {
+          const { enRepartoEstatusId, sinGestionarEstatusId } = corteSinGestionar;
+          const enReparto = await tx.orden.findMany({
+            where: {
+              mensajeroAsignadoId: mensajeroId,
+              estatusId: enRepartoEstatusId,
+              deletedAt: null,
+            },
+            select: { id: true },
+          });
+          if (enReparto.length > 0) {
+            const ids = enReparto.map((o) => o.id);
+            const movidas = await tx.orden.updateMany({
+              where: { id: { in: ids }, estatusId: enRepartoEstatusId, deletedAt: null },
+              data: { estatusId: sinGestionarEstatusId },
+            });
+            sinGestionarTransicionadas = movidas.count;
+            if (movidas.count > 0) {
+              await appendCambioEstado(
+                tx,
+                ids.map((ordenId) => ({
+                  ordenId,
+                  estatusOrigenId: enRepartoEstatusId, // la guarda garantiza este origen
+                  estatusDestinoId: sinGestionarEstatusId,
+                  actorUsuarioId: null, // R6: sistema/cron
+                  origenTipo: "corte_sin_gestionar", // R6
+                })),
+              );
+            }
+          }
+        }
+
         // R13: consume las gestiones pendientes con guardia de propiedad + no-cerradas
         // en el WHERE (concurrencia-segura: solo las cierre_id IS NULL del actor).
         // Feature 41/C1 (R8/R9/R23): si vincula 0 (otra solicitud/corte concurrente las
@@ -271,7 +373,14 @@ export class CierreDiaRepository implements ICierreDiaRepository {
           where: { mensajeroId, cierreId: null, anuladaAt: null },
           data: { cierreId: cierre.id },
         });
-        if (vinculadas.count === 0) throw new SinGestionesVinculadas();
+        // Feature 41/C1 + feature 109 (R8/R9/R23): guarda "algo paso". El cierre se conserva si
+        // vinculo >=1 gestion O (corte diario) transiciono >=1 orden a `sin_gestionar`. Si AMBOS
+        // son 0 -> rollback -> null (carrera / no-op real). La 37 (solicitar, sin corteSinGestionar)
+        // exige >=1 gestion como antes (sinGestionarTransicionadas queda 0). El `vencido`
+        // money-neutral (0 gestiones + >=1 sin_gestionar) YA NO se descarta (R8).
+        if (vinculadas.count === 0 && sinGestionarTransicionadas === 0) {
+          throw new SinGestionesVinculadas();
+        }
         // Feature 39/R12/R14: puebla pago_mensajero por gestion AGRUPADO por valor de pago
         // (F1.4: a lo sumo 2 valores distintos — cobroEntregado para `entregada`, "0.00" para
         // el resto). Guardia por cierreId=nuevo (las que acabamos de vincular). Todo en la tx.
@@ -471,7 +580,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         });
         if (anulada.count === 0) throw new NoAnulable();
 
-        // 2) R18/R19: devuelve la orden a `en_reparto` (unico estado desde el que se puede
+        // 2) R18/R19: devuelve la orden a `en_ruta` (unico estado desde el que se puede
         // volver a gestionar) y REPONE la asignacion al mensajero autor. `mensajeroAsignadoId`
         // incondicional: es idempotente cuando la asignacion ya era ese mensajero
         // (entregada/reprogramada/rechazada) y repone la que el seguimiento de un reintento
@@ -491,7 +600,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         if (movida.count === 0) throw new NoAnulable();
 
         // 3) R20/R21/R23: CHOKE POINT del historial (49) en la MISMA tx que el cambio de estado.
-        // Origen = estado real previo, destino = `en_reparto`, actor = quien deshizo,
+        // Origen = estado real previo, destino = `en_ruta`, actor = quien deshizo,
         // `gestion_orden_id` = la gestion anulada, `origen_tipo` = `deshacer_gestion` (12.º
         // valor, F1.4-b) para que la linea de tiempo NO lo confunda con una gestion real.
         // Es un APPEND: ninguna fila previa del historial se modifica ni se borra (R23).

@@ -71,19 +71,21 @@ export class JobRepository implements IJobRepository {
     const maxIntentos = opts.maxIntentos ?? loadJobsConfig().JOBS_MAX_ATTEMPTS;
     const runAfter = opts.runAfter ?? new Date();
     const dedupeKey = opts.dedupeKey ?? null;
+    const lastError = opts.lastError ?? null;
     const payloadJson = JSON.stringify(payload ?? {});
 
     // R7: fila `pending`, `intentos = 0`. R8: `ON CONFLICT ("dedupe_key") ... DO NOTHING`
     // apunta al indice UNICO PARCIAL (por eso el `WHERE "dedupe_key" IS NOT NULL`); un
     // `dedupe_key` repetido no crea fila y no falla. `RETURNING *` -> null si se omitio.
+    // `last_error` inicial (opcional): motivo del fallo sincrono que motivo el encolado.
     const rows = await client.$queryRaw<JobRow[]>`
       INSERT INTO "jobs" (
         "id", "tipo", "payload", "estado", "intentos", "max_intentos",
-        "run_after", "dedupe_key", "created_at", "updated_at"
+        "run_after", "dedupe_key", "last_error", "created_at", "updated_at"
       )
       VALUES (
         ${id}, ${tipo}::"job_tipo", ${payloadJson}::jsonb, 'pending', 0, ${maxIntentos},
-        ${runAfter}, ${dedupeKey}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ${runAfter}, ${dedupeKey}, ${lastError}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
       ON CONFLICT ("dedupe_key") WHERE "dedupe_key" IS NOT NULL DO NOTHING
       RETURNING *`;

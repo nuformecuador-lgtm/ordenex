@@ -1,0 +1,157 @@
+import { describe, it, expect, vi } from "vitest";
+import { handleCargaApi, type CargaApiDeps } from "@/app/api/ordenes/api-key/carga/route";
+import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { ApiKeyAuthResult } from "@/lib/interfaces/services/IApiKeyAuthService";
+import type {
+  CargaViaApiResult,
+  CargaViaApiSummary,
+  IBulkOrdenService,
+} from "@/lib/interfaces/services/IBulkOrdenService";
+import type { IEtiquetasLotePdfService } from "@/lib/interfaces/services/IEtiquetasLotePdfService";
+
+// Feature 112 (T3.1) — cableado del PDF de etiquetas en el endpoint de carga por
+// API. Se inyectan fakes de `autenticar`, `bulkService` y `etiquetasService`: sin
+// DB, sin Storage, sin red. Cubre R10/R12/R13/R16/R17.
+
+const KEY_ACTOR: Actor = { usuarioId: "key-user-1", rol: "apiKey" };
+const SECRETO = "ordx_secretovivo1234567890";
+
+function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSummary {
+  return {
+    total: 1,
+    creadas: 1,
+    duplicadas: 0,
+    conError: 0,
+    filas: [
+      { fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "en_ruta_bodega_central", numGuia: 1042 },
+    ],
+    ordenes: [
+      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
+    ],
+    ...overrides,
+  };
+}
+
+function fakeBulk(summary: CargaViaApiSummary): IBulkOrdenService {
+  return {
+    cargarMasiva: vi.fn(),
+    cargarViaApi: vi.fn().mockResolvedValue({ status: "ok", summary } satisfies CargaViaApiResult),
+  };
+}
+
+function fakeEtiquetas(overrides: Partial<IEtiquetasLotePdfService> = {}): IEtiquetasLotePdfService {
+  return {
+    generarYAlmacenar: vi.fn().mockResolvedValue({
+      path: "key-user-1/uuid.pdf",
+      signedUrl: "https://signed.example/pdf?token=abc",
+      expiraEnSegundos: 3600,
+    }),
+    ...overrides,
+  };
+}
+
+function reqConBearer(body: unknown, bearer?: string): Request {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (bearer !== undefined) headers.Authorization = `Bearer ${bearer}`;
+  return new Request("http://localhost/api/ordenes/api-key/carga", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+const BODY = { ordenes: [{ num_remision: "REM-1", destinatario: "Ana", telefono: "099" }] };
+
+function depsOk(bulk: IBulkOrdenService, etiquetas: IEtiquetasLotePdfService): CargaApiDeps {
+  return {
+    autenticar: async () => ({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }) as ApiKeyAuthResult,
+    bulkService: bulk,
+    etiquetasService: etiquetas,
+  };
+}
+
+describe("carga API + etiquetas PDF (feature 112)", () => {
+  it("incluye etiquetasPdf con url y TTL cuando se crean ordenes (R10/R17)", async () => {
+    const etiquetas = fakeEtiquetas();
+    const res = await handleCargaApi(reqConBearer(BODY, SECRETO), depsOk(fakeBulk(okSummary()), etiquetas));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.etiquetasPdf).toEqual({
+      url: "https://signed.example/pdf?token=abc",
+      expiraEnSegundos: 3600,
+    });
+    // El service recibe los ids de las ordenes creadas y el actor de la tienda.
+    expect(etiquetas.generarYAlmacenar).toHaveBeenCalledWith(["ord-1"], KEY_ACTOR);
+  });
+
+  it("etiquetasPdf trae { error } y responde 200 cuando el service lanza (R12)", async () => {
+    const etiquetas = fakeEtiquetas({
+      generarYAlmacenar: vi.fn().mockRejectedValue(new Error("storage caido")),
+    });
+    const res = await handleCargaApi(reqConBearer(BODY, SECRETO), depsOk(fakeBulk(okSummary()), etiquetas));
+    // La carga NO se revierte: 200 con el fallo VISIBLE, no null.
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.etiquetasPdf).toHaveProperty("error");
+    expect(typeof json.etiquetasPdf.error).toBe("string");
+    expect(json.etiquetasPdf.error).not.toContain(SECRETO);
+    // Los campos del summary siguen presentes (carga commiteada).
+    expect(json.creadas).toBe(1);
+    expect(json.ordenes[0].numGuia).toBe(1042);
+  });
+
+  it("etiquetasPdf es null cuando el service no halla etiqueta imprimible (R14)", async () => {
+    const etiquetas = fakeEtiquetas({ generarYAlmacenar: vi.fn().mockResolvedValue(null) });
+    const res = await handleCargaApi(reqConBearer(BODY, SECRETO), depsOk(fakeBulk(okSummary()), etiquetas));
+    const json = await res.json();
+    expect(json.etiquetasPdf).toBeNull();
+    expect(etiquetas.generarYAlmacenar).toHaveBeenCalledTimes(1);
+  });
+
+  it("etiquetasPdf es null cuando no se crea ninguna orden (R13)", async () => {
+    const summary = okSummary({ total: 1, creadas: 0, duplicadas: 1, conError: 0, ordenes: [] });
+    const etiquetas = fakeEtiquetas();
+    const res = await handleCargaApi(reqConBearer(BODY, SECRETO), depsOk(fakeBulk(summary), etiquetas));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.etiquetasPdf).toBeNull();
+    // Sin ordenes creadas NO se toca el orquestador (no Storage).
+    expect(etiquetas.generarYAlmacenar).not.toHaveBeenCalled();
+  });
+
+  it("mantiene 401 sin key sin generar PDF (R16)", async () => {
+    const etiquetas = fakeEtiquetas();
+    const deps: CargaApiDeps = {
+      autenticar: async () => ({ status: "unauthenticated" }) as ApiKeyAuthResult,
+      bulkService: fakeBulk(okSummary()),
+      etiquetasService: etiquetas,
+    };
+    const res = await handleCargaApi(reqConBearer(BODY), deps);
+    expect(res.status).toBe(401);
+    expect(etiquetas.generarYAlmacenar).not.toHaveBeenCalled();
+  });
+
+  it("mantiene 403 con key sin permiso sin generar PDF (R16)", async () => {
+    const etiquetas = fakeEtiquetas();
+    const deps: CargaApiDeps = {
+      autenticar: async () => ({ status: "forbidden" }) as ApiKeyAuthResult,
+      bulkService: fakeBulk(okSummary()),
+      etiquetasService: etiquetas,
+    };
+    const res = await handleCargaApi(reqConBearer(BODY, SECRETO), deps);
+    expect(res.status).toBe(403);
+    expect(etiquetas.generarYAlmacenar).not.toHaveBeenCalled();
+  });
+
+  it("preserva los campos existentes del summary (R17)", async () => {
+    const etiquetas = fakeEtiquetas();
+    const res = await handleCargaApi(reqConBearer(BODY, SECRETO), depsOk(fakeBulk(okSummary()), etiquetas));
+    const json = await res.json();
+    for (const campo of ["total", "creadas", "duplicadas", "conError", "filas", "ordenes"]) {
+      expect(json).toHaveProperty(campo);
+    }
+    expect(json.total).toBe(1);
+    expect(json.filas[0].numGuia).toBe(1042);
+    expect(json.ordenes[0].costoEnvio).toBe("3.92");
+  });
+});

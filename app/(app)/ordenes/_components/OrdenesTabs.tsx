@@ -17,6 +17,7 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
+import { EscanerRecepcionBodegaCentral } from "./EscanerRecepcionBodegaCentral";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
 import {
   ordenesColumnsMensajeroSugerido,
@@ -26,12 +27,14 @@ import { GenerarGuiaModal } from "./GenerarGuiaModal";
 import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
+import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
 
 type ModalAbierto =
   | "generar-guia"
   | "asignar-bodega"
   | "etiquetas"
   | "devolver-tienda"
+  | "recuperar-bodega"
   | null;
 
 async function mensajerosFetcher() {
@@ -72,7 +75,7 @@ const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"])
 const ESTADO_REPROGRAMADA = "reprogramada";
 
 // Estado cuya tab bloquea la seleccion de las ordenes NO centrales: "Devolver a la
-// tienda" (rechazada -> devuelta_origen) la ejecuta la bodega RESPONSABLE, y para el
+// tienda" (rechazada -> devolviendo_a_tienda) la ejecuta la bodega RESPONSABLE, y para el
 // maestro/admin eso es solo la bodega central (zonaEsGam). Las satelite las devuelve
 // el adminSatelite de la zona (en /recepcion-satelite), asi que su check se bloquea
 // en vez de dejar seleccionarlas y vaciar el modal.
@@ -80,18 +83,32 @@ const ESTADO_RECHAZADA = "rechazada";
 const MOTIVO_RECHAZADA_NO_CENTRAL =
   "Orden de zona satélite: la devuelve el admin de la bodega satélite de su zona.";
 
+// Feature 100/T4.2: estado cuya tab ofrece "Recuperar a bodega"
+// (devuelta -> en_bodega_central). Igual que `rechazada`, la ejecuta la bodega RESPONSABLE:
+// para maestro/admin eso es SOLO la bodega central (zonaEsGam). Las devueltas de zona
+// satélite las recupera el adminSatelite de la zona (en /recepcion-satelite), así que
+// su check se bloquea en vez de dejar seleccionarlas y vaciar el modal (R15).
+const ESTADO_DEVUELTA = "devuelta";
+const MOTIVO_DEVUELTA_NO_CENTRAL =
+  "Orden de zona satélite: la recupera el admin de la bodega satélite de su zona.";
+
+// Feature 101/R8/R10: única tab que resalta las órdenes prioritarias (liberadas por
+// el SLA de la 99). Es la superficie de reasignación de la bodega central; el resto de
+// tabs NO resalta por prioridad (el flag `resaltarPrioridad` de OrdenesModule va gateado).
+const ESTADO_EN_BODEGA = "en_bodega_central";
+
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
 // Derivado de `accionesDe()`: `en_fulfillment`/`en_preparacion` -> "Generar guía"
-// (asigna mensajero) y `en_bodega` -> "Asignar mensajero".
-// Las tabs que solo imprimen etiquetas (`en_espera_aceptacion`,
+// (asigna mensajero) y `en_bodega_central` -> "Asignar mensajero".
+// Las tabs que solo imprimen etiquetas (`por_recoger`,
 // `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
-// Nota: en `en_bodega` el bloqueo también alcanza a "Imprimir etiquetas" (comparte el
+// Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas" (comparte el
 // checkbox); es el precio de una única columna de selección por tab.
 const ESTADOS_ASIGNACION = new Set([
   "en_fulfillment",
   "en_preparacion",
-  "en_bodega",
+  "en_bodega_central",
 ]);
 const MOTIVO_ZONA_CIERRE_ABIERTO =
   "La bodega de esta zona tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar la orden.";
@@ -130,6 +147,7 @@ export function OrdenesTabs({
   exclude = DEFAULT_EXCLUDE,
   puedeCargarMasiva = false,
   puedeEscanearQr = false,
+  puedeRecibirBodegaCentral = false,
   mostrarHistorial = false,
   accionesLote = false,
   incluirTodas = false,
@@ -147,10 +165,18 @@ export function OrdenesTabs({
   /**
    * Ofrece "Escanear con cámara" junto a la carga masiva: el adminTienda escanea el
    * QR de la etiqueta de una orden que vuelve ("En ruta a origen") y la marca como
-   * recibida en su tienda (`devuelta_origen` -> `recibido_origen`), sin salir del
+   * recibida en su tienda (`devolviendo_a_tienda` -> `devuelta_a_tienda`), sin salir del
    * listado. NO navega (para eso está `/qr`).
    */
   puedeEscanearQr?: boolean;
+  /**
+   * Feature 138 (R12/R16): ofrece el receptor de la BODEGA CENTRAL (escaneo por
+   * cámara + entrada manual de guía) en el encabezado, junto al resto de acciones a
+   * nivel del contenedor. Cierra el callejón `en_ruta_bodega_central` transicionando
+   * a `en_bodega_central`. Solo para maestro/admin (`esAccesoTotal`); el service
+   * revalida server-side. `adminTienda` y otros roles NO lo reciben.
+   */
+  puedeRecibirBodegaCentral?: boolean;
   mostrarHistorial?: boolean;
   /**
    * Habilita la selección por checkbox + barra de acciones por lote por estado
@@ -209,6 +235,12 @@ export function OrdenesTabs({
     setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
     setModalAbierto("devolver-tienda");
   }
+  // "Recuperar a bodega" (feature 100) solo aplica a órdenes `devuelta` de la bodega
+  // CENTRAL (`zonaEsGam === true`); se filtra antes de abrir (el backend revalida, R15).
+  function abrirRecuperar(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
+    setModalAbierto("recuperar-bodega");
+  }
 
   // Revalida TODAS las tablas por tab (comparten el prefijo de key SWR).
   function revalidarTablas() {
@@ -257,7 +289,7 @@ export function OrdenesTabs({
 
   // Mapeo estado -> acciones por lote. Sin `accionesLote` no hay acciones (undefined).
   // Nota: "Rutear a bodega satélite" NO se ofrece en esta vista de tabs (se retiró de
-  // `en_bodega` por decisión humana). La vista legacy OrdenesRevisionMaestro sí la
+  // `en_bodega_central` por decisión humana). La vista legacy OrdenesRevisionMaestro sí la
   // ofrece, así que la paridad con esa vista ya no es total.
   function accionesDe(estatusValue: string): AccionLote[] {
     switch (estatusValue) {
@@ -266,11 +298,11 @@ export function OrdenesTabs({
         return [
           { key: "guia", label: "Generar guía", onRun: abrirGenerarGuia },
         ];
-      case "en_espera_aceptacion":
+      case "por_recoger":
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
         ];
-      case "en_bodega":
+      case "en_bodega_central":
         return [
           {
             key: "asignar",
@@ -294,6 +326,15 @@ export function OrdenesTabs({
             key: "devolver",
             label: "Devolver a la tienda",
             onRun: abrirDevolver,
+          },
+        ];
+      case "devuelta":
+        // Feature 100/T4.2 (R12): recuperar a bodega las devueltas de la zona central.
+        return [
+          {
+            key: "recuperar",
+            label: "Recuperar a bodega",
+            onRun: abrirRecuperar,
           },
         ];
       default:
@@ -331,13 +372,18 @@ export function OrdenesTabs({
     });
   }
 
-  // La carga masiva y el escaneo viven a nivel del contenedor (no por tab): son
-  // acciones independientes del estado activo. Se ofrecen solo al adminTienda
-  // (feature 26), vía `puedeCargarMasiva` / `puedeEscanearQr`.
+  // La carga masiva y los escáneres viven a nivel del contenedor (no por tab): son
+  // acciones independientes del estado activo. La carga masiva y la recepción en
+  // origen se ofrecen al adminTienda (feature 26); la recepción en bodega central
+  // (feature 138) al maestro/admin. `onRecibida={handleSuccess}` revalida las tablas
+  // por tab (R14), de modo que la orden recibida deja de figurar en la vista.
   const header =
-    puedeCargarMasiva || puedeEscanearQr ? (
+    puedeCargarMasiva || puedeEscanearQr || puedeRecibirBodegaCentral ? (
       <div className="flex flex-col items-end gap-3">
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {puedeRecibirBodegaCentral ? (
+            <EscanerRecepcionBodegaCentral onRecibida={handleSuccess} />
+          ) : null}
           {puedeEscanearQr ? (
             <EscanerRecepcionOrigen onRecibida={handleSuccess} />
           ) : null}
@@ -397,6 +443,11 @@ export function OrdenesTabs({
     if (tab.value === ESTADO_RECHAZADA) {
       bloqueoSeleccion = (o) =>
         o.zonaEsGam === true ? null : MOTIVO_RECHAZADA_NO_CENTRAL;
+    } else if (tab.value === ESTADO_DEVUELTA) {
+      // Feature 100/T4.2 (R15): maestro/admin solo recupera a bodega las devueltas
+      // de la zona central; las satélite se bloquean (las recupera el adminSatelite).
+      bloqueoSeleccion = (o) =>
+        o.zonaEsGam === true ? null : MOTIVO_DEVUELTA_NO_CENTRAL;
     } else if (ESTADOS_ASIGNACION.has(tab.value)) {
       const zonas = zonasBloqueadas;
       bloqueoSeleccion = (o) => {
@@ -418,6 +469,7 @@ export function OrdenesTabs({
         selectable={acc.length > 0}
         bloqueoSeleccion={bloqueoSeleccion}
         acciones={acc}
+        resaltarPrioridad={tab.value === ESTADO_EN_BODEGA}
       />
     );
   }
@@ -487,6 +539,12 @@ export function OrdenesTabs({
           />
           <DevolverATiendaModal
             open={modalAbierto === "devolver-tienda"}
+            ordenes={ordenesSeleccionadas}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          <RecuperarABodegaModal
+            open={modalAbierto === "recuperar-bodega"}
             ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}

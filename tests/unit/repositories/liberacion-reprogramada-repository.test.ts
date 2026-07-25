@@ -89,12 +89,32 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
     expect(ok).toBe(true);
     const arg = prisma.orden.updateMany.mock.calls[0][0];
     expect(arg.where).toEqual({ id: "o1", estatusId: "os-reprogramada", deletedAt: null });
+    // Feature 110/R1/R6: prioridad=true va DENTRO del mismo data (resto de campos intactos).
     expect(arg.data).toEqual({
       estatusId: "os-en-bodega",
       mensajeroAsignadoId: null,
       asignadoAt: null, // feature 76/LC1 (C3): limpia el timestamp de asignacion
       liberadaReprogramadaAt: corridaAt,
+      prioridad: true,
     });
+  });
+
+  // Feature 110 (R1/R4): la liberacion de una reprogramada enciende prioridad=true DENTRO del
+  // unico updateMany.data guardado (una sola escritura, sin segunda transicion).
+  it("R1/R4: liberar una reprogramada enciende prioridad=true en el unico updateMany.data", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.updateMany.mockResolvedValue({ count: 1 });
+
+    await repoWith(prisma).liberarOrden({
+      ordenId: "o1",
+      destinoEstatusId: "os-en-bodega-satelite",
+      estatusReprogramadaId: "os-reprogramada",
+      corridaAt: new Date("2026-07-15T06:00:00.000Z"),
+    });
+
+    // R4: una sola llamada a orden.updateMany (sin segunda escritura para el flag).
+    expect(prisma.orden.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.orden.updateMany.mock.calls[0][0].data.prioridad).toBe(true);
   });
 
   // Feature 49/#10 (R18/R21): al liberar, 1 historial con origen reprogramada -> destino,
@@ -155,7 +175,7 @@ describe("findLiberadasHoy (R15/R16)", () => {
     ]);
 
     const rows = await repoWith(prisma).findLiberadasHoy(
-      { zonaId: "z-central", estatusValue: "en_bodega" },
+      { zonaId: "z-central", estatusValue: "en_bodega_central" },
       HOY,
     );
 
@@ -163,7 +183,7 @@ describe("findLiberadasHoy (R15/R16)", () => {
     expect(arg.where).toMatchObject({
       zonaId: "z-central",
       deletedAt: null,
-      estatus: { value: "en_bodega" },
+      estatus: { value: "en_bodega_central" },
     });
     // ventana [hoyCR, hoyCR + 24h).
     expect(arg.where.liberadaReprogramadaAt.gte).toEqual(HOY);

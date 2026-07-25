@@ -4,10 +4,13 @@ import { useState } from "react";
 
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { Pagination } from "@/components/shared/Pagination";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import { listarNovedadesAction } from "@/lib/actions/novedades";
 import { CAUSA_DEVOLUCION_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-devolucion-options";
 import type { NovedadDTO } from "@/lib/types/novedad";
+
+import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 
 // Feature 87 (T12, design §3.2) — modulo cliente de `/novedades`. Recibe TODO por props
 // desde el Server Component padre (que ya valido rol adminTienda y pre-fetch pagina 1, R18):
@@ -42,6 +45,16 @@ export function NovedadesModule({
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(initialPage);
   const [loading, setLoading] = useState(false);
+  // Feature 100 (T3.1): orden con el modal de reprogramación abierto (null = cerrado).
+  const [ordenAReprogramar, setOrdenAReprogramar] = useState<NovedadDTO | null>(
+    null,
+  );
+
+  /** T3.1: tras reprogramar con éxito la orden sale de `devuelta` -> se quita de la lista. */
+  function handleReprogramada(ordenId: string) {
+    setItems((prev) => prev.filter((n) => n.id !== ordenId));
+    setTotal((prev) => Math.max(0, prev - 1));
+  }
 
   /** Re-fetch de la pagina pedida por Server Action (R22). Errores -> toast, sin romper. */
   async function cambiarPagina(nextPage: number) {
@@ -106,10 +119,22 @@ export function NovedadesModule({
                 {causaLabel(novedad.causa)}
               </p>
             </div>
-            <ContactoButtons
-              telefono={novedad.telefonoDest}
-              nombre={novedad.destinatario}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <ContactoButtons
+                telefono={novedad.telefonoDest}
+                nombre={novedad.destinatario}
+              />
+              {/* T3.1 (R1): acción "Reprogramar" junto a los botones de contacto. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setOrdenAReprogramar(novedad)}
+                aria-label={`Reprogramar la orden de ${novedad.destinatario}`}
+              >
+                Reprogramar
+              </Button>
+            </div>
           </li>
         ))}
       </ul>
@@ -122,6 +147,19 @@ export function NovedadesModule({
         disabled={loading}
         ariaLabel="Paginación de novedades"
       />
+
+      {/* T3.1/T3.2: modal de reprogramación (fecha + motivo opcional). Montado SOLO
+          con orden activa y con `key`, para arrancar fresco en cada apertura. */}
+      {ordenAReprogramar ? (
+        <ReprogramarNovedadModal
+          key={ordenAReprogramar.id}
+          orden={ordenAReprogramar}
+          onOpenChange={(open) => {
+            if (!open) setOrdenAReprogramar(null);
+          }}
+          onReprogramada={handleReprogramada}
+        />
+      ) : null}
     </div>
   );
 }

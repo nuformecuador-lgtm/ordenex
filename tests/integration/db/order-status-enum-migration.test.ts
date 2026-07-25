@@ -1,13 +1,34 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
-import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
 // Feature 28: cobertura ESTATICA de la migracion del enum Postgres
 // `order_status_value` (standalone). Patron carga-masiva-schema.test.ts: NO
 // requiere Postgres real, lee migration.sql/down.sql y hace asserts (R9, R10).
+//
+// Feature 135/R10: este test lee SQL HISTORICO e inmutable, por lo que afirma los 8
+// literales ORIGINALES del enum (los que la migracion `_order_status_value_enum`
+// realmente creo), DESACOPLADO de ORDER_STATUS_SEED. Tres de esos 8 originales
+// (`en_bodega`, `en_ruta_bodega_principal`, `devuelta_origen`) fueron RENOMBRADOS en
+// el seed vigente por feature 135; si el test siguiera derivando el set esperado del
+// seed, la comparacion romperia. Los literales viejos que aparecen aqui son
+// HISTORICOS por diseno (allowlist del guard de censo R13).
 
 const MIGRATIONS_DIR = path.join(__dirname, "..", "..", "..", "db", "migrations");
+
+// Los 8 valores ORIGINALES del enum standalone, tal cual los creo la migracion
+// historica (antes de los ADD VALUE posteriores de features 17/30/36/33/PR#75/109 y
+// del rename de feature 135). Fijos: NO se derivan del seed vigente (R10).
+const HISTORICAL_ENUM_VALUES = [
+  "entregada",
+  "devuelta",
+  "devuelta_origen",
+  "reprogramada",
+  "en_fulfillment",
+  "en_ruta_bodega_principal",
+  "en_bodega",
+  "en_preparacion",
+];
 
 function enumMigrationDir(): string {
   const dir = fs
@@ -42,24 +63,13 @@ describe("order_status_value migration.sql (UP) — enum standalone (R9)", () =>
     expect(upSql).not.toMatch(/ALTER TABLE/i);
   });
 
-  it("tiene exactamente los 8 valores originales de ORDER_STATUS_SEED (R10)", () => {
-    // Feature 17: ORDER_STATUS_SEED sumo un 9no valor ("en_espera_aceptacion") y
-    // feature 30 un 10mo ("en_ruta_bodega_satelite"), ambos agregados al enum
-    // standalone por migraciones POSTERIORES (`ALTER TYPE ... ADD VALUE`, ver
-    // *_orden_num_guia_deferred_... y *_order_status_en_ruta_bodega_satelite).
-    // Feature 36 sumo en_reparto/rechazada, feature 33 en_bodega_satelite y el PR
-    // #75 recibido_origen, todos por ADD VALUE posteriores. Esta migracion es
-    // historica y no se edita: sigue creando el tipo con los 8 valores originales.
+  it("tiene exactamente los 8 valores HISTORICOS originales del enum (R10, desacoplado del seed)", () => {
+    // La migracion es historica e inmutable: sigue creando el tipo con sus 8 valores
+    // originales. Feature 135 renombro 3 de ellos en el seed vigente, pero este SQL
+    // NO cambia: se afirman los literales HISTORICOS fijos, no los del seed.
     const enumValues = extractEnumValues(upSql);
     expect(enumValues).toHaveLength(8);
-    const seedOriginal = new Set(ORDER_STATUS_SEED);
-    seedOriginal.delete("en_espera_aceptacion");
-    seedOriginal.delete("en_ruta_bodega_satelite"); // feature 30
-    seedOriginal.delete("en_reparto"); // feature 36
-    seedOriginal.delete("rechazada"); // feature 36
-    seedOriginal.delete("en_bodega_satelite"); // feature 33
-    seedOriginal.delete("recibido_origen"); // PR #75
-    expect(new Set(enumValues)).toEqual(seedOriginal);
+    expect(new Set(enumValues)).toEqual(new Set(HISTORICAL_ENUM_VALUES));
   });
 });
 

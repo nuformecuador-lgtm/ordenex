@@ -1,7 +1,7 @@
 // Feature 88 — Carga de órdenes por API (canal integrador). A diferencia de la carga
 // masiva por sesión (`carga-masiva/chunk`), este endpoint se autentica por API KEY en el
 // header `Authorization: Bearer ordx_...` (no por cookie de sesión), fija el estado inicial
-// en `en_ruta_bodega_principal`, asigna `num_guia` en el acto y devuelve cada orden con su
+// en `en_ruta_bodega_central`, asigna `num_guia` en el acto y devuelve cada orden con su
 // guía. Reutiliza `BulkOrdenService` por dentro (misma validación/dedup/geo).
 //
 // SEGURIDAD (R6): la key viaja en cada request. NUNCA se loguea (ni la key ni su hash), ni
@@ -22,18 +22,35 @@ import type {
   ApiKeyAuthResult,
   IApiKeyAuthService,
 } from "@/lib/interfaces/services/IApiKeyAuthService";
+import type { IEtiquetasLotePdfService } from "@/lib/interfaces/services/IEtiquetasLotePdfService";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import { ApiKeyAuthService } from "@/lib/services/ApiKeyAuthService";
+import { EtiquetaGuiaService } from "@/lib/services/EtiquetaGuiaService";
+import { EtiquetasLotePdfService } from "@/lib/services/EtiquetasLotePdfService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
+import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
+import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
+import { etiquetasConfig } from "@/lib/config/etiquetas";
 
 export interface CargaApiDeps {
   autenticar?: (rawKey: string | null) => Promise<ApiKeyAuthResult>;
   bulkService?: IBulkOrdenService;
+  // Feature 112: orquestador del PDF consolidado de etiquetas (inyectable en tests).
+  etiquetasService?: IEtiquetasLotePdfService;
 }
+
+// Feature 112 (T3.1) — bloque `etiquetasPdf` de la respuesta. El fallo se hace
+// VISIBLE con `{ error }` (no se oculta con `null`, R12); `null` significa que no
+// habia nada que generar (sin ordenes creadas o sin etiqueta imprimible, R13/R14).
+type EtiquetasPdf =
+  | { url: string; expiraEnSegundos: number } // exito (R10)
+  | { error: string } // fallo best-effort (R12), HTTP 200, carga NO revertida
+  | null; // nada que generar (R13/R14)
 
 function buildAutenticar(): (rawKey: string | null) => Promise<ApiKeyAuthResult> {
   const prisma = getPrismaClient();
@@ -43,7 +60,26 @@ function buildAutenticar(): (rawKey: string | null) => Promise<ApiKeyAuthResult>
 
 function buildBulkService(): IBulkOrdenService {
   const prisma = getPrismaClient();
-  return new BulkOrdenService(new OrdenRepository(prisma));
+  // Feature 98/T8: se inyecta tambien el resolver de tarifa vigente por tienda, para que
+  // `cargarViaApi` devuelva el `costoEnvio` (flete + IVA) por orden creada.
+  return new BulkOrdenService(
+    new OrdenRepository(prisma),
+    new TarifaVigentePorTiendaRepository(prisma),
+  );
+}
+
+// Feature 112 — arma el orquestador del PDF de etiquetas con sus dependencias reales:
+// servicio de etiquetas (feature 32), Storage y firma de URLs sobre el bucket privado
+// de config (feature 21/22). El cliente Supabase es perezoso (no toca red al construir).
+function buildEtiquetasService(): IEtiquetasLotePdfService {
+  const prisma = getPrismaClient();
+  const bucket = etiquetasConfig.ETIQUETAS_BUCKET;
+  return new EtiquetasLotePdfService(
+    new EtiquetaGuiaService(new OrdenRepository(prisma)),
+    new SupabaseFileStorage(undefined, bucket),
+    new SupabaseSignedUrlProvider(undefined, bucket),
+    etiquetasConfig.SIGNED_URL_TTL_SECONDS,
+  );
 }
 
 // R1/§3: extrae el secreto del header `Authorization: Bearer <key>`. `null` si el header
@@ -96,7 +132,34 @@ export async function handleCargaApi(req: Request, deps: CargaApiDeps = {}): Pro
     const service = deps.bulkService ?? buildBulkService();
     const cargaResult = await service.cargarViaApi(parsed.data.ordenes as RawRow[], auth.actor);
     if (cargaResult.status === "forbidden") throw new ForbiddenError(); // R15 (defensa en profundidad)
-    return cargaResult.summary;
+
+    // Feature 112 (R1/R10/R12-R17): tras la carga OK (ya commiteada), genera el PDF
+    // consolidado de etiquetas del lote y devuelve su URL firmada. Best-effort: la
+    // carga NUNCA se revierte por un fallo aqui; el fallo se hace VISIBLE en la
+    // respuesta con `{ error }` (R12). Sin ordenes creadas -> `null`, sin tocar
+    // Storage (R13). Solo se alcanza con auth OK y carga OK (R16).
+    const summary = cargaResult.summary;
+    let etiquetasPdf: EtiquetasPdf = null;
+    if (summary.ordenes.length > 0) {
+      try {
+        const etiquetasSvc = deps.etiquetasService ?? buildEtiquetasService();
+        const out = await etiquetasSvc.generarYAlmacenar(
+          summary.ordenes.map((o) => o.id),
+          auth.actor,
+        );
+        // `out === null` => no habia etiqueta imprimible: `null`, no es error (R14).
+        etiquetasPdf = out ? { url: out.signedUrl, expiraEnSegundos: out.expiraEnSegundos } : null;
+      } catch (err) {
+        // Best-effort (R12): la carga ya esta commiteada; NO se revierte. El fallo
+        // se registra con contexto (sin PII ni la API key) y se expone al cliente
+        // con un mensaje generico.
+        console.error("etiquetas-pdf-lote: fallo best-effort en carga por API", err);
+        etiquetasPdf = { error: "no se pudo generar el PDF de etiquetas del lote" };
+      }
+    }
+
+    // R17: preserva TODOS los campos del summary y añade `etiquetasPdf`.
+    return { ...summary, etiquetasPdf };
   });
 
   if (isAppErrorShape(result)) return appErrorToResponse(result);

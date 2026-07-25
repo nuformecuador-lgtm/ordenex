@@ -4,6 +4,7 @@ import type {
   IGestionOrdenRepository,
   MiAsignacionRow,
   OrdenGestionRow,
+  ReprogramarDesdeDevueltaInput,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
@@ -17,9 +18,17 @@ import { loadRouteOptimizationConfig } from "@/lib/config/route-optimization";
 // Feature 61: estado terminal de entrega para el KPI "entregadas" del portal.
 const ESTATUS_ENTREGADA = "entregada";
 
+// Feature 100 — `resultado` de la gestion que ancla la ventana en `devuelta` (R5: de ahi se deriva
+// el mensajero de la gestion sintetica) y `resultado` de la gestion sintetica de reprogramacion
+// (R3). Valores del catalogo `gestion_resultado` ya sembrados; esta feature NO agrega estados.
+const RESULTADO_DEVUELTA = "devuelta";
+const RESULTADO_REPROGRAMADA = "reprogramada";
+
 type GestionPrismaClient = Pick<
   PrismaClient,
-  "orden" | "usuario" | "gestionOrden" | "$transaction"
+  // Feature 119 (R1/R9): + `gestionOrdenEvidencia` para insertar las N filas hijas dentro de
+  // la MISMA transaccion que crea la gestion y transiciona la orden.
+  "orden" | "usuario" | "gestionOrden" | "gestionOrdenEvidencia" | "$transaction"
 >;
 
 // Proyeccion de "mis asignaciones": la orden + nombres legibles via relaciones ya
@@ -227,8 +236,8 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         tx,
         rows.map((r) => ({
           ordenId: r.id,
-          estatusOrigenId: origenEstatusId, // en_espera_aceptacion (fijado por la guarda)
-          estatusDestinoId: destinoEstatusId, // en_reparto
+          estatusOrigenId: origenEstatusId, // por_recoger (fijado por la guarda)
+          estatusDestinoId: destinoEstatusId, // en_ruta
           actorUsuarioId: mensajeroId, // R21: el mensajero que recoge
           origenTipo: "recoleccion", // R23
         })),
@@ -261,15 +270,21 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     mensajeroId: string;
     gestion: GestionOrdenData;
     nuevoEstatusId: string;
-    seguimiento?: { destinoEstatusId: string; limpiaMensajero: boolean };
   }): Promise<string> {
-    const { ordenId, mensajeroId, gestion, nuevoEstatusId, seguimiento } = input;
+    const { ordenId, mensajeroId, gestion, nuevoEstatusId } = input;
     return this.prisma.$transaction(async (tx) => {
-      // Feature 49/#9 (R20): estatus de ORIGEN (en_reparto) pre-leido dentro de la tx.
+      // Feature 49/#9 (R20): estatus de ORIGEN (en_ruta) pre-leido dentro de la tx.
       const actual = await tx.orden.findFirst({
         where: { id: ordenId },
         select: { estatusId: true },
       });
+      // Feature 119 (R12): PORTADA denormalizada = evidencia indice 0 (o la primera si no hay
+      // un 0 explicito). Retro-compat: si el caller aun pasa la portada suelta y no la lista,
+      // se cae a `evidenciaStoragePath/_content_type`. La escriben el MISMO INSERT que las hijas.
+      const cover =
+        gestion.evidencias?.find((e) => e.indice === 0) ?? gestion.evidencias?.[0] ?? null;
+      const coverStoragePath = cover?.storagePath ?? gestion.evidenciaStoragePath ?? null;
+      const coverContentType = cover?.contentType ?? gestion.evidenciaContentType ?? null;
       const creada = await tx.gestionOrden.create({
         data: {
           ordenId,
@@ -278,19 +293,33 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           montoRecibido:
             gestion.montoRecibido != null ? new Prisma.Decimal(gestion.montoRecibido) : null,
           metodoPago: gestion.metodoPago ?? null,
-          evidenciaStoragePath: gestion.evidenciaStoragePath ?? null,
-          evidenciaContentType: gestion.evidenciaContentType ?? null,
+          // Feature 119 (R12): dual-write de la portada (indice 0) en las columnas viejas para que
+          // los consumidores actuales (cierres 37/38/40, API 106) sigan mostrando UNA foto sin cambios.
+          evidenciaStoragePath: coverStoragePath,
+          evidenciaContentType: coverContentType,
           motivo: gestion.motivo ?? null,
           fechaReprogramacion: gestion.fechaReprogramacion
             ? new Date(`${gestion.fechaReprogramacion}T00:00:00.000Z`)
             : null,
           // Feature 73/R11/R13: la causa entra en el MISMO INSERT que la gestion, dentro de
-          // la tx que cambia el estatus y aplica la transicion de seguimiento de la 47 -> si
-          // algo falla, la causa NO queda persistida (atomicidad ya provista, sin firma nueva).
+          // la tx que cambia el estatus -> si algo falla, la causa NO queda persistida
+          // (atomicidad ya provista, sin firma nueva).
           causaDevolucion: gestion.causaDevolucion ?? null,
         },
         select: { id: true },
       });
+      // Feature 119 (R1/R2/R9): las N filas hijas se insertan en la MISMA transaccion (todo-o-nada
+      // con la gestion + la transicion). Vacio (reprogramada / sin fotos) no inserta nada.
+      if (gestion.evidencias && gestion.evidencias.length > 0) {
+        await tx.gestionOrdenEvidencia.createMany({
+          data: gestion.evidencias.map((e) => ({
+            gestionId: creada.id,
+            storagePath: e.storagePath,
+            contentType: e.contentType,
+            indice: e.indice,
+          })),
+        });
+      }
       await tx.orden.update({
         where: { id: ordenId },
         data: { estatusId: nuevoEstatusId },
@@ -314,34 +343,12 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           gestionOrdenId: creada.id,
         },
       ]);
-      // Feature 47/#9 (R6/R7/R10/R11): transicion de SEGUIMIENTO de una gestion `devuelta`,
-      // en la MISMA tx. La orden NUNCA reposa en `devuelta`: se resuelve hacia la bodega
-      // responsable (reintento, limpiando el mensajero, R6) o hacia `rechazada` (escalado,
-      // conservando el mensajero). El actor es NULL (sistema, no una persona): la dispara el
-      // sistema como consecuencia sincrona de la devolucion. Origen = `nuevoEstatusId` (= id
-      // de `devuelta`), reutilizando `origen_tipo = gestion` (sin enum nuevo, sin migracion).
-      if (seguimiento) {
-        await tx.orden.update({
-          where: { id: ordenId },
-          data: {
-            estatusId: seguimiento.destinoEstatusId,
-            // Feature 76/LC1 (C1): al limpiar el mensajero (reintento devuelto) limpia tambien
-            // `asignado_at` (defensivo, evita un timestamp huerfano).
-            ...(seguimiento.limpiaMensajero ? { mensajeroAsignadoId: null, asignadoAt: null } : {}),
-          },
-        });
-        await appendCambioEstado(tx, [
-          {
-            ordenId,
-            estatusOrigenId: nuevoEstatusId, // = id de `devuelta` (la fila que el derivador cuenta)
-            estatusDestinoId: seguimiento.destinoEstatusId,
-            actorUsuarioId: null, // R10: sistema, no una persona
-            origenTipo: "gestion", // R14/R21: reutiliza el enum existente (sin migracion)
-            gestionOrdenId: creada.id,
-          },
-        ]);
-      }
-      // Feature 92 (R19): la gestion SACA la orden de `en_reparto` -> reoptimizacion
+      // Feature 99 (R1/R29): la rama `devuelta` YA NO aplica una transicion de seguimiento
+      // inmediata. La orden REPOSA en `devuelta` (destino = `nuevoEstatusId`) y el cron SLA
+      // (`DevolucionSlaService`/`DevolucionSlaRepository`) decide el reintento a bodega o el
+      // escalado a `rechazada` al vencer la ventana. Antes, aqui vivia un segundo `orden.update`
+      // + append (feature 47); se relocalizo al cron.
+      // Feature 92 (R19): la gestion SACA la orden de `en_ruta` -> reoptimizacion
       // INMEDIATA (sin delay), dentro de esta misma transaccion (outbox).
       //
       // ⚠️ Este encolado usa el namespace `:inmediato:`, DISJUNTO del `:debounce:`. Si
@@ -356,6 +363,82 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         creada.id,
       );
       return creada.id;
+    });
+  }
+
+  /**
+   * Feature 100 (design §2.1, R2/R3/R5/R11/R20/R21): reprograma UNA orden en `devuelta` a
+   * `reprogramada`, atomico. (a) UPDATE guardado por `estatus_id = devuelta` + no borrada (R21);
+   * si count 0 (carrera con el cron SLA de la 99 / doble submit) -> false, sin efectos (R7).
+   * (b) Deriva el mensajero de la ULTIMA gestion `devuelta` VIGENTE (`anulada_at IS NULL`,
+   * `createdAt desc`), leido DENTRO de la tx (R5, misma derivacion que `findDevueltasSla`);
+   * `gestion_orden.mensajero_id` es NOT NULL, asi que su ausencia (anomalia: una orden en
+   * `devuelta` SIN gestion que la explique) ABORTA la tx lanzando -> revierte el UPDATE (R20),
+   * en vez de persistir una gestion sintetica sin actor. (c) Crea la gestion sintetica
+   * `resultado = reprogramada` con `fecha_reprogramacion` (patron `crearGestionYTransicionar`) y
+   * `motivo` opcional, `cierre_id NULL` (entra al proximo cierre pero aporta $0.00: el cierre solo
+   * acredita `entregada`/`rechazada`, R10). (d) Appendea la transicion via el choke point
+   * (`actor = adminTienda`, `origen_tipo = reprogramacion_tienda`, enlazando la gestion, R11). El
+   * destino es `reprogramada`, NO `devuelta`, asi que NO cuenta como intento (R8).
+   */
+  async reprogramarDesdeDevuelta(input: ReprogramarDesdeDevueltaInput): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      // R21: UPDATE guardado por estatus=devuelta + no borrada -> reprogramada.
+      const result = await tx.orden.updateMany({
+        where: {
+          id: input.ordenId,
+          estatusId: input.estatusDevueltaId, // guarda de idempotencia/carrera con el cron 99
+          deletedAt: null,
+        },
+        data: { estatusId: input.estatusReprogramadaId },
+      });
+      // R7/R21: la orden ya salio de `devuelta` -> no crea gestion ni append (no-op).
+      if (result.count === 0) return false;
+
+      // R5: mensajero de la ULTIMA gestion `devuelta` vigente, leido dentro de la tx (mismo
+      // criterio de vigencia que `findDevueltasSla` de la 99: no anulada, mas reciente).
+      const ancla = await tx.gestionOrden.findFirst({
+        where: { ordenId: input.ordenId, resultado: RESULTADO_DEVUELTA, anuladaAt: null },
+        orderBy: { createdAt: "desc" },
+        select: { mensajeroId: true },
+      });
+      if (!ancla) {
+        // Anomalia: una orden en `devuelta` SIN gestion `devuelta` vigente no tiene a quien
+        // atribuir la gestion sintetica (`mensajero_id` NOT NULL). Abortar la tx (revierte el
+        // UPDATE, R20) es preferible a inventar un actor.
+        throw new Error(
+          "reprogramarDesdeDevuelta: sin gestion `devuelta` vigente para derivar el mensajero (R5)",
+        );
+      }
+
+      // R3: gestion sintetica `reprogramada` en la MISMA tx. `fecha_reprogramacion` -> DATE
+      // (patron `crearGestionYTransicionar`). `cierre_id NULL` -> money-neutral (R10).
+      const gestion = await tx.gestionOrden.create({
+        data: {
+          ordenId: input.ordenId,
+          mensajeroId: ancla.mensajeroId, // R5
+          resultado: RESULTADO_REPROGRAMADA, // R3
+          fechaReprogramacion: new Date(`${input.fechaReprogramacion}T00:00:00.000Z`), // R3
+          motivo: input.motivo, // Q1: opcional (puede ser null)
+          cierreId: null, // R10: entra al proximo cierre pero aporta $0.00 (no es entregada/rechazada)
+        },
+        select: { id: true },
+      });
+
+      // R11/R20: append por el choke point, actor = adminTienda, origen_tipo reprogramacion_tienda,
+      // enlaza la gestion sintetica; origen `devuelta` (fijado por la guarda del UPDATE).
+      await appendCambioEstado(tx, [
+        {
+          ordenId: input.ordenId,
+          estatusOrigenId: input.estatusDevueltaId,
+          estatusDestinoId: input.estatusReprogramadaId,
+          actorUsuarioId: input.actorUsuarioId, // R11: el adminTienda
+          origenTipo: "reprogramacion_tienda", // R11
+          motivo: input.motivo, // consistente con la gestion (puede ser null)
+          gestionOrdenId: gestion.id,
+        },
+      ]);
+      return true;
     });
   }
 }

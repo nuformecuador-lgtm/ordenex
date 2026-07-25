@@ -7,11 +7,14 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
-// Feature 89 (T4) — service de NOVEDADES con el repo mockeado (sin DB/HTTP). Cubre R8 (count y
-// find reciben el MISMO `cerrados`), R9 (acota `tienda = actor.usuarioId`), R10 (causa al DTO,
-// null si no hay), R11 (rol != adminTienda -> forbidden), R12/R13 (paginacion 10, orden por
-// recencia, shape). El predicado de la query (R1-R7) se ejercita a nivel de repo en T5; aqui se
-// verifica el CONTRATO: el service pide el conjunto de estatus CERRADOS, no un estatus unico.
+// Feature 89/99 (T14) — service de NOVEDADES con el repo mockeado (sin DB/HTTP). INVIERTE al
+// predicado de la feature 99 (Q7): la novedad se ancla al ESTADO REAL `estatus = devuelta`, no a
+// "gestion devuelta vigente + estatus abierto". El service ya NO computa un conjunto de estatus
+// CERRADOS; solo acota por tienda y delega el filtro de estado al repo. Cubre R8 (count y find
+// sobre el mismo universo), R9 (acota `tienda = actor.usuarioId`), R10 (causa al DTO, null si no
+// hay), R11 (rol != adminTienda -> forbidden), R12/R13 (paginacion 10, orden por recencia, shape).
+// El predicado de la query (`estatus = devuelta`) se ejercita a nivel de repo en
+// orden-repository.novedades.test.ts.
 
 const ADMIN: Actor = { usuarioId: "tienda-1", rol: "adminTienda" };
 const OTRA_TIENDA: Actor = { usuarioId: "tienda-2", rol: "adminTienda" };
@@ -19,10 +22,6 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 
 const PAGE_SIZE = 10;
-
-// R3: el conjunto de estatus que CIERRAN la novedad (decision #1 del gate). El service debe
-// pasar EXACTAMENTE este conjunto tanto a count como a find (R8).
-const ESTATUS_CERRADOS = ["entregada", "devuelta_origen", "recibido_origen"];
 
 type RepoMethods = Pick<
   IOrdenRepository,
@@ -69,14 +68,15 @@ describe("NovedadesService.listar (feature 89)", () => {
     const service = new NovedadesService(repo);
     await service.listar({ page: 1, pageSize: PAGE_SIZE }, OTRA_TIENDA);
 
-    expect(repo.countDevueltasByTienda).toHaveBeenCalledWith("tienda-2", ESTATUS_CERRADOS);
-    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-2", ESTATUS_CERRADOS, {
+    // Feature 99: sin conjunto `cerrados` -> el service solo pasa la tienda (+ paginacion en find).
+    expect(repo.countDevueltasByTienda).toHaveBeenCalledWith("tienda-2");
+    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-2", {
       skip: 0,
       take: PAGE_SIZE,
     });
   });
 
-  it("R8: count y find se invocan con el MISMO conjunto `cerrados` (mismo universo)", async () => {
+  it("R8: count y find se invocan sobre el MISMO universo (misma tienda, sin conjunto de cerrados)", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 1),
       findDevueltasByTienda: vi.fn(async () => [ordenRow()]),
@@ -84,20 +84,17 @@ describe("NovedadesService.listar (feature 89)", () => {
     const service = new NovedadesService(repo);
     await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
 
-    const [, cerradosCount] = (
-      repo.countDevueltasByTienda as ReturnType<typeof vi.fn>
-    ).mock.calls[0];
-    const [, cerradosFind] = (
-      repo.findDevueltasByTienda as ReturnType<typeof vi.fn>
-    ).mock.calls[0];
-    // Mismo contenido y, ademas, exactamente el conjunto de cierre ratificado (R3).
-    expect(cerradosCount).toEqual(ESTATUS_CERRADOS);
-    expect(cerradosFind).toEqual(cerradosCount);
-    // Ni `rechazada` ni `en_bodega`/`en_bodega_satelite` cierran la novedad (R4).
-    expect(cerradosCount).not.toContain("rechazada");
-    expect(cerradosCount).not.toContain("en_bodega");
-    expect(cerradosCount).not.toContain("en_bodega_satelite");
-    expect(cerradosCount).not.toContain("devuelta");
+    // Feature 99 (Q7): el service YA NO computa un conjunto de estatus CERRADOS; el filtro de
+    // estado (`estatus = devuelta`) vive en el repo (orden-repository.novedades.test.ts). Aqui se
+    // afirma que ambos metodos reciben SOLO la tienda: sin segundo argumento `cerrados` que
+    // pudiera divergir entre count y find.
+    const argsCount = (repo.countDevueltasByTienda as ReturnType<typeof vi.fn>).mock.calls[0];
+    const argsFind = (repo.findDevueltasByTienda as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(argsCount).toEqual(["tienda-1"]);
+    expect(argsFind[0]).toBe("tienda-1");
+    // find lleva la paginacion como 2.º argumento; NO un conjunto de estatus.
+    expect(argsFind[1]).toEqual({ skip: 0, take: PAGE_SIZE });
+    expect(argsFind).toHaveLength(2);
   });
 
   it("R10: la causa fluye al DTO desde la ultima gestion `devuelta` vigente", async () => {
@@ -201,7 +198,7 @@ describe("NovedadesService.listar (feature 89)", () => {
     if (res.status !== "ok") throw new Error("esperaba ok");
     expect(res.items).toHaveLength(1);
     // page 3, pageSize 10 -> skip 20 (paginacion de 10 por pagina, R12).
-    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", ESTATUS_CERRADOS, {
+    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", {
       skip: 20,
       take: PAGE_SIZE,
     });

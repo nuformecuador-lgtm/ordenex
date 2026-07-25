@@ -1,6 +1,5 @@
 import { Prisma } from "@prisma/client";
 import { GESTION_MIME_EXTENSION, gestionConfig, type GestionMimeType } from "@/lib/config/gestion";
-import { reintentosConfig } from "@/lib/config/reintentos";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type {
@@ -10,10 +9,9 @@ import type {
   OrdenGestionRow,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type { IOrdenMensajeroMetaRepository } from "@/lib/interfaces/repositories/IOrdenMensajeroMetaRepository";
 import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   DetalleConflicto,
   EscogerServiceResult,
@@ -27,19 +25,18 @@ import type {
   RecogerInput,
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
-import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
+
+// Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo total sobre las guías (texto fijo
+// i18n-ready, SIN PII ni datos del cierre). Mientras el mensajero tenga un cierre
+// `solicitado`/`vencido` sin resolver no puede gestionar NI recoger/escoger.
+const MSG_BLOQUEADO =
+  "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias."; // R1/R4/R20
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
-const ORIGEN_RECOGER = "en_espera_aceptacion";
-const ESTADO_EN_REPARTO = "en_reparto";
+const ORIGEN_RECOGER = "por_recoger";
+const ESTADO_EN_REPARTO = "en_ruta";
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
-const ORIGEN_GESTION = "en_reparto";
-
-// Feature 47 — destinos de la transicion de SEGUIMIENTO de una gestion `devuelta` (valores
-// de catalogo YA sembrados en ORDER_STATUS_SEED; esta feature NO agrega estados, R21).
-const ESTATUS_RECHAZADA = "rechazada"; // escalado (final) al alcanzar el umbral
-const ESTATUS_EN_BODEGA = "en_bodega"; // reintento -> bodega central
-const ESTATUS_EN_BODEGA_SATELITE = "en_bodega_satelite"; // reintento -> bodega satelite
+const ORIGEN_GESTION = "en_ruta";
 
 // El `value` de order_status destino coincide 1:1 con el `resultado` de la
 // gestion (entregada/reprogramada/devuelta/rechazada).
@@ -56,20 +53,33 @@ function distinct(values: string[]): string[] {
 export class MisAsignacionesService implements IMisAsignacionesService {
   constructor(
     private readonly repo: IGestionOrdenRepository,
-    private readonly ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue">,
+    // Feature 111/R1-R4: + `findMensajerosBloqueados` — MISMO predicado derivado de la
+    // asignación (`solicitado`/`vencido`), sin duplicar la derivación ni flag persistido. La
+    // guarda de bloqueo total lo consume en gestionar/recoger/escoger.
+    private readonly ordenRepo: Pick<
+      IOrdenRepository,
+      "findEstatusIdByValue" | "findMensajerosBloqueados"
+    >,
     private readonly storage: IFileStorage,
     private readonly signedUrls: ISignedUrlProvider,
-    // Feature 47: deps añadidas al FINAL (no rompe el orden existente). El derivador de
-    // intentos (49) y la zona central para la bodega responsable (41/54). Solo se consumen
-    // en la rama `devuelta`.
-    private readonly historial: Pick<IOrdenHistorialService, "contarIntentos">,
-    private readonly zonaRepo: Pick<IZonaRepository, "findCentralZonaId">,
-    // Feature 92 (R23/R28): dep anadida al FINAL (no rompe el orden existente). Se usa
-    // para leer la secuencia optimizada al listar y para persistir el origen `gps` que
-    // el navegador adjunta a recoger/gestionar.
+    // Feature 92 (R23/R28): se usa para leer la secuencia optimizada al listar y para
+    // persistir el origen `gps` que el navegador adjunta a recoger/gestionar.
+    //
+    // Feature 99 (R1/R29): la rama `devuelta` YA NO re-rutea de inmediato. El derivador de
+    // intentos (49) y la zona central (54) que servian a `resolverSeguimientoDevuelta` se
+    // RELOCALIZARON al servicio del cron `DevolucionSlaService`; por eso desaparecieron del
+    // constructor. `gestionar` deja la orden REPOSANDO en `devuelta` y el cron SLA decide.
     private readonly rutaRepo: Pick<
       IRutaOptimizadaRepository,
       "findByMensajero" | "upsertOrigen"
+    >,
+    // Feature 115 (R17/R20): meta privada del mensajero. Solo LECTURA aqui para reflejar en el
+    // listado, del PROPIO actor: la marca "gestionar mas tarde" (`findMarcarLuegoByMensajero`,
+    // 115) y la nota privada (`findNotasByMensajero`, feature 116/R6/R8). La ESCRITURA vive en
+    // OrdenMensajeroMetaService (marca) y NotaPrivadaMensajeroService (nota).
+    private readonly metaRepo: Pick<
+      IOrdenMensajeroMetaRepository,
+      "findMarcarLuegoByMensajero" | "findNotasByMensajero"
     >,
   ) {}
 
@@ -97,16 +107,32 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     }
   }
 
+  /**
+   * Feature 111/R1-R4/R2 — predicado de bloqueo total: `true` si el mensajero tiene un cierre
+   * en estado bloqueante (`solicitado`/`vencido`). REUSA `findMensajerosBloqueados` (mismo
+   * helper derivado de la asignación); NO duplica la derivación ni introduce un flag persistido.
+   */
+  private async estaBloqueado(usuarioId: string): Promise<boolean> {
+    const bloqueados = await this.ordenRepo.findMensajerosBloqueados([usuarioId]);
+    return bloqueados.has(usuarioId);
+  }
+
   async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta] = await Promise.all([
-      this.repo.getOrdenEnGestion(actor.usuarioId), // R20
-      this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
-      this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
-      this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
-      this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
-    ]);
+    const [ordenEnGestionId, rows, entregadas, montoEntregadas, ruta, marcadasLuego, notasPrivadas] =
+      await Promise.all([
+        this.repo.getOrdenEnGestion(actor.usuarioId), // R20
+        this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
+        this.repo.contarEntregadas(actor.usuarioId), // Feature 61: KPI entregadas
+        this.repo.sumMontoCobrarEntregadas(actor.usuarioId), // KPI "Total a cobrar" (parte entregada)
+        this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
+        // Feature 115 (R17/R20): marcas "gestionar mas tarde" del PROPIO actor (Set<ordenId>).
+        this.metaRepo.findMarcarLuegoByMensajero(actor.usuarioId),
+        // Feature 116 (R6/R8): notas privadas del PROPIO actor (Map<ordenId, nota>). Misma query
+        // acotada por `usuario_id = actor` que garantiza que nunca trae la nota de otro mensajero.
+        this.metaRepo.findNotasByMensajero(actor.usuarioId),
+      ]);
 
     // Feature 92 (R28): posicion por orden. Vacio si nunca se optimizo -> todas las cards
     // quedan "sin posicion" y conservan el orden actual, que es el comportamiento previo.
@@ -115,7 +141,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
     for (const row of rows) {
-      const dto = toDTO(row);
+      // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
+      // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
+      // Feature 116 (R6/R8): merge de la nota privada del propio actor (`null` si no hay nota).
+      const dto = {
+        ...toDTO(row),
+        marcarLuego: marcadasLuego.has(row.id),
+        notaPrivada: notasPrivadas.get(row.id) ?? null,
+      };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
         porRecoger.push(dto);
@@ -138,14 +171,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       return a.secuenciaRuta - b.secuenciaRuta;
     });
     const paradasSinOptimizar = porGestionar.filter((o) => o.secuenciaRuta === null).length;
-    // Feature 61: KPIs derivados de las ordenes en_reparto (porGestionar) + el conteo
+    // Feature 61: KPIs derivados de las ordenes en_ruta (porGestionar) + el conteo
     // de entregadas. `pendientes` = en camino; `porCobrar` = COD por recaudar (null = 0).
     const codEnReparto = porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
     const kpis: MisAsignacionesKpis = {
       pendientes: porGestionar.length,
       entregadas,
       porCobrar: codEnReparto,
-      // Total a cobrar ACUMULADO: COD en_reparto + COD ya entregado. Estable al entregar;
+      // Total a cobrar ACUMULADO: COD en_ruta + COD ya entregado. Estable al entregar;
       // se descuenta al gestionar como reprogramada/devuelta/rechazada (fuera de ambos sets).
       totalACobrar: codEnReparto + montoEntregadas,
     };
@@ -172,6 +205,16 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
     const ordenIds = distinct(input.ordenIds);
     if (ordenIds.length === 0) return { status: "ok", recogidas: [] };
+
+    // Feature 111/R4 (Q3): bloqueo total — un mensajero con un cierre pendiente
+    // (`solicitado`/`vencido`) no puede RECOGER. Guarda al inicio (ANTES de cualquier efecto:
+    // la transición vive en `recogerLote`), MISMO predicado que gestionar. Sin PII (R20).
+    if (await this.estaBloqueado(actor.usuarioId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_BLOQUEADO })),
+      };
+    }
 
     const rows = await this.repo.findByIdsParaGestion(ordenIds);
     const rowById = new Map(rows.map((r) => [r.id, r]));
@@ -216,6 +259,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async escogerParaGestion(ordenId: string, actor: Actor): Promise<EscogerServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
+    // Feature 111/R4 (Q3): bloqueo total — mensajero con cierre pendiente no puede ESCOGER una
+    // orden para gestión. Guarda al inicio, ANTES de fijar el puntero (sin efectos parciales).
+    if (await this.estaBloqueado(actor.usuarioId)) {
+      return { status: "conflict", motivo: MSG_BLOQUEADO };
+    }
+
     const guardia = await this.cargarOrdenGestionable(ordenId, actor);
     if (guardia.status !== "ok") return guardia;
 
@@ -229,6 +278,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
   async gestionar(input: GestionarInput, actor: Actor): Promise<GestionarServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
+
+    // Feature 111/R1/R2/R3 (obligatorio): bloqueo total — un mensajero con un cierre pendiente
+    // (`solicitado`/`vencido`) NO puede GESTIONAR. Guarda al INICIO, ANTES de cargar la orden y
+    // de subir la evidencia a Storage -> sin efectos parciales (R3: ni upload, ni transición, ni
+    // fila `gestion_orden`). MISMO predicado derivado de la asignación (R2). Sin PII (R20).
+    if (await this.estaBloqueado(actor.usuarioId)) {
+      return { status: "conflict", motivo: MSG_BLOQUEADO };
+    }
 
     const guardia = await this.cargarOrdenGestionable(input.ordenId, actor);
     if (guardia.status !== "ok") return guardia;
@@ -266,67 +323,78 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       };
     }
 
-    // R23/R30: subir evidencia (entrega/rechazo/devolucion) ANTES de la transaccion.
-    let storagePath: string | null = null;
-    let contentType: string | null = null;
+    // Feature 119 (R9/R10): subida SECUENCIAL y determinista de las N evidencias ANTES de la
+    // transaccion, acumulando en `uploaded` los paths ya subidos para poder COMPENSAR
+    // (storage.remove) ante cualquier fallo. El bucle secuencial hace la compensacion trivial:
+    // `uploaded` contiene EXACTAMENTE lo subido hasta el fallo (sin rastrear promesas de un
+    // Promise.all que rechaza). Para el tope de 3 fotos el costo de no paralelizar es despreciable.
+    const uploaded: string[] = [];
+    const evidencias: { storagePath: string; contentType: string; indice: number }[] = [];
     if (
       input.resultado === "entregada" ||
       input.resultado === "rechazada" ||
       input.resultado === "devuelta" // feature 75: evidencia obligatoria tambien en Devolver
     ) {
-      const ext = GESTION_MIME_EXTENSION[input.evidencia.contentType as GestionMimeType] ?? "bin";
-      const path = `${input.ordenId}/${input.resultado}-${Date.now()}.${ext}`;
-      storagePath = await this.storage.upload({
-        path,
-        bytes: input.evidencia.bytes,
-        contentType: input.evidencia.contentType,
-      });
-      contentType = input.evidencia.contentType;
+      try {
+        for (let i = 0; i < input.evidencias.length; i++) {
+          const ev = input.evidencias[i];
+          const ext = GESTION_MIME_EXTENSION[ev.contentType as GestionMimeType] ?? "bin";
+          // `-i` garantiza unicidad del path entre las fotos de la MISMA gestion (mismo `Date.now()`).
+          const path = `${input.ordenId}/${input.resultado}-${Date.now()}-${i}.${ext}`;
+          const stored = await this.storage.upload({
+            path,
+            bytes: ev.bytes,
+            contentType: ev.contentType,
+          });
+          uploaded.push(stored);
+          evidencias.push({ storagePath: stored, contentType: ev.contentType, indice: i });
+        }
+      } catch (error) {
+        // R10: falla la subida #k -> borrar las k-1 ya subidas y NO persistir NADA (el repo ni
+        // se invoca). El fallo se propaga como error, no como resultado de dominio.
+        if (uploaded.length > 0) await this.storage.remove(uploaded);
+        throw error;
+      }
     }
 
-    const gestion = buildGestionData(input, storagePath, contentType);
-
-    // Feature 47 (R1/R4/R5/R8/R9): SOLO la rama `devuelta` gana una transicion de
-    // SEGUIMIENTO (las otras 3 ramas quedan intactas -> R19). La decision (reintento a
-    // bodega vs escalado a rechazada) se toma ANTES de la tx con el conteo derivado de la
-    // 49; el puntero de bloqueo 1-a-1 del mensajero evita TOCTOU (design §2.3). El repo solo
-    // escribe: la REGLA vive aqui.
-    let seguimiento: { destinoEstatusId: string; limpiaMensajero: boolean } | undefined;
-    if (input.resultado === "devuelta") {
-      const decision = await this.resolverSeguimientoDevuelta(orden);
-      if (decision.status !== "ok") return decision;
-      seguimiento = decision.seguimiento;
-    }
+    const gestion = buildGestionData(input, evidencias);
 
     try {
-      // R23/R26/R28/R30: INSERT gestion + UPDATE estatus + limpiar puntero, atomico.
-      // Feature 47 (R6/R7/R10/R11): + transicion de seguimiento (reintento/escalado) en la
-      // MISMA tx cuando hay `seguimiento` (rama devuelta).
+      // R23/R26/R28/R30 + R9: INSERT gestion + N filas de evidencia + UPDATE estatus + limpiar
+      // puntero, TODO en una unica transaccion (todo-o-nada).
+      // Feature 99 (R1/R29): la rama `devuelta` transiciona la orden a `devuelta` y la DEJA
+      // ahi (sin transicion de seguimiento inmediata: ni reintento a bodega ni escalado). La
+      // devolucion se contabiliza como intento (R2) por el append a `devuelta` del choke
+      // point; el cron SLA (`DevolucionSlaService`) decide al vencer la ventana.
       await this.repo.crearGestionYTransicionar({
         ordenId: input.ordenId,
         mensajeroId: actor.usuarioId,
         gestion,
         nuevoEstatusId,
-        seguimiento,
       });
     } catch (error) {
-      // R23/R30: si la transaccion falla tras subir, limpiar el objeto (best-effort).
-      if (storagePath) await this.storage.remove([storagePath]);
+      // R11: la transaccion fallo DESPUES de subir -> borrar las N evidencias subidas
+      // (best-effort) y propagar; no queda ninguna fila persistida.
+      if (uploaded.length > 0) await this.storage.remove(uploaded);
       throw error;
     }
 
     // Feature 92 (R23): igual que en `recogerAsignaciones`, tras la transaccion.
     await this.registrarUbicacion(actor.usuarioId, input.ubicacion);
 
-    // R8: la evidencia se muestra con URL firmada de TTL acotado, nunca el path crudo.
-    let evidenciaUrl: string | undefined;
-    if (storagePath) {
-      evidenciaUrl = await this.signedUrls.createSignedUrl(
-        storagePath,
+    // R13: cada evidencia se muestra con URL firmada de TTL acotado, NUNCA el path crudo ni el
+    // bucket. Se mapea en el ORDEN de `uploaded` (indice 0..N-1) para preservar la portada primero.
+    let evidenciaUrls: string[] | undefined;
+    if (uploaded.length > 0) {
+      const urlByPath = await this.signedUrls.createSignedUrls(
+        uploaded,
         gestionConfig.SIGNED_URL_TTL_SECONDS,
       );
+      evidenciaUrls = uploaded
+        .map((p) => urlByPath[p])
+        .filter((u): u is string => typeof u === "string");
     }
-    return { status: "ok", ordenId: input.ordenId, estado: input.resultado, evidenciaUrl };
+    return { status: "ok", ordenId: input.ordenId, estado: input.resultado, evidenciaUrls };
   }
 
   async liberarGestion(ordenId: string, actor: Actor): Promise<LiberarServiceResult> {
@@ -339,7 +407,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
   /**
    * Guardia comun (R18/R31): la orden existe, es del actor y su origen es
-   * `en_reparto`. Devuelve la fila o un resultado de rechazo.
+   * `en_ruta`. Devuelve la fila o un resultado de rechazo.
    */
   private async cargarOrdenGestionable(
     ordenId: string,
@@ -357,60 +425,6 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       return { status: "conflict", motivo: `solo se gestiona desde ${ORIGEN_GESTION}` }; // R18
     }
     return { status: "ok", orden };
-  }
-
-  /**
-   * Feature 47 (R1/R2/R5/R8/R9) — REGLA de reintento vs escalado de una gestion `devuelta`.
-   * Lee el conteo de intentos previos (derivador de la 49), calcula el intento actual y lo
-   * compara con el umbral configurable (R3). `intentoActual >= umbral` -> ESCALADO a
-   * `rechazada` (final, conserva el mensajero). `intentoActual < umbral` -> REINTENTO a la
-   * bodega responsable derivada de la zona (`en_bodega`/`en_bodega_satelite`, limpia el
-   * mensajero, R6). `zonaId` null -> fallback central `en_bodega` (R5 edge). Resuelve el id
-   * del destino via `findEstatusIdByValue`; catalogo incompleto -> validation_error (mismo
-   * patron que ya usa `gestionar`). El actor del seguimiento lo fija el repo (null, sistema).
-   */
-  private async resolverSeguimientoDevuelta(
-    orden: OrdenGestionRow,
-  ): Promise<
-    | { status: "ok"; seguimiento: { destinoEstatusId: string; limpiaMensajero: boolean } }
-    | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  > {
-    const intentosPrevios = await this.historial.contarIntentos(orden.id); // R1/R2 (derivador 49)
-    const intentoActual = intentosPrevios + 1;
-    const umbral = reintentosConfig.MIN_INTENTOS_ENTREGA; // R3
-
-    if (intentoActual >= umbral) {
-      // R8/R9: la N-esima devolucion (N = umbral) escala a `rechazada` (final). NO limpia el
-      // mensajero: deja el rastro del ultimo (mismo trato que un rechazo directo, para la 48).
-      const destinoEstatusId = await this.ordenRepo.findEstatusIdByValue(ESTATUS_RECHAZADA);
-      if (destinoEstatusId === null) return this.catalogoIncompleto();
-      return { status: "ok", seguimiento: { destinoEstatusId, limpiaMensajero: false } };
-    }
-
-    // R5: reintento -> bodega responsable derivada de la zona (reusa el ruteo 30/33/46).
-    // `zonaId` null -> fallback central (`en_bodega`), sin consultar la zona central.
-    let value: string;
-    if (orden.zonaId === null) {
-      value = ESTATUS_EN_BODEGA;
-    } else {
-      const centralZonaId = await this.zonaRepo.findCentralZonaId();
-      const { destinoTipo } = resolverDestinoCierre(orden.zonaId, centralZonaId);
-      value = destinoTipo === "bodega_central" ? ESTATUS_EN_BODEGA : ESTATUS_EN_BODEGA_SATELITE;
-    }
-    const destinoEstatusId = await this.ordenRepo.findEstatusIdByValue(value);
-    if (destinoEstatusId === null) return this.catalogoIncompleto();
-    // R6: reintento limpia el mensajero (handoff a la bodega, patron liberacion 46).
-    return { status: "ok", seguimiento: { destinoEstatusId, limpiaMensajero: true } };
-  }
-
-  private catalogoIncompleto(): {
-    status: "validation_error";
-    fieldErrors: Record<string, string[]>;
-  } {
-    return {
-      status: "validation_error",
-      fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
-    };
   }
 }
 
@@ -439,14 +453,23 @@ function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     // Feature 92 (R28): la posicion la resuelve el llamador con el mapa de la ruta; el
     // default `null` es correcto para "Por recoger", que nunca tiene posicion.
     secuenciaRuta: null,
+    // Feature 115 (R17): default `false`; el llamador lo sobreescribe con la marca real del
+    // actor (`marcadasLuego.has(row.id)`). Aqui SIEMPRE nace un boolean concreto.
+    marcarLuego: false,
+    // Feature 116 (R6/R8): default `null`; el llamador lo sobreescribe con la nota real del
+    // actor (`notasPrivadas.get(row.id)`). Aqui SIEMPRE nace un `string | null` concreto.
+    notaPrivada: null,
   };
 }
 
-/** Arma los campos nullable de gestion_orden segun el resultado (R23/R26/R28/R30). */
+/**
+ * Arma los campos nullable de gestion_orden segun el resultado (R23/R26/R28/R30). Feature 119:
+ * las ramas con foto pasan la LISTA `evidencias` (1..N); el repo deriva de ella la portada
+ * (indice 0) hacia las columnas viejas (dual-write, R12) e inserta las N filas hijas.
+ */
 function buildGestionData(
   input: GestionarInput,
-  storagePath: string | null,
-  contentType: string | null,
+  evidencias: { storagePath: string; contentType: string; indice: number }[],
 ): GestionOrdenData {
   switch (input.resultado) {
     case "entregada":
@@ -454,8 +477,7 @@ function buildGestionData(
         resultado: "entregada",
         montoRecibido: input.montoRecibido,
         metodoPago: input.metodoPago,
-        evidenciaStoragePath: storagePath,
-        evidenciaContentType: contentType,
+        evidencias,
       };
     case "reprogramada":
       return {
@@ -466,22 +488,18 @@ function buildGestionData(
     case "devuelta":
       // Feature 73/R11/R12: la causa va en su COLUMNA propia, APARTE del texto libre; el
       // `motivo` se persiste EXACTAMENTE como lo escribio el mensajero, sin decoracion.
-      // Pedido: la devolucion ahora persiste la FOTO de evidencia (obligatoria), igual que
-      // entrega/rechazo (mismas columnas genericas de gestion_orden).
+      // Feature 75/119: la devolucion persiste sus 1..N fotos de evidencia (obligatorias).
       return {
         resultado: "devuelta",
         causaDevolucion: input.causaDevolucion,
         motivo: input.motivo,
-        // Feature 75: la evidencia (subida ANTES de la tx, espejo de rechazada) entra al INSERT.
-        evidenciaStoragePath: storagePath,
-        evidenciaContentType: contentType,
+        evidencias,
       };
     case "rechazada":
       return {
         resultado: "rechazada",
         motivo: input.motivo,
-        evidenciaStoragePath: storagePath,
-        evidenciaContentType: contentType,
+        evidencias,
       };
   }
 }

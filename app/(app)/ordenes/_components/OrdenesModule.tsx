@@ -6,6 +6,10 @@ import useSWR from "swr";
 
 import { DataTable } from "@/components/shared/DataTable";
 import type { Column } from "@/components/shared/DataTable";
+import {
+  conBadgePrioridad,
+  resaltarFilaPrioridad,
+} from "@/components/shared/PrioridadResalte";
 import { Pagination } from "@/components/shared/Pagination";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -78,6 +82,7 @@ export function OrdenesModule({
   selectable = false,
   bloqueoSeleccion,
   acciones,
+  resaltarPrioridad = false,
 }: {
   columns?: Column<OrdenListItemDTO>[];
   puedeCargarMasiva?: boolean;
@@ -106,6 +111,14 @@ export function OrdenesModule({
    * muestra la barra. La columna de checkbox depende de `selectable`.
    */
   acciones?: AccionLote[];
+  /**
+   * Feature 101/R8: resalta las filas de órdenes con `prioridad === true` (color
+   * llamativo + badge "Prioritaria" accesible). Se activa SOLO en la superficie de
+   * reasignación de la bodega dueña (apartado `en_bodega_central` de `/ordenes`, gateado por
+   * `OrdenesTabs`); por defecto `false`, de modo que el resto de listados (otras tabs,
+   * "Todas", dashboard adminTienda, listado plano) no resaltan por prioridad (R10).
+   */
+  resaltarPrioridad?: boolean;
 } = {}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -140,6 +153,11 @@ export function OrdenesModule({
   const items = data?.items ?? [];
 
   const columnasEfectivas = useMemo<Column<OrdenListItemDTO>[]>(() => {
+    // Feature 101/R8: en la superficie de reasignación (`en_bodega_central`) las columnas de
+    // DATOS se decoran para anexar el badge "Prioritaria" a las filas prioritarias.
+    // Se decora ANTES de anteponer el checkbox, así el badge cae en la primera columna
+    // de datos (Nº Guía), no en la de selección. Sin `resaltarPrioridad`, sin cambio.
+    const columnasDatos = resaltarPrioridad ? conBadgePrioridad(columns) : columns;
     // Columna de selección (checkbox) al frente cuando el listado es seleccionable.
     const conSeleccion: Column<OrdenListItemDTO>[] = selectable
       ? [
@@ -183,9 +201,9 @@ export function OrdenesModule({
               );
             },
           },
-          ...columns,
+          ...columnasDatos,
         ]
-      : columns;
+      : columnasDatos;
 
     if (!mostrarHistorial) return conSeleccion;
     return [
@@ -203,7 +221,7 @@ export function OrdenesModule({
         ),
       },
     ];
-  }, [columns, mostrarHistorial, selectable, seleccionIds, bloqueoSeleccion, items]);
+  }, [columns, mostrarHistorial, selectable, seleccionIds, bloqueoSeleccion, items, resaltarPrioridad]);
 
   // Snapshot de las filas marcadas PRESENTES en la página actual (la selección se
   // acota a lo visible, como en la vista de revisión previa).
@@ -255,6 +273,7 @@ export function OrdenesModule({
         data={items}
         rowKey="id"
         ariaLabel="Órdenes"
+        rowClassName={resaltarPrioridad ? resaltarFilaPrioridad : undefined}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las órdenes" : null}
         emptyState={{

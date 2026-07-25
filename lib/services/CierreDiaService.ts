@@ -33,13 +33,19 @@ const ROL_AUTORIZADO = "mensajero";
 
 // R10: estados de una orden asignada que aun cuenta como "pendiente de gestion".
 // Mientras el mensajero tenga alguna en estos estados, no puede cerrar.
-const ESTADOS_PENDIENTES = ["en_espera_aceptacion", "en_reparto"];
+const ESTADOS_PENDIENTES = ["por_recoger", "en_ruta"];
 
 // Mensajes accionables del gate/precondicion (R10/R11) y del ruteo (R12/R16).
 const MSG_PENDIENTES = "Tenes ordenes sin gestionar; gestionalas antes de cerrar."; // R10
 const MSG_VACIO = "No tenes gestiones pendientes de cierre."; // R11
 const MSG_DUPLICADO = "Ya tenes un cierre solicitado pendiente de aprobacion."; // R12
 const MSG_SIN_ZONA = "No tenes una zona asignada; contacta a tu administrador."; // R16
+
+// Feature 111/R5/R20: motivo ACCIONABLE del bloqueo total sobre las guías (texto fijo
+// i18n-ready, SIN PII ni datos del cierre). Un mensajero con un cierre `solicitado`/`vencido`
+// no puede hacer NADA con las guías (gestionar/recoger/escoger/deshacer) hasta resolverlo.
+const MSG_BLOQUEADO =
+  "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias."; // R5/R20
 
 // Feature 67 — mensajes ACCIONABLES del deshacer (constantes i18n-ready, patron MSG_* de la 37).
 const MSG_YA_EN_CIERRE = "Esta gestion ya esta incluida en un cierre solicitado; no se puede deshacer."; // R2
@@ -51,7 +57,7 @@ const MSG_CATALOGO = "catalogo de estados incompleto (seed pendiente)"; // patro
 
 // Feature 67/R18: unico estado desde el que se puede volver a gestionar (`ORIGEN_GESTION` de
 // MisAsignacionesService, guardia `cargarOrdenGestionable`). Destino del deshacer.
-const ESTADO_EN_REPARTO = "en_reparto";
+const ESTADO_EN_REPARTO = "en_ruta";
 
 /**
  * Feature 67/R5 (design §5.3) — REGLA: estado en el que la orden DEBE estar para que su gestion
@@ -61,24 +67,26 @@ const ESTADO_EN_REPARTO = "en_reparto";
  * Derivado de `crearGestionYTransicionar` + `resolverSeguimientoDevuelta` (verificado):
  *   - entregada/reprogramada/rechazada: destino = `resultado`, sin seguimiento.
  *   - devuelta: la 47 emite un SEGUIMIENTO en la MISMA tx y la orden NUNCA reposa en `devuelta`
- *     (reintento -> `en_bodega`/`en_bodega_satelite`; escalado -> `rechazada`). `devuelta` se
+ *     (reintento -> `en_bodega_central`/`en_bodega_satelite`; escalado -> `rechazada`). `devuelta` se
  *     acepta SOLO por defensa ante filas anteriores a la 47.
  */
 const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
   entregada: ["entregada"],
   reprogramada: ["reprogramada"],
   rechazada: ["rechazada"],
-  devuelta: ["en_bodega", "en_bodega_satelite", "rechazada", "devuelta"],
+  devuelta: ["en_bodega_central", "en_bodega_satelite", "rechazada", "devuelta"],
 };
 
 // Metodos de repo que consume el service (inyeccion por constructor). Se declaran
 // como Pick para dobles de test sin DB/red (patron RecepcionSateliteService).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 39: ademas de la zona (37), el service resuelve el vehiculo del mensajero
-// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_reparto`).
+// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_ruta`).
+// Feature 111/R5: + `findMensajerosBloqueados` (guarda de bloqueo EXPLICITA de `deshacerGestion`,
+// mismo predicado derivado que la asignacion; sin duplicar la derivacion ni flag persistido).
 type OrdenRepo = Pick<
   IOrdenRepository,
-  "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue"
+  "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueados"
 >;
 
 /**
@@ -173,6 +181,15 @@ export class CierreDiaService implements ICierreDiaService {
       motivoBloqueo = MSG_VACIO; // R11
     }
 
+    // Feature 111/R13 (datos): derivado de `cierresPasados` ya cargado (sin query extra).
+    // Habilita el CTA "Solicitar aprobación del cierre vencido" con independencia del gate de
+    // creación (`puedesSolicitar`), que sigue siendo el del flujo de la 37.
+    const tieneVencido = cierresPasados.some((c) => c.estado === "vencido");
+    // Feature 109/R31 (datos): `true` si hay un cierre `rechazado` en el historico (derivado de
+    // `cierresPasados`, sin query extra). Habilita el MISMO CTA de re-solicitud que el `vencido`
+    // (111/R13): un `rechazado` NO es terminal (bloquea hasta re-solicitar + aprobar).
+    const tieneRechazado = cierresPasados.some((c) => c.estado === "rechazado");
+
     return {
       status: "ok",
       grupos,
@@ -182,12 +199,40 @@ export class CierreDiaService implements ICierreDiaService {
       puedesSolicitar,
       motivoBloqueo,
       cierresPasados,
+      tieneVencido, // feature 111/R13
+      tieneRechazado, // feature 109/R31
     };
   }
 
   async solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1
 
+    // Feature 111/R6/R9/R10: si el mensajero tiene un cierre `vencido`, "Solicitar cierre"
+    // NO crea un cierre nuevo: transiciona ese `vencido -> solicitado` (escritura guardada por
+    // estado). Va ANTES del flujo de creación y EXENTO de la precondición de "sin pendientes"
+    // (R9, anti-deadlock: el mensajero está bloqueado para gestionar —R1— y quedaría atrapado
+    // si además no pudiera enviar su vencido a aprobación). NO recalcula ni re-snapshotea (R8:
+    // el repo solo cambia `estado`). Invariante R10: el corte no crea `vencido` con `solicitado`
+    // presente (41 R10) y aquí se transiciona en vez de crear una segunda fila.
+    if (await this.repo.existeCierreVencido(actor.usuarioId)) {
+      const ok = await this.repo.transicionarVencidoASolicitado(actor.usuarioId);
+      // R7: 0 filas = el vencido ya fue resuelto/transicionado entre la lectura y la escritura.
+      if (!ok) return { status: "conflict", motivo: MSG_DUPLICADO };
+      return { status: "ok", via: "vencido_solicitado" }; // R8: sin snapshot nuevo
+    }
+
+    // Feature 109/R28 (modelo GLOBAL): un cierre `rechazado` ya NO es terminal — BLOQUEA (R29) y es
+    // RE-SOLICITABLE (`rechazado -> solicitado`, espejo EXACTO del `vencido`). Misma rama, mismo gate
+    // (EXENTO de la precondicion de "sin pendientes", anti-deadlock: el mensajero esta bloqueado y
+    // quedaria atrapado). Money-safe (R28: el repo solo cambia `estado`). El desbloqueo definitivo y
+    // la liberacion de `sin_gestionar` ocurren SOLO al APROBAR (R16).
+    if (await this.repo.existeCierreRechazado(actor.usuarioId)) {
+      const ok = await this.repo.transicionarRechazadoASolicitado(actor.usuarioId);
+      if (!ok) return { status: "conflict", motivo: MSG_DUPLICADO };
+      return { status: "ok", via: "rechazado_solicitado" }; // R28: sin snapshot nuevo
+    }
+
+    // R11: sin `vencido` -> flujo de creación de la 37 SIN CAMBIOS (precondiciones + snapshot).
     // R10: precondicion — sin ordenes pendientes de gestion.
     const pendientes = await this.repo.contarOrdenesPendientesGestion(
       actor.usuarioId,
@@ -253,7 +298,9 @@ export class CierreDiaService implements ICierreDiaService {
     });
     if (cierreId === null) return { status: "conflict", motivo: MSG_VACIO };
 
-    return { status: "ok", cierreId, totales, destinoTipo };
+    // Feature 111/P2: `via: "creado"` distingue el toast del camino de creación (37) del de
+    // transición del vencido; los consumidores previos ignoran el campo.
+    return { status: "ok", via: "creado", cierreId, totales, destinoTipo };
   }
 
   /**
@@ -265,6 +312,13 @@ export class CierreDiaService implements ICierreDiaService {
     // 1) R8 (F1.4-f): SOLO el rol mensajero, antes de tocar el repo. El admin no tiene ventana
     // para deshacer (la ventana muere al solicitar el cierre, que es cuando el admin lo ve).
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" };
+
+    // Feature 111/R5 (Q2, guarda EXPLICITA belt-and-suspenders): un mensajero BLOQUEADO
+    // (cierre `solicitado`/`vencido`) no puede hacer NADA con las guías, incluido DESHACER.
+    // MISMO predicado derivado que la asignación/gestionar (`findMensajerosBloqueados`), ANTES
+    // de cualquier lectura/escritura de la gestión. No se apoya en el no-op natural.
+    const bloqueados = await this.ordenRepo.findMensajerosBloqueados([actor.usuarioId]);
+    if (bloqueados.has(actor.usuarioId)) return { status: "conflict", motivo: MSG_BLOQUEADO };
 
     // 2) R9: inexistente -> forbidden (NO se distingue de ajena, patron 36/R31: no revela que
     // la gestion existe).
@@ -362,6 +416,9 @@ export function toDetalleDTO(
     ingresoBodegaRechazo:
       ingresoBodegaRechazo !== undefined ? ingresoBodegaRechazo : g.ingresoBodegaRechazo,
     tarifaFaltante,
+    // Feature 102/R9/R11: passthrough del flag ya derivado en el repo (admin: del historial;
+    // vista en vivo del mensajero: `false`). El service no re-deriva la clasificacion.
+    esRechazoSla: g.esRechazoSla,
     // Passthrough: solo viene poblado desde los repos de admin (38/40), que lo derivan del
     // snapshot. En la vista en vivo del mensajero es `undefined` y la UI no muestra nada.
     ingresoOrdenex: g.ingresoOrdenex,

@@ -80,54 +80,9 @@ describe("configuracion/page.tsx — autorización del módulo de zonas (R29)", 
   });
 });
 
-describe("configuracion/page.tsx — pre-carga de zonas del maestro (R30)", () => {
-  it("pre-carga el listado de zonas y lo pasa al módulo", async () => {
-    resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
-    listarZonasMock.mockResolvedValue({
-      status: "ok",
-      items: [
-        {
-          id: "z1",
-          nombre: "Zona Sur",
-          cobroVehiculo: false,
-          distritosCount: 7,
-          esCentral: false,
-        },
-      ],
-      page: 1,
-      pageSize: 25,
-      total: 1,
-    });
-    const { default: ConfiguracionPage } = await import(
-      "@/app/(app)/configuracion/page"
-    );
-
-    render(await ConfiguracionPage());
-
-    expect(screen.getByTestId("zonas-module-stub")).toBeInTheDocument();
-    expect(listarZonasMock).toHaveBeenCalledTimes(1);
-    const arg = listarZonasMock.mock.calls[0][0] as {
-      page: number;
-      pageSize: number;
-    };
-    expect(arg.page).toBe(1);
-    expect(arg.pageSize).toBeGreaterThan(0);
-    expect(zonasCalls).toHaveLength(1);
-    expect(zonasCalls[0].items).toHaveLength(1);
-    expect(zonasCalls[0].total).toBe(1);
-  });
-
-  it("si el listado de zonas falla, pasa datos vacíos al módulo sin romper (R30)", async () => {
-    resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
-    listarZonasMock.mockResolvedValue({ status: "forbidden" });
-    const { default: ConfiguracionPage } = await import(
-      "@/app/(app)/configuracion/page"
-    );
-
-    render(await ConfiguracionPage());
-
-    expect(screen.getByTestId("zonas-module-stub")).toBeInTheDocument();
-    expect(zonasCalls[0].items).toHaveLength(0);
-    expect(zonasCalls[0].total).toBe(0);
-  });
-});
+// NOTA (chore fix-dev-init-verde): el bloque "pre-carga de zonas del maestro (R30)" se retiró.
+// La gestión de zonas se movió de `/configuracion` a `/configuracion/tarifas` (rama flow,
+// commit "remove zones from config>user"): `ConfiguracionPage` ya NO monta `ZonasModule` ni
+// pre-carga `listarZonas`. Esos tests probaban una funcionalidad deliberadamente reubicada. Si
+// la reubicación NO fuese la intención final, restaurar `ZonasModule` en la página es una
+// decisión de UI para frontend_dev (y entonces estos tests volverían).

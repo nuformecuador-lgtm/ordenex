@@ -6,7 +6,7 @@ import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionRe
 // bodega responsable. Componente PRIVADO: recibe por props las ordenes ya resueltas
 // server-side (el Server Component padre valido el rol/zona via `listarLiberadasHoy`);
 // NO fetchea datos sensibles por si mismo. Se monta en las DOS vistas de bodega:
-// maestro central (`en_bodega`) y adminSatelite (`en_bodega_satelite`). Si no hay
+// maestro central (`en_bodega_central`) y adminSatelite (`en_bodega_satelite`). Si no hay
 // ordenes liberadas hoy, NO renderiza la seccion (aviso solo cuando hay algo que
 // avisar). Textos como children/literales, listos para i18n futuro.
 

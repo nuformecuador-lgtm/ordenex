@@ -15,9 +15,194 @@
 
 ## Features en curso
 
-_Ninguna._ No hay ninguna feature `in_progress` en `feature_list.json`. El último trabajo
-mergeado fue la **feature 97** (optimización de ruta — frontend): en `dev` (PR #110) y
-desplegada a **prod** (PR #117).
+### Lote 137–140 (flujo de estados) — 137 implementada + reviewer APROBADO, PR #157; mergeando `dev`
+
+> Renumerado desde **135–138** por colisión de IDs: `dev` (merge de #155 `flow`) reclamó
+> **135 = analítica-KPIs** y **136 = etiquetas-PDF**. El lote se desplazó al bloque libre 137–140.
+
+**137 — rename nomenclatura `order_status` (fullstack, opción A del gate) — code-complete + verde.**
+Rama `feature/135-order-status-rename-nomenclatura` (conserva slug `135`, pusheada; **PR #157 → `dev`**,
+patrón 103/104/105). `./init.sh` **verde** antes del merge (484 archivos / 4815 tests); guards R13 +
+`no-embalaje` verdes; reviewer **APROBADO-CON-NOTAS**, 0 bloqueantes, trazabilidad R1–R13 completa
+(`progress/review_137-...md`). Se reinició de cero desde el spec del gate (se descartó una WIP pre-gate
+que usaba `en_tienda`).
+- **✅ Merge de `dev` resuelto + re-verificado (`fix f99e44c`):** census R13 + `no-embalaje` verdes,
+  **cero regresiones** (+11 tests nuevos del rename pasan); los 3 literales viejos que trajo dev,
+  renombrados. Rama pusheada, PR #157 mergeable.
+- **⚠️ `./init.sh` local ROJO por breakage PRE-EXISTENTE de `dev`**, NO del rename: 34 errores de
+  typecheck + 30 tests en features de dev (feat-92 auth, chat/ubicación, zonas, `RUTA_VIGENTE`
+  duplicado + `sincronizarRuta` en MisAsignacionesModule). Demostrado idéntico contra un worktree
+  limpio de `origin/dev`. `dev` pasa en Vercel porque `next build` no type-chequea tests; el rojo
+  local se coló al trunk. **Requiere fix aparte (dueño de flow/feat-92), no en el PR del rename.**
+- **Deuda post-merge (Nota-3):** `prisma migrate deploy` + verificar `down.sql` con `db:rollback`
+  (migración `db/migrations/20260724120000_order_status_rename_nomenclatura/`).
+- **138/139/140** (recepción central / devolución rechazadas / guardia) siguen `spec_ready`, encadenadas.
+
+**Reconciliación de estado stale (pre-merge):** 107/108/110/120 estaban `in_progress` pese a estar
+mergeadas a `dev` (PRs #135/#136/#140/#149) → reconciliadas a `done`.
+
+**Ubicación compartida por el cliente en el chat de WhatsApp — feature 121 (2026-07-24) → EN
+ESPECIFICACIÓN / puerta F1.4.** Pedido del humano: "en el webhook que consume las respuestas de
+WhatsApp agregar soporte para ubicación (mensajes `type=location`); almacenar la ubicación enviada;
+y en el front un icono en el chat que al dar click despliegue, en modal/popup dentro de la misma
+ventana, un minimapa con la ubicación actual del repartidor y el punto compartido por el usuario".
+Fullstack, high, `depends_on: 120`.
+- **Decisiones cerradas pre-spec (AskUserQuestion):** D1 = la posición del repartidor es el **GPS del
+  navegador EN VIVO** (`useUbicacionActual`, feature 93), con degradación (solo punto del cliente +
+  aviso) si se deniega/expira; no hay rastreo server-side. D2 = v1 **solo visualizar** (no adoptar la
+  ubicación como coordenadas de entrega de la orden).
+- **Reúso clave:** borde tipado del webhook `lib/types/whatsapp-webhook.ts` (`metaMessageSchema` +
+  `parseWebhookEventos`, hoy `type=location`→`otro` sin coords), `ChatWhatsappService.ingerirEventos`
+  + insert idempotente por `wa_message_id` (dedupe R8 de la 120), stack Leaflet+react-leaflet+OSM de la
+  feature 97 (`RutaMapa`/`RutaMapaInner`/`ruta-mapa-tipos`, patrón anti-SSR `next/dynamic({ssr:false})`),
+  `Dialog` de shadcn, `useUbicacionActual` (93).
+- **Cambio de esquema:** enum `ChatMensajeTipo` += `ubicacion` + columnas `latitud`/`longitud` nullable
+  en `chat_mensaje` (migración + `down.sql`, patrón `ALTER TYPE ADD VALUE` como `cancelacion_api` de la
+  106).
+- **Gate F1.4 APROBADO** con P1=solo lat/lng, P2=pin + texto "Ubicación compartida" en `text-xs`,
+  P3=GPS al abrir el modal (lazy).
+- **IMPLEMENTADA + reviewer APROBADO 0 bloqueantes** (orquestación directa `backend_dev` →
+  `frontend_dev` → `reviewer`, model opus, sobre el árbol `flow`). Backend: enum
+  `ChatMensajeTipo.ubicacion` + columnas `latitud/longitud` (migración up/down
+  `20260724_chat_mensaje_ubicacion`), normalización `type=location` en `whatsapp-webhook.ts`,
+  propagación service/repo/DTO/vista. Frontend: burbuja con `MapPin`, **`components/ui/dialog.tsx`
+  nuevo** (sobre `@base-ui/react`, modelado en `sheet.tsx`), `UbicacionMapa/UbicacionMapaInner`
+  (Leaflet+OSM anti-SSR, patrón feature 97), GPS lazy vía `useUbicacionActual` con degradación no
+  bloqueante. **16/16 R con test, 156/156 verdes, typecheck 0 en archivos 121.** Detalle en
+  `progress/impl_121_backend.md`, `impl_121_frontend.md`, `review_121.md`.
+- **Deuda menor:** la migración se validó solo por forma estática (falta `apply`/`db:rollback` real);
+  G2 quedó como dos archivos `impl_121_*` en vez de un `impl_121.md`.
+- **⚠️ PENDIENTE (leader) — aterrizaje diferido:** la infraestructura del chat que esto extiende vive
+  como **WIP en `flow`, aún NO en `dev`** (feature 120, hecha, sin PR). Sin commitear todavía. El PR
+  limpio de la 121 se arma cuando aterrice la 120: rama desde `origin/dev` + cherry-pick de la 120 +
+  de la 121. **Al desplegar:** correr la migración `20260724_chat_mensaje_ubicacion` (post-merge a
+  mano; el `.env` apunta a DB compartida).
+
+
+**Etiquetas PDF en la carga por API — feature 136 (2026-07-23; renumerada de 112 en el merge dev→flow por colisión con `112-webhook-payload-data`) → EN ESPECIFICACIÓN.** Pedido del
+humano: "generar las etiquetas de las órdenes cuando se realice la carga masiva, un único PDF
+almacenado en el storage de Supabase" + "retorna la url donde están los PDF del bucket en la
+respuesta de la carga". Backend, `medium`, `depends_on: 88` (done).
+- **Decisiones ya cerradas con el humano** (antes del spec, vía AskUserQuestion): (a) momento = la
+  **carga vía API** (`cargarViaApi`, que ya asigna `num_guia` en el acto; la carga masiva por sesión
+  NO numera, no aplica); (b) generación **server-side**; (c) **un PDF consolidado por lote**;
+  (d) devolver la **URL firmada** en la respuesta del endpoint.
+- **Reúso clave:** `EtiquetaGuiaService.generarEtiquetas` (arma los `EtiquetaGuiaDTO`),
+  `SupabaseFileStorage`/`SupabaseSignedUrlProvider` (`lib/storage/`), `buildPaqueteUrl`. Layout de
+  etiqueta 100×100 mm de `app/(app)/ordenes/_components/etiquetas-pdf.ts` (cliente, feature 32).
+- **Deps nuevas ya instaladas** durante la exploración: `qrcode` + `bwip-js` (pure-JS server-side; el
+  generador de cliente `jspdf`+`jsbarcode`+`qrcode.react` depende del DOM/canvas y no corre en Node).
+- **Fase 1 en curso:** feature 136 en `feature_list.json`; `spec_author` (`model: opus`)
+  lanzado para `specs/136-etiquetas-pdf-carga-api/` (requirements EARS + design + tasks).
+- **Próximo:** al terminar el spec → `spec_ready` + **PARAR en la puerta humana F1.4**. Rama/impl se
+  difieren a Fase 2 en worktree aislado desde `origin/dev` (el `flow` actual arrastra WIP ajeno).
+- **⚠️ Tarea humana al desplegar:** crear el bucket **privado** `etiquetas-guia` en Supabase.
+
+**Chat mensajero↔cliente vía WhatsApp — feature 109 (2026-07-23) → EN ESPECIFICACIÓN.** Pedido del
+humano: "chat que tiene acceso el mensajero, que usa la implementación de WhatsApp como intermediario
+y que a través del webhook registra las respuestas del cliente". Fullstack, high, `depends_on: null`.
+- **Fase 1 en curso:** feature registrada en `feature_list.json` (id 109, `pending`); `spec_author`
+  lanzado (`model: opus`) para `specs/109-chat-mensajero-whatsapp/` (requirements EARS + design + tasks).
+- **Infra WhatsApp ya existente (WIP en `flow`, reutilizable):** `lib/clients/whatsapp-cloud.ts`
+  (`WhatsappCloudClient.enviarTexto`/`enviarPlantilla`, saliente), `lib/config/whatsapp.ts`
+  (credenciales por env), plantillas sincronizadas a Meta (feature 107), `EnviarPlantillaWhatsappButton`
+  en `mis-asignaciones`. **NO existe** webhook de ENTRADA ni tablas de chat → es el núcleo nuevo.
+- **Alcance nuevo:** webhook `app/api/webhooks/whatsapp/route.ts` (GET handshake + POST firmado
+  X-Hub-Signature-256), tablas conversación/mensaje (migración + RLS por asignación), UI de hilo en
+  `mis-asignaciones` respetando la ventana de 24 h de WhatsApp (texto libre dentro, plantilla fuera).
+- **Próximo:** al terminar el spec → `spec_ready` + **PARAR en la puerta humana F1.4** (revisar los 3
+  archivos y resolver las decisiones abiertas). Rama/impl se difieren a Fase 2 en worktree aislado
+  desde `origin/dev` (el `flow` actual arrastra WIP ajeno de WhatsApp).
+
+**Plantillas de mensajes — feature 107 (2026-07-22) → PR #135, falta merge humano.** Subitem
+"Plantillas" en Configuración (rol maestro, `/configuracion/plantillas`): CRUD completo (crear/editar/
+eliminar) + editor que inserta campos variables `{{clave}}` + preview + estado
+(activo/inactivo/pending/refused). Fullstack, sin dependencias (se saltó el id 106 por colisión con
+`specs/106-api-lectura-ordenes/` de sesión paralela; ver también worktree `ordenex-wt-106`).
+
+- **Gate humano APROBADO** con 4 decisiones: (D1) nace `pending`; (D2) el front SOLO desactiva
+  (destino `inactivo`, `z.literal("inactivo")`) — ACTIVAR `pending→activo` NO existe aún; `refused`
+  reservado sin productor; (D3) SOFT DELETE con `deletedAt`; (D4) catálogo de variables ABIERTO/
+  data-driven, `variables text[]` derivadas del cuerpo.
+- **Flujo:** spec_author (31 req EARS) → backend_dev (T1–T7) → frontend_dev (T8–T11 + eliminar) →
+  reviewer. Orquestación directa, `model: opus`. Implementado en worktree aislado **`ordenex-wt-107`**
+  desde `origin/dev` (rama `feature/107-plantillas-mensajes`), 14 commits.
+- **Reviewer APROBADO** (`progress/review_107.md`, viaja en la rama): 31/31 R con test tras cerrar el
+  único bloqueante (R3, test de autorización de la página). typecheck/lint verdes; **82 tests de la
+  feature verdes** (9 archivos).
+- **PR #135 → dev** (spec + review + alta 107 en feature_list viajan en la misma rama). Falta merge
+  humano. ⚠️ Al desplegar: correr la migración `20260722130000_plantilla_mensaje`.
+- Deuda menor diferida: `progress/impl_107.md` no se escribió (M1 del review); tasks.md sin marcas `[x]`.
+
+_Ninguna del lote mensajero en curso._
+
+**Lote mensajero 113–119 — COMPLETO (7/7 mergeadas a `dev`, 2026-07-23).** Detalle en `history.md`.
+113 card detalle+foco (PR #147) · 114 buscador (#150) · 115 marcar-luego (#146) · 116 notas privadas
+(#152) · 117 filtro cantón/distrito (#153) · 118 SINPE (#145) · 119 evidencias 1..N (#148). Nació como
+112–118 y se **renumeró a 113–119** (colisión del ID 112 con `webhook-payload`). Migraciones nuevas:
+115 `orden_mensajero_meta`, 119 `gestion_orden_evidencia`; rename del enum SINPE (118). Se saldó de paso
+un error de lint ajeno de la 120-chat con el PR #151. Despliegue: `prisma migrate deploy`.
+
+**Renumeración del backlog de analítica (2026-07-23, reajustada en el merge dev→flow 2026-07-24).** La
+cadena de analítica (puro registro, sin specs/ramas/código) usaba `120`, que colisionaba con
+`120 = chat-whatsapp`; se desplazó +1 → 121–134. Al mergear `dev` en `flow` el `121` volvió a colisionar,
+ahora con `121 = ubicación-chat-whatsapp` (feature real, con spec + código en disco). Se movió el
+**catálogo de KPIs a `135`** (era 121), y sus dependientes (`122`, `123`) apuntan ahora a `135`; el resto
+de la cadena (122–134) queda intacto. Estado final: `120` = chat-whatsapp, `121` = ubicación,
+`122–134` + `135` = analítica.
+
+_Cierres previos mergeados a `dev`:_ **109** (PR #141), **110** (PR #140), **111** (PR #139), **102** (PR #131).
+
+
+**Flujo de API key — verificación + huecos (2026-07-21).** A pedido del humano se verificó el flujo
+de carga por API key (features 81/82/88, `done`): valida la key por hash SHA-256, carga por endpoint
+expuesto (`POST /api/ordenes/api-key/carga`), genera `num_guia` y devuelve errores por fila. Dos
+huecos → tres features nuevas. **Gate F1.4 APROBADO por el humano.**
+
+> ⚠️ **Colisión de IDs por sesiones paralelas.** Se registraron primero como 98/99/100, pero durante
+> la sesión otras sesiones commitearon a `origin/dev` las features **98–102**. Se **renumeraron a
+> 103/104/105**. Las **ramas de código conservan su slug original** (`feature/98-api-carga-valor-pagar`,
+> `feature/99-webhooks-cambios-estado`) porque ya estaban pusheadas y el classifier bloquea el borrado
+> de ramas remotas. Los specs se movieron a `specs/103-*` y `specs/104-*`.
+
+| # | Feature | Rama | Zona | Estado |
+|---|---------|------|------|--------|
+| 103 | api - `costoEnvio` (flete+IVA) en la carga por API | `feature/98-api-carga-valor-pagar` | backend | reviewer **APROBADO** · **PR #125** → dev (falta merge humano) |
+| 104 | webhooks de cambios de estado (API key) | `feature/99-webhooks-cambios-estado` | backend | reviewer **OK** · **PR #127** → dev (falta merge humano) |
+| 105 | webhooks - UI de registro (Config > API) | `feature/105-webhooks-ui-registro` | frontend | pending (bloqueada por 104; spec sin autoría) |
+
+**Feature 106 — API de lectura/detalle/cancelación de órdenes por API key (2026-07-22).** Ciclo SDD
+completo, backend, high, `depends_on: 88`. Exposición a integradores por API key: GET listado scopeado
+al dueño de la key (`tienda_id = actor.usuarioId`, forzado en el repo), GET detalle por `num_guia` con
+evidencias de entrega/rechazo firmadas (signed URL 5 min, sin PII), y **PUT** cancelar (solo desde
+`en_bodega`/`en_ruta_bodega_principal` → `devuelta_origen`, si no 409) vía `appendCambioEstado`
+(bitácora + webhook 104). Gate F1.4 aprobado por el humano; única migración = `ADD VALUE
+'cancelacion_api'` en el enum `orden_historial_origen_tipo`. Implementada en worktree aislado
+(`ordenex-wt-106`, `backend_dev` model opus): typecheck verde, lint 0, 55 tests nuevos + 68 ripple
+verdes. Reviewer **APROBADO 0 bloqueantes**. Rama `feature/106-api-lectura-ordenes` sincronizada con
+`dev`, pusheada, **PR #132 → dev (falta merge humano)**. Todo el registro (feature_list 106 + spec +
+`impl_106` + `review_106`) viaja commiteado en el propio PR #132 (self-contained). **⚠️ Al desplegar:
+correr `db:migrate` (agrega el valor de enum; no se aplicó pre-merge porque el `.env` apunta a DB
+compartida).**
+
+**Bookkeeping en PR #124** (`chore/registro-features-webhooks-103-105`): feature_list 103/104/105 +
+specs/103 + specs/104 + `review_103` + `review_104`. Los tres PRs (#124, #125, #127) → `dev`, merge humano.
+
+**Decisiones del gate F1.4 (cerradas por el humano):** F103 → `costoEnvio` = flete+IVA, `"0.00"` si la
+tienda no tiene tarifa, campo `costoEnvio`. F104 → registro por **UI en Config>API** (Server Action,
+rol maestro; nace 105), secreto **cifrado AES-256-GCM** (`WEBHOOK_SECRET_ENC_KEY` en env), emite **solo
+órdenes cargadas por API key**, **5 reintentos**, persiste el error de entrega vía `jobs.last_error`.
+
+- **F103:** `feature/98-api-carga-valor-pagar` @ `ae651b7`, pusheada; typecheck 0, suite 3935/3935.
+  `impl_98.md` vive en esa rama. Pendiente: PR hacia `dev`.
+- **F104:** en implementación en worktree aislado (`backend_dev`, `model: opus`). Al mergear:
+  **configurar `WEBHOOK_SECRET_ENC_KEY` en Vercel** o los webhooks no pueden firmar.
+
+> Este registro (feature_list 103/104/105 + specs/103 + specs/104 + esta bitácora) viaja en
+> `chore/registro-features-webhooks-103-105` → PR a `dev` (sin commits directos a `dev`).
+
+El último trabajo previo mergeado fue la **feature 97** (optimización de ruta — frontend): PR #110 a
+`dev`, prod PR #117.
 
 ## Backlog pendiente
 
@@ -44,21 +229,24 @@ vive en su entrada de `feature_list.json`. Las 6 con dependencia la tienen `done
   producción** (`app/` + `lib/`, sin tests). Por ahí se coló el `console.log('xyz')` del PR #75.
   El de `OtpChallengeIssuer` es un **secreto en logs** → lo cubre la feature 80. Algunas pueden
   ser logging de error legítimo: revisar una por una + instalar `no-console` con allowlist.
-- **Suite flaky → `./init.sh` no determinista** (registrado en la bitácora previa; reconfirmar al
-  tocarlo). `HomePage`, `HomePageRol`, `OrdenesModuleReuse` y a veces `CierreDiaPage` caen con
-  `Test timed out in 5000ms` bajo carga de suite completa y **pasan en aislado** (el conteo varía
-  entre corridas). Un gate que miente por exceso entrena a ignorarlo. Candidatos: subir el timeout
-  de vitest, aislar esos archivos, o `retry` acotado.
+- **✅ RESUELTO (2026-07-22, `chore/fix-init-sh-rule4`):** la suite flaky que volvía `./init.sh` no
+  determinista se salda subiendo `testTimeout`/`hookTimeout` de vitest de 5000ms (default) a
+  **20000ms** en `vitest.config.ts`. Los timeouts por contención bajo carga (`HomePage`,
+  `HomePageRol`, `OrdenesModuleReuse`, `CierreDiaPage`, que pasaban en aislado) desaparecieron;
+  `./init.sh` corre la suite verde de forma determinista (verificado 4075/4075). Un test
+  genuinamente colgado sigue fallando a los 20s.
 - **`zonas-migration.test.ts` usa una denylist de migraciones apendida a mano** → se pone rojo con
   cada migración nueva (ya rompió ≥3 veces). Patrón frágil: un test que lista archivos del repo en
   vez de leer código.
 - **Fakes de repositorio a mano y duplicados** (`IUserRepository` triplicado, `IOrdenRepository`
   con ~30 métodos listados a mano) → cada método nuevo del contrato rompe N archivos de test. Un
   builder en `tests/helpers/` lo mataría de raíz.
-- **`./init.sh`: las reglas 3 y 4 no corren de verdad** — dependen de `jq` (ausente) y la regla 4
-  busca `specs/<name>/` cuando la convención real es `specs/<id>-<slug>/`. Con `jq` presente
-  fallaría listando features tempranas sin spec. Además `cancelled` no está en su vocabulario.
-  Opciones: acotar la regla a features NO `done`, o un campo `spec_path` explícito por feature.
+- **✅ RESUELTO (2026-07-22, `chore/fix-init-sh-rule4`):** regla 4 de `init.sh` corregida — resuelve
+  la carpeta de spec por `spec_path` explícito o glob `specs/<id>-*` (antes usaba `.name`, que no
+  matchea el slug), y solo la exige a features **en vuelo** (`spec_ready`/`in_progress`), no a las
+  `done` tempranas (1–16) sin spec. Regla 3 subida a **máx 2 `in_progress` por zona** (decisión del
+  humano), consistente con CLAUDE.md regla 1 y AGENTS.md. `init.sh` verde de punta a punta. Nota:
+  ambas reglas siguen dependiendo de `jq`; si falta, se saltan sin fallar (degradación aceptada).
 - **No hay harness de E2E** (seed + login por rol). Los `e2e/*.spec.ts` están escritos pero usan
   emails placeholder → no se ejecutan. Candidato a feature propia.
 - **`app/(app)/ordenes/_components/ordenes-columns.tsx` es un imán de drift** (ya lo revirtieron 2

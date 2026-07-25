@@ -20,6 +20,11 @@ export interface CargaViaApiOrden {
   numRemision: string;
   numGuia: number;
   estado: string;
+  // Feature 98 (design §2, R5/R7/D2/D3): costo del envio que paga la tienda por esta orden =
+  // FLETE + IVA del flete de su tarifa vigente, money-safe STRING escala 2. NUNCA `null`: el
+  // gap de tarifa (tienda sin tarifa vigente) se representa con "0.00" (D1). Distinto de
+  // `monto_cobrar`/COD (que viaja en el input y no se toca).
+  costoEnvio: string;
 }
 
 export interface CargaViaApiSummary {
@@ -61,7 +66,7 @@ export interface IBulkOrdenService {
    * Feature 88 — carga por API (canal integrador). Reusa los helpers de resolucion/dedup/
    * validacion de `cargarMasiva` (R7), pero: autoriza SOLO al rol `apiKey` (R15); el dueño
    * (`tienda_id`) es el usuario dedicado de la key (`actor.usuarioId`, D4); el estado inicial
-   * es FIJO `en_ruta_bodega_principal` (R8, sin consultar el flag `fulfillment`); y persiste
+   * es FIJO `en_ruta_bodega_central` (R8, sin consultar el flag `fulfillment`); y persiste
    * con `num_guia` inmediato (R9). Nunca lanza por autorizacion (devuelve `forbidden`).
    * Devuelve el summary extendido con `numGuia` por creada + el bloque plano `ordenes` (R10).
    * No hay `dryRun`: el integrador carga en firme.

@@ -1,11 +1,15 @@
 "use server";
 
 import {
+  apiKeyIdSchema,
   generarApiKeySchema,
   listarApiKeysSchema,
+  type ActivarApiKeyResult,
   type ApiKeyActionErrorResult,
+  type DesactivarApiKeyResult,
   type GenerarApiKeyResult,
   type ListarApiKeysResult,
+  type RotarApiKeyResult,
 } from "@/lib/types/api-key";
 import type { Actor, IApiKeyService } from "@/lib/interfaces/services/IApiKeyService";
 import { ApiKeyService } from "@/lib/services/ApiKeyService";
@@ -43,6 +47,24 @@ function toApiKeyActionError(shape: AppErrorShape): ApiKeyActionErrorResult {
   }
   if (err.status === "not_found") {
     throw new Error(`unexpected not_found status in api-keys action: ${shape.code}`);
+  }
+  return err;
+}
+
+/**
+ * Variante para las actions del ciclo de vida (rotar/activar/desactivar), donde
+ * `not_found` (R3) SI es un status esperado y no un bug. A diferencia de
+ * `toApiKeyActionError`, deja pasar `not_found`; sigue rechazando `conflict`, que no tiene
+ * sentido en estas operaciones. En la practica el service produce `not_found` como
+ * RETORNO (no como excepcion), asi que este mapeo solo lo tocan los errores LANZADOS
+ * (UnauthenticatedError, ZodError); admitir `not_found` aqui es defensa en profundidad.
+ */
+function toApiKeyLifecycleActionError(
+  shape: AppErrorShape,
+): ApiKeyActionErrorResult | { status: "not_found" } {
+  const err = toActionError(shape);
+  if (err.status === "conflict") {
+    throw new Error(`unexpected conflict status in api-keys lifecycle action: ${shape.code}`);
   }
   return err;
 }
@@ -93,4 +115,59 @@ export async function listarApiKeys(
     return service.listar(data, actor);
   });
   return isAppErrorShape(r) ? toApiKeyActionError(r) : r;
+}
+
+/**
+ * Ciclo de vida/R1/R2/R3: rota el secreto de una API key. Devuelve el nuevo secreto en
+ * claro UNA sola vez. Autorizacion en dos capas: actor aqui (R1 -> `UnauthenticatedError`),
+ * rol en el service (solo `maestro`). Solo sesion, zod (`id` uuid) y la llamada al service.
+ */
+export async function rotarApiKey(
+  input: unknown,
+  deps: ApiKeyActionDeps = {},
+): Promise<RotarApiKeyResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1
+    const data = apiKeyIdSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.apiKeyService ?? buildApiKeyService();
+    return service.rotar(data, actor);
+  });
+  return isAppErrorShape(r) ? toApiKeyLifecycleActionError(r) : r;
+}
+
+/**
+ * Ciclo de vida/R1/R3/R4: activa una API key (`estado='activa'`). Idempotente. Misma
+ * envoltura que `rotarApiKey`; `not_found` (R3) es un status esperado del ciclo de vida.
+ */
+export async function activarApiKey(
+  input: unknown,
+  deps: ApiKeyActionDeps = {},
+): Promise<ActivarApiKeyResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1
+    const data = apiKeyIdSchema.parse(input);
+    const service = deps.apiKeyService ?? buildApiKeyService();
+    return service.activar(data, actor);
+  });
+  return isAppErrorShape(r) ? toApiKeyLifecycleActionError(r) : r;
+}
+
+/**
+ * Ciclo de vida/R1/R3/R4: desactiva una API key (`estado='inactiva'`, palanca de
+ * revocacion). Idempotente. `not_found` (R3) es un status esperado del ciclo de vida.
+ */
+export async function desactivarApiKey(
+  input: unknown,
+  deps: ApiKeyActionDeps = {},
+): Promise<DesactivarApiKeyResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1
+    const data = apiKeyIdSchema.parse(input);
+    const service = deps.apiKeyService ?? buildApiKeyService();
+    return service.desactivar(data, actor);
+  });
+  return isAppErrorShape(r) ? toApiKeyLifecycleActionError(r) : r;
 }

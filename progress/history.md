@@ -1679,3 +1679,207 @@
   geocodificación en asignación (R9). Backend chico: `MiAsignacionDTO` expone lat/lng (feature 91).
 - Leaflet cargado con `next/dynamic` `ssr:false`. `pnpm build` exit 0. **PR #110**, **desplegada a
   prod (PR #117)**.
+
+## 2026-07-21 — devolución diferida + cron SLA de novedades (feature 99, BACKEND, money-critical)
+- Motor del nuevo flujo de devolución. La orden devuelta ya NO se re-rutea de inmediato (feature
+  47): cuenta como intento y QUEDA en `devuelta` (entra a /novedades). Un cron horario
+  (`/api/cron/procesar-devueltas-sla`, `0 * * * *`, auth `CRON_SECRET`) procesa las vencidas sin
+  resolver: not_found 24h con intentos<3 → libera a la bodega dueña (`en_bodega`/
+  `en_bodega_satelite` por zona, sin mensajero); not_found 3er intento tras 24h → `rechazada`;
+  wrong_number/wrong_address al día 6 → `rechazada`. Ventanas rolling en hora CR, ancladas a la
+  última gestión `devuelta` vigente (SIN columna `devuelta_at`).
+- Requisitos R1–R30 (mapa R→test en `progress/impl_99.md`). Migración: SOLO ALTER del enum
+  `orden_historial_origen_tipo` (+`liberacion_devuelta_sla`/`escalado_devuelta_sla`) con `down.sql`
+  que recrea el tipo; round-trip real verificado en DB desechable.
+- **DINERO (Option A, gate F1.4-Q1):** al escalar, el cron crea una gestión SINTÉTICA
+  `resultado=rechazada` (actor sistema, `cierre_id null`, mensajero de la última devuelta) en la
+  misma tx → el snapshot de la 56 y la wallet 42/69 cobran el ingreso de bodega SIN código
+  monetario nuevo. De paso cierra un hueco preexistente de la 47 (los escalados no generaban
+  ingreso: `ingreso-bodega.ts:23` da 0.00 para `resultado !== rechazada`). Verificado POR MUTACIÓN
+  por el reviewer.
+- Reconcilia la 47 (relocaliza `resolverSeguimientoDevuelta` al cron; tests INVERTIDOS al sentido
+  nuevo, no aflojados) y /novedades 89 (predicado ancla a `estatus = devuelta`; tests invertidos).
+  Todas las transiciones por el choke point `appendCambioEstado` (49); los 2 `origen_tipo` nuevos NO
+  cuentan como intento (destino ≠ `devuelta`).
+- Gate F1.4 aprobado por el humano (las 8 recomendadas + confirmación Q1). Ciclo SDD directo del
+  leader (spec_author → backend_dev → reviewer, `model:opus`). **Reviewer APROBADO 0 bloqueantes.**
+  Medido (implementer + reviewer + leader, independiente): typecheck 0, lint 0, **3950/3950 tests**,
+  round-trip real. Base de 100/101/102. **DEUDA ajena:** `./init.sh` rojo por bug preexistente del
+  harness (`login` sin `specs/login/`), medido idéntico en HEAD limpio — no es de esta feature.
+
+## 2026-07-22 — resolver la novedad: reprogramar (tienda) / recuperar a bodega (feature 100, FULLSTACK)
+- Dos acciones MANUALES que RESUELVEN una novedad y sacan la orden de `devuelta` antes de que venza
+  su ventana SLA (la feature 99 la salta, porque su cron solo actúa sobre las que siguen en
+  `devuelta`). (1) **Reprogramar** (adminTienda, en `/novedades`): tras contactar al cliente,
+  reprograma a la fecha que pida; gestión sintética `resultado=reprogramada` + `fecha_reprogramacion`
+  (`origen_tipo=reprogramacion_tienda`) que reusa INTACTO el bloqueo/liberación de la 46. (2)
+  **Recuperar a bodega** (bodega dueña: maestro/admin en `/ordenes`, adminSatelite en
+  `/recepcion-satelite`): pasa la orden a `en_bodega`/`en_bodega_satelite` por zona, sin mensajero,
+  para un nuevo intento (`origen_tipo=recuperacion_manual`, actor=admin).
+- Requisitos R1–R24 (mapa R→test en `progress/impl_100.md`). Migración: solo ALTER del enum
+  `orden_historial_origen_tipo` (+`reprogramacion_tienda`/`recuperacion_manual`) con `down.sql`;
+  round-trip real verificado por el reviewer (up→down→up). Grupo nuevo `devueltas` en
+  `RecepcionSateliteService.listar` (patrón del `porDevolver` de la 48).
+- Gate F1.4 aprobado por el humano (las 5 recomendadas + bonus): Q1 reprogramar money-neutral y sin
+  contar intento; Q2 recuperar limpia mensajero; Q3 authz server-side (tienda dueña /
+  `esBodegaResponsable`); Q4 sin abrir `/novedades` a la bodega; Q5 sin carrera con el cron 99
+  (UPDATE guardado por `estatus_id=devuelta`, `if count>0`). **Bonus:** NO enciende `orden.prioridad`
+  (es la feature 101).
+- Ciclo SDD directo del leader (spec_author → backend_dev ×2 → frontend_dev → reviewer). **Reviewer
+  APROBADO de código** (RECHAZADO inicial SOLO por `impl_100.md` ausente, ya escrito; sin cambios de
+  código; money-neutralidad y authz verificadas de forma adversarial, sin fuga de `prioridad`).
+  Medido: typecheck 0, lint 0, **4039/4039 tests**, round-trip real. Base para 101 (prioridad) y 102
+  (dinero en cierres). `./init.sh` rojo solo por la deuda ajena preexistente del harness (`login`).
+
+## 2026-07-22 — prioridad de reasignación de las órdenes liberadas por SLA (feature 101, FULLSTACK)
+- Nueva columna `orden.prioridad` (bool, default false). El cron SLA de la feature 99 la **enciende**
+  al liberar una devolución vencida `not_found` a la bodega (`DevolucionSlaRepository.liberarDevueltaSla`),
+  y se **apaga** al reasignar mensajero desde la bodega dueña (`asignarBodegaLote` central /
+  `asignarSateliteLote` satélite). Los listados de reasignación de la bodega dueña ordenan
+  `prioridad DESC` primero y el frontend **resalta la fila** (fondo `bg-warning/15` + badge accesible
+  "Prioritaria") en el apartado `en_bodega` de `/ordenes` (maestro/admin) y el grupo "Recibidas" de
+  `/recepcion-satelite` (adminSatelite).
+- Requisitos R1–R12 (mapa R→test en `progress/impl_101-prioridad-reasignacion.md`). Migración aditiva
+  (`ADD COLUMN` NOT NULL DEFAULT false) con `down.sql` (DROP COLUMN); round-trip real verificado por el
+  reviewer. El escalado y la recuperación manual (100) NO encienden prioridad (R3, test negativo).
+  Sin backfill (R11). El resalte NO se filtra a /novedades ni "Devueltas" (R10, test). Helper compartido
+  `components/shared/PrioridadResalte.tsx`; `DataTable` gana la prop opcional retrocompatible `rowClassName`.
+- Gate F1.4 aprobado por el humano (las 5 recomendadas + prop `rowClassName`). Ciclo directo del leader
+  (spec_author → backend_dev → frontend_dev → reviewer). El `frontend_dev` cayó por límite de sesión a
+  mitad de tarea; el leader retomó y cerró el frontend restante (test R10 de no-fuga, helper aislado,
+  test de migración). **Reviewer APROBADO de código** (RECHAZADO inicial solo por artefactos de
+  trazabilidad, ya cerrados; sin cambios de código de dominio). Medido: typecheck 0, lint 0,
+  **4050/4050 tests**, round-trip real. `./init.sh` rojo solo por la deuda ajena preexistente del
+  harness. Base de la feature 102 (dinero de estos rechazos visible en cierres — pendiente, para mañana).
+
+## 2026-07-22 — 109 orden sin gestionar (cierre vencido + reasignación prioritaria)
+- Al corte diario (41), TODA orden aún en `en_reparto` → nuevo estatus `sin_gestionar` + cierre
+  `vencido` money-neutral que bloquea al mensajero; las órdenes quedan CONGELADAS hasta que se
+  APRUEBE el cierre, ahí se liberan a bodega por zona (`en_bodega`/`en_bodega_satelite`, sin
+  mensajero) con `prioridad=true` (101/110). Todas las transiciones por `appendCambioEstado` (49).
+- **Modelo del cierre revisado (system-wide, 38/111):** solo `aprobado` es TERMINAL;
+  `solicitado`/`vencido`/`rechazado` son abiertos=BLOQUEANTES. Rechazar deja `rechazado` (conserva
+  motivo/auditoría) pero ahora BLOQUEA y es RE-SOLICITABLE (`rechazado→solicitado`, espejo del
+  `vencido`); el conjunto bloqueante pasa a `{solicitado,vencido,rechazado}` en el bloqueo derivado,
+  el SQL anti-TOCTOU de asignación y la exclusión del corte. Invariante: nunca 2 cierres abiertos.
+- Requisitos cubiertos: **R1–R31**. Migraciones aditivas + `down.sql`: `order_status` `sin_gestionar`
+  (es TABLA → `INSERT WHERE NOT EXISTS`) y 2 `origen_tipo` (`corte_sin_gestionar`,
+  `liberacion_sin_gestionar`). SIN migración del enum `CierreEstado`.
+- Gate F1.4 + re-gate cerrados por el humano (3 iteraciones del modelo de rechazo hasta "rechazado
+  bloqueante + re-solicitable, GLOBAL"). typecheck 0, lint 0 err (143 warn baseline), **suite
+  4522/4522**. Reviewer APROBADO (0 bloqueantes). **PR #141 → dev, merge humano 2026-07-22.**
+- **Deuda/decisiones:** (1) los subagentes cayeron por errores de API repetidos (backend ~8,
+  frontend 1, reviewer 4); el leader remató backend/review/verificación a mano (detalle en
+  `impl_109.md`/`review_109.md`). (2) El ripple de los tests-DOWN de enum (67/99/100/106) se saldó
+  agregando los 2 valores nuevos a sus SETS DE EXCLUSIÓN, sin tocar ningún `down.sql` (patrón frágil
+  vivo, como la allow-list de `zonas-migration`). (3) Follow-up no bloqueante: aserción explícita de
+  R13 (aprobar `vencido` money-neutral → 0 wallet), hoy garantizado por construcción. (4) Despliegue:
+  `prisma migrate deploy` en destino (2 migraciones).
+
+## 2026-07-23 — 118 corrección SIMPE → SINPE (medio de pago CR)
+- Rename del VALOR del enum Postgres/Prisma `metodo_pago_value` `SIMPE`→`SINPE` (typo introducido en la
+  feature 36), **reversible**: migración nueva `ALTER TYPE ... RENAME VALUE 'SIMPE' TO 'SINPE'` +
+  `down.sql` inverso (preserva filas, no reescribe; migración histórica intacta).
+- Alcance real ~27 archivos (8 fuentes + 12 tests + migración up/down + test de rename + guard de
+  censo). Identificadores internos NO tocados por regla explícita (`total_simpe`/`totalSimpe`/clave
+  DTO interna `simpe`). El ripple del test frágil `zonas-migration` se saldó excluyendo la migración
+  nueva (patrón conocido).
+- R1–R12 trazados a tests. Guard de censo case-sensitive de `SIMPE` como test Vitest. typecheck 0,
+  lint 0, **4528/4528 tests**. Reviewer APROBADO (0 bloqueantes). **PR #145 → dev, merge humano
+  2026-07-23.** Despliegue: `prisma migrate deploy`.
+- Contexto: nació en el lote mensajero registrado como 112–118 y **renumerado a 113–119** por colisión
+  del ID 112 con `webhook-payload` (PR #144, de otra sesión); esta feature quedó como **118**.
+
+## 2026-07-23 — 115 mensajero: marcar orden para "gestionar más tarde"
+- Marca privada por `(mensajero, orden)`, **solo informativa** (badge + orden visual); no cambia
+  estado/ruta/prioridad ni escribe en el historial. Tabla nueva
+  `orden_mensajero_meta(usuario_id, orden_id, marcar_luego bool default false, nota text NULL,
+  UNIQUE(usuario_id, orden_id))` con RLS habilitada sin policies + 2 FK `ON DELETE CASCADE` +
+  `down.sql`. La columna `nota` **nace aquí** para la feature 116 (que NO crea migración).
+- Server Action `marcarGestionarLuego` con authz por mensajero (`usuario_id` SIEMPRE del actor; valida
+  propiedad de la orden; idempotente por el UNIQUE). `marcarLuego` en `MiAsignacionDTO` (opcional en el
+  tipo, siempre emitido). UI: badge + toggle en la card + `sort` estable que hunde las marcadas al final
+  sin mutar la ruta persistida.
+- R1–R20 trazados a tests. typecheck 0, lint 0, **4568/4568** (4574 tras sync con dev). Reviewer
+  APROBADO (0 bloqueantes). **PR #146 → dev, merge humano 2026-07-23.** Sync trivial con 118
+  (`schema.prisma` auto-merge SINPE+modelo; `zonas-migration` unión de exclusiones). Despliegue:
+  `prisma migrate deploy`. Base de la feature 116 (notas privadas, reusa esta tabla).
+
+## 2026-07-23 — 113 mensajero: card con detalle inline + modo foco al gestionar
+- Cambio de PRESENTACIÓN en `MisAsignacionesModule.tsx` (sin backend/contratos; el bloqueo 1-a-1 no
+  cambia). Cada card de "En reparto" muestra `AsignacionDetalle` inline (Pedido/Entrega/Cobro); se
+  ELIMINA el ocultamiento "Termina la gestión en curso" → la restricción por gestión activa vuelve a ser
+  de ACCIÓN, no de visibilidad.
+- **Modo foco** derivado de `ordenEnGestionId` (sin estado nuevo): colapsa a solo `GestionarOrdenPanel`,
+  oculta cards/mapa/"Por recoger"; se restaura al liberar el puntero. Preserva intactos el badge/toggle/
+  sort de la feature 115.
+- R1–R12 trazados a tests. typecheck 0, lint 0, **4586/4586**. Reviewer APROBADO (rechazo inicial solo por
+  `tasks.md` sin marcar `[x]`, remediado; sin cambios de código). **PR #147 → dev, merge humano 2026-07-23.**
+
+## 2026-07-23 — 119 evidencias de gestión: de 1 a 1..N fotos (máx 3)
+- La evidencia de gestión pasa de 1 foto a **1..3** (entregada/rechazada/devuelta). Tabla nueva
+  `gestion_orden_evidencia` 1:N (FK `gestion_id` CASCADE, `@@unique(gestion_id, indice)`, RLS sin
+  policies) + migración/`down.sql` + **backfill** (portada existente → fila `indice 0`, `content_type`
+  fallback `image/jpeg`).
+- **Expand/contract:** se conservan `gestion_orden.evidencia_storage_path/_content_type` como PORTADA
+  (índice 0) vía dual-write en la misma tx, para NO romper los consumidores de lectura (cierres 37/38/40,
+  API 106, que siguen viendo la portada). Repuntarlos a N fotos = follow-up fuera de alcance.
+- **Atomicidad storage↔DB con compensación:** subida secuencial acumulando lo subido; **rollback total**
+  (`storage.remove` + nada en DB) ante fallo de subida (R10) o de la transacción (R11). Contrato
+  `evidencias: EvidenciaArchivo[]`, `evidenciasSchema` min 1 / max 3, `evidenciaUrls` firmadas; el puente
+  temporal `foldEvidenciaSingular` fue retirado. UI: `GestionarOrdenPanel` multi-select + previews (con
+  revoke) + quitar + tope 3 + bloqueo de envío.
+- R1–R17 trazados a tests. typecheck 0, lint 0, **4644/4644** (tras sync con 113). Reviewer APROBADO.
+  **PR #148 → dev, merge humano 2026-07-23.** Despliegue: `prisma migrate deploy` (tabla + backfill); env
+  opcional `GESTION_MAX_EVIDENCIAS` (default 3); bucket `gestion-evidencias`.
+
+## 2026-07-23 — 114 mensajero: buscador de guías asignadas
+- Input de búsqueda **100% cliente** en `MisAsignacionesModule` (sin backend): filtra ambos grupos por
+  numGuía/numRemisión/destinatario, match parcial insensible a mayúsculas/acentos (reusa `normalizeName`);
+  query vacío → sin filtrar; mensaje "sin resultados" por grupo.
+- **Decisión del gate F1.4:** el mapa de ruta y el panel de detalle reflejan el conjunto FILTRADO
+  (coherencia lista↔mapa), con salvaguarda de que la orden en gestión (`ordenEnGestionId`) nunca se oculta.
+  Integra sobre 113 (foco/detalle) y 115 (badge/toggle/sort), preservados; el buscador solo aplica en la
+  vista de lista.
+- R1–R9 trazados a tests. typecheck 0, lint 0, **4657/4657**. Reviewer APROBADO. **PR #150 → dev, merge
+  humano 2026-07-23.** El `frontend_dev` cayó por un error de API a mitad; el leader lo reanudó y remató
+  (tests + push). Sin migraciones ni env nuevas.
+
+## 2026-07-23 — 116 mensajero: notas privadas por orden
+- Nota de texto libre **privada del mensajero** por orden, distinta de `orden.notas` (nota de la tienda).
+  **SIN migración:** reutiliza la tabla `orden_mensajero_meta` y su columna `nota` de la feature 115.
+- Server Actions `guardarNotaPrivada`/`limpiarNotaPrivada` con authz por mensajero (`usuario_id` SIEMPRE del
+  actor); `upsertNota` PRESERVA `marcar_luego`; `limpiar` = `nota=NULL` idempotente sin borrar la fila;
+  guardar en blanco → limpiar (R5); orden inexistente/ajena → `forbidden` sin excepción cruda. `notaPrivada`
+  en `MiAsignacionDTO` solo del propio actor, vía el `Promise.all` de 115 (sin N+1).
+- UI: editor "Mi nota" en el detalle (separado y etiquetado distinto de "Notas" de tienda) + indicador en la
+  card. Preserva 113/114/115. `orden.notas` nunca se toca (R7).
+- R1–R17 trazados a tests. typecheck 0, lint 0, **4779/4779**. Reviewer APROBADO. **PR #152 → dev, merge
+  humano 2026-07-23.** El backend cayó por un error de API a mitad; el leader lo reanudó y remató. Sin
+  migraciones ni env nuevas.
+
+## 2026-07-23 — 117 mensajero: filtro por cantón y distrito
+- Filtro **100% cliente** por Cantón y Distrito en `MisAsignacionesModule` (sin backend). Dos `Select`
+  encadenados (distrito `disabled` sin cantón; cambiar de cantón resetea distrito; opción "todos" /
+  "Limpiar filtros"); opciones de cantón derivadas del conjunto COMPLETO.
+- **Decisión del gate F1.4:** etiqueta **"Cantón (Provincia)"** (dedup cantón+provincia); el mapa y el panel
+  reflejan el conjunto FILTRADO (R14) con salvaguarda de la orden en gestión (R10). Se **compone en AND** con
+  el buscador de la feature 114 sobre las mismas listas visibles.
+- Preserva 113/114/115/116. R1–R14 trazados a tests. typecheck 0, lint 0, **4804/4804**. Reviewer APROBADO.
+  **PR #153 → dev, merge humano 2026-07-23.** Cierra el lote mensajero 113–119. Sin migraciones ni env nuevas.
+
+## 2026-07-24 — 137 unificar nomenclatura de order_status (rename, opción A del gate)
+- Rename reversible del `value` de 6 estatus para unificar backend↔frontend↔contrato externo:
+  `en_reparto→en_ruta`, `en_espera_aceptacion→por_recoger`, `en_bodega→en_bodega_central`,
+  `en_ruta_bodega_principal→en_ruta_bodega_central`, `devuelta_origen→devolviendo_a_tienda`,
+  `recibido_origen→devuelta_a_tienda`. Migración por `UPDATE order_status.value` (+down.sql), tupla fuente
+  de verdad `ORDER_STATUS_SEED`, etiquetas R8 (= value legible directo), contrato externo API/webhook
+  (breaking R9), barrido de ~180 archivos guardado por censo case-sensitive (R13). NO cambia
+  `orden.estatus_id` (FK por id).
+- Requisitos R1–R13 trazados a tests (`progress/impl_137-order-status-rename-nomenclatura.md`). Reviewer
+  APROBADO-CON-NOTAS, 0 bloqueantes. typecheck 0, lint 0, suite verde.
+- Renumerada 135→137 por colisión de IDs (dev reclamó 135=analítica, 136=etiquetas vía #155 flow); la rama
+  conserva el slug `feature/135-...` (pusheada), patrón 103/104/105. **PR #157 → dev, merge humano 2026-07-24.**
+- DEUDA: la migración NO se aplicó contra DB real (entorno sin `.env`; R2/R3/R4 por test estático +
+  round-trip en memoria). **Al desplegar: `prisma migrate deploy` + verificar `down.sql` con `db:rollback`,
+  coordinado con el deploy** (rename de valores: código y DB deben coincidir). Fundacional del lote 137–140.

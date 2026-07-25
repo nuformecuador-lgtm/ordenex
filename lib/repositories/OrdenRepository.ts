@@ -32,13 +32,64 @@ import {
   type OrderStatusLiteRow,
   type ProvinciaRow,
   type RecepcionSateliteRow,
+  type RechazoSlaTiendaRow,
   type UpdateOrdenData,
+  type ApiOrdenListResult,
+  type ApiOrdenDetalleRow,
+  type ApiOrdenRow,
+  type CancelarViaApiResult,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
+import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 /** Feature 92: unico estatus cuyas ordenes son paradas de la ruta de un mensajero. */
-const ESTATUS_EN_REPARTO = "en_reparto";
+const ESTATUS_EN_REPARTO = "en_ruta";
+
+// Feature 106 (design §4, R19/R20): unicos estados desde los que la tienda puede cancelar
+// una orden via API; cualquier otro (incl. una orden ya en `devolviendo_a_tienda`) es 409.
+const ESTADOS_CANCELABLES_API: readonly string[] = ["en_bodega_central", "en_ruta_bodega_central"];
+
+// Feature 106 — `select` de los campos PUBLICOS de una orden para el canal integrador, y su
+// mapeo a `ApiOrdenRow` (Decimal -> number, estatus.value plano). Un solo lugar para que el
+// listado y el detalle no diverjan en las columnas que exponen.
+const API_ORDEN_SELECT = {
+  numGuia: true,
+  numRemision: true,
+  destinatario: true,
+  telefonoDest: true,
+  producto: true,
+  direccion: true,
+  montoCobrar: true,
+  createdAt: true,
+  estatus: { select: { value: true } },
+} as const;
+
+type ApiOrdenSelectRow = {
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  telefonoDest: string;
+  producto: string;
+  direccion: string | null;
+  montoCobrar: Prisma.Decimal | null;
+  createdAt: Date;
+  estatus: { value: string };
+};
+
+function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
+  return {
+    numGuia: r.numGuia,
+    numRemision: r.numRemision,
+    estatusValue: r.estatus.value,
+    destinatario: r.destinatario,
+    telefonoDest: r.telefonoDest,
+    producto: r.producto,
+    direccion: r.direccion,
+    montoCobrar: r.montoCobrar !== null ? r.montoCobrar.toNumber() : null,
+    createdAt: r.createdAt,
+  };
+}
 
 type OrdenPrismaClient = Pick<
   PrismaClient,
@@ -57,9 +108,11 @@ type OrdenPrismaClient = Pick<
   | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
 >;
 
-// Feature 41 (R12/R16/R17): estados de cierre que BLOQUEAN. `rechazado`/`aprobado` NO
-// bloquean (dinero conciliado o descartado). Fuente de verdad en lib/types/cierre.ts.
-const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido"];
+// Feature 41 (R12/R16/R17) + feature 109 (R29, modelo GLOBAL): estados de cierre ABIERTOS que
+// BLOQUEAN al mensajero. Solo `aprobado` es TERMINAL (dinero conciliado); `rechazado` deja de ser
+// terminal por LOGICA (109) — ahora BLOQUEA y es RE-SOLICITABLE (`rechazado -> solicitado`), igual
+// que `vencido`. Fuente de verdad en lib/types/cierre.ts.
+const ESTADOS_CIERRE_BLOQUEANTES: CierreEstado[] = ["solicitado", "vencido", "rechazado"];
 const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
 
 // Feature 17/R3: nombre CONSTANTE del generador (nunca interpolar entrada de
@@ -80,7 +133,12 @@ const NUM_GUIA_GENERATOR = "siguiente_num_guia()";
 const ORIGEN_RECEPCION_SATELITE = "en_ruta_bodega_satelite";
 // Estado de ORIGEN de la recepcion en la tienda: la orden viaja de vuelta a la
 // tienda ("En ruta a origen") y esta la recibe fisicamente.
-const ORIGEN_RECEPCION_ORIGEN = "devuelta_origen";
+const ORIGEN_RECEPCION_ORIGEN = "devolviendo_a_tienda";
+// Feature 138/R2/R11: estado de ORIGEN de la recepcion en la BODEGA CENTRAL. Es el
+// dead-end de la carga por API (`BulkOrdenService.ESTATUS_INICIAL_API`); la escritura
+// guardada (`recibirEnBodegaCentral`) solo transiciona una orden que sigue en este estado.
+// A diferencia de la satelite/origen, la guarda NO se acota por zona ni por tienda (R11).
+const ORIGEN_RECEPCION_BODEGA_CENTRAL = "en_ruta_bodega_central";
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
 const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
@@ -131,12 +189,26 @@ const RESULTADO_REPROGRAMADA = "reprogramada";
 // (mismo criterio que `contarPorDestinoVigentes`, feature 67).
 const RESULTADO_DEVUELTA = "devuelta";
 
+// Feature 99 (Q7): `order_status.value` en el que REPOSA una devolucion diferida. El predicado
+// de /novedades se ancla a este estado real (no a la gestion vigente).
+const ESTATUS_DEVUELTA = "devuelta";
+
+// Feature 102 (T7): `order_status.value` de una orden rechazada. La superficie de rechazos por
+// SLA de la tienda se ancla a este estado real (mientras la orden REPOSE en `rechazada`, R15).
+const ESTATUS_RECHAZADA = "rechazada";
+
 /**
  * Serializa una fecha `@db.Date` (guardada a medianoche UTC) a `YYYY-MM-DD`.
  * `null`/`undefined` -> `null`. Convencion del repo (ver CierreDiaRepository).
  */
 function toFechaISO(fecha: Date | null | undefined): string | null {
   return fecha ? fecha.toISOString().slice(0, 10) : null;
+}
+
+// Feature 102: money-safe Decimal -> STRING escala 2 fija (nunca number/parseFloat). `null` ->
+// `null` (monto aun sin snapshot). Patron `decimalToString` de los repos de cierre.
+function decimalOrNullToString(d: Prisma.Decimal | null): string | null {
+  return d === null ? null : d.toFixed(2);
 }
 
 const WITH_ESTATUS_Y_TIENDA = {
@@ -201,6 +273,7 @@ function toDTO(row: OrdenRow): OrdenDTO {
     peso: row.peso ? row.peso.toNumber() : null,
     notas: row.notas,
     mensajeroAsignadoId: row.mensajeroAsignadoId, // feature 49/R27: autoriza al mensajero asignado
+    prioridad: row.prioridad, // feature 101/R9: expone el flag de reasignacion prioritaria (sort R6 + resalte R8)
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -389,6 +462,7 @@ const WITH_RECEPCION_SATELITE = {
     direccion: true,
     producto: true,
     montoCobrar: true,
+    prioridad: true, // feature 101/R9: se pide explicito (es un `select`) para el sort R7 + resalte R8
     estatus: { select: { value: true } },
     tienda: { select: { nombre: true } },
     zona: { select: { nombre: true } },
@@ -419,6 +493,7 @@ function toRecepcionSateliteRow(row: OrdenRecepcionSateliteRow): RecepcionSateli
     provinciaNombre: row.provincia.nombre,
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
+    prioridad: row.prioridad, // feature 101/R9: propaga el flag para el sort R7 + resalte R8
   };
 }
 
@@ -500,7 +575,16 @@ export class OrdenRepository implements IOrdenRepository {
         ? { mensajeroAsignadoId: params.where.mensajeroAsignadoId }
         : {}),
     };
-    const orderBy = { [SORT_COLUMN[params.sortBy]]: params.sortDir };
+    // Feature 101/R6: `prioridad DESC` PRIMERO y LUEGO el orden vigente (lista blanca R31:
+    // created_at/num_guia/num_remision). El sort va en la QUERY para respetar la paginacion
+    // (una orden prioritaria flota a la primera pagina, no queda atrapada en la 2). Es GLOBAL
+    // al listado pero INOCUO fuera de `en_bodega_central`: solo ahi (y en bodega satelite) hay
+    // `prioridad = true`; en el resto el desempate booleano cae al criterio vigente sin
+    // alterar el orden observable (R10, sin reordenar superficies ajenas).
+    const orderBy: Prisma.OrdenOrderByWithRelationInput[] = [
+      { prioridad: "desc" },
+      { [SORT_COLUMN[params.sortBy]]: params.sortDir },
+    ];
 
     const [items, total] = await Promise.all([
       this.prisma.orden.findMany({
@@ -707,7 +791,14 @@ export class OrdenRepository implements IOrdenRepository {
       // La zona del distrito vive en la N:M `zona_distrito` (feature 24): es ahi donde
       // la UI/ZonaForm asigna distritos a zonas, NO en la columna escalar distrito.zona_id
       // (que quedo sin poblar). La carga masiva deriva orden.zona_id de esta relacion.
-      select: { id: true, nombre: true, cantonId: true, zonas: { select: { zonaId: true } } },
+      // Feature 98/R2: junto al `zonaId` de la N:M se proyecta `zona.esCentral` (flag que elige
+      // la columna del flete al tarifar la carga por API), sin una consulta extra.
+      select: {
+        id: true,
+        nombre: true,
+        cantonId: true,
+        zonas: { select: { zonaId: true, zona: { select: { esCentral: true } } } },
+      },
     });
     // Un distrito con EXACTAMENTE una zona resuelve orden.zona_id; con 0 zonas -> sin zona
     // asignada (error de fila); con >1 -> ambiguo/no derivable -> null (mismo trato seguro:
@@ -717,6 +808,9 @@ export class OrdenRepository implements IOrdenRepository {
       nombre: d.nombre,
       cantonId: d.cantonId,
       zonaId: d.zonas.length === 1 ? d.zonas[0].zonaId : null,
+      // Feature 98/R2: `esCentral` de la unica zona; `false` si el distrito no resuelve UNA
+      // zona (0 o >1 -> `zonaId` null -> la fila no llega a tarifarse).
+      esCentral: d.zonas.length === 1 ? d.zonas[0].zona.esCentral : false,
     }));
   }
 
@@ -1040,6 +1134,124 @@ export class OrdenRepository implements IOrdenRepository {
     };
   }
 
+  // --- Feature 106: canal integrador de lectura/cancelacion por API key ---
+
+  /**
+   * Feature 106/R6/R7/R11: pagina de ordenes del owner. El scope va FORZADO en el WHERE
+   * (`tienda_id = ownerId` no opcional) + `deleted_at IS NULL`; ningun parametro externo
+   * puede ampliarlo. `estatusId` opcional acota por estado. `total` con el MISMO where para
+   * paginar de forma determinista.
+   */
+  async listByOwner(params: {
+    ownerId: string;
+    estatusId?: string;
+    skip: number;
+    take: number;
+  }): Promise<ApiOrdenListResult> {
+    const where: Prisma.OrdenWhereInput = {
+      tiendaId: params.ownerId, // R6/R7: owner FORZADO
+      deletedAt: null, // R11
+      ...(params.estatusId ? { estatusId: params.estatusId } : {}),
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.orden.findMany({
+        where,
+        orderBy: { createdAt: "desc" }, // orden estable entre paginas (R10)
+        skip: params.skip,
+        take: params.take,
+        select: API_ORDEN_SELECT,
+      }),
+      this.prisma.orden.count({ where }),
+    ]);
+    return { items: rows.map(toApiOrdenRow), total };
+  }
+
+  /**
+   * Feature 106/R12/R13/R14/R15/R18: detalle de una orden del owner por `num_guia`. El scope
+   * va en el WHERE (`tienda_id = ownerId` + `deleted_at IS NULL`): una orden inexistente,
+   * borrada o de OTRO owner devuelve `null` (el service -> 404 uniforme, no filtra existencia).
+   * Incluye (join, sin N+1) las gestiones con evidencia de entrega/rechazo; `[]` si no hay. LEE
+   * `gestion_orden`, nunca escribe.
+   */
+  async findDetalleByNumGuiaForOwner(
+    numGuia: number,
+    ownerId: string,
+  ): Promise<ApiOrdenDetalleRow | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { numGuia, tiendaId: ownerId, deletedAt: null }, // R12/R14/R24: scope forzado
+      select: {
+        ...API_ORDEN_SELECT,
+        gestiones: {
+          where: {
+            resultado: { in: ["entregada", "rechazada"] }, // R15: solo entrega/rechazo
+            evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
+          },
+          select: {
+            resultado: true,
+            evidenciaStoragePath: true,
+            evidenciaContentType: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+    if (!row) return null;
+    return {
+      ...toApiOrdenRow(row),
+      evidencias: row.gestiones.map((g) => ({
+        // `resultado` esta acotado por el WHERE a estos dos valores.
+        resultado: g.resultado as "entregada" | "rechazada",
+        // El WHERE exige `evidencia_storage_path` no nulo; el `!` es seguro.
+        storagePath: g.evidenciaStoragePath!,
+        contentType: g.evidenciaContentType,
+      })),
+    };
+  }
+
+  /**
+   * Feature 106/R19-R26: cancela una orden del owner en UNA transaccion (R25). Pre-lee la
+   * orden por `num_guia` DENTRO de la tx exigiendo `tienda_id = ownerId` + `deleted_at IS NULL`
+   * (R23/R24 -> `not_found`). Si su estado no es cancelable -> `conflict` sin escribir (R20).
+   * En estado cancelable: `UPDATE orden.estatus_id = devueltaOrigenEstatusId` + `appendCambioEstado`
+   * (`origenTipo:'cancelacion_api'`, `motivo:'cancelada por tienda'`, actor = ownerId) en la MISMA
+   * tx (R21/R22/R26). NO escribe en `gestion_orden`. El outbox de webhooks (feature 104) viaja
+   * dentro de `appendCambioEstado`.
+   */
+  async cancelarViaApi(params: {
+    numGuia: number;
+    ownerId: string;
+    devueltaOrigenEstatusId: string;
+  }): Promise<CancelarViaApiResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const orden = await tx.orden.findFirst({
+        where: { numGuia: params.numGuia, tiendaId: params.ownerId, deletedAt: null },
+        select: { id: true, estatusId: true, estatus: { select: { value: true } } },
+      });
+      if (!orden) return { status: "not_found" }; // R23/R24
+      const estadoActual = orden.estatus.value;
+      if (!ESTADOS_CANCELABLES_API.includes(estadoActual)) {
+        return { status: "conflict", estadoActual }; // R20 (incl. ya devolviendo_a_tienda)
+      }
+      // R19/R25: transiciona y registra en la MISMA tx.
+      await tx.orden.update({
+        where: { id: orden.id },
+        data: { estatusId: params.devueltaOrigenEstatusId },
+      });
+      await appendCambioEstado(tx, [
+        {
+          ordenId: orden.id,
+          estatusOrigenId: orden.estatusId, // R22: estado previo real
+          estatusDestinoId: params.devueltaOrigenEstatusId, // devolviendo_a_tienda
+          actorUsuarioId: params.ownerId, // R22: actor = actor.usuarioId (= owner)
+          origenTipo: "cancelacion_api", // R22
+          motivo: "cancelada por tienda", // R26: marcador semantico en la bitacora
+        },
+      ]);
+      return { status: "ok", estadoAnterior: estadoActual };
+    });
+  }
+
   /** R28: subconjunto de `ids` con rol `mensajero`, SIN filtro de zona. */
   async findMensajeroIdsValidos(ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
@@ -1105,7 +1317,7 @@ export class OrdenRepository implements IOrdenRepository {
     if (decisiones.length === 0) return [];
     return this.prisma.$transaction(async (tx) => {
       // Feature 49/#3 (R20): estatus de ORIGEN por orden, leido dentro de la tx antes de
-      // escribir (cada orden puede venir de en_fulfillment/en_preparacion/en_bodega).
+      // escribir (cada orden puede venir de en_fulfillment/en_preparacion/en_bodega_central).
       const origenRows = await tx.orden.findMany({
         where: { id: { in: decisiones.map((d) => d.ordenId) } },
         select: { id: true, estatusId: true },
@@ -1137,7 +1349,7 @@ export class OrdenRepository implements IOrdenRepository {
           throw new Error(`num_guia no asignado para la orden ${d.ordenId}`);
         }
         resultados.push({ ordenId: d.ordenId, numGuia: updated.numGuia });
-        // R11: destino real por orden (en_espera_aceptacion/en_bodega/en_ruta_bodega_satelite).
+        // R11: destino real por orden (por_recoger/en_bodega_central/en_ruta_bodega_satelite).
         entradas.push({
           ordenId: d.ordenId,
           estatusOrigenId: origenById.get(d.ordenId) ?? null,
@@ -1171,7 +1383,9 @@ export class OrdenRepository implements IOrdenRepository {
       const result = await tx.orden.updateMany({
         where: { id: { in: ordenIds } },
         // Feature 76/R23 (W2): al fijar el mensajero, estampa `asignado_at = now`.
-        data: { mensajeroAsignadoId: mensajeroId, estatusId, asignadoAt: new Date() },
+        // Feature 101/R5 (gate F1.4-Q1): al reasignar desde la bodega central apaga
+        // `prioridad` en la MISMA escritura (una orden no hereda prioridad a ciclos futuros).
+        data: { mensajeroAsignadoId: mensajeroId, estatusId, asignadoAt: new Date(), prioridad: false },
       });
       // R8: registra SOLO las filas efectivamente afectadas (las existentes).
       await appendCambioEstado(
@@ -1290,6 +1504,13 @@ export class OrdenRepository implements IOrdenRepository {
   /**
    * Feature 33/R6/R8/R9: ordenes NO borradas de `zonaId` cuyo `estatus.value`
    * esta en `estatusValues`, con nombres legibles de tienda/geografia. Solo query.
+   *
+   * Feature 101/R7: ordena `prioridad DESC` PRIMERO y LUEGO `createdAt DESC` (recencia,
+   * criterio vigente). El sort va en la QUERY (no en memoria) para respetar la paginacion:
+   * una orden prioritaria flota a la primera pagina. Solo el grupo "Recibidas"
+   * (`en_bodega_satelite`) tiene prioritarias; los demas grupos que devuelve el mismo query
+   * (por recibir / rechazada / devuelta) tienen `prioridad = false`, asi que el desempate es
+   * inocuo para ellos (R10, sin reordenar por prioridad superficies ajenas).
    */
   async findRecepcionSateliteByZona(
     zonaId: string,
@@ -1302,6 +1523,7 @@ export class OrdenRepository implements IOrdenRepository {
         deletedAt: null, // R6: excluye borradas
         estatus: { value: { in: estatusValues } },
       },
+      orderBy: [{ prioridad: "desc" }, { createdAt: "desc" }], // R7: prioridad-first + recencia
       ...WITH_RECEPCION_SATELITE,
     });
     return rows.map(toRecepcionSateliteRow);
@@ -1357,7 +1579,7 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * Recepcion en la tienda de ORIGEN (`devuelta_origen` -> `recibido_origen`), cierre
+   * Recepcion en la tienda de ORIGEN (`devolviendo_a_tienda` -> `devuelta_a_tienda`), cierre
    * del flujo de devolucion. Espejo EXACTO de `recibirEnSatelite` cambiando la guarda
    * de zona por la de tienda: updateMany guardado + append del historial en la MISMA
    * tx (choke point de la feature 49), con el origen pre-leido bajo la misma guarda.
@@ -1371,7 +1593,7 @@ export class OrdenRepository implements IOrdenRepository {
     historial: HistorialContexto,
   ): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
-      // Origen pre-leido con la MISMA guarda (estado devuelta_origen + tienda).
+      // Origen pre-leido con la MISMA guarda (estado devolviendo_a_tienda + tienda).
       const actual = await tx.orden.findFirst({
         where: {
           id: ordenId,
@@ -1399,6 +1621,57 @@ export class OrdenRepository implements IOrdenRepository {
             estatusDestinoId: destinoEstatusId,
             actorUsuarioId: historial.actorUsuarioId,
             origenTipo: historial.origenTipo, // ajuste_estado (como la devolucion)
+          },
+        ]);
+      }
+      return result.count === 1;
+    });
+  }
+
+  /**
+   * Feature 138/R2/R3/R9/R18: recepcion en la BODEGA CENTRAL
+   * (`en_ruta_bodega_central` -> `en_bodega_central`), cierre del dead-end de la carga
+   * por API. Espejo EXACTO de `recibirEnOrigen`/`recibirEnSatelite` pero SIN guarda de
+   * tienda ni de zona: la bodega central es global (R11). La UNICA guarda es el estado de
+   * ORIGEN + no borrada, impuesta en el propio `updateMany` (concurrencia-segura, R9): a lo
+   * sumo UNA de dos recepciones concurrentes afecta 1 fila. Origen pre-leido bajo la misma
+   * guarda; append del historial (`origenTipo = recepcion_bodega_central`) SOLO si transiciono
+   * (count 1), en la MISMA tx (choke point feature 49: historial + outbox de webhook). NO toca
+   * `mensajeroAsignadoId` ni `numGuia` (R18).
+   */
+  async recibirEnBodegaCentral(
+    ordenId: string,
+    destinoEstatusId: string,
+    historial: HistorialContexto,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      // Origen pre-leido con la MISMA guarda (estado en_ruta_bodega_central + no borrada).
+      // SIN zona/tienda: cualquier orden en el origen es elegible (R11).
+      const actual = await tx.orden.findFirst({
+        where: {
+          id: ordenId,
+          deletedAt: null,
+          estatus: { value: ORIGEN_RECEPCION_BODEGA_CENTRAL },
+        },
+        select: { estatusId: true },
+      });
+      const result = await tx.orden.updateMany({
+        where: {
+          id: ordenId,
+          deletedAt: null,
+          estatus: { value: ORIGEN_RECEPCION_BODEGA_CENTRAL },
+        },
+        data: { estatusId: destinoEstatusId },
+      });
+      // R3/R9: SOLO si transiciono (count 1); una orden que perdio la carrera no deja rastro.
+      if (result.count === 1 && actual !== null) {
+        await appendCambioEstado(tx, [
+          {
+            ordenId,
+            estatusOrigenId: actual.estatusId,
+            estatusDestinoId: destinoEstatusId,
+            actorUsuarioId: historial.actorUsuarioId,
+            origenTipo: historial.origenTipo, // recepcion_bodega_central
           },
         ]);
       }
@@ -1451,12 +1724,16 @@ export class OrdenRepository implements IOrdenRepository {
   // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
 
   /**
-   * Feature 34/R7/R14: transiciona el lote a `en_espera_aceptacion` fijando
+   * Feature 34/R7/R14: transiciona el lote a `por_recoger` fijando
    * `mensajeroAsignadoId`, con escritura guardada por estado de ORIGEN + zona (solo
    * las que sigan en `origenEstatusId`, de `zonaId` y no borradas; patron
    * `recibirEnSatelite`, concurrencia-segura). Filtra por `estatusId` (id ya
    * resuelto por el service), NO por `estatus.value`. NUNCA toca `numGuia` (R8).
    * Devuelve el numero de filas efectivamente transicionadas.
+   *
+   * Feature 101/R5 (gate F1.4-Q1): al reasignar desde la bodega SATELITE apaga
+   * `"prioridad" = false` en el MISMO `SET` (paridad con `asignarBodegaLote`), asi una
+   * orden liberada por SLA no arrastra prioridad a ciclos futuros.
    */
   async asignarSateliteLote(
     ordenIds: string[],
@@ -1486,6 +1763,7 @@ export class OrdenRepository implements IOrdenRepository {
         SET "mensajero_asignado_id" = ${mensajeroId},
             "asignado_at" = NOW(),
             "estatus_id" = ${destinoEstatusId},
+            "prioridad" = false,
             "updated_at" = NOW()
         WHERE "id" IN (${Prisma.join(ordenIds)})
           AND "estatus_id" = ${origenEstatusId}
@@ -1494,7 +1772,7 @@ export class OrdenRepository implements IOrdenRepository {
           AND NOT EXISTS (
             SELECT 1 FROM "cierre_dia" c
             WHERE c."mensajero_id" = ${mensajeroId}
-              AND c."estado" IN ('solicitado', 'vencido')
+              AND c."estado" IN ('solicitado', 'vencido', 'rechazado')
           )
         RETURNING "id"`;
       await appendCambioEstado(
@@ -1594,45 +1872,41 @@ export class OrdenRepository implements IOrdenRepository {
   // --- Feature 87/89: lista de novedades (devoluciones del mensajero de la tienda) ---
 
   /**
-   * Feature 89/R1-R8: predicado CENTRAL de una NOVEDAD, extraido para que `count` y `find`
-   * usen EXACTAMENTE el mismo `where` (garantiza R8: total y pagina cuentan el mismo universo).
-   * Una orden es novedad si: es de la tienda del actor (R9), no esta borrada (R5), su estatus
-   * ACTUAL NO esta en `cerrados` (R2/R3: `{entregada, devuelta_origen, recibido_origen}`) y
-   * tiene AL MENOS una gestion de devolucion VIGENTE (`resultado="devuelta"`, `anuladaAt IS
-   * NULL`, R1/R7) via la back-relation `gestiones` (`some`). No filtra por estatus actual =
-   * `devuelta` (bug de la feature 87): la feature 47 saca la orden de `devuelta` en la misma tx.
+   * Feature 99/R7-R9 (Q7): predicado CENTRAL de una NOVEDAD, ANCLADO AL ESTADO REAL. Extraido
+   * para que `count` y `find` usen EXACTAMENTE el mismo `where` (R8: total y pagina cuentan el
+   * mismo universo). Una orden es novedad si: es de la tienda del actor (R9), no esta borrada
+   * (R5) y su estatus ACTUAL ES `devuelta` (R7). Bajo la feature 99 la orden REPOSA en `devuelta`
+   * hasta que el cron SLA la libere/escale o la feature 100 la resuelva; al salir de `devuelta`
+   * cae del predicado sin doble conteo (R8). Reemplaza el predicado anterior por gestion vigente
+   * + estatus abierto (feature 89): ya no hace falta, el estado real es la fuente unica.
    */
-  private novedadWhere(tiendaId: string, cerrados: string[]): Prisma.OrdenWhereInput {
+  private novedadWhere(tiendaId: string): Prisma.OrdenWhereInput {
     return {
       tiendaId,
       deletedAt: null, // R5: excluye borradas
-      estatus: { value: { notIn: cerrados } }, // R2/R3: solo mientras no este cerrada
-      gestiones: {
-        some: { resultado: RESULTADO_DEVUELTA, anuladaAt: null }, // R1/R7: gestion devuelta VIGENTE
-      },
+      estatus: { value: ESTATUS_DEVUELTA }, // R7: solo mientras REPOSE en `devuelta`
     };
   }
 
-  /** Feature 89/R1-R8: cuenta las NOVEDADES de `tiendaId` (predicado central, mismo `where` que find). */
-  async countDevueltasByTienda(tiendaId: string, cerrados: string[]): Promise<number> {
+  /** Feature 99/R7/R8: cuenta las NOVEDADES de `tiendaId` (predicado central, mismo `where` que find). */
+  async countDevueltasByTienda(tiendaId: string): Promise<number> {
     return this.prisma.orden.count({
-      where: this.novedadWhere(tiendaId, cerrados),
+      where: this.novedadWhere(tiendaId),
     });
   }
 
   /**
-   * Feature 89/R1-R8/R12: una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado central
-   * que `countDevueltasByTienda` (R8), ordenada por `Orden.createdAt` desc (fallback documentado
-   * de R12; el service reordena por la fecha de la gestion vigente). Select minimo: solo lo que
-   * consume el DTO + `createdAt`.
+   * Feature 99/R7/R8/R9: una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado central
+   * que `countDevueltasByTienda` (R8), ordenada por `Orden.createdAt` desc (fallback documentado;
+   * el service reordena por la fecha de la ultima gestion `devuelta` vigente, R9). Select minimo:
+   * solo lo que consume el DTO + `createdAt`.
    */
   async findDevueltasByTienda(
     tiendaId: string,
-    cerrados: string[],
     pagination: { skip: number; take: number },
   ): Promise<NovedadOrdenRow[]> {
     const rows = await this.prisma.orden.findMany({
-      where: this.novedadWhere(tiendaId, cerrados),
+      where: this.novedadWhere(tiendaId),
       orderBy: { createdAt: "desc" },
       skip: pagination.skip,
       take: pagination.take,
@@ -1673,6 +1947,71 @@ export class OrdenRepository implements IOrdenRepository {
       }
     }
     return map;
+  }
+
+  // --- Feature 102: rechazos por SLA de la tienda (superficie derivada de solo-lectura) ---
+
+  /**
+   * Feature 102/R12-R15: predicado CENTRAL de un RECHAZO POR SLA, ANCLADO AL ESTADO REAL.
+   * Extraido para que `count` y `find` compartan EXACTAMENTE el mismo `where` (R15: total y pagina
+   * sobre el mismo universo). Una orden entra si: es de la tienda del actor (R13), no esta borrada
+   * (R15), su estatus ACTUAL es `rechazada` Y tiene AL MENOS una transicion del cron SLA en su
+   * historial (`origen_tipo = escalado_devuelta_sla`, feature 99). Un rechazo MANUAL del mensajero
+   * (sin esa transicion) NO entra. Al salir de `rechazada` o al borrarse, deja de casar (R15).
+   */
+  private rechazoSlaWhere(tiendaId: string): Prisma.OrdenWhereInput {
+    return {
+      tiendaId, // R13: acotada a la tienda del actor
+      deletedAt: null, // R15: excluye borradas
+      estatus: { value: ESTATUS_RECHAZADA }, // R12/R15: solo mientras REPOSE en `rechazada`
+      historialEstados: { some: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA } }, // R12: alcanzada por el cron SLA
+    };
+  }
+
+  /** Feature 102/R12/R13/R15: cuenta los rechazos por SLA de `tiendaId` (mismo `where` que find). */
+  async countRechazadasSlaByTienda(tiendaId: string): Promise<number> {
+    return this.prisma.orden.count({ where: this.rechazoSlaWhere(tiendaId) });
+  }
+
+  /**
+   * Feature 102/R12/R14/R15: una PAGINA de rechazos por SLA de `tiendaId` con el MISMO predicado
+   * que `countRechazadasSlaByTienda` (R15), ordenada por `Orden.createdAt` desc. El `monto` sale de
+   * la gestion sintetica SLA (la enlazada por la transicion `origen_tipo = escalado_devuelta_sla`),
+   * traida en el MISMO query via la relacion `historialEstados` acotada -> sin N+1. Money-safe:
+   * `ingreso_bodega_rechazo` (Decimal) -> STRING escala 2, o `null` si aun sin snapshot (Q2).
+   */
+  async findRechazadasSlaByTienda(
+    tiendaId: string,
+    pagination: { skip: number; take: number },
+  ): Promise<RechazoSlaTiendaRow[]> {
+    const rows = await this.prisma.orden.findMany({
+      where: this.rechazoSlaWhere(tiendaId),
+      orderBy: { createdAt: "desc" },
+      skip: pagination.skip,
+      take: pagination.take,
+      select: {
+        id: true,
+        numGuia: true,
+        numRemision: true,
+        destinatario: true,
+        // La transicion del cron SLA enlaza la gestion sintetica que porta el monto de 56. Se
+        // acota al origen SLA y a la mas reciente (defensivo: una orden tiene a lo sumo una).
+        historialEstados: {
+          where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { gestion: { select: { ingresoBodegaRechazo: true } } },
+        },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      numGuia: r.numGuia,
+      numRemision: r.numRemision,
+      destinatario: r.destinatario,
+      // Money-safe: el snapshot de 56 (Decimal) -> STRING escala 2; `null` = pendiente de cierre.
+      monto: decimalOrNullToString(r.historialEstados[0]?.gestion?.ingresoBodegaRechazo ?? null),
+    }));
   }
 }
 

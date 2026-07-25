@@ -20,12 +20,23 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
+import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
+import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 
-// Estados de ORIGEN que la resolucion puede transicionar (R12). Feature 41/E1 (R19):
-// ademas de `solicitado`, un `vencido` (creado por el corte diario) es resoluble por la
-// bodega responsable reusando la auditoria existente; resolverlo desbloquea (R15). Los
-// totales NO se recalculan (R4).
-const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado", "vencido"];
+// Estados de ORIGEN que la resolucion NORMAL (aprobar/rechazar) puede transicionar (R12).
+// Feature 111/R15 (Q1-B): se RETIRA `vencido` (revierte parcialmente la 41 R19). El approve/
+// reject normal opera SOLO sobre `solicitado`: el flujo normal de un `vencido` es que el
+// mensajero lo solicite (`vencido -> solicitado`, R6) o que el admin lo destrabe por la
+// VALVULA DE ESCAPE (`forzarSolicitudVencido`, R16) y luego lo apruebe/rechace ya como
+// `solicitado`. Los totales NO se recalculan (R4).
+const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado"];
+
+// Feature 111/R16 + feature 109/R28: estados que la VALVULA DE ESCAPE toca. Transiciona un cierre
+// ABIERTO ABANDONADO (`vencido` o —modelo GLOBAL 109— `rechazado`) a `solicitado`, en nombre del
+// mensajero ausente que dejaria su bodega bloqueada; guardada por estado. Solo cambia `estado`.
+const ESTADOS_REABRIBLES: CierreEstado[] = ["vencido", "rechazado"];
+const ESTADO_SOLICITADO: CierreEstado = "solicitado";
 
 // Feature 42/T8: la resolucion del cierre ahora orquesta una transaccion (para alimentar
 // la wallet atomicamente al aprobar, R5/R7) -> el cliente necesita `$transaction`.
@@ -69,6 +80,9 @@ export const DETALLE_ADMIN_SELECT = {
 } as const;
 
 // Feature 69/T18 — lo que aporta la GESTION (que NO se congela: es suyo, no de la orden).
+// Feature 102/T2 (R1/R3): + la relacion `historialEstados` ACOTADA al origen SLA (feature 99),
+// para DERIVAR `esRechazoSla` por gestion sin columna/migracion nueva. `where` + `take: 1` la
+// dejan barata (a lo sumo una fila por gestion); el util `esRechazoSla` es el predicado.
 export const GESTION_ADMIN_SELECT = {
   id: true,
   ordenId: true,
@@ -80,6 +94,11 @@ export const GESTION_ADMIN_SELECT = {
   evidenciaStoragePath: true,
   pagoMensajero: true, // feature 39: snapshot del pago al mensajero
   ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo
+  historialEstados: {
+    where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA }, // feature 102/R1: solo la fila del cron SLA
+    take: 1,
+    select: { origenTipo: true },
+  },
 } as const;
 
 type DetalleAdminRow = Prisma.CierreDetailGetPayload<{ select: typeof DETALLE_ADMIN_SELECT }>;
@@ -201,6 +220,9 @@ export function toPendienteRowDesdeSnapshot(
     evidenciaStoragePath: g.evidenciaStoragePath,
     pagoMensajero: decimalToString(g.pagoMensajero),
     ingresoBodegaRechazo: decimalToString(g.ingresoBodegaRechazo),
+    // Feature 102/R1/R9: `true` si la gestion tiene una transicion del cron SLA enlazada
+    // (`historialEstados` ya viene acotado a ese origen por `GESTION_ADMIN_SELECT`).
+    esRechazoSla: esRechazoSla(g.historialEstados),
     ingresoOrdenex: toIngresoOrdenex(g, d),
   };
 }
@@ -355,7 +377,8 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * igual.
    */
   async resolverCierre(input: ResolverCierreInput): Promise<ResolverCierreResult> {
-    const { cierreId, alcance, nuevoEstado, resueltoPor, motivoRechazo } = input;
+    const { cierreId, alcance, nuevoEstado, resueltoPor, motivoRechazo, liberacionSinGestionar } =
+      input;
     const alcanceGuard = alcanceWhere(alcance);
 
     const count = await this.prisma.$transaction(async (tx) => {
@@ -397,6 +420,73 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         if (movsMensajero.egresoCaja.length > 0) {
           await this.walletMovimientoRepo.crearMovimientos(tx, movsMensajero.egresoCaja);
         }
+
+        // Feature 109 (T3.1, R16-R19/R22/R27): LIBERA a bodega las ordenes `sin_gestionar` del
+        // mensajero del cierre, EXCLUSIVAMENTE en esta rama `aprobado` (un RECHAZO no libera, R27) y
+        // en la MISMA tx (atomico con la transicion del cierre y los wallets). Money-neutral: solo
+        // toca `orden.*` (NO recalcula snapshots, R23). Un cierre NORMAL (sin `sin_gestionar`) o una
+        // 2.ª corrida encuentran 0 filas -> no-op sin tocar `prioridad` (R19/R20).
+        if (liberacionSinGestionar) {
+          const cierre = await tx.cierreDia.findUnique({
+            where: { id: cierreId },
+            select: { mensajeroId: true },
+          });
+          if (cierre !== null) {
+            const {
+              sinGestionarEstatusId,
+              enBodegaEstatusId,
+              enBodegaSateliteEstatusId,
+              centralZonaId,
+            } = liberacionSinGestionar;
+            // R16/R19: ordenes `sin_gestionar` del mensajero (guarda por estatus + propiedad).
+            const ordenes = await tx.orden.findMany({
+              where: {
+                mensajeroAsignadoId: cierre.mensajeroId,
+                estatusId: sinGestionarEstatusId,
+                deletedAt: null,
+              },
+              select: { id: true, zonaId: true },
+            });
+            if (ordenes.length > 0) {
+              // R16: destino por ZONA de la ORDEN (resolverDestinoCierre, misma regla 99/100).
+              const idsByDestino = new Map<string, string[]>();
+              for (const o of ordenes) {
+                const { destinoTipo } = resolverDestinoCierre(o.zonaId, centralZonaId);
+                const destinoEstatusId =
+                  destinoTipo === "bodega_central" ? enBodegaEstatusId : enBodegaSateliteEstatusId;
+                const arr = idsByDestino.get(destinoEstatusId);
+                if (arr) arr.push(o.id);
+                else idsByDestino.set(destinoEstatusId, [o.id]);
+              }
+              for (const [destinoEstatusId, ids] of idsByDestino) {
+                // R16/R17/R19: molde de `recuperarABodega` — updateMany GUARDADO por
+                // `estatus_id = sin_gestionar`, limpia mensajero/asignado_at + `prioridad = true`.
+                const movidas = await tx.orden.updateMany({
+                  where: { id: { in: ids }, estatusId: sinGestionarEstatusId, deletedAt: null },
+                  data: {
+                    estatusId: destinoEstatusId,
+                    mensajeroAsignadoId: null, // R16: handoff limpio a la bodega
+                    asignadoAt: null, // R16
+                    prioridad: true, // R17: reasignacion prioritaria (101/110)
+                  },
+                });
+                // R18/R22: choke point SOLO de las que transicionaron; actor = admin, origen dedicado.
+                if (movidas.count > 0) {
+                  await appendCambioEstado(
+                    tx,
+                    ids.map((ordenId) => ({
+                      ordenId,
+                      estatusOrigenId: sinGestionarEstatusId,
+                      estatusDestinoId: destinoEstatusId,
+                      actorUsuarioId: resueltoPor, // R18: el admin que aprobo
+                      origenTipo: "liberacion_sin_gestionar", // R18
+                    })),
+                  );
+                }
+              }
+            }
+          }
+        }
       }
       return res.count;
     });
@@ -408,5 +498,31 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       where: { id: cierreId, ...alcanceGuard },
     });
     return enAlcance > 0 ? "conflict" : "fuera_de_alcance"; // R12 vs R13
+  }
+
+  /**
+   * Feature 111/R16 — VALVULA DE ESCAPE. `updateMany` guardado por estado (`vencido`) + alcance;
+   * SOLO cambia `estado` (money-safe, R16/R21: no toca snapshot ni `resuelto_por`/`resuelto_at`).
+   * `count === 0` -> `conflict` (existe en alcance pero ya no es `vencido`) o `fuera_de_alcance`.
+   * NO alimenta wallets ni corre en $transaction: no es una resolucion (no mueve dinero), solo
+   * reencamina el `vencido` al flujo normal de aprobacion. El desbloqueo ocurre al APROBAR (R18).
+   */
+  async forzarSolicitudVencido(cierreId: string, alcance: Alcance): Promise<ResolverCierreResult> {
+    const alcanceGuard = alcanceWhere(alcance);
+
+    // R16 + feature 109/R28: guardia por estado ABIERTO ('vencido'|'rechazado') + alcance en el
+    // WHERE (anti-TOCTOU). SOLO `estado` (money-safe).
+    const res = await this.prisma.cierreDia.updateMany({
+      where: { id: cierreId, estado: { in: ESTADOS_REABRIBLES }, ...alcanceGuard },
+      data: { estado: ESTADO_SOLICITADO },
+    });
+    if (res.count === 1) return "updated";
+
+    // count 0: distinguir "existe en alcance pero ya no es vencido" (conflict) de "fuera de
+    // alcance / inexistente" (fuera_de_alcance) — mismo patron que `resolverCierre`.
+    const enAlcance = await this.prisma.cierreDia.count({
+      where: { id: cierreId, ...alcanceGuard },
+    });
+    return enAlcance > 0 ? "conflict" : "fuera_de_alcance";
   }
 }

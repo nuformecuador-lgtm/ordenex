@@ -12,6 +12,14 @@
     {
       "path": "/api/cron/procesar-jobs",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/procesar-devueltas-sla",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-plantillas-whatsapp",
+      "schedule": "0 3 * * *"
     }
   ]
 }

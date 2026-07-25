@@ -48,6 +48,11 @@ export interface CierreDetalleGestion {
   // `entregada && pago === "0.00"` de la 39, para entregas Y rechazos. En el detalle admin
   // (38/40), donde no se re-resuelve la tarifa (snapshot), es `false` por defecto.
   tarifaFaltante: boolean;
+  // Feature 102/R9/R11: `true` si la gestion `rechazada` fue escalada por el cron SLA (99),
+  // `false` si es un rechazo manual del mensajero (o cualquier otro resultado). En el detalle
+  // admin (38/40) alimenta la marca por fila; en la vista EN VIVO del mensajero (37) es `false`
+  // por defecto (esa vista no expone el desglose SLA).
+  esRechazoSla: boolean;
   /**
    * Desglose del ingreso de Ordenex (flete, IVA, comision) + la tarifa congelada de esa
    * orden. Solo lo pueblan los detalles de ADMIN (38/40), que leen del snapshot; en la vista
@@ -166,6 +171,16 @@ export type ListarCierreDiaServiceResult =
       puedesSolicitar: boolean; // R10/R11: false si hay pendientes o no hay gestiones
       motivoBloqueo: string | null; // texto accionable si !puedesSolicitar
       cierresPasados: CierrePasadoDTO[]; // R18
+      // Feature 111/R13 (datos): `true` si el mensajero tiene un cierre `vencido` en el
+      // histórico (derivado de `cierresPasados`, sin query extra). Habilita el CTA
+      // diferenciado "Solicitar aprobación del cierre vencido" en la UI, con independencia de
+      // `puedesSolicitar`. El service SIEMPRE lo puebla; opcional en el tipo por retrocompat.
+      tieneVencido?: boolean;
+      // Feature 109/R31 (datos): `true` si el mensajero tiene un cierre `rechazado` en el
+      // histórico. En el modelo GLOBAL un `rechazado` NO es terminal: bloquea y es RE-SOLICITABLE.
+      // Habilita el MISMO CTA de re-solicitud que el `vencido` (111/R13). SIEMPRE poblado;
+      // opcional por retrocompat.
+      tieneRechazado?: boolean;
     }
   | { status: "forbidden" };
 
@@ -173,13 +188,25 @@ export type ListarCierreDiaServiceResult =
 // determinan todo). `conflict` cubre R10 (pendientes) / R11 (vacio) / R12
 // (duplicado); `validation_error` cubre R16 (sin zona).
 export type SolicitarCierreServiceResult =
-  | { status: "ok"; cierreId: string; totales: CierreTotales; destinoTipo: CierreDestinoTipo }
+  | {
+      status: "ok";
+      // Feature 111/R6/P2 + feature 109/R28: distingue el toast del cliente. `creado` = cierre nuevo
+      // (flujo 37); `vencido_solicitado` = transición vencido→solicitado (R6/R8);
+      // `rechazado_solicitado` = transición rechazado→solicitado (109/R28), ambas SIN cierre nuevo
+      // ni snapshot. El service SIEMPRE lo puebla; opcional en el tipo por retrocompat.
+      via?: "creado" | "vencido_solicitado" | "rechazado_solicitado";
+      // Presentes SOLO en la rama de creación (`via: "creado"`); ausentes al transicionar un
+      // vencido (R8: no se re-lee ni recalcula el snapshot money-critical del cierre).
+      cierreId?: string;
+      totales?: CierreTotales;
+      destinoTipo?: CierreDestinoTipo;
+    }
   | { status: "forbidden" } // rol != mensajero (R1)
-  | { status: "conflict"; motivo: string } // R10 pendientes / R11 vacio / R12 duplicado
+  | { status: "conflict"; motivo: string } // R10 pendientes / R11 vacio / R12 duplicado / 111 R7
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }; // R16 sin zona
 
 // Feature 67/R1-R6/R8-R10 — resultado del deshacer. `ok` devuelve el `ordenId` para que la
-// vista sepa que orden volvio a `en_reparto`. `forbidden` cubre R8 (rol != mensajero) y R9
+// vista sepa que orden volvio a `en_ruta`. `forbidden` cubre R8 (rol != mensajero) y R9
 // (gestion ajena o inexistente: NO se distinguen, para no revelar datos de gestiones ajenas).
 // `conflict` con motivo ACCIONABLE cubre R2 (ya en un cierre), R3 (ya deshecha), R4 (no es la
 // mas reciente), R5 (la orden ya se movio) y R6 (orden borrada). `validation_error` cubre el
@@ -206,7 +233,7 @@ export interface ICierreDiaService {
   solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult>;
   /**
    * Feature 67/R1-R6/R8/R9/R18/R19 — DESHACE una gestion: la ANULA con rastro (no la borra,
-   * decision 2 del humano) y devuelve su orden a `en_reparto` con su mensajero, de forma
+   * decision 2 del humano) y devuelve su orden a `en_ruta` con su mensajero, de forma
    * atomica. La VENTANA es `cierre_id IS NULL` (decision 1): antes de solicitar el cierre.
    * Solo el propio mensajero dueño de la gestion (F1.4-f); cualquier otro rol -> `forbidden`.
    * NO toca el puntero `usuario.orden_en_gestion_id` (R29/R30, F1.4-c): la orden se retoma con

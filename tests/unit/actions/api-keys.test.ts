@@ -1,35 +1,61 @@
 import { describe, it, expect, vi } from "vitest";
-import { generarApiKey } from "@/lib/actions/api-keys";
+import {
+  activarApiKey,
+  desactivarApiKey,
+  generarApiKey,
+  rotarApiKey,
+} from "@/lib/actions/api-keys";
 import type { Actor, IApiKeyService } from "@/lib/interfaces/services/IApiKeyService";
-import type { GenerarApiKeyResult, ListarApiKeysResult } from "@/lib/types/api-key";
+import type {
+  CambiarEstadoApiKeyResult,
+  GenerarApiKeyResult,
+  ListarApiKeysResult,
+  RotarApiKeyResult,
+} from "@/lib/types/api-key";
 
 // Feature 81 — Server Action. `deps` inyectados: no toca cookies reales ni Prisma.
 
+const UUID = "11111111-1111-4111-8111-111111111111";
+
 /**
- * Feature 82: `IApiKeyService` ahora exige `listar`. En los tests de `generarApiKey` no
- * debe invocarse nunca: stub que falla ruidosamente en vez de devolver un vacio.
+ * Stubs de los metodos que NO ejercita el test en curso: fallan ruidosamente en vez de
+ * devolver un vacio que haria pasar un test por la razon equivocada.
  */
-function listarStub(): Pick<IApiKeyService, "listar"> {
+function otrosStubs(): Pick<IApiKeyService, "listar" | "rotar" | "activar" | "desactivar"> {
   return {
     listar: vi.fn(async (): Promise<ListarApiKeysResult> => {
-      throw new Error("listar no debe invocarse desde generarApiKey");
+      throw new Error("listar no debe invocarse aqui");
     }),
+    rotar: vi.fn(async (): Promise<RotarApiKeyResult> => {
+      throw new Error("rotar no debe invocarse aqui");
+    }),
+    activar: vi.fn(async (): Promise<CambiarEstadoApiKeyResult> => {
+      throw new Error("activar no debe invocarse aqui");
+    }),
+    desactivar: vi.fn(async (): Promise<CambiarEstadoApiKeyResult> => {
+      throw new Error("desactivar no debe invocarse aqui");
+    }),
+  };
+}
+
+function apiKeyPublico(estado: "activa" | "inactiva" = "activa") {
+  return {
+    id: "key-1",
+    identificador: "Tienda Uno",
+    keyPrefix: "ordx_abc1234",
+    estado,
+    usuarioId: "u-dedicado",
+    createdAt: new Date("2026-07-16T12:00:00Z"),
   };
 }
 
 function okService(): IApiKeyService {
   return {
-    ...listarStub(),
+    ...otrosStubs(),
     generar: vi.fn(
       async (): Promise<GenerarApiKeyResult> => ({
         status: "ok",
-        apiKey: {
-          id: "key-1",
-          identificador: "Tienda Uno",
-          keyPrefix: "ordx_abc1234",
-          usuarioId: "u-dedicado",
-          createdAt: new Date("2026-07-16T12:00:00Z"),
-        },
+        apiKey: apiKeyPublico(),
         plainKey: "ordx_secreto",
       }),
     ),
@@ -117,7 +143,7 @@ describe("generarApiKey (action) — propagacion del service (R2/R11/R18)", () =
 
   it("R2: propaga el forbidden del service", async () => {
     const service: IApiKeyService = {
-      ...listarStub(),
+      ...otrosStubs(),
       generar: vi.fn(async (): Promise<GenerarApiKeyResult> => ({ status: "forbidden" })),
     };
     const r = await generarApiKey(
@@ -129,12 +155,118 @@ describe("generarApiKey (action) — propagacion del service (R2/R11/R18)", () =
 
   it("R11: propaga el conflict del service con su campo", async () => {
     const service: IApiKeyService = {
-      ...listarStub(),
+      ...otrosStubs(),
       generar: vi.fn(
         async (): Promise<GenerarApiKeyResult> => ({ status: "conflict", campo: "email" }),
       ),
     };
     const r = await generarApiKey({ identificador: "Tienda Uno" }, { getActor: actor, apiKeyService: service });
     expect(r).toEqual({ status: "conflict", campo: "email" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ciclo de vida — rotarApiKey / activarApiKey / desactivarApiKey (actions)
+// ---------------------------------------------------------------------------
+
+const maestro = async (): Promise<Actor> => ({ usuarioId: "u-maestro", rol: "maestro" });
+
+/** Service con rotar/activar/desactivar sobrescritos; el resto lanza (otrosStubs). */
+function lifecycleService(overrides: Partial<IApiKeyService>): IApiKeyService {
+  return { ...okService(), ...otrosStubs(), ...overrides };
+}
+
+describe("rotarApiKey (action) — autenticacion y validacion (R1)", () => {
+  it("R1: sin sesion -> unauthenticated, sin tocar el service", async () => {
+    const rotar = vi.fn();
+    const r = await rotarApiKey({ id: UUID }, { getActor: async () => null, apiKeyService: lifecycleService({ rotar }) });
+    expect(r).toEqual({ status: "unauthenticated" });
+    expect(rotar).not.toHaveBeenCalled();
+  });
+
+  it("id no-uuid -> validation_error, sin tocar el service", async () => {
+    const rotar = vi.fn();
+    const r = await rotarApiKey({ id: "no-uuid" }, { getActor: maestro, apiKeyService: lifecycleService({ rotar }) });
+    expect(r.status).toBe("validation_error");
+    expect(rotar).not.toHaveBeenCalled();
+  });
+});
+
+describe("rotarApiKey (action) — propagacion del service (R2/R3)", () => {
+  it("R2: propaga ok con el nuevo secreto en claro y la key publica (sin keyHash)", async () => {
+    const rotar = vi.fn(
+      async (): Promise<RotarApiKeyResult> => ({
+        status: "ok",
+        apiKey: apiKeyPublico(),
+        plainKey: "ordx_nuevosecreto",
+      }),
+    );
+    const r = await rotarApiKey({ id: UUID }, { getActor: maestro, apiKeyService: lifecycleService({ rotar }) });
+    expect(rotar).toHaveBeenCalledWith({ id: UUID }, { usuarioId: "u-maestro", rol: "maestro" });
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.plainKey).toBe("ordx_nuevosecreto");
+      expect(r.apiKey).not.toHaveProperty("keyHash");
+    }
+  });
+
+  it("R3: propaga not_found del service", async () => {
+    const rotar = vi.fn(async (): Promise<RotarApiKeyResult> => ({ status: "not_found" }));
+    const r = await rotarApiKey({ id: UUID }, { getActor: maestro, apiKeyService: lifecycleService({ rotar }) });
+    expect(r).toEqual({ status: "not_found" });
+  });
+
+  it("R1: propaga forbidden del service (rol != maestro)", async () => {
+    const rotar = vi.fn(async (): Promise<RotarApiKeyResult> => ({ status: "forbidden" }));
+    const r = await rotarApiKey(
+      { id: UUID },
+      { getActor: async () => ({ usuarioId: "u1", rol: "admin" }), apiKeyService: lifecycleService({ rotar }) },
+    );
+    expect(r).toEqual({ status: "forbidden" });
+  });
+});
+
+describe("activarApiKey / desactivarApiKey (actions) — R1/R3/R4", () => {
+  it("R4: activar propaga ok con la key publica actualizada", async () => {
+    const activar = vi.fn(
+      async (): Promise<CambiarEstadoApiKeyResult> => ({ status: "ok", apiKey: apiKeyPublico("activa") }),
+    );
+    const r = await activarApiKey({ id: UUID }, { getActor: maestro, apiKeyService: lifecycleService({ activar }) });
+    expect(activar).toHaveBeenCalledWith({ id: UUID }, { usuarioId: "u-maestro", rol: "maestro" });
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.apiKey.estado).toBe("activa");
+  });
+
+  it("R4: desactivar propaga ok con la key publica actualizada", async () => {
+    const desactivar = vi.fn(
+      async (): Promise<CambiarEstadoApiKeyResult> => ({ status: "ok", apiKey: apiKeyPublico("inactiva") }),
+    );
+    const r = await desactivarApiKey({ id: UUID }, { getActor: maestro, apiKeyService: lifecycleService({ desactivar }) });
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.apiKey.estado).toBe("inactiva");
+  });
+
+  it("R3: activar/desactivar propagan not_found", async () => {
+    const activar = vi.fn(async (): Promise<CambiarEstadoApiKeyResult> => ({ status: "not_found" }));
+    const desactivar = vi.fn(async (): Promise<CambiarEstadoApiKeyResult> => ({ status: "not_found" }));
+    expect(
+      await activarApiKey({ id: UUID }, { getActor: maestro, apiKeyService: lifecycleService({ activar }) }),
+    ).toEqual({ status: "not_found" });
+    expect(
+      await desactivarApiKey({ id: UUID }, { getActor: maestro, apiKeyService: lifecycleService({ desactivar }) }),
+    ).toEqual({ status: "not_found" });
+  });
+
+  it("R1: sin sesion -> unauthenticated para ambas, sin tocar el service", async () => {
+    const activar = vi.fn();
+    const desactivar = vi.fn();
+    expect(
+      await activarApiKey({ id: UUID }, { getActor: async () => null, apiKeyService: lifecycleService({ activar }) }),
+    ).toEqual({ status: "unauthenticated" });
+    expect(
+      await desactivarApiKey({ id: UUID }, { getActor: async () => null, apiKeyService: lifecycleService({ desactivar }) }),
+    ).toEqual({ status: "unauthenticated" });
+    expect(activar).not.toHaveBeenCalled();
+    expect(desactivar).not.toHaveBeenCalled();
   });
 });

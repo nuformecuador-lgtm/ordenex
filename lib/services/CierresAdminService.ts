@@ -14,6 +14,7 @@ import type {
   AprobarCierreServiceResult,
   CierreAdminResumen,
   CierreDetalleAdminServiceResult,
+  ForzarSolicitudVencidoServiceResult,
   ICierresAdminService,
   ListarCierresAdminServiceResult,
   RechazarCierreServiceResult,
@@ -24,6 +25,7 @@ import {
   pagoTiendaOrdenex,
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
+import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
 
 // Roles autorizados en el modulo (R1): acceso total (maestro/admin -> bodega central) y el
 // adminSatelite (su bodega). Cualquier otro -> forbidden.
@@ -32,9 +34,16 @@ const ROL_ADMIN_SATELITE = "adminSatelite";
 // Mensaje accionable cuando falta el motivo de rechazo (R11).
 const MSG_MOTIVO_REQUERIDO = "El motivo de rechazo es obligatorio.";
 
+// Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
+// aprobar (destinos de bodega por zona de la orden).
+const ESTADO_SIN_GESTIONAR = "sin_gestionar";
+const ESTADO_EN_BODEGA = "en_bodega_central";
+const ESTADO_EN_BODEGA_SATELITE = "en_bodega_satelite";
+
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
-type OrdenRepo = Pick<IOrdenRepository, "findUsuarioZonaId">;
+// Feature 109 (T3.1): + `findEstatusIdByValue` para resolver los estatus destino de la liberacion.
+type OrdenRepo = Pick<IOrdenRepository, "findUsuarioZonaId" | "findEstatusIdByValue">;
 
 // Resultado interno de resolver el alcance del actor (R2/R3).
 type AlcanceResult =
@@ -144,13 +153,50 @@ export class CierresAdminService implements ICierresAdminService {
       totalesIngreso.comisionConIva,
     );
 
-    return { status: "ok", cierre: resumen, grupos, totalesIngreso, ganancia, pagoTienda };
+    // Feature 102/R4-R8/R10: desglose SLA/manual del ingreso de bodega por rechazos, particionando
+    // los montos por gestion YA snapshoteados por su clasificacion (esRechazoSla). SOLO LECTURA
+    // (R6/R16): el `total` se LEE del snapshot del cierre (no se recomputa); la particion asegura
+    // `sla + manual === total` (R5). El alcance satelite recibe este mismo desglose (R10).
+    const desglose = desglosarIngresoBodegaPorOrigen(found.gestiones);
+    const desgloseIngresoBodegaRechazos = {
+      sla: desglose.totalSla,
+      manual: desglose.totalManual,
+      total: resumen.totalIngresoBodegaRechazos, // snapshot leido (R6), no recomputado
+    };
+
+    return {
+      status: "ok",
+      cierre: resumen,
+      grupos,
+      totalesIngreso,
+      desgloseIngresoBodegaRechazos,
+      ganancia,
+      pagoTienda,
+    };
   }
 
   async aprobarCierre(cierreId: string, actor: Actor): Promise<AprobarCierreServiceResult> {
     const scope = await this.resolveAlcance(actor);
     if (scope.status === "forbidden") return { status: "forbidden" }; // R1
     if (scope.status === "sinZona") return { status: "no_encontrada" }; // R13
+
+    // Feature 109 (T3.1, R16): resuelve la config de la LIBERACION de `sin_gestionar` (estatus
+    // destino por zona + zona central). Se pasa SOLO al aprobar; el repo la corre DENTRO de la tx,
+    // guardada por `estatus_id = sin_gestionar` (no-op si el cierre no tiene ordenes congeladas,
+    // R20). Si el catalogo no tiene los estados (seed pendiente) -> undefined (no libera, defensivo).
+    const [sinGestionarEstatusId, enBodegaEstatusId, enBodegaSateliteEstatusId, centralZonaId] =
+      await Promise.all([
+        this.ordenRepo.findEstatusIdByValue(ESTADO_SIN_GESTIONAR),
+        this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA),
+        this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA_SATELITE),
+        this.zonaRepo.findCentralZonaId(),
+      ]);
+    const liberacionSinGestionar =
+      sinGestionarEstatusId !== null &&
+      enBodegaEstatusId !== null &&
+      enBodegaSateliteEstatusId !== null
+        ? { sinGestionarEstatusId, enBodegaEstatusId, enBodegaSateliteEstatusId, centralZonaId }
+        : undefined;
 
     // R10/R12-R15: transicion guardada. Aprobar limpia motivoRechazo (null).
     const res = await this.repo.resolverCierre({
@@ -159,6 +205,7 @@ export class CierresAdminService implements ICierresAdminService {
       nuevoEstado: "aprobado",
       resueltoPor: actor.usuarioId, // R14
       motivoRechazo: null,
+      liberacionSinGestionar, // feature 109/R16: libera `sin_gestionar` en la misma tx
     });
     if (res === "updated") return { status: "ok", cierreId, estado: "aprobado" };
     if (res === "conflict") return { status: "conflict" }; // R12
@@ -193,6 +240,24 @@ export class CierresAdminService implements ICierresAdminService {
     if (res === "updated") return { status: "ok", cierreId, estado: "rechazado" };
     if (res === "conflict") return { status: "conflict" }; // R12
     return { status: "no_encontrada" }; // fuera_de_alcance (R13)
+  }
+
+  async forzarSolicitudVencido(
+    cierreId: string,
+    actor: Actor,
+  ): Promise<ForzarSolicitudVencidoServiceResult> {
+    // R16: acotada al alcance del admin (rol+zona destino), MISMO resolver que aprobar/rechazar.
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R1
+    if (scope.status === "sinZona") return { status: "no_encontrada" }; // R13
+
+    // R16: transicion guardada por estado ('vencido') + alcance en el repo. Money-safe (R21):
+    // NO recalcula el snapshot ni toca `resuelto_por`/`resuelto_at`. R18: NO desbloquea; el
+    // desbloqueo ocurre al APROBAR el `solicitado` resultante (que registra la auditoria, R17).
+    const res = await this.repo.forzarSolicitudVencido(cierreId, scope.alcance);
+    if (res === "updated") return { status: "ok", cierreId, estado: "solicitado" };
+    if (res === "conflict") return { status: "conflict" }; // ya no es `vencido`
+    return { status: "no_encontrada" }; // fuera_de_alcance / inexistente (R13)
   }
 }
 

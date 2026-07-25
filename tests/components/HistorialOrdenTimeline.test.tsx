@@ -34,7 +34,7 @@ const ENTRADAS: OrdenHistorialEntradaDTO[] = [
     createdAt: new Date("2026-01-01T10:00:00Z"),
   },
   {
-    estatusOrigenValue: "en_reparto",
+    estatusOrigenValue: "en_ruta",
     estatusDestinoValue: "reprogramada",
     origenTipo: "gestion",
     actorNombre: "Ana Mensajera",
@@ -43,7 +43,7 @@ const ENTRADAS: OrdenHistorialEntradaDTO[] = [
   },
   {
     estatusOrigenValue: "reprogramada",
-    estatusDestinoValue: "en_bodega",
+    estatusDestinoValue: "en_bodega_central",
     origenTipo: "liberacion_reprogramada",
     actorNombre: null,
     motivo: null,
@@ -57,17 +57,17 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
 
     // Etiquetas legibles (estatus-label), una por value presente en las entradas.
     expect(screen.getByText(L.en_preparacion)).toBeInTheDocument();
-    expect(screen.getByText(L.en_reparto)).toBeInTheDocument();
-    expect(screen.getByText(L.en_bodega)).toBeInTheDocument();
+    expect(screen.getByText(L.en_ruta)).toBeInTheDocument();
+    expect(screen.getByText(L.en_bodega_central)).toBeInTheDocument();
     // "reprogramada" aparece 2 veces (destino de la 2.ª entrada, origen de la 3.ª).
     expect(screen.getAllByText(L.reprogramada)).toHaveLength(2);
 
     // Los values crudos NO se muestran (R30).
     for (const value of [
       "en_preparacion",
-      "en_reparto",
+      "en_ruta",
       "reprogramada",
-      "en_bodega",
+      "en_bodega_central",
     ]) {
       expect(screen.queryByText(value)).toBeNull();
     }
@@ -82,8 +82,8 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     // Orden cronológico: creación primero, liberación del sistema al final.
     expect(within(items[0]).getByText("Creación")).toBeInTheDocument();
     expect(within(items[0]).getByText(L.en_preparacion)).toBeInTheDocument();
-    expect(within(items[1]).getByText(L.en_reparto)).toBeInTheDocument();
-    expect(within(items[2]).getByText(L.en_bodega)).toBeInTheDocument();
+    expect(within(items[1]).getByText(L.en_ruta)).toBeInTheDocument();
+    expect(within(items[2]).getByText(L.en_bodega_central)).toBeInTheDocument();
     // Actor null -> "Sistema" (R21/R29), en la última entrada.
     expect(within(items[2]).getByText(/Sistema/)).toBeInTheDocument();
   });
@@ -109,10 +109,10 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
 
   // ---------- Feature 48 (T11.1, R15) — retorno a la tienda de origen ----------
 
-  it("R15: incluye la transición 'rechazada → devuelta_origen' como una entrada más, con su actor y timestamp", () => {
+  it("R15: incluye la transición 'rechazada → devolviendo_a_tienda' como una entrada más, con su actor y timestamp", () => {
     const entradas: OrdenHistorialEntradaDTO[] = [
       {
-        estatusOrigenValue: "en_reparto",
+        estatusOrigenValue: "en_ruta",
         estatusDestinoValue: "rechazada",
         origenTipo: "gestion",
         actorNombre: "Ana Mensajera",
@@ -121,7 +121,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
       },
       {
         estatusOrigenValue: "rechazada",
-        estatusDestinoValue: "devuelta_origen",
+        estatusDestinoValue: "devolviendo_a_tienda",
         origenTipo: "ajuste_estado",
         actorNombre: "Bodega Central",
         motivo: null,
@@ -135,8 +135,8 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     // La última entrada es el retorno a la tienda de origen.
     const retorno = items[items.length - 1];
     // Etiqueta legible del destino (R15/R30), NUNCA el value crudo.
-    expect(within(retorno).getByText(L.devuelta_origen)).toBeInTheDocument();
-    expect(within(retorno).queryByText("devuelta_origen")).toBeNull();
+    expect(within(retorno).getByText(L.devolviendo_a_tienda)).toBeInTheDocument();
+    expect(within(retorno).queryByText("devolviendo_a_tienda")).toBeNull();
     // Origen legible "rechazada" y actor de la bodega que ejecutó el retorno.
     expect(within(retorno).getByText(L.rechazada)).toBeInTheDocument();
     expect(within(retorno).getByText(/Bodega Central/)).toBeInTheDocument();

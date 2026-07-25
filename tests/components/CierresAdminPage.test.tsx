@@ -23,6 +23,8 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
+  // Feature 111/R16: válvula de escape consumida por el módulo hijo.
+  forzarSolicitudVencido: vi.fn(),
 }));
 // Feature 40: la página, role-aware, pre-fetch los datos de cierre de bodega por rol
 // (adminSatelite → consolidación; maestro → cola/histórico). Se mockean para aislar

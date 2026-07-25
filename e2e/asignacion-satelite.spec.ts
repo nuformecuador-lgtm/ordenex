@@ -9,18 +9,18 @@ import { test, expect, type Page } from "@playwright/test";
  *  region selects one or more orders (state `en_bodega_satelite`, of their zone)
  *  via the per-row checkbox → clicks "Asignar" → picks a courier of their zone in
  *  the modal Select → confirms → the batch transitions
- *  `en_bodega_satelite` → `en_espera_aceptacion` and a success toast is shown.
+ *  `en_bodega_satelite` → `por_recoger` and a success toast is shown.
  *
  * MANUAL VERIFICATION (not automatable here):
  *  - The downstream consumption by the courier module (feature 36, "Recoger" →
- *    `en_reparto`) is verified by e2e/mis-asignaciones.spec.ts and manually; this
- *    spec stops at `en_espera_aceptacion` (the boundary of feature 34, R17).
+ *    `en_ruta`) is verified by e2e/mis-asignaciones.spec.ts and manually; this
+ *    spec stops at `por_recoger` (the boundary of feature 34, R17).
  *
  * EXECUTION NOTE:
  * These tests require:
  * - A running Next.js dev server (pnpm dev)
  * - A test database with Supabase/Postgres and the `en_bodega_satelite` and
- *   `en_espera_aceptacion` catalog values seeded (features 33/17 migrations applied)
+ *   `por_recoger` catalog values seeded (features 33/17 migrations applied)
  * - A seeded `adminSatelite` user WITH a `zonaId`, at least one order already in
  *   `en_bodega_satelite` in that same zone (so "Recibidas" is non-empty), and at
  *   least one `mensajero` user in that same zone (so the modal Select is non-empty)
@@ -64,7 +64,7 @@ test.describe("Asignación satélite — asignar mensajero de la zona", () => {
     await page.goto("/recepcion-satelite");
   });
 
-  test("seleccionar orden recibida → Asignar mensajero → en_espera_aceptacion", async ({
+  test("seleccionar orden recibida → Asignar mensajero → por_recoger", async ({
     page,
   }) => {
     // The "Recibidas" region lists orders in `en_bodega_satelite` of the zone.
@@ -96,7 +96,7 @@ test.describe("Asignación satélite — asignar mensajero de la zona", () => {
     // Success feedback (toast) confirms the batch transition.
     await expect(page.getByText(/Mensajero asignado a/i)).toBeVisible();
 
-    // After router.refresh(), the order left "Recibidas" (now en_espera_aceptacion),
+    // After router.refresh(), the order left "Recibidas" (now por_recoger),
     // so it is no longer selectable there.
     await expect(
       recibidas.getByRole("checkbox", {

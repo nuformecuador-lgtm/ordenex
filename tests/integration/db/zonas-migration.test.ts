@@ -184,7 +184,28 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         // num_guia no secuencial: apendidas despues. La segunda reemplaza la
         // permutacion de la primera (dejaba delta constante entre consecutivas).
         !d.endsWith("_num_guia_no_secuencial") &&
-        !d.endsWith("_num_guia_feistel"),
+        !d.endsWith("_num_guia_feistel") &&
+        // feature 104 (rama feature/99): apendidas despues (enum de job_tipo + tabla de suscripcion de webhook).
+        !d.endsWith("_job_tipo_webhook_estado") &&
+        !d.endsWith("_webhook_suscripcion") &&
+        !d.endsWith("_orden_historial_origen_tipo_sla_devuelta") && // feature 99: apendida despues
+        !d.endsWith("_orden_historial_origen_tipo_resolver_novedad") && // feature 100: apendida despues
+        !d.endsWith("_orden_prioridad") && // feature 101: apendida despues
+        !d.endsWith("_cancelacion_api_por_key") && // feature 106: apendida despues
+        !d.endsWith("_api_key_estado") && // merge origin/dev: apendida despues
+        !d.endsWith("_plantilla_mensaje") && // feature 107: apendida despues
+        !d.endsWith("_order_status_sin_gestionar") && // feature 109: apendida despues
+        !d.endsWith("_orden_historial_origen_sin_gestionar") && // feature 109: apendida despues
+        !d.endsWith("_orden_mensajero_meta") && // feature 115: apendida despues
+        !d.endsWith("_metodo_pago_rename_simpe_to_sinpe") && // feature 118: apendida despues
+        !d.endsWith("_gestion_orden_evidencia") && // feature 119: apendida despues
+        !d.endsWith("_job_tipo_whatsapp_template_sync") && // integracion WhatsApp: apendida despues
+        !d.endsWith("_plantilla_template_id") && // integracion WhatsApp: apendida despues
+        !d.endsWith("_chat_whatsapp") && // feature 120: apendida despues
+        !d.endsWith("_job_tipo_whatsapp_chat_envio") && // feature 120: apendida despues
+        !d.endsWith("_chat_mensaje_ubicacion") && // feature 121: apendida despues
+        !d.endsWith("_order_status_rename_nomenclatura") && // feature 137 (rename order_status): apendida despues
+        !d.endsWith("_orden_historial_origen_recepcion_bodega_central"), // feature 138 (recepcion bodega central): apendida despues
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);

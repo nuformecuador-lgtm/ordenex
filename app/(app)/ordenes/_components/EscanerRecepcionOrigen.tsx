@@ -12,7 +12,7 @@ import { estatusLabel } from "./estatus-label";
 
 // Escáner de la tienda en `/ordenes`: cierra el flujo de devolución. El adminTienda
 // escanea el QR de la etiqueta de una orden que viaja de vuelta ("En ruta a origen")
-// y la marca como recibida en su tienda (`devuelta_origen` -> `recibido_origen`).
+// y la marca como recibida en su tienda (`devolviendo_a_tienda` -> `devuelta_a_tienda`).
 // Mismo patrón que `EscanerRecepcion` de la bodega satélite: resuelve el num_guia del
 // texto decodificado, llama a la Server Action y traduce el resultado a un toast.
 //

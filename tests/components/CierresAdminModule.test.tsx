@@ -8,6 +8,7 @@ import {
   verCierreDetalle,
   aprobarCierre,
   rechazarCierre,
+  forzarSolicitudVencido,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
@@ -26,6 +27,8 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
   listarCierresAdmin: vi.fn(),
+  // Feature 111/R16: válvula de escape (destrabar `vencido` abandonado).
+  forzarSolicitudVencido: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({
@@ -52,6 +55,7 @@ vi.mock("next/navigation", () => ({
 const verDetalleMock = vi.mocked(verCierreDetalle);
 const aprobarMock = vi.mocked(aprobarCierre);
 const rechazarMock = vi.mocked(rechazarCierre);
+const forzarMock = vi.mocked(forzarSolicitudVencido);
 
 const ZERO_TOTALES: CierreTotales = {
   efectivo: "0.00",
@@ -106,12 +110,24 @@ function makeGestion(
     pagoMensajero: null, // feature 39
     ingresoBodegaRechazo: null, // feature 56
     tarifaFaltante: false, // feature 56/R23
+    esRechazoSla: false, // feature 102
     ...over,
   };
 }
 
 function emptyGrupos(): CierreGrupos {
   return { entregada: [], reprogramada: [], devuelta: [], rechazada: [] };
+}
+
+/**
+ * Feature 102 (T10/T11): desglose del ingreso de bodega por rechazos. Default en cero (los tests
+ * que no lo están mirando solo lo necesitan para el typecheck); los tests del desglose lo
+ * sobreescriben con montos reales para afirmar SLA separado del manual (R8).
+ */
+function makeDesglose(
+  over: Partial<{ sla: string; manual: string; total: string }> = {},
+): { sla: string; manual: string; total: string } {
+  return { sla: "0.00", manual: "0.00", total: "0.00", ...over };
 }
 
 /** Ingreso de Ordenex en cero: el default para los tests que no lo están mirando. */
@@ -212,6 +228,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({
         cierreId: "c1",
         totales: {
@@ -246,6 +263,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso({ total: "3672.50" }),
@@ -268,6 +286,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({
         cierreId: "c1",
         totales: {
@@ -295,6 +314,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(), // total "0.00": p.ej. puras reprogramaciones
@@ -317,6 +337,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso({
@@ -386,6 +407,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -421,6 +443,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -445,11 +468,12 @@ describe("CierresAdminModule", () => {
         gestionId: "g1",
         resultado: "entregada",
         montoRecibido: "1250.50",
-        metodoPago: "SIMPE",
+        metodoPago: "SINPE",
       }),
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -465,7 +489,7 @@ describe("CierresAdminModule", () => {
     });
     const region = within(dialog).getByRole("region", { name: "Entregadas" });
     expect(within(region).getByText("₡1250.50")).toBeInTheDocument();
-    expect(within(region).getByText("SIMPE")).toBeInTheDocument();
+    expect(within(region).getByText("SINPE")).toBeInTheDocument();
   });
 
   it("feature 56/R23 (Q6): el badge 'Sin tarifa' se muestra por el flag tarifaFaltante en ENTREGAS", async () => {
@@ -484,6 +508,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -525,6 +550,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -554,6 +580,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -584,6 +611,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -600,10 +628,16 @@ describe("CierresAdminModule", () => {
     expect(within(region).getByText("₡3500.00")).toBeInTheDocument();
   });
 
-  it("feature 56/R16: el total del ingreso de bodega por rechazos se muestra separado en el detalle", async () => {
+  it("feature 102/R8: el ingreso de bodega por rechazos muestra el total y los subtotales SLA y manual separados", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      // 6000 (SLA) + 3200 (manual) === 9200 (total snapshot), particionado server-side (R5).
+      desgloseIngresoBodegaRechazos: makeDesglose({
+        sla: "6000.00",
+        manual: "3200.00",
+        total: "9200.00",
+      }),
       cierre: makeResumen({
         cierreId: "c1",
         totalIngresoBodegaRechazos: "9200.00",
@@ -622,7 +656,62 @@ describe("CierresAdminModule", () => {
     const region = within(dialog).getByRole("region", {
       name: "Ingreso de bodega por rechazos del cierre",
     });
+    // El total combinado (56) + las dos sublíneas del desglose por origen (102/R8).
     expect(within(region).getByText("₡9200.00")).toBeInTheDocument();
+    expect(within(region).getByText("Automático (por plazo vencido)")).toBeInTheDocument();
+    expect(within(region).getByText("₡6000.00")).toBeInTheDocument();
+    expect(within(region).getByText("Manual (mensajero)")).toBeInTheDocument();
+    expect(within(region).getByText("₡3200.00")).toBeInTheDocument();
+  });
+
+  it("feature 102/R9: cada fila rechazada se marca como SLA (cron) o Manual (mensajero) según esRechazoSla", async () => {
+    const user = userEvent.setup();
+    const grupos = emptyGrupos();
+    grupos.rechazada = [
+      makeGestion({
+        gestionId: "g-sla",
+        resultado: "rechazada",
+        numRemision: "REM-SLA",
+        destinatario: "Cliente SLA",
+        ingresoBodegaRechazo: "6000.00",
+        esRechazoSla: true,
+      }),
+      makeGestion({
+        gestionId: "g-man",
+        resultado: "rechazada",
+        numRemision: "REM-MAN",
+        destinatario: "Cliente Manual",
+        ingresoBodegaRechazo: "3200.00",
+        esRechazoSla: false,
+      }),
+    ];
+    verDetalleMock.mockResolvedValue({
+      status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose({
+        sla: "6000.00",
+        manual: "3200.00",
+        total: "9200.00",
+      }),
+      cierre: makeResumen({ cierreId: "c1" }),
+      grupos,
+      totalesIngreso: zeroIngreso(),
+      ganancia: "0.00",
+      pagoTienda: "0.00",
+    });
+    renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
+
+    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Detalle del cierre",
+    });
+    const region = within(dialog).getByRole("region", { name: "Rechazadas" });
+    // Cada fila trae su marca de origen: SLA para el escalado, Manual para el del mensajero.
+    const filaSla = within(region).getByText("REM-SLA").closest("tr");
+    const filaManual = within(region).getByText("REM-MAN").closest("tr");
+    expect(filaSla).not.toBeNull();
+    expect(filaManual).not.toBeNull();
+    expect(within(filaSla as HTMLElement).getByText("Automático")).toBeInTheDocument();
+    expect(within(filaManual as HTMLElement).getByText("Manual")).toBeInTheDocument();
   });
 
   it("R7: la evidencia se muestra vía URL firmada en el visor (nunca el path crudo)", async () => {
@@ -638,6 +727,7 @@ describe("CierresAdminModule", () => {
     ];
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
       grupos,
       totalesIngreso: zeroIngreso(),
@@ -666,6 +756,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -696,6 +787,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -726,6 +818,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -768,6 +861,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c2", estado: "aprobado", resueltoAt: "2026-07-12T00:00:00.000Z" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -796,6 +890,7 @@ describe("CierresAdminModule", () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
@@ -834,7 +929,7 @@ describe("CierresAdminModule", () => {
     ).not.toBeInTheDocument();
   });
 
-  // ---------- Feature 41 (F1, R20) ----------
+  // ---------- Feature 41 (F1, R20) + Feature 111 (R15/R16) ----------
 
   it("R20: un cierre 'vencido' se muestra en la cola con badge DIFERENCIADO del 'solicitado'", () => {
     renderModule({
@@ -859,56 +954,184 @@ describe("CierresAdminModule", () => {
     expect(within(region).getByText("Eva Vencida")).toBeInTheDocument();
   });
 
-  it("R20: un 'vencido' es RESOLUBLE — su detalle expone aprobar/rechazar", async () => {
-    const user = userEvent.setup();
-    verDetalleMock.mockResolvedValue({
-      status: "ok",
-      cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),
-      grupos: emptyGrupos(),
-      totalesIngreso: zeroIngreso(),
-      ganancia: "0.00",
-      pagoTienda: "0.00",
+  it("R16: la acción DIFERENCIADA 'Destrabar cierre vencido' aparece SOLO en las filas 'vencido'", () => {
+    renderModule({
+      pendientes: [
+        makeResumen({ cierreId: "cv", estado: "vencido", mensajeroNombre: "Eva Vencida" }),
+        makeResumen({ cierreId: "cs", estado: "solicitado", mensajeroNombre: "Sol Solicita" }),
+      ],
     });
-    renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
 
-    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
-    const dialog = await screen.findByRole("dialog", {
-      name: "Detalle del cierre",
+    const region = screen.getByRole("region", { name: "Pendientes de decisión" });
+    // Una sola fila (la vencida) ofrece el destrabe; el `solicitado` no.
+    const destrabar = within(region).getAllByRole("button", {
+      name: /Destrabar cierre vencido abandonado de/,
     });
+    expect(destrabar).toHaveLength(1);
     expect(
-      within(dialog).getByRole("button", { name: "Aprobar" }),
+      within(region).getByRole("button", {
+        name: "Destrabar cierre vencido abandonado de Eva Vencida",
+      }),
     ).toBeInTheDocument();
+    // El `solicitado` mantiene su "Ver / decidir"; el `vencido` NO lo ofrece.
     expect(
-      within(dialog).getByRole("button", { name: "Rechazar" }),
+      within(region).getByRole("button", { name: "Ver / decidir" }),
     ).toBeInTheDocument();
   });
 
-  it("R20: aprobar un 'vencido' llama a aprobarCierre y refresca", async () => {
+  it("R15: un 'vencido' NO es resoluble por la vía normal — su detalle NO expone aprobar/rechazar", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       status: "ok",
+      desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),
       grupos: emptyGrupos(),
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
     });
-    aprobarMock.mockResolvedValue({
-      status: "ok",
-      cierreId: "cv",
-      estado: "aprobado",
-    });
     renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
 
-    await user.click(screen.getByRole("button", { name: "Ver / decidir" }));
+    // La fila `vencido` se ve con "Ver" (solo lectura del detalle).
+    await user.click(screen.getByRole("button", { name: "Ver" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
-    await user.click(within(dialog).getByRole("button", { name: "Aprobar" }));
+    expect(
+      within(dialog).queryByRole("button", { name: "Aprobar" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Rechazar" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("R16: destrabar pide confirmación (excepción) y al confirmar llama a forzarSolicitudVencido y refresca", async () => {
+    const user = userEvent.setup();
+    forzarMock.mockResolvedValue({
+      status: "ok",
+      cierreId: "cv",
+      estado: "solicitado",
+    });
+    renderModule({
+      pendientes: [
+        makeResumen({ cierreId: "cv", estado: "vencido", mensajeroNombre: "Eva Vencida" }),
+      ],
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Destrabar cierre vencido abandonado de Eva Vencida",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Destrabar cierre vencido abandonado",
+    });
+    // Copy de EXCEPCIÓN: deja claro que es en nombre del mensajero y que luego se aprueba/rechaza.
+    expect(dialog).toHaveTextContent(/excepción/i);
+    expect(dialog).toHaveTextContent(/Eva Vencida/);
+    // No se llamó a la action hasta confirmar (confirmación explícita).
+    expect(forzarMock).not.toHaveBeenCalled();
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Destrabar (excepción)" }),
+    );
 
     await vi.waitFor(() =>
-      expect(aprobarMock).toHaveBeenCalledWith({ cierreId: "cv" }),
+      expect(forzarMock).toHaveBeenCalledWith({ cierreId: "cv" }),
     );
+    await vi.waitFor(() => expect(successMock).toHaveBeenCalled());
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  it("R16: cancelar la confirmación del destrabe NO llama a la action", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      pendientes: [
+        makeResumen({ cierreId: "cv", estado: "vencido", mensajeroNombre: "Eva Vencida" }),
+      ],
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Destrabar cierre vencido abandonado de Eva Vencida",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Destrabar cierre vencido abandonado",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    expect(forzarMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("R16: si el destrabe da conflict, muestra toast accionable y refresca", async () => {
+    const user = userEvent.setup();
+    forzarMock.mockResolvedValue({ status: "conflict" });
+    renderModule({
+      pendientes: [
+        makeResumen({ cierreId: "cv", estado: "vencido", mensajeroNombre: "Eva Vencida" }),
+      ],
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Destrabar cierre vencido abandonado de Eva Vencida",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Destrabar cierre vencido abandonado",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Destrabar (excepción)" }),
+    );
+
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(successMock).not.toHaveBeenCalled();
+  });
+
+  // ---------- Feature 109 (R31): `rechazado` del histórico rotulado como bloqueante ----------
+
+  it("R31: un 'rechazado' del histórico se rotula 'Bloqueante hasta re-solicitud' (no resuelto/cerrado)", () => {
+    renderModule({
+      historico: [
+        makeResumen({
+          cierreId: "c-rech",
+          estado: "rechazado",
+          mensajeroNombre: "Rita Rechazada",
+          resueltoAt: "2026-07-20T08:00:00.000Z",
+          motivoRechazo: "Montos no cuadran",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Histórico" });
+    // Conserva su etiqueta "Rechazado"…
+    expect(within(region).getByText("Rechazado")).toBeInTheDocument();
+    // …pero se rotula BLOQUEANTE hasta que el mensajero lo re-solicite (no "resuelto").
+    expect(
+      within(region).getByText("Bloqueante hasta re-solicitud"),
+    ).toBeInTheDocument();
+  });
+
+  it("R31: un 'aprobado' del histórico NO lleva el rótulo de bloqueante (es terminal)", () => {
+    renderModule({
+      historico: [
+        makeResumen({
+          cierreId: "c-apr",
+          estado: "aprobado",
+          mensajeroNombre: "Ada Aprobada",
+          resueltoAt: "2026-07-20T08:00:00.000Z",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Histórico" });
+    expect(within(region).getByText("Aprobado")).toBeInTheDocument();
+    expect(
+      within(region).queryByText("Bloqueante hasta re-solicitud"),
+    ).toBeNull();
   });
 });

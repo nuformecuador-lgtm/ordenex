@@ -5,6 +5,8 @@
 // Feature 41 (R22): añade el caso `bodega_bloqueada`, cuyo mensaje DIFERENCIA la causa
 // (porMensajeros / porCierreBodega) reutilizando `bodegaBloqueadaMensaje`.
 
+import { geocodificacionMotivoMessage } from "@/app/(app)/_components/geocodificacion-motivo-messages";
+
 import {
   bodegaBloqueadaMensaje,
   type BodegaBloqueoCausa,
@@ -57,6 +59,10 @@ export function asignacionSateliteErrorMessage(error: unknown): string {
   if (isBodegaBloqueada(error)) {
     return bodegaBloqueadaMensaje(error.causa);
   }
+  // Feature 93 (R9): mismo mapeo compartido que `guiaDecisionErrorMessage`, para
+  // que `AsignarSateliteModal` no quede con el mensaje genérico de `conflict`.
+  const porGeocodificacion = geocodificacionMotivoMessage(error);
+  if (porGeocodificacion !== null) return porGeocodificacion;
   const status =
     error && typeof error === "object" && "status" in error
       ? (error as { status: unknown }).status

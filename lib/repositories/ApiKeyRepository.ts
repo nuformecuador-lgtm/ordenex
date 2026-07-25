@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type EstadoApiKey, type PrismaClient } from "@prisma/client";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import {
   CatalogoInvalidoError,
@@ -27,6 +27,7 @@ const PUBLIC_SELECT = {
   id: true,
   identificador: true,
   keyPrefix: true,
+  estado: true,
   usuarioId: true,
   createdAt: true,
 } as const;
@@ -41,6 +42,7 @@ const LIST_SELECT = {
   id: true,
   identificador: true,
   keyPrefix: true,
+  estado: true,
   usuarioId: true,
   createdAt: true,
   usuario: { select: { email: true } },
@@ -122,6 +124,7 @@ export class ApiKeyRepository implements IApiKeyRepository {
       where: { keyHash },
       select: {
         id: true,
+        estado: true, // estado PROPIO de la key (palanca de revocacion, feature 88/R7)
         usuarioId: true,
         usuario: { select: { estado: true, rol: { select: { value: true } } } },
       },
@@ -131,6 +134,7 @@ export class ApiKeyRepository implements IApiKeyRepository {
       apiKeyId: row.id,
       usuarioId: row.usuarioId,
       estado: row.usuario.estado,
+      apiKeyEstado: row.estado,
       rol: row.usuario.rol.value,
     };
   }
@@ -156,6 +160,7 @@ export class ApiKeyRepository implements IApiKeyRepository {
       id: row.id,
       identificador: row.identificador,
       keyPrefix: row.keyPrefix,
+      estado: row.estado,
       usuarioId: row.usuarioId,
       usuarioEmail: row.usuario.email, // [D1]: se aplana el include
       createdAt: row.createdAt,
@@ -167,6 +172,55 @@ export class ApiKeyRepository implements IApiKeyRepository {
   async count(): Promise<number> {
     return this.prisma.apiKey.count();
   }
+
+  /**
+   * Ciclo de vida/R2: reemplaza `key_prefix`+`key_hash` de la fila `id` en un solo UPDATE
+   * (atomico a nivel de fila). El hash viejo deja de resolver de inmediato. Solo query:
+   * el secreto ya lo genero el service; aqui no se toca el usuario ni el `estado`. `P2025`
+   * (fila inexistente) -> `null` para que el service lo traduzca a `not_found` (R3).
+   */
+  async rotar(
+    id: string,
+    data: { keyPrefix: string; keyHash: string },
+  ): Promise<ApiKeyPublico | null> {
+    try {
+      return await this.prisma.apiKey.update({
+        where: { id },
+        data: { keyPrefix: data.keyPrefix, keyHash: data.keyHash },
+        select: PUBLIC_SELECT, // R6/R19: sin keyHash
+      });
+    } catch (error) {
+      if (esRegistroNoEncontrado(error)) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Ciclo de vida/R4: fija el `estado` propio de la key en un solo UPDATE. Idempotente a
+   * nivel de fila (fijar el estado actual es un no-op valido en Postgres). `P2025` (fila
+   * inexistente) -> `null` -> `not_found` (R3).
+   */
+  async setEstado(id: string, estado: EstadoApiKey): Promise<ApiKeyPublico | null> {
+    try {
+      return await this.prisma.apiKey.update({
+        where: { id },
+        data: { estado },
+        select: PUBLIC_SELECT, // R6/R19: sin keyHash
+      });
+    } catch (error) {
+      if (esRegistroNoEncontrado(error)) return null;
+      throw error;
+    }
+  }
+}
+
+/**
+ * `true` si el error es el P2025 de Prisma ("record to update not found"): la fila que se
+ * intento actualizar no existe. Mismo patron que `SessionRepository`. Robusto bajo el
+ * driver adapter (el codigo P2025 se preserva). Cualquier otro error se re-lanza.
+ */
+function esRegistroNoEncontrado(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
 }
 
 /**

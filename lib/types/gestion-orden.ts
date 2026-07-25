@@ -53,6 +53,17 @@ const evidenciaSchema = z.custom<ArchivoLike>(
   { message: "la evidencia debe ser una imagen jpeg, png o webp de tamano permitido" },
 );
 
+// Feature 119 (R5/R6/R7/R8): la evidencia UNICA pasa a una LISTA de 1..N fotos. Cada foto se
+// valida POR ARCHIVO con el `evidenciaSchema` de la 36/75 (R8: una foto invalida invalida el
+// envio); la lista exige al menos 1 (R6) y como maximo `MAX_EVIDENCIAS_POR_GESTION` (R7, def 3).
+const evidenciasSchema = z
+  .array(evidenciaSchema)
+  .min(1, "se requiere al menos una foto de evidencia") // R6
+  .max(
+    gestionConfig.MAX_EVIDENCIAS_POR_GESTION,
+    `maximo ${gestionConfig.MAX_EVIDENCIAS_POR_GESTION} fotos de evidencia`,
+  ); // R7
+
 // R16: recoger recibe un conjunto NO vacio de ordenIds (lote o de a una).
 // Feature 92/R22: + `ubicacion` OPCIONAL. Al ser opcional, ninguna llamada existente se
 // rompe: un cliente que no la envie sigue validando igual.
@@ -107,7 +118,7 @@ const causaDevolucionSchema = z.enum(CAUSA_DEVOLUCION_SEED, { message: "causa re
 // R22/R25/R27/R29: entrada de gestion DISCRIMINADA por `resultado` con las
 // obligatoriedades por rama (decision F1.4-i). La evidencia (File) va en el mismo
 // schema como file-like (obligatoria en entrega/rechazo).
-export const gestionarSchema = z.discriminatedUnion("resultado", [
+const gestionarUnionSchema = z.discriminatedUnion("resultado", [
   z.object({
     ordenId: z.string().min(1),
     resultado: z.literal("entregada"),
@@ -115,7 +126,8 @@ export const gestionarSchema = z.discriminatedUnion("resultado", [
     // servicio revalida que el monto CUADRE con el `montoCobrar` de la orden (R22).
     montoRecibido: z.number().nonnegative("monto invalido"),
     metodoPago: z.enum(METODO_PAGO_SEED),
-    evidencia: evidenciaSchema,
+    // Feature 119 (R5): lista de 1..N fotos (antes una sola). Validacion por archivo (R8).
+    evidencias: evidenciasSchema,
     ubicacion: ubicacionSchema.optional(), // feature 92/R22
   }),
   z.object({
@@ -134,18 +146,25 @@ export const gestionarSchema = z.discriminatedUnion("resultado", [
     causaDevolucion: causaDevolucionSchema,
     motivo: motivoSchema, // feature 36: se CONSERVA obligatorio (R7)
     // Feature 75: la evidencia (foto) pasa a ser OBLIGATORIA en Devolver, igual que en
-    // entrega/rechazo. Mismo evidenciaSchema (R24: MIME jpeg/png/webp + tamano).
-    evidencia: evidenciaSchema,
+    // entrega/rechazo. Feature 119 (R5): ahora es una LISTA de 1..N fotos.
+    evidencias: evidenciasSchema,
     ubicacion: ubicacionSchema.optional(), // feature 92/R22
   }),
   z.object({
     ordenId: z.string().min(1),
     resultado: z.literal("rechazada"),
     motivo: motivoSchema,
-    evidencia: evidenciaSchema,
+    // Feature 119 (R5): lista de 1..N fotos (antes una sola).
+    evidencias: evidenciasSchema,
     ubicacion: ubicacionSchema.optional(), // feature 92/R22
   }),
 ]);
+
+// Feature 119: el contrato de gestion recibe la LISTA `evidencias` (1..N fotos). Cliente (panel)
+// y servidor (Server Action) usan el MISMO schema (R8): el panel envia `evidencias` en su
+// `safeParse` y el borde arma `evidencias` con `getAll("evidencia")`, asi que ninguno depende ya
+// del campo singular historico (el puente `foldEvidenciaSingular` se retiro al migrar el panel).
+export const gestionarSchema = gestionarUnionSchema;
 export type GestionarActionInput = z.infer<typeof gestionarSchema>;
 
 // --- Resultados expuestos por la Server Action (agregan `unauthenticated`) ---
@@ -177,7 +196,8 @@ export type EscogerResult =
   | { status: "conflict"; motivo: string };
 
 export type GestionarResult =
-  | { status: "ok"; ordenId: string; estado: string; evidenciaUrl?: string }
+  // Feature 119 (R13): URLs firmadas de las N evidencias (antes una sola `evidenciaUrl`).
+  | { status: "ok"; ordenId: string; estado: string; evidenciaUrls?: string[] }
   | { status: "unauthenticated" }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }

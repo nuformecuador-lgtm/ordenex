@@ -22,12 +22,14 @@ import type {
   CargaViaApiSummary,
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
+import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import { normalizeName } from "@/lib/utils/normalize";
+import { costoEnvioDeTarifa } from "@/lib/utils/ingreso-ordenex";
 
 // Feature 88/R8: estado inicial FIJO de las ordenes cargadas por API (canal integrador),
 // distinto del default de la carga masiva por sesion (en_preparacion/en_fulfillment). Valor
 // de enum EXISTENTE (order-status.ts), sin migracion de estado.
-const ESTATUS_INICIAL_API = "en_ruta_bodega_principal";
+const ESTATUS_INICIAL_API = "en_ruta_bodega_central";
 
 // La resolucion geografica compara nombres del archivo contra los de la DB con el
 // MISMO normalizador que indexa el arbol de zonas (lib/utils/normalize): minusculas,
@@ -72,6 +74,9 @@ interface ResolvedGeo {
   zonaId: string;
   cantonId: string;
   distritoId: string | null;
+  // Feature 98/R2: flag de la zona resuelta del distrito, para elegir la columna del flete al
+  // tarifar la carga por API. La via sesion lo ignora (R9).
+  esCentral: boolean;
 }
 
 type GeoResult =
@@ -159,6 +164,7 @@ function resolveGeo(
       zonaId: distrito.zonaId,
       cantonId: canton.id,
       distritoId: distrito.id,
+      esCentral: distrito.esCentral, // feature 98/R2: flag de la zona del distrito.
     },
   };
 }
@@ -192,7 +198,13 @@ interface PreloadedContext {
 }
 
 export class BulkOrdenService implements IBulkOrdenService {
-  constructor(private readonly repo: IOrdenRepository) {}
+  // Feature 98/§6: `tarifaRepo` es dependencia de la via API (tarifar cada orden creada con
+  // FLETE + IVA). `cargarMasiva` (via sesion) NO la usa (R9). Requerida en el constructor para
+  // que una omision del wiring sea un error de compilacion (money-safe: nunca costoEnvio mudo).
+  constructor(
+    private readonly repo: IOrdenRepository,
+    private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
+  ) {}
 
   async cargarMasiva(
     rows: RawRow[],
@@ -279,7 +291,7 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     const tiendaId = actor.usuarioId; // D4: el usuario dedicado de la key es el dueño.
 
-    // R8: estado inicial FIJO `en_ruta_bodega_principal` (no se consulta `fulfillment`).
+    // R8: estado inicial FIJO `en_ruta_bodega_central` (no se consulta `fulfillment`).
     const ctx = await this.precargar(rows, ESTATUS_INICIAL_API);
 
     if (ctx.estatusId === null) {
@@ -300,6 +312,9 @@ export class BulkOrdenService implements IBulkOrdenService {
     const filas: CargaViaApiRow[] = [];
     const toCreate: CreateOrdenData[] = [];
     const seen = new Map<string, string>();
+    // Feature 98/R2: `esCentral` de cada fila creada, cruzado luego por `numRemision` (igual que
+    // `numGuia`) para tarifar SIN N+1. Solo las creadas se tarifan (R4).
+    const esCentralPorRemision = new Map<string, boolean>();
 
     rows.forEach((raw, idx) => {
       const fila = idx + 1;
@@ -313,6 +328,7 @@ export class BulkOrdenService implements IBulkOrdenService {
         return;
       }
       toCreate.push({ ...result.createData, estatusId, tiendaId });
+      esCentralPorRemision.set(result.createData.numRemision, result.esCentral); // R2
       filas.push({
         fila,
         numRemision: result.createData.numRemision,
@@ -320,6 +336,12 @@ export class BulkOrdenService implements IBulkOrdenService {
         estatus: ctx.estatusInicialValue,
       });
     });
+
+    // Feature 98/R1/R3: tarifa vigente de la tienda resuelta UNA sola vez por lote (todo el lote
+    // es de una tienda, `actor.usuarioId`), sin N+1. `null` si la tienda no tiene tarifa (gap
+    // D1/R8 -> costoEnvio "0.00"). No se consulta si no hay ninguna orden creada (nada que tarifar).
+    const tarifaLote =
+      toCreate.length > 0 ? await this.tarifaRepo.resolveTarifaPorTienda(tiendaId) : null;
 
     // R9/R10: persistencia con `num_guia` inmediato (misma tx que la creación). El actor del
     // historial es el usuario dedicado de la key; origenTipo `carga_api` (D7).
@@ -345,6 +367,9 @@ export class BulkOrdenService implements IBulkOrdenService {
         numRemision: creada.numRemision,
         numGuia: creada.numGuia,
         estado: creada.estatusValue,
+        // Feature 98/R5/R7: FLETE + IVA del flete de la tarifa del lote, segun `esCentral` de la
+        // zona de esta orden (cruzado por numRemision). Gap de tarifa -> "0.00" (D1/R8).
+        costoEnvio: costoEnvioDeTarifa(tarifaLote, esCentralPorRemision.get(creada.numRemision) ?? false),
       });
     }
 
@@ -386,7 +411,9 @@ export class BulkOrdenService implements IBulkOrdenService {
   ):
     | { status: "error"; numRemision: string; errores: Record<string, string[]> }
     | { status: "duplicada"; numRemision: string; estatus: string }
-    | { status: "creada"; createData: CreateOrdenData } {
+    // Feature 98/R2: la creada expone tambien `esCentral` (zona) para tarifar la carga por API
+    // sin N+1; la via sesion (cargarMasiva) lo ignora.
+    | { status: "creada"; createData: CreateOrdenData; esCentral: boolean } {
     const numRemisionRaw = (raw.num_remision ?? "").trim();
 
     const parsed = filaCargaSchema.safeParse(raw);
@@ -431,6 +458,7 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     return {
       status: "creada",
+      esCentral: geo.esCentral, // feature 98/R2
       createData: {
         numRemision: data.num_remision,
         estatusId: "", // el llamador lo completa (ya resuelto una sola vez, R7)

@@ -37,6 +37,10 @@ export type ListarRecepcionSateliteResult =
       // elegibles para "Devolver a la tienda". El campo viaja tal cual desde el
       // service result (la action solo reenvia); acotado server-side por zona.
       porDevolver: RecepcionSateliteDTO[];
+      // Feature 100/T4.1/R12: ordenes `devuelta` de la zona del adminSatelite,
+      // elegibles para "Recuperar a bodega". Viaja tal cual desde el service result
+      // (la action solo reenvia); acotado server-side por zona.
+      devueltas: RecepcionSateliteDTO[];
       zonaNombre: string | null;
       sinZona: boolean;
     }
@@ -80,7 +84,7 @@ export type AsignarSateliteActionInput = z.infer<typeof asignarSateliteSchema>;
 // del borde; el resto son resultados de dominio del service). Espejo de
 // `AsignarSateliteServiceResult`.
 export type AsignarSateliteResult =
-  | { status: "ok"; resultados: { ordenId: string; estado: "en_espera_aceptacion" }[] }
+  | { status: "ok"; resultados: { ordenId: string; estado: "por_recoger" }[] }
   | { status: "forbidden" }
   | { status: "sin_zona" }
   // Feature 41/R18: bodega bloqueada (regla estricta R17). La causa (porMensajeros /

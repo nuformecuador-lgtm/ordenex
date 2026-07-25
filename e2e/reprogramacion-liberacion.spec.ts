@@ -12,11 +12,11 @@ import { test, expect, type Page } from "@playwright/test";
  *     `reprogramada`, keeping its `zonaId` (central for the maestro path).
  *  2. Bloqueo (R1/R2): while `fecha_reprogramacion > hoy`, the order is NOT
  *     assignable. In the maestro's "Órdenes" view it is NOT listed under any
- *     assignable apartado (`en_bodega`/`en_fulfillment`), so it cannot be selected
+ *     assignable apartado (`en_bodega_central`/`en_fulfillment`), so it cannot be selected
  *     nor sent — the block is server-side (guardas de `generarGuia`/`asignarDesdeBodega`).
  *  3. Corte de fecha + cron (R7/R12): invoking `GET /api/cron/liberar-reprogramadas`
  *     with the correct `Authorization: Bearer <CRON_SECRET>` returns `200` with the
- *     aggregate summary and transitions the (now due) order to `en_bodega` (central)
+ *     aggregate summary and transitions the (now due) order to `en_bodega_central` (central)
  *     / `en_bodega_satelite` (satellite), clearing its courier.
  *  4. Aviso derivado (R15): after refreshing the warehouse view, the order appears in
  *     the "Liberadas hoy (reprogramación)" region of the responsible warehouse
@@ -44,7 +44,7 @@ import { test, expect, type Page } from "@playwright/test";
  * - A running Next.js dev server (pnpm dev) with `CRON_SECRET` in its env.
  * - A test database with Supabase/Postgres, the feature 46 migration
  *   (`orden.liberada_reprogramada_at` + partial index) applied, and the
- *   order/gestion catalog values seeded (incl. `reprogramada`, `en_bodega`).
+ *   order/gestion catalog values seeded (incl. `reprogramada`, `en_bodega_central`).
  * - The seeded maestro and orders A/B per PRECONDITION above.
  *
  * If the environment lacks .env or a real database, these tests are WRITTEN but
@@ -105,7 +105,7 @@ test.describe.serial("Reprogramación — bloqueo y liberación programada", () 
   }) => {
     // R7/R12: simulate the date cut by invoking the liberation cron with the correct
     // secret. It returns 200 with the aggregate summary (no PII) and transitions the
-    // due order B to `en_bodega` (central), clearing its courier.
+    // due order B to `en_bodega_central` (central), clearing its courier.
     const res = await request.get("/api/cron/liberar-reprogramadas", {
       headers: { Authorization: `Bearer ${CRON_SECRET}` },
     });

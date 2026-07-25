@@ -3,11 +3,9 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
-import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import { OrdenMensajeroMetaRepository } from "@/lib/repositories/OrdenMensajeroMetaRepository";
 import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
-import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { gestionConfig, type GestionMimeType } from "@/lib/config/gestion";
@@ -74,12 +72,13 @@ function buildService(): IMisAsignacionesService {
     new OrdenRepository(prisma),
     new SupabaseFileStorage(undefined, gestionConfig.EVIDENCIA_BUCKET),
     new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET),
-    // Feature 47: derivador de intentos (49) para la regla de reintento/escalado y la zona
-    // central (54) para derivar la bodega responsable del reintento.
-    new OrdenHistorialService(new OrdenRepository(prisma), new OrdenHistorialRepository(prisma)),
-    new ZonaRepository(prisma),
     // Feature 92 (R23/R28): secuencia optimizada al listar + persistencia del origen `gps`.
+    // Feature 99 (R29): la decision de reintento/escalado de una devolucion ya NO vive aqui
+    // (se relocalizo al cron SLA), por eso el service ya no recibe el derivador de intentos ni
+    // la zona central.
     new RutaOptimizadaRepository(prisma),
+    // Feature 115 (R17/R20): meta-repo para reflejar la marca "gestionar mas tarde" del actor.
+    new OrdenMensajeroMetaRepository(prisma),
   );
 }
 
@@ -109,7 +108,7 @@ export async function listarMisAsignaciones(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
-/** R14-R17: recoger (lote o de a una) en_espera_aceptacion -> en_reparto. */
+/** R14-R17: recoger (lote o de a una) por_recoger -> en_ruta. */
 export async function recogerAsignaciones(
   input: unknown,
   deps: MisAsignacionesDeps = {},
@@ -201,8 +200,14 @@ function rawFromFormData(formData: FormData): Record<string, unknown> {
   }
   const monto = formData.get("montoRecibido");
   if (monto !== null && monto !== "") raw.montoRecibido = Number(monto);
-  const evidencia = formData.get("evidencia");
-  if (evidencia !== null && typeof evidencia !== "string") raw.evidencia = evidencia;
+  // Feature 119 (R5): la evidencia pasa de UNA a 1..N fotos. Se leen TODAS las entradas de la
+  // misma clave `evidencia` (`getAll`) —el panel hace `append("evidencia", file)` por foto— y
+  // se filtran las strings (un File-like tiene `arrayBuffer`). Se expone como `raw.evidencias`.
+  // El panel sin migrar (T11) aun manda UN solo `evidencia`: `getAll` lo lee como lista de 1.
+  const evidencias = formData
+    .getAll("evidencia")
+    .filter((v): v is Exclude<FormDataEntryValue, string> => typeof v !== "string");
+  if (evidencias.length > 0) raw.evidencias = evidencias;
   // Feature 92/R22: la geolocalizacion viaja como DOS campos escalares del FormData
   // (`ubicacionLat`/`ubicacionLng`) y se recompone aqui. Solo se arma el objeto si vienen
   // LOS DOS: media coordenada no es una ubicacion, y dejarla a medias haria que zod la
@@ -228,7 +233,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
         resultado: "entregada",
         montoRecibido: data.montoRecibido,
         metodoPago: data.metodoPago,
-        evidencia: await leerEvidencia(data.evidencia as unknown as FileLike),
+        evidencias: await leerEvidencias(data.evidencias as unknown as FileLike[]),
       };
     case "reprogramada":
       return {
@@ -245,7 +250,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
         resultado: "devuelta",
         causaDevolucion: data.causaDevolucion, // feature 73/R6
         motivo: data.motivo,
-        evidencia: await leerEvidencia(data.evidencia as unknown as FileLike), // feature 75
+        evidencias: await leerEvidencias(data.evidencias as unknown as FileLike[]), // feature 75/119
       };
     case "rechazada":
       return {
@@ -253,7 +258,7 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
         ordenId: data.ordenId,
         resultado: "rechazada",
         motivo: data.motivo,
-        evidencia: await leerEvidencia(data.evidencia as unknown as FileLike),
+        evidencias: await leerEvidencias(data.evidencias as unknown as FileLike[]),
       };
   }
 }
@@ -261,4 +266,9 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
 async function leerEvidencia(file: FileLike): Promise<EvidenciaArchivo> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   return { contentType: file.type as GestionMimeType, bytes };
+}
+
+// Feature 119 (R5): lee el binario de las N fotos (en el ORDEN en que llegaron -> indice 0..N-1).
+async function leerEvidencias(files: FileLike[]): Promise<EvidenciaArchivo[]> {
+  return Promise.all(files.map(leerEvidencia));
 }

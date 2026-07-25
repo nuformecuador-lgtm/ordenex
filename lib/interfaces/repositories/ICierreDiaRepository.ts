@@ -44,9 +44,25 @@ export interface CierreGestionPendienteRow {
   // (R7b) y del dinero recibido (R20). En vivo (37) el service lo DERIVA; en admin (38/40)
   // es el snapshot leido de la columna.
   ingresoBodegaRechazo: string | null;
+  // Feature 102/R1/R3: clasificacion SLA (cron 99) vs manual (mensajero) de una gestion
+  // `rechazada`, DERIVADA del historial inmutable (`origen_tipo = escalado_devuelta_sla`), sin
+  // columna nueva. La pueblan los repos de ADMIN (38/40); en la vista EN VIVO del mensajero (37)
+  // es `false` por defecto (no expone el desglose, R11).
+  esRechazoSla: boolean;
   // Desglose del ingreso de Ordenex + tarifa congelada, DERIVADO del snapshot. Solo lo
   // pueblan los repos de ADMIN (38/40): la vista en vivo del mensajero (37) no lo expone.
   ingresoOrdenex?: IngresoOrdenexDTO | null;
+}
+
+// Feature 109 (T1.2, R6/R8): input OPCIONAL del corte diario. Cuando esta presente,
+// `crearCierre` transiciona en la MISMA tx las ordenes `en_ruta` del mensajero a
+// `sin_gestionar` (via el choke point 49, actor null, `origen_tipo = corte_sin_gestionar`) y
+// RELAJA la guarda de "algo paso" (crea el `vencido` money-neutral si transiciono >=1 orden aunque
+// vincule 0 gestiones, R8). Ausente = flujo de la 37 (solicitar) SIN cambios. Los estatus ids los
+// resuelve el service (`findEstatusIdByValue`), no el repo.
+export interface CorteSinGestionarInput {
+  enRepartoEstatusId: string;
+  sinGestionarEstatusId: string;
 }
 
 // Datos para crear la solicitud de cierre (R13/R14). Totales snapshot como STRING.
@@ -58,6 +74,9 @@ export interface CrearCierreInput {
   // (default); el corte diario crea `vencido` reusando la MISMA tx de vinculacion +
   // snapshot. Solo estos dos valores son validos como estado de creacion.
   estado?: Extract<CierreEstado, "solicitado" | "vencido">;
+  // Feature 109 (T1.2, R6/R8): presente SOLO en el corte diario -> transiciona `en_ruta ->
+  // sin_gestionar` y relaja la guarda "algo paso". Ausente en `solicitarCierre` (37).
+  corteSinGestionar?: CorteSinGestionarInput;
   totales: CierreTotales;
   // Feature 39/R12/R14: pago al mensajero snapshoteado por gestion (gestionId -> STRING)
   // + total del cierre (STRING). Se persisten en la MISMA tx que crea el cierre.
@@ -112,11 +131,46 @@ export interface ICierreDiaRepository {
   findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]>;
   /**
    * R10: cuenta las ordenes asignadas al mensajero (no borradas) cuyo estado esta
-   * en `estados` (en_espera_aceptacion/en_reparto = pendientes de gestion).
+   * en `estados` (por_recoger/en_ruta = pendientes de gestion).
    */
   contarOrdenesPendientesGestion(mensajeroId: string, estados: string[]): Promise<number>;
   /** R12: `true` si el mensajero ya tiene un cierre en estado `solicitado`. */
   existeCierreSolicitado(mensajeroId: string): Promise<boolean>;
+  /**
+   * Feature 111/R6 — `true` si el mensajero tiene un cierre en estado `vencido` (gemelo de
+   * `existeCierreSolicitado`, `count WHERE estado='vencido'`). Lo consume `solicitarCierre`
+   * para enrutar al camino de transición en vez de crear un cierre nuevo. Usa el indice
+   * `(mensajero_id, estado)`.
+   */
+  existeCierreVencido(mensajeroId: string): Promise<boolean>;
+  /**
+   * Feature 111/R6/R7/R8 — transiciona el `vencido` del mensajero a `solicitado` con una
+   * escritura GUARDADA por estado (`updateMany WHERE mensajero_id = actor AND estado =
+   * 'vencido' SET estado = 'solicitado'`). SOLO cambia `estado`: NO toca los totales snapshot,
+   * `total_pago_mensajero`, `total_ingreso_bodega_rechazos`, los `cierre_id` de las gestiones,
+   * ni `resuelto_por`/`resuelto_at`/`solicitado_at` (money-safe, R8/R21). Devuelve `true` si
+   * afectó 1 fila; `false` si 0 (el `vencido` ya fue resuelto/transicionado entre la lectura y
+   * la escritura -> el service lo traduce a `conflict`, R7). Anti-TOCTOU sin locks.
+   */
+  transicionarVencidoASolicitado(mensajeroId: string): Promise<boolean>;
+  /**
+   * Feature 109/R28 — `true` si el mensajero tiene un cierre en estado `rechazado` (gemelo EXACTO
+   * de `existeCierreVencido`, `count WHERE estado='rechazado'`). Lo consume `solicitarCierre` para
+   * enrutar un `rechazado` (que en el modelo GLOBAL de la 109 BLOQUEA y es RE-SOLICITABLE) al
+   * camino de transicion en vez de crear un cierre nuevo. Usa el indice `(mensajero_id, estado)`.
+   */
+  existeCierreRechazado(mensajeroId: string): Promise<boolean>;
+  /**
+   * Feature 109/R28 — transiciona el `rechazado` del mensajero a `solicitado` con una escritura
+   * GUARDADA por estado (`updateMany WHERE mensajero_id = actor AND estado = 'rechazado' SET estado
+   * = 'solicitado'`), espejo EXACTO de `transicionarVencidoASolicitado`. SOLO cambia `estado`: NO
+   * toca totales snapshot, pago/ingreso, `cierre_id` de gestiones, ni `resuelto_por`/`resuelto_at`/
+   * `motivo_rechazo`/`solicitado_at` (money-safe). Devuelve `true` si afecto 1 fila; `false` si 0
+   * (el `rechazado` ya fue re-solicitado/resuelto entre la lectura y la escritura -> el service lo
+   * traduce a `conflict`). Anti-TOCTOU sin locks. El desbloqueo definitivo + la liberacion de
+   * `sin_gestionar` ocurren SOLO al APROBAR (R16).
+   */
+  transicionarRechazadoASolicitado(mensajeroId: string): Promise<boolean>;
   /**
    * R13/R14: bajo prisma.$transaction (todo-o-nada): (a) INSERT cierre_dia con el
    * destino derivado + los totales snapshot (estado `solicitado` por defecto, o
@@ -145,7 +199,7 @@ export interface ICierreDiaRepository {
   /**
    * Feature 67/R11/R18-R23 — UNICA escritura del deshacer, todo-o-nada en UNA `$transaction`
    * (R22): (1) ANULA la gestion con rastro (`anulada_at`/`anulada_por`) conservando intactos
-   * todos sus datos originales (R11/R12), (2) devuelve la orden a `en_reparto` REPONIENDO la
+   * todos sus datos originales (R11/R12), (2) devuelve la orden a `en_ruta` REPONIENDO la
    * asignacion al mensajero autor (R18/R19: una gestion `devuelta` con reintento habia limpiado
    * `mensajero_asignado_id`), (3) registra la transicion por el CHOKE POINT del historial
    * (`appendCambioEstado`, `origen_tipo = deshacer_gestion`) en la MISMA tx (R20/R21). NO toca

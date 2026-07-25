@@ -14,7 +14,7 @@ export interface OrdenLiberableRow {
 // Entrada del UPDATE guardado por orden (idempotente por estado de origen).
 export interface LiberarOrdenInput {
   ordenId: string;
-  // Estatus destino ya resuelto (en_bodega | en_bodega_satelite).
+  // Estatus destino ya resuelto (en_bodega_central | en_bodega_satelite).
   destinoEstatusId: string;
   // Estatus de ORIGEN esperado (`reprogramada`): guarda de idempotencia/carrera.
   estatusReprogramadaId: string;
@@ -25,7 +25,7 @@ export interface LiberarOrdenInput {
 // Filtro del aviso derivado (R15/R16): bodega = zona + estatus destino de esa bodega.
 export interface LiberadaHoyFilter {
   zonaId: string;
-  estatusValue: string; // en_bodega (central) | en_bodega_satelite (satelite)
+  estatusValue: string; // en_bodega_central (central) | en_bodega_satelite (satelite)
 }
 
 // Fila proyectada para el aviso "liberadas hoy" de la bodega (sin PII sensible extra).

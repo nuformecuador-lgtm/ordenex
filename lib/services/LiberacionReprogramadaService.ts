@@ -9,7 +9,7 @@ import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 
 // Estatus destino de la liberacion segun la bodega responsable (F1.4-a). Valores de
 // catalogo ya sembrados (ORDER_STATUS_SEED); esta feature NO agrega estados.
-const ESTATUS_EN_BODEGA = "en_bodega"; // central
+const ESTATUS_EN_BODEGA = "en_bodega_central"; // central
 const ESTATUS_EN_BODEGA_SATELITE = "en_bodega_satelite"; // satelite
 const ESTATUS_REPROGRAMADA = "reprogramada"; // origen (guarda de idempotencia)
 
@@ -27,7 +27,7 @@ const defaultLogger: LiberacionLogger = { warn: (m) => console.warn(m) };
 /**
  * Feature 46 — logica de negocio de la liberacion programada (R12-R14/R17). Por cada
  * orden reprogramada cuya fecha ya llego (`hoyCR`), deriva su bodega responsable
- * (`resolverDestinoCierre`, reusa la regla 41/37) y la transiciona a `en_bodega` /
+ * (`resolverDestinoCierre`, reusa la regla 41/37) y la transiciona a `en_bodega_central` /
  * `en_bodega_satelite` limpiando el mensajero y marcando la liberacion. Resiliente por
  * orden (patron `CorteDiarioService`) e idempotente (la transicion saca la orden de
  * `reprogramada`, R17). No conoce HTTP ni Prisma directo; testeable con dobles.

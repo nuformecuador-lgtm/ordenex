@@ -1,0 +1,30 @@
+app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx(183,9): error TS2552: Cannot find name 'sincronizando'. Did you mean 'sincronizar'?
+app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx(184,5): error TS2304: Cannot find name 'setSincronizando'.
+app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx(186,28): error TS2304: Cannot find name 'pedirUbicacion'.
+app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx(190,28): error TS2552: Cannot find name 'sincronizarRuta'. Did you mean 'sincronizar'?
+app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx(208,7): error TS2304: Cannot find name 'setSincronizando'.
+lib/clients/fallback-route-optimization.ts(22,40): error TS2307: Cannot find module '@/lib/auth/google-token-shared' or its corresponding type declarations.
+tests/components/MisAsignacionesModule.test.tsx(84,35): error TS2304: Cannot find name 'sincronizarRuta'.
+tests/components/MisAsignacionesModule.test.tsx(126,7): error TS2451: Cannot redeclare block-scoped variable 'RUTA_VIGENTE'.
+tests/components/MisAsignacionesModule.test.tsx(172,7): error TS2451: Cannot redeclare block-scoped variable 'RUTA_VIGENTE'.
+tests/unit/auth/middleware.test.ts(148,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(149,16): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(157,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(158,16): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(166,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(167,16): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(174,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(175,24): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(181,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(182,16): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(188,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(189,16): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(197,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(198,24): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(205,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(206,16): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(211,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(212,16): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(223,16): error TS2339: Property 'status' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/auth/middleware.test.ts(224,26): error TS2339: Property 'headers' does not exist on type 'Promise<NextResponse<unknown>>'.
+tests/unit/clients/fallback-route-optimization.test.ts(6,8): error TS2307: Cannot find module '@/lib/auth/google-token-shared' or its corresponding type declarations.

@@ -1,0 +1,13 @@
+-- Feature 99 (design §1.2, R3): anade el 4.º valor al enum `job_tipo` — el tipo de job
+-- `webhook_estado`, que entrega firmada UNA transicion de estado al integrador suscrito.
+--
+-- POR QUE ESTA MIGRACION VA SOLA (la tabla va en la siguiente,
+-- 20260721130000_webhook_suscripcion): Postgres NO permite USAR un valor de enum en la
+-- misma transaccion que lo anadio (error 55P04 "unsafe use of new value of enum type").
+-- Prisma Migrate corre cada migration.sql en una transaccion, asi que cualquier sentencia
+-- que consumiera 'webhook_estado'::job_tipo aqui abortaria. Precedentes exactos en el repo:
+-- 20260719120000_job_tipo_geocodificacion (feature 91) y
+-- 20260720120000_job_tipo_optimizacion_ruta (feature 92). Se reusa ese criterio tal cual.
+--
+-- Aditiva (R3): no altera ninguna tabla existente.
+ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'webhook_estado';

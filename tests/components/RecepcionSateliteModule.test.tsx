@@ -7,6 +7,7 @@ import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_compone
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { devolverATienda } from "@/lib/actions/devolucion-origen";
 import { recibirLote } from "@/lib/actions/recepcion-satelite";
+import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 // Feature 33 (T12) — módulo de la bodega satélite. Se mockean la Server Action de
@@ -29,6 +30,14 @@ vi.mock("@/lib/actions/devolucion-origen", () => ({
 }));
 
 const devolverATiendaMock = vi.mocked(devolverATienda);
+
+// Feature 100 (T4.1): la sección "Devueltas" ejecuta la recuperación vía esta Server
+// Action; se mockea para verificar la invocación por fila (R12).
+vi.mock("@/lib/actions/resolver-novedad", () => ({
+  recuperarABodega: vi.fn(),
+}));
+
+const recuperarABodegaMock = vi.mocked(recuperarABodega);
 
 const { refreshMock } = vi.hoisted(() => ({ refreshMock: vi.fn() }));
 
@@ -86,6 +95,7 @@ function renderModule(
       porRecibir={props?.porRecibir ?? []}
       recibidas={props?.recibidas ?? []}
       porDevolver={props?.porDevolver ?? []}
+      devueltas={props?.devueltas ?? []}
       zonaNombre={props?.zonaNombre ?? "Limón"}
       sinZona={props?.sinZona ?? false}
       mensajeros={props?.mensajeros ?? [{ id: "m1", nombre: "Ana Mensajera" }]}
@@ -607,6 +617,81 @@ describe("RecepcionSateliteModule", () => {
     ).toBeNull();
   });
 
+  // ---------- Feature 100 (T4.1) — recuperar a bodega (devueltas) ----------
+
+  it("R12: 'Devueltas' lista las órdenes devuelta de la zona con su botón 'Recuperar'", () => {
+    renderModule({
+      devueltas: [
+        makeOrden({
+          id: "n1",
+          numRemision: "REM-DEVUELTA",
+          destinatario: "Caro Díaz",
+          estatusValue: "devuelta",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Devueltas" });
+    expect(within(region).getAllByText(/REM-DEVUELTA/).length).toBeGreaterThan(0);
+    expect(within(region).getAllByText(/Caro Díaz/).length).toBeGreaterThan(0);
+    expect(
+      within(region).getByRole("button", { name: "Recuperar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R12: 'Recuperar' dispara recuperarABodega con el ordenId y en éxito refresca", async () => {
+    const user = userEvent.setup();
+    recuperarABodegaMock.mockResolvedValue({ status: "ok" });
+    renderModule({
+      devueltas: [
+        makeOrden({
+          id: "n1",
+          numRemision: "REM-DEVUELTA",
+          estatusValue: "devuelta",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Devueltas" });
+    await user.click(within(region).getByRole("button", { name: "Recuperar" }));
+
+    expect(recuperarABodegaMock).toHaveBeenCalledTimes(1);
+    expect(recuperarABodegaMock).toHaveBeenCalledWith({ ordenId: "n1" });
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("R12: un resultado no-ok NO refresca (error por toast)", async () => {
+    const user = userEvent.setup();
+    recuperarABodegaMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
+    renderModule({
+      devueltas: [
+        makeOrden({
+          id: "n1",
+          numRemision: "REM-DEVUELTA",
+          estatusValue: "devuelta",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Devueltas" });
+    await user.click(within(region).getByRole("button", { name: "Recuperar" }));
+
+    await vi.waitFor(() => expect(recuperarABodegaMock).toHaveBeenCalled());
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("sin órdenes devueltas muestra el vacío", () => {
+    renderModule({ devueltas: [] });
+
+    const region = screen.getByRole("region", { name: "Devueltas" });
+    expect(
+      within(region).getByText("No hay órdenes por recuperar."),
+    ).toBeInTheDocument();
+    expect(
+      within(region).queryByRole("button", { name: "Recuperar" }),
+    ).toBeNull();
+  });
+
   // ---------- Feature 63 — recepción en lote (reuse "Por recoger" del mensajero) ----------
 
   it("Feature 63: 'Por recibir' muestra el banner con el contador de nuevas por recibir", () => {
@@ -676,5 +761,47 @@ describe("RecepcionSateliteModule", () => {
     ).toBeNull();
     // La orden sigue listándose aunque no se pueda aceptar.
     expect(within(region).getAllByText(/REM-R1/).length).toBeGreaterThan(0);
+  });
+
+  // ---------- Feature 101 (R8/R10) — resalte de prioridad ----------
+  it("R8: una orden PRIORITARIA en 'Recibidas' muestra el badge 'Prioritaria' y resalta su fila", () => {
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "p1",
+          numRemision: "REM-PRIO",
+          estatusValue: "en_bodega_satelite",
+          prioridad: true,
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Recibidas" });
+    // El estado prioritario NO se comunica solo por color: hay un texto accesible.
+    expect(within(region).getByText("Prioritaria")).toBeInTheDocument();
+    // La fila lleva la clase de resalte compartida.
+    const fila = within(region).getByText(/REM-PRIO/).closest("tr");
+    expect(fila).toHaveClass("bg-warning/15");
+  });
+
+  it("R10: el resalte NO se filtra a 'Devueltas' aunque la orden traiga prioridad=true", () => {
+    // 'Devueltas' es recuperación manual (feature 100), NUNCA reasignación por SLA:
+    // no debe resaltar por prioridad aunque el flag venga en el DTO.
+    renderModule({
+      devueltas: [
+        makeOrden({
+          id: "d1",
+          numRemision: "REM-DEV",
+          estatusValue: "devuelta",
+          prioridad: true,
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Devueltas" });
+    // La orden se lista, pero SIN el badge de prioridad y SIN el tinte de resalte.
+    expect(within(region).getAllByText(/REM-DEV/).length).toBeGreaterThan(0);
+    expect(within(region).queryByText("Prioritaria")).toBeNull();
+    expect(region.querySelector(".bg-warning\\/15")).toBeNull();
   });
 });
