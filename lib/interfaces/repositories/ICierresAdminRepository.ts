@@ -47,6 +47,19 @@ export interface LiberacionSinGestionarConfig {
   centralZonaId: string | null; // null = ningun mensajero clasifica central (fallback satelite)
 }
 
+// Feature 139 (T1.1, R5): config OPCIONAL del DISPARO de la devolucion de RECHAZADAS al APROBAR
+// el cierre. Presente SOLO al aprobar (la resuelve el service via `findEstatusIdByValue`/
+// `findCentralZonaId`); ausente al rechazar (R10: un rechazo NO dispara). Los estatus ids del
+// catalogo + la zona central se pasan por input (el repo no re-resuelve catalogo). Molde de
+// `LiberacionSinGestionarConfig`. El destino por orden lo decide `resolverDestinoCierre` sobre la
+// zona de la orden: bodega satelite -> `porDevolverId`; bodega central -> `porDevolverATiendaId`.
+export interface DevolucionRechazadasConfig {
+  rechazadaId: string; // estado de ORIGEN (guarda del updateMany, R7/R22)
+  porDevolverId: string; // destino satelite
+  porDevolverATiendaId: string; // destino central
+  centralZonaId: string | null; // null = ningun mensajero clasifica central (fallback satelite)
+}
+
 // Datos de la transicion guardada (aprobar/rechazar). `motivoRechazo` = null al
 // aprobar; el motivo (ya validado) al rechazar.
 export interface ResolverCierreInput {
@@ -59,6 +72,12 @@ export interface ResolverCierreInput {
   // ordenes `sin_gestionar` del mensajero del cierre a bodega (por zona, con `prioridad = true`),
   // via el choke point. Ausente = no hay liberacion (rechazo, o cierres sin la config).
   liberacionSinGestionar?: LiberacionSinGestionarConfig;
+  // Feature 139 (T1.1, R5-R11): presente SOLO al aprobar -> DENTRO de la MISMA tx (tras liberar
+  // `sin_gestionar`) transiciona las `rechazada` del mensajero del cierre a `por_devolver`
+  // (satelite) / `por_devolver_a_tienda` (central) por zona, via el choke point
+  // (`origen_tipo = devolucion_rechazada`). Money-neutral: NO toca mensajero/prioridad (R8).
+  // Ausente = no dispara (rechazo R10, o cierres sin la config).
+  devolucionRechazadas?: DevolucionRechazadasConfig;
 }
 
 // Resultado de la transicion guardada: `updated` (aplicada), `conflict` (existe en

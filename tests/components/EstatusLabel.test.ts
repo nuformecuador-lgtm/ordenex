@@ -22,6 +22,9 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   en_bodega_satelite: "En bodega satélite", // feature 33 (R8)
   devuelta_a_tienda: "Devuelta a tienda", // feature 135 (R8)
   sin_gestionar: "Sin gestionar", // feature 109/R25
+  por_devolver: "Por devolver", // feature 139/R4
+  devolviendo_a_bodega_central: "Devolviendo a bodega central", // feature 139/R4
+  por_devolver_a_tienda: "Por devolver a tienda", // feature 139/R4
 };
 
 describe("estatusLabel — mapa de presentación value → label (R17)", () => {

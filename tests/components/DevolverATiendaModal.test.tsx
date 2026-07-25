@@ -37,8 +37,8 @@ function makeOrden(
   return {
     numGuia: 1001,
     numRemision: "REM-000",
-    estatusId: "id-rechazada",
-    estatusValue: "rechazada",
+    estatusId: "id-por-devolver-a-tienda",
+    estatusValue: "por_devolver_a_tienda",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",
@@ -82,8 +82,8 @@ afterEach(() => {
   cleanup();
 });
 
-describe("DevolverATiendaModal", () => {
-  it("R4: al confirmar dispara devolverATienda con el ordenId de cada orden y refleja éxito (onSuccess)", async () => {
+describe("DevolverATiendaModal (feature 139/R15: 'Enviar a la tienda')", () => {
+  it("R15: al confirmar dispara devolverATienda con el ordenId de cada orden y refleja éxito (onSuccess)", async () => {
     const user = userEvent.setup();
     devolverATiendaMock.mockResolvedValue({ status: "ok" });
 
@@ -94,7 +94,7 @@ describe("DevolverATiendaModal", () => {
     const { onSuccess } = renderModal(ordenes);
 
     await user.click(
-      screen.getByRole("button", { name: "Devolver a la tienda" }),
+      screen.getByRole("button", { name: "Enviar a la tienda" }),
     );
 
     expect(devolverATiendaMock).toHaveBeenCalledTimes(2);
@@ -103,20 +103,20 @@ describe("DevolverATiendaModal", () => {
 
     await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(successMock).toHaveBeenCalledWith(
-      "2 orden(es) devuelta(s) a la tienda.",
+      "2 orden(es) enviada(s) a la tienda.",
     );
     expect(errorMock).not.toHaveBeenCalled();
   });
 
-  it("lote vacío (sin órdenes de zona central tras el filtro): avisa y NO llama la acción", async () => {
+  it("lote vacío: avisa y NO llama la acción", async () => {
     const user = userEvent.setup();
     const { onSuccess } = renderModal([]);
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      /selecciona órdenes de zona central/i,
+      /selecciona al menos una orden/i,
     );
     const confirmar = screen.getByRole("button", {
-      name: "Devolver a la tienda",
+      name: "Enviar a la tienda",
     });
     expect(confirmar).toBeDisabled();
 
@@ -125,7 +125,7 @@ describe("DevolverATiendaModal", () => {
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
-  it("un resultado no-ok muestra el error y NO invoca onSuccess", async () => {
+  it("un resultado no-ok muestra el error (origen 'Por devolver a tienda') y NO invoca onSuccess", async () => {
     const user = userEvent.setup();
     devolverATiendaMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
 
@@ -134,13 +134,13 @@ describe("DevolverATiendaModal", () => {
     ]);
 
     await user.click(
-      screen.getByRole("button", { name: "Devolver a la tienda" }),
+      screen.getByRole("button", { name: "Enviar a la tienda" }),
     );
 
     expect(devolverATiendaMock).toHaveBeenCalledWith({ ordenId: "o1" });
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith(
-        expect.stringMatching(/rechazada/i),
+        expect.stringMatching(/por devolver a tienda/i),
       ),
     );
     expect(onSuccess).not.toHaveBeenCalled();

@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
-import { devolverATienda } from "@/lib/actions/devolucion-origen";
+import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
 import { recibirLote } from "@/lib/actions/recepcion-satelite";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
@@ -23,13 +23,13 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
 
 const recibirLoteMock = vi.mocked(recibirLote);
 
-// Feature 48 (T9): la sección "Por devolver a tienda" ejecuta el retorno vía esta
-// Server Action; se mockea para verificar la invocación por fila.
-vi.mock("@/lib/actions/devolucion-origen", () => ({
-  devolverATienda: vi.fn(),
+// Feature 139 (T3.3): la sección "Por devolver" envía POR LOTE a la bodega central vía
+// esta Server Action; se mockea para verificar la invocación por selección.
+vi.mock("@/lib/actions/envio-devolucion-central", () => ({
+  enviarACentral: vi.fn(),
 }));
 
-const devolverATiendaMock = vi.mocked(devolverATienda);
+const enviarACentralMock = vi.mocked(enviarACentral);
 
 // Feature 100 (T4.1): la sección "Devueltas" ejecuta la recuperación vía esta Server
 // Action; se mockea para verificar la invocación por fila (R12).
@@ -39,7 +39,11 @@ vi.mock("@/lib/actions/resolver-novedad", () => ({
 
 const recuperarABodegaMock = vi.mocked(recuperarABodega);
 
-const { refreshMock } = vi.hoisted(() => ({ refreshMock: vi.fn() }));
+const { refreshMock, successMock, errorMock } = vi.hoisted(() => ({
+  refreshMock: vi.fn(),
+  successMock: vi.fn(),
+  errorMock: vi.fn(),
+}));
 
 // R9: el estado legible de "Recibidas" se COMPONE como "<etiqueta del estado> de
 // <zona>". Lo verificado es esa composición, no el texto de la etiqueta: por eso la
@@ -50,8 +54,8 @@ const ESTADO_SATELITE_LIMON = `${ORDER_STATUS_LABELS.en_bodega_satelite} de Lim�
 
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
-    success: vi.fn(),
-    error: vi.fn(),
+    success: successMock,
+    error: errorMock,
     warning: vi.fn(),
     info: vi.fn(),
     show: vi.fn(),
@@ -95,6 +99,7 @@ function renderModule(
       porRecibir={props?.porRecibir ?? []}
       recibidas={props?.recibidas ?? []}
       porDevolver={props?.porDevolver ?? []}
+      enTransitoACentral={props?.enTransitoACentral ?? []}
       devueltas={props?.devueltas ?? []}
       zonaNombre={props?.zonaNombre ?? "Limón"}
       sinZona={props?.sinZona ?? false}
@@ -528,93 +533,154 @@ describe("RecepcionSateliteModule", () => {
     expect(within(region).getByRole("button", { name: "Asignar" })).toBeEnabled();
   });
 
-  // ---------- Feature 48 (T9) — devolución a la tienda de origen ----------
+  // ---------- Feature 139 (T3.3) — "Por devolver" por lote a bodega central ----------
 
-  it("R10/R14: 'Por devolver a tienda' lista las órdenes rechazada de la zona con su botón", () => {
+  it("R13/R21: 'Por devolver' es una TABLA seleccionable de las órdenes por_devolver + botón 'Enviar a central'", () => {
     renderModule({
       porDevolver: [
         makeOrden({
           id: "d1",
-          numRemision: "REM-RECHAZADA",
+          numRemision: "REM-PORDEV",
           destinatario: "Caro Díaz",
-          estatusValue: "rechazada",
+          estatusValue: "por_devolver",
         }),
       ],
     });
 
-    const region = screen.getByRole("region", {
-      name: "Por devolver a tienda",
-    });
-    expect(within(region).getAllByText(/REM-RECHAZADA/).length).toBeGreaterThan(0);
-    expect(within(region).getAllByText(/Caro Díaz/).length).toBeGreaterThan(0);
+    const region = screen.getByRole("region", { name: "Por devolver" });
+    // Es una tabla (patrón "Recibidas"), no cards con botón por fila.
+    const tabla = within(region).getByRole("table", { name: "Por devolver" });
+    expect(within(tabla).getByText("REM-PORDEV")).toBeInTheDocument();
+    expect(within(tabla).getAllByText(/Caro Díaz/).length).toBeGreaterThan(0);
+    // Checkbox de selección por fila + botón de acción por lote.
     expect(
-      within(region).getByRole("button", { name: "Devolver a la tienda" }),
+      within(tabla).getByRole("checkbox", { name: "Seleccionar REM-PORDEV" }),
+    ).toBeInTheDocument();
+    expect(
+      within(region).getByRole("button", { name: "Enviar a central" }),
     ).toBeInTheDocument();
   });
 
-  it("R4/R10: el botón 'Devolver a la tienda' dispara devolverATienda con el ordenId y en éxito refresca", async () => {
+  it("R13: sin selección 'Enviar a central' está deshabilitado; al seleccionar se habilita", async () => {
     const user = userEvent.setup();
-    devolverATiendaMock.mockResolvedValue({ status: "ok" });
     renderModule({
       porDevolver: [
         makeOrden({
           id: "d1",
-          numRemision: "REM-RECHAZADA",
-          estatusValue: "rechazada",
+          numRemision: "REM-PORDEV",
+          estatusValue: "por_devolver",
         }),
       ],
     });
 
-    const region = screen.getByRole("region", {
-      name: "Por devolver a tienda",
-    });
-    await user.click(
-      within(region).getByRole("button", { name: "Devolver a la tienda" }),
-    );
+    const region = screen.getByRole("region", { name: "Por devolver" });
+    const enviar = within(region).getByRole("button", { name: "Enviar a central" });
+    expect(enviar).toBeDisabled();
 
-    expect(devolverATiendaMock).toHaveBeenCalledTimes(1);
-    expect(devolverATiendaMock).toHaveBeenCalledWith({ ordenId: "d1" });
-    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1));
+    await user.click(
+      within(region).getByRole("checkbox", { name: "Seleccionar REM-PORDEV" }),
+    );
+    expect(enviar).toBeEnabled();
   });
 
-  it("R4: un resultado no-ok muestra el error por fila y NO refresca", async () => {
+  it("R13: 'Enviar a central' dispara enviarACentral por cada seleccionada y en éxito refresca", async () => {
     const user = userEvent.setup();
-    devolverATiendaMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
+    enviarACentralMock.mockResolvedValue({ status: "ok" });
     renderModule({
       porDevolver: [
-        makeOrden({
-          id: "d1",
-          numRemision: "REM-RECHAZADA",
-          estatusValue: "rechazada",
-        }),
+        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver" }),
+        makeOrden({ id: "d2", numRemision: "REM-B", estatusValue: "por_devolver" }),
       ],
     });
 
-    const region = screen.getByRole("region", {
-      name: "Por devolver a tienda",
-    });
+    const region = screen.getByRole("region", { name: "Por devolver" });
+    // Selecciona todas con el checkbox de cabecera.
     await user.click(
-      within(region).getByRole("button", { name: "Devolver a la tienda" }),
+      within(region).getByRole("checkbox", {
+        name: "Seleccionar todas las órdenes por devolver",
+      }),
+    );
+    await user.click(
+      within(region).getByRole("button", { name: "Enviar a central" }),
     );
 
     await vi.waitFor(() =>
-      expect(within(region).getByRole("alert")).toBeInTheDocument(),
+      expect(enviarACentralMock).toHaveBeenCalledTimes(2),
     );
-    expect(refreshMock).not.toHaveBeenCalled();
+    expect(enviarACentralMock).toHaveBeenCalledWith({ ordenId: "d1" });
+    expect(enviarACentralMock).toHaveBeenCalledWith({ ordenId: "d2" });
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 
-  it("sin órdenes por devolver muestra el vacío", () => {
+  it("R13: un resultado no-ok se reporta por toast de error (y aun así refresca)", async () => {
+    const user = userEvent.setup();
+    enviarACentralMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
+    renderModule({
+      porDevolver: [
+        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver" }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "Por devolver" });
+    await user.click(
+      within(region).getByRole("checkbox", { name: "Seleccionar REM-A" }),
+    );
+    await user.click(
+      within(region).getByRole("button", { name: "Enviar a central" }),
+    );
+
+    await vi.waitFor(() => expect(enviarACentralMock).toHaveBeenCalledTimes(1));
+    expect(errorMock).toHaveBeenCalledWith(
+      expect.stringMatching(/por devolver/i),
+    );
+  });
+
+  it("sin órdenes por devolver la tabla muestra el vacío y no hay 'Enviar a central' activo", () => {
     renderModule({ porDevolver: [] });
 
-    const region = screen.getByRole("region", {
-      name: "Por devolver a tienda",
-    });
+    const region = screen.getByRole("region", { name: "Por devolver" });
+    const tabla = within(region).getByRole("table", { name: "Por devolver" });
     expect(
-      within(region).getByText("No hay órdenes por devolver."),
+      within(tabla).getByText("No hay órdenes por devolver."),
     ).toBeInTheDocument();
     expect(
-      within(region).queryByRole("button", { name: "Devolver a la tienda" }),
-    ).toBeNull();
+      within(region).getByRole("button", { name: "Enviar a central" }),
+    ).toBeDisabled();
+  });
+
+  // ---------- Feature 139 (T3.3) — "En tránsito a central" (informativa) ----------
+
+  it("R21: 'En tránsito a central' lista las devolviendo_a_bodega_central SIN acción (read-only)", () => {
+    renderModule({
+      enTransitoACentral: [
+        makeOrden({
+          id: "t1",
+          numRemision: "REM-TRANSITO",
+          estatusValue: "devolviendo_a_bodega_central",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "En tránsito a central" });
+    const tabla = within(region).getByRole("table", {
+      name: "En tránsito a central",
+    });
+    expect(within(tabla).getByText("REM-TRANSITO")).toBeInTheDocument();
+    // Informativa: sin checkbox ni botón de acción.
+    expect(within(region).queryByRole("checkbox")).toBeNull();
+    expect(within(region).queryByRole("button")).toBeNull();
+  });
+
+  it("R21: 'En tránsito a central' sin órdenes muestra el vacío", () => {
+    renderModule({ enTransitoACentral: [] });
+
+    const region = screen.getByRole("region", { name: "En tránsito a central" });
+    const tabla = within(region).getByRole("table", {
+      name: "En tránsito a central",
+    });
+    expect(
+      within(tabla).getByText("No hay órdenes en tránsito a central."),
+    ).toBeInTheDocument();
   });
 
   // ---------- Feature 100 (T4.1) — recuperar a bodega (devueltas) ----------

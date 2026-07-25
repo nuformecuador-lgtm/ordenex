@@ -6,6 +6,7 @@ import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 import { OrdenesModule } from "./_components/OrdenesModule";
 import { OrdenesTabs } from "./_components/OrdenesTabs";
+import { EXCLUDE_POR_ROL } from "./exclude-por-rol";
 
 /**
  * Feature 63/C5 (R12/R20, design.md §4.3, F1.4-h): el rol se resuelve SOLO
@@ -25,13 +26,8 @@ const ROLES_CON_TABS = new Set<string>([
   RolValue.adminTienda,
 ]);
 
-// F1.4-c (R13): `exclude` por rol, por `value` del estado. Default `["pendiente"]`
-// (borrador transitorio recién sembrado). Un rol sin override cae al default.
-const EXCLUDE_POR_ROL: Record<string, string[]> = {
-  [RolValue.maestro]: ["pendiente"],
-  [RolValue.admin]: ["pendiente"],
-  [RolValue.adminTienda]: ["pendiente", "devuelta", "en_bodega_central", "en_bodega_satelite", "en_ruta_bodega_satelite"],
-};
+// F1.4-c (R13) + Feature 139 (R19/R20): `exclude` por rol vive en `./exclude-por-rol`
+// (módulo aparte para blindarlo con test sin arrastrar las deps server-only de la page).
 
 export default async function OrdenesPage() {
   const actor = await resolveActorFromSession();

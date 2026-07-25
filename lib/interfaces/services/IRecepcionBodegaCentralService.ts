@@ -10,21 +10,24 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // traduce al resultado tipado expuesto.
 
 /**
- * Resultado de dominio de la recepcion en bodega central. Espejo de
- * `RecibirEnOrigenServiceResult` SIN `tienda_ajena` (ni `zona_ajena`/`sin_zona`): la bodega
- * central es global, no hay alcance por tienda/zona que reportar (R11). `unauthenticated` NO
- * vive aqui: lo agrega el borde (R5).
- * - `ok`: transiciono a `en_bodega_central` (R2).
- * - `forbidden`: el actor no es maestro ni admin (R4).
- * - `ya_recibida`: ya estaba en `en_bodega_central` -> idempotente, sin escritura (R7).
- * - `estado_invalido`: no esta en `en_ruta_bodega_central`; lleva el estado actual para que
- *   la UI pueda nombrarlo (R8).
+ * Resultado de dominio de la recepcion en bodega central (STATE-AWARE, feature 138 + 139). Espejo de
+ * `RecibirEnOrigenServiceResult` SIN `tienda_ajena` (ni `zona_ajena`/`sin_zona`): la bodega central es
+ * global, no hay alcance por tienda/zona que reportar (R11). `unauthenticated` NO vive aqui: lo agrega
+ * el borde (R5).
+ * - `ok`: transiciono al destino resuelto por el estado de origen: `en_bodega_central` (desde
+ *   `en_ruta_bodega_central`, caso 138) o `por_devolver_a_tienda` (desde `devolviendo_a_bodega_central`,
+ *   caso 139/R17).
+ * - `forbidden`: el actor no es maestro ni admin (R4/R17).
+ * - `ya_recibida`: ya estaba en un destino (en_bodega_central / por_devolver_a_tienda) -> idempotente,
+ *   sin escritura (R7).
+ * - `estado_invalido`: no esta en un origen valido de la recepcion central; lleva el estado actual
+ *   para que la UI pueda nombrarlo (R8).
  * - `no_encontrada`: no existe orden viva con ese `num_guia` (o esta borrada) (R6).
  * - `validation_error`: el catalogo no tiene el estado destino (config; seed pendiente).
  * - `conflict`: perdio una carrera (el estado cambio entre la lectura y el UPDATE) (R9).
  */
 export type RecibirEnBodegaCentralServiceResult =
-  | { status: "ok"; ordenId: string; estado: "en_bodega_central" }
+  | { status: "ok"; ordenId: string; estado: "en_bodega_central" | "por_devolver_a_tienda" }
   | { status: "forbidden" }
   | { status: "estado_invalido"; estado: string }
   | { status: "ya_recibida" }
@@ -35,10 +38,11 @@ export type RecibirEnBodegaCentralServiceResult =
 export interface IRecepcionBodegaCentralService {
   /**
    * Recibe en la bodega central la orden cuyo `num_guia` es el escaneado (el QR codifica
-   * `/paquete/<numGuia>`). Transiciona a `en_bodega_central` SOLO si sigue en
-   * `en_ruta_bodega_central`. Idempotente si ya estaba recibida. Elegible CUALQUIER orden en
-   * el origen para maestro/admin, sin acotar por zona ni por tienda (R11). El rol y la guardia
-   * de estado se imponen server-side.
+   * `/paquete/<numGuia>`). STATE-AWARE (feature 138 + 139): resuelve el par ORIGEN->DESTINO por el
+   * estado de origen: `en_ruta_bodega_central -> en_bodega_central` (138) o
+   * `devolviendo_a_bodega_central -> por_devolver_a_tienda` (139/R17). Idempotente si ya estaba en un
+   * destino. Elegible CUALQUIER orden en un origen valido para maestro/admin, sin acotar por zona ni
+   * por tienda (R11). El rol y la guardia de estado se imponen server-side.
    */
   recibirEnBodegaCentral(
     numGuia: number,

@@ -1883,3 +1883,14 @@
 - DEUDA: la migración NO se aplicó contra DB real (entorno sin `.env`; R2/R3/R4 por test estático +
   round-trip en memoria). **Al desplegar: `prisma migrate deploy` + verificar `down.sql` con `db:rollback`,
   coordinado con el deploy** (rename de valores: código y DB deben coincidir). Fundacional del lote 137–140.
+
+## 2026-07-24 — 138 recepción en bodega central
+- Cierra el dead-end de `en_ruta_bodega_central` (órdenes de carga API sin salida): recepción por QR / entrada
+  manual (maestro/admin, global sin zona/tienda) → `en_bodega_central` + historial. Migración aditiva
+  `ADD VALUE 'recepcion_bodega_central'` al enum `OrdenHistorialOrigenTipo` (+down.sql patrón `carga_api`).
+  Backend espejo de `RecepcionOrigen` (repo `recibirEnBodegaCentral` guardado por estado de origen; service
+  `esAccesoTotal`); escáner en el header de `/ordenes` (gate maestro/admin).
+- R1–R18 trazados a tests. Reviewer APROBADO-CON-NOTAS, 0 bloqueantes. `./init.sh` verde (503 archivos /
+  4979 tests). Renumerada 136→138. **PR #159 → dev, merge humano 2026-07-24.**
+- DEUDA: migración aditiva NO aplicada contra DB real (post-merge: `prisma migrate deploy` + verificar
+  `down.sql` con `db:rollback`; bajo riesgo por ser `ADD VALUE`).

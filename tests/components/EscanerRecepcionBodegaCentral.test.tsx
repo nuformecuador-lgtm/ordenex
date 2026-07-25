@@ -144,6 +144,27 @@ describe("EscanerRecepcionBodegaCentral — toast por resultado (R15) + refresco
     expect(onRecibida).toHaveBeenCalledTimes(1);
   });
 
+  it("R17 (139): ok con estado por_devolver_a_tienda -> toast nombra ese destino, no 'bodega central'", async () => {
+    const user = userEvent.setup();
+    const onRecibida = vi.fn();
+    // Recepción STATE-AWARE: una orden en devolviendo_a_bodega_central queda en
+    // por_devolver_a_tienda; el toast debe reflejar ese destino (no "bodega central").
+    recibirMock.mockResolvedValue({
+      status: "ok",
+      ordenId: "o1",
+      estado: "por_devolver_a_tienda",
+    });
+    render(<EscanerRecepcionBodegaCentral onRecibida={onRecibida} />);
+
+    await escanear(user, qrDeGuia(21));
+
+    await vi.waitFor(() => expect(successMock).toHaveBeenCalled());
+    expect(successMock.mock.calls[0][0]).toMatch(/21/);
+    expect(successMock.mock.calls[0][0]).toMatch(/por devolver a la tienda/i);
+    expect(successMock.mock.calls[0][0]).not.toMatch(/bodega central/i);
+    expect(onRecibida).toHaveBeenCalledTimes(1);
+  });
+
   it("ya_recibida -> toast info y dispara onRecibida (idempotente, R14)", async () => {
     const user = userEvent.setup();
     const onRecibida = vi.fn();

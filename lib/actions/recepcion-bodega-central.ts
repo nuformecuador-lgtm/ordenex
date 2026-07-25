@@ -54,8 +54,10 @@ export interface RecepcionBodegaCentralDeps {
 
 /**
  * Recibe en la bodega central la orden del `num_guia` escaneado (el QR codifica
- * `/paquete/<numGuia>`): `en_ruta_bodega_central` -> `en_bodega_central`. El rol (maestro/admin)
- * y la guardia de estado los impone el service, server-side; sin acotar por zona ni tienda (R11).
+ * `/paquete/<numGuia>`). STATE-AWARE (feature 138 + 139): un solo escaner resuelve el destino por el
+ * estado de origen: `en_ruta_bodega_central -> en_bodega_central` (138) o
+ * `devolviendo_a_bodega_central -> por_devolver_a_tienda` (139). El rol (maestro/admin) y la guardia
+ * de estado los impone el service, server-side; sin acotar por zona ni tienda (R11).
  */
 export async function recibirEnBodegaCentralPorQr(
   input: unknown,

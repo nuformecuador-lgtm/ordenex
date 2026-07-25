@@ -26,6 +26,9 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   en_bodega_satelite: "En bodega satélite", // feature 33 (R8: value legible directo)
   devuelta_a_tienda: "Devuelta a tienda", // feature 135: cierre del flujo de devolución, la tienda de origen la recibió
   sin_gestionar: "Sin gestionar", // feature 109/R25: orden que quedó en en_ruta al pasar de día (congelada hasta aprobar el cierre)
+  por_devolver: "Por devolver", // feature 139/R4: rechazada de bodega satélite tras aprobar el cierre (elegible para "enviar a central")
+  devolviendo_a_bodega_central: "Devolviendo a bodega central", // feature 139/R4: en tránsito satélite → central
+  por_devolver_a_tienda: "Por devolver a tienda", // feature 139/R4: en la central, elegible para "enviar a la tienda"
 };
 
 /**
@@ -54,6 +57,12 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   devuelta_a_tienda: "success",
   // Feature 109/R25: estado de EXCEPCIÓN (orden sin gestionar, congelada) -> variante de alerta.
   sin_gestionar: "warning",
+  // Feature 139/R4: estados del flujo de devolución de rechazadas. Los estados de ESPERA
+  // (por devolver / por devolver a tienda) usan `warning` (acción pendiente); el de TRÁNSITO
+  // (devolviendo a bodega central) usa `info`, como el resto de estados en ruta.
+  por_devolver: "warning",
+  devolviendo_a_bodega_central: "info",
+  por_devolver_a_tienda: "warning",
 };
 
 /**
