@@ -1894,3 +1894,25 @@
   4979 tests). Renumerada 136→138. **PR #159 → dev, merge humano 2026-07-24.**
 - DEUDA: migración aditiva NO aplicada contra DB real (post-merge: `prisma migrate deploy` + verificar
   `down.sql` con `db:rollback`; bajo riesgo por ser `ADD VALUE`).
+
+## 2026-07-25 — 139 flujo de devolución de rechazadas (estados + transiciones + UI)
+- Cierra el retorno físico de las `rechazada`: 3 estados nuevos al catálogo (`por_devolver`,
+  `devolviendo_a_bodega_central`, `por_devolver_a_tienda`, índices 16/17/18 sin alterar posiciones
+  previas) + `ADD VALUE 'devolucion_rechazada'` al enum de historial (ambas con `down.sql`).
+- Recorrido: al APROBAR el cierre, cada `rechazada` del mensajero rutea por zona de la orden
+  (`resolverDestinoCierre`) → satélite `por_devolver` / central `por_devolver_a_tienda` (atómico con
+  el cierre, money-neutral, idempotente); `por_devolver → devolviendo_a_bodega_central` (adminSatélite,
+  por lote); `devolviendo_a_bodega_central → por_devolver_a_tienda` (recepción central **state-aware**,
+  extiende el escáner de la 138 a un solo escáner que resuelve destino por estado de origen);
+  `por_devolver_a_tienda → devolviendo_a_tienda` (maestro/admin) → `devuelta_a_tienda` (tienda, flujo
+  existente). **R9: se RETIRA la arista manual directa `rechazada → devolviendo_a_tienda`** en las 3
+  superficies de UI — la única salida de `rechazada` pasa a ser la aprobación del cierre.
+- R1–R24 trazados a tests (`progress/impl_139-...md`). Reviewer APROBADO-CON-NOTAS, 0 bloqueantes;
+  typecheck 0, lint 0, 271 tests dirigidos verdes; `./init.sh` verde (508 archivos / 5012 tests).
+  Renumerada 137→139. **PR #160 → dev, mergeado 2026-07-25.**
+- DEUDAS: T4.1 (test de integración del recorrido completo) queda como follow-up — cada transición
+  tiene unit test y el flujo no está en la lista E2E-obligatoria de CHECKPOINTS; migraciones no
+  aplicadas contra DB real (post-merge `prisma migrate deploy` + `db:rollback`); R22 en los envíos por
+  lote usa `update` guardado solo por `{id, deletedAt}` con pre-check en el service (desviación
+  prescrita por el design §4.1/§4.4, precedente feature 48) → endurecer a `updateMany WHERE
+  estatus_id = origen` en el futuro.

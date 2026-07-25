@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma } from "@prisma/client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 36 — repositorio con Prisma mockeado (sin DB). Cubre el filtrado por
 // mensajero (R9/R13), la guardia origen+propiedad de recogerLote (R15) y la
@@ -31,6 +32,10 @@ function fakeAsignacionRow(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
   it("R13: filtra por mensajero_asignado_id + no borradas + estados, en el WHERE", async () => {
@@ -190,7 +195,7 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
   it("guardia propiedad + origen en el SQL; devuelve filas afectadas (rows.length)", async () => {
     const { repo, $queryRaw } = buildRecogerRepo([{ id: "o1" }, { id: "o2" }]);
 
-    const n = await repo.recogerLote(["o1", "o2"], "m1", "os-espera", "os-reparto");
+    const n = await repo.recogerLote(["o1", "o2"], "m1", idEstado("por_recoger"), idEstado("en_ruta"));
 
     expect(n).toBe(2);
     const call = $queryRaw.mock.calls[0] as unknown[];
@@ -202,8 +207,8 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
     expect(strings).toMatch(/deleted_at" IS NULL/);
     expect(strings).toMatch(/RETURNING "id"/);
     expect(values).toContain("m1"); // propiedad
-    expect(values).toContain("os-espera"); // origen
-    expect(values).toContain("os-reparto"); // destino en_ruta
+    expect(values).toContain(idEstado("por_recoger")); // origen
+    expect(values).toContain(idEstado("en_ruta")); // destino en_ruta
   });
 
   // Feature 49/#8 (R16/R8): 1 historial por orden recogida (actor = el mensajero); una
@@ -211,14 +216,14 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
   it("R16/R8: registra historial (recoleccion) solo de los ids retornados", async () => {
     const { repo, createMany } = buildRecogerRepo([{ id: "o1" }]); // solo 1 de 2 gano la guarda
 
-    await repo.recogerLote(["o1", "o2"], "m1", "os-espera", "os-reparto");
+    await repo.recogerLote(["o1", "o2"], "m1", idEstado("por_recoger"), idEstado("en_ruta"));
 
     const arg = (createMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-espera",
-        estatusDestinoId: "os-reparto",
+        estatusOrigenId: idEstado("por_recoger"),
+        estatusDestinoId: idEstado("en_ruta"),
         actorUsuarioId: "m1", // el mensajero que recoge
         origenTipo: "recoleccion",
         motivo: null,
@@ -298,7 +303,7 @@ describe("GestionOrdenRepository.liberarOrdenEnGestion (R35)", () => {
 
 describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · feature 49/#9)", () => {
   function buildTxRepo(
-    origenEstatusId = "os-reparto",
+    origenEstatusId = idEstado("en_ruta"),
     historialCreateMany: ReturnType<typeof vi.fn> = vi.fn(),
   ) {
     const gestionCreate = vi.fn(async () => ({ id: "g1" }));
@@ -330,7 +335,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
         evidenciaStoragePath: "o1/entregada-1.jpg",
         evidenciaContentType: "image/jpeg",
       },
-      nuevoEstatusId: "os-entregada",
+      nuevoEstatusId: idEstado("entregada"),
     });
 
     expect(id).toBe("g1");
@@ -340,7 +345,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect((gArg.data.montoRecibido as Prisma.Decimal).toString()).toBe("100");
     expect((ordenUpdate.mock.calls[0] as unknown[])[0]).toMatchObject({
       where: { id: "o1" },
-      data: { estatusId: "os-entregada" },
+      data: { estatusId: idEstado("entregada") },
     });
     // R19: libera el puntero de bloqueo dentro de la transaccion.
     expect((usuarioUpdate.mock.calls[0] as unknown[])[0]).toMatchObject({
@@ -355,7 +360,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
-      nuevoEstatusId: "os-reprogramada",
+      nuevoEstatusId: idEstado("reprogramada"),
     });
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
     expect(gArg.data.fechaReprogramacion).toBeInstanceOf(Date);
@@ -366,7 +371,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
   // Feature 49/#9 (R17/R20/R22): entregada (sin motivo) deja historial con destino,
   // gestion_orden_id, origen pre-leido y actor = el mensajero; motivo null.
   it("R17/R20: entregada deja historial con destino, gestionOrdenId y motivo null", async () => {
-    const { repo, historialCreateMany } = buildTxRepo("os-reparto");
+    const { repo, historialCreateMany } = buildTxRepo(idEstado("en_ruta"));
 
     await repo.crearGestionYTransicionar({
       ordenId: "o1",
@@ -378,15 +383,15 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
         evidenciaStoragePath: "o1/entregada-1.jpg",
         evidenciaContentType: "image/jpeg",
       },
-      nuevoEstatusId: "os-entregada",
+      nuevoEstatusId: idEstado("entregada"),
     });
 
     const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-reparto",
-        estatusDestinoId: "os-entregada",
+        estatusOrigenId: idEstado("en_ruta"),
+        estatusDestinoId: idEstado("entregada"),
         actorUsuarioId: "m1",
         origenTipo: "gestion",
         motivo: null,
@@ -397,19 +402,19 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
 
   // R22: una gestion con motivo (devuelta) registra ese motivo en el historial.
   it("R22: devuelta registra el motivo de la gestion en el historial", async () => {
-    const { repo, historialCreateMany } = buildTxRepo("os-reparto");
+    const { repo, historialCreateMany } = buildTxRepo(idEstado("en_ruta"));
 
     await repo.crearGestionYTransicionar({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", motivo: "cliente ausente" },
-      nuevoEstatusId: "os-devuelta",
+      nuevoEstatusId: idEstado("devuelta"),
     });
 
     const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as {
       data: Record<string, unknown>[];
     };
-    expect(arg.data[0].estatusDestinoId).toBe("os-devuelta");
+    expect(arg.data[0].estatusDestinoId).toBe(idEstado("devuelta"));
     expect(arg.data[0].motivo).toBe("cliente ausente");
     expect(arg.data[0].origenTipo).toBe("gestion");
     expect(arg.data[0].gestionOrdenId).toBe("g1");
@@ -424,20 +429,20 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
 
   it("R1/R29: devuelta -> UN solo orden.update (a `devuelta`) y UN solo append, sin re-ruteo", async () => {
     const historialCreateMany = vi.fn();
-    const { repo, ordenUpdate } = buildTxRepo("os-reparto", historialCreateMany);
+    const { repo, ordenUpdate } = buildTxRepo(idEstado("en_ruta"), historialCreateMany);
 
     await repo.crearGestionYTransicionar({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", motivo: "ausente" },
-      nuevoEstatusId: "os-devuelta",
+      nuevoEstatusId: idEstado("devuelta"),
     });
 
     // La orden REPOSA en `devuelta`: un unico update, sin 2.ª transicion a bodega/rechazada.
     expect(ordenUpdate).toHaveBeenCalledTimes(1);
     expect((ordenUpdate.mock.calls[0] as unknown[])[0]).toMatchObject({
       where: { id: "o1" },
-      data: { estatusId: "os-devuelta" },
+      data: { estatusId: idEstado("devuelta") },
     });
     // El mensajero NO se limpia aqui (era parte del reintento de la 47, ahora en el cron).
     const updData = (ordenUpdate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -447,8 +452,8 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(historialCreateMany).toHaveBeenCalledTimes(1);
     const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
     expect(arg.data[0]).toMatchObject({
-      estatusOrigenId: "os-reparto",
-      estatusDestinoId: "os-devuelta",
+      estatusOrigenId: idEstado("en_ruta"),
+      estatusDestinoId: idEstado("devuelta"),
       actorUsuarioId: "m1",
       origenTipo: "gestion",
       motivo: "ausente",
@@ -459,13 +464,13 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
   // Las otras 3 ramas: UNA sola transicion y UN solo append (igual que devuelta ahora).
   it("R19: cualquier rama -> un solo orden.update y un solo append (sin seguimiento)", async () => {
     const historialCreateMany = vi.fn();
-    const { repo, ordenUpdate } = buildTxRepo("os-reparto", historialCreateMany);
+    const { repo, ordenUpdate } = buildTxRepo(idEstado("en_ruta"), historialCreateMany);
 
     await repo.crearGestionYTransicionar({
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "entregada", montoRecibido: 100, metodoPago: "efectivo" },
-      nuevoEstatusId: "os-entregada",
+      nuevoEstatusId: idEstado("entregada"),
     });
 
     expect(ordenUpdate).toHaveBeenCalledTimes(1);
@@ -481,7 +486,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", causaDevolucion: "wrong_number", motivo: "telefono errado" },
-      nuevoEstatusId: "os-devuelta",
+      nuevoEstatusId: idEstado("devuelta"),
     });
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -497,7 +502,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", causaDevolucion: "not_found", motivo: "ausente" },
-      nuevoEstatusId: "os-devuelta",
+      nuevoEstatusId: idEstado("devuelta"),
     });
 
     // Un unico INSERT de gestion (con la causa dentro) + el UPDATE del estado: si la tx aborta,
@@ -510,7 +515,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     const historialCreateMany = vi.fn(async () => {
       throw new Error("append falla");
     });
-    const { repo } = buildTxRepo("os-reparto", historialCreateMany);
+    const { repo } = buildTxRepo(idEstado("en_ruta"), historialCreateMany);
 
     // El fallo se propaga -> $transaction revierte: la causa NO queda persistida.
     await expect(
@@ -518,7 +523,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
         ordenId: "o1",
         mensajeroId: "m1",
         gestion: { resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "x" },
-        nuevoEstatusId: "os-devuelta",
+        nuevoEstatusId: idEstado("devuelta"),
       }),
     ).rejects.toThrow("append falla");
   });
@@ -530,7 +535,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "rechazada", motivo: "cliente rechazo" },
-      nuevoEstatusId: "os-rechazada",
+      nuevoEstatusId: idEstado("rechazada"),
     });
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };

@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
 import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 100 (T5.2) — INTEGRACION de la recuperacion a bodega con el cron SLA vecino, con los repos
 // REALES (`RecuperacionBodegaRepository.recuperarABodega` de la 100 y
@@ -12,9 +13,9 @@ import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaReposit
 // Postgres en la suite; se usa una "base" en memoria con la semantica de las queries Prisma.
 
 const ESTATUS: Record<string, string> = {
-  devuelta: "os-devuelta",
-  en_bodega_central: "os-en-bodega",
-  en_bodega_satelite: "os-en-bodega-satelite",
+  devuelta: idEstado("devuelta"),
+  en_bodega_central: idEstado("en_bodega_central"),
+  en_bodega_satelite: idEstado("en_bodega_satelite"),
 };
 const valueByEstatusId = (id: string): string =>
   Object.keys(ESTATUS).find((v) => ESTATUS[v] === id) ?? "desconocido";
@@ -166,6 +167,10 @@ function recuperar(db: Db, destinoValue: "en_bodega_central" | "en_bodega_sateli
 }
 
 const slaRepo = (db: Db) => new DevolucionSlaRepository(db.prisma as unknown as PrismaClient);
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("Feature 100 T5.2 — recuperar (satelite) saca la orden de `devuelta`: el cron SLA 99 la salta + queda asignable (R18)", () => {
   it("ANTES de recuperar, el cron SLA 99 SI ve la orden `devuelta`", async () => {

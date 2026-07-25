@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import type {
   ITarifaVigentePorTiendaRepository,
   TarifaVigenteResuelta,
 } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 37 — tests unit del repositorio del cierre (mockea Prisma, sin DB real,
 // patron orden-repository.asignacion.test.ts). Cubre R3 (solo cierre_id IS NULL),
@@ -73,6 +74,10 @@ function buildTarifaRepo(
     }),
   } as unknown as ITarifaVigentePorTiendaRepository;
 }
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
   it("R3: filtra por mensajeroId y cierreId:null; ordena por createdAt desc", async () => {
@@ -375,7 +380,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     return tx;
   }
 
-  const CORTE = { enRepartoEstatusId: "s-reparto", sinGestionarEstatusId: "s-sin-gestionar" };
+  const CORTE = { enRepartoEstatusId: idEstado("en_ruta"), sinGestionarEstatusId: idEstado("sin_gestionar") };
   function corteInput(overrides: Record<string, unknown> = {}) {
     return {
       mensajeroId: "m1",
@@ -402,13 +407,13 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     // Pre-SELECT de las ordenes del mensajero en en_ruta.
     expect(tx.orden.findMany.mock.calls[0][0].where).toEqual({
       mensajeroAsignadoId: "m1",
-      estatusId: "s-reparto",
+      estatusId: idEstado("en_ruta"),
       deletedAt: null,
     });
     // updateMany GUARDADO por estatus_id=en_ruta -> sin_gestionar; NO limpia mensajero (Q1).
     const upd = tx.orden.updateMany.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: { in: ["o1", "o2"] }, estatusId: "s-reparto", deletedAt: null });
-    expect(upd.data).toEqual({ estatusId: "s-sin-gestionar" });
+    expect(upd.where).toEqual({ id: { in: ["o1", "o2"] }, estatusId: idEstado("en_ruta"), deletedAt: null });
+    expect(upd.data).toEqual({ estatusId: idEstado("sin_gestionar") });
     expect(upd.data).not.toHaveProperty("mensajeroAsignadoId"); // se conserva
     expect(upd.data).not.toHaveProperty("prioridad"); // money-safe: no toca prioridad
   });
@@ -424,8 +429,8 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "s-reparto",
-        estatusDestinoId: "s-sin-gestionar",
+        estatusOrigenId: idEstado("en_ruta"),
+        estatusDestinoId: idEstado("sin_gestionar"),
         actorUsuarioId: null, // R6: sistema/cron
         origenTipo: "corte_sin_gestionar", // R6
         motivo: null,
@@ -433,8 +438,8 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       },
       {
         ordenId: "o2",
-        estatusOrigenId: "s-reparto",
-        estatusDestinoId: "s-sin-gestionar",
+        estatusOrigenId: idEstado("en_ruta"),
+        estatusDestinoId: idEstado("sin_gestionar"),
         actorUsuarioId: null,
         origenTipo: "corte_sin_gestionar",
         motivo: null,
@@ -743,7 +748,7 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       resultado: "devuelta",
       cierreId: null,
       anuladaAt: null,
-      orden: { deletedAt: null, estatusId: "s-bodega", estatus: { value: "en_bodega_central" } },
+      orden: { deletedAt: null, estatusId: idEstado("en_bodega_central"), estatus: { value: "en_bodega_central" } },
     });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
@@ -757,7 +762,7 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       resultado: "devuelta", // R5
       cierreId: null, // R2
       anuladaAt: null, // R3
-      orden: { deletedAt: null, estatusId: "s-bodega", estatusValue: "en_bodega_central" }, // R5/R6
+      orden: { deletedAt: null, estatusId: idEstado("en_bodega_central"), estatusValue: "en_bodega_central" }, // R5/R6
     });
   });
 
@@ -771,7 +776,7 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       resultado: "entregada",
       cierreId: null,
       anuladaAt: null,
-      orden: { deletedAt: borrada, estatusId: "s-entregada", estatus: { value: "entregada" } },
+      orden: { deletedAt: borrada, estatusId: idEstado("entregada"), estatus: { value: "entregada" } },
     });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
@@ -813,8 +818,8 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     ordenId: "o1",
     mensajeroId: "m1",
     actorUsuarioId: "m1",
-    estatusEsperadoId: "s-bodega",
-    estatusEnRepartoId: "s-reparto",
+    estatusEsperadoId: idEstado("en_bodega_central"),
+    estatusEnRepartoId: idEstado("en_ruta"),
   };
 
   function buildTx(counts: { anula?: number; mueve?: number } = {}) {
@@ -903,9 +908,9 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
 
     const arg = (tx.orden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
     // R5/R6: guardias — la orden sigue en el estado leido y no esta borrada.
-    expect(arg.where).toEqual({ id: "o1", estatusId: "s-bodega", deletedAt: null });
+    expect(arg.where).toEqual({ id: "o1", estatusId: idEstado("en_bodega_central"), deletedAt: null });
     // R18: `en_ruta` (unico estado desde el que se puede volver a gestionar).
-    expect(arg.data.estatusId).toBe("s-reparto");
+    expect(arg.data.estatusId).toBe(idEstado("en_ruta"));
     // R19: repone la asignacion que el SEGUIMIENTO del reintento (47/R6) habia limpiado.
     expect(arg.data.mensajeroAsignadoId).toBe("m1");
     // Feature 76/R23 (W4): la reposicion es una reasignacion efectiva -> estampa asignado_at.
@@ -925,8 +930,8 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "s-bodega", // origen = estado REAL previo de la orden
-        estatusDestinoId: "s-reparto",
+        estatusOrigenId: idEstado("en_bodega_central"), // origen = estado REAL previo de la orden
+        estatusDestinoId: idEstado("en_ruta"),
         actorUsuarioId: "m1", // quien deshizo
         origenTipo: "deshacer_gestion", // 12.º valor: distinguible de una gestion real
         motivo: null,
