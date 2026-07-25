@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import type {
@@ -12,6 +12,7 @@ import {
   dedupeKeyDebounce,
   dedupeKeyInmediato,
 } from "@/lib/services/jobs/optimizacion-ruta-encolado";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 92 (R16/R17/R19) — encolado TRANSACTIONAL OUTBOX desde los DOS writers del
 // mensajero. Prisma va mockeado (patron de `orden-geocode-enqueue.test.ts`), pero el
@@ -86,7 +87,7 @@ function prismaGestion(opts: { gestionId?: string; falla?: boolean } = {}) {
         return { id: opts.gestionId ?? "gestion-1" };
       }),
     },
-    orden: { update: vi.fn(async () => ({})), findFirst: vi.fn(async () => ({ estatusId: "os" })) },
+    orden: { update: vi.fn(async () => ({})), findFirst: vi.fn(async () => ({ estatusId: idEstado("en_ruta") })) },
     usuario: { update: vi.fn(async () => ({})) },
     ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
   };
@@ -104,15 +105,19 @@ const GESTION_INPUT = {
   ordenId: "o1",
   mensajeroId: MENSAJERO,
   gestion: { resultado: "entregada" as const, montoRecibido: 100, metodoPago: "efectivo" as const },
-  nuevoEstatusId: "os-entregada",
+  nuevoEstatusId: idEstado("entregada"),
 };
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
   it("una recogida deja UN job optimizacion_ruta con runAfter = ahora + debounce", async () => {
     const { prisma } = prismaRecoger([{ id: "o1" }]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, "os-espera", "os-reparto");
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_ruta"));
 
     expect(cola.ruta).toHaveLength(1);
     // PII: el payload lleva SOLO el id del mensajero.
@@ -131,8 +136,8 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     await repoRecoger(prisma, cola).recogerLote(
       ids.map((i) => i.id),
       MENSAJERO,
-      "os-espera",
-      "os-reparto",
+      idEstado("por_recoger"),
+      idEstado("en_ruta"),
     );
 
     expect(cola.ruta).toHaveLength(1);
@@ -142,7 +147,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma, tx } = prismaRecoger([{ id: "o1" }]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, "os-espera", "os-reparto");
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_ruta"));
 
     // El 4.º argumento de `enqueue` es el cliente transaccional del writer (outbox).
     expect(cola.ruta[0].tx).toBe(tx);
@@ -153,7 +158,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma } = prismaRecoger([]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, "os-espera", "os-reparto");
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_ruta"));
 
     expect(cola.ruta).toHaveLength(0);
   });
@@ -167,8 +172,8 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
     await repoRecoger(primera.prisma, cola, T0).recogerLote(
       ["o1"],
       MENSAJERO,
-      "os-espera",
-      "os-reparto",
+      idEstado("por_recoger"),
+      idEstado("en_ruta"),
     );
     const runAfterPrimero = cola.ruta[0].opts.runAfter;
 
@@ -177,8 +182,8 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
     await repoRecoger(segunda.prisma, cola, new Date(T0.getTime() + 20_000)).recogerLote(
       ["o2"],
       MENSAJERO,
-      "os-espera",
-      "os-reparto",
+      idEstado("por_recoger"),
+      idEstado("en_ruta"),
     );
 
     expect(cola.ruta).toHaveLength(1);
@@ -189,7 +194,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
     const cola = new ColaEnMemoria();
     for (const m of ["m-1", "m-2"]) {
       const { prisma } = prismaRecoger([{ id: "o1" }]);
-      await repoRecoger(prisma, cola, T0).recogerLote(["o1"], m, "os-espera", "os-reparto");
+      await repoRecoger(prisma, cola, T0).recogerLote(["o1"], m, idEstado("por_recoger"), idEstado("en_ruta"));
     }
     expect(cola.ruta).toHaveLength(2);
   });
@@ -217,8 +222,8 @@ describe("R19 — gestionar encola una reoptimizacion INMEDIATA", () => {
     await repoRecoger(recogida.prisma, cola, T0).recogerLote(
       ["o1"],
       MENSAJERO,
-      "os-espera",
-      "os-reparto",
+      idEstado("por_recoger"),
+      idEstado("en_ruta"),
     );
     expect(cola.ruta).toHaveLength(1);
 
@@ -244,7 +249,7 @@ describe("R16/R19 — una transaccion REVERTIDA no deja jobs huerfanos", () => {
     const cola = new ColaEnMemoria();
 
     await expect(
-      repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, "os-espera", "os-reparto"),
+      repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_ruta")),
     ).rejects.toThrow();
 
     // El encolado va DESPUES del append en la misma tx: nunca llego a ejecutarse.

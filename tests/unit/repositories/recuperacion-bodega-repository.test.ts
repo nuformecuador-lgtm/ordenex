@@ -1,6 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+
+// Feature 140: la guardia del choke point es de FALLO CERRADO. Los ids de estatus son los del
+// catalogo (`idEstado`) y el catalogo se siembra antes de cada test, asi el append valida de
+// verdad el par `origen -> destino` contra `TRANSICIONES` en vez de saltarselo.
 
 // Feature 100 (T2.2) — repo de la RECUPERACION a bodega (molde de
 // DevolucionSlaRepository.liberarDevueltaSla). Mockea Prisma (sin DB real; mocks bare +
@@ -26,25 +31,29 @@ function repoWith(prisma: ReturnType<typeof buildPrisma>) {
   return new RecuperacionBodegaRepository(prisma as unknown as PrismaClient);
 }
 
+beforeEach(async () => {
+  await sembrarCatalogoEstados();
+});
+
 describe("recuperarABodega (R13/R14/R17/R21)", () => {
   it("R13/R14/R17: UPDATE guardado por estatus=devuelta -> destino, limpia mensajero + asignado_at, append actor=admin", async () => {
     const prisma = buildPrisma();
 
     const ok = await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega-satelite",
-      estatusDevueltaId: "os-devuelta",
+      destinoEstatusId: idEstado("en_bodega_satelite"),
+      estatusDevueltaId: idEstado("devuelta"),
       actorUsuarioId: "admin-1",
     });
 
     expect(ok).toBe(true);
     const upd = prisma.orden.updateMany.mock.calls[0][0];
     // R21: guarda por estado + no borrada.
-    expect(upd.where).toEqual({ id: "o1", estatusId: "os-devuelta", deletedAt: null });
+    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
     // R13/R14: destino de bodega + handoff limpio (mensajero + asignado_at a null).
     // Feature 110/R2/R4/R6: prioridad=true va DENTRO del mismo data (una sola escritura).
     expect(upd.data).toEqual({
-      estatusId: "os-en-bodega-satelite",
+      estatusId: idEstado("en_bodega_satelite"),
       mensajeroAsignadoId: null,
       asignadoAt: null,
       prioridad: true,
@@ -55,8 +64,8 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     expect(hist.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-devuelta",
-        estatusDestinoId: "os-en-bodega-satelite",
+        estatusOrigenId: idEstado("devuelta"),
+        estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: "admin-1", // R17: trazabilidad del actor (no del cron)
         origenTipo: "recuperacion_manual", // R17
         motivo: null, // el choke point normaliza a null (no hay motivo en una recuperacion)
@@ -69,13 +78,13 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     const prisma = buildPrisma();
     await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega", // central
-      estatusDevueltaId: "os-devuelta",
+      destinoEstatusId: idEstado("en_bodega_central"), // central
+      estatusDevueltaId: idEstado("devuelta"),
       actorUsuarioId: "maestro-1",
     });
-    expect(prisma.orden.updateMany.mock.calls[0][0].data.estatusId).toBe("os-en-bodega");
+    expect(prisma.orden.updateMany.mock.calls[0][0].data.estatusId).toBe(idEstado("en_bodega_central"));
     expect(prisma.ordenHistorialEstado.createMany.mock.calls[0][0].data[0].estatusDestinoId).toBe(
-      "os-en-bodega",
+      idEstado("en_bodega_central"),
     );
   });
 
@@ -83,8 +92,8 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     const prisma = buildPrisma();
     await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega",
-      estatusDevueltaId: "os-devuelta",
+      destinoEstatusId: idEstado("en_bodega_central"),
+      estatusDevueltaId: idEstado("devuelta"),
       actorUsuarioId: "maestro-1",
     });
     // R4: una sola llamada a orden.updateMany (no hay segunda escritura para encender prioridad).
@@ -106,8 +115,8 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
 
     const ok = await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega",
-      estatusDevueltaId: "os-devuelta",
+      destinoEstatusId: idEstado("en_bodega_central"),
+      estatusDevueltaId: idEstado("devuelta"),
       actorUsuarioId: "admin-1",
     });
 
@@ -122,8 +131,8 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     await expect(
       repoWith(prisma).recuperarABodega({
         ordenId: "o1",
-        destinoEstatusId: "os-en-bodega",
-        estatusDevueltaId: "os-devuelta",
+        destinoEstatusId: idEstado("en_bodega_central"),
+        estatusDevueltaId: idEstado("devuelta"),
         actorUsuarioId: "admin-1",
       }),
     ).rejects.toThrow("historial down");

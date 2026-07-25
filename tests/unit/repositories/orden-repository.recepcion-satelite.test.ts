@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 33 — repo de la bodega satelite. Prisma se mockea con dobles simples
 // (patron orden-repository.guia.test.ts): sin DB real, se verifica la forma de la
@@ -29,6 +30,10 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
 
 // Feature 49/#6: contexto de historial (actor = el adminSatelite que recibe por QR).
 const HIST_RECEPCION = { actorUsuarioId: "adminsat-1", origenTipo: "recepcion_satelite" } as const;
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("OrdenRepository.findUsuarioZonaId (R4/R5)", () => {
   it("R4: devuelve la zona del adminSatelite (select zonaId por usuarioId)", async () => {
@@ -140,11 +145,11 @@ describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
 describe("OrdenRepository.recibirEnSatelite (R11/R18 · feature 49/#6)", () => {
   it("R11/R18: UPDATE guardado por id+zona+deletedAt+origen; true si afecto 1 fila", async () => {
     const prisma = buildPrisma();
-    prisma.orden.findFirst.mockResolvedValue({ estatusId: "os-ruta" });
+    prisma.orden.findFirst.mockResolvedValue({ estatusId: idEstado("en_ruta_bodega_satelite") });
     prisma.orden.updateMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const ok = await repo.recibirEnSatelite("o1", "z-limon", "os-recibida", HIST_RECEPCION);
+    const ok = await repo.recibirEnSatelite("o1", "z-limon", idEstado("en_bodega_satelite"), HIST_RECEPCION);
 
     expect(ok).toBe(true);
     const arg = prisma.orden.updateMany.mock.calls[0][0];
@@ -156,7 +161,7 @@ describe("OrdenRepository.recibirEnSatelite (R11/R18 · feature 49/#6)", () => {
       estatus: { value: "en_ruta_bodega_satelite" },
     });
     // R11: solo fija estatusId; NO toca mensajeroAsignadoId ni numGuia.
-    expect(arg.data).toEqual({ estatusId: "os-recibida" });
+    expect(arg.data).toEqual({ estatusId: idEstado("en_bodega_satelite") });
     expect(arg.data).not.toHaveProperty("mensajeroAsignadoId");
     expect(arg.data).not.toHaveProperty("numGuia");
   });
@@ -164,19 +169,19 @@ describe("OrdenRepository.recibirEnSatelite (R11/R18 · feature 49/#6)", () => {
   // Feature 49/#6 (R14/R7): al recibir, 1 historial (origen en_ruta -> en_bodega_satelite).
   it("R14: recepcion deja 1 historial con origen pre-leido y tipo recepcion_satelite", async () => {
     const prisma = buildPrisma();
-    prisma.orden.findFirst.mockResolvedValue({ estatusId: "os-ruta" });
+    prisma.orden.findFirst.mockResolvedValue({ estatusId: idEstado("en_ruta_bodega_satelite") });
     prisma.orden.updateMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.recibirEnSatelite("o1", "z-limon", "os-recibida", HIST_RECEPCION);
+    await repo.recibirEnSatelite("o1", "z-limon", idEstado("en_bodega_satelite"), HIST_RECEPCION);
 
     expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
     const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-ruta",
-        estatusDestinoId: "os-recibida",
+        estatusOrigenId: idEstado("en_ruta_bodega_satelite"),
+        estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: "adminsat-1",
         origenTipo: "recepcion_satelite",
         motivo: null,
@@ -192,7 +197,7 @@ describe("OrdenRepository.recibirEnSatelite (R11/R18 · feature 49/#6)", () => {
     prisma.orden.updateMany.mockResolvedValue({ count: 0 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.recibirEnSatelite("o1", "z-limon", "os-recibida", HIST_RECEPCION)).toBe(false);
+    expect(await repo.recibirEnSatelite("o1", "z-limon", idEstado("en_bodega_satelite"), HIST_RECEPCION)).toBe(false);
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 });
@@ -221,8 +226,8 @@ describe("OrdenRepository.recibirLoteEnSatelite (feature 63)", () => {
     const count = await repo.recibirLoteEnSatelite(
       ["o1", "o2", "o3"],
       "z-limon",
-      "os-ruta-satelite", // origen: en_ruta_bodega_satelite
-      "os-recibida", // destino: en_bodega_satelite
+      idEstado("en_ruta_bodega_satelite"), // origen: en_ruta_bodega_satelite
+      idEstado("en_bodega_satelite"), // destino: en_bodega_satelite
       HIST_RECEPCION,
     );
 
@@ -238,8 +243,8 @@ describe("OrdenRepository.recibirLoteEnSatelite (feature 63)", () => {
     const values = call.slice(1);
     // Alcance por zona + estado de ORIGEN en el WHERE + destino en el SET.
     expect(values).toContain("z-limon");
-    expect(values).toContain("os-ruta-satelite");
-    expect(values).toContain("os-recibida");
+    expect(values).toContain(idEstado("en_ruta_bodega_satelite"));
+    expect(values).toContain(idEstado("en_bodega_satelite"));
     // NO toca mensajero ni num_guia (paridad R11 de la recepcion 1-a-1).
     expect(strings).not.toMatch(/num_guia/);
     expect(strings).not.toMatch(/mensajero/);
@@ -256,8 +261,8 @@ describe("OrdenRepository.recibirLoteEnSatelite (feature 63)", () => {
     const count = await repo.recibirLoteEnSatelite(
       ["o1", "o2"],
       "z-limon",
-      "os-ruta-satelite",
-      "os-recibida",
+      idEstado("en_ruta_bodega_satelite"),
+      idEstado("en_bodega_satelite"),
       HIST_RECEPCION,
     );
 
@@ -267,8 +272,8 @@ describe("OrdenRepository.recibirLoteEnSatelite (feature 63)", () => {
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-ruta-satelite",
-        estatusDestinoId: "os-recibida",
+        estatusOrigenId: idEstado("en_ruta_bodega_satelite"),
+        estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: "adminsat-1",
         origenTipo: "recepcion_satelite",
         motivo: null,
@@ -285,8 +290,8 @@ describe("OrdenRepository.recibirLoteEnSatelite (feature 63)", () => {
     const count = await repo.recibirLoteEnSatelite(
       ["o1"],
       "z-limon",
-      "os-ruta-satelite",
-      "os-recibida",
+      idEstado("en_ruta_bodega_satelite"),
+      idEstado("en_bodega_satelite"),
       HIST_RECEPCION,
     );
 
@@ -299,7 +304,7 @@ describe("OrdenRepository.recibirLoteEnSatelite (feature 63)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     expect(
-      await repo.recibirLoteEnSatelite([], "z-limon", "os-ruta-satelite", "os-recibida", HIST_RECEPCION),
+      await repo.recibirLoteEnSatelite([], "z-limon", idEstado("en_ruta_bodega_satelite"), idEstado("en_bodega_satelite"), HIST_RECEPCION),
     ).toBe(0);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(tx.$queryRaw).not.toHaveBeenCalled();

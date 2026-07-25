@@ -21,13 +21,13 @@ const CREACION = new Set<string>(ESTADOS_CREACION);
 
 describe("R8 — la guardia acepta TODAS las transiciones del inventario", () => {
   it.each(INVENTARIO_FLUJO.map((a) => [a.n, a.origen, a.destino, a.via, a.callSite] as const))(
-    "#%i acepta %s -> %s (via %s, %s)",
+    "#%s acepta %s -> %s (via %s, %s)",
     (_n, origen, destino) => {
       expect(() => assertTransicionValida(origen, destino)).not.toThrow();
     },
   );
 
-  it("el inventario de flujo tiene las 41 aristas y 39 pares unicos del apendice A.3", () => {
+  it("el inventario de flujo tiene las 43 aristas y 39 pares unicos (A.3 + correccion #7b/#7c)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     const pares = new Set(INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino}`));
     expect(pares.size).toBe(RECUENTO_INVENTARIO.paresUnicos);

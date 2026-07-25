@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 100 (T1.2) — repo de la REPROGRAMACION por la tienda. Mockea Prisma (sin DB real, patron
 // devolucion-sla-repository.test.ts: mocks bare + mockResolvedValue). El fake pasa el propio prisma
@@ -35,12 +36,16 @@ function repoWith(prisma: ReturnType<typeof buildPrisma>) {
 
 const INPUT = {
   ordenId: "o1",
-  estatusDevueltaId: "os-devuelta",
-  estatusReprogramadaId: "os-reprogramada",
+  estatusDevueltaId: idEstado("devuelta"),
+  estatusReprogramadaId: idEstado("reprogramada"),
   fechaReprogramacion: "2026-07-25",
   motivo: "cliente pidio otra fecha",
   actorUsuarioId: "tienda-1",
 };
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("reprogramarDesdeDevuelta — transicion + gestion sintetica (R2/R3/R5/R11)", () => {
   it("R21: UPDATE guardado por estatus=devuelta + no borrada -> reprogramada", async () => {
@@ -49,8 +54,8 @@ describe("reprogramarDesdeDevuelta — transicion + gestion sintetica (R2/R3/R5/
 
     expect(ok).toBe(true);
     const upd = prisma.orden.updateMany.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: "o1", estatusId: "os-devuelta", deletedAt: null });
-    expect(upd.data).toEqual({ estatusId: "os-reprogramada" });
+    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
+    expect(upd.data).toEqual({ estatusId: idEstado("reprogramada") });
   });
 
   it("R5: deriva el mensajero de la ULTIMA gestion `devuelta` VIGENTE (no anulada, mas reciente)", async () => {
@@ -94,8 +99,8 @@ describe("reprogramarDesdeDevuelta — transicion + gestion sintetica (R2/R3/R5/
     expect(hist.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-devuelta",
-        estatusDestinoId: "os-reprogramada", // R8: destino reprogramada, no devuelta -> no cuenta intento
+        estatusOrigenId: idEstado("devuelta"),
+        estatusDestinoId: idEstado("reprogramada"), // R8: destino reprogramada, no devuelta -> no cuenta intento
         actorUsuarioId: "tienda-1", // R11: el adminTienda (no NULL, no el mensajero)
         origenTipo: "reprogramacion_tienda", // R11
         motivo: "cliente pidio otra fecha",

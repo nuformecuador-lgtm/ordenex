@@ -11,6 +11,7 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 import {
   assertTransicionValida,
   esOrderStatusValue,
+  TransicionNoValidableError,
 } from "@/lib/types/order-status-transiciones";
 
 /**
@@ -24,13 +25,17 @@ export type ChokePointTx = OrdenHistorialTxClient & JobTxClient;
 
 /**
  * Feature 140 (design §4) — resolvedor del catalogo de estados para la guardia: devuelve el
- * mapa `id -> value` de `order_status`, o `null` si el catalogo NO esta disponible en este
- * `tx`. Inyectable con default real, mismo patron que `emitir: WebhookEmisor`, para que la
- * firma publica de `appendCambioEstado` NO cambie para los ~18 call-sites (Q6/R8).
+ * mapa `id -> value` de `order_status`. Inyectable con default real, mismo patron que
+ * `emitir: WebhookEmisor`, para que la firma publica de `appendCambioEstado` NO cambie para
+ * los ~18 call-sites (Q6/R8).
+ *
+ * FALLO CERRADO (Q7): el tipo NO admite `null` ni `undefined`. Si el catalogo no se puede
+ * leer, la implementacion LANZA (`TransicionNoValidableError`) y la `$transaction` del
+ * call-site revierte. No existe "catalogo ausente => sigue adelante sin validar".
  */
 export type CatalogoEstadosResolver = (
   tx: ChokePointTx,
-) => Promise<ReadonlyMap<string, OrderStatusValue> | null>;
+) => Promise<ReadonlyMap<string, OrderStatusValue>>;
 
 /** Fila cruda del catalogo (`order_status`), el unico dato que la guardia necesita. */
 interface OrderStatusRow {
@@ -54,31 +59,44 @@ export function resetCatalogoEstadosCache(): void {
  * Resolvedor REAL usado por defecto (design §4). Lee el catalogo COMPLETO (18 filas) con UNA
  * consulta dentro del `tx` en curso y lo cachea por proceso.
  *
- * GUARD DEFENSIVO (mismo precedente que `emisorWebhookEstadoReal`): si el `tx` no expone
- * `$queryRaw`, o la consulta no devuelve un catalogo utilizable, retorna `null` = "catalogo
- * NO disponible". Eso ocurre SOLO con los dobles parciales de los tests unitarios historicos
- * de los call-sites (feature 49), que mockean el `tx` con `ordenHistorialEstado` a secas y
- * usan ids sinteticos (`os-x`) que no existen en ningun catalogo. En produccion el `tx` es
- * el cliente de `$transaction` de Prisma y `order_status` esta sembrado, asi que el catalogo
- * SIEMPRE resuelve y la guardia SIEMPRE valida. NO es un interruptor: no hay variable de
- * entorno, config ni parametro que lo fuerce (Q7, activacion estricta).
+ * FALLO CERRADO (Q7): si el `tx` no expone `$queryRaw`, si la consulta no devuelve un array o
+ * si el catalogo resulta vacio, LANZA `TransicionNoValidableError` — no devuelve un catalogo
+ * parcial ni deja pasar la escritura. Un fallo transitorio de lectura tambien lanza (lo
+ * propaga Prisma) y revierte la `$transaction` del call-site. La escritura de estado solo
+ * ocurre si la guardia pudo demostrar que la transicion es legal.
  */
 export const resolverCatalogoEstadosReal: CatalogoEstadosResolver = async (tx) => {
   if (catalogoCache !== null) return catalogoCache;
-  if (typeof (tx as { $queryRaw?: unknown }).$queryRaw !== "function") return null;
+  if (typeof (tx as { $queryRaw?: unknown }).$queryRaw !== "function") {
+    throw new TransicionNoValidableError("catalogo_no_disponible");
+  }
   const filas = await tx.$queryRaw<OrderStatusRow[]>`
     SELECT os."id" AS id, os."value" AS value
     FROM "order_status" os`;
-  if (!Array.isArray(filas)) return null;
+  if (!Array.isArray(filas)) throw new TransicionNoValidableError("catalogo_no_disponible");
   const porId = new Map<string, OrderStatusValue>();
   for (const fila of filas) {
     if (typeof fila?.id !== "string" || typeof fila?.value !== "string") continue;
+    // Una fila con un `value` que este build no conoce (drift DB->codigo) NO entra al mapa:
+    // no se puede clasificar. Cualquier transicion que la toque sera rechazada abajo con
+    // `estatus_desconocido`, en vez de colarse sin validar.
     if (esOrderStatusValue(fila.value)) porId.set(fila.id, fila.value);
   }
-  if (porId.size === 0) return null; // catalogo vacio/ilegible: no se cachea, no se valida
+  if (porId.size === 0) throw new TransicionNoValidableError("catalogo_no_disponible");
   catalogoCache = porId;
   return porId;
 };
+
+/** Resuelve un `id` de estatus a su `value`, o LANZA: no hay "no se pudo, sigue adelante". */
+function valueDe(
+  porId: ReadonlyMap<string, OrderStatusValue>,
+  estatusId: string,
+  lado: "origen" | "destino",
+): OrderStatusValue {
+  const value = porId.get(estatusId);
+  if (value === undefined) throw new TransicionNoValidableError("estatus_desconocido", lado);
+  return value;
+}
 
 /**
  * Feature 140 (R6/R7/R10) — valida el LOTE COMPLETO contra `TRANSICIONES` ANTES de escribir
@@ -86,10 +104,12 @@ export const resolverCatalogoEstadosReal: CatalogoEstadosResolver = async (tx) =
  * el `createMany` y el `emitir` no llegan a ejecutarse y el `throw` revierte la `$transaction`
  * del call-site: todo-o-nada, sin efectos parciales (R7).
  *
- * Una entrada cuyo `id` no esta en el catalogo resuelto se salta: no es clasificable, y no es
- * un agujero de la guardia — la FK `orden_historial_estado.estatus_destino_id -> order_status.id`
- * rechaza cualquier id que no exista, en esta misma transaccion. Ademas deja que un estado
- * sembrado DESPUES de arrancar el proceso (cache tibia) no tumbe el flujo.
+ * FALLO CERRADO (Q7, decision del gate): NO existe ninguna ruta por la que una entrada llegue
+ * al `createMany` sin haber pasado por `assertTransicionValida`. Si el catalogo no esta
+ * disponible, o si un `id` de la entrada no resuelve a un `value` CONOCIDO por este build
+ * (drift DB->codigo: la tabla gano un value que `ORDER_STATUS_SEED` aun no lista), la guardia
+ * no puede DEMOSTRAR la legalidad -> rechaza con `TransicionNoValidableError`. "No sé" se
+ * trata como "no", que es lo que distingue una guardia de un adorno.
  */
 async function validarTransiciones(
   tx: ChokePointTx,
@@ -97,17 +117,13 @@ async function validarTransiciones(
   catalogo: CatalogoEstadosResolver,
 ): Promise<void> {
   const porId = await catalogo(tx);
-  if (porId === null) return; // catalogo no disponible (doble de test): nada que clasificar
   for (const entrada of entradas) {
-    const destino = porId.get(entrada.estatusDestinoId);
-    if (destino === undefined) continue;
-    if (entrada.estatusOrigenId === null) {
-      assertTransicionValida(null, destino); // R10: creacion contra ESTADOS_CREACION
-      continue;
-    }
-    const origen = porId.get(entrada.estatusOrigenId);
-    if (origen === undefined) continue;
-    assertTransicionValida(origen, destino); // R6
+    const destino = valueDe(porId, entrada.estatusDestinoId, "destino");
+    const origen =
+      entrada.estatusOrigenId === null
+        ? null // creacion (R10): se valida contra ESTADOS_CREACION
+        : valueDe(porId, entrada.estatusOrigenId, "origen");
+    assertTransicionValida(origen, destino); // R6/R10
   }
 }
 
@@ -141,6 +157,10 @@ async function validarTransiciones(
  * `TransicionIlegalError` y revierte la `$transaction` del call-site (R7). `catalogo` es
  * inyectable con default real (mismo patron que `emitir`), asi la firma sigue siendo
  * compatible con los ~18 call-sites (R8).
+ *
+ * La guardia es de FALLO CERRADO (Q7): si no puede resolver el catalogo, o si un `id` de la
+ * entrada no corresponde a un `value` conocido por este build, lanza `TransicionNoValidableError`
+ * en vez de dejar pasar la escritura sin validar.
  */
 export async function appendCambioEstado(
   tx: ChokePointTx,

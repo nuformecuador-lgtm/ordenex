@@ -1,6 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionReprogramadaRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+
+// Feature 140: la guardia del choke point es de FALLO CERRADO. Los ids de estatus son los del
+// catalogo (`idEstado`) y el catalogo se siembra antes de cada test, asi el append valida de
+// verdad el par `origen -> destino` contra `TRANSICIONES` en vez de saltarselo.
 
 // Feature 46 (R10/R11/R13/R15/R17) — repo de la liberacion programada. Mockea Prisma
 // (sin DB real, patron corte-diario-repository.test.ts). Cubre: seleccion `<= hoy`,
@@ -27,6 +32,10 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
 function repoWith(prisma: ReturnType<typeof buildPrisma>) {
   return new LiberacionReprogramadaRepository(prisma as unknown as PrismaClient);
 }
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados();
+});
 
 describe("findOrdenesLiberables (R10/R11)", () => {
   it("R10: filtra por estatus reprogramada + no borrada, gestion reprogramada mas reciente", async () => {
@@ -81,17 +90,17 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
 
     const ok = await repoWith(prisma).liberarOrden({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega",
-      estatusReprogramadaId: "os-reprogramada",
+      destinoEstatusId: idEstado("en_bodega_central"),
+      estatusReprogramadaId: idEstado("reprogramada"),
       corridaAt,
     });
 
     expect(ok).toBe(true);
     const arg = prisma.orden.updateMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ id: "o1", estatusId: "os-reprogramada", deletedAt: null });
+    expect(arg.where).toEqual({ id: "o1", estatusId: idEstado("reprogramada"), deletedAt: null });
     // Feature 110/R1/R6: prioridad=true va DENTRO del mismo data (resto de campos intactos).
     expect(arg.data).toEqual({
-      estatusId: "os-en-bodega",
+      estatusId: idEstado("en_bodega_central"),
       mensajeroAsignadoId: null,
       asignadoAt: null, // feature 76/LC1 (C3): limpia el timestamp de asignacion
       liberadaReprogramadaAt: corridaAt,
@@ -107,8 +116,8 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
 
     await repoWith(prisma).liberarOrden({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega-satelite",
-      estatusReprogramadaId: "os-reprogramada",
+      destinoEstatusId: idEstado("en_bodega_satelite"),
+      estatusReprogramadaId: idEstado("reprogramada"),
       corridaAt: new Date("2026-07-15T06:00:00.000Z"),
     });
 
@@ -125,8 +134,8 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
 
     await repoWith(prisma).liberarOrden({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega-satelite",
-      estatusReprogramadaId: "os-reprogramada",
+      destinoEstatusId: idEstado("en_bodega_satelite"),
+      estatusReprogramadaId: idEstado("reprogramada"),
       corridaAt: new Date("2026-07-15T06:00:00.000Z"),
     });
 
@@ -135,8 +144,8 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-reprogramada",
-        estatusDestinoId: "os-en-bodega-satelite",
+        estatusOrigenId: idEstado("reprogramada"),
+        estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: null, // R21: sistema/cron
         origenTipo: "liberacion_reprogramada",
         motivo: null,
@@ -151,8 +160,8 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
 
     const ok = await repoWith(prisma).liberarOrden({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega",
-      estatusReprogramadaId: "os-reprogramada",
+      destinoEstatusId: idEstado("en_bodega_central"),
+      estatusReprogramadaId: idEstado("reprogramada"),
       corridaAt: new Date(),
     });
 

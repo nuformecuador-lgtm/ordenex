@@ -3,14 +3,18 @@ import {
   appendCambioEstado,
   resetCatalogoEstadosCache,
 } from "@/lib/repositories/registrar-cambio-estado";
-import { ORDER_STATUS_SEED, type OrderStatusValue } from "@/lib/types/order-status";
-import { TransicionIlegalError } from "@/lib/types/order-status-transiciones";
+import { type OrderStatusValue } from "@/lib/types/order-status";
+import {
+  TransicionIlegalError,
+  TransicionNoValidableError,
+} from "@/lib/types/order-status-transiciones";
 import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import {
   INVENTARIO_CREACION,
   INVENTARIO_FLUJO,
   RECUENTO_INVENTARIO,
 } from "@/tests/fixtures/inventario-transiciones-140";
+import { filasCatalogoEstados, idEstado } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 140 — T3.3 (R7/R11/R13) + T3.4 (R8 data-driven sobre el inventario COMPLETO):
 // la GUARDIA en el choke point `appendCambioEstado`.
@@ -20,7 +24,7 @@ import {
 // exactamente lo que hace la tabla real tras el seed. Asi la guardia corre de verdad
 // (resuelve `id -> value` y valida el par), sin Postgres.
 
-const idDe = (value: OrderStatusValue): string => `os-${value}`;
+const idDe = idEstado;
 
 /** Argumento que el choke point pasa a `createMany` (se inspecciona en los tests de R11). */
 interface CreateManyArg {
@@ -31,9 +35,7 @@ function buildTx(conCatalogo = true) {
   const createMany = vi.fn(async (arg: CreateManyArg) => ({ count: arg.data.length }));
   const $queryRaw = vi.fn(async (strings: TemplateStringsArray) => {
     const sql = strings.join(" ");
-    if (conCatalogo && sql.includes("order_status")) {
-      return ORDER_STATUS_SEED.map((value) => ({ id: idDe(value), value }));
-    }
+    if (conCatalogo && sql.includes("order_status")) return filasCatalogoEstados();
     return [];
   });
   const tx = { ordenHistorialEstado: { createMany }, $queryRaw, $executeRaw: vi.fn() };
@@ -68,7 +70,7 @@ beforeEach(() => {
 
 describe("R8/T3.4 — ninguna transicion del inventario empieza a fallar por la guardia", () => {
   it.each(INVENTARIO_FLUJO.map((a) => [a.n, a.origen, a.destino, a.via] as const))(
-    "#%i deja pasar %s -> %s (origen_tipo %s) y registra el historial",
+    "#%s deja pasar %s -> %s (origen_tipo %s) y registra el historial",
     async (_n, origen, destino, via) => {
       const { tx, createMany } = buildTx();
       const emitir = vi.fn(async () => {});
@@ -88,12 +90,12 @@ describe("R8/T3.4 — ninguna transicion del inventario empieza a fallar por la 
     },
   );
 
-  it("el test recorre el inventario COMPLETO (41 aristas de flujo + 3 de creacion)", () => {
+  it("el test recorre el inventario COMPLETO (43 aristas de flujo + 3 de creacion)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     expect(INVENTARIO_CREACION).toHaveLength(RECUENTO_INVENTARIO.aristasCreacion);
   });
 
-  it("un lote con las 41 aristas de flujo a la vez pasa en una sola llamada", async () => {
+  it("un lote con las 43 aristas de flujo a la vez pasa en una sola llamada", async () => {
     const { tx, createMany } = buildTx();
     const emitir = vi.fn(async () => {});
     const lote = INVENTARIO_FLUJO.map((a, i) => entrada(a.origen, a.destino, a.via, `o${i}`));
@@ -275,14 +277,108 @@ describe("resolvedor de catalogo inyectable (patron del emisor de webhooks)", ()
     expect(createMany).not.toHaveBeenCalled();
   });
 
-  it("un tx que no puede leer el catalogo (doble parcial) no rompe el append", async () => {
-    // Guard defensivo documentado: los tests historicos de los ~18 call-sites mockean el tx
-    // con `ordenHistorialEstado` a secas e ids sinteticos. Sin catalogo no hay nada que
-    // clasificar; en produccion el tx SIEMPRE es el de Prisma y el catalogo SIEMPRE resuelve.
+  it("con el catalogo inyectado, un id que no resuelve tambien lanza", async () => {
+    const { tx, createMany } = buildTx();
+    const emitir = vi.fn(async () => {});
+    const catalogo = vi.fn(async () =>
+      new Map<string, OrderStatusValue>([[idDe("entregada"), "entregada"]]),
+    );
+    await expect(
+      appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir, catalogo),
+    ).rejects.toBeInstanceOf(TransicionNoValidableError);
+    expect(createMany).not.toHaveBeenCalled();
+  });
+});
+
+// FALLO CERRADO (Q7). Antes existia aqui un test que consagraba lo contrario ("un tx que no
+// puede leer el catalogo no rompe el append"): era el contrato del fail-open. Se elimino y se
+// sustituye por estos, que exigen el RECHAZO. Si la guardia no puede DEMOSTRAR que la
+// transicion es legal, no se escribe: "no sé" se trata como "no".
+describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
+  it("un tx sin $queryRaw (doble parcial) RECHAZA el append", async () => {
     const createMany = vi.fn(async () => ({ count: 1 }));
     const tx = { ordenHistorialEstado: { createMany } };
     const emitir = vi.fn(async () => {});
-    await appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir);
-    expect(createMany).toHaveBeenCalledTimes(1);
+    await expect(
+      appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir),
+    ).rejects.toBeInstanceOf(TransicionNoValidableError);
+    expect(createMany).not.toHaveBeenCalled();
+    expect(emitir).not.toHaveBeenCalled();
+  });
+
+  it("un $queryRaw que no devuelve filas de catalogo RECHAZA el append", async () => {
+    const { tx, createMany } = buildTx(false); // responde [] a la consulta del catalogo
+    const emitir = vi.fn(async () => {});
+    await expect(
+      appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir),
+    ).rejects.toBeInstanceOf(TransicionNoValidableError);
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it("un fallo de lectura del catalogo se propaga y revierte la tx (no degrada)", async () => {
+    const createMany = vi.fn(async () => ({ count: 1 }));
+    const tx = {
+      ordenHistorialEstado: { createMany },
+      $queryRaw: vi.fn(async () => {
+        throw new Error("connection terminated");
+      }),
+    };
+    const emitir = vi.fn(async () => {});
+    await expect(
+      appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir),
+    ).rejects.toThrow("connection terminated");
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it("DRIFT DB->build: un value que el build no conoce NO pasa sin validar", async () => {
+    // La tabla `order_status` tiene un value que este build todavia no lista en el SEED
+    // (deploy con el catalogo por delante del codigo). Antes esa transicion se colaba: el id
+    // existe, la FK es feliz y la guardia la saltaba. Ahora se RECHAZA.
+    const createMany = vi.fn(async () => ({ count: 1 }));
+    const tx = {
+      ordenHistorialEstado: { createMany },
+      $queryRaw: vi.fn(async () => [
+        ...filasCatalogoEstados(),
+        { id: "os-estado-del-futuro", value: "estado_del_futuro" },
+      ]),
+    };
+    const emitir = vi.fn(async () => {});
+    await expect(
+      appendCambioEstado(
+        tx as never,
+        [
+          {
+            ordenId: "o1",
+            estatusOrigenId: idDe("en_ruta"),
+            estatusDestinoId: "os-estado-del-futuro",
+            actorUsuarioId: "u1",
+            origenTipo: "gestion",
+          },
+        ],
+        emitir,
+      ),
+    ).rejects.toBeInstanceOf(TransicionNoValidableError);
+    expect(createMany).not.toHaveBeenCalled();
+    expect(emitir).not.toHaveBeenCalled();
+  });
+
+  it("el error de no-validable no filtra ids ni PII", async () => {
+    const createMany = vi.fn(async () => ({ count: 1 }));
+    const tx = { ordenHistorialEstado: { createMany } };
+    const emitir = vi.fn(async () => {});
+    await expect(
+      appendCambioEstado(
+        tx as never,
+        [entrada("en_ruta", "entregada", "gestion", "orden-secreta")],
+        emitir,
+      ),
+    ).rejects.toThrow("transicion no validable: el catalogo de estados no esta disponible");
+    await expect(
+      appendCambioEstado(
+        tx as never,
+        [entrada("en_ruta", "entregada", "gestion", "orden-secreta")],
+        emitir,
+      ),
+    ).rejects.not.toThrow(/orden-secreta|u1|os-/);
   });
 });

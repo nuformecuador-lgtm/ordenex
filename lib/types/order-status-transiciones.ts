@@ -7,9 +7,12 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // (el choke point `appendCambioEstado`) resuelve `id -> value` antes de preguntar aqui.
 //
 // El mapa es el INVENTARIO CERRADO del apendice A del design, leido del codigo de `dev`:
-// 41 aristas de flujo (numeracion #1-#42 con el #27 RETIRADO) + 3 aristas de creacion.
-// Las 41 colapsan a 39 pares `(origen, destino)` unicos: #19/#23 y #20/#24 comparten par y
-// difieren SOLO en familia.
+// 43 aristas de flujo (numeracion #1-#42 con el #27 RETIRADO, + #7b/#7c) + 3 de creacion.
+// Las 43 colapsan a 39 pares `(origen, destino)` unicos, porque cuatro pares estan declarados
+// dos veces con familias distintas: #19/#23, #20/#24 (SLA vs. recuperacion manual) y
+// #3/#7b, #6/#7c (`generacion_guia` no-GAM vs. `ruteo_satelite`; el apendice A contaba 41
+// porque omitia estas dos ultimas — `ORIGEN_RUTEO_SATELITE` de `GuiaAsignacionService.ts:35`
+// admite `en_fulfillment`/`en_preparacion` ademas de `en_bodega_central`).
 //
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
@@ -45,11 +48,16 @@ export const TRANSICIONES = {
     { to: "por_recoger", via: "generacion_guia", rol: "maestro/admin" }, // #4
     { to: "en_bodega_central", via: "generacion_guia", rol: "maestro/admin" }, // #5
     { to: "en_ruta_bodega_satelite", via: "generacion_guia", rol: "maestro/admin" }, // #6
+    // #7c: `rutearABogegaSatelite` admite este origen (`ORIGEN_RUTEO_SATELITE`,
+    // GuiaAsignacionService.ts:35) y emite `ruteo_satelite`. Mismo PAR que #6, otra familia.
+    { to: "en_ruta_bodega_satelite", via: "ruteo_satelite", rol: "maestro/admin" }, // #7c
   ],
   en_fulfillment: [
     { to: "por_recoger", via: "generacion_guia", rol: "maestro/admin" }, // #1
     { to: "en_bodega_central", via: "generacion_guia", rol: "maestro/admin" }, // #2
     { to: "en_ruta_bodega_satelite", via: "generacion_guia", rol: "maestro/admin" }, // #3
+    // #7b: idem #7c desde `en_fulfillment` (mismo PAR que #3, familia `ruteo_satelite`).
+    { to: "en_ruta_bodega_satelite", via: "ruteo_satelite", rol: "maestro/admin" }, // #7b
   ],
   en_ruta_bodega_central: [
     { to: "devolviendo_a_tienda", via: "cancelacion_api", rol: "apiKey (tienda)" }, // #30
@@ -195,6 +203,40 @@ export class TransicionIlegalError extends Error {
         : `transicion ilegal: ${origen} -> ${destino}`,
     );
     this.name = "TransicionIlegalError";
+  }
+}
+
+/**
+ * Motivo por el que la guardia NO PUDO decidir la legalidad de una transicion.
+ *   - `catalogo_no_disponible`: no se pudo leer `order_status` en la transaccion en curso.
+ *   - `estatus_desconocido`: un `id` de la entrada no corresponde a ningun `value` del
+ *     catalogo CONOCIDO por este build (drift DB->codigo: la tabla tiene un value que
+ *     `ORDER_STATUS_SEED` todavia no lista).
+ */
+export type MotivoNoValidable = "catalogo_no_disponible" | "estatus_desconocido";
+
+/**
+ * Feature 140 (Q7, activacion estricta) — FALLO CERRADO. Si la guardia no puede DEMOSTRAR que
+ * una transicion es legal, la RECHAZA: no existe ninguna ruta por la que una entrada llegue al
+ * `createMany` sin haber pasado por `assertTransicionValida`.
+ *
+ * Es un error distinto de `TransicionIlegalError` a proposito: "no pude validar" no es lo
+ * mismo que "es ilegal", y separarlos deja el diagnostico claro en la bitacora del incidente
+ * (drift catalogo/codigo vs. flujo que intenta una arista inexistente). Mensaje SIN PII: ni
+ * ids, ni ordenes, ni actores (R12).
+ */
+export class TransicionNoValidableError extends Error {
+  constructor(
+    readonly motivo: MotivoNoValidable,
+    /** Lado de la transicion que no resolvio (solo para `estatus_desconocido`). */
+    readonly lado: "origen" | "destino" | null = null,
+  ) {
+    super(
+      motivo === "catalogo_no_disponible"
+        ? "transicion no validable: el catalogo de estados no esta disponible"
+        : `transicion no validable: el catalogo no reconoce el estatus de ${lado ?? "la transicion"}`,
+    );
+    this.name = "TransicionNoValidableError";
   }
 }
 

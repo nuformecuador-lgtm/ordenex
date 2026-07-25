@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
@@ -9,6 +9,7 @@ import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/reposit
 import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWalletTiendaFeedService";
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 38 — tests unit del CierresAdminRepository (mockea Prisma, sin DB real,
 // patron cierre-dia-repository.test.ts). Cubre R2/R4/R5 (findCierresByAlcance con
@@ -168,6 +169,10 @@ function detalleRow(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("CierresAdminRepository.findCierresByAlcance (R2/R4/R5)", () => {
   it("R2: maestro -> WHERE solo destino_tipo=bodega_central (SIN destinoZonaId); orderBy solicitadoAt desc", async () => {
@@ -1039,9 +1044,9 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
 
 describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestionar` (feature 109/R16-R20)", () => {
   const LIBERACION = {
-    sinGestionarEstatusId: "s-sg",
-    enBodegaEstatusId: "s-bodega",
-    enBodegaSateliteEstatusId: "s-bodega-sat",
+    sinGestionarEstatusId: idEstado("sin_gestionar"),
+    enBodegaEstatusId: idEstado("en_bodega_central"),
+    enBodegaSateliteEstatusId: idEstado("en_bodega_satelite"),
     centralZonaId: "z-central",
   };
 
@@ -1099,15 +1104,15 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     // R16/R19: pre-SELECT de las `sin_gestionar` del mensajero del cierre.
     expect(prisma.orden.findMany.mock.calls[0][0].where).toEqual({
       mensajeroAsignadoId: "m1",
-      estatusId: "s-sg",
+      estatusId: idEstado("sin_gestionar"),
       deletedAt: null,
     });
     // dos updateMany (uno por destino), cada uno GUARDADO por estatus_id=sin_gestionar.
     const calls = prisma.orden.updateMany.mock.calls.map((c) => c[0]);
-    const central = calls.find((c) => c.data.estatusId === "s-bodega");
-    const sat = calls.find((c) => c.data.estatusId === "s-bodega-sat");
-    expect(central.where).toEqual({ id: { in: ["o1"] }, estatusId: "s-sg", deletedAt: null });
-    expect(sat.where).toEqual({ id: { in: ["o2"] }, estatusId: "s-sg", deletedAt: null });
+    const central = calls.find((c) => c.data.estatusId === idEstado("en_bodega_central"));
+    const sat = calls.find((c) => c.data.estatusId === idEstado("en_bodega_satelite"));
+    expect(central.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("sin_gestionar"), deletedAt: null });
+    expect(sat.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("sin_gestionar"), deletedAt: null });
     // R16/R17: limpia mensajero/asignado_at + prioridad=true en la MISMA escritura.
     for (const c of [central, sat]) {
       expect(c.data).toMatchObject({
@@ -1128,8 +1133,8 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     expect(entradas).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "s-sg",
-        estatusDestinoId: "s-bodega-sat",
+        estatusOrigenId: idEstado("sin_gestionar"),
+        estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: "adm-maestro", // R18: el admin que aprobo
         origenTipo: "liberacion_sin_gestionar", // R18
         motivo: null,

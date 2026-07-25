@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type {
@@ -11,6 +11,7 @@ import type { JobTipo } from "@prisma/client";
 import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { hashDireccion } from "@/lib/geo/direccion-query";
 import { dedupeKeyGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 91 (R6, R7, R8, R12, R13) — encolado TRANSACTIONAL OUTBOX desde los writers de
 // direccion. Prisma va mockeado (patron de tests/integration/repositories), pero el
@@ -74,7 +75,7 @@ class ColaEnMemoria implements IJobRepository {
 
 const CREATE_DATA: CreateOrdenData = {
   numRemision: "REM-1",
-  estatusId: "st-1",
+  estatusId: idEstado("en_preparacion"),
   destinatario: "Ana",
   telefonoDest: "88880000",
   tiendaId: "tienda-1",
@@ -126,6 +127,10 @@ function buildPrisma(overrides: {
   };
   return { prisma, orden, ordenHistorialEstado };
 }
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("R6 — creacion individual", () => {
   it("crear una orden con direccion deja un job geocodificacion pendiente", async () => {
@@ -201,9 +206,9 @@ describe("R8 — carga masiva", () => {
     const { prisma } = buildPrisma({
       before: [{ id: "orden-existente" }],
       after: [
-        { id: "orden-existente", estatusId: "st-1", direccion: "Ya estaba" },
-        { id: "orden-a", estatusId: "st-1", direccion: "Av. A" },
-        { id: "orden-b", estatusId: "st-1", direccion: "Av. B" },
+        { id: "orden-existente", estatusId: idEstado("en_preparacion"), direccion: "Ya estaba" },
+        { id: "orden-a", estatusId: idEstado("en_preparacion"), direccion: "Av. A" },
+        { id: "orden-b", estatusId: idEstado("en_preparacion"), direccion: "Av. B" },
       ],
       createManyCount: 2,
     });
@@ -229,9 +234,9 @@ describe("R8 — carga masiva", () => {
     const { prisma } = buildPrisma({
       before: [],
       after: [
-        { id: "orden-a", estatusId: "st-1", direccion: "Av. A" },
-        { id: "orden-b", estatusId: "st-1", direccion: null },
-        { id: "orden-c", estatusId: "st-1", direccion: "   " },
+        { id: "orden-a", estatusId: idEstado("en_preparacion"), direccion: "Av. A" },
+        { id: "orden-b", estatusId: idEstado("en_preparacion"), direccion: null },
+        { id: "orden-c", estatusId: idEstado("en_preparacion"), direccion: "   " },
       ],
       createManyCount: 3,
     });
