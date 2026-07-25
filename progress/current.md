@@ -18,10 +18,19 @@
 ### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
 
 > Detalle de las 4 en `history.md`. PRs #157 (137) · #159 (138) · #160 (139) · #161 (140).
-> **Deuda viva del lote (tarea humana):** las migraciones de 137/138/139 NO se han aplicado contra DB
-> real (entorno sin `.env`) → al desplegar, `prisma migrate deploy` + verificar `down.sql` con
-> `db:rollback`, **coordinado con el deploy**: la 137 renombra values del catálogo y código y DB deben
-> coincidir. La 140 no trae migraciones.
+> **✅ DESPLEGADO A PROD 2026-07-25 (PR #163 `dev → prod`).** Deployment `ordenex-qzzgvlmhq` **Ready**;
+> build verde en 29 s; runtime sin errores (cron `/api/cron/procesar-jobs` cada minuto, 200).
+> **Migraciones APLICADAS** en la base de producción: el build corrió `prisma migrate deploy` y reportó
+> `No pending migrations to apply` sobre **86 migraciones** = las 86 del repo (incluidas las 4 del lote).
+> Deuda de migraciones **saldada**; también aplicadas y verificadas en la DB local.
+>
+> ⚠️ **Hallazgo operativo del deploy (importante para el futuro):** los **previews de Vercel usan la
+> MISMA base de Supabase que producción**. Como el `build` es `prisma generate && prisma migrate deploy
+> && next build`, **el build de un preview migra la base de producción**. Por eso las migraciones ya
+> estaban aplicadas antes del merge a `prod`. Consecuencia: la ventana de riesgo de una migración
+> no-aditiva empieza **al abrir el PR**, no al mergear — con el rename de la 137 esa ventana estuvo
+> abierta desde el preview del PR #157. Para renames/destructivas futuras: patrón expand-contract o
+> mergear inmediatamente tras abrir el PR.
 >
 > Cierre de deuda en `chore/cierre-lote-137-140`: T4.1 de la 139 saldada (test de integración del
 > recorrido completo), los 2 `down.sql` que faltaban en el repo (deuda ajena de WhatsApp) escritos y
