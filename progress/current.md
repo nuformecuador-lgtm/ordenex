@@ -257,22 +257,30 @@ El último trabajo previo mergeado fue la **feature 97** (optimización de ruta 
 
 ## Backlog pendiente
 
-Las 7 features `pending`. El detalle completo (alcance, decisiones del gate F1.4, hallazgos)
-vive en su entrada de `feature_list.json`. Las 6 con dependencia la tienen `done`, así que
-**todas están desbloqueadas**.
+> **Auditado contra el código el 2026-07-26.** El registro estaba desactualizado: **3 features
+> figuraban pendientes pero YA ESTABAN IMPLEMENTADAS** (112, 105, 79 → `done`) y **2 estaban a medias
+> en la mitad contraria** a la que decía su ficha (85 y 74). Evidencia por feature en su `status_note`
+> de `feature_list.json`. **No queda ninguna feature `in_progress` ni `spec_ready`.**
 
-| # | Feature | Zona | Depende de |
-|---|---------|------|-----------|
-| 66 | qr - detalle (detalle de la orden con switch por rol) | — | — |
-| 70 | regla de selección de tarifa vigente (filtrar `tarifas.status`) | backend | 69 ✅ |
-| 71 | listado del maestro: bloquear checkbox de órdenes con cierre sin resolver | fullstack | 69 ✅ |
-| 74 | explotar la causa de devolución (mostrarla y agruparla) | fullstack | 73 ✅ |
-| 79 | decidir si `/paquete/[numGuia]` es pública y desbloquearla | backend | 78 ✅ |
-| 80 | proveedor de correo real + sacar el OTP de los logs | backend | 78 ✅ |
-| 85 | wallet - periodicidad de gastos fijos (frontend) | frontend | 84 ✅ |
+**Cerradas por la auditoría (ya estaban hechas):**
 
-> **66** se reclasificó de `in_progress` → `pending` el 2026-07-21: nunca se empezó (sin rama,
-> sin spec, sin commit; solo existe el escáner de la feature 65 que navega a la ruta del QR).
+| # | Evidencia |
+|---|-----------|
+| 112 | `WebhookEstadoService.ts:89` ya usa el sobre `data:`; test en `webhook-estado-service.test.ts:94`. Figuraba `spec_ready`. |
+| 105 | UI cableada: `page.tsx` → `ApiKeysModule` → `api-keys-columns` → `WebhookAccionCell` → `RegistrarWebhookForm` (+ `RevelarWebhookSecretoModal`), con 3 tests de componente. |
+| 79 | Decisión tomada e implementada (opción **b**: exige sesión). `middleware.ts` con `REDIRECT_TO_ROOT = ["/paquete"]` manda a `/` en vez de a `/login`; tests en `middleware.test.ts:116-127`. |
+
+**Pendientes reales — 5 sueltas + 15 de analítica:**
+
+| # | Feature | Zona | Estado real |
+|---|---------|------|-------------|
+| 80 | proveedor de correo real + sacar el OTP de los logs | backend | **Sin empezar.** `StubEmailProvider` vivo y OTP en `console.log` (`OtpChallengeIssuer.ts:39`) → **ningún email sale hoy en producción**. |
+| 85 | wallet - periodicidad de gastos fijos | frontend | **Backend YA HECHO** (migración `gasto_fijo_periodicidad` + `GastoFijoPlantillaService` + `GeneracionGastosFijosService`). Falta **solo la UI**. |
+| 74 | explotar la causa de devolución | fullstack | **Captura YA HECHA** (`causa-devolucion-options.ts` + `GestionarOrdenPanel`). Falta **mostrarla y agruparla** en los listados. |
+| 70 | regla de selección de tarifa vigente | backend | Sin empezar. ⚠️ **Requiere gate humano**: lo dice el propio código (`TarifaVigentePorTiendaRepository.ts:56`, decisión (g) de la 69 sin cerrar). |
+| 71 | bloquear checkbox de órdenes con cierre sin resolver | fullstack | Sin empezar, sin rastro en `app/(app)/ordenes`. |
+| 66 | qr - detalle (switch por rol) | — | Sin empezar; solo existe el escáner de la 65 (`app/(app)/qr/page.tsx` navega a la ruta del QR). |
+| 135 + 122–134 | **analítica** (15 encadenadas) | backend/frontend | Sin empezar: sin ruta `/analitica`, sin migración `analytics_daily`, sin servicios. |
 
 ## Deudas de arnés vivas
 
