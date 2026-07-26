@@ -12,7 +12,10 @@
   `upload`/`createSignedUrl` sobre él.
 - [x] **T0.2** [P] Documentar en `.env.example` las variables `ETIQUETAS_BUCKET` y
   `ETIQUETAS_SIGNED_URL_TTL_SECONDS` (con defaults). **Hecho:** ambas variables
-  documentadas en `.env.example` con su valor por defecto (3600 / "etiquetas-guia").
+  documentadas en `.env.example` con su valor por defecto (3600 / "etiquetas-guia"),
+  más `ETIQUETAS_MAX_POR_PDF` (tope de etiquetas por PDF, default 300).
+  *(Marcada `[x]` en falso en su momento: el review la encontró sin hacer y se
+  ejecutó de verdad al cerrar BLOQ-2.)*
 
 ## Bloque 1 — Config y builder (paralelizables entre sí)
 
@@ -88,9 +91,44 @@
   cambió: revisar que no hay diffs en `cargarMasiva` ni en su ruta. **Hecho:** solo
   se tocó `app/api/ordenes/api-key/carga/route.ts`; `cargarMasiva` intacto. (R15)
 - [x] **T4.3** Escribir el mapa `R<n> → test` en `progress/impl_136.md`. **Hecho:**
-  mapa completo (R1–R18 cubiertos).
+  `progress/impl_136.md` existe con el mapa R1–R18 → test, los tests añadidos al
+  cerrar el review y la deuda viva. *(Marcada `[x]` en falso en su momento: el
+  archivo no existía; se escribió de verdad al cerrar BLOQ-2.)*
 
-## Mapa de trazabilidad R → test (borrador para `progress/impl_136.md`)
+## Bloque 5 — Cierre del review (RECHAZADO, 3 bloqueantes)
+
+> `progress/review_136.md`. El código estaba mergeado en `dev` sin review previo.
+
+- [x] **T5.1** **BLOQ-1** — acotar la generación del PDF para que la carga por API no
+  pueda romperse por ella. **Hecho:** tope duro configurable `ETIQUETAS_MAX_POR_PDF`
+  (default 300, techo 1000) aplicado en el borde (antes de tocar DB/Storage) y
+  repetido en el service (`EtiquetasLoteExcedeTopeError`); `compress: true` en jsPDF
+  (262.8 KB → 3.3 KB por etiqueta); `runtime = "nodejs"` y `maxDuration = 60`
+  explícitos en la ruta. Por encima del tope: HTTP 200, `num_guia` intactos y
+  `etiquetasPdf: { error }` explicativo. (R12)
+  - Test: `carga-api-etiquetas.test.ts › lote por encima del tope: 200 con los
+    num_guia intactos y etiquetasPdf { error } (BLOQ-1/R12)` y `› lote justo EN el
+    tope: si genera el PDF`; `etiquetas-lote-pdf-service.test.ts › no construye ni
+    sube el PDF cuando el lote supera el tope`, `› el error del tope solo lleva
+    numeros`, `› genera el PDF cuando el lote iguala EXACTAMENTE el tope`.
+- [x] **T5.2** **BLOQ-3** — smoke test de R7 sin mocks. **Hecho:**
+  `tests/unit/pdf/etiquetas-pdf-lote.smoke.test.ts` ejercita `qrcode` y
+  `bwip-js/node` reales bajo Node y valida el PDF (cabecera, trailer, `%%EOF`,
+  páginas, MediaBox, XObjects de imagen, texto). El test con mocks se conserva. (R7)
+- [x] **T5.3** Notas menores del review. **Hecho:** TTL clampeado a 24 h; el log del
+  best-effort ya no vuelca el error crudo (solo el tipo); `EtiquetaGuiaService`
+  filtra por dueño cuando el actor es `apiKey`, con test de la invariante; comentarios
+  "Feature 112" → "Feature 136".
+- [x] **T5.4** Cerrar los requisitos que el review marcó como PARCIALES. **Hecho:**
+  R3 gana el puente end-to-end "N órdenes creadas → N páginas"
+  (`etiquetas-lote-pdf-service.test.ts › sube un PDF con una pagina por orden creada
+  del lote`) y R4 pasa de asertar 4 datos a los 9 que exige el requisito.
+
+## Mapa de trazabilidad R → test (borrador)
+
+> **El mapa canónico y actualizado vive en `progress/impl_136.md`** (incluye los tests
+> añadidos al cerrar el review y corrige R3/R4, que aquí figuraban como cubiertos y el
+> review encontró parciales). Esta tabla se conserva como el borrador que fue.
 
 | R | Test |
 | --- | --- |

@@ -159,6 +159,34 @@ describe("EtiquetasLotePdfService.generarYAlmacenar", () => {
     expect(storage.upload).not.toHaveBeenCalled();
   });
 
+  // R3 (puente end-to-end): el review marco este requisito como PARCIAL porque
+  // solo se probaba el builder en aislamiento ("N etiquetas -> N paginas"), no el
+  // tramo "N ordenes creadas del lote -> N paginas del PDF que se sube". Aqui se
+  // usa el builder REAL: entran 3 ordenIds y se cuenta lo que acaba en Storage.
+  it("sube un PDF con una pagina por orden creada del lote (R1/R3)", async () => {
+    const storage = fakeStorage();
+    const ordenIds = ["ord-1", "ord-2", "ord-3"];
+    const svc = new EtiquetasLotePdfService(
+      fakeEtiquetaService({
+        status: "ok",
+        etiquetas: ordenIds.map((_, i) => etiqueta(100 + i)),
+        omitidas: [],
+      }),
+      storage,
+      fakeSignedUrls(),
+      3600,
+      MAX_ETIQUETAS,
+      // sin `build`: se usa el default `buildEtiquetasLotePdf`
+    );
+
+    await svc.generarYAlmacenar(ordenIds, ACTOR);
+
+    const input = (storage.upload as ReturnType<typeof vi.fn>).mock.calls[0][0] as UploadInput;
+    const pdf = Buffer.from(input.bytes).toString("latin1");
+    expect(pdf.startsWith("%PDF-")).toBe(true);
+    expect((pdf.match(/\/Type\s*\/Page(?![s])/g) ?? []).length).toBe(ordenIds.length);
+  });
+
   // BLOQ-1: el tope corta ANTES de construir el PDF. Es la defensa en profundidad
   // del invariante "la carga por API nunca se rompe por la generacion del PDF":
   // el borde ya descarta el lote por el numero de ordenes creadas.
