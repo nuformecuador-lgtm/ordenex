@@ -2008,3 +2008,27 @@
 - **Notas menores vivas** del re-review: M1 upload/signed URL sin timeout (un stall de red aún podría
   dar 504 tras el commit — misma familia que BLOQ-1, mucho menos probable), M2 assert numérico débil en
   R4, M3 R3 no end-to-end, sin E2E (precedente de la 88).
+
+## 2026-07-26 — 112, 105 y 79: cerradas por auditoría del backlog (ya estaban hechas)
+- A petición del humano ("creo que muchas ya quedaron o ya no se necesitan") se auditó **cada feature
+  pendiente contra el código**. El registro estaba desactualizado en 5 de 8 casos.
+- **112 — webhook, sobre genérico `data`** (figuraba `spec_ready`, o sea sin empezar): ya implementada.
+  `lib/services/WebhookEstadoService.ts:89` construye el cuerpo con `data: {...}` y
+  `tests/unit/services/webhook-estado-service.test.ts:94` asserta `body.data`. El breaking change
+  `orden` → `data` viajó con la implementación de la 104.
+- **105 — UI de registro de webhooks** (figuraba `pending`): ya implementada y **cableada**. Cadena
+  `page.tsx` → `ApiKeysModule` (23 referencias a webhook) → `api-keys-columns.tsx` →
+  `WebhookAccionCell.tsx` → `RegistrarWebhookForm.tsx`, más `RevelarWebhookSecretoModal.tsx` y
+  `webhook-url.ts`, con 3 tests de componente. (Un primer grep superficial sugirió que el formulario no
+  estaba montado; la cadena real pasa por las columnas de la tabla.)
+- **79 — `/paquete/[numGuia]` pública** (figuraba `pending`): la decisión que la feature pedía **ya se
+  tomó y se implementó** — opción (b) de su propia descripción: NO es pública, exige sesión. Con un
+  refinamiento: `middleware.ts` la manda a `/` en vez de a `/login` (`REDIRECT_TO_ROOT`), porque enviar
+  a un formulario de login a quien sólo pegó un número de guía es un callejón. Tests en
+  `tests/unit/auth/middleware.test.ts:116-127`. La superficie de enumeración que alertaba su ficha
+  queda descartada al no exponerse sin sesión.
+- **Reclasificadas (estaban a medias, en la mitad contraria a la que decía su ficha):** **85** tiene el
+  backend completo y sólo le falta la UI (es feature frontend); **74** tiene la captura de la causa
+  hecha y le falta explotarla (mostrarla/agruparla en listados).
+- **Backlog real resultante: 20 pendientes, de las cuales 15 son la cadena de analítica.** El trabajo
+  suelto son 5 features (80, 85, 74, 70, 71) más la 66. Sin features `in_progress` ni `spec_ready`.

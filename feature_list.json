@@ -815,7 +815,8 @@
       "complexity": "low",
       "zone": "fullstack",
       "branch": null,
-      "depends_on": 73
+      "depends_on": 73,
+      "status_note": "AUDITORIA 2026-07-26: la CAPTURA de la causa ya existe (app/(app)/mis-asignaciones/_components/causa-devolucion-options.ts + GestionarOrdenPanel.tsx, con migracion gestion_orden_causa_devolucion y lib/types/causa-devolucion.ts). LO QUE FALTA ES EXPLOTARLA: la causa NO se muestra ni se agrupa en los listados (cero referencias a causaDevolucion en app/(app)/ordenes ni app/(app)/cierre-dia). Alcance real = mostrar la causa en el listado y agrupar/contar por causa."
     },
     {
       "id": 75,
@@ -870,12 +871,13 @@
       "id": 79,
       "name": "decidir si /paquete/[numGuia] es publica y desbloquearla",
       "description": "Registrada `pending` 2026-07-16 al acotar el alcance de la feature 78 (decision (a) del humano: se dejo fuera a proposito). `app/paquete/[numGuia]` es la cuarta ruta fuera de `(app)` y, como `/recuperar-contrasena` y `/postulacion`, hoy la intercepta el middleware (`PUBLIC_ROUTES` solo lista `/login` y `/api/health`) y la redirige a `/login`. Parece rastreo publico de una orden por numero de guia, pero NO se verifico su intencion ni quien deberia verla -> REQUIERE DECISION DEL HUMANO (regla 6: no inventar): (a) si es publica de verdad, sumar `/paquete` a `PUBLIC_ROUTES` (prefijo, por ser ruta dinamica `[numGuia]`) + test de middleware, reutilizando lo que deje la feature 78; ALERTA A EVALUAR EN EL SPEC: exponer una orden por numero de guia sin sesion es una superficie de enumeracion (num_guia es incremental y unico por la feature 17 -> adivinable) -> decidir que datos se muestran a un anonimo; (b) si debe exigir sesion, entonces el comportamiento actual es CORRECTO por accidente y solo hay que documentarlo. Depende de la 78 solo por orden logico (comparte `PUBLIC_ROUTES` y el archivo de tests de middleware que la 78 crea), no por bloqueo tecnico.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "backend",
       "branch": null,
-      "depends_on": 78
+      "depends_on": 78,
+      "status_note": "CERRADA 2026-07-26 por auditoria del backlog. La decision que la feature pedia YA SE TOMO y se implemento: opcion (b) de su propia descripcion — /paquete/[numGuia] NO es publica, exige sesion. Refinamiento sobre el comportamiento original: en vez de mandar a /login manda a `/` (middleware.ts, REDIRECT_TO_ROOT = ['/paquete']), porque enviar a un formulario de login a quien solo pego un numero de guia es un callejon. Testeado en tests/unit/auth/middleware.test.ts:116-127 (sin sesion -> 307 a `/`; con sesion -> pasa). La superficie de enumeracion que alertaba la descripcion queda descartada al no exponerse sin sesion."
     },
     {
       "id": 80,
@@ -943,7 +945,8 @@
       "complexity": "medium",
       "zone": "frontend",
       "branch": null,
-      "depends_on": 84
+      "depends_on": 84,
+      "status_note": "AUDITORIA 2026-07-26: el BACKEND YA ESTA HECHO (migracion 20260717120000_gasto_fijo_periodicidad + lib/services/GastoFijoPlantillaService.ts + GeneracionGastosFijosService.ts + GastoFijoPlantillaRepository + lib/types/gasto-fijo-plantilla.ts). LO QUE FALTA ES SOLO LA UI (esta feature es de zona frontend): cero referencias a periodicidad en app/(app)/wallet. Alcance real = exponer en el wallet la periodicidad de la plantilla de gasto fijo."
     },
     {
       "id": 86,
@@ -1157,12 +1160,13 @@
       "name": "webhooks - UI de registro de la suscripcion (Configuracion > API)",
       "spec_path": "specs/105-webhooks-ui-registro",
       "description": "Registrada 2026-07-21. Feature frontend HERMANA de la 104, nace de la decision D1 del gate (UI en config>api). NOTA DE COLISION: se registro primero como id 100, renumerada a 105 (origin/dev ya tenia 98-102). Pantalla en `Configuracion > API` (junto a la gestion de API keys, feature 82) para que el maestro registre/edite/de de baja la URL de callback del webhook y vea el estado (activa) y el secreto (mostrado en claro UNA sola vez al generarse). Consume la Server Action `lib/actions/webhooks.ts` de la 104. FUERA DE ALCANCE: backend (todo en la 104); panel de entregas. Spec pendiente de autoria. DEPENDE de la 104. Zona frontend.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
       "branch": "feature/105-webhooks-ui-registro",
-      "depends_on": 104
+      "depends_on": 104,
+      "status_note": "CERRADA 2026-07-26 por auditoria del backlog (figuraba pending sin empezar). Evidencia: la UI existe y esta CABLEADA en Configuracion > API — cadena page.tsx -> ApiKeysModule (23 referencias a webhook) -> api-keys-columns.tsx -> WebhookAccionCell.tsx -> RegistrarWebhookForm.tsx, mas RevelarWebhookSecretoModal.tsx y webhook-url.ts. Con tests de componente: tests/components/RegistrarWebhookForm.test.tsx, WebhookAccionCell.test.tsx, RevelarWebhookSecretoModal.test.tsx."
     },
     {
       "id": 106,
@@ -1239,12 +1243,13 @@
       "name": "webhook - sobre generico del payload (orden -> data)",
       "spec_path": "specs/112-webhook-payload-data",
       "description": "Registrada 2026-07-23 (pedido del humano: 'deberiamos retornar data en lugar de orden, ya que no sabemos si agregaremos mas eventos a los que suscribirse; dejalo como data'). ALCANCE (backend, cambio de CONTRATO del webhook de la feature 104): el cuerpo de entrega del webhook `orden.estado_actualizado` deja de usar la clave especifica `orden` y pasa a un SOBRE GENERICO con `data`, para no atar el payload al recurso y permitir futuros tipos de evento discriminados por `evento`. Cuerpo nuevo: { evento, eventoId, ocurridoAt, data: { numGuia, numRemision, estado } } (antes `orden:` en vez de `data:`). El discriminador sigue siendo `evento`; el sobre (evento/eventoId/ocurridoAt/data) queda estable entre tipos de evento futuros. Es un cambio BREAKING del contrato, pero se hace AHORA que la 104 recien se mergeo y (probablemente) no hay integradores reales, que es el momento mas barato. Toca: lib/services/WebhookEstadoService.ts (construccion del cuerpo `orden`->`data`), sus tests, y la doc OpenAPI (lib/api/openapi-spec.ts + docs/api/api-key-openapi.yaml) donde se documente el payload del webhook. GATE F1.4 APROBADO por el humano 2026-07-23 (nombre = `data`, no body/response; hacerlo ya; rama separada). Backend puro, sin migracion. DEPENDE de la 104 (webhooks, en dev).",
-      "status": "spec_ready",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "backend",
       "branch": "feature/112-webhook-payload-data",
-      "depends_on": 104
+      "depends_on": 104,
+      "status_note": "CERRADA 2026-07-26 por auditoria del backlog (figuraba spec_ready, es decir 'sin empezar', pero YA ESTABA IMPLEMENTADA). Evidencia: lib/services/WebhookEstadoService.ts:89 construye el cuerpo con `data: {...}` (sobre generico) y tests/unit/services/webhook-estado-service.test.ts:94 asserta `body.data` con numGuia/numRemision/estado. El breaking change de `orden` -> `data` viajo con la implementacion de la 104."
     },
     {
       "id": 113,
