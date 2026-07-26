@@ -36,12 +36,30 @@ Patrón de `lib/config/gestion.ts` (env con default, sin hardcode, R18):
 ```ts
 export interface EtiquetasConfig {
   ETIQUETAS_BUCKET: string;          // default "etiquetas-guia" (privado)
-  SIGNED_URL_TTL_SECONDS: number;    // default 3600 (1 h)
+  SIGNED_URL_TTL_SECONDS: number;    // default 3600 (1 h), clampeado a 24 h
+  MAX_ETIQUETAS_POR_PDF: number;     // default 300, techo duro 1000
 }
 ```
 
 - `ETIQUETAS_BUCKET` ← `process.env.ETIQUETAS_BUCKET?.trim() || "etiquetas-guia"`.
 - `SIGNED_URL_TTL_SECONDS` ← `readPositiveInt("ETIQUETAS_SIGNED_URL_TTL_SECONDS", 3600)`.
+
+> **Actualización 2026-07-25 (cierre de BLOQ-1 del review).** El diseño original no acotaba el PDF y
+> eso resultó ser un fallo con pérdida de datos: la carga por API admite hasta
+> `MAX_CHUNK_ROWS = 5000` filas y el render costaba ~13 ms y ~279 KB por etiqueta, así que un lote
+> grande reventaba por **OOM/timeout DESPUÉS** de commitear las órdenes. Como un OOM no es una
+> excepción JS, el `try/catch` del borde no lo capturaba: el integrador recibía 500/504 en vez del 200
+> que exige R12 y **perdía los `num_guia`** ya asignados. Añadido al diseño:
+>
+> - **`MAX_ETIQUETAS_POR_PDF`** (env `ETIQUETAS_MAX_POR_PDF`, default 300, techo duro 1000). El lote que
+>   lo supera **se degrada a `etiquetasPdf: { error }` decidido en el BORDE, antes de construir el
+>   service o el cliente de Storage**: el trabajo que no se arranca no puede reventar. Repetido en el
+>   service (`EtiquetasLoteExcedeTopeError`) como defensa en profundidad.
+> - **`compress: true`** en jsPDF: 262.8 KB → 3.3 KB por etiqueta (~80×), el tamaño deja de ser el límite.
+> - **`runtime = "nodejs"` + `maxDuration = 60`** en la ruta, coherente con el tope (medido: 300
+>   etiquetas ≈ 5.74 s / RSS 301 MB; el techo 1000 ≈ 19.3 s).
+> - **TTL clampeado a 24 h**: sin cota, una env equivocada dejaría el PDF del lote —con los datos de
+>   todas las órdenes de la tienda— accesible durante ese tiempo para quien tuviera el enlace.
 
 ## 4. Builder server-side del PDF — `lib/pdf/etiquetas-pdf-lote.ts`
 

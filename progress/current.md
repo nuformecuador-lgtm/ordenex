@@ -86,8 +86,14 @@ mapa (`lib/types/order-status-transiciones.ts`) y lo valida ahí.
 **Reconciliación de estado stale (pre-merge):** 107/108/110/120 estaban `in_progress` pese a estar
 mergeadas a `dev` (PRs #135/#136/#140/#149) → reconciliadas a `done`.
 
-**Ubicación compartida por el cliente en el chat de WhatsApp — feature 121 (2026-07-24) → EN
-ESPECIFICACIÓN / puerta F1.4.** Pedido del humano: "en el webhook que consume las respuestas de
+**Ubicación compartida en el chat de WhatsApp — feature 121 → ✅ CERRADA 2026-07-25 (`done`).**
+Reviewer APROBADO 0 bloqueantes; código y migración ya en `dev` y desplegados. Resumen en `history.md`.
+El bloque de abajo se conserva como bitácora de la sesión en que se hizo.
+
+<details>
+<summary>Bitácora de la 121 (histórico)</summary>
+
+Pedido del humano: "en el webhook que consume las respuestas de
 WhatsApp agregar soporte para ubicación (mensajes `type=location`); almacenar la ubicación enviada;
 y en el front un icono en el chat que al dar click despliegue, en modal/popup dentro de la misma
 ventana, un minimapa con la ubicación actual del repartidor y el punto compartido por el usuario".
@@ -117,11 +123,11 @@ Fullstack, high, `depends_on: 120`.
   `progress/impl_121_backend.md`, `impl_121_frontend.md`, `review_121.md`.
 - **Deuda menor:** la migración se validó solo por forma estática (falta `apply`/`db:rollback` real);
   G2 quedó como dos archivos `impl_121_*` en vez de un `impl_121.md`.
-- **⚠️ PENDIENTE (leader) — aterrizaje diferido:** la infraestructura del chat que esto extiende vive
-  como **WIP en `flow`, aún NO en `dev`** (feature 120, hecha, sin PR). Sin commitear todavía. El PR
-  limpio de la 121 se arma cuando aterrice la 120: rama desde `origin/dev` + cherry-pick de la 120 +
-  de la 121. **Al desplegar:** correr la migración `20260724_chat_mensaje_ubicacion` (post-merge a
-  mano; el `.env` apunta a DB compartida).
+- ~~**PENDIENTE (leader) — aterrizaje diferido**~~ → **RESUELTO.** Dependía de que la feature 120 (chat)
+  saliera de `flow` a `dev`; ya ocurrió, y con ella aterrizó la 121. La migración
+  `20260724120000_chat_mensaje_ubicacion` está **aplicada en producción** (verificado 2026-07-25).
+
+</details>
 
 
 **Etiquetas PDF en la carga por API — feature 136 (2026-07-23; renumerada de 112 en el merge dev→flow por colisión con `112-webhook-payload-data`) → EN ESPECIFICACIÓN.** Pedido del
@@ -297,16 +303,38 @@ vive en su entrada de `feature_list.json`. Las 6 con dependencia la tienen `done
 - **`app/(app)/ordenes/_components/ordenes-columns.tsx` es un imán de drift** (ya lo revirtieron 2
   veces) → mirarlo con lupa en todo PR que lo toque.
 
-## Tareas humanas pendientes (verificar)
+## Tareas humanas pendientes
 
-> La app ya está en **prod** (PR #117); estos buckets podrían estar creados. Confirmar contra el
-> proyecto Supabase antes de darlos por hechos o por pendientes.
+> **✅ VERIFICADO CONTRA SUPABASE PROD el 2026-07-25** (proyecto `ordenex-db` / `scfnwxqbsgkzwsdntdvd`,
+> vía MCP). Ya no hay que suponer: se consultó `storage.buckets` directamente.
 
-- **Bucket Supabase `gestion-evidencias`** (privado) — evidencias de entrega/rechazo del mensajero
-  (feature 36). Sin él, la gestión falla al subir la foto.
-- **Bucket Supabase `mensajero-docs`** (privado) — documentos de postulación del mensajero (feature 21).
+- ~~**Bucket `gestion-evidencias`**~~ → **EXISTE**, privado, creado 2026-07-15. Nada que hacer.
+- ~~**Bucket `mensajero-docs`**~~ → **EXISTE**, privado, creado 2026-07-15. Nada que hacer.
+- ⚠️ **Bucket `etiquetas-guia` (privado) — NO EXISTE. ÚNICO BLOQUEO DE INFRA VIVO.** Lo necesita la
+  feature 136 (`ETIQUETAS_BUCKET`, default `etiquetas-guia` en `lib/config/etiquetas.ts`). Es la tarea
+  T0.1 del spec de la 136, la única sin marcar.
+  **Impacto matizado (corregido por el review de la 136):** el endpoint trata la etiqueta como
+  best-effort — `try/catch` (`route.ts:152-158`) que NO revierte la carga, responde **200** con las
+  órdenes y su `num_guia` y expone el fallo como `etiquetasPdf: { error }`. Eso **cubre las excepciones
+  JS** (bucket ausente incluido), así que en lotes normales los integradores reciben sus órdenes bien,
+  sólo sin PDF.
+  ⚠️ **PERO NO cubre OOM/timeout** (BLOQ-1 del review): el PDF no tiene cota (hasta `MAX_CHUNK_ROWS`
+  = 5000, ~279 KB y ~13 ms por etiqueta → ~1.4 GB / ~65 s) y el fallo ocurre **después** del commit de
+  las órdenes. Un OOM no es excepción JS → 500/504 en vez de 200 y el integrador **pierde los
+  `num_guia`** (al reintentar salen `duplicada`). En corrección; ver `progress/review_136.md`.
+  Crear desde el dashboard de Supabase (Storage → New bucket → nombre `etiquetas-guia`, **Private**),
+  o por SQL:
+  `INSERT INTO storage.buckets (id, name, public) VALUES ('etiquetas-guia','etiquetas-guia',false) ON CONFLICT (id) DO NOTHING;`
+  (los buckets existentes solo se crearon; el service role bypassa RLS, así que no hacen falta policies).
 - **Proveedor de correo real** — hoy `StubEmailProvider` solo hace `console.info`; **ningún email
-  sale** y el OTP se lee de los logs del servidor. Lo salda la feature 80.
+  sale** y el OTP se lee de los logs del servidor. Lo salda la feature 80 (`pending`).
+
+**Estado del catálogo en PROD (verificado el 2026-07-25):** migraciones del lote 4/4 aplicadas,
+0 nombres viejos residuales, 6/6 nombres nuevos, `orden_historial_origen_tipo` con 22 values.
+`order_status` tiene **19 filas**: las 18 del código + `pendiente`, huérfano (**0 órdenes en prod y 0 en
+local**, sembrado por `20260714140000_order_status_pendiente` y nunca añadido a `ORDER_STATUS_SEED`).
+Inofensivo hoy; con la guardia de la 140 cualquier transición que lo tocara se rechaza explícitamente.
+Limpiarlo requiere una migración propia — decisión de datos, no urgente.
 
 ## Notas de proceso (vigentes)
 

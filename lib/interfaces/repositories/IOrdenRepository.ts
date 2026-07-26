@@ -185,6 +185,10 @@ export interface DistritoRow {
 // (R4: la orden puede no tener distrito).
 export interface EtiquetaRow {
   id: string;
+  // Feature 136: dueño de la orden. Lo necesita `EtiquetaGuiaService` para filtrar
+  // por propietario cuando el actor es una API key (aislamiento entre tiendas
+  // explicito en el service, no solo garantizado por el borde).
+  tiendaId: string;
   numGuia: number | null;
   numRemision: string;
   destinatario: string;

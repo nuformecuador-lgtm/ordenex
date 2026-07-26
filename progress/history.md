@@ -1954,3 +1954,54 @@
   inconsistencia código↔DB de una migración no-aditiva se abre **al crear el PR**, no al mergear: con el
   rename de la 137 estuvo abierta desde el preview del PR #157. Para renames/destructivas futuras,
   preferir expand-contract (aditiva primero, limpieza en un PR posterior) o mergear de inmediato.
+
+## 2026-07-25 — 121 ubicación compartida por el cliente en el chat de WhatsApp (cierre de estado stale)
+- Soporte de `type=location` en el webhook de WhatsApp + minimapa en el chat. Backend: enum
+  `ChatMensajeTipo.ubicacion` + columnas `latitud`/`longitud` nullable en `chat_mensaje` (migración
+  up/down `20260724120000_chat_mensaje_ubicacion`), normalización en `lib/types/whatsapp-webhook.ts`,
+  propagación service/repo/DTO/vista. Frontend: burbuja con `MapPin`, **`components/ui/dialog.tsx` nuevo**
+  (sobre `@base-ui/react`, modelado en `sheet.tsx`), `UbicacionMapa`/`UbicacionMapaInner`
+  (Leaflet + OSM anti-SSR, patrón feature 97) y GPS lazy vía `useUbicacionActual` con degradación no
+  bloqueante si se deniega el permiso.
+- Gate F1.4: D1 = la posición del repartidor es el **GPS del navegador en vivo** (sin rastreo
+  server-side); D2 = v1 **solo visualiza** (no adopta la ubicación como coordenadas de entrega).
+  P1 = solo lat/lng, P2 = pin + texto "Ubicación compartida", P3 = GPS al abrir el modal.
+- Reviewer **APROBADO 0 bloqueantes**, 16/16 requisitos con test (`progress/review_121.md`,
+  `impl_121_backend.md`, `impl_121_frontend.md`).
+- **Cerrada el 2026-07-25 por reconciliación:** figuraba `in_progress` por el aterrizaje diferido —
+  dependía de que la feature 120 (chat) saliera de `flow` a `dev`, cosa que ya ocurrió. Su código y su
+  migración están en `dev` y desplegados. Deuda menor heredada: la migración se validó por forma
+  estática, y G2 quedó como dos archivos `impl_121_*` en vez de un `impl_121.md`.
+
+## 2026-07-25 — 136 etiquetas PDF: primer review real (RECHAZADO) + corrección de los 3 bloqueantes
+> La feature sigue `in_progress`: no puede cerrarse hasta que exista el bucket (T0.1, ops).
+
+- **Se descubrió que la 136 estaba mergeada en `dev` y DESPLEGADA sin review real.** Su
+  `status_note` afirmaba "reviewer APROBADO 0 bloqueantes" y daba por hecho `.env.example`, pero
+  `progress/review_136.md` no existía en disco y las variables no estaban en el archivo. Ambas
+  afirmaciones quedaron corregidas en `feature_list.json`.
+- **Review real → RECHAZADO, 3 bloqueantes** (`progress/review_136.md`; lo transcribió el leader tras
+  cuatro caídas de conexión del agente, mismo precedente que la 139):
+  - **BLOQ-1 (grave, pérdida de datos):** el PDF no tenía cota — hasta `MAX_CHUNK_ROWS` = 5000, con
+    ~13 ms y ~279 KB por etiqueta (~1.4 GB / ~65 s en el tope) — y reventaba por **OOM/timeout DESPUÉS**
+    de commitear las órdenes. Un OOM no es excepción JS, así que el `try/catch` del borde no lo
+    capturaba: **500/504 en vez del 200 de R12 y el integrador perdía los `num_guia`** (al reintentar le
+    salían como `duplicada`). Ningún test cubría lote grande.
+  - **BLOQ-2:** T0.2 y T4.3 marcadas `[x]` con artefacto inexistente (`.env.example` sin las variables,
+    `impl_136.md` ausente).
+  - **BLOQ-3:** R7 sin test asertivo — el test mockeaba `qrcode` y `bwip-js`, justo las libs cuya
+    server-safety afirma el requisito.
+- **Corregido en 5 commits.** BLOQ-1 se resuelve **decidiendo antes de empezar** en vez de intentar
+  recuperarse: tope `ETIQUETAS_MAX_POR_PDF` (default 300, techo 1000) evaluado en el **borde** antes de
+  construir service o cliente de Storage, repetido en el service como defensa en profundidad; más
+  `compress: true` (262.8 KB → 3.3 KB por etiqueta, ~80×) y `runtime = "nodejs"` + `maxDuration = 60`.
+  Menores: TTL clampeado a 24 h, log sin el error crudo, `EtiquetaGuiaService` aísla por dueño cuando el
+  actor es `apiKey`, y los comentarios "Feature 112" → "Feature 136".
+- **Re-review: APROBADO-CON-NOTAS, 0 bloqueantes**, con medición propia del reviewer (300 etiquetas =
+  5.74 s / RSS 301 MB → cabe con margen en `maxDuration=60`; techo 1000 = 19.3 s). **14 tests nuevos**;
+  R3 y R4 dejan de ser parciales. `./init.sh` verde (**515 archivos / 5209 tests**), verificado también
+  por el leader de forma independiente.
+- **Deuda viva:** T0.1 crear el bucket privado `etiquetas-guia` (ops) — mientras no exista, R8/R9/R10
+  sólo están verificados contra fakes y la respuesta real siempre trae `{ error }`. Notas menores del
+  re-review: M1 upload/signed URL sin timeout (un stall de red aún podría dar 504 tras el commit),
+  M2 assert numérico débil en R4, M3 R3 no end-to-end, sin E2E (precedente de la 88).
