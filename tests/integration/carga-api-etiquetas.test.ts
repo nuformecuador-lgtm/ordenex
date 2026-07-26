@@ -3,15 +3,18 @@ import { handleCargaApi, type CargaApiDeps } from "@/app/api/ordenes/api-key/car
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ApiKeyAuthResult } from "@/lib/interfaces/services/IApiKeyAuthService";
 import type {
+  CargaViaApiOrden,
   CargaViaApiResult,
+  CargaViaApiRow,
   CargaViaApiSummary,
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
 import type { IEtiquetasLotePdfService } from "@/lib/interfaces/services/IEtiquetasLotePdfService";
+import { etiquetasConfig } from "@/lib/config/etiquetas";
 
-// Feature 112 (T3.1) — cableado del PDF de etiquetas en el endpoint de carga por
+// Feature 136 (T3.1) — cableado del PDF de etiquetas en el endpoint de carga por
 // API. Se inyectan fakes de `autenticar`, `bulkService` y `etiquetasService`: sin
-// DB, sin Storage, sin red. Cubre R10/R12/R13/R16/R17.
+// DB, sin Storage, sin red. Cubre R10/R12/R13/R16/R17 + el tope de BLOQ-1.
 
 const KEY_ACTOR: Actor = { usuarioId: "key-user-1", rol: "apiKey" };
 const SECRETO = "ordx_secretovivo1234567890";
@@ -70,7 +73,30 @@ function depsOk(bulk: IBulkOrdenService, etiquetas: IEtiquetasLotePdfService): C
   };
 }
 
-describe("carga API + etiquetas PDF (feature 112)", () => {
+/**
+ * Summary de un lote de `n` ordenes creadas, todas con `num_guia` asignado (es el
+ * escenario de la carga por API: guia en el acto). Sirve para ejercitar el tope de
+ * etiquetas por PDF sin construir ningun PDF de verdad.
+ */
+function summaryDeLoteGrande(n: number): CargaViaApiSummary {
+  const ordenes: CargaViaApiOrden[] = Array.from({ length: n }, (_, i) => ({
+    id: `ord-${i + 1}`,
+    numRemision: `REM-${i + 1}`,
+    numGuia: 1000 + i,
+    estado: "en_ruta_bodega_central",
+    costoEnvio: "3.92",
+  }));
+  const filas: CargaViaApiRow[] = ordenes.map((o, i) => ({
+    fila: i + 1,
+    numRemision: o.numRemision,
+    resultado: "creada",
+    estatus: o.estado,
+    numGuia: o.numGuia,
+  }));
+  return { total: n, creadas: n, duplicadas: 0, conError: 0, filas, ordenes };
+}
+
+describe("carga API + etiquetas PDF (feature 136)", () => {
   it("incluye etiquetasPdf con url y TTL cuando se crean ordenes (R10/R17)", async () => {
     const etiquetas = fakeEtiquetas();
     const res = await handleCargaApi(reqConBearer(BODY, SECRETO), depsOk(fakeBulk(okSummary()), etiquetas));
