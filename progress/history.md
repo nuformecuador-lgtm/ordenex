@@ -1974,7 +1974,9 @@
   estática, y G2 quedó como dos archivos `impl_121_*` en vez de un `impl_121.md`.
 
 ## 2026-07-25 — 136 etiquetas PDF: primer review real (RECHAZADO) + corrección de los 3 bloqueantes
-> La feature sigue `in_progress`: no puede cerrarse hasta que exista el bucket (T0.1, ops).
+> ✅ **CERRADA (`done`) el 2026-07-26**: el bucket privado `etiquetas-guia` ya existe en Supabase prod
+> (`public = false`, verificado por el leader), con lo que T0.1 queda saldada y R8/R9/R10 dejan de
+> depender de fakes. Re-review APROBADO-CON-NOTAS, 0 bloqueantes.
 
 - **Se descubrió que la 136 estaba mergeada en `dev` y DESPLEGADA sin review real.** Su
   `status_note` afirmaba "reviewer APROBADO 0 bloqueantes" y daba por hecho `.env.example`, pero
@@ -2001,7 +2003,8 @@
   5.74 s / RSS 301 MB → cabe con margen en `maxDuration=60`; techo 1000 = 19.3 s). **14 tests nuevos**;
   R3 y R4 dejan de ser parciales. `./init.sh` verde (**515 archivos / 5209 tests**), verificado también
   por el leader de forma independiente.
-- **Deuda viva:** T0.1 crear el bucket privado `etiquetas-guia` (ops) — mientras no exista, R8/R9/R10
-  sólo están verificados contra fakes y la respuesta real siempre trae `{ error }`. Notas menores del
-  re-review: M1 upload/signed URL sin timeout (un stall de red aún podría dar 504 tras el commit),
-  M2 assert numérico débil en R4, M3 R3 no end-to-end, sin E2E (precedente de la 88).
+- ~~**Deuda viva:** T0.1 crear el bucket privado `etiquetas-guia`~~ → **SALDADA 2026-07-26**: el bucket
+  existe y es privado en Supabase prod. La respuesta del endpoint ya puede traer la URL firmada real.
+- **Notas menores vivas** del re-review: M1 upload/signed URL sin timeout (un stall de red aún podría
+  dar 504 tras el commit — misma familia que BLOQ-1, mucho menos probable), M2 assert numérico débil en
+  R4, M3 R3 no end-to-end, sin E2E (precedente de la 88).
