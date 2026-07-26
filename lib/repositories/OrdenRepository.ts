@@ -408,6 +408,7 @@ function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
 const WITH_ETIQUETA = {
   select: {
     id: true,
+    tiendaId: true, // Feature 136: dueño, para el filtro por propietario del service
     numGuia: true,
     numRemision: true,
     destinatario: true,
@@ -431,6 +432,7 @@ type OrdenEtiquetaRow = Prisma.OrdenGetPayload<typeof WITH_ETIQUETA>;
 function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
   return {
     id: row.id,
+    tiendaId: row.tiendaId,
     numGuia: row.numGuia,
     numRemision: row.numRemision,
     destinatario: row.destinatario,
