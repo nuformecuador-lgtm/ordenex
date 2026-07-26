@@ -313,12 +313,15 @@ vive en su entrada de `feature_list.json`. Las 6 con dependencia la tienen `done
 - ⚠️ **Bucket `etiquetas-guia` (privado) — NO EXISTE. ÚNICO BLOQUEO DE INFRA VIVO.** Lo necesita la
   feature 136 (`ETIQUETAS_BUCKET`, default `etiquetas-guia` en `lib/config/etiquetas.ts`). Es la tarea
   T0.1 del spec de la 136, la única sin marcar.
-  **Impacto real medido (leído del código, `app/api/ordenes/api-key/carga/route.ts:138-162`): NO rompe
-  la carga por API.** El endpoint trata la etiqueta como **best-effort**: `try/catch` que NO revierte la
-  carga (ya commiteada), responde **HTTP 200** con las órdenes y su `num_guia`, y expone el fallo
-  visible como `etiquetasPdf: { error }` (nunca lo oculta con `null`, que significa "nada que generar").
-  Es decir: hoy los integradores reciben sus órdenes correctamente, solo **sin el PDF**. Prioridad
-  media, no urgencia.
+  **Impacto matizado (corregido por el review de la 136):** el endpoint trata la etiqueta como
+  best-effort — `try/catch` (`route.ts:152-158`) que NO revierte la carga, responde **200** con las
+  órdenes y su `num_guia` y expone el fallo como `etiquetasPdf: { error }`. Eso **cubre las excepciones
+  JS** (bucket ausente incluido), así que en lotes normales los integradores reciben sus órdenes bien,
+  sólo sin PDF.
+  ⚠️ **PERO NO cubre OOM/timeout** (BLOQ-1 del review): el PDF no tiene cota (hasta `MAX_CHUNK_ROWS`
+  = 5000, ~279 KB y ~13 ms por etiqueta → ~1.4 GB / ~65 s) y el fallo ocurre **después** del commit de
+  las órdenes. Un OOM no es excepción JS → 500/504 en vez de 200 y el integrador **pierde los
+  `num_guia`** (al reintentar salen `duplicada`). En corrección; ver `progress/review_136.md`.
   Crear desde el dashboard de Supabase (Storage → New bucket → nombre `etiquetas-guia`, **Private**),
   o por SQL:
   `INSERT INTO storage.buckets (id, name, public) VALUES ('etiquetas-guia','etiquetas-guia',false) ON CONFLICT (id) DO NOTHING;`
