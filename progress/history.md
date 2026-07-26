@@ -1943,7 +1943,14 @@
 - Re-review **APROBADO 0 bloqueantes**, verificado **por mutación** (borrar una arista pone en rojo los
   tests de sus call-sites; antes del fix seguían verdes). R1–R17 trazados, 151 tests nuevos, suite 511
   archivos / 5163 verdes, `./init.sh` OK. **PR #161 → dev, mergeado 2026-07-25.**
-- **Lote 137–140 COMPLETO** (4/4 mergeadas). Deuda viva del lote: las migraciones de 137/138/139 no se
-  han aplicado contra DB real (entorno sin `.env`) → al desplegar `prisma migrate deploy` + verificar
-  `down.sql` con `db:rollback`, **coordinado con el deploy** porque la 137 renombra valores del catálogo
-  y código y DB deben coincidir.
+- **Lote 137–140 COMPLETO** (4/4 mergeadas) y **DESPLEGADO A PRODUCCIÓN el 2026-07-25** (PR #163
+  `dev → prod`, 41 commits). Deployment `ordenex-qzzgvlmhq` **Ready**, build verde en 29 s, runtime sin
+  errores. **Migraciones aplicadas y verificadas**: el build corrió `prisma migrate deploy` →
+  `No pending migrations to apply` sobre **86 migraciones** (= las 86 del repo, incluidas las 4 del
+  lote). Deuda de migraciones del lote **SALDADA**.
+- ⚠️ **Hallazgo operativo del deploy:** los **previews de Vercel comparten la base de Supabase con
+  producción**, y como el `build` incluye `prisma migrate deploy`, **el build de un preview migra la
+  base de producción**. Por eso al mergear a `prod` no quedaba nada pendiente. La ventana de
+  inconsistencia código↔DB de una migración no-aditiva se abre **al crear el PR**, no al mergear: con el
+  rename de la 137 estuvo abierta desde el preview del PR #157. Para renames/destructivas futuras,
+  preferir expand-contract (aditiva primero, limpieza en un PR posterior) o mergear de inmediato.
