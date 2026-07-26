@@ -1954,3 +1954,21 @@
   inconsistencia código↔DB de una migración no-aditiva se abre **al crear el PR**, no al mergear: con el
   rename de la 137 estuvo abierta desde el preview del PR #157. Para renames/destructivas futuras,
   preferir expand-contract (aditiva primero, limpieza en un PR posterior) o mergear de inmediato.
+
+## 2026-07-25 — 121 ubicación compartida por el cliente en el chat de WhatsApp (cierre de estado stale)
+- Soporte de `type=location` en el webhook de WhatsApp + minimapa en el chat. Backend: enum
+  `ChatMensajeTipo.ubicacion` + columnas `latitud`/`longitud` nullable en `chat_mensaje` (migración
+  up/down `20260724120000_chat_mensaje_ubicacion`), normalización en `lib/types/whatsapp-webhook.ts`,
+  propagación service/repo/DTO/vista. Frontend: burbuja con `MapPin`, **`components/ui/dialog.tsx` nuevo**
+  (sobre `@base-ui/react`, modelado en `sheet.tsx`), `UbicacionMapa`/`UbicacionMapaInner`
+  (Leaflet + OSM anti-SSR, patrón feature 97) y GPS lazy vía `useUbicacionActual` con degradación no
+  bloqueante si se deniega el permiso.
+- Gate F1.4: D1 = la posición del repartidor es el **GPS del navegador en vivo** (sin rastreo
+  server-side); D2 = v1 **solo visualiza** (no adopta la ubicación como coordenadas de entrega).
+  P1 = solo lat/lng, P2 = pin + texto "Ubicación compartida", P3 = GPS al abrir el modal.
+- Reviewer **APROBADO 0 bloqueantes**, 16/16 requisitos con test (`progress/review_121.md`,
+  `impl_121_backend.md`, `impl_121_frontend.md`).
+- **Cerrada el 2026-07-25 por reconciliación:** figuraba `in_progress` por el aterrizaje diferido —
+  dependía de que la feature 120 (chat) saliera de `flow` a `dev`, cosa que ya ocurrió. Su código y su
+  migración están en `dev` y desplegados. Deuda menor heredada: la migración se validó por forma
+  estática, y G2 quedó como dos archivos `impl_121_*` en vez de un `impl_121.md`.
