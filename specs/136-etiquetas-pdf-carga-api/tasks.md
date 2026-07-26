@@ -7,7 +7,7 @@
 
 ## Bloque 0 — Preparación (Ops / entorno)
 
-- [ ] **T0.1** [P] Crear bucket privado `etiquetas-guia` en Supabase Storage (tarea
+- [x] **T0.1** [P] Crear bucket privado `etiquetas-guia` en Supabase Storage (tarea
   humana). **Hecho:** el bucket existe, es privado, y el service role puede
   `upload`/`createSignedUrl` sobre él.
 - [x] **T0.2** [P] Documentar en `.env.example` las variables `ETIQUETAS_BUCKET` y
