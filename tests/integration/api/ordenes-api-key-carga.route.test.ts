@@ -125,7 +125,10 @@ describe("carga API: happy path (R10)", () => {
     expect(json.ordenes[0]).toMatchObject({ numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central" });
     expect(json.filas[0].numGuia).toBe(1042);
     // El service recibe el actor del usuario dedicado de la key.
-    expect(service.cargarViaApi).toHaveBeenCalledWith(BODY.ordenes, KEY_ACTOR);
+    // Feature 141: el 3.er argumento son las opciones del lote (`name` ausente aquí).
+    expect(service.cargarViaApi).toHaveBeenCalledWith(BODY.ordenes, KEY_ACTOR, {
+      name: undefined,
+    });
   });
 
   // Feature 98 (T10) — la respuesta incluye costoEnvio (flete + IVA) por orden creada (R5).

@@ -20,8 +20,10 @@ export interface BulkSummary {
   conError: number;
   filas: RowResult[];
   /**
-   * Feature 141/R27: identificador del LOTE de carga masiva al que quedaron asociadas las
-   * ordenes creadas. `null` cuando no se creo ningun lote (dry-run o cero ordenes creadas).
+   * Feature 141/R38: identificador del LOTE de carga masiva al que quedaron asociadas las
+   * ordenes creadas (creado en esta peticion o reutilizado). Es un TOKEN OPACO emitido por el
+   * servidor: el cliente lo reenvia en los chunks siguientes. `null` cuando no hubo lote
+   * (dry-run o cero ordenes persistidas).
    */
   cargaId: string | null;
 }

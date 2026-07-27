@@ -83,6 +83,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1"])),
     createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }),
     // Feature 141: el repo devuelve las creadas + el `cargaId` del lote de ESTA peticion.
+    // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
+    setCargaDownloadUrl: vi.fn(async () => {}),
+    setOrdenesDownloadUrl: vi.fn(async () => {}),
     createManyOrdenesConGuia: vi.fn(async (data: CreateOrdenData[]) => ({
       creadas: conGuiaEco(data),
       cargaId: "carga-api-1",

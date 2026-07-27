@@ -78,27 +78,50 @@ export interface GeoExistence {
  * lote; el repo solo asegura la fila de `carga` y cuelga de ella las ordenes creadas.
  */
 export interface LoteContexto {
-  /** id del lote. `null` = el repo lo genera (via API key: un lote por llamada). */
+  /**
+   * Token de lote EMITIDO POR EL SERVIDOR y reenviado por el cliente en los chunks 2..N.
+   * `null` = esta peticion CREA el lote y el repo genera el id (R15/R16). NUNCA es un valor
+   * elegido por el usuario: con id presente el repo solo LEE y verifica propiedad (R17/R19).
+   */
   cargaId: string | null;
-  /** `carga.usuario_carga`: el actor de la carga (R2/R20). */
+  /** `carga.usuario_carga`: el actor de la carga (R2/R31). */
   usuarioCargaId: string;
   /**
-   * Tamano TOTAL del lote (R7/R18/R21). Sesion = filas de la SESION declaradas por el
-   * cliente; API = `ordenes.length` del payload. NUNCA el tamano del chunk ni del batch: se
-   * escribe UNA sola vez (el INSERT idempotente no reescribe una fila existente).
+   * Tamano TOTAL del lote (R7/R29/R32). Sesion = filas de la SESION declaradas por el
+   * cliente; API = `ordenes.length` del payload. NUNCA el tamano del chunk ni del batch: solo
+   * lo escribe la peticion que CREA el lote; las que lo reutilizan no lo tocan.
    */
   totalFiles: number;
+  /**
+   * `carga.name` OPCIONAL definido por el usuario (R8/R20). Solo lo usa la CREACION del lote
+   * (R21/R22); al reutilizar un lote existente se ignora (R23). Repetir un nombre propio
+   * produce `CargaNombreDuplicadoError` (R24).
+   */
+  name?: string | null;
 }
 
 /**
- * Feature 141 (R17) — el `carga_id` recibido corresponde a un lote de OTRO usuario. El borde
- * lo traduce a 403 sin crear ninguna orden ni modificar el lote existente. Vive aqui (junto a
- * `NumRemisionDuplicadoError`) para que el controller pueda reconocerlo sin importar el repo.
+ * Feature 141 (R19) — el `carga_id` recibido no corresponde a ninguna fila, o corresponde a un
+ * lote de OTRO usuario. El borde lo traduce a 403 sin crear ninguna orden ni modificar el lote
+ * existente; es el MISMO error en ambos casos, para no revelar si el lote existe. Vive aqui
+ * (junto a `NumRemisionDuplicadoError`) para que el controller lo reconozca sin importar el repo.
  */
 export class CargaLoteAjenoError extends Error {
   constructor(public readonly cargaId: string) {
-    super(`carga_id de otro usuario: ${cargaId}`);
+    super(`carga_id desconocido o de otro usuario: ${cargaId}`);
     this.name = "CargaLoteAjenoError";
+  }
+}
+
+/**
+ * Feature 141 (R24) — el actor ya tiene un lote con ese `name` (viola el unico compuesto
+ * `carga_usuario_carga_name_key`). El borde lo traduce a 409 nombrando el duplicado; la
+ * transaccion revierte, asi que ni el lote ni las ordenes de esa peticion quedan persistidos.
+ */
+export class CargaNombreDuplicadoError extends Error {
+  constructor(public readonly nombre: string) {
+    super(`ya existe una carga con el nombre '${nombre}'`);
+    this.name = "CargaNombreDuplicadoError";
   }
 }
 
@@ -458,11 +481,13 @@ export interface IOrdenRepository {
    * `skipDuplicates` saltó) registra una fila de historial (origen null, destino = estado
    * inicial, `origenTipo` = `carga_masiva`, actor = la tienda) en la MISMA tx del chunk.
    *
-   * Feature 141 (R12/R13/R23/R24/R25): en esa MISMA tx asegura la fila de `carga` del lote
-   * (idempotente por `lote.cargaId`) y escribe `carga_id` en las ordenes que inserta. Solo la
-   * asegura si el batch tiene al menos una fila por insertar (sin lotes huerfanos, R24); las
-   * duplicadas que `skipDuplicates` salta conservan su `carga_id` previo (R25). Devuelve el
-   * total insertado y el `cargaId` resuelto (`null` si no se creo ningun lote).
+   * Feature 141 (R15/R16/R17/R34/R35/R36): en esa MISMA tx resuelve la fila de `carga` del
+   * lote —CREANDOLA con un id generado por el SERVIDOR si `lote.cargaId` es `null` (R15/R16),
+   * o LEYENDOLA y verificando propiedad si viene un token previo (R17/R19)— y escribe
+   * `carga_id` en las ordenes que inserta. Solo la resuelve si el batch tiene al menos una
+   * fila por insertar (sin lotes huerfanos, R28/R35); las duplicadas que `skipDuplicates`
+   * salta conservan su `carga_id` previo (R36). Devuelve el total insertado y el `cargaId`
+   * resuelto (`null` si no se creo ni reutilizo ningun lote).
    */
   createManyOrdenes(
     data: CreateOrdenData[],
@@ -482,11 +507,11 @@ export interface IOrdenRepository {
    * una fila por orden creada con su `num_guia` asignado. El estado inicial ya viene resuelto
    * en `data[].estatusId` (el service lo fija a `en_ruta_bodega_central`).
    *
-   * Feature 141 (R19/R21/R23/R25): igual que `createManyOrdenes`, asegura la fila de `carga`
-   * del lote y escribe `carga_id` en las ordenes creadas dentro de la MISMA tx. Con
-   * `lote.cargaId = null` el repo genera UN id la primera vez y lo REUSA en los batches
-   * siguientes de la misma llamada (una peticion = un lote, R19). Devuelve las creadas y el
-   * `cargaId` resuelto (`null` si no se creo ningun lote).
+   * Feature 141 (R30/R32/R34/R36): igual que `createManyOrdenes`, resuelve la fila de `carga`
+   * del lote y escribe `carga_id` en las ordenes creadas dentro de la MISMA tx. La via API key
+   * siempre entra con `lote.cargaId = null`: el repo genera UN id la primera vez y lo REUSA en
+   * los batches internos siguientes de la misma llamada (una peticion = un lote, R30).
+   * Devuelve las creadas y el `cargaId` resuelto (`null` si no se creo ningun lote).
    */
   createManyOrdenesConGuia(
     data: CreateOrdenData[],
@@ -494,6 +519,21 @@ export interface IOrdenRepository {
     historial: HistorialContexto,
     lote: LoteContexto,
   ): Promise<{ creadas: CreateOrdenConGuiaResultRow[]; cargaId: string | null }>;
+
+  // --- Feature 141: persistencia de las URLs de descarga de etiquetas (R47/R48) ---
+
+  /**
+   * Feature 141/R47: fija `carga.download_url` del lote con la URL del PDF CONSOLIDADO (modo
+   * `consolidate`). Escritura POST-COMMIT de la carga (best-effort en el borde): NO toca
+   * ninguna otra columna de `carga` ni ninguna orden.
+   */
+  setCargaDownloadUrl(cargaId: string, url: string): Promise<void>;
+  /**
+   * Feature 141/R48: fija `orden.download_url` de cada orden con la URL de SU PDF individual
+   * (modo `individual`), en una sola transaccion. Escritura POST-COMMIT: NO toca `carga_id`,
+   * `num_guia`, `estatus_id` ni ninguna otra columna. Lista vacia -> no-op.
+   */
+  setOrdenesDownloadUrl(items: { ordenId: string; url: string }[]): Promise<void>;
 
   // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
 

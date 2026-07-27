@@ -49,6 +49,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
       ]),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set()),
     createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 1, cargaId: UUID_SESION }),
+    // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
+    setCargaDownloadUrl: vi.fn(async () => {}),
+    setOrdenesDownloadUrl: vi.fn(async () => {}),
     createManyOrdenesConGuia: vi.fn(async (data: CreateOrdenData[]) => ({
       creadas: data.map((d, i) => ({
         ordenId: `o${i + 1}`,
@@ -120,6 +123,7 @@ describe("cargarMasiva — lote de la sesion (R12/R13/R18/R27)", () => {
       cargaId: UUID_SESION,
       usuarioCargaId: "store1", // R2: el adminTienda autenticado
       totalFiles: 500,
+      name: null, // R22: sin nombre declarado
     });
   });
 
@@ -217,9 +221,10 @@ describe("cargarViaApi — lote por peticion (R19/R20/R21/R22/R28)", () => {
 
     expect(repo.createManyOrdenesConGuia).toHaveBeenCalledTimes(1);
     expect(loteArg(repo, "createManyOrdenesConGuia")).toEqual({
-      cargaId: null, // el id lo genera el servidor
-      usuarioCargaId: "key-user-1", // R20: usuario dedicado de la key
-      totalFiles: 3, // R21: objetos del array del payload
+      cargaId: null, // R15: el id lo genera SIEMPRE el servidor
+      usuarioCargaId: "key-user-1", // R31: usuario dedicado de la key
+      totalFiles: 3, // R32: objetos del array del payload
+      name: null, // R22: sin nombre declarado
     });
   });
 

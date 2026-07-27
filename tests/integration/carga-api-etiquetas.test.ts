@@ -9,12 +9,17 @@ import type {
   CargaViaApiSummary,
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
-import type { IEtiquetasLotePdfService } from "@/lib/interfaces/services/IEtiquetasLotePdfService";
+import type { IEtiquetasDescargaService } from "@/lib/interfaces/services/IEtiquetasDescargaService";
 import { etiquetasConfig } from "@/lib/config/etiquetas";
 
 // Feature 136 (T3.1) — cableado del PDF de etiquetas en el endpoint de carga por
-// API. Se inyectan fakes de `autenticar`, `bulkService` y `etiquetasService`: sin
+// API. Se inyectan fakes de `autenticar`, `bulkService` y `descargaService`: sin
 // DB, sin Storage, sin red. Cubre R10/R12/R13/R16/R17 + el tope de BLOQ-1.
+//
+// Feature 141 (T28): la ruta ya no habla con `EtiquetasLotePdfService` directamente, sino
+// con `EtiquetasDescargaService` (genera segun `download_type` y persiste la URL). Las
+// aserciones heredadas de la 136 se conservan TAL CUAL sobre el modo `consolidate` (default),
+// que es justo la garantia de compatibilidad hacia atras (R53).
 
 const KEY_ACTOR: Actor = { usuarioId: "key-user-1", rol: "apiKey" };
 const SECRETO = "ordx_secretovivo1234567890";
@@ -31,7 +36,7 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     ordenes: [
       { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
     ],
-    cargaId: "33333333-3333-4333-8333-333333333333", // feature 141/R28
+    cargaId: "33333333-3333-4333-8333-333333333333", // feature 141/R39
     ...overrides,
   };
 }
@@ -43,12 +48,13 @@ function fakeBulk(summary: CargaViaApiSummary): IBulkOrdenService {
   };
 }
 
-function fakeEtiquetas(overrides: Partial<IEtiquetasLotePdfService> = {}): IEtiquetasLotePdfService {
+function fakeEtiquetas(
+  overrides: Partial<IEtiquetasDescargaService> = {},
+): IEtiquetasDescargaService {
   return {
-    generarYAlmacenar: vi.fn().mockResolvedValue({
-      path: "key-user-1/uuid.pdf",
-      signedUrl: "https://signed.example/pdf?token=abc",
-      expiraEnSegundos: 3600,
+    generarYPersistir: vi.fn().mockResolvedValue({
+      consolidado: { url: "https://signed.example/pdf?token=abc", expiraEnSegundos: 3600 },
+      porOrden: new Map(),
     }),
     ...overrides,
   };
@@ -66,11 +72,11 @@ function reqConBearer(body: unknown, bearer?: string): Request {
 
 const BODY = { ordenes: [{ num_remision: "REM-1", destinatario: "Ana", telefono: "099" }] };
 
-function depsOk(bulk: IBulkOrdenService, etiquetas: IEtiquetasLotePdfService): CargaApiDeps {
+function depsOk(bulk: IBulkOrdenService, etiquetas: IEtiquetasDescargaService): CargaApiDeps {
   return {
     autenticar: async () => ({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }) as ApiKeyAuthResult,
     bulkService: bulk,
-    etiquetasService: etiquetas,
+    descargaService: etiquetas,
   };
 }
 
@@ -101,7 +107,7 @@ function summaryDeLoteGrande(n: number): CargaViaApiSummary {
     conError: 0,
     filas,
     ordenes,
-    cargaId: "33333333-3333-4333-8333-333333333333", // feature 141/R28
+    cargaId: "33333333-3333-4333-8333-333333333333", // feature 141/R39
   };
 }
 
@@ -116,12 +122,17 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
       expiraEnSegundos: 3600,
     });
     // El service recibe los ids de las ordenes creadas y el actor de la tienda.
-    expect(etiquetas.generarYAlmacenar).toHaveBeenCalledWith(["ord-1"], KEY_ACTOR);
+    expect(etiquetas.generarYPersistir).toHaveBeenCalledWith({
+      modo: "consolidate", // feature 141/R43: default
+      cargaId: "33333333-3333-4333-8333-333333333333",
+      ordenIds: ["ord-1"],
+      actor: KEY_ACTOR,
+    });
   });
 
   it("etiquetasPdf trae { error } y responde 200 cuando el service lanza (R12)", async () => {
     const etiquetas = fakeEtiquetas({
-      generarYAlmacenar: vi.fn().mockRejectedValue(new Error("storage caido")),
+      generarYPersistir: vi.fn().mockRejectedValue(new Error("storage caido")),
     });
     const res = await handleCargaApi(reqConBearer(BODY, SECRETO), depsOk(fakeBulk(okSummary()), etiquetas));
     // La carga NO se revierte: 200 con el fallo VISIBLE, no null.
@@ -136,11 +147,13 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
   });
 
   it("etiquetasPdf es null cuando el service no halla etiqueta imprimible (R14)", async () => {
-    const etiquetas = fakeEtiquetas({ generarYAlmacenar: vi.fn().mockResolvedValue(null) });
+    const etiquetas = fakeEtiquetas({
+      generarYPersistir: vi.fn().mockResolvedValue({ consolidado: null, porOrden: new Map() }),
+    });
     const res = await handleCargaApi(reqConBearer(BODY, SECRETO), depsOk(fakeBulk(okSummary()), etiquetas));
     const json = await res.json();
     expect(json.etiquetasPdf).toBeNull();
-    expect(etiquetas.generarYAlmacenar).toHaveBeenCalledTimes(1);
+    expect(etiquetas.generarYPersistir).toHaveBeenCalledTimes(1);
   });
 
   it("etiquetasPdf es null cuando no se crea ninguna orden (R13)", async () => {
@@ -151,7 +164,7 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
     const json = await res.json();
     expect(json.etiquetasPdf).toBeNull();
     // Sin ordenes creadas NO se toca el orquestador (no Storage).
-    expect(etiquetas.generarYAlmacenar).not.toHaveBeenCalled();
+    expect(etiquetas.generarYPersistir).not.toHaveBeenCalled();
   });
 
   it("mantiene 401 sin key sin generar PDF (R16)", async () => {
@@ -159,11 +172,11 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
     const deps: CargaApiDeps = {
       autenticar: async () => ({ status: "unauthenticated" }) as ApiKeyAuthResult,
       bulkService: fakeBulk(okSummary()),
-      etiquetasService: etiquetas,
+      descargaService: etiquetas,
     };
     const res = await handleCargaApi(reqConBearer(BODY), deps);
     expect(res.status).toBe(401);
-    expect(etiquetas.generarYAlmacenar).not.toHaveBeenCalled();
+    expect(etiquetas.generarYPersistir).not.toHaveBeenCalled();
   });
 
   it("mantiene 403 con key sin permiso sin generar PDF (R16)", async () => {
@@ -171,11 +184,11 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
     const deps: CargaApiDeps = {
       autenticar: async () => ({ status: "forbidden" }) as ApiKeyAuthResult,
       bulkService: fakeBulk(okSummary()),
-      etiquetasService: etiquetas,
+      descargaService: etiquetas,
     };
     const res = await handleCargaApi(reqConBearer(BODY, SECRETO), deps);
     expect(res.status).toBe(403);
-    expect(etiquetas.generarYAlmacenar).not.toHaveBeenCalled();
+    expect(etiquetas.generarYPersistir).not.toHaveBeenCalled();
   });
 
   // BLOQ-1 — el caso que faltaba. Antes del tope, un lote asi intentaba rendir
@@ -214,7 +227,7 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
 
     // 4. Y sobre todo: NO se intento generar nada. El trabajo que no se arranca
     //    no puede tumbar la function.
-    expect(etiquetas.generarYAlmacenar).not.toHaveBeenCalled();
+    expect(etiquetas.generarYPersistir).not.toHaveBeenCalled();
   });
 
   it("lote justo EN el tope: si genera el PDF (BLOQ-1, borde del limite)", async () => {
@@ -232,7 +245,7 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
       url: "https://signed.example/pdf?token=abc",
       expiraEnSegundos: 3600,
     });
-    expect(etiquetas.generarYAlmacenar).toHaveBeenCalledTimes(1);
+    expect(etiquetas.generarYPersistir).toHaveBeenCalledTimes(1);
   });
 
   it("no loguea el mensaje crudo del error: podria traer datos de la orden (design §8)", async () => {
@@ -243,7 +256,7 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const etiquetas = fakeEtiquetas({
-        generarYAlmacenar: vi
+        generarYPersistir: vi
           .fn()
           .mockRejectedValue(new Error(`no se pudo dibujar ${PII}, ${DIRECCION}`)),
       });

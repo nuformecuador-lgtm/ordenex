@@ -49,6 +49,9 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findDistritosByCantonIds: vi.fn(),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1", "msg-2"])),
     createManyOrdenes: vi.fn(),
+    // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
+    setCargaDownloadUrl: vi.fn(async () => {}),
+    setOrdenesDownloadUrl: vi.fn(async () => {}),
     createManyOrdenesConGuia: vi.fn().mockResolvedValue({ creadas: [], cargaId: null }), // feature 88/141
     findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
     asignarMensajeroSugerido: vi.fn().mockResolvedValue(0),

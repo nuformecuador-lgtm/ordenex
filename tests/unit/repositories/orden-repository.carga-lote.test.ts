@@ -2,23 +2,27 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
-import { CargaLoteAjenoError } from "@/lib/interfaces/repositories/IOrdenRepository";
+import {
+  CargaLoteAjenoError,
+  CargaNombreDuplicadoError,
+} from "@/lib/interfaces/repositories/IOrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 import { buildCargaDelegate, loteCtx, type CargaDelegateFake } from "@/tests/fixtures/carga-lote";
 
-// Feature 141 (T6/T12/T13) — el lote en la capa de repositorio. Cubre:
-//   R23 — el ensure del lote y el INSERT de las ordenes ocurren en la MISMA $transaction;
-//         si el insert falla, la tx revierte y no queda lote.
-//   R24 — ningun lote huerfano: un batch sin filas por insertar NO toca `carga`.
-//   R25 — TODAS las ordenes creadas del batch llevan el MISMO carga_id; las duplicadas
-//         saltadas por skipDuplicates no se modifican.
-//   R26 — el alta manual individual (`create`) deja carga_id NULL y no crea lote.
-//   R29 — ningun camino escribe `download_url` (ni en `orden` ni en `carga`).
-//   R11 — la carga masiva sigue sin enviar `num_guia`.
-//   R17 — un lote de otro usuario aborta la insercion (el borde lo traduce a 403).
-//   R19 — via API key: UN solo lote aunque el lote se parta en varios batches internos.
+// Feature 141 (T6/T18/T22/T26) — el lote en la capa de repositorio. Cubre:
+//   R15/R16 — el `carga_id` escrito en las ordenes es el id GENERADO POR EL SERVIDOR; un
+//             token entrante nunca se convierte en el id de una fila nueva.
+//   R17/R19 — token propio -> reutiliza; token desconocido/ajeno -> aborta sin crear ordenes.
+//   R21/R24 — `name` persistido al crear; nombre repetido -> aborta (409 en el borde).
+//   R34     — el lote se resuelve y las ordenes se insertan en la MISMA $transaction.
+//   R28/R35 — ningun lote huerfano: un batch sin filas por insertar NO toca `carga`.
+//   R36     — TODAS las creadas del batch llevan el MISMO carga_id.
+//   R37     — el alta manual individual (`create`) deja carga_id NULL y no crea lote.
+//   R30/R32 — via API key: UN lote por peticion aunque haya varios batches internos.
+//   R14/R40 — la carga masiva no envia `num_guia` ni `download_url` en el INSERT.
+//   R47/R48 — persistencia POST-COMMIT de las URLs de descarga.
 
-const UUID_SESION = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const TOKEN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const HIST_CARGA = { actorUsuarioId: "tienda-1", origenTipo: "carga_masiva" } as const;
 const HIST_API = { actorUsuarioId: "key-user-1", origenTipo: "carga_api" } as const;
 
@@ -29,6 +33,7 @@ function buildPrisma(carga: CargaDelegateFake = buildCargaDelegate()) {
       findMany: vi.fn().mockResolvedValue([]),
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
       findUniqueOrThrow: vi.fn(),
+      update: vi.fn(async () => ({})),
     },
     ordenHistorialEstado: { createMany: vi.fn() },
     carga,
@@ -60,9 +65,10 @@ beforeEach(async () => {
   await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO
 });
 
-describe("createManyOrdenes — lote en la MISMA transaccion (R23/R25)", () => {
-  it("R25: todas las filas del createMany llevan el MISMO carga_id del lote", async () => {
-    const prisma = buildPrisma();
+describe("createManyOrdenes — el lote se resuelve en la MISMA transaccion (R34/R36)", () => {
+  it("R15/R36: todas las filas del createMany llevan el carga_id GENERADO POR EL SERVIDOR", async () => {
+    const carga = buildCargaDelegate();
+    const prisma = buildPrisma(carga);
     prisma.orden.createMany.mockResolvedValue({ count: 2 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
@@ -70,26 +76,22 @@ describe("createManyOrdenes — lote en la MISMA transaccion (R23/R25)", () => {
       [baseCreateData({ numRemision: "REM-1" }), baseCreateData({ numRemision: "REM-2" })],
       500,
       HIST_CARGA,
-      loteCtx({ cargaId: UUID_SESION, usuarioCargaId: "tienda-1", totalFiles: 2 }),
+      loteCtx({ cargaId: null, usuarioCargaId: "tienda-1", totalFiles: 2 }),
     );
 
-    expect(res.cargaId).toBe(UUID_SESION);
+    const idServidor = [...carga.filas.keys()][0];
+    expect(res.cargaId).toBe(idServidor);
     const filas = prisma.orden.createMany.mock.calls[0][0].data;
-    expect(filas.map((f: { cargaId: string }) => f.cargaId)).toEqual([UUID_SESION, UUID_SESION]);
+    expect(filas.map((f: { cargaId: string }) => f.cargaId)).toEqual([idServidor, idServidor]);
   });
 
-  it("R23: el ensure del lote ocurre DENTRO del mismo $transaction y ANTES del insert", async () => {
+  it("R34: el lote se resuelve DENTRO del mismo $transaction y ANTES del insert", async () => {
     const orden: string[] = [];
     const carga = buildCargaDelegate();
-    carga.createMany.mockImplementation(async ({ data }: { data: Array<{ id: string }> }) => {
-      orden.push("carga.createMany");
-      carga.filas.set(data[0].id, {
-        id: data[0].id,
-        usuarioCarga: "tienda-1",
-        totalFiles: 1,
-        downloadUrl: null,
-      });
-      return { count: 1 };
+    const createReal = carga.create;
+    carga.create = vi.fn(async (args: { data: Record<string, unknown> }) => {
+      orden.push("carga.create");
+      return createReal(args);
     });
     const prisma = buildPrisma(carga);
     prisma.orden.createMany.mockImplementation(async () => {
@@ -106,10 +108,10 @@ describe("createManyOrdenes — lote en la MISMA transaccion (R23/R25)", () => {
 
     await repo.createManyOrdenes([baseCreateData()], 500, HIST_CARGA, loteCtx());
 
-    expect(orden).toEqual(["tx.start", "carga.createMany", "orden.createMany", "tx.end"]);
+    expect(orden).toEqual(["tx.start", "carga.create", "orden.createMany", "tx.end"]);
   });
 
-  it("R23: si el insert de las ordenes falla, el error se propaga y la tx revierte", async () => {
+  it("R34: si el insert de las ordenes falla, el error se propaga (la tx revierte el lote)", async () => {
     const prisma = buildPrisma();
     prisma.orden.createMany.mockRejectedValue(new Error("insert boom"));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -117,30 +119,10 @@ describe("createManyOrdenes — lote en la MISMA transaccion (R23/R25)", () => {
     await expect(
       repo.createManyOrdenes([baseCreateData()], 500, HIST_CARGA, loteCtx()),
     ).rejects.toThrow("insert boom");
-    // El ensure del lote vive en la MISMA tx: al revertir, la fila de `carga` se va con ella
-    // (aqui se observa que no hubo commit: el insert nunca completo).
     expect(prisma.orden.createMany).toHaveBeenCalledTimes(1);
   });
 
-  it("R17: un lote de OTRO usuario aborta la insercion (sin crear ordenes)", async () => {
-    const carga = buildCargaDelegate([
-      { id: UUID_SESION, usuarioCarga: "otra-tienda", totalFiles: 10, downloadUrl: null },
-    ]);
-    const prisma = buildPrisma(carga);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    await expect(
-      repo.createManyOrdenes(
-        [baseCreateData()],
-        500,
-        HIST_CARGA,
-        loteCtx({ cargaId: UUID_SESION, usuarioCargaId: "tienda-1" }),
-      ),
-    ).rejects.toBeInstanceOf(CargaLoteAjenoError);
-    expect(prisma.orden.createMany).not.toHaveBeenCalled();
-  });
-
-  it("R11/R29: la fila insertada no lleva num_guia ni download_url", async () => {
+  it("R14/R40: la fila insertada no lleva num_guia ni download_url", async () => {
     const prisma = buildPrisma();
     prisma.orden.createMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -153,7 +135,102 @@ describe("createManyOrdenes — lote en la MISMA transaccion (R23/R25)", () => {
   });
 });
 
-describe("createManyOrdenes — sin lotes huerfanos (R15/R24)", () => {
+describe("createManyOrdenes — token del lote entrante (R15/R17/R19/R24)", () => {
+  it("R17: con un token propio REUTILIZA la fila (no crea otra) y cuelga las ordenes de ella", async () => {
+    const carga = buildCargaDelegate([
+      { id: TOKEN, usuarioCarga: "tienda-1", name: "enero", totalFiles: 500, downloadUrl: null },
+    ]);
+    const prisma = buildPrisma(carga);
+    prisma.orden.createMany.mockResolvedValue({ count: 1 });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.createManyOrdenes(
+      [baseCreateData()],
+      500,
+      HIST_CARGA,
+      loteCtx({ cargaId: TOKEN, usuarioCargaId: "tienda-1", totalFiles: 500 }),
+    );
+
+    expect(res.cargaId).toBe(TOKEN);
+    expect(carga.create).not.toHaveBeenCalled();
+    expect(carga.filas.size).toBe(1);
+    expect(prisma.orden.createMany.mock.calls[0][0].data[0].cargaId).toBe(TOKEN);
+  });
+
+  it("R15/R19: un token INEXISTENTE no crea ninguna fila con ese id y aborta la insercion", async () => {
+    const carga = buildCargaDelegate();
+    const prisma = buildPrisma(carga);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await expect(
+      repo.createManyOrdenes(
+        [baseCreateData()],
+        500,
+        HIST_CARGA,
+        loteCtx({ cargaId: TOKEN, usuarioCargaId: "tienda-1" }),
+      ),
+    ).rejects.toBeInstanceOf(CargaLoteAjenoError);
+    expect(carga.filas.has(TOKEN)).toBe(false);
+    expect(carga.create).not.toHaveBeenCalled();
+    expect(prisma.orden.createMany).not.toHaveBeenCalled(); // ninguna orden persistida
+  });
+
+  it("R19: un token de OTRO usuario aborta la insercion sin tocar el lote ajeno", async () => {
+    const carga = buildCargaDelegate([
+      { id: TOKEN, usuarioCarga: "otra-tienda", name: null, totalFiles: 10, downloadUrl: null },
+    ]);
+    const prisma = buildPrisma(carga);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await expect(
+      repo.createManyOrdenes(
+        [baseCreateData()],
+        500,
+        HIST_CARGA,
+        loteCtx({ cargaId: TOKEN, usuarioCargaId: "tienda-1" }),
+      ),
+    ).rejects.toBeInstanceOf(CargaLoteAjenoError);
+    expect(carga.filas.get(TOKEN)).toMatchObject({ usuarioCarga: "otra-tienda", totalFiles: 10 });
+    expect(prisma.orden.createMany).not.toHaveBeenCalled();
+  });
+
+  it("R24: un `name` ya usado por el actor aborta la insercion (nada persistido)", async () => {
+    const carga = buildCargaDelegate([
+      { id: "otro", usuarioCarga: "tienda-1", name: "enero", totalFiles: 5, downloadUrl: null },
+    ]);
+    const prisma = buildPrisma(carga);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await expect(
+      repo.createManyOrdenes(
+        [baseCreateData()],
+        500,
+        HIST_CARGA,
+        loteCtx({ usuarioCargaId: "tienda-1", name: "enero" }),
+      ),
+    ).rejects.toBeInstanceOf(CargaNombreDuplicadoError);
+    expect(prisma.orden.createMany).not.toHaveBeenCalled();
+    expect(carga.filas.size).toBe(1);
+  });
+
+  it("R21: el `name` del lote llega al INSERT de `carga`", async () => {
+    const carga = buildCargaDelegate();
+    const prisma = buildPrisma(carga);
+    prisma.orden.createMany.mockResolvedValue({ count: 1 });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.createManyOrdenes(
+      [baseCreateData()],
+      500,
+      HIST_CARGA,
+      loteCtx({ name: "carga de enero" }),
+    );
+
+    expect([...carga.filas.values()][0].name).toBe("carga de enero");
+  });
+});
+
+describe("createManyOrdenes — sin lotes huerfanos (R28/R35)", () => {
   it("un batch cuyas filas YA existen no toca `carga` ni inserta", async () => {
     const carga = buildCargaDelegate();
     const prisma = buildPrisma(carga);
@@ -165,13 +242,13 @@ describe("createManyOrdenes — sin lotes huerfanos (R15/R24)", () => {
       [baseCreateData({ numRemision: "REM-DUP" })],
       500,
       HIST_CARGA,
-      loteCtx({ cargaId: UUID_SESION }),
+      loteCtx(),
     );
 
-    expect(carga.createMany).not.toHaveBeenCalled();
+    expect(carga.create).not.toHaveBeenCalled();
     expect(carga.filas.size).toBe(0);
     expect(prisma.orden.createMany).not.toHaveBeenCalled();
-    expect(res.inserted).toBe(0);
+    expect(res).toEqual({ inserted: 0, cargaId: null });
   });
 
   it("un batch mixto (una nueva, una duplicada) SI crea el lote", async () => {
@@ -190,16 +267,16 @@ describe("createManyOrdenes — sin lotes huerfanos (R15/R24)", () => {
       [baseCreateData({ numRemision: "REM-DUP" }), baseCreateData({ numRemision: "REM-NEW" })],
       500,
       HIST_CARGA,
-      loteCtx({ cargaId: UUID_SESION, totalFiles: 2 }),
+      loteCtx({ totalFiles: 2 }),
     );
 
-    expect(res.cargaId).toBe(UUID_SESION);
     expect(carga.filas.size).toBe(1);
+    expect(res.cargaId).toBe([...carga.filas.keys()][0]);
   });
 });
 
-describe("createManyOrdenesConGuia — un lote por peticion (R19/R21/R25)", () => {
-  it("R19: dos batches internos comparten UN solo lote (el id se genera una vez)", async () => {
+describe("createManyOrdenesConGuia — un lote por peticion (R30/R32/R36)", () => {
+  it("R30: dos batches internos comparten UN solo lote (id generado una vez por el servidor)", async () => {
     const carga = buildCargaDelegate();
     const prisma = buildPrisma(carga);
     prisma.orden.findMany
@@ -233,25 +310,27 @@ describe("createManyOrdenesConGuia — un lote por peticion (R19/R21/R25)", () =
       ],
       1, // batchSize 1 -> DOS transacciones
       HIST_API,
-      loteCtx({ cargaId: null, usuarioCargaId: "key-user-1", totalFiles: 2 }),
+      loteCtx({ cargaId: null, usuarioCargaId: "key-user-1", totalFiles: 2, name: "lote api" }),
     );
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(carga.filas.size).toBe(1); // UN lote, no uno por batch
+    expect(carga.create).toHaveBeenCalledTimes(1);
     expect(res.cargaId).toBe([...carga.filas.keys()][0]);
-    // R21: el total del lote es el del payload, no el del batch interno.
+    // R32/R21: el total es el del payload (no el del batch interno) y el nombre se persiste.
     expect([...carga.filas.values()][0]).toMatchObject({
       usuarioCarga: "key-user-1",
       totalFiles: 2,
+      name: "lote api",
     });
-    // R25: ambas ordenes cuelgan del MISMO lote.
+    // R36: ambas ordenes cuelgan del MISMO lote.
     const enviados = prisma.orden.createMany.mock.calls.map(
       (c) => (c[0] as { data: Array<{ cargaId: string }> }).data[0].cargaId,
     );
     expect(new Set(enviados).size).toBe(1);
   });
 
-  it("R22/R24: un lote 100% duplicado no crea fila en `carga`", async () => {
+  it("R33/R35: un lote 100% duplicado no crea fila en `carga`", async () => {
     const carga = buildCargaDelegate();
     const prisma = buildPrisma(carga);
     prisma.orden.findMany.mockResolvedValueOnce([{ id: "o-existing", numRemision: "REM-1" }]);
@@ -269,7 +348,7 @@ describe("createManyOrdenesConGuia — un lote por peticion (R19/R21/R25)", () =
   });
 });
 
-describe("alta manual individual — sin lote (R26/R29)", () => {
+describe("alta manual individual — sin lote (R37/R40)", () => {
   it("`create` no envia carga_id ni download_url y no toca `carga`", async () => {
     const carga = buildCargaDelegate();
     const prisma = buildPrisma(carga);
@@ -294,7 +373,55 @@ describe("alta manual individual — sin lote (R26/R29)", () => {
     const data = prisma.orden.create.mock.calls[0][0].data;
     expect(data).not.toHaveProperty("cargaId");
     expect(data).not.toHaveProperty("downloadUrl");
-    expect(carga.createMany).not.toHaveBeenCalled();
+    expect(carga.create).not.toHaveBeenCalled();
     expect(carga.filas.size).toBe(0);
+  });
+});
+
+describe("persistencia de las URLs de descarga (R47/R48)", () => {
+  it("R47: setCargaDownloadUrl actualiza SOLO `download_url` de la fila del lote", async () => {
+    const carga = buildCargaDelegate([
+      { id: TOKEN, usuarioCarga: "key-user-1", name: null, totalFiles: 2, downloadUrl: null },
+    ]);
+    const prisma = buildPrisma(carga);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.setCargaDownloadUrl(TOKEN, "https://signed.example/lote.pdf");
+
+    expect(carga.update).toHaveBeenCalledWith({
+      where: { id: TOKEN },
+      data: { downloadUrl: "https://signed.example/lote.pdf" },
+    });
+    expect(carga.filas.get(TOKEN)).toMatchObject({
+      downloadUrl: "https://signed.example/lote.pdf",
+      totalFiles: 2, // el resto de la fila intacto
+      name: null,
+    });
+  });
+
+  it("R48: setOrdenesDownloadUrl escribe la URL de cada orden en UNA transaccion", async () => {
+    const prisma = buildPrisma();
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.setOrdenesDownloadUrl([
+      { ordenId: "o1", url: "https://signed.example/1.pdf" },
+      { ordenId: "o2", url: "https://signed.example/2.pdf" },
+    ]);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.orden.update.mock.calls.map((c) => c[0])).toEqual([
+      { where: { id: "o1" }, data: { downloadUrl: "https://signed.example/1.pdf" } },
+      { where: { id: "o2" }, data: { downloadUrl: "https://signed.example/2.pdf" } },
+    ]);
+  });
+
+  it("R48: lista vacia -> no-op (ni transaccion ni updates)", async () => {
+    const prisma = buildPrisma();
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.setOrdenesDownloadUrl([]);
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.orden.update).not.toHaveBeenCalled();
   });
 });

@@ -35,8 +35,8 @@ export interface CargaViaApiSummary {
   filas: CargaViaApiRow[];
   ordenes: CargaViaApiOrden[];
   /**
-   * Feature 141/R28: identificador del LOTE creado por ESTA peticion (una peticion = un
-   * lote, R19). `null` si no se creo ninguna orden y por tanto ningun lote (R22).
+   * Feature 141/R39: identificador del LOTE creado por ESTA peticion (una peticion = un
+   * lote, R30). `null` si no se creo ninguna orden y por tanto ningun lote (R33).
    */
   cargaId: string | null;
 }
@@ -61,17 +61,19 @@ export interface IBulkOrdenService {
    * la UI muestre los hallazgos (errores de geografía, num_remision duplicados)
    * ANTES de escribir en la DB. La carga real re-valida (es la autoridad final).
    *
-   * Feature 141 (R12/R13/R18): `options.cargaId` es el identificador de la SESION de carga
-   * (un UUID por sesion, repetido en los N chunks); el lote se asegura de forma idempotente,
-   * asi que los N chunks comparten UNA sola fila de `carga`. `options.totalFiles` es el total
-   * de filas de la SESION declarado por el cliente (nunca el del chunk); se escribe una sola
-   * vez, al crear la fila. Puede lanzar `CargaLoteAjenoError` si el lote es de otro usuario
-   * (el borde lo traduce a 403, R17).
+   * Feature 141 (R15-R17/R20/R29): `options.cargaId` es el TOKEN OPACO del lote que el
+   * SERVIDOR emitio al persistir el primer chunk y que el cliente reenvia en los siguientes;
+   * el cliente NUNCA elige el id. Ausente = esta peticion crea el lote (id generado dentro de
+   * la transaccion). `options.totalFiles` es el total de filas de la SESION declarado por el
+   * cliente (nunca el del chunk) y `options.name` el nombre opcional del lote; ambos solo se
+   * escriben al CREAR la fila. Puede lanzar `CargaLoteAjenoError` (lote desconocido o ajeno →
+   * 403, R19) o `CargaNombreDuplicadoError` (nombre repetido del actor → 409, R24); ninguno se
+   * captura aqui: son condiciones del borde, no clasificacion de filas.
    */
   cargarMasiva(
     rows: RawRow[],
     actor: Actor,
-    options?: { dryRun?: boolean; cargaId?: string; totalFiles?: number },
+    options?: { dryRun?: boolean; cargaId?: string; name?: string; totalFiles?: number },
   ): Promise<BulkOrdenResult>;
 
   /**
@@ -82,6 +84,14 @@ export interface IBulkOrdenService {
    * con `num_guia` inmediato (R9). Nunca lanza por autorizacion (devuelve `forbidden`).
    * Devuelve el summary extendido con `numGuia` por creada + el bloque plano `ordenes` (R10).
    * No hay `dryRun`: el integrador carga en firme.
+   *
+   * Feature 141 (R20/R21/R30-R33): `options.name` es el nombre OPCIONAL del lote; el id del
+   * lote lo genera SIEMPRE el servidor (una peticion = un lote). Puede lanzar
+   * `CargaNombreDuplicadoError` (→ 409, R24), que el borde traduce.
    */
-  cargarViaApi(rows: RawRow[], actor: Actor): Promise<CargaViaApiResult>;
+  cargarViaApi(
+    rows: RawRow[],
+    actor: Actor,
+    options?: { name?: string },
+  ): Promise<CargaViaApiResult>;
 }

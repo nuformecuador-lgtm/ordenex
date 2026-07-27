@@ -45,6 +45,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }), // feature 141
     // Feature 88: persistencia con guia inmediata (carga por API). Por defecto vacio;
     // los tests de cargarViaApi lo sobreescriben para devolver las guias asignadas.
+    // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
+    setCargaDownloadUrl: vi.fn(async () => {}),
+    setOrdenesDownloadUrl: vi.fn(async () => {}),
     createManyOrdenesConGuia: vi.fn().mockResolvedValue({ creadas: [], cargaId: null }), // feature 88/141
     // Feature 16: metodos de resumen/asignacion, no ejercitados por la carga
     // masiva (feature 15) pero exigidos por la interfaz IOrdenRepository.

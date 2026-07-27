@@ -2,16 +2,19 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
-// Feature 141 (R1-R11) — cobertura ESTATICA de la migracion `*_carga_orden_carga_id`
+// Feature 141 (R1-R14) — cobertura ESTATICA de la migracion `*_carga_orden_carga_id`
 // (patron `orden-prioridad-migration` / `zonas-migration`): lee migration.sql, down.sql y
 // schema.prisma y los verifica por regex. NO requiere Postgres real. Cubre:
 //   R1/R2/R6/R7 — tabla `carga` con sus columnas y la FK a `usuario`.
 //   R3          — sin `batch_url` ni `status` (D2/D3).
 //   R4/R5       — `orden.carga_id` y `orden.download_url` NULLABLE, con indice y FK RESTRICT.
-//   R8          — sin backfill (ningun UPDATE sobre `orden`).
-//   R9          — RLS habilitada en `carga`, sin policies.
-//   R10         — down.sql revierte EXACTAMENTE lo que crea el UP.
-//   R11         — `num_guia` intacto (ni el UP ni el DOWN lo mencionan).
+//   R8/R9/R10   — `name` nullable y unicidad POR USUARIO (los NULL conviven).
+//   R11         — sin backfill (ningun UPDATE sobre `orden`).
+//   R12         — RLS habilitada en `carga`, sin policies.
+//   R13         — down.sql revierte EXACTAMENTE lo que crea el UP.
+//   R14         — `num_guia` intacto (ni el UP ni el DOWN lo mencionan).
+// NOTA: la migracion se modifico EN SITIO (gate F1.4-10): no esta aplicada en ninguna base
+// ni mergeado su PR, asi que `name` y su indice entran en este mismo par de archivos.
 
 const ROOT = path.join(__dirname, "..", "..", "..");
 const MIGRATIONS_DIR = path.join(ROOT, "db", "migrations");
@@ -46,7 +49,7 @@ function sinComentarios(sql: string): string {
 const upEjecutable = sinComentarios(upSql);
 const downEjecutable = sinComentarios(downSql);
 
-describe("Feature 141 · UP — tabla `carga` (R1/R2/R6/R7)", () => {
+describe("Feature 141 · UP — tabla `carga` (R1/R2/R6/R7/R8/R9)", () => {
   it("R1: crea la tabla en SINGULAR con id, fecha_carga, download_url y total_files", () => {
     expect(upSql).toMatch(/CREATE TABLE "carga" \(/);
     expect(upSql).toMatch(/"id"\s+TEXT NOT NULL/);
@@ -61,6 +64,21 @@ describe("Feature 141 · UP — tabla `carga` (R1/R2/R6/R7)", () => {
     expect(upSql).toMatch(
       /CONSTRAINT "carga_usuario_carga_fkey" FOREIGN KEY \("usuario_carga"\)[\s\S]*REFERENCES "usuario"\("id"\) ON DELETE RESTRICT/,
     );
+  });
+
+  it("R8: `name` es TEXT NULLABLE (dato opcional del usuario)", () => {
+    expect(upSql).toMatch(/"name"\s+TEXT,/);
+    expect(upSql).not.toMatch(/"name"\s+TEXT NOT NULL/);
+  });
+
+  it("R9: crea el indice UNICO COMPUESTO (usuario_carga, name), no uno global sobre name", () => {
+    expect(upSql).toMatch(
+      /CREATE UNIQUE INDEX "carga_usuario_carga_name_key" ON "carga"\("usuario_carga", "name"\)/,
+    );
+    // R10: unicidad POR USUARIO; nunca un unico global sobre `name` solo.
+    expect(upEjecutable).not.toMatch(/CREATE UNIQUE INDEX "[a-z_]+" ON "carga"\("name"\)/);
+    // Tampoco un indice unico PARCIAL (design §1.1: no aporta y complica el DOWN).
+    expect(upEjecutable).not.toMatch(/carga_usuario_carga_name_key[\s\S]*WHERE/);
   });
 
   it("R6: download_url es TEXT NULLABLE (nace sin valor)", () => {
@@ -83,14 +101,14 @@ describe("Feature 141 · UP — tabla `carga` (R1/R2/R6/R7)", () => {
     expect(upEjecutable).not.toMatch(/CREATE TYPE/i);
   });
 
-  it("R9: habilita RLS en `carga` y NO define ninguna policy", () => {
+  it("R12: habilita RLS en `carga` y NO define ninguna policy", () => {
     expect(upSql).toMatch(/ALTER TABLE "carga" ENABLE ROW LEVEL SECURITY/);
     expect(upEjecutable).not.toMatch(/CREATE POLICY/i);
     expect(upEjecutable).not.toMatch(/DISABLE ROW LEVEL SECURITY/i);
   });
 });
 
-describe("Feature 141 · UP — columnas nuevas de `orden` (R4/R5/R8/R11)", () => {
+describe("Feature 141 · UP — columnas nuevas de `orden` (R4/R5/R11/R14)", () => {
   it("R4: agrega carga_id TEXT NULLABLE con indice y FK a carga(id) ON DELETE RESTRICT", () => {
     expect(upSql).toMatch(/ALTER TABLE "orden" ADD COLUMN "carga_id" TEXT;/);
     expect(upSql).not.toMatch(/ADD COLUMN "carga_id" TEXT NOT NULL/);
@@ -105,18 +123,18 @@ describe("Feature 141 · UP — columnas nuevas de `orden` (R4/R5/R8/R11)", () =
     expect(upSql).not.toMatch(/ADD COLUMN "download_url" TEXT NOT NULL/);
   });
 
-  it("R8: sin backfill — ningun UPDATE ni INSERT sobre las ordenes existentes", () => {
+  it("R11: sin backfill — ningun UPDATE ni INSERT sobre las ordenes existentes", () => {
     expect(upEjecutable).not.toMatch(/UPDATE\s+"?orden"?/i);
     expect(upEjecutable).not.toMatch(/INSERT\s+INTO/i);
   });
 
-  it("R11: no toca num_guia (columna, secuencia, indice ni funcion)", () => {
+  it("R14: no toca num_guia (columna, secuencia, indice ni funcion)", () => {
     expect(upEjecutable).not.toMatch(/num_guia/i);
     expect(downEjecutable).not.toMatch(/num_guia/i);
   });
 });
 
-describe("Feature 141 · DOWN — revierte exactamente (R10)", () => {
+describe("Feature 141 · DOWN — revierte exactamente (R13)", () => {
   it("suelta la FK, el indice y las dos columnas de `orden`, y despues la tabla `carga`", () => {
     expect(downSql).toMatch(/ALTER TABLE "orden" DROP CONSTRAINT IF EXISTS "orden_carga_id_fkey"/);
     expect(downSql).toMatch(/DROP INDEX IF EXISTS "orden_carga_id_idx"/);
@@ -129,6 +147,13 @@ describe("Feature 141 · DOWN — revierte exactamente (R10)", () => {
     expect(downSql.indexOf('DROP COLUMN IF EXISTS "carga_id"')).toBeLessThan(
       downSql.indexOf('DROP TABLE IF EXISTS "carga"'),
     );
+  });
+
+  it("R13: el DROP TABLE arrastra el indice unico compuesto (no hace falta soltarlo aparte)", () => {
+    expect(downEjecutable).toMatch(/DROP TABLE IF EXISTS "carga"/);
+    // No se suelta el indice por separado: moriria con la tabla; y no debe quedar huerfano
+    // ningun DROP INDEX de `carga` que fallara si la tabla ya no existe.
+    expect(downEjecutable).not.toMatch(/DROP INDEX IF EXISTS "carga_/);
   });
 
   it("el DOWN no toca ninguna otra columna de `orden` ni RLS de otras tablas", () => {
@@ -153,7 +178,7 @@ describe("Feature 141 · DOWN — revierte exactamente (R10)", () => {
   });
 });
 
-describe("Feature 141 · schema.prisma refleja la migracion (sin drift) (R1-R7)", () => {
+describe("Feature 141 · schema.prisma refleja la migracion (sin drift) (R1-R9)", () => {
   const bloqueCarga = schema.match(/model Carga \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const bloqueOrden = schema.match(/model Orden \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
@@ -165,6 +190,13 @@ describe("Feature 141 · schema.prisma refleja la migracion (sin drift) (R1-R7)"
     expect(bloqueCarga).toMatch(/downloadUrl\s+String\?\s+@map\("download_url"\)/);
     expect(bloqueCarga).toMatch(/totalFiles\s+Int\s+@default\(0\)\s+@map\("total_files"\)/);
     expect(bloqueCarga).toMatch(/usuario Usuario @relation\("CargaUsuario"[\s\S]*onDelete: Restrict\)/);
+  });
+
+  it("R8/R9: el modelo Carga declara `name String?` y el @@unique([usuarioCarga, name])", () => {
+    expect(bloqueCarga).toMatch(/name\s+String\?/);
+    expect(bloqueCarga).toMatch(/@@unique\(\[usuarioCarga, name\]\)/);
+    // Nunca `@unique` a secas sobre el campo (seria unicidad GLOBAL, alternativa E descartada).
+    expect(bloqueCarga).not.toMatch(/name\s+String\?\s+@unique/);
   });
 
   it("R3: el modelo Carga NO declara status ni batchUrl", () => {

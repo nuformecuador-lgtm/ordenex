@@ -14,15 +14,20 @@ import {
   appErrorToResponse,
   UnauthenticatedError,
   ForbiddenError,
+  ConflictError,
   ValidationError,
   MSG,
 } from "@/lib/errors";
 import type { IBulkOrdenService } from "@/lib/interfaces/services/IBulkOrdenService";
+import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   ApiKeyAuthResult,
   IApiKeyAuthService,
 } from "@/lib/interfaces/services/IApiKeyAuthService";
-import type { IEtiquetasLotePdfService } from "@/lib/interfaces/services/IEtiquetasLotePdfService";
+import type {
+  DownloadType,
+  IEtiquetasDescargaService,
+} from "@/lib/interfaces/services/IEtiquetasDescargaService";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import { ApiKeyAuthService } from "@/lib/services/ApiKeyAuthService";
 import { EtiquetaGuiaService } from "@/lib/services/EtiquetaGuiaService";
@@ -30,6 +35,8 @@ import {
   EtiquetasLotePdfService,
   EtiquetasLoteExcedeTopeError,
 } from "@/lib/services/EtiquetasLotePdfService";
+import { EtiquetasDescargaService } from "@/lib/services/EtiquetasDescargaService";
+import { CargaNombreDuplicadoError } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
 import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
@@ -54,8 +61,9 @@ export const maxDuration = 60;
 export interface CargaApiDeps {
   autenticar?: (rawKey: string | null) => Promise<ApiKeyAuthResult>;
   bulkService?: IBulkOrdenService;
-  // Feature 136: orquestador del PDF consolidado de etiquetas (inyectable en tests).
-  etiquetasService?: IEtiquetasLotePdfService;
+  // Feature 141: orquestador de la descarga de etiquetas segun `download_type` (genera los
+  // PDFs y persiste las URLs). Sustituye a la inyeccion directa del servicio de PDF de la 136.
+  descargaService?: IEtiquetasDescargaService;
 }
 
 // Feature 136 (T3.1) — bloque `etiquetasPdf` de la respuesta. El fallo se hace
@@ -110,19 +118,21 @@ function buildBulkService(): IBulkOrdenService {
   );
 }
 
-// Feature 136 — arma el orquestador del PDF de etiquetas con sus dependencias reales:
-// servicio de etiquetas (feature 32), Storage y firma de URLs sobre el bucket privado
-// de config (feature 21/22). El cliente Supabase es perezoso (no toca red al construir).
-function buildEtiquetasService(): IEtiquetasLotePdfService {
+// Feature 136 + 141 — arma el orquestador de la DESCARGA de etiquetas con sus dependencias
+// reales: generador de PDFs de la 136 (servicio de etiquetas de la 32 + Storage + firma de
+// URLs sobre el bucket privado de config) y el repositorio de ordenes, que es quien persiste
+// las URLs (`carga.download_url` / `orden.download_url`). El cliente Supabase es perezoso.
+function buildDescargaService(): IEtiquetasDescargaService {
   const prisma = getPrismaClient();
   const bucket = etiquetasConfig.ETIQUETAS_BUCKET;
-  return new EtiquetasLotePdfService(
+  const pdfService = new EtiquetasLotePdfService(
     new EtiquetaGuiaService(new OrdenRepository(prisma)),
     new SupabaseFileStorage(undefined, bucket),
     new SupabaseSignedUrlProvider(undefined, bucket),
     etiquetasConfig.SIGNED_URL_TTL_SECONDS,
     etiquetasConfig.MAX_ETIQUETAS_POR_PDF,
   );
+  return new EtiquetasDescargaService(pdfService, new OrdenRepository(prisma));
 }
 
 // R1/§3: extrae el secreto del header `Authorization: Bearer <key>`. `null` si el header
@@ -142,7 +152,33 @@ const cargaApiBodySchema = z.object({
     .array(z.record(z.string(), z.string()))
     .min(1, "el lote no puede estar vacío")
     .max(cargaMasivaConfig.MAX_CHUNK_ROWS, "el lote excede el máximo permitido"),
+  // Feature 141 (R20/R21/R22): nombre OPCIONAL del lote. Repetirlo dentro del mismo usuario
+  // (el de la key) -> 409 (R24).
+  name: z.string().trim().min(1).max(120).optional(),
+  // Feature 141 (R42/R43/R44): modo de descarga de las etiquetas del lote. Ausente =
+  // `consolidate` (compatibilidad con la feature 136); un valor fuera del enum es
+  // VALIDATION_ERROR (422) ANTES de crear ninguna orden y sin tocar Storage. NO se persiste
+  // en ninguna tabla (R45): es un parámetro de la petición, no un atributo del lote.
+  download_type: z.enum(["consolidate", "individual"]).optional().default("consolidate"),
 });
+
+/**
+ * Feature 141 (R24): un `name` repetido del mismo usuario es un error de dominio del
+ * repositorio; el borde lo traduce a 409 nombrando el duplicado. La transacción ya revirtió,
+ * así que la petición no dejó ni lote ni órdenes.
+ */
+async function ejecutarCargaApi(
+  service: IBulkOrdenService,
+  body: { ordenes: unknown[]; name?: string; download_type: DownloadType },
+  actor: Actor,
+) {
+  try {
+    return await service.cargarViaApi(body.ordenes as RawRow[], actor, { name: body.name });
+  } catch (err) {
+    if (err instanceof CargaNombreDuplicadoError) throw new ConflictError(err.message);
+    throw err;
+  }
+}
 
 /**
  * Lógica del endpoint, extraída para inyección de dependencias en tests (autenticar +
@@ -172,8 +208,10 @@ export async function handleCargaApi(req: Request, deps: CargaApiDeps = {}): Pro
     }
 
     // 4. R7-R11: carga vía API (reusa BulkOrdenService). El actor es el usuario dedicado.
+    // Feature 141 (R20/R21): `name` opcional del lote; un nombre repetido del mismo usuario
+    // aborta la carga con 409 (R24) — la transacción del repositorio ya revirtió.
     const service = deps.bulkService ?? buildBulkService();
-    const cargaResult = await service.cargarViaApi(parsed.data.ordenes as RawRow[], auth.actor);
+    const cargaResult = await ejecutarCargaApi(service, parsed.data, auth.actor);
     if (cargaResult.status === "forbidden") throw new ForbiddenError(); // R15 (defensa en profundidad)
 
     // Feature 136 (R1/R10/R12-R17): tras la carga OK (ya commiteada), genera el PDF
@@ -192,34 +230,57 @@ export async function handleCargaApi(req: Request, deps: CargaApiDeps = {}): Pro
     // imprimibles son un subconjunto), asi que basta con mirarlo aqui, sin tocar la
     // DB ni Storage.
     const summary = cargaResult.summary;
+    const downloadType = parsed.data.download_type; // R43: `consolidate` por defecto
     const topeEtiquetas = etiquetasConfig.MAX_ETIQUETAS_POR_PDF;
     let etiquetasPdf: EtiquetasPdf = null;
+    // Feature 141 (R48/R54): URL del PDF individual por orden; vacío en modo `consolidate`.
+    let urlPorOrden = new Map<string, string>();
     if (summary.ordenes.length > topeEtiquetas) {
-      // Degradacion explicita (R12): 200 con el summary intacto y el motivo visible.
+      // Degradacion explicita (R12/R52): 200 con el summary intacto y el motivo visible, en
+      // AMBOS modos y sin tocar Storage.
       etiquetasPdf = { error: msgLoteExcedeTope(topeEtiquetas) };
     } else if (summary.ordenes.length > 0) {
       try {
-        const etiquetasSvc = deps.etiquetasService ?? buildEtiquetasService();
-        const out = await etiquetasSvc.generarYAlmacenar(
-          summary.ordenes.map((o) => o.id),
-          auth.actor,
-        );
-        // `out === null` => no habia etiqueta imprimible: `null`, no es error (R14).
-        etiquetasPdf = out ? { url: out.signedUrl, expiraEnSegundos: out.expiraEnSegundos } : null;
+        // Feature 141 (R47/R48): el servicio de descarga genera según el modo y PERSISTE la
+        // URL donde corresponde (`carga.download_url` o `orden.download_url`). El borde no
+        // habla con el repositorio (regla de capas).
+        const descargaSvc = deps.descargaService ?? buildDescargaService();
+        const out = await descargaSvc.generarYPersistir({
+          modo: downloadType,
+          cargaId: summary.cargaId,
+          ordenIds: summary.ordenes.map((o) => o.id),
+          actor: auth.actor,
+        });
+        urlPorOrden = out.porOrden;
+        // R53: en `consolidate` el bloque `etiquetasPdf` conserva la forma de la 136
+        // (`null` si no había etiqueta imprimible, R14/R49). En `individual` vale `null`
+        // salvo fallo global: cada URL viaja en su orden (R54).
+        etiquetasPdf = out.consolidado
+          ? { url: out.consolidado.url, expiraEnSegundos: out.consolidado.expiraEnSegundos }
+          : null;
       } catch (err) {
-        // Best-effort (R12): la carga ya esta commiteada; NO se revierte. Se registra
-        // el TIPO del error (nunca su mensaje crudo: puede venir del render y traer
-        // datos de la orden) y se expone al cliente un mensaje generico.
+        // Best-effort (R12/R51): la carga ya esta commiteada; NO se revierte, y los
+        // `download_url` afectados quedan NULL. Se registra el TIPO del error (nunca su
+        // mensaje crudo: puede venir del render y traer datos de la orden) y se expone al
+        // cliente un mensaje generico.
         console.error("etiquetas-pdf-lote: fallo best-effort en carga por API", {
           error: describirErrorSeguro(err),
           ordenes: summary.ordenes.length,
+          modo: downloadType,
         });
         etiquetasPdf = { error: MSG_ETIQUETAS_FALLO };
+        urlPorOrden = new Map();
       }
     }
 
-    // R17: preserva TODOS los campos del summary y añade `etiquetasPdf`.
-    return { ...summary, etiquetasPdf };
+    // R17 + feature 141 (R39/R54/R55): preserva TODOS los campos del summary (incluido
+    // `cargaId`) y añade `etiquetasPdf`, el modo aplicado y la URL individual de cada orden.
+    return {
+      ...summary,
+      ordenes: summary.ordenes.map((o) => ({ ...o, downloadUrl: urlPorOrden.get(o.id) ?? null })),
+      downloadType,
+      etiquetasPdf,
+    };
   });
 
   if (isAppErrorShape(result)) return appErrorToResponse(result);

@@ -11,12 +11,16 @@ import {
   appErrorToResponse,
   UnauthenticatedError,
   ForbiddenError,
+  ConflictError,
   ValidationError,
   MSG,
 } from "@/lib/errors";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IBulkOrdenService } from "@/lib/interfaces/services/IBulkOrdenService";
-import { CargaLoteAjenoError } from "@/lib/interfaces/repositories/IOrdenRepository";
+import {
+  CargaLoteAjenoError,
+  CargaNombreDuplicadoError,
+} from "@/lib/interfaces/repositories/IOrdenRepository";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
@@ -48,32 +52,43 @@ const chunkBodySchema = z.object({
     .min(1, "el lote no puede estar vacío")
     .max(cargaMasivaConfig.MAX_CHUNK_ROWS, "el lote excede el máximo permitido"),
   dryRun: z.boolean().optional().default(false),
-  // Feature 141 (R16): identificador de la SESIÓN de carga (uno por sesión, repetido en los
-  // N chunks). Debe ser UUID; cualquier otra cosa es error de validación (400/422) y no crea
-  // ninguna orden ni lote.
+  // Feature 141 (R18): TOKEN del lote EMITIDO POR EL SERVIDOR en el primer chunk y reenviado
+  // por el cliente en los siguientes. Ausente = esta petición crea el lote. Debe tener el
+  // formato del token (UUID); cualquier otra cosa es error de validación (422) y no crea
+  // ninguna orden ni lote. Un token con formato válido pero desconocido/ajeno -> 403 (R19).
   cargaId: z.uuid("cargaId debe ser un UUID").optional(),
-  // Feature 141 (R18): total de filas de la SESIÓN declarado por el cliente (no el del chunk).
+  // Feature 141 (R20/R21/R22): nombre OPCIONAL del lote, definido por el usuario. Solo lo
+  // persiste la petición que CREA el lote; repetir un nombre propio -> 409 (R24).
+  name: z.string().trim().min(1).max(120).optional(),
+  // Feature 141 (R29): total de filas de la SESIÓN declarado por el cliente (no el del chunk).
   totalFiles: z.number().int().min(0).optional(),
+  // Feature 141/R46: este endpoint NO conoce `download_type`; una clave desconocida en el
+  // cuerpo se ignora (el schema no es `.strict()`), como hasta ahora.
 });
 
 /**
- * Feature 141 (R17): un `cargaId` que pertenece a OTRO usuario es un intento de colgar
- * órdenes del lote ajeno -> 403, sin crear ninguna orden (la transacción del repo ya
- * revirtió). Cualquier otro error se propaga tal cual al manejador genérico.
+ * Feature 141: traduce los dos errores de dominio del lote a códigos del borde.
+ * - `CargaLoteAjenoError` (token desconocido o de otro usuario) -> 403 (R19).
+ * - `CargaNombreDuplicadoError` (el actor ya tiene un lote con ese nombre) -> 409 (R24),
+ *   con el nombre duplicado en el mensaje.
+ * En ambos casos la transacción del repositorio ya revirtió: la petición no creó órdenes.
+ * Cualquier otro error se propaga tal cual al manejador genérico.
  */
 async function ejecutarCarga(
   service: IBulkOrdenService,
-  body: { rows: unknown[]; dryRun: boolean; cargaId?: string; totalFiles?: number },
+  body: { rows: unknown[]; dryRun: boolean; cargaId?: string; name?: string; totalFiles?: number },
   actor: Actor,
 ) {
   try {
     return await service.cargarMasiva(body.rows as RawRow[], actor, {
       dryRun: body.dryRun,
       cargaId: body.cargaId,
+      name: body.name,
       totalFiles: body.totalFiles,
     });
   } catch (err) {
     if (err instanceof CargaLoteAjenoError) throw new ForbiddenError();
+    if (err instanceof CargaNombreDuplicadoError) throw new ConflictError(err.message);
     throw err;
   }
 }

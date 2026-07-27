@@ -478,8 +478,9 @@ model Orden {
   geocodePrecision       String?   @map("geocode_precision")
   geocodeStatus          String?   @map("geocode_status")
   // Feature 141 (R4/R5/D1/D7): lote de carga masiva del que nacio esta orden. NULL = orden
-  // sin lote (alta manual o historica anterior a la feature; sin backfill, R8). `downloadUrl`
-  // NACE aqui y queda NULL: ninguna ruta de esta feature la escribe (R29).
+  // sin lote (alta manual o historica anterior a la feature; sin backfill, R11).
+  // `downloadUrl` = URL del PDF INDIVIDUAL de ESTA orden (via API key, modo `individual`,
+  // R48); NULL en modo `consolidate`, en la via sesion (R40) y sin etiqueta imprimible (R49).
   cargaId                String?   @map("carga_id")
   downloadUrl            String?   @map("download_url")
   deletedAt              DateTime? @map("deleted_at") // soft delete
@@ -516,21 +517,24 @@ model Orden {
 
 // Feature 141 — LOTE de carga masiva. Una fila por carga masiva efectiva (>=1 orden
 // persistida), tanto por sesion (UI /ordenes, XLSX en chunks) como por API key. El alta
-// manual de UNA orden NO crea lote (R26). Sin `status` (D3) y sin `batch_url` (D2). RLS
+// manual de UNA orden NO crea lote (R37). Sin `status` (D3) y sin `batch_url` (D2). RLS
 // habilitada sin policies: la autorizacion vive en el service (patron orden_mensajero_meta /
-// plantilla_mensaje). `downloadUrl` nace NULL y nadie la escribe en esta feature (R29).
+// plantilla_mensaje). `id` lo genera SIEMPRE el SERVIDOR dentro de la tx (R15/D8): el cliente
+// nunca lo propone. `name` es el UNICO campo definido por el usuario (D9).
 model Carga {
   id           String   @id @default(uuid())
   fechaCarga   DateTime @default(now()) @map("fecha_carga")
   usuarioCarga String   @map("usuario_carga") // FK -> usuario: quien realizo la carga (R2)
-  downloadUrl  String?  @map("download_url") // D1: nace NULL (la escribe una feature posterior)
-  totalFiles   Int      @default(0) @map("total_files") // R7/R18/R21: tamano TOTAL del lote, nunca el del chunk/batch
+  name         String? // R8: nombre OPCIONAL del lote definido por el usuario; NULL = sin nombre
+  downloadUrl  String?  @map("download_url") // R47: URL del PDF CONSOLIDADO del lote (modo consolidate); NULL en la via sesion (R40)
+  totalFiles   Int      @default(0) @map("total_files") // R7/R29/R32: tamano TOTAL del lote, nunca el del chunk/batch
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   usuario Usuario @relation("CargaUsuario", fields: [usuarioCarga], references: [id], onDelete: Restrict)
   ordenes Orden[] @relation("OrdenCarga")
 
+  @@unique([usuarioCarga, name]) // R9/R10: unicidad del nombre POR USUARIO (los NULL conviven)
   @@index([usuarioCarga])
   @@index([fechaCarga])
   @@map("carga")

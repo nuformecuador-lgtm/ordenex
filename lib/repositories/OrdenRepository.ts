@@ -46,7 +46,7 @@ import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabil
 import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 /**
- * Feature 141 (R15/R24) — ¿queda alguna fila del batch por insertar? Se compara contra el
+ * Feature 141 (R28/R35) — ¿queda alguna fila del batch por insertar? Se compara contra el
  * snapshot `before` (leido DENTRO de la tx): si TODAS las `num_remision` del batch ya existen,
  * el `createMany` con `skipDuplicates` no insertaria nada y asegurar el lote dejaria una fila
  * de `carga` sin ninguna orden que la referencie.
@@ -868,20 +868,23 @@ export class OrdenRepository implements IOrdenRepository {
           select: { id: true, numRemision: true },
         });
         const beforeIds = new Set(before.map((r) => r.id));
-        // Feature 141 (R15/R24): si TODAS las filas del batch ya existen, no hay nada que
+        // Feature 141 (R28/R35): si TODAS las filas del batch ya existen, no hay nada que
         // insertar -> no se toca `carga` (ningun lote huerfano por un chunk 100% duplicado).
         if (!hayFilasPorInsertar(chunk, before)) {
           return { count: 0, cargaId };
         }
-        // Feature 141 (R23): el lote se asegura DENTRO de esta tx, antes del insert (la FK
+        // Feature 141 (R34): el lote se resuelve DENTRO de esta tx, antes del insert (la FK
         // `orden.carga_id` exige que la fila de `carga` exista al insertar las ordenes).
+        // Con `cargaId === null` lo CREA con id server-side (R15/R16); con un token previo
+        // solo lo LEE y verifica propiedad (R17/R19).
         const loteId = await ensureCargaEnTx(tx, {
           id: cargaId,
           usuarioCargaId: lote.usuarioCargaId,
           totalFiles: lote.totalFiles,
+          name: lote.name ?? null, // R21/R23: solo lo usa la creacion
         });
         const result = await tx.orden.createMany({
-          // R25: `carga_id` viaja en el INSERT, asi que solo las ordenes EFECTIVAMENTE
+          // R36: `carga_id` viaja en el INSERT, asi que solo las ordenes EFECTIVAMENTE
           // creadas quedan asociadas al lote; las duplicadas saltadas no se modifican.
           data: chunk.map((d) => this.toCreateManyInput(d, loteId)),
           skipDuplicates: true,
@@ -955,15 +958,17 @@ export class OrdenRepository implements IOrdenRepository {
           select: { id: true, numRemision: true },
         });
         const beforeIds = new Set(before.map((r) => r.id));
-        // Feature 141 (R22/R24): batch 100% duplicado -> no se asegura ningun lote.
+        // Feature 141 (R33/R35): batch 100% duplicado -> no se resuelve ningun lote.
         if (!hayFilasPorInsertar(chunk, before)) {
           return { creadas: [] as CreateOrdenConGuiaResultRow[], cargaId };
         }
-        // Feature 141 (R23): lote asegurado DENTRO de la tx, antes del insert.
+        // Feature 141 (R34): lote resuelto DENTRO de la tx, antes del insert (creado con id
+        // server-side en el primer batch con ordenes, reutilizado en los siguientes, R30).
         const loteId = await ensureCargaEnTx(tx, {
           id: cargaId,
           usuarioCargaId: lote.usuarioCargaId,
           totalFiles: lote.totalFiles,
+          name: lote.name ?? null, // R21: nombre del lote de la via API key
         });
         await tx.orden.createMany({
           data: chunk.map((d) => this.toCreateManyInput(d, loteId)),
@@ -1017,8 +1022,8 @@ export class OrdenRepository implements IOrdenRepository {
     return { creadas, cargaId };
   }
 
-  // Feature 141: `cargaId` se inyecta en el INSERT (R25). `downloadUrl` NO se envia: nace
-  // NULL y ninguna ruta de esta feature la escribe (R29).
+  // Feature 141: `cargaId` se inyecta en el INSERT (R36). `downloadUrl` NO se envia aqui:
+  // nace NULL y solo la escribe, POST-COMMIT, el modo `individual` de la via API key (R48).
   private toCreateManyInput(
     data: CreateOrdenData,
     cargaId: string,
@@ -1041,6 +1046,30 @@ export class OrdenRepository implements IOrdenRepository {
       montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
       mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
     };
+  }
+
+  // --- Feature 141: URLs de descarga de etiquetas (R47/R48) ---
+
+  /**
+   * R47: URL del PDF CONSOLIDADO del lote. Escritura POST-COMMIT de la carga: un solo UPDATE
+   * de `download_url`, sin tocar ninguna otra columna de `carga`.
+   */
+  async setCargaDownloadUrl(cargaId: string, url: string): Promise<void> {
+    await this.prisma.carga.update({ where: { id: cargaId }, data: { downloadUrl: url } });
+  }
+
+  /**
+   * R48: URL del PDF individual de cada orden. Un `update` por orden dentro de UNA transaccion
+   * (el volumen esta acotado por el tope de etiquetas por peticion). Solo escribe
+   * `download_url`: no toca `carga_id`, `num_guia`, `estatus_id` ni el historial.
+   */
+  async setOrdenesDownloadUrl(items: { ordenId: string; url: string }[]): Promise<void> {
+    if (items.length === 0) return; // no-op
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        await tx.orden.update({ where: { id: item.ordenId }, data: { downloadUrl: item.url } });
+      }
+    });
   }
 
   // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
