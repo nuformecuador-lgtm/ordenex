@@ -28,7 +28,20 @@ vi.mock("@/app/(app)/ordenes/_components/carga-masiva-chunks", async (importOrig
   return { ...actual, procesarEnChunks: procesarEnChunksMock };
 });
 
-const HEADERS_OK = ["num_remision", "destinatario", "telefono", "provincia", "canton"];
+// Feature 142: la cabecera obligatoria es la de la plantilla v2 (columna única
+// `direccion_destinatario`, sin provincia/cantón/distrito/dirección).
+const HEADERS_OK = ["num_remision", "destinatario", "telefono", "direccion_destinatario"];
+
+/** Cabecera de la plantilla ANTERIOR: 4 columnas geográficas, sin la nueva. */
+const HEADERS_PLANTILLA_VIEJA = [
+  "num_remision",
+  "destinatario",
+  "telefono",
+  "provincia",
+  "canton",
+  "distrito",
+  "direccion",
+];
 
 function archivo(numRemisiones: string[], headers = HEADERS_OK): ArchivoParseado {
   return {
@@ -142,6 +155,60 @@ describe("OrdenesCargaUpload — validaciones de borde", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/faltan columnas/i);
     expect(procesarEnChunksMock).not.toHaveBeenCalled();
     expect(onValidated).not.toHaveBeenCalled();
+  });
+
+  it("R7/R8: archivo con la plantilla VIEJA → corte duro con el copy de plantilla nueva, sin request", async () => {
+    const user = userEvent.setup();
+    parseArchivoMock.mockResolvedValue(archivo(["REM-1"], HEADERS_PLANTILLA_VIEJA));
+    const onValidated = vi.fn();
+
+    render(<OrdenesCargaUpload onValidated={onValidated} />);
+    await user.upload(fileInput(), csvFile());
+
+    // Copy literal decidido en la puerta de aprobación (design.md > Preguntas abiertas #3).
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Faltan columnas obligatorias: direccion_destinatario. La plantilla cambió: descarga la plantilla nueva y vuelve a cargar tus datos.",
+    );
+    // R7: ninguna fila viaja al servidor.
+    expect(procesarEnChunksMock).not.toHaveBeenCalled();
+    expect(onValidated).not.toHaveBeenCalled();
+  });
+
+  it("R8: si falta otra obligatoria (no la dirección) NO se menciona la plantilla nueva", async () => {
+    const user = userEvent.setup();
+    parseArchivoMock.mockResolvedValue(
+      archivo(["REM-1"], ["destinatario", "telefono", "direccion_destinatario"]),
+    );
+    const onValidated = vi.fn();
+
+    render(<OrdenesCargaUpload onValidated={onValidated} />);
+    await user.upload(fileInput(), csvFile());
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent(
+      "Faltan columnas obligatorias: num_remision.",
+    );
+    expect(alerta).not.toHaveTextContent(/plantilla cambió/i);
+    expect(procesarEnChunksMock).not.toHaveBeenCalled();
+    expect(onValidated).not.toHaveBeenCalled();
+  });
+
+  it("R10: columnas extra desconocidas además de las obligatorias → se procesa igual", async () => {
+    const user = userEvent.setup();
+    parseArchivoMock.mockResolvedValue(
+      archivo(["REM-1"], [...HEADERS_OK, "provincia", "canton", "distrito", "direccion", "color"]),
+    );
+    procesarEnChunksMock.mockResolvedValue([
+      { fila: 1, numRemision: "REM-1", resultado: "creada" },
+    ] satisfies RowResult[]);
+    const onValidated = vi.fn();
+
+    render(<OrdenesCargaUpload onValidated={onValidated} />);
+    await user.upload(fileInput(), csvFile());
+
+    await waitFor(() => expect(onValidated).toHaveBeenCalledTimes(1));
+    expect(procesarEnChunksMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("supera el tope de filas → alerta con el máximo, sin validar", async () => {
