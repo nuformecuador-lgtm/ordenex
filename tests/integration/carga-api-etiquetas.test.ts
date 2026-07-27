@@ -292,3 +292,32 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
     expect(json.ordenes[0].costoEnvio).toBe("3.92");
   });
 });
+
+// --- Feature 141 (R52): el tope corta ANTES de empezar, en AMBOS modos ---
+
+describe("tope de etiquetas en modo individual (feature 141/R52)", () => {
+  it("lote por encima del tope con download_type=individual: 200, sin generar y con el motivo visible", async () => {
+    const tope = etiquetasConfig.MAX_ETIQUETAS_POR_PDF;
+    const summary = summaryDeLoteGrande(tope + 1);
+    const etiquetas = fakeEtiquetas();
+
+    const req = new Request("http://localhost/api/ordenes/api-key/carga", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SECRETO}` },
+      body: JSON.stringify({ ...BODY, download_type: "individual" }),
+    });
+    const res = await handleCargaApi(req, depsOk(fakeBulk(summary), etiquetas));
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // Ni un solo PDF: el trabajo que no se arranca no puede desbordar la function.
+    expect(etiquetas.generarYPersistir).not.toHaveBeenCalled();
+    expect(json.etiquetasPdf.error).toContain(String(tope));
+    expect(json.downloadType).toBe("individual");
+    // Las ordenes conservan su num_guia y quedan SIN downloadUrl (columna NULL).
+    expect(json.ordenes).toHaveLength(tope + 1);
+    expect(json.ordenes.every((o: { downloadUrl: string | null }) => o.downloadUrl === null)).toBe(
+      true,
+    );
+  });
+});

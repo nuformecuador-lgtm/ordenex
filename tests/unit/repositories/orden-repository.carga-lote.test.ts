@@ -88,8 +88,8 @@ describe("createManyOrdenes — el lote se resuelve en la MISMA transaccion (R34
   it("R34: el lote se resuelve DENTRO del mismo $transaction y ANTES del insert", async () => {
     const orden: string[] = [];
     const carga = buildCargaDelegate();
-    const createReal = carga.create;
-    carga.create = vi.fn(async (args: { data: Record<string, unknown> }) => {
+    const createReal = carga.create as unknown as (args: unknown) => Promise<unknown>;
+    carga.create = vi.fn(async (args: unknown) => {
       orden.push("carga.create");
       return createReal(args);
     });
@@ -409,7 +409,7 @@ describe("persistencia de las URLs de descarga (R47/R48)", () => {
     ]);
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.orden.update.mock.calls.map((c) => c[0])).toEqual([
+    expect(prisma.orden.update.mock.calls.map((c) => (c as unknown[])[0])).toEqual([
       { where: { id: "o1" }, data: { downloadUrl: "https://signed.example/1.pdf" } },
       { where: { id: "o2" }, data: { downloadUrl: "https://signed.example/2.pdf" } },
     ]);
