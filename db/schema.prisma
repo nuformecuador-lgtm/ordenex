@@ -133,6 +133,7 @@ model Usuario {
   webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
   ordenMensajeroMetas                 OrdenMensajeroMeta[]      @relation("OrdenMensajeroMetaMensajero") // feature 115: marcas privadas ("gestionar mas tarde") de ESTE mensajero sobre sus ordenes
   chatConversaciones                  ChatConversacion[]        @relation("ChatConversacionMensajero") // feature 120/R13/R16: hilos de chat asignados a ESTE mensajero
+  cargasRealizadas                    Carga[]                   @relation("CargaUsuario") // feature 141/R2: lotes de carga masiva que ESTE usuario realizo (adminTienda o usuario dedicado de la API key)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -476,6 +477,11 @@ model Orden {
   geocodedAt             DateTime? @map("geocoded_at")
   geocodePrecision       String?   @map("geocode_precision")
   geocodeStatus          String?   @map("geocode_status")
+  // Feature 141 (R4/R5/D1/D7): lote de carga masiva del que nacio esta orden. NULL = orden
+  // sin lote (alta manual o historica anterior a la feature; sin backfill, R8). `downloadUrl`
+  // NACE aqui y queda NULL: ninguna ruta de esta feature la escribe (R29).
+  cargaId                String?   @map("carga_id")
+  downloadUrl            String?   @map("download_url")
   deletedAt              DateTime? @map("deleted_at") // soft delete
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
@@ -488,6 +494,7 @@ model Orden {
   distrito          Distrito?   @relation(fields: [distritoId], references: [id])
   mensajeroSugerido Usuario?    @relation("OrdenMensajeroSugerido", fields: [mensajeroSugeridoId], references: [id])
   mensajeroAsignado Usuario?    @relation("OrdenMensajeroAsignado", fields: [mensajeroAsignadoId], references: [id], onDelete: SetNull) // feature 17/R7
+  carga             Carga?      @relation("OrdenCarga", fields: [cargaId], references: [id], onDelete: Restrict) // feature 141/R4: un lote con ordenes no se puede borrar
 
   gestiones             GestionOrden[] // feature 36: gestiones registradas sobre esta orden
   mensajerosGestionando Usuario[]              @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
@@ -503,7 +510,30 @@ model Orden {
   @@index([mensajeroSugeridoId])
   @@index([mensajeroAsignadoId]) // feature 17/R7
   @@index([mensajeroAsignadoId, asignadoAt]) // feature 76/R1: denominador del ranking diario (asignadas HOY por mensajero)
+  @@index([cargaId]) // feature 141/R4: "ordenes de este lote"
   @@map("orden")
+}
+
+// Feature 141 — LOTE de carga masiva. Una fila por carga masiva efectiva (>=1 orden
+// persistida), tanto por sesion (UI /ordenes, XLSX en chunks) como por API key. El alta
+// manual de UNA orden NO crea lote (R26). Sin `status` (D3) y sin `batch_url` (D2). RLS
+// habilitada sin policies: la autorizacion vive en el service (patron orden_mensajero_meta /
+// plantilla_mensaje). `downloadUrl` nace NULL y nadie la escribe en esta feature (R29).
+model Carga {
+  id           String   @id @default(uuid())
+  fechaCarga   DateTime @default(now()) @map("fecha_carga")
+  usuarioCarga String   @map("usuario_carga") // FK -> usuario: quien realizo la carga (R2)
+  downloadUrl  String?  @map("download_url") // D1: nace NULL (la escribe una feature posterior)
+  totalFiles   Int      @default(0) @map("total_files") // R7/R18/R21: tamano TOTAL del lote, nunca el del chunk/batch
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  usuario Usuario @relation("CargaUsuario", fields: [usuarioCarga], references: [id], onDelete: Restrict)
+  ordenes Orden[] @relation("OrdenCarga")
+
+  @@index([usuarioCarga])
+  @@index([fechaCarga])
+  @@map("carga")
 }
 
 // Feature 115 — meta PRIVADA por (mensajero, orden). `marcar_luego` (115) = "gestionar
