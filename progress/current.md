@@ -15,6 +15,69 @@
 
 ## Features en curso
 
+**Plantilla de carga masiva v2 — feature 142 (2026-07-27) → IMPLEMENTADA + reviewer APROBADO
+(0 bloqueantes), PR → `dev` (falta merge humano).** Pedido del humano:
+rehacer la plantilla de carga masiva de órdenes con (1) un orden de columnas nuevo — `destinatario`,
+`telefono`, `direccion_destinatario`, `monto_cobrar`, `producto`, `num_remision`, `peso`, `notas` — y
+(2) las 4 columnas `provincia`/`canton`/`distrito`/`direccion` **reemplazadas por una sola**,
+`direccion_destinatario`, con formato `'País / Provincia / Cantón (Distrito) / Dirección literal'`.
+Fullstack, `high`, `depends_on: null`. Rama `feature/142-plantilla-carga-masiva-v2` desde `origin/dev`
+@ `97f6e91`, en worktree aislado `../ordenex-wt-142` (el árbol `ux` arrastra WIP ajeno y su typecheck
+está en rojo por `count` en `GestionarOrdenPanelProps`).
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** (a) **CORTE DURO** — no hay modo compatibilidad
+  con la plantilla vieja de 4 columnas; un archivo viejo falla en `findMissingHeaders` con un mensaje
+  que apunta a descargar la plantilla nueva. Un solo camino de código, sin deuda de retiro.
+  (b) **DISTRITO OBLIGATORIO** — sin el paréntesis del distrito la fila es `fieldError` en
+  `direccion_destinatario` y no se crea, porque `zona_id` se deriva del distrito y decide tarifa y ruteo.
+- **Superficie confirmada contra `origin/dev`:** `ORDENES_BULK_FIELDS`
+  (`app/(app)/ordenes/_components/carga-masiva-fields.ts`, hoy 11 campos con las 4 geográficas),
+  `REQUIRED_HEADERS` + `filaCargaSchema` (`lib/types/carga-masiva.ts`, hoy exige
+  `num_remision`/`destinatario`/`telefono`/`provincia`/`canton` en cabecera),
+  `carga-masiva-parser.ts`, `carga-masiva-chunks.ts` y `resolverGeografia` de `BulkOrdenService`
+  (sigue resolviendo provincia→cantón→distrito por nombre contra el catálogo). **Sin migración.**
+  Ojo al round-trip: `tests/integration/carga-masiva-plantilla-roundtrip.test.ts` genera la plantilla
+  y la vuelve a parsear — el corte duro lo toca de lleno.
+- **Renumeración 141–149 → 142–150 aterrizando en esta rama:** la traía el árbol de trabajo de `ux`
+  **sin commitear** (`dev` sigue con los ids viejos del PR #170). Viaja commiteada en este PR para que
+  deje de ser estado volátil. `141` conserva `tabla carga + carga_id en orden` (PR #168).
+- **Orquestación:** feature `fullstack` que NO se parte en dos — `lib/types/carga-masiva.ts` y el
+  parser son el mismo contrato compartido por cliente y servidor, y partirlo serializaría un cambio
+  atómico. Se aplica el precedente de la 121: directo `spec_author` → `backend_dev` → `frontend_dev`
+  → `reviewer` con `model: opus`, sin el `implementer` monolítico.
+- **Gate F1.4 APROBADO (2026-07-27)** con las 6 propuestas del spec tal cual: (1) texto tras el `)`
+  del distrito → error de fila; (2) dirección literal vacía → se acepta (`null`); (3) copy literal del
+  corte duro; (4) ejemplo canónico sustituible si el guard del seed lo rechaza; (5) columna `peso`
+  fuera de alcance; (6) no hay doc pública de la plantilla que actualizar.
+- **Hallazgo estructural del spec (lo que salvó el contrato público):** `filaCargaSchema`/`resolveFila`
+  los comparte `cargarViaApi` (feature 88, **API key de integradores**, con `provincia`/`canton`/
+  `distrito` SEPARADOS). Meter el parser en `filaCargaSchema` habría roto ese contrato en silencio.
+  Solución: **extractor de geografía inyectado por vía** (`geoInputDesdeDireccionUnificada` para la UI,
+  `geoInputDesdeColumnasSeparadas` para la API) con `resolveGeo` **sin tocar una línea**.
+- **Implementada** en el worktree `../ordenex-wt-142` (`backend_dev` B1–B8 → `frontend_dev` F1–F4 +
+  C1–C2 + T2 → `reviewer`, todos `model: opus`, 8 commits). Parser puro nuevo en
+  `lib/utils/direccion-destinatario.ts`. **Sin migración**, sin cambios en `db/`, un solo `.tsx` tocado.
+- **⚠️ El ejemplo canónico de la plantilla se SUSTITUYÓ:** `Cartago / Jimenez (Juan Vinas)` existe en
+  `public/geografia-cr-completa.xlsx` pero **no recibe zona** al cruzarlo con
+  `public/mapa-geografico-costa-rica.xlsx` → la fila de ejemplo habría fallado con «distrito sin zona».
+  Quedó `Costa Rica / Cartago / Cartago (Occidental) / Frente gasolinera JSM, 200m sur` (zona GAM).
+  El guard `tests/unit/scripts/carga-masiva-ejemplos-geo.test.ts` **no se relajó** — hizo su trabajo.
+  Deuda de datos preexistente detrás: solo **198 ternas** del catálogo reciben zona en el seed.
+- **Reviewer APROBADO, 0 bloqueantes** (7 notas menores). No se fio de los números: corrida propia
+  con **typecheck 0**, **lint 0 errores / 144 warnings**, **517 archivos / 5280 tests, 0 fallos**,
+  `./init.sh` verde. Además **prueba de mutación** (rompiendo R19 y R22 caen 5 tests en 2 archivos →
+  los tests son sensibles, no decorativos) y **fuzz de 50.000 entradas** contra el parser → 0
+  excepciones y 0 aceptaciones con geografía vacía. Verificó que **falla cerrado**: con el parser
+  mutado devolviendo distrito vacío, la fila igual sale a error por `resolveGeo`; `zona_id` nunca
+  queda nulo. Detalle en `progress/impl_142_backend.md`, `impl_142-plantilla-carga-masiva-v2.md`
+  y `review_142.md` (viajan en la rama).
+- **Notas menores diferidas:** falta un test extremo a extremo cliente→ruta chunk→service con la
+  columna nueva; el mensaje de «paréntesis no cerrado» confunde cuando hay una `/` dentro del
+  paréntesis; R32 se apoya en la genericidad de los chips sin caso propio.
+- **Renumeración 141–149 → 142–150 commiteada por fin en esta rama** (venía suelta en el árbol de `ux`).
+- **Aviso a otras sesiones:** el corte es duro. Cualquier archivo de carga masiva con las 4 columnas
+  viejas deja de funcionar al mergear; hay que redescargar la plantilla.
+
 ### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
 
 > Detalle de las 4 en `history.md`. PRs #157 (137) · #159 (138) · #160 (139) · #161 (140).
