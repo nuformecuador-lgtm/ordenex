@@ -106,7 +106,7 @@ Referencia de requisitos: `requirements.md` (R1–R40). Diseño: `design.md`.
 
 ## Bloque F — Frontend
 
-- [ ] **F1 — Nueva definición de columnas de la plantilla**
+- [x] **F1 — Nueva definición de columnas de la plantilla**
   - Archivos: `app/(app)/ordenes/_components/carga-masiva-fields.ts`
   - `ORDENES_BULK_FIELDS` = 8 campos en el orden exacto de R1, sin `label`, con
     `example` por campo (`design.md §5`).
@@ -115,7 +115,7 @@ Referencia de requisitos: `requirements.md` (R1–R40). Diseño: `design.md`.
     `["destinatario","telefono","direccion_destinatario","monto_cobrar","producto","num_remision","peso","notas"]`.
   - Depende de: nada (no necesita B1).
 
-- [ ] **F2 — Mensaje de corte duro en el paso de subida**
+- [x] **F2 — Mensaje de corte duro en el paso de subida**
   - Archivos: `app/(app)/ordenes/_components/OrdenesCargaUpload.tsx`
   - Cuando `findMissingHeaders` incluye `direccion_destinatario`, el mensaje de
     error añade la indicación de descargar la plantilla nueva; revisar el texto
@@ -125,7 +125,7 @@ Referencia de requisitos: `requirements.md` (R1–R40). Diseño: `design.md`.
     chunk al servidor en ese caso.
   - Depende de: B3.
 
-- [ ] **F3 [P] — Verificar que los helpers de presentación no cambian**
+- [x] **F3 [P] — Verificar que los helpers de presentación no cambian**
   - Archivos: `carga-masiva-parser.ts`, `carga-masiva-chunks.ts`,
     `carga-masiva-clasificacion.ts`, `carga-masiva-error-chips.ts`
   - Son agnósticos del nombre de campo; confirmar que no requieren cambios y que
@@ -134,7 +134,7 @@ Referencia de requisitos: `requirements.md` (R1–R40). Diseño: `design.md`.
     `tests/components/CargaMasivaErrorChips.test.ts` pasa.
   - Depende de: nada.
 
-- [ ] **F4 — Tests de componente del paso de subida**
+- [x] **F4 — Tests de componente del paso de subida**
   - Archivos: `tests/components/OrdenesCargaUpload.test.tsx`
   - Actualizar `HEADERS_OK` al set nuevo; añadir: archivo con las 4 columnas
     viejas y sin `direccion_destinatario` → error de cabecera con mensaje que
@@ -147,7 +147,7 @@ Referencia de requisitos: `requirements.md` (R1–R40). Diseño: `design.md`.
 
 ## Bloque C — Round-trip y ejemplo de la plantilla (cierra backend + frontend)
 
-- [ ] **C1 — Reescritura del round-trip de plantilla**
+- [x] **C1 — Reescritura del round-trip de plantilla**
   - Archivos: `tests/integration/carga-masiva-plantilla-roundtrip.test.ts`
   - Conservar: cabecera = clave máquina, cada clave verbatim en XLSX y CSV,
     `findMissingHeaders` vacío tras re-parsear. Sustituir el caso del `distrito`
@@ -158,7 +158,7 @@ Referencia de requisitos: `requirements.md` (R1–R40). Diseño: `design.md`.
   - **Hecho cuando**: la suite del archivo pasa.
   - Depende de: B1, F1.
 
-- [ ] **C2 — Reescritura del guard de geografía del ejemplo**
+- [x] **C2 — Reescritura del guard de geografía del ejemplo**
   - Archivos: `tests/unit/scripts/carga-masiva-ejemplos-geo.test.ts`
   - Obtiene la terna aplicando `parseDireccionDestinatario` al ejemplo de
     `direccion_destinatario` y mantiene las dos aserciones contra los XLSX del
@@ -173,14 +173,14 @@ Referencia de requisitos: `requirements.md` (R1–R40). Diseño: `design.md`.
 
 ## Bloque T — Cierre
 
-- [ ] **T1 — Verificación ejecutable completa**
+- [x] **T1 — Verificación ejecutable completa**
   - Correr `./init.sh`, `pnpm typecheck`, `pnpm lint` y la suite completa de
     tests en el worktree.
   - **Hecho cuando**: todo en verde y el delta de tests fallidos respecto al
     baseline de la rama es 0.
   - Depende de: B2, B5, B6, B7, B8, F3, F4, C1, C2.
 
-- [ ] **T2 — Mapa de trazabilidad `R<n> → test`**
+- [x] **T2 — Mapa de trazabilidad `R<n> → test`**
   - Archivos: `progress/impl_142-plantilla-carga-masiva-v2.md`
   - Tabla con una fila por requisito R1–R40: requisito → archivo de test →
     nombre del caso. Ningún requisito puede quedar sin test.
