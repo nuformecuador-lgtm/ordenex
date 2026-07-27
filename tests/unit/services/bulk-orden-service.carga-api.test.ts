@@ -81,8 +81,12 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
         { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
       ]),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1"])),
-    createManyOrdenes: vi.fn().mockResolvedValue(0),
-    createManyOrdenesConGuia: vi.fn(async (data: CreateOrdenData[]) => conGuiaEco(data)),
+    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }),
+    // Feature 141: el repo devuelve las creadas + el `cargaId` del lote de ESTA peticion.
+    createManyOrdenesConGuia: vi.fn(async (data: CreateOrdenData[]) => ({
+      creadas: conGuiaEco(data),
+      cargaId: "carga-api-1",
+    })),
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
     findByNumGuiaForTransicion: vi.fn().mockResolvedValue(null),
     findMensajeroIdsValidos: vi.fn().mockResolvedValue(new Set()),

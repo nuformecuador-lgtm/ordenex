@@ -16,6 +16,7 @@ import {
 } from "@/lib/errors";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IBulkOrdenService } from "@/lib/interfaces/services/IBulkOrdenService";
+import { CargaLoteAjenoError } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
@@ -47,7 +48,35 @@ const chunkBodySchema = z.object({
     .min(1, "el lote no puede estar vacío")
     .max(cargaMasivaConfig.MAX_CHUNK_ROWS, "el lote excede el máximo permitido"),
   dryRun: z.boolean().optional().default(false),
+  // Feature 141 (R16): identificador de la SESIÓN de carga (uno por sesión, repetido en los
+  // N chunks). Debe ser UUID; cualquier otra cosa es error de validación (400/422) y no crea
+  // ninguna orden ni lote.
+  cargaId: z.uuid("cargaId debe ser un UUID").optional(),
+  // Feature 141 (R18): total de filas de la SESIÓN declarado por el cliente (no el del chunk).
+  totalFiles: z.number().int().min(0).optional(),
 });
+
+/**
+ * Feature 141 (R17): un `cargaId` que pertenece a OTRO usuario es un intento de colgar
+ * órdenes del lote ajeno -> 403, sin crear ninguna orden (la transacción del repo ya
+ * revirtió). Cualquier otro error se propaga tal cual al manejador genérico.
+ */
+async function ejecutarCarga(
+  service: IBulkOrdenService,
+  body: { rows: unknown[]; dryRun: boolean; cargaId?: string; totalFiles?: number },
+  actor: Actor,
+) {
+  try {
+    return await service.cargarMasiva(body.rows as RawRow[], actor, {
+      dryRun: body.dryRun,
+      cargaId: body.cargaId,
+      totalFiles: body.totalFiles,
+    });
+  } catch (err) {
+    if (err instanceof CargaLoteAjenoError) throw new ForbiddenError();
+    throw err;
+  }
+}
 
 /**
  * Lógica del endpoint, extraída para inyección de dependencias en tests
@@ -80,11 +109,7 @@ export async function handleCargaMasivaChunk(
     }
 
     const service = deps.bulkService ?? buildBulkService();
-    const cargaResult = await service.cargarMasiva(
-      parsed.data.rows as RawRow[],
-      actor,
-      { dryRun: parsed.data.dryRun },
-    );
+    const cargaResult = await ejecutarCarga(service, parsed.data, actor);
     if (cargaResult.status === "forbidden") throw new ForbiddenError();
     return cargaResult.summary;
   });

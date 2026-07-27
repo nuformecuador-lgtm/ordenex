@@ -19,6 +19,11 @@ export interface BulkSummary {
   duplicadas: number;
   conError: number;
   filas: RowResult[];
+  /**
+   * Feature 141/R27: identificador del LOTE de carga masiva al que quedaron asociadas las
+   * ordenes creadas. `null` cuando no se creo ningun lote (dry-run o cero ordenes creadas).
+   */
+  cargaId: string | null;
 }
 
 // R16: columnas obligatorias de CABECERA (estructura del archivo). Distinto de

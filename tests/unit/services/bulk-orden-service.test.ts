@@ -42,10 +42,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
       { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" },
     ]),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1"])),
-    createManyOrdenes: vi.fn().mockResolvedValue(0),
+    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }), // feature 141
     // Feature 88: persistencia con guia inmediata (carga por API). Por defecto vacio;
     // los tests de cargarViaApi lo sobreescriben para devolver las guias asignadas.
-    createManyOrdenesConGuia: vi.fn().mockResolvedValue([]),
+    createManyOrdenesConGuia: vi.fn().mockResolvedValue({ creadas: [], cargaId: null }), // feature 88/141
     // Feature 16: metodos de resumen/asignacion, no ejercitados por la carga
     // masiva (feature 15) pero exigidos por la interfaz IOrdenRepository.
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados por la

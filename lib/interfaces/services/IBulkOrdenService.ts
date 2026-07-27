@@ -34,6 +34,11 @@ export interface CargaViaApiSummary {
   conError: number;
   filas: CargaViaApiRow[];
   ordenes: CargaViaApiOrden[];
+  /**
+   * Feature 141/R28: identificador del LOTE creado por ESTA peticion (una peticion = un
+   * lote, R19). `null` si no se creo ninguna orden y por tanto ningun lote (R22).
+   */
+  cargaId: string | null;
 }
 
 // Feature 88 — resultado discriminado de la carga por API (espejo de `BulkOrdenResult`):
@@ -55,11 +60,18 @@ export interface IBulkOrdenService {
    * ninguna orden. Devuelve el mismo `BulkSummary` que la carga real, para que
    * la UI muestre los hallazgos (errores de geografía, num_remision duplicados)
    * ANTES de escribir en la DB. La carga real re-valida (es la autoridad final).
+   *
+   * Feature 141 (R12/R13/R18): `options.cargaId` es el identificador de la SESION de carga
+   * (un UUID por sesion, repetido en los N chunks); el lote se asegura de forma idempotente,
+   * asi que los N chunks comparten UNA sola fila de `carga`. `options.totalFiles` es el total
+   * de filas de la SESION declarado por el cliente (nunca el del chunk); se escribe una sola
+   * vez, al crear la fila. Puede lanzar `CargaLoteAjenoError` si el lote es de otro usuario
+   * (el borde lo traduce a 403, R17).
    */
   cargarMasiva(
     rows: RawRow[],
     actor: Actor,
-    options?: { dryRun?: boolean },
+    options?: { dryRun?: boolean; cargaId?: string; totalFiles?: number },
   ): Promise<BulkOrdenResult>;
 
   /**

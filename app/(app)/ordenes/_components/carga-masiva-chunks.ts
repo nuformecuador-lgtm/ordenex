@@ -60,6 +60,35 @@ export interface ProcesarChunksOpts {
   endpoint?: string;
   onProgress?: (procesadas: number, total: number) => void;
   fetchImpl?: typeof fetch;
+  /**
+   * Feature 141 (R12/R13): identificador del LOTE de esta sesión de carga. Si no se pasa, lo
+   * genera `procesarEnChunks` UNA vez y lo repite en los N chunks, para que el servidor
+   * asocie todas las órdenes de la sesión a una sola fila de `carga`.
+   */
+  cargaId?: string;
+  /**
+   * Feature 141 (R18): total de filas de la SESIÓN. Por defecto, el largo del arreglo
+   * completo que se trocea (que ES el total de la sesión), nunca el tamaño de un chunk.
+   */
+  totalFiles?: number;
+}
+
+/**
+ * Feature 141 — UUID del lote de la sesión. `crypto.randomUUID` existe en todo navegador
+ * moderno en contexto seguro y en Node >= 19; el fallback (contexto no seguro) arma un UUID
+ * v4 válido con `getRandomValues` o, en último término, con `Math.random`: el id es opaco y
+ * su unicidad la respalda además la verificación de propietario del servidor.
+ */
+function nuevoCargaId(): string {
+  const cripto = globalThis.crypto as Crypto | undefined;
+  if (cripto && typeof cripto.randomUUID === "function") return cripto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (cripto && typeof cripto.getRandomValues === "function") cripto.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // versión 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variante RFC 4122
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** Error de un lote (HTTP no-ok); el llamador lo traduce a alerta/toast. */
@@ -83,13 +112,19 @@ export async function procesarEnChunks(
   const lotes = chunk(filas, opts.chunkSize);
   const resultados: RowResult[] = [];
   let procesadas = 0;
+  // Feature 141 (R12/R13/R14/R18): en firme, UN identificador de lote por SESIÓN de carga,
+  // repetido en los N chunks junto al total de la sesión. El dry-run no persiste nada, así
+  // que no lleva lote (el servidor no crea fila de `carga`).
+  const lote141 = opts.dryRun
+    ? null
+    : { cargaId: opts.cargaId ?? nuevoCargaId(), totalFiles: opts.totalFiles ?? filas.length };
 
   for (const lote of lotes) {
     const rows = lote.map((f) => aplicarMensajero(f.row, opts.mensajeroSugeridoId));
     const res = await doFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows, dryRun: opts.dryRun }),
+      body: JSON.stringify({ rows, dryRun: opts.dryRun, ...(lote141 ?? {}) }),
     });
     if (!res.ok) throw new ChunkRequestError(res.status);
 

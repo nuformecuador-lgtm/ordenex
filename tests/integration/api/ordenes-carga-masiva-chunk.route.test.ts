@@ -20,6 +20,7 @@ function okSummary(overrides: Partial<BulkSummary> = {}): BulkSummary {
     duplicadas: 0,
     conError: 0,
     filas: [{ fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "en_preparacion" }],
+    cargaId: "11111111-1111-4111-8111-111111111111", // feature 141/R27
     ...overrides,
   };
 }

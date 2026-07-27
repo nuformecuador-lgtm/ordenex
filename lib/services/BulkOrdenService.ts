@@ -209,7 +209,7 @@ export class BulkOrdenService implements IBulkOrdenService {
   async cargarMasiva(
     rows: RawRow[],
     actor: Actor,
-    options: { dryRun?: boolean } = {},
+    options: { dryRun?: boolean; cargaId?: string; totalFiles?: number } = {},
   ): Promise<BulkOrdenResult> {
     // R11: SOLO adminTienda, sin tocar datos ni pre-cargar nada para otros roles.
     if (actor.rol !== "adminTienda") return { status: "forbidden" };
@@ -236,7 +236,8 @@ export class BulkOrdenService implements IBulkOrdenService {
           estatus: [`estatus inicial "${estatusInicialValue}" no disponible (seed pendiente)`],
         },
       }));
-      return { status: "ok", summary: this.buildSummary(rows.length, filas) };
+      // Feature 141/R15: ninguna orden persistida -> ningun lote (`cargaId` null).
+      return { status: "ok", summary: this.buildSummary(rows.length, filas, null) };
     }
     const estatusId = ctx.estatusId;
 
@@ -270,17 +271,30 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     // Dry-run (validación previa): se omite la persistencia; el summary ya lleva
     // la clasificación completa (creadas/duplicadas/error) para el preview.
+    // Feature 141 (R14/R15): sin persistencia no hay lote — ni en dry-run ni cuando el chunk
+    // no aporta ninguna orden nueva.
+    let cargaId: string | null = null;
     if (!options.dryRun && toCreate.length > 0) {
       // R27 + feature 49/#1 (R9/R21/R23): el actor de la carga masiva es la tienda que
       // carga (el adminTienda autenticado); cada orden creada deja su primera fila de
       // historial (origen null -> estado inicial, origenTipo carga_masiva) en la MISMA tx.
-      await this.repo.createManyOrdenes(toCreate, cargaMasivaConfig.BATCH_SIZE, {
-        actorUsuarioId: tiendaId,
-        origenTipo: "carga_masiva",
-      });
+      const persistido = await this.repo.createManyOrdenes(
+        toCreate,
+        cargaMasivaConfig.BATCH_SIZE,
+        { actorUsuarioId: tiendaId, origenTipo: "carga_masiva" },
+        {
+          // Feature 141 (R12/R13): el id de la SESION de carga, compartido por los N chunks.
+          cargaId: options.cargaId ?? null,
+          usuarioCargaId: tiendaId, // R2: el adminTienda autenticado realiza la carga
+          // R18: total de la SESION declarado por el cliente. El fallback `rows.length` solo
+          // aplica si el cliente no lo declara: degrada al tamaño del chunk, nunca a 0.
+          totalFiles: options.totalFiles ?? rows.length,
+        },
+      );
+      cargaId = persistido.cargaId;
     }
 
-    return { status: "ok", summary: this.buildSummary(rows.length, filas) };
+    return { status: "ok", summary: this.buildSummary(rows.length, filas, cargaId) };
   }
 
   async cargarViaApi(rows: RawRow[], actor: Actor): Promise<CargaViaApiResult> {
@@ -305,7 +319,8 @@ export class BulkOrdenService implements IBulkOrdenService {
           estatus: [`estatus inicial "${ESTATUS_INICIAL_API}" no disponible (seed pendiente)`],
         },
       }));
-      return { status: "ok", summary: this.buildViaApiSummary(rows.length, filas, []) };
+      // Feature 141/R22: sin ordenes creadas no hay lote.
+      return { status: "ok", summary: this.buildViaApiSummary(rows.length, filas, [], null) };
     }
     const estatusId = ctx.estatusId;
 
@@ -345,13 +360,20 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     // R9/R10: persistencia con `num_guia` inmediato (misma tx que la creación). El actor del
     // historial es el usuario dedicado de la key; origenTipo `carga_api` (D7).
-    const creadas =
+    // Feature 141 (R19/R20/R21/R22): UNA fila de `carga` por peticion, con `usuario_carga` =
+    // usuario dedicado de la key y `total_files` = cantidad de objetos del array recibido
+    // (`rows.length`, incluyendo duplicadas y filas con error), NUNCA el tamaño de los batches
+    // internos. El id lo genera el repo (`cargaId: null`) y lo reutiliza entre batches.
+    const persistido =
       toCreate.length > 0
-        ? await this.repo.createManyOrdenesConGuia(toCreate, cargaMasivaConfig.BATCH_SIZE, {
-            actorUsuarioId: tiendaId,
-            origenTipo: "carga_api",
-          })
-        : [];
+        ? await this.repo.createManyOrdenesConGuia(
+            toCreate,
+            cargaMasivaConfig.BATCH_SIZE,
+            { actorUsuarioId: tiendaId, origenTipo: "carga_api" },
+            { cargaId: null, usuarioCargaId: tiendaId, totalFiles: rows.length },
+          )
+        : { creadas: [], cargaId: null };
+    const creadas = persistido.creadas;
 
     // R10: mapea el `num_guia` (por num_remision) a las filas creadas y arma el bloque plano.
     const guiaPorRemision = new Map(creadas.map((c) => [c.numRemision, c]));
@@ -373,13 +395,17 @@ export class BulkOrdenService implements IBulkOrdenService {
       });
     }
 
-    return { status: "ok", summary: this.buildViaApiSummary(rows.length, filas, ordenes) };
+    return {
+      status: "ok",
+      summary: this.buildViaApiSummary(rows.length, filas, ordenes, persistido.cargaId),
+    };
   }
 
   private buildViaApiSummary(
     total: number,
     filas: CargaViaApiRow[],
     ordenes: CargaViaApiOrden[],
+    cargaId: string | null, // feature 141/R28
   ): CargaViaApiSummary {
     return {
       total,
@@ -388,16 +414,22 @@ export class BulkOrdenService implements IBulkOrdenService {
       conError: filas.filter((f) => f.resultado === "error").length,
       filas,
       ordenes,
+      cargaId,
     };
   }
 
-  private buildSummary(total: number, filas: RowResult[]): BulkSummary {
+  private buildSummary(
+    total: number,
+    filas: RowResult[],
+    cargaId: string | null, // feature 141/R27
+  ): BulkSummary {
     return {
       total,
       creadas: filas.filter((f) => f.resultado === "creada").length,
       duplicadas: filas.filter((f) => f.resultado === "duplicada").length,
       conError: filas.filter((f) => f.resultado === "error").length,
       filas,
+      cargaId,
     };
   }
 

@@ -31,6 +31,7 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     ordenes: [
       { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
     ],
+    cargaId: "33333333-3333-4333-8333-333333333333", // feature 141/R28
     ...overrides,
   };
 }
@@ -93,7 +94,15 @@ function summaryDeLoteGrande(n: number): CargaViaApiSummary {
     estatus: o.estado,
     numGuia: o.numGuia,
   }));
-  return { total: n, creadas: n, duplicadas: 0, conError: 0, filas, ordenes };
+  return {
+    total: n,
+    creadas: n,
+    duplicadas: 0,
+    conError: 0,
+    filas,
+    ordenes,
+    cargaId: "33333333-3333-4333-8333-333333333333", // feature 141/R28
+  };
 }
 
 describe("carga API + etiquetas PDF (feature 136)", () => {

@@ -21,6 +21,7 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     ordenes: [
       { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
     ],
+    cargaId: "22222222-2222-4222-8222-222222222222", // feature 141/R28
     ...overrides,
   };
 }

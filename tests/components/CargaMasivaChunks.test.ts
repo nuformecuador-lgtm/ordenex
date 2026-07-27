@@ -27,6 +27,7 @@ function okResponse(rows: Array<Record<string, string>>): Response {
       resultado: "creada",
       estatus: "en_preparacion",
     })),
+    cargaId: null, // feature 141/R27
   };
   return new Response(JSON.stringify(summary), { status: 200 });
 }

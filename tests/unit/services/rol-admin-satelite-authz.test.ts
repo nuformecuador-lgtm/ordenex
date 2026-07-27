@@ -76,8 +76,8 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
     findMensajerosByIds: vi.fn().mockResolvedValue(new Set()),
-    createManyOrdenes: vi.fn().mockResolvedValue(0),
-    createManyOrdenesConGuia: vi.fn().mockResolvedValue([]), // feature 88
+    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }), // feature 141
+    createManyOrdenesConGuia: vi.fn().mockResolvedValue({ creadas: [], cargaId: null }), // feature 88/141
     findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
     asignarMensajeroSugerido: vi.fn().mockResolvedValue(0),
     countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
