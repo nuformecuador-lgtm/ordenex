@@ -1593,6 +1593,18 @@
       "zone": "backend",
       "branch": "feature/140-flujo-estados-guardia-central",
       "depends_on": 139
+    },
+    {
+      "id": 141,
+      "name": "tabla carga + carga_id en orden",
+      "spec_path": "specs/141-tabla-cargas-orden",
+      "description": "Backend. Nueva tabla 'carga' (SINGULAR, convencion del repo): fecha_carga, usuario_carga FK usuario, download_url nullable, total_files. SIN batch_url ni status (decision del humano). En 'orden': nuevas columnas carga_id (FK a carga, nullable para el historico, ON DELETE RESTRICT) y download_url (nullable). Cada carga masiva -ambas vias: UI XLSX/chunks (cargarMasiva) y API key (cargarViaApi)- crea UNA fila en carga y todas las ordenes del lote nacen con ese carga_id; total_files = archivos de la sesion (via UI) / cantidad de objetos del array del payload (via API key), total del lote y no por chunk. num_guia se mantiene tal cual. Alcance: solo persistir y devolver carga_id; download_url queda NULL (nadie la escribe todavia); sin UI ni filtro por lote.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/141-tabla-cargas-orden",
+      "depends_on": null
     }
   ]
 }
