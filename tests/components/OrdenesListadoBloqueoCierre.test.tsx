@@ -4,7 +4,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
-import { OrdenesTabs } from "@/app/(app)/ordenes/_components/OrdenesTabs";
+import { OrdenesListado } from "@/app/(app)/ordenes/_components/OrdenesListado";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import { listarOrderStatus } from "@/lib/actions/order-status";
@@ -31,8 +31,8 @@ vi.mock("@/app/(app)/ordenes/_components/GenerarGuiaModal", () => ({
 vi.mock("@/app/(app)/ordenes/_components/AsignarBodegaModal", () => ({
   AsignarBodegaModal: () => null,
 }));
-vi.mock("@/app/(app)/ordenes/_components/RutearSateliteModal", () => ({
-  RutearSateliteModal: () => null,
+vi.mock("@/app/(app)/ordenes/_components/RecuperarABodegaModal", () => ({
+  RecuperarABodegaModal: () => null,
 }));
 vi.mock("@/app/(app)/ordenes/_components/EtiquetasGuiaModal", () => ({
   EtiquetasGuiaModal: () => null,
@@ -46,7 +46,8 @@ const listarOrderStatusMock = vi.mocked(listarOrderStatus);
 const listarMensajerosMock = vi.mocked(listarMensajerosParaAsignacion);
 const listarZonasBloqueadasMock = vi.mocked(listarZonasBloqueadasPorCierre);
 
-// Una sola tab (de asignacion) para que la primera tab activa sea la que se prueba.
+// Catalogo minimo: el filtro por estado no se toca en este archivo (el listado sin
+// filtro sirve las ordenes del mock), pero el componente lo consulta igual.
 const CATALOGO = [{ id: "id-fulfillment", value: "en_fulfillment" }];
 
 const ZONA_GAM = "zona-gam";
@@ -63,6 +64,8 @@ function makeOrden(
     numGuia: null,
     numRemision: ref,
     estatusId: "id-fulfillment",
+    // El bloqueo se deriva del estado de la ORDEN (ya no de una tab activa).
+    estatusValue: "en_fulfillment",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",
@@ -81,8 +84,8 @@ function makeOrden(
   };
 }
 
-/** Monta las tabs del maestro sirviendo `items` en la tab de asignacion. */
-function renderTabs(items: OrdenListItemDTO[]) {
+/** Monta el listado del maestro sirviendo `items` (ordenes en estado de asignacion). */
+function renderListado(items: OrdenListItemDTO[]) {
   listarOrdenesMock.mockImplementation(async (input) => {
     const { page, pageSize } = input as { page: number; pageSize: number };
     return { status: "ok", items, page, pageSize, total: items.length };
@@ -90,7 +93,7 @@ function renderTabs(items: OrdenListItemDTO[]) {
   render(
     <ToastProvider>
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <OrdenesTabs accionesLote />
+        <OrdenesListado accionesLote />
       </SWRConfig>
     </ToastProvider>,
   );
@@ -115,9 +118,9 @@ afterEach(() => {
   cleanup();
 });
 
-describe("OrdenesTabs — bloqueo del checkbox por zona con cierre abierto", () => {
+describe("OrdenesListado — bloqueo del checkbox por zona con cierre abierto", () => {
   it("orden de zona SATELITE con >=1 cierre -> checkbox deshabilitado y no seleccionable", async () => {
-    renderTabs([makeOrden("REM-sat", ZONA_SATELITE, false)]);
+    renderListado([makeOrden("REM-sat", ZONA_SATELITE, false)]);
 
     const checkbox = await screen.findByRole("checkbox", {
       name: /No se puede seleccionar la orden REM-sat/i,
@@ -133,7 +136,7 @@ describe("OrdenesTabs — bloqueo del checkbox por zona con cierre abierto", () 
   });
 
   it("orden de zona GAM (central) con >=1 cierre -> checkbox deshabilitado", async () => {
-    renderTabs([makeOrden("REM-gam", ZONA_GAM, true)]);
+    renderListado([makeOrden("REM-gam", ZONA_GAM, true)]);
 
     const checkbox = await screen.findByRole("checkbox", {
       name: /No se puede seleccionar la orden REM-gam/i,
@@ -142,7 +145,7 @@ describe("OrdenesTabs — bloqueo del checkbox por zona con cierre abierto", () 
   });
 
   it("orden de zona SIN cierres -> checkbox habilitado y seleccionable", async () => {
-    renderTabs([makeOrden("REM-libre", ZONA_LIBRE, false)]);
+    renderListado([makeOrden("REM-libre", ZONA_LIBRE, false)]);
 
     const checkbox = await screen.findByRole("checkbox", {
       name: "Seleccionar orden REM-libre",
@@ -153,8 +156,8 @@ describe("OrdenesTabs — bloqueo del checkbox por zona con cierre abierto", () 
     expect(checkbox).toHaveAttribute("aria-checked", "true");
   });
 
-  it("el bloqueo es POR ORDEN, no global: en la misma tab conviven bloqueada y libre", async () => {
-    renderTabs([
+  it("el bloqueo es POR ORDEN, no global: en la misma tabla conviven bloqueada y libre", async () => {
+    renderListado([
       makeOrden("REM-sat", ZONA_SATELITE, false),
       makeOrden("REM-libre", ZONA_LIBRE, false),
     ]);
@@ -178,7 +181,7 @@ describe("OrdenesTabs — bloqueo del checkbox por zona con cierre abierto", () 
   // solo es alcanzable como dato degradado en runtime; se cubre con "" (falsy) para
   // fijar el criterio: sin zona NO se puede afirmar que este bloqueada -> no se bloquea.
   it("orden sin `zonaId` -> NO se bloquea (no se puede afirmar que su zona lo este)", async () => {
-    renderTabs([makeOrden("REM-sinzona", "", false)]);
+    renderListado([makeOrden("REM-sinzona", "", false)]);
 
     expect(
       await screen.findByRole("checkbox", {

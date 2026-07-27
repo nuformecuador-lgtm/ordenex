@@ -141,7 +141,9 @@ export class OrdenService implements IOrdenService {
 
     const where: {
       tiendaId?: string;
-      estatusId?: string;
+      // Un id o una lista de ids (filtro multi-estado); el repositorio traduce
+      // la lista a `IN (...)`.
+      estatusId?: string | string[];
       mensajeroAsignadoId?: string;
     } = {};
     // R10: el `estatusId` escalar preexistente sigue funcionando (sin regresion).

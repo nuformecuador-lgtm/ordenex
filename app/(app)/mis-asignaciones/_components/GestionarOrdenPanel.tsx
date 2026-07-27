@@ -116,6 +116,7 @@ export interface GestionarOrdenPanelProps {
   onCancelarGestion: () => void | Promise<void>;
   /** Se invoca tras un "ok" para que el padre refresque el listado. */
   onSuccess: () => void;
+  count: number;
 }
 
 /** Primer mensaje de error de un campo (o undefined). */
@@ -142,7 +143,8 @@ export function GestionarOrdenPanel({
   onGestionarPedido,
   onCancelarGestion,
   onSuccess,
-}: GestionarOrdenPanelProps) {
+  count,
+}: Readonly<GestionarOrdenPanelProps>) {
   const toast = useToast();
 
   // El padre remonta este panel (`key={orden.id}`) al cambiar de orden, por lo
@@ -362,16 +364,21 @@ export function GestionarOrdenPanel({
   const resultadoLabel =
     RESULTADO_BOTONES.find((b) => b.value === resultado)?.label ?? "";
 
+    console.log(orden)
+
   return (
     <section
       aria-label="Detalle de la orden"
       className="mx-auto flex w-full max-w-2xl flex-col gap-5 overflow-x-hidden rounded-xl border border-border bg-card p-6 shadow-xs"
     >
-      <div className="flex flex-col gap-1.5">
-        <h2 className="text-lg font-semibold">Detalle de la orden</h2>
-        <p className="text-sm text-muted-foreground">
-          Orden {orden.numRemision} · {orden.destinatario}
+      <div className="flex flex-row items-center gap-1.5">
+        {orden.secuenciaRuta && <h2 className="m-1 text-lg font-semibold bg-brand-light w-6 h-6 flex items-center justify-center rounded pt-1 pb-1 px-1">{orden.secuenciaRuta}</h2>}
+        <div>
+        <p className="text-xs text-muted-foreground">{orden.numGuia}</p>
+        <p className="text-xs text-muted-foreground">
+          {orden.secuenciaRuta} de {count}
         </p>
+        </div>
       </div>
 
       {/* Detalle completo: nombre, teléfono, dirección, notas, producto (+ más). */}

@@ -569,7 +569,15 @@ export class OrdenRepository implements IOrdenRepository {
     const where: Prisma.OrdenWhereInput = {
       deletedAt: null, // R34
       ...(params.where.tiendaId ? { tiendaId: params.where.tiendaId } : {}),
-      ...(params.where.estatusId ? { estatusId: params.where.estatusId } : {}),
+      // Un id -> igualdad; una lista de ids -> `IN (...)` (filtro multi-estado).
+      // Lista vacia = sin filtro (se descarta, igual que un `estatusId` ausente).
+      ...(Array.isArray(params.where.estatusId)
+        ? params.where.estatusId.length > 0
+          ? { estatusId: { in: params.where.estatusId } }
+          : {}
+        : params.where.estatusId
+          ? { estatusId: params.where.estatusId }
+          : {}),
       // Acotamiento por dueño para el rol mensajero: solo sus asignadas (evita fuga
       // del listado completo en /ordenes). El service lo setea; aqui se traduce al WHERE.
       ...(params.where.mensajeroAsignadoId

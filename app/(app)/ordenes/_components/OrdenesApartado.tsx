@@ -207,41 +207,44 @@ export function OrdenesApartado({
     <section className="flex flex-col gap-3" aria-label={titulo}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">{titulo}</h2>
-        {selectable &&
-        (actionLabel || secondaryActionLabel || tertiaryActionLabel) ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {actionLabel ? (
-              <Button
-                type="button"
-                onClick={handleAction}
-                disabled={seleccionadas.length === 0}
-              >
-                {actionLabel}
-              </Button>
-            ) : null}
-            {secondaryActionLabel ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSecondaryAction}
-                disabled={seleccionadas.length === 0}
-              >
-                {secondaryActionLabel}
-              </Button>
-            ) : null}
-            {tertiaryActionLabel ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleTertiaryAction}
-                disabled={seleccionadas.length === 0}
-              >
-                {tertiaryActionLabel}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
       </div>
+      {/* Acciones de lote: bloque normal en el flujo, encima de la tabla y alineado a
+          la derecha. Los botones existen siempre (el apartado seleccionable los
+          declara) y se deshabilitan mientras la selección esté vacía. */}
+      {selectable &&
+      (actionLabel || secondaryActionLabel || tertiaryActionLabel) ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {actionLabel ? (
+            <Button
+              type="button"
+              onClick={handleAction}
+              disabled={seleccionadas.length === 0}
+            >
+              {actionLabel}
+            </Button>
+          ) : null}
+          {secondaryActionLabel ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSecondaryAction}
+              disabled={seleccionadas.length === 0}
+            >
+              {secondaryActionLabel}
+            </Button>
+          ) : null}
+          {tertiaryActionLabel ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleTertiaryAction}
+              disabled={seleccionadas.length === 0}
+            >
+              {tertiaryActionLabel}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <DataTable
         columns={columns}
         data={items}

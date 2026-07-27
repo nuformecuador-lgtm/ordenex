@@ -40,11 +40,11 @@ function Seccion({
   titulo,
   divider,
   children,
-}: {
+}: Readonly<{
   titulo: string;
   divider?: boolean;
   children: ReactNode;
-}) {
+}>) {
   return (
     <section
       className={`flex flex-col gap-2${divider ? " border-t border-border pt-4" : ""}`}
@@ -67,16 +67,12 @@ export function AsignacionDetalle({ orden }: AsignacionDetalleProps) {
     <div className="flex flex-col gap-4">
       {/* Sección 1 — Pedido */}
       <Seccion titulo="Pedido">
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Campo label="Nº Guía">{orden.numGuia ?? "—"}</Campo>
           <Campo label="Nombre">{orden.destinatario}</Campo>
-          <Campo label="Teléfono">{orden.telefonoDest}</Campo>
           <Campo label="Producto">{orden.producto}</Campo>
-        </dl>
       </Seccion>
 
       {/* Sección 2 — Entrega */}
-      <Seccion titulo="Entrega" divider>
+      <Seccion titulo="Entrega">
         <dl className="flex flex-col gap-3">
           <Campo label="Dirección">
             <span className="font-medium">{orden.direccion ?? "—"}</span>
@@ -91,7 +87,7 @@ export function AsignacionDetalle({ orden }: AsignacionDetalleProps) {
       </Seccion>
 
       {/* Sección 3 — Cobro */}
-      <Seccion titulo="Cobro" divider>
+      <Seccion titulo="Cobro">
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Campo label="Valor a cobrar">{formatMonto(orden.montoCobrar)}</Campo>
           <Campo label="Peso">{formatPeso(orden.peso)}</Campo>
