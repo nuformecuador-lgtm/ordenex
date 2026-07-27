@@ -282,6 +282,31 @@ El último trabajo previo mergeado fue la **feature 97** (optimización de ruta 
 | 66 | qr - detalle (switch por rol) | — | Sin empezar; solo existe el escáner de la 65 (`app/(app)/qr/page.tsx` navega a la ruta del QR). |
 | 135 + 122–134 | **analítica** (15 encadenadas) | backend/frontend | Sin empezar: sin ruta `/analitica`, sin migración `analytics_daily`, sin servicios. |
 
+### Lote 141–149 — registrado el 2026-07-27 (solo alta en `feature_list.json`)
+
+Nueve funcionalidades pedidas por el humano, **sin spec, sin rama y sin código**. Boceto aprobado en
+chat antes de escribir. Dos ajustes sobre lo pedido: (a) "reordenar la plantilla" y "unificar
+provincia/cantón/distrito en una columna" se **fusionaron en la 141** — tocan los mismos 4 archivos y
+la segunda borra las columnas que la primera ordena; (b) "filtros + búsqueda + export en todas las
+tablas" se **partió en 143 (capacidad en `DataTable`) + 144 (rollout a los 31 consumidores)**.
+
+| # | Feature | Zona | Cplx | Depende |
+|---|---------|------|------|---------|
+| 141 | plantilla v2: nuevo orden + `direccion_destinatario` unificada | fullstack | high | — |
+| 142 | descargar en Excel las filas con error de la carga masiva | frontend | medium | 141 |
+| 143 | `DataTable`: búsqueda, filtros y export a Excel (capacidad) | frontend | medium | — |
+| 144 | rollout de búsqueda/filtros/export a las 31 tablas | frontend | high | 143 |
+| 145 | campana de notificaciones funcional | fullstack | high | — |
+| 146 | filtro por bodega de las órdenes asignables | fullstack | medium | — |
+| 147 | manifiesto Excel al crear o mover órdenes | fullstack | high | — |
+| 148 | deshacer asignación a mensajero o bodega antes de la recogida | fullstack | high | — |
+| 149 | tamaño de hoja seleccionable en las etiquetas | fullstack | medium | — |
+
+Cada ficha lleva sus decisiones `ABIERTO:` marcadas; se cierran en la puerta F1.4 de su spec, no antes.
+Dos con acoplamiento a trabajo ya cerrado: la **148** debe **declarar las aristas inversas en el mapa de
+la guardia central (feature 140)** o `appendCambioEstado` lanzará `TransicionIlegalError`; la **149**
+toca los **dos** generadores de PDF (cliente feature 32 + servidor feature 136).
+
 ## Deudas de arnés vivas
 
 - **No hay regla `no-console` en el lint** (verificado 2026-07-21) → **17 llamadas `console.*` en
