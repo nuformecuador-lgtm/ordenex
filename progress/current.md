@@ -103,6 +103,37 @@ está en rojo por `count` en `GestionarOrdenPanelProps`).
 <summary>Bitácora del lote (histórico de la sesión)</summary>
 
 #### Estado durante la sesión — 137/138/139 mergeadas; 140 en implementación
+**Tabla `carga` + `carga_id` en orden — feature 141 (2026-07-27) → IMPLEMENTADA + reviewer APROBADO,
+`PR #168` → `dev` (falta merge humano).** Pedido del humano: "genera una tabla cargas, agrega un campo en orden (carga_id) y
+download_url (nullable)… cada que se realice una carga masiva se debe generar una entrada nueva en
+cargas, las órdenes que se registran desde ahora deben tener este id". Backend, `medium`,
+`depends_on: null`. Rama `feature/141-tabla-cargas-orden` **aún no creada** (se difiere a Fase 2, en
+worktree desde `origin/dev`).
+- **Decisiones cerradas pre-spec (AskUserQuestion):** D1 `download_url` en AMBAS tablas (`cargas` y
+  `orden`); D2 se **omite `batch_url`**; D3 se **remueve `status`**; D4 `total_files` = archivos
+  cargados en esa carga masiva; D5 disparan **ambos** caminos (`cargarMasiva` UI/chunks y
+  `cargarViaApi` API key), el alta manual NO; D6 `num_guia` intacto (`carga_id` es un identificador
+  de lote nuevo, insumo de una feature posterior); D7 `orden.carga_id` nullable, sin backfill.
+- **Spec escrito:** `specs/141-tabla-cargas-orden/` (R1–R30 EARS, design con `cargaId` generado en
+  cliente e idempotente por chunk + 6 alternativas descartadas, 15 tasks con `[P]`).
+- **Gate F1.4 APROBADO** con 5 decisiones más: tabla `carga` **singular**; `total_files` = total del
+  lote (API = objetos del array del payload; sesión = total declarado, no acumulado por chunk); FK
+  `ON DELETE RESTRICT`; `download_url` **NULL** en todo el alcance (nadie la escribe); solo persistir
+  y devolver `carga_id`, **sin UI**.
+- **Implementada** en worktree aislado `../ordenex-wt-141` (rama `feature/141-tabla-cargas-orden`
+  desde `origin/dev` @ 1cfb2ed; `backend_dev` model opus, 6 commits). Migración
+  `db/migrations/20260727120000_carga_orden_carga_id` (up+down) + denylist de `zonas-migration.test.ts`.
+- **Reviewer APROBADO-CON-NOTAS, 0 bloqueantes** (8 notas menores): typecheck 0, lint 0 errores
+  (144 warnings = baseline), **519 archivos / 5275 tests verdes** (+66), `./init.sh` verde,
+  R1–R30 con test real, cero `.tsx` en el diff. Detalle en `progress/impl_141.md` / `review_141.md`
+  (viajan en la rama).
+- **PR #168 → `dev`** (spec + alta en `feature_list` + bitácoras viajan en el propio PR, self-contained).
+- **⚠️ Al desplegar:** correr `prisma migrate deploy` (migración `20260727120000_carga_orden_carga_id`).
+  El `down.sql` se revisó por lectura, **sin round-trip real** contra la DB compartida.
+- **Nota:** el solape con la 136 se disolvió — `dev` avanzó y las features 136–140 quedaron `done`
+  antes de arrancar la implementación.
+
+### Lote 137–140 (flujo de estados) — 137 implementada + reviewer APROBADO, PR #157; mergeando `dev`
 
 > Renumerado desde **135–138** por colisión de IDs: `dev` (merge de #155 `flow`) reclamó
 > **135 = analítica-KPIs** y **136 = etiquetas-PDF**. El lote se desplazó al bloque libre 137–140.
@@ -345,33 +376,64 @@ El último trabajo previo mergeado fue la **feature 97** (optimización de ruta 
 | 66 | qr - detalle (switch por rol) | — | Sin empezar; solo existe el escáner de la 65 (`app/(app)/qr/page.tsx` navega a la ruta del QR). |
 | 135 + 122–134 | **analítica** (15 encadenadas) | backend/frontend | Sin empezar: sin ruta `/analitica`, sin migración `analytics_daily`, sin servicios. |
 
-### Lote 141–149 — registrado el 2026-07-27 (solo alta en `feature_list.json`)
+### Lote 142–150 — registrado el 2026-07-27 (solo alta en `feature_list.json`)
+
+> **Renumerado 141–149 → 142–150 el 2026-07-27** al resolver el conflicto de `feature_list.json` con
+> el pull de `dev`: el id **141 lo conserva `tabla carga + carga_id en orden`** (spec, rama
+> `feature/141-tabla-cargas-orden`, PR #168 abierto e `impl_141`/`review_141` ya escritos con ese id).
+> El lote no tiene specs, ramas ni código, así que mover sus ids fue el cambio barato. `depends_on`
+> internos reajustados (143→142, 145→144). ⚠️ Los ids viejos ya viajaron a `dev` en el PR #170:
+> cualquier sesión que haya tomado uno del rango 141–149 debe releer `feature_list.json`.
 
 Nueve funcionalidades pedidas por el humano, **sin spec, sin rama y sin código**. Boceto aprobado en
 chat antes de escribir. Dos ajustes sobre lo pedido: (a) "reordenar la plantilla" y "unificar
-provincia/cantón/distrito en una columna" se **fusionaron en la 141** — tocan los mismos 4 archivos y
+provincia/cantón/distrito en una columna" se **fusionaron en la 142** — tocan los mismos 4 archivos y
 la segunda borra las columnas que la primera ordena; (b) "filtros + búsqueda + export en todas las
-tablas" se **partió en 143 (capacidad en `DataTable`) + 144 (rollout a los 31 consumidores)**.
+tablas" se **partió en 144 (capacidad en `DataTable`) + 145 (rollout a los 31 consumidores)**.
 
 | # | Feature | Zona | Cplx | Depende |
 |---|---------|------|------|---------|
-| 141 | plantilla v2: nuevo orden + `direccion_destinatario` unificada | fullstack | high | — |
-| 142 | descargar en Excel las filas con error de la carga masiva | frontend | medium | 141 |
-| 143 | `DataTable`: búsqueda, filtros y export a Excel (capacidad) | frontend | medium | — |
-| 144 | rollout de búsqueda/filtros/export a las 31 tablas | frontend | high | 143 |
-| 145 | campana de notificaciones funcional | fullstack | high | — |
-| 146 | filtro por bodega de las órdenes asignables | fullstack | medium | — |
-| 147 | manifiesto Excel al crear o mover órdenes | fullstack | high | — |
-| 148 | deshacer asignación a mensajero o bodega antes de la recogida | fullstack | high | — |
-| 149 | tamaño de hoja seleccionable en las etiquetas | fullstack | medium | — |
+| 142 | plantilla v2: nuevo orden + `direccion_destinatario` unificada | fullstack | high | — |
+| 143 | descargar en Excel las filas con error de la carga masiva | frontend | medium | 142 |
+| 144 | `DataTable`: búsqueda, filtros y export a Excel (capacidad) | frontend | medium | — |
+| 145 | rollout de búsqueda/filtros/export a las 31 tablas | frontend | high | 144 |
+| 146 | campana de notificaciones funcional | fullstack | high | — |
+| 147 | filtro por bodega de las órdenes asignables | fullstack | medium | — |
+| 148 | manifiesto Excel al crear o mover órdenes | fullstack | high | — |
+| 149 | deshacer asignación a mensajero o bodega antes de la recogida | fullstack | high | — |
+| 150 | tamaño de hoja seleccionable en las etiquetas | fullstack | medium | — |
 
 Cada ficha lleva sus decisiones `ABIERTO:` marcadas; se cierran en la puerta F1.4 de su spec, no antes.
-Dos con acoplamiento a trabajo ya cerrado: la **148** debe **declarar las aristas inversas en el mapa de
-la guardia central (feature 140)** o `appendCambioEstado` lanzará `TransicionIlegalError`; la **149**
+Dos con acoplamiento a trabajo ya cerrado: la **149** debe **declarar las aristas inversas en el mapa de
+la guardia central (feature 140)** o `appendCambioEstado` lanzará `TransicionIlegalError`; la **150**
 toca los **dos** generadores de PDF (cliente feature 32 + servidor feature 136).
 
 ## Deudas de arnés vivas
 
+- **✅ MITIGADO (2026-07-27, `chore/migraciones-solo-en-produccion`):** el `build` ya no corre
+  `prisma migrate deploy` en todos los entornos. Ahora pasa por `scripts/migrate-deploy.ts`, que
+  **solo migra en producción**, y en preview únicamente si el entorno declara
+  `MIGRATE_ON_PREVIEW=true` (= "esta base es de pruebas"). Corta el efecto secundario de que
+  **abrir un PR migrara la base de producción**. Suma dos guardas nacidas del incidente del día:
+  aborta si la URL de migraciones apunta al pooler **transaccional** (`:6543` / `pgbouncer=true`) y
+  pone un **timeout de 120 s**, para que un cuelgue sea un build rojo con mensaje y no 2 h de slot
+  ocupado en silencio. **No es la cura**: mientras Preview apunte a la base de producción, una
+  migración nueva sigue teniendo que aplicarse a mano. La cura es la base por preview (en curso,
+  tarea humana).
+  > ⚠️ **Al conectar la base de pruebas:** poner `DATABASE_URL` (`:6543`) y `DIRECT_URL` (`:5432`)
+  > de esa base **solo en el entorno Preview**, y recién entonces `MIGRATE_ON_PREVIEW=true`. Sin
+  > apuntar primero las URLs, el flag haría que cada preview migre producción — justo lo que se
+  > acaba de cerrar.
+- **Incidente del 2026-07-27 (resuelto, PR #172):** el fix del pooler (`d60df35`) se mergeó a `prod`
+  pero **no a `dev`** → todo build salido de `dev` se colgaba en `migrate deploy` contra `:6543`.
+  Dos deployments muertos (`dev` ~1 h 40 min en BUILDING, PR #170 en ERROR) y la rama `ux`
+  bloqueada. **Lección:** un hotfix ramificado desde `origin/prod` hay que portarlo a `dev`
+  con cherry-pick el mismo día; si toca el build, `prod` se ve sano mientras todo lo demás arde.
+- **`typecheck` roto en `dev` desde el merge de `ux` (PR #171)** — 2 errores TS2741 en
+  `tests/components/GestionarOrdenPanelEvidencias.test.tsx:84` y `NotaPrivadaMensajero.test.tsx:253`
+  (falta la prop `count` de `GestionarOrdenPanelProps`). Verificado sobre `origin/dev` limpio: es
+  ajeno a los PRs de hoy. No rompe el deploy (Next no type-checkea los tests), pero deja `pnpm
+  typecheck` en rojo para todos.
 - **No hay regla `no-console` en el lint** (verificado 2026-07-21) → **17 llamadas `console.*` en
   producción** (`app/` + `lib/`, sin tests). Por ahí se coló el `console.log('xyz')` del PR #75.
   El de `OtpChallengeIssuer` es un **secreto en logs** → lo cubre la feature 80. Algunas pueden

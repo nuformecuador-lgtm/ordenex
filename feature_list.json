@@ -1630,22 +1630,22 @@
     },
     {
       "id": 144,
-      "name": "DataTable: busqueda, filtros y export a Excel",
-      "description": "Frontend. Agrega al DataTable generico (components/shared/DataTable.tsx) tres capacidades opt-in por props, sin que la tabla conozca dominio: (a) input de busqueda global que matchea contra el valor de CUALQUIER columna de la fila; (b) integracion del TableFilters existente (hoy UI suelta, sin consumidores); (c) boton 'Exportar Excel' que serializa las filas visibles con exceljs (patron de lib/utils/xlsx-template, import dinamico), usando column.value como cabecera y el valor crudo de la fila (no el ReactNode de render). Se necesita un accesor de export por columna para las celdas con render custom. Sin backend. ABIERTO: si el export cubre solo lo cargado en cliente o todo el dataset filtrado en listados con paginacion server-side.",
+      "name": "DataTable: busqueda y filtros",
+      "description": "Frontend. Agrega al DataTable generico (components/shared/DataTable.tsx) dos capacidades opt-in por props, sin que la tabla conozca dominio: (a) input de busqueda global que matchea contra el valor de CUALQUIER columna de la fila; (b) integracion del TableFilters existente (components/shared/TableFilters.tsx, hoy UI suelta y sin consumidores). El export a Excel NO entra aqui: se decidio server-side y vive en la 151. Requisito para esa 151: el estado de busqueda/filtros debe quedar legible desde fuera (elevable o expuesto por callback), de modo que el boton de export pueda enviar al backend EXACTAMENTE los mismos filtros con los que se lista.",
       "status": "pending",
       "sdd": true,
-      "complexity": "medium",
+      "complexity": "low",
       "zone": "frontend",
       "depends_on": null
     },
     {
       "id": 145,
       "name": "rollout de busqueda/filtros/export a todas las tablas",
-      "description": "Frontend. Adopta la capacidad de la 143 en los 31 consumidores de DataTable (ordenes, wallet, cierres, cierres-admin, cierre-dia, configuracion usuarios/zonas/plantillas/api, ranking, recepcion-satelite, mis-pagos, mi-wallet, carga masiva). Por tabla: declarar los campos de filtro relevantes, habilitar la busqueda y definir el accesor de export por columna. Sin backend salvo que se decida el export server-side en la 143. Alto volumen de archivos, bajo riesgo unitario.",
+      "description": "Fullstack. Adopta la capacidad de la 144 (busqueda + filtros) en los 31 consumidores de DataTable (ordenes, wallet, cierres, cierres-admin, cierre-dia, configuracion usuarios/zonas/plantillas/api, ranking, recepcion-satelite, mis-pagos, mi-wallet, carga masiva). Por tabla: declarar los campos de filtro relevantes y habilitar la busqueda. Ya NO es frontend puro: el export es server-side (151), asi que cada tabla que lo ofrezca necesita SU propia Server Action de export con sus filtros y sus columnas declaradas en el servidor. Depende tambien de la 151, no solo de la 144. Alto volumen de archivos, bajo riesgo unitario.",
       "status": "pending",
       "sdd": true,
       "complexity": "high",
-      "zone": "frontend",
+      "zone": "fullstack",
       "depends_on": 144
     },
     {
@@ -1697,6 +1697,16 @@
       "complexity": "medium",
       "zone": "fullstack",
       "depends_on": null
+    },
+    {
+      "id": 151,
+      "name": "export a Excel server-side del dataset filtrado (sin paginacion)",
+      "description": "Backend. El export a Excel lo genera el SERVIDOR, no el cliente: exportar solo las filas visibles es inutil en listados con paginacion server-side y ademas se saltaria el acotamiento por rol/zona que vive en los services. Server Action de export por listado que recibe EL MISMO objeto de filtros que ya recibe el listado (p. ej. ORDEN_FILTER_FIELDS / status_id de lib/types/orden.ts, validado con el mismo schema zod) pero SIN page/pageSize, ejecuta la consulta completa a traves del MISMO service que lista (OrdenService.listar y equivalentes) para heredar la autorizacion y el acotamiento, y genera el xlsx con exceljs reusando el patron de lib/utils/xlsx-template (import dinamico). Las cabeceras y las columnas exportadas se declaran en el SERVIDOR (valor crudo, nunca el ReactNode de render). El boton 'Exportar Excel' del DataTable se cablea aqui como prop opt-in que dispara la accion del listado que lo monta. ABIERTO: tope de filas y que hacer al superarlo (error explicito vs. truncado avisado); y si el archivo viaja como base64 por la Server Action o por un Route Handler con streaming.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "depends_on": 144
     }
   ]
 }

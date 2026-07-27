@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentType } from "react";
+import { useEffect, useState, type ComponentType, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -10,7 +10,6 @@ import {
   Home,
   Megaphone,
   Package,
-  QrCode,
   Settings,
   Trophy,
   Truck,
@@ -44,6 +43,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Logo } from "@/components/shared/Logo";
 
 type SidebarIcon = ComponentType<LucideProps>;
 
@@ -141,11 +141,49 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   package: Package,
   clipboardCheck: ClipboardCheck,
   truck: Truck,
-  qrCode: QrCode,
   megaphone: Megaphone,
   trophy: Trophy,
   wallet: Wallet,
 };
+
+// Entrada escalonada de los items al cargar (solo la primera vez). Cada item
+// entra desplazandose de izquierda a derecha con un fade 0 -> 1; el retardo
+// crece con el indice para que aparezcan uno tras otro.
+const ENTRADA_DURACION_MS = 340;
+const ENTRADA_STAGGER_MS = 80;
+
+// Se usa TRANSICION (no @keyframes): el estado inicial y el final son clases
+// normales y el retardo por item va en `transitionDelay`. Es mas predecible que
+// las utilidades animate-in/slide-in de tw-animate-css, que dependen de
+// variables de tema y se anulan enteras bajo prefers-reduced-motion.
+const ENTRADA_TRANSICION = "ease-out will-change-[opacity,translate]";
+/** Estado inicial: invisible y desplazado a la izquierda. */
+const ENTRADA_OCULTO = "opacity-0 -translate-x-6";
+/** Estado final: en su sitio, opaco. */
+const ENTRADA_VISIBLE = "opacity-100 translate-x-0";
+
+function entradaStyle(index: number): CSSProperties {
+  return {
+    // OJO: en Tailwind v4 `translate-x-*` usa la propiedad CSS `translate`, no
+    // `transform`. Si solo se transiciona `transform` el desplazamiento no se
+    // anima (solo el fade). Se declara aqui, inline, para no depender de que la
+    // utilidad arbitraria transition-[...] se genere con la lista correcta.
+    transitionProperty: "opacity, translate, transform",
+    transitionDuration: `${ENTRADA_DURACION_MS}ms`,
+    transitionDelay: `${index * ENTRADA_STAGGER_MS}ms`,
+  };
+}
+
+/**
+ * Fases de la entrada:
+ * - `espera`: HTML del servidor y primer render en cliente. Los items estan
+ *   ocultos (opacity 0). Sin esta fase la animacion arranca en el PRIMER PINTADO
+ *   del HTML server-rendered, es decir antes de que la pagina se vea, y al
+ *   recargar no se percibe nada.
+ * - `animando`: se aplican las clases de animacion; corre la secuencia.
+ * - `listo`: sin clases, estado final normal.
+ */
+type FaseEntrada = "espera" | "animando" | "listo";
 
 // El Sidebar reexporta los tipos de dominio del menu para consumidores/tests.
 export type SidebarItem = MenuItem;
@@ -155,21 +193,68 @@ export { SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
 export function Sidebar({
   items = SIDEBAR_ITEMS,
   usuario = null,
-}: {
+}: Readonly<{
   items?: readonly MenuItem[];
   /** Usuario autenticado para el footer (nombre + rol). `null` = sin sesión. */
   usuario?: SidebarUsuario | null;
-}) {
+}>) {
   const pathname = usePathname();
+  // La animacion de entrada corre SOLO en la primera carga. El sidebar vive en
+  // el layout y no se desmonta al navegar, pero los items con submenu si se
+  // remontan (su `key` incluye el estado activo, que cambia con la ruta): sin
+  // esta fase volverian a animarse en cada navegacion.
+  const [fase, setFase] = useState<FaseEntrada>("espera");
+
+  useEffect(() => {
+    // Doble requestAnimationFrame: el navegador debe PINTAR el estado inicial
+    // (oculto) antes de que cambie la clase, o no hay transicion que interpolar
+    // y los items aparecerian de golpe.
+    let interno = 0;
+    const inicio = window.requestAnimationFrame(() => {
+      interno = window.requestAnimationFrame(() => setFase("animando"));
+    });
+    const total = ENTRADA_DURACION_MS + items.length * ENTRADA_STAGGER_MS;
+    const fin = window.setTimeout(() => setFase("listo"), total + 150);
+    return () => {
+      window.cancelAnimationFrame(inicio);
+      window.cancelAnimationFrame(interno);
+      window.clearTimeout(fin);
+    };
+  }, [items.length]);
 
   return (
     <SidebarRoot collapsible="icon">
       {/* min-h-14 conserva el alto del logo al colapsar sin recortar el botón
           (que sobresale del borde); por eso NO se usa overflow-hidden aquí. */}
       <SidebarHeader className="px-3 py-4 relative min-h-14 justify-center">
-        <span className="text-base font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-          Ordenex
-        </span>
+        {/* Wordmark: visible cuando el sidebar está expandido. Mismo tratamiento
+            que el icono: se mantiene siempre en el DOM y se cruza por opacidad
+            (1 expandido → 0 colapsado) para que al expandir aparezca con un fade
+            en lugar de un salto. Posición absoluta (alineado a la izquierda, como
+            el padding del header) para que al colapsar no se envuelva en el rail
+            angosto ni empuje el alto. */}
+        <Logo
+          className={cn(
+            "absolute left-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-base text-sidebar-foreground",
+            "opacity-100 transition-opacity duration-300 ease-out",
+            "group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:opacity-0",
+          )}
+        />
+        {/* Icono de marca: solo cuando está colapsado. Centrado en el ancho del
+            rail y con fade de opacidad (0→1) para que no aparezca de golpe. Se
+            mantiene siempre en el DOM (opacity-0 en expandido) para que la
+            transición corra al colapsar en lugar de un display none→block seco. */}
+        <img
+          src="/icons/icon-192.png"
+          alt="Ordenex"
+          width={32}
+          height={32}
+          className={cn(
+            "pointer-events-none absolute left-1/2 top-1/2 size-8 -translate-x-1/2 -translate-y-1/2 rounded-md",
+            "opacity-0 transition-opacity duration-300 ease-out",
+            "group-data-[collapsible=icon]:opacity-100",
+          )}
+        />
         <SidebarCollapseToggle />
       </SidebarHeader>
       <SidebarContent>
@@ -177,8 +262,18 @@ export function Sidebar({
           <SidebarGroupContent>
             <nav aria-label="Navegación principal">
               <SidebarMenu>
-                {items.map((item) => {
+                {items.map((item, index) => {
                   const Icon = ICON_BY_KEY[item.iconKey];
+                  const entrada =
+                    fase === "listo"
+                      ? { className: undefined, style: undefined }
+                      : {
+                          className: cn(
+                            ENTRADA_TRANSICION,
+                            fase === "espera" ? ENTRADA_OCULTO : ENTRADA_VISIBLE,
+                          ),
+                          style: entradaStyle(index),
+                        };
                   if (item.children && item.children.length > 0) {
                     const childActive = item.children.some(
                       (child) => pathname === child.href,
@@ -194,7 +289,8 @@ export function Sidebar({
                         // manteniendo el submenu no-controlado sin el warning.
                         key={`${item.href}:${childActive}`}
                         defaultOpen={childActive}
-                        className="group/collapsible"
+                        className={cn("group/collapsible", entrada.className)}
+                        style={entrada.style}
                         render={<SidebarMenuItem />}
                       >
                         <CollapsibleTrigger
@@ -238,7 +334,11 @@ export function Sidebar({
                   }
                   const isActive = pathname === item.href;
                   return (
-                    <SidebarMenuItem key={item.href}>
+                    <SidebarMenuItem
+                      key={item.href}
+                      className={entrada.className}
+                      style={entrada.style}
+                    >
                       <SidebarMenuButton
                         isActive={isActive}
                         tooltip={item.label}

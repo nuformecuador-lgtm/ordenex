@@ -5,22 +5,23 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 import { OrdenesModule } from "./_components/OrdenesModule";
-import { OrdenesTabs } from "./_components/OrdenesTabs";
+import { OrdenesListado } from "./_components/OrdenesListado";
 import { EXCLUDE_POR_ROL } from "./exclude-por-rol";
 
 /**
  * Feature 63/C5 (R12/R20, design.md §4.3, F1.4-h): el rol se resuelve SOLO
  * server-side vía `resolveActorFromSession` (patrón `app/(app)/page.tsx`). Los
  * roles ≠ mensajero que operan en `/ordenes` — `maestro`, `admin`, `adminTienda`
- * — ven las órdenes agrupadas por estado en `OrdenesTabs` (R12), con `exclude`
- * por rol. `adminSatelite` queda FUERA del v1 (opera en `/mis-asignaciones`,
- * feature 33) y `mensajero` NO usa este componente: su experiencia sigue siendo
- * `/mis-asignaciones` (R20). Cualquier otro caso conserva el listado plano previo
- * (features 6/7/8), SIN regresión.
+ * — ven UNA tabla normal con un filtro de selección múltiple por estado
+ * (`OrdenesListado`, que sustituyó a las tabs por estado), con `exclude` por rol
+ * acotando los estados ofrecidos. `adminSatelite` queda FUERA del v1 (opera en
+ * `/mis-asignaciones`, feature 33) y `mensajero` NO usa este componente: su
+ * experiencia sigue siendo `/mis-asignaciones` (R20). Cualquier otro caso conserva
+ * el listado plano previo (features 6/7/8), SIN regresión.
  */
 
-// Roles que ven las tabs en `/ordenes` (F1.4-h). `adminSatelite` NO está aquí.
-const ROLES_CON_TABS = new Set<string>([
+// Roles que ven el listado con filtro por estado (F1.4-h). `adminSatelite` NO está aquí.
+const ROLES_CON_FILTRO_ESTADO = new Set<string>([
   RolValue.maestro,
   RolValue.admin,
   RolValue.adminTienda,
@@ -45,7 +46,7 @@ export default async function OrdenesPage() {
   // el callejón `en_ruta_bodega_central`; el service revalida el rol server-side.
   // `adminTienda` NO la recibe (conserva su recepción en origen `puedeEscanearQr`).
   const puedeRecibirBodegaCentral = rol ? esAccesoTotal(rol) : false;
-  const usaTabs = rol ? ROLES_CON_TABS.has(rol) : false;
+  const usaFiltroEstado = rol ? ROLES_CON_FILTRO_ESTADO.has(rol) : false;
   // Feature 94 (paridad adm↔maestro): selección por checkbox + acciones por lote
   // (asignar mensajero, rutear a bodega satélite, etc.) para roles de ACCESO TOTAL
   // (`maestro`/`admin`); las Server Actions ya autorizan a ambos. `adminTienda` no
@@ -55,16 +56,14 @@ export default async function OrdenesPage() {
 
   return (
     <AppPage title="Órdenes" description="Listado y gestión de órdenes">
-      {usaTabs ? (
-        <OrdenesTabs
+      {usaFiltroEstado ? (
+        <OrdenesListado
           exclude={EXCLUDE_POR_ROL[rol as string] ?? ["pendiente"]}
           puedeCargarMasiva={puedeCargarMasiva}
           puedeEscanearQr={puedeEscanearQr}
           puedeRecibirBodegaCentral={puedeRecibirBodegaCentral}
           mostrarHistorial
           accionesLote={accionesLote}
-          incluirTodas={rol ? esAccesoTotal(rol) : false}
-          orientation={"vertical"}
         />
       ) : (
         // adminSatelite / mensajero / sin sesión: listado plano previo, SIN

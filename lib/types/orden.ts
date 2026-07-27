@@ -55,9 +55,15 @@ export type ActualizarOrdenInput = z.infer<typeof actualizarOrdenSchema>;
 export const ORDEN_FILTER_FIELDS = ["status_id"] as const;
 export type OrdenFilterField = (typeof ORDEN_FILTER_FIELDS)[number];
 
+// `status_id` acepta UN id (contrato previo, sin regresion) o una LISTA de ids
+// (filtro multi-estado del listado unico de `/ordenes`, que sustituyo a las tabs
+// por estado). La lista se traduce a `IN (...)` en el repositorio; una lista VACIA
+// no es valida (equivaldria a "ningun estado": el front omite el filtro en su lugar).
 export const ordenFilterSchema = z
   .object({
-    status_id: z.string().min(1).optional(),
+    status_id: z
+      .union([z.string().min(1), z.array(z.string().min(1)).nonempty()])
+      .optional(),
   })
   .strict();
 export type OrdenFilterInput = z.infer<typeof ordenFilterSchema>;

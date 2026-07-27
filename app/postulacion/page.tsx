@@ -2,6 +2,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { VehiculoRepository } from "@/lib/repositories/VehiculoRepository";
 import type { SelectOption } from "@/components/ui/select";
 import type { VehiculoValue } from "@prisma/client";
+import { Logo } from "@/components/shared/Logo";
 import { PostulacionForm } from "./_components/PostulacionForm";
 
 // Opt-out del prerender estatico: esta pagina publica consulta catalogos de DB
@@ -63,9 +64,7 @@ export default async function PostulacionPage() {
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(242,100,25,0.16),transparent_55%)]"
         />
         <div className="relative">
-          <span className="font-heading text-2xl font-semibold tracking-tight">
-            Ordenex
-          </span>
+          <Logo />
           <div className="mt-3 h-1 w-10 rounded-full bg-brand" />
         </div>
         <p className="relative max-w-sm text-sm leading-relaxed text-white/70">
@@ -78,9 +77,7 @@ export default async function PostulacionPage() {
       <div className="flex flex-1 flex-col items-center justify-center gap-8 bg-background px-6 py-12">
         {/* Wordmark compacto, solo visible en movil */}
         <div className="md:hidden">
-          <span className="font-heading text-xl font-semibold tracking-tight text-navy">
-            Ordenex
-          </span>
+          <Logo className="text-xl text-navy" />
         </div>
         <PostulacionForm
           tiposIdentificacion={tipoOptions}

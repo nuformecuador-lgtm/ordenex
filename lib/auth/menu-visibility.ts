@@ -15,7 +15,6 @@ export type IconKey =
   | "package"
   | "clipboardCheck"
   | "truck"
-  | "qrCode"
   | "megaphone"
   | "trophy"
   | "wallet";
@@ -154,12 +153,6 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     href: "/cierres-admin",
     iconKey: "clipboardCheck",
     roles: ["maestro", "admin", "adminSatelite"],
-  },
-  {
-    label: "QR",
-    href: "/qr",
-    iconKey: "qrCode",
-    roles: ROLES_SEED,
   },
   {
     label: "Perfil",

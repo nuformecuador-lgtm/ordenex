@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 
-import { TabsGroup, type TabItem } from "@/components/shared/TabsGroup";
+import { MultiSelectFilter } from "@/components/shared/MultiSelectFilter";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
@@ -51,8 +51,8 @@ async function mensajerosFetcher() {
 /**
  * Zonas (central GAM y satélites, misma regla) con AL MENOS 1 mensajero con un cierre
  * abierto (`solicitado`/`vencido`). Alimenta el bloqueo POR ORDEN del checkbox en las
- * tabs cuya acción por lote asigna/rutea: mientras la zona de la orden esté bloqueada
- * no se le puede asignar mensajero, así que no se deja seleccionar.
+ * órdenes cuya acción por lote asigna/rutea: mientras la zona de la orden esté
+ * bloqueada no se le puede asignar mensajero, así que no se deja seleccionar.
  */
 async function zonasBloqueadasFetcher(): Promise<Set<string>> {
   const res = await listarZonasBloqueadasPorCierre();
@@ -63,44 +63,45 @@ async function zonasBloqueadasFetcher(): Promise<Set<string>> {
 // Feature 63/C3 (F1.4-c): `exclude` es por `value` del estado; default
 // `["pendiente"]` (borrador transitorio recién sembrado). El backend NO recibe
 // `exclude`: `listarOrderStatus()` devuelve el catálogo COMPLETO (R1) y el front
-// filtra antes de mapear a tabs (aclaración del humano, R14).
+// filtra antes de construir las opciones del filtro (aclaración del humano, R14).
 const DEFAULT_EXCLUDE = ["pendiente"];
 
 // Estados PREVIOS a la asignación de mensajero: muestran "Mensajero sugerido" en
 // lugar de "Mensajero" (aún no hay asignado; la asignación es en "Generar guía").
 const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"]);
 
-// Estado cuya tab muestra ademas "Liberada el" (la fecha para la que quedo
+// Estado cuyo listado muestra ademas "Liberada el" (la fecha para la que quedo
 // reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
 const ESTADO_REPROGRAMADA = "reprogramada";
 
 // Feature 139/R9: `rechazada` YA NO ofrece salida manual ("Devolver a la tienda" se
 // retiró). Su única salida es la APROBACIÓN DEL CIERRE (backend), que la deja en
-// `por_devolver` (satélite) o `por_devolver_a_tienda` (central). La tab queda como
-// espera pasiva (sin acción por lote, sin checkbox).
+// `por_devolver` (satélite) o `por_devolver_a_tienda` (central): espera pasiva, sin
+// acción por lote.
 
-// Feature 100/T4.2: estado cuya tab ofrece "Recuperar a bodega"
-// (devuelta -> en_bodega_central). Igual que `rechazada`, la ejecuta la bodega RESPONSABLE:
-// para maestro/admin eso es SOLO la bodega central (zonaEsGam). Las devueltas de zona
-// satélite las recupera el adminSatelite de la zona (en /recepcion-satelite), así que
-// su check se bloquea en vez de dejar seleccionarlas y vaciar el modal (R15).
+// Feature 100/T4.2: estado que ofrece "Recuperar a bodega"
+// (devuelta -> en_bodega_central). La ejecuta la bodega RESPONSABLE: para maestro/admin
+// eso es SOLO la bodega central (zonaEsGam). Las devueltas de zona satélite las recupera
+// el adminSatelite de la zona (en /recepcion-satelite), así que su check se bloquea en
+// vez de dejar seleccionarlas y vaciar el modal (R15).
 const ESTADO_DEVUELTA = "devuelta";
 const MOTIVO_DEVUELTA_NO_CENTRAL =
   "Orden de zona satélite: la recupera el admin de la bodega satélite de su zona.";
 
-// Feature 101/R8/R10: única tab que resalta las órdenes prioritarias (liberadas por
-// el SLA de la 99). Es la superficie de reasignación de la bodega central; el resto de
-// tabs NO resalta por prioridad (el flag `resaltarPrioridad` de OrdenesModule va gateado).
+// Feature 101/R8/R10: único estado que resalta las órdenes prioritarias (liberadas por
+// el SLA de la 99). Es la superficie de reasignación de la bodega central; el resalte
+// se activa solo cuando el filtro está acotado EXACTAMENTE a este estado, de modo que
+// el resto de vistas (otros estados, listado sin filtro) no resalta por prioridad (R10).
 const ESTADO_EN_BODEGA = "en_bodega_central";
 
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
 // Derivado de `accionesDe()`: `en_fulfillment`/`en_preparacion` -> "Generar guía"
 // (asigna mensajero) y `en_bodega_central` -> "Asignar mensajero".
-// Las tabs que solo imprimen etiquetas (`por_recoger`,
+// Los estados que solo imprimen etiquetas (`por_recoger`,
 // `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
-// Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas" (comparte el
-// checkbox); es el precio de una única columna de selección por tab.
+// Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas"
+// (comparte el checkbox); es el precio de una única columna de selección.
 const ESTADOS_ASIGNACION = new Set([
   "en_fulfillment",
   "en_preparacion",
@@ -109,11 +110,11 @@ const ESTADOS_ASIGNACION = new Set([
 const MOTIVO_ZONA_CIERRE_ABIERTO =
   "La bodega de esta zona tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar la orden.";
 
-// Tab sintético "Todas" (solo maestro): lista las órdenes SIN filtro de estado.
-// Su id no colisiona con ningún `order_status.id` (ids de DB), así que sirve de
-// value único en TabsGroup y en el set `visited`.
-const TODAS_TAB_ID = "__todas__";
-const TODAS_TAB_LABEL = "Todas";
+// Motivo del bloqueo del checkbox en órdenes cuyo estado no tiene ninguna acción por
+// lote (p. ej. `rechazada`, `entregada`): con una sola tabla para todos los estados,
+// marcarlas no llevaría a ninguna acción, así que se bloquean y se explica por qué.
+const MOTIVO_SIN_ACCIONES =
+  "Este estado no tiene acciones por lote disponibles.";
 
 /** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
 function labelDe(value: string): string {
@@ -127,36 +128,30 @@ async function catalogoFetcher(): Promise<OrderStatusLiteRow[]> {
 }
 
 /**
- * Feature 63/C3 (R12-R19): agrupa las órdenes por estado en tabs para roles ≠
- * mensajero. Deriva las tabs del catálogo `order_status` (SWR sobre
- * `listarOrderStatus()`) menos `exclude` (R14). Cada tab monta un `OrdenesModule`
- * (reuso, R19) con `filter={{status_id}}` propio, de modo que la caché y la
- * paginación son independientes por estado (R15/R17).
+ * Listado de órdenes de `/ordenes` para roles ≠ mensajero: UNA tabla normal
+ * (`OrdenesModule`) más un filtro de SELECCIÓN MÚLTIPLE por estado. Sustituye a las
+ * tabs por estado: el filtro se deriva del mismo catálogo `order_status` (SWR sobre
+ * `listarOrderStatus()`) menos `exclude` (R14), pero permite combinar varios estados
+ * en una sola vista en vez de forzar una tab por estado.
  *
- * LAZY LOADING DURO (R16): una tab NUNCA visitada NO monta su `OrdenesModule` y,
- * por ende, NO invoca `listarOrdenes`. El contenido de cada tab se monta SOLO la
- * primera vez que esa tab se activa (set `visited`); no basta con ocultarlo por
- * CSS. Al volver a una tab ya visitada, su `OrdenesModule` sigue montado
- * (`keepMounted`), conservando su estado/paginación y sirviendo de la caché SWR.
+ * Sin estados marcados, el listado NO filtra (equivale a la antigua tab "Todas").
+ * Con estados marcados, se envía `filter.status_id` como LISTA y el backend resuelve
+ * `IN (...)`; la caché y la paginación de SWR son por combinación de estados.
+ *
+ * Acciones por lote: como una misma tabla puede mezclar estados, las acciones se
+ * derivan de la SELECCIÓN (intersección de las acciones de los estados marcados), no
+ * de una tab activa. Las filas cuyo estado no tiene acción por lote no son
+ * seleccionables (checkbox bloqueado con su motivo).
  */
-export function OrdenesTabs({
+export function OrdenesListado({
   exclude = DEFAULT_EXCLUDE,
   puedeCargarMasiva = false,
   puedeEscanearQr = false,
   puedeRecibirBodegaCentral = false,
   mostrarHistorial = false,
   accionesLote = false,
-  incluirTodas = false,
-  orientation = "horizontal",
 }: Readonly<{
   exclude?: string[];
-  /**
-   * Disposición de las tabs (`TabsGroup`). `vertical` las pone en columna a la
-   * izquierda del listado y añade un input para filtrarlas por nombre de estado:
-   * con ~13 estados es más rápido que barrer el scroll horizontal. Se usa en la
-   * vista del `maestro`; `admin`/`adminTienda` siguen en `horizontal`.
-   */
-  orientation?: "horizontal" | "vertical";
   puedeCargarMasiva?: boolean;
   /**
    * Ofrece "Escanear con cámara" junto a la carga masiva: el adminTienda escanea el
@@ -175,18 +170,12 @@ export function OrdenesTabs({
   puedeRecibirBodegaCentral?: boolean;
   mostrarHistorial?: boolean;
   /**
-   * Habilita la selección por checkbox + barra de acciones por lote por estado
-   * (asignar mensajero, generar guía, imprimir etiquetas, devolver a tienda)
-   * dentro de las tabs. Solo para `maestro` (las Server Actions son maestro-only);
-   * `admin` (solo-lectura) y `adminTienda` lo reciben en `false`.
+   * Habilita la selección por checkbox + barra de acciones por lote (asignar
+   * mensajero, generar guía, imprimir etiquetas, enviar a la tienda, recuperar a
+   * bodega). Solo para roles de acceso total (`maestro`/`admin`); `adminTienda` lo
+   * recibe en `false`.
    */
   accionesLote?: boolean;
-  /**
-   * Antepone una tab "Todas" (activa por defecto) que lista las órdenes SIN filtro
-   * de estado. Solo la usa el `maestro`: es una vista global de lectura, sin
-   * acciones por lote (esas son por estado). Los demás roles no la reciben.
-   */
-  incluirTodas?: boolean;
 }>) {
   const { mutate } = useSWRConfig();
   const { data: catalogo, isLoading } = useSWR(
@@ -241,7 +230,8 @@ export function OrdenesTabs({
     setModalAbierto("recuperar-bodega");
   }
 
-  // Revalida TODAS las tablas por tab (comparten el prefijo de key SWR).
+  // Revalida el listado (todas sus combinaciones de estado/página comparten el
+  // prefijo de key SWR).
   function revalidarTablas() {
     void mutate(
       (key) => Array.isArray(key) && key[0] === "ordenes:list",
@@ -278,25 +268,20 @@ export function OrdenesTabs({
   // Feature 95: éxito de "Generar guía" / "Asignar mensajero" → revalida las tablas
   // (num_guia/estado recién asignados) Y encadena la vista previa + descarga de las
   // etiquetas del MISMO lote (`ordenesSeleccionadas`), en vez de solo cerrar.
-  // `EtiquetasGuiaModal` re-deriva las etiquetas por id (ya con num_guia) y omite
-  // las órdenes que no obtuvieron guía; al cerrarlo se corta el flujo (sin
-  // re-encadenar).
   function encadenarEtiquetas() {
     revalidarTablas();
     setModalAbierto("etiquetas");
   }
 
-  // Mapeo estado -> acciones por lote. Sin `accionesLote` no hay acciones (undefined).
-  // Nota: "Rutear a bodega satélite" NO se ofrece en esta vista de tabs (se retiró de
+  // Mapeo estado -> acciones por lote.
+  // Nota: "Rutear a bodega satélite" NO se ofrece en esta vista (se retiró de
   // `en_bodega_central` por decisión humana). La vista legacy OrdenesRevisionMaestro sí la
   // ofrece, así que la paridad con esa vista ya no es total.
-  function accionesDe(estatusValue: string): AccionLote[] {
+  function accionesDe(estatusValue: string | undefined): AccionLote[] {
     switch (estatusValue) {
       case "en_fulfillment":
       case "en_preparacion":
-        return [
-          { key: "guia", label: "Generar guía", onRun: abrirGenerarGuia },
-        ];
+        return [{ key: "guia", label: "Generar guía", onRun: abrirGenerarGuia }];
       case "por_recoger":
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
@@ -333,64 +318,116 @@ export function OrdenesTabs({
       case "devuelta":
         // Feature 100/T4.2 (R12): recuperar a bodega las devueltas de la zona central.
         return [
-          {
-            key: "recuperar",
-            label: "Recuperar a bodega",
-            onRun: abrirRecuperar,
-          },
+          { key: "recuperar", label: "Recuperar a bodega", onRun: abrirRecuperar },
         ];
       default:
         return [];
     }
   }
 
-  // R14: tabs = catálogo − exclude (por value), en el orden determinista del
-  // catálogo (R5). Se filtra en el front antes de mapear a tabs.
-  const tabs = useMemo<OrderStatusLiteRow[]>(
+  // R14: opciones del filtro = catálogo − exclude (por value), en el orden
+  // determinista del catálogo (R5). Se filtra en el front.
+  const estadosDisponibles = useMemo<OrderStatusLiteRow[]>(
     () => (catalogo ?? []).filter((s) => !exclude.includes(s.value)),
     [catalogo, exclude],
   );
 
-  const [active, setActive] = useState<string | null>(null);
-  // R16: solo las tabs efectivamente activadas alguna vez montan su contenido.
-  const [visited, setVisited] = useState<Set<string>>(() => new Set());
+  // Ids marcados en el filtro. Vacío = sin filtro (todas las órdenes).
+  const [estadosMarcados, setEstadosMarcados] = useState<string[]>([]);
 
-  // Primera tab disponible = activa por defecto (y por tanto visitada), una vez
-  // cargado el catálogo. Con `incluirTodas`, la tab "Todas" va primero y es la
-  // activa por defecto. Las demás quedan sin montar hasta ser visitadas.
-  const activeValue =
-    active ?? (incluirTodas ? TODAS_TAB_ID : tabs[0]?.id) ?? null;
+  const opciones = useMemo(
+    () =>
+      estadosDisponibles.map((s) => ({ value: s.id, label: labelDe(s.value) })),
+    [estadosDisponibles],
+  );
 
-  // Patrón "ajustar estado durante el render" (React): registra la tab activa
-  // como visitada de forma persistente, sin un efecto post-paint. Una vez
-  // visitada, la tab permanece en `visited` aunque deje de ser la activa, de
-  // modo que su `OrdenesModule` sigue montado y conserva su paginación (R17).
-  if (activeValue && !visited.has(activeValue)) {
-    setVisited((prev) => {
-      if (prev.has(activeValue)) return prev;
-      const next = new Set(prev);
-      next.add(activeValue);
-      return next;
-    });
+  // Si el filtro está acotado a EXACTAMENTE un estado, ese estado decide las columnas
+  // (mensajero sugerido / "Liberada el") y el resalte de prioridad. Con varios estados
+  // mezclados —o sin filtro— no hay un estado que mande, así que se usan las columnas
+  // por defecto y no se resalta.
+  const valueUnico =
+    estadosMarcados.length === 1
+      ? estadosDisponibles.find((s) => s.id === estadosMarcados[0])?.value
+      : undefined;
+
+  let columns: Column<OrdenListItemDTO>[] | undefined;
+  if (valueUnico && ESTADOS_MENSAJERO_SUGERIDO.has(valueUnico)) {
+    columns = ordenesColumnsMensajeroSugerido;
+  } else if (valueUnico === ESTADO_REPROGRAMADA) {
+    columns = ordenesColumnsReprogramada;
   }
 
-  // La carga masiva y los escáneres viven a nivel del contenedor (no por tab): son
-  // acciones independientes del estado activo. La carga masiva y la recepción en
+  /**
+   * ¿Se monta la columna de checkbox? Solo si alguna orden de la página está en un
+   * estado con acción por lote. Filtrado a estados de solo lectura (p. ej. `rechazada`)
+   * la tabla queda limpia, sin una columna de casillas inertes.
+   */
+  function haySeleccionables(items: OrdenListItemDTO[]): boolean {
+    return items.some((row) => accionesDe(row.estatusValue).length > 0);
+  }
+
+  /**
+   * Bloqueo del checkbox POR FILA (reglas que conviven, ahora derivadas del estado de
+   * la ORDEN y no de una tab activa):
+   * - estado sin acciones por lote: no hay a dónde llevar la selección (la columna
+   *   existe porque otras filas de la página sí la tienen).
+   * - `devuelta`: solo las de la bodega central (las satélite las recupera el adminSatelite).
+   * - estados de asignación: si la ZONA de esa orden tiene ≥1 mensajero con cierre abierto.
+   * Nota (139/R15): `por_devolver_a_tienda` NO se bloquea por zona: su acción "Enviar a la
+   * tienda" es maestro/admin central directa y estas órdenes están siempre físicamente en
+   * la central (incluidas las de origen satélite ya recibidas).
+   */
+  function bloqueoSeleccion(row: OrdenListItemDTO): string | null {
+    const value = row.estatusValue;
+    if (accionesDe(value).length === 0) return MOTIVO_SIN_ACCIONES;
+    if (value === ESTADO_DEVUELTA) {
+      return row.zonaEsGam === true ? null : MOTIVO_DEVUELTA_NO_CENTRAL;
+    }
+    if (value && ESTADOS_ASIGNACION.has(value)) {
+      // Sin datos aún (SWR en vuelo) o sin `zonaId` utilizable: NO se bloquea. No se
+      // puede AFIRMAR que la zona esté bloqueada, y el backend revalida la regla al
+      // ejecutar la acción (defensa en profundidad); bloquear "por si acaso"
+      // castigaría órdenes válidas.
+      if (!zonasBloqueadas || !row.zonaId) return null;
+      return zonasBloqueadas.has(row.zonaId) ? MOTIVO_ZONA_CIERRE_ABIERTO : null;
+    }
+    return null;
+  }
+
+  /**
+   * Acciones ofrecidas para la selección actual = INTERSECCIÓN (por `key`) de las
+   * acciones de los estados presentes en ella. Con filas de un solo estado son las de
+   * ese estado; al mezclar estados solo sobrevive lo que aplica a TODAS (p. ej.
+   * "Imprimir etiquetas" entre `por_recoger` y `en_bodega_central`). Si nada aplica a
+   * todas, no se ofrece ninguna acción en vez de ejecutar una que descartaría filas.
+   */
+  function accionesPara(seleccionadas: OrdenListItemDTO[]): AccionLote[] {
+    if (seleccionadas.length === 0) return [];
+    const valores = [...new Set(seleccionadas.map((o) => o.estatusValue))];
+    const [primero, ...resto] = valores;
+    let comunes = accionesDe(primero);
+    for (const value of resto) {
+      const keys = new Set(accionesDe(value).map((a) => a.key));
+      comunes = comunes.filter((a) => keys.has(a.key));
+    }
+    return comunes;
+  }
+
+  // La carga masiva y los escáneres viven a nivel del contenedor (no dependen del
+  // filtro): son acciones independientes del estado. La carga masiva y la recepción en
   // origen se ofrecen al adminTienda (feature 26); la recepción en bodega central
-  // (feature 138) al maestro/admin. `onRecibida={handleSuccess}` revalida las tablas
-  // por tab (R14), de modo que la orden recibida deja de figurar en la vista.
+  // (feature 138) al maestro/admin. `onRecibida={handleSuccess}` revalida el listado
+  // (R14), de modo que la orden recibida refleja su nuevo estado.
   const header =
     puedeCargarMasiva || puedeEscanearQr || puedeRecibirBodegaCentral ? (
-      <div className="flex flex-col items-end gap-3">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {puedeRecibirBodegaCentral ? (
-            <EscanerRecepcionBodegaCentral onRecibida={handleSuccess} />
-          ) : null}
-          {puedeEscanearQr ? (
-            <EscanerRecepcionOrigen onRecibida={handleSuccess} />
-          ) : null}
-          {puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {puedeRecibirBodegaCentral ? (
+          <EscanerRecepcionBodegaCentral onRecibida={handleSuccess} />
+        ) : null}
+        {puedeEscanearQr ? (
+          <EscanerRecepcionOrigen onRecibida={handleSuccess} />
+        ) : null}
+        {puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
       </div>
     ) : null;
 
@@ -398,123 +435,43 @@ export function OrdenesTabs({
     return (
       <div className="flex flex-col gap-4">
         {header}
-        <Skeleton className="h-40 w-full" data-testid="ordenes-tabs-loading" />
+        <Skeleton className="h-40 w-full" data-testid="ordenes-listado-loading" />
       </div>
     );
   }
-
-  if (tabs.length === 0 && !incluirTodas) {
-    return (
-      <div className="flex flex-col gap-4">
-        {header}
-        <p className="text-sm text-muted-foreground">
-          No hay estados disponibles.
-        </p>
-      </div>
-    );
-  }
-
-  /**
-   * Contenido de una tab. R16 (lazy loading duro): si la tab NUNCA se visitó
-   * devuelve `null`, así su `OrdenesModule` no se monta y no invoca `listarOrdenes`.
-   */
-  function contenidoDe(tab: OrderStatusLiteRow): React.ReactNode {
-    if (!visited.has(tab.id)) return null;
-    // Selección por checkbox SOLO en estados que tienen alguna acción por
-    // lote (evita checkboxes inertes en estados solo-lectura).
-    const acc = accionesLote ? accionesDe(tab.value) : [];
-    // Columnas por estado: en_fulfillment/en_preparacion muestran
-    // "Mensajero sugerido" en vez de "Mensajero"; reprogramada añade
-    // "Liberada el" (el día en que el cron la desbloquea).
-    let columns: Column<OrdenListItemDTO>[] | undefined;
-    if (ESTADOS_MENSAJERO_SUGERIDO.has(tab.value)) {
-      columns = ordenesColumnsMensajeroSugerido;
-    } else if (tab.value === ESTADO_REPROGRAMADA) {
-      columns = ordenesColumnsReprogramada;
-    }
-    // Bloqueo de selección por tab (reglas que conviven):
-    // - `devuelta`: bloquea el check de las órdenes NO centrales (el maestro/admin
-    //   solo recupera a bodega las de la bodega central). La acción no asigna
-    //   mensajero, así que no se solapa con el bloqueo de asignación.
-    // - tabs de asignación/ruteo: bloqueo POR ORDEN si la ZONA de esa orden
-    //   tiene ≥1 mensajero con cierre abierto. No es global: en la misma tab
-    //   conviven órdenes de zona bloqueada (check off) y de zona libre (on).
-    // Nota (139/R15): `por_devolver_a_tienda` NO se bloquea por zona: su acción
-    // "Enviar a la tienda" es maestro/admin central directa y estas órdenes están
-    // siempre físicamente en la central (incluidas las de origen satélite ya recibidas).
-    let bloqueoSeleccion: ((row: OrdenListItemDTO) => string | null) | undefined;
-    if (tab.value === ESTADO_DEVUELTA) {
-      // Feature 100/T4.2 (R15): maestro/admin solo recupera a bodega las devueltas
-      // de la zona central; las satélite se bloquean (las recupera el adminSatelite).
-      bloqueoSeleccion = (o) =>
-        o.zonaEsGam === true ? null : MOTIVO_DEVUELTA_NO_CENTRAL;
-    } else if (ESTADOS_ASIGNACION.has(tab.value)) {
-      const zonas = zonasBloqueadas;
-      bloqueoSeleccion = (o) => {
-        // Sin datos aún (SWR en vuelo) o sin `zonaId` utilizable: NO se
-        // bloquea. No se puede AFIRMAR que la zona esté bloqueada, y el
-        // backend revalida la regla al ejecutar la acción (defensa en
-        // profundidad); bloquear "por si acaso" castigaría órdenes válidas.
-        // (`zonaId` es `string` en el DTO; la guarda es defensiva ante un
-        // dato degradado en runtime.)
-        if (!zonas || !o.zonaId) return null;
-        return zonas.has(o.zonaId) ? MOTIVO_ZONA_CIERRE_ABIERTO : null;
-      };
-    }
-    return (
-      <OrdenesModule
-        filter={{ status_id: tab.id }}
-        columns={columns}
-        mostrarHistorial={mostrarHistorial}
-        selectable={acc.length > 0}
-        bloqueoSeleccion={bloqueoSeleccion}
-        acciones={acc}
-        resaltarPrioridad={tab.value === ESTADO_EN_BODEGA}
-      />
-    );
-  }
-
-  /**
-   * Contenido de la tab "Todas": `OrdenesModule` SIN `filter` (todas las órdenes,
-   * sin acotar por estado), con lazy loading duro como el resto. Es solo-lectura:
-   * las acciones por lote son por estado, así que aquí no hay selección.
-   */
-  function contenidoTodas(): React.ReactNode {
-    if (!visited.has(TODAS_TAB_ID)) return null;
-    return <OrdenesModule mostrarHistorial={mostrarHistorial} />;
-  }
-
-  const statusItems: TabItem[] = tabs.map((tab) => ({
-    value: tab.id,
-    label: labelDe(tab.value),
-    content: contenidoDe(tab),
-  }));
-  const items: TabItem[] = incluirTodas
-    ? [
-        { value: TODAS_TAB_ID, label: TODAS_TAB_LABEL, content: contenidoTodas() },
-        ...statusItems,
-      ]
-    : statusItems;
 
   return (
     <div className="flex flex-col gap-4">
       {header}
-      {/* R18: con ~13 tabs el listado sigue usable — `horizontal` scrollea en X;
-          `vertical` (maestro) las apila y ofrece el filtro por nombre de estado.
-          `keepMounted`: el panel de una tab ya visitada permanece en el DOM al
-          cambiar de tab, conservando la paginación de su OrdenesModule (R17). */}
-      <TabsGroup
-        items={items}
-        orientation={orientation}
-        value={activeValue ?? undefined}
-        onValueChange={setActive}
-        keepMounted
-        filterPlaceholder="Filtrar estados…"
-        emptyFilterMessage="Ningún estado coincide"
-        ariaLabel="Órdenes por estado"
+
+      {/* Filtro de estados: sustituye a las tabs por estado. Sin marcar nada, el
+          listado muestra TODAS las órdenes (equivalente a la antigua tab "Todas"). */}
+      <MultiSelectFilter
+        label="Estado"
+        options={opciones}
+        value={estadosMarcados}
+        onChange={setEstadosMarcados}
+        placeholder="Todos"
+        searchPlaceholder="Filtrar estados…"
+        emptyMessage="Ningún estado coincide"
+        disabled={opciones.length === 0}
       />
 
-      {/* Modales de acción por lote (solo maestro). Montados una vez; `open` por
+      <OrdenesModule
+        filter={
+          estadosMarcados.length > 0
+            ? { status_id: estadosMarcados }
+            : undefined
+        }
+        columns={columns}
+        mostrarHistorial={mostrarHistorial}
+        selectable={accionesLote ? haySeleccionables : false}
+        bloqueoSeleccion={accionesLote ? bloqueoSeleccion : undefined}
+        acciones={accionesLote ? accionesPara : undefined}
+        resaltarPrioridad={valueUnico === ESTADO_EN_BODEGA}
+      />
+
+      {/* Modales de acción por lote (solo acceso total). Montados una vez; `open` por
           `modalAbierto`. */}
       {accionesLote ? (
         <>

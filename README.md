@@ -38,7 +38,8 @@ desactiva la geocodificación):
 
 | Variable | Notas |
 | --- | --- |
-| `DATABASE_URL` | Pooler **transaccional** de Supabase (`:6543`) en serverless. |
+| `DATABASE_URL` | Pooler **transaccional** de Supabase (`:6543`) en serverless. Solo runtime. |
+| `DIRECT_URL` | Pooler en modo **sesión** (`:5432`). Solo el CLI de Prisma (`migrate deploy` del build). Sin ella, `prisma.config.ts` cae a `DATABASE_URL`. |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Solo servidor. Nunca exponer. |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Cliente. |
 | `NEXT_PUBLIC_APP_URL` | Origin de los QR de etiqueta. Ver aviso abajo. |
@@ -55,9 +56,36 @@ desactiva la geocodificación):
 ### Base de datos
 
 ```bash
-pnpm exec prisma migrate deploy   # esquema (usar pooler en modo session, :5432)
+pnpm exec prisma migrate deploy   # esquema (usa DIRECT_URL: pooler en modo sesión, :5432)
 pnpm db:seed                      # catálogos: tipos de id, roles, estados, vehículos
 ```
+
+#### Cuándo migra el build
+
+El paso de migraciones del `build` (`scripts/migrate-deploy.ts`) se ejecuta:
+
+| Entorno | ¿Migra? |
+| --- | --- |
+| `VERCEL_ENV=production` | **Sí**, siempre |
+| `VERCEL_ENV=preview` | Solo con `MIGRATE_ON_PREVIEW=true` |
+| `development` / build local | No — usa `pnpm db:migrate` |
+
+El motivo es que **previews y producción compartían la misma base de Supabase**:
+con el `prisma migrate deploy` que corría en todos los entornos, abrir un PR
+aplicaba sus migraciones a la base de producción antes de mergear.
+
+`MIGRATE_ON_PREVIEW=true` es la declaración de que la base de Preview **es una
+base de pruebas, no la de producción**. Ponlo en el entorno Preview solo cuando
+`DATABASE_URL`/`DIRECT_URL` de Preview apunten a esa base propia; entonces cada
+preview aplica sus migraciones contra la suya, que es el comportamiento
+deseable. Sin el flag, el preview de una rama con una migración nueva corre
+contra una base que no la tiene y fallará en runtime hasta que alguien la
+aplique a mano.
+
+El script aborta además si la URL de migraciones apunta al pooler
+**transaccional** (`:6543` o `pgbouncer=true`) — ahí `migrate deploy` espera un
+advisory lock para siempre — y le pone un tope de 120 s para que un cuelgue se
+vea como un build rojo con mensaje, no como un build eterno.
 
 ### Usuario maestro (bootstrap)
 

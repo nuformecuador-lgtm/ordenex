@@ -53,7 +53,13 @@ export interface UpdateOrdenData {
 }
 
 export interface ListOrdenesParams {
-  where: { tiendaId?: string; estatusId?: string; mensajeroAsignadoId?: string };
+  // `estatusId` admite un id (filtro por un estado) o una lista de ids (filtro
+  // multi-estado del listado de `/ordenes`), que el repositorio traduce a `IN (...)`.
+  where: {
+    tiendaId?: string;
+    estatusId?: string | string[];
+    mensajeroAsignadoId?: string;
+  };
   sortBy: SortField;
   sortDir: SortDir;
   skip: number;

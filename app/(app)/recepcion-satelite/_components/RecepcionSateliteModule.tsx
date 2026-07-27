@@ -439,6 +439,10 @@ export function RecepcionSateliteModule({
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Recibidas</h2>
+        </div>
+        {/* "Asignar" vive en el flujo, encima de la tabla y alineado a la derecha;
+            queda deshabilitado sin selección o con la bodega bloqueada. */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             onClick={() => setModalOpen(true)}
