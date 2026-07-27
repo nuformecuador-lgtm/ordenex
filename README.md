@@ -38,7 +38,8 @@ desactiva la geocodificación):
 
 | Variable | Notas |
 | --- | --- |
-| `DATABASE_URL` | Pooler **transaccional** de Supabase (`:6543`) en serverless. |
+| `DATABASE_URL` | Pooler **transaccional** de Supabase (`:6543`) en serverless. Solo runtime. |
+| `DIRECT_URL` | Pooler en modo **sesión** (`:5432`). Solo el CLI de Prisma (`migrate deploy` del build). Sin ella, `prisma.config.ts` cae a `DATABASE_URL`. |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Solo servidor. Nunca exponer. |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Cliente. |
 | `NEXT_PUBLIC_APP_URL` | Origin de los QR de etiqueta. Ver aviso abajo. |
@@ -55,7 +56,7 @@ desactiva la geocodificación):
 ### Base de datos
 
 ```bash
-pnpm exec prisma migrate deploy   # esquema (usar pooler en modo session, :5432)
+pnpm exec prisma migrate deploy   # esquema (usa DIRECT_URL: pooler en modo sesión, :5432)
 pnpm db:seed                      # catálogos: tipos de id, roles, estados, vehículos
 ```
 
