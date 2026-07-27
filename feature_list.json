@@ -1596,6 +1596,18 @@
     },
     {
       "id": 141,
+      "name": "tabla carga + carga_id en orden",
+      "spec_path": "specs/141-tabla-cargas-orden",
+      "description": "Backend. Nueva tabla 'carga' (SINGULAR, convencion del repo): fecha_carga, usuario_carga FK usuario, download_url nullable, total_files. SIN batch_url ni status (decision del humano). En 'orden': nuevas columnas carga_id (FK a carga, nullable para el historico, ON DELETE RESTRICT) y download_url (nullable). Cada carga masiva -ambas vias: UI XLSX/chunks (cargarMasiva) y API key (cargarViaApi)- crea UNA fila en carga y todas las ordenes del lote nacen con ese carga_id; total_files = total del lote (API = objetos del array del payload; sesion = total declarado, no acumulado por chunk). num_guia se mantiene tal cual. Alcance: solo persistir y devolver carga_id; download_url queda NULL; sin UI. Implementada + reviewer APROBADO-CON-NOTAS (0 bloqueantes), PR #168 -> dev.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/141-tabla-cargas-orden",
+      "depends_on": null
+    },
+    {
+      "id": 142,
       "name": "plantilla de carga masiva v2 (orden nuevo + direccion unificada)",
       "description": "Fullstack. Rehace la plantilla de carga masiva de ordenes. (1) Nuevo orden de columnas: destinatario, telefono, direccion_destinatario, monto_cobrar, producto, num_remision, peso, notas. (2) Las 4 columnas provincia/canton/distrito/direccion se REEMPLAZAN por una sola, direccion_destinatario, con el formato 'Pais / Provincia / Canton (Distrito) / Direccion literal' (ej: 'Costa Rica / Cartago / Jimenez (Juan Vinas) / Frente gasolinera JSM...'). Nuevo parser puro que separa por '/' en 4 partes (los primeros 3 separadores; el resto queda integro como direccion, que puede contener '/'), ignora el pais y extrae el distrito del parentesis. Toca ORDENES_BULK_FIELDS (carga-masiva-fields.ts), REQUIRED_HEADERS + filaCargaSchema (lib/types/carga-masiva.ts), carga-masiva-parser.ts y resolverGeografia de BulkOrdenService (que sigue resolviendo provincia->canton->distrito por nombre contra el catalogo y derivando zona_id del distrito). Errores de parseo del campo -> fieldError de fila, no excepcion. Sin migracion. ABIERTO: si se acepta transitoriamente la plantilla vieja (4 columnas) o el corte es duro.",
       "status": "pending",
@@ -1605,37 +1617,37 @@
       "depends_on": null
     },
     {
-      "id": 142,
+      "id": 143,
       "name": "descargar en Excel las filas con error de la carga masiva",
       "description": "Frontend. En el resumen de la carga masiva, boton para descargar un xlsx con TODAS las filas cuyo resultado sea 'error' (cualquier motivo), con el mismo formato de la plantilla vigente para corregir y volver a cargar sin retrabajo. Reusa el grupo 'errores' de clasificarBulkSummary (fila, numRemision, errores) cruzado por numero de linea con las FilaParseada que ya viven en el cliente (carga-masiva-parser/chunks), y el generador xlsx de lib/utils/xlsx-template (exceljs, import dinamico). Sin backend nuevo. Consumidores: OrdenesCargaResumen / OrdenesConErrorTabla. ABIERTO: si el motivo del error viaja en una hoja aparte o en una columna extra al final (una columna extra rompe el round-trip descargar->subir del parser).",
       "status": "pending",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
-      "depends_on": 141
+      "depends_on": 142
     },
     {
-      "id": 143,
-      "name": "DataTable: busqueda, filtros y export a Excel",
-      "description": "Frontend. Agrega al DataTable generico (components/shared/DataTable.tsx) tres capacidades opt-in por props, sin que la tabla conozca dominio: (a) input de busqueda global que matchea contra el valor de CUALQUIER columna de la fila; (b) integracion del TableFilters existente (hoy UI suelta, sin consumidores); (c) boton 'Exportar Excel' que serializa las filas visibles con exceljs (patron de lib/utils/xlsx-template, import dinamico), usando column.value como cabecera y el valor crudo de la fila (no el ReactNode de render). Se necesita un accesor de export por columna para las celdas con render custom. Sin backend. ABIERTO: si el export cubre solo lo cargado en cliente o todo el dataset filtrado en listados con paginacion server-side.",
+      "id": 144,
+      "name": "DataTable: busqueda y filtros",
+      "description": "Frontend. Agrega al DataTable generico (components/shared/DataTable.tsx) dos capacidades opt-in por props, sin que la tabla conozca dominio: (a) input de busqueda global que matchea contra el valor de CUALQUIER columna de la fila; (b) integracion del TableFilters existente (components/shared/TableFilters.tsx, hoy UI suelta y sin consumidores). El export a Excel NO entra aqui: se decidio server-side y vive en la 151. Requisito para esa 151: el estado de busqueda/filtros debe quedar legible desde fuera (elevable o expuesto por callback), de modo que el boton de export pueda enviar al backend EXACTAMENTE los mismos filtros con los que se lista.",
       "status": "pending",
       "sdd": true,
-      "complexity": "medium",
+      "complexity": "low",
       "zone": "frontend",
       "depends_on": null
     },
     {
-      "id": 144,
+      "id": 145,
       "name": "rollout de busqueda/filtros/export a todas las tablas",
-      "description": "Frontend. Adopta la capacidad de la 143 en los 31 consumidores de DataTable (ordenes, wallet, cierres, cierres-admin, cierre-dia, configuracion usuarios/zonas/plantillas/api, ranking, recepcion-satelite, mis-pagos, mi-wallet, carga masiva). Por tabla: declarar los campos de filtro relevantes, habilitar la busqueda y definir el accesor de export por columna. Sin backend salvo que se decida el export server-side en la 143. Alto volumen de archivos, bajo riesgo unitario.",
+      "description": "Fullstack. Adopta la capacidad de la 144 (busqueda + filtros) en los 31 consumidores de DataTable (ordenes, wallet, cierres, cierres-admin, cierre-dia, configuracion usuarios/zonas/plantillas/api, ranking, recepcion-satelite, mis-pagos, mi-wallet, carga masiva). Por tabla: declarar los campos de filtro relevantes y habilitar la busqueda. Ya NO es frontend puro: el export es server-side (151), asi que cada tabla que lo ofrezca necesita SU propia Server Action de export con sus filtros y sus columnas declaradas en el servidor. Depende tambien de la 151, no solo de la 144. Alto volumen de archivos, bajo riesgo unitario.",
       "status": "pending",
       "sdd": true,
       "complexity": "high",
-      "zone": "frontend",
-      "depends_on": 143
+      "zone": "fullstack",
+      "depends_on": 144
     },
     {
-      "id": 145,
+      "id": 146,
       "name": "campana de notificaciones funcional",
       "description": "Fullstack. Conecta components/shared/NotificationsBell.tsx (hoy montada en PageHeader con EXAMPLE_NOTIFICATIONS quemadas y estado solo local) a datos reales. Backend: modelo notificacion (destinatario usuario/rol, tipo alert|box|warning, descripcion, anexo, leida_at, entidad de origen) con migracion + down.sql + RLS; productores en los eventos de dominio importantes; Server Actions de listar / marcar leida / marcar todas / descartar. Frontend: la campana consume la accion con SWR y deja de tener estado quemado. Uno de los avisos NO es un evento de dominio y exige barrido periodico: 'ordenes con mas de 1 dia sin asignacion' (sin mensajero asignado pasado el umbral) -> cron + job dedicado, patron procesar-devueltas-sla (vercel.json) sobre la cola de jobs (JobTipo, feature 90); umbral configurable por env, sin re-notificar la misma orden. ABIERTO (define el alcance): resto de eventos que notifican y a que rol (candidatos: rechazo, carga masiva terminada, postulacion pendiente, cierre por aprobar, novedad); si el reloj del umbral corre desde la creacion de la orden o desde que quedo asignable; y si la actualizacion de la campana es polling SWR o Supabase Realtime.",
       "status": "pending",
@@ -1645,7 +1657,7 @@
       "depends_on": null
     },
     {
-      "id": 146,
+      "id": 147,
       "name": "filtro por bodega de las ordenes asignables",
       "description": "Fullstack. Filtro de bodega en el modulo de ordenes que acota las ordenes ASIGNABLES a la bodega elegida. No existe tabla bodega: la bodega se deriva de la zona (bodega central/GAM vs bodega satelite por zona), asi que el filtro se resuelve por orden.zona_id + estatus. Backend: parametro de filtro en el repo/service de listado (OrdenService) respetando el scope por rol vigente. Frontend: select de bodega en el apartado de asignacion. ABIERTO: catalogo exacto de opciones (central + una por zona con satelite) y que estados cuentan como 'asignable' (en_bodega_central, en_bodega_satelite, por_recoger).",
       "status": "pending",
@@ -1655,7 +1667,7 @@
       "depends_on": null
     },
     {
-      "id": 147,
+      "id": 148,
       "name": "manifiesto Excel al crear o mover ordenes",
       "description": "Fullstack. Tras cada operacion POR LOTE sobre ordenes, ofrecer la descarga inmediata de un xlsx con el manifiesto de lo creado o enviado. Puntos de enganche existentes: creacion por carga masiva (BulkOrdenService), generar guia / asignar mensajero (GuiaAsignacionService.generarGuia y asignarDesdeBodega), ruteo a bodega satelite (rutearABodegaSatelite / AsignacionSateliteService), envio de devolucion a central (EnvioDevolucionCentralService) y envio a la tienda. Un servicio unico arma el manifiesto (num_guia, num_remision, destinatario, telefono, direccion, zona, monto, origen, destino, responsable, fecha) y cada flujo lo expone como descarga. ABIERTO: generacion en cliente sobre el resultado de la accion (mas simple) vs server-side persistido en Storage (reimprimible y auditable), y si el manifiesto queda asociado al lote en DB.",
       "status": "pending",
@@ -1665,7 +1677,7 @@
       "depends_on": null
     },
     {
-      "id": 148,
+      "id": 149,
       "name": "deshacer asignacion a mensajero o bodega antes de la recogida",
       "description": "Fullstack. Permite revertir una asignacion mientras la orden NO haya sido recogida ni recibida. Casos: (a) asignada a mensajero (por_recoger) -> vuelve a en_bodega_central o en_bodega_satelite segun su origen y se limpia mensajero_asignado_id; (b) ruteada a bodega satelite (en_ruta_bodega_satelite) -> vuelve a en_bodega_central mientras la satelite no la reciba. Se bloquea si ya paso a en_ruta / en_bodega_satelite / gestionada. Requiere DECLARAR las aristas inversas en el mapa de transiciones de la guardia central (lib/types/order-status-transiciones.ts, feature 140): sin eso la guardia lanza TransicionIlegalError. Pasa por appendCambioEstado para dejar bitacora + webhook. UI: accion de deshacer en el listado del maestro y en el apartado de la satelite. ABIERTO: que roles pueden deshacer (maestro/admin/adminSatelite), si se conserva el num_guia y si exige motivo.",
       "status": "pending",
@@ -1675,7 +1687,7 @@
       "depends_on": null
     },
     {
-      "id": 149,
+      "id": 150,
       "name": "tamano de hoja seleccionable en las etiquetas",
       "description": "Fullstack. Hoy la etiqueta es una pagina cuadrada de 100x100 mm hardcodeada en los DOS generadores: el de cliente app/(app)/ordenes/_components/etiquetas-pdf.ts (feature 32) y el consolidado server-side lib/pdf/etiquetas-pdf-lote.ts (feature 136). Se agrega un catalogo de tamanos de hoja compartido (100x100 mm, 4x6 in, A4, carta) en lib/config/etiquetas.ts, un selector en el flujo de descarga y el layout parametrizado por tamano en ambos generadores (margenes, tipografia, QR y codigo de barras escalan). ABIERTO: en hojas grandes (A4/carta), una etiqueta por pagina escalada o mosaico de N por hoja; y si el tamano se recuerda por usuario o se elige en cada descarga.",
       "status": "pending",
@@ -1683,6 +1695,16 @@
       "complexity": "medium",
       "zone": "fullstack",
       "depends_on": null
+    },
+    {
+      "id": 151,
+      "name": "export a Excel server-side del dataset filtrado (sin paginacion)",
+      "description": "Backend. El export a Excel lo genera el SERVIDOR, no el cliente: exportar solo las filas visibles es inutil en listados con paginacion server-side y ademas se saltaria el acotamiento por rol/zona que vive en los services. Server Action de export por listado que recibe EL MISMO objeto de filtros que ya recibe el listado (p. ej. ORDEN_FILTER_FIELDS / status_id de lib/types/orden.ts, validado con el mismo schema zod) pero SIN page/pageSize, ejecuta la consulta completa a traves del MISMO service que lista (OrdenService.listar y equivalentes) para heredar la autorizacion y el acotamiento, y genera el xlsx con exceljs reusando el patron de lib/utils/xlsx-template (import dinamico). Las cabeceras y las columnas exportadas se declaran en el SERVIDOR (valor crudo, nunca el ReactNode de render). El boton 'Exportar Excel' del DataTable se cablea aqui como prop opt-in que dispara la accion del listado que lo monta. ABIERTO: tope de filas y que hacer al superarlo (error explicito vs. truncado avisado); y si el archivo viaja como base64 por la Server Action o por un Route Handler con streaming.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "depends_on": 144
     }
   ]
 }
