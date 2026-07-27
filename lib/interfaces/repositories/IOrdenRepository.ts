@@ -72,6 +72,36 @@ export interface GeoExistence {
   distrito: boolean; // true si no se consulta distrito (opcional) o si existe
 }
 
+/**
+ * Feature 141 (design §3.1) — contexto del LOTE de carga masiva que acompana a una insercion
+ * batch. NO es logica de negocio: el service ya decidio quien carga y cuantas filas tiene el
+ * lote; el repo solo asegura la fila de `carga` y cuelga de ella las ordenes creadas.
+ */
+export interface LoteContexto {
+  /** id del lote. `null` = el repo lo genera (via API key: un lote por llamada). */
+  cargaId: string | null;
+  /** `carga.usuario_carga`: el actor de la carga (R2/R20). */
+  usuarioCargaId: string;
+  /**
+   * Tamano TOTAL del lote (R7/R18/R21). Sesion = filas de la SESION declaradas por el
+   * cliente; API = `ordenes.length` del payload. NUNCA el tamano del chunk ni del batch: se
+   * escribe UNA sola vez (el INSERT idempotente no reescribe una fila existente).
+   */
+  totalFiles: number;
+}
+
+/**
+ * Feature 141 (R17) — el `carga_id` recibido corresponde a un lote de OTRO usuario. El borde
+ * lo traduce a 403 sin crear ninguna orden ni modificar el lote existente. Vive aqui (junto a
+ * `NumRemisionDuplicadoError`) para que el controller pueda reconocerlo sin importar el repo.
+ */
+export class CargaLoteAjenoError extends Error {
+  constructor(public readonly cargaId: string) {
+    super(`carga_id de otro usuario: ${cargaId}`);
+    this.name = "CargaLoteAjenoError";
+  }
+}
+
 /** R28/R14: `num_remision` provisto ya existe en otra orden. */
 export class NumRemisionDuplicadoError extends Error {
   constructor(public readonly numRemision: string) {
@@ -427,12 +457,19 @@ export interface IOrdenRepository {
    * Feature 49/#1 (R9/R8/R20): por cada orden EFECTIVAMENTE insertada (no las duplicadas que
    * `skipDuplicates` saltó) registra una fila de historial (origen null, destino = estado
    * inicial, `origenTipo` = `carga_masiva`, actor = la tienda) en la MISMA tx del chunk.
+   *
+   * Feature 141 (R12/R13/R23/R24/R25): en esa MISMA tx asegura la fila de `carga` del lote
+   * (idempotente por `lote.cargaId`) y escribe `carga_id` en las ordenes que inserta. Solo la
+   * asegura si el batch tiene al menos una fila por insertar (sin lotes huerfanos, R24); las
+   * duplicadas que `skipDuplicates` salta conservan su `carga_id` previo (R25). Devuelve el
+   * total insertado y el `cargaId` resuelto (`null` si no se creo ningun lote).
    */
   createManyOrdenes(
     data: CreateOrdenData[],
     batchSize: number,
     historial: HistorialContexto,
-  ): Promise<number>;
+    lote: LoteContexto,
+  ): Promise<{ inserted: number; cargaId: string | null }>;
 
   /**
    * Feature 88/R8/R9/R10: inserta en lotes de `batchSize` con `skipDuplicates` (patron
@@ -444,12 +481,19 @@ export interface IOrdenRepository {
    * filas duplicadas (saltadas por `skipDuplicates`) NO consumen `num_guia` (R11). Devuelve
    * una fila por orden creada con su `num_guia` asignado. El estado inicial ya viene resuelto
    * en `data[].estatusId` (el service lo fija a `en_ruta_bodega_central`).
+   *
+   * Feature 141 (R19/R21/R23/R25): igual que `createManyOrdenes`, asegura la fila de `carga`
+   * del lote y escribe `carga_id` en las ordenes creadas dentro de la MISMA tx. Con
+   * `lote.cargaId = null` el repo genera UN id la primera vez y lo REUSA en los batches
+   * siguientes de la misma llamada (una peticion = un lote, R19). Devuelve las creadas y el
+   * `cargaId` resuelto (`null` si no se creo ningun lote).
    */
   createManyOrdenesConGuia(
     data: CreateOrdenData[],
     batchSize: number,
     historial: HistorialContexto,
-  ): Promise<CreateOrdenConGuiaResultRow[]>;
+    lote: LoteContexto,
+  ): Promise<{ creadas: CreateOrdenConGuiaResultRow[]; cargaId: string | null }>;
 
   // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
 

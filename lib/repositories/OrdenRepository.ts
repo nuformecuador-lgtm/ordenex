@@ -38,10 +38,26 @@ import {
   type ApiOrdenDetalleRow,
   type ApiOrdenRow,
   type CancelarViaApiResult,
+  type LoteContexto,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
+import { ensureCargaEnTx } from "@/lib/repositories/carga-lote";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
+
+/**
+ * Feature 141 (R15/R24) — ¿queda alguna fila del batch por insertar? Se compara contra el
+ * snapshot `before` (leido DENTRO de la tx): si TODAS las `num_remision` del batch ya existen,
+ * el `createMany` con `skipDuplicates` no insertaria nada y asegurar el lote dejaria una fila
+ * de `carga` sin ninguna orden que la referencie.
+ */
+function hayFilasPorInsertar(
+  chunk: { numRemision: string }[],
+  before: { numRemision: string }[],
+): boolean {
+  const existentes = new Set(before.map((r) => r.numRemision));
+  return chunk.some((d) => !existentes.has(d.numRemision));
+}
 
 /** Feature 92: unico estatus cuyas ordenes son paradas de la ruta de un mensajero. */
 const ESTATUS_EN_REPARTO = "en_ruta";
@@ -103,6 +119,7 @@ type OrdenPrismaClient = Pick<
   | "cierreDia" // feature 41: bloqueo derivado del mensajero / bodega (R12/R17)
   | "cierreBodega" // feature 41: causa (ii) del bloqueo de bodega (R17)
   | "gestionOrden" // feature 87: causa de devolucion vigente de la lista de novedades (R6/R8)
+  | "carga" // feature 141: lote de carga masiva asegurado en la tx de la insercion batch
   | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
   | "$executeRaw" // feature 41/R23: anti-TOCTOU (NOT EXISTS cierre bloqueante en el lote)
   | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
@@ -830,23 +847,43 @@ export class OrdenRepository implements IOrdenRepository {
     data: CreateOrdenData[],
     batchSize: number,
     historial: HistorialContexto,
-  ): Promise<number> {
+    lote: LoteContexto,
+  ): Promise<{ inserted: number; cargaId: string | null }> {
     let inserted = 0;
+    // Feature 141: el id del lote se resuelve UNA vez y se reutiliza en los batches
+    // siguientes de esta misma llamada (via API key entra `null` y lo genera el helper).
+    let cargaId: string | null = lote.cargaId;
     for (let i = 0; i < data.length; i += batchSize) {
       const chunk = data.slice(i, i + batchSize);
       const chunkNums = chunk.map((d) => d.numRemision);
       // Feature 49/#1 (R7): cada chunk hace su createMany + append en la MISMA tx.
-      const chunkInserted = await this.prisma.$transaction(async (tx) => {
+      const chunkResult = await this.prisma.$transaction(async (tx) => {
         // R8/R9: para registrar SOLO las EFECTIVAMENTE insertadas (skipDuplicates puede
         // saltar duplicadas), se comparan las filas con esos num_remision antes/despues:
         // las nuevas son las que no existian antes del insert.
         const before = await tx.orden.findMany({
           where: { numRemision: { in: chunkNums } },
-          select: { id: true },
+          // Feature 141: `numRemision` se anade al select (aditivo sobre una query que YA se
+          // ejecutaba) para saber si queda algo por insertar ANTES de asegurar el lote (R24).
+          select: { id: true, numRemision: true },
         });
         const beforeIds = new Set(before.map((r) => r.id));
+        // Feature 141 (R15/R24): si TODAS las filas del batch ya existen, no hay nada que
+        // insertar -> no se toca `carga` (ningun lote huerfano por un chunk 100% duplicado).
+        if (!hayFilasPorInsertar(chunk, before)) {
+          return { count: 0, cargaId };
+        }
+        // Feature 141 (R23): el lote se asegura DENTRO de esta tx, antes del insert (la FK
+        // `orden.carga_id` exige que la fila de `carga` exista al insertar las ordenes).
+        const loteId = await ensureCargaEnTx(tx, {
+          id: cargaId,
+          usuarioCargaId: lote.usuarioCargaId,
+          totalFiles: lote.totalFiles,
+        });
         const result = await tx.orden.createMany({
-          data: chunk.map((d) => this.toCreateManyInput(d)),
+          // R25: `carga_id` viaja en el INSERT, asi que solo las ordenes EFECTIVAMENTE
+          // creadas quedan asociadas al lote; las duplicadas saltadas no se modifican.
+          data: chunk.map((d) => this.toCreateManyInput(d, loteId)),
           skipDuplicates: true,
         });
         const after = await tx.orden.findMany({
@@ -879,11 +916,12 @@ export class OrdenRepository implements IOrdenRepository {
             direccion: nueva.direccion,
           });
         }
-        return result.count;
+        return { count: result.count, cargaId: loteId };
       });
-      inserted += chunkInserted;
+      inserted += chunkResult.count;
+      cargaId = chunkResult.cargaId;
     }
-    return inserted;
+    return { inserted, cargaId };
   }
 
   /**
@@ -899,21 +937,36 @@ export class OrdenRepository implements IOrdenRepository {
     data: CreateOrdenData[],
     batchSize: number,
     historial: HistorialContexto,
-  ): Promise<CreateOrdenConGuiaResultRow[]> {
+    lote: LoteContexto,
+  ): Promise<{ creadas: CreateOrdenConGuiaResultRow[]; cargaId: string | null }> {
     const creadas: CreateOrdenConGuiaResultRow[] = [];
+    // Feature 141 (R19): una peticion = UN lote. El id se resuelve en el primer batch que
+    // inserta y se reutiliza en los siguientes de esta misma llamada.
+    let cargaId: string | null = lote.cargaId;
     for (let i = 0; i < data.length; i += batchSize) {
       const chunk = data.slice(i, i + batchSize);
       const chunkNums = chunk.map((d) => d.numRemision);
-      const chunkCreadas = await this.prisma.$transaction(async (tx) => {
+      const chunkResult = await this.prisma.$transaction(async (tx) => {
         // Diff before/after: las nuevas son las que no existian antes del insert (respeta
         // duplicados por carrera, igual que createManyOrdenes).
         const before = await tx.orden.findMany({
           where: { numRemision: { in: chunkNums } },
-          select: { id: true },
+          // Feature 141: `numRemision` para decidir si queda algo por insertar (R24).
+          select: { id: true, numRemision: true },
         });
         const beforeIds = new Set(before.map((r) => r.id));
+        // Feature 141 (R22/R24): batch 100% duplicado -> no se asegura ningun lote.
+        if (!hayFilasPorInsertar(chunk, before)) {
+          return { creadas: [] as CreateOrdenConGuiaResultRow[], cargaId };
+        }
+        // Feature 141 (R23): lote asegurado DENTRO de la tx, antes del insert.
+        const loteId = await ensureCargaEnTx(tx, {
+          id: cargaId,
+          usuarioCargaId: lote.usuarioCargaId,
+          totalFiles: lote.totalFiles,
+        });
         await tx.orden.createMany({
-          data: chunk.map((d) => this.toCreateManyInput(d)),
+          data: chunk.map((d) => this.toCreateManyInput(d, loteId)),
           skipDuplicates: true,
         });
         const after = await tx.orden.findMany({
@@ -956,15 +1009,22 @@ export class OrdenRepository implements IOrdenRepository {
           });
         }
         await appendCambioEstado(tx, entradas);
-        return resultado;
+        return { creadas: resultado, cargaId: loteId };
       });
-      creadas.push(...chunkCreadas);
+      creadas.push(...chunkResult.creadas);
+      cargaId = chunkResult.cargaId;
     }
-    return creadas;
+    return { creadas, cargaId };
   }
 
-  private toCreateManyInput(data: CreateOrdenData): Prisma.OrdenCreateManyInput {
+  // Feature 141: `cargaId` se inyecta en el INSERT (R25). `downloadUrl` NO se envia: nace
+  // NULL y ninguna ruta de esta feature la escribe (R29).
+  private toCreateManyInput(
+    data: CreateOrdenData,
+    cargaId: string,
+  ): Prisma.OrdenCreateManyInput {
     return {
+      cargaId,
       numRemision: data.numRemision,
       estatusId: data.estatusId,
       destinatario: data.destinatario,

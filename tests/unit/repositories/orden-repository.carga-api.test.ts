@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { buildCargaDelegate, loteCtx } from "@/tests/fixtures/carga-lote";
 
 // Feature 88 — createManyOrdenesConGuia: inserta el lote y, en la MISMA tx, asigna
 // num_guia inmediato (misma secuencia `orden_num_guia_seq` que "Generar guia") y deja el
@@ -16,6 +17,8 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       findUniqueOrThrow: vi.fn(),
     },
     ordenHistorialEstado: { createMany: vi.fn() },
+    // Feature 141: delegate del lote asegurado dentro de la tx del batch.
+    carga: buildCargaDelegate(),
     $executeRawUnsafe: vi.fn(),
     $transaction: vi.fn(),
     ...overrides,
@@ -62,10 +65,11 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
       .mockResolvedValueOnce({ numGuia: 1002 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const creadas = await repo.createManyOrdenesConGuia(
+    const { creadas } = await repo.createManyOrdenesConGuia(
       [baseCreateData({ numRemision: "REM-1" }), baseCreateData({ numRemision: "REM-2" })],
       500,
       HIST_API,
+      loteCtx({ usuarioCargaId: "key-user-1", totalFiles: 2 }),
     );
 
     expect(creadas).toEqual([
@@ -86,7 +90,12 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     prisma.orden.findUniqueOrThrow.mockResolvedValueOnce({ numGuia: 5 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.createManyOrdenesConGuia([baseCreateData()], 500, HIST_API);
+    await repo.createManyOrdenesConGuia(
+      [baseCreateData()],
+      500,
+      HIST_API,
+      loteCtx({ usuarioCargaId: "key-user-1" }),
+    );
 
     // El SQL usa la secuencia por su nombre constante (misma que generarGuiaLote) y la
     // guarda `num_guia IS NULL` (idempotencia); el id viaja como parametro, no interpolado.
@@ -107,7 +116,12 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     prisma.orden.findUniqueOrThrow.mockResolvedValueOnce({ numGuia: 7 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.createManyOrdenesConGuia([baseCreateData()], 500, HIST_API);
+    await repo.createManyOrdenesConGuia(
+      [baseCreateData()],
+      500,
+      HIST_API,
+      loteCtx({ usuarioCargaId: "key-user-1" }),
+    );
 
     expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
     const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
@@ -128,13 +142,18 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     const prisma = buildPrisma();
     // REM-1 ya existia (before); tras el insert sigue existiendo (after) -> ninguna nueva.
     prisma.orden.findMany
-      .mockResolvedValueOnce([{ id: "o-existing" }])
+      .mockResolvedValueOnce([{ id: "o-existing", numRemision: "REM-1" }])
       .mockResolvedValueOnce([
         { id: "o-existing", numRemision: "REM-1", estatusId: idEstado("en_bodega_central"), estatus: { value: "en_bodega_central" } },
       ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const creadas = await repo.createManyOrdenesConGuia([baseCreateData({ numRemision: "REM-1" })], 500, HIST_API);
+    const { creadas } = await repo.createManyOrdenesConGuia(
+      [baseCreateData({ numRemision: "REM-1" })],
+      500,
+      HIST_API,
+      loteCtx({ usuarioCargaId: "key-user-1" }),
+    );
 
     expect(creadas).toEqual([]);
     // No se consume num_guia para la duplicada (R11).
@@ -146,7 +165,7 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
   it("mezcla nueva + duplicada: solo la nueva recibe guia e historial", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany
-      .mockResolvedValueOnce([{ id: "o-existing" }]) // REM-2 preexiste
+      .mockResolvedValueOnce([{ id: "o-existing", numRemision: "REM-2" }]) // REM-2 preexiste
       .mockResolvedValueOnce([
         { id: "o-existing", numRemision: "REM-2", estatusId: idEstado("en_bodega_central"), estatus: { value: "en_bodega_central" } },
         { id: "o-new", numRemision: "REM-1", estatusId: idEstado("en_ruta_bodega_central"), estatus: { value: "en_ruta_bodega_central" } },
@@ -154,10 +173,11 @@ describe("OrdenRepository.createManyOrdenesConGuia (feature 88)", () => {
     prisma.orden.findUniqueOrThrow.mockResolvedValueOnce({ numGuia: 9 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const creadas = await repo.createManyOrdenesConGuia(
+    const { creadas } = await repo.createManyOrdenesConGuia(
       [baseCreateData({ numRemision: "REM-1" }), baseCreateData({ numRemision: "REM-2" })],
       500,
       HIST_API,
+      loteCtx({ usuarioCargaId: "key-user-1", totalFiles: 2 }),
     );
 
     expect(creadas).toEqual([
