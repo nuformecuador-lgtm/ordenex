@@ -177,3 +177,39 @@ describe("carga API: seguridad (R6)", () => {
     expect(texto).not.toContain(SECRETO);
   });
 });
+
+// --- Feature 141: lote de carga por API key (R28) ---
+
+describe("carga API: cargaId del lote (feature 141)", () => {
+  it("R28: el cargaId viaja en la respuesta junto al resto del summary", async () => {
+    const service = fakeService();
+    const res = await handleCargaApi(
+      reqConBearer(BODY, SECRETO),
+      deps({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }, service),
+    );
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json.cargaId).toBe("22222222-2222-4222-8222-222222222222");
+    // No se pierde ningun campo previo del contrato.
+    expect(json.ordenes).toHaveLength(1);
+    expect(json.filas).toHaveLength(1);
+    expect(json).toHaveProperty("etiquetasPdf");
+  });
+
+  it("R28: sin ordenes creadas, cargaId es null y el resto del summary se preserva", async () => {
+    const service = fakeService({
+      cargarViaApi: vi.fn().mockResolvedValue({
+        status: "ok",
+        summary: okSummary({ creadas: 0, duplicadas: 1, ordenes: [], cargaId: null }),
+      } satisfies CargaViaApiResult),
+    });
+    const res = await handleCargaApi(
+      reqConBearer(BODY, SECRETO),
+      deps({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }, service),
+    );
+    const json = await res.json();
+    expect(json.cargaId).toBeNull();
+    expect(json.duplicadas).toBe(1);
+    expect(json.etiquetasPdf).toBeNull(); // sin ordenes no hay PDF (feature 136/R13)
+  });
+});

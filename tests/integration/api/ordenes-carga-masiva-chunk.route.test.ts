@@ -7,6 +7,7 @@ import {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IBulkOrdenService, BulkOrdenResult } from "@/lib/interfaces/services/IBulkOrdenService";
 import type { BulkSummary } from "@/lib/types/carga-masiva";
+import { CargaLoteAjenoError } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 const TIENDA: Actor = { usuarioId: "store1", rol: "adminTienda" };
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
@@ -119,6 +120,90 @@ describe("chunk: validación del cuerpo -> 422", () => {
     });
     const res = await handleCargaMasivaChunk(req, deps(TIENDA, service));
     expect(res.status).toBe(422);
+    expect(service.cargarMasiva).not.toHaveBeenCalled();
+  });
+});
+
+// --- Feature 141: lote de carga masiva (R16/R17/R27/R30) ---
+
+const UUID_SESION = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+describe("chunk: lote de carga masiva (feature 141)", () => {
+  it("R16: cargaId que no es UUID -> 422 de validacion, sin tocar el service", async () => {
+    const service = fakeService();
+    const res = await handleCargaMasivaChunk(
+      jsonReq({ rows: [ROW], cargaId: "no-es-uuid" }),
+      deps(TIENDA, service),
+    );
+    expect(res.status).toBe(422);
+    expect(service.cargarMasiva).not.toHaveBeenCalled();
+  });
+
+  it("R16/R18: cargaId UUID y totalFiles se propagan al service", async () => {
+    const service = fakeService();
+    await handleCargaMasivaChunk(
+      jsonReq({ rows: [ROW], cargaId: UUID_SESION, totalFiles: 500 }),
+      deps(TIENDA, service),
+    );
+    expect(service.cargarMasiva).toHaveBeenCalledWith([ROW], TIENDA, {
+      dryRun: false,
+      cargaId: UUID_SESION,
+      totalFiles: 500,
+    });
+  });
+
+  it("R18: totalFiles negativo -> 422 (entero >= 0)", async () => {
+    const service = fakeService();
+    const res = await handleCargaMasivaChunk(
+      jsonReq({ rows: [ROW], cargaId: UUID_SESION, totalFiles: -1 }),
+      deps(TIENDA, service),
+    );
+    expect(res.status).toBe(422);
+    expect(service.cargarMasiva).not.toHaveBeenCalled();
+  });
+
+  it("R17: lote de OTRO usuario -> 403 (CargaLoteAjenoError traducido)", async () => {
+    const service = fakeService({
+      cargarMasiva: vi.fn().mockRejectedValue(new CargaLoteAjenoError(UUID_SESION)),
+    });
+    const res = await handleCargaMasivaChunk(
+      jsonReq({ rows: [ROW], cargaId: UUID_SESION, totalFiles: 1 }),
+      deps(TIENDA, service),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("R27: la respuesta incluye el cargaId del summary", async () => {
+    const service = fakeService();
+    const res = await handleCargaMasivaChunk(
+      jsonReq({ rows: [ROW], cargaId: UUID_SESION, totalFiles: 1 }),
+      deps(TIENDA, service),
+    );
+    const body = await res.json();
+    expect(body.cargaId).toBe("11111111-1111-4111-8111-111111111111");
+  });
+
+  it("R27: dry-run devuelve cargaId null (no se creo lote)", async () => {
+    const service = fakeService({
+      cargarMasiva: vi
+        .fn()
+        .mockResolvedValue({ status: "ok", summary: okSummary({ cargaId: null }) }),
+    });
+    const res = await handleCargaMasivaChunk(
+      jsonReq({ rows: [ROW], dryRun: true }),
+      deps(TIENDA, service),
+    );
+    const body = await res.json();
+    expect(body.cargaId).toBeNull();
+  });
+
+  it("R30: la autorizacion no cambia — un rol no adminTienda con cargaId valido sigue en 403", async () => {
+    const service = fakeService();
+    const res = await handleCargaMasivaChunk(
+      jsonReq({ rows: [ROW], cargaId: UUID_SESION, totalFiles: 1 }),
+      deps(MAESTRO, service),
+    );
+    expect(res.status).toBe(403);
     expect(service.cargarMasiva).not.toHaveBeenCalled();
   });
 });

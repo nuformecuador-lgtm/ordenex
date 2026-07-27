@@ -134,3 +134,89 @@ describe("carga-masiva-chunks — combinarResultados", () => {
     expect(combinado.filas[1].resultado).toBe("duplicada");
   });
 });
+
+// --- Feature 141: el cliente propaga UN lote por sesion (R12/R13/R14/R18) ---
+
+/** Captura los cuerpos JSON enviados por `procesarEnChunks`. */
+function fetchCaptor(): { fetchImpl: typeof fetch; bodies: Array<Record<string, unknown>> } {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    bodies.push(body);
+    return okResponse(body.rows);
+  }) as unknown as typeof fetch;
+  return { fetchImpl, bodies };
+}
+
+describe("carga-masiva-chunks — lote de la sesion (feature 141)", () => {
+  it("R12/R13: los N chunks de una sesion en firme envian el MISMO cargaId (UUID)", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+    const filas = [fila("A", 1), fila("B", 2), fila("C", 3), fila("D", 4), fila("E", 5)];
+
+    await procesarEnChunks(filas, { dryRun: false, chunkSize: 2, fetchImpl });
+
+    expect(bodies).toHaveLength(3);
+    const ids = bodies.map((b) => b.cargaId);
+    expect(new Set(ids).size).toBe(1);
+    expect(String(ids[0])).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+  });
+
+  it("R18: todos los chunks declaran el total de la SESION, no el del chunk", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+    const filas = [fila("A", 1), fila("B", 2), fila("C", 3), fila("D", 4), fila("E", 5)];
+
+    await procesarEnChunks(filas, { dryRun: false, chunkSize: 2, fetchImpl });
+
+    expect(bodies.map((b) => b.totalFiles)).toEqual([5, 5, 5]);
+  });
+
+  it("R14: el dry-run NO envia cargaId ni totalFiles (no crea lote)", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+
+    await procesarEnChunks([fila("A", 1), fila("B", 2)], {
+      dryRun: true,
+      chunkSize: 1,
+      fetchImpl,
+    });
+
+    for (const body of bodies) {
+      expect(body).not.toHaveProperty("cargaId");
+      expect(body).not.toHaveProperty("totalFiles");
+    }
+  });
+
+  it("respeta el cargaId/totalFiles que le pase el llamador", async () => {
+    const { fetchImpl, bodies } = fetchCaptor();
+    const cargaId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+
+    await procesarEnChunks([fila("A", 1)], {
+      dryRun: false,
+      chunkSize: 10,
+      fetchImpl,
+      cargaId,
+      totalFiles: 900,
+    });
+
+    expect(bodies[0]).toMatchObject({ cargaId, totalFiles: 900 });
+  });
+
+  it("dos sesiones distintas obtienen lotes distintos", async () => {
+    const primera = fetchCaptor();
+    const segunda = fetchCaptor();
+
+    await procesarEnChunks([fila("A", 1)], {
+      dryRun: false,
+      chunkSize: 10,
+      fetchImpl: primera.fetchImpl,
+    });
+    await procesarEnChunks([fila("B", 2)], {
+      dryRun: false,
+      chunkSize: 10,
+      fetchImpl: segunda.fetchImpl,
+    });
+
+    expect(primera.bodies[0].cargaId).not.toBe(segunda.bodies[0].cargaId);
+  });
+});
