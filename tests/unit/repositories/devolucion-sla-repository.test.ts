@@ -1,6 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+
+// Feature 140: la guardia del choke point es de FALLO CERRADO. Los ids de estatus son los del
+// catalogo (`idEstado`) y el catalogo se siembra antes de cada test, asi el append valida de
+// verdad el par `origen -> destino` contra `TRANSICIONES` en vez de saltarselo.
 
 // Feature 99 (T6/T7/T8) — repo del cron SLA. Mockea Prisma (sin DB real, patron
 // liberacion-reprogramada-repository.test.ts). Cubre: findDevueltasSla deriva causa + ancladaAt +
@@ -26,6 +31,10 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
 function repoWith(prisma: ReturnType<typeof buildPrisma>) {
   return new DevolucionSlaRepository(prisma as unknown as PrismaClient);
 }
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados();
+});
 
 describe("findDevueltasSla (R5)", () => {
   it("R5: filtra por estatus devuelta + no borrada; deriva causa, ancladaAt y mensajero de la gestion vigente", async () => {
@@ -96,17 +105,17 @@ describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
 
     const ok = await repoWith(prisma).liberarDevueltaSla({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega-satelite",
-      estatusDevueltaId: "os-devuelta",
+      destinoEstatusId: idEstado("en_bodega_satelite"),
+      estatusDevueltaId: idEstado("devuelta"),
     });
 
     expect(ok).toBe(true);
     const upd = prisma.orden.updateMany.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: "o1", estatusId: "os-devuelta", deletedAt: null });
+    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
     // Feature 101/R2 (gate F1.4-Q5): la liberacion por SLA enciende `prioridad: true` en el
     // MISMO `data` guardado (junto al destino y el handoff limpio del mensajero).
     expect(upd.data).toEqual({
-      estatusId: "os-en-bodega-satelite",
+      estatusId: idEstado("en_bodega_satelite"),
       mensajeroAsignadoId: null, // R15: handoff limpio a la bodega
       asignadoAt: null,
       prioridad: true, // feature 101/R2
@@ -117,8 +126,8 @@ describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
     expect(hist.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-devuelta",
-        estatusDestinoId: "os-en-bodega-satelite",
+        estatusOrigenId: idEstado("devuelta"),
+        estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: null,
         origenTipo: "liberacion_devuelta_sla",
         motivo: null,
@@ -135,8 +144,8 @@ describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
 
     const ok = await repoWith(prisma).liberarDevueltaSla({
       ordenId: "o1",
-      destinoEstatusId: "os-en-bodega",
-      estatusDevueltaId: "os-devuelta",
+      destinoEstatusId: idEstado("en_bodega_central"),
+      estatusDevueltaId: idEstado("devuelta"),
     });
 
     expect(ok).toBe(false);
@@ -151,8 +160,8 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
 
     const ok = await repoWith(prisma).escalarDevueltaSla({
       ordenId: "o1",
-      estatusDevueltaId: "os-devuelta",
-      estatusRechazadaId: "os-rechazada",
+      estatusDevueltaId: idEstado("devuelta"),
+      estatusRechazadaId: idEstado("rechazada"),
       mensajeroId: "m1",
       motivo: "escalado SLA not_found",
     });
@@ -160,8 +169,8 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
     expect(ok).toBe(true);
     // R16/R17: transiciona a rechazada, guardado por estado; NO toca el mensajero (paridad rechazo).
     const upd = prisma.orden.updateMany.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: "o1", estatusId: "os-devuelta", deletedAt: null });
-    expect(upd.data).toEqual({ estatusId: "os-rechazada" });
+    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
+    expect(upd.data).toEqual({ estatusId: idEstado("rechazada") });
     expect(upd.data).not.toHaveProperty("mensajeroAsignadoId");
     // Feature 101/R3: el ESCALADO a `rechazada` NO enciende `prioridad` (solo la liberacion SLA).
     expect(upd.data).not.toHaveProperty("prioridad");
@@ -188,8 +197,8 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
     expect(hist.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: "os-devuelta",
-        estatusDestinoId: "os-rechazada",
+        estatusOrigenId: idEstado("devuelta"),
+        estatusDestinoId: idEstado("rechazada"),
         actorUsuarioId: null,
         origenTipo: "escalado_devuelta_sla",
         motivo: null,
@@ -204,8 +213,8 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
 
     const ok = await repoWith(prisma).escalarDevueltaSla({
       ordenId: "o1",
-      estatusDevueltaId: "os-devuelta",
-      estatusRechazadaId: "os-rechazada",
+      estatusDevueltaId: idEstado("devuelta"),
+      estatusRechazadaId: idEstado("rechazada"),
       mensajeroId: "m1",
       motivo: "escalado SLA wrong_number",
     });

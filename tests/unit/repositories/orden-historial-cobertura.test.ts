@@ -170,6 +170,18 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "recibirEnBodegaCentral",
     origenTipo: "recepcion_bodega_central",
   },
+  // #22: feature 139. Al APROBAR el cierre, `CierresAdminRepository.resolverCierre` TAMBIEN dispara
+  // la devolucion de las `rechazada` del mensajero a `por_devolver` (satelite) / `por_devolver_a_tienda`
+  // (central) por zona, en la MISMA tx (tras la liberacion #20), via el choke point con actor=admin y
+  // `origen_tipo` NUEVO `devolucion_rechazada` (22.º valor del enum, migracion
+  // `*_orden_historial_origen_devolucion_rechazada` + su down). Money-neutral (NO toca mensajero/prioridad).
+  // Solo en la rama `aprobado`. Es el 2.º `origen_tipo` que escribe `resolverCierre` (junto al #20).
+  {
+    n: 22,
+    repo: "CierresAdminRepository",
+    simbolo: "resolverCierre",
+    origenTipo: "devolucion_rechazada",
+  },
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
@@ -191,11 +203,11 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 21 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(21);
-    // numeracion 1..21 sin huecos ni duplicados.
+  it("son EXACTAMENTE 22 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(22);
+    // numeracion 1..22 sin huecos ni duplicados.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     ]);
   });
 
@@ -206,7 +218,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 21 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
+  it("los 22 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
     const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
     expect(tiposDelMapa).toEqual(tiposDelSeed);

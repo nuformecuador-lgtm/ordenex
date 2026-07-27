@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CreateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 49/#1: createManyOrdenes envuelve cada chunk en `$transaction`; el fake
 // invoca el callback con el propio `prisma` como `tx` (tiene orden.* + el choke point
@@ -37,7 +38,7 @@ const HIST_CARGA = { actorUsuarioId: "tienda-1", origenTipo: "carga_masiva" } as
 function baseCreateData(overrides: Partial<CreateOrdenData> = {}): CreateOrdenData {
   return {
     numRemision: "REM-1",
-    estatusId: "os-preparacion",
+    estatusId: idEstado("en_preparacion"),
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "t1",
@@ -49,6 +50,10 @@ function baseCreateData(overrides: Partial<CreateOrdenData> = {}): CreateOrdenDa
     ...overrides,
   };
 }
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("OrdenRepository.findExistingRemisiones (R25)", () => {
   it("mapea numRemision -> estatus.value y filtra deletedAt:null", async () => {
@@ -269,8 +274,8 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     prisma.orden.findMany
       .mockResolvedValueOnce([{ id: "ord-existing" }]) // before: REM-2 preexiste
       .mockResolvedValueOnce([
-        { id: "ord-existing", estatusId: "os-prep" },
-        { id: "ord-new", estatusId: "os-prep" },
+        { id: "ord-existing", estatusId: idEstado("en_preparacion") },
+        { id: "ord-new", estatusId: idEstado("en_preparacion") },
       ]); // after
     prisma.orden.createMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -289,7 +294,7 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
       {
         ordenId: "ord-new",
         estatusOrigenId: null,
-        estatusDestinoId: "os-prep",
+        estatusDestinoId: idEstado("en_preparacion"),
         actorUsuarioId: "tienda-1",
         origenTipo: "carga_masiva",
         motivo: null,
@@ -303,7 +308,7 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     const prisma = buildPrisma();
     prisma.orden.findMany
       .mockResolvedValueOnce([{ id: "dup-1" }]) // before
-      .mockResolvedValueOnce([{ id: "dup-1", estatusId: "os-prep" }]); // after: sin nuevas
+      .mockResolvedValueOnce([{ id: "dup-1", estatusId: idEstado("en_preparacion") }]); // after: sin nuevas
     prisma.orden.createMany.mockResolvedValue({ count: 0 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 

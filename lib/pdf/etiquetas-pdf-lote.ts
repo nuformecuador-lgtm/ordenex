@@ -6,7 +6,7 @@ import { formatMonto } from "@/lib/config/moneda";
 import { buildPaqueteUrl } from "@/lib/utils/paquete-url";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 
-// Feature 112 (T1.2) — Builder SERVER-SIDE del PDF consolidado de etiquetas de
+// Feature 136 (T1.2) — Builder SERVER-SIDE del PDF consolidado de etiquetas de
 // guia. Corre en el runtime Node del endpoint de carga por API (R7): sin DOM, sin
 // canvas del navegador. Replica la maqueta del generador de cliente (feature 32,
 // app/(app)/ordenes/_components/etiquetas-pdf.ts) pero rasteriza el QR con
@@ -98,9 +98,18 @@ async function drawEtiqueta(doc: jsPDF, etiqueta: EtiquetaGuiaDTO): Promise<void
  * Construye el PDF consolidado del lote: una etiqueta por pagina de 100 x 100 mm
  * (R1-R6). Funcion pura (sin DOM, R7); el llamador garantiza `etiquetas.length > 0`
  * (nunca produce un PDF de 0 paginas). Devuelve los bytes del PDF como `Uint8Array`.
+ *
+ * `compress: true` (BLOQ-1 del review de la 136) NO es cosmetico: sin el, jsPDF
+ * escribe los mapas de bits del QR y del barcode SIN comprimir. Medido con las
+ * deps reales: 262.8 KB por etiqueta sin compresion vs 3.3 KB con ella (~80x), y
+ * ~65 MB menos de RSS cada 50 etiquetas. Deja de ser el tamaño el factor que
+ * limita el lote; el que queda (tiempo, ~18 ms/etiqueta) lo acota el tope
+ * `etiquetasConfig.MAX_ETIQUETAS_POR_PDF` que aplica el borde. Efecto colateral
+ * a tener presente en tests: los content streams pasan a estar deflateados, asi
+ * que el texto NO se lee escaneando los bytes en crudo (hay que inflarlos).
  */
 export async function buildEtiquetasLotePdf(etiquetas: EtiquetaGuiaDTO[]): Promise<Uint8Array> {
-  const doc = new jsPDF({ unit: "mm", format: [SIZE_MM, SIZE_MM] });
+  const doc = new jsPDF({ unit: "mm", format: [SIZE_MM, SIZE_MM], compress: true });
   for (let i = 0; i < etiquetas.length; i++) {
     if (i > 0) doc.addPage([SIZE_MM, SIZE_MM]);
     await drawEtiqueta(doc, etiquetas[i]);

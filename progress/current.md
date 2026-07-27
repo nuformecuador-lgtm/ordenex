@@ -15,34 +15,85 @@
 
 ## Features en curso
 
-### Lote 137–140 (flujo de estados) — 137 implementada + reviewer APROBADO, PR #157; mergeando `dev`
+### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
+
+> Detalle de las 4 en `history.md`. PRs #157 (137) · #159 (138) · #160 (139) · #161 (140).
+> **✅ DESPLEGADO A PROD 2026-07-25 (PR #163 `dev → prod`).** Deployment `ordenex-qzzgvlmhq` **Ready**;
+> build verde en 29 s; runtime sin errores (cron `/api/cron/procesar-jobs` cada minuto, 200).
+> **Migraciones APLICADAS** en la base de producción: el build corrió `prisma migrate deploy` y reportó
+> `No pending migrations to apply` sobre **86 migraciones** = las 86 del repo (incluidas las 4 del lote).
+> Deuda de migraciones **saldada**; también aplicadas y verificadas en la DB local.
+>
+> ⚠️ **Hallazgo operativo del deploy (importante para el futuro):** los **previews de Vercel usan la
+> MISMA base de Supabase que producción**. Como el `build` es `prisma generate && prisma migrate deploy
+> && next build`, **el build de un preview migra la base de producción**. Por eso las migraciones ya
+> estaban aplicadas antes del merge a `prod`. Consecuencia: la ventana de riesgo de una migración
+> no-aditiva empieza **al abrir el PR**, no al mergear — con el rename de la 137 esa ventana estuvo
+> abierta desde el preview del PR #157. Para renames/destructivas futuras: patrón expand-contract o
+> mergear inmediatamente tras abrir el PR.
+>
+> Cierre de deuda en `chore/cierre-lote-137-140`: T4.1 de la 139 saldada (test de integración del
+> recorrido completo), los 2 `down.sql` que faltaban en el repo (deuda ajena de WhatsApp) escritos y
+> respaldados por tests → `./init.sh` ya no avisa `migraciones sin down.sql`.
+
+<details>
+<summary>Bitácora del lote (histórico de la sesión)</summary>
+
+#### Estado durante la sesión — 137/138/139 mergeadas; 140 en implementación
 
 > Renumerado desde **135–138** por colisión de IDs: `dev` (merge de #155 `flow`) reclamó
 > **135 = analítica-KPIs** y **136 = etiquetas-PDF**. El lote se desplazó al bloque libre 137–140.
 
-**137 — rename nomenclatura `order_status` (fullstack, opción A del gate) — code-complete + verde.**
-Rama `feature/135-order-status-rename-nomenclatura` (conserva slug `135`, pusheada; **PR #157 → `dev`**,
-patrón 103/104/105). `./init.sh` **verde** antes del merge (484 archivos / 4815 tests); guards R13 +
-`no-embalaje` verdes; reviewer **APROBADO-CON-NOTAS**, 0 bloqueantes, trazabilidad R1–R13 completa
-(`progress/review_137-...md`). Se reinició de cero desde el spec del gate (se descartó una WIP pre-gate
-que usaba `en_tienda`).
-- **✅ Merge de `dev` resuelto + re-verificado (`fix f99e44c`):** census R13 + `no-embalaje` verdes,
-  **cero regresiones** (+11 tests nuevos del rename pasan); los 3 literales viejos que trajo dev,
-  renombrados. Rama pusheada, PR #157 mergeable.
-- **⚠️ `./init.sh` local ROJO por breakage PRE-EXISTENTE de `dev`**, NO del rename: 34 errores de
-  typecheck + 30 tests en features de dev (feat-92 auth, chat/ubicación, zonas, `RUTA_VIGENTE`
-  duplicado + `sincronizarRuta` en MisAsignacionesModule). Demostrado idéntico contra un worktree
-  limpio de `origin/dev`. `dev` pasa en Vercel porque `next build` no type-chequea tests; el rojo
-  local se coló al trunk. **Requiere fix aparte (dueño de flow/feat-92), no en el PR del rename.**
-- **Deuda post-merge (Nota-3):** `prisma migrate deploy` + verificar `down.sql` con `db:rollback`
-  (migración `db/migrations/20260724120000_order_status_rename_nomenclatura/`).
-- **138/139/140** (recepción central / devolución rechazadas / guardia) siguen `spec_ready`, encadenadas.
+**137 rename nomenclatura (PR #157) · 138 recepción central (PR #159) · 139 devolución de rechazadas
+(PR #160) — las tres `done` y mergeadas.** Detalle de cada una en `history.md`. La 139 se reconcilió a
+`done` el 2026-07-25 (figuraba `in_progress` con su PR ya mergeado).
+
+**140 — guardia central de transiciones de `order_status` (backend, high) — EN IMPLEMENTACIÓN.**
+Rama `feature/140-flujo-estados-guardia-central` desde `origin/dev`. Cierra la deuda de fondo del lote:
+hoy NO existe máquina de estados central — cada service declara sus orígenes/destinos y la única guardia
+real es el `WHERE estatus_id = <origen>` de cada UPDATE. El choke point `appendCambioEstado` (feature 49,
+~18 call-sites) registra historial + encola webhook pero **no valida legalidad**. La 140 centraliza el
+mapa (`lib/types/order-status-transiciones.ts`) y lo valida ahí.
+
+- **Gate F1.4 APROBADO (2026-07-25), 4 decisiones:** (Q3) TODO pasa por la guardia, **sin override
+  `ANY→ANY`** ni para maestro/admin — rescatar una orden atascada exigirá declarar la arista y desplegar;
+  (activación) **estricta desde el día 1**, sin shadow/flag/env; (Q5) se valida también la creación
+  `null→X` contra `ESTADOS_CREACION = {en_preparacion, en_fulfillment, en_ruta_bodega_central}`;
+  (Q6) `throw` tipado `TransicionIlegalError` sin PII, firma intacta para los ~18 call-sites.
+- **Q1/Q2/Q4 se cerraron CONTRA CÓDIGO al aterrizar 138/139** (ya no eran preguntas): terminales
+  `entregada`/`devuelta_a_tienda`; `en_ruta_bodega_central` dejó de ser vestigial (entrada por `carga_api`,
+  salida por la recepción central de la 138) → **allowlist vestigial VACÍA**; y el catálogo pasó a **18
+  values** (la 139 sumó 3, no 1: `por_devolver`, `devolviendo_a_bodega_central`, `por_devolver_a_tienda`).
+- **Spec reconciliado (`spec_author`):** estaba escrito con la numeración vieja (se titulaba "138";
+  135/136/137 = hoy 137/138/139) y con `TODO(136)/TODO(137)` sin resolver. Inventario re-derivado del
+  código: **41 aristas de flujo → 39 pares únicos + 3 de creación**, 22/22 familias `origen_tipo`,
+  conectividad 18/18 sin callejones ni cuellos de botella. **La 139 RETIRÓ `rechazada →
+  devolviendo_a_tienda`** (su R9): declararla reabriría un camino cerrado a propósito.
+- **Reviewer RECHAZÓ la 1.ª entrega (`progress/review_140.md`), 2 bloqueantes.** Inventario R8
+  CONFIRMADO correcto y R1–R17 trazados, pero **BLOQ-1: la guardia falla ABIERTA** — `esOrderStatusValue`
+  descarta las filas de `order_status` cuyo `value` no esté en el `ORDER_STATUS_SEED` del build y esa
+  transición pasa **sin validar** (drift DB↔build, justo donde la guardia hace falta); agravante: de 26
+  suites que mockean el `tx` la guardia queda **OFF** en los ~25 archivos que modelan los call-sites
+  reales, y un test consagraba el fail-open como contrato. **BLOQ-2:** `tasks.md` con las 11 tareas sin
+  marcar. En corrección por `backend_dev` (fail-CLOSED + inyectar catálogo explícito en las suites, sin
+  relajar la guardia para que pasen).
+- **Sin migraciones, sin `down.sql`, sin RLS, sin endpoints nuevos** (es dominio puro + choke point).
+- **Cierre:** re-review APROBADO 0 bloqueantes tras el fix a fallo cerrado, verificado por mutación.
+  PR #161 mergeado a `dev`.
+
+</details>
 
 **Reconciliación de estado stale (pre-merge):** 107/108/110/120 estaban `in_progress` pese a estar
 mergeadas a `dev` (PRs #135/#136/#140/#149) → reconciliadas a `done`.
 
-**Ubicación compartida por el cliente en el chat de WhatsApp — feature 121 (2026-07-24) → EN
-ESPECIFICACIÓN / puerta F1.4.** Pedido del humano: "en el webhook que consume las respuestas de
+**Ubicación compartida en el chat de WhatsApp — feature 121 → ✅ CERRADA 2026-07-25 (`done`).**
+Reviewer APROBADO 0 bloqueantes; código y migración ya en `dev` y desplegados. Resumen en `history.md`.
+El bloque de abajo se conserva como bitácora de la sesión en que se hizo.
+
+<details>
+<summary>Bitácora de la 121 (histórico)</summary>
+
+Pedido del humano: "en el webhook que consume las respuestas de
 WhatsApp agregar soporte para ubicación (mensajes `type=location`); almacenar la ubicación enviada;
 y en el front un icono en el chat que al dar click despliegue, en modal/popup dentro de la misma
 ventana, un minimapa con la ubicación actual del repartidor y el punto compartido por el usuario".
@@ -72,11 +123,11 @@ Fullstack, high, `depends_on: 120`.
   `progress/impl_121_backend.md`, `impl_121_frontend.md`, `review_121.md`.
 - **Deuda menor:** la migración se validó solo por forma estática (falta `apply`/`db:rollback` real);
   G2 quedó como dos archivos `impl_121_*` en vez de un `impl_121.md`.
-- **⚠️ PENDIENTE (leader) — aterrizaje diferido:** la infraestructura del chat que esto extiende vive
-  como **WIP en `flow`, aún NO en `dev`** (feature 120, hecha, sin PR). Sin commitear todavía. El PR
-  limpio de la 121 se arma cuando aterrice la 120: rama desde `origin/dev` + cherry-pick de la 120 +
-  de la 121. **Al desplegar:** correr la migración `20260724_chat_mensaje_ubicacion` (post-merge a
-  mano; el `.env` apunta a DB compartida).
+- ~~**PENDIENTE (leader) — aterrizaje diferido**~~ → **RESUELTO.** Dependía de que la feature 120 (chat)
+  saliera de `flow` a `dev`; ya ocurrió, y con ella aterrizó la 121. La migración
+  `20260724120000_chat_mensaje_ubicacion` está **aplicada en producción** (verificado 2026-07-25).
+
+</details>
 
 
 **Etiquetas PDF en la carga por API — feature 136 (2026-07-23; renumerada de 112 en el merge dev→flow por colisión con `112-webhook-payload-data`) → EN ESPECIFICACIÓN.** Pedido del
@@ -206,22 +257,30 @@ El último trabajo previo mergeado fue la **feature 97** (optimización de ruta 
 
 ## Backlog pendiente
 
-Las 7 features `pending`. El detalle completo (alcance, decisiones del gate F1.4, hallazgos)
-vive en su entrada de `feature_list.json`. Las 6 con dependencia la tienen `done`, así que
-**todas están desbloqueadas**.
+> **Auditado contra el código el 2026-07-26.** El registro estaba desactualizado: **3 features
+> figuraban pendientes pero YA ESTABAN IMPLEMENTADAS** (112, 105, 79 → `done`) y **2 estaban a medias
+> en la mitad contraria** a la que decía su ficha (85 y 74). Evidencia por feature en su `status_note`
+> de `feature_list.json`. **No queda ninguna feature `in_progress` ni `spec_ready`.**
 
-| # | Feature | Zona | Depende de |
-|---|---------|------|-----------|
-| 66 | qr - detalle (detalle de la orden con switch por rol) | — | — |
-| 70 | regla de selección de tarifa vigente (filtrar `tarifas.status`) | backend | 69 ✅ |
-| 71 | listado del maestro: bloquear checkbox de órdenes con cierre sin resolver | fullstack | 69 ✅ |
-| 74 | explotar la causa de devolución (mostrarla y agruparla) | fullstack | 73 ✅ |
-| 79 | decidir si `/paquete/[numGuia]` es pública y desbloquearla | backend | 78 ✅ |
-| 80 | proveedor de correo real + sacar el OTP de los logs | backend | 78 ✅ |
-| 85 | wallet - periodicidad de gastos fijos (frontend) | frontend | 84 ✅ |
+**Cerradas por la auditoría (ya estaban hechas):**
 
-> **66** se reclasificó de `in_progress` → `pending` el 2026-07-21: nunca se empezó (sin rama,
-> sin spec, sin commit; solo existe el escáner de la feature 65 que navega a la ruta del QR).
+| # | Evidencia |
+|---|-----------|
+| 112 | `WebhookEstadoService.ts:89` ya usa el sobre `data:`; test en `webhook-estado-service.test.ts:94`. Figuraba `spec_ready`. |
+| 105 | UI cableada: `page.tsx` → `ApiKeysModule` → `api-keys-columns` → `WebhookAccionCell` → `RegistrarWebhookForm` (+ `RevelarWebhookSecretoModal`), con 3 tests de componente. |
+| 79 | Decisión tomada e implementada (opción **b**: exige sesión). `middleware.ts` con `REDIRECT_TO_ROOT = ["/paquete"]` manda a `/` en vez de a `/login`; tests en `middleware.test.ts:116-127`. |
+
+**Pendientes reales — 5 sueltas + 15 de analítica:**
+
+| # | Feature | Zona | Estado real |
+|---|---------|------|-------------|
+| 80 | proveedor de correo real + sacar el OTP de los logs | backend | **Sin empezar.** `StubEmailProvider` vivo y OTP en `console.log` (`OtpChallengeIssuer.ts:39`) → **ningún email sale hoy en producción**. |
+| 85 | wallet - periodicidad de gastos fijos | frontend | **Backend YA HECHO** (migración `gasto_fijo_periodicidad` + `GastoFijoPlantillaService` + `GeneracionGastosFijosService`). Falta **solo la UI**. |
+| 74 | explotar la causa de devolución | fullstack | **Captura YA HECHA** (`causa-devolucion-options.ts` + `GestionarOrdenPanel`). Falta **mostrarla y agruparla** en los listados. |
+| 70 | regla de selección de tarifa vigente | backend | Sin empezar. ⚠️ **Requiere gate humano**: lo dice el propio código (`TarifaVigentePorTiendaRepository.ts:56`, decisión (g) de la 69 sin cerrar). |
+| 71 | bloquear checkbox de órdenes con cierre sin resolver | fullstack | Sin empezar, sin rastro en `app/(app)/ordenes`. |
+| 66 | qr - detalle (switch por rol) | — | Sin empezar; solo existe el escáner de la 65 (`app/(app)/qr/page.tsx` navega a la ruta del QR). |
+| 135 + 122–134 | **analítica** (15 encadenadas) | backend/frontend | Sin empezar: sin ruta `/analitica`, sin migración `analytics_daily`, sin servicios. |
 
 ## Deudas de arnés vivas
 
@@ -252,16 +311,38 @@ vive en su entrada de `feature_list.json`. Las 6 con dependencia la tienen `done
 - **`app/(app)/ordenes/_components/ordenes-columns.tsx` es un imán de drift** (ya lo revirtieron 2
   veces) → mirarlo con lupa en todo PR que lo toque.
 
-## Tareas humanas pendientes (verificar)
+## Tareas humanas pendientes
 
-> La app ya está en **prod** (PR #117); estos buckets podrían estar creados. Confirmar contra el
-> proyecto Supabase antes de darlos por hechos o por pendientes.
+> **✅ VERIFICADO CONTRA SUPABASE PROD el 2026-07-25** (proyecto `ordenex-db` / `scfnwxqbsgkzwsdntdvd`,
+> vía MCP). Ya no hay que suponer: se consultó `storage.buckets` directamente.
 
-- **Bucket Supabase `gestion-evidencias`** (privado) — evidencias de entrega/rechazo del mensajero
-  (feature 36). Sin él, la gestión falla al subir la foto.
-- **Bucket Supabase `mensajero-docs`** (privado) — documentos de postulación del mensajero (feature 21).
+- ~~**Bucket `gestion-evidencias`**~~ → **EXISTE**, privado, creado 2026-07-15. Nada que hacer.
+- ~~**Bucket `mensajero-docs`**~~ → **EXISTE**, privado, creado 2026-07-15. Nada que hacer.
+- ⚠️ **Bucket `etiquetas-guia` (privado) — NO EXISTE. ÚNICO BLOQUEO DE INFRA VIVO.** Lo necesita la
+  feature 136 (`ETIQUETAS_BUCKET`, default `etiquetas-guia` en `lib/config/etiquetas.ts`). Es la tarea
+  T0.1 del spec de la 136, la única sin marcar.
+  **Impacto matizado (corregido por el review de la 136):** el endpoint trata la etiqueta como
+  best-effort — `try/catch` (`route.ts:152-158`) que NO revierte la carga, responde **200** con las
+  órdenes y su `num_guia` y expone el fallo como `etiquetasPdf: { error }`. Eso **cubre las excepciones
+  JS** (bucket ausente incluido), así que en lotes normales los integradores reciben sus órdenes bien,
+  sólo sin PDF.
+  ⚠️ **PERO NO cubre OOM/timeout** (BLOQ-1 del review): el PDF no tiene cota (hasta `MAX_CHUNK_ROWS`
+  = 5000, ~279 KB y ~13 ms por etiqueta → ~1.4 GB / ~65 s) y el fallo ocurre **después** del commit de
+  las órdenes. Un OOM no es excepción JS → 500/504 en vez de 200 y el integrador **pierde los
+  `num_guia`** (al reintentar salen `duplicada`). En corrección; ver `progress/review_136.md`.
+  Crear desde el dashboard de Supabase (Storage → New bucket → nombre `etiquetas-guia`, **Private**),
+  o por SQL:
+  `INSERT INTO storage.buckets (id, name, public) VALUES ('etiquetas-guia','etiquetas-guia',false) ON CONFLICT (id) DO NOTHING;`
+  (los buckets existentes solo se crearon; el service role bypassa RLS, así que no hacen falta policies).
 - **Proveedor de correo real** — hoy `StubEmailProvider` solo hace `console.info`; **ningún email
-  sale** y el OTP se lee de los logs del servidor. Lo salda la feature 80.
+  sale** y el OTP se lee de los logs del servidor. Lo salda la feature 80 (`pending`).
+
+**Estado del catálogo en PROD (verificado el 2026-07-25):** migraciones del lote 4/4 aplicadas,
+0 nombres viejos residuales, 6/6 nombres nuevos, `orden_historial_origen_tipo` con 22 values.
+`order_status` tiene **19 filas**: las 18 del código + `pendiente`, huérfano (**0 órdenes en prod y 0 en
+local**, sembrado por `20260714140000_order_status_pendiente` y nunca añadido a `ORDER_STATUS_SEED`).
+Inofensivo hoy; con la guardia de la 140 cualquier transición que lo tocara se rechaza explícitamente.
+Limpiarlo requiere una migración propia — decisión de datos, no urgente.
 
 ## Notas de proceso (vigentes)
 

@@ -18,17 +18,40 @@ function distinct(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+/**
+ * Feature 136 — ¿puede este actor ver la etiqueta de esta orden?
+ *
+ * El rol `apiKey` (canal de integracion de la carga por API) SOLO ve las ordenes
+ * de su propia tienda: `actor.usuarioId` es el usuario dedicado de la key y el
+ * `tienda_id` con el que se crean sus ordenes (`BulkOrdenService.cargarViaApi`).
+ * Hasta ahora el aislamiento entre tiendas descansaba unicamente en el borde —los
+ * `ordenIds` salen del summary de la propia carga—, asi que un futuro llamador que
+ * pasara ids ajenos filtraria datos de otra tienda sin que nada lo impidiera. La
+ * invariante se fija aqui, en el service, que es donde vive la autorizacion.
+ *
+ * Los roles de sesion (maestro/admin/adminTienda/mensajero/adminSatelite) mantienen
+ * el comportamiento previo: la etiqueta es un READ derivado abierto a cualquier rol
+ * autenticado (decision cerrada en la feature 32).
+ */
+function esVisiblePara(row: EtiquetaRow, actor: Actor): boolean {
+  if (actor.rol !== "apiKey") return true;
+  return row.tiendaId === actor.usuarioId;
+}
+
 export class EtiquetaGuiaService implements IEtiquetaGuiaService {
   constructor(private readonly repo: IOrdenRepository) {}
 
   async generarEtiquetas(
     input: GenerarEtiquetasInput,
-    _actor: Actor,
+    actor: Actor,
   ): Promise<GenerarEtiquetasServiceResult> {
     // Autorizacion: la etiqueta es un READ derivado disponible para cualquier rol
     // autenticado (decision del usuario). La sesion ya se exige en el borde
-    // (Server Action -> `unauthenticated` sin sesion); aqui no se restringe por rol
-    // ni se filtra por visibilidad de la orden.
+    // (Server Action -> `unauthenticated` sin sesion); para los roles de sesion no
+    // se restringe por rol ni se filtra por visibilidad de la orden.
+    //
+    // EXCEPCION (feature 136): el rol `apiKey` SI se filtra por dueño (ver
+    // `esVisiblePara`). Es un canal de integracion externo, no una sesion humana.
     const ordenIds = distinct(input.ordenIds);
     if (ordenIds.length === 0) return { status: "ok", etiquetas: [], omitidas: [] };
 
@@ -43,8 +66,10 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
     // que no vinieron de la query. Una orden invalida NO aborta el lote (R3).
     for (const ordenId of ordenIds) {
       const row = rowById.get(ordenId);
-      if (!row) {
-        // No existe o esta borrada (el repo la excluyo por deletedAt) (R3).
+      if (!row || !esVisiblePara(row, actor)) {
+        // No existe, esta borrada (el repo la excluyo por deletedAt) o es de otra
+        // tienda y el actor es una API key (feature 136). En los tres casos se
+        // reporta igual: `no_encontrada` NO revela la existencia de la orden ajena.
         omitidas.push({ ordenId, motivo: "no_encontrada" });
         continue;
       }
@@ -61,12 +86,15 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
 
   async obtenerEtiquetaPorGuia(
     numGuia: number,
-    _actor: Actor,
+    actor: Actor,
   ): Promise<EtiquetaPorGuiaServiceResult> {
     // Misma autorizacion que `generarEtiquetas`: READ derivado disponible para
-    // cualquier rol autenticado (la sesion se exige en el borde).
+    // cualquier rol autenticado (la sesion se exige en el borde), salvo `apiKey`,
+    // que solo ve las ordenes de su propia tienda (feature 136).
     const row = await this.repo.findEtiquetaByNumGuia(numGuia); // ya filtra borradas (R3)
-    if (!row || row.numGuia === null) return { status: "no_encontrada" };
+    if (!row || row.numGuia === null || !esVisiblePara(row, actor)) {
+      return { status: "no_encontrada" };
+    }
     return { status: "ok", etiqueta: this.toEtiquetaDTO(row, row.numGuia) };
   }
 

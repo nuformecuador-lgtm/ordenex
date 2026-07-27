@@ -185,6 +185,10 @@ export interface DistritoRow {
 // (R4: la orden puede no tener distrito).
 export interface EtiquetaRow {
   id: string;
+  // Feature 136: dueño de la orden. Lo necesita `EtiquetaGuiaService` para filtrar
+  // por propietario cuando el actor es una API key (aislamiento entre tiendas
+  // explicito en el service, no solo garantizado por el borde).
+  tiendaId: string;
   numGuia: number | null;
   numRemision: string;
   destinatario: string;
@@ -644,20 +648,25 @@ export interface IOrdenRepository {
     historial: HistorialContexto,
   ): Promise<boolean>;
 
-  // --- Feature 138: recepcion por QR en la bodega CENTRAL (R2/R3/R9/R18) ---
+  // --- Feature 138 + 139: recepcion por QR en la bodega CENTRAL (STATE-AWARE) ---
 
   /**
-   * Feature 138/R2/R3/R9/R18: recepcion en la BODEGA CENTRAL: transicion atomica y
-   * concurrencia-segura de UNA orden a `en_bodega_central`, cerrando el dead-end de la
-   * carga por API. Espejo de `recibirEnOrigen`/`recibirEnSatelite` pero SIN guarda de tienda
-   * ni de zona: la bodega central es global (R11). UPDATE guardado SOLO por estado de origen
-   * (sigue en `en_ruta_bodega_central`) + no borrada (`deletedAt IS NULL`); origen pre-leido
-   * bajo la misma guarda y append del historial (`origenTipo = recepcion_bodega_central`) en la
-   * MISMA tx, SOLO si transiciono. Devuelve `true` si afecto 1 fila (recibida), `false` si 0
-   * (ya no estaba en el origen -> race). NO toca `mensajeroAsignadoId` ni `numGuia` (R18).
+   * Feature 138/R2/R3/R9/R18 + feature 139/R17 (STATE-AWARE): recepcion en la BODEGA CENTRAL:
+   * transicion atomica y concurrencia-segura de UNA orden a `destinoEstatusId`, con el par
+   * ORIGEN->DESTINO resuelto por el SERVICE segun el estado de origen de la orden:
+   *   - `en_ruta_bodega_central` -> `en_bodega_central` (caso 138: cierra el dead-end de la carga API).
+   *   - `devolviendo_a_bodega_central` -> `por_devolver_a_tienda` (caso 139: retorno satelite).
+   * UN solo escaner/accion. Espejo de `recibirEnOrigen`/`recibirEnSatelite` pero SIN guarda de
+   * tienda ni de zona: la bodega central es global (R11). UPDATE guardado SOLO por estado de ORIGEN
+   * (`estatus.value = origenValue`, pasado por el service) + no borrada (`deletedAt IS NULL`); origen
+   * pre-leido bajo la misma guarda y append del historial (`origenTipo` = el pasado en `historial`,
+   * `recepcion_bodega_central` en ambos casos) en la MISMA tx, SOLO si transiciono. Devuelve `true`
+   * si afecto 1 fila (recibida), `false` si 0 (ya no estaba en el origen -> race). NO toca
+   * `mensajeroAsignadoId` ni `numGuia` (R18).
    */
   recibirEnBodegaCentral(
     ordenId: string,
+    origenValue: string,
     destinoEstatusId: string,
     historial: HistorialContexto,
   ): Promise<boolean>;

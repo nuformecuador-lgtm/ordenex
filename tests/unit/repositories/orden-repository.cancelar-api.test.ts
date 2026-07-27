@@ -1,14 +1,24 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import type { OrderStatusValue } from "@/lib/types/order-status";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 106 (T7 + T14) — cancelarViaApi: transaccion que valida owner+estado, transiciona a
 // `devolviendo_a_tienda` y registra en la bitacora via appendCambioEstado (origen_tipo cancelacion_api,
 // motivo 'cancelada por tienda') EN LA MISMA tx, SIN tocar gestion_orden. El fake de $transaction
 // invoca el callback con el propio prisma como tx.
+//
+// Feature 140: la guardia del choke point es de FALLO CERRADO, asi que los ids de estatus son
+// los del catalogo (`idEstado`) y el catalogo se siembra antes de cada test. El par
+// `en_bodega_central`/`en_ruta_bodega_central -> devolviendo_a_tienda` son las aristas #29/#30.
 
 const OWNER = "store-1";
-const DEVUELTA_ORIGEN_ID = "os-devuelta-origen";
+const DEVUELTA_ORIGEN_ID = idEstado("devolviendo_a_tienda");
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados();
+});
 
 function buildPrisma(ordenActual: Record<string, unknown> | null) {
   const prisma = {
@@ -33,7 +43,11 @@ function buildPrisma(ordenActual: Record<string, unknown> | null) {
 }
 
 function ordenEn(estatusValue: string) {
-  return { id: "ord-1", estatusId: "os-origen", estatus: { value: estatusValue } };
+  return {
+    id: "ord-1",
+    estatusId: idEstado(estatusValue as OrderStatusValue),
+    estatus: { value: estatusValue },
+  };
 }
 
 describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
@@ -81,7 +95,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
     expect(arg.data).toEqual([
       {
         ordenId: "ord-1",
-        estatusOrigenId: "os-origen", // estado previo real (R22)
+        estatusOrigenId: idEstado("en_bodega_central"), // estado previo real (R22)
         estatusDestinoId: DEVUELTA_ORIGEN_ID, // devolviendo_a_tienda (R22)
         actorUsuarioId: OWNER, // actor = owner (R22)
         origenTipo: "cancelacion_api", // R22

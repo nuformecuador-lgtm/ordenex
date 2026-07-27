@@ -13,6 +13,7 @@ const MENSAJERO: Actor = { usuarioId: "u-msg", rol: "mensajero" };
 function etiquetaRow(overrides: Partial<EtiquetaRow> = {}): EtiquetaRow {
   return {
     id: "o1",
+    tiendaId: "tienda-1",
     numGuia: 501,
     numRemision: "REM-1",
     destinatario: "Juan Perez",
@@ -83,6 +84,74 @@ describe("EtiquetaGuiaService — autorizacion (cualquier rol autenticado)", () 
       expect(r.etiquetas).toHaveLength(1);
     }
     expect(repo.findEtiquetasByIds).toHaveBeenCalled();
+  });
+});
+
+// Feature 136 — aislamiento entre tiendas para el canal de integracion. Hasta la
+// 136 la garantia descansaba SOLO en el borde (los ids salian del summary de la
+// propia carga); estos tests la fijan en el service, que es donde vive la autz.
+describe("EtiquetaGuiaService — aislamiento por dueño del rol apiKey (feature 136)", () => {
+  const KEY_TIENDA_1: Actor = { usuarioId: "tienda-1", rol: "apiKey" };
+  const KEY_TIENDA_2: Actor = { usuarioId: "tienda-2", rol: "apiKey" };
+
+  it("una API key NO obtiene la etiqueta de una orden de otra tienda", async () => {
+    const repo = fakeRepo([etiquetaRow({ id: "o1", tiendaId: "tienda-1" })]);
+    const service = new EtiquetaGuiaService(repo);
+
+    const r = await service.generarEtiquetas({ ordenIds: ["o1"] }, KEY_TIENDA_2);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.etiquetas).toEqual([]);
+    // Se reporta igual que una orden inexistente: no revela que la orden existe.
+    expect(r.omitidas).toEqual([{ ordenId: "o1", motivo: "no_encontrada" }]);
+  });
+
+  it("una API key SI obtiene la etiqueta de sus propias ordenes", async () => {
+    const repo = fakeRepo([etiquetaRow({ id: "o1", tiendaId: "tienda-1" })]);
+    const service = new EtiquetaGuiaService(repo);
+
+    const r = await service.generarEtiquetas({ ordenIds: ["o1"] }, KEY_TIENDA_1);
+
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.etiquetas).toHaveLength(1);
+    expect(r.etiquetas[0].ordenId).toBe("o1");
+    expect(r.omitidas).toEqual([]);
+  });
+
+  it("en un lote mixto, la API key solo recibe las etiquetas de su tienda", async () => {
+    const repo = fakeRepo([
+      etiquetaRow({ id: "propia", tiendaId: "tienda-1", numGuia: 11 }),
+      etiquetaRow({ id: "ajena", tiendaId: "tienda-2", numGuia: 22 }),
+    ]);
+    const service = new EtiquetaGuiaService(repo);
+
+    const r = await service.generarEtiquetas({ ordenIds: ["propia", "ajena"] }, KEY_TIENDA_1);
+
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.etiquetas).toHaveLength(1);
+    expect(r.etiquetas[0].ordenId).toBe("propia");
+    expect(r.etiquetas.map((e) => e.numGuia)).not.toContain(22);
+    expect(r.omitidas).toEqual([{ ordenId: "ajena", motivo: "no_encontrada" }]);
+  });
+
+  it("la ruta por num_guia tampoco expone la orden de otra tienda a una API key", async () => {
+    const repo = fakeRepo([etiquetaRow({ id: "o1", tiendaId: "tienda-1", numGuia: 501 })]);
+    const service = new EtiquetaGuiaService(repo);
+
+    expect((await service.obtenerEtiquetaPorGuia(501, KEY_TIENDA_2)).status).toBe("no_encontrada");
+    expect((await service.obtenerEtiquetaPorGuia(501, KEY_TIENDA_1)).status).toBe("ok");
+  });
+
+  it("los roles de sesion NO se filtran por dueño (comportamiento de la feature 32)", async () => {
+    const repo = fakeRepo([etiquetaRow({ id: "o1", tiendaId: "otra-tienda" })]);
+    const service = new EtiquetaGuiaService(repo);
+
+    for (const actor of [MAESTRO, ADMIN, ADMIN_TIENDA, MENSAJERO]) {
+      const r = await service.generarEtiquetas({ ordenIds: ["o1"] }, actor);
+      if (r.status !== "ok") throw new Error("unreachable");
+      expect(r.etiquetas).toHaveLength(1);
+    }
   });
 });
 

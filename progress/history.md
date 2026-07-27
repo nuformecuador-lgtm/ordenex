@@ -1883,3 +1883,152 @@
 - DEUDA: la migración NO se aplicó contra DB real (entorno sin `.env`; R2/R3/R4 por test estático +
   round-trip en memoria). **Al desplegar: `prisma migrate deploy` + verificar `down.sql` con `db:rollback`,
   coordinado con el deploy** (rename de valores: código y DB deben coincidir). Fundacional del lote 137–140.
+
+## 2026-07-24 — 138 recepción en bodega central
+- Cierra el dead-end de `en_ruta_bodega_central` (órdenes de carga API sin salida): recepción por QR / entrada
+  manual (maestro/admin, global sin zona/tienda) → `en_bodega_central` + historial. Migración aditiva
+  `ADD VALUE 'recepcion_bodega_central'` al enum `OrdenHistorialOrigenTipo` (+down.sql patrón `carga_api`).
+  Backend espejo de `RecepcionOrigen` (repo `recibirEnBodegaCentral` guardado por estado de origen; service
+  `esAccesoTotal`); escáner en el header de `/ordenes` (gate maestro/admin).
+- R1–R18 trazados a tests. Reviewer APROBADO-CON-NOTAS, 0 bloqueantes. `./init.sh` verde (503 archivos /
+  4979 tests). Renumerada 136→138. **PR #159 → dev, merge humano 2026-07-24.**
+- DEUDA: migración aditiva NO aplicada contra DB real (post-merge: `prisma migrate deploy` + verificar
+  `down.sql` con `db:rollback`; bajo riesgo por ser `ADD VALUE`).
+
+## 2026-07-25 — 139 flujo de devolución de rechazadas (estados + transiciones + UI)
+- Cierra el retorno físico de las `rechazada`: 3 estados nuevos al catálogo (`por_devolver`,
+  `devolviendo_a_bodega_central`, `por_devolver_a_tienda`, índices 16/17/18 sin alterar posiciones
+  previas) + `ADD VALUE 'devolucion_rechazada'` al enum de historial (ambas con `down.sql`).
+- Recorrido: al APROBAR el cierre, cada `rechazada` del mensajero rutea por zona de la orden
+  (`resolverDestinoCierre`) → satélite `por_devolver` / central `por_devolver_a_tienda` (atómico con
+  el cierre, money-neutral, idempotente); `por_devolver → devolviendo_a_bodega_central` (adminSatélite,
+  por lote); `devolviendo_a_bodega_central → por_devolver_a_tienda` (recepción central **state-aware**,
+  extiende el escáner de la 138 a un solo escáner que resuelve destino por estado de origen);
+  `por_devolver_a_tienda → devolviendo_a_tienda` (maestro/admin) → `devuelta_a_tienda` (tienda, flujo
+  existente). **R9: se RETIRA la arista manual directa `rechazada → devolviendo_a_tienda`** en las 3
+  superficies de UI — la única salida de `rechazada` pasa a ser la aprobación del cierre.
+- R1–R24 trazados a tests (`progress/impl_139-...md`). Reviewer APROBADO-CON-NOTAS, 0 bloqueantes;
+  typecheck 0, lint 0, 271 tests dirigidos verdes; `./init.sh` verde (508 archivos / 5012 tests).
+  Renumerada 137→139. **PR #160 → dev, mergeado 2026-07-25.**
+- DEUDAS: ~~T4.1 (test de integración del recorrido completo)~~ **SALDADA 2026-07-25** en
+  `chore/cierre-lote-137-140`: `tests/integration/db/devolucion-rechazadas-flow.test.ts` (9 tests)
+  encadena services y repos reales por las dos ramas del mismo cierre y verifica el historial exacto
+  por salto; la guardia de la 140 no reveló ningún hueco (los 5 pares son legales); migraciones no
+  aplicadas contra DB real (post-merge `prisma migrate deploy` + `db:rollback`); R22 en los envíos por
+  lote usa `update` guardado solo por `{id, deletedAt}` con pre-check en el service (desviación
+  prescrita por el design §4.1/§4.4, precedente feature 48) → endurecer a `updateMany WHERE
+  estatus_id = origen` en el futuro.
+
+## 2026-07-25 — 140 guardia central de transiciones de `order_status` (cierra el lote 137–140)
+- Salda la deuda de fondo del lote: **no existía máquina de estados**. Cada service declaraba sus
+  orígenes/destinos y la única guardia real era el `WHERE estatus_id = <origen>` de cada UPDATE; el
+  choke point `appendCambioEstado` (feature 49, ~18 call-sites) registraba historial + encolaba webhook
+  **sin validar legalidad**. Ahora el mapa vive en `lib/types/order-status-transiciones.ts` y se valida
+  en el choke point, cubriendo los ~18 call-sites de una vez.
+- **43 aristas de flujo → 39 pares dirigidos únicos + 3 de creación**, 22/22 familias `origen_tipo`,
+  conectividad 18/18 (sin callejones sin salida ni estados inalcanzables). Exhaustividad estática por
+  `satisfies`: el build rompe si el catálogo gana un value sin clasificar. **Sin migraciones, sin
+  `down.sql`, sin RLS, sin endpoints nuevos** (dominio puro + choke point).
+- **Gate F1.4, 4 decisiones:** todo pasa por la guardia (sin override `ANY→ANY` ni para maestro/admin
+  → rescatar una orden atascada exige declarar la arista y desplegar); activación **estricta desde el
+  día 1** (sin shadow/flag/env); se valida también la creación `null→X` contra `ESTADOS_CREACION`;
+  `throw` tipado sin PII con la firma intacta para los call-sites. Q1/Q2/Q4 se cerraron **contra el
+  código** al aterrizar 138/139 (`en_ruta_bodega_central` dejó de ser vestigial → allowlist vacía; el
+  catálogo pasó a 18 values). `rechazada → devolviendo_a_tienda` NO se declara: la 139 la retiró (R9).
+- **El reviewer RECHAZÓ la 1.ª entrega:** la guardia **fallaba abierta** — un `value` presente en la DB
+  pero ausente del `ORDER_STATUS_SEED` del build pasaba sin validar (drift DB↔código, justo donde la
+  guardia hace falta), y quedaba OFF en las ~25 suites que modelan los call-sites reales, con un test
+  que consagraba el fail-open como contrato. Corregido a **fallo cerrado** (`TransicionNoValidableError`)
+  + catálogo explícito inyectado en 24 suites vía fixture derivada del SEED real (no permisiva).
+- Re-review **APROBADO 0 bloqueantes**, verificado **por mutación** (borrar una arista pone en rojo los
+  tests de sus call-sites; antes del fix seguían verdes). R1–R17 trazados, 151 tests nuevos, suite 511
+  archivos / 5163 verdes, `./init.sh` OK. **PR #161 → dev, mergeado 2026-07-25.**
+- **Lote 137–140 COMPLETO** (4/4 mergeadas) y **DESPLEGADO A PRODUCCIÓN el 2026-07-25** (PR #163
+  `dev → prod`, 41 commits). Deployment `ordenex-qzzgvlmhq` **Ready**, build verde en 29 s, runtime sin
+  errores. **Migraciones aplicadas y verificadas**: el build corrió `prisma migrate deploy` →
+  `No pending migrations to apply` sobre **86 migraciones** (= las 86 del repo, incluidas las 4 del
+  lote). Deuda de migraciones del lote **SALDADA**.
+- ⚠️ **Hallazgo operativo del deploy:** los **previews de Vercel comparten la base de Supabase con
+  producción**, y como el `build` incluye `prisma migrate deploy`, **el build de un preview migra la
+  base de producción**. Por eso al mergear a `prod` no quedaba nada pendiente. La ventana de
+  inconsistencia código↔DB de una migración no-aditiva se abre **al crear el PR**, no al mergear: con el
+  rename de la 137 estuvo abierta desde el preview del PR #157. Para renames/destructivas futuras,
+  preferir expand-contract (aditiva primero, limpieza en un PR posterior) o mergear de inmediato.
+
+## 2026-07-25 — 121 ubicación compartida por el cliente en el chat de WhatsApp (cierre de estado stale)
+- Soporte de `type=location` en el webhook de WhatsApp + minimapa en el chat. Backend: enum
+  `ChatMensajeTipo.ubicacion` + columnas `latitud`/`longitud` nullable en `chat_mensaje` (migración
+  up/down `20260724120000_chat_mensaje_ubicacion`), normalización en `lib/types/whatsapp-webhook.ts`,
+  propagación service/repo/DTO/vista. Frontend: burbuja con `MapPin`, **`components/ui/dialog.tsx` nuevo**
+  (sobre `@base-ui/react`, modelado en `sheet.tsx`), `UbicacionMapa`/`UbicacionMapaInner`
+  (Leaflet + OSM anti-SSR, patrón feature 97) y GPS lazy vía `useUbicacionActual` con degradación no
+  bloqueante si se deniega el permiso.
+- Gate F1.4: D1 = la posición del repartidor es el **GPS del navegador en vivo** (sin rastreo
+  server-side); D2 = v1 **solo visualiza** (no adopta la ubicación como coordenadas de entrega).
+  P1 = solo lat/lng, P2 = pin + texto "Ubicación compartida", P3 = GPS al abrir el modal.
+- Reviewer **APROBADO 0 bloqueantes**, 16/16 requisitos con test (`progress/review_121.md`,
+  `impl_121_backend.md`, `impl_121_frontend.md`).
+- **Cerrada el 2026-07-25 por reconciliación:** figuraba `in_progress` por el aterrizaje diferido —
+  dependía de que la feature 120 (chat) saliera de `flow` a `dev`, cosa que ya ocurrió. Su código y su
+  migración están en `dev` y desplegados. Deuda menor heredada: la migración se validó por forma
+  estática, y G2 quedó como dos archivos `impl_121_*` en vez de un `impl_121.md`.
+
+## 2026-07-25 — 136 etiquetas PDF: primer review real (RECHAZADO) + corrección de los 3 bloqueantes
+> ✅ **CERRADA (`done`) el 2026-07-26**: el bucket privado `etiquetas-guia` ya existe en Supabase prod
+> (`public = false`, verificado por el leader), con lo que T0.1 queda saldada y R8/R9/R10 dejan de
+> depender de fakes. Re-review APROBADO-CON-NOTAS, 0 bloqueantes.
+
+- **Se descubrió que la 136 estaba mergeada en `dev` y DESPLEGADA sin review real.** Su
+  `status_note` afirmaba "reviewer APROBADO 0 bloqueantes" y daba por hecho `.env.example`, pero
+  `progress/review_136.md` no existía en disco y las variables no estaban en el archivo. Ambas
+  afirmaciones quedaron corregidas en `feature_list.json`.
+- **Review real → RECHAZADO, 3 bloqueantes** (`progress/review_136.md`; lo transcribió el leader tras
+  cuatro caídas de conexión del agente, mismo precedente que la 139):
+  - **BLOQ-1 (grave, pérdida de datos):** el PDF no tenía cota — hasta `MAX_CHUNK_ROWS` = 5000, con
+    ~13 ms y ~279 KB por etiqueta (~1.4 GB / ~65 s en el tope) — y reventaba por **OOM/timeout DESPUÉS**
+    de commitear las órdenes. Un OOM no es excepción JS, así que el `try/catch` del borde no lo
+    capturaba: **500/504 en vez del 200 de R12 y el integrador perdía los `num_guia`** (al reintentar le
+    salían como `duplicada`). Ningún test cubría lote grande.
+  - **BLOQ-2:** T0.2 y T4.3 marcadas `[x]` con artefacto inexistente (`.env.example` sin las variables,
+    `impl_136.md` ausente).
+  - **BLOQ-3:** R7 sin test asertivo — el test mockeaba `qrcode` y `bwip-js`, justo las libs cuya
+    server-safety afirma el requisito.
+- **Corregido en 5 commits.** BLOQ-1 se resuelve **decidiendo antes de empezar** en vez de intentar
+  recuperarse: tope `ETIQUETAS_MAX_POR_PDF` (default 300, techo 1000) evaluado en el **borde** antes de
+  construir service o cliente de Storage, repetido en el service como defensa en profundidad; más
+  `compress: true` (262.8 KB → 3.3 KB por etiqueta, ~80×) y `runtime = "nodejs"` + `maxDuration = 60`.
+  Menores: TTL clampeado a 24 h, log sin el error crudo, `EtiquetaGuiaService` aísla por dueño cuando el
+  actor es `apiKey`, y los comentarios "Feature 112" → "Feature 136".
+- **Re-review: APROBADO-CON-NOTAS, 0 bloqueantes**, con medición propia del reviewer (300 etiquetas =
+  5.74 s / RSS 301 MB → cabe con margen en `maxDuration=60`; techo 1000 = 19.3 s). **14 tests nuevos**;
+  R3 y R4 dejan de ser parciales. `./init.sh` verde (**515 archivos / 5209 tests**), verificado también
+  por el leader de forma independiente.
+- ~~**Deuda viva:** T0.1 crear el bucket privado `etiquetas-guia`~~ → **SALDADA 2026-07-26**: el bucket
+  existe y es privado en Supabase prod. La respuesta del endpoint ya puede traer la URL firmada real.
+- **Notas menores vivas** del re-review: M1 upload/signed URL sin timeout (un stall de red aún podría
+  dar 504 tras el commit — misma familia que BLOQ-1, mucho menos probable), M2 assert numérico débil en
+  R4, M3 R3 no end-to-end, sin E2E (precedente de la 88).
+
+## 2026-07-26 — 112, 105 y 79: cerradas por auditoría del backlog (ya estaban hechas)
+- A petición del humano ("creo que muchas ya quedaron o ya no se necesitan") se auditó **cada feature
+  pendiente contra el código**. El registro estaba desactualizado en 5 de 8 casos.
+- **112 — webhook, sobre genérico `data`** (figuraba `spec_ready`, o sea sin empezar): ya implementada.
+  `lib/services/WebhookEstadoService.ts:89` construye el cuerpo con `data: {...}` y
+  `tests/unit/services/webhook-estado-service.test.ts:94` asserta `body.data`. El breaking change
+  `orden` → `data` viajó con la implementación de la 104.
+- **105 — UI de registro de webhooks** (figuraba `pending`): ya implementada y **cableada**. Cadena
+  `page.tsx` → `ApiKeysModule` (23 referencias a webhook) → `api-keys-columns.tsx` →
+  `WebhookAccionCell.tsx` → `RegistrarWebhookForm.tsx`, más `RevelarWebhookSecretoModal.tsx` y
+  `webhook-url.ts`, con 3 tests de componente. (Un primer grep superficial sugirió que el formulario no
+  estaba montado; la cadena real pasa por las columnas de la tabla.)
+- **79 — `/paquete/[numGuia]` pública** (figuraba `pending`): la decisión que la feature pedía **ya se
+  tomó y se implementó** — opción (b) de su propia descripción: NO es pública, exige sesión. Con un
+  refinamiento: `middleware.ts` la manda a `/` en vez de a `/login` (`REDIRECT_TO_ROOT`), porque enviar
+  a un formulario de login a quien sólo pegó un número de guía es un callejón. Tests en
+  `tests/unit/auth/middleware.test.ts:116-127`. La superficie de enumeración que alertaba su ficha
+  queda descartada al no exponerse sin sesión.
+- **Reclasificadas (estaban a medias, en la mitad contraria a la que decía su ficha):** **85** tiene el
+  backend completo y sólo le falta la UI (es feature frontend); **74** tiene la captura de la causa
+  hecha y le falta explotarla (mostrarla/agruparla en listados).
+- **Backlog real resultante: 20 pendientes, de las cuales 15 son la cadena de analítica.** El trabajo
+  suelto son 5 features (80, 85, 74, 70, 71) más la 66. Sin features `in_progress` ni `spec_ready`.

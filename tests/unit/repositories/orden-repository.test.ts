@@ -1,14 +1,15 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { NumRemisionDuplicadoError } from "@/lib/interfaces/repositories/IOrdenRepository";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 function ordenRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "ord-1",
     numGuia: 1,
     numRemision: "REM-1",
-    estatusId: "os-bodega",
+    estatusId: idEstado("en_bodega_central"),
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "t1",
@@ -56,7 +57,7 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
 function ordenListRow(overrides: Record<string, unknown> = {}) {
   return {
     ...ordenRow(),
-    estatus: { id: "os-bodega", value: "en_bodega_central" },
+    estatus: { id: idEstado("en_bodega_central"), value: "en_bodega_central" },
     tienda: {
       id: "t1",
       nombre: "Tienda Uno",
@@ -80,7 +81,8 @@ function ordenListRow(overrides: Record<string, unknown> = {}) {
 function baseCreateData() {
   return {
     numRemision: "REM-1",
-    estatusId: "os-bodega",
+    // Feature 140/Q5: una orden nace SOLO en un ESTADOS_CREACION (aqui el default global).
+    estatusId: idEstado("en_preparacion"),
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "t1",
@@ -123,6 +125,10 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
 // Feature 49/#2/#10/#20: contexto de historial que el service inyecta al repo.
 const HIST_CREACION = { actorUsuarioId: "u-actor", origenTipo: "creacion_manual" } as const;
 const HIST_AJUSTE = { actorUsuarioId: "u-actor", origenTipo: "ajuste_estado" } as const;
+
+beforeEach(async () => {
+  await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
 
 describe("OrdenRepository.create", () => {
   it("serializa peso Decimal a number y arma OrdenDTO sin deletedAt", async () => {
@@ -181,7 +187,9 @@ describe("OrdenRepository.create", () => {
   // (creacion) -> destino estado inicial, actor y tipo creacion_manual, en la misma tx.
   it("R10/R20: registra 1 historial con origen null, destino=estado inicial, tipo creacion_manual", async () => {
     const prisma = buildPrisma();
-    prisma.orden.create.mockResolvedValue(ordenRow({ id: "ord-1", estatusId: "os-bodega" }));
+    prisma.orden.create.mockResolvedValue(
+      ordenRow({ id: "ord-1", estatusId: idEstado("en_preparacion") }),
+    );
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     await repo.create(baseCreateData(), HIST_CREACION);
@@ -192,7 +200,7 @@ describe("OrdenRepository.create", () => {
       {
         ordenId: "ord-1",
         estatusOrigenId: null,
-        estatusDestinoId: "os-bodega",
+        estatusDestinoId: idEstado("en_preparacion"),
         actorUsuarioId: "u-actor",
         origenTipo: "creacion_manual",
         motivo: null,
@@ -250,7 +258,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const res = await repo.list({
-      where: { estatusId: "os-reprogramada" },
+      where: { estatusId: idEstado("reprogramada") },
       sortBy: "num_guia",
       sortDir: "asc",
       skip: 0,
@@ -309,7 +317,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const res = await repo.list({
-      where: { estatusId: "os-bodega" },
+      where: { estatusId: idEstado("en_bodega_central") },
       sortBy: "num_guia",
       sortDir: "asc",
       skip: 0,
@@ -320,7 +328,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(res.items).toHaveLength(2);
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ deletedAt: null, estatusId: "os-bodega" });
+    expect(arg.where).toMatchObject({ deletedAt: null, estatusId: idEstado("en_bodega_central") });
     // Feature 101/R6: prioridad-first PRIMERO, luego la columna mapeada (R31) como desempate.
     expect(arg.orderBy).toEqual([{ prioridad: "desc" }, { numGuia: "asc" }]);
     expect(arg.skip).toBe(0);
@@ -443,7 +451,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     });
 
     const rel = res.items[0].relaciones!;
-    expect(rel.estatus).toEqual({ id: "os-bodega", value: "en_bodega_central" });
+    expect(rel.estatus).toEqual({ id: idEstado("en_bodega_central"), value: "en_bodega_central" });
     expect(rel.zona).toEqual({ id: "z1", nombre: "GAM", esCentral: true });
     expect(rel.provincia).toEqual({ id: "p1", nombre: "San José" });
     expect(rel.canton).toEqual({ id: "c1", nombre: "Central" });
@@ -499,7 +507,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     await repo.list({
-      where: { estatusId: "os-bodega" },
+      where: { estatusId: idEstado("en_bodega_central") },
       sortBy: "created_at",
       sortDir: "desc",
       skip: 0,
@@ -524,7 +532,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const res = await repo.list({
-      where: { estatusId: "os-bodega" },
+      where: { estatusId: idEstado("en_bodega_central") },
       sortBy: "created_at",
       sortDir: "desc",
       skip: 0,
@@ -563,15 +571,21 @@ describe("OrdenRepository.update (R36/R37)", () => {
     prisma.orden.updateMany.mockResolvedValue({ count: 1 });
     // pre-lectura del origen (call 1) + relectura final para el DTO (call 2).
     prisma.orden.findFirst
-      .mockResolvedValueOnce({ estatusId: "os-bodega" })
-      .mockResolvedValueOnce(ordenRow({ estatusId: "os-entregada" }));
+      .mockResolvedValueOnce({ estatusId: idEstado("devolviendo_a_tienda") })
+      .mockResolvedValueOnce(ordenRow({ estatusId: idEstado("devuelta_a_tienda") }));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.update("ord-1", { estatusId: "os-entregada" }, HIST_AJUSTE);
+    // Feature 140: `ajuste_estado` pasa por la MISMA guardia (Q3, sin override), asi que el
+    // par tiene que ser una arista declarada: #28 `devolviendo_a_tienda -> devuelta_a_tienda`.
+    const dto = await repo.update(
+      "ord-1",
+      { estatusId: idEstado("devuelta_a_tienda") },
+      HIST_AJUSTE,
+    );
 
     const arg = prisma.orden.updateMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ id: "ord-1", deletedAt: null });
-    expect(dto?.estatusId).toBe("os-entregada");
+    expect(dto?.estatusId).toBe(idEstado("devuelta_a_tienda"));
   });
 
   it("devuelve null si no existe o esta borrada (R36)", async () => {
@@ -588,19 +602,19 @@ describe("OrdenRepository.update (R36/R37)", () => {
     const prisma = buildPrisma();
     prisma.orden.updateMany.mockResolvedValue({ count: 1 });
     prisma.orden.findFirst
-      .mockResolvedValueOnce({ estatusId: "os-bodega" }) // origen pre-leido
-      .mockResolvedValueOnce(ordenRow({ estatusId: "os-entregada" }));
+      .mockResolvedValueOnce({ estatusId: idEstado("devolviendo_a_tienda") }) // origen pre-leido
+      .mockResolvedValueOnce(ordenRow({ estatusId: idEstado("devuelta_a_tienda") }));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.update("ord-1", { estatusId: "os-entregada" }, HIST_AJUSTE);
+    await repo.update("ord-1", { estatusId: idEstado("devuelta_a_tienda") }, HIST_AJUSTE);
 
     expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
     const arg = prisma.ordenHistorialEstado.createMany.mock.calls[0][0];
     expect(arg.data).toEqual([
       {
         ordenId: "ord-1",
-        estatusOrigenId: "os-bodega",
-        estatusDestinoId: "os-entregada",
+        estatusOrigenId: idEstado("devolviendo_a_tienda"),
+        estatusDestinoId: idEstado("devuelta_a_tienda"),
         actorUsuarioId: "u-actor",
         origenTipo: "ajuste_estado",
         motivo: null,
@@ -626,11 +640,11 @@ describe("OrdenRepository.update (R36/R37)", () => {
     const prisma = buildPrisma();
     prisma.orden.updateMany.mockResolvedValue({ count: 1 });
     prisma.orden.findFirst
-      .mockResolvedValueOnce({ estatusId: "os-bodega" }) // origen
-      .mockResolvedValueOnce(ordenRow({ estatusId: "os-bodega" }));
+      .mockResolvedValueOnce({ estatusId: idEstado("en_bodega_central") }) // origen
+      .mockResolvedValueOnce(ordenRow({ estatusId: idEstado("en_bodega_central") }));
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.update("ord-1", { estatusId: "os-bodega" }, HIST_AJUSTE);
+    await repo.update("ord-1", { estatusId: idEstado("en_bodega_central") }, HIST_AJUSTE);
 
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
@@ -664,10 +678,10 @@ describe("OrdenRepository.existsGeo / existsEstatus / findEstatusIdByValue", () 
 
   it("findEstatusIdByValue resuelve el id por value", async () => {
     const prisma = buildPrisma();
-    prisma.orderStatus.findUnique.mockResolvedValue({ id: "os-bodega", value: "en_bodega_central" });
+    prisma.orderStatus.findUnique.mockResolvedValue({ id: idEstado("en_bodega_central"), value: "en_bodega_central" });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.findEstatusIdByValue("en_bodega_central")).toBe("os-bodega");
+    expect(await repo.findEstatusIdByValue("en_bodega_central")).toBe(idEstado("en_bodega_central"));
   });
 
   it("existsEstatus devuelve false cuando no existe", async () => {

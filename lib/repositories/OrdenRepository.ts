@@ -134,11 +134,10 @@ const ORIGEN_RECEPCION_SATELITE = "en_ruta_bodega_satelite";
 // Estado de ORIGEN de la recepcion en la tienda: la orden viaja de vuelta a la
 // tienda ("En ruta a origen") y esta la recibe fisicamente.
 const ORIGEN_RECEPCION_ORIGEN = "devolviendo_a_tienda";
-// Feature 138/R2/R11: estado de ORIGEN de la recepcion en la BODEGA CENTRAL. Es el
-// dead-end de la carga por API (`BulkOrdenService.ESTATUS_INICIAL_API`); la escritura
-// guardada (`recibirEnBodegaCentral`) solo transiciona una orden que sigue en este estado.
-// A diferencia de la satelite/origen, la guarda NO se acota por zona ni por tienda (R11).
-const ORIGEN_RECEPCION_BODEGA_CENTRAL = "en_ruta_bodega_central";
+// Feature 138 + 139: la recepcion en la BODEGA CENTRAL es STATE-AWARE: el estado de ORIGEN
+// (`en_ruta_bodega_central` para el caso 138, `devolviendo_a_bodega_central` para el 139) lo
+// resuelve el SERVICE y lo pasa como `origenValue` a `recibirEnBodegaCentral`, que guarda el UPDATE
+// por ese estado. La guarda NO se acota por zona ni por tienda (R11): la bodega central es global.
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
 const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
@@ -409,6 +408,7 @@ function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
 const WITH_ETIQUETA = {
   select: {
     id: true,
+    tiendaId: true, // Feature 136: dueño, para el filtro por propietario del service
     numGuia: true,
     numRemision: true,
     destinatario: true,
@@ -432,6 +432,7 @@ type OrdenEtiquetaRow = Prisma.OrdenGetPayload<typeof WITH_ETIQUETA>;
 function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
   return {
     id: row.id,
+    tiendaId: row.tiendaId,
     numGuia: row.numGuia,
     numRemision: row.numRemision,
     destinatario: row.destinatario,
@@ -1629,29 +1630,32 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * Feature 138/R2/R3/R9/R18: recepcion en la BODEGA CENTRAL
-   * (`en_ruta_bodega_central` -> `en_bodega_central`), cierre del dead-end de la carga
-   * por API. Espejo EXACTO de `recibirEnOrigen`/`recibirEnSatelite` pero SIN guarda de
-   * tienda ni de zona: la bodega central es global (R11). La UNICA guarda es el estado de
-   * ORIGEN + no borrada, impuesta en el propio `updateMany` (concurrencia-segura, R9): a lo
-   * sumo UNA de dos recepciones concurrentes afecta 1 fila. Origen pre-leido bajo la misma
-   * guarda; append del historial (`origenTipo = recepcion_bodega_central`) SOLO si transiciono
-   * (count 1), en la MISMA tx (choke point feature 49: historial + outbox de webhook). NO toca
+   * Feature 138/R2/R3/R9/R18 + feature 139/R17 (STATE-AWARE): recepcion en la BODEGA CENTRAL. El par
+   * ORIGEN->DESTINO lo resuelve el SERVICE por el estado de origen de la orden y lo pasa como
+   * `origenValue`/`destinoEstatusId`: `en_ruta_bodega_central -> en_bodega_central` (138) o
+   * `devolviendo_a_bodega_central -> por_devolver_a_tienda` (139). Espejo de
+   * `recibirEnOrigen`/`recibirEnSatelite` pero SIN guarda de tienda ni de zona: la bodega central es
+   * global (R11). La UNICA guarda es el estado de ORIGEN (`estatus.value = origenValue`) + no borrada,
+   * impuesta en el propio `updateMany` (concurrencia-segura, R9): a lo sumo UNA de dos recepciones
+   * concurrentes afecta 1 fila. Origen pre-leido bajo la misma guarda; append del historial
+   * (`origenTipo` = el pasado en `historial`, `recepcion_bodega_central`) SOLO si transiciono (count 1),
+   * en la MISMA tx (choke point feature 49: historial + outbox de webhook). NO toca
    * `mensajeroAsignadoId` ni `numGuia` (R18).
    */
   async recibirEnBodegaCentral(
     ordenId: string,
+    origenValue: string,
     destinoEstatusId: string,
     historial: HistorialContexto,
   ): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
-      // Origen pre-leido con la MISMA guarda (estado en_ruta_bodega_central + no borrada).
-      // SIN zona/tienda: cualquier orden en el origen es elegible (R11).
+      // Origen pre-leido con la MISMA guarda (estado `origenValue` + no borrada). SIN zona/tienda:
+      // cualquier orden en el origen es elegible (R11).
       const actual = await tx.orden.findFirst({
         where: {
           id: ordenId,
           deletedAt: null,
-          estatus: { value: ORIGEN_RECEPCION_BODEGA_CENTRAL },
+          estatus: { value: origenValue },
         },
         select: { estatusId: true },
       });
@@ -1659,7 +1663,7 @@ export class OrdenRepository implements IOrdenRepository {
         where: {
           id: ordenId,
           deletedAt: null,
-          estatus: { value: ORIGEN_RECEPCION_BODEGA_CENTRAL },
+          estatus: { value: origenValue },
         },
         data: { estatusId: destinoEstatusId },
       });

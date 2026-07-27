@@ -33,10 +33,15 @@ export type ListarRecepcionSateliteResult =
       status: "ok";
       porRecibir: RecepcionSateliteDTO[];
       recibidas: RecepcionSateliteDTO[];
-      // Feature 48/T9/R14: ordenes `rechazada` de la zona del adminSatelite,
-      // elegibles para "Devolver a la tienda". El campo viaja tal cual desde el
-      // service result (la action solo reenvia); acotado server-side por zona.
+      // Feature 139/T2.5/R21: ordenes `por_devolver` de la zona del adminSatelite,
+      // elegibles para "Enviar a central" (por lote). REEMPLAZA el viejo scope `rechazada`
+      // (feature 48). El campo viaja tal cual desde el service result (la action solo
+      // reenvia); acotado server-side por zona.
       porDevolver: RecepcionSateliteDTO[];
+      // Feature 139/T2.5/R21: ordenes `devolviendo_a_bodega_central` de la zona (en transito
+      // a la central), INFORMATIVAS. Alineado con `ListarRecepcionSateliteServiceResult.ok`:
+      // el service ya lo devuelve y la action lo reenvia verbatim (sin remapear).
+      enTransitoACentral: RecepcionSateliteDTO[];
       // Feature 100/T4.1/R12: ordenes `devuelta` de la zona del adminSatelite,
       // elegibles para "Recuperar a bodega". Viaja tal cual desde el service result
       // (la action solo reenvia); acotado server-side por zona.
