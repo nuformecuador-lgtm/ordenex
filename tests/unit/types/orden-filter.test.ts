@@ -47,4 +47,23 @@ describe("ordenFilterSchema / listarOrdenesSchema.filter (feature 63)", () => {
   it("R7: status_id vacio se rechaza (min(1))", () => {
     expect(() => ordenFilterSchema.parse({ status_id: "" })).toThrow(z.ZodError);
   });
+
+  // Filtro MULTI-ESTADO: el listado unico de /ordenes ofrece un selector de seleccion
+  // multiple, asi que `status_id` acepta tambien una LISTA de ids (-> `IN (...)`).
+  it("status_id acepta una LISTA de ids", () => {
+    const parsed = listarOrdenesSchema.parse({
+      filter: { status_id: ["os-a", "os-b"] },
+    });
+    expect(parsed.filter).toEqual({ status_id: ["os-a", "os-b"] });
+  });
+
+  it("una lista VACIA se rechaza (equivaldria a 'ningun estado': se omite el filtro)", () => {
+    expect(() => ordenFilterSchema.parse({ status_id: [] })).toThrow(z.ZodError);
+  });
+
+  it("un id vacio dentro de la lista se rechaza (min(1) por elemento)", () => {
+    expect(() => ordenFilterSchema.parse({ status_id: ["os-a", ""] })).toThrow(
+      z.ZodError,
+    );
+  });
 });

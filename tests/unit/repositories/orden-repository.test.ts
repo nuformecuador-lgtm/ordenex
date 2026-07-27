@@ -477,6 +477,51 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     });
   });
 
+  // Filtro MULTI-ESTADO (selector de seleccion multiple del listado de /ordenes): una
+  // LISTA de ids se traduce a `IN (...)`; una lista vacia no filtra (equivale a "sin
+  // filtro", igual que un estatusId ausente).
+  it("un estatusId como LISTA se traduce a `IN (...)` en el where", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const ids = [idEstado("en_bodega_central"), idEstado("entregada")];
+    await repo.list({
+      where: { estatusId: ids },
+      sortBy: "created_at",
+      sortDir: "desc",
+      skip: 0,
+      take: 20,
+    });
+
+    const arg = prisma.orden.findMany.mock.calls[0][0];
+    expect(arg.where).toMatchObject({ deletedAt: null, estatusId: { in: ids } });
+    // El count usa el MISMO where (el total debe corresponder al filtro aplicado).
+    expect(prisma.orden.count.mock.calls[0][0].where).toMatchObject({
+      estatusId: { in: ids },
+    });
+  });
+
+  it("un estatusId como lista VACIA no filtra por estado", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.list({
+      where: { estatusId: [] },
+      sortBy: "created_at",
+      sortDir: "desc",
+      skip: 0,
+      take: 20,
+    });
+
+    const arg = prisma.orden.findMany.mock.calls[0][0];
+    expect(arg.where.estatusId).toBeUndefined();
+    expect(arg.where).toMatchObject({ deletedAt: null });
+  });
+
   it("inyecta tiendaId en el where cuando se pasa (alcance adminTienda)", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([]);
