@@ -1,8 +1,14 @@
 // Feature 15 — Orquesta la carga masiva de ordenes: autorizacion, resolucion
 // geografica/mensajero por fila, deduplicacion y persistencia batch. Logica de
 // negocio pura (sin HTTP, sin Prisma directo, sin parseo de archivo).
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { ordenesConfig } from "@/lib/config/ordenes";
+import {
+  emitirBestEffort,
+  notificarCargaMasivaTerminadaReal,
+  type CargaMasivaNotificador,
+} from "@/lib/notificaciones/notificadores";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
 import { filaCargaSchema, type BulkSummary, type RowResult } from "@/lib/types/carga-masiva";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
@@ -204,6 +210,14 @@ export class BulkOrdenService implements IBulkOrdenService {
   constructor(
     private readonly repo: IOrdenRepository,
     private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
+    /**
+     * Feature 146 (R22/R25): notificador de "carga masiva terminada", inyectable con default
+     * real. Solo lo usa `cargarViaApi`, que SI tiene fin de lote real (una peticion = un lote).
+     * La carga por UI la trocea el cliente y se cierra con la Server Action
+     * `notificarCargaMasivaTerminada` (F1.4-4). BEST-EFFORT: una notificacion perdida no puede
+     * invalidar una carga de cientos de ordenes ya persistidas.
+     */
+    private readonly notificarCarga: CargaMasivaNotificador = notificarCargaMasivaTerminadaReal,
   ) {}
 
   async cargarMasiva(
@@ -373,7 +387,21 @@ export class BulkOrdenService implements IBulkOrdenService {
       });
     }
 
-    return { status: "ok", summary: this.buildViaApiSummary(rows.length, filas, ordenes) };
+    const summary = this.buildViaApiSummary(rows.length, filas, ordenes);
+
+    // Feature 146/R22/R25: aviso `box` al usuario ejecutor (el dueño de la API key), server-side
+    // porque esta via SI conoce el fin del lote. Va DESPUES de la persistencia y absorbe su
+    // propio fallo: la carga ya esta hecha y su respuesta no puede depender del aviso.
+    await emitirBestEffort("carga_masiva_terminada", () =>
+      this.notificarCarga({
+        usuarioId: tiendaId,
+        creadas: summary.creadas,
+        total: summary.total,
+        loteId: randomUUID(),
+      }),
+    );
+
+    return { status: "ok", summary };
   }
 
   private buildViaApiSummary(
