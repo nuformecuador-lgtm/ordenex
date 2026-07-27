@@ -133,6 +133,9 @@ model Usuario {
   webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
   ordenMensajeroMetas                 OrdenMensajeroMeta[]      @relation("OrdenMensajeroMetaMensajero") // feature 115: marcas privadas ("gestionar mas tarde") de ESTE mensajero sobre sus ordenes
   chatConversaciones                  ChatConversacion[]        @relation("ChatConversacionMensajero") // feature 120/R13/R16: hilos de chat asignados a ESTE mensajero
+  notificacionesRecibidas             Notificacion[]            @relation("NotificacionDestinatario") // feature 146/R1: notificaciones dirigidas a ESTE usuario (D4)
+  notificacionesDeSuTienda            Notificacion[]            @relation("NotificacionTienda") // feature 146/F1.4-1: notificaciones ACOTADAS a esta tienda (el adminTienda ES la tienda)
+  notificacionLecturas                NotificacionLectura[] // feature 146/R2/R3: lectura/descarte de ESTE usuario, aislado de los demas del mismo rol
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -383,6 +386,7 @@ model Zona {
   cierresDestino       CierreDia[] // feature 37: cierres cuyo destino_zona_id apunta a esta zona
   cierresBodega        CierreBodega[] // feature 40: cierres de bodega de esta zona satelite
   cierreDetalles       CierreDetail[] // feature 69/R6: snapshots que congelaron esta zona
+  notificaciones       Notificacion[] // feature 146/F1.4-1: notificaciones ACOTADAS a esta zona (alcance del adminSatelite)
 
   @@map("zona")
 }
@@ -1407,4 +1411,99 @@ model RutaOptimizadaParada {
   @@unique([rutaId, secuencia])
   @@index([ordenId])
   @@map("ruta_optimizada_parada")
+}
+
+// Feature 146 (design §1.1) — tipo de PRESENTACION de la notificacion: mapea 1:1 al icono
+// que pinta la campana. Enum Postgres nativo (patron RolValue / ChatMensajeTipo).
+enum NotificacionTipo {
+  alert
+  box
+  warning
+
+  @@map("notificacion_tipo")
+}
+
+// Feature 146 (design §1.1) — evento de dominio que origino la notificacion. INVENTARIO
+// CERRADO de D1 (exactamente cuatro productores): anadir un evento exige migracion de enum,
+// deliberado (mismo criterio que OrdenHistorialOrigenTipo), para que ningun productor no
+// especificado se cuele sin revision (R26).
+enum NotificacionEvento {
+  orden_rechazada
+  carga_masiva_terminada
+  postulacion_mensajero_pendiente
+  cierre_dia_por_aprobar
+
+  @@map("notificacion_evento")
+}
+
+// Feature 146 (design §1.1) — tipo de la entidad de origen. Discrimina a que tabla apunta
+// `entidadId` (referencia POLIMORFICA, sin FK).
+enum NotificacionEntidadTipo {
+  orden
+  usuario
+  cierre_dia
+  carga
+
+  @@map("notificacion_entidad_tipo")
+}
+
+// Feature 146 (design §1.2, R1/R4/R5/R6) — una notificacion DIRIGIDA (D4): o a un ROL
+// (`destinatarioRol`) o a un USUARIO concreto (`destinatarioUsuarioId`), nunca a ambos ni a
+// ninguno (CHECK XOR `notificacion_destinatario_xor` en la migracion; Prisma no expresa
+// CHECK). Un evento con N roles destinatarios produce N filas (F1.4-5).
+//
+// `tiendaId` y `zonaId` son el ALCANCE (F1.4-1): opcionales e INDEPENDIENTES entre si.
+// NULL en ambos = visible a todo el rol (R13). Ambos con FK ON DELETE CASCADE (R11).
+// `tiendaId` referencia `usuario` porque en este esquema la tienda ES el usuario adminTienda.
+//
+// `leidaAt` NO vive aqui a proposito (D4): el estado de lectura es POR USUARIO y vive en
+// `NotificacionLectura`. Fila INMUTABLE (sin updatedAt): nada de la notificacion cambia
+// despues de crearse.
+model Notificacion {
+  id                    String                  @id @default(uuid())
+  tipo                  NotificacionTipo
+  evento                NotificacionEvento
+  descripcion           String
+  anexo                 String?
+  entidadTipo           NotificacionEntidadTipo @map("entidad_tipo")
+  entidadId             String?                 @map("entidad_id") // referencia polimorfica: SIN FK (design Riesgo 4)
+  destinatarioRol       RolValue?               @map("destinatario_rol")
+  destinatarioUsuarioId String?                 @map("destinatario_usuario_id")
+  tiendaId              String?                 @map("tienda_id") // alcance: el adminTienda dueno de la orden
+  zonaId                String?                 @map("zona_id") // alcance: la zona del adminSatelite
+  createdAt             DateTime                @default(now()) @map("created_at")
+
+  destinatarioUsuario Usuario? @relation("NotificacionDestinatario", fields: [destinatarioUsuarioId], references: [id], onDelete: Cascade)
+  tienda              Usuario? @relation("NotificacionTienda", fields: [tiendaId], references: [id], onDelete: Cascade)
+  zona                Zona?    @relation(fields: [zonaId], references: [id], onDelete: Cascade)
+
+  lecturas NotificacionLectura[]
+
+  // Los indices del listado y del alcance son PARCIALES (WHERE ... IS NOT NULL) y van a
+  // mano en la migracion; Prisma no los expresa. Lo mismo el unico de dedupe
+  // (`notificacion_dedupe_key`, NULLS NOT DISTINCT). Se declaran aqui los btree simples
+  // equivalentes para que el cliente generado conozca la forma de la tabla.
+  @@index([entidadTipo, entidadId])
+  @@map("notificacion")
+}
+
+// Feature 146 (design §1.3, R2/R3) — estado de una notificacion PARA UN USUARIO. La
+// AUSENCIA de fila significa "no leida y no descartada". Descartar implica leida (se
+// escriben ambos instantes) para que descartar una no leida no descuadre el contador.
+// Unico (notificacionId, usuarioId): a lo sumo una fila por par, y es la clave del upsert
+// idempotente de marcar/descartar (R37). Que el estado viva aqui —y no en `Notificacion`—
+// es lo que hace que un admin que lee NO apague el aviso de los demas admins (R3).
+model NotificacionLectura {
+  id             String    @id @default(uuid())
+  notificacionId String    @map("notificacion_id")
+  usuarioId      String    @map("usuario_id")
+  leidaAt        DateTime? @map("leida_at")
+  descartadaAt   DateTime? @map("descartada_at")
+
+  notificacion Notificacion @relation(fields: [notificacionId], references: [id], onDelete: Cascade)
+  usuario      Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([notificacionId, usuarioId])
+  @@index([usuarioId])
+  @@map("notificacion_lectura")
 }
