@@ -50,7 +50,7 @@ interface OrdenesPageData {
 async function ordenesFetcher(
   page: number,
   pageSize: number,
-  filter?: { status_id: string },
+  filter?: { status_id: string | string[] },
 ): Promise<OrdenesPageData> {
   // Feature 63/C2 (R15/R19): con `filter` se inyecta el `status_id` a la action
   // (whitelist server-side -> where.estatusId). Sin `filter`, el input es
@@ -89,13 +89,23 @@ export function OrdenesModule({
   mostrarHistorial?: boolean;
   /**
    * Feature 63/C2 (R15): filtro opcional por estado de orden. Se inyecta a
-   * `listarOrdenes` y entra en la key SWR, de modo que cada estado (tab) tiene
-   * su propia caché y paginación independiente (R17). Sin la prop, el módulo se
-   * comporta idéntico al listado plano previo (R10/R19, sin regresión).
+   * `listarOrdenes` y entra en la key SWR, de modo que cada combinación de
+   * estados tiene su propia caché y paginación. `status_id` admite UN id o una
+   * LISTA de ids (filtro multi-estado del selector de `/ordenes`, que sustituyó a
+   * las tabs por estado); el backend traduce la lista a `IN (...)`. Sin la prop, el
+   * módulo se comporta idéntico al listado plano previo (R10/R19, sin regresión).
    */
-  filter?: { status_id: string };
-  /** Habilita la columna de checkbox por fila (selección por lote, solo maestro). */
-  selectable?: boolean;
+  filter?: { status_id: string | string[] };
+  /**
+   * Habilita la columna de checkbox por fila (selección por lote, solo maestro).
+   *
+   * Admite un PREDICADO sobre las filas de la página: con una sola tabla para varios
+   * estados, una vista acotada a estados sin acción por lote (p. ej. `rechazada`)
+   * mostraría una columna entera de casillas inertes. El predicado deja decidir "aquí
+   * no hay nada que seleccionar" mirando los datos. Es distinto de `bloqueoSeleccion`:
+   * ese bloquea filas concretas SIN quitar la columna (el motivo debe poder leerse).
+   */
+  selectable?: boolean | ((items: OrdenListItemDTO[]) => boolean);
   /**
    * Predicado de bloqueo por fila: devuelve el MOTIVO (texto) si la orden NO puede
    * seleccionarse, o `null` si sí. Cuando devuelve motivo, el checkbox se deshabilita
@@ -106,17 +116,21 @@ export function OrdenesModule({
    */
   bloqueoSeleccion?: (row: OrdenListItemDTO) => string | null;
   /**
-   * Acciones por lote disponibles para este listado/estado. Se muestran en una barra
+   * Acciones por lote disponibles para este listado. Se muestran en una barra
    * contextual SOLO cuando hay ≥1 fila marcada. Sin acciones o sin selección, no se
    * muestra la barra. La columna de checkbox depende de `selectable`.
+   *
+   * Admite una FUNCIÓN de la selección actual: con un listado de estados mezclados
+   * (filtro multi-estado) las acciones aplicables dependen de qué filas se marcaron,
+   * no del listado. Se evalúa en cada render con el snapshot de la selección.
    */
-  acciones?: AccionLote[];
+  acciones?: AccionLote[] | ((seleccionadas: OrdenListItemDTO[]) => AccionLote[]);
   /**
    * Feature 101/R8: resalta las filas de órdenes con `prioridad === true` (color
    * llamativo + badge "Prioritaria" accesible). Se activa SOLO en la superficie de
-   * reasignación de la bodega dueña (apartado `en_bodega_central` de `/ordenes`, gateado por
-   * `OrdenesTabs`); por defecto `false`, de modo que el resto de listados (otras tabs,
-   * "Todas", dashboard adminTienda, listado plano) no resaltan por prioridad (R10).
+   * reasignación de la bodega dueña (`/ordenes` filtrado a `en_bodega_central`, gateado por
+   * `OrdenesListado`); por defecto `false`, de modo que el resto de listados (otros
+   * estados, sin filtro, dashboard adminTienda, listado plano) no resaltan por prioridad (R10).
    */
   resaltarPrioridad?: boolean;
 } = {}) {
@@ -142,15 +156,38 @@ export function OrdenesModule({
     });
   }
 
-  // Feature 63/C2 (R17): el `status_id` entra en la key SWR para que la caché y
-  // la paginación sean por-tab. Sin `filter`, `statusId` es `undefined`.
+  // Feature 63/C2 (R17): el estado filtrado entra en la key SWR para que la caché y
+  // la paginación sean por combinación de estados. La key debe ser un ESCALAR estable:
+  // con una lista de ids se serializa ordenada, así que dos arrays con los mismos ids
+  // (en distinto orden o de distinta identidad) comparten caché en vez de refetchear.
   const statusId = filter?.status_id;
+  const statusKey = Array.isArray(statusId)
+    ? [...statusId].sort().join(",")
+    : statusId;
   const { data, error, isLoading } = useSWR(
-    ["ordenes:list", statusId, page, pageSize],
+    ["ordenes:list", statusKey, page, pageSize],
     () => ordenesFetcher(page, pageSize, filter),
   );
 
+  // Al cambiar el filtro de estados, la página actual puede no existir en el nuevo
+  // resultado (p. ej. estabas en la 4 y ahora hay 1). Se vuelve a la 1 y se limpia la
+  // selección (las filas marcadas ya no están a la vista). Patrón "ajustar estado
+  // durante el render": evita el parpadeo de un fetch a la página vieja en un efecto.
+  const [statusKeyPrevio, setStatusKeyPrevio] = useState(statusKey);
+  if (statusKey !== statusKeyPrevio) {
+    setStatusKeyPrevio(statusKey);
+    setPage(1);
+    setSeleccionIds(new Set());
+  }
+
   const items = data?.items ?? [];
+
+  // ¿Se monta la columna de checkbox? Con un predicado, lo deciden las filas de la
+  // página. NO se usa `bloqueoSeleccion` para esto: una página en la que todas las
+  // filas están bloqueadas por una condición temporal (zona con cierre abierto) debe
+  // seguir mostrando las casillas para que su motivo sea legible.
+  const haySeleccion =
+    typeof selectable === "function" ? selectable(items) : selectable;
 
   const columnasEfectivas = useMemo<Column<OrdenListItemDTO>[]>(() => {
     // Feature 101/R8: en la superficie de reasignación (`en_bodega_central`) las columnas de
@@ -159,7 +196,7 @@ export function OrdenesModule({
     // de datos (Nº Guía), no en la de selección. Sin `resaltarPrioridad`, sin cambio.
     const columnasDatos = resaltarPrioridad ? conBadgePrioridad(columns) : columns;
     // Columna de selección (checkbox) al frente cuando el listado es seleccionable.
-    const conSeleccion: Column<OrdenListItemDTO>[] = selectable
+    const conSeleccion: Column<OrdenListItemDTO>[] = haySeleccion
       ? [
           {
             id: "seleccionar",
@@ -221,12 +258,17 @@ export function OrdenesModule({
         ),
       },
     ];
-  }, [columns, mostrarHistorial, selectable, seleccionIds, bloqueoSeleccion, items, resaltarPrioridad]);
+  }, [columns, mostrarHistorial, haySeleccion, seleccionIds, bloqueoSeleccion, items, resaltarPrioridad]);
 
   // Snapshot de las filas marcadas PRESENTES en la página actual (la selección se
   // acota a lo visible, como en la vista de revisión previa).
   const seleccionadas = items.filter((item) => seleccionIds.has(item.id));
-  const hayAcciones = selectable && !!acciones?.length && seleccionadas.length > 0;
+  // Acciones aplicables a la selección actual. Con `acciones` como función, el padre
+  // decide qué aplica a ESTAS filas (estados mezclados); con un array, es fijo.
+  const accionesActivas =
+    typeof acciones === "function" ? acciones(seleccionadas) : (acciones ?? []);
+  const hayAcciones =
+    haySeleccion && accionesActivas.length > 0 && seleccionadas.length > 0;
 
   return (
     <section className="flex flex-col gap-4">
@@ -244,7 +286,7 @@ export function OrdenesModule({
             {seleccionadas.length === 1 ? "" : "s"}
           </span>
           <div className="flex flex-wrap items-center gap-2">
-            {acciones!.map((accion) => (
+            {accionesActivas.map((accion) => (
               <Button
                 key={accion.key}
                 type="button"

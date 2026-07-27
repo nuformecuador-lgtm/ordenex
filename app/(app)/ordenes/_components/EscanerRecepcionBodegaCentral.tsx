@@ -20,7 +20,7 @@ import { estatusLabel } from "./estatus-label";
 // y traducen el resultado a un toast por estado (R15). Guard `procesando` anti-doble
 // envío. Tras `ok`/`ya_recibida` invoca `onRecibida` para refrescar el listado (R14).
 //
-// El rol (maestro/admin) NO se decide aquí: el padre (OrdenesTabs) solo monta este
+// El rol (maestro/admin) NO se decide aquí: el padre (OrdenesListado) solo monta este
 // control cuando `puedeRecibirBodegaCentral`, y el service revalida server-side (R16).
 
 export interface EscanerRecepcionBodegaCentralProps {
