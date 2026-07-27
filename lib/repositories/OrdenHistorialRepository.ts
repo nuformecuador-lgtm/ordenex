@@ -2,10 +2,11 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CambioEstadoEntrada,
   IOrdenHistorialRepository,
-  OrdenHistorialTxClient,
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
-import type { JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
-import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import {
+  appendCambioEstado,
+  type ChokePointTx,
+} from "@/lib/repositories/registrar-cambio-estado";
 import {
   ORIGEN_TIPOS_CON_GESTION,
   type OrdenHistorialEntradaDTO,
@@ -59,7 +60,7 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
    * reutilizado por los 3 repos de escritura de estado sin instanciar esta clase).
    */
   async registrarCambioEstado(
-    tx: OrdenHistorialTxClient & JobTxClient,
+    tx: ChokePointTx,
     entradas: CambioEstadoEntrada[],
   ): Promise<void> {
     await appendCambioEstado(tx, entradas);
