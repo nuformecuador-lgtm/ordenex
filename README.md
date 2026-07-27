@@ -60,6 +60,33 @@ pnpm exec prisma migrate deploy   # esquema (usa DIRECT_URL: pooler en modo sesi
 pnpm db:seed                      # catálogos: tipos de id, roles, estados, vehículos
 ```
 
+#### Cuándo migra el build
+
+El paso de migraciones del `build` (`scripts/migrate-deploy.ts`) se ejecuta:
+
+| Entorno | ¿Migra? |
+| --- | --- |
+| `VERCEL_ENV=production` | **Sí**, siempre |
+| `VERCEL_ENV=preview` | Solo con `MIGRATE_ON_PREVIEW=true` |
+| `development` / build local | No — usa `pnpm db:migrate` |
+
+El motivo es que **previews y producción compartían la misma base de Supabase**:
+con el `prisma migrate deploy` que corría en todos los entornos, abrir un PR
+aplicaba sus migraciones a la base de producción antes de mergear.
+
+`MIGRATE_ON_PREVIEW=true` es la declaración de que la base de Preview **es una
+base de pruebas, no la de producción**. Ponlo en el entorno Preview solo cuando
+`DATABASE_URL`/`DIRECT_URL` de Preview apunten a esa base propia; entonces cada
+preview aplica sus migraciones contra la suya, que es el comportamiento
+deseable. Sin el flag, el preview de una rama con una migración nueva corre
+contra una base que no la tiene y fallará en runtime hasta que alguien la
+aplique a mano.
+
+El script aborta además si la URL de migraciones apunta al pooler
+**transaccional** (`:6543` o `pgbouncer=true`) — ahí `migrate deploy` espera un
+advisory lock para siempre — y le pone un tope de 120 s para que un cuelgue se
+vea como un build rojo con mensaje, no como un build eterno.
+
 ### Usuario maestro (bootstrap)
 
 La operación arranca desde una cuenta con rol `maestro`. La credencial **no

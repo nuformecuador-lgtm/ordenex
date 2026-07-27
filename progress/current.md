@@ -347,6 +347,30 @@ toca los **dos** generadores de PDF (cliente feature 32 + servidor feature 136).
 
 ## Deudas de arnés vivas
 
+- **✅ MITIGADO (2026-07-27, `chore/migraciones-solo-en-produccion`):** el `build` ya no corre
+  `prisma migrate deploy` en todos los entornos. Ahora pasa por `scripts/migrate-deploy.ts`, que
+  **solo migra en producción**, y en preview únicamente si el entorno declara
+  `MIGRATE_ON_PREVIEW=true` (= "esta base es de pruebas"). Corta el efecto secundario de que
+  **abrir un PR migrara la base de producción**. Suma dos guardas nacidas del incidente del día:
+  aborta si la URL de migraciones apunta al pooler **transaccional** (`:6543` / `pgbouncer=true`) y
+  pone un **timeout de 120 s**, para que un cuelgue sea un build rojo con mensaje y no 2 h de slot
+  ocupado en silencio. **No es la cura**: mientras Preview apunte a la base de producción, una
+  migración nueva sigue teniendo que aplicarse a mano. La cura es la base por preview (en curso,
+  tarea humana).
+  > ⚠️ **Al conectar la base de pruebas:** poner `DATABASE_URL` (`:6543`) y `DIRECT_URL` (`:5432`)
+  > de esa base **solo en el entorno Preview**, y recién entonces `MIGRATE_ON_PREVIEW=true`. Sin
+  > apuntar primero las URLs, el flag haría que cada preview migre producción — justo lo que se
+  > acaba de cerrar.
+- **Incidente del 2026-07-27 (resuelto, PR #172):** el fix del pooler (`d60df35`) se mergeó a `prod`
+  pero **no a `dev`** → todo build salido de `dev` se colgaba en `migrate deploy` contra `:6543`.
+  Dos deployments muertos (`dev` ~1 h 40 min en BUILDING, PR #170 en ERROR) y la rama `ux`
+  bloqueada. **Lección:** un hotfix ramificado desde `origin/prod` hay que portarlo a `dev`
+  con cherry-pick el mismo día; si toca el build, `prod` se ve sano mientras todo lo demás arde.
+- **`typecheck` roto en `dev` desde el merge de `ux` (PR #171)** — 2 errores TS2741 en
+  `tests/components/GestionarOrdenPanelEvidencias.test.tsx:84` y `NotaPrivadaMensajero.test.tsx:253`
+  (falta la prop `count` de `GestionarOrdenPanelProps`). Verificado sobre `origin/dev` limpio: es
+  ajeno a los PRs de hoy. No rompe el deploy (Next no type-checkea los tests), pero deja `pnpm
+  typecheck` en rojo para todos.
 - **No hay regla `no-console` en el lint** (verificado 2026-07-21) → **17 llamadas `console.*` en
   producción** (`app/` + `lib/`, sin tests). Por ahí se coló el `console.log('xyz')` del PR #75.
   El de `OtpChallengeIssuer` es un **secreto en logs** → lo cubre la feature 80. Algunas pueden
