@@ -16,7 +16,7 @@
 ## Features en curso
 
 **Manifiesto Excel al crear o mover órdenes — feature 148 (2026-07-28) → IMPLEMENTADA + reviewer
-APROBADO-CON-NOTAS (0 bloqueantes), PR → `dev` (falta merge humano).** Fullstack, `high`,
+APROBADO-CON-NOTAS (0 bloqueantes), `PR #178` → `dev` (falta merge humano).** Fullstack, `high`,
 `depends_on: null`. Rama `feature/148-manifiesto-excel-lotes` desde `origin/dev` @ `55b0cd4`, en
 worktree aislado `../ordenex-wt-148`. Spec en `specs/148-manifiesto-excel-lotes/` (**R1–R30**, 22
 tasks). Todo el bookkeeping viaja commiteado en el PR (self-contained).

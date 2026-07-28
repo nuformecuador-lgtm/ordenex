@@ -1677,6 +1677,7 @@
       "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/148-manifiesto-excel-lotes",
+      "pr": 178,
       "spec_path": "specs/148-manifiesto-excel-lotes",
       "depends_on": null
     },
