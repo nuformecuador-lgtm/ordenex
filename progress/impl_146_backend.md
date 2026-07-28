@@ -22,7 +22,8 @@ para el agente de frontend; ningún `.tsx` fue tocado.
 | `db/migrations/20260727120000_notificacion/migration.sql` | nuevo |
 | `db/migrations/20260727120000_notificacion/down.sql` | nuevo |
 | `db/schema.prisma` | modificado — 3 enums, `Notificacion`, `NotificacionLectura`, 3 relaciones inversas en `Usuario` y 1 en `Zona` |
-| `tests/integration/db/zonas-migration.test.ts` | modificado — **única** edición a un test ajeno (denylist, R12) |
+| `tests/integration/db/zonas-migration.test.ts` | modificado — denylist del invariante de orden (R12) |
+| `tests/integration/db/no-migration-102.test.ts` | modificado — **desviación**, ver §5.0 |
 
 ### Repositorio (B6)
 | Archivo | Estado |
@@ -66,7 +67,7 @@ para el agente de frontend; ningún `.tsx` fue tocado.
 | **Total** | **145** |
 
 Conteo por capa: **9 archivos nuevos de producción**, **10 modificados**, **9 archivos de test
-nuevos**, **1 test ajeno editado** (el permitido por el spec).
+nuevos**, **2 tests ajenos editados** (uno permitido por el spec y otro forzado; ver §5.0).
 
 ---
 
@@ -222,16 +223,52 @@ tests/unit/repositories/api-key-repository.test.ts 158:37 warning '_args' is def
 
 | | Archivos | Tests |
 | --- | --- | --- |
-| **Baseline** (`origin/dev` @ `56ff0aa`, medido dos veces en este worktree) | 516 (5 fallando) | 5237 (15 fallando / 5222 pasando) |
-| **Después** | ver §5 | ver §5 |
+| **Baseline** (`origin/dev` @ `56ff0aa`, medido **dos veces** en este worktree) | 516 · **5 fallando** | 5237 · **15 fallando** / 5222 pasando |
+| **Después** | 525 · **4 fallando** | 5384 · **14 fallando** / 5370 pasando |
 
-Los 5 archivos que ya fallaban en el baseline son deuda ajena (entre ellos
-`tests/components/NotaPrivadaMensajero.test.tsx` y el guard `tests/unit/guards/no-embalaje.test.ts`,
-que además es flaky por timeout bajo carga: recorre el repo entero con un límite de 20 s).
+**Delta: 0 fallos nuevos** (de hecho, uno menos). Los 4 archivos que siguen en rojo son
+**deuda ajena de frontend**, ninguno tocado por esta feature:
+
+```
+FAIL tests/components/DataTable.test.tsx              (2 tests)
+FAIL tests/components/MarcarLuegoToggle.test.tsx      (2 tests)
+FAIL tests/components/MisAsignacionesModule.test.tsx  (9 tests)
+FAIL tests/components/NotaPrivadaMensajero.test.tsx   (1 test)
+```
+
+El quinto archivo del baseline, `tests/unit/guards/no-embalaje.test.ts`, pasó esta vez: es
+**flaky por timeout** (recorre el repo entero con el límite de 20 s y cae bajo contención de
+CPU), no un fallo determinista.
+
+`+147` tests respecto al baseline: los 145 nuevos de la feature más 2 que gana
+`no-migration-102.test.ts` al reescribirse (5 → 7).
 
 ---
 
 ## 5. Deudas conocidas y riesgos
+
+### 5.0 Desviación del encargo: una segunda edición a un test ajeno
+
+El encargo permitía editar **un solo** test existente (`zonas-migration.test.ts`). Hubo que
+tocar **un segundo**, `tests/integration/db/no-migration-102.test.ts`, porque su guardia era
+**estructuralmente incompatible** con esta feature: afirmaba que `db/schema.prisma` no declara
+ningún `model Notificac*` ni ningún `@@map("…notificac…")`, y que ninguna carpeta de migración
+contiene el concepto `notificac`. La feature 146 hace exactamente esas tres cosas, así que no
+existía forma de implementarla dejando ese archivo intacto (renombrar la carpeta de migración no
+habría salvado las dos aserciones sobre el esquema).
+
+La edición es mínima y conserva el invariante real de la 102 —que su clasificación SLA se
+**deriva** del historial y no se snapshotea en una columna nueva—, cambiando solo la premisa
+caducada: donde decía "no existe ninguna notificación en el esquema" ahora dice "la única infra
+de notificaciones del esquema y de las migraciones es la de la 146", enumerando los dos modelos,
+las dos tablas y los tres enums. Además se reformuló un comentario de `schema.prisma` para no
+usar la palabra "campana", de modo que la aserción "sin badge ni campana persistidos" de la 102
+sigue en pie sin relajarse.
+
+**Queda a criterio del reviewer** si esta desviación es aceptable o si prefiere resolverla de
+otra forma.
+
+### 5.1 Deudas técnicas
 
 1. **La migración no está aplicada.** `20260727120000_notificacion` debe aplicarse como paso de
    despliegue humano (`pnpm db:migrate deploy` o el script de despliegue). Hasta entonces, las
