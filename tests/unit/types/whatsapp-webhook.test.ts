@@ -92,7 +92,13 @@ describe("parseWebhookEventos (R5)", () => {
       ],
     });
     expect(eventos.statuses).toEqual([
-      { waMessageId: "wamid.OUT1", estado: "delivered", ocurridoAt: new Date(1700000002 * 1000) },
+      {
+        waMessageId: "wamid.OUT1",
+        estado: "delivered",
+        ocurridoAt: new Date(1700000002 * 1000),
+        // Un status sano no trae `errors`: el motivo normaliza a null.
+        error: null,
+      },
     ]);
   });
 

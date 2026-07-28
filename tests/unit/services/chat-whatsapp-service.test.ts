@@ -38,6 +38,7 @@ function fakeConversacionRepo(
 function fakeMensajeRepo(over: Partial<IChatMensajeRepository> = {}): IChatMensajeRepository {
   return {
     insertarEntranteIdempotente: vi.fn(async () => true),
+    findByWaMessageId: vi.fn(async () => null),
     insertarSaliente: vi.fn(async () => ({
       id: "msg-out",
       conversacionId: "hilo-1",
@@ -49,6 +50,9 @@ function fakeMensajeRepo(over: Partial<IChatMensajeRepository> = {}): IChatMensa
       estado: "queued" as const,
       latitud: null,
       longitud: null,
+        errorCodigo: null,
+        errorTitulo: null,
+        errorDetalle: null,
       ocurridoAt: AHORA,
       createdAt: AHORA,
     })),
@@ -129,11 +133,17 @@ describe("ingerirEventos (R6/R7/R8/R25)", () => {
 
     const resumen = await service.ingerirEventos(
       eventos({
-        statuses: [{ waMessageId: "wamid.OUT1", estado: "delivered", ocurridoAt: AHORA }],
+        statuses: [{ waMessageId: "wamid.OUT1", estado: "delivered", ocurridoAt: AHORA, error: null }],
       }),
     );
 
-    expect(msg.actualizarEstadoPorWaMessageId).toHaveBeenCalledWith("wamid.OUT1", "delivered");
+    // El 3.er argumento es `undefined` a proposito en los estados sanos: NO toca las
+    // columnas de error (solo un `failed` las escribe, y solo `null` las limpia).
+    expect(msg.actualizarEstadoPorWaMessageId).toHaveBeenCalledWith(
+      "wamid.OUT1",
+      "delivered",
+      undefined,
+    );
     expect(resumen.statusesAplicados).toBe(1);
   });
 
@@ -181,6 +191,9 @@ describe("enviarTexto (R18/R19/R20/R21)", () => {
         estado: "sent" as const,
         latitud: null,
         longitud: null,
+        errorCodigo: null,
+        errorTitulo: null,
+        errorDetalle: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -288,6 +301,9 @@ describe("enviarTexto (R18/R19/R20/R21)", () => {
         estado: "queued" as const,
         latitud: null,
         longitud: null,
+        errorCodigo: null,
+        errorTitulo: null,
+        errorDetalle: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -343,6 +359,9 @@ describe("enviarPlantilla (envio + persistencia tipo plantilla)", () => {
         estado: "sent" as const,
         latitud: null,
         longitud: null,
+        errorCodigo: null,
+        errorTitulo: null,
+        errorDetalle: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -434,6 +453,9 @@ describe("enviarPlantilla (envio + persistencia tipo plantilla)", () => {
         estado: "queued" as const,
         latitud: null,
         longitud: null,
+        errorCodigo: null,
+        errorTitulo: null,
+        errorDetalle: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -471,6 +493,9 @@ describe("reintentarEnvio (D1/F3)", () => {
         estado: "queued" as const,
         latitud: null,
         longitud: null,
+        errorCodigo: null,
+        errorTitulo: null,
+        errorDetalle: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -508,6 +533,9 @@ describe("reintentarEnvio (D1/F3)", () => {
         estado: "queued" as const,
         latitud: null,
         longitud: null,
+        errorCodigo: null,
+        errorTitulo: null,
+        errorDetalle: null,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
