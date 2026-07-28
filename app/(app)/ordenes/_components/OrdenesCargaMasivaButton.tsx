@@ -144,6 +144,18 @@ export function OrdenesCargaMasivaButton() {
     setStep("preview");
   }
 
+  /**
+   * R39: avisa UNA sola vez, al cerrar el último chunk de la carga real (nunca en
+   * dry-run). El aviso es informativo: si la acción falla, la carga ya persistida y
+   * su resumen siguen intactos, por eso el error se descarta deliberadamente.
+   */
+  function avisarCargaTerminada(creadas: number, total: number) {
+    if (!loteId) return;
+    void notificarCargaMasivaTerminada({ creadas, total, loteId }).catch(() => {
+      // Best-effort (R25): una notificación perdida no invalida la carga.
+    });
+  }
+
   // Fase 2: carga real. Re-envía las filas únicas en chunks SIN dryRun para
   // persistir solo las nuevas válidas (duplicadas/errores se omiten).
   async function handleConfirmar() {
@@ -196,6 +208,7 @@ export function OrdenesCargaMasivaButton() {
       setStep("upload");
       setClasificacion(CLASIFICACION_VACIA);
       setFilasUnicas([]);
+      setLoteId(null);
       setConfirmando(false);
       setConfirmProgreso(null);
     }
