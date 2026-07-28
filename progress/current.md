@@ -15,6 +15,68 @@
 
 ## Features en curso
 
+**Componente de filtros parametrizable + su implementación en órdenes — feature 144 (2026-07-28) →
+EN ESPECIFICACIÓN.** **⚠️ REDEFINIDA por el humano, en dos pasadas.** La ficha decía «`DataTable`:
+búsqueda y filtros» (`frontend`/`low`); ese alcance queda **RETIRADO**. Fullstack, `high`,
+`depends_on: null`. Rama `feature/144-filtros-ordenes` desde `origin/dev @ 55b0cd4`, en worktree
+aislado `../ordenex-wt-144` (el árbol `ux` arrastra WIP ajeno).
+
+- **Son DOS piezas, y el corte entre ellas es lo que decide si la feature envejece bien.**
+  **(A)** un **componente de filtros genérico y parametrizable** (el `FilterComponents` del humano) en
+  `components/shared/`, **sin dominio**: recibe por props qué filtros monta, de qué tipo es cada uno y
+  **los datos/opciones de cada campo**, y emite por `onChange` la lista de filtros seleccionados (ids)
+  en forma **agnóstica del consumidor**, para que cualquiera la mande a **cualquier endpoint o action**.
+  Es el hermano un nivel arriba de `MultiSelectFilter`: aquel es **un** control, este **orquesta N** y
+  es dueño del estado agregado. **(B)** su **única implementación en esta feature**: el listado de
+  **órdenes**. La feature **no es específica de órdenes**; órdenes es el primer consumidor.
+- **El encadenamiento es la parte que más fácil contamina (A):** provincia → cantón → distrito **no**
+  se hardcodea. Se expresa como una **dependencia declarada entre filtros** («B depende de A y así se
+  acotan sus opciones»), de modo que el componente nunca sepa qué es una provincia. Criterio de corte
+  que se le dio al `spec_author`: **todo `R<n>` de (A) debe poder testearse con filtros de fantasía,
+  sin nombrar órdenes, zonas ni distritos**; si necesita nombrarlos, pertenece a (B).
+
+- **Decisión de transporte cerrada por el humano (la que evitaba el spec equivocado):** **no** hay
+  endpoint HTTP nuevo **ni** query params en la URL del navegador. Se **extiende el comportamiento
+  actual** — la Server Action `listarOrdenes` (`lib/actions/ordenes`) ya recibe `filter.status_id` como
+  lista de ids con whitelist server-side, y los cinco filtros nuevos viajan **dentro de ese mismo
+  `filter`**, también como ids. Se propuso URL + Server Action y el humano lo descartó: extender, no
+  agregar superficie.
+- **Hallazgo que forzó esa decisión:** el listado de `/ordenes` **no pasa por HTTP**. `OrdenesModule`
+  llama a la Server Action vía SWR con la key `["ordenes:list", statusKey, page, pageSize]`. Un
+  `?distrito=…` literal habría exigido cambiar el transporte del listado entero (auth, scoping por rol,
+  paginación y sus tests). El listado **ya está paginado en servidor**, así que el filtrado es
+  server-side y al cambiar el filtro se vuelve a la página 1 — comportamiento que el filtro de estado
+  ya implementa (`statusKeyPrevio`, ajuste durante el render) y que los filtros nuevos deben heredar,
+  no reinventar.
+- **Estado del filtro en un componente propio y parametrizable:** qué filtros monta y con qué opciones
+  se decide **por props**; su `onChange` se dispara **al seleccionar un valor** (no en cada tecleo del
+  autocomplete) y emite la lista completa de filtros seleccionados para que el consumidor la inyecte
+  en `filter`.
+- **Reúso confirmado contra `origin/dev`:** `components/shared/MultiSelectFilter.tsx` ya es exactamente
+  el control pedido — botón + panel con **buscador interno**, casilla por opción, `role="listbox"` /
+  `role="option"` con `aria-selected`, cierre por clic fuera y `Escape`, controlado y sin dominio.
+  No hay que construir el autocomplete: hay que orquestar cinco. `TableFilters.tsx` (inputs de texto
+  sueltos, sin consumidores) **no** sirve acá: emite `Record<string,string>`, no ids múltiples.
+- **Encadenamiento geográfico en el front:** las opciones se **precargan del backend en una sola
+  entrega** y provincia → cantón → distrito se filtra sobre esos datos ya cargados, sin ida y vuelta
+  por selección. Fuentes ya existentes: `GeoRepository`/`GeoService` y `ZonaRepository`.
+- **Filtro de tienda:** para roles administrativos; las opciones son las cuentas tienda **incluidas las
+  integradoras que cargan por API key** (feature 88, `tienda_id = actor.usuarioId`). Un `adminTienda`
+  ya ve solo lo suyo por el scoping server-side.
+- **ABIERTO, a cerrar en la puerta F1.4** (no antes, y **no** por el leader): (a) forma del filtro de
+  tiempo — presets relativos (7/15/30/90 días) frente a rango desde/hasta, con la zona horaria de
+  operación CR/UTC-6 contra el `createdAt` en UTC; (b) si `zona` se filtra por la zona **derivada del
+  distrito** de la orden o por un campo propio; (c) si el precargado de geografía viaja como prop desde
+  el Server Component de la page o por una action propia cacheada.
+- **⚠️ La 145 hay que revalidarla, aunque ya no queda huérfana.** «Rollout de búsqueda/filtros/export a
+  las 31 tablas» adopta *la capacidad de la 144*; con la 2.ª redefinición esa capacidad **vuelve a
+  existir** en la pieza (A) — pero **solo la parte de filtros**. La **búsqueda global** y el **export**
+  que la 145 da por sentados **siguen sin dueño**: la búsqueda no está en el alcance de la 144 y el
+  export vive en la 151 (server-side). Su `depends_on: 144` se mantiene; falta decidir con el humano
+  quién entrega la búsqueda. Anotado también en su ficha de `feature_list.json`.
+- **Bookkeeping en la rama** (ficha 144 redefinida + nota en la 145 + este bloque), no como estado
+  volátil en `ux` — lección de la 142.
+
 **Plantilla de carga masiva v2 — feature 142 (2026-07-27) → IMPLEMENTADA + reviewer APROBADO
 (0 bloqueantes), `PR #174` → `dev` (falta merge humano).** Pedido del humano:
 rehacer la plantilla de carga masiva de órdenes con (1) un orden de columnas nuevo — `destinatario`,
