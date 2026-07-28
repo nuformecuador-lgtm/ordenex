@@ -130,3 +130,118 @@ punta a punta.
    botón del último envío sobrevive al refresco, pero NO a una recarga de la página.
 4. **`ManifiestoResultado` no figura en `design.md §3`** (decisión 2). Si el reviewer lo
    considera fuera de contrato, se inlinea en los 5 modales sin tocar el botón.
+
+---
+
+# Correcciones del review (`progress/review_148.md`) — segunda vuelta
+
+Veredicto original: RECHAZADO, 2 bloqueantes. El bloqueante 1 (casillas de `tasks.md`) lo
+cerró el leader. Aquí queda el bloqueante 2 y el cambio extra autorizado por el humano.
+
+## B2 — El efecto colateral del diferimiento de `onSuccess` alcanza también a la capa E2E
+
+**Reconocido: mi declaración anterior ("12 tests ajenos") se quedó corta.** El diferimiento
+cambia el comportamiento OBSERVABLE de los 4 modales, así que rompe cualquier prueba que los
+confirme, incluidas las de Playwright, que **no** corren en `pnpm test` ni en `./init.sh` y
+por eso no salieron en rojo. Auditados los 18 specs de `e2e/**` uno por uno: **3 tocan
+modales de esta feature**, no solo el que encontró el reviewer.
+
+### 1. `e2e/asignacion-satelite.spec.ts` (el del review) — `AsignarSateliteModal`
+
+- **Rotura 1 (strict mode).** `page.getByText(/Mensajero asignado a/i)` resolvía a 2
+  elementos (toast + `Alert role="status"` de `ManifiestoResultado`, que recibe el MISMO
+  string). Arreglado **acotando la aserción del toast a su propia región**
+  (`getByRole("region", { name: "Notificaciones" })`, el `Toast.Viewport` de
+  `providers/ToastProvider.tsx:102-104`). La aserción original —"el toast de éxito se ve"—
+  se conserva íntegra; solo deja de ser ambigua. No se usó `.first()`, que podría haber
+  pasado mirando el elemento equivocado.
+- **Rotura 2 (la aserción medía otra cosa).** El `toHaveCount(0)` sobre "Recibidas" se
+  evaluaba con el diálogo abierto, o sea, podía pasar por el `aria-hidden` del fondo y no por
+  la transición `en_bodega_satelite → por_recoger`. Arreglado haciendo explícito el recorrido
+  real del usuario: se comprueba la fase "resultado" (resumen + botón de manifiesto), se
+  pulsa **"Cerrar"**, se espera `toBeHidden()` del diálogo —que es lo que dispara
+  `onSuccess` → `router.refresh()`— y **recién entonces** se afirma la salida de "Recibidas".
+- El test verifica **lo mismo que antes y algo más**: sigue exigiendo el toast de éxito y la
+  desaparición de la orden tras el refresco, y añade la evidencia de que el refresco ocurre
+  al cerrar. **No se relajó ninguna aserción; no se borró ninguna.**
+
+### 2. `e2e/reintentos-escalado.spec.ts:189-210` — `AsignarBodegaModal` (misma rotura latente)
+
+`maestroReasignaDesdeBodega` hacía `expect(modal).toBeHidden()` inmediatamente tras
+confirmar: con la fase "resultado" el modal **sigue abierto** y ese `toBeHidden()` fallaría.
+Adaptado igual: se comprueba el botón de manifiesto, se pulsa "Cerrar" y ahí sí
+`toBeHidden()`. El reviewer no lo había auditado.
+
+### 3. `e2e/devolucion-origen.spec.ts:118-126` — `DevolverATiendaModal` (misma rotura latente)
+
+Idéntico caso: `toBeHidden()` justo tras confirmar, y la comprobación del apartado "Devueltas
+a origen" dependía de un refresco que ahora ocurre al cerrar. Adaptado igual.
+
+### Deuda AJENA encontrada al auditar (NO la toqué, no es de esta feature)
+
+Los dos specs de arriba ya estaban desalineados con `dev` **antes** de la 148, por el
+renombrado de la feature 139:
+
+- `reintentos-escalado.spec.ts:203` busca dentro del modal un botón `"Asignar mensajero"`,
+  pero el confirmar de `AsignarBodegaModal` se llama **"Asignar"** ("Asignar mensajero" es el
+  TÍTULO del diálogo y el botón del listado). El localizador no resuelve.
+- `devolucion-origen.spec.ts:114-121` usa `"Devolver a la tienda"`, pero la feature 139
+  renombró ese modal a **"Enviar a la tienda"** (título y confirmar).
+
+No los corrijo: es drift de otras features, no puedo ejecutarlos para validar el arreglo, y
+tocar sus localizadores sin verificación sería peor que dejarlos declarados. **Queda
+registrado aquí para quien retome los E2E.**
+
+### Qué se pudo y qué NO se pudo verificar de los E2E (sin adornos)
+
+- **Verificado:** `pnpm typecheck` **incluye** `e2e/**` (`tsconfig.json` toma `**/*.ts` y
+  solo excluye `node_modules`), así que los 3 specs editados compilan: **0 errores**.
+- **NO verificado — no los ejecuté:** no hay harness para levantarlos.
+  `playwright.config.ts` arranca `pnpm dev` contra `localhost:3000` y los specs exigen una
+  base de datos sembrada con usuarios por rol; los emails son **placeholders**
+  (`admin-satelite@example.com`, `correct-password`, `REM-SEED-BODEGA-SATELITE`), el propio
+  encabezado del spec dice "WRITTEN but NOT EXECUTED", y **no hay navegadores de Playwright
+  instalados** en esta máquina (`~/.cache/ms-playwright` no existe). **No afirmo que pasen**:
+  afirmo que están adaptados al flujo real y que compilan.
+
+## Cambio extra autorizado — respaldo de `responsable` = `"—"` (U+2014)
+
+Autorizado puntualmente por el humano sobre `lib/services/ManifiestoService.ts` (backend):
+
+- Nueva constante exportada `RESPONSABLE_FALLBACK = "—"` (em dash); `ManifiestoService.armar`
+  la usa en lugar de la cadena vacía cuando `findUsuarioNombre` devuelve `null` (usuario
+  borrado entre la operación y la descarga). Sigue sin inventar textos de rol (§9.8).
+- Tests (`tests/unit/services/manifiesto-service.test.ts`, **+2**, 32 → 34): "sin nombre
+  resoluble del ejecutor, responsable cae al guion largo y no a cadena vacía" (fija el
+  literal U+2014 y descarta `""`) y "con mensajero asignado, el respaldo del actor no
+  contamina responsable" (el respaldo es SOLO del actor, no de la columna entera).
+- Corregido de paso un colapso del helper de test: `opts.nombre ?? ACTOR_NOMBRE` convertía un
+  `nombre: null` explícito en el nombre real, así que el caso ni siquiera era expresable.
+  Ahora distingue `undefined` de `null`. **Cierra el menor 5 del review.**
+- Nada más de ese archivo ni del resto del backend se tocó.
+
+## Números medidos tras las correcciones
+
+| | Punto de partida (review) | Después de las correcciones | Delta |
+|---|---|---|---|
+| `pnpm typecheck` | 0 errores | **0 errores** (incluye `e2e/**`) | 0 |
+| `pnpm lint` | 0 errores / 145 warnings | **0 errores / 145 warnings** | 0 |
+| `pnpm test --run` | 524 archivos / 5400 tests, 0 fallos | **524 archivos / 5402 tests, 0 fallos** | +2 tests, 0 regresiones |
+| `./init.sh` | verde | **verde (exit 0)**, con la suite 524/5402 | — |
+| E2E Playwright | no ejecutables | **no ejecutados** (ver arriba) | — |
+
+**Flake observada, ajena a la 148:** en UNA corrida de `./init.sh` cayó
+`tests/unit/guards/no-embalaje.test.ts` (un guard que recorre el árbol de archivos del repo)
+bajo carga; aislado da 1/1 verde y las dos corridas completas posteriores
+(`pnpm test --run` y `./init.sh`) dieron 524/524 archivos y 5402/5402 tests. Mismo patrón que
+la flake que anotó el reviewer (su menor 7) con otro archivo: suites dependientes de I/O y
+tiempo bajo carga alta. No toca nada del diff de la 148.
+
+## Deuda que queda abierta tras esta vuelta
+
+1. Los 3 specs E2E adaptados **no se pudieron ejecutar** (sin seed, sin login por rol, sin
+   navegadores). Su verde real sigue pendiente de un entorno E2E.
+2. El drift ajeno de `reintentos-escalado.spec.ts` y `devolucion-origen.spec.ts` (nombres de
+   botón de la feature 139) sigue sin corregir, por decisión explícita.
+3. Menores 1, 2, 3, 4, 6 y 8 del review: fuera de esta corrección (el mapa consolidado y
+   `history.md` son cierre del leader; los demás son del backend o decisiones de producto).
