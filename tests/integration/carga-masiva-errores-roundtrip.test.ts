@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { buildXlsxRows } from "@/lib/utils/xlsx-template";
 import { parseSpreadsheet } from "@/lib/parsers/spreadsheet";
-import { matrizAArchivo } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
+import { parseArchivo } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
 import { findMissingHeaders, filaCargaSchema } from "@/lib/types/carga-masiva";
 import { ORDENES_BULK_FIELDS } from "@/app/(app)/ordenes/_components/carga-masiva-fields";
 import {
@@ -12,7 +12,6 @@ import {
 } from "@/app/(app)/ordenes/_components/carga-masiva-export-errores";
 import type { OrdenConError } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
 import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
-import ExcelJS from "exceljs";
 
 /**
  * Feature 143 — EL RIESGO CENTRAL: el archivo de "órdenes con error" que descarga
@@ -86,23 +85,18 @@ const CAMPOS_SIN_MOTIVO = ERRORES_EXPORT_FIELDS.filter(
   (f) => f.key !== COLUMNA_MOTIVO_ERROR,
 );
 
-/** Re-parsea un XLSX con el parser del NAVEGADOR (matriz → ArchivoParseado). */
+/**
+ * Re-parsea el binario exportado por el camino REAL del parser del navegador:
+ * `parseArchivo(File)` → lectura xlsx con exceljs → `celdaATexto` → `matrizAArchivo`.
+ * Se construye un `File` de verdad (como el que entrega `BulkUpload` al usuario)
+ * en vez de reimplementar la lectura de celdas: si la coacción de celdas de
+ * producción se rompiera (rich text, fórmula, fecha), este test debe caer con ella.
+ */
 async function parsearComoNavegador(buffer: ArrayBuffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet) throw new Error("el workbook no tiene hojas");
-  const matriz: string[][] = [];
-  worksheet.eachRow({ includeEmpty: true }, (row) => {
-    const arr: string[] = [];
-    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      const value = cell.value;
-      arr[colNumber - 1] =
-        value === null || value === undefined ? "" : String(value);
-    });
-    matriz.push(arr);
+  const file = new File([buffer], "ordenes-con-error.xlsx", {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
-  return matrizAArchivo(matriz);
+  return parseArchivo(file);
 }
 
 describe("Carga masiva — round-trip del export de filas con error", () => {
