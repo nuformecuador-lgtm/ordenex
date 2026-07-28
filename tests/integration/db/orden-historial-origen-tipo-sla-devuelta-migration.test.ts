@@ -91,6 +91,7 @@ describe("Feature 99 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
       "liberacion_sin_gestionar", // feature 109
       "recepcion_bodega_central", // feature 138
       "devolucion_rechazada", // feature 139
+      "deshacer_asignacion", // feature 149
     ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_99.has(v))),

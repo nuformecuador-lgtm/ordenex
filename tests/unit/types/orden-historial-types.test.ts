@@ -23,6 +23,11 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // por_devolver/por_devolver_a_tienda por zona): valor propio para que la linea de tiempo distinga la
 // salida de `rechazada` disparada por la aprobacion del cierre de las cuatro transiciones de lote/recepcion
 // del flujo (que reusan `ajuste_estado` / `recepcion_bodega_central`).
+// Feature 149: el conjunto pasa a 23 con `deshacer_asignacion` (reversion de la asignacion/ruteo
+// ANTES de la recogida: por_recoger -> en_bodega_central/en_bodega_satelite y
+// en_ruta_bodega_satelite -> en_bodega_central): valor propio para que la linea de tiempo distinga
+// la reversion de la asignacion que la produjo (`asignacion_bodega`/`asignacion_satelite`/
+// `ruteo_satelite`) y de un parche administrativo generico (`ajuste_estado`).
 describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
   const ESPERADOS = [
     "carga_masiva",
@@ -47,10 +52,11 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "liberacion_sin_gestionar", // feature 109: CierresAdminRepository.resolverCierre (aprobar, sin_gestionar -> bodega)
     "recepcion_bodega_central", // feature 138: OrdenRepository.recibirEnBodegaCentral (recepcion fisica, en_ruta_bodega_central -> en_bodega_central)
     "devolucion_rechazada", // feature 139: CierresAdminRepository.resolverCierre (aprobar, rechazada -> por_devolver/por_devolver_a_tienda)
+    "deshacer_asignacion", // feature 149: OrdenRepository.deshacerAsignacionLote (reversion antes de la recogida)
   ];
 
-  it("contiene exactamente los 22 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(22);
+  it("contiene exactamente los 23 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(23);
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

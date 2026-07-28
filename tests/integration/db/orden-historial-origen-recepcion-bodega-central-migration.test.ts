@@ -84,7 +84,11 @@ describe("Feature 138 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
     // `recepcion_bodega_central` (138) y `devolucion_rechazada` (feature 139), apendido despues. El
     // down.sql del 138 recrea el enum a su estado PRE-138 (fijo, historico); sin descontar los
     // posteriores el SEED crecido divergiria (patron del down del 67/99/100/106).
-    const AÑADIDOS_EN_O_DESPUES_DEL_138 = new Set([NUEVO, "devolucion_rechazada"]);
+    const AÑADIDOS_EN_O_DESPUES_DEL_138 = new Set([
+      NUEVO,
+      "devolucion_rechazada", // feature 139
+      "deshacer_asignacion", // feature 149
+    ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_138.has(v))),
     );
