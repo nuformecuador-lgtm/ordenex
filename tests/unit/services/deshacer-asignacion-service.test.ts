@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import fs from "fs";
+import path from "path";
 import { DeshacerAsignacionService } from "@/lib/services/DeshacerAsignacionService";
 import {
   DeshacerAsignacionConflictoError,
@@ -547,14 +549,89 @@ describe("T4.13/R40 — ningun motivo expone UUIDs ni datos del destinatario", (
 // T4.14(a) — Sin notificacion al mensajero (R41)
 // ---------------------------------------------------------------------------------------
 describe("T4.14(a)/R41 — esta feature NO notifica al mensajero desasignado", () => {
-  it("una reversion exitosa no invoca ningun productor de notificaciones desde el service", async () => {
-    const e = escenario();
-    const notificador = vi.fn();
-    const r = await e.service.deshacer(input(), MAESTRO);
+  // CENSO DE COLABORADORES. Los tres repos van envueltos en un Proxy que registra CUALQUIER
+  // metodo invocado, INCLUIDOS los que el doble no define (el `get` de una propiedad inexistente
+  // devuelve un recolector, no `undefined`). Asi, si alguien cablea un productor de avisos
+  // —`repo.notificar(...)`, `jobs.enqueue(...)`, una dep nueva— el nombre aparece en el censo y
+  // el aserto de igualdad EXACTA rompe. Es la version FALSABLE del test tautologico anterior,
+  // que espiaba un `vi.fn()` suelto que nadie podia llamar (hallazgo N5 del review).
+  function censoDeColaboradores() {
+    const invocados: string[] = [];
+    const envolver = <T extends object>(obj: T, nombre: string): T =>
+      new Proxy(obj, {
+        get(target, prop, receiver) {
+          if (typeof prop !== "string") return Reflect.get(target, prop, receiver);
+          const valor = Reflect.get(target, prop, receiver) as unknown;
+          if (typeof valor === "function") {
+            return (...args: unknown[]) => {
+              invocados.push(`${nombre}.${prop}`);
+              return (valor as (...a: unknown[]) => unknown).apply(target, args);
+            };
+          }
+          if (valor === undefined) {
+            // Metodo que el doble NO tiene: si el service lo llama, queda registrado igual.
+            return (...args: unknown[]) => {
+              void args;
+              invocados.push(`${nombre}.${prop}`);
+              return undefined;
+            };
+          }
+          return valor;
+        },
+      });
+    const repo = envolver(
+      {
+        findUsuarioZonaId: vi.fn(async () => null),
+        findByIdsForTransicion: vi.fn(async () => [ordenRow()]),
+        findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID[v] ?? null),
+        deshacerAsignacionLote: vi.fn(async () => 1),
+      },
+      "repo",
+    );
+    const zonaRepo = envolver({ findCentralZonaId: vi.fn(async () => ZONA_CENTRAL) }, "zonaRepo");
+    const historialRepo = envolver(
+      {
+        findOrigenesReversion: vi.fn(
+          async () => new Map<string, string | null>([["o1", "en_bodega_central"]]),
+        ),
+      },
+      "historialRepo",
+    );
+    return { service: new DeshacerAsignacionService(repo, zonaRepo, historialRepo), invocados };
+  }
+
+  it("una reversion exitosa invoca EXACTAMENTE los metodos de repo conocidos: ninguno de aviso", async () => {
+    const { service, invocados } = censoDeColaboradores();
+
+    const r = await service.deshacer(input(), MAESTRO);
+
     expect(r.status).toBe("ok");
-    // El service SOLO habla con sus tres repos; no hay canal de avisos (feature 146, pending).
-    expect(notificador).not.toHaveBeenCalled();
-    expect(e.deshacerAsignacionLote).toHaveBeenCalledTimes(1);
+    // Conjunto CERRADO de colaboradores. Un productor de notificaciones (de la 146 o de
+    // cualquier otro canal) añadiria un nombre aqui y este aserto caeria.
+    expect([...new Set(invocados)].sort()).toEqual([
+      "historialRepo.findOrigenesReversion",
+      "repo.deshacerAsignacionLote",
+      "repo.findByIdsForTransicion",
+      "repo.findEstatusIdByValue",
+      "zonaRepo.findCentralZonaId",
+    ]);
+    // Y, explicitamente, ninguna llamada con pinta de aviso o de cola de mensajes.
+    for (const nombre of invocados) {
+      expect(nombre).not.toMatch(/notif|aviso|campana|enqueue|job|mensaje|push|email|sms/i);
+    }
+  });
+
+  it("el service no tiene POR DONDE notificar: 3 deps y ningun canal en su fuente", () => {
+    // Arity del constructor: inyectar un notificador como 4.ª dep rompe este aserto.
+    expect(DeshacerAsignacionService.length).toBe(3);
+    const fuente = fs.readFileSync(
+      path.join(__dirname, "..", "..", "..", "lib", "services", "DeshacerAsignacionService.ts"),
+      "utf8",
+    );
+    // El fuente NO importa ni menciona ningun canal de avisos (patron de censo del repo).
+    expect(fuente).not.toMatch(/notificac|notificar|IJobRepository|enqueue|Whatsapp/i);
+    // El UNICO rastro admitido del aviso diferido es el ancla, y vive en el REPO, no aqui (R41).
+    expect(fuente).not.toContain("TODO(146)");
   });
 
   it("el unico efecto para el mensajero es que la orden sale de su listado de asignaciones", async () => {
