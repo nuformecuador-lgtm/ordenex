@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, configure } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 import { RolValue } from "@prisma/client";
@@ -13,6 +13,15 @@ import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 
 // Feature 144 / TB2.5 (R47, R64) — la PAGE resuelve el catálogo server-side y lo
 // baja por props; si no se puede resolver, pasa `null` y la página sigue viva.
+
+// Los `findBy*` de testing-library NO usan el `testTimeout: 20000` de vitest: se rigen
+// por el `asyncUtilTimeout` de `waitFor`, cuyo default es 1000 ms. Cada caso de este
+// archivo arrastra el render completo del arbol de la page, y bajo la contencion de CPU
+// de la suite entera ese segundo no alcanza (el archivo pasa siempre en aislamiento y
+// fallaba en ~2 de cada 3 corridas completas). Se sube el margen para TODAS las esperas
+// del archivo: no cambia lo que se afirma, solo deja de medir la carga de la maquina.
+// Mismo razonamiento que el `testTimeout: 20000` de `vitest.config.ts`.
+configure({ asyncUtilTimeout: 10000 });
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
