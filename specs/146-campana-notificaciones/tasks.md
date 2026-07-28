@@ -177,13 +177,13 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
 Arranca en cuanto A1 y B10 están mergeados (contrato congelado). No toca `db/`, `lib/services/`
 ni `lib/repositories/`.
 
-- [ ] **C1 — Hook `hooks/useNotificaciones.ts`.** SWR sobre `listarNotificaciones` con
+- [x] **C1 — Hook `hooks/useNotificaciones.ts`.** SWR sobre `listarNotificaciones` con
       `refreshInterval` de `notificacionesConfig`, `revalidateOnFocus`, `keepPreviousData` y
       `mutate` expuesto.
       *Hecho:* el fetcher lanza si `status !== "ok"` (patrón feature 22).
       *Depende de:* A1, A2, B10
 
-- [ ] **C2 — `NotificationsBell` conectada (R40–R50).** Eliminar `EXAMPLE_NOTIFICATIONS` y el
+- [x] **C2 — `NotificationsBell` conectada (R40–R50).** Eliminar `EXAMPLE_NOTIFICATIONS` y el
       estado local de datos; consumir `useNotificaciones`; `onOpenChange` → `mutate()` (R47);
       "marcar todas" y "X" invocan las acciones con actualización optimista; `notifications?`
       pasa a `fallbackData`; **conservar `NotificationItem` como alias público de
@@ -192,7 +192,7 @@ ni `lib/repositories/`.
       `NotificationItem` sigue exportado.
       *Depende de:* C1
 
-- [ ] **C3 — Tests de componente (R40–R50).** `tests/components/NotificationsBell.test.tsx`:
+- [x] **C3 — Tests de componente (R40–R50).** `tests/components/NotificationsBell.test.tsx`:
       sin datos quemados, badge con el conteo, `+99` sobre 99, sin badge con 0, estado vacío,
       "marcar todas" deshabilitado sin no leídas y su invocación, descartar retira el elemento,
       revalidación al abrir, degradación limpia ante error/`unauthenticated`, icono por tipo,
@@ -200,8 +200,9 @@ ni `lib/repositories/`.
       *Hecho:* R40–R50 mapeados uno a uno.
       *Depende de:* C2
 
-- [ ] **C4 — Cierre de la carga masiva de UI (R39).** `[P]` con C3
-      En `OrdenesCargaUpload.tsx`: generar un `loteId` (uuid) al iniciar la carga y, al
+- [x] **C4 — Cierre de la carga masiva de UI (R39).** `[P]` con C3
+      En `OrdenesCargaMasivaButton.tsx` (único punto con `dryRun:false`; `OrdenesCargaUpload.tsx`
+      sólo hace dry-run): generar un `loteId` (uuid) al iniciar la carga y, al
       terminar `procesarEnChunks` (no en `dryRun`), invocar `notificarCargaMasivaTerminada`
       **una sola vez** con `{ creadas, total, loteId }`; ignorar el fallo (no bloquea el
       resumen).
