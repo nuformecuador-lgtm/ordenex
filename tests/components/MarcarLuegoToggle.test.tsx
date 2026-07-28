@@ -109,6 +109,33 @@ function renderModule(porGestionar: MiAsignacionDTO[]) {
   );
 }
 
+/**
+ * Card (`<article>` de `PosOrderCard`) de una remisión. El rediseño POS dejó el
+ * `<article>` sin nombre accesible, así que se llega a él desde su CTA interno.
+ */
+function cardDe(numRemision: string): HTMLElement {
+  const cta = screen.getByRole("button", {
+    name: new RegExp(`Gestionar orden ${numRemision}`),
+  });
+  const card = cta.closest("article");
+  if (card === null) throw new Error(`sin <article> para ${numRemision}`);
+  return card;
+}
+
+/**
+ * Nº de parada de la cabecera POS. El texto se reparte entre un `<span class="sr-only">
+ * Parada </span>` y `{parada} de {total}`, así que se busca por el `<p>` que los contiene.
+ */
+function paradaEnCabecera(parada: number, total: number): HTMLElement {
+  return screen.getByText(
+    (_, el) =>
+      el?.tagName === "P" &&
+      (el.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .includes(`Parada ${parada} de ${total}`),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   marcarMock.mockResolvedValue({
@@ -225,21 +252,12 @@ describe("MarcarLuegoToggle (feature 115 / T8)", () => {
       makeAsignacion({ id: "g2", numRemision: "REM-G2", marcarLuego: false }),
     ]);
 
-    // El badge vive DENTRO del `<button>` de la card (el toggle "Gestionar más tarde" es un
-    // hermano fuera del botón), así que `within(card)` aísla el badge sin capturar el toggle.
-    const cardMarcada = screen.getByRole("button", {
-      name: /Gestionar orden REM-G1/,
-    });
-    expect(
-      within(cardMarcada).getByText("Gestionar más tarde"),
-    ).toBeInTheDocument();
-
-    const cardNoMarcada = screen.getByRole("button", {
-      name: /Gestionar orden REM-G2/,
-    });
-    expect(
-      within(cardNoMarcada).queryByText("Gestionar más tarde"),
-    ).toBeNull();
+    // Rediseño POS: la card es el `<article>` (PosOrderCard) y el botón "Gestionar
+    // orden" es su CTA interno, no la card entera. El badge vive DENTRO del article;
+    // el toggle homónimo es HERMANO del article, así que acotar al article sigue
+    // aislando el badge del toggle.
+    expect(within(cardDe("REM-G1")).getByText("Gestionar más tarde")).toBeInTheDocument();
+    expect(within(cardDe("REM-G2")).queryByText("Gestionar más tarde")).toBeNull();
   });
 
   // ---------------- R19: orden visual (hunde las marcadas al final) ----------------
@@ -279,9 +297,9 @@ describe("MarcarLuegoToggle (feature 115 / T8)", () => {
     ]);
 
     // R16/R19: la secuencia de ruta NO se altera — g1 sigue siendo la parada 1.
-    expect(screen.getByText("Parada 1 de la ruta")).toBeInTheDocument();
-    expect(screen.getByText("Parada 2 de la ruta")).toBeInTheDocument();
-    expect(screen.getByText("Parada 3 de la ruta")).toBeInTheDocument();
+    expect(paradaEnCabecera(1, 3)).toBeInTheDocument();
+    expect(paradaEnCabecera(2, 3)).toBeInTheDocument();
+    expect(paradaEnCabecera(3, 3)).toBeInTheDocument();
   });
 
   it("R19: sin órdenes marcadas, el orden de ruta del server se conserva intacto", () => {

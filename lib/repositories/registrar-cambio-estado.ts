@@ -7,6 +7,11 @@ import {
   emisorWebhookEstadoReal,
   type WebhookEmisor,
 } from "@/lib/services/jobs/webhook-estado-encolado";
+import {
+  emisorNotificacionReal,
+  type NotificacionEmisor,
+  type NotificacionEmisorTx,
+} from "@/lib/notificaciones/emitir";
 import type { OrderStatusValue } from "@/lib/types/order-status";
 import {
   assertTransicionValida,
@@ -21,7 +26,7 @@ import {
  * transaccion (transactional-outbox). El `tx` REAL de los ~13 call-sites es el cliente de
  * `$transaction` de Prisma, que satisface ambas caras: se ensancha el TIPO, no la semantica.
  */
-export type ChokePointTx = OrdenHistorialTxClient & JobTxClient;
+export type ChokePointTx = OrdenHistorialTxClient & JobTxClient & NotificacionEmisorTx;
 
 /**
  * Feature 140 (design §4) — resolvedor del catalogo de estados para la guardia: devuelve el
@@ -115,7 +120,7 @@ async function validarTransiciones(
   tx: ChokePointTx,
   entradas: CambioEstadoEntrada[],
   catalogo: CatalogoEstadosResolver,
-): Promise<void> {
+): Promise<ReadonlyMap<string, OrderStatusValue>> {
   const porId = await catalogo(tx);
   for (const entrada of entradas) {
     const destino = valueDe(porId, entrada.estatusDestinoId, "destino");
@@ -125,6 +130,9 @@ async function validarTransiciones(
         : valueDe(porId, entrada.estatusOrigenId, "origen");
     assertTransicionValida(origen, destino); // R6/R10
   }
+  // Feature 146: se devuelve el catalogo YA resuelto para que el emisor de notificaciones
+  // clasifique el destino del lote sin una segunda consulta.
+  return porId;
 }
 
 /**
@@ -167,10 +175,11 @@ export async function appendCambioEstado(
   entradas: CambioEstadoEntrada[],
   emitir: WebhookEmisor = emisorWebhookEstadoReal,
   catalogo: CatalogoEstadosResolver = resolverCatalogoEstadosReal,
+  emitirNotificaciones: NotificacionEmisor = emisorNotificacionReal,
 ): Promise<void> {
   if (entradas.length === 0) return; // no-op: nada que registrar
   // Feature 140 (R6/R7): guardia ANTES del append; si lanza, no hay historial ni webhook.
-  await validarTransiciones(tx, entradas, catalogo);
+  const valuePorEstatusId = await validarTransiciones(tx, entradas, catalogo);
   await tx.ordenHistorialEstado.createMany({
     data: entradas.map((e) => ({
       ordenId: e.ordenId,
@@ -185,4 +194,14 @@ export async function appendCambioEstado(
   // Feature 99 (R10/R11): emision transactional-outbox EN LA MISMA tx. Si la tx revierte, el
   // job encolado se va con ella (R11).
   await emitir(tx, entradas);
+  // Feature 146 (design §4.1, R18-R21): emision de las notificaciones de "orden rechazada por
+  // el destinatario" EN LA MISMA tx (F1.4-3). Aqui —y no en `GestionOrdenRepository`— porque
+  // este es el UNICO punto por el que pasa toda escritura de `orden.estatus_id`: ningun camino
+  // nuevo hacia `rechazada` puede perder el aviso por olvido (alternativa A5 descartada).
+  //
+  // TRANSACCIONAL, no best-effort: dentro de una transaccion de Postgres un error de sentencia
+  // aborta la transaccion entera, asi que el try/catch "dentro del tx" no existe. Consecuencias
+  // ACEPTADAS y cerradas en F1.4-3: si la tx revierte no queda notificacion (R20) y si la
+  // emision falla no se persiste el cambio de estado (R21).
+  await emitirNotificaciones(tx, entradas, valuePorEstatusId);
 }
