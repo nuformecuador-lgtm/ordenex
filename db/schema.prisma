@@ -507,6 +507,12 @@ model Orden {
   @@index([mensajeroSugeridoId])
   @@index([mensajeroAsignadoId]) // feature 17/R7
   @@index([mensajeroAsignadoId, asignadoAt]) // feature 76/R1: denominador del ranking diario (asignadas HOY por mensajero)
+  // Feature 144/B5: filtros de zona y geografia del listado (`IN (...)` en ruta caliente:
+  // findMany + count por cada cambio de filtro). `createdAt` ya esta indexado arriba.
+  @@index([zonaId])
+  @@index([provinciaId])
+  @@index([cantonId])
+  @@index([distritoId])
   @@map("orden")
 }
 

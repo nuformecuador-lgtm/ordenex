@@ -12,6 +12,14 @@ export interface MultiSelectOption {
   value: string;
   /** Texto visible de la opcion (y lo que se busca al filtrar). */
   label: string;
+  /**
+   * Feature 144 (R28): grupo al que pertenece la opcion. Es puro CONTRATO DE
+   * OPCIONES —el control no sabe que significa el grupo—, asi que cualquier
+   * consumidor puede agrupar lo que quiera. MIENTRAS ninguna opcion declare grupo,
+   * la lista se pinta PLANA, con el mismo markup y el mismo ARIA que antes de esta
+   * feature (sin regresion para el filtro de estado de la 63).
+   */
+  group?: string;
 }
 
 export interface MultiSelectFilterProps {
@@ -84,6 +92,31 @@ export function MultiSelectFilter({
     return options.filter((o) => o.label.toLowerCase().includes(q));
   }, [options, query]);
 
+  /**
+   * Secciones por grupo (R28). `null` = ninguna opcion visible declara grupo, y
+   * entonces la lista se pinta plana EXACTAMENTE como antes de esta feature. Con
+   * grupos se preserva el ORDEN DE APARICION de cada grupo en `options`; las
+   * opciones sin grupo caen en una seccion sin cabecera.
+   */
+  const secciones = useMemo(() => {
+    if (!visibles.some((o) => o.group)) return null;
+    const orden: string[] = [];
+    const porGrupo = new Map<string, MultiSelectOption[]>();
+    for (const opcion of visibles) {
+      const grupo = opcion.group ?? "";
+      const acumulado = porGrupo.get(grupo);
+      if (acumulado) acumulado.push(opcion);
+      else {
+        porGrupo.set(grupo, [opcion]);
+        orden.push(grupo);
+      }
+    }
+    return orden.map((grupo) => ({
+      grupo,
+      opciones: porGrupo.get(grupo) as MultiSelectOption[],
+    }));
+  }, [visibles]);
+
   function alternar(v: string) {
     onChange(
       seleccion.has(v) ? value.filter((x) => x !== v) : [...value, v],
@@ -97,6 +130,39 @@ export function MultiSelectFilter({
       : value.length === 1
         ? (options.find((o) => o.value === value[0])?.label ?? "1 seleccionado")
         : `${value.length} seleccionados`;
+
+  /** Una opcion de la lista. Identica con y sin grupos: `role="option"` + `aria-selected`. */
+  function renderOpcion(opcion: MultiSelectOption) {
+    const marcada = seleccion.has(opcion.value);
+    return (
+      <li key={opcion.value}>
+        {/* `option` como boton: un clic marca/desmarca sin cerrar el
+            panel (seleccion multiple encadenada). */}
+        <button
+          type="button"
+          role="option"
+          aria-selected={marcada}
+          className={cn(
+            "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
+            "hover:bg-accent hover:text-accent-foreground",
+            marcada && "font-medium",
+          )}
+          onClick={() => alternar(opcion.value)}
+        >
+          <span
+            className={cn(
+              "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
+              marcada ? "bg-primary text-primary-foreground" : "opacity-50",
+            )}
+            aria-hidden
+          >
+            {marcada ? <Check className="h-3 w-3" /> : null}
+          </span>
+          <span className="truncate">{opcion.label}</span>
+        </button>
+      </li>
+    );
+  }
 
   return (
     <div ref={contenedorRef} className={cn("relative", className)}>
@@ -147,40 +213,27 @@ export function MultiSelectFilter({
               <li className="px-2 py-1.5 text-sm text-muted-foreground">
                 {emptyMessage}
               </li>
-            ) : (
-              visibles.map((opcion) => {
-                const marcada = seleccion.has(opcion.value);
-                return (
-                  <li key={opcion.value}>
-                    {/* `option` como boton: un clic marca/desmarca sin cerrar el
-                        panel (seleccion multiple encadenada). */}
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={marcada}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
-                        "hover:bg-accent hover:text-accent-foreground",
-                        marcada && "font-medium",
-                      )}
-                      onClick={() => alternar(opcion.value)}
+            ) : secciones ? (
+              // R28: `listbox > group > option` es una composicion ARIA valida. La
+              // `ul` interna va como `presentation` para que las opciones sigan
+              // siendo hijas directas del grupo a ojos del lector de pantalla.
+              secciones.map(({ grupo, opciones }) =>
+                grupo === "" ? (
+                  opciones.map(renderOpcion)
+                ) : (
+                  <li key={`grupo:${grupo}`} role="group" aria-label={grupo}>
+                    <div
+                      className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      aria-hidden
                     >
-                      <span
-                        className={cn(
-                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
-                          marcada
-                            ? "bg-primary text-primary-foreground"
-                            : "opacity-50",
-                        )}
-                        aria-hidden
-                      >
-                        {marcada ? <Check className="h-3 w-3" /> : null}
-                      </span>
-                      <span className="truncate">{opcion.label}</span>
-                    </button>
+                      {grupo}
+                    </div>
+                    <ul role="presentation">{opciones.map(renderOpcion)}</ul>
                   </li>
-                );
-              })
+                ),
+              )
+            ) : (
+              visibles.map(renderOpcion)
             )}
           </ul>
         </div>

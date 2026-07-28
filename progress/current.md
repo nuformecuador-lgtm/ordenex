@@ -15,6 +15,100 @@
 
 ## Features en curso
 
+**Componente de filtros parametrizable + su implementación en órdenes — feature 144 (2026-07-28) →
+SPEC ESCRITO + GATE F1.4 APROBADO, en reconciliación del spec antes de implementar.** **⚠️ REDEFINIDA por el humano, en dos pasadas.** La ficha decía «`DataTable`:
+búsqueda y filtros» (`frontend`/`low`); ese alcance queda **RETIRADO**. Fullstack, `high`,
+`depends_on: null`. Rama `feature/144-filtros-ordenes` desde `origin/dev @ 55b0cd4`, en worktree
+aislado `../ordenex-wt-144` (el árbol `ux` arrastra WIP ajeno).
+
+- **Son DOS piezas, y el corte entre ellas es lo que decide si la feature envejece bien.**
+  **(A)** un **componente de filtros genérico y parametrizable** (el `FilterComponents` del humano) en
+  `components/shared/`, **sin dominio**: recibe por props qué filtros monta, de qué tipo es cada uno y
+  **los datos/opciones de cada campo**, y emite por `onChange` la lista de filtros seleccionados (ids)
+  en forma **agnóstica del consumidor**, para que cualquiera la mande a **cualquier endpoint o action**.
+  Es el hermano un nivel arriba de `MultiSelectFilter`: aquel es **un** control, este **orquesta N** y
+  es dueño del estado agregado. **(B)** su **única implementación en esta feature**: el listado de
+  **órdenes**. La feature **no es específica de órdenes**; órdenes es el primer consumidor.
+- **El encadenamiento es la parte que más fácil contamina (A):** provincia → cantón → distrito **no**
+  se hardcodea. Se expresa como una **dependencia declarada entre filtros** («B depende de A y así se
+  acotan sus opciones»), de modo que el componente nunca sepa qué es una provincia. Criterio de corte
+  que se le dio al `spec_author`: **todo `R<n>` de (A) debe poder testearse con filtros de fantasía,
+  sin nombrar órdenes, zonas ni distritos**; si necesita nombrarlos, pertenece a (B).
+
+- **Decisión de transporte cerrada por el humano (la que evitaba el spec equivocado):** **no** hay
+  endpoint HTTP nuevo **ni** query params en la URL del navegador. Se **extiende el comportamiento
+  actual** — la Server Action `listarOrdenes` (`lib/actions/ordenes`) ya recibe `filter.status_id` como
+  lista de ids con whitelist server-side, y los cinco filtros nuevos viajan **dentro de ese mismo
+  `filter`**, también como ids. Se propuso URL + Server Action y el humano lo descartó: extender, no
+  agregar superficie.
+- **Hallazgo que forzó esa decisión:** el listado de `/ordenes` **no pasa por HTTP**. `OrdenesModule`
+  llama a la Server Action vía SWR con la key `["ordenes:list", statusKey, page, pageSize]`. Un
+  `?distrito=…` literal habría exigido cambiar el transporte del listado entero (auth, scoping por rol,
+  paginación y sus tests). El listado **ya está paginado en servidor**, así que el filtrado es
+  server-side y al cambiar el filtro se vuelve a la página 1 — comportamiento que el filtro de estado
+  ya implementa (`statusKeyPrevio`, ajuste durante el render) y que los filtros nuevos deben heredar,
+  no reinventar.
+- **Estado del filtro en un componente propio y parametrizable:** qué filtros monta y con qué opciones
+  se decide **por props**; su `onChange` se dispara **al seleccionar un valor** (no en cada tecleo del
+  autocomplete) y emite la lista completa de filtros seleccionados para que el consumidor la inyecte
+  en `filter`.
+- **Reúso confirmado contra `origin/dev`:** `components/shared/MultiSelectFilter.tsx` ya es exactamente
+  el control pedido — botón + panel con **buscador interno**, casilla por opción, `role="listbox"` /
+  `role="option"` con `aria-selected`, cierre por clic fuera y `Escape`, controlado y sin dominio.
+  No hay que construir el autocomplete: hay que orquestar cinco. `TableFilters.tsx` (inputs de texto
+  sueltos, sin consumidores) **no** sirve acá: emite `Record<string,string>`, no ids múltiples.
+- **Encadenamiento geográfico en el front:** las opciones se **precargan del backend en una sola
+  entrega** y provincia → cantón → distrito se filtra sobre esos datos ya cargados, sin ida y vuelta
+  por selección. Fuentes ya existentes: `GeoRepository`/`GeoService` y `ZonaRepository`.
+- **Filtro de tienda:** para roles administrativos; las opciones son las cuentas tienda **incluidas las
+  integradoras que cargan por API key** (feature 88, `tienda_id = actor.usuarioId`). Un `adminTienda`
+  ya ve solo lo suyo por el scoping server-side.
+- **Spec escrito:** `specs/144-filtros-ordenes/` — **R1–R20 bloque A** (componente genérico, testeables
+  con filtros de fantasía) + **R21–R51 bloque B** (cableado en órdenes), 20 tasks con gate explícito
+  A→B, 10 alternativas descartadas. **Migración: sí, una, y solo de índices** (`zona_id`,
+  `provincia_id`, `canton_id`, `distrito_id` en `orden`) con su `down.sql`; sin tablas ni columnas
+  nuevas, sin RLS nueva.
+- **GATE F1.4 APROBADO (2026-07-28), las 14 preguntas cerradas.** Cuatro se apartaron de lo que
+  recomendaba el spec y cambian el diseño:
+  - **(a) Filtro de tiempo → LAS DOS FORMAS.** Presets **y** rango abierto. El bloque A gana un tipo
+    `dateRange`. Bordes CR/UTC calculados **server-side**: `desde` = 06:00 UTC de ese día, `hasta`
+    **inclusive** = `< 06:00 UTC del día+1`.
+    - **El date-range de shadcn se descartó, y con la dependencia medida:** el humano lo pidió por
+      nombre, pero traerlo arrastra `react-day-picker` **y** `@radix-ui/react-popover`. Verificado dos
+      veces (`spec_author` y leader, contra `package.json` y `components/ui/`): el repo corre **solo**
+      sobre `@base-ui/react ^1.6.0`, sin Radix, sin `react-day-picker`, sin `date-fns`, y **no existen**
+      `calendar`/`popover`/`command`. Copiar shadcn dejaría **dos librerías de primitivas conviviendo**
+      (foco, portales y accesibilidad duplicados). **Decisión del humano: dos `<Input type="date">`,
+      cero dependencias nuevas**, alineado con `wallet/_components/WalletFiltros.tsx`, que ya resuelve
+      un desde/hasta exactamente así (el patrón ya vive en 6 componentes).
+    - **Preset y rango son MUTUAMENTE EXCLUYENTES en la UI** (decisión del humano; el spec había
+      propuesto «gana el rango»): elegir uno **vacía** el otro, así que el estado inválido nunca llega
+      a existir y no hay precedencia que documentar ni `validation_error` que lanzar.
+  - **(c) Precargado → `Promise.all` al cargar la página**, no la Server Action + SWR que recomendaba
+    el spec. Los ~70 KB en el RSC payload de cada carga de `/ordenes` son **coste aceptado a
+    sabiendas**; queda margen para adelgazarlo enviando el catálogo con los campos mínimos.
+  - **(h) Cuentas apiKey → SEPARADAS POR GRUPO**, no mezcladas. Ojo: `MultiSelectFilter` es propio del
+    repo (no shadcn; se hizo con panel propio porque no hay `Popover`/`Command` en `components/ui/`),
+    así que el agrupado se diseña en el contrato de opciones de A (`group?`), no se importa.
+  - **(i) Limpiar → las dos:** «Limpiar todo» **y** limpiar individual por filtro.
+  - Las otras diez van por la recomendación del spec: **(b)** `orden.zona_id`; **(d)** todas las
+    tiendas; **(e)** incluidas las inactivas, marcadas; **(f)** las órdenes con `distrito_id` NULL
+    quedan fuera y sin opción «sin distrito» (el humano afirma que **no deberían existir** — eso es
+    una afirmación sobre los datos **a verificar**, anotada como riesgo, no un supuesto);
+    **(g)** la selección se pierde al recargar, como ya pasa con el filtro de estado; **(j)** estado
+    no controlado; **(k)** v1 con `multi`, `single` y `dateRange`; **(l)** salida
+    `Record<string, string[]>` con claves vacías omitidas — el borde a vigilar es el `dateRange`, el
+    único cuyos valores **no son ids de catálogo**; **(m)** un solo padre por filtro;
+    **(n)** `components/shared/`, excepción explícita a la regla de las dos superficies de
+    `docs/architecture.md` con la 145 como segundo consumidor declarado.
+- **⚠️ La 145 hay que revalidarla, aunque ya no queda huérfana.** «Rollout de búsqueda/filtros/export a
+  las 31 tablas» adopta *la capacidad de la 144*; con la 2.ª redefinición esa capacidad **vuelve a
+  existir** en la pieza (A) — pero **solo la parte de filtros**. La **búsqueda global** y el **export**
+  que la 145 da por sentados **siguen sin dueño**: la búsqueda no está en el alcance de la 144 y el
+  export vive en la 151 (server-side). Su `depends_on: 144` se mantiene; falta decidir con el humano
+  quién entrega la búsqueda. Anotado también en su ficha de `feature_list.json`.
+- **Bookkeeping en la rama** (ficha 144 redefinida + nota en la 145 + este bloque), no como estado
+  volátil en `ux` — lección de la 142.
 **Tamaño de hoja seleccionable en las etiquetas — feature 150 (2026-07-28) → IMPLEMENTADA + reviewer
 APROBADO (0 bloqueantes, 4 menores), `PR #179` → `dev` (falta merge humano).** Fullstack, `medium`,
 `depends_on: null`. Spec en `specs/150-tamano-hoja-etiquetas/` (**R1–R21**, 11 tasks, 3 con `[P]`). Rama
@@ -311,8 +405,19 @@ está en rojo por `count` en `GestionarOrdenPanelProps`).
   a Excel salió de la 144 y pasó a **server-side en una feature 151** nueva; la 145 pasó a `fullstack`).
   Se resolvió conservando **la 142 nuestra** y **la versión de `dev` para 144/145**, que estaba más al día.
 
-> ### ⚠️ `dev` está EN ROJO, y no es culpa de la 142 — MEDIDO, no supuesto
+> ### ✅ SALDADA (2026-07-28) — `dev` volvió a verde. Lo de abajo queda como histórico.
 >
+> Lo arregló el **PR #175** (`fix/tests-rediseno-ux`, merge `55b0cd4`), que entró después de la 142.
+> **Medido, no supuesto**, en el worktree limpio `../ordenex-wt-144` sobre `origin/dev @ 55b0cd4` y con
+> `pnpm db:generate` corrido antes de medir (un worktree nuevo no trae cliente de Prisma y sin él el
+> typecheck escupe ~30 falsos `TS2305` de `@prisma/client`): **`./init.sh` VERDE de punta a punta** —
+> typecheck **0 errores**, lint **0 errores / 145 warnings**, **518 archivos / 5308 tests, 0 fallos**,
+> todas las migraciones con `down.sql`. Ese es el **baseline de la 144**: cualquier rojo que aparezca
+> durante su implementación es suyo, no heredado.
+>
+> <details><summary>Histórico: el diagnóstico de cuando estaba en rojo</summary>
+>
+
 > Tras el merge quedan **2 errores de typecheck** (`count` falta en `GestionarOrdenPanelProps`, en
 > `GestionarOrdenPanelEvidencias.test.tsx` y `NotaPrivadaMensajero.test.tsx`) y **14 tests rojos** en
 > 4 archivos: `DataTable.test.tsx` (2), `MarcarLuegoToggle.test.tsx` (2), `MisAsignacionesModule.test.tsx`
@@ -327,6 +432,8 @@ está en rojo por `count` en `GestionarOrdenPanelProps`).
 > Corolario para la 141 (`../ordenex-wt-141`, PR #168 abierto): en `dev` solo aterrizó su **spec**;
 > la migración `20260727120000_carga_orden_carga_id` y su código **NO** están en `dev` todavía.
 > Por eso sigue legítimamente `in_progress`.
+>
+> </details>
 
 ### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
 

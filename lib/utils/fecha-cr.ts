@@ -52,6 +52,43 @@ export function mananaCalendarioCR(now: Date = new Date()): string {
 }
 
 /**
+ * Feature 144 (R41/R42/R43) — INSTANTE UTC del comienzo (00:00 hora de pared de Costa
+ * Rica) de la fecha calendario `YYYY-MM-DD`. Es `${fecha}T06:00:00.000Z`.
+ *
+ * OJO, es la trampa del repo: `startOfDayCR` NO sirve para esto. Aquella devuelve la
+ * MEDIANOCHE UTC de la fecha calendario CR (convencion `@db.Date` de la feature 46), que
+ * es un instante 6 h ANTERIOR al comienzo real del dia en CR. Comparar `created_at` (un
+ * `timestamp` en UTC) contra `startOfDayCR` metería en el rango las 6 primeras horas UTC
+ * del dia, que en CR son todavia el dia anterior. Por eso aqui se suman las 6 h.
+ *
+ * `fecha` debe venir ya validada como `YYYY-MM-DD` (ver `ordenFilterSchema`).
+ */
+export function inicioDelDiaCREnUtc(fecha: string): Date {
+  return new Date(`${fecha}T06:00:00.000Z`);
+}
+
+/**
+ * Feature 144 (R42) — INSTANTE UTC del comienzo del dia SIGUIENTE a `fecha` en hora de
+ * Costa Rica. Es la cota superior EXCLUSIVA que hace que `hasta` sea INCLUSIVO: con
+ * `hasta = 2026-07-15` el rango debe cubrir todo el 15 en CR, es decir hasta
+ * `2026-07-16T05:59:59.999Z`. El error clasico —usar `<= inicioDelDiaCREnUtc(hasta)`—
+ * perderia el dia entero salvo su primer instante.
+ */
+export function inicioDelDiaSiguienteCREnUtc(fecha: string): Date {
+  return new Date(inicioDelDiaCREnUtc(fecha).getTime() + UN_DIA_MS);
+}
+
+/**
+ * Feature 144 (R41) — INSTANTE UTC desde el que empieza el atajo "ultimos N dias",
+ * contado sobre la fecha calendario de Costa Rica de `now`: el comienzo del dia CR de
+ * hace `N - 1` dias, de modo que "ultimos 7 dias" cubra 7 dias CALENDARIO incluido hoy.
+ */
+export function inicioDeUltimosNDiasCREnUtc(dias: number, now: Date = new Date()): Date {
+  const fecha = fechaCalendarioCR(new Date(now.getTime() - (dias - 1) * UN_DIA_MS));
+  return inicioDelDiaCREnUtc(fecha);
+}
+
+/**
  * Feature 45 (R30) — periodo mensual `YYYY-MM` de la fecha CALENDARIO de Costa Rica (UTC-6)
  * correspondiente a `now`. Consistente con `startOfDayCR` (mismo offset). Se usa como parte
  * de la clave de idempotencia del cron de gastos fijos (`<plantillaId>:<YYYY-MM>`). Ejemplos:
