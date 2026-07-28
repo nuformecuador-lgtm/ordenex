@@ -195,6 +195,35 @@ function panelDetalle() {
   return screen.getByRole("region", { name: "Detalle de la orden" });
 }
 
+/**
+ * Card de una remisión: el `<article>` de `PosOrderCard`. El rediseño POS dejó de
+ * envolver la card entera en el `<button>` —ahora "Gestionar orden" es un CTA
+ * interno— y el `<article>` no tiene nombre accesible, así que se sube desde el CTA.
+ */
+function cardDe(numRemision: string): HTMLElement {
+  const cta = screen.getByRole("button", {
+    name: new RegExp(`Gestionar orden ${numRemision}`),
+  });
+  const card = cta.closest("article");
+  if (card === null) throw new Error(`sin <article> para ${numRemision}`);
+  return card;
+}
+
+/**
+ * Nº de parada en la cabecera de la card POS. El texto se reparte entre
+ * `<span class="sr-only">Parada </span>` y `{parada} de {total}`, así que se busca
+ * por el `<p>` que los contiene en lugar de por una cadena exacta.
+ */
+function paradaEnCabecera(parada: number, total: number): HTMLElement {
+  return screen.getByText(
+    (_, el) =>
+      el?.tagName === "P" &&
+      (el.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .includes(`Parada ${parada} de ${total}`),
+  );
+}
+
 /** Sube un File válido (image/jpeg, size>0) al input de evidencia dado. */
 async function subirEvidencia(user: ReturnType<typeof userEvent.setup>, label: string) {
   const file = new File(["evidencia-bytes"], "evidencia.jpg", {
@@ -430,7 +459,7 @@ describe("MisAsignacionesModule", () => {
     ).toBeInTheDocument();
     // El panel inline muestra por defecto la PRIMERA orden (sin fijar el puntero).
     expect(
-      within(panelDetalle()).getByText("Orden REM-G1 · Uno"),
+      within(panelDetalle()).getByText("Uno"),
     ).toBeInTheDocument();
     expect(escogerMock).not.toHaveBeenCalled();
     // Feature 98: el panel exige verificar la guía antes de gestionar → el gate
@@ -453,10 +482,10 @@ describe("MisAsignacionesModule", () => {
     });
 
     // Por defecto la primera; al seleccionar la segunda, el panel la refleja.
-    expect(within(panelDetalle()).getByText("Orden REM-G1 · Uno")).toBeInTheDocument();
+    expect(within(panelDetalle()).getByText("Uno")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Gestionar orden REM-G2/ }));
 
-    expect(within(panelDetalle()).getByText("Orden REM-G2 · Dos")).toBeInTheDocument();
+    expect(within(panelDetalle()).getByText("Dos")).toBeInTheDocument();
     expect(escogerMock).not.toHaveBeenCalled();
   });
 
@@ -485,7 +514,7 @@ describe("MisAsignacionesModule", () => {
     expect(screen.queryByText(/Termina la gestión en curso/)).toBeNull();
     // Solo queda el panel de la orden ACTIVA (g2).
     expect(
-      within(panelDetalle()).getByText("Orden REM-G2 · Activa Dos"),
+      within(panelDetalle()).getByText("Activa Dos"),
     ).toBeInTheDocument();
   });
 
@@ -960,16 +989,14 @@ describe("MisAsignacionesModule", () => {
     const region = screen.getByRole("region", {
       name: "En reparto / por gestionar",
     });
-    // La posición 1 y 2 se leen de forma accesible ("Parada N de la ruta").
-    expect(within(region).getByText("Parada 1 de la ruta")).toBeInTheDocument();
-    expect(within(region).getByText("Parada 2 de la ruta")).toBeInTheDocument();
+    // La posición 1 y 2 se leen de forma accesible ("Parada N de TOTAL").
+    expect(paradaEnCabecera(1, 3)).toBeInTheDocument();
+    expect(paradaEnCabecera(2, 3)).toBeInTheDocument();
     // La orden sin posición muestra la marca de pendiente (y no un número de parada).
     expect(
       within(region).getByText("Pendiente de optimizar"),
     ).toBeInTheDocument();
-    expect(
-      within(region).queryByText("Parada 3 de la ruta"),
-    ).toBeNull();
+    expect(() => paradaEnCabecera(3, 3)).toThrow();
   });
 
   it("R30: con la ruta 'desactualizada' muestra el aviso de que el orden no está actualizado", () => {
@@ -1142,10 +1169,11 @@ describe("MisAsignacionesModule", () => {
       ],
     });
 
-    const card1 = screen.getByRole("button", { name: /Gestionar orden REM-G1/ });
-    const card2 = screen.getByRole("button", { name: /Gestionar orden REM-G2/ });
+    const card1 = cardDe("REM-G1");
+    const card2 = cardDe("REM-G2");
 
-    // Cada card trae las 3 secciones de AsignacionDetalle y sus labels.
+    // Cada card trae las 3 secciones de AsignacionDetalle y sus labels (el
+    // rediseño POS las pliega en un `<details>`, pero siguen montadas: R1).
     for (const card of [card1, card2]) {
       expect(within(card).getByText("Pedido")).toBeInTheDocument();
       expect(within(card).getByText("Entrega")).toBeInTheDocument();
@@ -1154,8 +1182,13 @@ describe("MisAsignacionesModule", () => {
       expect(within(card).getByText("Dirección")).toBeInTheDocument();
     }
     // ...con los datos propios de cada orden (no los del vecino).
-    expect(within(card1).getByText("Calle Uno 111")).toBeInTheDocument();
-    expect(within(card2).getByText("Calle Dos 222")).toBeInTheDocument();
+    // La dirección aparece DOS veces por card (bloque de navegación POS + campo
+    // "Dirección" del detalle plegado), de ahí el getAll; lo que importa es que
+    // cada card lleve la suya y NO la del vecino.
+    expect(within(card1).getAllByText("Calle Uno 111").length).toBeGreaterThan(0);
+    expect(within(card1).queryByText("Calle Dos 222")).toBeNull();
+    expect(within(card2).getAllByText("Calle Dos 222").length).toBeGreaterThan(0);
+    expect(within(card2).queryByText("Calle Uno 111")).toBeNull();
   });
 
   it("R2: el texto 'Termina la gestión en curso' no aparece en NINGÚN estado", () => {
@@ -1193,12 +1226,14 @@ describe("MisAsignacionesModule", () => {
       ],
     });
 
-    const card = screen.getByRole("button", { name: /Gestionar orden REM-G1/ });
-    // La deshabilitación restringe la ACCIÓN, no la visibilidad.
-    expect(card).toBeDisabled();
+    const cta = screen.getByRole("button", { name: /Gestionar orden REM-G1/ });
+    const card = cardDe("REM-G1");
+    // La deshabilitación restringe la ACCIÓN (el CTA), no la visibilidad.
+    expect(cta).toBeDisabled();
     expect(within(card).getByText("Pedido")).toBeInTheDocument();
     expect(within(card).getByText("Valor a cobrar")).toBeInTheDocument();
-    expect(within(card).getByText("Calle Uno 111")).toBeInTheDocument();
+    // Dos veces: bloque de navegación POS + campo "Dirección" del detalle plegado.
+    expect(within(card).getAllByText("Calle Uno 111").length).toBeGreaterThan(0);
   });
 
   it("R4: con una gestión activa NO se ofrece gestionar OTRA orden (sus cards no están en el DOM)", () => {
@@ -1253,7 +1288,7 @@ describe("MisAsignacionesModule", () => {
     });
 
     expect(
-      within(panelDetalle()).getByText("Orden REM-G2 · Activa Dos"),
+      within(panelDetalle()).getByText("Activa Dos"),
     ).toBeInTheDocument();
   });
 
@@ -2100,13 +2135,13 @@ describe("MisAsignacionesModule", () => {
 
     // Por defecto el panel muestra la PRIMERA (g1).
     expect(
-      within(panelDetalle()).getByText("Orden REM-G1 · Uno"),
+      within(panelDetalle()).getByText("Uno"),
     ).toBeInTheDocument();
 
     // Al filtrar por Escazú, el conjunto filtrado es [g2]: el panel y el mapa lo reflejan.
     await elegirEnSelect(user, "Filtrar por cantón", "Escazú (San José)");
     expect(
-      within(panelDetalle()).getByText("Orden REM-G2 · Dos"),
+      within(panelDetalle()).getByText("Dos"),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Gestionar orden REM-G1/ }),

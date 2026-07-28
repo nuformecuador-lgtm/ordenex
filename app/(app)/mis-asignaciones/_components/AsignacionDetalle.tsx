@@ -67,8 +67,12 @@ export function AsignacionDetalle({ orden }: AsignacionDetalleProps) {
     <div className="flex flex-col gap-4">
       {/* Sección 1 — Pedido */}
       <Seccion titulo="Pedido">
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Campo label="Nº Guía">{orden.numGuia ?? "—"}</Campo>
           <Campo label="Nombre">{orden.destinatario}</Campo>
+          <Campo label="Teléfono">{orden.telefonoDest}</Campo>
           <Campo label="Producto">{orden.producto}</Campo>
+        </dl>
       </Seccion>
 
       {/* Sección 2 — Entrega */}

@@ -62,6 +62,139 @@ Spec en `specs/146-campana-notificaciones/` (R1–R50, 24 tasks).
   (`PAGE_SIZE=50` trunca en silencio); `marcarNotificacionLeida` sin control por elemento en la UI
   (solo "marcar todas" o descartar); la campana arranca vacía en cada página y cada una abre su
   propio polling.
+**Descargar en Excel las filas con error de la carga masiva — feature 143 (2026-07-27) → IMPLEMENTADA
++ reviewer APROBADO (0 bloqueantes), falta PR/merge.** Frontend, `medium`, `depends_on: 142`
+(**satisfecha**: la 142 se mergeó a `dev` en `c3e6954`, PR #174). Rama
+`feature/143-descargar-errores-carga-masiva` desde `origin/dev @ c3e6954`, en worktree aislado
+`../ordenex-wt-143` (el árbol `ux` sigue arrastrando WIP ajeno y su typecheck está en rojo).
+Spec en `specs/143-descargar-errores-carga-masiva/` (**R1–R22**, 15 tasks).
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** (a) el motivo del error viaja en una **columna
+  extra `motivo_error`** al final (tras `notas`), una sola hoja — NO hoja aparte; (b) las celdas llevan
+  los **valores CRUDOS** del archivo original (`FilaParseada.row`), no los normalizados, para que el
+  usuario reconozca su fila tal como la escribió.
+- **El ABIERTO del backlog quedó desactivado, pero por diseño permisivo, no por contrato.** El item
+  advertía que "una columna extra rompe el round-trip". Verificado que NO: `findMissingHeaders`
+  (`lib/types/carga-masiva.ts`) solo comprueba **presencia** de `REQUIRED_HEADERS` sin lista blanca,
+  ambos parsers (navegador y `lib/parsers/spreadsheet.ts`) indexan **por nombre de cabecera** y no por
+  posición, y `filaCargaSchema` es un `z.object` **sin `.strict()`** → zod descarta `motivo_error` en
+  silencio. Como hoy funciona por accidente afortunado, se **fijó con R14/R15/R16 + test de round-trip
+  + comentarios-ancla en el schema**, para que un futuro `.strict()` rompa un test y no la feature en
+  producción.
+- **Hallazgo del spec (el que evita un export desalineado en silencio):** el cruce `fila` ↔ `linea`
+  solo es válido porque `procesarEnChunks` **remapea** la fila del lote a la línea original
+  (`carga-masiva-chunks.ts:99`, `fila: lote[i]?.linea ?? rr.fila`). Sin ese remapeo el archivo saldría
+  con los datos de otras filas y el usuario corregiría la fila equivocada. Blindado con test dedicado.
+- **Colocación del botón:** `OrdenesCargaPreview` es la **única superficie viva** que lista errores —
+  `OrdenesCargaResumenPaso` está definido y testeado pero **no lo importa nadie**. El único dueño de la
+  clasificación + las `FilaParseada` es `OrdenesCargaMasivaButton`, así que bastó una prop (`filas`).
+- **Gate F1.4 APROBADO (2026-07-27):** (1) alcance **solo vista previa** — los errores de la carga real
+  post-confirmación (paso `asignacion`, hoy solo un toast) quedan fuera de alcance explícito (R20);
+  (2) el `motivo_error` lleva **prefijo de línea** (`Fila 7 — telefono: debe tener 8 dígitos`), una sola
+  vez aunque haya varios campos, y **sin prefijo** cuando no hay línea conocida — no se inventa número
+  (R22); (3) **sin CSV** (R21), decidido por el leader con el default: solo xlsx.
+- **Sin backend nuevo, sin migración, sin endpoint.** Descarga cliente puro (Blob + anchor). Módulos
+  nuevos: `carga-masiva-errores-formato.ts`, `carga-masiva-export-errores.ts` y `buildXlsxRows` +
+  `XLSX_MIME` en `lib/utils/xlsx-template.ts` (`buildXlsxTemplate` intacto). `exceljs` sigue entrando
+  **solo** por import dinámico dentro de `buildXlsxRows`, con test que lo blinda desde el componente.
+- **Review por MUTACIÓN, no por lectura** (lo que da confianza real en el mapa R1–R22): `.strict()` en
+  `filaCargaSchema` mata 2 tests; lista blanca en `findMissingHeaders` mata los 2 de R14; quitar el
+  remapeo de `chunks` mata el test del cruce; sufijo `" *"` en la cabecera mata 9; un prefijo
+  `Fila ${fila ?? 0}` inventado mata los 2 de R22. **0 bloqueantes, 8 menores**; se cerraron los 3
+  accionables (casillas de `tasks.md`; el round-trip del navegador pasó a usar `parseArchivo` real en
+  vez de reimplementar la lectura de celdas; fuera el import dinámico redundante). Los 5 restantes son
+  deuda preexistente de `dev` (typecheck en rojo, sin E2E de ingesta) o verificación fuera de alcance.
+- **⚠️ T13 (paseo manual en Excel/Sheets) NO se ejecutó** — queda para la puerta de aceptación humana.
+  Se sustituyó por verificación ejecutable en `tests/integration/carga-masiva-errores-roundtrip.test.ts`,
+  que genera el `.xlsx` real y lo re-parsea con **ambos** parsers.
+- **Baseline de `dev` medido en worktree limpio ANTES de implementar** (no es de esta feature):
+  `pnpm typecheck` 2 errores (`count` en `GestionarOrdenPanelProps`), `pnpm test` 14 fallando / 5294
+  pasando en `DataTable`, `LoginForm`, `MarcarLuegoToggle`, `MisAsignacionesModule`,
+  `NotaPrivadaMensajero`. **Delta 0** verificado por implementer y reviewer por separado.
+
+**Plantilla de carga masiva v2 — feature 142 (2026-07-27) → IMPLEMENTADA + reviewer APROBADO
+(0 bloqueantes), `PR #174` → `dev` (falta merge humano).** Pedido del humano:
+rehacer la plantilla de carga masiva de órdenes con (1) un orden de columnas nuevo — `destinatario`,
+`telefono`, `direccion_destinatario`, `monto_cobrar`, `producto`, `num_remision`, `peso`, `notas` — y
+(2) las 4 columnas `provincia`/`canton`/`distrito`/`direccion` **reemplazadas por una sola**,
+`direccion_destinatario`, con formato `'País / Provincia / Cantón (Distrito) / Dirección literal'`.
+Fullstack, `high`, `depends_on: null`. Rama `feature/142-plantilla-carga-masiva-v2` desde `origin/dev`
+@ `97f6e91`, en worktree aislado `../ordenex-wt-142` (el árbol `ux` arrastra WIP ajeno y su typecheck
+está en rojo por `count` en `GestionarOrdenPanelProps`).
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** (a) **CORTE DURO** — no hay modo compatibilidad
+  con la plantilla vieja de 4 columnas; un archivo viejo falla en `findMissingHeaders` con un mensaje
+  que apunta a descargar la plantilla nueva. Un solo camino de código, sin deuda de retiro.
+  (b) **DISTRITO OBLIGATORIO** — sin el paréntesis del distrito la fila es `fieldError` en
+  `direccion_destinatario` y no se crea, porque `zona_id` se deriva del distrito y decide tarifa y ruteo.
+- **Superficie confirmada contra `origin/dev`:** `ORDENES_BULK_FIELDS`
+  (`app/(app)/ordenes/_components/carga-masiva-fields.ts`, hoy 11 campos con las 4 geográficas),
+  `REQUIRED_HEADERS` + `filaCargaSchema` (`lib/types/carga-masiva.ts`, hoy exige
+  `num_remision`/`destinatario`/`telefono`/`provincia`/`canton` en cabecera),
+  `carga-masiva-parser.ts`, `carga-masiva-chunks.ts` y `resolverGeografia` de `BulkOrdenService`
+  (sigue resolviendo provincia→cantón→distrito por nombre contra el catálogo). **Sin migración.**
+  Ojo al round-trip: `tests/integration/carga-masiva-plantilla-roundtrip.test.ts` genera la plantilla
+  y la vuelve a parsear — el corte duro lo toca de lleno.
+- **Renumeración 141–149 → 142–150 aterrizando en esta rama:** la traía el árbol de trabajo de `ux`
+  **sin commitear** (`dev` sigue con los ids viejos del PR #170). Viaja commiteada en este PR para que
+  deje de ser estado volátil. `141` conserva `tabla carga + carga_id en orden` (PR #168).
+- **Orquestación:** feature `fullstack` que NO se parte en dos — `lib/types/carga-masiva.ts` y el
+  parser son el mismo contrato compartido por cliente y servidor, y partirlo serializaría un cambio
+  atómico. Se aplica el precedente de la 121: directo `spec_author` → `backend_dev` → `frontend_dev`
+  → `reviewer` con `model: opus`, sin el `implementer` monolítico.
+- **Gate F1.4 APROBADO (2026-07-27)** con las 6 propuestas del spec tal cual: (1) texto tras el `)`
+  del distrito → error de fila; (2) dirección literal vacía → se acepta (`null`); (3) copy literal del
+  corte duro; (4) ejemplo canónico sustituible si el guard del seed lo rechaza; (5) columna `peso`
+  fuera de alcance; (6) no hay doc pública de la plantilla que actualizar.
+- **Hallazgo estructural del spec (lo que salvó el contrato público):** `filaCargaSchema`/`resolveFila`
+  los comparte `cargarViaApi` (feature 88, **API key de integradores**, con `provincia`/`canton`/
+  `distrito` SEPARADOS). Meter el parser en `filaCargaSchema` habría roto ese contrato en silencio.
+  Solución: **extractor de geografía inyectado por vía** (`geoInputDesdeDireccionUnificada` para la UI,
+  `geoInputDesdeColumnasSeparadas` para la API) con `resolveGeo` **sin tocar una línea**.
+- **Implementada** en el worktree `../ordenex-wt-142` (`backend_dev` B1–B8 → `frontend_dev` F1–F4 +
+  C1–C2 + T2 → `reviewer`, todos `model: opus`, 8 commits). Parser puro nuevo en
+  `lib/utils/direccion-destinatario.ts`. **Sin migración**, sin cambios en `db/`, un solo `.tsx` tocado.
+- **⚠️ El ejemplo canónico de la plantilla se SUSTITUYÓ:** `Cartago / Jimenez (Juan Vinas)` existe en
+  `public/geografia-cr-completa.xlsx` pero **no recibe zona** al cruzarlo con
+  `public/mapa-geografico-costa-rica.xlsx` → la fila de ejemplo habría fallado con «distrito sin zona».
+  Quedó `Costa Rica / Cartago / Cartago (Occidental) / Frente gasolinera JSM, 200m sur` (zona GAM).
+  El guard `tests/unit/scripts/carga-masiva-ejemplos-geo.test.ts` **no se relajó** — hizo su trabajo.
+  Deuda de datos preexistente detrás: solo **198 ternas** del catálogo reciben zona en el seed.
+- **Reviewer APROBADO, 0 bloqueantes** (7 notas menores). No se fio de los números: corrida propia
+  con **typecheck 0**, **lint 0 errores / 144 warnings**, **517 archivos / 5280 tests, 0 fallos**,
+  `./init.sh` verde. Además **prueba de mutación** (rompiendo R19 y R22 caen 5 tests en 2 archivos →
+  los tests son sensibles, no decorativos) y **fuzz de 50.000 entradas** contra el parser → 0
+  excepciones y 0 aceptaciones con geografía vacía. Verificó que **falla cerrado**: con el parser
+  mutado devolviendo distrito vacío, la fila igual sale a error por `resolveGeo`; `zona_id` nunca
+  queda nulo. Detalle en `progress/impl_142_backend.md`, `impl_142-plantilla-carga-masiva-v2.md`
+  y `review_142.md` (viajan en la rama).
+- **Notas menores diferidas:** falta un test extremo a extremo cliente→ruta chunk→service con la
+  columna nueva; el mensaje de «paréntesis no cerrado» confunde cuando hay una `/` dentro del
+  paréntesis; R32 se apoya en la genericidad de los chips sin caso propio.
+- **Renumeración 141–149 → 142–150 commiteada por fin en esta rama** (venía suelta en el árbol de `ux`).
+- **Aviso a otras sesiones:** el corte es duro. Cualquier archivo de carga masiva con las 4 columnas
+  viejas deja de funcionar al mergear; hay que redescargar la plantilla.
+- **Sincronizado con `dev` @ `56ff0aa`** (merge `c08f60b`). Conflicto único en `feature_list.json`:
+  `dev` **ya había hecho la misma renumeración** por su cuenta y además refinó la 144/145 (el export
+  a Excel salió de la 144 y pasó a **server-side en una feature 151** nueva; la 145 pasó a `fullstack`).
+  Se resolvió conservando **la 142 nuestra** y **la versión de `dev` para 144/145**, que estaba más al día.
+
+> ### ⚠️ `dev` está EN ROJO, y no es culpa de la 142 — MEDIDO, no supuesto
+>
+> Tras el merge quedan **2 errores de typecheck** (`count` falta en `GestionarOrdenPanelProps`, en
+> `GestionarOrdenPanelEvidencias.test.tsx` y `NotaPrivadaMensajero.test.tsx`) y **14 tests rojos** en
+> 4 archivos: `DataTable.test.tsx` (2), `MarcarLuegoToggle.test.tsx` (2), `MisAsignacionesModule.test.tsx`
+> (9), `NotaPrivadaMensajero.test.tsx` (1).
+>
+> Se levantó un **worktree limpio de `origin/dev` @ `56ff0aa`** y se corrieron ahí: **los mismos 2
+> errores y los mismos 14 tests fallan sin la 142**. Delta de la feature = **0**; ninguno de esos 4
+> archivos aparece en su diff. Es deuda del **rework de `mis-asignaciones`/`pos-card` + `DataTable`**
+> que entró a `dev`. **Alguien tiene que saldarla**: hoy `./init.sh` no puede pasar en `dev` ni en
+> ninguna rama que salga de él, así que el arnés está sin red para todas las features en vuelo.
+>
+> Corolario para la 141 (`../ordenex-wt-141`, PR #168 abierto): en `dev` solo aterrizó su **spec**;
+> la migración `20260727120000_carga_orden_carga_id` y su código **NO** están en `dev` todavía.
+> Por eso sigue legítimamente `in_progress`.
 
 ### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
 

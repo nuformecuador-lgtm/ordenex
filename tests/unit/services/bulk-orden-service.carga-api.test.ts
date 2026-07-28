@@ -423,3 +423,56 @@ describe("cargarViaApi — no-regresión del contrato 88 (feature 98/R10)", () =
     }
   });
 });
+
+// Feature 142 (B6/R38) — la plantilla v2 de la via sesion (columna unica
+// `direccion_destinatario`) NO toca el contrato publico de la 88: el integrador
+// sigue enviando provincia/canton/distrito/direccion como campos separados.
+describe("cargarViaApi — no-regresión del contrato 88 frente a la plantilla v2 (feature 142/R38)", () => {
+  it("R38: fila con provincia/canton/distrito separados y SIN direccion_destinatario se crea igual", async () => {
+    const repo = buildRepo();
+    const r = await buildService(repo).cargarViaApi(
+      [
+        {
+          num_remision: "REM-88",
+          destinatario: "Ana",
+          telefono: "0991234567",
+          provincia: "Pichincha",
+          canton: "Quito",
+          distrito: "La Mariscal",
+          direccion: "Av. Amazonas N33-12",
+          producto: "Caja",
+        },
+      ],
+      APIKEY,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.summary).toMatchObject({ total: 1, creadas: 1, conError: 0 });
+      expect(r.summary.filas[0]).toMatchObject({ resultado: "creada", numGuia: 1000 });
+    }
+    // La geografia se deriva de las 4 columnas separadas, no de ninguna columna unificada.
+    expect(conGuiaArg(repo)[0]).toMatchObject({
+      numRemision: "REM-88",
+      provinciaId: "p1",
+      cantonId: "c1",
+      distritoId: "d1",
+      zonaId: "z1",
+      direccion: "Av. Amazonas N33-12",
+    });
+  });
+
+  it("R38: una columna direccion_destinatario presente en el payload API es ignorada (manda la geografia separada)", async () => {
+    const repo = buildRepo();
+    const r = await buildService(repo).cargarViaApi(
+      [row({ direccion_destinatario: "basura sin formato", direccion: "Av. Amazonas" })],
+      APIKEY,
+    );
+
+    if (r.status === "ok") {
+      expect(r.summary.creadas).toBe(1);
+      expect(r.summary.conError).toBe(0);
+    }
+    expect(conGuiaArg(repo)[0].direccion).toBe("Av. Amazonas");
+  });
+});

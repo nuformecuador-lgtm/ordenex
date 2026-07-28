@@ -30,6 +30,7 @@ import type {
 } from "@/lib/interfaces/services/IBulkOrdenService";
 import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import { normalizeName } from "@/lib/utils/normalize";
+import { parseDireccionDestinatario } from "@/lib/utils/direccion-destinatario";
 import { costoEnvioDeTarifa } from "@/lib/utils/ingreso-ordenex";
 
 // Feature 88/R8: estado inicial FIJO de las ordenes cargadas por API (canal integrador),
@@ -175,6 +176,41 @@ function resolveGeo(
   };
 }
 
+// Feature 142 (design.md §4) — extractor de geografia INYECTADO POR VIA.
+//
+// `resolveFila` lo comparten `cargarMasiva` (via sesion, plantilla v2 con la
+// columna unica `direccion_destinatario`) y `cargarViaApi` (via API key, feature
+// 88: contrato PUBLICO con `provincia`/`canton`/`distrito`/`direccion` como campos
+// separados). Cada via aporta su propio extractor; `resolveGeo` sigue recibiendo
+// los mismos 3 nombres y no cambia (R33-R38).
+type GeoInput =
+  | { ok: true; provincia: string; canton: string; distrito: string; direccion: string }
+  | { ok: false; fieldErrors: Record<string, string[]> };
+
+type GeoInputExtractor = (raw: RawRow) => GeoInput;
+
+// R29: via sesion. La terna sale de parsear `direccion_destinatario`; cualquier
+// fallo de formato es un fieldError bajo esa misma clave (fila a error, R30).
+function geoInputDesdeDireccionUnificada(raw: RawRow): GeoInput {
+  const parsed = parseDireccionDestinatario(raw.direccion_destinatario ?? "");
+  if (!parsed.ok) {
+    return { ok: false, fieldErrors: { direccion_destinatario: [parsed.mensaje] } };
+  }
+  return { ok: true, ...parsed.partes };
+}
+
+// R38: via API key. Contrato de la feature 88 intacto: los 4 campos separados,
+// con el mismo `trim()` que antes hacia `filaCargaSchema`.
+function geoInputDesdeColumnasSeparadas(raw: RawRow): GeoInput {
+  return {
+    ok: true,
+    provincia: (raw.provincia ?? "").trim(),
+    canton: (raw.canton ?? "").trim(),
+    distrito: (raw.distrito ?? "").trim(),
+    direccion: (raw.direccion ?? "").trim(),
+  };
+}
+
 type MensajeroResult =
   | { ok: true; id: string | null }
   | { ok: false; fieldErrors: Record<string, string[]> };
@@ -264,7 +300,9 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     rows.forEach((raw, idx) => {
       const fila = idx + 1;
-      const result = this.resolveFila(raw, ctx, seen);
+      // Feature 142: la via sesion deriva la geografia de `direccion_destinatario`
+      // (plantilla v2, corte duro D1: no hay camino desde las columnas viejas).
+      const result = this.resolveFila(raw, ctx, seen, geoInputDesdeDireccionUnificada);
       if (result.status === "error") {
         filas.push({ fila, numRemision: result.numRemision, resultado: "error", errores: result.errores });
         return;
@@ -333,7 +371,9 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     rows.forEach((raw, idx) => {
       const fila = idx + 1;
-      const result = this.resolveFila(raw, ctx, seen); // R7: mismas reglas que la carga masiva.
+      // R7: mismas reglas que la carga masiva, pero con la geografia en columnas
+      // separadas (feature 142/R38: el contrato publico de la 88 no cambia).
+      const result = this.resolveFila(raw, ctx, seen, geoInputDesdeColumnasSeparadas);
       if (result.status === "error") {
         filas.push({ fila, numRemision: result.numRemision, resultado: "error", errores: result.errores });
         return;
@@ -437,6 +477,8 @@ export class BulkOrdenService implements IBulkOrdenService {
     raw: RawRow,
     ctx: PreloadedContext,
     seen: Map<string, string>,
+    // Feature 142 (design.md §4): la via decide de donde sale la geografia.
+    geoInputOf: GeoInputExtractor,
   ):
     | { status: "error"; numRemision: string; errores: Record<string, string[]> }
     | { status: "duplicada"; numRemision: string; estatus: string }
@@ -452,12 +494,14 @@ export class BulkOrdenService implements IBulkOrdenService {
     }
     const data = parsed.data;
 
-    const geoResult = resolveGeo(
-      { provincia: raw.provincia ?? "", canton: raw.canton ?? "", distrito: raw.distrito ?? "" },
-      ctx.provinciaIndex,
-      ctx.cantonIndex,
-      ctx.distritoIndex,
-    );
+    // Feature 142/R29: si el extractor de la via falla (p. ej. formato invalido de
+    // `direccion_destinatario`), la fila va a error con SU clave, sin llegar a
+    // resolveGeo. Si tiene exito, resolveGeo recibe exactamente los mismos 3
+    // nombres de siempre (R33-R36, mensajes intactos).
+    const geoInput = geoInputOf(raw);
+    const geoResult: GeoResult = geoInput.ok
+      ? resolveGeo(geoInput, ctx.provinciaIndex, ctx.cantonIndex, ctx.distritoIndex)
+      : { ok: false, fieldErrors: geoInput.fieldErrors };
     const mensajeroResult = resolveMensajero(data.mensajero_sugerido_id, ctx.mensajerosValidos);
 
     const fieldErrors: Record<string, string[]> = {};
@@ -467,8 +511,10 @@ export class BulkOrdenService implements IBulkOrdenService {
       return { status: "error", numRemision: data.num_remision, errores: fieldErrors };
     }
     // Invariante: fieldErrors vacio implica que ambos resolvieron "ok" (los
-    // unicos casos que agregan claves a fieldErrors son las ramas !ok).
+    // unicos casos que agregan claves a fieldErrors son las ramas !ok). Y un
+    // geoResult ok implica un geoInput ok (es su unica fuente).
     const geo = (geoResult as Extract<GeoResult, { ok: true }>).geo;
+    const direccionLiteral = (geoInput as Extract<GeoInput, { ok: true }>).direccion;
     const mensajeroSugeridoId = (mensajeroResult as Extract<MensajeroResult, { ok: true }>).id;
 
     // R26: dedup intra-archivo, primera ocurrencia gana; reporta el mismo
@@ -501,7 +547,9 @@ export class BulkOrdenService implements IBulkOrdenService {
         producto: data.producto,
         peso: null, // R4: la carga masiva no trae peso
         notas: data.notas === "" ? null : data.notas,
-        direccion: data.direccion === "" ? null : data.direccion,
+        // R37: la direccion literal se persiste en el mismo campo de siempre;
+        // vacia -> null (igual que la columna `direccion` vacia de hoy, R26).
+        direccion: direccionLiteral === "" ? null : direccionLiteral,
         montoCobrar: data.monto_cobrar,
         mensajeroSugeridoId,
       },

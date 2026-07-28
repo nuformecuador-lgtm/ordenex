@@ -25,6 +25,7 @@ import {
   ChunkRequestError,
 } from "@/app/(app)/ordenes/_components/carga-masiva-chunks";
 import { findMissingHeaders } from "@/lib/types/carga-masiva";
+import { FORMATO_DIRECCION_DESTINATARIO } from "@/lib/utils/direccion-destinatario";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
 
 export interface OrdenesCargaUploadResult {
@@ -40,6 +41,22 @@ export interface OrdenesCargaUploadProps {
 }
 
 type Status = "idle" | "validando" | "error";
+
+/** Columna única de la plantilla v2 (feature 142). Su ausencia = plantilla vieja. */
+const COLUMNA_DIRECCION = "direccion_destinatario";
+
+/**
+ * Mensaje de cabecera incompleta. Si lo que falta es `direccion_destinatario`, el
+ * archivo es (casi siempre) de la plantilla ANTERIOR, que traía provincia/cantón/
+ * distrito/dirección en columnas separadas: no hay modo de compatibilidad (D1),
+ * así que se le dice explícitamente que descargue la plantilla nueva (R8).
+ */
+function mensajeCabeceraFaltante(faltantes: string[]): string {
+  const base = `Faltan columnas obligatorias: ${faltantes.join(", ")}.`;
+  return faltantes.includes(COLUMNA_DIRECCION)
+    ? `${base} La plantilla cambió: descarga la plantilla nueva y vuelve a cargar tus datos.`
+    : base;
+}
 
 function mensajeDeError(cause: unknown): string {
   if (cause instanceof ParseArchivoError) return cause.message;
@@ -92,7 +109,7 @@ export function OrdenesCargaUpload({ onValidated }: OrdenesCargaUploadProps) {
       const faltantes = findMissingHeaders(headers);
       if (faltantes.length > 0) {
         setStatus("error");
-        setMessage(`Faltan columnas obligatorias: ${faltantes.join(", ")}.`);
+        setMessage(mensajeCabeceraFaltante(faltantes));
         return;
       }
       if (filas.length === 0) {
@@ -143,8 +160,13 @@ export function OrdenesCargaUpload({ onValidated }: OrdenesCargaUploadProps) {
       onClear={handleQuitar}
       hint={
         <>
-          Se valida en tu navegador (geografía y números de remisión duplicados)
-          apenas lo cargues y se procesa por lotes. Máximo{" "}
+          La dirección va en una sola columna{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+            {COLUMNA_DIRECCION}
+          </code>
+          , con el formato {FORMATO_DIRECCION_DESTINATARIO}. Se valida en tu
+          navegador (geografía y números de remisión duplicados) apenas lo
+          cargues y se procesa por lotes. Máximo{" "}
           {cargaMasivaConfig.MAX_ROWS.toLocaleString()} filas.
         </>
       }
