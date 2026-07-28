@@ -207,7 +207,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_order_status_rename_nomenclatura") && // feature 137 (rename order_status): apendida despues
         !d.endsWith("_orden_historial_origen_recepcion_bodega_central") && // feature 138 (recepcion bodega central): apendida despues
         !d.endsWith("_order_status_devolucion_rechazadas") && // feature 139 (devolucion rechazadas): apendida despues
-        !d.endsWith("_orden_historial_origen_devolucion_rechazada"), // feature 139 (origen_tipo devolucion): apendida despues
+        !d.endsWith("_orden_historial_origen_devolucion_rechazada") && // feature 139 (origen_tipo devolucion): apendida despues
+        !d.endsWith("_orden_indices_filtros"), // feature 144 (indices de filtros de orden): apendida despues
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);
