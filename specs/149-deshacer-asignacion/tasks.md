@@ -214,28 +214,34 @@
 
 ## F6 — UI
 
-- [ ] **T6.1 — Modal del maestro.** Depende de T3.3.
+- [x] **T6.1 — Modal del maestro.** Depende de T3.3.
   `app/(app)/ordenes/_components/DeshacerAsignacionModal.tsx` +
   `deshacer-asignacion-error-messages.ts`.
   **Hecho:** una sola llamada a la Server Action con el lote completo; botón deshabilitado sin
   motivo válido.
 
-- [ ] **T6.2 — Cableado del listado.** Depende de T6.1.
+- [x] **T6.2 — Cableado del listado.** Depende de T6.1.
   `OrdenesListado.tsx`: acción `deshacer` en `por_recoger` y `en_ruta_bodega_satelite`, unión
   `ModalAbierto`, montaje del modal, `onSuccess = handleSuccess`.
   **Hecho:** la acción aparece con una selección de esos estados y no aparece en los demás.
 
-- [ ] **T6.3 — Grupo `asignadas` en la satélite.** [P con T6.1]
+- [ ] **T6.3 — Grupo `asignadas` en la satélite.** [P con T6.1] — **BLOQUEADA para el
+  `frontend_dev`: toca `lib/services` (backend).**
   `RecepcionSateliteService.listar` + `IRecepcionSateliteService` + `page.tsx`: nuevo bucket
   `asignadas` (`por_recoger` de la zona).
   **Hecho:** unit del service verifica la clasificación del nuevo bucket.
+  **Estado:** el `frontend_dev` NO la ejecutó (fuera de su alcance: es un service de lectura).
+  La UI ya está lista y consume la prop opcional `asignadas` del módulo; falta ÚNICAMENTE
+  añadir `"por_recoger"` a `estatusValues`, el bucket en el bucle de clasificación, el campo en
+  `IRecepcionSateliteService` y pasarlo desde `page.tsx`. Ver `progress/impl_149_frontend.md` §4.
 
-- [ ] **T6.4 — Sección y modal de la satélite.** Depende de T6.3 y T6.1.
+- [x] **T6.4 — Sección y modal de la satélite.** Depende de T6.3 y T6.1.
+  *(UI completa; el alimentador de datos lo aporta T6.3, pendiente.)*
   `RecepcionSateliteModule.tsx`: sección «Asignadas (por recoger)» con selección propia + botón +
   `DeshacerAsignacionSateliteModal.tsx`; sin acción de deshacer en «Por recibir».
   **Hecho:** `router.refresh()` tras éxito.
 
-- [ ] **T6.5 — Tests de UI.** Depende de T6.2 y T6.4.
+- [x] **T6.5 — Tests de UI.** Depende de T6.2 y T6.4.
   `tests/unit/components/deshacer-asignacion.ui.test.tsx`: la acción se ofrece en los dos estados
   del listado del maestro; el `adminSatelite` la ve sobre sus `por_recoger` y NO sobre
   `en_ruta_bodega_satelite`; el botón de confirmar está deshabilitado con motivo inválido y
