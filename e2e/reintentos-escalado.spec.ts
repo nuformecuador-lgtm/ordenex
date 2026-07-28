@@ -201,6 +201,13 @@ async function maestroReasignaDesdeBodega(page: Page) {
   await expect(modal).toBeVisible();
   await elegirEnSelect(page, "Mensajero", "Juan Mensajero");
   await modal.getByRole("button", { name: "Asignar mensajero" }).click();
+  // Feature 148 (§9.7): el modal ya NO se cierra al confirmar; pasa a la fase
+  // "resultado" (resumen de la asignación ya cometida + botón del manifiesto del
+  // lote) y el refresco del listado se difiere al cierre de esa fase.
+  await expect(
+    modal.getByRole("button", { name: /Descargar manifiesto/i }),
+  ).toBeVisible();
+  await modal.getByRole("button", { name: "Cerrar" }).click();
   await expect(modal).toBeHidden();
   await logout(page);
 }
