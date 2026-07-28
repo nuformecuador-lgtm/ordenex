@@ -28,7 +28,7 @@ import {
 } from "@/lib/utils/cierre-totales";
 import {
   emitirBestEffort,
-  notificarCierreDiaPorAprobarReal,
+  notificadorNoOp,
   type CierreNotificador,
 } from "@/lib/notificaciones/notificadores";
 
@@ -109,11 +109,11 @@ export class CierreDiaService implements ICierreDiaService {
     // Feature 39: resolver de la tarifa de pago al mensajero (por zona+vehiculo).
     private readonly tarifaZonaRepo: ITarifaZonaMensajeroRepository,
     /**
-     * Feature 146 (R24/R25): notificador de "cierre por aprobar", inyectable con default real.
-     * BEST-EFFORT: corre despues de la escritura ya guardada del cierre y nunca altera su
-     * resultado.
+     * Feature 146 (R24/R25): notificador de "cierre por aprobar". El DEFAULT es NO-OP: el
+     * composition root (`lib/actions/cierre-dia.ts`) inyecta el real. BEST-EFFORT: corre
+     * despues de la escritura ya guardada del cierre y nunca altera su resultado.
      */
-    private readonly notificarCierre: CierreNotificador = notificarCierreDiaPorAprobarReal,
+    private readonly notificarCierre: CierreNotificador = notificadorNoOp,
   ) {}
 
   /**

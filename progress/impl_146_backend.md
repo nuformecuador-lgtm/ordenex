@@ -42,7 +42,7 @@ para el agente de frontend; ningún `.tsx` fue tocado.
 | Archivo | Estado |
 | --- | --- |
 | `lib/notificaciones/emitir.ts` | nuevo — textos §4.6 + dedupe + emisor transaccional del rechazo |
-| `lib/notificaciones/notificadores.ts` | nuevo — 3 notificadores best-effort |
+| `lib/notificaciones/notificadores.ts` | nuevo — no-op por defecto + 3 notificadores best-effort reales |
 | `lib/repositories/registrar-cambio-estado.ts` | modificado — 5.º parámetro `emitirNotificaciones` |
 | `lib/repositories/OrdenHistorialRepository.ts` | modificado — `tx: ChokePointTx` |
 | `lib/interfaces/repositories/IOrdenHistorialRepository.ts` | modificado — `tx` ensanchado |
@@ -51,6 +51,9 @@ para el agente de frontend; ningún `.tsx` fue tocado.
 | `lib/services/BulkOrdenService.ts` | modificado — aviso al cerrar el lote por API |
 | `lib/interfaces/repositories/ICierreDiaRepository.ts` | modificado — `findCierreSolicitado?` (opcional) |
 | `lib/repositories/CierreDiaRepository.ts` | modificado — implementa `findCierreSolicitado` |
+| `lib/actions/postulacion-mensajero.ts` | modificado — composition root: inyecta el notificador real |
+| `lib/actions/cierre-dia.ts` | modificado — composition root: inyecta el notificador real |
+| `app/api/ordenes/api-key/carga/route.ts` | modificado — composition root: inyecta el notificador real |
 
 ### Tests nuevos
 | Archivo | Tests |
@@ -64,9 +67,10 @@ para el agente de frontend; ningún `.tsx` fue tocado.
 | `tests/unit/repositories/notificacion-orden-rechazada.test.ts` | 15 |
 | `tests/unit/services/notificacion-productores.test.ts` | 12 |
 | `tests/unit/services/notificacion-productores-wiring.test.ts` | 19 |
-| **Total** | **145** |
+| `tests/unit/services/notificacion-notificadores-reales.test.ts` | 16 |
+| **Total** | **161** |
 
-Conteo por capa: **9 archivos nuevos de producción**, **10 modificados**, **9 archivos de test
+Conteo por capa: **9 archivos nuevos de producción**, **10 modificados**, **10 archivos de test
 nuevos**, **2 tests ajenos editados** (uno permitido por el spec y otro forzado; ver §5.0).
 
 ---
@@ -175,13 +179,34 @@ R40–R50: **bloque C (frontend)**, fuera de este alcance.
    un alta correcta en un error. Se usa un flag `creado` y `emitirBestEffort` como segunda
    red, para blindar también contra un notificador inyectado que no absorba su fallo.
 
-10. **Los tres notificadores reales hacen no-op bajo vitest** (`process.env.VITEST` /
-    `NODE_ENV === "test"`). Son el *default* del constructor de `PostulacionMensajeroService`,
-    `CierreDiaService` y `BulkOrdenService`, y las suites existentes los construyen sin
-    inyectar nada: sin esa guarda, un `pnpm test` con `DATABASE_URL` en el entorno escribiría
-    notificaciones reales en la base, que en este repo es **compartida con producción**. Los
-    tests de esta feature inyectan su propio notificador, así que la guarda no oculta ningún
-    comportamiento bajo prueba.
+10. **El default de los tres services es un notificador NO-OP; el real se cablea en el
+    composition root.** El riesgo a evitar era concreto: `PostulacionMensajeroService`,
+    `CierreDiaService` y `BulkOrdenService` se construyen en suites ajenas **sin inyectar
+    nada**, así que un default "real" habría escrito notificaciones en la base —que en este
+    repo es **compartida con producción**— en cuanto `DATABASE_URL` estuviera en el entorno del
+    runner.
+
+    La primera versión resolvió esto con una guarda `if (enTest()) return` dentro de los
+    notificadores reales. **Fue un error y se revirtió**: apagar una emisión según
+    `process.env` deja el camino de producción sin cobertura posible y lo convierte en una
+    falla silenciosa si la variable se filtra a un preview (mismo anti-patrón por el que se
+    rechazó la primera entrega de la feature 140).
+
+    El cableado definitivo invierte la dirección:
+
+    - `notificadorNoOp` es el **default** del constructor de los tres services. Una suite que
+      construya sin cablear obtiene el no-op **por construcción**, sin husmear el entorno.
+    - `notificar{Postulacion,CierreDia,CargaMasiva}*Con(repo, logger?)` es el camino real
+      **parametrizado por repositorio**, y por eso es directamente testeable con un doble.
+    - `notificar*Real` son bindings finos de esas mismas funciones sobre
+      `NotificacionRepository(getPrismaClient())`, y se inyectan **explícitamente** en el
+      composition root: `lib/actions/postulacion-mensajero.ts`, `lib/actions/cierre-dia.ts` y
+      `app/api/ordenes/api-key/carga/route.ts`.
+
+    No queda **ninguna** referencia a `VITEST` ni a `NODE_ENV === "test"` en `lib/` ni en
+    `app/`; hay un test que lo verifica recorriendo ambos árboles. Otros dos tests fijan que
+    los defaults son el no-op y que los tres composition roots inyectan el real, para que
+    "alguien olvida cablear" sea un fallo de test y no una notificación perdida en silencio.
 
 11. **La zona de la orden se lee de `orden.zona_id`,** no derivándola del distrito: la columna
     existe y es NOT NULL en el esquema (`schema.prisma:453`). Si aun así llegara nula, la fila
@@ -224,9 +249,10 @@ tests/unit/repositories/api-key-repository.test.ts 158:37 warning '_args' is def
 | | Archivos | Tests |
 | --- | --- | --- |
 | **Baseline** (`origin/dev` @ `56ff0aa`, medido **dos veces** en este worktree) | 516 · **5 fallando** | 5237 · **15 fallando** / 5222 pasando |
-| **Después** | 525 · **4 fallando** | 5384 · **14 fallando** / 5370 pasando |
+| **Tras A+B** | 525 · **4 fallando** | 5384 · **14 fallando** / 5370 pasando |
+| **Tras el recableado de los notificadores** | 526 · **5 fallando** | 5400 · **15 fallando** / 5385 pasando |
 
-**Delta: 0 fallos nuevos** (de hecho, uno menos). Los 4 archivos que siguen en rojo son
+**Delta de fallos deterministas: 0.** Los 4 archivos que fallan en las tres mediciones son
 **deuda ajena de frontend**, ninguno tocado por esta feature:
 
 ```
@@ -236,12 +262,14 @@ FAIL tests/components/MisAsignacionesModule.test.tsx  (9 tests)
 FAIL tests/components/NotaPrivadaMensajero.test.tsx   (1 test)
 ```
 
-El quinto archivo del baseline, `tests/unit/guards/no-embalaje.test.ts`, pasó esta vez: es
-**flaky por timeout** (recorre el repo entero con el límite de 20 s y cae bajo contención de
-CPU), no un fallo determinista.
+El quinto archivo varía de una corrida a otra porque la suite tiene **tests flaky por
+contención de CPU** (límite de 20 s por test): en el baseline cayó
+`tests/unit/guards/no-embalaje.test.ts` (recorre el repo entero), en la última corrida cayó
+`tests/integration/recuperar-contrasena-form.test.tsx`. Ambos **pasan en aislado**
+(`recuperar-contrasena-form`: 7/7 verificado) y ninguno tiene relación con notificaciones.
 
-`+147` tests respecto al baseline: los 145 nuevos de la feature más 2 que gana
-`no-migration-102.test.ts` al reescribirse (5 → 7).
+`+163` tests respecto al baseline: 145 de los bloques A+B, 16 del camino real de los
+notificadores, y 2 que gana `no-migration-102.test.ts` al reescribirse (5 → 7).
 
 ---
 
@@ -283,17 +311,24 @@ otra forma.
    cierre deja la notificación colgada. Aceptado en el design (Riesgo 4): la campana no navega
    a la entidad en v1.
 
-4. **`findCierreSolicitado` opcional en la interfaz.** Ideal sería obligatorio; se dejó
-   opcional para no editar tests ajenos. Cuando esos dobles se toquen por otra razón, conviene
-   promoverlo a obligatorio.
+4. **`findCierreSolicitado` es OPCIONAL en `ICierreDiaRepository` — deuda explícita.**
+   Debería ser obligatorio: es el método del que depende R24 para conocer el id del cierre, y
+   declararlo opcional significa que **un repositorio que no lo implemente no notifica y el
+   typechecker no dice nada**. Se dejó opcional porque la alternativa era editar los dobles a
+   mano de `tests/unit/services/cierre-dia-service.test.ts` y
+   `tests/integration/actions/cierre-dia-action.test.ts` (features 37/38/109/111), y el spec
+   restringe las ediciones a tests ajenos. El repositorio real sí lo implementa y los tests de
+   wiring cubren los tres caminos con un doble que lo trae. **Recomendación para el reviewer:**
+   promoverlo a obligatorio en cuanto esos dos archivos se toquen por otra razón.
 
 5. **`NULLS NOT DISTINCT` exige Postgres 15+.** Supabase corre 15+, pero la migración fallará
    ruidosamente en un motor anterior. Está fijado por el test de migración.
 
-6. **El guard de "no-op en test" de los notificadores reales** es un compromiso: protege una
-   base compartida a costa de que el camino real de los tres productores best-effort no se
-   ejercite end-to-end en la suite. Se compensa con los tests de wiring, que inyectan un
-   notificador espía y verifican tanto la emisión como el comportamiento ante fallo.
+6. **El default no-op depende de que el composition root recuerde cablear.** Es la deuda
+   inherente a esta forma de inyección: un call-site nuevo que construya uno de los tres
+   services sin pasar el notificador perderá el aviso. Mitigado con un test que verifica que
+   los tres composition roots actuales inyectan `notificar*Real` y que los defaults siguen
+   siendo el no-op; un cuarto call-site tendría que añadirse a esa lista.
 
 7. **Bloque C pendiente.** `hooks/useNotificaciones.ts`, `components/shared/NotificationsBell.tsx`
    y el cierre de la carga masiva de UI (`OrdenesCargaUpload.tsx`, R39 lado cliente) los
@@ -305,5 +340,5 @@ otra forma.
 ## Veredicto
 
 Bloques A y B completos: modelo, migración up/down con RLS, predicado único de visibilidad,
-service, 5 Server Actions y los 4 productores de D1, con 145 tests nuevos que mapean R1–R39,
+service, 5 Server Actions y los 4 productores de D1, con 161 tests nuevos que mapean R1–R39,
 typecheck y lint sin delta sobre el baseline.

@@ -25,6 +25,8 @@ import {
 import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
 import { useToast } from "@/hooks/useToast";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
+import { notificarCargaMasivaTerminada } from "@/lib/actions/notificaciones";
+import { nuevoLoteId } from "@/app/(app)/ordenes/_components/lote-id";
 
 // Re-export por compatibilidad con consumidores previos de la constante.
 export { ORDENES_BULK_FIELDS } from "@/app/(app)/ordenes/_components/carga-masiva-fields";
@@ -116,6 +118,9 @@ export function OrdenesCargaMasivaButton() {
     useState<ClasificacionCarga>(CLASIFICACION_VACIA);
   // Filas únicas validadas, para re-enviarlas en la carga real al confirmar.
   const [filasUnicas, setFilasUnicas] = useState<FilaParseada[]>([]);
+  // R39: identificador del lote, generado al iniciar la carga y ESTABLE entre
+  // reintentos de la confirmación; es la clave de idempotencia del aviso.
+  const [loteId, setLoteId] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [confirmProgreso, setConfirmProgreso] = useState<{
     hechas: number;
@@ -128,6 +133,8 @@ export function OrdenesCargaMasivaButton() {
   function handleValidated(result: OrdenesCargaUploadResult) {
     setClasificacion(result.clasificacion);
     setFilasUnicas(result.filasUnicas);
+    // La carga (aún no persistida) empieza aquí: su lote ya tiene identidad.
+    setLoteId(nuevoLoteId());
 
     const nuevas = result.clasificacion.numRemisionesNuevas.length;
     const dup = result.clasificacion.existentes.length;
@@ -158,6 +165,10 @@ export function OrdenesCargaMasivaButton() {
       const message = `Carga: ${nuevas} creadas, ${dup} duplicadas, ${err} con error`;
       if (err > 0) toast.warning(message);
       else toast.success(message);
+
+      // R22/R39: la carga por interfaz terminó — el servidor no puede saberlo solo.
+      // Best-effort: no se espera ni se propaga el fallo, el resumen no depende de él.
+      avisarCargaTerminada(nuevas, filasUnicas.length);
 
       void mutate(
         (key) => Array.isArray(key) && key[0] === "ordenes:list",

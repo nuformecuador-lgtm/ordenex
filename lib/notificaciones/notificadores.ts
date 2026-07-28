@@ -6,8 +6,20 @@
 // Storage, un cierre guardado). Una notificacion perdida no puede invalidar ninguna de esas
 // tres (R25). El unico productor transaccional es el del rechazo, que vive DENTRO del `tx`
 // del choke point y donde el try/catch ni siquiera es representable (design §4.1).
+//
+// CABLEADO (importante): el DEFAULT del constructor de los tres services es el notificador
+// NO-OP de abajo, y los notificadores REALES se inyectan EXPLICITAMENTE en el composition root
+// (las Server Actions y los route handlers que construyen esos services en produccion). No al
+// reves. Asi:
+//   - una suite que construya un service sin inyectar obtiene el no-op POR CONSTRUCCION, y
+//     nunca puede escribir en la base —que en este repo es COMPARTIDA con produccion—;
+//   - el camino REAL queda testeable de verdad: se inyecta `notificar*Real` con un repositorio
+//     doble y se verifica que emite (ver `notificacion-notificadores-reales.test.ts`).
+// Ninguna rama de este archivo depende de `process.env`: apagar una emision segun el entorno
+// seria una falla silenciosa en cuanto una variable se filtrara a un preview.
 import { defaultLogger, type ErrorLogger } from "@/lib/errors";
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import type { INotificacionRepository } from "@/lib/interfaces/repositories/INotificacionRepository";
 import { NotificacionRepository } from "@/lib/repositories/NotificacionRepository";
 import {
   emitirCargaMasivaTerminada,
@@ -35,48 +47,84 @@ export async function emitirBestEffort(
   }
 }
 
-/**
- * GUARDA DE SEGURIDAD DE TESTS. Los tres notificadores son el DEFAULT del constructor de sus
- * services (`PostulacionMensajeroService`, `CierreDiaService`, `BulkOrdenService`), y las
- * suites unitarias existentes los construyen SIN inyectar nada. Sin esta guarda, un `pnpm test`
- * ejecutado con `DATABASE_URL` en el entorno escribiria notificaciones reales en la base, que
- * en este repo es COMPARTIDA con produccion. Los tests de esta feature inyectan su propio
- * notificador, asi que la guarda no oculta ningun comportamiento bajo prueba.
- */
-function enTest(): boolean {
-  return process.env.VITEST !== undefined || process.env.NODE_ENV === "test";
-}
+/** Firma del notificador de postulacion pendiente (R23/R25). */
+export type PostulacionNotificador = (ctx: PostulacionContexto) => Promise<void>;
+/** Firma del notificador de cierre por aprobar (R24/R25). */
+export type CierreNotificador = (ctx: CierrePorAprobarContexto) => Promise<void>;
+/** Firma del notificador de carga masiva terminada (R22/R25). */
+export type CargaMasivaNotificador = (ctx: CargaMasivaContexto) => Promise<void>;
 
-function repoReal(): NotificacionRepository {
+/**
+ * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
+ * —tipicamente un doble de test— no toca la base ni emite nada, sin necesidad de husmear el
+ * entorno. El composition root es el responsable de inyectar el notificador real.
+ */
+export const notificadorNoOp: PostulacionNotificador &
+  CierreNotificador &
+  CargaMasivaNotificador = async () => {};
+
+/**
+ * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
+ * puedan ejercitar `notificar*Con(repoDoble)` sin tocar `getPrismaClient`.
+ */
+function repoReal(): INotificacionRepository {
   return new NotificacionRepository(getPrismaClient());
 }
 
-/** Firma del notificador de postulacion pendiente, inyectable en el service (R23/R25). */
-export type PostulacionNotificador = (ctx: PostulacionContexto) => Promise<void>;
+// ---------------------------------------------------------------------------
+// Camino REAL, parametrizado por repositorio (testeable) + su binding a produccion.
+// ---------------------------------------------------------------------------
 
-export const notificarPostulacionPendienteReal: PostulacionNotificador = async (ctx) => {
-  if (enTest()) return;
-  await emitirBestEffort("postulacion_mensajero_pendiente", () =>
-    emitirPostulacionPendiente(repoReal(), ctx),
-  );
-};
+/** R23/R25: emite el aviso de postulacion pendiente contra `repo`, absorbiendo su fallo. */
+export function notificarPostulacionPendienteCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): PostulacionNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "postulacion_mensajero_pendiente",
+      () => emitirPostulacionPendiente(repo, ctx),
+      logger,
+    );
+  };
+}
 
-/** Firma del notificador de cierre por aprobar, inyectable en el service (R24/R25). */
-export type CierreNotificador = (ctx: CierrePorAprobarContexto) => Promise<void>;
+/** R24/R25: emite el aviso de cierre por aprobar contra `repo`, absorbiendo su fallo. */
+export function notificarCierreDiaPorAprobarCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): CierreNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "cierre_dia_por_aprobar",
+      () => emitirCierreDiaPorAprobar(repo, ctx),
+      logger,
+    );
+  };
+}
 
-export const notificarCierreDiaPorAprobarReal: CierreNotificador = async (ctx) => {
-  if (enTest()) return;
-  await emitirBestEffort("cierre_dia_por_aprobar", () =>
-    emitirCierreDiaPorAprobar(repoReal(), ctx),
-  );
-};
+/** R22/R25: emite el aviso de carga masiva terminada contra `repo`, absorbiendo su fallo. */
+export function notificarCargaMasivaTerminadaCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): CargaMasivaNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "carga_masiva_terminada",
+      () => emitirCargaMasivaTerminada(repo, ctx),
+      logger,
+    );
+  };
+}
 
-/** Firma del notificador de carga masiva terminada, inyectable en el service (R22/R25). */
-export type CargaMasivaNotificador = (ctx: CargaMasivaContexto) => Promise<void>;
+// Bindings de PRODUCCION. Solo el composition root los importa. Resuelven el repositorio en el
+// momento de la emision (no al importar el modulo), para no abrir una conexion por el hecho de
+// que alguien importe este archivo.
+export const notificarPostulacionPendienteReal: PostulacionNotificador = async (ctx) =>
+  notificarPostulacionPendienteCon(repoReal())(ctx);
 
-export const notificarCargaMasivaTerminadaReal: CargaMasivaNotificador = async (ctx) => {
-  if (enTest()) return;
-  await emitirBestEffort("carga_masiva_terminada", () =>
-    emitirCargaMasivaTerminada(repoReal(), ctx),
-  );
-};
+export const notificarCierreDiaPorAprobarReal: CierreNotificador = async (ctx) =>
+  notificarCierreDiaPorAprobarCon(repoReal())(ctx);
+
+export const notificarCargaMasivaTerminadaReal: CargaMasivaNotificador = async (ctx) =>
+  notificarCargaMasivaTerminadaCon(repoReal())(ctx);

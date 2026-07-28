@@ -6,7 +6,7 @@ import { z } from "zod";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import {
   emitirBestEffort,
-  notificarCargaMasivaTerminadaReal,
+  notificadorNoOp,
   type CargaMasivaNotificador,
 } from "@/lib/notificaciones/notificadores";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
@@ -211,13 +211,14 @@ export class BulkOrdenService implements IBulkOrdenService {
     private readonly repo: IOrdenRepository,
     private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
     /**
-     * Feature 146 (R22/R25): notificador de "carga masiva terminada", inyectable con default
-     * real. Solo lo usa `cargarViaApi`, que SI tiene fin de lote real (una peticion = un lote).
-     * La carga por UI la trocea el cliente y se cierra con la Server Action
-     * `notificarCargaMasivaTerminada` (F1.4-4). BEST-EFFORT: una notificacion perdida no puede
-     * invalidar una carga de cientos de ordenes ya persistidas.
+     * Feature 146 (R22/R25): notificador de "carga masiva terminada". El DEFAULT es NO-OP: el
+     * composition root (`app/api/ordenes/api-key/carga/route.ts`) inyecta el real. Solo lo usa
+     * `cargarViaApi`, que SI tiene fin de lote real (una peticion = un lote); la carga por UI
+     * la trocea el cliente y se cierra con la Server Action `notificarCargaMasivaTerminada`
+     * (F1.4-4). BEST-EFFORT: una notificacion perdida no puede invalidar una carga de cientos
+     * de ordenes ya persistidas.
      */
-    private readonly notificarCarga: CargaMasivaNotificador = notificarCargaMasivaTerminadaReal,
+    private readonly notificarCarga: CargaMasivaNotificador = notificadorNoOp,
   ) {}
 
   async cargarMasiva(

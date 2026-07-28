@@ -39,6 +39,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
 import { etiquetasConfig } from "@/lib/config/etiquetas";
+import { notificarCargaMasivaTerminadaReal } from "@/lib/notificaciones/notificadores";
 
 // El runtime de Node es OBLIGATORIO: Prisma, el hash de la API key y el render del
 // PDF (jspdf/qrcode/bwip-js, R7) no corren en edge.
@@ -107,6 +108,9 @@ function buildBulkService(): IBulkOrdenService {
   return new BulkOrdenService(
     new OrdenRepository(prisma),
     new TarifaVigentePorTiendaRepository(prisma),
+    // Feature 146/R22: COMPOSITION ROOT del aviso "carga masiva terminada". Esta via SI tiene
+    // fin de lote real (una peticion = un lote), asi que es la unica que lo cablea server-side.
+    notificarCargaMasivaTerminadaReal,
   );
 }
 

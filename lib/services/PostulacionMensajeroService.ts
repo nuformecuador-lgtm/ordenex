@@ -16,7 +16,7 @@ import {
 import { MIME_EXTENSION } from "@/lib/config/postulacion";
 import {
   emitirBestEffort,
-  notificarPostulacionPendienteReal,
+  notificadorNoOp,
   type PostulacionNotificador,
 } from "@/lib/notificaciones/notificadores";
 
@@ -33,12 +33,14 @@ export class PostulacionMensajeroService implements IPostulacionMensajeroService
     private readonly repo: IPostulacionRepository,
     private readonly storage: IFileStorage,
     /**
-     * Feature 146 (R23/R25): notificador de "postulacion pendiente", inyectable con default
-     * real (mismo patron que `emitir`/`catalogo` del choke point). BEST-EFFORT: corre tras la
-     * escritura atomica y la subida de documentos, y absorbe su propio fallo, porque una
-     * postulacion ya creada con sus documentos no puede tirarse por un aviso perdido.
+     * Feature 146 (R23/R25): notificador de "postulacion pendiente". El DEFAULT es NO-OP a
+     * proposito: el composition root (`lib/actions/postulacion-mensajero.ts`) inyecta el
+     * notificador real, y un service construido sin cablear —un doble de test— no puede tocar
+     * la base por accidente. BEST-EFFORT: corre tras la escritura atomica y la subida de
+     * documentos, y absorbe su propio fallo, porque una postulacion ya creada con sus
+     * documentos no puede tirarse por un aviso perdido.
      */
-    private readonly notificar: PostulacionNotificador = notificarPostulacionPendienteReal,
+    private readonly notificar: PostulacionNotificador = notificadorNoOp,
   ) {}
 
   async postular(command: PostularMensajeroCommand): Promise<PostularMensajeroResult> {
