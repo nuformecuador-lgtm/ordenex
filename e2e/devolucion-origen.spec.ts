@@ -119,6 +119,14 @@ test.describe.serial("Devolución a la tienda de origen — rechazada → devolv
     await expect(modal).toBeVisible();
     await expect(modal.getByText(new RegExp(REMISION))).toBeVisible();
     await modal.getByRole("button", { name: "Devolver a la tienda" }).click();
+    // Feature 148 (§9.7): el modal ya NO se cierra al confirmar; pasa a la fase
+    // "resultado" (envío ya cometido + botón del manifiesto de las órdenes
+    // efectivamente enviadas) y `onSuccess` —con el refresco del listado— ocurre al
+    // cerrarla. El apartado "Devueltas a origen" se comprueba DESPUÉS del cierre.
+    await expect(
+      modal.getByRole("button", { name: /Descargar manifiesto/i }),
+    ).toBeVisible();
+    await modal.getByRole("button", { name: "Cerrar" }).click();
     await expect(modal).toBeHidden();
 
     // R14 — la orden aparece en el apartado de solo lectura "Devueltas a origen".

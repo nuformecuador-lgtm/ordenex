@@ -98,6 +98,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
     findEtiquetaByNumGuia: vi.fn().mockResolvedValue(null),
+    // Feature 148: stubs del manifiesto (READ derivado, no lo ejercita este test).
+    findManifiestoByIds: vi.fn().mockResolvedValue([]),
+    findManifiestoByRemisiones: vi.fn().mockResolvedValue([]),
+    findUsuarioNombre: vi.fn().mockResolvedValue(null),
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
     findUsuarioVehiculoId: vi.fn().mockResolvedValue(null),
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),

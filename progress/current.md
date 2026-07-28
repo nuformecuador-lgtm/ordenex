@@ -15,6 +15,78 @@
 
 ## Features en curso
 
+**Manifiesto Excel al crear o mover órdenes — feature 148 (2026-07-28) → IMPLEMENTADA + reviewer
+APROBADO-CON-NOTAS (0 bloqueantes), `PR #178` → `dev` (falta merge humano).** Fullstack, `high`,
+`depends_on: null`. Rama `feature/148-manifiesto-excel-lotes` desde `origin/dev` @ `55b0cd4`, en
+worktree aislado `../ordenex-wt-148`. Spec en `specs/148-manifiesto-excel-lotes/` (**R1–R30**, 22
+tasks). Todo el bookkeeping viaja commiteado en el PR (self-contained).
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** **D1** generación en **CLIENTE** sobre el
+  resultado de la acción (`exceljs` con import dinámico + Blob/anchor), sin Storage y sin bucket
+  nuevo, **asumiendo que el manifiesto NO es reimprimible**; **D2** alcance = **los 5 puntos de
+  enganche** en esta feature; **D3** **sin modelo nuevo en DB** y sin reusar `carga.download_url` de
+  la 141 (su PR #168 sigue sin mergear; la dependencia habría bloqueado la 148).
+- **Hallazgo estructural del spec (D4), lo que evitó tocar 5 servicios de negocio:** ningún flujo
+  devuelve hoy las 11 columnas — la carga masiva ni siquiera trae `ordenId` — y **dos de los cinco
+  no tienen lote en el service**: `EnvioDevolucionCentralService.enviarACentral` y
+  `DevolucionOrigenService.devolverATienda` son **por orden**, con el lote como un loop en la UI.
+  Solución: **Server Action de LECTURA aparte** (`obtenerManifiesto`, unión discriminada `ordenIds`
+  vs `numRemisiones`), con lo que los 5 servicios quedan **intactos** (R27, verificado contra el
+  diff por el reviewer). Precedente idéntico: `generarEtiquetas({ ordenIds })`.
+- **Gate F1.4 APROBADO (2026-07-28)** con las 8 propuestas del spec tal cual: enganche al lote de la
+  UI sin tocar services; bodega central = `zona.nombre` de la zona `esCentral` con literal de
+  respaldo `"Bodega central"`; `monto` = `monto_cobrar` (COD); `telefono` del destinatario; `fecha`
+  de la **operación** (calendario CR); carga masiva = archivo completo, no por chunk; **fase
+  "resultado" con botón explícito** en los 4 modales; `responsable` = mensajero si lo hay, si no el
+  nombre del usuario que ejecutó (y **`"—"`** si ese nombre no se resuelve, decidido por el humano).
+- **⚠️ CAMBIO DE UX REAL, confirmado por el humano:** para que exista la fase "resultado",
+  `onSuccess()` se **difiere al cierre** de esa fase (el `onSuccess` de los padres cierra el modal y
+  destruiría la pantalla donde vive el botón). La operación se comete en el mismo instante, pero **el
+  encadenado a "Imprimir etiquetas" de la feature 95 ahora ocurre después**: manifiesto → etiquetas.
+  Cubierto por tests: mutar el diferimiento mata 5, dos de ellos de la cadena de la 95.
+- **⚠️ El bloqueante que solo apareció por mirar los E2E:** el diferimiento rompió **3** specs
+  (`asignacion-satelite`, `reintentos-escalado`, `devolucion-origen`) — el texto de éxito pasó a
+  resolver a 2 elementos (toast + `Alert` del manifiesto) y las aserciones de listado asumían un
+  `router.refresh()` que ahora ocurre al cerrar. **No salió en rojo porque los E2E no corren en
+  `pnpm test` ni en `./init.sh`.** El reviewer solo había visto 1 de los 3.
+- **Review por MUTACIÓN: 10 mutaciones, 9 KILL, 1 sobreviviente conocida.** Invertir origen/destino
+  → 2 tests; `responsable` siempre el actor → 3; quitar el acotamiento por tienda del actor `apiKey`
+  → 2; permutar las 11 columnas → 2; quitar el `onSuccess()` diferido → 5; tragarse el error de
+  descarga → 2; `"—"` → `""` → 1; guion corto en vez de U+2014 → 4 (el codepoint queda fijado).
+  **Sobrevive** la rama `mensajero ?? actor` de `asignacion_satelite` (menor 4, abierto).
+- **Detalle que valió el arreglo del `"—"`:** el helper del test colapsaba `nombre: null` al nombre
+  del actor, así que **el caso no era ni expresable** — el test que decía cubrirlo no podía fallar.
+  Verificado empíricamente por el reviewer restaurando el helper viejo (mata 1 test).
+- **Sin migración, sin `db/schema.prisma`, sin RLS.** Módulos nuevos: `lib/types/manifiesto.ts`,
+  `IManifiestoService` + `ManifiestoService`, `lib/actions/manifiesto.ts`,
+  `lib/utils/manifiesto-xlsx.ts`, `components/shared/descargar-blob.ts`,
+  `DescargarManifiestoButton.tsx` y `ManifiestoResultado.tsx`.
+- **Números medidos por el reviewer** (no los declarados por los implementadores): baseline
+  `origin/dev` @ `55b0cd4` = typecheck 0 / **518 archivos / 5308 tests**; final = typecheck **0**,
+  lint **0 errores / 145 warnings**, **524 archivos / 5402 tests, 0 fallos**, `./init.sh` verde.
+  **+94 tests, 0 regresiones.**
+- **⚠️ Deuda que sale de esta feature:** (a) los **3 E2E adaptados NUNCA se ejecutaron** — no hay
+  harness (webServer `pnpm dev` contra BD sembrada, emails placeholder, encabezado "WRITTEN but NOT
+  EXECUTED"); se sustituyó por verificación estática de cada localizador; (b) **drift ajeno
+  preexistente de la feature 139** en `reintentos-escalado` y `devolucion-origen` (`"Asignar
+  mensajero"` vs el confirmar `"Asignar"`; `"Devolver a la tienda"` vs `"Enviar a la tienda"`), que
+  vuelve **inalcanzables** las líneas nuevas de esos 2 specs hasta sanearlo; (c) el manifiesto **no
+  es reimprimible** ni queda auditado en DB (aceptado en D1/D3); (d) **nadie abrió un `.xlsx` real
+  en Excel/Sheets** — queda para la puerta de aceptación humana.
+- **⚠️ Conflicto de merge previsible con la 143 (PR #177):** ambas agregan `buildXlsxRows` +
+  `XLSX_MIME` a `lib/utils/xlsx-template.ts`. Aquí no existían, así que la 148 los crea con firma
+  `buildXlsxRows(columns, rows, sheetName)`. Al aterrizar la segunda hay que **quedarse con una sola
+  versión, no duplicar**.
+- **✅ Conflicto RESUELTO (2026-07-28, merge de `origin/dev` @ `28d9e8e` en la rama de la 148):** las
+  dos versiones de `buildXlsxRows` quedaron **unificadas en UNA sola** con la firma de la 148
+  (`XlsxColumn[]` + celdas `string | number | null`, `sheetName = "Datos"`), y la garantía de
+  round-trip de la 143 pasó al call-site con el adaptador nuevo **`toXlsxColumns(fields)`**
+  (cabecera = clave máquina, vía el mismo `headerFor` de siempre). `XLSX_MIME` quedó con **una sola
+  definición** para sus tres consumidores. Detalle en `progress/impl_148_frontend.md`.
+- **Peaje pagado a una deuda de arnés conocida:** hubo que tocar **5 suites ajenas** solo para
+  agregar stubs `vi.fn()`, porque sus fakes de `IOrdenRepository` son literales exhaustivos que
+  revientan el typecheck ante cualquier método nuevo. El reviewer auditó los 12 tests ajenos tocados
+  uno por uno: son adaptaciones legítimas, ninguno perdió una aserción.
 **Tamaño de hoja seleccionable en las etiquetas — feature 150 (2026-07-28) → IMPLEMENTADA + reviewer
 APROBADO (0 bloqueantes, 4 menores), PR → `dev` (falta merge humano).** Fullstack, `medium`,
 `depends_on: null`. Rama `feature/150-tamano-hoja-etiquetas` desde `origin/dev @ 55b0cd4`, en worktree

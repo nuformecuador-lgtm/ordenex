@@ -13,6 +13,17 @@
  * inicial del componente.
  */
 
+/**
+ * MIME de un libro XLSX (OpenXML), para el `Blob` de descarga en el navegador.
+ * Vive aquí —junto a los constructores del binario, y no en cada componente—
+ * para que TODO consumidor que envuelva un `ArrayBuffer` de este módulo use la
+ * MISMA cadena. Hoy son tres: `BulkUpload` (plantilla de carga masiva),
+ * `OrdenesCargaPreview` (export de filas con error, feature 143) y el manifiesto
+ * por lote (feature 148).
+ */
+export const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
 /** Definición de una columna de la plantilla. Espejo de `TemplateField`/`CsvTemplateField`. */
 export interface XlsxTemplateField {
   /** Clave/encabezado de la columna. Fallback de la cabecera si no hay `label` (R1). */
@@ -41,15 +52,6 @@ export interface XlsxTemplateField {
 function headerFor(field: XlsxTemplateField): string {
   return field.label ?? field.key;
 }
-
-/**
- * MIME de un libro XLSX (OpenXML), para el `Blob` de descarga en el navegador.
- * Vive aquí (junto a los constructores del binario) para que todo consumidor que
- * descarga un XLSX use la MISMA cadena: `BulkUpload` (plantilla) y
- * `OrdenesCargaPreview` (export de filas con error, feature 143).
- */
-export const XLSX_MIME =
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /** Ancho mínimo legible de columna, en caracteres (R3). */
 const MIN_WIDTH = 12;
@@ -124,65 +126,111 @@ export async function buildXlsxTemplate(
   return buffer as ArrayBuffer;
 }
 
-/** Ancho de una columna de datos: cabecera vs. el valor más largo presente (R3). */
-function computeDataWidth(
-  field: XlsxTemplateField,
-  rows: Array<Record<string, string>>,
-): number {
-  let longest = headerFor(field).length;
-  for (const row of rows) {
-    const value = row[field.key];
-    if (typeof value === "string" && value.length > longest) longest = value.length;
-  }
-  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, longest + PAD));
+// ---------------------------------------------------------------------------
+// Generador de HOJA DE DATOS (N filas), hermano del de plantilla.
+// Features 143 (export de órdenes con error) y 148 (manifiesto por lote):
+// AMBAS lo introdujeron por separado con el mismo nombre. Aquí quedan UNIFICADAS
+// en una sola implementación, con la firma explícita de la 148 (cabecera propia y
+// celdas string | number | null) y la garantía de round-trip de la 143 preservada
+// en el call-site vía `toXlsxColumns` (ver más abajo).
+// ---------------------------------------------------------------------------
+
+/** Definición de una columna de una hoja de datos: clave del dato + cabecera visible. */
+export interface XlsxColumn {
+  /** Clave con la que se busca el valor en cada fila. */
+  key: string;
+  /** Texto de la celda de cabecera (fila 1). */
+  header: string;
+  /** Ancho fijo opcional; si se omite se calcula por contenido. */
+  width?: number;
 }
 
 /**
- * Feature 143 — Construye el binario XLSX de una tabla de DATOS (hermana de
- * `buildXlsxTemplate`, que solo emite cabecera + una fila de ejemplo).
+ * Valor admitido en una celda de datos. `null` -> celda VACÍA (no la cadena
+ * "null", no 0). Un `number` se emite como NÚMERO: el manifiesto necesita que
+ * `monto` sea sumable y formateable como moneda en la hoja (feature 148), cosa
+ * que se pierde si se serializa a texto.
+ */
+export type XlsxCellValue = string | number | null;
+
+/**
+ * Adapta campos de PLANTILLA a columnas de datos conservando la regla dura del
+ * round-trip: la cabecera es SIEMPRE la clave máquina (`label ?? key`, vía
+ * `headerFor`), jamás una etiqueta divergente ni un sufijo, o el archivo
+ * descargado deja de poder re-subirse (lección de la feature 58 — 143/R2/R14).
  *
- * - Única hoja (`sheetName`, por defecto "Datos").
- * - Fila 1 = cabecera en negrita con la CLAVE MÁQUINA de cada campo
- *   (`headerFor`): jamás una etiqueta divergente ni un sufijo, o el archivo
- *   descargado deja de poder re-subirse (lección de la feature 58 — R2/R14).
- * - Una fila por elemento de `rows`; celda vacía si la clave no está presente.
- * - Anchos por contenido real, acotados por `MAX_WIDTH`.
- * - `exceljs` se importa de forma DINÁMICA dentro de la función (R19): no entra
- *   en el bundle inicial de quien lo consuma.
+ * Antes esa regla vivía ESCONDIDA dentro del generador; ahora es explícita en el
+ * call-site, que es donde se decide qué cabecera lleva el archivo. Quien exporte
+ * datos re-subibles DEBE pasar por aquí y no construir `XlsxColumn` a mano.
+ */
+export function toXlsxColumns(fields: XlsxTemplateField[]): XlsxColumn[] {
+  return fields.map((field) => ({ key: field.key, header: headerFor(field) }));
+}
+
+/** Ancho por contenido de una columna de datos: cabecera vs. el valor más largo (R3). */
+function computeDataWidth(
+  column: XlsxColumn,
+  rows: Array<Record<string, XlsxCellValue>>,
+): number {
+  let largest = column.header.length;
+  for (const row of rows) {
+    const value = row[column.key];
+    if (value === null || value === undefined) continue;
+    const length = String(value).length;
+    if (length > largest) largest = length;
+  }
+  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, largest + PAD));
+}
+
+/**
+ * Construye el binario XLSX de una hoja de DATOS: una fila de cabecera (en negrita)
+ * más una fila por elemento de `rows`, en el orden recibido.
  *
- * @throws si `fields` está vacío (mismo contrato defensivo que `buildXlsxTemplate`).
+ * - Única hoja, nombrada por `sheetName` (por defecto "Datos").
+ * - Fila 1 = las cabeceras declaradas en `columns`, en ese orden. Para un archivo
+ *   que deba poder RE-SUBIRSE, esas cabeceras se obtienen con `toXlsxColumns`
+ *   (clave máquina; feature 143/R2/R14).
+ * - Solo se emiten las columnas declaradas: cualquier otra clave presente en una
+ *   fila se IGNORA (el consumidor decide qué se publica — feature 148/R11).
+ * - Un valor `null`/ausente deja la celda vacía, sin texto de relleno.
+ * - Anchos calculados por contenido (cabecera y valores), con el mismo mínimo/máximo
+ *   legible que la plantilla.
+ * - `exceljs` se importa dinámicamente DENTRO de la función (regla del módulo): no
+ *   entra en el bundle inicial de quien lo consuma.
+ *
+ * @throws si `columns` está vacío (mismo contrato defensivo que `buildXlsxTemplate`).
  */
 export async function buildXlsxRows(
-  fields: XlsxTemplateField[],
-  rows: Array<Record<string, string>>,
+  columns: XlsxColumn[],
+  rows: Array<Record<string, XlsxCellValue>>,
   sheetName = "Datos",
 ): Promise<ArrayBuffer> {
-  if (fields.length === 0) {
+  if (columns.length === 0) {
     throw new Error(
-      "buildXlsxRows: se requiere al menos un campo para generar la hoja",
+      "buildXlsxRows: se requiere al menos una columna para generar la hoja",
     );
   }
 
-  // Import dinámico (R19): exceljs fuera del bundle inicial del consumidor.
+  // Import dinámico: exceljs queda fuera del bundle inicial del consumidor.
   const ExcelJS = (await import("exceljs")).default;
 
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
 
-  worksheet.columns = fields.map((field) => ({
-    header: headerFor(field),
-    key: field.key,
-    width: computeDataWidth(field, rows),
+  worksheet.columns = columns.map((column) => ({
+    header: column.header,
+    key: column.key,
+    width: column.width ?? computeDataWidth(column, rows),
   }));
 
   worksheet.getRow(1).font = { bold: true };
 
   for (const row of rows) {
-    const record: Record<string, string> = {};
-    for (const field of fields) {
-      record[field.key] = row[field.key] ?? "";
+    const celdas: Record<string, XlsxCellValue> = {};
+    for (const column of columns) {
+      celdas[column.key] = row[column.key] ?? null;
     }
-    worksheet.addRow(record);
+    worksheet.addRow(celdas);
   }
 
   const buffer = await workbook.xlsx.writeBuffer();

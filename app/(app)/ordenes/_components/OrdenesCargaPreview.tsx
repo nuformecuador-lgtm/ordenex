@@ -23,7 +23,7 @@ import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-
 // librería de generación XLSX, que `buildXlsxRows` carga con import dinámico por
 // dentro (R19). Un `await import()` aquí no aplazaría nada, porque `XLSX_MIME` ya
 // obliga a resolver el mismo módulo en este componente.
-import { XLSX_MIME, buildXlsxRows } from "@/lib/utils/xlsx-template";
+import { XLSX_MIME, buildXlsxRows, toXlsxColumns } from "@/lib/utils/xlsx-template";
 import { useToast } from "@/hooks/useToast";
 
 export interface OrdenesCargaPreviewProps {
@@ -86,7 +86,11 @@ export function OrdenesCargaPreview({
     setGenerandoErrores(true);
     try {
       const buffer = await buildXlsxRows(
-        ERRORES_EXPORT_FIELDS,
+        // R2/R14 — la cabecera DEBE ser la clave máquina para que el archivo se
+        // pueda volver a subir. `toXlsxColumns` es quien lo garantiza (antes esa
+        // regla vivía dentro del generador, que la feature 148 unificó): NO se
+        // construyen columnas a mano aquí.
+        toXlsxColumns(ERRORES_EXPORT_FIELDS),
         construirFilasErrorExport(errores, filas ?? []),
         "Ordenes con error",
       );

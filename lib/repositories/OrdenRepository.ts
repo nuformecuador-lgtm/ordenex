@@ -26,6 +26,7 @@ import {
   type ListOrdenesParams,
   type ListOrdenesResult,
   type CausaDevueltaVigente,
+  type ManifiestoOrdenRow,
   type MensajeroLiteRow,
   type NovedadOrdenRow,
   type OrdenTransicionRow,
@@ -445,6 +446,52 @@ function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
     provinciaNombre: row.provincia.nombre,
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
+  };
+}
+
+// Feature 148/R4/R6/R7/R11 — proyeccion del MANIFIESTO (patron WITH_ETIQUETA). Solo
+// las columnas que consumen las 11 celdas de R2 + `tiendaId` (dueño, para el filtro
+// por API key de R29). Suma dos datos que la etiqueta no tiene: el NOMBRE del
+// mensajero ASIGNADO (columna `responsable`, R9) y `zona.esCentral` (decide
+// GAM/no-GAM en `origen`/`destino`, design.md §4). NO selecciona producto,
+// provincia/canton/distrito, notas ni `deletedAt` (R11); el filtro `deletedAt: null`
+// va en el `where` (R12).
+const WITH_MANIFIESTO = {
+  select: {
+    id: true,
+    tiendaId: true, // R29: dueño, para el filtro por propietario del service
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    direccion: true,
+    montoCobrar: true,
+    tienda: { select: { nombre: true } },
+    zona: { select: { nombre: true, esCentral: true } },
+    mensajeroAsignado: { select: { nombre: true } },
+  },
+} as const;
+
+type OrdenManifiestoRow = Prisma.OrdenGetPayload<typeof WITH_MANIFIESTO>;
+
+// R4/R6/R7/R11: serializa la fila a ManifiestoOrdenRow. Resuelve los nombres
+// legibles (zona por NOMBRE, R6), mapea Decimal montoCobrar -> number|null (R7) y
+// deja `mensajeroAsignadoNombre` null si la orden no tiene mensajero asignado (el
+// service cae entonces al actor, design.md §9.8). NO expone deletedAt (R11).
+function toManifiestoOrdenRow(row: OrdenManifiestoRow): ManifiestoOrdenRow {
+  return {
+    id: row.id,
+    tiendaId: row.tiendaId,
+    numGuia: row.numGuia,
+    numRemision: row.numRemision,
+    destinatario: row.destinatario,
+    telefonoDest: row.telefonoDest,
+    direccion: row.direccion,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    tiendaNombre: row.tienda.nombre,
+    zonaNombre: row.zona.nombre,
+    zonaEsCentral: row.zona.esCentral,
+    mensajeroAsignadoNombre: row.mensajeroAsignado?.nombre ?? null,
   };
 }
 
@@ -1488,6 +1535,49 @@ export class OrdenRepository implements IOrdenRepository {
       ...WITH_ETIQUETA,
     });
     return row ? toEtiquetaRow(row) : null;
+  }
+
+  // --- Feature 148: manifiesto Excel por lote (READ derivado, R4/R6/R7/R12/R29) ---
+
+  /**
+   * Feature 148/R4/R6/R7/R12: filas del manifiesto por id. `deletedAt: null` (R12):
+   * la orden borrada no aparece y el service la reporta como `no_encontrada`. Solo
+   * query, sin logica de negocio (el mapeo flujo -> origen/destino/responsable vive
+   * en `ManifiestoService`).
+   */
+  async findManifiestoByIds(ids: string[]): Promise<ManifiestoOrdenRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { id: { in: ids }, deletedAt: null }, // R12
+      ...WITH_MANIFIESTO,
+    });
+    return rows.map(toManifiestoOrdenRow);
+  }
+
+  /**
+   * Feature 148/R4/R12/R29: filas del manifiesto por `num_remision`, ACOTADAS a
+   * `tiendaId` (mismo `where` que `findResumenByNumRemisiones`, R29) y no borradas
+   * (R12). Es la via de la carga masiva, cuyo summary no lleva ids (design.md §2).
+   */
+  async findManifiestoByRemisiones(
+    remisiones: string[],
+    tiendaId: string,
+  ): Promise<ManifiestoOrdenRow[]> {
+    if (remisiones.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { numRemision: { in: remisiones }, tiendaId, deletedAt: null }, // R12/R29
+      ...WITH_MANIFIESTO,
+    });
+    return rows.map(toManifiestoOrdenRow);
+  }
+
+  /** Feature 148/R9: `usuario.nombre` del actor; `null` si el usuario no resuelve. */
+  async findUsuarioNombre(usuarioId: string): Promise<string | null> {
+    const row = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { nombre: true },
+    });
+    return row?.nombre ?? null;
   }
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---

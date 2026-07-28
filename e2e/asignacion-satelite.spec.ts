@@ -91,10 +91,31 @@ test.describe("Asignación satélite — asignar mensajero de la zona", () => {
       .click();
 
     // Confirm the assignment.
+    const modal = page.getByRole("dialog", { name: "Asignar mensajero" });
     await page.getByRole("button", { name: "Asignar" }).last().click();
 
-    // Success feedback (toast) confirms the batch transition.
-    await expect(page.getByText(/Mensajero asignado a/i)).toBeVisible();
+    // Success feedback (toast) confirms the batch transition. Feature 148 (§9.7):
+    // the SAME summary string now also renders inside the modal's "resultado"
+    // phase, so the toast assertion is scoped to the toast viewport region
+    // ("Notificaciones") to keep it unambiguous under Playwright strict mode.
+    // Without the scope this resolves to 2 elements and fails.
+    const notificaciones = page.getByRole("region", { name: "Notificaciones" });
+    await expect(notificaciones.getByText(/Mensajero asignado a/i)).toBeVisible();
+
+    // Feature 148 (§9.7): the modal no longer closes on confirm. It switches to the
+    // "resultado" phase, which repeats the summary and offers the batch manifest.
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText(/Mensajero asignado a/i)).toBeVisible();
+    await expect(
+      modal.getByRole("button", { name: /Descargar manifiesto/i }),
+    ).toBeVisible();
+
+    // The parent's refresh (router.refresh) is deferred to the CLOSING of that
+    // phase — that is the real user journey now. Closing it here keeps the next
+    // assertion measuring the state transition and not the modal's aria-hidden
+    // backdrop.
+    await modal.getByRole("button", { name: "Cerrar" }).click();
+    await expect(modal).toBeHidden();
 
     // After router.refresh(), the order left "Recibidas" (now por_recoger),
     // so it is no longer selectable there.

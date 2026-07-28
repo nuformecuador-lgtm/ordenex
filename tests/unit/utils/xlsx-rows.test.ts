@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import ExcelJS from "exceljs";
 
-import { buildXlsxRows, XLSX_MIME, type XlsxTemplateField } from "@/lib/utils/xlsx-template";
+import {
+  buildXlsxRows,
+  toXlsxColumns,
+  XLSX_MIME,
+  type XlsxTemplateField,
+} from "@/lib/utils/xlsx-template";
 import {
   ERRORES_EXPORT_FIELDS,
   COLUMNA_MOTIVO_ERROR,
@@ -42,7 +47,7 @@ const CLAVES_PLANTILLA = [
 describe("buildXlsxRows (feature 143)", () => {
   it("R1/R2: cabecera = claves máquina en orden, con motivo_error como ÚLTIMA columna", async () => {
     const worksheet = await loadFirstWorksheet(
-      await buildXlsxRows(ERRORES_EXPORT_FIELDS, []),
+      await buildXlsxRows(toXlsxColumns(ERRORES_EXPORT_FIELDS), []),
     );
     expect(rowValues(worksheet, 1, ERRORES_EXPORT_FIELDS.length)).toEqual([
       ...CLAVES_PLANTILLA,
@@ -61,7 +66,7 @@ describe("buildXlsxRows (feature 143)", () => {
   it("R3: emite una fila de datos por registro, en orden", async () => {
     const fields: XlsxTemplateField[] = [{ key: "a" }, { key: "b" }];
     const worksheet = await loadFirstWorksheet(
-      await buildXlsxRows(fields, [
+      await buildXlsxRows(toXlsxColumns(fields), [
         { a: "1", b: "2" },
         { a: "3", b: "4" },
         { a: "5", b: "6" },
@@ -76,13 +81,13 @@ describe("buildXlsxRows (feature 143)", () => {
   it("R4: celda vacía si la clave no está en el registro (sin desplazar columnas)", async () => {
     const fields: XlsxTemplateField[] = [{ key: "a" }, { key: "b" }, { key: "c" }];
     const worksheet = await loadFirstWorksheet(
-      await buildXlsxRows(fields, [{ a: "1", c: "3" }]),
+      await buildXlsxRows(toXlsxColumns(fields), [{ a: "1", c: "3" }]),
     );
     expect(rowValues(worksheet, 2, 3)).toEqual(["1", "", "3"]);
   });
 
   it("R1: la cabecera está en negrita y el binario es recargable por ExcelJS", async () => {
-    const buffer = await buildXlsxRows([{ key: "a" }], [{ a: "x" }]);
+    const buffer = await buildXlsxRows(toXlsxColumns([{ key: "a" }]), [{ a: "x" }]);
     expect(buffer.byteLength).toBeGreaterThan(0);
     const worksheet = await loadFirstWorksheet(buffer);
     expect(worksheet.getRow(1).getCell(1).font?.bold).toBe(true);
@@ -90,7 +95,7 @@ describe("buildXlsxRows (feature 143)", () => {
 
   it("R1: una sola hoja, aunque haya muchas filas", async () => {
     const workbook = new ExcelJS.Workbook();
-    const buffer = await buildXlsxRows(ERRORES_EXPORT_FIELDS, [
+    const buffer = await buildXlsxRows(toXlsxColumns(ERRORES_EXPORT_FIELDS), [
       { num_remision: "A", motivo_error: "Fila 1 — x" },
       { num_remision: "B", motivo_error: "Fila 2 — y" },
     ]);
@@ -100,6 +105,47 @@ describe("buildXlsxRows (feature 143)", () => {
 
   it("contrato: rechaza si se invoca sin campos", async () => {
     await expect(buildXlsxRows([], [{ a: "1" }])).rejects.toThrow();
+  });
+
+  // Feature 148 — el generador se unificó con el del manifiesto y la cabecera dejó
+  // de calcularse DENTRO de la función: ahora la fija `toXlsxColumns` en el
+  // call-site. Este guard blinda que ese adaptador aplique EXACTAMENTE la misma
+  // regla de siempre (`headerFor` = `label ?? key`), de la que depende el
+  // round-trip descargar → corregir → subir (R2/R14): con los campos del export,
+  // que por contrato NO declaran `label` (test de arriba), la cabecera es la clave
+  // máquina, y jamás se inventa un texto distinto.
+  it("R2/R14: toXlsxColumns conserva la regla de cabecera (label ?? key) y con el export da la clave máquina", async () => {
+    expect(toXlsxColumns(ERRORES_EXPORT_FIELDS).map((c) => c.header)).toEqual([
+      ...CLAVES_PLANTILLA,
+      COLUMNA_MOTIVO_ERROR,
+    ]);
+    // La clave del dato NO se toca: es la que busca el valor en cada fila.
+    expect(toXlsxColumns(ERRORES_EXPORT_FIELDS).map((c) => c.key)).toEqual([
+      ...CLAVES_PLANTILLA,
+      COLUMNA_MOTIVO_ERROR,
+    ]);
+
+    // Misma regla que `buildXlsxTemplate`: si un campo trae `label`, manda el label
+    // (por eso el export lo prohíbe); un `required` NUNCA añade sufijo (feature 58).
+    const conLabel: XlsxTemplateField[] = [
+      { key: "telefono", required: true },
+      { key: "num_remision", label: "Nº Remisión" },
+    ];
+    expect(toXlsxColumns(conLabel).map((c) => c.header)).toEqual([
+      "telefono",
+      "Nº Remisión",
+    ]);
+
+    // Y lo que declara `toXlsxColumns` es LITERALMENTE lo que acaba en la fila 1.
+    const worksheet = await loadFirstWorksheet(
+      await buildXlsxRows(toXlsxColumns(ERRORES_EXPORT_FIELDS), [
+        { num_remision: "REM-1" },
+      ]),
+    );
+    expect(rowValues(worksheet, 1, ERRORES_EXPORT_FIELDS.length)).toEqual([
+      ...CLAVES_PLANTILLA,
+      COLUMNA_MOTIVO_ERROR,
+    ]);
   });
 
   it("R21: expone el MIME de XLSX (única forma de descarga; no hay variante CSV)", () => {
