@@ -16,7 +16,7 @@
 ## Features en curso
 
 **Plantilla de carga masiva v2 — feature 142 (2026-07-27) → IMPLEMENTADA + reviewer APROBADO
-(0 bloqueantes), PR → `dev` (falta merge humano).** Pedido del humano:
+(0 bloqueantes), `PR #174` → `dev` (falta merge humano).** Pedido del humano:
 rehacer la plantilla de carga masiva de órdenes con (1) un orden de columnas nuevo — `destinatario`,
 `telefono`, `direccion_destinatario`, `monto_cobrar`, `producto`, `num_remision`, `peso`, `notas` — y
 (2) las 4 columnas `provincia`/`canton`/`distrito`/`direccion` **reemplazadas por una sola**,
@@ -77,6 +77,27 @@ está en rojo por `count` en `GestionarOrdenPanelProps`).
 - **Renumeración 141–149 → 142–150 commiteada por fin en esta rama** (venía suelta en el árbol de `ux`).
 - **Aviso a otras sesiones:** el corte es duro. Cualquier archivo de carga masiva con las 4 columnas
   viejas deja de funcionar al mergear; hay que redescargar la plantilla.
+- **Sincronizado con `dev` @ `56ff0aa`** (merge `c08f60b`). Conflicto único en `feature_list.json`:
+  `dev` **ya había hecho la misma renumeración** por su cuenta y además refinó la 144/145 (el export
+  a Excel salió de la 144 y pasó a **server-side en una feature 151** nueva; la 145 pasó a `fullstack`).
+  Se resolvió conservando **la 142 nuestra** y **la versión de `dev` para 144/145**, que estaba más al día.
+
+> ### ⚠️ `dev` está EN ROJO, y no es culpa de la 142 — MEDIDO, no supuesto
+>
+> Tras el merge quedan **2 errores de typecheck** (`count` falta en `GestionarOrdenPanelProps`, en
+> `GestionarOrdenPanelEvidencias.test.tsx` y `NotaPrivadaMensajero.test.tsx`) y **14 tests rojos** en
+> 4 archivos: `DataTable.test.tsx` (2), `MarcarLuegoToggle.test.tsx` (2), `MisAsignacionesModule.test.tsx`
+> (9), `NotaPrivadaMensajero.test.tsx` (1).
+>
+> Se levantó un **worktree limpio de `origin/dev` @ `56ff0aa`** y se corrieron ahí: **los mismos 2
+> errores y los mismos 14 tests fallan sin la 142**. Delta de la feature = **0**; ninguno de esos 4
+> archivos aparece en su diff. Es deuda del **rework de `mis-asignaciones`/`pos-card` + `DataTable`**
+> que entró a `dev`. **Alguien tiene que saldarla**: hoy `./init.sh` no puede pasar en `dev` ni en
+> ninguna rama que salga de él, así que el arnés está sin red para todas las features en vuelo.
+>
+> Corolario para la 141 (`../ordenex-wt-141`, PR #168 abierto): en `dev` solo aterrizó su **spec**;
+> la migración `20260727120000_carga_orden_carga_id` y su código **NO** están en `dev` todavía.
+> Por eso sigue legítimamente `in_progress`.
 
 ### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
 
