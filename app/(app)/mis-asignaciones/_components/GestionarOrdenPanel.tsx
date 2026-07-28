@@ -364,8 +364,6 @@ export function GestionarOrdenPanel({
   const resultadoLabel =
     RESULTADO_BOTONES.find((b) => b.value === resultado)?.label ?? "";
 
-    console.log(orden)
-
   return (
     <section
       aria-label="Detalle de la orden"
