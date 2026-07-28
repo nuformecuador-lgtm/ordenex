@@ -15,6 +15,182 @@
 
 ## Features en curso
 
+**Tamaño de hoja seleccionable en las etiquetas — feature 150 (2026-07-28) → IMPLEMENTADA + reviewer
+APROBADO (0 bloqueantes, 4 menores), `PR #179` → `dev` (falta merge humano).** Fullstack, `medium`,
+`depends_on: null`. Spec en `specs/150-tamano-hoja-etiquetas/` (**R1–R21**, 11 tasks, 3 con `[P]`). Rama
+`feature/150-tamano-hoja-etiquetas` desde `origin/dev @ 55b0cd4`, en worktree aislado `../ordenex-wt-150`.
+Gate F1.4 aprobado por el humano con las 5 decisiones del spec tal cual.
+
+> **La bitácora completa de la feature (cifras medidas, mutaciones, desvíos y notas menores) viaja
+> commiteada en el PR #179**, en la copia de `progress/current.md` de la rama — no aquí, para que no sea
+> estado volátil del árbol `ux` (lección de la 142). **Delta medido: +41 tests, 0 rotos**
+> (baseline 518/5308 → 522/5349), typecheck 0, lint 0 errores, `./init.sh` verde, 21/21 R con test real.
+> **Buena noticia colateral:** el typecheck de `dev` volvió a verde en `55b0cd4` (PR #175) — la deuda que
+> figuraba abajo como «`typecheck` roto en `dev` desde el merge de `ux`» está **saldada**.
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** **D1** en hojas grandes, **una etiqueta por página
+  escalada** — NO mosaico/N-up; **D2** el tamaño se elige **en cada descarga**, default 100x100 mm, **sin
+  persistencia** (ni `localStorage` ni DB); **D3** alcance = **solo el generador de cliente**. El
+  server-side `lib/pdf/etiquetas-pdf-lote.ts` (feature 136, PDF consolidado de la carga por API key)
+  **queda en 100x100 mm y fuera de alcance** → la feature **no tiene backend, ni migración, ni `down.sql`,
+  ni RLS**, y **no toca el contrato público de integradores** (feature 88). D3 nació de un matiz que la
+  ficha no contemplaba: ese PDF lo genera el servidor solo, **sin humano delante**, así que un selector
+  ahí habría exigido preferencia persistida en Configuración > API (migración + UI) o un campo nuevo en
+  el payload público. El humano eligió no pagar ninguna de las dos.
+- **Riesgo aceptado por D3:** los dos generadores quedan **divergentes** — el de cliente parametrizable,
+  el de servidor fijo en 100x100. El spec lo blinda con un test de **no-regresión** sobre el builder de
+  lote (T3) para que la divergencia sea deliberada y no un olvido.
+- **Las 5 decisiones que tomó el propio spec** (§9 declaró **ninguna abierta**; el humano las **ratificó
+  todas tal cual** en la puerta F1.4): (1) el catálogo vive en **`lib/config/etiquetas-hoja.ts`**, NO en `lib/config/etiquetas.ts`
+  como decía la ficha — ese archivo es config server-side por `process.env` (feature 136) y un componente
+  cliente no puede importarlo sin arrastrarla; (2) escalado por **factor único `s = lado_menor / 100`**
+  con centrado en ambos ejes, que preserva la relación de aspecto cuadrada en hojas alargadas;
+  (3) **carta = 215.9 × 279.4 mm** exactos, no el `216 × 279` redondeado de la ficha; (4) el nombre del
+  archivo descargado lleva **sufijo del tamaño** (única de las cinco que reescribe un requisito, R19, si
+  el humano discrepa); (5) el ráster del código de barras se escala **hacia arriba** y el QR de la vista
+  previa se queda intacto en 512 px.
+- **Superficie verificada:** `SIZE_MM = 100` / `MARGIN = 6` hardcodeados en
+  `app/(app)/ordenes/_components/etiquetas-pdf.ts`; el selector va en `EtiquetasGuiaModal.tsx`.
+  Tests que roza: `EtiquetasGuiaModal.test.tsx`, `OrdenesListadoEtiquetasChain.test.tsx`.
+  Precedente que se revisa: la decisión F1.4 (c) de la feature 32 fue la que fijó los 100x100 cuadrados.
+
+**Deshacer asignación a mensajero o bodega antes de la recogida — feature 149 (2026-07-28) →
+gate F1.4 APROBADO, EN IMPLEMENTACIÓN.** Fullstack, `high`, `depends_on: null`. Spec en
+`specs/149-deshacer-asignacion/` (**R1–R41**, 33 tasks en 7 bloques). Rama
+`feature/149-deshacer-asignacion` desde `origin/dev @ 55b0cd4`, en worktree aislado
+`../ordenex-wt-149`. Backend (F0–F5) y UI (F6 salvo T6.3) hechos; T6.3 devuelta al `backend_dev`.
+
+> ### ✅ `dev` YA NO está en rojo — MEDIDO en worktree limpio de `origin/dev @ 55b0cd4`
+>
+> `pnpm typecheck` **0 errores** y `pnpm test` **518 archivos / 5308 tests, 0 fallos**. El **PR #175**
+> (`fix/tests-rediseno-ux`) saldó la deuda que arrastraba `dev`: los 2 errores TS2741 por la prop
+> `count` de `GestionarOrdenPanelProps` y los 14 tests rojos del rework de `mis-asignaciones`/
+> `DataTable`. **Las notas de la 142/143/148 que dan `dev` por rojo quedaron obsoletas.**
+> Ojo: el script de la suite es `pnpm test` — **`test:run` no existe** en `package.json`.
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** **D1 roles** = `maestro`/`admin` (`esAccesoTotal`)
+  sobre cualquier orden + `adminSatelite` **acotado a SU zona** (patrón de `AsignacionSateliteService`);
+  **D2** el `num_guia` se **CONSERVA** intacto (ya impreso en etiquetas, `generarGuiaLote` es idempotente
+  sobre él); **D3** el estado destino se **DERIVA del historial** (último `estatus_origen`), no de una
+  regla de zona, y **falla CERRADO** si no hay fila; **D4 motivo OBLIGATORIO** en texto libre, persistido
+  en la bitácora (columna `motivo` que ya expone `OrdenHistorialEntradaDTO`); **D5** valor de enum
+  **NUEVO** `deshacer_asignacion` en `orden_historial_origen_tipo` → migración `ALTER TYPE ADD VALUE`
+  + `down.sql`, patrón `cancelacion_api` (106).
+- **Por qué D3 y no la regla de zona:** una orden en `por_recoger` pudo llegar desde `en_bodega_central`
+  (#8), `en_bodega_satelite` (#9) **o** `en_fulfillment`/`en_preparacion` (#1/#4); una en
+  `en_ruta_bodega_satelite`, desde `en_bodega_central` (#7) o `en_fulfillment`/`en_preparacion`
+  (#6/#7b/#7c). **D3' del spec:** esos dos orígenes pre-guía **sí se soportan pero se normalizan a
+  `en_bodega_central`** (con guardas de coherencia zona↔destino) — nunca se vuelve a un estado pre-guía,
+  porque eso reabriría «Generar guía» sobre una orden ya etiquetada y con `num_guia`.
+- **⚠️ Toca la guardia central de la 140 — 3 aristas nuevas**, todas `via: "deshacer_asignacion"`:
+  **#43** `por_recoger → en_bodega_central`, **#44** `por_recoger → en_bodega_satelite`, **#45**
+  `en_ruta_bodega_satelite → en_bodega_central`. Recuento del inventario: **43 → 46 aristas, 39 → 42
+  pares**. **Rompe a propósito** `guardia.test.ts:30-34` (conteo) y `:51` (que consagraba
+  `por_recoger → en_bodega_satelite` como **ilegal**); el invariante de conectividad NO rompe.
+- **Migración:** `db/migrations/20260728120000_orden_historial_origen_deshacer_asignacion/` — up con
+  `ALTER TYPE ... ADD VALUE IF NOT EXISTS` **sola en su transacción** (55P04); down por recreación del
+  enum con los 22 valores previos + `ALTER COLUMN ... USING`. Suma el valor a
+  `ORDEN_HISTORIAL_ORIGEN_TIPO_SEED` (el `satisfies` rompería el build si no) y **queda fuera** de
+  `ORIGEN_TIPOS_CON_GESTION` (destino ≠ `devuelta` y nunca enlaza gestión → no altera `contarIntentos`).
+- **7 decisiones abiertas del gate F1.4** en `design.md §8`, pendientes del humano: Q1 bloquear o no por
+  cierre pendiente del mensajero; Q2 qué hacer con `prioridad` (los writers la apagan al asignar y el
+  flag no se historifica); Q3 desempate del historial (UUID v4 no es cronológico); Q4 tope de lote;
+  Q5 avisar al mensajero desasignado; Q6 confirmar que no hace falta marca de «ya revertida»;
+  Q7 si el webhook debe distinguirse de la liberación por SLA (mismo destino).
+
+**Manifiesto Excel al crear o mover órdenes — feature 148 (2026-07-28) → IMPLEMENTADA + reviewer
+APROBADO-CON-NOTAS (0 bloqueantes), `PR #178` → `dev` (falta merge humano).** El registro completo
+—con el cambio de UX, las 10 mutaciones del review, los números medidos y la deuda viva— viaja
+commiteado en la propia rama; acá queda el resumen. Fullstack, `high`, `depends_on: null`. Spec en
+`specs/148-manifiesto-excel-lotes/` (**R1–R30**, 22 tasks, 12 con `[P]`). Sin rama todavía: la Fase 2
+va a worktree aislado desde `origin/dev` (el árbol `ux` arrastra WIP ajeno y typecheck en rojo).
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** **D1** generación en **CLIENTE** sobre el
+  resultado de la acción (`exceljs` con import dinámico + Blob/anchor, patrón de las features 31/32/143)
+  — sin Storage, sin bucket nuevo, **asumiendo explícitamente que el manifiesto NO es reimprimible**;
+  **D2** alcance = **los 5 puntos de enganche** en esta misma feature; **D3** **sin modelo nuevo en DB**
+  (sin migración, sin `down.sql`, sin RLS) y **sin** reusar `carga.download_url` de la 141 (su PR #168
+  sigue sin mergear, y la dependencia bloquearía la 148).
+- **Hallazgo estructural del spec (D4, lo que evita tocar 5 servicios de negocio):** **ningún flujo
+  devuelve hoy las 11 columnas** del manifiesto — la carga masiva ni siquiera trae `ordenId`, y **dos
+  de los cinco no tienen lote en el service**: `EnvioDevolucionCentralService.enviarACentral` y
+  `DevolucionOrigenService.devolverATienda` son **por orden**, el lote lo hace la UI en un loop
+  (`RecepcionSateliteModule.tsx:345-365`, `DevolverATiendaModal.tsx:49-52`). Solución: el manifiesto se
+  arma con una **Server Action de LECTURA aparte** (`obtenerManifiesto`, unión discriminada `ordenIds`
+  vs `numRemisiones`) en vez de ampliar los 5 retornos → los services de negocio quedan **intactos**
+  (R27). Precedente idéntico en el repo: `generarEtiquetas({ ordenIds })`.
+- **Módulos nuevos:** `lib/types/manifiesto.ts`, `IManifiestoService` + `ManifiestoService`,
+  `lib/actions/manifiesto.ts`, `lib/utils/manifiesto-xlsx.ts`, `components/shared/descargar-blob.ts` y
+  `DescargarManifiestoButton.tsx` (reusado por los 5 flujos). Modificados: `xlsx-template.ts`,
+  `IOrdenRepository`/`OrdenRepository`.
+- **⚠️ Conflicto de merge previsible con la 143:** ambas agregan `buildXlsxRows` + `XLSX_MIME` a
+  `lib/utils/xlsx-template.ts`. Hoy ese archivo solo exporta `XlsxTemplateField` y `buildXlsxTemplate`;
+  el MIME es constante privada en `components/shared/BulkUpload.tsx:102`.
+- **Gate F1.4 APROBADO (2026-07-28)** con **las 8 propuestas del spec tal cual** (registradas en
+  `design.md §9`): (1) enganche al **lote de la UI sin tocar los services** — R27 intacto, sin
+  métodos de lote nuevos en el dominio; (2) bodega central = `zona.nombre` de la zona `esCentral`,
+  con **literal de respaldo `"Bodega central"`** si no hay ninguna configurada (la descarga nunca
+  falla por un dato de catálogo); (3) `monto` = `monto_cobrar` (COD, no flete+IVA); (4) `telefono` =
+  del destinatario; (5) `fecha` = de la **operación** (calendario CR), no `created_at`; (6) carga
+  masiva = **archivo completo**, no chunk por chunk; (7) **fase "resultado" con botón explícito** en
+  los 4 modales (hoy cierran al confirmar) — sin descarga automática ni acción en el toast, único
+  cambio de UX no trivial; (8) `responsable` = mensajero asignado si lo hay, si no el **nombre del
+  usuario que ejecutó**; se conservan las 11 columnas.
+- **Fase 2 en curso** en `../ordenex-wt-148` (rama `feature/148-manifiesto-excel-lotes` desde
+  `origin/dev` @ `55b0cd4`, `.env` copiado y cliente Prisma generado). Orquestación directa
+  `backend_dev` → `frontend_dev` → `reviewer` con `model: opus` (precedente 121/142). Reparto:
+  backend T1–T6 + T15/T16/T18; frontend T7–T14 + T17/T19/T20/T21.
+- **Baseline propio medido en el worktree ANTES de tocar nada** (regla: los números de la bitácora
+  caducan): `origin/dev` @ `55b0cd4` → **typecheck 0 errores, 518 archivos / 5308 tests, 0 fallos**.
+  Verde de punta a punta, así que el delta 0 de esta feature se mide contra eso.
+
+**Descargar en Excel las filas con error de la carga masiva — feature 143 (2026-07-27) → IMPLEMENTADA
++ reviewer APROBADO (0 bloqueantes), `PR #177` → `dev` (falta merge humano).** Frontend, `medium`,
+`depends_on: 142` (**satisfecha**: la 142 se mergeó a `dev` en `c3e6954`, PR #174). Rama
+`feature/143-descargar-errores-carga-masiva` desde `origin/dev @ c3e6954`, en worktree aislado
+`../ordenex-wt-143` (el árbol `ux` sigue arrastrando WIP ajeno y typecheck en rojo).
+Spec en `specs/143-descargar-errores-carga-masiva/` (**R1–R22**, 15 tasks). El bookkeeping viaja
+commiteado en el PR (no se queda como estado volátil en `ux`, lección de la 142).
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** (a) el motivo del error viaja en una **columna
+  extra `motivo_error`** al final (tras `notas`), una sola hoja — NO hoja aparte; (b) las celdas llevan
+  los **valores CRUDOS** del archivo original (`FilaParseada.row`), no los normalizados, para que el
+  usuario reconozca su fila tal como la escribió.
+- **El ABIERTO del backlog quedó desactivado, pero por diseño permisivo, no por contrato.** El item
+  advertía que "una columna extra rompe el round-trip". Verificado que NO: `findMissingHeaders`
+  (`lib/types/carga-masiva.ts`) solo comprueba **presencia** de `REQUIRED_HEADERS` sin lista blanca,
+  ambos parsers (navegador y `lib/parsers/spreadsheet.ts`) indexan **por nombre de cabecera** y no por
+  posición, y `filaCargaSchema` es un `z.object` **sin `.strict()`** → zod descarta `motivo_error` en
+  silencio. Como hoy funciona por accidente afortunado, el spec lo **fija con R14/R15/R16 + test de
+  round-trip + comentario-ancla en el schema**, para que un futuro `.strict()` rompa un test y no la
+  feature en producción.
+- **Hallazgo del spec (el que evita un export desalineado en silencio):** el cruce `fila` ↔ `linea`
+  solo es válido porque `procesarEnChunks` **remapea** la fila del lote a la línea original
+  (`carga-masiva-chunks.ts:99`, `fila: lote[i]?.linea ?? rr.fila`). Sin ese remapeo el archivo saldría
+  con los datos de otras filas. Queda blindado con test dedicado (T6).
+- **Colocación del botón:** `OrdenesCargaPreview` es la **única superficie viva** que lista errores —
+  `OrdenesCargaResumenPaso` está definido y testeado pero **no lo importa nadie**. El único dueño de la
+  clasificación + las `FilaParseada` es `OrdenesCargaMasivaButton`, así que basta una prop.
+- **Gate F1.4 APROBADO (2026-07-27):** (1) alcance **solo vista previa** — los errores de la carga real
+  post-confirmación (paso `asignacion`, hoy solo un toast) quedan fuera de alcance explícito; (2) el
+  `motivo_error` lleva **prefijo de línea** (`Fila 7 — telefono: debe tener 8 dígitos`), que resuelve el
+  caso `num_remision` vacío/repetido sin una segunda columna extra; (3) **sin CSV** (decidido por el
+  leader con el default: solo xlsx, el formato de la plantilla vigente).
+- **Sin backend nuevo, sin migración.** Descarga cliente puro (Blob + anchor), `exceljs` con import
+  dinámico dentro de la función (regla del módulo `xlsx-template`). Módulos nuevos:
+  `carga-masiva-errores-formato.ts`, `carga-masiva-export-errores.ts` y `buildXlsxRows` + `XLSX_MIME`
+  en `lib/utils/xlsx-template.ts` (`buildXlsxTemplate` intacto).
+- **Review por MUTACIÓN, no por lectura** (lo que da confianza real en el mapa R1–R22): `.strict()` en
+  `filaCargaSchema` mata 2 tests; lista blanca en `findMissingHeaders` mata los 2 de R14; quitar el
+  remapeo de `chunks` mata el test del cruce; sufijo `" *"` en la cabecera mata 9; un prefijo
+  `Fila ${fila ?? 0}` inventado mata los 2 de R22. **0 bloqueantes, 8 menores**; se cerraron los 3
+  accionables (casillas de `tasks.md`; el round-trip del navegador pasó a usar `parseArchivo` real en
+  vez de reimplementar la lectura de celdas; fuera el import dinámico redundante). Los 5 restantes son
+  deuda preexistente de `dev` o verificación fuera de alcance.
+- **⚠️ T13 (paseo manual en Excel/Sheets) NO se ejecutó** — queda para la puerta de aceptación humana.
+  Se sustituyó por verificación ejecutable que genera el `.xlsx` real y lo re-parsea con ambos parsers.
+- **Delta 0** verificado por implementer y reviewer por separado. +47 tests nuevos, `pnpm lint` 0 errores.
+
 **Plantilla de carga masiva v2 — feature 142 (2026-07-27) → IMPLEMENTADA + reviewer APROBADO
 (0 bloqueantes), `PR #174` → `dev` (falta merge humano).** Pedido del humano:
 rehacer la plantilla de carga masiva de órdenes con (1) un orden de columnas nuevo — `destinatario`,
@@ -450,7 +626,13 @@ toca los **dos** generadores de PDF (cliente feature 32 + servidor feature 136).
   Dos deployments muertos (`dev` ~1 h 40 min en BUILDING, PR #170 en ERROR) y la rama `ux`
   bloqueada. **Lección:** un hotfix ramificado desde `origin/prod` hay que portarlo a `dev`
   con cherry-pick el mismo día; si toca el build, `prod` se ve sano mientras todo lo demás arde.
-- **`typecheck` roto en `dev` desde el merge de `ux` (PR #171)** — 2 errores TS2741 en
+- **✅ RESUELTO (2026-07-28, PR #175 `fix/tests-rediseno-ux`, `dev` @ `55b0cd4`):** la deuda de abajo
+  está saldada. **Medido en worktree limpio de `origin/dev` @ `55b0cd4`**: `pnpm typecheck` **0
+  errores** y **518 archivos / 5308 tests, 0 fallos**. Ya no hay que trabajar sin red: cualquier rama
+  que salga de `dev` desde ahora arranca en verde, y un rojo al final es de quien lo introdujo.
+  Ojo: el árbol principal `ux` (checkout de esta sesión) **sigue en rojo** con los 2 TS2741, porque
+  está en `c3e6954` y arrastra WIP ajeno sin commitear — es el árbol el que está atrasado, no `dev`.
+- ~~**`typecheck` roto en `dev` desde el merge de `ux` (PR #171)**~~ — 2 errores TS2741 en
   `tests/components/GestionarOrdenPanelEvidencias.test.tsx:84` y `NotaPrivadaMensajero.test.tsx:253`
   (falta la prop `count` de `GestionarOrdenPanelProps`). Verificado sobre `origin/dev` limpio: es
   ajeno a los PRs de hoy. No rompe el deploy (Next no type-checkea los tests), pero deja `pnpm
