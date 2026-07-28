@@ -1691,8 +1691,11 @@
     {
       "id": 150,
       "name": "tamano de hoja seleccionable en las etiquetas",
+      "spec_path": "specs/150-tamano-hoja-etiquetas",
+      "branch": "feature/150-tamano-hoja-etiquetas",
+      "status_note": "IMPLEMENTADA + reviewer APROBADO (0 bloqueantes, 4 menores) el 2026-07-28. Decisiones del humano: D1 una etiqueta por pagina escalada (sin mosaico), D2 tamano elegido en cada descarga sin persistencia (default 100x100 mm), D3 solo el generador de cliente -> el server-side de la 136 queda en 100x100 y NO se toca, sin backend/migracion/RLS y sin tocar el contrato publico de integradores (feature 88). Modulos nuevos: lib/config/etiquetas-hoja.ts (catalogo puro, importable desde cliente) y app/(app)/ordenes/_components/etiquetas-layout.ts (factor s = lado_menor/100 con centrado). Medido en worktree limpio desde origin/dev @ 55b0cd4: typecheck 0, lint 0 errores, 522 archivos / 5349 tests / 0 fallos (+41 sobre baseline 518/5308, delta de rotos = 0), ./init.sh verde. 21/21 requisitos con test real; 6 mutaciones detectadas (2 reproducidas + 4 propias del reviewer).",
       "description": "Fullstack. Hoy la etiqueta es una pagina cuadrada de 100x100 mm hardcodeada en los DOS generadores: el de cliente app/(app)/ordenes/_components/etiquetas-pdf.ts (feature 32) y el consolidado server-side lib/pdf/etiquetas-pdf-lote.ts (feature 136). Se agrega un catalogo de tamanos de hoja compartido (100x100 mm, 4x6 in, A4, carta) en lib/config/etiquetas.ts, un selector en el flujo de descarga y el layout parametrizado por tamano en ambos generadores (margenes, tipografia, QR y codigo de barras escalan). ABIERTO: en hojas grandes (A4/carta), una etiqueta por pagina escalada o mosaico de N por hoja; y si el tamano se recuerda por usuario o se elige en cada descarga.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",

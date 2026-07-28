@@ -107,7 +107,7 @@
 
 ### [x] T11 — Verificación y bitácora
 - Correr `./init.sh` y la suite completa; registrar el mapa R → test en
-  `progress/impl_150-tamano-hoja-etiquetas.md`.
+  `progress/impl_150.md`.
 - **Hecho cuando:** `./init.sh` en verde, suite sin fallos nuevos respecto del
   baseline medido en el momento (no citado de memoria), y los 21 requisitos
   aparecen mapeados a un test existente.

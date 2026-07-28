@@ -15,6 +15,55 @@
 
 ## Features en curso
 
+**Tamaño de hoja seleccionable en las etiquetas — feature 150 (2026-07-28) → IMPLEMENTADA + reviewer
+APROBADO (0 bloqueantes, 4 menores), PR → `dev` (falta merge humano).** Fullstack, `medium`,
+`depends_on: null`. Rama `feature/150-tamano-hoja-etiquetas` desde `origin/dev @ 55b0cd4`, en worktree
+aislado `../ordenex-wt-150` (el árbol `ux` arrastra WIP ajeno de otras sesiones). Spec en
+`specs/150-tamano-hoja-etiquetas/` (**R1–R21**, 11 tasks). El bookkeeping viaja commiteado en el PR.
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** **D1** en hojas grandes, **una etiqueta por página
+  escalada** — NO mosaico/N-up; **D2** el tamaño se elige **en cada descarga**, default 100x100 mm, **sin
+  persistencia** (ni `localStorage`, ni cookie, ni DB); **D3** alcance = **solo el generador de cliente**.
+- **D3 nació de un matiz que la ficha no contemplaba, y es lo que recortó la feature a la mitad:** la
+  ficha daba por hecho que se tocaban los **dos** generadores, pero el server-side
+  `lib/pdf/etiquetas-pdf-lote.ts` (feature 136) corre **solo, dentro del `POST /api/ordenes/api-key/carga`,
+  sin humano delante**. Un selector ahí no existe: era preferencia persistida en Configuración > API
+  (migración + UI + Server Action) o un campo nuevo en el **payload público de integradores** (feature 88).
+  El humano eligió ninguna → la 150 queda **sin backend, sin migración, sin `down.sql`, sin RLS y sin
+  tocar contrato público**. El reviewer verificó que ese archivo **no aparece en el diff**.
+- **Riesgo aceptado:** los dos generadores quedan **divergentes** (cliente parametrizable, servidor fijo
+  en 100x100). Blindado con test de no-regresión (R21). ⚠️ **Nota m1 del review:** ese blindaje se apoya
+  en `Function.length` y **no cazaría** una parametrización con parámetro **por defecto** — el reviewer
+  lo comprobó en Node. Es el punto débil conocido de la guardia.
+- **Módulos nuevos:** `lib/config/etiquetas-hoja.ts` (catálogo puro de tamaños — 100x100 mm, 4x6 in, A4,
+  carta) y `app/(app)/ordenes/_components/etiquetas-layout.ts` (escalado). Modificados: `etiquetas-pdf.ts`
+  y `EtiquetasGuiaModal.tsx`. **El catálogo NO fue a `lib/config/etiquetas.ts`** como decía la ficha: ese
+  archivo es config server-side por `process.env` (feature 136) y un componente cliente no puede
+  importarlo sin arrastrar el entorno al bundle.
+- **Gate F1.4 APROBADO (2026-07-28)** con las 5 decisiones del spec tal cual: catálogo en módulo propio;
+  factor único `s = lado_menor / 100` con centrado en ambos ejes (preserva la maqueta cuadrada en hojas
+  alargadas); `carta` = **215.9 × 279.4 mm** exactos, no el `216 × 279` redondeado de la ficha; sufijo del
+  tamaño en el nombre del archivo (R19); ráster del barcode escalado hacia arriba, QR de la vista previa
+  intacto en 512 px.
+- **Desvío del design documentado y verificado:** la implementación usa `lado = min(ancho, alto)` en vez
+  de `100·s` porque el ida y vuelta por el factor daba `offX = −1.4e−14` y violaba R17 por ruido de coma
+  flotante. El reviewer confirmó que es el mismo valor matemático y que los números salen clavados contra
+  `design.md` §3.2/§3.3 (carta = 612×792 pt).
+- **Reviewer APROBADO, 0 bloqueantes.** No se fio de los números: corrida propia con **typecheck 0**,
+  **lint 0 errores / 145 warnings** (ninguno en archivos de la 150), **522 archivos / 5349 tests, 0
+  fallos**, `./init.sh` en `== init OK ==`. Baseline medida por el leader en el mismo worktree **antes**
+  de implementar: 518/5308 → **delta +41 tests, 0 rotos**. **21/21 requisitos con test real** (leyó cada
+  aserción). **6 pruebas de mutación**, todas detectadas: las 2 del implementador reproducidas
+  (`Math.min`→`Math.max` tumba 6; nombre de archivo fijo tumba 4) + **4 propias** (`offY = 0`, `ceil`→
+  `floor` en el ráster, `splitTextToSize` sin escalar, quitar el reset al default al reabrir el modal).
+- **Trampa de jsPDF que costó un archivo de test extra:** `doc.save` es propiedad **de instancia** y el
+  build de Node la implementa con `fs.writeFileSync` → llamarlo con jspdf real **escribía PDFs de verdad
+  en la raíz del repo**. R19 se aisló en `etiquetas-pdf-descarga.test.ts` sustituyendo jspdf entero; el
+  reviewer confirmó que no toca `fs` y que no quedaron residuos.
+- **Notas menores diferidas:** m1 (blindaje R21 ciego a parámetros por defecto), m2 (R15 depende de una
+  sola aserción de centrado), y el **centrado nunca se validó con impresión física** — reversible en una
+  línea, pero es el paseo manual que falta.
+
 **Plantilla de carga masiva v2 — feature 142 (2026-07-27) → IMPLEMENTADA + reviewer APROBADO
 (0 bloqueantes), `PR #174` → `dev` (falta merge humano).** Pedido del humano:
 rehacer la plantilla de carga masiva de órdenes con (1) un orden de columnas nuevo — `destinatario`,
