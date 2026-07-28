@@ -4,6 +4,7 @@ import type {
   OrdenHistorialOrigenTipo,
 } from "@/lib/types/orden-historial";
 import type { JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
+import type { NotificacionTxClient } from "@/lib/interfaces/repositories/INotificacionRepository";
 
 // Feature 49 (design §3.1/§4.2) — contrato del repositorio del HISTORIAL de estados de la
 // orden. Solo queries Prisma; sin logica de negocio (la autorizacion vive en el service,
@@ -51,8 +52,11 @@ export interface IOrdenHistorialRepository {
   // Feature 99 (design §6.1): el `tx` se ensancha con `JobTxClient` para poder emitir el
   // webhook en la misma transaccion (transactional-outbox); el `tx` real de Prisma ya lo
   // satisface.
+  // Feature 146 (design §4.1): se ensancha una vez mas con las tablas de notificacion + `orden`,
+  // porque el choke point emite el aviso del rechazo DENTRO de la misma transaccion (F1.4-3).
+  // Mismo movimiento que hizo la 99: se ensancha el TIPO, no la semantica.
   registrarCambioEstado(
-    tx: OrdenHistorialTxClient & JobTxClient,
+    tx: OrdenHistorialTxClient & JobTxClient & NotificacionTxClient & Pick<PrismaClient, "orden">,
     entradas: CambioEstadoEntrada[],
   ): Promise<void>;
   /**

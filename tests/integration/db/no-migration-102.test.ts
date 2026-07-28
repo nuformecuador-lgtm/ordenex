@@ -8,6 +8,14 @@ import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 // migracion (R3) ni infra de notificaciones (R17). La clasificacion SLA se DERIVA por join del
 // historial inmutable (`origen_tipo = escalado_devuelta_sla`, feature 99) + el snapshot de 56, sin
 // columna/tabla/enum nuevos. Lee schema.prisma y las carpetas de migracion por regex; sin Postgres.
+//
+// ACTUALIZADO POR LA FEATURE 146 (campana de notificaciones, spec aprobado). El R17 de la 102
+// dice que *la 102* no introduce infra de notificaciones — no que el producto no pueda tenerla
+// nunca. La 146 SI la introduce (`notificacion` + `notificacion_lectura`, migracion
+// `20260727120000_notificacion`), asi que las dos aserciones que leian "no existe NINGUNA
+// notificacion en el esquema" pasan a leer "la unica infra de notificaciones que existe es la de
+// la 146": el invariante REAL de la 102 —que su clasificacion SLA se deriva y no se snapshotea—
+// queda intacto y sigue verificado abajo.
 
 const ROOT = path.join(__dirname, "..", "..", "..");
 const MIGRATIONS_DIR = path.join(ROOT, "db", "migrations");
@@ -25,19 +33,28 @@ const CONCEPTOS_PROHIBIDOS = [
   "esrechazosla",
   "total_ingreso_bodega_rechazos_sla", // subtotal SLA snapshoteado (descartado, design §7.1)
   "rechazo_sla_visible",
-  "notificac", // tabla/feed de notificaciones (descartado por el gate)
-  "notification",
-  "campana",
 ] as const;
 
+// La UNICA carpeta de migracion con concepto de notificacion admitida: la de la feature 146.
+const MIGRACION_NOTIFICACIONES_146 = "_notificacion";
+
 describe("Feature 102 · SIN migracion nueva (R3)", () => {
-  it("no hay carpeta de migracion que introduzca la clasificacion/notificacion (por concepto)", () => {
+  it("no hay carpeta de migracion que introduzca la clasificacion SLA (por concepto)", () => {
     for (const dir of migrationDirs) {
       const lower = dir.toLowerCase();
       for (const concepto of CONCEPTOS_PROHIBIDOS) {
         expect(lower.includes(concepto)).toBe(false);
       }
     }
+  });
+
+  it("la unica migracion de notificaciones es la de la feature 146", () => {
+    const conNotificacion = migrationDirs.filter((d) =>
+      /notificac|notification|campana/i.test(d),
+    );
+    expect(conNotificacion).toEqual([
+      conNotificacion.find((d) => d.endsWith(MIGRACION_NOTIFICACIONES_146)),
+    ]);
   });
 
   it("schema.prisma NO tiene columna snapshot de la clasificacion SLA (ni en gestion ni en cierre)", () => {
@@ -50,13 +67,28 @@ describe("Feature 102 · SIN migracion nueva (R3)", () => {
   });
 });
 
-describe("Feature 102 · SIN infra de notificaciones (R17)", () => {
-  it("schema.prisma NO declara modelo/enum/tabla de notificacion, feed, campana ni badge", () => {
-    expect(schemaPrisma).not.toMatch(/model\s+Notificac\w*/i);
-    expect(schemaPrisma).not.toMatch(/model\s+Notification\w*/i);
-    expect(schemaPrisma).not.toMatch(/@@map\(\s*"[^"]*notificac[^"]*"\s*\)/i);
-    expect(schemaPrisma).not.toMatch(/@@map\(\s*"[^"]*notification[^"]*"\s*\)/i);
-    // El aviso a la tienda es una superficie derivada de solo-lectura, sin badge/campana persistido.
+describe("Feature 102 · SIN infra de notificaciones PROPIA (R17)", () => {
+  it("la unica infra de notificaciones del esquema es la de la feature 146", () => {
+    // La 102 no aporto ningun modelo; los que existen son EXACTAMENTE los dos de la 146.
+    const modelos = Array.from(schemaPrisma.matchAll(/model\s+(Notificac\w*|Notification\w*)/gi)).map(
+      (m) => m[1],
+    );
+    expect(modelos.sort()).toEqual(["Notificacion", "NotificacionLectura"]);
+
+    const tablas = Array.from(
+      schemaPrisma.matchAll(/@@map\(\s*"([^"]*(?:notificac|notification)[^"]*)"\s*\)/gi),
+    ).map((m) => m[1]);
+    expect(tablas.sort()).toEqual([
+      "notificacion",
+      "notificacion_entidad_tipo", // enum nativo de la 146
+      "notificacion_evento", // enum nativo de la 146
+      "notificacion_lectura",
+      "notificacion_tipo", // enum nativo de la 146
+    ]);
+  });
+
+  it("el aviso SLA a la tienda sigue siendo derivado: sin badge ni campana persistidos", () => {
+    // El alcance de la 146 son sus dos tablas; el aviso de la 102 NO gano estado propio.
     expect(schemaPrisma.toLowerCase()).not.toContain("campana");
     expect(schemaPrisma.toLowerCase()).not.toContain("badge");
   });

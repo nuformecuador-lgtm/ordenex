@@ -157,6 +157,25 @@ describe("OrdenesCargaUpload — validaciones de borde", () => {
     expect(onValidated).not.toHaveBeenCalled();
   });
 
+  it("R17 (feature 143): cabecera incompleta → sin clasificación, luego no hay descarga de errores", async () => {
+    // El botón "descargar filas con error" vive en el paso de hallazgos, al que
+    // solo se llega vía `onValidated`. Con cabecera incompleta el flujo se corta
+    // aquí: no hay clasificación, no hay grupo `errores` y no hay nada que exportar.
+    const user = userEvent.setup();
+    parseArchivoMock.mockResolvedValue(archivo(["REM-1"], ["num_remision", "telefono"]));
+    const onValidated = vi.fn();
+
+    render(<OrdenesCargaUpload onValidated={onValidated} />);
+    await user.upload(fileInput(), csvFile());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/faltan columnas/i);
+    expect(onValidated).not.toHaveBeenCalled();
+    expect(procesarEnChunksMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /descargar filas con error/i }),
+    ).toBeNull();
+  });
+
   it("R7/R8: archivo con la plantilla VIEJA → corte duro con el copy de plantilla nueva, sin request", async () => {
     const user = userEvent.setup();
     parseArchivoMock.mockResolvedValue(archivo(["REM-1"], HEADERS_PLANTILLA_VIEJA));

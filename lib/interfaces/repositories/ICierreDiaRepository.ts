@@ -123,6 +123,13 @@ export interface AnularGestionInput {
   estatusEnRepartoId: string; // R18: destino
 }
 
+/** Feature 146 (R24): proyeccion minima del cierre `solicitado` para componer su aviso. */
+export interface CierreSolicitadoInfo {
+  id: string;
+  destinoZonaId: string | null;
+  mensajeroNombre: string | null;
+}
+
 export interface ICierreDiaRepository {
   /**
    * R2/R3: gestiones del mensajero con `cierre_id IS NULL` + detalle de la orden
@@ -153,6 +160,19 @@ export interface ICierreDiaRepository {
    * la escritura -> el service lo traduce a `conflict`, R7). Anti-TOCTOU sin locks.
    */
   transicionarVencidoASolicitado(mensajeroId: string): Promise<boolean>;
+  /**
+   * Feature 146 (R24) — datos MINIMOS del cierre `solicitado` vigente del mensajero: su id
+   * (entidad de origen de la notificacion), la zona DESTINO (alcance del `adminSatelite`) y el
+   * nombre del mensajero (anexo, §4.6). Se lee DESPUES de cualquiera de los tres caminos de
+   * exito de `solicitarCierre`, para que los tres notifiquen por el mismo sitio: los dos de
+   * transicion (`vencido`/`rechazado` -> `solicitado`) devuelven solo un booleano y no traen el
+   * id del cierre. `null` si no hay cierre solicitado (el aviso simplemente no se emite).
+   *
+   * OPCIONAL a proposito: declararlo obligatorio romperia los dobles de test de las features
+   * 37/38/109/111 que implementan esta interfaz a mano, y esta feature no puede editarlos. El
+   * repositorio REAL si lo implementa; un doble que no lo traiga simplemente no notifica.
+   */
+  findCierreSolicitado?(mensajeroId: string): Promise<CierreSolicitadoInfo | null>;
   /**
    * Feature 109/R28 — `true` si el mensajero tiene un cierre en estado `rechazado` (gemelo EXACTO
    * de `existeCierreVencido`, `count WHERE estado='rechazado'`). Lo consume `solicitarCierre` para
