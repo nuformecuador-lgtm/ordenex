@@ -96,6 +96,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
     findEtiquetaByNumGuia: vi.fn().mockResolvedValue(null),
+    // Feature 148: stubs del manifiesto (READ derivado, no lo ejercita este test).
+    findManifiestoByIds: vi.fn().mockResolvedValue([]),
+    findManifiestoByRemisiones: vi.fn().mockResolvedValue([]),
+    findUsuarioNombre: vi.fn().mockResolvedValue(null),
     // Feature 33: recepcion en bodega satelite, no ejercitada aqui pero exigida
     // por la interfaz IOrdenRepository.
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
@@ -382,6 +386,40 @@ describe("listar — filtro generico filter.status_id (feature 63, R8/R9/R10)", 
     );
     const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.where.estatusId).toBe("os-filter");
+  });
+
+  // Filtro MULTI-ESTADO (listado unico de /ordenes con selector de seleccion multiple):
+  // `status_id` admite una LISTA de ids; el service la pasa tal cual y el repositorio la
+  // traduce a `IN (...)`. El acotamiento por rol sigue componiendo con ella.
+  it("filter.status_id como LISTA se traduce a where.estatusId con todos los ids", async () => {
+    await service.listar(
+      {
+        page: 1,
+        pageSize: 20,
+        filter: { status_id: ["os-entregada", "os-devuelta"] },
+        sortBy: "created_at",
+        sortDir: "desc",
+      },
+      MAESTRO,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toEqual(["os-entregada", "os-devuelta"]);
+  });
+
+  it("filter.status_id como LISTA compone con el alcance por rol de adminTienda", async () => {
+    await service.listar(
+      {
+        page: 1,
+        pageSize: 20,
+        filter: { status_id: ["os-entregada", "os-devuelta"] },
+        sortBy: "created_at",
+        sortDir: "desc",
+      },
+      TIENDA,
+    );
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where.estatusId).toEqual(["os-entregada", "os-devuelta"]);
+    expect(arg.where.tiendaId).toBe("store1"); // acotamiento por tienda intacto
   });
 
   it("R10: sin filter, el estatusId escalar sigue funcionando (sin regresion)", async () => {

@@ -1,6 +1,6 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
-// Feature 112 (T2.1) — contrato del orquestador que genera el PDF consolidado del
+// Feature 136 (T2.1) — contrato del orquestador que genera el PDF consolidado del
 // lote y lo almacena en el bucket privado, devolviendo su URL firmada. Logica de
 // negocio pura (sin HTTP): el borde (endpoint de carga por API) decide la politica
 // best-effort (try/catch) y traduce el resultado al bloque `etiquetasPdf`.
@@ -22,6 +22,8 @@ export interface IEtiquetasLotePdfService {
    * no hay etiqueta imprimible (todas omitidas por `sin_guia`/`no_encontrada`, R14)
    * o si el servicio de etiquetas responde `forbidden`. NO captura errores de
    * infraestructura: los propaga para que el borde aplique best-effort (R12).
+   * Tampoco genera PDFs por encima del tope de etiquetas configurado: lanza
+   * `EtiquetasLoteExcedeTopeError` antes de construir nada (BLOQ-1).
    */
   generarYAlmacenar(
     ordenIds: string[],

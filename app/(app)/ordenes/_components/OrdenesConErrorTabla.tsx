@@ -3,28 +3,17 @@
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { OrdenConError } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
+import { formatErrores } from "@/app/(app)/ordenes/_components/carga-masiva-errores-formato";
+
+// Feature 143: `formatErrores` se mudó a un módulo puro para compartirla con el
+// export de filas con error (que no puede depender de un componente cliente). Se
+// re-exporta aquí para no romper a los consumidores/tests que la importaban
+// desde este archivo.
+export { formatErrores };
 
 export interface OrdenesConErrorTablaProps {
   /** Filas con `resultado === "error"` del `BulkSummary` (R18, R19). */
   errores: OrdenConError[];
-}
-
-/** Motivo genérico cuando la fila no trae detalle de errores (R19). */
-const MOTIVO_GENERICO = "Error de validación";
-
-/**
- * Aplana el mapa `campo → mensajes[]` a un texto legible, p. ej.
- * "num_remision: obligatorio; telefono: formato inválido" (R19). Si el mapa está
- * vacío (o sus entradas no aportan mensaje), devuelve un motivo genérico.
- */
-export function formatErrores(errores: Record<string, string[]>): string {
-  const partes: string[] = [];
-  for (const [campo, mensajes] of Object.entries(errores)) {
-    if (mensajes.length > 0) {
-      partes.push(`${campo}: ${mensajes.join(", ")}`);
-    }
-  }
-  return partes.length > 0 ? partes.join("; ") : MOTIVO_GENERICO;
 }
 
 /**

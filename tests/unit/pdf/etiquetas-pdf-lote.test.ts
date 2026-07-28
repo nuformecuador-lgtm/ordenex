@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { inflateSync } from "node:zlib";
 
-// Feature 112 (T1.2) — el builder corre en Node SIN DOM (R7): se mockean solo las
+// Feature 136 (T1.2) — el builder corre en Node SIN DOM (R7): se mockean solo las
 // libs de rasterizado (qrcode/bwip-js) para (a) afirmar QUE valor codifica cada
 // codigo y (b) mantener el test rapido/determinista; jspdf se usa REAL, lo que
 // prueba de paso que ensambla el PDF en Node (sin canvas del navegador).
@@ -29,6 +30,7 @@ vi.mock("bwip-js/node", () => ({
 
 import { buildEtiquetasLotePdf } from "@/lib/pdf/etiquetas-pdf-lote";
 import { buildPaqueteUrl } from "@/lib/utils/paquete-url";
+import { formatMonto } from "@/lib/config/moneda";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 
 function etiqueta(overrides: Partial<EtiquetaGuiaDTO> = {}): EtiquetaGuiaDTO {
@@ -53,10 +55,52 @@ function etiqueta(overrides: Partial<EtiquetaGuiaDTO> = {}): EtiquetaGuiaDTO {
   };
 }
 
-/** Cuenta objetos `/Type /Page` (excluye el nodo `/Pages`) en el PDF sin comprimir. */
+/**
+ * Cuenta objetos `/Type /Page` (excluye el nodo `/Pages`). Los diccionarios de
+ * objeto viajan en claro aunque el documento use `compress: true` (solo se
+ * deflatean los streams), asi que este conteo sigue siendo valido.
+ */
 function contarPaginas(bytes: Uint8Array): number {
   const s = Buffer.from(bytes).toString("latin1");
   return (s.match(/\/Type\s*\/Page(?![s])/g) ?? []).length;
+}
+
+/**
+ * Texto visible del PDF. El builder emite con `compress: true` (BLOQ-1: sin ello
+ * cada etiqueta pesa ~80x mas), asi que los content streams van deflateados y NO
+ * se pueden leer escaneando los bytes en crudo: hay que inflarlos. Devuelve la
+ * concatenacion de todo lo inflable mas el cuerpo en claro (diccionarios).
+ */
+function textoDelPdf(bytes: Uint8Array): string {
+  const buf = Buffer.from(bytes);
+  const crudo = buf.toString("latin1");
+  let out = crudo;
+  const re = /stream\r?\n/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(crudo)) !== null) {
+    const start = m.index + m[0].length;
+    const end = crudo.indexOf("endstream", start);
+    if (end < 0) continue;
+    try {
+      out += inflateSync(buf.subarray(start, end)).toString("latin1");
+    } catch {
+      // Stream no inflable (imagen ya codificada / datos crudos): no aporta texto.
+    }
+  }
+  return out;
+}
+
+/**
+ * ¿Aparece `valor` como texto dibujado en el PDF? jsPDF escribe los literales en
+ * WinAnsi (ASCII tal cual), PERO si la cadena trae algun caracter fuera de ese
+ * juego —el simbolo de moneda, p. ej.— codifica TODO ese texto en UTF-16BE, y
+ * entonces cada caracter va precedido de un byte 0x00. Se acepta cualquiera de
+ * las dos formas para no atar el test a la moneda configurada.
+ */
+function incluyeTexto(pdf: string, valor: string): boolean {
+  if (pdf.includes(valor)) return true;
+  const utf16be = [...valor].map((c) => `\u0000${c}`).join("");
+  return pdf.includes(utf16be);
 }
 
 beforeEach(() => {
@@ -103,16 +147,45 @@ describe("buildEtiquetasLotePdf (R1-R7)", () => {
   it("cada pagina incluye los campos de la orden", async () => {
     const bytes = await buildEtiquetasLotePdf([
       etiqueta({
+        numGuia: 1042,
+        numRemision: "REM-1",
         destinatario: "AnaDestinatario",
+        telefonoDest: "0999999999",
+        direccion: "CalleDireccion 123",
         producto: "ProductoTest",
+        montoCobrar: 1234.5,
         tiendaNombre: "TiendaTest",
+        zonaNombre: "ZonaTest",
+        provinciaNombre: "ProvinciaTest",
+        cantonNombre: "CantonTest",
+        distritoNombre: "DistritoTest",
       }),
     ]);
-    // R4: los valores de la orden quedan escritos como texto en el content stream.
-    const s = Buffer.from(bytes).toString("latin1");
+    // R4: los NUEVE datos que exige el requisito quedan escritos como texto en el
+    // content stream (guia, remision, destinatario, telefono, direccion, ubicacion
+    // geografica, producto, monto a cobrar y tienda).
+    const s = textoDelPdf(bytes);
+    expect(s).toContain("1042"); // numero de guia
+    expect(s).toContain("REM-1"); // numero de remision
     expect(s).toContain("AnaDestinatario");
+    expect(s).toContain("0999999999"); // telefono
+    expect(s).toContain("CalleDireccion 123");
     expect(s).toContain("ProductoTest");
     expect(s).toContain("TiendaTest");
-    expect(s).toContain("REM-1");
+    // Ubicacion geografica: los 4 niveles (se dibujan unidos por " / ", pero el
+    // ajuste de linea puede partirlos, asi que se afirma nivel a nivel).
+    expect(s).toContain("ZonaTest");
+    expect(s).toContain("ProvinciaTest");
+    expect(s).toContain("CantonTest");
+    expect(s).toContain("DistritoTest");
+    // Monto a cobrar: formateado con la moneda configurada (p. ej. "₡1 234,50").
+    // Se afirma el tramo ASCII visible mas largo del importe ("234,50"), valido
+    // para cualquier locale/moneda configurada, sin hardcodear el simbolo.
+    const tramosAscii = formatMonto(1234.5)
+      .split(/[^\x21-\x7E]+/)
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+    expect(tramosAscii[0].length).toBeGreaterThan(1);
+    expect(incluyeTexto(s, tramosAscii[0])).toBe(true);
   });
 });

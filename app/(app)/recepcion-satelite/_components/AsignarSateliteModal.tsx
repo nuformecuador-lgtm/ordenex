@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
+import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { asignarDesdeSatelite } from "@/lib/actions/recepcion-satelite";
@@ -45,12 +46,20 @@ export function AsignarSateliteModal({
 }: AsignarSateliteModalProps) {
   const toast = useToast();
   const [mensajeroId, setMensajeroId] = useState("");
+  // Feature 148 (T12, §9.7): fase "resultado" con el lote ya asignado.
+  const [resultado, setResultado] = useState<{
+    ordenIds: string[];
+    mensaje: string;
+  } | null>(null);
   // Reinicia la selección solo al transicionar a `open` (ajuste de estado durante
   // el render, no en un `useEffect`, para evitar el render en cascada).
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (open) setMensajeroId("");
+    if (open) {
+      setMensajeroId("");
+      setResultado(null);
+    }
   }
 
   const sinMensajeros = mensajeros.length === 0; // R6
@@ -78,25 +87,56 @@ export function AsignarSateliteModal({
       throw result;
     }
 
-    toast.success(`Mensajero asignado a ${result.resultados.length} orden(es).`);
-    onSuccess();
+    const mensaje = `Mensajero asignado a ${result.resultados.length} orden(es).`;
+    toast.success(mensaje);
+    // Feature 148 (§9.7): asignación ya cometida → fase "resultado"; `onSuccess()`
+    // se difiere al cierre. Nada del contrato de negocio cambia (R27).
+    setResultado({
+      ordenIds: result.resultados.map((r) => r.ordenId),
+      mensaje,
+    });
   }
 
   function handleError(error: unknown) {
     toast.error(asignacionSateliteErrorMessage(error));
   }
 
+  /** Cierre de la fase "resultado" por cualquier vía: recién ahí refresca el padre. */
+  function handleOpenChange(next: boolean) {
+    if (!next && resultado) {
+      setResultado(null);
+      onOpenChange(false);
+      onSuccess();
+      return;
+    }
+    onOpenChange(next);
+  }
+
   return (
     <Modal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="Asignar mensajero"
-      description={`Asigna un mensajero a ${ordenes.length} orden(es) seleccionada(s) de tu zona.`}
+      description={
+        resultado
+          ? "Mensajero asignado. Descarga el manifiesto del lote antes de cerrar."
+          : `Asigna un mensajero a ${ordenes.length} orden(es) seleccionada(s) de tu zona.`
+      }
       confirmLabel="Asignar"
+      cancelLabel={resultado ? "Cerrar" : "Cancelar"}
       confirmDisabled={sinMensajeros}
+      hideConfirm={resultado !== null}
+      closeOnConfirm={false}
       onConfirm={handleConfirm}
       onError={handleError}
     >
+      {resultado ? (
+        <ManifiestoResultado
+          mensaje={resultado.mensaje}
+          flujo="asignacion_satelite"
+          seleccion={{ ordenIds: resultado.ordenIds }}
+        />
+      ) : (
       <div className="flex flex-col gap-2">
         <ul className="max-h-40 list-disc overflow-auto pl-5 text-sm text-muted-foreground">
           {ordenes.map((orden) => (
@@ -121,6 +161,7 @@ export function AsignarSateliteModal({
           />
         )}
       </div>
+      )}
     </Modal>
   );
 }

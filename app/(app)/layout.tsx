@@ -34,7 +34,12 @@ export default async function AppLayout({
     <ToastProvider>
       <SidebarProvider>
         <Sidebar items={items} usuario={usuario} />
-        <SidebarInset>
+        {/* overflow-x-clip: la columna de contenido nunca empuja el ancho más
+            allá del viewport (evita scroll horizontal accidental en responsive).
+            El contenido genuinamente ancho (tablas) scrollea dentro de su propio
+            contenedor overflow-x-auto, así que este clip no lo recorta. clip (no
+            hidden) para no convertir el main en contenedor de scroll vertical. */}
+        <SidebarInset className="overflow-x-clip">
           <SidebarTrigger className={"relative md:hidden"} />
           {children}
         </SidebarInset>

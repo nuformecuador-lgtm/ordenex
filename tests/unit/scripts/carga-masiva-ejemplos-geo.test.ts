@@ -5,6 +5,11 @@
 // sin zona). Se valida ESTÁTICAMENTE (sin DB) reusando el MISMO parser + normalizador
 // del seed (scripts/seed-zonas.ts) sobre los XLSX de public/, así el ejemplo no puede
 // volver a desincronizarse del seed: si alguien lo cambia a algo inválido, falla aquí.
+//
+// Feature 142 (R4) — La terna ya no vive en 3 columnas: sale de aplicar el parser
+// real (`parseDireccionDestinatario`) al ejemplo de la columna única
+// `direccion_destinatario`. Así este guard sigue verificando exactamente lo que
+// hará el servidor con la plantilla descargada sin editar.
 import path from "node:path";
 import { describe, it, expect, beforeAll } from "vitest";
 import ExcelJS from "exceljs";
@@ -16,6 +21,10 @@ import {
 } from "@/scripts/seed-zonas";
 import { normalizeZonaKey, canonicalZonaNombre } from "@/lib/geo/normalize";
 import { ORDENES_BULK_FIELDS } from "@/app/(app)/ordenes/_components/OrdenesCargaMasivaButton";
+import {
+  parseDireccionDestinatario,
+  type DireccionDestinatarioPartes,
+} from "@/lib/utils/direccion-destinatario";
 
 // Mismas rutas/hoja que el seed (scripts/seed-zonas.ts). Absolutas respecto al repo.
 const GEO_XLSX_PATH = path.resolve(process.cwd(), "public/geografia-cr-completa.xlsx");
@@ -45,6 +54,18 @@ function exampleFor(key: string): string {
     throw new Error(`La plantilla no define ejemplo para la columna '${key}'`);
   }
   return field.example;
+}
+
+/** R4: la terna del ejemplo sale del MISMO parser que usa la vía sesión. */
+function partesDelEjemplo(): DireccionDestinatarioPartes {
+  const ejemplo = exampleFor("direccion_destinatario");
+  const parsed = parseDireccionDestinatario(ejemplo);
+  if (!parsed.ok) {
+    throw new Error(
+      `El ejemplo de 'direccion_destinatario' ("${ejemplo}") no pasa el parser: ${parsed.mensaje}`,
+    );
+  }
+  return parsed.partes;
 }
 
 describe("carga masiva — fila de ejemplo con geografía válida (feature 58)", () => {
@@ -84,23 +105,29 @@ describe("carga masiva — fila de ejemplo con geografía válida (feature 58)",
     expect(ternasConZona.size).toBeGreaterThan(0);
   });
 
-  it("provincia/cantón/distrito de ejemplo EXISTEN en el catálogo geográfico real", () => {
-    const provincia = exampleFor("provincia");
-    const canton = exampleFor("canton");
-    const distrito = exampleFor("distrito");
+  it("R4: el ejemplo de direccion_destinatario se parsea a las 4 partes", () => {
+    const { provincia, canton, distrito, direccion } = partesDelEjemplo();
+    expect(provincia).not.toBe("");
+    expect(canton).not.toBe("");
+    expect(distrito).not.toBe("");
+    // La dirección literal del ejemplo es informativa: debe existir para que la
+    // fila de muestra enseñe el formato completo (R3).
+    expect(direccion).not.toBe("");
+  });
+
+  it("R4: provincia/cantón/distrito del ejemplo EXISTEN en el catálogo geográfico real", () => {
+    const { provincia, canton, distrito } = partesDelEjemplo();
 
     const terna = ternaKey(provincia, canton, distrito);
     expect(terna).not.toBeNull();
     expect(
       geoTernas.has(terna!),
-      `El combo de ejemplo ${provincia}/${canton}/${distrito} no existe en el catálogo geográfico (public/geografia-cr-completa.xlsx). Elige uno del seed real.`,
+      `El combo de ejemplo ${provincia}/${canton}/${distrito} (derivado de la columna direccion_destinatario) no existe en el catálogo geográfico (public/geografia-cr-completa.xlsx). Elige uno del seed real.`,
     ).toBe(true);
   });
 
-  it("el distrito de ejemplo TIENE zona asignada (deriva orden.zona_id)", () => {
-    const provincia = exampleFor("provincia");
-    const canton = exampleFor("canton");
-    const distrito = exampleFor("distrito");
+  it("R4: el distrito del ejemplo TIENE zona asignada (deriva orden.zona_id)", () => {
+    const { provincia, canton, distrito } = partesDelEjemplo();
 
     const terna = ternaKey(provincia, canton, distrito);
     expect(

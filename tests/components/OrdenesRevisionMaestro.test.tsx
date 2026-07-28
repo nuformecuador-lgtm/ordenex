@@ -511,7 +511,7 @@ describe("OrdenesRevisionMaestro", () => {
 
   it("Feature 139/R9: el apartado 'Rechazadas' NO ofrece la salida manual 'Devolver a la tienda'", async () => {
     // La única salida de `rechazada` es ahora la aprobación del cierre (backend); la
-    // acción manual se retiró de esta vista (y de OrdenesTabs). El apartado sigue
+    // acción manual se retiró de esta vista (y de OrdenesListado). El apartado sigue
     // listando las órdenes, pero sin acción de escritura ni modal.
     listarOrdenesMock.mockImplementation(async (input) => {
       const { estatusId, page, pageSize } = input as {

@@ -4,7 +4,7 @@ import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
-import { OrdenesTabs } from "@/app/(app)/ordenes/_components/OrdenesTabs";
+import { OrdenesListado } from "@/app/(app)/ordenes/_components/OrdenesListado";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { listarOrdenes } from "@/lib/actions/ordenes";
 import { listarOrderStatus } from "@/lib/actions/order-status";
@@ -20,7 +20,7 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 // Feature 95 — encadenado: al terminar "Generar guía" / "Asignar mensajero", el
 // flujo abre automáticamente el modal de etiquetas con el MISMO lote (re-derivado
-// por id, ya con num_guia). Se ejercita OrdenesTabs con los modales REALES; solo se
+// por id, ya con num_guia). Se ejercita OrdenesListado con los modales REALES; solo se
 // stubean las dependencias no testeables en jsdom (server actions, PDF, QR/barcode)
 // y DevolverATiendaModal (fuera de este flujo; su server action no se carga).
 vi.mock("@/lib/actions/ordenes", () => ({ listarOrdenes: vi.fn() }));
@@ -108,8 +108,8 @@ function makeEtiqueta(
   };
 }
 
-/** Monta las tabs del maestro con UNA sola tab (la del `estatus` dado) activa. */
-function renderTabs(estatus: { id: string; value: string }, items: OrdenListItemDTO[]) {
+/** Monta el listado del maestro sirviendo `items` (estados con accion por lote). */
+function renderListado(estatus: { id: string; value: string }, items: OrdenListItemDTO[]) {
   listarOrderStatusMock.mockResolvedValue({ status: "ok", estatus: [estatus] });
   listarOrdenesMock.mockImplementation(async (input) => {
     const { page, pageSize } = input as { page: number; pageSize: number };
@@ -118,7 +118,7 @@ function renderTabs(estatus: { id: string; value: string }, items: OrdenListItem
   render(
     <ToastProvider>
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <OrdenesTabs accionesLote />
+        <OrdenesListado accionesLote />
       </SWRConfig>
     </ToastProvider>,
   );
@@ -131,7 +131,7 @@ beforeEach(() => {
     mensajeros: [{ id: "m1", nombre: "Ana Mensajera" }],
     bloqueadosIds: [],
   });
-  // Sin zonas bloqueadas: los checkbox de la tab de asignación quedan habilitados.
+  // Sin zonas bloqueadas: los checkbox de las órdenes de asignación quedan habilitados.
   listarZonasBloqueadasMock.mockResolvedValue({
     status: "ok",
     zonasBloqueadasIds: [],
@@ -142,7 +142,7 @@ afterEach(() => {
   cleanup();
 });
 
-describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / asignar", () => {
+describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía / asignar", () => {
   it("tras el éxito de 'Generar guía' abre el modal de etiquetas con el MISMO lote (re-derivado por id)", async () => {
     const user = userEvent.setup();
     generarGuiaMock.mockResolvedValue({
@@ -155,7 +155,7 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
       omitidas: [],
     });
 
-    renderTabs(
+    renderListado(
       { id: "est-fulfillment", value: "en_fulfillment" },
       [makeOrden({ id: "id-o1", numRemision: "REM-1", estatusId: "est-fulfillment" })],
     );
@@ -173,6 +173,11 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
     );
 
     expect(generarGuiaMock).toHaveBeenCalledTimes(1);
+
+    // Feature 148 (§9.7): tras confirmar, el modal de guía pasa a su fase
+    // "resultado" (manifiesto del lote) y el encadenado a etiquetas ocurre al
+    // CERRAR esa fase, no al confirmar. El lote encadenado es el mismo.
+    await user.click(within(guiaDialog).getByRole("button", { name: "Cerrar" }));
 
     // Encadena: el modal de etiquetas se abre con el lote (re-fetch por id).
     const etiquetasDialog = await screen.findByRole("dialog", {
@@ -201,7 +206,7 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
       omitidas: [],
     });
 
-    renderTabs(
+    renderListado(
       { id: "est-bodega", value: "en_bodega_central" },
       [
         makeOrden({
@@ -237,6 +242,13 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
 
     expect(asignarDesdeBodegaMock).toHaveBeenCalledTimes(1);
 
+    // Feature 148 (§9.7): tras confirmar, el modal de asignación pasa a su fase
+    // "resultado" (manifiesto del lote) y el encadenado a etiquetas ocurre al
+    // CERRAR esa fase, no al confirmar. El lote encadenado es el mismo.
+    await user.click(
+      within(asignarDialog).getByRole("button", { name: "Cerrar" }),
+    );
+
     const etiquetasDialog = await screen.findByRole("dialog", {
       name: "Imprimir etiquetas",
     });
@@ -258,7 +270,7 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
       omitidas: [],
     });
 
-    renderTabs(
+    renderListado(
       { id: "est-fulfillment", value: "en_fulfillment" },
       [makeOrden({ id: "id-o1", numRemision: "REM-1", estatusId: "est-fulfillment" })],
     );
@@ -271,6 +283,11 @@ describe("OrdenesTabs — feature 95: encadenar etiquetas tras generar guía / a
     await user.click(
       within(guiaDialog).getByRole("button", { name: "Generar guía" }),
     );
+
+    // Feature 148 (§9.7): tras confirmar, el modal de guía pasa a su fase
+    // "resultado" (manifiesto del lote) y el encadenado a etiquetas ocurre al
+    // CERRAR esa fase, no al confirmar. El lote encadenado es el mismo.
+    await user.click(within(guiaDialog).getByRole("button", { name: "Cerrar" }));
 
     const etiquetasDialog = await screen.findByRole("dialog", {
       name: "Imprimir etiquetas",

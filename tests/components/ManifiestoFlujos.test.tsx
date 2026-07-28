@@ -1,0 +1,529 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, within, waitFor, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+import { OrdenesCargaResumenPaso } from "@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso";
+import { GenerarGuiaModal } from "@/app/(app)/ordenes/_components/GenerarGuiaModal";
+import { AsignarBodegaModal } from "@/app/(app)/ordenes/_components/AsignarBodegaModal";
+import { RutearSateliteModal } from "@/app/(app)/ordenes/_components/RutearSateliteModal";
+import { DevolverATiendaModal } from "@/app/(app)/ordenes/_components/DevolverATiendaModal";
+import { AsignarSateliteModal } from "@/app/(app)/recepcion-satelite/_components/AsignarSateliteModal";
+import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
+
+import { obtenerManifiesto } from "@/lib/actions/manifiesto";
+import {
+  generarGuia,
+  asignarDesdeBodega,
+  rutearABodegaSatelite,
+} from "@/lib/actions/ordenes-guia";
+import { asignarDesdeSatelite } from "@/lib/actions/recepcion-satelite";
+import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
+import { devolverATienda } from "@/lib/actions/devolucion-origen";
+import type { OrdenListItemDTO } from "@/lib/types/orden";
+import type { ManifiestoFilaDTO } from "@/lib/types/manifiesto";
+import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+
+// Feature 148 (T20) — los 5 puntos de enganche (6 superficies de UI): cada flujo, tras
+// COMETER su operación de negocio, ofrece la descarga del manifiesto de SU lote (R18–R23)
+// sin alterar la llamada de negocio ni su resultado (R25, R27).
+
+vi.mock("@/lib/actions/manifiesto", () => ({ obtenerManifiesto: vi.fn() }));
+vi.mock("@/lib/actions/ordenes-guia", () => ({
+  generarGuia: vi.fn(),
+  asignarDesdeBodega: vi.fn(),
+  rutearABodegaSatelite: vi.fn(),
+}));
+vi.mock("@/lib/actions/recepcion-satelite", () => ({
+  asignarDesdeSatelite: vi.fn(),
+  recibirLote: vi.fn(),
+  recibirPorQr: vi.fn(),
+  listarRecepcionSatelite: vi.fn(),
+}));
+vi.mock("@/lib/actions/envio-devolucion-central", () => ({
+  enviarACentral: vi.fn(),
+}));
+vi.mock("@/lib/actions/devolucion-origen", () => ({ devolverATienda: vi.fn() }));
+vi.mock("@/lib/actions/resolver-novedad", () => ({ recuperarABodega: vi.fn() }));
+
+// El paso de carga masiva monta `OrdenesCargaResumen` (SWR + acciones de mensajero).
+const { listarMensajerosMock, resumenCargaMasivaMock, asignarMensajeroSugeridoMock } =
+  vi.hoisted(() => ({
+    listarMensajerosMock: vi.fn(),
+    resumenCargaMasivaMock: vi.fn(),
+    asignarMensajeroSugeridoMock: vi.fn(),
+  }));
+vi.mock("@/lib/actions/mensajeros", () => ({
+  listarMensajeros: listarMensajerosMock,
+  resumenCargaMasiva: resumenCargaMasivaMock,
+  asignarMensajeroSugerido: asignarMensajeroSugeridoMock,
+}));
+vi.mock("swr", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("swr")>();
+  return { ...actual, useSWRConfig: () => ({ mutate: vi.fn() }) };
+});
+
+// El generador se aísla de exceljs; el binario real lo cubre `manifiesto-xlsx.test.ts`.
+const { buildManifiestoXlsxMock } = vi.hoisted(() => ({
+  buildManifiestoXlsxMock: vi.fn<() => Promise<ArrayBuffer>>(),
+}));
+vi.mock("@/lib/utils/manifiesto-xlsx", () => ({
+  buildManifiestoXlsx: buildManifiestoXlsxMock,
+  manifiestoFileName: (flujo: string, fecha: string) =>
+    `manifiesto-${flujo}-${fecha}.xlsx`,
+}));
+
+const { successMock, errorMock, warningMock, refreshMock } = vi.hoisted(() => ({
+  successMock: vi.fn(),
+  errorMock: vi.fn(),
+  warningMock: vi.fn(),
+  refreshMock: vi.fn(),
+}));
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    success: successMock,
+    error: errorMock,
+    warning: warningMock,
+    info: vi.fn(),
+    show: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: refreshMock, push: vi.fn() }),
+}));
+vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
+
+const obtenerManifiestoMock = vi.mocked(obtenerManifiesto);
+const generarGuiaMock = vi.mocked(generarGuia);
+const asignarDesdeBodegaMock = vi.mocked(asignarDesdeBodega);
+const rutearMock = vi.mocked(rutearABodegaSatelite);
+const asignarDesdeSateliteMock = vi.mocked(asignarDesdeSatelite);
+const enviarACentralMock = vi.mocked(enviarACentral);
+const devolverATiendaMock = vi.mocked(devolverATienda);
+
+function makeFila(over: Partial<ManifiestoFilaDTO> = {}): ManifiestoFilaDTO {
+  return {
+    numGuia: 1001,
+    numRemision: "REM-001",
+    destinatario: "Ana Pérez",
+    telefono: "88880000",
+    direccion: "Calle 1",
+    zona: "Limón",
+    monto: 15000,
+    origen: "Bodega central",
+    destino: "Limón",
+    responsable: "Beto Mensajero",
+    fecha: "2026-07-28",
+    ...over,
+  };
+}
+
+function makeOrden(
+  over: Partial<OrdenListItemDTO> & { id: string },
+): OrdenListItemDTO {
+  return {
+    numGuia: null,
+    numRemision: "REM-000",
+    estatusId: "id-estatus",
+    estatusValue: "en_fulfillment",
+    destinatario: "Destino",
+    telefonoDest: "88880000",
+    tiendaId: "tienda-uuid",
+    tiendaNombre: "Tienda X",
+    zonaId: "zona-1",
+    provinciaId: "prov-1",
+    cantonId: "canton-1",
+    distritoId: null,
+    producto: "Producto",
+    peso: 1,
+    notas: null,
+    mensajeroSugeridoId: null,
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    ...over,
+  };
+}
+
+function makeRecepcion(
+  over: Partial<RecepcionSateliteDTO> & { id: string },
+): RecepcionSateliteDTO {
+  return {
+    numGuia: 1001,
+    numRemision: "REM-001",
+    estatusValue: "por_devolver",
+    destinatario: "Ana Pérez",
+    telefonoDest: "88880000",
+    direccion: "Calle 1",
+    producto: "Caja",
+    montoCobrar: 150,
+    tiendaNombre: "Tienda X",
+    zonaNombre: "Limón",
+    provinciaNombre: "Limón",
+    cantonNombre: "Central",
+    distritoNombre: "Limón",
+    ...over,
+  };
+}
+
+let anchorClick: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  Object.defineProperty(URL, "createObjectURL", {
+    value: vi.fn(() => "blob:mock-url"),
+    configurable: true,
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    value: vi.fn(),
+    configurable: true,
+  });
+  anchorClick = vi
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(() => {});
+  buildManifiestoXlsxMock.mockResolvedValue(new ArrayBuffer(8));
+  obtenerManifiestoMock.mockResolvedValue({
+    status: "ok",
+    filas: [makeFila()],
+    omitidas: [],
+  });
+  listarMensajerosMock.mockResolvedValue({ status: "ok", mensajeros: [] });
+  resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: [] });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+/** El botón compartido del manifiesto, por su nombre accesible. */
+function botonManifiesto(): HTMLElement {
+  return screen.getByRole("button", { name: /descargar manifiesto/i });
+}
+
+describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
+  it("R18: tras la carga masiva ofrece el manifiesto de las remisiones creadas", async () => {
+    const user = userEvent.setup();
+    render(
+      <OrdenesCargaResumenPaso
+        clasificacion={{
+          numRemisionesNuevas: ["REM-A", "REM-B"],
+          existentes: [],
+          errores: [],
+        }}
+      />,
+    );
+
+    await user.click(botonManifiesto());
+
+    expect(obtenerManifiestoMock).toHaveBeenCalledWith({
+      flujo: "carga_masiva",
+      numRemisiones: ["REM-A", "REM-B"],
+    });
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledTimes(1));
+  });
+
+  it("R17/R18: sin órdenes nuevas el paso de carga masiva NO ofrece manifiesto", () => {
+    render(
+      <OrdenesCargaResumenPaso
+        clasificacion={{
+          numRemisionesNuevas: [],
+          existentes: [{ numRemision: "REM-X", estatus: "en_bodega_central" }],
+          errores: [],
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /descargar manifiesto/i }),
+    ).toBeNull();
+  });
+
+  it("R19: tras generar guía ofrece el manifiesto de las órdenes del lote", async () => {
+    const user = userEvent.setup();
+    generarGuiaMock.mockResolvedValue({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", numGuia: 1, estado: "por_recoger" },
+        { ordenId: "o2", numGuia: 2, estado: "en_bodega_central" },
+      ],
+    });
+    const onSuccess = vi.fn();
+    render(
+      <GenerarGuiaModal
+        open
+        ordenes={[makeOrden({ id: "o1" }), makeOrden({ id: "o2" })]}
+        mensajeros={[{ id: "m1", nombre: "Ana" }]}
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Generar guía" }));
+    await user.click(await screen.findByRole("button", { name: /descargar manifiesto/i }));
+
+    expect(obtenerManifiestoMock).toHaveBeenCalledWith({
+      flujo: "generacion_guia",
+      ordenIds: ["o1", "o2"],
+    });
+    // La descarga NO cierra el flujo: el resultado sigue visible (R26).
+    expect(onSuccess).not.toHaveBeenCalled();
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledTimes(1));
+  });
+
+  it("R19: tras asignar desde bodega ofrece el manifiesto del lote", async () => {
+    const user = userEvent.setup();
+    asignarDesdeBodegaMock.mockResolvedValue({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o2", estado: "por_recoger" },
+      ],
+    });
+    render(
+      <AsignarBodegaModal
+        open
+        ordenes={[makeOrden({ id: "o1" }), makeOrden({ id: "o2" })]}
+        mensajeros={[{ id: "m1", nombre: "Ana" }]}
+        onOpenChange={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Mensajero para el lote" }));
+    const listbox = await screen.findByRole("listbox");
+    await user.click(within(listbox).getByRole("option", { name: "Ana" }));
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await user.click(await screen.findByRole("button", { name: /descargar manifiesto/i }));
+    expect(obtenerManifiestoMock).toHaveBeenCalledWith({
+      flujo: "generacion_guia",
+      ordenIds: ["o1", "o2"],
+    });
+  });
+
+  it("R20: tras rutear a satélite ofrece el manifiesto del lote", async () => {
+    const user = userEvent.setup();
+    rutearMock.mockResolvedValue({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", estado: "en_ruta_bodega_satelite" },
+        { ordenId: "o2", estado: "en_ruta_bodega_satelite" },
+      ],
+    });
+    render(
+      <RutearSateliteModal
+        open
+        ordenes={[makeOrden({ id: "o1" }), makeOrden({ id: "o2" })]}
+        onOpenChange={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Rutear a bodega satélite" }),
+    );
+    await user.click(await screen.findByRole("button", { name: /descargar manifiesto/i }));
+
+    expect(obtenerManifiestoMock).toHaveBeenCalledWith({
+      flujo: "ruteo_satelite",
+      ordenIds: ["o1", "o2"],
+    });
+  });
+
+  it("R21: tras asignar desde la bodega satélite ofrece el manifiesto del lote", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "s1", estado: "por_recoger" }],
+    });
+    render(
+      <AsignarSateliteModal
+        open
+        ordenes={[makeRecepcion({ id: "s1", estatusValue: "en_bodega_satelite" })]}
+        mensajeros={[{ id: "m1", nombre: "Ana" }]}
+        onOpenChange={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Mensajero para el lote" }));
+    const listbox = await screen.findByRole("listbox");
+    await user.click(within(listbox).getByRole("option", { name: "Ana" }));
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await user.click(await screen.findByRole("button", { name: /descargar manifiesto/i }));
+    expect(obtenerManifiestoMock).toHaveBeenCalledWith({
+      flujo: "asignacion_satelite",
+      ordenIds: ["s1"],
+    });
+  });
+
+  it("R22: tras enviar a central ofrece el manifiesto SOLO de las enviadas con éxito", async () => {
+    const user = userEvent.setup();
+    // La primera sale ok, la segunda falla: el manifiesto solo lleva la primera.
+    enviarACentralMock
+      .mockResolvedValueOnce({ status: "ok" })
+      .mockResolvedValueOnce({ status: "conflict", motivo: "estado inválido" });
+
+    render(
+      <RecepcionSateliteModule
+        porRecibir={[]}
+        recibidas={[]}
+        porDevolver={[
+          makeRecepcion({ id: "d1", numRemision: "REM-D1" }),
+          makeRecepcion({ id: "d2", numRemision: "REM-D2" }),
+        ]}
+        enTransitoACentral={[]}
+        zonaNombre="Limón"
+        sinZona={false}
+        mensajeros={[]}
+        bloqueoBodega={{
+          bloqueada: false,
+          porMensajeros: false,
+          porCierreBodega: false,
+        }}
+      />,
+    );
+
+    // Sin envío previo no hay nada que descargar (R17).
+    expect(
+      screen.queryByRole("button", { name: /descargar manifiesto/i }),
+    ).toBeNull();
+
+    const porDevolver = screen.getByRole("region", { name: "Por devolver" });
+    await user.click(
+      within(porDevolver).getByRole("checkbox", { name: "Seleccionar REM-D1" }),
+    );
+    await user.click(
+      within(porDevolver).getByRole("checkbox", { name: "Seleccionar REM-D2" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Enviar a central" }));
+
+    const boton = await screen.findByRole("button", {
+      name: /descargar manifiesto/i,
+    });
+    await user.click(boton);
+
+    expect(obtenerManifiestoMock).toHaveBeenCalledWith({
+      flujo: "devolucion_central",
+      ordenIds: ["d1"], // la que falló queda fuera
+    });
+  });
+
+  it("R23: tras enviar a la tienda ofrece el manifiesto de las enviadas", async () => {
+    const user = userEvent.setup();
+    devolverATiendaMock.mockResolvedValue({ status: "ok" });
+    render(
+      <DevolverATiendaModal
+        open
+        ordenes={[makeOrden({ id: "t1" }), makeOrden({ id: "t2" })]}
+        onOpenChange={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Enviar a la tienda" }));
+    await user.click(await screen.findByRole("button", { name: /descargar manifiesto/i }));
+
+    expect(obtenerManifiestoMock).toHaveBeenCalledWith({
+      flujo: "envio_tienda",
+      ordenIds: ["t1", "t2"],
+    });
+  });
+
+  it("R23/R25: si el envío a la tienda falla, no hay fase de resultado ni manifiesto", async () => {
+    const user = userEvent.setup();
+    devolverATiendaMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
+    const onSuccess = vi.fn();
+    render(
+      <DevolverATiendaModal
+        open
+        ordenes={[makeOrden({ id: "t1" })]}
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Enviar a la tienda" }));
+
+    await waitFor(() => expect(errorMock).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByRole("button", { name: /descargar manifiesto/i }),
+    ).toBeNull();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(obtenerManifiestoMock).not.toHaveBeenCalled();
+  });
+
+  it("R25: un fallo de la descarga NO re-ejecuta la acción de negocio ni revierte su resultado", async () => {
+    const user = userEvent.setup();
+    generarGuiaMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "o1", numGuia: 7, estado: "por_recoger" }],
+    });
+    obtenerManifiestoMock.mockRejectedValue(new Error("red caída"));
+    const onSuccess = vi.fn();
+    render(
+      <GenerarGuiaModal
+        open
+        ordenes={[makeOrden({ id: "o1" })]}
+        mensajeros={[{ id: "m1", nombre: "Ana" }]}
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Generar guía" }));
+    const descargar = await screen.findByRole("button", {
+      name: /descargar manifiesto/i,
+    });
+    await user.click(descargar);
+
+    await waitFor(() => expect(errorMock).toHaveBeenCalledTimes(1));
+    // La operación de negocio NO se repite ni se deshace…
+    expect(generarGuiaMock).toHaveBeenCalledTimes(1);
+    // …su resultado sigue visible y con su toast de éxito intacto (R26).
+    expect(successMock).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText(/guía generada para 1 orden\(es\)/i),
+    ).toBeInTheDocument();
+    // …y se puede cerrar el flujo con normalidad: el refresco del padre ocurre igual.
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+
+  it("R27: la llamada de negocio conserva su input, su toast y su manejo de resultado", async () => {
+    const user = userEvent.setup();
+    rutearMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "o1", estado: "en_ruta_bodega_satelite" }],
+    });
+    const onSuccess = vi.fn();
+    render(
+      <RutearSateliteModal
+        open
+        ordenes={[makeOrden({ id: "o1", numRemision: "REM-1" })]}
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Rutear a bodega satélite" }),
+    );
+
+    // Input idéntico y UNA sola llamada; el manifiesto no participa de la operación.
+    expect(rutearMock).toHaveBeenCalledTimes(1);
+    expect(rutearMock).toHaveBeenCalledWith({ ordenIds: ["o1"] });
+    expect(successMock).toHaveBeenCalledWith(
+      "1 orden(es) en ruta a bodega satélite.",
+    );
+    // La acción de lectura del manifiesto NO se dispara sola (§9.7: botón explícito).
+    expect(obtenerManifiestoMock).not.toHaveBeenCalled();
+    expect(anchorClick).not.toHaveBeenCalled();
+
+    // Y el refresco del padre sigue ocurriendo, al cerrar la fase de resultado.
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+});

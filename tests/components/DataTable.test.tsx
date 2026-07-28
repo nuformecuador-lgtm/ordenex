@@ -308,17 +308,22 @@ describe("DataTable", () => {
     expect(screen.queryByText("No hay registros")).not.toBeInTheDocument();
   });
 
-  it("B12: sin `rowClassName` cada fila de datos conserva solo `border-b` (retrocompatible, R8-101/T9)", () => {
+  it("B12: sin `rowClassName` cada fila de datos conserva la base y no gana clases derivadas (retrocompatible, R8-101/T9)", () => {
     const columns: Column<Row>[] = [{ id: "nombre", value: "Nombre" }];
 
     render(<DataTable columns={columns} data={baseData} ariaLabel="T" />);
 
     const rows = bodyRows();
     expect(rows).toHaveLength(baseData.length);
-    for (const row of rows) {
-      // La clase base sigue intacta y no se cuela ninguna clase derivada de fila.
+    for (const [index, row] of rows.entries()) {
+      // La clase base sigue intacta...
       expect(row).toHaveClass("border-b");
-      expect(row.className.trim()).toBe("border-b");
+      // ...y las filas pares llevan el fondo alterno del rediseño (zebra). Se
+      // afirma explicitamente para que un cambio de ese fondo se vea aqui, en
+      // vez de comparar el className completo: eso acoplaba el test a que la
+      // fila NO tuviera ninguna otra clase de presentacion.
+      if (index % 2 === 0) expect(row).toHaveClass("bg-brand/5");
+      else expect(row).not.toHaveClass("bg-brand/5");
     }
   });
 
@@ -340,11 +345,12 @@ describe("DataTable", () => {
     // La fila marcada combina la clase base con la derivada.
     expect(beto).toHaveClass("border-b");
     expect(beto).toHaveClass("bg-warning/15");
-    // Las no marcadas (undefined) quedan idénticas al comportamiento previo.
+    // Las no marcadas (undefined) no reciben NINGUNA clase derivada: conservan
+    // la base y su fondo alterno, nada mas.
     expect(ana).not.toHaveClass("bg-warning/15");
     expect(ceci).not.toHaveClass("bg-warning/15");
-    expect(ana.className.trim()).toBe("border-b");
-    expect(ceci.className.trim()).toBe("border-b");
+    expect(ana).toHaveClass("border-b");
+    expect(ceci).toHaveClass("border-b");
   });
 
   it("B11: columnas con id único renderizan sin throw (R4)", () => {

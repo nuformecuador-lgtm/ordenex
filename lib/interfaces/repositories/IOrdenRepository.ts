@@ -53,7 +53,13 @@ export interface UpdateOrdenData {
 }
 
 export interface ListOrdenesParams {
-  where: { tiendaId?: string; estatusId?: string; mensajeroAsignadoId?: string };
+  // `estatusId` admite un id (filtro por un estado) o una lista de ids (filtro
+  // multi-estado del listado de `/ordenes`), que el repositorio traduce a `IN (...)`.
+  where: {
+    tiendaId?: string;
+    estatusId?: string | string[];
+    mensajeroAsignadoId?: string;
+  };
   sortBy: SortField;
   sortDir: SortDir;
   skip: number;
@@ -185,6 +191,10 @@ export interface DistritoRow {
 // (R4: la orden puede no tener distrito).
 export interface EtiquetaRow {
   id: string;
+  // Feature 136: dueño de la orden. Lo necesita `EtiquetaGuiaService` para filtrar
+  // por propietario cuando el actor es una API key (aislamiento entre tiendas
+  // explicito en el service, no solo garantizado por el borde).
+  tiendaId: string;
   numGuia: number | null;
   numRemision: string;
   destinatario: string;
@@ -197,6 +207,34 @@ export interface EtiquetaRow {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+}
+
+// Feature 148 — fila proyectada para armar el MANIFIESTO de un lote (R4/R6/R7).
+// Molde de `EtiquetaRow` (nombres legibles, no IDs; `montoCobrar` Decimal->number),
+// con dos diferencias que el manifiesto SI necesita y la etiqueta no:
+//   - `mensajeroAsignadoNombre`: alimenta la columna `responsable` cuando el flujo
+//     dejo mensajero asignado (R9 / design.md §9.8). Null si la orden no lo tiene.
+//   - `zonaEsCentral`: distingue la orden GAM de la no-GAM para resolver
+//     `origen`/`destino` de `generacion_guia` sin un parametro extra (design.md §4).
+// A cambio NO trae producto ni provincia/canton/distrito: el manifiesto no los usa
+// (R11). NUNCA incluye `deletedAt` (R11): el repo YA filtra `deletedAt: null` para
+// que una orden borrada cuente como no encontrada (R12). `numGuia` puede venir null
+// (R5): la celda queda vacia, la fila NO se descarta.
+export interface ManifiestoOrdenRow {
+  id: string;
+  // Dueño de la orden. Lo necesita `ManifiestoService` para filtrar por propietario
+  // cuando el actor es una API key (R29), igual que `EtiquetaRow.tiendaId`.
+  tiendaId: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  telefonoDest: string;
+  direccion: string | null;
+  montoCobrar: number | null;
+  tiendaNombre: string;
+  zonaNombre: string;
+  zonaEsCentral: boolean;
+  mensajeroAsignadoNombre: string | null;
 }
 
 // Feature 33 — fila proyectada para el modulo de la bodega satelite ("Mis
@@ -587,6 +625,38 @@ export interface IOrdenRepository {
    * Solo query, sin logica de negocio.
    */
   findEtiquetaByNumGuia(numGuia: number): Promise<EtiquetaRow | null>;
+
+  // --- Feature 148: manifiesto Excel por lote (READ derivado, R4/R6/R7/R12/R29) ---
+
+  /**
+   * Feature 148/R4/R6/R7/R12: filas del manifiesto por id de orden, con el NOMBRE de
+   * la zona (R6, no su id), el de la tienda y el del mensajero ASIGNADO resueltos, y
+   * `montoCobrar` ya como number|null (Decimal->number, R7). Filtra `deletedAt: null`
+   * (R12): una orden borrada NO aparece y el service la reporta como `no_encontrada`.
+   * NO filtra por `num_guia`: devuelve filas con `numGuia` posible null y el service
+   * deja la celda vacia (R5). Solo query, sin logica de negocio. Vacio si `ids` esta
+   * vacio.
+   */
+  findManifiestoByIds(ids: string[]): Promise<ManifiestoOrdenRow[]>;
+  /**
+   * Feature 148/R4/R12/R29: mismas filas resueltas por `num_remision`, la UNICA
+   * seleccion disponible tras una carga masiva (su `BulkSummary` no lleva ids,
+   * design.md §2). Acotado por `tiendaId` —igual que `findResumenByNumRemisiones`—
+   * para que el lote no pueda alcanzar ordenes de otra tienda (R29). Mismo filtro
+   * `deletedAt: null` (R12). Vacio si `remisiones` esta vacio.
+   */
+  findManifiestoByRemisiones(
+    remisiones: string[],
+    tiendaId: string,
+  ): Promise<ManifiestoOrdenRow[]>;
+  /**
+   * Feature 148/R9: `usuario.nombre` del actor que ejecuto la operacion, resuelto
+   * server-side por `usuarioId` (espejo de `findUsuarioFulfillment`/`findUsuarioZonaId`).
+   * Alimenta la columna `responsable` cuando el flujo NO deja mensajero asignado
+   * (design.md §9.8). `null` si el usuario no resuelve. `Actor` solo lleva
+   * `{ usuarioId, rol }`, por eso el nombre se lee aqui y no viaja desde el borde.
+   */
+  findUsuarioNombre(usuarioId: string): Promise<string | null>;
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
 

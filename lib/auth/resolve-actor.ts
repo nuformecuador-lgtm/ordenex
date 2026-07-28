@@ -27,5 +27,8 @@ export async function resolveActorFromSession(): Promise<Actor | null> {
   });
   if (!usuario) return null;
 
-  return { usuarioId: usuario.id, rol: usuario.rol.value };
+  // Feature 146 (A3): `zonaId` viaja en el actor porque el alcance por zona de las
+  // notificaciones (R16) se resuelve contra `usuario.zona_id`. El dato ya venia en la
+  // fila leida: no hay consulta extra.
+  return { usuarioId: usuario.id, rol: usuario.rol.value, zonaId: usuario.zonaId ?? null };
 }

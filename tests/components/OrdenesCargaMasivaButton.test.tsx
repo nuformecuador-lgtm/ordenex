@@ -178,6 +178,8 @@ describe("OrdenesCargaMasivaButton — validación", () => {
     expect(screen.getByTestId("preview-double")).toBeInTheDocument();
     expect(screen.queryByTestId("upload-double")).not.toBeInTheDocument();
     expect(preview.props?.clasificacion.numRemisionesNuevas).toEqual(["REM-A", "REM-B"]);
+    // Feature 143: las filas CRUDAS llegan al preview para poder exportarlas.
+    expect(preview.props?.filas).toEqual([fila("REM-A", 1)]);
     expect(infoMock).toHaveBeenCalledTimes(1);
     // Validar NO persiste: sin mutate ni carga real.
     expect(mutateMock).not.toHaveBeenCalled();
@@ -210,6 +212,32 @@ describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
 
     expect(await screen.findByTestId("asignacion-double")).toBeInTheDocument();
     expect(asignacion.props?.numRemisiones).toEqual(["REM-A"]);
+  });
+
+  it("R20 (feature 143): en el paso 'asignacion' no existe ningún botón de descarga de errores", async () => {
+    // Decisión de gate G-1: la descarga vive SOLO en la vista previa. Tras la
+    // carga real el modal no ofrece exportar nada.
+    const user = userEvent.setup();
+    procesarEnChunksMock.mockResolvedValue([
+      { fila: 1, numRemision: "REM-A", resultado: "creada" },
+      { fila: 2, numRemision: "REM-B", resultado: "error", errores: { telefono: ["x"] } },
+    ] satisfies RowResult[]);
+
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+    validar({
+      numRemisionesNuevas: ["REM-A"],
+      filasUnicas: [fila("REM-A", 1), fila("REM-B", 2)],
+    });
+
+    await user.click(screen.getByRole("button", { name: "confirmar-double" }));
+    expect(await screen.findByTestId("asignacion-double")).toBeInTheDocument();
+
+    // Aunque la carga real dejó una fila con error, el paso no ofrece descarga.
+    expect(
+      screen.queryByRole("button", { name: /descargar filas con error/i }),
+    ).toBeNull();
+    expect(screen.queryByTestId("preview-double")).not.toBeInTheDocument();
   });
 
   it("si la carga real no crea nada → cierra el modal", async () => {

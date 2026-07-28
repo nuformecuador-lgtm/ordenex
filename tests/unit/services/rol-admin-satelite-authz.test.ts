@@ -104,6 +104,10 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     // Feature 32: etiqueta de guia, exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
     findEtiquetaByNumGuia: vi.fn().mockResolvedValue(null),
+    // Feature 148: stubs del manifiesto (READ derivado, no lo ejercita este test).
+    findManifiestoByIds: vi.fn().mockResolvedValue([]),
+    findManifiestoByRemisiones: vi.fn().mockResolvedValue([]),
+    findUsuarioNombre: vi.fn().mockResolvedValue(null),
     // Feature 33: recepcion en bodega satelite, no ejercitada aqui pero exigida
     // por la interfaz IOrdenRepository.
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
