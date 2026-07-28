@@ -18,7 +18,57 @@ export const consoleLogger: ChatLogger = {
  * Claves del payload de Meta que identifican al destinatario. Se REDACTAN antes de volcar el
  * status crudo: `recipient_id` es el telefono del cliente en E.164, o sea PII directa.
  */
-const CLAVES_PII = new Set(["recipient_id", "recipient", "from", "wa_id", "phone_number"]);
+const CLAVES_PII = new Set([
+  "recipient_id",
+  "recipient",
+  "from",
+  "wa_id",
+  "phone_number",
+  "to", // destino de la peticion saliente a la Graph API
+]);
+
+/**
+ * Claves cuyo VALOR es contenido dirigido al cliente (el texto del mensaje y los parametros
+ * que rellenan la plantilla: nombre, direccion, montos). Para diagnosticar un 400 lo que hace
+ * falta es la ESTRUCTURA -cuantos parametros van, en que orden, de que tipo-, no el contenido.
+ * Se sustituyen por un marcador que conserva tipo y longitud.
+ */
+const CLAVES_CONTENIDO = new Set(["body", "text"]);
+
+/** ¿Volcado SIN redactar? `WHATSAPP_DEBUG_LOG=true`. Pensado para depurar, no para produccion. */
+export function debugCompletoActivo(): boolean {
+  return (process.env.WHATSAPP_DEBUG_LOG ?? "").trim().toLowerCase() === "true";
+}
+
+/** Marcador que conserva la forma del valor sin revelarlo: `<str:23>`, `<number>`. */
+function marcador(valor: unknown): string {
+  if (typeof valor === "string") return `<str:${valor.length}>`;
+  return `<${typeof valor}>`;
+}
+
+/**
+ * Prepara el cuerpo de una peticion saliente para el log.
+ *
+ * Con `WHATSAPP_DEBUG_LOG=true` devuelve el cuerpo TAL CUAL, sin tocar nada: es la unica forma
+ * de ver literalmente lo que viaja a Meta. Sin el flag, redacta el destino y el contenido pero
+ * CONSERVA `name`, `language`, `type` y la estructura de `components`, que es lo que explica
+ * la mayoria de los 400 (numero de parametros, orden, idioma inexistente).
+ */
+export function cuerpoParaLog(cuerpo: unknown): unknown {
+  return debugCompletoActivo() ? cuerpo : redactarEnvio(cuerpo);
+}
+
+function redactarEnvio(valor: unknown): unknown {
+  if (Array.isArray(valor)) return valor.map(redactarEnvio);
+  if (valor === null || typeof valor !== "object") return valor;
+  const salida: Record<string, unknown> = {};
+  for (const [clave, v] of Object.entries(valor as Record<string, unknown>)) {
+    if (CLAVES_PII.has(clave)) salida[clave] = "[redactado]";
+    else if (CLAVES_CONTENIDO.has(clave) && typeof v !== "object") salida[clave] = marcador(v);
+    else salida[clave] = redactarEnvio(v);
+  }
+  return salida;
+}
 
 /**
  * Copia profunda del valor sustituyendo por `"[redactado]"` cualquier clave de `CLAVES_PII`.
