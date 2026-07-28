@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   AnularGestionInput,
   CierreGestionPendienteRow,
+  CierreSolicitadoInfo,
   CrearCierreInput,
   GestionDeshacerRow,
   ICierreDiaRepository,
@@ -228,6 +229,25 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       where: { mensajeroId, estado: ESTADO_SOLICITADO },
     });
     return count > 0;
+  }
+
+  /**
+   * Feature 146/R24: proyeccion minima del cierre `solicitado` vigente (id + zona destino +
+   * nombre del mensajero) para componer su aviso. Los dos caminos de transicion solo devuelven
+   * un booleano, asi que el id del cierre se lee aqui, despues del exito.
+   */
+  async findCierreSolicitado(mensajeroId: string): Promise<CierreSolicitadoInfo | null> {
+    const fila = await this.prisma.cierreDia.findFirst({
+      where: { mensajeroId, estado: ESTADO_SOLICITADO },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, destinoZonaId: true, mensajero: { select: { nombre: true } } },
+    });
+    if (fila === null) return null;
+    return {
+      id: fila.id,
+      destinoZonaId: fila.destinoZonaId ?? null,
+      mensajeroNombre: fila.mensajero?.nombre ?? null,
+    };
   }
 
   /** Feature 111/R6: existe un cierre `vencido` del mensajero (gemelo del anterior). */
