@@ -14,13 +14,18 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // porque omitia estas dos ultimas — `ORIGEN_RUTEO_SATELITE` de `GuiaAsignacionService.ts:35`
 // admite `en_fulfillment`/`en_preparacion` ademas de `en_bodega_central`).
 //
+// Feature 149 (design §2, R27): el inventario suma TRES aristas (#43/#44/#45, familia
+// `deshacer_asignacion`) y pasa a 46 aristas de flujo / 42 pares unicos. Las tres son pares
+// NUEVOS (ninguna repite un par ya declarado), y `por_recoger -> en_bodega_satelite` (#44) deja
+// de ser ilegal: era un caso del test de pares ilegales de la 140 y se actualizo a proposito.
+//
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
 // `ANY -> ANY` para maestro/admin (Q3): el ajuste administrativo generico
 // (`OrdenService.actualizar`, `origen_tipo = ajuste_estado`) pasa por el MISMO mapa y sus
 // aristas legitimas (#28, #40, #42) estan declaradas explicitamente abajo.
 
-/** Familia de la transicion: reutiliza el enum de origen del historial (22 valores). */
+/** Familia de la transicion: reutiliza el enum de origen del historial (23 valores). */
 export type FamiliaTransicion = OrdenHistorialOrigenTipo;
 
 /**
@@ -73,6 +78,9 @@ export const TRANSICIONES = {
   ],
   en_ruta_bodega_satelite: [
     { to: "en_bodega_satelite", via: "recepcion_satelite", rol: "adminSatelite" }, // #10
+    // Feature 149 (caso b): deshacer el RUTEO antes de que la satelite reciba el paquete.
+    // El paquete sigue bajo custodia de la central, por eso el destino es la central.
+    { to: "en_bodega_central", via: "deshacer_asignacion", rol: "maestro/admin" }, // #45 (149)
   ],
   en_bodega_satelite: [
     { to: "por_recoger", via: "asignacion_satelite", rol: "adminSatelite" }, // #9
@@ -80,6 +88,15 @@ export const TRANSICIONES = {
   ],
   por_recoger: [
     { to: "en_ruta", via: "recoleccion", rol: "mensajero" }, // #11
+    // Feature 149 (caso a): deshacer la asignacion a un mensajero que aun no recogio. El
+    // destino se DERIVA del historial (D3) y se normaliza a un estado de BODEGA (D3'): NO se
+    // declara ninguna arista hacia `en_fulfillment`/`en_preparacion` (R28).
+    { to: "en_bodega_central", via: "deshacer_asignacion", rol: "maestro/admin" }, // #43 (149)
+    {
+      to: "en_bodega_satelite",
+      via: "deshacer_asignacion",
+      rol: "maestro/admin/adminSatelite (de la zona)",
+    }, // #44 (149)
   ],
   en_ruta: [
     { to: "entregada", via: "gestion", rol: "mensajero" }, // #12

@@ -8,10 +8,11 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 //
 // Es la RED DE SEGURIDAD de la activacion estricta (Q7): si una arista real faltara en
 // `TRANSICIONES`, ese flujo se caeria en produccion. Por eso los tests que lo consumen
-// recorren el inventario COMPLETO (43 aristas de flujo + 3 de creacion), no un muestreo.
+// recorren el inventario COMPLETO (46 aristas de flujo + 3 de creacion), no un muestreo.
 //
 // La numeracion `n` es la del apendice (#1-#42) con el #27 RETIRADO a proposito por la
-// feature 139 (`rechazada -> devolviendo_a_tienda` ya no existe): el hueco es deliberado.
+// feature 139 (`rechazada -> devolviendo_a_tienda` ya no existe): el hueco es deliberado. La
+// feature 149 CONTINUA la numeracion con #43/#44/#45 (familia `deshacer_asignacion`).
 //
 // CORRECCION sobre el apendice A (hallazgo del review): `rutearABodegaSatelite` admite TRES
 // origenes (`ORIGEN_RUTEO_SATELITE`, `GuiaAsignacionService.ts:35`), no solo
@@ -38,7 +39,7 @@ export interface AristaCreacionInventario {
   callSite: string;
 }
 
-/** A.2 — 43 aristas de flujo (numeracion 1-42 sin el #27, mas #7b/#7c del review). */
+/** A.2 — 46 aristas de flujo (1-42 sin el #27, + #7b/#7c del review, + #43/#44/#45 de la 149). */
 export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "1", origen: "en_fulfillment", destino: "por_recoger", via: "generacion_guia", callSite: "GuiaAsignacionService.generarGuia (GAM+mensajero)" },
   { n: "2", origen: "en_fulfillment", destino: "en_bodega_central", via: "generacion_guia", callSite: "generarGuia (GAM sin mensajero)" },
@@ -84,6 +85,12 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "40", origen: "por_devolver", destino: "devolviendo_a_bodega_central", via: "ajuste_estado", callSite: "EnvioDevolucionCentralService.enviarACentral (139)" },
   { n: "41", origen: "devolviendo_a_bodega_central", destino: "por_devolver_a_tienda", via: "recepcion_bodega_central", callSite: "RecepcionBodegaCentralService state-aware (139)" },
   { n: "42", origen: "por_devolver_a_tienda", destino: "devolviendo_a_tienda", via: "ajuste_estado", callSite: "DevolucionOrigenService.devolverATienda (139)" },
+  // Feature 149 (design §2, R27): reversion de la asignacion/ruteo ANTES de la recogida. Las
+  // TRES aristas son pares NUEVOS (no repiten ningun par ya declarado), por eso suben tanto el
+  // recuento de aristas (43 -> 46) como el de pares unicos (39 -> 42).
+  { n: "43", origen: "por_recoger", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "DeshacerAsignacionService.deshacer -> OrdenRepository.deshacerAsignacionLote (149, caso a central)" },
+  { n: "44", origen: "por_recoger", destino: "en_bodega_satelite", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso a satelite)" },
+  { n: "45", origen: "en_ruta_bodega_satelite", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso b)" },
 ];
 
 /**
@@ -100,11 +107,12 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
 ];
 
 /**
- * Recuentos: 43 aristas de flujo (las 41 de A.3 + #7b/#7c del review), 39 pares dirigidos
- * unicos (igual que A.3: las dos nuevas repiten pares ya declarados) y 3 de creacion.
+ * Recuentos: 46 aristas de flujo (las 41 de A.3 + #7b/#7c del review + #43/#44/#45 de la
+ * feature 149), 42 pares dirigidos unicos (los 39 de A.3 + los 3 pares NUEVOS de la 149; #7b/#7c
+ * repiten pares ya declarados y no suman) y 3 de creacion.
  */
 export const RECUENTO_INVENTARIO = {
-  aristasFlujo: 43,
-  paresUnicos: 39,
+  aristasFlujo: 46,
+  paresUnicos: 42,
   aristasCreacion: 3,
 } as const;

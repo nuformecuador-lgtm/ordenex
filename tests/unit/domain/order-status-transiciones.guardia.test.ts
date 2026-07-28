@@ -27,7 +27,7 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
     },
   );
 
-  it("el inventario de flujo tiene las 43 aristas y 39 pares unicos (A.3 + correccion #7b/#7c)", () => {
+  it("el inventario de flujo tiene las 46 aristas y 42 pares unicos (A.3 + #7b/#7c + 149 #43-#45)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     const pares = new Set(INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino}`));
     expect(pares.size).toBe(RECUENTO_INVENTARIO.paresUnicos);
@@ -47,12 +47,41 @@ describe("R6 — la guardia rechaza los pares que no estan en TRANSICIONES", () 
     ["entregada", "devuelta_a_tienda"],
     ["en_preparacion", "entregada"],
     ["devuelta_a_tienda", "en_ruta"],
-    ["por_recoger", "en_bodega_satelite"],
+    // Feature 149: `por_recoger -> en_bodega_satelite` SALE de esta lista porque paso a ser
+    // LEGAL (#44). Se sustituye por `por_recoger -> en_preparacion`, que sigue siendo ilegal
+    // (D3': la reversion normaliza a un estado de BODEGA, nunca vuelve a un estado pre-guia).
+    ["por_recoger", "en_preparacion"],
     ["sin_gestionar", "en_ruta"],
     ["devolviendo_a_bodega_central", "devuelta_a_tienda"],
   ] as const)("lanza TransicionIlegalError en %s -> %s", (origen, destino) => {
     expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
   });
+
+  // --- REGRESION 149 (R27/R28) ------------------------------------------------------------
+  it("REGRESION 149/R27: las TRES aristas de `deshacer_asignacion` (#43/#44/#45) son LEGALES", () => {
+    expect(() => assertTransicionValida("por_recoger", "en_bodega_central")).not.toThrow(); // #43
+    expect(() => assertTransicionValida("por_recoger", "en_bodega_satelite")).not.toThrow(); // #44
+    expect(() =>
+      assertTransicionValida("en_ruta_bodega_satelite", "en_bodega_central"),
+    ).not.toThrow(); // #45
+  });
+
+  it.each([
+    // D3': la normalizacion manda a BODEGA; volver a un estado pre-guia sigue prohibido.
+    ["por_recoger", "en_fulfillment"],
+    ["por_recoger", "en_preparacion"],
+    ["en_ruta_bodega_satelite", "en_fulfillment"],
+    ["en_ruta_bodega_satelite", "en_preparacion"],
+    // Ya recogida / ya recibida: el deshacer no reabre estos caminos (R16).
+    ["en_ruta", "por_recoger"],
+    ["en_ruta", "en_bodega_central"],
+    ["en_bodega_satelite", "en_ruta_bodega_satelite"],
+  ] as const)(
+    "REGRESION 149/R28: %s -> %s sigue siendo ILEGAL (la 149 no lo abrio)",
+    (origen, destino) => {
+      expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
+    },
+  );
 
   it("REGRESION 139/R9: rechazada -> devolviendo_a_tienda es ILEGAL (arista #27 retirada)", () => {
     expect(() => assertTransicionValida("rechazada", "devolviendo_a_tienda")).toThrow(

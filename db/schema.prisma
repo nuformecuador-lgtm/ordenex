@@ -1113,6 +1113,7 @@ enum OrdenHistorialOrigenTipo {
   liberacion_sin_gestionar // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin)
   recepcion_bodega_central // feature 138: recepcion fisica en la bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin)
   devolucion_rechazada // feature 139: al APROBAR el cierre, rechazada -> por_devolver (satelite) / por_devolver_a_tienda (central) (actor admin)
+  deshacer_asignacion // feature 149: reversion de asignacion/ruteo antes de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite -> en_bodega_central)
 
   @@map("orden_historial_origen_tipo")
 }
