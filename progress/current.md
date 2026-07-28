@@ -70,11 +70,20 @@ aislado `../ordenex-wt-144` (el árbol `ux` arrastra WIP ajeno).
   nuevas, sin RLS nueva.
 - **GATE F1.4 APROBADO (2026-07-28), las 14 preguntas cerradas.** Cuatro se apartaron de lo que
   recomendaba el spec y cambian el diseño:
-  - **(a) Filtro de tiempo → LAS DOS FORMAS.** Presets **y** rango abierto con el date-range de shadcn.
-    Consecuencia: el bloque A gana un tipo `dateRange` y hace falta decidir la dependencia (el repo es
-    pnpm y el `Dialog` de la 121 se construyó sobre `@base-ui/react`, no Radix — «instalá shadcn» no
-    es una respuesta). Bordes CR/UTC calculados **server-side**: `desde` = 06:00 UTC de ese día,
-    `hasta` **inclusive** = `< 06:00 UTC del día+1`.
+  - **(a) Filtro de tiempo → LAS DOS FORMAS.** Presets **y** rango abierto. El bloque A gana un tipo
+    `dateRange`. Bordes CR/UTC calculados **server-side**: `desde` = 06:00 UTC de ese día, `hasta`
+    **inclusive** = `< 06:00 UTC del día+1`.
+    - **El date-range de shadcn se descartó, y con la dependencia medida:** el humano lo pidió por
+      nombre, pero traerlo arrastra `react-day-picker` **y** `@radix-ui/react-popover`. Verificado dos
+      veces (`spec_author` y leader, contra `package.json` y `components/ui/`): el repo corre **solo**
+      sobre `@base-ui/react ^1.6.0`, sin Radix, sin `react-day-picker`, sin `date-fns`, y **no existen**
+      `calendar`/`popover`/`command`. Copiar shadcn dejaría **dos librerías de primitivas conviviendo**
+      (foco, portales y accesibilidad duplicados). **Decisión del humano: dos `<Input type="date">`,
+      cero dependencias nuevas**, alineado con `wallet/_components/WalletFiltros.tsx`, que ya resuelve
+      un desde/hasta exactamente así (el patrón ya vive en 6 componentes).
+    - **Preset y rango son MUTUAMENTE EXCLUYENTES en la UI** (decisión del humano; el spec había
+      propuesto «gana el rango»): elegir uno **vacía** el otro, así que el estado inválido nunca llega
+      a existir y no hay precedencia que documentar ni `validation_error` que lanzar.
   - **(c) Precargado → `Promise.all` al cargar la página**, no la Server Action + SWR que recomendaba
     el spec. Los ~70 KB en el RSC payload de cada carga de `/ordenes` son **coste aceptado a
     sabiendas**; queda margen para adelgazarlo enviando el catálogo con los campos mínimos.
