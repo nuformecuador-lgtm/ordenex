@@ -15,6 +15,54 @@
 
 ## Features en curso
 
+### Campana de notificaciones — feature 146 (2026-07-27) → IMPLEMENTADA + reviewer **APROBADO-CON-NOTAS** (0 bloqueantes), **PR #176** → `dev` (falta merge humano)
+
+Fullstack, high, `depends_on: null`. Ciclo SDD completo en worktree aislado `../ordenex-wt-146`
+(rama `feature/146-campana-notificaciones` desde `origin/dev` @ `56ff0aa`), 16 commits.
+Spec en `specs/146-campana-notificaciones/` (R1–R50, 24 tasks).
+
+- **Decisiones cerradas pre-spec (AskUserQuestion):** los 4 eventos que notifican (rechazo, carga
+  masiva terminada, postulación pendiente, cierre por aprobar); refresco por **polling SWR**, no
+  Realtime; direccionamiento **por rol con lectura por usuario**.
+- **⚠️ El humano OMITIÓ el aviso de "órdenes con más de 1 día sin asignación"**, que era el único
+  que exigía barrido periódico → **cayeron el cron, el `JobTipo` y el env de umbral** que la ficha
+  original daba por hechos. La respuesta sobre el reloj del umbral ("desde la creación") quedó
+  archivada por si ese aviso se retoma como feature aparte.
+- **Gate F1.4 APROBADO** con 4 decisiones más, una de ellas resolviendo una **contradicción** en las
+  respuestas del humano (pidió que el rechazo llegara al `adminSatelite` y a la vez excluirlo del
+  v1 → desempató por incluir ambos): rechazo → maestro + admin + `adminTienda` dueño +
+  `adminSatelite` de la zona, lo que obligó a **dos columnas de alcance** (`tienda_id`, `zona_id`);
+  productor de rechazo **transaccional**; carga masiva por UI vía Server Action explícita de
+  "carga terminada". Otras 5 menores las cerró el leader (una fila por rol, ventana de 30 días sin
+  purga, dedupe por `(evento, entidad_id)`, `PAGE_SIZE=50` / 60 s, `NotificationItem` como alias).
+- **Modelo:** `notificacion` + `notificacion_lectura` (estado leída/descartada POR usuario), RLS
+  habilitada **sin policies** (patrón del repo: sesión propia, sin `auth.uid()`), toda la
+  autorización en un único `predicadoVisibilidad(actor)` compartido por las 5 acciones.
+  `Actor` gana `zonaId` (aditivo). Migración `20260727120000_notificacion` (up + down).
+- **Corrección bloqueante que atajó el leader:** la 1.ª entrega del backend metía
+  `if (enTest()) return` en producción — el mismo anti-patrón de guardia-apagada-bajo-test que hizo
+  rechazar la feature 140. Recableado: el default de los services es un **no-op** y el real se
+  inyecta en los composition roots; hay un test de barrido que falla si alguien reintroduce un
+  apagado por entorno. El reviewer confirmó un **4.º** sitio que construye `BulkOrdenService`
+  (`app/api/ordenes/carga-masiva/chunk/route.ts`) y se queda con el no-op: es correcto, esa ruta no
+  sabe cuál es el último chunk.
+- **Guardia ajena editada (aprobada por el leader):** `tests/integration/db/no-migration-102.test.ts`
+  afirmaba que el esquema no tiene NINGUNA infra de notificaciones. Ese R17 acotaba a la 102, no
+  prohibía el concepto para siempre; la edición pasa a una allowlist de una entrada (más estricta
+  que borrar los conceptos) y deja intactos los invariantes propios de la 102.
+- **Verificación:** typecheck **2 errores, los 2 preexistentes de `dev`** (prop `count` en
+  `GestionarOrdenPanelEvidencias.test.tsx:84` y `NotaPrivadaMensajero.test.tsx:253`) → **delta 0**;
+  lint 0 errores; suite 528 archivos / 5426 tests con los mismos rojos ajenos → delta 0; los 14
+  archivos de la feature en aislado **213/213**. `./init.sh` queda rojo **solo** por esos 2 errores
+  heredados. Detalle en `progress/impl_146_backend.md`, `impl_146_frontend.md`, `review_146.md`.
+- **⚠️ Al desplegar:** `prisma migrate deploy` para `20260727120000_notificacion` (aditiva, 2 tablas
+  + 3 enums). **No se aplicó** desde el agente (el `.env` apunta a la base compartida con prod) y el
+  `down.sql` se revisó por lectura, **sin round-trip real**.
+- **Deudas conocidas:** sin purga (los 30 días son solo ventana de consulta); sin paginación
+  (`PAGE_SIZE=50` trunca en silencio); `marcarNotificacionLeida` sin control por elemento en la UI
+  (solo "marcar todas" o descartar); la campana arranca vacía en cada página y cada una abre su
+  propio polling.
+
 ### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
 
 > Detalle de las 4 en `history.md`. PRs #157 (137) · #159 (138) · #160 (139) · #161 (140).
