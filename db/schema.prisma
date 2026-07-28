@@ -1414,7 +1414,7 @@ model RutaOptimizadaParada {
 }
 
 // Feature 146 (design §1.1) — tipo de PRESENTACION de la notificacion: mapea 1:1 al icono
-// que pinta la campana. Enum Postgres nativo (patron RolValue / ChatMensajeTipo).
+// que pinta el indicador de avisos. Enum Postgres nativo (patron RolValue / ChatMensajeTipo).
 enum NotificacionTipo {
   alert
   box

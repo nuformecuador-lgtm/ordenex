@@ -17,7 +17,7 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
 
 ## Bloque A — Contrato y tipos (backend, bloquea a todo lo demás)
 
-- [ ] **A1 — Tipos de dominio y schemas zod.**
+- [x] **A1 — Tipos de dominio y schemas zod.**
       `lib/types/notificacion.ts`: `NotificationType`, `NotificacionEvento`,
       `NotificacionEntidadTipo`, `NotificacionDTO`, resultados de las 5 acciones,
       `notificacionIdSchema` y `cargaTerminadaSchema` (`creadas`/`total`/`loteId`, R36).
@@ -25,12 +25,12 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       `anexo?`, `read`, `createdAt` (design §3.1).
       *Depende de:* —
 
-- [ ] **A2 — Config.** `lib/config/notificaciones.ts` con `PAGE_SIZE = 50`,
+- [x] **A2 — Config.** `lib/config/notificaciones.ts` con `PAGE_SIZE = 50`,
       `REFRESH_INTERVAL_MS = 60_000`, `VENTANA_DIAS = 30` (F1.4-8, F1.4-6).
       *Hecho:* sin literales mágicos en services ni componentes.
       *Depende de:* — · `[P]` con A1
 
-- [ ] **A3 — `Actor` gana `zonaId`.** *(NUEVA — la trae el alcance por zona, F1.4-1)*
+- [x] **A3 — `Actor` gana `zonaId`.** *(NUEVA — la trae el alcance por zona, F1.4-1)*
       Ampliar `resolveActorFromSession` y el tipo `Actor` con `zonaId: string | null`
       (`usuario.zona_id`, ya en el `include`).
       *Hecho:* cambio aditivo; `pnpm typecheck` verde sin tocar ningún consumidor existente;
@@ -41,7 +41,7 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
 
 ## Bloque B — Backend (zona `backend_dev`)
 
-- [ ] **B1 — Migración `20260727120000_notificacion`.**
+- [x] **B1 — Migración `20260727120000_notificacion`.**
       `migration.sql` con los 3 enums, `notificacion` (incluidas **`tienda_id` y `zona_id`**
       con sus FK `ON DELETE CASCADE`), `notificacion_lectura`, `CHECK` XOR de destinatario,
       `CHECK` de marca presente, los 5 índices parciales + el índice de dedupe
@@ -49,24 +49,24 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       *Hecho:* la migración aplica limpia sobre una base al día.
       *Depende de:* —
 
-- [ ] **B2 — `down.sql`.** Revierte exactamente B1 (tablas en orden inverso + `DROP TYPE`).
+- [x] **B2 — `down.sql`.** Revierte exactamente B1 (tablas en orden inverso + `DROP TYPE`).
       *Hecho:* `pnpm db:rollback` deja el esquema idéntico al previo (`prisma migrate diff`
       vacío contra el estado anterior).
       *Depende de:* B1
 
-- [ ] **B3 — Modelos en `db/schema.prisma`.** `Notificacion` (con `tiendaId`/`zonaId`),
+- [x] **B3 — Modelos en `db/schema.prisma`.** `Notificacion` (con `tiendaId`/`zonaId`),
       `NotificacionLectura` y los 3 enums, `@@map`/`@map` en `snake_case`, relaciones inversas
       en `Usuario` (dos: destinatario y tienda) y `Zona`.
       *Hecho:* `pnpm db:generate` sin drift (`prisma migrate diff` schema↔migraciones vacío).
       *Depende de:* B1
 
-- [ ] **B4 — Denylist del invariante de migraciones.** Añadir `!d.endsWith("_notificacion")` a
+- [x] **B4 — Denylist del invariante de migraciones.** Añadir `!d.endsWith("_notificacion")` a
       `tests/integration/db/zonas-migration.test.ts`.
       *Hecho:* `zonas-migration.test.ts` en verde. **Única** edición permitida a un test
       existente en esta feature.
       *Depende de:* B1
 
-- [ ] **B5 — Test de migración (R1–R11).** `tests/integration/db/notificacion-migration.test.ts`
+- [x] **B5 — Test de migración (R1–R11).** `tests/integration/db/notificacion-migration.test.ts`
       al estilo `zonas-migration` / `chat-*-migration`: regex sobre `migration.sql` y
       `down.sql`. Cubre columnas, **las dos columnas de alcance y sus FK `ON DELETE CASCADE`**,
       `CHECK` XOR, `CHECK` de marca, los índices parciales, el índice de dedupe con
@@ -75,7 +75,7 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       *Hecho:* R1, R2, R4, R5, R7, R8, R9, R10, R11 mapeados.
       *Depende de:* B1, B2 · `[P]` con B3/B4
 
-- [ ] **B6 — Repository + predicado de visibilidad.** *(CRECIÓ con F1.4-1)*
+- [x] **B6 — Repository + predicado de visibilidad.** *(CRECIÓ con F1.4-1)*
       `INotificacionRepository` + `NotificacionRepository`: `crear` (acepta `tx`),
       `existeNoLeidaPara` (dedupe, §1.4), `listarParaUsuario`, `marcarLeida` (upsert),
       `marcarTodasLeidas` (`ON CONFLICT DO NOTHING`), `descartar`, `findVisibleParaActor`, y
@@ -85,7 +85,7 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       (`grep` no encuentra un segundo filtro de alcance).
       *Depende de:* A1, A3, B3
 
-- [ ] **B7 — Tests del alcance (R13–R17).** *(NUEVA — la trae F1.4-1)*
+- [x] **B7 — Tests del alcance (R13–R17).** *(NUEVA — la trae F1.4-1)*
       `tests/unit/repositories/notificacion-visibilidad.test.ts`: alcance NULL visible a todo
       el rol (R13); `tienda_id` con valor visible sólo a esa tienda (R14); **caso negativo**:
       un `adminTienda` NO ve el rechazo de otra tienda (R15); `zona_id` con valor visible sólo
@@ -94,13 +94,13 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       *Hecho:* R13, R14, R15, R16, R17 mapeados uno a uno, con nombres de comportamiento.
       *Depende de:* B6
 
-- [ ] **B8 — Service.** `INotificacionService` + `NotificacionService`: aplica el predicado,
+- [x] **B8 — Service.** `INotificacionService` + `NotificacionService`: aplica el predicado,
       la ventana de 30 días y el límite de 50, deriva `read` y `noLeidas`, devuelve
       `forbidden`/`not_found` de dominio. Repositorio inyectado por constructor.
       *Hecho:* testeable sin DB (repo mockeado).
       *Depende de:* B6
 
-- [ ] **B9 — Tests unitarios del service (R3, R28–R33, R35, R37).**
+- [x] **B9 — Tests unitarios del service (R3, R28–R33, R35, R37).**
       `tests/unit/services/notificacion-service.test.ts`: exclusión de descartadas, ventana de
       30 días y límite 50 (R29), orden, conteo de no leídas (R30), `forbidden` sobre
       notificación no visible (R35), idempotencia (R37), aislamiento entre dos usuarios del
@@ -108,13 +108,13 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       *Hecho:* R3, R28, R29, R30, R31, R32, R33, R35, R37 mapeados.
       *Depende de:* B8
 
-- [ ] **B10 — Server Actions.** `lib/actions/notificaciones.ts`: las 4 del design §3.2–§3.5 +
+- [x] **B10 — Server Actions.** `lib/actions/notificaciones.ts`: las 4 del design §3.2–§3.5 +
       `notificarCargaMasivaTerminada` (§3.6), con `resolveActorFromSession` +
       `withErrorHandler` + `toActionError` y `deps` inyectables.
       *Hecho:* firmas idénticas a las del design; ninguna ruta API nueva (R38).
       *Depende de:* B8
 
-- [ ] **B11 — Tests de integración de las acciones (R34, R36, R38, R39).**
+- [x] **B11 — Tests de integración de las acciones (R34, R36, R38, R39).**
       `tests/integration/actions/notificaciones-action.test.ts` con actor y service falsos: sin
       sesión → `unauthenticated` sin tocar el service (R34); id/contadores inválidos →
       `validation_error` (R36); las acciones son Server Actions, no rutas (R38);
@@ -123,7 +123,7 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       *Hecho:* R34, R36, R38, R39 mapeados.
       *Depende de:* B10
 
-- [ ] **B12 — Emisor central + dedupe.** `lib/notificaciones/emitir.ts`: una función por evento
+- [x] **B12 — Emisor central + dedupe.** `lib/notificaciones/emitir.ts`: una función por evento
       (`emitirOrdenRechazada`, `emitirCargaMasivaTerminada`, `emitirPostulacionPendiente`,
       `emitirCierreDiaPorAprobar`), tipo `NotificacionEmisor`, textos de §4.6 y guardia de
       dedupe (§1.4) con captura de la violación de unicidad como no-op.
@@ -131,7 +131,7 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       cubre R27 (segunda emisión con una no leída ⇒ no crea fila).
       *Depende de:* B6
 
-- [ ] **B13 — Productor: orden rechazada (R18–R21).** *(CRECIÓ: 4 filas con alcance)*
+- [x] **B13 — Productor: orden rechazada (R18–R21).** *(CRECIÓ: 4 filas con alcance)*
       Enganchar en `appendCambioEstado` como **quinto parámetro inyectable con default real**,
       filtrando `destino === "rechazada" && origenTipo === "gestion"`; emisión **transaccional**
       (F1.4-3). Emite 4 filas: `maestro`, `admin`, `adminTienda` con `tienda_id =
@@ -143,14 +143,14 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       (R20), fallo de emisión ⇒ sin cambio de estado (R21).
       *Depende de:* B12
 
-- [ ] **B14 — Productor: postulación pendiente (R23, R25).** `[P]` con B13/B15/B16
+- [x] **B14 — Productor: postulación pendiente (R23, R25).** `[P]` con B13/B15/B16
       `PostulacionMensajeroService.postular`, rama de éxito, best-effort. Dos filas
       (`maestro`, `admin`) sin alcance.
       *Hecho:* test que verifica las dos filas y que un emisor que lanza **no** cambia el
       resultado `{ status: "ok" }` de la postulación (R25).
       *Depende de:* B12
 
-- [ ] **B15 — Productor: cierre de día por aprobar (R24, R25).** `[P]` con B13/B14/B16
+- [x] **B15 — Productor: cierre de día por aprobar (R24, R25).** `[P]` con B13/B14/B16
       Los **tres** caminos de éxito de `CierreDiaService.solicitarCierre`, best-effort. Tres
       filas: `maestro`, `admin` y `adminSatelite` con `zona_id` = zona destino del cierre.
       *Hecho:* test de los tres caminos (`crearCierre`, `vencido→solicitado`,
@@ -158,13 +158,13 @@ La frontera contractual es `lib/types/notificacion.ts` (DTO) + las firmas de
       re-solicitud (R27).
       *Depende de:* B12
 
-- [ ] **B16 — Productor: carga masiva terminada (R22, R25).** `[P]` con B13/B14/B15
+- [x] **B16 — Productor: carga masiva terminada (R22, R25).** `[P]` con B13/B14/B15
       `BulkOrdenService.cargarViaApi`: emisión server-side al final, best-effort, destinatario
       = usuario ejecutor. (La vía UI ya está cubierta por la acción de B10/B11.)
       *Hecho:* test de la vía API y del emisor que lanza.
       *Depende de:* B12, B10
 
-- [ ] **B17 — Guardia de alcance (R26).** Test que verifica que la feature no introduce cron:
+- [x] **B17 — Guardia de alcance (R26).** Test que verifica que la feature no introduce cron:
       `vercel.json` sin entradas nuevas, `JobTipo` sin valores nuevos, sin route handler nuevo
       bajo `app/api/`.
       *Hecho:* R26 mapeado a un test explícito (D2).
