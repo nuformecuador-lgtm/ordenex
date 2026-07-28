@@ -124,4 +124,17 @@ describe("buildXlsxRows (feature 143)", () => {
     expect(fuente).not.toMatch(/^\s*import\s+.*from\s+["']exceljs["']/m);
     expect(fuente).toMatch(/await import\(["']exceljs["']\)/);
   });
+
+  it("R19: el componente que descarga NO importa exceljs (lo carga buildXlsxRows)", () => {
+    // El invariante de bundle es que `exceljs` entre SOLO por el import dinámico
+    // interno de `buildXlsxRows`. El componente puede importar `xlsx-template`
+    // estáticamente (módulo liviano) sin arrastrarlo.
+    const fuente = readFileSync(
+      "app/(app)/ordenes/_components/OrdenesCargaPreview.tsx",
+      "utf-8",
+    );
+    expect(fuente).not.toMatch(/from\s+["']exceljs["']/);
+    expect(fuente).not.toMatch(/import\(["']exceljs["']\)/);
+    expect(fuente).not.toMatch(/require\(["']exceljs["']\)/);
+  });
 });

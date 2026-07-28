@@ -19,7 +19,11 @@ import {
   nombreArchivoErrores,
 } from "@/app/(app)/ordenes/_components/carga-masiva-export-errores";
 import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
-import { XLSX_MIME } from "@/lib/utils/xlsx-template";
+// Import ESTÁTICO a propósito: `xlsx-template` es liviano y NO arrastra la
+// librería de generación XLSX, que `buildXlsxRows` carga con import dinámico por
+// dentro (R19). Un `await import()` aquí no aplazaría nada, porque `XLSX_MIME` ya
+// obliga a resolver el mismo módulo en este componente.
+import { XLSX_MIME, buildXlsxRows } from "@/lib/utils/xlsx-template";
 import { useToast } from "@/hooks/useToast";
 
 export interface OrdenesCargaPreviewProps {
@@ -71,9 +75,9 @@ export function OrdenesCargaPreview({
    * `motivo_error` al final, para corregirlas y volver a subir el archivo.
    *
    * Todo ocurre EN EL NAVEGADOR: los datos ya están en el estado del cliente, así
-   * que no se hace ninguna petición de red (R9). `buildXlsxRows` llega por import
-   * dinámico para no meter `exceljs` en el bundle inicial (R19). Solo `.xlsx`:
-   * no hay variante CSV (R21).
+   * que no se hace ninguna petición de red (R9). `exceljs` no entra en el bundle
+   * inicial porque `buildXlsxRows` lo carga dinámicamente por dentro (R19). Solo
+   * `.xlsx`: no hay variante CSV (R21).
    */
   async function handleDescargarErrores() {
     // R11/R12: sin filas con error no hay nada que generar; una generación en
@@ -81,7 +85,6 @@ export function OrdenesCargaPreview({
     if (errores.length === 0 || generandoErrores) return;
     setGenerandoErrores(true);
     try {
-      const { buildXlsxRows } = await import("@/lib/utils/xlsx-template");
       const buffer = await buildXlsxRows(
         ERRORES_EXPORT_FIELDS,
         construirFilasErrorExport(errores, filas ?? []),
