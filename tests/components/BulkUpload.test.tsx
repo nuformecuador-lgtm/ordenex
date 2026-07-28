@@ -13,11 +13,15 @@ const XLSX_MIME =
 
 // Mock del generador XLSX: el componente lo carga con import dinámico (R6b). Se
 // aísla de exceljs para observar el flujo de descarga de forma determinista.
+// Feature 148/T7/T21: el MIME ya NO es una constante local del componente, sino un
+// export del generador; el doble debe reexponerlo con el MISMO valor para que la
+// descarga de plantilla siga produciendo idéntico Blob (R13, no regresión).
 const { buildXlsxTemplateMock } = vi.hoisted(() => ({
   buildXlsxTemplateMock: vi.fn<(fields: TemplateField[]) => Promise<ArrayBuffer>>(),
 }));
 vi.mock("@/lib/utils/xlsx-template", () => ({
   buildXlsxTemplate: buildXlsxTemplateMock,
+  XLSX_MIME: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }));
 
 const fields: TemplateField[] = [

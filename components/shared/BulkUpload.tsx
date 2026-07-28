@@ -98,10 +98,6 @@ const FILE_TYPE_MAP: Record<UploadFileType, { ext: string; mimes: string[] }> = 
 const DEFAULT_TEMPLATE_NAME = "plantilla.xlsx";
 const DEFAULT_LABEL = "Archivo a cargar";
 
-/** MIME de un libro XLSX (OpenXML), para el Blob de descarga (R6). */
-const XLSX_MIME =
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-
 /** Extrae la extensión (en minúsculas, con punto) del nombre de archivo. */
 function getExtension(fileName: string): string {
   const dot = fileName.lastIndexOf(".");
@@ -204,7 +200,11 @@ export function BulkUpload({
     setIsGeneratingTemplate(true);
     try {
       // Import dinámico (R6b): exceljs queda fuera del bundle inicial del componente.
-      const { buildXlsxTemplate } = await import("@/lib/utils/xlsx-template");
+      // El MIME viaja con el generador (feature 148/T7): una sola definición para
+      // todos los consumidores de XLSX, sin constante local duplicada.
+      const { buildXlsxTemplate, XLSX_MIME } = await import(
+        "@/lib/utils/xlsx-template"
+      );
       const buffer = await buildXlsxTemplate(fields);
       const blob = new Blob([buffer], { type: XLSX_MIME });
       const url = URL.createObjectURL(blob);
