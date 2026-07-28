@@ -17,8 +17,19 @@ export interface ChatMensajeDTO {
   /** Feature 121: coordenadas de un mensaje de ubicacion; `null` en los demas tipos. */
   latitud: number | null;
   longitud: number | null;
+  /** Motivo del ultimo `failed` reportado por Meta; `null` si nunca fallo o ya se reconcilio. */
+  errorCodigo: number | null;
+  errorTitulo: string | null;
+  errorDetalle: string | null;
   ocurridoAt: Date;
   createdAt: Date;
+}
+
+/** Motivo del fallo a persistir junto al estado (viene del `errors[0]` del webhook). */
+export interface ChatMensajeErrorInput {
+  codigo: number;
+  titulo: string | null;
+  detalle: string | null;
 }
 
 /** Datos de un mensaje ENTRANTE a insertar (R6). `estado` no aplica a entrantes. */
@@ -59,11 +70,22 @@ export interface IChatMensajeRepository {
    * R7/R8: actualiza el `estado` del saliente identificado por `waMessageId`. Devuelve el
    * numero de filas afectadas: 0 = el saliente aun no esta registrado (el status llego
    * antes; no rompe el 200, R9).
+   *
+   * `error` (opcional) persiste el motivo que Meta adjunta a un `failed`. Se pasa `null`
+   * explicito para LIMPIARLO cuando un mensaje vuelve a un estado sano (p. ej. un reintento
+   * que sale bien): asi la columna nunca conserva el motivo de un fallo ya superado.
    */
   actualizarEstadoPorWaMessageId(
     waMessageId: string,
     estado: ChatMensajeEstado,
+    error?: ChatMensajeErrorInput | null,
   ): Promise<number>;
+
+  /**
+   * Busca un saliente por su `wa_message_id` (el status del webhook solo trae ese id, y el
+   * job de reintento necesita el id interno del mensaje). `null` si no esta registrado.
+   */
+  findByWaMessageId(waMessageId: string): Promise<ChatMensajeDTO | null>;
 
   /**
    * D1/R21: reconcilia un saliente `queued` tras un reintento exitoso: fija su `waMessageId`

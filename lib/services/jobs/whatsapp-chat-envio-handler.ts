@@ -12,8 +12,11 @@ import type { JobHandler } from "@/lib/interfaces/services/IJobQueueService";
 import { ChatWhatsappService } from "@/lib/services/ChatWhatsappService";
 import { ChatConversacionRepository } from "@/lib/repositories/ChatConversacionRepository";
 import { ChatMensajeRepository } from "@/lib/repositories/ChatMensajeRepository";
+import { PlantillaMensajeRepository } from "@/lib/repositories/PlantillaMensajeRepository";
+import { OrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
 import { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
 import { loadWhatsappConfig } from "@/lib/config/whatsapp";
+import { consoleLogger } from "@/lib/services/whatsapp/chat-logger";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 
 const payloadSchema = z.object({
@@ -28,6 +31,13 @@ export function buildWhatsappChatEnvioService(): ChatWhatsappService {
     conversacionRepo: new ChatConversacionRepository(prisma),
     mensajeRepo: new ChatMensajeRepository(prisma),
     client: new WhatsappCloudClient({ config }),
+    // Necesarios para reenviar un saliente `tipo=plantilla` COMO plantilla (misma cadena de
+    // resolucion que `EnvioPlantillaWhatsappService`). Sin ellos el reintento de una plantilla
+    // lanza en vez de degradarla a texto libre.
+    plantillaRepo: new PlantillaMensajeRepository(prisma),
+    ordenReader: new OrdenEnvioReader(prisma),
+    idiomaPorDefecto: config.templateIdioma,
+    logger: consoleLogger,
   });
 }
 
