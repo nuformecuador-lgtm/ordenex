@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { Modal } from "@/components/shared/Modal";
+import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { useToast } from "@/hooks/useToast";
 import {
   devolverATienda,
@@ -41,39 +44,79 @@ export function DevolverATiendaModal({
 }: DevolverATiendaModalProps) {
   const toast = useToast();
   const sinOrdenes = ordenes.length === 0;
+  // Feature 148 (T14, §9.1/§9.7): fase "resultado". El lote de esta operación existe
+  // SOLO en la UI (el service es por-orden), así que se acumulan aquí los ids con
+  // `status === "ok"`; el service NO se toca (R27).
+  const [resultado, setResultado] = useState<{
+    ordenIds: string[];
+    mensaje: string;
+  } | null>(null);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setResultado(null);
+  }
 
   async function handleConfirm() {
     // R15: por cada orden seleccionada se ejecuta el envío (loop await),
     // acumulando los resultados no-"ok" para no ocultar un fallo parcial.
     const errores: DevolverATiendaActionResult[] = [];
+    const enviadasIds: string[] = [];
     for (const orden of ordenes) {
       const result = await devolverATienda({ ordenId: orden.id });
       if (result.status !== "ok") errores.push(result);
+      else enviadasIds.push(orden.id); // R23: solo las efectivamente enviadas
     }
     if (errores.length > 0) {
       throw errores[0]; // canal de error del Modal (mismo patrón que RutearSateliteModal)
     }
 
-    toast.success(`${ordenes.length} orden(es) enviada(s) a la tienda.`);
-    onSuccess();
+    const mensaje = `${ordenes.length} orden(es) enviada(s) a la tienda.`;
+    toast.success(mensaje);
+    // El envío ya está cometido → fase "resultado"; `onSuccess()` se difiere al cierre.
+    setResultado({ ordenIds: enviadasIds, mensaje });
   }
 
   function handleError(error: unknown) {
     toast.error(devolucionOrigenErrorMessage(error));
   }
 
+  /** Cierre de la fase "resultado" por cualquier vía: recién ahí refresca el padre. */
+  function handleOpenChange(next: boolean) {
+    if (!next && resultado) {
+      setResultado(null);
+      onOpenChange(false);
+      onSuccess();
+      return;
+    }
+    onOpenChange(next);
+  }
+
   return (
     <Modal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="Enviar a la tienda"
-      description={`Se enviarán ${ordenes.length} orden(es) a su tienda de origen.`}
+      description={
+        resultado
+          ? "Órdenes enviadas. Descarga el manifiesto del lote antes de cerrar."
+          : `Se enviarán ${ordenes.length} orden(es) a su tienda de origen.`
+      }
       confirmLabel="Enviar a la tienda"
+      cancelLabel={resultado ? "Cerrar" : "Cancelar"}
       confirmDisabled={sinOrdenes}
+      hideConfirm={resultado !== null}
+      closeOnConfirm={false}
       onConfirm={handleConfirm}
       onError={handleError}
     >
-      {sinOrdenes ? (
+      {resultado ? (
+        <ManifiestoResultado
+          mensaje={resultado.mensaje}
+          flujo="envio_tienda"
+          seleccion={{ ordenIds: resultado.ordenIds }}
+        />
+      ) : sinOrdenes ? (
         <p
           role="alert"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
