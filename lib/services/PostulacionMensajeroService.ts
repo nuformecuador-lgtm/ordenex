@@ -14,6 +14,11 @@ import {
   type PostularMensajeroResult,
 } from "@/lib/types/postulacion-mensajero";
 import { MIME_EXTENSION } from "@/lib/config/postulacion";
+import {
+  emitirBestEffort,
+  notificadorNoOp,
+  type PostulacionNotificador,
+} from "@/lib/notificaciones/notificadores";
 
 /** Rol al que se asigna toda postulacion (R12). */
 const ROL_MENSAJERO = "mensajero";
@@ -27,6 +32,15 @@ export class PostulacionMensajeroService implements IPostulacionMensajeroService
   constructor(
     private readonly repo: IPostulacionRepository,
     private readonly storage: IFileStorage,
+    /**
+     * Feature 146 (R23/R25): notificador de "postulacion pendiente". El DEFAULT es NO-OP a
+     * proposito: el composition root (`lib/actions/postulacion-mensajero.ts`) inyecta el
+     * notificador real, y un service construido sin cablear —un doble de test— no puede tocar
+     * la base por accidente. BEST-EFFORT: corre tras la escritura atomica y la subida de
+     * documentos, y absorbe su propio fallo, porque una postulacion ya creada con sus
+     * documentos no puede tirarse por un aviso perdido.
+     */
+    private readonly notificar: PostulacionNotificador = notificadorNoOp,
   ) {}
 
   async postular(command: PostularMensajeroCommand): Promise<PostularMensajeroResult> {
@@ -63,6 +77,7 @@ export class PostulacionMensajeroService implements IPostulacionMensajeroService
     const usuarioId = randomUUID();
     const subidos: string[] = [];
     const documentos: MensajeroDocumentoInput[] = [];
+    let creado = false;
 
     try {
       for (const tipo of DOCUMENTO_TIPOS) {
@@ -97,7 +112,7 @@ export class PostulacionMensajeroService implements IPostulacionMensajeroService
         documentos,
       );
 
-      return { status: "ok" };
+      creado = true;
     } catch (error) {
       // R24: sin cuenta parcial ni archivos huerfanos: limpiar lo subido.
       await this.storage.remove(subidos);
@@ -107,5 +122,20 @@ export class PostulacionMensajeroService implements IPostulacionMensajeroService
       }
       return { status: "error" };
     }
+
+    // Feature 146/R23/R25: dos filas `warning` sin alcance (maestro + admin). Va FUERA del
+    // try/catch de la postulacion a proposito: si estuviera dentro, un notificador que lanza
+    // dispararia la limpieza de documentos (R24) y convertiria un alta correcta en un error.
+    // El notificador real ya absorbe su propio fallo; esto lo blinda tambien frente a uno
+    // inyectado que no lo haga.
+    if (creado) {
+      await emitirBestEffort("postulacion_mensajero_pendiente", () =>
+        this.notificar({
+          postulanteId: usuarioId,
+          nombre: [command.nombre, command.primerApellido].filter(Boolean).join(" ").trim(),
+        }),
+      );
+    }
+    return { status: "ok" };
   }
 }

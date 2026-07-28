@@ -1621,8 +1621,8 @@
     {
       "id": 143,
       "name": "descargar en Excel las filas con error de la carga masiva",
-      "description": "Frontend. En el resumen de la carga masiva, boton para descargar un xlsx con TODAS las filas cuyo resultado sea 'error' (cualquier motivo), con el mismo formato de la plantilla vigente para corregir y volver a cargar sin retrabajo. Reusa el grupo 'errores' de clasificarBulkSummary (fila, numRemision, errores) cruzado por numero de linea con las FilaParseada que ya viven en el cliente (carga-masiva-parser/chunks), y el generador xlsx de lib/utils/xlsx-template (exceljs, import dinamico). Sin backend nuevo. Consumidores: OrdenesCargaResumen / OrdenesConErrorTabla. ABIERTO: si el motivo del error viaja en una hoja aparte o en una columna extra al final (una columna extra rompe el round-trip descargar->subir del parser).",
-      "status": "pending",
+      "description": "Frontend. En el resumen de la carga masiva, boton para descargar un xlsx con TODAS las filas cuyo resultado sea 'error' (cualquier motivo), con el mismo formato de la plantilla vigente para corregir y volver a cargar sin retrabajo. Reusa el grupo 'errores' de clasificarBulkSummary (fila, numRemision, errores) cruzado por numero de linea con las FilaParseada que ya viven en el cliente (carga-masiva-parser/chunks), y el generador xlsx de lib/utils/xlsx-template (exceljs, import dinamico). Sin backend nuevo. Consumidores: OrdenesCargaResumen / OrdenesConErrorTabla. CERRADO (gate 2026-07-27): el motivo viaja en una columna extra motivo_error al final con prefijo de linea (Fila N - campo: mensaje), una sola hoja, valores crudos del archivo original; solo xlsx, solo en la vista previa (OrdenesCargaPreview). El round-trip NO se rompe: findMissingHeaders no tiene lista blanca y filaCargaSchema es z.object sin .strict(), asi que motivo_error se descarta en silencio; fijado con R14/R15/R16 + test de round-trip.",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",
@@ -1651,11 +1651,13 @@
     {
       "id": 146,
       "name": "campana de notificaciones funcional",
-      "description": "Fullstack. Conecta components/shared/NotificationsBell.tsx (hoy montada en PageHeader con EXAMPLE_NOTIFICATIONS quemadas y estado solo local) a datos reales. Backend: modelo notificacion (destinatario usuario/rol, tipo alert|box|warning, descripcion, anexo, leida_at, entidad de origen) con migracion + down.sql + RLS; productores en los eventos de dominio importantes; Server Actions de listar / marcar leida / marcar todas / descartar. Frontend: la campana consume la accion con SWR y deja de tener estado quemado. Uno de los avisos NO es un evento de dominio y exige barrido periodico: 'ordenes con mas de 1 dia sin asignacion' (sin mensajero asignado pasado el umbral) -> cron + job dedicado, patron procesar-devueltas-sla (vercel.json) sobre la cola de jobs (JobTipo, feature 90); umbral configurable por env, sin re-notificar la misma orden. ABIERTO (define el alcance): resto de eventos que notifican y a que rol (candidatos: rechazo, carga masiva terminada, postulacion pendiente, cierre por aprobar, novedad); si el reloj del umbral corre desde la creacion de la orden o desde que quedo asignable; y si la actualizacion de la campana es polling SWR o Supabase Realtime.",
-      "status": "pending",
+      "description": "Fullstack. Conecta components/shared/NotificationsBell.tsx (hoy montada en PageHeader con EXAMPLE_NOTIFICATIONS quemadas y estado solo local) a datos reales. Backend: tablas 'notificacion' (una fila por rol destinatario, con alcance opcional tienda_id/zona_id) y 'notificacion_lectura' (estado leida/descartada POR USUARIO), migracion + down.sql + RLS habilitada sin policies (patron del repo: sesion propia, sin auth.uid()); 5 Server Actions (listar / marcar leida / marcar todas / descartar / notificar carga masiva terminada), todas autorizadas por un unico predicadoVisibilidad(actor). Frontend: la campana consume las acciones con SWR (refresco 60s + revalidacion al abrir el popover), badge de no leidas y estado vacio; NotificationItem queda como alias de NotificacionDTO. CUATRO productores decididos por el humano: orden rechazada (transaccional dentro de appendCambioEstado, filtrando destino=rechazada && origen_tipo=gestion para que el escalado SLA NO notifique), carga masiva terminada, postulacion de mensajero pendiente y cierre de dia por aprobar (los tres best-effort, notificador no-op por defecto e inyeccion del real en los composition roots). Destinatarios: rechazo -> maestro + admin + el adminTienda dueno + el adminSatelite de la zona; postulacion -> maestro + admin; cierre -> maestro + admin + adminSatelite; carga masiva -> el usuario ejecutor. FUERA DE ALCANCE por decision explicita del humano: el aviso de 'ordenes con mas de 1 dia sin asignacion' y con el todo el barrido periodico (sin cron nuevo, sin JobTipo, sin env de umbral). Deudas conocidas: sin purga (la ventana de 30 dias es solo de consulta), sin paginacion (PAGE_SIZE=50), y marcarNotificacionLeida sin control por elemento en la UI. Implementada + reviewer APROBADO-CON-NOTAS (0 bloqueantes, 9 notas menores).",
+      "spec_path": "specs/146-campana-notificaciones",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
+      "branch": "feature/146-campana-notificaciones",
       "depends_on": null
     },
     {
@@ -1694,8 +1696,11 @@
     {
       "id": 150,
       "name": "tamano de hoja seleccionable en las etiquetas",
+      "spec_path": "specs/150-tamano-hoja-etiquetas",
+      "branch": "feature/150-tamano-hoja-etiquetas",
+      "status_note": "IMPLEMENTADA + reviewer APROBADO (0 bloqueantes, 4 menores) el 2026-07-28. Decisiones del humano: D1 una etiqueta por pagina escalada (sin mosaico), D2 tamano elegido en cada descarga sin persistencia (default 100x100 mm), D3 solo el generador de cliente -> el server-side de la 136 queda en 100x100 y NO se toca, sin backend/migracion/RLS y sin tocar el contrato publico de integradores (feature 88). Modulos nuevos: lib/config/etiquetas-hoja.ts (catalogo puro, importable desde cliente) y app/(app)/ordenes/_components/etiquetas-layout.ts (factor s = lado_menor/100 con centrado). Medido en worktree limpio desde origin/dev @ 55b0cd4: typecheck 0, lint 0 errores, 522 archivos / 5349 tests / 0 fallos (+41 sobre baseline 518/5308, delta de rotos = 0), ./init.sh verde. 21/21 requisitos con test real; 6 mutaciones detectadas (2 reproducidas + 4 propias del reviewer).",
       "description": "Fullstack. Hoy la etiqueta es una pagina cuadrada de 100x100 mm hardcodeada en los DOS generadores: el de cliente app/(app)/ordenes/_components/etiquetas-pdf.ts (feature 32) y el consolidado server-side lib/pdf/etiquetas-pdf-lote.ts (feature 136). Se agrega un catalogo de tamanos de hoja compartido (100x100 mm, 4x6 in, A4, carta) en lib/config/etiquetas.ts, un selector en el flujo de descarga y el layout parametrizado por tamano en ambos generadores (margenes, tipografia, QR y codigo de barras escalan). ABIERTO: en hojas grandes (A4/carta), una etiqueta por pagina escalada o mosaico de N por hoja; y si el tamano se recuerda por usuario o se elige en cada descarga.",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",

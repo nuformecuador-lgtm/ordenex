@@ -145,6 +145,21 @@ describe("OrdenesCargaResumen — DataTable del resumen (R22, R23)", () => {
     expect(screen.getByText("María Ruiz")).toBeInTheDocument();
   });
 
+  it("R20 (feature 143): el paso posterior a la carga real NO ofrece descargar filas con error", async () => {
+    // Decisión de gate G-1: la descarga vive SOLO en la vista previa (antes de
+    // crear nada). Este paso no lista filas con error ni ofrece exportarlas.
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(
+      screen.queryByRole("button", { name: /descargar filas con error/i }),
+    ).toBeNull();
+    const descargas = screen
+      .queryAllByRole("button")
+      .filter((b) => /descargar/i.test(b.textContent ?? ""));
+    expect(descargas).toHaveLength(0);
+  });
+
   it("invoca resumenCargaMasiva con los numRemisiones recibidos por props", async () => {
     render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
     await screen.findByText("REM-0001");

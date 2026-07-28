@@ -14,6 +14,9 @@ import { Download, FileSpreadsheet, UploadCloud, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+// Feature 143: el MIME del XLSX vive junto a los constructores del binario, para
+// que plantilla y export de errores compartan una única definición.
+import { XLSX_MIME } from "@/lib/utils/xlsx-template";
 
 /** Definición parametrizable de una columna de la plantilla (R1, R5, R6). */
 export interface TemplateField {
@@ -200,11 +203,10 @@ export function BulkUpload({
     setIsGeneratingTemplate(true);
     try {
       // Import dinámico (R6b): exceljs queda fuera del bundle inicial del componente.
-      // El MIME viaja con el generador (feature 148/T7): una sola definición para
-      // todos los consumidores de XLSX, sin constante local duplicada.
-      const { buildXlsxTemplate, XLSX_MIME } = await import(
-        "@/lib/utils/xlsx-template"
-      );
+      // El MIME NO viaja por aquí: es el `XLSX_MIME` exportado que se importa
+      // arriba de forma estática (una sola definición para los tres consumidores
+      // de XLSX; features 143 y 148 lo unificaron en `lib/utils/xlsx-template`).
+      const { buildXlsxTemplate } = await import("@/lib/utils/xlsx-template");
       const buffer = await buildXlsxTemplate(fields);
       const blob = new Blob([buffer], { type: XLSX_MIME });
       const url = URL.createObjectURL(blob);
