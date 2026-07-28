@@ -225,18 +225,15 @@
   `ModalAbierto`, montaje del modal, `onSuccess = handleSuccess`.
   **Hecho:** la acción aparece con una selección de esos estados y no aparece en los demás.
 
-- [ ] **T6.3 — Grupo `asignadas` en la satélite.** [P con T6.1] — **BLOQUEADA para el
-  `frontend_dev`: toca `lib/services` (backend).**
+- [x] **T6.3 — Grupo `asignadas` en la satélite.** [P con T6.1] — ejecutada por el
+  `backend_dev` (toca `lib/services`, fuera del alcance del `frontend_dev`).
   `RecepcionSateliteService.listar` + `IRecepcionSateliteService` + `page.tsx`: nuevo bucket
   `asignadas` (`por_recoger` de la zona).
-  **Hecho:** unit del service verifica la clasificación del nuevo bucket.
-  **Estado:** el `frontend_dev` NO la ejecutó (fuera de su alcance: es un service de lectura).
-  La UI ya está lista y consume la prop opcional `asignadas` del módulo; falta ÚNICAMENTE
-  añadir `"por_recoger"` a `estatusValues`, el bucket en el bucle de clasificación, el campo en
-  `IRecepcionSateliteService` y pasarlo desde `page.tsx`. Ver `progress/impl_149_frontend.md` §4.
+  **Hecho:** `tests/unit/services/recepcion-satelite-asignadas.test.ts` verifica la
+  clasificación del nuevo bucket, el scoping por la zona resuelta server-side, que el caso (b)
+  NO entra (R36) y que los cinco buckets previos no se contaminan.
 
 - [x] **T6.4 — Sección y modal de la satélite.** Depende de T6.3 y T6.1.
-  *(UI completa; el alimentador de datos lo aporta T6.3, pendiente.)*
   `RecepcionSateliteModule.tsx`: sección «Asignadas (por recoger)» con selección propia + botón +
   `DeshacerAsignacionSateliteModal.tsx`; sin acción de deshacer en «Por recibir».
   **Hecho:** `router.refresh()` tras éxito.
@@ -303,8 +300,8 @@
 | R32 | T5.1 |
 | R33 | T5.1 |
 | R34 | T6.5 |
-| R35 | T6.5 |
-| R36 | T6.5 |
+| R35 | T6.3 (service/repo: `recepcion-satelite-asignadas.test.ts`) + T6.5 (UI) |
+| R36 | T6.3 + T6.5 |
 | R37 | T6.5 |
 | R38 | T6.5 |
 | R39 | T6.5 |

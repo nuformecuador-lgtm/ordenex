@@ -1,8 +1,9 @@
 # Feature 149 — Bitácora de implementación (BACKEND, F0–F5)
 
 > Rama `feature/149-deshacer-asignacion`, worktree `ordenex-wt-149`, desde `origin/dev @ 55b0cd4`.
-> Alcance de esta bitácora: **F0, F1, F2, F3, F4 y F5** de `specs/149-deshacer-asignacion/tasks.md`.
-> **F6 (UI) NO se tocó**: es del `frontend_dev`. F7 (cierre) es del reviewer/leader.
+> Alcance de esta bitácora: **F0, F1, F2, F3, F4 y F5** de `specs/149-deshacer-asignacion/tasks.md`,
+> **más T6.3** (bucket `asignadas` del módulo satélite, §8: es backend puro y el `frontend_dev`
+> paró correctamente en ella). El resto de F6 (UI) es del `frontend_dev`; F7 es del reviewer/leader.
 
 ---
 
@@ -16,7 +17,8 @@
 | F3 — Servicio | T3.1–T3.3 | ✅ todas |
 | F4 — Tests de servicio y borde | T4.1–T4.14 | ✅ todas |
 | F5 — Integración | T5.1, T5.2 | ✅ todas |
-| F6 — UI | T6.1–T6.5 | ⛔ fuera de alcance (frontend_dev) |
+| F6 — UI | T6.1, T6.2, T6.4, T6.5 | ✅ `frontend_dev` |
+| F6 — UI | **T6.3** (bucket `asignadas`) | ✅ **backend_dev** (2.ª pasada, ver §8) |
 | F7 — Cierre | T7.1, T7.2 | ⛔ fuera de alcance (reviewer/leader) |
 
 ---
@@ -156,7 +158,10 @@ Búsqueda para la 146: `rg "TODO\(146\)"`.
 | R31 | integración | `R23/R31 — EXACTAMENTE una fila de historial por orden, con motivo` |
 | R32 | integración | `R32 — el webhook de estado se encola en la MISMA transaccion` |
 | R33 | integración | `R33: si el append revierte la tx...` y `R33: una orden que pierde la carrera...` |
-| R34–R39 | — | **PENDIENTE: F6 (UI), del `frontend_dev`** (`T6.5`) |
+| R34 | `tests/unit/components/deshacer-asignacion.ui.test.tsx` | T6.5 (`frontend_dev`) |
+| R35 | `tests/unit/services/recepcion-satelite-asignadas.test.ts` (**service, T6.3**) + T6.5 (UI) | `T6.3/R35 — el modulo satelite lista las 'por_recoger' de SU zona` (7 casos: clasificación, scoping server-side, R36, no-contaminación de los 5 buckets previos, sin zona, 2 roles) |
+| R36 | idem + T6.5 | `R36: una 'en_ruta_bodega_satelite' NO cae en 'asignadas'` |
+| R37–R39 | `deshacer-asignacion.ui.test.tsx` | T6.5 (`frontend_dev`) |
 | R40 | `deshacer-asignacion-service.test.ts` | `T4.13/R40 — ningun motivo expone UUIDs ni datos del destinatario` |
 | R41 | `deshacer-asignacion-service.test.ts` + repo test | `T4.14(a)/R41 — esta feature NO notifica al mensajero desasignado` + `R41 (T4.14b) — ancla TODO(146)` |
 
@@ -189,18 +194,59 @@ $ npx prisma migrate status   → "Database schema is up to date!"
 
 ## 7. Pendiente / notas para quien siga
 
-1. **F6 (UI) sin empezar**: `DeshacerAsignacionModal`, cableado de `OrdenesListado`, bucket
-   `asignadas` de `RecepcionSateliteService` y su sección/modal, `deshacer-asignacion-error-messages.ts`
-   y `T6.5`. R34–R39 quedan SIN test hasta entonces: la matriz de `tasks.md` no está completa todavía.
-   El backend ya expone todo lo que la UI necesita: `deshacerAsignacion(input)` en
-   `lib/actions/deshacer-asignacion.ts`, con `status` ∈ `ok | forbidden | sin_zona |
-   validation_error | conflict | unauthenticated` y motivos tipados en
-   `lib/services/mensajes-deshacer-asignacion.ts` (la UI debe traducir ESAS constantes, no literales).
-2. **`RecepcionSateliteService.listar` no se tocó** (T6.3 es de F6): hoy `/recepcion-satelite` aún
-   no lista las `por_recoger` de la zona.
-3. **Desviación menor y consciente respecto de `design.md` §1**: el catálogo de estados
+1. **F6 cerrada**: T6.1/T6.2/T6.4/T6.5 por el `frontend_dev` y **T6.3 por el backend** (§8).
+   R34–R39 ya tienen test. Queda F7 (cierre del reviewer/leader).
+2. **Desviación menor y consciente respecto de `design.md` §1**: el catálogo de estados
    (`findEstatusIdByValue`) se resuelve en el paso 5 y no en el 8, porque `findOrigenesReversion`
    necesita el `estatus_id` ACTUAL de cada orden y no su `value`. El orden de las GUARDAS de negocio
    no cambia, y `validation_error` por seed incompleto sigue ocurriendo antes de cualquier escritura.
-4. **Un `UPDATE` por orden** (no uno con `IN (...)`): el destino es POR ORDEN (cada una vuelve a la
+3. **Un `UPDATE` por orden** (no uno con `IN (...)`): el destino es POR ORDEN (cada una vuelve a la
    bodega de la que salió). Todos dentro de UNA sola `$transaction`.
+
+
+---
+
+## 8. Cierre de T6.3 — bucket `asignadas` del módulo satélite (2.ª pasada del backend)
+
+El `frontend_dev` cerró F6 salvo T6.3 y paró bien: exige `lib/services`, que es backend. La
+sección «Asignadas (por recoger)» del módulo existía pero se renderizaba VACÍA. Se implementó
+respetando el contrato que dejó en `progress/impl_149_frontend.md` §4 (prop opcional
+`asignadas?: RecepcionSateliteDTO[]`), sin obligarlo a rehacer UI.
+
+### Cambios
+| Archivo | Cambio |
+| --- | --- |
+| `lib/services/RecepcionSateliteService.ts` | `const ESTADO_ASIGNADA = "por_recoger"`; añadido a `findRecepcionSateliteByZona(zonaId, [...])`; bucket `asignadas` en el MISMO bucle de clasificación; `asignadas: []` en la rama `sinZona` |
+| `lib/interfaces/services/IRecepcionSateliteService.ts` | `asignadas: RecepcionSateliteDTO[]` en `ListarRecepcionSateliteServiceResult` |
+| `lib/types/recepcion-satelite.ts` | `asignadas` en `ListarRecepcionSateliteResult` (el tipo que reenvía la Server Action) |
+| `app/(app)/recepcion-satelite/page.tsx` | `asignadas={result.asignadas}` al módulo |
+| `tests/unit/services/recepcion-satelite-asignadas.test.ts` **[NUEVO]** | 7 casos (ver matriz, R35/R36) |
+| `tests/unit/services/recepcion-satelite-service.test.ts` | la aserción del contrato de `findRecepcionSateliteByZona` pasa de CINCO a SEIS estados; `asignadas: []` en el caso `sinZona` |
+| `tests/unit/actions/recepcion-satelite-action.test.ts`, `tests/components/RecepcionSatelitePage.test.tsx` | dobles del service completados con `asignadas: []` |
+
+**Sin cambios en repo ni DTO**: `findRecepcionSateliteByZona(zonaId, estatusValues)` ya acepta N
+estados y `RecepcionSateliteRow`/`RecepcionSateliteDTO` ya traen todo lo que la tabla renderiza.
+Cero consultas nuevas: es el MISMO `findMany`, con un `value` más en el `IN`.
+
+### Scoping por zona (decisión D1)
+- La zona sale de `repo.findUsuarioZonaId(actor.usuarioId)` (SERVER-SIDE): el cliente no la elige,
+  no hay parámetro por el que pasarla. Aserto: `findUsuarioZonaId` recibe el `usuarioId` del actor
+  y el ÚNICO argumento de zona de `findRecepcionSateliteByZona` es el resuelto ahí.
+- El repo filtra `where: { zonaId, deletedAt: null, estatus: { value: { in: [...] } } }`: una orden
+  de otra zona no puede aparecer en el bucket.
+- `rol !== adminSatelite` → `forbidden` ANTES de resolver zona o leer órdenes.
+- `adminSatelite` sin zona → `asignadas: []` y CERO consultas de órdenes.
+- **Defensa en profundidad**: aunque el listado se filtrara mal, ejecutar la reversión pasa por
+  `DeshacerAsignacionService` (rol + zona propia + destino derivado obligado a
+  `en_bodega_satelite`, R4/R5) y por la guarda `zona_id` repetida en el `WHERE` del `UPDATE`
+  (R21). Listar y ejecutar están acotados por el MISMO criterio, resuelto en el mismo sitio.
+- **R36**: `en_ruta_bodega_satelite` NO entra en `asignadas` — sigue en `porRecibir`, sin acción
+  de deshacer: el caso (b) es competencia de la bodega central.
+
+### Números tras T6.3 (medidos)
+```
+$ pnpm typecheck  → 0 errores                            [baseline post-frontend: 0]        delta 0
+$ pnpm lint       → 0 errores, 154 warnings              [baseline post-frontend: 154]      delta 0
+$ pnpm test       → 527 archivos / 5458 tests, 0 fallos  [baseline: 526 / 5450, 0 fallos]
+                    +1 archivo, +8 tests, delta de fallidos = 0
+```
