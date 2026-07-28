@@ -81,7 +81,7 @@
 
 ## Bloque B1 — Backend: contrato y consulta
 
-- [ ] **TB1.1 — Ampliar el schema del filtro.** `lib/types/orden.ts`:
+- [x] **TB1.1 — Ampliar el schema del filtro.** `lib/types/orden.ts`:
   `ORDEN_FILTER_FIELDS` a 9 claves; los cinco de catálogo como `idList` (`.nonempty()`);
   `created_preset` como `z.enum`; `created_desde`/`created_hasta` como fecha `YYYY-MM-DD`;
   `.refine` de rango no invertido **y** `.refine` de exclusión preset↔rango. Mantener
@@ -89,20 +89,20 @@
   **Hecho:** `pnpm typecheck` verde; tests del schema, incluido "preset + desde →
   `validation_error`" (R30, R31, R32, R38, R39, R40, R43).
 
-- [ ] **TB1.2 `[P]` — Helpers de borde horario CR.** `inicioDelDiaCREnUtc()` e
+- [x] **TB1.2 `[P]` — Helpers de borde horario CR.** `inicioDelDiaCREnUtc()` e
   `inicioDelDiaSiguienteCREnUtc()` en `lib/utils/fecha-cr.ts`, con el ajuste de +6 h
   documentado.
   **Hecho:** tests de borde `2026-07-15T05:59:59Z` vs `06:00:00Z`, y `hasta` inclusive
   (incluye `2026-07-16T05:59:59Z` para `hasta = 2026-07-15`) (R41, R42).
 
-- [ ] **TB1.3 — Traducción en el service.** `OrdenService.listar`: `FILTER_TO_COLUMN`
+- [x] **TB1.3 — Traducción en el service.** `OrdenService.listar`: `FILTER_TO_COLUMN`
   ampliado; `where` tipado a `string | string[]`; preset/rango → `createdAt: {gte, lt}`;
   **scoping por rol escrito al final**.
   **Hecho:** tests con repo mockeado del `where` construido (R33, R34, R36, R37, R41, R42,
   R46).
   *Depende de TB1.1, TB1.2.*
 
-- [ ] **TB1.4 — `where` en el repositorio.** `OrdenRepository.list` + `ListOrdenesParams`:
+- [x] **TB1.4 — `where` en el repositorio.** `OrdenRepository.list` + `ListOrdenesParams`:
   listas → `{ in: [...] }`, `createdAt: { gte, lt }`, `deletedAt: null` intacto, `count` con
   el MISMO `where`.
   **Hecho:** test (Prisma mockeado) del objeto `where` y de la identidad
@@ -110,7 +110,7 @@
   bajo el filtro de distrito (R35, R44, decisión (f)).
   *Depende de TB1.3.*
 
-- [ ] **TB1.5 — Test de no regresión del contrato.** Sin `filter`, o con solo `status_id`,
+- [x] **TB1.5 — Test de no regresión del contrato.** Sin `filter`, o con solo `status_id`,
   el input recibido por service/repositorio es **idéntico** al previo (criterio de la 63).
   **Hecho:** test verde contra el snapshot previo (R45).
   *Depende de TB1.4.*
@@ -119,21 +119,21 @@
 
 ## Bloque B2 — Backend: catálogos
 
-- [ ] **TB2.1 `[P]` — Proyección plana de geografía.** `GeoRepository`: provincias
+- [x] **TB2.1 `[P]` — Proyección plana de geografía.** `GeoRepository`: provincias
   `{id,nombre}`, cantones `{id,nombre,padreId}`, distritos `{id,nombre,padreId}`, ordenados
   por nombre, campos mínimos (`design.md §3.2`).
   **Hecho:** test unitario con Prisma mockeado (R48, R49).
 
-- [ ] **TB2.2 `[P]` — Cuentas tienda.** `UserRepository.listCuentasTienda()`:
+- [x] **TB2.2 `[P]` — Cuentas tienda.** `UserRepository.listCuentasTienda()`:
   `rol.value IN ('adminTienda','apiKey')`, **sin filtrar por `estado`**, proyección
   `{id, nombre, esApiKey, activa}`.
   **Hecho:** test: incluye ambos roles, incluye inactivas, expone las dos banderas, no
   expone email/teléfono, orden por nombre (R50, R54).
 
-- [ ] **TB2.3 `[P]` — Zonas ligeras.** Proyección `{id,nombre}` en `ZonaRepository`.
+- [x] **TB2.3 `[P]` — Zonas ligeras.** Proyección `{id,nombre}` en `ZonaRepository`.
   **Hecho:** test unitario verde (R48, R49).
 
-- [ ] **TB2.4 — `FiltrosOrdenesService`.** `obtenerCatalogo(actor)` con **`Promise.all`** de
+- [x] **TB2.4 — `FiltrosOrdenesService`.** `obtenerCatalogo(actor)` con **`Promise.all`** de
   las cinco lecturas y autorización `maestro`/`admin`/`adminTienda` → `ok`, resto →
   `forbidden`, sin sesión → `unauthenticated`.
   **Hecho:** tests sin DB: las cinco lecturas se disparan **en paralelo** (los mocks se
@@ -146,6 +146,11 @@
   **Hecho:** test de la page: `admin` recibe catálogo; fallo del service → props `null` y la
   página sigue renderizando; roles bloqueados siguen en `notFound()` (R47, R64).
   *Depende de TB2.4.*
+  > **Queda para el `frontend_dev`:** es la única task de B2 que toca un `.tsx`. El
+  > backend ya dejó listo su punto de entrada: `obtenerCatalogoFiltrosOrdenes()` en
+  > `lib/actions/filtros-ordenes.ts` (resuelve el actor, autoriza y hace el `Promise.all`
+  > dentro del service). La page solo tiene que llamarlo tras sus guardias de rol y pasar
+  > `catalogo` (o `null` si el `status` no es `ok` o si lanza) por props.
 
 ---
 
@@ -197,13 +202,19 @@
 
 ## Bloque B5 — Datos
 
-- [ ] **TB5.1 `[P]` — Migración de índices.** `db/migrations/<ts>_orden_indices_filtros/`
+- [x] **TB5.1 `[P]` — Migración de índices.** `db/migrations/<ts>_orden_indices_filtros/`
   con `migration.sql` (4 `CREATE INDEX`) y `down.sql` (4 `DROP INDEX IF EXISTS`), más los
   `@@index` en `db/schema.prisma`.
   **Hecho:** `pnpm db:migrate` aplica y `pnpm db:rollback` revierte sin residuos; test de
   migración/rollback (patrón `tests/integration/db/*-migracion.test.ts`) verde. Sin tablas
   nuevas ⇒ sin RLS nueva.
   *Independiente; puede correr desde el inicio del bloque B.*
+  > **NO se aplicó contra la base.** El `.env` de este worktree apunta a una base
+  > compartida con producción, así que la migración se validó **por forma estática**
+  > (`tests/integration/db/orden-indices-filtros-migracion.test.ts`: 4 `CREATE INDEX`,
+  > 4 `DROP INDEX IF EXISTS`, sin DDL de tablas/columnas, `@@index` en `schema.prisma`).
+  > **Pendiente al desplegar: `prisma migrate deploy`.** Carpeta:
+  > `db/migrations/20260728120000_orden_indices_filtros/`.
 
 ---
 
