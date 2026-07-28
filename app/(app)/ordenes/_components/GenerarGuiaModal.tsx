@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { generarGuia } from "@/lib/actions/ordenes-guia";
@@ -28,6 +29,12 @@ export interface GenerarGuiaModalProps {
 }
 
 const SIN_MENSAJERO_LABEL = "Sin mensajero";
+
+/** Feature 148: lote ya cometido + su resumen, para la fase "resultado". */
+interface GuiaGeneradaResumen {
+  ordenIds: string[];
+  mensaje: string;
+}
 
 /** `ordenId -> mensajeroId` ("" = sin mensajero). Preselecciona el sugerido (R20/R21). */
 function seleccionInicial(ordenes: OrdenListItemDTO[]): Record<string, string> {
@@ -99,10 +106,17 @@ export function GenerarGuiaModal({
   const [seleccion, setSeleccion] = useState<Record<string, string>>(() =>
     open ? seleccionInicial(ordenes) : {},
   );
+  // Feature 148 (T11, §9.7): fase "resultado". Guarda el LOTE ya cometido (ids del
+  // resultado de negocio) para poder ofrecer el manifiesto sin perderlo al cerrar.
+  // `null` = fase de edición; array = la guía ya se generó.
+  const [resultado, setResultado] = useState<GuiaGeneradaResumen | null>(null);
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (open) setSeleccion(seleccionInicial(ordenes));
+    if (open) {
+      setSeleccion(seleccionInicial(ordenes));
+      setResultado(null);
+    }
   }
 
   const mensajeroOptions = toMensajeroOptions(
@@ -174,27 +188,63 @@ export function GenerarGuiaModal({
     const satelite = result.resultados.filter(
       (r) => r.estado === "en_ruta_bodega_satelite",
     ).length;
-    toast.success(
-      `Guía generada para ${result.resultados.length} orden(es): ${espera} en espera de aceptación, ${bodega} en bodega, ${satelite} en ruta a bodega satélite.`,
-    );
-    onSuccess();
+    const mensaje = `Guía generada para ${result.resultados.length} orden(es): ${espera} en espera de aceptación, ${bodega} en bodega, ${satelite} en ruta a bodega satélite.`;
+    toast.success(mensaje);
+    // Feature 148 (§9.7): la operación YA está cometida; en vez de cerrar, el modal
+    // pasa a la fase "resultado" con el mismo resumen + el botón de manifiesto.
+    // `onSuccess()` (refresco del padre) se difiere al cierre de esa fase: nada de
+    // la llamada de negocio, su input ni su toast cambian (R27).
+    setResultado({
+      ordenIds: result.resultados.map((r) => r.ordenId),
+      mensaje,
+    });
   }
 
   function handleError(error: unknown) {
     toast.error(guiaDecisionErrorMessage(error));
   }
 
+  /**
+   * Cierre de la fase "resultado" por cualquier vía (botón, Escape, overlay): recién
+   * ahí se avisa al padre para que refresque. Un fallo de la descarga no pasa por
+   * aquí, así que no puede alterar el resultado ya cometido (R25).
+   */
+  function handleOpenChange(next: boolean) {
+    if (!next && resultado) {
+      setResultado(null);
+      onOpenChange(false);
+      onSuccess();
+      return;
+    }
+    onOpenChange(next);
+  }
+
   return (
     <Modal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="Generar guía"
-      description="Confirma el mensajero por orden. Las órdenes sin mensajero pasan a bodega."
+      description={
+        resultado
+          ? "Guías generadas. Descarga el manifiesto del lote antes de cerrar."
+          : "Confirma el mensajero por orden. Las órdenes sin mensajero pasan a bodega."
+      }
       confirmLabel="Generar guía"
+      cancelLabel={resultado ? "Cerrar" : "Cancelar"}
+      hideConfirm={resultado !== null}
+      // El modal NO se cierra al confirmar: pasa a la fase "resultado" (§9.7).
+      closeOnConfirm={false}
       onConfirm={handleConfirm}
       onError={handleError}
       className="max-w-2xl"
     >
+      {resultado ? (
+        <ManifiestoResultado
+          mensaje={resultado.mensaje}
+          flujo="generacion_guia"
+          seleccion={{ ordenIds: resultado.ordenIds }}
+        />
+      ) : (
       <div className="flex flex-col gap-4">
         {conSugerido.length > 0 ? (
           <div className="flex flex-col gap-2">
@@ -233,6 +283,7 @@ export function GenerarGuiaModal({
           );
         })}
       </div>
+      )}
     </Modal>
   );
 }
