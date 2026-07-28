@@ -6,8 +6,13 @@
 import type { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
 import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
-import type { WebhookEventos } from "@/lib/types/whatsapp-webhook";
+import type { IPlantillaMensajeRepository } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
+import type { IOrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
+import type { WebhookEventos, WebhookStatus } from "@/lib/types/whatsapp-webhook";
 import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
+import { esErrorTransitorio } from "@/lib/services/whatsapp/errores-meta";
+import { construirComponentsEnvio } from "@/lib/utils/whatsapp-template";
+import { resolverValoresOrden } from "@/lib/utils/whatsapp-envio-valores";
 
 /**
  * Cliente minimo consumido: el envio de texto libre (saliente del chat) y el envio de una
@@ -77,10 +82,27 @@ export interface ChatWhatsappServiceDeps {
    * tests; si falta, el `transitorio` se persiste igual (no se pierde) sin encolar.
    */
   encolarReintento?: (mensajeChatId: string) => Promise<void>;
+  /**
+   * Resolucion de la plantilla y de los datos de la orden para REENVIAR un saliente
+   * `tipo=plantilla` que quedo `queued`. Opcional: sin ellos, `reintentarEnvio` no reintenta
+   * plantillas (no las degrada a texto libre, que seria un mensaje distinto y ademas
+   * rechazado fuera de la ventana de 24 h).
+   */
+  plantillaRepo?: Pick<IPlantillaMensajeRepository, "findEnviableById">;
+  ordenReader?: IOrdenEnvioReader;
+  /** Idioma por defecto si la plantilla no tiene idioma sincronizado con Meta. */
+  idiomaPorDefecto?: string;
   /** Horas de la ventana de sesion de WhatsApp. Default 24 (R18/R19). */
   ventanaHoras?: number;
+  /** Logger inyectable, patron `GeocodeLogger`. NUNCA recibe PII ni secretos (R11). */
+  logger?: ChatLogger;
   /** Reloj inyectable para tests deterministas. Default `new Date()`. */
   now?: () => Date;
+}
+
+/** Logger inyectable del chat. Solo mensajes agregados: nunca numero destino ni cuerpo. */
+export interface ChatLogger {
+  warn(message: string): void;
 }
 
 export class ChatWhatsappService {
@@ -142,14 +164,62 @@ export class ChatWhatsappService {
     }
 
     for (const status of eventos.statuses) {
+      // Un `failed` persiste ADEMAS el motivo que manda Meta (`errors[0]`). Los demas estados
+      // pasan `undefined` para no tocar esas columnas (ver `actualizarEstadoPorWaMessageId`).
+      const esFallo = status.estado === "failed";
       const afectadas = await this.deps.mensajeRepo.actualizarEstadoPorWaMessageId(
         status.waMessageId,
         status.estado,
+        esFallo ? status.error : undefined,
       );
       statusesAplicados += afectadas;
+
+      if (esFallo) {
+        await this.procesarFallo(status, afectadas);
+      }
     }
 
     return { mensajesRegistrados, statusesAplicados, sinResolver };
+  }
+
+  /**
+   * Un saliente que Meta reporta como `failed`: se DEJA CONSTANCIA siempre y se reintenta
+   * SOLO si el codigo describe una condicion pasajera (`esErrorTransitorio`).
+   *
+   * La asimetria es deliberada. La mayoria de los `failed` son deterministas (destinatario
+   * fuera de la lista de permitidos, plantilla no aprobada, numero sin WhatsApp) y
+   * reintentarlos gasta cuota, consume los intentos del job y acaba en dead-letter sin
+   * cambiar nada. Mismo criterio que `GeocodificacionService` con los desenlaces del geocoder.
+   *
+   * Para que el job pueda reintentarlo, el mensaje se devuelve a `queued`: `reintentarEnvio`
+   * es un no-op sobre cualquier otro estado (guarda de idempotencia que se conserva intacta).
+   */
+  private async procesarFallo(status: WebhookStatus, afectadas: number): Promise<void> {
+    const transitorio = esErrorTransitorio(status.error?.codigo);
+
+    // R11: se cita el codigo y el texto del ERROR, jamas el numero destino ni el cuerpo.
+    this.deps.logger?.warn(
+      `[whatsapp] saliente failed wamid=${status.waMessageId} registrado=${afectadas > 0} ` +
+        `codigo=${status.error?.codigo ?? "sin-codigo"} transitorio=${transitorio} ` +
+        `titulo=${JSON.stringify(status.error?.titulo ?? null)} ` +
+        `detalle=${JSON.stringify(status.error?.detalle ?? null)}`,
+    );
+
+    // `afectadas === 0`: el status llego antes que el saliente (o es de otro emisor). No hay
+    // nada que reintentar y forzarlo crearia un job apuntando a un mensaje inexistente.
+    if (!transitorio || afectadas === 0) return;
+    if (this.deps.encolarReintento === undefined) return;
+
+    const mensaje = await this.deps.mensajeRepo.findByWaMessageId(status.waMessageId);
+    if (mensaje === null) return;
+
+    // Vuelve a `queued` para que `reintentarEnvio` lo tome (su guarda exige ese estado).
+    await this.deps.mensajeRepo.actualizarEstadoPorWaMessageId(
+      status.waMessageId,
+      "queued",
+      status.error,
+    );
+    await this.deps.encolarReintento(mensaje.id);
   }
 
   /**
@@ -272,13 +342,60 @@ export class ChatWhatsappService {
     const hilo = await this.deps.conversacionRepo.findById(mensaje.conversacionId);
     if (hilo === null) return;
 
-    const outcome = await client.enviarTexto(hilo.telefonoE164, mensaje.cuerpo ?? "");
+    // Un saliente de PLANTILLA se reenvia COMO PLANTILLA. Antes se reenviaba siempre con
+    // `enviarTexto`, lo que mandaba el cuerpo renderizado como texto libre: un mensaje
+    // distinto del que el mensajero eligio y, fuera de la ventana de 24 h, rechazado por Meta.
+    const outcome =
+      mensaje.tipo === "plantilla"
+        ? await this.reenviarPlantilla(client, hilo, mensaje)
+        : await client.enviarTexto(hilo.telefonoE164, mensaje.cuerpo ?? "");
+
     if (outcome.status === "ok") {
       await this.deps.mensajeRepo.reconciliarSaliente(mensaje.id, outcome.mensajeId, "sent");
       return;
     }
     // Sigue fallando: relanza para el backoff del job (detalle sin secretos ni destino).
     throw new Error(outcome.detalle);
+  }
+
+  /**
+   * Reconstruye el envio de plantilla de un saliente `queued`: resuelve la plantilla por su
+   * `plantilla_id` y re-renderiza los componentes con los datos VIGENTES de la orden (misma
+   * cadena que `EnvioPlantillaWhatsappService`, unica fuente de la construccion).
+   *
+   * Se re-renderiza en vez de guardar los componentes porque el cuerpo depende de datos que
+   * pueden haber cambiado entre el fallo y el reintento (num_guia, monto). Reenviar los
+   * valores viejos mandaria al cliente informacion desactualizada.
+   */
+  private async reenviarPlantilla(
+    client: ChatClient,
+    hilo: { telefonoE164: string; ordenId: string; mensajeroId: string },
+    mensaje: { plantillaId: string | null },
+  ): Promise<{ status: "ok"; mensajeId: string } | { status: "transitorio"; detalle: string }> {
+    const { plantillaRepo, ordenReader } = this.deps;
+    if (plantillaRepo === undefined || ordenReader === undefined || mensaje.plantillaId === null) {
+      // Sin las deps de plantilla no se puede reconstruir el envio. Es DETERMINISTA: relanzar
+      // en bucle no las va a materializar, pero tampoco se degrada a texto libre.
+      throw new Error("reintento de plantilla: faltan plantillaRepo/ordenReader o plantilla_id");
+    }
+
+    const plantilla = await plantillaRepo.findEnviableById(mensaje.plantillaId);
+    if (plantilla === null) {
+      throw new Error("reintento de plantilla: la plantilla ya no es enviable");
+    }
+    const orden = await ordenReader.findParaEnvio(hilo.ordenId, hilo.mensajeroId);
+    if (orden === null) {
+      throw new Error("reintento de plantilla: la orden ya no esta asignada a ese mensajero");
+    }
+
+    const valores = resolverValoresOrden(plantilla.variables, orden);
+    const componentes = construirComponentsEnvio(plantilla.variables, valores);
+    return client.enviarPlantilla(
+      hilo.telefonoE164,
+      plantilla.nombre,
+      plantilla.templateIdioma || (this.deps.idiomaPorDefecto ?? "es"),
+      componentes,
+    );
   }
 
   /** El cliente de envio es obligatorio para las operaciones salientes (no para la ingesta). */

@@ -5,6 +5,7 @@
 import type { ChatMensajeEstado, PrismaClient } from "@prisma/client";
 import type {
   ChatMensajeDTO,
+  ChatMensajeErrorInput,
   IChatMensajeRepository,
   InsertarEntranteInput,
   InsertarSalienteInput,
@@ -23,6 +24,9 @@ const SELECT = {
   estado: true,
   latitud: true,
   longitud: true,
+  errorCodigo: true,
+  errorTitulo: true,
+  errorDetalle: true,
   ocurridoAt: true,
   createdAt: true,
 } as const;
@@ -38,6 +42,9 @@ type Row = {
   estado: ChatMensajeEstado | null;
   latitud: number | null;
   longitud: number | null;
+  errorCodigo: number | null;
+  errorTitulo: string | null;
+  errorDetalle: string | null;
   ocurridoAt: Date;
   createdAt: Date;
 };
@@ -54,6 +61,9 @@ function toDTO(row: Row): ChatMensajeDTO {
     estado: row.estado,
     latitud: row.latitud,
     longitud: row.longitud,
+    errorCodigo: row.errorCodigo,
+    errorTitulo: row.errorTitulo,
+    errorDetalle: row.errorDetalle,
     ocurridoAt: row.ocurridoAt,
     createdAt: row.createdAt,
   };
@@ -107,14 +117,36 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
   async actualizarEstadoPorWaMessageId(
     waMessageId: string,
     estado: ChatMensajeEstado,
+    error?: ChatMensajeErrorInput | null,
   ): Promise<number> {
     // R7/R8: localiza el saliente por su id de Meta y actualiza el estado. `updateMany`
     // devuelve el conteo: 0 = el saliente aun no esta registrado (no rompe el 200, R9).
+    //
+    // `error === undefined` (el caso de sent/delivered/read) NO toca las columnas de error:
+    // se distingue de `null`, que las LIMPIA a proposito. Sin esa distincion, cada status
+    // posterior a un fallo borraria el motivo o, peor, lo conservaria para siempre.
     const result = await this.prisma.chatMensaje.updateMany({
       where: { waMessageId, direccion: "saliente" },
-      data: { estado },
+      data: {
+        estado,
+        ...(error === undefined
+          ? {}
+          : {
+              errorCodigo: error?.codigo ?? null,
+              errorTitulo: error?.titulo ?? null,
+              errorDetalle: error?.detalle ?? null,
+            }),
+      },
     });
     return result.count;
+  }
+
+  async findByWaMessageId(waMessageId: string): Promise<ChatMensajeDTO | null> {
+    const row = await this.prisma.chatMensaje.findFirst({
+      where: { waMessageId, direccion: "saliente" },
+      select: SELECT,
+    });
+    return row === null ? null : toDTO(row);
   }
 
   async reconciliarSaliente(
@@ -124,7 +156,9 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
   ): Promise<void> {
     await this.prisma.chatMensaje.update({
       where: { id: mensajeId },
-      data: { waMessageId, estado },
+      // El reintento salio bien: se limpia el motivo del fallo anterior. Si no se limpiara,
+      // un mensaje entregado seguiria mostrando el error que ya se supero.
+      data: { waMessageId, estado, errorCodigo: null, errorTitulo: null, errorDetalle: null },
     });
   }
 
