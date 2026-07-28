@@ -22,7 +22,7 @@
 
 ## Bloque A1 — Motor de dependencias (puro, sin dominio)
 
-- [ ] **TA.1 — Utilidades de dependencias.** `lib/utils/filter-dependencies.ts`:
+- [x] **TA.1 — Utilidades de dependencias.** `lib/utils/filter-dependencies.ts`:
   `opcionesVisibles`, `seleccionEfectiva`, `podarSeleccion` (`design.md §A.7`). Puras, sin
   React, sin dominio, con guarda de ciclos.
   **Hecho:** tests con filtros de fantasía: sin `dependsOn` → todas las opciones; padre con
@@ -32,13 +32,13 @@
 
 ## Bloque A2 — Controles
 
-- [ ] **TA.2 `[P]` — `group` en `MultiSelectFilter`.** Añadir `group?: string` a
+- [x] **TA.2 `[P]` — `group` en `MultiSelectFilter`.** Añadir `group?: string` a
   `MultiSelectOption` y render por secciones (`role="group"` + `aria-label`), preservando el
   orden de aparición de los grupos. Sin grupos → markup y ARIA **idénticos a hoy**.
   **Hecho:** tests nuevos de agrupado + **los tests existentes de `MultiSelectFilter` y del
   filtro de estado pasan SIN modificarlos** (R28, R65, riesgo §8.5).
 
-- [ ] **TA.3 `[P]` — `DateRangeFilter`.** `components/shared/DateRangeFilter.tsx`: atajos
+- [x] **TA.3 `[P]` — `DateRangeFilter`.** `components/shared/DateRangeFilter.tsx`: atajos
   (de `options`) + dos `<Input type="date">` (desde/hasta) + "Limpiar" propio, con la
   **exclusión mutua interna** (elegir atajo vacía las fechas; escribir una fecha vacía el
   atajo). `min`/`max` cruzados entre los dos inputs, `aria-invalid` + mensaje si queda
@@ -53,7 +53,7 @@
 
 ## Bloque A3 — Orquestador
 
-- [ ] **TA.4 — `FilterComponent`.** `components/shared/FilterComponent.tsx`: monta
+- [x] **TA.4 — `FilterComponent`.** `components/shared/FilterComponent.tsx`: monta
   `MultiSelectFilter` (`multi`), `Select` de `components/ui` (`single`) y `DateRangeFilter`
   (`dateRange`); estado agregado **no controlado**; aplica TA.1 antes de emitir;
   `showClearAll`.
@@ -67,7 +67,7 @@
   (R1–R7, R13–R20, R22, R26, R29).
   *Depende de TA.1, TA.2, TA.3.*
 
-- [ ] **TA.5 `[P]` — Documentar el contrato.** Cabecera JSDoc en `FilterComponent` con el
+- [x] **TA.5 `[P]` — Documentar el contrato.** Cabecera JSDoc en `FilterComponent` con el
   contrato de props, la semántica de `dependsOn`/`parentValue`/`group`, el uso de `options`
   como atajos en `dateRange`, la **tabla de qué emite el filtro de tiempo en cada caso** y la
   frase "la traducción al transporte es del consumidor".
@@ -140,7 +140,7 @@
   invocan antes de resolver el primero); autorización por rol (R47, R52, R53).
   *Depende de TB2.1, TB2.2, TB2.3.*
 
-- [ ] **TB2.5 — Resolución en el Server Component.** `app/(app)/ordenes/page.tsx` llama al
+- [x] **TB2.5 — Resolución en el Server Component.** `app/(app)/ordenes/page.tsx` llama al
   service tras las guardias de rol y pasa el catálogo por props (o `null` si falla), sin
   romper la página.
   **Hecho:** test de la page: `admin` recibe catálogo; fallo del service → props `null` y la
@@ -156,7 +156,7 @@
 
 ## Bloque B3 — Declaración y traducción (lo específico de órdenes)
 
-- [ ] **TB3.1 — `construirFiltrosOrdenes`.** Función pura en
+- [x] **TB3.1 — `construirFiltrosOrdenes`.** Función pura en
   `_components/ordenes-filtros-def.ts`: catálogo + `incluirTienda` → `FilterDef[]` con
   **seis** filtros (cinco sin tienda), `dependsOn` en cantón/distrito, `parentValue` por
   opción, `group` por tipo de cuenta, sufijo "(inactiva)", y el filtro `created` de kind
@@ -166,7 +166,7 @@
   marcan en el label; el filtro de tiempo es UNO solo (R51, R55, R56, R62).
   *Depende de TA.4 y TB2.5.*
 
-- [ ] **TB3.2 `[P]` — `seleccionAFilter`.** Función pura en
+- [x] **TB3.2 `[P]` — `seleccionAFilter`.** Función pura en
   `_components/seleccion-a-filter.ts`: `FilterSelection` → `Partial<OrdenFilterInput>`
   (listas tal cual; `created` posicional → `created_preset` **o** `created_desde`/
   `created_hasta`; claves vacías fuera).
@@ -179,7 +179,7 @@
 
 ## Bloque B4 — Cableado del listado
 
-- [ ] **TB4.1 — `OrdenesListado`.** Recibe `catalogoFiltros` por props, monta
+- [x] **TB4.1 — `OrdenesListado`.** Recibe `catalogoFiltros` por props, monta
   `FilterComponent` con `construirFiltrosOrdenes` y `showClearAll`, funde `status_id` +
   `seleccionAFilter` en un único `filter`, `incluirTienda` por rol, `disabled` si el
   catálogo es `null`.
@@ -189,7 +189,7 @@
   servidor**; "Limpiar todo" visible (R46, R57, R59, R62, R63, R64).
   *Depende de TB3.1, TB3.2, TB2.5.*
 
-- [ ] **TB4.2 — Key de SWR y reset.** `statusKey`/`statusKeyPrevio` →
+- [x] **TB4.2 — Key de SWR y reset.** `statusKey`/`statusKeyPrevio` →
   `filterKey`/`filterKeyPrevio` con `serializarFiltro` (claves y valores ordenados); reset a
   página 1 + limpieza de selección ante cualquier cambio; `mutate` por prefijo
   `"ordenes:list"` intacto.
@@ -220,24 +220,24 @@
 
 ## Bloque 6 — Cierre
 
-- [ ] **T6.1 — No regresión de otras superficies.** Dashboard del `adminTienda`, listado
+- [x] **T6.1 — No regresión de otras superficies.** Dashboard del `adminTienda`, listado
   plano de `OrdenesModule` sin props, filtro de estado de la 63, `WalletFiltros` y resto de
   tablas se comportan igual.
   **Hecho:** suite existente verde **sin modificar sus asserts** (R65, riesgo §8.5).
   *Depende de B4.*
 
-- [ ] **T6.2 — Aislamiento del bloque A.** Verificar que `FilterComponent`,
+- [x] **T6.2 — Aislamiento del bloque A.** Verificar que `FilterComponent`,
   `DateRangeFilter`, `filter-dependencies.ts` y sus tests no importan dominio.
   **Hecho:** revisión de imports (o regla de lint/grep documentada en el impl) sin hallazgos;
   ningún test de R1–R29 menciona órdenes/zona/provincia/distrito.
 
-- [ ] **T6.3 — Verificación ejecutable.** `./init.sh`, `pnpm typecheck`, `pnpm lint`,
+- [x] **T6.3 — Verificación ejecutable.** `./init.sh`, `pnpm typecheck`, `pnpm lint`,
   `pnpm test` en verde, medidos en este worktree limpio. **`git diff package.json
   pnpm-lock.yaml` debe salir VACÍO** (dependencias nuevas: ninguna).
   **Hecho:** salida pegada en `progress/impl_144-filtros-ordenes.md` con el delta contra el
   baseline medido AL EMPEZAR (no citado de memoria).
 
-- [ ] **T6.4 — Mapa R→test.** Rellenar la tabla de abajo con archivo y nombre exactos.
+- [x] **T6.4 — Mapa R→test.** Rellenar la tabla de abajo con archivo y nombre exactos.
   **Hecho:** los 65 requisitos tienen test; el reviewer lo verifica.
 
 ---
@@ -282,7 +282,7 @@
 
 | R | Qué prueba | Task | Test (archivo::nombre) |
 | --- | --- | --- | --- |
-| R30 | el filtro acepta las 8 claves nuevas | TB1.1 | `tests/unit/types/orden-filter-schema.test.ts` |
+| R30 | el filtro acepta las 8 claves nuevas | TB1.1 | `tests/unit/types/orden-filter-144.test.ts` |
 | R31 | clave fuera de whitelist → `validation_error` sin consulta | TB1.1 | idem |
 | R32 | lista vacía / id vacío → `validation_error` | TB1.1 | idem |
 | R33 | AND entre filtros distintos | TB1.3 | `tests/unit/services/orden-service-filtros.test.ts` |
@@ -290,23 +290,23 @@
 | R35 | id inexistente → cero filas, nunca "sin filtro" | TB1.4 | `tests/unit/repositories/orden-repository-filtros.test.ts` |
 | R36 | `adminTienda`: el filtro de tienda no amplía su alcance | TB1.3 | `orden-service-filtros.test.ts` |
 | R37 | `mensajero`: sigue acotado a sus asignadas | TB1.3 | idem |
-| R38 | preset: valor único de dominio cerrado | TB1.1 | `orden-filter-schema.test.ts` |
+| R38 | preset: valor único de dominio cerrado | TB1.1 | `orden-filter-144.test.ts` |
 | R39 | fechas `YYYY-MM-DD`; rango invertido → `validation_error` | TB1.1 | idem |
 | R40 | preset + rango a la vez → `validation_error` (falla cerrado) | TB1.1 | idem |
 | R41 | preset de N días → borde 00:00 CR de hace N−1 días | TB1.2/TB1.3 | `tests/unit/utils/fecha-cr-filtros.test.ts` |
 | R42 | desde/hasta con `hasta` INCLUSIVE; rango abierto | TB1.2/TB1.3 | idem |
-| R43 | validación en el borde; bordes calculados server-side | TB1.1/TB1.3 | `orden-filter-schema.test.ts` + service |
+| R43 | validación en el borde; bordes calculados server-side | TB1.1/TB1.3 | `orden-filter-144.test.ts` + service |
 | R44 | `count` con el mismo `where` que `findMany` | TB1.4 | `orden-repository-filtros.test.ts` |
 | R45 | sin filtros nuevos, input idéntico al previo | TB1.5 / TB4.2 | `orden-service-filtros.test.ts` |
 | R46 | combina con `status_id` sin anularse | TB1.3 / TB4.1 | idem + test de `OrdenesListado` |
-| R47 | catálogos resueltos en paralelo en el servidor y por props | TB2.4/TB2.5 | `tests/unit/services/filtros-ordenes-service.test.ts` |
-| R48 | cada opción con id, nombre y padre donde aplica | TB2.1 | `tests/unit/repositories/geo-repository.test.ts` |
+| R47 | catálogos resueltos en paralelo en el servidor y por props | TB2.4/TB2.5 | `tests/unit/services/filtros-ordenes-service.test.ts` + `tests/components/OrdenesPageFiltros.test.tsx` |
+| R48 | cada opción con id, nombre y padre donde aplica | TB2.1 | `tests/unit/repositories/catalogo-filtros-ordenes.test.ts` |
 | R49 | orden determinista | TB2.1/2.2/2.3 | tests de repositorio |
-| R50 | tiendas: incluye `apiKey` e inactivas | TB2.2 | `tests/unit/repositories/user-repository-tiendas.test.ts` |
+| R50 | tiendas: incluye `apiKey` e inactivas | TB2.2 | `tests/unit/repositories/catalogo-filtros-ordenes.test.ts` |
 | R51 | `apiKey` en grupo aparte; inactivas marcadas | TB3.1 | `tests/unit/components/ordenes-filtros-def.test.ts` |
 | R52 | sin sesión → `unauthenticated`, sin datos | TB2.4 | `filtros-ordenes-service.test.ts` |
 | R53 | rol ajeno → `forbidden`, sin datos | TB2.4 | idem |
-| R54 | sin PII más allá del nombre | TB2.2 | `user-repository-tiendas.test.ts` |
+| R54 | sin PII más allá del nombre | TB2.2 | `catalogo-filtros-ordenes.test.ts` |
 | R55 | seis filtros declarados sobre el componente genérico | TB3.1 | `ordenes-filtros-def.test.ts` |
 | R56 | la cadena geográfica se declara con `dependsOn` | TB3.1 | idem |
 | R57 | acotamiento en cliente, sin round-trip por selección | TB4.1 | `tests/unit/components/ordenes-listado-filtros.test.tsx` |
@@ -316,11 +316,11 @@
 | R61 | key estable: selecciones equivalentes comparten caché | TB4.2 | idem |
 | R62 | rol acotado a su tienda no declara el filtro de tienda | TB3.1/TB4.1 | `ordenes-listado-filtros.test.tsx` |
 | R63 | la barra ofrece "Limpiar todo" | TB4.1 | idem |
-| R64 | catálogo no disponible → filtros deshabilitados, listado vivo | TB2.5/TB4.1 | test de la page + idem |
-| R65 | ninguna otra superficie cambia | T6.1 / TA.2 | suite existente de `MultiSelectFilter`/`DataTable`/dashboard |
+| R64 | catálogo no disponible → filtros deshabilitados, listado vivo | TB2.5/TB4.1 | `tests/components/OrdenesPageFiltros.test.tsx` + `ordenes-listado-filtros.test.tsx` |
+| R65 | ninguna otra superficie cambia | T6.1 / TA.2 | suite existente verde sin tocar asserts + `multi-select-filter-grupos.test.tsx` |
 
-*(Los nombres de archivo son la propuesta del spec; el implementer los fija y actualiza esta
-tabla en `progress/impl_144-filtros-ordenes.md`.)*
+*(Nombres ya fijados por los implementers. Bitácoras: `progress/impl_144_backend.md` (B1/B2/B5)
+y `progress/impl_144_frontend.md` (A, B3, B4, TB2.5 y cierre).)*
 
 ---
 

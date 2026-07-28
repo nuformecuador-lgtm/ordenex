@@ -71,7 +71,7 @@ export function DateRangeFilter({
   const [hasta, setHasta] = useState("");
 
   // Limpieza externa ("Limpiar todo"): se ajusta el estado DURANTE el render, sin
-  // efecto ni emision propia (patron del listado de ordenes).
+  // efecto ni emision propia (patron "ajustar estado durante el render").
   const [signalPrevio, setSignalPrevio] = useState(resetSignal);
   if (resetSignal !== signalPrevio) {
     setSignalPrevio(resetSignal);
