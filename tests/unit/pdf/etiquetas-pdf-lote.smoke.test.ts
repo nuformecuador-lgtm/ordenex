@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { inflateSync } from "node:zlib";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import QRCode from "qrcode";
 import bwipjs from "bwip-js/node";
 
@@ -115,6 +117,36 @@ describe("buildEtiquetasLotePdf — smoke server-side sin mocks (R7)", () => {
 
     // Un PDF con dos QR + dos barcode reales pesa bastante mas que uno vacio.
     expect(bytes.byteLength).toBeGreaterThan(3000);
+  });
+
+  // Feature 150 (T3, R21) — BLINDAJE de la decision D3: el tamaño de hoja
+  // seleccionable es SOLO del generador de cliente. Este bloque existe para que
+  // un refactor bienintencionado que "unifique" los dos generadores rompa aqui
+  // antes de cambiar el PDF consolidado que reciben los integradores por API
+  // (feature 88/136), que sigue siendo 100 x 100 mm fijo.
+  it("R21: el generador server-side sigue en 100 x 100 mm y sin parametro de tamaño", async () => {
+    const bytes = await buildEtiquetasLotePdf([etiqueta(2001), etiqueta(2002)]);
+    const pdf = Buffer.from(bytes).toString("latin1");
+
+    // 100 mm = 283.46 pt: TODAS las paginas, sin excepcion.
+    const cajas = pdf.match(/\/MediaBox\s*\[[^\]]*\]/g) ?? [];
+    expect(cajas).toHaveLength(2);
+    for (const caja of cajas) {
+      expect(caja).toMatch(/\/MediaBox\s*\[0 0 283\.\d+ 283\.\d+\]/);
+    }
+
+    // Firma publica: un unico parametro (las etiquetas). Si alguien le añadiese
+    // un `hoja`, `length` pasaria a 2 y este test caeria.
+    expect(buildEtiquetasLotePdf).toHaveLength(1);
+
+    // Y no importa el catalogo de tamaños de la feature 150: ese modulo es del
+    // generador de cliente.
+    const fuente = readFileSync(
+      path.join(__dirname, "..", "..", "..", "lib", "pdf", "etiquetas-pdf-lote.ts"),
+      "utf8",
+    );
+    expect(fuente).not.toContain("etiquetas-hoja");
+    expect(fuente).not.toContain("etiquetas-layout");
   });
 
   it("no toca el DOM: no hay document ni window en el entorno del builder (R7)", async () => {
