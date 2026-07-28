@@ -214,20 +214,26 @@ ni `lib/repositories/`.
 
 ## Bloque D — Cierre
 
-- [ ] **D1 — Mapa de trazabilidad.** `progress/impl_146.md` con la tabla `R1..R50 → test`.
+- [x] **D1 — Mapa de trazabilidad.** `progress/impl_146.md` con la tabla `R1..R50 → test`.
       *Hecho:* los 50 requisitos tienen al menos un test nombrado; ninguno sin cubrir
       (`docs/specs.md` §Trazabilidad).
       *Depende de:* B17, C4
+      **Cerrada con desviación:** la tabla quedó repartida en `progress/impl_146_backend.md`
+      (R1–R39) e `impl_146_frontend.md` (R40–R50), no en un `impl_146.md` único, porque backend
+      y frontend corrieron como agentes separados. Verificada por el reviewer: R1–R50 cubiertos.
 
-- [ ] **D2 — Verificación ejecutable.** `./init.sh` en verde + suite completa + `pnpm typecheck`
+- [x] **D2 — Verificación ejecutable.** `./init.sh` en verde + suite completa + `pnpm typecheck`
       + `pnpm lint`, con delta 0 respecto al baseline **medido en el momento** (no el citado en
       `progress/current.md`).
       *Hecho:* salida pegada en `progress/impl_146.md`.
       *Depende de:* D1
+      **Cerrada con delta 0, no en verde absoluto:** `./init.sh` queda rojo por los **2 errores de
+      typecheck preexistentes de `dev`** (`GestionarOrdenPanelEvidencias.test.tsx:84` y
+      `NotaPrivadaMensajero.test.tsx:253`, prop `count`), deuda ajena que esta feature no debe
+      arreglar. Medido: typecheck 2/2 preexistentes, lint 0 errores, suite 5426 tests con los
+      mismos rojos ajenos. Delta 0 en las tres.
 
-- [ ] **D3 — Commits.** Un commit por task lógica (`feat(146): ...`, `test(146): ...`), no un
+- [x] **D3 — Commits.** Un commit por task lógica (`feat(146): ...`, `test(146): ...`), no un
       mega-commit final (`docs/conventions.md`).
       *Hecho:* el historial de la rama refleja el desglose de este archivo.
       *Depende de:* D2
-</content>
-</invoke>
