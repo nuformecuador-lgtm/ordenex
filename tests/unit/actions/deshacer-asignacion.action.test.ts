@@ -14,7 +14,10 @@ const ORDEN_ID = "8b1a2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d";
 const ORDEN_ID_2 = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5e";
 
 function deps(opts: { actor?: Actor | null } = {}) {
-  const deshacer = vi.fn(async () => ({ status: "ok" as const, resultados: [] }));
+  const deshacer = vi.fn(async (_input: DeshacerAsignacionInput, _actor: Actor) => ({
+    status: "ok" as const,
+    resultados: [],
+  }));
   const service: IDeshacerAsignacionService = { deshacer };
   return {
     deshacer,
@@ -116,7 +119,7 @@ describe("borde — forma del input", () => {
   });
 
   it("los resultados de dominio del service se devuelven tal cual", async () => {
-    const deshacer = vi.fn(async () => ({
+    const deshacer = vi.fn(async (_input: DeshacerAsignacionInput, _actor: Actor) => ({
       status: "conflict" as const,
       detalle: [{ ordenId: ORDEN_ID, motivo: "orden borrada" }],
     }));

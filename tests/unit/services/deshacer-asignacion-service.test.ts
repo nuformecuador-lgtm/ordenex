@@ -82,7 +82,9 @@ function escenario(opts: EscenarioOpts = {}) {
   const findUsuarioZonaId = vi.fn(async () =>
     opts.zonaUsuario === undefined ? ZONA_SATELITE : opts.zonaUsuario,
   );
-  const findOrigenesReversion = vi.fn(async () => origenes);
+  const findOrigenesReversion = vi.fn(
+    async (_items: readonly { ordenId: string; estatusActualId: string }[]) => origenes,
+  );
   const findCentralZonaId = vi.fn(async () =>
     opts.centralZonaId === undefined ? ZONA_CENTRAL : opts.centralZonaId,
   );
