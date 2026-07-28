@@ -31,6 +31,15 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
  */
 export const BODEGA_CENTRAL_FALLBACK = "Bodega central";
 
+/**
+ * Respaldo de `responsable` cuando el NOMBRE del ejecutor no se puede resolver
+ * (`findUsuarioNombre` devuelve `null`: usuario borrado entre la operacion y la
+ * descarga). Decision del humano tras el review: se emite un guion largo, NO cadena
+ * vacia —para que la celda se lea como "sin dato conocido" y no como un hueco— y NO
+ * un texto de rol, que §9.8 prohibe explicitamente.
+ */
+export const RESPONSABLE_FALLBACK = "—"; // em dash
+
 // Solo los metodos de LECTURA que el manifiesto necesita. Usar `Pick` (patron
 // `ZonaRepo` de CorteDiarioService/CierreDiaService) documenta en el tipo que este
 // servicio no puede escribir: `create`, `update`, `generarGuiaLote`... ni siquiera
@@ -150,7 +159,9 @@ export class ManifiestoService implements IManifiestoService {
 
     const ctx: UbicacionCtx = {
       central: await this.resolverBodegaCentral(),
-      actor: (await this.ordenRepo.findUsuarioNombre(actor.usuarioId)) ?? "",
+      actor:
+        (await this.ordenRepo.findUsuarioNombre(actor.usuarioId)) ??
+        RESPONSABLE_FALLBACK,
     };
     const fecha = fechaCalendarioCR(this.now()); // R10: calendario CR, NO toISOString
 

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { ManifiestoService, BODEGA_CENTRAL_FALLBACK } from "@/lib/services/ManifiestoService";
+import {
+  ManifiestoService,
+  BODEGA_CENTRAL_FALLBACK,
+  RESPONSABLE_FALLBACK,
+} from "@/lib/services/ManifiestoService";
 import type {
   IOrdenRepository,
   ManifiestoOrdenRow,
@@ -86,7 +90,12 @@ function build(
   rows: ManifiestoOrdenRow[] = [row()],
   opts: { central?: { id: string; nombre: string } | null; nombre?: string | null } = {},
 ) {
-  const { repo, lectura, prohibidas } = fakeOrdenRepo(rows, opts.nombre ?? ACTOR_NOMBRE);
+  const { repo, lectura, prohibidas } = fakeOrdenRepo(
+    rows,
+    // `?? ACTOR_NOMBRE` colapsaria un `nombre: null` explicito (usuario no
+    // resoluble), que es justo lo que fija el test del respaldo de `responsable`.
+    opts.nombre === undefined ? ACTOR_NOMBRE : opts.nombre,
+  );
   const zonaRepo = fakeZonaRepo(opts.central === undefined ? { id: "z-c", nombre: CENTRAL_NOMBRE } : opts.central);
   const service = new ManifiestoService(repo, zonaRepo, () => AHORA);
   return { service, repo, lectura, prohibidas, zonaRepo };
@@ -309,6 +318,36 @@ describe("R9 — responsable: mensajero si el flujo lo asigna, si no el actor (�
     expect(fila.responsable).toBe(ACTOR_NOMBRE);
     // Sin textos de rol (§9.8): es el nombre de la persona, no "Bodega central".
     expect(fila.responsable).not.toBe(BODEGA_CENTRAL_FALLBACK);
+  });
+
+  // Decision del humano tras el review de la 148: si el nombre del ejecutor no se
+  // puede resolver (usuario borrado entre la operacion y la descarga), la celda sale
+  // con un guion largo, NUNCA vacia y NUNCA con un texto de rol (§9.8).
+  it("sin nombre resoluble del ejecutor, responsable cae al guion largo y no a cadena vacia", async () => {
+    const { service } = build([row({ mensajeroAsignadoNombre: null })], { nombre: null });
+    const r = await service.armar(
+      { flujo: "devolucion_central", ordenIds: ["o1"] },
+      MAESTRO,
+    );
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.filas[0].responsable).toBe(RESPONSABLE_FALLBACK);
+    expect(RESPONSABLE_FALLBACK).toBe("—"); // em dash, no guion corto ni ""
+    expect(r.filas[0].responsable).not.toBe("");
+  });
+
+  // El mensajero sigue mandando aunque el nombre del actor no se resuelva: el
+  // respaldo es SOLO del actor, no de la columna entera.
+  it("con mensajero asignado, el respaldo del actor no contamina responsable", async () => {
+    const { service } = build(
+      [row({ mensajeroAsignadoNombre: "Carlos Mensajero" })],
+      { nombre: null },
+    );
+    const r = await service.armar(
+      { flujo: "asignacion_satelite", ordenIds: ["o1"] },
+      MAESTRO,
+    );
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.filas[0].responsable).toBe("Carlos Mensajero");
   });
 });
 
