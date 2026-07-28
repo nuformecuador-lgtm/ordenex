@@ -3,7 +3,7 @@
 // aplicacion de statuses, regla de la ventana de 24 h y orquestacion del envio saliente
 // (en linea + encolado de reintento ante `transitorio`, D1). Recibe repos + cliente por
 // constructor (inyeccion por interfaz, patron `EnvioPlantillaWhatsappService`).
-import type { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
+import type { WhatsappCloudClient, WhatsappEnvioOutcome } from "@/lib/clients/whatsapp-cloud";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
 import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { IPlantillaMensajeRepository } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
@@ -32,7 +32,10 @@ export interface IngestaResumen {
 export type EnviarTextoChatResult =
   | { status: "ok"; mensajeId: string; mensajeChatId: string }
   | { status: "fuera_ventana" } // R19/D2: bloqueado en el server, exige plantilla
-  | { status: "transitorio"; detalle: string; mensajeChatId: string }; // R21: reintentable
+  | { status: "transitorio"; detalle: string; mensajeChatId: string } // R21: reintentable
+  // La Graph API rechazo la peticion (4xx que no es 429). NO se reintenta: el saliente queda
+  // `failed` con el motivo, en vez de `queued` para siempre.
+  | { status: "permanente"; detalle: string; mensajeChatId: string };
 
 export interface EnviarTextoChatInput {
   ordenId: string;
@@ -49,7 +52,8 @@ export interface EnviarTextoChatInput {
  */
 export type EnviarPlantillaChatResult =
   | { status: "ok"; mensajeId: string; mensajeChatId: string }
-  | { status: "transitorio"; detalle: string; mensajeChatId: string }; // R21: reintentable
+  | { status: "transitorio"; detalle: string; mensajeChatId: string } // R21: reintentable
+  | { status: "permanente"; detalle: string; mensajeChatId: string };
 
 export interface EnviarPlantillaChatInput {
   ordenId: string;
@@ -262,6 +266,17 @@ export class ChatWhatsappService {
       return { status: "ok", mensajeId: outcome.mensajeId, mensajeChatId: guardado.id };
     }
 
+    // Rechazo de la Graph API (4xx): DETERMINISTA. Se persiste `failed` con el motivo y NO se
+    // encola nada; reintentarlo daria el mismo error y lo dejaria `queued` indefinidamente.
+    if (outcome.status === "permanente") {
+      const fallido = await this.persistirFalloPermanente(
+        { conversacionId: hilo.id, tipo: "texto", cuerpo: input.texto, plantillaId: null },
+        outcome,
+        ahora,
+      );
+      return { status: "permanente", detalle: outcome.detalle, mensajeChatId: fallido };
+    }
+
     // R21/D1: `transitorio`. Se persiste como `queued` (sin perder el texto) y se encola el
     // reintento. El detalle del cliente ya viene sin secretos ni numero destino.
     const encolado = await this.deps.mensajeRepo.insertarSaliente({
@@ -314,6 +329,20 @@ export class ChatWhatsappService {
       return { status: "ok", mensajeId: outcome.mensajeId, mensajeChatId: guardado.id };
     }
 
+    if (outcome.status === "permanente") {
+      const fallido = await this.persistirFalloPermanente(
+        {
+          conversacionId: hilo.id,
+          tipo: "plantilla",
+          cuerpo: input.cuerpoRenderizado,
+          plantillaId: input.plantillaId,
+        },
+        outcome,
+        ahora,
+      );
+      return { status: "permanente", detalle: outcome.detalle, mensajeChatId: fallido };
+    }
+
     // R21/D1: `transitorio`. Se persiste como `queued` (sin perder la plantilla) y se encola el
     // reintento. El detalle del cliente ya viene sin secretos ni numero destino.
     const encolado = await this.deps.mensajeRepo.insertarSaliente({
@@ -354,7 +383,20 @@ export class ChatWhatsappService {
       await this.deps.mensajeRepo.reconciliarSaliente(mensaje.id, outcome.mensajeId, "sent");
       return;
     }
-    // Sigue fallando: relanza para el backoff del job (detalle sin secretos ni destino).
+    if (outcome.status === "permanente") {
+      // Rechazo determinista: cerrar el mensaje como `failed` y COMPLETAR el job. Relanzar
+      // aqui solo gastaria los intentos restantes contra el mismo error y lo dejaria `queued`.
+      await this.deps.mensajeRepo.marcarFallido(mensaje.id, {
+        codigo: outcome.codigoMeta,
+        titulo: null,
+        detalle: outcome.detalle,
+      });
+      this.deps.logger?.warn(
+        `[whatsapp] reintento rechazado de forma permanente, sin mas intentos: ${outcome.detalle}`,
+      );
+      return;
+    }
+    // Sigue fallando de forma pasajera: relanza para el backoff del job.
     throw new Error(outcome.detalle);
   }
 
@@ -371,7 +413,7 @@ export class ChatWhatsappService {
     client: ChatClient,
     hilo: { telefonoE164: string; ordenId: string; mensajeroId: string },
     mensaje: { plantillaId: string | null },
-  ): Promise<{ status: "ok"; mensajeId: string } | { status: "transitorio"; detalle: string }> {
+  ): Promise<WhatsappEnvioOutcome> {
     const { plantillaRepo, ordenReader } = this.deps;
     if (plantillaRepo === undefined || ordenReader === undefined || mensaje.plantillaId === null) {
       // Sin las deps de plantilla no se puede reconstruir el envio. Es DETERMINISTA: relanzar
@@ -396,6 +438,43 @@ export class ChatWhatsappService {
       plantilla.templateIdioma || (this.deps.idiomaPorDefecto ?? "es"),
       componentes,
     );
+  }
+
+  /**
+   * Persiste un saliente que la Graph API rechazo de forma DETERMINISTA: estado `failed` y el
+   * motivo en las columnas de error, para que sea visible sin entrar al panel de Meta.
+   *
+   * Se guarda igual que un envio bueno (no se descarta) porque el mensajero necesita ver que
+   * lo intento y por que no salio; lo que NO se hace es encolar reintento.
+   */
+  private async persistirFalloPermanente(
+    base: {
+      conversacionId: string;
+      tipo: "texto" | "plantilla";
+      cuerpo: string;
+      plantillaId: string | null;
+    },
+    outcome: { detalle: string; codigoMeta: number | null },
+    ahora: Date,
+  ): Promise<string> {
+    const guardado = await this.deps.mensajeRepo.insertarSaliente({
+      conversacionId: base.conversacionId,
+      tipo: base.tipo,
+      cuerpo: base.cuerpo,
+      plantillaId: base.plantillaId,
+      waMessageId: null,
+      estado: "failed",
+      ocurridoAt: ahora,
+      error: {
+        codigo: outcome.codigoMeta,
+        titulo: null,
+        detalle: outcome.detalle,
+      },
+    });
+    this.deps.logger?.warn(
+      `[whatsapp] saliente rechazado por la Graph API (sin reintento): ${outcome.detalle}`,
+    );
+    return guardado.id;
   }
 
   /** El cliente de envio es obligatorio para las operaciones salientes (no para la ingesta). */

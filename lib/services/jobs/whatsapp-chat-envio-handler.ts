@@ -30,7 +30,7 @@ export function buildWhatsappChatEnvioService(): ChatWhatsappService {
   return new ChatWhatsappService({
     conversacionRepo: new ChatConversacionRepository(prisma),
     mensajeRepo: new ChatMensajeRepository(prisma),
-    client: new WhatsappCloudClient({ config }),
+    client: new WhatsappCloudClient({ config, logger: consoleLogger }),
     // Necesarios para reenviar un saliente `tipo=plantilla` COMO plantilla (misma cadena de
     // resolucion que `EnvioPlantillaWhatsappService`). Sin ellos el reintento de una plantilla
     // lanza en vez de degradarla a texto libre.

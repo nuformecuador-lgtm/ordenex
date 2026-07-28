@@ -12,6 +12,8 @@
 //    OPERACION y el ESTADO (codigo HTTP, "timeout"/"red"), jamas el token ni el
 //    numero destino (que es dato personal).
 import { z } from "zod";
+import type { ChatLogger } from "@/lib/services/ChatWhatsappService";
+import { redactarPII } from "@/lib/services/whatsapp/chat-logger";
 import type { WhatsappConfig } from "@/lib/config/whatsapp";
 
 const GRAPH_BASE = "https://graph.facebook.com";
@@ -36,10 +38,19 @@ const respuestaOkSchema = z.object({
   messages: z.array(z.object({ id: z.string() })).min(1),
 });
 
-/** Desenlace de un envio. `ok` trae el id que asigna Meta al mensaje. */
+/**
+ * Desenlace de un envio. `ok` trae el id que asigna Meta al mensaje.
+ *
+ * `transitorio` vs `permanente` NO es cosmetico: decide si el saliente queda `queued` con un
+ * job de reintento o `failed` cerrado. Antes TODO no-2xx era `transitorio`, asi que un 400
+ * (plantilla inexistente, idioma equivocado, numero de parametros que no cuadra, destinatario
+ * no permitido) dejaba el mensaje `queued` PARA SIEMPRE: el job lo reintentaba 5 veces contra
+ * el mismo 400 y moria en dead-letter sin que nadie lo viera.
+ */
 export type WhatsappEnvioOutcome =
   | { status: "ok"; mensajeId: string }
-  | { status: "transitorio"; detalle: string };
+  | { status: "transitorio"; detalle: string }
+  | { status: "permanente"; detalle: string; codigoMeta: number | null };
 
 export interface WhatsappCloudClientOpts {
   config: WhatsappConfig;
@@ -47,17 +58,45 @@ export interface WhatsappCloudClientOpts {
   timeoutMs?: number;
   /** `fetch` inyectable: los tests no tocan la red (invariante 1). */
   fetchImpl?: typeof fetch;
+  /** Logger del volcado de errores. Sin el, un no-2xx sigue funcionando pero es mudo. */
+  logger?: ChatLogger;
+}
+
+/** Forma del error de la Graph API, extraida de forma defensiva (Meta la ha ido cambiando). */
+interface ErrorMetaParseado {
+  json: unknown | null;
+  codigo: number | null;
+  mensaje: string | null;
+}
+
+/**
+ * Extrae `error.code` y `error.message` del cuerpo de un no-2xx. Nunca lanza: un cuerpo que no
+ * sea JSON (p. ej. un HTML de un proxy) devuelve `json: null` y el llamador vuelca el texto
+ * crudo tal cual, que sigue siendo mas util que nada.
+ */
+function parseErrorMeta(texto: string): ErrorMetaParseado {
+  try {
+    const json: unknown = JSON.parse(texto);
+    const error = (json as { error?: Record<string, unknown> })?.error;
+    const codigo = typeof error?.code === "number" ? error.code : null;
+    const mensaje = typeof error?.message === "string" ? error.message : null;
+    return { json, codigo, mensaje };
+  } catch {
+    return { json: null, codigo: null, mensaje: null };
+  }
 }
 
 export class WhatsappCloudClient {
   private readonly config: WhatsappConfig;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly logger: ChatLogger | undefined;
 
   constructor(opts: WhatsappCloudClientOpts) {
     this.config = opts.config;
     this.timeoutMs = opts.timeoutMs ?? 10_000;
     this.fetchImpl = opts.fetchImpl ?? fetch;
+    this.logger = opts.logger;
   }
 
   /**
@@ -118,9 +157,28 @@ export class WhatsappCloudClient {
     }
 
     if (respuesta.status < 200 || respuesta.status >= 300) {
-      // Cualquier codigo no-2xx -> transitorio. Se cita solo el codigo, jamas el
-      // cuerpo de la respuesta (puede ecoar el destino).
-      return { status: "transitorio", detalle: `${OPERACION}: HTTP ${respuesta.status}` };
+      // El cuerpo del error de la Graph API es la UNICA fuente del motivo real. Se lee
+      // ENTERO, se redacta el destinatario y se vuelca sin recortar: incluye `code`,
+      // `error_subcode`, `error_data.details` y el `fbtrace_id` que pide el soporte de Meta.
+      const cuerpoError = await respuesta.text().catch(() => "");
+      const parsed = parseErrorMeta(cuerpoError);
+      this.logger?.warn(
+        `[whatsapp] ${OPERACION}: HTTP ${respuesta.status} respuesta completa: ` +
+          (parsed.json === null
+            ? cuerpoError
+            : JSON.stringify(redactarPII(parsed.json), null, 2)),
+      );
+
+      // 5xx y 429 son de verdad pasajeros (caida o cuota). El resto de 4xx describe una
+      // peticion mal formada o no autorizada: reintentarla da exactamente el mismo error.
+      const esPasajero = respuesta.status >= 500 || respuesta.status === 429;
+      const detalle =
+        `${OPERACION}: HTTP ${respuesta.status}` +
+        (parsed.codigo === null ? "" : ` (Meta ${parsed.codigo})`) +
+        (parsed.mensaje === null ? "" : `: ${parsed.mensaje}`);
+      return esPasajero
+        ? { status: "transitorio", detalle }
+        : { status: "permanente", detalle, codigoMeta: parsed.codigo };
     }
 
     let json: unknown;

@@ -27,7 +27,8 @@ export interface ChatMensajeDTO {
 
 /** Motivo del fallo a persistir junto al estado (viene del `errors[0]` del webhook). */
 export interface ChatMensajeErrorInput {
-  codigo: number;
+  /** `null` si el proveedor no devolvio codigo (cuerpo no-JSON, proxy, etc.). */
+  codigo: number | null;
   titulo: string | null;
   detalle: string | null;
 }
@@ -53,6 +54,8 @@ export interface InsertarSalienteInput {
   waMessageId?: string | null;
   estado: ChatMensajeEstado;
   ocurridoAt: Date;
+  /** Motivo, cuando se inserta ya `failed` (rechazo determinista de la Graph API). */
+  error?: ChatMensajeErrorInput | null;
 }
 
 export interface IChatMensajeRepository {
@@ -96,6 +99,12 @@ export interface IChatMensajeRepository {
     waMessageId: string,
     estado: ChatMensajeEstado,
   ): Promise<void>;
+
+  /**
+   * Cierra un saliente como `failed` con su motivo. Lo usa el reintento cuando la Graph API
+   * responde un rechazo DETERMINISTA: sin esto el mensaje se quedaria `queued` para siempre.
+   */
+  marcarFallido(mensajeId: string, error: ChatMensajeErrorInput): Promise<void>;
 
   /** Busca un mensaje por id (drenado del job de reintento). */
   findById(mensajeId: string): Promise<ChatMensajeDTO | null>;

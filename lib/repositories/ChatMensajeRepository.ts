@@ -108,6 +108,11 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
         waMessageId: input.waMessageId ?? null,
         estado: input.estado,
         ocurridoAt: input.ocurridoAt,
+        // Un saliente puede NACER `failed` (rechazo determinista de la Graph API): el motivo
+        // se guarda en el mismo insert, no en un update posterior.
+        errorCodigo: input.error?.codigo ?? null,
+        errorTitulo: input.error?.titulo ?? null,
+        errorDetalle: input.error?.detalle ?? null,
       },
       select: SELECT,
     });
@@ -139,6 +144,18 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
       },
     });
     return result.count;
+  }
+
+  async marcarFallido(mensajeId: string, error: ChatMensajeErrorInput): Promise<void> {
+    await this.prisma.chatMensaje.update({
+      where: { id: mensajeId },
+      data: {
+        estado: "failed",
+        errorCodigo: error.codigo,
+        errorTitulo: error.titulo,
+        errorDetalle: error.detalle,
+      },
+    });
   }
 
   async findByWaMessageId(waMessageId: string): Promise<ChatMensajeDTO | null> {

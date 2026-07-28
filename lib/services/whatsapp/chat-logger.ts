@@ -23,7 +23,14 @@ const CLAVES_PII = new Set(["recipient_id", "recipient", "from", "wa_id", "phone
 /**
  * Copia profunda del valor sustituyendo por `"[redactado]"` cualquier clave de `CLAVES_PII`.
  * Puro y defensivo: tolera null, arrays y anidacion arbitraria sin lanzar.
+ *
+ * NO recorta ni resume nada mas: todo lo que no sea el identificador del destinatario se
+ * conserva integro, incluido `fbtrace_id`, que es lo que pide el soporte de Meta.
  */
+export function redactarPII(valor: unknown): unknown {
+  return redactar(valor);
+}
+
 function redactar(valor: unknown): unknown {
   if (Array.isArray(valor)) return valor.map(redactar);
   if (valor === null || typeof valor !== "object") return valor;

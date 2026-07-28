@@ -269,6 +269,7 @@ describe("listarHiloChat (R16/R22)", () => {
       insertarSaliente: vi.fn(),
       actualizarEstadoPorWaMessageId: vi.fn(),
       findByWaMessageId: vi.fn(),
+      marcarFallido: vi.fn(async () => {}),
       reconciliarSaliente: vi.fn(),
       findById: vi.fn(),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

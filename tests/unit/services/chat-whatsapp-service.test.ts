@@ -39,6 +39,7 @@ function fakeMensajeRepo(over: Partial<IChatMensajeRepository> = {}): IChatMensa
   return {
     insertarEntranteIdempotente: vi.fn(async () => true),
     findByWaMessageId: vi.fn(async () => null),
+    marcarFallido: vi.fn(async () => {}),
     insertarSaliente: vi.fn(async () => ({
       id: "msg-out",
       conversacionId: "hilo-1",
