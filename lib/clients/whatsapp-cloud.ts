@@ -13,7 +13,7 @@
 //    numero destino (que es dato personal).
 import { z } from "zod";
 import type { ChatLogger } from "@/lib/services/ChatWhatsappService";
-import { redactarPII } from "@/lib/services/whatsapp/chat-logger";
+import { cuerpoParaLog, debugCompletoActivo, redactarPII } from "@/lib/services/whatsapp/chat-logger";
 import type { WhatsappConfig } from "@/lib/config/whatsapp";
 
 const GRAPH_BASE = "https://graph.facebook.com";
@@ -138,6 +138,14 @@ export class WhatsappCloudClient {
 
   private async enviar(cuerpo: unknown): Promise<WhatsappEnvioOutcome> {
     const url = `${GRAPH_BASE}/${this.config.apiVersion}/${this.config.numeroId}/messages`;
+
+    // Volcado de la PETICION, antes de mandarla. Sin esto, un 400 de la Graph API obliga a
+    // adivinar que se envio: el `detalle` solo cuenta lo que Meta responde, no lo que se pidio.
+    // El token NUNCA entra aqui: va en la cabecera y no se loguea (invariante 3).
+    this.logger?.warn(
+      `[whatsapp] POST ${url}${debugCompletoActivo() ? " (debug completo)" : ""} cuerpo=` +
+        JSON.stringify(cuerpoParaLog(cuerpo), null, 2),
+    );
 
     let respuesta: Response;
     try {
