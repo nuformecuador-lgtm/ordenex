@@ -1681,12 +1681,13 @@
     {
       "id": 149,
       "name": "deshacer asignacion a mensajero o bodega antes de la recogida",
-      "description": "Fullstack. Permite revertir una asignacion mientras la orden NO haya sido recogida ni recibida. Casos: (a) asignada a mensajero (por_recoger) -> vuelve a en_bodega_central o en_bodega_satelite segun su origen y se limpia mensajero_asignado_id; (b) ruteada a bodega satelite (en_ruta_bodega_satelite) -> vuelve a en_bodega_central mientras la satelite no la reciba. Se bloquea si ya paso a en_ruta / en_bodega_satelite / gestionada. Requiere DECLARAR las aristas inversas en el mapa de transiciones de la guardia central (lib/types/order-status-transiciones.ts, feature 140): sin eso la guardia lanza TransicionIlegalError. Pasa por appendCambioEstado para dejar bitacora + webhook. UI: accion de deshacer en el listado del maestro y en el apartado de la satelite. ABIERTO: que roles pueden deshacer (maestro/admin/adminSatelite), si se conserva el num_guia y si exige motivo.",
-      "status": "pending",
+      "description": "Fullstack. Permite revertir una asignacion mientras la orden NO haya sido recogida ni recibida. Casos: (a) asignada a mensajero (por_recoger) -> vuelve a en_bodega_central o en_bodega_satelite segun su origen y se limpia mensajero_asignado_id; (b) ruteada a bodega satelite (en_ruta_bodega_satelite) -> vuelve a en_bodega_central mientras la satelite no la reciba. Se bloquea si ya paso a en_ruta / en_bodega_satelite / gestionada. Requiere DECLARAR las aristas inversas en el mapa de transiciones de la guardia central (lib/types/order-status-transiciones.ts, feature 140): sin eso la guardia lanza TransicionIlegalError. Pasa por appendCambioEstado para dejar bitacora + webhook. UI: accion de deshacer en el listado del maestro y en el apartado de la satelite. CERRADO (pre-spec 2026-07-28): D1 roles = maestro/admin (esAccesoTotal) sobre cualquier orden + adminSatelite acotado a SU zona; D2 el num_guia se CONSERVA intacto (ya impreso en etiquetas, generarGuiaLote es idempotente); D3 el estado destino se DERIVA del historial (ultimo estatus_origen), no de una regla de zona, y falla CERRADO si no hay fila; D4 motivo OBLIGATORIO en texto libre persistido en la bitacora; D5 valor de enum NUEVO deshacer_asignacion en orden_historial_origen_tipo (migracion ALTER TYPE ADD VALUE + down.sql, patron cancelacion_api de la 106). Gate F1.4 APROBADO 2026-07-28 (Q1-Q7 cerradas): NO se bloquea por cierre pendiente del mensajero (asimetria deliberada: asignar sigue bloqueado, deshacer no); prioridad NO se restaura (limitacion conocida); sin tope de lote; el aviso al mensajero desasignado se DIFIERE a la feature 146 (R41 + ancla TODO(146) en codigo). Spec: R1-R41, 33 tasks, 3 aristas nuevas (#43 por_recoger -> en_bodega_central, #44 por_recoger -> en_bodega_satelite, #45 en_ruta_bodega_satelite -> en_bodega_central).",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
-      "depends_on": null
+      "depends_on": null,
+      "spec_path": "specs/149-deshacer-asignacion"
     },
     {
       "id": 150,
