@@ -16,9 +16,12 @@ const XLSX_MIME =
 const { buildXlsxTemplateMock } = vi.hoisted(() => ({
   buildXlsxTemplateMock: vi.fn<(fields: TemplateField[]) => Promise<ArrayBuffer>>(),
 }));
-vi.mock("@/lib/utils/xlsx-template", () => ({
-  buildXlsxTemplate: buildXlsxTemplateMock,
-}));
+// Mock PARCIAL: `XLSX_MIME` se conserva del módulo real, porque la feature 143 lo
+// promovió a constante exportada y BulkUpload la importa de forma estática.
+vi.mock("@/lib/utils/xlsx-template", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils/xlsx-template")>();
+  return { ...actual, buildXlsxTemplate: buildXlsxTemplateMock };
+});
 
 const fields: TemplateField[] = [
   { key: "num_remision", label: "Nº Remisión", example: "R-001" },

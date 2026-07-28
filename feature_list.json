@@ -1621,8 +1621,8 @@
     {
       "id": 143,
       "name": "descargar en Excel las filas con error de la carga masiva",
-      "description": "Frontend. En el resumen de la carga masiva, boton para descargar un xlsx con TODAS las filas cuyo resultado sea 'error' (cualquier motivo), con el mismo formato de la plantilla vigente para corregir y volver a cargar sin retrabajo. Reusa el grupo 'errores' de clasificarBulkSummary (fila, numRemision, errores) cruzado por numero de linea con las FilaParseada que ya viven en el cliente (carga-masiva-parser/chunks), y el generador xlsx de lib/utils/xlsx-template (exceljs, import dinamico). Sin backend nuevo. Consumidores: OrdenesCargaResumen / OrdenesConErrorTabla. ABIERTO: si el motivo del error viaja en una hoja aparte o en una columna extra al final (una columna extra rompe el round-trip descargar->subir del parser).",
-      "status": "pending",
+      "description": "Frontend. En el resumen de la carga masiva, boton para descargar un xlsx con TODAS las filas cuyo resultado sea 'error' (cualquier motivo), con el mismo formato de la plantilla vigente para corregir y volver a cargar sin retrabajo. Reusa el grupo 'errores' de clasificarBulkSummary (fila, numRemision, errores) cruzado por numero de linea con las FilaParseada que ya viven en el cliente (carga-masiva-parser/chunks), y el generador xlsx de lib/utils/xlsx-template (exceljs, import dinamico). Sin backend nuevo. Consumidores: OrdenesCargaResumen / OrdenesConErrorTabla. CERRADO (gate 2026-07-27): el motivo viaja en una columna extra motivo_error al final con prefijo de linea (Fila N - campo: mensaje), una sola hoja, valores crudos del archivo original; solo xlsx, solo en la vista previa (OrdenesCargaPreview). El round-trip NO se rompe: findMissingHeaders no tiene lista blanca y filaCargaSchema es z.object sin .strict(), asi que motivo_error se descarta en silencio; fijado con R14/R15/R16 + test de round-trip.",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "frontend",

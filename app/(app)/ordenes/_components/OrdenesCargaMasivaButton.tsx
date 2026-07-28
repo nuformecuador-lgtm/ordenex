@@ -217,6 +217,8 @@ export function OrdenesCargaMasivaButton() {
           ) : step === "preview" ? (
             <OrdenesCargaPreview
               clasificacion={clasificacion}
+              // Feature 143: valores CRUDOS del archivo para el export de errores.
+              filas={filasUnicas}
               confirmando={confirmando}
               progresoTexto={progresoTexto}
               onConfirmar={handleConfirmar}

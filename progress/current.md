@@ -15,6 +15,56 @@
 
 ## Features en curso
 
+**Descargar en Excel las filas con error de la carga masiva — feature 143 (2026-07-27) → IMPLEMENTADA
++ reviewer APROBADO (0 bloqueantes), falta PR/merge.** Frontend, `medium`, `depends_on: 142`
+(**satisfecha**: la 142 se mergeó a `dev` en `c3e6954`, PR #174). Rama
+`feature/143-descargar-errores-carga-masiva` desde `origin/dev @ c3e6954`, en worktree aislado
+`../ordenex-wt-143` (el árbol `ux` sigue arrastrando WIP ajeno y su typecheck está en rojo).
+Spec en `specs/143-descargar-errores-carga-masiva/` (**R1–R22**, 15 tasks).
+
+- **Decisiones cerradas PRE-SPEC (AskUserQuestion):** (a) el motivo del error viaja en una **columna
+  extra `motivo_error`** al final (tras `notas`), una sola hoja — NO hoja aparte; (b) las celdas llevan
+  los **valores CRUDOS** del archivo original (`FilaParseada.row`), no los normalizados, para que el
+  usuario reconozca su fila tal como la escribió.
+- **El ABIERTO del backlog quedó desactivado, pero por diseño permisivo, no por contrato.** El item
+  advertía que "una columna extra rompe el round-trip". Verificado que NO: `findMissingHeaders`
+  (`lib/types/carga-masiva.ts`) solo comprueba **presencia** de `REQUIRED_HEADERS` sin lista blanca,
+  ambos parsers (navegador y `lib/parsers/spreadsheet.ts`) indexan **por nombre de cabecera** y no por
+  posición, y `filaCargaSchema` es un `z.object` **sin `.strict()`** → zod descarta `motivo_error` en
+  silencio. Como hoy funciona por accidente afortunado, se **fijó con R14/R15/R16 + test de round-trip
+  + comentarios-ancla en el schema**, para que un futuro `.strict()` rompa un test y no la feature en
+  producción.
+- **Hallazgo del spec (el que evita un export desalineado en silencio):** el cruce `fila` ↔ `linea`
+  solo es válido porque `procesarEnChunks` **remapea** la fila del lote a la línea original
+  (`carga-masiva-chunks.ts:99`, `fila: lote[i]?.linea ?? rr.fila`). Sin ese remapeo el archivo saldría
+  con los datos de otras filas y el usuario corregiría la fila equivocada. Blindado con test dedicado.
+- **Colocación del botón:** `OrdenesCargaPreview` es la **única superficie viva** que lista errores —
+  `OrdenesCargaResumenPaso` está definido y testeado pero **no lo importa nadie**. El único dueño de la
+  clasificación + las `FilaParseada` es `OrdenesCargaMasivaButton`, así que bastó una prop (`filas`).
+- **Gate F1.4 APROBADO (2026-07-27):** (1) alcance **solo vista previa** — los errores de la carga real
+  post-confirmación (paso `asignacion`, hoy solo un toast) quedan fuera de alcance explícito (R20);
+  (2) el `motivo_error` lleva **prefijo de línea** (`Fila 7 — telefono: debe tener 8 dígitos`), una sola
+  vez aunque haya varios campos, y **sin prefijo** cuando no hay línea conocida — no se inventa número
+  (R22); (3) **sin CSV** (R21), decidido por el leader con el default: solo xlsx.
+- **Sin backend nuevo, sin migración, sin endpoint.** Descarga cliente puro (Blob + anchor). Módulos
+  nuevos: `carga-masiva-errores-formato.ts`, `carga-masiva-export-errores.ts` y `buildXlsxRows` +
+  `XLSX_MIME` en `lib/utils/xlsx-template.ts` (`buildXlsxTemplate` intacto). `exceljs` sigue entrando
+  **solo** por import dinámico dentro de `buildXlsxRows`, con test que lo blinda desde el componente.
+- **Review por MUTACIÓN, no por lectura** (lo que da confianza real en el mapa R1–R22): `.strict()` en
+  `filaCargaSchema` mata 2 tests; lista blanca en `findMissingHeaders` mata los 2 de R14; quitar el
+  remapeo de `chunks` mata el test del cruce; sufijo `" *"` en la cabecera mata 9; un prefijo
+  `Fila ${fila ?? 0}` inventado mata los 2 de R22. **0 bloqueantes, 8 menores**; se cerraron los 3
+  accionables (casillas de `tasks.md`; el round-trip del navegador pasó a usar `parseArchivo` real en
+  vez de reimplementar la lectura de celdas; fuera el import dinámico redundante). Los 5 restantes son
+  deuda preexistente de `dev` (typecheck en rojo, sin E2E de ingesta) o verificación fuera de alcance.
+- **⚠️ T13 (paseo manual en Excel/Sheets) NO se ejecutó** — queda para la puerta de aceptación humana.
+  Se sustituyó por verificación ejecutable en `tests/integration/carga-masiva-errores-roundtrip.test.ts`,
+  que genera el `.xlsx` real y lo re-parsea con **ambos** parsers.
+- **Baseline de `dev` medido en worktree limpio ANTES de implementar** (no es de esta feature):
+  `pnpm typecheck` 2 errores (`count` en `GestionarOrdenPanelProps`), `pnpm test` 14 fallando / 5294
+  pasando en `DataTable`, `LoginForm`, `MarcarLuegoToggle`, `MisAsignacionesModule`,
+  `NotaPrivadaMensajero`. **Delta 0** verificado por implementer y reviewer por separado.
+
 **Plantilla de carga masiva v2 — feature 142 (2026-07-27) → IMPLEMENTADA + reviewer APROBADO
 (0 bloqueantes), `PR #174` → `dev` (falta merge humano).** Pedido del humano:
 rehacer la plantilla de carga masiva de órdenes con (1) un orden de columnas nuevo — `destinatario`,

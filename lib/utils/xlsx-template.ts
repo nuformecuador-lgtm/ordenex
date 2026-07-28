@@ -42,6 +42,15 @@ function headerFor(field: XlsxTemplateField): string {
   return field.label ?? field.key;
 }
 
+/**
+ * MIME de un libro XLSX (OpenXML), para el `Blob` de descarga en el navegador.
+ * Vive aquí (junto a los constructores del binario) para que todo consumidor que
+ * descarga un XLSX use la MISMA cadena: `BulkUpload` (plantilla) y
+ * `OrdenesCargaPreview` (export de filas con error, feature 143).
+ */
+export const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
 /** Ancho mínimo legible de columna, en caracteres (R3). */
 const MIN_WIDTH = 12;
 /** Ancho máximo para evitar columnas desmesuradas (R3). */
@@ -111,6 +120,71 @@ export async function buildXlsxTemplate(
 
   // writeBuffer() es async y devuelve el binario XLSX (R6/R7). exceljs declara un
   // tipo `Buffer` propio; se normaliza a ArrayBuffer para el borde de presentación.
+  const buffer = await workbook.xlsx.writeBuffer();
+  return buffer as ArrayBuffer;
+}
+
+/** Ancho de una columna de datos: cabecera vs. el valor más largo presente (R3). */
+function computeDataWidth(
+  field: XlsxTemplateField,
+  rows: Array<Record<string, string>>,
+): number {
+  let longest = headerFor(field).length;
+  for (const row of rows) {
+    const value = row[field.key];
+    if (typeof value === "string" && value.length > longest) longest = value.length;
+  }
+  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, longest + PAD));
+}
+
+/**
+ * Feature 143 — Construye el binario XLSX de una tabla de DATOS (hermana de
+ * `buildXlsxTemplate`, que solo emite cabecera + una fila de ejemplo).
+ *
+ * - Única hoja (`sheetName`, por defecto "Datos").
+ * - Fila 1 = cabecera en negrita con la CLAVE MÁQUINA de cada campo
+ *   (`headerFor`): jamás una etiqueta divergente ni un sufijo, o el archivo
+ *   descargado deja de poder re-subirse (lección de la feature 58 — R2/R14).
+ * - Una fila por elemento de `rows`; celda vacía si la clave no está presente.
+ * - Anchos por contenido real, acotados por `MAX_WIDTH`.
+ * - `exceljs` se importa de forma DINÁMICA dentro de la función (R19): no entra
+ *   en el bundle inicial de quien lo consuma.
+ *
+ * @throws si `fields` está vacío (mismo contrato defensivo que `buildXlsxTemplate`).
+ */
+export async function buildXlsxRows(
+  fields: XlsxTemplateField[],
+  rows: Array<Record<string, string>>,
+  sheetName = "Datos",
+): Promise<ArrayBuffer> {
+  if (fields.length === 0) {
+    throw new Error(
+      "buildXlsxRows: se requiere al menos un campo para generar la hoja",
+    );
+  }
+
+  // Import dinámico (R19): exceljs fuera del bundle inicial del consumidor.
+  const ExcelJS = (await import("exceljs")).default;
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+
+  worksheet.columns = fields.map((field) => ({
+    header: headerFor(field),
+    key: field.key,
+    width: computeDataWidth(field, rows),
+  }));
+
+  worksheet.getRow(1).font = { bold: true };
+
+  for (const row of rows) {
+    const record: Record<string, string> = {};
+    for (const field of fields) {
+      record[field.key] = row[field.key] ?? "";
+    }
+    worksheet.addRow(record);
+  }
+
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer as ArrayBuffer;
 }
