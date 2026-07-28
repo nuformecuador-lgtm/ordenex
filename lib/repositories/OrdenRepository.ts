@@ -565,24 +565,56 @@ export class OrdenRepository implements IOrdenRepository {
     return row ? toDTO(row) : null;
   }
 
+  /**
+   * Feature 63 + 144 — traduce UN valor del `where` (ya resuelto por el service) al
+   * criterio Prisma de su columna: LISTA -> `IN (...)` (OR dentro del mismo filtro,
+   * R34); ESCALAR -> igualdad; AUSENTE -> clave omitida (sin filtro). Las claves
+   * resultantes son hermanas del mismo objeto `where` => AND entre filtros distintos
+   * (R33).
+   *
+   * `listaVaciaSinFiltro` existe SOLO por retrocompatibilidad de `estatusId` (feature
+   * 63: una lista vacia equivalia a "sin filtro"). Los filtros de la 144 fallan
+   * CERRADO: lista vacia -> `IN ()` -> cero filas. Un filtro presente jamas puede
+   * degradar a "sin filtro" y devolver de mas (R35). El schema `.nonempty()` ya hace
+   * la lista vacia inalcanzable desde el borde; esto es defensa en profundidad.
+   */
+  private static criterio(
+    columna: string,
+    valor: string | string[] | undefined,
+    listaVaciaSinFiltro = false,
+  ): Record<string, unknown> {
+    if (valor === undefined) return {};
+    if (Array.isArray(valor)) {
+      if (valor.length === 0 && listaVaciaSinFiltro) return {};
+      return { [columna]: { in: valor } };
+    }
+    return valor ? { [columna]: valor } : {};
+  }
+
   async list(params: ListOrdenesParams): Promise<ListOrdenesResult> {
+    const criterioColumna = OrdenRepository.criterio;
     const where: Prisma.OrdenWhereInput = {
       deletedAt: null, // R34
-      ...(params.where.tiendaId ? { tiendaId: params.where.tiendaId } : {}),
+      ...criterioColumna("tiendaId", params.where.tiendaId),
       // Un id -> igualdad; una lista de ids -> `IN (...)` (filtro multi-estado).
-      // Lista vacia = sin filtro (se descarta, igual que un `estatusId` ausente).
-      ...(Array.isArray(params.where.estatusId)
-        ? params.where.estatusId.length > 0
-          ? { estatusId: { in: params.where.estatusId } }
-          : {}
-        : params.where.estatusId
-          ? { estatusId: params.where.estatusId }
-          : {}),
+      // `true`: retrocompatibilidad de la feature 63 — una lista vacia de estados
+      // equivalia a "sin filtro". Los filtros de la 144 NO heredan esa concesion.
+      ...criterioColumna("estatusId", params.where.estatusId, true),
       // Acotamiento por dueño para el rol mensajero: solo sus asignadas (evita fuga
       // del listado completo en /ordenes). El service lo setea; aqui se traduce al WHERE.
       ...(params.where.mensajeroAsignadoId
         ? { mensajeroAsignadoId: params.where.mensajeroAsignadoId }
         : {}),
+      // Feature 144 (R33/R34/R35): filtros de catalogo de la orden. Mismo patron:
+      // lista -> `IN (...)` (OR interno), escalar -> igualdad, ausente -> sin clave.
+      // Claves hermanas del mismo objeto = AND entre filtros distintos.
+      ...criterioColumna("zonaId", params.where.zonaId),
+      ...criterioColumna("provinciaId", params.where.provinciaId),
+      ...criterioColumna("cantonId", params.where.cantonId),
+      // `distrito_id` es NULLABLE: `IN (...)` deja fuera las ordenes sin distrito.
+      ...criterioColumna("distritoId", params.where.distritoId),
+      // Feature 144 (R41/R42): rango temporal ya resuelto a instantes UTC por el service.
+      ...(params.where.createdAt ? { createdAt: params.where.createdAt } : {}),
     };
     // Feature 101/R6: `prioridad DESC` PRIMERO y LUEGO el orden vigente (lista blanca R31:
     // created_at/num_guia/num_remision). El sort va en la QUERY para respetar la paginacion
