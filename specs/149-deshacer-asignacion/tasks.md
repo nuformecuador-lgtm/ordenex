@@ -8,7 +8,7 @@
 
 ## F0 — Base de datos y dominio (bloquea todo lo demás)
 
-- [ ] **T0.1 — Migración del enum.**
+- [x] **T0.1 — Migración del enum.**
   Crear `db/migrations/20260728120000_orden_historial_origen_deshacer_asignacion/` con
   `migration.sql` (`ALTER TYPE ... ADD VALUE IF NOT EXISTS 'deshacer_asignacion'`, sola en su
   transacción) y `down.sql` (recreación del enum con los 22 valores previos), copiando el
@@ -16,12 +16,12 @@
   **Hecho:** `pnpm run db:migrate` aplica en verde; `pnpm run db:rollback` revierte en verde
   sobre una DB sin filas `deshacer_asignacion`; `down.sql` existe.
 
-- [ ] **T0.2 — Enum en el schema Prisma.** [P con T0.3]
+- [x] **T0.2 — Enum en el schema Prisma.** [P con T0.3]
   Añadir `deshacer_asignacion` al enum `OrdenHistorialOrigenTipo` de `db/schema.prisma`, con
   comentario `// feature 149: reversión de asignación/ruteo antes de la recogida`.
   **Hecho:** `pnpm db:generate` regenera el cliente y `OrdenHistorialOrigenTipo` incluye el valor.
 
-- [ ] **T0.3 — SEED de tipos de origen.** [P con T0.2]
+- [x] **T0.3 — SEED de tipos de origen.** [P con T0.2]
   Añadir `"deshacer_asignacion"` a `ORDEN_HISTORIAL_ORIGEN_TIPO_SEED`
   (`lib/types/orden-historial.ts`) y documentar en comentario, siguiendo el formato de las
   features 99/100/109, POR QUÉ **no** entra en `ORIGEN_TIPOS_CON_GESTION` (nunca enlaza gestión;
@@ -29,12 +29,12 @@
   **Hecho:** `pnpm typecheck` en verde (el `satisfies` y `_EnsureExhaustive` no rompen);
   `ORIGEN_TIPOS_CON_GESTION` sigue con dos valores.
 
-- [ ] **T0.4 — Aristas nuevas en la guardia (140).** Depende de T0.3.
+- [x] **T0.4 — Aristas nuevas en la guardia (140).** Depende de T0.3.
   Declarar #43/#44/#45 en `lib/types/order-status-transiciones.ts` exactamente como en
   `design.md` §2, con el comentario `// #4x (149)`.
   **Hecho:** `pnpm typecheck` en verde; `assertTransicionValida` acepta los tres pares nuevos.
 
-- [ ] **T0.5 — Actualizar el inventario-fixture de la 140.** Depende de T0.4.
+- [x] **T0.5 — Actualizar el inventario-fixture de la 140.** Depende de T0.4.
   Añadir a mano las 3 filas a `INVENTARIO_FLUJO` (`tests/fixtures/inventario-transiciones-140.ts`)
   y actualizar `RECUENTO_INVENTARIO` a `aristasFlujo: 46`, `paresUnicos: 42`.
   **Hecho:** el test «el mapa declara exactamente las aristas del inventario» pasa.
@@ -43,19 +43,19 @@
 
 ## F1 — Tests de dominio (guardia) — pueden escribirse en paralelo a F2
 
-- [ ] **T1.1 — Reparar y extender el unit de la guardia.** Depende de T0.5.
+- [x] **T1.1 — Reparar y extender el unit de la guardia.** Depende de T0.5.
   En `tests/unit/domain/order-status-transiciones.guardia.test.ts`: retirar
   `["por_recoger", "en_bodega_satelite"]` de la lista de pares ilegales (ahora es #44), sustituirlo
   por `["por_recoger", "en_preparacion"]`, actualizar el título/recuento del test de conteo y
   añadir un bloque «REGRESIÓN 149» que afirme que #43/#44/#45 pasan.
   **Cubre:** R27, R28. **Hecho:** suite `order-status-transiciones` en verde.
 
-- [ ] **T1.2 — Test de no-regresión del conjunto de orígenes con gestión.** [P con T1.1]
+- [x] **T1.2 — Test de no-regresión del conjunto de orígenes con gestión.** [P con T1.1]
   Nuevo `tests/unit/domain/orden-historial-origen-149.test.ts`: `deshacer_asignacion` está en el
   SEED y NO está en `ORIGEN_TIPOS_CON_GESTION`.
   **Cubre:** R25, R26.
 
-- [ ] **T1.3 — Test de conectividad sin cambios.** [P con T1.1]
+- [x] **T1.3 — Test de conectividad sin cambios.** [P con T1.1]
   Ejecutar `order-status-transiciones.connectividad.test.ts` sin tocarlo y confirmar verde
   (catálogo sigue en 18, sin terminales nuevos).
   **Hecho:** verde sin modificar el archivo. Si hiciera falta modificarlo, es señal de que se
@@ -65,13 +65,13 @@
 
 ## F2 — Capa de datos
 
-- [ ] **T2.1 — Lectura del origen para la reversión.**
+- [x] **T2.1 — Lectura del origen para la reversión.**
   Añadir `findOrigenesReversion` a `IOrdenHistorialRepository` y a `OrdenHistorialRepository`
   (`DISTINCT ON (orden_id)`, `ORDER BY orden_id, created_at DESC, id DESC`, join al `value` del
   estado de origen; una sola consulta para el lote).
   **Hecho:** unit con doble de Prisma verifica la forma del query y el mapeo `ordenId -> value|null`.
 
-- [ ] **T2.2 — Escritura transaccional del lote.** [P con T2.1]
+- [x] **T2.2 — Escritura transaccional del lote.** [P con T2.1]
   Añadir `deshacerAsignacionLote` a `IOrdenRepository` y `OrdenRepository` según `design.md`
   §3.2: UPDATE guardado por `estatus_id` de origen + `deleted_at IS NULL` + `zona_id` opcional,
   **SIN guarda de `cierre_dia`** (Q1 CERRADA); `RETURNING id`; si `rows.length !== items.length`
@@ -81,7 +81,7 @@
   **Hecho:** no toca `num_guia` ni `prioridad` (verificable en el `SET` del SQL); el ancla
   `TODO(146)` está en el archivo; unit en verde.
 
-- [ ] **T2.3 — Mensajes de bloqueo tipados.** [P con T2.1/T2.2]
+- [x] **T2.3 — Mensajes de bloqueo tipados.** [P con T2.1/T2.2]
   `lib/services/mensajes-deshacer-asignacion.ts` con las constantes de motivo (patrón
   `mensajes-bloqueo.ts`).
   **Hecho:** ningún literal de motivo duplicado entre service, tests y UI.
@@ -90,18 +90,18 @@
 
 ## F3 — Servicio (lógica de negocio)
 
-- [ ] **T3.1 — Interfaz del service.** Depende de T2.1/T2.2.
+- [x] **T3.1 — Interfaz del service.** Depende de T2.1/T2.2.
   `lib/interfaces/services/IDeshacerAsignacionService.ts` con input, resultado y
   `DeshacerAsignacionResultadoItem`.
   **Hecho:** `pnpm typecheck` en verde.
 
-- [ ] **T3.2 — `DeshacerAsignacionService`.** Depende de T3.1.
+- [x] **T3.2 — `DeshacerAsignacionService`.** Depende de T3.1.
   Implementar la secuencia de `design.md` §1 (autorización → zona → GAM → validación por orden →
   derivación/normalización → coherencia zona/destino → cierre del mensajero → catálogo →
   escritura), con `Pick<IOrdenRepository, ...>` para los dobles de test.
   **Hecho:** el service no importa Prisma ni nada de `next/`; se instancia en test con dobles.
 
-- [ ] **T3.3 — Server Action.** Depende de T3.2.
+- [x] **T3.3 — Server Action.** Depende de T3.2.
   `lib/actions/deshacer-asignacion.ts` con `withErrorHandler` + `resolveActorFromSession` + zod
   (`ordenIds` uuid no vacío, `motivo` trim 10..300) + fábrica del service.
   **Hecho:** un input inválido devuelve `validation_error` SIN construir el service.
@@ -110,48 +110,48 @@
 
 ## F4 — Tests de servicio y borde (bloque grande; se puede repartir)
 
-- [ ] **T4.1 — Autorización por rol.** [P]
+- [x] **T4.1 — Autorización por rol.** [P]
   `tests/unit/services/deshacer-asignacion.autz.test.ts`: `maestro`/`admin` pasan;
   `adminTienda`/`mensajero`/`apiKey` → `forbidden` sin llamar a ningún writer.
   **Cubre:** R1, R2, R3.
 
-- [ ] **T4.2 — Scoping por zona del `adminSatelite`.** [P]
+- [x] **T4.2 — Scoping por zona del `adminSatelite`.** [P]
   Zona ajena en una orden del lote → `forbidden` y cero escrituras; sin zona → `sin_zona`;
   destino derivado `en_bodega_central` con actor `adminSatelite` → `forbidden`.
   **Cubre:** R4, R5, R6.
 
-- [ ] **T4.3 — Caso (a).** [P]
+- [x] **T4.3 — Caso (a).** [P]
   Orden `por_recoger` con origen `en_bodega_central` → destino `en_bodega_central`, mensajero y
   `asignado_at` a NULL; ídem con origen `en_bodega_satelite` → `en_bodega_satelite`.
   **Cubre:** R8, R9.
 
-- [ ] **T4.4 — Caso (b).** [P]
+- [x] **T4.4 — Caso (b).** [P]
   Orden `en_ruta_bodega_satelite` → `en_bodega_central`, mensajero/`asignado_at` NULL.
   **Cubre:** R10.
 
-- [ ] **T4.5 — Derivación y normalización.** [P]
+- [x] **T4.5 — Derivación y normalización.** [P]
   Los cuatro orígenes de la tabla D3' producen el destino esperado; se afirma que la derivación
   usa el historial y NO la zona (caso testigo: orden de zona satélite cuyo historial dice
   `en_bodega_central` no puede terminar en `en_bodega_satelite`).
   **Cubre:** R11, R12.
 
-- [ ] **T4.6 — Fallo cerrado de la derivación.** [P]
+- [x] **T4.6 — Fallo cerrado de la derivación.** [P]
   Sin fila de historial → `conflict`; origen NULL (creación) → `conflict`; origen fuera de la
   tabla (`en_ruta`, `devuelta`) → `conflict`. En los tres casos, cero escrituras.
   **Cubre:** R13.
 
-- [ ] **T4.7 — Coherencia zona/destino.** [P]
+- [x] **T4.7 — Coherencia zona/destino.** [P]
   Destino `en_bodega_central` con orden no-GAM → `conflict`; destino `en_bodega_satelite` con
   orden GAM → `conflict`.
   **Cubre:** R14, R15.
 
-- [ ] **T4.8 — Bloqueos de estado y existencia.** [P]
+- [x] **T4.8 — Bloqueos de estado y existencia.** [P]
   `en_ruta`, `en_bodega_satelite`, `entregada`, `reprogramada`, `devuelta`, `rechazada`,
   `sin_gestionar` → `conflict` con el estado en el motivo; orden borrada → «orden borrada»; id
   inexistente → «orden no existe».
   **Cubre:** R16, R17, R18.
 
-- [ ] **T4.9 — ASIMETRÍA asignar/deshacer con cierre pendiente (Q1 CERRADA).** [P]
+- [x] **T4.9 — ASIMETRÍA asignar/deshacer con cierre pendiente (Q1 CERRADA).** [P]
   `tests/unit/services/deshacer-asignacion.cierre-asimetria.test.ts`, DOS aserciones sobre el
   MISMO mensajero con un cierre `solicitado`:
   (a) `DeshacerAsignacionService.deshacer` sobre su orden en `por_recoger` → `ok`, la orden
@@ -160,32 +160,32 @@
       `MSG_MENSAJERO_BLOQUEADO` (test de no-regresión del gate vigente).
   **Cubre:** R19.
 
-- [ ] **T4.10 — Todo-o-nada y carrera.** [P]
+- [x] **T4.10 — Todo-o-nada y carrera.** [P]
   Lote de 3 con una orden inválida → cero escrituras en las otras dos; simulación de carrera
   (`deshacerAsignacionLote` lanza `DeshacerAsignacionConflictoError`) → `conflict` con detalle y
   sin efectos parciales.
   **Cubre:** R20, R21.
 
-- [ ] **T4.11 — Motivo obligatorio (borde zod).** [P]
+- [x] **T4.11 — Motivo obligatorio (borde zod).** [P]
   `tests/unit/actions/deshacer-asignacion.action.test.ts`: motivo ausente, `""`, `"   "`, 9
   caracteres y 301 caracteres → `validation_error` con `fieldErrors.motivo`, sin construir el
   service; motivo válido con espacios se pasa RECORTADO al service; sin sesión →
   `unauthenticated`.
   **Cubre:** R7, R22, R24.
 
-- [ ] **T4.12 — Invariantes de columnas.** [P]
+- [x] **T4.12 — Invariantes de columnas.** [P]
   Tras una reversión, `num_guia` conserva su valor y `prioridad` NO cambia en ninguna dirección
   (Q2 CERRADA): una orden con `prioridad = false` sigue en `false` —la pérdida del flag es la
   limitación aceptada de R30— y una con `true` sigue en `true`. El `SET` del UPDATE no menciona
   ninguna de las dos columnas.
   **Cubre:** R29, R30.
 
-- [ ] **T4.13 — Mensajes sin PII.** [P]
+- [x] **T4.13 — Mensajes sin PII.** [P]
   Ningún `motivo` de `conflict` ni mensaje de error contiene un UUID (regex de UUID) ni el nombre
   o teléfono del destinatario.
   **Cubre:** R40.
 
-- [ ] **T4.14 — Sin notificación al mensajero + ancla 146 (Q5 CERRADA).** [P]
+- [x] **T4.14 — Sin notificación al mensajero + ancla 146 (Q5 CERRADA).** [P]
   (a) Test: una reversión exitosa NO invoca ningún productor de notificaciones —el único job
   encolado es el webhook de estado del choke point— y la orden desaparece del listado de
   asignaciones del mensajero.
@@ -198,14 +198,14 @@
 
 ## F5 — Integración (repo + choke point + guardia real)
 
-- [ ] **T5.1 — Bitácora y webhook.** Depende de T2.2.
+- [x] **T5.1 — Bitácora y webhook.** Depende de T2.2.
   `tests/integration/repositories/deshacer-asignacion.historial.test.ts`: una reversión escribe
   EXACTAMENTE una fila de historial por orden, con origen real, destino, actor, `origen_tipo =
   deshacer_asignacion` y el motivo; el emisor de webhooks se invoca en la misma tx; si la tx
   revierte, no queda ni fila ni job.
   **Cubre:** R23, R31, R32, R33.
 
-- [ ] **T5.2 — La guardia real acepta las tres aristas.** Depende de T0.4.
+- [x] **T5.2 — La guardia real acepta las tres aristas.** Depende de T0.4.
   Reversión de las tres combinaciones a través de `appendCambioEstado` SIN mockear la guardia:
   ninguna lanza `TransicionIlegalError`.
   **Cubre:** R27.
