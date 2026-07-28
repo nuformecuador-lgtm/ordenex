@@ -1,43 +1,73 @@
 # Feature 144 — Filtros de órdenes (zona, tienda, geografía y tiempo) · design.md
 
-> Decisiones técnicas ANTES de código.
+> Decisiones técnicas ANTES de código. **Puerta F1.4 cerrada por el humano el
+> 2026-07-28** (§0).
 >
 > La feature entrega **dos piezas**: **(A)** un componente de filtros **genérico y
 > parametrizable** (`FilterComponent`), sin dominio, reutilizable por cualquier
 > consumidor y cualquier transporte; y **(B)** el **cableado en órdenes**, único
 > consumidor implementado ahora.
->
-> Decisiones cerradas que NO se reabren: se extiende el `filter` de la Server Action
-> `listarOrdenes` (sin endpoint HTTP nuevo, sin query params en la URL del navegador
-> — variante propuesta al humano y **descartada** por él, §10.1); el encadenamiento
-> se resuelve en el cliente sobre datos precargados en una sola entrega; la única
-> implementación de consumidor que entra aquí es órdenes.
+
+---
+
+## 0. Decisiones cerradas (gate F1.4, 2026-07-28)
+
+| # | Pregunta | Decisión del humano | Consecuencia de diseño |
+| --- | --- | --- | --- |
+| (a) | Filtro de tiempo: presets vs. rango | **LAS DOS.** Presets **y** rango abierto desde/hasta. Cálculo server-side; bordes: `desde` = 00:00 CR (06:00 UTC de ese día), `hasta` **inclusive** (< 06:00 UTC del día+1) | Dos filtros declarados en B (§4.1); tipo `dateRange` entra en A (§A.3); tres claves nuevas en el `filter` (§2.1); regla de precedencia (§2.5) |
+| (b) | Zona: columna propia vs. derivada | **`orden.zona_id`** | `WHERE zona_id IN (...)` directo, sin JOIN (§2.2) |
+| (c) | Vía del precargado | **`Promise.all` al cargar la página** → Server Component resuelve en paralelo y baja por props | Se descarta la Server Action + SWR que yo recomendaba (§3.4); ~70 KB en el RSC payload = **coste aceptado a sabiendas** (§3.2) |
+| (d) | Opciones de tienda | **Todas** las cuentas dueñas posibles | Sin `SELECT DISTINCT` sobre `orden` (§3.3) |
+| (e) | Tiendas inactivas | **Se incluyen**, marcadas en la etiqueta | `listCuentasTienda()` no filtra por `estado`; el label lleva sufijo (§3.3) |
+| (f) | Distrito NULL | **Quedan fuera, sin opción "sin distrito"**. El humano afirma que no deberían existir NULLs | Semántica `IN (...)` intacta; **la columna SÍ es nullable hoy** → riesgo anotado (§8.6) |
+| (g) | Persistencia de la selección | **Se pierde al recargar**, sin `sessionStorage` | Sin trabajo adicional |
+| (h) | Cuentas apiKey en el select de tienda | **Separadas por grupo** | `group?: string` en la opción; agrupado **genérico en A** e implementado dentro de `MultiSelectFilter` (§A.6) |
+| (i) | Limpiar | **Las dos:** "Limpiar todo" **y** limpiar individual | `showClearAll` en A + limpieza propia del `dateRange` (§A.5) |
+| (j) | Estado del componente | **No controlado** (interno) + `onChange` | El consumidor no puede vaciar A desde fuera → fundamenta la precedencia de (§2.5) |
+| (k) | Tipos de filtro en v1 | **`multi`, `single`, `dateRange`** | `FilterKind` de tres valores (§A.3) |
+| (l) | Forma del payload | **`Record<string, string[]>`**, claves vacías omitidas | El `dateRange` encaja como lista de 2 posiciones (§A.4) |
+| (m) | ¿Varios padres por filtro? | **Un solo padre** | `dependsOn?: string` (§A.7) |
+| (n) | Ubicación del componente | **`components/shared/`**, con la 145 como segundo consumidor | Excepción documentada a la regla de las dos superficies (§A.1) |
 
 ---
 
 # Parte A — `FilterComponent` (genérico, sin dominio)
 
-## A.1 Qué es y qué no es
+## A.1 Qué es, qué no es y dónde vive
 
 | | `MultiSelectFilter` (ya existe) | `FilterComponent` (esta feature) |
 | --- | --- | --- |
 | Alcance | **un** control | **N** controles |
-| Estado | controlado por el padre (`value`/`onChange`) | dueño del **estado agregado** |
+| Estado | controlado por el padre | dueño del **estado agregado**, no controlado (decisión (j)) |
 | Sabe de | nada | nada (tampoco de órdenes) |
 | Emite | `string[]` de un filtro | selección agregada de todos los filtros |
 
-`FilterComponent` **no** hace fetch (R4), **no** conoce claves ni entidades del
-dominio (R5), **no** construye el objeto de ninguna API (R14). Recibe declaraciones,
-pinta controles, mantiene el estado agregado, aplica las dependencias declaradas y
-emite. Punto.
+`FilterComponent` **no** hace fetch (R4), **no** conoce claves ni entidades del dominio
+(R5), **no** construye el objeto de ninguna API (R18).
 
-## A.2 Contrato de props
+**Ubicación: `components/shared/FilterComponent.tsx` (decisión (n)).**
+`docs/architecture.md` pide DOS consumidores con la misma API antes de promover a
+`shared/`, y hoy hay uno. **Excepción aprobada por el humano en F1.4**, justificada así:
+(i) el humano pidió explícitamente que el componente naciera genérico y reutilizable;
+(ii) la feature **145** ("rollout de búsqueda/filtros/export a todas las tablas") ya
+existe en `feature_list.json` con `depends_on: 144` y es su segundo consumidor
+declarado; (iii) nacer en `_components/` de órdenes obligaría a reescribir imports en la
+145 sin ganancia. **Reviewer: esto NO es un hallazgo.**
+
+## A.2 Ficheros de A
+
+```
+components/shared/FilterComponent.tsx      ← orquestador (nuevo)
+components/shared/DateRangeFilter.tsx      ← control de rango (nuevo, §A.5)
+components/shared/MultiSelectFilter.tsx    ← EXISTENTE, se le añade `group` (§A.6)
+lib/utils/filter-dependencies.ts           ← motor de dependencias, puro (nuevo)
+```
+
+## A.3 Contrato de props
 
 ```ts
-// components/shared/FilterComponent.tsx   (ubicación: pregunta abierta (n))
-
-/** Tipos de control soportados en v1 (pregunta abierta (k)). */
-export type FilterKind = "multi" | "single";
+/** Tipos soportados en v1 (decisión (k)). */
+export type FilterKind = "multi" | "single" | "dateRange";
 
 export interface FilterOption {
   /** Valor emitido tal cual (R5). Normalmente un id. */
@@ -46,125 +76,175 @@ export interface FilterOption {
   label: string;
   /**
    * Valor del filtro PADRE al que pertenece esta opción. Solo lo leen los filtros
-   * que declaran `dependsOn` (R15/R16). El componente NO sabe qué significa.
+   * que declaran `dependsOn` (R21/R22). El componente NO sabe qué significa.
    */
   parentValue?: string;
+  /**
+   * Grupo al que pertenece la opción (decisión (h), R26). Puro contrato de opciones:
+   * el componente no sabe qué es un grupo más allá de una cabecera con nombre.
+   */
+  group?: string;
 }
 
 export interface FilterDef {
-  /** Clave con la que este filtro aparece en la salida (R2). */
-  key: string;
+  key: string;                 // clave en la salida (R2)
   label: string;
   kind: FilterKind;
-  options: FilterOption[];
-  /** Clave de OTRO filtro del que este depende (R15). */
-  dependsOn?: string;
+  /** Obligatorio en "multi"/"single"; ignorado en "dateRange". */
+  options?: FilterOption[];
+  dependsOn?: string;          // un solo padre (decisión (m))
   placeholder?: string;
   searchPlaceholder?: string;
   emptyMessage?: string;
   disabled?: boolean;
 }
 
-/** Salida agnóstica (R11/R13/R14): clave declarada -> valores marcados. */
+/** Salida agnóstica y uniforme (R14/R16/R17/R18, decisión (l)). */
 export type FilterSelection = Record<string, string[]>;
 
 export interface FilterComponentProps {
   filters: FilterDef[];
   onChange: (selection: FilterSelection) => void;
-  /** Deshabilita TODOS los controles (R10). */
-  disabled?: boolean;
+  /** Muestra la acción "Limpiar todo" (decisión (i), R20). Default: false. */
+  showClearAll?: boolean;
+  disabled?: boolean;          // R13
   className?: string;
 }
 ```
 
-Decisiones de forma, explícitas:
+## A.4 Forma de la salida, incluido el borde del `dateRange`
 
-- **`FilterSelection` es `Record<string, string[]>` incluso para `single`** (una
-  lista de 0 o 1 elemento). Una sola forma de salida = un solo camino de código en
-  cada consumidor, y añadir un tipo nuevo no rompe a nadie. Alternativa evaluada:
-  `string[] | string` según el tipo — obliga a cada consumidor a `Array.isArray`.
-  → **pregunta abierta (l)**.
-- **Las claves sin selección no aparecen** en la salida (R13). "Sin filtros" es `{}`,
-  que el consumidor distingue con `Object.keys(sel).length === 0`. Es lo que permite
-  a órdenes no tocar `filter` y conservar el input previo (R46).
-- **Estado interno (no controlado) con `onChange`** — recomendación; ver pregunta
-  abierta (j). El componente es dueño del estado agregado porque la poda transitiva
-  (R18) necesita decidir sobre el conjunto, no sobre un control suelto.
+`FilterSelection` es `Record<string, string[]>` **para los tres tipos** (decisión (l)),
+con esta convención, que es el punto donde una forma uniforme podría romperse y por eso
+queda fijada sin ambigüedad y trazada a test (R17):
 
-## A.3 Render de cada control
+| `kind` | Qué emite | Ejemplos |
+| --- | --- | --- |
+| `multi` | N valores de catálogo | `{ zona_id: ["z1","z2"] }` |
+| `single` | exactamente 1 valor | `{ created_preset: ["30d"] }` |
+| `dateRange` | **exactamente 2 posiciones** `[inicial, final]`, `""` en el extremo no fijado | `{ created_range: ["2026-07-01","2026-07-28"] }`, `{ created_range: ["2026-07-01",""] }`, `{ created_range: ["","2026-07-28"] }` |
 
-- `kind: "multi"` → **`MultiSelectFilter`** existente, tal cual, sin modificarlo:
-  ya trae buscador interno, casilla por opción, `role="listbox"`/`role="option"` +
-  `aria-selected`, cierre por clic fuera y `Escape` (R6, R20). Su `onChange` solo se
-  dispara en `alternar()` y en "Limpiar"; el buscador es estado local suyo, así que
-  **R12 (no emitir al teclear) se cumple por construcción** — el test lo fija para
-  que nadie lo rompa.
-- `kind: "single"` → `Select` de shadcn/ui (`components/ui/select`), una opción a la
-  vez (R7).
-- `kind` desconocido → no se renderiza ni entra en la salida, y el resto sigue
-  funcionando (R8). Se registra una advertencia en desarrollo.
-- Filtro sin opciones (o cuyas opciones quedaron vacías tras el acotamiento) →
-  control `disabled` (R9). `props.disabled` global gana sobre todo (R10).
+Reglas duras:
 
-## A.4 Contrato de dependencias entre filtros
+- **Clave omitida** si el filtro no tiene selección (R16). Para `dateRange`, "sin
+  selección" = **ambos** extremos vacíos; nunca se emite `["",""]`.
+- **La posición es el significado**: índice 0 = inicial, índice 1 = final. Nunca se
+  compacta la lista quitando el extremo vacío (eso volvería ambiguo `["2026-07-01"]`).
+- El componente **no interpreta** las fechas más allá de la comparación de orden (R10):
+  no las convierte a instantes, no aplica husos, no las normaliza. Eso es server-side
+  (decisión (a), §2.4).
+- Los valores del `dateRange` son los únicos que **no** son ids de catálogo. El
+  componente no lo nota: para él son cadenas (R5).
 
-Este es el punto que más fácilmente contamina el componente genérico, así que se
-diseña explícito.
+## A.5 Control de rango de fechas — **sin dependencias nuevas** (recomendado)
 
-**Declaración:** un filtro declara `dependsOn: "<key de otro filtro>"`, y cada opción
-suya trae `parentValue` = el valor del padre al que pertenece.
+El humano dijo «usá el dateRange de shadcn». Verificado contra el repo, ese camino **no
+es gratis**:
+
+- `components/ui/` **no** tiene `calendar`, `popover` ni `command`.
+- El date-range de shadcn = `Calendar` (que es **`react-day-picker`**) + `Popover` (que
+  en shadcn es **`@radix-ui/react-popover`**).
+- `package.json` **no tiene ni un solo paquete de Radix**: las primitivas de este repo
+  se construyeron sobre **`@base-ui/react` ^1.6.0** (`components/ui/select.tsx`,
+  `dialog.tsx`). Traer Radix metería una **segunda librería de primitivas** conviviendo
+  con Base UI: drift de foco/portales/estilos y peso extra, para un solo control.
+- El repo ya tiene un patrón vigente y probado para fechas: **`<Input type="date">`**, en
+  6 componentes, incluido `app/(app)/wallet/_components/WalletFiltros.tsx`, que ya
+  implementa un **desde/hasta** con dos inputs nativos y un botón "Limpiar".
+
+**Recomendación (y decisión de diseño): construir `DateRangeFilter` con dos
+`<Input type="date">`** + botón "Limpiar" propio, reusando `components/ui/input.tsx` y
+`components/ui/label.tsx`. **Dependencias nuevas: NINGUNA.** Se obtiene el calendario
+nativo del sistema operativo (accesible, localizado, táctil en móvil), formato
+`YYYY-MM-DD` ya normalizado por el navegador, y `onChange` que dispara al **completar**
+la fecha, no por tecla (satisface el espíritu de R15).
+
+Si el humano exige el calendario visual de shadcn pese a lo anterior, el camino de menor
+daño es: **`react-day-picker` (1 dependencia)** dentro de un panel propio construido con
+el mismo patrón de `MultiSelectFilter` (que ya resuelve clic-fuera + `Escape` sin
+ninguna primitiva) — **y explícitamente NO** `@radix-ui/react-popover`. Eso es una task
+extra y se decide antes de TA.4; no es lo que este spec presupuesta.
+
+Limpieza individual (decisión (i), R19): el `DateRangeFilter` tiene su propio botón
+"Limpiar" que vacía ambos extremos y emite. Validación: si inicial > final, el control
+se marca `aria-invalid` con mensaje y **no** emite esa combinación (R10).
+
+## A.6 Agrupado de opciones (decisión (h)) — **capacidad genérica de A**
+
+**Es genérico, no del filtro de tienda.** Es puro contrato de opciones (`group?: string`),
+así que cualquier filtro de cualquier consumidor puede agrupar sin que A sepa de qué.
+
+Se implementa **dentro de `MultiSelectFilter`** (es el único que renderiza una lista de
+opciones): si alguna opción trae `group`, la lista se parte en secciones preservando el
+orden de aparición de los grupos; si ninguna lo trae, se renderiza plana **exactamente
+como hoy** (R26 y sin regresión para el filtro de estado de la 63).
+
+ARIA: `listbox > group > option` es una composición válida. La estructura pasa de
+
+```html
+<ul role="listbox"> <li><button role="option" …>…</button></li> … </ul>
+```
+
+a, cuando hay grupos:
+
+```html
+<ul role="listbox" aria-multiselectable>
+  <li role="group" aria-label="Cuentas tienda">
+    <div aria-hidden>Cuentas tienda</div>          <!-- cabecera visual -->
+    <ul> <li><button role="option" aria-selected=…>…</button></li> … </ul>
+  </li>
+  <li role="group" aria-label="Integraciones (API)"> … </li>
+</ul>
+```
+
+Los `role="option"` y sus `aria-selected` **no cambian**, así que los tests existentes de
+`MultiSelectFilter` y del filtro de estado siguen verdes (R63).
+
+## A.7 Contrato de dependencias entre filtros
+
+**Declaración:** un filtro declara `dependsOn: "<key de otro filtro>"` (un solo padre,
+decisión (m)), y cada opción suya trae `parentValue` = el valor del padre al que
+pertenece.
 
 **Resolución** (`lib/utils/filter-dependencies.ts`, funciones puras sin React):
 
 ```ts
-/** Valores del filtro `key` que se OFRECEN, dadas las selecciones actuales. */
 opcionesVisibles(filters, selection, key): FilterOption[]
-
-/** Selección EFECTIVA de un filtro: su selección si no está vacía; si está vacía,
- *  todos sus valores visibles (R16). Recursiva sobre la cadena de padres. */
 seleccionEfectiva(filters, selection, key): Set<string>
-
-/** Poda transitiva: quita de cada filtro dependiente los valores que dejaron de
- *  estar visibles (R18). Idempotente. */
 podarSeleccion(filters, selection): FilterSelection
 ```
 
 Regla de `opcionesVisibles(key)`:
 
-1. Si el filtro no declara `dependsOn`, o su padre no está declarado (R19) →
-   **todas** sus opciones.
-2. Si declara `dependsOn: P` → las opciones cuyo `parentValue` ∈
-   `seleccionEfectiva(P)`.
+1. Sin `dependsOn`, o con padre no declarado (R25) → **todas** sus opciones.
+2. Con `dependsOn: P` → las opciones cuyo `parentValue` ∈ `seleccionEfectiva(P)`.
 
-`seleccionEfectiva` es lo que hace funcionar el caso "provincia marcada, cantón sin
-marcar": el efectivo del cantón son *sus* opciones visibles (ya acotadas por la
-provincia), así que los distritos salen acotados a esas provincias **sin** que el
-componente sepa qué es una provincia (R16, R17). La recursión da profundidad
-arbitraria; se protege contra ciclos con un `Set` de claves visitadas (un ciclo se
-trata como "sin padre", igual que R19).
+`seleccionEfectiva(P)` = selección de P si no está vacía; si está vacía, **todos sus
+valores visibles** (recursivo). Eso es lo que hace funcionar "provincia marcada, cantón
+sin marcar": el efectivo del cantón son *sus* opciones visibles (ya acotadas por la
+provincia), así que los distritos salen acotados sin que A sepa qué es una provincia
+(R22, R23). Profundidad arbitraria; ciclos cortados con un `Set` de visitados (un ciclo
+se trata como "sin padre", igual que R25). Los filtros `dateRange` no participan en
+dependencias (no tienen opciones).
 
-**Poda:** tras cada cambio, se aplica `podarSeleccion` **antes** de llamar a
-`onChange`, en orden topológico (padres antes que hijos), de modo que lo emitido
-nunca contenga un hijo huérfano (R18). Es la regla frente a la alternativa
-"conservar la selección oculta": un valor seleccionado pero invisible produce
-resultados inexplicables — exactamente el problema que el humano señaló.
+**Poda:** tras cada cambio se aplica `podarSeleccion` **antes** de llamar a `onChange`,
+en orden topológico (padres antes que hijos), de modo que lo emitido nunca contenga un
+hijo huérfano (R24). Es la regla frente a "conservar la selección oculta": un valor
+seleccionado pero invisible produce resultados inexplicables — el problema que el humano
+señaló.
 
-**Alternativa evaluada y descartada:** que el **consumidor** recalcule las opciones
-de los hijos y las vuelva a pasar por props en cada `onChange` (componente
-totalmente "tonto"). Descartada porque (i) obliga a cada consumidor a reimplementar
-acotamiento + poda + coherencia de la salida, que es justo la lógica que se quiere
-compartir; (ii) crea un lazo `onChange → recalcular → props → poda → onChange`
-propenso a renders en cascada y a emitir salidas transitorias incoherentes; (iii) el
-componente seguiría necesitando la poda de todos modos para no emitir huérfanos, así
-que no se ahorra nada. La declaración `dependsOn` + `parentValue` mantiene el
-componente ignorante del dominio con una sola pieza de metadato por opción.
+**Alternativa evaluada y descartada:** que el **consumidor** recalcule las opciones de
+los hijos y las repase por props (componente "tonto"). Descartada porque (i) obliga a
+cada consumidor a reimplementar acotamiento + poda, que es justo lo que se quiere
+compartir; (ii) crea un lazo `onChange → recalcular → props → poda → onChange` propenso a
+renders en cascada; (iii) A necesitaría la poda igualmente para no emitir huérfanos.
 
-## A.5 Lo que NO entra en A
+## A.8 Lo que NO entra en A
 
-Sin conocimiento de provincias/cantones/distritos, sin "createdAt", sin `filter`, sin
-`status_id`, sin Server Actions, sin SWR, sin ids de dominio. Todo eso vive en B.
-El test de esta pieza usa filtros de fantasía (`color` → `talla`), y el reviewer
-rechaza el bloque A si sus tests importan dominio.
+Sin provincias/cantones/distritos, sin `createdAt`, sin `filter`, sin `status_id`, sin
+Server Actions, sin husos horarios. Los tests de A usan filtros de fantasía (`color` →
+`talla`) y **no pueden importar** `lib/types/orden`, `lib/actions/*` ni
+`app/(app)/ordenes/*`.
 
 ---
 
@@ -174,32 +254,25 @@ rechaza el bloque A si sus tests importan dominio.
 
 ### 1.1 Sin tablas nuevas, sin columnas nuevas
 
-Todo lo que la feature filtra ya está en `orden`:
-
 | Filtro | Columna | Nulabilidad | Notas |
 | --- | --- | --- | --- |
-| zona | `orden.zona_id` | NOT NULL | FK → `zona`. Valor **congelado** al crear la orden. |
-| tienda | `orden.tienda_id` | NOT NULL | FK → `usuario` (dueño; `adminTienda` o `apiKey`). |
-| provincia | `orden.provincia_id` | NOT NULL | FK → `provincia`. |
-| cantón | `orden.canton_id` | NOT NULL | FK → `canton`. |
-| distrito | `orden.distrito_id` | **NULL** | único FK geográfico opcional. |
-| tiempo | `orden.created_at` | NOT NULL | `DateTime` en UTC, default `now()`. |
+| zona | `orden.zona_id` | NOT NULL | decisión (b): valor **congelado** de la orden |
+| tienda | `orden.tienda_id` | NOT NULL | FK → `usuario` (`adminTienda` o `apiKey`) |
+| provincia | `orden.provincia_id` | NOT NULL | |
+| cantón | `orden.canton_id` | NOT NULL | |
+| distrito | `orden.distrito_id` | **NULL** | decisión (f); ver riesgo §8.6 |
+| tiempo | `orden.created_at` | NOT NULL | `DateTime` en UTC |
 
-No hay RLS nueva que declarar: no se crean tablas. Las tablas leídas
-(`zona`, `provincia`, `canton`, `distrito`, `usuario`, `orden`) mantienen su política
-actual; la autorización de negocio sigue viviendo en los services (patrón del repo).
+No hay RLS nueva: no se crean tablas. La autorización de negocio sigue en los services.
 
 ### 1.2 Migración: **SÍ, una**, y es solo de índices
 
-`orden` tiene índices en `tienda_id`, `estatus_id`, `created_at`,
-`mensajero_sugerido_id`, `mensajero_asignado_id` y `(mensajero_asignado_id,
-asignado_at)`. **No** tiene índice en `zona_id`, `provincia_id`, `canton_id` ni
-`distrito_id`, y esta feature los pone en el `WHERE` de una ruta caliente
-(`/ordenes`, con `findMany` + `count` por cada cambio de filtro). Un `WHERE ... IN`
-sobre columnas sin índice en la tabla más grande del sistema es exactamente el
+`orden` no tiene índice en `zona_id`, `provincia_id`, `canton_id` ni `distrito_id`, y
+esta feature los pone en el `WHERE` de una ruta caliente (`findMany` + `count` por cada
+cambio de filtro). Un `WHERE ... IN` sin índice en la tabla más grande del sistema es el
 anti-patrón que `docs/architecture.md` manda rechazar.
 
-Migración `db/migrations/<ts>_orden_indices_filtros/`:
+`db/migrations/<ts>_orden_indices_filtros/`:
 
 ```sql
 -- migration.sql (UP)
@@ -217,306 +290,337 @@ DROP INDEX IF EXISTS "orden_provincia_id_idx";
 DROP INDEX IF EXISTS "orden_zona_id_idx";
 ```
 
-Con los `@@index([zonaId]) / @@index([provinciaId]) / @@index([cantonId]) /
-@@index([distritoId])` correspondientes en `db/schema.prisma` (el schema y el SQL no
-pueden divergir).
+Más los `@@index([zonaId] / [provinciaId] / [cantonId] / [distritoId])` en
+`db/schema.prisma` (schema y SQL no pueden divergir). `created_at` ya está indexado. Sin
+índices compuestos por ahora (§9.9).
 
-**No** se crean índices compuestos con `created_at`: sin datos de producción sobre la
-combinación real de filtros sería adivinar. Se deja anotado como seguimiento.
-
-## 2. Contrato del `filter` (lo que viaja)
+## 2. Contrato del `filter`
 
 ### 2.1 Forma extendida
 
-`ordenFilterSchema` (`lib/types/orden.ts`) sigue siendo `.strict()` — esa propiedad
-es la que hace que R22 se cumpla sin código extra — y pasa de una clave a siete:
+`ordenFilterSchema` sigue `.strict()` —esa propiedad es la que da R29 sin código extra—
+y pasa de 1 a 9 claves:
 
 ```ts
 export const ORDEN_FILTER_FIELDS = [
   "status_id",
-  "zona_id",
-  "tienda_id",
-  "provincia_id",
-  "canton_id",
-  "distrito_id",
-  "created_range",   // nombre provisional: depende de la pregunta (a)
+  "zona_id", "tienda_id", "provincia_id", "canton_id", "distrito_id",
+  "created_preset",          // decisión (a): presets
+  "created_desde",           // decisión (a): rango abierto
+  "created_hasta",
 ] as const;
 
 const idList = z.array(z.string().min(1)).nonempty();
+const fechaCalendario = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const CREATED_PRESETS = ["7d", "15d", "30d", "90d"] as const;
 
 export const ordenFilterSchema = z
   .object({
-    // `status_id` conserva la unión escalar|lista por retrocompatibilidad (R33).
-    status_id:    z.union([z.string().min(1), idList]).optional(),
-    // Los cinco nuevos nacen SOLO como lista: no hay contrato previo que preservar.
+    status_id:    z.union([z.string().min(1), idList]).optional(), // retrocompat (R43)
     zona_id:      idList.optional(),
     tienda_id:    idList.optional(),
     provincia_id: idList.optional(),
     canton_id:    idList.optional(),
     distrito_id:  idList.optional(),
-    created_range: z.enum(CREATED_RANGE_VALUES).optional(), // NO lista (R29)
+    created_preset: z.enum(CREATED_PRESETS).optional(),            // NO lista (R36)
+    created_desde:  fechaCalendario.optional(),                    // R37
+    created_hasta:  fechaCalendario.optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (f) => !(f.created_desde && f.created_hasta) || f.created_desde <= f.created_hasta,
+    { path: ["created_hasta"], message: "El rango de fechas está invertido" },     // R37
+  );
 ```
 
-Puntos que NO se degradan respecto de la 63:
+Notas: la comparación `desde <= hasta` con cadenas `YYYY-MM-DD` es correcta
+lexicográficamente. El cliente **nunca** manda instantes ni offsets (R41).
 
-- `.strict()` ⇒ clave desconocida = `ZodError` = `validation_error` **antes** de
-  construir el `where` (R22, R31).
-- `.nonempty()` ⇒ lista vacía = `validation_error`, no "sin filtro" (R23). El front
-  **omite la clave** en lugar de mandar `[]` (R46) — y eso sale gratis de R13 de A.
-- Ningún valor del `filter` se usa jamás como nombre de columna: la traducción es un
-  mapa explícito (§2.2).
-
-### 2.2 Traducción a `WHERE` (service → repository)
-
-`OrdenService.listar` amplía el mapa explícito, único punto que conoce los nombres
-internos:
+### 2.2 Traducción a `WHERE`
 
 ```ts
 const FILTER_TO_COLUMN = {
-  status_id:    "estatusId",
-  zona_id:      "zonaId",
-  tienda_id:    "tiendaId",
-  provincia_id: "provinciaId",
-  canton_id:    "cantonId",
-  distrito_id:  "distritoId",
+  status_id: "estatusId", zona_id: "zonaId", tienda_id: "tiendaId",
+  provincia_id: "provinciaId", canton_id: "cantonId", distrito_id: "distritoId",
 } as const;
 ```
 
-`OrdenRepository.list` extiende su `where` con el patrón vigente para `estatusId`:
-lista → `{ in: [...] }`, escalar → igualdad, ausente → clave omitida.
-`deletedAt: null` sigue siempre presente, y **`count` usa el mismo objeto `where`**
-que `findMany` (R32).
+`OrdenRepository.list` extiende su `where` con el patrón vigente: lista → `{ in: [...] }`,
+escalar → igualdad, ausente → clave omitida; `deletedAt: null` siempre; **`count` con el
+mismo objeto `where`** (R42). Las tres claves temporales NO están en el mapa: el service
+las convierte a `createdAt: { gte, lt }` (§2.4).
 
-Semántica resultante, explícita:
+Semántica explícita:
 
-- **Entre filtros distintos: AND.** Son claves hermanas del mismo objeto `where` de
-  Prisma (R24).
-- **Dentro de un filtro multi-valor: OR**, materializado como `IN (...)` (R25).
-- **Id inexistente o ajeno: falla cerrado.** Un id que no existe no aparece en
-  ninguna fila ⇒ `IN` no lo selecciona ⇒ el resultado se estrecha, nunca se ensancha
-  (R26). No se comprueba existencia contra el catálogo: sería una query extra por
-  request y **no aporta seguridad** (el peor caso ya es "cero filas"). Lo que sí se
-  prueba con test es que un id inventado NO se degrada a "sin filtro".
+- **Entre filtros distintos: AND** (claves hermanas del `where`) — R31.
+- **Dentro de un filtro multi-valor: OR** (`IN`) — R32.
+- **Id inexistente: falla cerrado.** No aparece en ninguna fila ⇒ el resultado se
+  estrecha, nunca se ensancha (R33). No se comprueba existencia contra el catálogo: sería
+  una query extra y no aporta seguridad (el peor caso ya es "cero filas"). Sí hay test de
+  que un id inventado NO se degrada a "sin filtro".
+- **Distrito NULL** (decisión (f)): `distrito_id IN (...)` las excluye por semántica SQL.
+  No se añade opción "sin distrito".
 
 ### 2.3 Precedencia y scoping por rol
 
-El orden de construcción del `where` en `listar` no cambia y es lo que garantiza
-R27/R28:
+Orden de construcción del `where` (no cambia; es lo que garantiza R34/R35):
 
-1. `estatusId` escalar heredado (si viene).
+1. `estatusId` escalar heredado.
 2. `filter.*` traducido (gana sobre el escalar en `status_id`, como hoy).
-3. **Scoping por rol, escrito AL FINAL**, sobre las mismas claves:
-   `adminTienda` ⇒ `where.tiendaId = actor.usuarioId`;
-   `mensajero` ⇒ `where.mensajeroAsignadoId = actor.usuarioId`.
+3. **Scoping por rol, escrito AL FINAL:** `adminTienda` ⇒ `where.tiendaId =
+   actor.usuarioId`; `mensajero` ⇒ `where.mensajeroAsignadoId = actor.usuarioId`.
 
 Si un `adminTienda` inyecta `filter.tienda_id = [otraTienda]`, el asignado posterior
-**pisa** el filtro y devuelve solo lo suyo. El filtro nunca amplía el alcance del
-rol. Se blinda con test explícito (R27), porque es la línea entre "filtro" y "fuga
-de datos". Igual para `mensajero` (R28).
+**pisa** el filtro. El filtro nunca amplía el alcance del rol; test explícito (R34/R35),
+porque es la línea entre "filtro" y "fuga de datos".
 
-> Nota para el implementer: hoy `where.tiendaId` es `string`. Al admitir `tienda_id`
-> como lista, el tipo pasa a `string | string[]`; el scoping por rol debe
-> **sobrescribir** con el escalar propio (no "componer"), que es exactamente la
-> semántica que R27 exige.
+> Nota para el implementer: hoy `where.tiendaId` es `string`; al admitir lista pasa a
+> `string | string[]`, y el scoping por rol debe **sobrescribir** con el escalar propio
+> (no componer). Es exactamente la semántica que R34 exige.
 
-### 2.4 Filtro de tiempo y los bordes del día
+### 2.4 Bordes temporales en horario de Costa Rica
 
-`created_at` se guarda en UTC; la operación es Costa Rica, UTC−6 **fijo** (sin
-horario de verano; `lib/utils/fecha-cr.ts` ya lo documenta y explota).
+`created_at` está en UTC; la operación es CR, **UTC−6 fijo** (sin DST; `fecha-cr.ts` ya
+lo documenta y explota). La trampa del repo: `startOfDayCR(now)` devuelve la **medianoche
+UTC de la fecha calendario CR** (convención `@db.Date` de la feature 46), no el instante
+"00:00 en CR". Para comparar contra un `timestamp` UTC hay que **sumar 6 h**.
 
-Con **presets relativos** (opción recomendada, pregunta (a)) el borde es:
+Helper nuevo en `lib/utils/fecha-cr.ts` (no en un módulo aparte):
 
+```ts
+/** Instante UTC del comienzo (00:00 CR) de la fecha calendario `YYYY-MM-DD`. */
+export function inicioDelDiaCREnUtc(fecha: string): Date;   // -> `${fecha}T06:00:00.000Z`
+/** Instante UTC del comienzo del día SIGUIENTE (cota superior exclusiva). */
+export function inicioDelDiaSiguienteCREnUtc(fecha: string): Date;
 ```
-desde = medianoche de CR del día (hoy_CR − (N−1) días)
-      = startOfDayCR(now) − (N−1) días + 6 h      // +6 h = 00:00 CR en UTC
-```
 
-Ojo con la trampa ya presente en el repo: `startOfDayCR(now)` devuelve la
-**medianoche UTC de la fecha calendario de CR** (convención de `@db.Date` de la
-feature 46), no el instante "00:00 en CR". Para comparar contra un `timestamp` UTC
-como `created_at` hay que sumar las 6 h. Sin ese ajuste, "últimos 7 días" incluiría
-de más las órdenes creadas entre 18:00 y 24:00 CR del día frontera. Se añade
-`inicioDelDiaCREnUtc()` a `lib/utils/fecha-cr.ts` (junto a los existentes, no en un
-módulo nuevo) y se prueba con casos de borde (`05:59:59Z` vs `06:00:00Z`).
+Traducción en el service:
 
-El cómputo del borde es **server-side**: el cliente envía el preset (`"7d"`, `"15d"`,
-`"30d"`, `"90d"`), no una fecha. Así el resultado no depende del reloj ni del huso
-del navegador, y el valor es whitelistable con `z.enum` (R29).
+| Entrada | `where.createdAt` |
+| --- | --- |
+| `created_preset: "Nd"` | `{ gte: inicioDelDiaCREnUtc(fechaCalendarioCR(now − (N−1) días)) }` (R38) |
+| `created_desde: "D"` | `{ gte: inicioDelDiaCREnUtc(D) }` |
+| `created_hasta: "H"` | `{ lt: inicioDelDiaSiguienteCREnUtc(H) }` — **hasta inclusive** (R39) |
+| solo uno de los dos | rango abierto por el otro lado (R39) |
 
-**El filtro de tiempo es, en A, un `kind: "single"` normal** sobre cuatro opciones
-dadas. Que sus valores signifiquen "margen desde `createdAt`" es decisión de B: el
-componente genérico no lo sabe (R5).
+Casos de borde trazados a test: `2026-07-15T05:59:59Z` (23:59:59 CR del 14) **no** entra
+en `desde = 2026-07-15`; `2026-07-15T06:00:00Z` **sí**. Y `hasta = 2026-07-15` incluye
+`2026-07-16T05:59:59Z`. El error clásico —`hasta` como `<= 06:00 UTC` del mismo día—
+perdería todo el día indicado salvo su primer segundo.
 
-## 3. Catálogo precargado
+### 2.5 Precedencia preset ↔ rango (R40)
+
+Si llegan **ambos**, **gana el rango explícito** y el preset se ignora. Motivo: con el
+estado de A **no controlado** (decisión (j)) el consumidor no puede vaciar el preset al
+fijar un rango, de modo que la combinación es alcanzable con uso normal de la UI;
+convertirla en `validation_error` sería castigar al usuario por un límite de
+arquitectura. El rango es el dato más específico y explícito, así que manda. Está
+documentado en el JSDoc del schema, en la etiqueta del control ("el rango sustituye al
+preset") y trazado a test.
+
+Alternativa descartada: `validation_error` con ambos (§9.11).
+
+## 3. Catálogos precargados (decisión (c))
 
 ### 3.1 Qué se entrega
 
-Una sola respuesta plana (no un árbol anidado): el encadenamiento se resuelve con el
-`parentValue` que pide el contrato de A, y una lista plana se mapea a
-`FilterOption[]` sin recorrer nada.
+Listas planas (no árbol): el encadenamiento se resuelve con `parentValue`, y una lista
+plana se mapea a `FilterOption[]` sin recorrer nada.
 
 ```ts
-interface OpcionCatalogo { id: string; nombre: string }
-interface OpcionConPadre extends OpcionCatalogo { padreId: string }
+interface OpcionCatalogo  { id: string; nombre: string }
+interface OpcionConPadre  extends OpcionCatalogo { padreId: string }
+interface CuentaTiendaDTO extends OpcionCatalogo { esApiKey: boolean; activa: boolean }
 
 interface CatalogoFiltrosOrdenesDTO {
-  zonas:      OpcionCatalogo[];   // id, nombre
-  tiendas:    OpcionCatalogo[];   // id, nombre  (SIN email/teléfono, R41)
+  zonas:      OpcionCatalogo[];
+  tiendas:    CuentaTiendaDTO[];   // `esApiKey` -> grupo (h); `activa` -> etiqueta (e)
   provincias: OpcionCatalogo[];
-  cantones:   OpcionConPadre[];   // padreId = provinciaId
-  distritos:  OpcionConPadre[];   // padreId = cantonId
+  cantones:   OpcionConPadre[];    // padreId = provinciaId
+  distritos:  OpcionConPadre[];    // padreId = cantonId
 }
 ```
 
-Orden determinista: `nombre asc` en cada colección (mismo criterio que
-`GeoRepository`/`UserRepository`), R37.
+`esApiKey` y `activa` son **banderas**, no PII (R52); el mapeo a `group` y al sufijo
+"(inactiva)" ocurre en el cliente, en la capa de declaración de B (§4.1).
+Orden determinista: `nombre asc` en cada colección (R47).
 
-### 3.2 Dimensión real del payload (número, no adjetivo)
+### 3.2 Peso del payload — coste **aceptado a sabiendas**
 
-Checksum del catálogo de CR en el repo (`public/geografia-cr-completa-NOTAS.md`,
-fuente IGN/DTA): **7 provincias + 84 cantones + 491 distritos = 582 filas**.
+Checksum del repo (`public/geografia-cr-completa-NOTAS.md`, IGN/DTA): **7 provincias + 84
+cantones + 491 distritos = 582 filas**.
 
-| Colección | Filas | Bytes/fila aprox. (uuid 36 + nombre + padreId + JSON) | Subtotal |
+| Colección | Filas | Bytes/fila aprox. | Subtotal |
 | --- | ---: | ---: | ---: |
 | provincias | 7 | ~70 B | ~0,5 KB |
 | cantones | 84 | ~120 B | ~10 KB |
 | distritos | 491 | ~120 B | ~59 KB |
 | zonas | decenas | ~70 B | <3 KB |
-| tiendas | decenas | ~70 B | <5 KB |
+| tiendas | decenas | ~90 B | <5 KB |
 
-**Total ≈ 70–80 KB sin comprimir; ≈ 12–20 KB con la compresión que ya aplica Vercel
-(gzip/brotli).** Es una entrega única por carga de la página de órdenes, de datos que
-cambian con frecuencia trimestral o menor. **No es preocupante**, y es
-sustancialmente más barato que "una consulta por selección" (descartada, §10.2). Si
-en el futuro molestara, la palanca obvia es servir los distritos bajo demanda por
-provincia, pero eso contradice la decisión cerrada del humano y NO se hace aquí.
+**≈ 70–80 KB sin comprimir, ≈ 12–20 KB con la compresión de Vercel**, incrustados en el
+**RSC payload de cada carga de `/ordenes`** (decisión (c): no hay caché SWR entre
+navegaciones). El humano lo aceptó explícitamente a cambio de que los filtros estén
+operativos en el primer paint. **No se re-litiga.**
+
+**Optimizaciones DENTRO de la decisión** (no la cambian, solo bajan el peso):
+
+1. **Campos mínimos** — se entregan solo `id`/`nombre`/`padreId` (+2 banderas booleanas
+   en tiendas). Nada de `createdAt`, `deletedAt`, zona del distrito, etc. *(Ya asumido
+   arriba; es lo que evita duplicar el peso.)*
+2. **Normalizado, no denormalizado** — el distrito referencia su cantón por `padreId` en
+   vez de repetir nombre de cantón y provincia en cada fila. Repetirlos costaría ~491 ×
+   ~30 B ≈ **+15 KB**.
+3. **Palanca opcional: codificación en tuplas.** Las claves JSON (`"id"`, `"nombre"`,
+   `"padreId"`) se repiten 582 veces ≈ **~14 KB solo de nombres de clave**. Emitir
+   `[["id","nombre","padreId"], …]` y rehidratar en el cliente lo elimina.
+   **Recomendación: NO hacerlo en v1** — cuesta legibilidad y un test más para ahorrar
+   ~3 KB comprimidos. Queda anotado como palanca si el peso molesta en producción.
 
 ### 3.3 De dónde salen los datos
 
-- **Zonas:** `ZonaRepository` (id + nombre). **No** se reusa `ZonaService.listar`: es
-  `maestro`-only y devuelve el CRUD paginado con tarifas.
-- **Geografía:** `GeoRepository` gana `listCatalogoPlano()` (tres `findMany` en
-  paralelo, proyección id/nombre/padre). **No** se reusa `listarArbolGeografico()`
-  (`lib/actions/geografia.ts`): es `maestro`-only, anida y arrastra la zona de cada
-  distrito, que aquí no hace falta.
-- **Tiendas:** `UserRepository` gana `listCuentasTienda()` = usuarios con
-  `rol.value IN ('adminTienda','apiKey')`, proyección `{id, nombre}` (R38, R41). Se
-  reusa el patrón de `listByRol`, que hoy filtra a un solo rol y a `estado: 'activo'`
-  (ver pregunta (e)).
+- **Zonas:** proyección `{id, nombre}` en `ZonaRepository`. No se reusa
+  `ZonaService.listar` (es `maestro`-only y pagina con tarifas).
+- **Geografía:** `GeoRepository.listCatalogoPlano()` — tres `findMany` con proyección
+  mínima. No se reusa `listarArbolGeografico()` (es `maestro`-only, anida y arrastra la
+  zona del distrito).
+- **Tiendas:** `UserRepository.listCuentasTienda()` — `rol.value IN
+  ('adminTienda','apiKey')`, **sin filtrar por `estado`** (decisión (e)), proyectando
+  `{id, nombre, esApiKey, activa}` (R48). Nada de email/teléfono (R52).
 
-### 3.4 Por dónde llega al cliente
+### 3.4 Cómo llega al cliente (decisión (c))
 
-Recomendación (pregunta (c)): **Server Action propia**
-`listarCatalogoFiltrosOrdenes()` en `lib/actions/ordenes-filtros.ts`, consumida por
-`OrdenesListado` con SWR y key fija `"ordenes:catalogo-filtros"`.
+**Server Component + `Promise.all` + props.** En `app/(app)/ordenes/page.tsx`:
 
-Motivos: (i) `OrdenesListado` ya es un Client Component que resuelve así el catálogo
-de estados (`"order-status:catalogo"`), y la simetría vale; (ii) SWR deduplica entre
-montajes, así que el payload de ~70 KB no se repite al navegar dentro de la SPA;
-(iii) pasarlo como prop desde el Server Component lo incrustaría en el RSC payload
-del HTML **en cada** carga de `/ordenes`, sin caché entre navegaciones.
+```tsx
+const actor = await resolveActorFromSession();
+// … guardias de rol vigentes (mensajero / adminSatelite -> notFound) …
+const catalogo = await obtenerCatalogoFiltrosOrdenes(actor);   // Promise.all dentro
+return <OrdenesListado catalogoFiltros={catalogo} … />;
+```
 
-Autorización de la action (nuevo `FiltrosOrdenesService`, DI por constructor,
-testeable sin DB): `maestro` / `admin` / `adminTienda` → `ok`; sin sesión →
-`unauthenticated` (R39); cualquier otro rol (`mensajero`, `adminSatelite`, `apiKey`)
-→ `forbidden` sin datos (R40). Es el mismo conjunto que `ROLES_CON_FILTRO_ESTADO` de
-`app/(app)/ordenes/page.tsx`.
+`FiltrosOrdenesService.obtenerCatalogo(actor)` (DI por constructor, testeable sin DB)
+autoriza `maestro`/`admin`/`adminTienda` → `ok`; sin sesión → `unauthenticated` (R50);
+cualquier otro rol → `forbidden` sin datos (R51) — mismo conjunto que
+`ROLES_CON_FILTRO_ESTADO`. Dentro:
 
-Nótese que esta autorización es de **B**: `FilterComponent` no sabe de roles ni de
-catálogos (R4).
+```ts
+const [zonas, tiendas, provincias, cantones, distritos] = await Promise.all([
+  zonaRepo.listLite(), userRepo.listCuentasTienda(), geoRepo.listProvinciasLite(),
+  geoRepo.listCantonesLite(), geoRepo.listDistritosLite(),
+]);
+```
+
+Cinco queries en paralelo, no cinco secuenciales: es literalmente lo que pidió el humano
+y lo que evita que el TTFB de `/ordenes` sume latencias. La página **no falla** si el
+catálogo falla: el service devuelve el resultado y `page.tsx` pasa `null`, con lo que la
+barra se monta deshabilitada (R62).
+
+**Se descarta la Server Action + SWR** que este diseño recomendaba antes (§9.12): la
+decisión (c) la sustituye.
 
 ## 4. La barra de filtros de órdenes
 
-### 4.1 Dónde vive lo específico de órdenes
+### 4.1 Declaración (todo lo específico de órdenes vive aquí)
 
-`app/(app)/ordenes/_components/ordenes-filtros-def.ts` — función **pura** que
-convierte el catálogo (§3.1) + el rol en `FilterDef[]`:
+`app/(app)/ordenes/_components/ordenes-filtros-def.ts` — función **pura**:
 
 ```ts
 export function construirFiltrosOrdenes(
-  catalogo: CatalogoFiltrosOrdenesDTO,
+  cat: CatalogoFiltrosOrdenesDTO,
   opts: { incluirTienda: boolean },
 ): FilterDef[] {
   return [
-    { key: "zona_id",      label: "Zona",      kind: "multi",
-      options: catalogo.zonas.map(o => ({ value: o.id, label: o.nombre })) },
-    ...(opts.incluirTienda ? [{ key: "tienda_id", label: "Tienda", kind: "multi",
-      options: catalogo.tiendas.map(o => ({ value: o.id, label: o.nombre })) }] : []),
+    { key: "zona_id", label: "Zona", kind: "multi",
+      options: cat.zonas.map(o => ({ value: o.id, label: o.nombre })) },
+
+    ...(opts.incluirTienda ? [{                                   // R60
+      key: "tienda_id", label: "Tienda", kind: "multi" as const,
+      options: cat.tiendas.map(o => ({
+        value: o.id,
+        label: o.activa ? o.nombre : `${o.nombre} (inactiva)`,     // decisión (e), R49
+        group: o.esApiKey ? "Integraciones (API)" : "Cuentas tienda", // decisión (h)
+      })),
+    }] : []),
+
     { key: "provincia_id", label: "Provincia", kind: "multi",
-      options: catalogo.provincias.map(o => ({ value: o.id, label: o.nombre })) },
-    { key: "canton_id",    label: "Cantón",    kind: "multi", dependsOn: "provincia_id",
-      options: catalogo.cantones.map(o => ({ value: o.id, label: o.nombre,
-                                            parentValue: o.padreId })) },
-    { key: "distrito_id",  label: "Distrito",  kind: "multi", dependsOn: "canton_id",
-      options: catalogo.distritos.map(o => ({ value: o.id, label: o.nombre,
-                                             parentValue: o.padreId })) },
-    { key: "created_range", label: "Creadas en", kind: "single",
-      options: CREATED_RANGE_OPTIONS },   // 7/15/30/90 días (pregunta (a))
+      options: cat.provincias.map(o => ({ value: o.id, label: o.nombre })) },
+    { key: "canton_id", label: "Cantón", kind: "multi", dependsOn: "provincia_id",
+      options: cat.cantones.map(o => ({ value: o.id, label: o.nombre,
+                                        parentValue: o.padreId })) },
+    { key: "distrito_id", label: "Distrito", kind: "multi", dependsOn: "canton_id",
+      options: cat.distritos.map(o => ({ value: o.id, label: o.nombre,
+                                         parentValue: o.padreId })) },
+
+    { key: "created_preset", label: "Creadas en", kind: "single",
+      options: [
+        { value: "7d",  label: "Últimos 7 días" },
+        { value: "15d", label: "Últimos 15 días" },
+        { value: "30d", label: "Últimos 30 días" },
+        { value: "90d", label: "Últimos 90 días" },
+      ] },
+    { key: "created_range", label: "Rango de creación", kind: "dateRange" },
   ];
 }
 ```
 
-**Ahí está toda la cadena geográfica**: dos `dependsOn`. El componente genérico no
-sabe qué es una provincia (R42, R43). `incluirTienda: false` para `adminTienda`
-(R49).
+Toda la cadena geográfica son **dos `dependsOn`** (R53, R54). El agrupado de tienda son
+**dos strings** en `group`. `FilterComponent` no sabe qué es una provincia ni una API key.
 
-### 4.2 Traducción de la salida al `filter` (responsabilidad de B)
+### 4.2 Traducción al `filter` (responsabilidad de B, R56)
 
-`OrdenesListado` recibe `FilterSelection` (`Record<string, string[]>`) y la traduce.
-La traducción vive en `app/(app)/ordenes/_components/seleccion-a-filter.ts`, pura y
-testeable:
+`app/(app)/ordenes/_components/seleccion-a-filter.ts`, pura y testeable:
 
 ```ts
 export function seleccionAFilter(sel: FilterSelection): Partial<OrdenFilterInput> {
-  const out: Record<string, string[] | string> = {};
+  const out: Record<string, unknown> = {};
   for (const [key, values] of Object.entries(sel)) {
-    if (values.length === 0) continue;                 // defensa (A ya lo garantiza)
-    out[key] = key === "created_range" ? values[0]! : values; // single -> escalar
+    if (values.length === 0) continue;                  // defensa (A ya lo garantiza)
+    if (key === "created_preset") { out.created_preset = values[0]; continue; }
+    if (key === "created_range") {                      // ["desde","hasta"] -> 2 claves
+      const [desde, hasta] = values;
+      if (desde) out.created_desde = desde;
+      if (hasta) out.created_hasta = hasta;
+      continue;
+    }
+    out[key] = values;                                  // listas de ids, tal cual
   }
   return out as Partial<OrdenFilterInput>;
 }
 ```
 
-Las claves de `FilterDef` se eligieron **iguales** a las del `filter` de órdenes, así
-que la traducción es casi la identidad; la única transformación real es
-lista-de-uno → escalar para el filtro único. Aun así vive en B **por contrato**: el
-día que otro consumidor use `FilterComponent` con otro transporte (query string, body
-REST, GraphQL), su propia traducción vive en su propio lado (R45, R14).
+Las claves de catálogo se eligieron **iguales** a las del `filter`, así que ahí la
+traducción es la identidad; las dos transformaciones reales (único → escalar, rango → dos
+claves) demuestran por qué esto vive en B: otro consumidor con otro transporte (query
+string, body REST) escribirá la suya (R18/R56).
 
 En `OrdenesListado`:
 
-```ts
+```tsx
 const filter = { ...(estados.length ? { status_id: estados } : {}),
                  ...seleccionAFilter(seleccion) };
+<FilterComponent filters={defs} onChange={setSeleccion} showClearAll />   {/* R61 */}
 <OrdenesModule filter={Object.keys(filter).length ? filter : undefined} … />
 ```
 
-De ahí salen R34 (combinar con estado) y R46 (sin filtros → `filter` ausente → input
-idéntico al previo).
+De ahí salen R44 (combina con estado) y R57 (sin filtros → `filter` ausente → input
+idéntico al previo). Con `catalogoFiltros === null`, la barra se monta `disabled` y la
+tabla sigue viva (R62).
 
-Si el catálogo no cargó, `OrdenesListado` monta `FilterComponent` con `disabled` (o
-con `filters: []`) y el listado sigue sin filtros (R50), igual que hoy hace el filtro
-de estado con `opciones.length === 0`.
-
-> El filtro de **estado** se deja donde está (su propio `MultiSelectFilter` en
-> `OrdenesListado`), NO se migra a `FilterComponent` en esta feature: migrarlo tocaría
-> el camino ya probado de la 63 sin que nadie lo haya pedido, y R33/R46 exigen
-> demostrar cero regresión. Es candidato natural para la 145.
+> El filtro de **estado** se deja donde está (su `MultiSelectFilter` en `OrdenesListado`)
+> y NO se migra a `FilterComponent` en esta feature: tocaría el camino probado de la 63
+> sin petición, y R43/R57 exigen demostrar cero regresión. Candidato natural para la 145.
 
 ### 4.3 Key de SWR y reset de página
 
-`OrdenesModule` hoy deriva `statusKey` de `filter.status_id` y usa el patrón "ajustar
-estado durante el render" (`statusKeyPrevio`) para volver a página 1 y limpiar la
-selección de filas. Los filtros nuevos **heredan ese mecanismo**, no lo reinventan:
-se generaliza `statusKey` a un `filterKey` que serializa el `filter` COMPLETO con la
-misma disciplina de estabilidad:
+Se generaliza `statusKey` → `filterKey` con la misma disciplina de estabilidad que hoy
+tiene el estado:
 
 ```ts
 function serializarFiltro(filter?: OrdenFilterInput): string {
   if (!filter) return "";
-  return Object.keys(filter).sort()                       // claves ordenadas
+  return Object.keys(filter).sort()
     .map((k) => {
       const v = filter[k];
       return `${k}=${Array.isArray(v) ? [...v].sort().join(",") : v}`;
@@ -525,312 +629,149 @@ function serializarFiltro(filter?: OrdenFilterInput): string {
 }
 ```
 
-Claves ordenadas + valores ordenados ⇒ dos selecciones equivalentes producen la misma
-key ⇒ comparten caché y no refetchean en cada render (R48). `filterKeyPrevio`
-sustituye a `statusKeyPrevio` y dispara `setPage(1)` + `setSeleccionIds(new Set())`
-ante el cambio de CUALQUIER filtro (R47). La key SWR pasa de
-`["ordenes:list", statusKey, page, pageSize]` a
-`["ordenes:list", filterKey, page, pageSize]`; el `mutate` por prefijo de
-`revalidarTablas()` (`key[0] === "ordenes:list"`) sigue funcionando sin cambios.
+Claves ordenadas + valores ordenados ⇒ dos selecciones equivalentes producen la misma key
+⇒ comparten caché y no refetchean en cada render (R59). `filterKeyPrevio` sustituye a
+`statusKeyPrevio` y dispara `setPage(1)` + `setSeleccionIds(new Set())` ante el cambio de
+CUALQUIER filtro (R58). La key pasa de `["ordenes:list", statusKey, page, pageSize]` a
+`["ordenes:list", filterKey, page, pageSize]`; el `mutate` por prefijo
+(`key[0] === "ordenes:list"`) sigue igual.
 
-**Sin regresión (R33/R46):** con `filter` ausente, `serializarFiltro` devuelve `""` y
-`ordenesFetcher` llama `listarOrdenes({page, pageSize})` exactamente como hoy; con
-solo `status_id`, la key es `status_id=a,b` en vez de `a,b` — cambia el string, no el
-comportamiento (la key es interna a SWR, no viaja al servidor).
+**Sin regresión (R43/R57):** con `filter` ausente, `serializarFiltro` devuelve `""` y
+`ordenesFetcher` llama `listarOrdenes({page, pageSize})` exactamente como hoy.
 
----
+## 5. Capas tocadas
 
-## 5. Capas tocadas (resumen)
+| Bloque | Archivo | Cambio |
+| --- | --- | --- |
+| A | `components/shared/FilterComponent.tsx` | **nuevo** |
+| A | `components/shared/DateRangeFilter.tsx` | **nuevo** (2 `<Input type="date">`) |
+| A | `components/shared/MultiSelectFilter.tsx` | **modificado**: soporte `group` (sin grupos = idéntico a hoy) |
+| A | `lib/utils/filter-dependencies.ts` | **nuevo**, puro, sin dominio |
+| B | `lib/types/orden.ts` | `ORDEN_FILTER_FIELDS` + `ordenFilterSchema` a 9 claves + `refine` |
+| B | `lib/services/OrdenService.ts` | `FILTER_TO_COLUMN` ampliado + rango temporal |
+| B | `lib/repositories/OrdenRepository.ts` | `where` con `in` + `createdAt: { gte, lt }` |
+| B | `lib/interfaces/repositories/IOrdenRepository.ts` | `ListOrdenesParams.where` ampliado |
+| B | `lib/services/FiltrosOrdenesService.ts` | **nuevo**: `Promise.all` + autorización |
+| B | `GeoRepository`, `UserRepository`, `ZonaRepository` | proyecciones planas |
+| B | `lib/utils/fecha-cr.ts` | `inicioDelDiaCREnUtc`, `inicioDelDiaSiguienteCREnUtc` |
+| B | `app/(app)/ordenes/page.tsx` | resuelve el catálogo y lo pasa por props |
+| B | `_components/ordenes-filtros-def.ts`, `_components/seleccion-a-filter.ts` | **nuevos** |
+| B | `OrdenesListado.tsx`, `OrdenesModule.tsx` | cableado + `filterKey` |
+| B | `db/schema.prisma` + migración | 4 índices (+ `down.sql`) |
 
-| Bloque | Capa | Archivo | Cambio |
-| --- | --- | --- | --- |
-| A | UI genérica | `components/shared/FilterComponent.tsx` | **nuevo** (ubicación: pregunta (n)) |
-| A | Utils | `lib/utils/filter-dependencies.ts` | **nuevo**, puro, sin dominio |
-| B | Types/borde | `lib/types/orden.ts` | `ORDEN_FILTER_FIELDS` + `ordenFilterSchema` a 7 claves |
-| B | Service | `lib/services/OrdenService.ts` | `FILTER_TO_COLUMN` ampliado; `where` tipado; tiempo → rango |
-| B | Repository | `lib/repositories/OrdenRepository.ts` | `where` con `in` por lista + `createdAt: { gte }` |
-| B | Interfaces | `lib/interfaces/repositories/IOrdenRepository.ts` | `ListOrdenesParams.where` ampliado |
-| B | Service nuevo | `lib/services/FiltrosOrdenesService.ts` | catálogo + autorización por rol |
-| B | Repos | `GeoRepository`, `UserRepository`, `ZonaRepository` | métodos de proyección plana |
-| B | Action | `lib/actions/ordenes-filtros.ts` | `listarCatalogoFiltrosOrdenes()` |
-| B | Utils | `lib/utils/fecha-cr.ts` | `inicioDelDiaCREnUtc()` |
-| B | UI órdenes | `_components/ordenes-filtros-def.ts`, `_components/seleccion-a-filter.ts` | declaraciones + traducción |
-| B | UI órdenes | `OrdenesListado.tsx`, `OrdenesModule.tsx` | cableado + `filterKey` |
-| B | DB | `db/schema.prisma` + migración | 4 índices (+ `down.sql`) |
-
-**No se toca** `components/shared/MultiSelectFilter.tsx` (se reusa tal cual), ni
-`TableFilters.tsx`, ni `DataTable`, ni ninguna otra superficie (R51).
+**No se toca** `TableFilters.tsx`, `DataTable`, ni ninguna otra superficie (R63).
 
 ## 6. Contratos de entrada/salida (backend)
 
-**Entrada** (`listarOrdenes`, sin cambios estructurales):
-
 ```jsonc
+// listarOrdenes
 {
-  "page": 1,
-  "pageSize": 25,
+  "page": 1, "pageSize": 25,
   "filter": {
     "status_id": ["<uuid>"],
     "zona_id": ["<uuid>", "<uuid>"],
     "tienda_id": ["<uuid>"],
-    "provincia_id": ["<uuid>"],
-    "canton_id": ["<uuid>"],
-    "distrito_id": ["<uuid>"],
-    "created_range": "30d"
+    "provincia_id": ["<uuid>"], "canton_id": ["<uuid>"], "distrito_id": ["<uuid>"],
+    "created_preset": "30d",
+    "created_desde": "2026-07-01", "created_hasta": "2026-07-28"
   }
 }
 ```
 
-**Salida:** sin cambios — `{status:"ok", items, total, page, pageSize}`. La feature no
-altera el DTO de la orden.
+Salida sin cambios (`{status:"ok", items, total, page, pageSize}`). Errores: los del arnés
+(`validation_error` con `fieldErrors`, `unauthenticated`, `forbidden`). Sin códigos nuevos.
 
-**Errores:** los ya existentes del arnés — `validation_error` (con `fieldErrors`),
-`unauthenticated`, `forbidden`. Sin códigos nuevos.
+## 7. Dependencias nuevas a instalar
 
-## 7. Integraciones externas
+**NINGUNA.** Verificado contra `package.json` y `components/ui/`:
 
-Ninguna. Sin Supabase Auth nuevo, sin Meta, sin WhatsApp, sin webhooks, sin crons.
+- No hace falta `react-day-picker` ni `@radix-ui/react-popover`: el `dateRange` se
+  construye con `<Input type="date">` (patrón vigente en 6 componentes del repo,
+  `WalletFiltros` incluido) — §A.5.
+- No hace falta `Popover`/`Command`: `MultiSelectFilter` ya trae su panel propio con
+  clic-fuera + `Escape`.
+- No hace falta nada para el agrupado: es markup + ARIA dentro de `MultiSelectFilter`.
+- El repo es **pnpm**; si el humano revirtiera la decisión de §A.5, el añadido mínimo
+  sería `pnpm add react-day-picker` **y nada de Radix** (chocaría con `@base-ui/react`).
 
 ## 8. Riesgos
 
-1. **Contaminación de dominio en A.** El riesgo principal de esta reconciliación.
-   Mitigado por el criterio de corte de `requirements.md` + una regla dura de review:
-   ningún test de R1–R20 puede importar dominio, y `FilterComponent` no puede
-   importar nada de `lib/types/orden` ni de `app/(app)/ordenes`.
-2. **Ensanchar el alcance por accidente.** Mitigado por el orden de escritura del
-   `where` (§2.3) + tests de rol (R27/R28) que fallan si el filtro pisa el scoping.
-3. **Payload del catálogo en conexiones móviles.** Cuantificado (§3.2): ~70 KB, ~15 KB
-   comprimido, una vez por sesión de página gracias a SWR.
-4. **Off-by-one horario.** El repo YA tiene la trampa (`startOfDayCR` es medianoche
-   UTC de la fecha CR). Mitigado con helper propio + tests de borde.
-5. **Regresión silenciosa en la key de SWR.** Mitigado con test de estabilidad de
+1. **Contaminación de dominio en A** — riesgo principal. Mitigado por el criterio de corte
+   + regla dura de review: ningún test de R1–R27 importa dominio, y `FilterComponent` no
+   importa `lib/types/orden` ni `app/(app)/ordenes/*`.
+2. **Ensanchar el alcance por accidente** — mitigado por el orden de escritura del `where`
+   (§2.3) + tests de rol (R34/R35).
+3. **Peso del RSC payload** — cuantificado (§3.2) y **aceptado** en (c). Palanca de tuplas
+   documentada por si molesta.
+4. **Off-by-one horario** — la trampa ya existe en el repo (`startOfDayCR`). Mitigada con
+   helpers propios + tests de borde `05:59:59Z` / `06:00:00Z` y `hasta` inclusive.
+5. **Regresión de `MultiSelectFilter`** — se modifica un componente que hoy usa el filtro
+   de estado de la 63. Mitigado: sin `group` en las opciones, el render y el ARIA son
+   idénticos; los tests existentes deben pasar **sin tocarlos**.
+6. **`orden.distrito_id` es NULLABLE (decisión (f)).** El humano afirma que "no deberían
+   haber null". **Verificado en `db/schema.prisma`: `distritoId String?` — la columna SÍ
+   admite NULL hoy.** Este spec NO cambia esa nulabilidad ni añade la opción "sin
+   distrito": mantiene la semántica `IN (...)`, que las excluye. **Confirmar cuántas
+   órdenes tienen `distrito_id IS NULL` y, si son cero, migrar la columna a `NOT NULL`, es
+   trabajo de OTRA feature**, fuera del alcance de esta. Mientras exista algún NULL, esas
+   órdenes serán invisibles bajo el filtro de distrito (y visibles sin él).
+7. **Regresión silenciosa en la key de SWR** — mitigada con test de estabilidad de
    `serializarFiltro`.
-6. **Sobre-generalizar A con un solo consumidor.** Se acota a lo que órdenes necesita
-   HOY (dos tipos de control + dependencias declaradas); todo lo demás queda como
-   pregunta abierta (k)/(m), no se implementa "por si acaso".
 
 ## 9. Alternativas descartadas
 
-### 9.1 URL del navegador (query params) + Server Action — **DESCARTADA por el humano**
+**9.1 URL del navegador (query params) + Server Action.** Daría filtros enlazables,
+back/forward y estado tras recargar. **Descartada explícitamente por el humano**: se
+extiende `filter`. Consecuencia asumida: la selección se pierde al recargar (decisión (g)).
 
-Guardar la selección en `?zona=...&provincia=...` daría filtros compartibles por
-enlace, back/forward del navegador y estado recuperable al recargar. **El humano la
-evaluó y la descartó explícitamente**: se extiende `filter` y punto. Consecuencias
-asumidas: la selección no es enlazable ni sobrevive a un refresh (pregunta (g)).
+**9.2 Una consulta por selección** (`GeoService.listCantones(provinciaId)`). Descartada: el
+humano fijó precargar todo y encadenar en el front. 582 filas / ~70 KB una vez, contra un
+round-trip por cada clic en un select múltiple.
 
-### 9.2 Una consulta al servidor por cada selección (cantones de la provincia X)
+**9.3 Encadenamiento hardcodeado dentro del componente.** Descartada tras la corrección del
+humano: acopla A al dominio y lo inutiliza para el siguiente consumidor. Sustituido por
+`dependsOn` + `parentValue`.
 
-Es lo que hoy ofrece `GeoService.listCantones(provinciaId)` /
-`listDistritos(cantonId)`. Descartada: el humano fijó "precargar todo y encadenar en
-el front", y los números lo respaldan — 582 filas / ~70 KB una vez, contra un
-round-trip por cada clic en un select múltiple (marcar N provincias = N consultas,
-con parpadeo y estados de carga anidados en pleno panel abierto).
+**9.4 Componente "tonto"** (el consumidor recalcula opciones y las repasa por props).
+Descartada (§A.7): duplica lógica en cada consumidor y crea un lazo de renders.
 
-### 9.3 Encadenamiento hardcodeado dentro del componente
+**9.5 Filtro genérico dentro de `DataTable`.** Descartada: la ficha genérica de la 144 está
+RETIRADA y acoplarlo a la tabla impediría usarlo en superficies sin `DataTable`.
 
-La versión anterior de este diseño resolvía provincia→cantón→distrito con utilidades
-que conocían esos tres nombres. Descartada tras la corrección del humano: acopla el
-componente al dominio de órdenes y lo vuelve inservible para el siguiente consumidor.
-Sustituida por el contrato `dependsOn` + `parentValue` (§A.4).
+**9.6 Validar contra el catálogo cada id recibido.** Descartada: 1–6 queries extra por
+listado; el peor caso de un id inventado ya es "cero filas". La seguridad la da el scoping
+por rol.
 
-### 9.4 Componente "tonto": que el consumidor recalcule las opciones y las repase por props
+**9.7 Enviar nombres en vez de ids** (patrón de la 117). Descartada: aquí el filtrado es
+server-side sobre FKs; los nombres son ambiguos en CR (varios cantones "Central").
 
-Evaluada en detalle en §A.4 y descartada: duplica acotamiento + poda en cada
-consumidor, crea un lazo `onChange → props → onChange` y no ahorra la poda (que el
-componente necesita igual para no emitir huérfanos).
+**9.8 Migrar YA el filtro de estado a `FilterComponent`.** Descartada en esta feature
+(§4.2); candidata para la 145.
 
-### 9.5 Filtro genérico dentro de `DataTable`
+**9.9 Índices compuestos `(zona_id, created_at)`.** Descartada por ahora: sin telemetría de
+las combinaciones reales sería adivinar, y cuesta escrituras en la tabla más caliente.
 
-Descartada: la ficha genérica de la 144 ("DataTable: búsqueda y filtros") está
-RETIRADA, y acoplar los filtros a la tabla impediría usarlos en superficies sin
-`DataTable`. `FilterComponent` es independiente de cómo se pinte el resultado; el
-consumidor decide dónde lo monta.
+**9.10 Date-range de shadcn (`Calendar` + `Popover`).** Descartada (§A.5): arrastraría
+`react-day-picker` **y Radix** a un repo cuyas primitivas son `@base-ui/react`, para un
+control que el repo ya resuelve con `<Input type="date">` en 6 sitios.
 
-### 9.6 Validar contra el catálogo cada id recibido (existencia + propiedad)
+**9.11 `validation_error` cuando llegan preset y rango a la vez.** Descartada (§2.5): con
+el estado de A no controlado, esa combinación es alcanzable con uso normal de la UI;
+convertirla en error castigaría al usuario. Gana el rango.
 
-Descartada por coste sin beneficio: 1–6 queries extra por listado, y el peor caso de
-un id inventado ya es "cero filas" (§2.2). La seguridad la da el scoping por rol
-(§2.3), no la existencia del id. Se conserva la garantía dura de que un id no
-reconocido **jamás** se degrada a "sin filtro".
+**9.12 Server Action del catálogo + SWR con key fija.** Era mi recomendación en (c);
+**descartada por decisión del humano** a favor de `Promise.all` en el Server Component.
+Ventaja perdida: deduplicación entre navegaciones. Ventaja ganada: filtros operativos en el
+primer paint.
 
-### 9.7 Enviar nombres en vez de ids (patrón de la feature 117)
-
-La 117 filtra por `cantonNombre` porque opera sobre un array ya en el cliente. Aquí el
-filtrado es server-side sobre FKs, y el humano pidió ids explícitamente. Los nombres
-además son ambiguos en CR (varios cantones "Central") y no son estables.
-
-### 9.8 Migrar YA el filtro de estado a `FilterComponent`
-
-Descartada en esta feature (§4.2): tocaría el camino probado de la 63 sin petición, y
-R33/R46 exigen demostrar cero regresión. Candidato para la 145.
-
-### 9.9 Índices compuestos `(zona_id, created_at)` etc.
-
-Descartada por ahora: sin telemetría de las combinaciones reales de filtros, elegir el
-compuesto sería adivinar y costaría escrituras en la tabla más caliente. Se empieza
-por los cuatro índices simples (§1.2).
-
-### 9.10 Rango de fechas libre (desde/hasta) como única forma del filtro de tiempo
-
-No descartada del todo: es la pregunta abierta (a). Se descarta **como diseño
-cerrado** hasta la puerta F1.4.
+**9.13 Codificación en tuplas del catálogo.** No descartada del todo: es la palanca de
+§3.2(3); no se implementa en v1 por legibilidad frente a ~3 KB comprimidos.
 
 ---
 
 ## Preguntas abiertas
 
-> Se cierran en la **puerta humana F1.4**, no antes. Cada una lleva mi recomendación
-> razonada. Regla 6 de `CLAUDE.md`: lo que no está en el código, `docs/` o `specs/` es
-> desconocido y se marca, no se rellena.
->
-> (a)–(h) son las de la versión previa del spec y **siguen en pie tal cual**;
-> (i)–(n) nacen del contrato genérico.
-
-### (a) Forma del filtro de tiempo: presets relativos vs. rango desde/hasta
-
-**Recomendación: presets relativos (7 / 15 / 30 / 90 días), calculados server-side.**
-
-- **Presets.** El cliente manda `"30d"`; el servidor calcula
-  `desde = 00:00 CR del día (hoy_CR − 29)` convertido a UTC (= `startOfDayCR` + 6 h) y
-  filtra `created_at >= desde`. Bordes: el día empieza a las 06:00 UTC; una orden
-  creada a las `2026-07-15T05:59:59Z` (23:59:59 CR del 14) cae en el día 14. No hay
-  borde superior (siempre hasta "ahora"), así que no hay ambigüedad de "hasta
-  inclusive". Whitelistable con `z.enum` ⇒ superficie de ataque nula. El resultado no
-  depende del reloj del navegador.
-- **Rango desde/hasta.** Más potente, pero el cliente manda dos fechas `YYYY-MM-DD` y
-  hay que decidir e implementar: `desde` = 00:00 CR de esa fecha (06:00 UTC de ese
-  día) y `hasta` = **inclusive**, es decir `< 00:00 CR del día siguiente` (= 06:00 UTC
-  del día+1). El error clásico —`hasta` como `<= 00:00 UTC`— perdería todas las
-  órdenes del último día creadas después de las 18:00 CR del día anterior. Además
-  exige un date-picker de rango que **no existe** en `components/ui/` (habría que
-  añadir `calendar`/`popover` de shadcn) **y un tipo de filtro nuevo en A**
-  (pregunta (k)).
-
-Recomiendo presets en v1 y dejar el rango para después. **Si el humano prefiere rango,
-la regla de bordes es la del párrafo anterior, hay que presupuestar el date-picker y A
-gana un `kind` nuevo.**
-
-### (b) Zona: `orden.zona_id` (congelada) vs. derivada del distrito
-
-**Recomendación: filtrar por `orden.zona_id`.**
-
-Verificado: `orden.zona_id` **existe y es NOT NULL** (no es un campo hipotético), y la
-relación distrito→zona es N:M vía `zona_distrito` (la columna escalar
-`distrito.zona_id` se eliminó en `20260713000000`). Son **dos caminos posibles y
-distintos**:
-
-1. `orden.zona_id` — la zona con la que la orden se creó/operó. `WHERE` directo sobre
-   columna indexada. Coincide con lo que el usuario ve en la tabla y con lo que usan
-   las acciones por lote (`row.zonaId`, `zonaEsGam`).
-2. Derivar por el distrito (`orden.distrito_id → zona_distrito → zona_id`) — refleja el
-   mapeo VIGENTE. Requiere JOIN, falla para órdenes con `distrito_id = NULL`, y un
-   distrito puede pertenecer a **varias** zonas (N:M), así que "la zona de la orden"
-   deja de ser única.
-
-Filtrar por (2) mostraría en "zona X" órdenes que se operaron en "zona Y" porque
-alguien reasignó el distrito después. Recomiendo (1). **Pregunta:** ¿existe algún caso
-operativo donde se espere lo contrario (re-zonificación retroactiva)? Si lo hay, es
-una feature de backfill de `orden.zona_id`, no de este filtro.
-
-### (c) Vía del precargado: prop desde el Server Component vs. Server Action cacheada
-
-**Recomendación: Server Action propia + SWR con key fija** (razonado en §3.4: simetría
-con el catálogo de estados, deduplicación entre navegaciones dentro de la SPA, y no
-inflar el RSC payload de cada carga de `/ordenes` con ~70 KB).
-
-Contra: una petición extra al montar (mitigada por SWR y porque el listado se pinta
-sin esperarla). **Pregunta:** ¿se acepta que los filtros aparezcan deshabilitados
-durante los primeros ms, o se exige que estén operativos en el primer paint (lo que
-forzaría la prop desde el servidor)?
-
-### (d) Opciones del filtro de tienda: todas las cuentas vs. solo las que tienen órdenes
-
-**Recomendación: todas las cuentas dueñas posibles** (`adminTienda` + `apiKey`), por
-ser una consulta trivial e indexada, frente a un `SELECT DISTINCT tienda_id FROM orden`
-que es caro y varía con el resto de filtros. Coste: el usuario puede elegir una tienda
-sin órdenes y ver 0 resultados. **Pregunta:** ¿aceptable?
-
-### (e) Estado de las cuentas tienda en las opciones
-
-`UserRepository.listByRol` filtra hoy `estado: 'activo'`. Una tienda desactivada puede
-tener órdenes históricas: si se copia ese filtro, esas órdenes se vuelven infiltrables.
-**Recomendación: incluir también las inactivas**, marcándolas en la etiqueta (p. ej.
-`"Tienda X (inactiva)"`). **Pregunta:** ¿o se prefiere la simetría con el resto de
-selects (solo activas)?
-
-### (f) Órdenes con `distrito_id = NULL` bajo el filtro de distrito
-
-`distrito_id` es el único FK geográfico nullable. Con `distrito_id IN (...)` esas
-órdenes quedan **fuera**, que es la semántica correcta de SQL y la que ya adoptó la
-feature 117 (R6: "las órdenes con `distritoNombre === null` quedan excluidas bajo
-distrito"). **Recomendación: mantenerla y documentarla en la UI.** **Pregunta:** ¿hace
-falta una opción explícita "sin distrito"? Recomiendo que no en v1.
-
-### (g) Persistencia de la selección de filtros
-
-Descartada la URL (decisión cerrada del humano), la selección **se pierde** al recargar
-o al navegar fuera de `/ordenes` y volver. **Recomendación: aceptarlo en v1** (es el
-comportamiento actual del filtro de estado, así que no hay regresión ni
-inconsistencia). **Pregunta:** ¿se quiere persistirla en `sessionStorage`? Es barato,
-pero introduce un estado invisible que confunde ("¿por qué veo pocas órdenes?").
-
-### (h) ¿`admin` ve el filtro de tienda con las cuentas `apiKey` mezcladas?
-
-Las cuentas de integración por API key son usuarios reales con nombre, pero no son
-"tiendas" en el sentido de la UI. **Recomendación: mostrarlas en la misma lista** (son
-dueñas de órdenes; excluirlas haría infiltrables las órdenes de la 88), ordenadas
-alfabéticamente junto al resto. **Pregunta:** ¿se quiere distinguirlas visualmente
-(sufijo "(API)") o agruparlas aparte?
-
-### (i) ¿`FilterComponent` ofrece "Limpiar todo"?
-
-Cada `MultiSelectFilter` ya trae su propio "Limpiar" por filtro. Con 6 filtros
-encadenados, volver a cero cuesta hasta 6 clics. **Recomendación: sí, un "Limpiar
-todo" opcional por prop** (`showClearAll`, default `false` para no alterar a nadie),
-que vacía la selección y emite `{}` una sola vez. Añadiría un requisito a A.3.
-**Pregunta:** ¿se quiere en v1?
-
-### (j) ¿Estado controlado, no controlado o híbrido?
-
-**Recomendación: no controlado (estado interno) + `onChange`**, porque la poda
-transitiva (R18) necesita decidir sobre el conjunto y un padre que "corrija" la
-selección entre renders reintroduce el lazo de §9.4. Contra: el consumidor no puede
-resetear los filtros desde fuera (p. ej. al cambiar de pestaña) salvo remontando el
-componente con una `key`. Híbrido posible: `defaultValue` + `onChange` (no controlado
-con valor inicial). **Pregunta:** ¿hace falta control externo hoy?
-
-### (k) ¿Qué tipos de filtro soporta v1?
-
-`multi` y `single` cubren los seis filtros de órdenes. Candidatos evidentes para
-después: `text` (búsqueda libre), `dateRange` (ver (a)), `boolean`.
-**Recomendación: solo `multi` y `single` en v1**, con `FilterKind` como unión abierta a
-extender y R8 (tipo desconocido = se ignora sin romper) como red de seguridad.
-**Pregunta:** ¿se necesita alguno más desde ya (en particular `dateRange`, que depende
-de (a))?
-
-### (l) Forma exacta del payload emitido
-
-**Recomendación: `Record<string, string[]>` para todos los tipos** (el `single` emite
-lista de 0 o 1), con las claves vacías omitidas. Alternativas: `Record<string, string[]
-| string>` (obliga a `Array.isArray` en cada consumidor) o
-`Array<{key, values}>` (más verboso, sin ventaja). **Pregunta:** ¿se confirma el mapa
-con listas siempre?
-
-### (m) ¿Un filtro puede declarar más de un padre?
-
-Hoy `dependsOn` es **una** clave y `parentValue` **un** valor, que es todo lo que la
-cadena provincia→cantón→distrito necesita. Un `dependsOn: string[]` (con `parentValues:
-string[]` por opción y semántica AND/OR entre padres) es una generalización real, pero
-sin consumidor que la pida. **Recomendación: un solo padre en v1** (regla del arnés: no
-sobre-ingeniería). **Pregunta:** ¿hay algún filtro previsto que dependa de dos?
-
-### (n) ¿Dónde vive `FilterComponent`?
-
-`docs/architecture.md` exige DOS consumidores con la misma API antes de promover a
-`components/shared/`, y hoy hay uno (órdenes). Pero el humano pidió explícitamente que
-nazca genérico y reutilizable, y la feature 145 (rollout a todas las tablas) es su
-segundo consumidor declarado en `feature_list.json` (`depends_on: 144`).
-**Recomendación: `components/shared/FilterComponent.tsx` desde ya**, porque el diseño
-genérico ya está pagado y moverlo después significaría reescribir imports en la 145.
-**Pregunta:** ¿se acepta la excepción a la regla de las dos superficies, o se prefiere
-que nazca en `app/(app)/ordenes/_components/` y lo promueva la 145?
+**Ninguna bloqueante.** Las 14 preguntas (a)–(n) están cerradas en §0. Los dos puntos que
+este spec decide por su cuenta (precedencia preset↔rango §2.5, y el riesgo del
+`distrito_id` nullable §8.6) están señalados en `requirements.md > Preguntas abiertas`
+por si el humano quiere lo contrario; ninguno bloquea la implementación.

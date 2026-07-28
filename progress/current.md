@@ -16,7 +16,7 @@
 ## Features en curso
 
 **Componente de filtros parametrizable + su implementación en órdenes — feature 144 (2026-07-28) →
-EN ESPECIFICACIÓN.** **⚠️ REDEFINIDA por el humano, en dos pasadas.** La ficha decía «`DataTable`:
+SPEC ESCRITO + GATE F1.4 APROBADO, en reconciliación del spec antes de implementar.** **⚠️ REDEFINIDA por el humano, en dos pasadas.** La ficha decía «`DataTable`:
 búsqueda y filtros» (`frontend`/`low`); ese alcance queda **RETIRADO**. Fullstack, `high`,
 `depends_on: null`. Rama `feature/144-filtros-ordenes` desde `origin/dev @ 55b0cd4`, en worktree
 aislado `../ordenex-wt-144` (el árbol `ux` arrastra WIP ajeno).
@@ -63,11 +63,35 @@ aislado `../ordenex-wt-144` (el árbol `ux` arrastra WIP ajeno).
 - **Filtro de tienda:** para roles administrativos; las opciones son las cuentas tienda **incluidas las
   integradoras que cargan por API key** (feature 88, `tienda_id = actor.usuarioId`). Un `adminTienda`
   ya ve solo lo suyo por el scoping server-side.
-- **ABIERTO, a cerrar en la puerta F1.4** (no antes, y **no** por el leader): (a) forma del filtro de
-  tiempo — presets relativos (7/15/30/90 días) frente a rango desde/hasta, con la zona horaria de
-  operación CR/UTC-6 contra el `createdAt` en UTC; (b) si `zona` se filtra por la zona **derivada del
-  distrito** de la orden o por un campo propio; (c) si el precargado de geografía viaja como prop desde
-  el Server Component de la page o por una action propia cacheada.
+- **Spec escrito:** `specs/144-filtros-ordenes/` — **R1–R20 bloque A** (componente genérico, testeables
+  con filtros de fantasía) + **R21–R51 bloque B** (cableado en órdenes), 20 tasks con gate explícito
+  A→B, 10 alternativas descartadas. **Migración: sí, una, y solo de índices** (`zona_id`,
+  `provincia_id`, `canton_id`, `distrito_id` en `orden`) con su `down.sql`; sin tablas ni columnas
+  nuevas, sin RLS nueva.
+- **GATE F1.4 APROBADO (2026-07-28), las 14 preguntas cerradas.** Cuatro se apartaron de lo que
+  recomendaba el spec y cambian el diseño:
+  - **(a) Filtro de tiempo → LAS DOS FORMAS.** Presets **y** rango abierto con el date-range de shadcn.
+    Consecuencia: el bloque A gana un tipo `dateRange` y hace falta decidir la dependencia (el repo es
+    pnpm y el `Dialog` de la 121 se construyó sobre `@base-ui/react`, no Radix — «instalá shadcn» no
+    es una respuesta). Bordes CR/UTC calculados **server-side**: `desde` = 06:00 UTC de ese día,
+    `hasta` **inclusive** = `< 06:00 UTC del día+1`.
+  - **(c) Precargado → `Promise.all` al cargar la página**, no la Server Action + SWR que recomendaba
+    el spec. Los ~70 KB en el RSC payload de cada carga de `/ordenes` son **coste aceptado a
+    sabiendas**; queda margen para adelgazarlo enviando el catálogo con los campos mínimos.
+  - **(h) Cuentas apiKey → SEPARADAS POR GRUPO**, no mezcladas. Ojo: `MultiSelectFilter` es propio del
+    repo (no shadcn; se hizo con panel propio porque no hay `Popover`/`Command` en `components/ui/`),
+    así que el agrupado se diseña en el contrato de opciones de A (`group?`), no se importa.
+  - **(i) Limpiar → las dos:** «Limpiar todo» **y** limpiar individual por filtro.
+  - Las otras diez van por la recomendación del spec: **(b)** `orden.zona_id`; **(d)** todas las
+    tiendas; **(e)** incluidas las inactivas, marcadas; **(f)** las órdenes con `distrito_id` NULL
+    quedan fuera y sin opción «sin distrito» (el humano afirma que **no deberían existir** — eso es
+    una afirmación sobre los datos **a verificar**, anotada como riesgo, no un supuesto);
+    **(g)** la selección se pierde al recargar, como ya pasa con el filtro de estado; **(j)** estado
+    no controlado; **(k)** v1 con `multi`, `single` y `dateRange`; **(l)** salida
+    `Record<string, string[]>` con claves vacías omitidas — el borde a vigilar es el `dateRange`, el
+    único cuyos valores **no son ids de catálogo**; **(m)** un solo padre por filtro;
+    **(n)** `components/shared/`, excepción explícita a la regla de las dos superficies de
+    `docs/architecture.md` con la 145 como segundo consumidor declarado.
 - **⚠️ La 145 hay que revalidarla, aunque ya no queda huérfana.** «Rollout de búsqueda/filtros/export a
   las 31 tablas» adopta *la capacidad de la 144*; con la 2.ª redefinición esa capacidad **vuelve a
   existir** en la pieza (A) — pero **solo la parte de filtros**. La **búsqueda global** y el **export**
@@ -144,8 +168,19 @@ está en rojo por `count` en `GestionarOrdenPanelProps`).
   a Excel salió de la 144 y pasó a **server-side en una feature 151** nueva; la 145 pasó a `fullstack`).
   Se resolvió conservando **la 142 nuestra** y **la versión de `dev` para 144/145**, que estaba más al día.
 
-> ### ⚠️ `dev` está EN ROJO, y no es culpa de la 142 — MEDIDO, no supuesto
+> ### ✅ SALDADA (2026-07-28) — `dev` volvió a verde. Lo de abajo queda como histórico.
 >
+> Lo arregló el **PR #175** (`fix/tests-rediseno-ux`, merge `55b0cd4`), que entró después de la 142.
+> **Medido, no supuesto**, en el worktree limpio `../ordenex-wt-144` sobre `origin/dev @ 55b0cd4` y con
+> `pnpm db:generate` corrido antes de medir (un worktree nuevo no trae cliente de Prisma y sin él el
+> typecheck escupe ~30 falsos `TS2305` de `@prisma/client`): **`./init.sh` VERDE de punta a punta** —
+> typecheck **0 errores**, lint **0 errores / 145 warnings**, **518 archivos / 5308 tests, 0 fallos**,
+> todas las migraciones con `down.sql`. Ese es el **baseline de la 144**: cualquier rojo que aparezca
+> durante su implementación es suyo, no heredado.
+>
+> <details><summary>Histórico: el diagnóstico de cuando estaba en rojo</summary>
+>
+
 > Tras el merge quedan **2 errores de typecheck** (`count` falta en `GestionarOrdenPanelProps`, en
 > `GestionarOrdenPanelEvidencias.test.tsx` y `NotaPrivadaMensajero.test.tsx`) y **14 tests rojos** en
 > 4 archivos: `DataTable.test.tsx` (2), `MarcarLuegoToggle.test.tsx` (2), `MisAsignacionesModule.test.tsx`
@@ -160,6 +195,8 @@ está en rojo por `count` en `GestionarOrdenPanelProps`).
 > Corolario para la 141 (`../ordenex-wt-141`, PR #168 abierto): en `dev` solo aterrizó su **spec**;
 > la migración `20260727120000_carga_orden_carga_id` y su código **NO** están en `dev` todavía.
 > Por eso sigue legítimamente `in_progress`.
+>
+> </details>
 
 ### Lote 137–140 (flujo de estados) — ✅ **COMPLETO, 4/4 MERGEADAS a `dev`** (2026-07-25)
 
