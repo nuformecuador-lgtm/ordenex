@@ -5,6 +5,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { PostulacionRepository } from "@/lib/repositories/PostulacionRepository";
 import { PostulacionMensajeroService } from "@/lib/services/PostulacionMensajeroService";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
+import { notificarPostulacionPendienteReal } from "@/lib/notificaciones/notificadores";
 import { ResetRateLimiter } from "@/lib/utils/reset-rate-limit";
 import { postulacionConfig } from "@/lib/config/postulacion";
 import type { IPostulacionMensajeroService } from "@/lib/interfaces/services/IPostulacionMensajeroService";
@@ -48,6 +49,10 @@ function buildService(): IPostulacionMensajeroService {
   return new PostulacionMensajeroService(
     new PostulacionRepository(prisma),
     new SupabaseFileStorage(),
+    // Feature 146/R23: COMPOSITION ROOT del aviso "postulacion pendiente". El notificador real
+    // se cablea aqui —donde ya vive el acceso a la base— y NO como default del service, para
+    // que un service construido sin cablear (dobles de test) no pueda escribir en la base.
+    notificarPostulacionPendienteReal,
   );
 }
 

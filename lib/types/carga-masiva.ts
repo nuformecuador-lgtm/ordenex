@@ -33,7 +33,13 @@ export const REQUIRED_HEADERS = [
   "direccion_destinatario",
 ] as const;
 
-/** R16: devuelve las columnas obligatorias ausentes en la cabecera detectada. */
+/**
+ * R16: devuelve las columnas obligatorias ausentes en la cabecera detectada.
+ *
+ * ANCLA feature 143 (R14) — comprueba PRESENCIA, nunca una lista blanca: el
+ * export de filas con error se re-sube con una columna extra `motivo_error` y
+ * debe seguir pasando. Lo blinda `tests/integration/carga-masiva-errores-roundtrip.test.ts`.
+ */
 export function findMissingHeaders(headers: string[]): string[] {
   const present = new Set(headers.map((h) => h.trim().toLowerCase()));
   return REQUIRED_HEADERS.filter((h) => !present.has(h));
@@ -56,6 +62,14 @@ function requiredNonEmpty(label: string) {
 // declara ningun campo geografico ni parsea `direccion_destinatario`: cada via
 // extrae su geografia con su propio extractor en `BulkOrdenService`.
 // `direccion_destinatario` queda como paso-a-traves tipado.
+//
+// ANCLA feature 143 (R16) — NO convertir este `z.object` en `.strict()`.
+// El export de filas con error (`carga-masiva-export-errores.ts`) descarga un
+// XLSX con una columna extra `motivo_error` para que el usuario corrija y VUELVA
+// A SUBIR ese mismo archivo. El round-trip sobrevive porque zod descarta en
+// silencio las claves desconocidas: con `.strict()` toda fila re-subida seria
+// rechazada. Igual que `findMissingHeaders` no debe adquirir una lista blanca de
+// cabeceras (R14). Lo blinda `tests/integration/carga-masiva-errores-roundtrip.test.ts`.
 export const filaCargaSchema = z.object({
   num_remision: requiredNonEmpty("num_remision"),
   destinatario: requiredNonEmpty("destinatario"),

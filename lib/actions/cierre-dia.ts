@@ -19,6 +19,7 @@ import {
   type ListarCierreDiaResult,
   type SolicitarCierreResult,
 } from "@/lib/types/cierre";
+import { notificarCierreDiaPorAprobarReal } from "@/lib/notificaciones/notificadores";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -43,6 +44,9 @@ function buildService(): ICierreDiaService {
     new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET),
     // Feature 39: resolver de la tarifa de pago al mensajero (por zona+vehiculo).
     new TarifaZonaMensajeroRepository(prisma),
+    // Feature 146/R24: COMPOSITION ROOT del aviso "cierre por aprobar". Se cablea aqui y no
+    // como default del service (ver `lib/notificaciones/notificadores.ts`).
+    notificarCierreDiaPorAprobarReal,
   );
 }
 

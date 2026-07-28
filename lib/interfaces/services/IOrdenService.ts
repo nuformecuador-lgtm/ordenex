@@ -12,6 +12,14 @@ import type {
 export interface Actor {
   usuarioId: string;
   rol: RolValue;
+  /**
+   * Feature 146 (A3, design §1.5) — zona del actor (`usuario.zona_id`), insumo del
+   * predicado de visibilidad de las notificaciones acotadas por zona (R16). OPCIONAL a
+   * proposito: el campo es ADITIVO y ningun consumidor existente (ni los ~cientos de
+   * literales `Actor` de los tests) tiene que declararlo. `resolveActorFromSession` SI lo
+   * puebla siempre; los consumidores que lo necesitan normalizan con `?? null`.
+   */
+  zonaId?: string | null;
 }
 
 // Resultados de dominio del servicio (sin acoplarse a HTTP). El borde (Server
