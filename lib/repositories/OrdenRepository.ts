@@ -12,7 +12,9 @@ import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { encolarGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
 import {
+  DeshacerAsignacionConflictoError,
   NumRemisionDuplicadoError,
+  type DeshacerAsignacionItem,
   type CantonRow,
   type CreateOrdenData,
   type CreateOrdenConGuiaResultRow,
@@ -1798,6 +1800,110 @@ export class OrdenRepository implements IOrdenRepository {
         })),
       );
       return rows.length;
+    });
+  }
+
+  // --- Feature 149: deshacer asignacion / ruteo antes de la recogida ---
+
+  /**
+   * Feature 149 (design §3.2) — reversion transaccional de un lote de asignaciones/ruteos.
+   *
+   * Molde de `asignarSateliteLote` (UPDATE crudo guardado + `RETURNING` + append en la misma
+   * tx) con TRES diferencias deliberadas:
+   *   1. El `SET` LIMPIA la asignacion (`mensajero_asignado_id = NULL`, `asignado_at = NULL`)
+   *      en vez de fijarla (R8/R9/R10), y NO menciona `num_guia` (D2/R29) ni `prioridad`
+   *      (Q2/R30). Esa AUSENCIA es el mecanismo, y es aserto de test (T4.12).
+   *   2. NO hay `NOT EXISTS` sobre `cierre_dia` (Q1 CERRADA, R19): el cierre pendiente del
+   *      mensajero NO bloquea el deshacer. Ver design §8-Q1: la orden nunca se recogio, no
+   *      entra en ningun cuadre de caja, y el gate de asignacion existe para lo contrario
+   *      (que no se le APILEN ordenes a quien esta cuadrando).
+   *   3. TODO-O-NADA REAL: si alguna orden no gana su guarda, LANZA y revierte la tx entera,
+   *      en vez de dejar pasar a los ganadores (R20/R21).
+   *
+   * El destino es POR ORDEN (cada una vuelve a la bodega de la que salio), asi que se emite un
+   * UPDATE por orden en vez de uno solo con `IN (...)`. Los lotes son de decenas de ordenes,
+   * dentro de una unica transaccion.
+   */
+  async deshacerAsignacionLote(
+    items: readonly DeshacerAsignacionItem[],
+    origenEstatusIdPorOrden: ReadonlyMap<string, string>,
+    historial: HistorialContexto & { motivo: string },
+    zonaId: string | null,
+  ): Promise<number> {
+    if (items.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      const transicionadas: { ordenId: string; origenEstatusId: string; destinoId: string }[] = [];
+      const noTransicionadas: string[] = [];
+      // Pre-read del lote DENTRO de la tx: captura el `mensajero_asignado_id` PREVIO (el UPDATE
+      // lo pone a NULL). Esta feature NO lo consume; existe para el ancla TODO(146) de abajo.
+      const previos = await tx.$queryRaw<{ id: string; mensajero_asignado_id: string | null }[]>`
+        SELECT "id", "mensajero_asignado_id"
+        FROM "orden"
+        WHERE "id" IN (${Prisma.join(items.map((i) => i.ordenId))})`;
+      const mensajeroPrevioPorOrden = new Map(
+        previos.map((p) => [p.id, p.mensajero_asignado_id] as const),
+      );
+      void mensajeroPrevioPorOrden; // consumido por la feature 146 (ver ancla mas abajo)
+
+      for (const item of items) {
+        const origenEstatusId = origenEstatusIdPorOrden.get(item.ordenId);
+        if (origenEstatusId === undefined) {
+          // El service SIEMPRE provee el origen de cada item; si faltara, la orden no se toca
+          // y el lote entero se revierte por el throw de abajo (fallo CERRADO).
+          noTransicionadas.push(item.ordenId);
+          continue;
+        }
+        const rows = await tx.$queryRaw<{ id: string }[]>`
+          UPDATE "orden"
+          SET "estatus_id" = ${item.destinoEstatusId},
+              "mensajero_asignado_id" = NULL,
+              "asignado_at" = NULL,
+              "updated_at" = NOW()
+          WHERE "id" = ${item.ordenId}
+            AND "estatus_id" = ${origenEstatusId}
+            AND "deleted_at" IS NULL
+            ${zonaId === null ? Prisma.empty : Prisma.sql`AND "zona_id" = ${zonaId}`}
+          RETURNING "id"`;
+        if (rows.length === 1) {
+          transicionadas.push({
+            ordenId: item.ordenId,
+            origenEstatusId,
+            destinoId: item.destinoEstatusId,
+          });
+        } else {
+          noTransicionadas.push(item.ordenId);
+        }
+      }
+
+      // R20/R21: una sola perdedora aborta el lote COMPLETO (el throw revierte la tx).
+      if (noTransicionadas.length > 0) {
+        throw new DeshacerAsignacionConflictoError(noTransicionadas);
+      }
+
+      // R31/R32/R33: historial + webhook en la MISMA tx, solo de las ordenes transicionadas
+      // (aqui, por el todo-o-nada, son todas). El choke point valida la transicion (140).
+      await appendCambioEstado(
+        tx,
+        transicionadas.map((t) => ({
+          ordenId: t.ordenId,
+          estatusOrigenId: t.origenEstatusId, // la guarda del UPDATE garantiza este origen
+          estatusDestinoId: t.destinoId,
+          actorUsuarioId: historial.actorUsuarioId,
+          origenTipo: historial.origenTipo, // deshacer_asignacion
+          motivo: historial.motivo, // R23: el motivo del lote, ya recortado por el borde
+        })),
+      );
+
+      // TODO(146): productor de notificación al mensajero desasignado. Cuando exista la campana
+      // de notificaciones (feature 146), encolar AQUI —en esta misma tx, patrón transactional-
+      // outbox del webhook de estado— un aviso por cada orden revertida que TENIA mensajero:
+      //   destinatario = mensajeroAsignadoId ANTES del UPDATE (capturarlo del RETURNING o del
+      //                  pre-read; el UPDATE ya lo puso a NULL)
+      //   contenido    = "La orden <num_guia> fue retirada de tus asignaciones"
+      // Solo caso (a) (`por_recoger`); el caso (b) no tiene mensajero. Ver specs/149 R41.
+      // El pre-read `mensajeroPrevioPorOrden` (arriba) ya deja el destinatario disponible.
+
+      return transicionadas.length;
     });
   }
 
