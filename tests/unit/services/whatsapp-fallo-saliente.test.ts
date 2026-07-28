@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ChatWhatsappService } from "@/lib/services/ChatWhatsappService";
 import type { ChatLogger } from "@/lib/services/ChatWhatsappService";
 import { CODIGOS_TRANSITORIOS, esErrorTransitorio } from "@/lib/services/whatsapp/errores-meta";
-import { volcarStatusesFallidos } from "@/lib/services/whatsapp/chat-logger";
+import { cuerpoParaLog, volcarStatusesFallidos } from "@/lib/services/whatsapp/chat-logger";
 import { parseWebhookEventos } from "@/lib/types/whatsapp-webhook";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
 import type {
@@ -298,5 +298,42 @@ describe("reintentarEnvio: un saliente de plantilla se reenvia COMO plantilla", 
 
     await expect(service.reintentarEnvio("msg-1")).rejects.toThrow(/faltan plantillaRepo/);
     expect(enviarTexto).not.toHaveBeenCalled();
+  });
+});
+
+describe("cuerpoParaLog: volcado de la peticion saliente", () => {
+  const cuerpo = {
+    messaging_product: "whatsapp",
+    to: "573112195060",
+    type: "template",
+    template: {
+      name: "aviso_entrega",
+      language: { code: "es_MX" },
+      components: [
+        { type: "body", parameters: [{ type: "text", text: "Juan Perez" }] },
+      ],
+    },
+  };
+
+  it("por defecto conserva la ESTRUCTURA y redacta destino y contenido", () => {
+    const salida = cuerpoParaLog(cuerpo) as typeof cuerpo;
+    // Lo que explica un 400 sobrevive intacto: plantilla, idioma y forma de components.
+    expect(salida.template.name).toBe("aviso_entrega");
+    expect(salida.template.language.code).toBe("es_MX");
+    expect(salida.template.components[0].parameters).toHaveLength(1);
+    // El destino y el valor del parametro, no.
+    expect(salida.to).toBe("[redactado]");
+    expect(JSON.stringify(salida)).not.toContain("573112195060");
+    expect(JSON.stringify(salida)).not.toContain("Juan Perez");
+  });
+
+  it("con WHATSAPP_DEBUG_LOG=true devuelve el cuerpo TAL CUAL", () => {
+    const previo = process.env.WHATSAPP_DEBUG_LOG;
+    process.env.WHATSAPP_DEBUG_LOG = "true";
+    try {
+      expect(cuerpoParaLog(cuerpo)).toBe(cuerpo);
+    } finally {
+      process.env.WHATSAPP_DEBUG_LOG = previo;
+    }
   });
 });
