@@ -19,6 +19,7 @@ import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { ordenesColumns } from "./ordenes-columns";
+import { serializarFiltro, type OrdenesFilterUI } from "./serializar-filtro";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
 import { EtiquetaOrdenAccion } from "./EtiquetaOrdenAccion";
@@ -50,11 +51,12 @@ interface OrdenesPageData {
 async function ordenesFetcher(
   page: number,
   pageSize: number,
-  filter?: { status_id: string | string[] },
+  filter?: OrdenesFilterUI,
 ): Promise<OrdenesPageData> {
   // Feature 63/C2 (R15/R19): con `filter` se inyecta el `status_id` a la action
-  // (whitelist server-side -> where.estatusId). Sin `filter`, el input es
-  // idéntico al previo (R10, sin regresión).
+  // (whitelist server-side -> where.estatusId). Feature 144: el mismo `filter`
+  // transporta zona/tienda/geografía/tiempo (misma whitelist). Sin `filter`, el
+  // input es idéntico al previo (R10/R45, sin regresión).
   const res = await listarOrdenes(filter ? { page, pageSize, filter } : { page, pageSize });
   if (res.status !== "ok") throw new Error("list_failed");
   // items incluyen tiendaNombre; total viene del backend (R25).
@@ -94,8 +96,13 @@ export function OrdenesModule({
    * LISTA de ids (filtro multi-estado del selector de `/ordenes`, que sustituyó a
    * las tabs por estado); el backend traduce la lista a `IN (...)`. Sin la prop, el
    * módulo se comporta idéntico al listado plano previo (R10/R19, sin regresión).
+   *
+   * Feature 144 (R30/R58): admite además las claves de zona, tienda, provincia,
+   * cantón, distrito y tiempo (`created_preset` / `created_desde` / `created_hasta`),
+   * todas de la MISMA lista blanca server-side. El módulo no las interpreta: las
+   * pasa tal cual y las serializa para la key de caché.
    */
-  filter?: { status_id: string | string[] };
+  filter?: OrdenesFilterUI;
   /**
    * Habilita la columna de checkbox por fila (selección por lote, solo maestro).
    *
@@ -156,26 +163,24 @@ export function OrdenesModule({
     });
   }
 
-  // Feature 63/C2 (R17): el estado filtrado entra en la key SWR para que la caché y
-  // la paginación sean por combinación de estados. La key debe ser un ESCALAR estable:
-  // con una lista de ids se serializa ordenada, así que dos arrays con los mismos ids
-  // (en distinto orden o de distinta identidad) comparten caché en vez de refetchear.
-  const statusId = filter?.status_id;
-  const statusKey = Array.isArray(statusId)
-    ? [...statusId].sort().join(",")
-    : statusId;
+  // Feature 63/C2 (R17) + Feature 144 (R61): el filtro entra en la key SWR para que
+  // la caché y la paginación sean por combinación de filtros. La key debe ser un
+  // ESCALAR estable: `serializarFiltro` ordena claves y valores, así que dos
+  // selecciones equivalentes (en distinto orden o de distinta identidad de objeto)
+  // comparten caché en vez de refetchear en cada render.
+  const filterKey = serializarFiltro(filter);
   const { data, error, isLoading } = useSWR(
-    ["ordenes:list", statusKey, page, pageSize],
+    ["ordenes:list", filterKey, page, pageSize],
     () => ordenesFetcher(page, pageSize, filter),
   );
 
-  // Al cambiar el filtro de estados, la página actual puede no existir en el nuevo
+  // Al cambiar CUALQUIER filtro, la página actual puede no existir en el nuevo
   // resultado (p. ej. estabas en la 4 y ahora hay 1). Se vuelve a la 1 y se limpia la
   // selección (las filas marcadas ya no están a la vista). Patrón "ajustar estado
   // durante el render": evita el parpadeo de un fetch a la página vieja en un efecto.
-  const [statusKeyPrevio, setStatusKeyPrevio] = useState(statusKey);
-  if (statusKey !== statusKeyPrevio) {
-    setStatusKeyPrevio(statusKey);
+  const [filterKeyPrevio, setFilterKeyPrevio] = useState(filterKey);
+  if (filterKey !== filterKeyPrevio) {
+    setFilterKeyPrevio(filterKey);
     setPage(1);
     setSeleccionIds(new Set());
   }
