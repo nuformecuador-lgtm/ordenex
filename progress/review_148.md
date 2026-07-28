@@ -320,3 +320,224 @@ diferimiento alcanza también a la capa E2E, no solo a los 12 tests de vitest de
 Vuelve al frontend_dev. **No hay nada que rehacer en la lógica:** los 30 requisitos están
 trazados a tests vivos, las 4 líneas rojas del gate se cumplen, las 6 mutaciones murieron,
 los 12 tests ajenos son adaptaciones legítimas y el delta de regresiones es 0.
+
+---
+---
+
+# RE-REVIEW (segunda vuelta) — 2026-07-28
+
+Base: los **4 commits nuevos** sobre lo revisado (`6efa4e7..HEAD`): `be05b1f` (casillas +
+informe), `95147f3` (E2E), `57149f0` (respaldo de `responsable`), `02eb87d` (bitácora).
+Diff auditado: 8 archivos, +550 / -27.
+
+## VEREDICTO: APROBADO-CON-NOTAS — 0 bloqueantes vivos
+
+Los 2 bloqueantes están **realmente cerrados** y la corrección **no introdujo nada nuevo en
+rojo**: ningún test ajeno se aflojó, el delta de la suite es exactamente +2 tests, y de las 4
+mutaciones nuevas 3 matan tests y la 4ª sobrevive **confirmando un menor ya abierto**, no uno
+nuevo.
+
+## 1. Números medidos por MÍ
+
+| | Declarado | Medido por el reviewer | Veredicto |
+|---|---|---|---|
+| pnpm typecheck | 0 | **0 errores** (exit 0) | coincide |
+| pnpm lint | 0 errores / 145 warnings | **0 errores / 145 warnings** | coincide |
+| pnpm test --run | 524 archivos / 5402 tests, 0 fallos | **524 archivos / 5402 tests, 0 fallos** (exit 0) | coincide |
+| ./init.sh | exit 0 | verde en la 1ª vuelta; en esta corrí la suite completa aparte, exit 0 | coincide |
+
+Delta contra mi propia medición de la primera vuelta (524 / **5400**): **+2 tests, 0
+regresiones, 0 archivos nuevos**. Cuadra exactamente con los 2 tests añadidos al respaldo de
+`responsable`. **Cero fallos en esta corrida** (ni siquiera la flake que vi la vez pasada).
+
+## 2. BLOQ-1 — casillas de tasks.md: CERRADO
+
+- grep: **0 casillas en `[ ]`, 22 en `[x]`** (T1–T22, ninguna omitida).
+- El diff de tasks.md es **exclusivamente el volteo de casillas**: comprobado con
+  `git diff | grep "^+" | grep -vc "^+- \[x\]"` → **0**. No se editó ni un texto de tarea, ni
+  un "Hecho cuando", ni un mapeo de R. No hay riesgo de que se haya "ajustado" el criterio
+  para poder marcar.
+- ¿Marcadas sin estar hechas? Contrastadas contra el diff de la rama: T1–T6 (tipos,
+  interfaces, repo, service, action), T7–T9 (xlsx, módulo puro, botón + helper), T10–T14 (los
+  6 puntos de UI), T15–T21 (los 6 archivos de test + los ajustes) y T22 (verificación
+  ejecutable) tienen todas su artefacto real en el árbol. **Ninguna casilla es falsa.**
+- Única salvedad, ya registrada como menor 1: el "Hecho cuando" de T22 pide el mapa R1..R30 en
+  UN archivo `progress/impl_148-manifiesto-excel-lotes.md`, y sigue partido en
+  impl_148_backend.md + impl_148_frontend.md. Es desviación de forma, no de fondo (los 30 R
+  están mapeados); queda como deuda, no reabre el bloqueante.
+
+## 3. BLOQ-2 — los 3 E2E: CERRADO, y el hallazgo del agente es correcto
+
+Mi review original identificó **1** spec afectado; el frontend_dev auditó los 18 y encontró
+**3**. Verificado: tenía razón, mi auditoría se quedó corta.
+
+### 3.1 asignacion-satelite.spec.ts — las dos roturas que reporté, resueltas bien
+
+- **Strict mode.** El acotamiento es a `getByRole("region", { name: "Notificaciones" })`, que
+  resuelve al Toast.Viewport real: `providers/ToastProvider.tsx:102-104` lo declara
+  literalmente `role="region"` + `aria-label="Notificaciones"`. **Comprobé que NO puede
+  apuntar al elemento equivocado**: el otro candidato con ese nombre accesible es
+  `NotificationsBell.tsx:142`, que es un **button**, no una region, así que
+  `getByRole("region", ...)` lo excluye por rol; y el resumen del modal (Alert role="status"
+  dentro del dialog) también queda fuera de la región. **La aserción sigue midiendo el toast
+  de éxito, y solo el toast.** Se evitó `.first()`, que es justo lo que habría podido pasar
+  mirando el nodo equivocado. Correcto.
+- **La aserción del listado.** Ahora el orden es: comprobar la fase "resultado" (resumen +
+  botón de manifiesto) → pulsar "Cerrar" → `expect(modal).toBeHidden()` → **recién entonces**
+  el `toHaveCount(0)` sobre "Recibidas".
+  ¿Falla ahora si router.refresh() no ocurre? **Sí**, y lo verifiqué leyendo el orden de
+  `handleOpenChange`: `setResultado(null); onOpenChange(false); onSuccess();`. El cierre del
+  diálogo (y por tanto el `toBeHidden()`) sucede ANTES de `onSuccess`, así que el
+  `toBeHidden()` pasaría igual sin refresco: **toda la capacidad de discriminación queda en el
+  `toHaveCount(0)` posterior**, que es exactamente donde debe estar. Sin refresco, la orden
+  seguiría en "Recibidas" con el diálogo ya cerrado (sin el aria-hidden del fondo que antes la
+  tapaba) y la aserción fallaría. **Ya no puede pasar por el motivo equivocado.**
+- **No se debilitó nada:** la única línea borrada es la aserción ambigua del toast, sustituida
+  por su versión acotada MÁS 5 aserciones nuevas (modal visible, resumen repetido, botón de
+  manifiesto, cierre, toBeHidden). El test verifica lo mismo de antes y algo más.
+
+### 3.2 y 3.3 reintentos-escalado.spec.ts y devolucion-origen.spec.ts — rotura latente real
+
+Confirmada contra origin/dev: ambos hacían `await expect(modal).toBeHidden();`
+**inmediatamente tras confirmar**, lo que con la fase "resultado" es falso. Los parches son
+**puramente aditivos** (+8/-0 y +7/-0, cero líneas borradas): comprueban el botón de
+manifiesto, pulsan "Cerrar" y solo entonces esperan toBeHidden(). **Ninguna aserción
+preexistente se tocó ni se relajó.**
+
+### 3.4 Verificación estática de TODOS los localizadores nuevos
+
+No pude ejecutarlos (ver §5), así que los contrasté uno a uno contra los componentes:
+
+| Localizador nuevo | Existe en | OK |
+|---|---|---|
+| region "Notificaciones" | providers/ToastProvider.tsx:102-104 (Toast.Viewport) | si |
+| dialog "Asignar mensajero" | título de AsignarSateliteModal y de AsignarBodegaModal | si |
+| button "Cerrar" | Modal con `cancelLabel={resultado ? "Cerrar" : "Cancelar"}`; **es el ÚNICO "Cerrar"** del diálogo (Modal.tsx no renderiza botón X) ⇒ sin ambigüedad | si |
+| button /Descargar manifiesto/i | DEFAULT_LABEL de DescargarManifiestoButton | si |
+| botón de manifiesto en DevolverATiendaModal | se renderiza porque enviadasIds no está vacío cuando todas salieron ok | si |
+
+## 4. Mutaciones NUEVAS (4)
+
+Archivos restaurados desde copia de respaldo; `git status --porcelain` **vacío** al terminar.
+
+| # | Mutación | Resultado | Detalle |
+|---|---|---|---|
+| **G** | RESPONSABLE_FALLBACK "—" → "" | **KILL (1)** | "sin nombre resoluble del ejecutor, responsable cae al guion largo y no a cadena vacia" |
+| **H** | El respaldo del actor pisa al mensajero (`mensajero ?? ctx.actor` → `ctx.actor`) + guion CORTO "-" en vez del largo | **KILL (4)** | incluye "con mensajero asignado, el respaldo del actor no contamina responsable" y el del literal U+2014 ⇒ el guion largo está fijado, no basta un guion cualquiera |
+| **I** | Cambiar SOLO la rama de respaldo de asignacion_satelite: `mensajero ?? ctx.actor` → `mensajero ?? RESPONSABLE_FALLBACK` | **SOBREVIVE (34/34 verde)** | confirma que el **menor 4 sigue abierto** (esa rama defensiva no está cubierta). No es hallazgo nuevo ni bloqueante: es la deuda que ya había registrado |
+| **J** | Restaurar el helper VIEJO del test (`opts.nombre ?? ACTOR_NOMBRE`) | **KILL (1)** | prueba EMPÍRICA de la afirmación del agente |
+
+**El fallback "—" está realmente cubierto** (G y H lo matan, y H fija el codepoint concreto,
+no un guion genérico).
+
+### La afirmación sobre el helper es EXACTA — verificada, no aceptada
+
+El agente afirma que `opts.nombre ?? ACTOR_NOMBRE` colapsaba un `nombre: null` explícito, de
+modo que mi menor 5 apuntaba a un caso **inexpresable**. Lo comprobé de dos formas:
+
+1. **Por diff**: la línea previa era literalmente `fakeOrdenRepo(rows, opts.nombre ?? ACTOR_NOMBRE)`.
+2. **Por ejecución (mutación J)**: al devolver el helper a su forma vieja, el test nuevo
+   **falla** (responsable sale "Ana Maestra" en vez de "—"). Es decir: antes del arreglo el
+   caso no podía escribirse desde el helper.
+
+El arreglo (`opts.nombre === undefined ? ACTOR_NOMBRE : opts.nombre`) **no quedó a medias**:
+distingue undefined de null y el resto de la suite sigue verde (34/34). **Menor 5: CERRADO.**
+
+## 5. Las dos afirmaciones del agente que se me pidió validar
+
+### 5.1 "Los E2E NO se ejecutaron" — exacta en la conclusión, con UN dato erróneo
+
+- `playwright.config.ts` levanta `webServer: { command: "pnpm dev", url: "http://localhost:3000" }`. **Confirmado.**
+- Los specs exigen BD sembrada con usuarios por rol y las credenciales son **placeholders**:
+  admin-satelite@example.com, maestro@example.com, mensajero@example.com,
+  admin.tienda@example.com, todos con "correct-password". **Confirmado.**
+- El encabezado de los 3 specs dice "these tests are WRITTEN but NOT EXECUTED". **Confirmado**
+  (líneas 30-31, 71-72 y 50-51 respectivamente).
+- `pnpm typecheck` SÍ cubre `e2e/**`: tsconfig.json incluye `**/*.ts` y excluye solo
+  node_modules. **Confirmado** ⇒ "lo único verificado es que compilan" es exacto.
+- **DATO ERRÓNEO (menor 9):** la bitácora dice "no hay navegadores de Playwright instalados
+  (`~/.cache/ms-playwright` no existe)". Esa es la ruta de Linux/macOS. En Windows viven en
+  `%LOCALAPPDATA%\ms-playwright`, y **SÍ están instalados**: chromium-1228,
+  chromium_headless_shell-1228, ffmpeg-1011, winldd-1007. La **conclusión no cambia** (siguen
+  sin poder ejecutarse por falta de BD sembrada y de usuarios reales), pero el motivo
+  declarado es parcialmente incorrecto y conviene no propagarlo.
+
+**Yo tampoco los ejecuté, y lo digo así:** habría requerido levantar `pnpm dev` desde este
+worktree contra el puerto 3000 —que pueden estar usando las sesiones paralelas— y sembrar la
+BD con esos usuarios. No lo hice, por la regla de no salirme del worktree ni perturbar otras
+sesiones. **Por eso la petición "mutá el código y confirmá que el E2E lo detectaría" NO es
+ejecutable aquí**; la sustituí por (a) la verificación estática de cada localizador contra los
+componentes (§3.4) y (b) el análisis del orden `onOpenChange(false)` → `onSuccess()` que
+demuestra dónde queda la capacidad de discriminación (§3.1). El equivalente en vitest SÍ está
+probado por mutación: la mutación E de la primera vuelta (quitar onSuccess() del cierre) mata
+5 tests, 2 de ellos de la cadena de la feature 95.
+
+### 5.2 Drift ajeno preexistente — CONFIRMADO
+
+Verificado con `git show origin/dev:<archivo>`, es decir, **antes de esta feature**:
+
+- reintentos-escalado.spec.ts:203 (en origin/dev): `modal.getByRole("button", { name: "Asignar mensajero" })`.
+  El confirmar de AsignarBodegaModal es **"Asignar"**; "Asignar mensajero" es el TÍTULO del
+  diálogo y la etiqueta del botón del listado (OrdenesListado.tsx:293). El localizador no
+  resuelve **ya en dev**.
+- devolucion-origen.spec.ts:114-121 (en origin/dev): usa "Devolver a la tienda" para la región,
+  el botón y el diálogo. La feature 139 retiró esa salida manual de `rechazada`
+  (OrdenesListado.tsx:77 lo documenta) y la acción vigente es **"Enviar a la tienda"**
+  (OrdenesListado.tsx:314), desde otro estado.
+
+**Es preexistente y ajeno a la 148.** Queda como **deuda registrada**, no como bloqueante.
+Consecuencia honesta que conviene anotar: como ese drift está en un paso ANTERIOR al que la
+148 añadió, las líneas nuevas de esos 2 specs son correctas pero **inalcanzables** hasta que
+se sanee el drift; su valor hoy es documental (y compilan).
+
+### 5.3 Flake no-embalaje.test.ts — mismo patrón que mi menor 7: CONFIRMADO
+
+`tests/unit/guards/no-embalaje.test.ts` recorre el árbol del repo con `fs` **síncrono**
+(REPO_ROOT + walk). Es exactamente la clase de suite dependiente de I/O y de tiempo que falla
+bajo carga alta y pasa aislada: la corrí sola → **1/1 verde**, y mis corridas completas de esta
+vuelta dieron **5402/5402 sin un solo fallo**. Encaja con mi menor 7
+(recuperar-contrasena-form.test.tsx). **Ajena a la 148**: el guard ignora `progress/` y
+`.claude/`, así que ni siquiera este informe lo puede alterar. Se fusiona en el menor 7.
+
+## 6. ¿Se aflojó algo? NO
+
+- **Tests de vitest tocados en estos 4 commits: exactamente 1**, y es el propio de la feature
+  (tests/unit/services/manifiesto-service.test.ts, +41/-2). Las 2 líneas borradas son el helper
+  colapsante; todo lo demás son aserciones nuevas. **Cero tests ajenos tocados.**
+- **E2E**: -1 línea en total en los 3 specs (la aserción ambigua del toast, sustituida por su
+  versión acotada) y +40 de aserciones nuevas. Ninguna comprobación se eliminó ni se volvió más
+  permisiva.
+- **Código de producción**: el único cambio es ManifiestoService ("" → RESPONSABLE_FALLBACK y la
+  constante exportada). No toca las 4 líneas rojas del gate: los 5 servicios de negocio siguen
+  ausentes del diff, sin migraciones, sin RLS, y la generación sigue en cliente.
+
+## 7. Estado final de los hallazgos
+
+| Hallazgo (1ª vuelta) | Estado |
+|---|---|
+| **BLOQUEANTE 1** — casillas de tasks.md | **CERRADO** (22/22, diff solo de casillas) |
+| **BLOQUEANTE 2** — E2E sin adaptar | **CERRADO y ampliado** (3 specs, no 1; parches aditivos y correctos) |
+| menor 1 — mapa R→test partido en 2 archivos | abierto (cierre del leader) |
+| menor 2 — falta entrada en progress/history.md | abierto (cierre del leader) |
+| menor 3 — design.md §4 dice num_remision único por tienda, es global | abierto (documental) |
+| menor 4 — la rama `?? ctx.actor` de asignacion_satelite sin cubrir | **abierto — reconfirmado por la mutación I (sobrevive)** |
+| menor 5 — responsable vacío sin test | **CERRADO** (respaldo "—" + 2 tests + helper arreglado; verificado por G/H/J) |
+| menor 6 — manifiestoSchema, unión de objetos no estrictos | abierto |
+| menor 7 — flake ajena bajo carga | abierto; **absorbe** la de no-embalaje.test.ts |
+| menor 8 — el botón del último envío a central persiste | abierto (decisión de UX para el humano) |
+| **menor 9 (NUEVO)** — la bitácora afirma que no hay navegadores de Playwright; sí los hay en %LOCALAPPDATA%\ms-playwright | nuevo, documental |
+
+**Deuda registrada al cerrar:** (1) los 3 E2E adaptados nunca se ejecutaron —su verde real
+depende de un entorno con BD sembrada—; (2) el drift ajeno de la feature 139 en
+reintentos-escalado.spec.ts y devolucion-origen.spec.ts, que además vuelve inalcanzables las
+líneas nuevas de esos 2 specs; (3) los menores 1, 2, 3, 4, 6, 8 y 9.
+
+## 8. Resumen
+
+**APROBADO-CON-NOTAS. 0 bloqueantes vivos.** Los dos bloqueantes están cerrados de verdad y
+verificados por medios propios (grep + diff para el 1; lectura del Toast.Viewport, del orden de
+handleOpenChange y de origin/dev para el 2). Las 4 mutaciones nuevas confirman que el respaldo
+"—" está cubierto y que la corrección del helper era real y necesaria. No hay regresiones:
+524 / 5402 / 0 fallos, typecheck 0, lint sin errores. La única corrección de fondo que le hago
+a la bitácora es el menor 9. Nada de lo que queda abierto impide el merge; todo es deuda
+registrada.
