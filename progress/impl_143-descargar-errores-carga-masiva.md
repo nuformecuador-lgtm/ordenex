@@ -126,12 +126,40 @@ que corre en cada suite. Queda pendiente el paseo visual del humano (abrir el
 | R16 | `tests/integration/carga-masiva-errores-roundtrip.test.ts::R16: 'filaCargaSchema' valida la fila re-subida y DESCARTA motivo_error` · `…::R16: el schema NO es '.strict()' (endurecerlo rompería la re-subida)` |
 | R17 | `tests/components/OrdenesCargaUpload.test.tsx::R17 (feature 143): cabecera incompleta → sin clasificación, luego no hay descarga de errores` |
 | R18 | `tests/integration/carga-masiva-plantilla-roundtrip.test.ts` (suite existente, sin cambios: la plantilla sigue con sus 8 columnas) · `tests/integration/carga-masiva-errores-roundtrip.test.ts::R18: la plantilla vacía sigue teniendo 8 columnas y NINGUNA motivo_error` |
-| R19 | `tests/unit/utils/xlsx-rows.test.ts::R19: el módulo de composición del export NO importa exceljs en top-level` · `…::R19: xlsx-template importa exceljs SOLO de forma dinámica` |
+| R19 | `tests/unit/utils/xlsx-rows.test.ts::R19: el módulo de composición del export NO importa exceljs en top-level` · `…::R19: xlsx-template importa exceljs SOLO de forma dinámica` · `…::R19: el componente que descarga NO importa exceljs (lo carga buildXlsxRows)` |
 | R20 | `tests/components/OrdenesCargaMasivaButton.test.tsx::R20 (feature 143): en el paso 'asignacion' no existe ningún botón de descarga de errores` · `tests/components/OrdenesCargaResumen.test.tsx::R20 (feature 143): el paso posterior a la carga real NO ofrece descargar filas con error` |
 | R21 | `tests/components/OrdenesCargaPreview.test.tsx::R21: hay UNA sola acción de descarga y es .xlsx (sin variante CSV)` · `tests/unit/utils/xlsx-rows.test.ts::R21: expone el MIME de XLSX (única forma de descarga; no hay variante CSV)` · `tests/components/CargaMasivaExportErrores.test.ts::R10/R21: la extensión ofrecida es siempre .xlsx` |
 | R22 | `tests/components/CargaMasivaExportErrores.test.ts::R22: 'fila: null' → SIN prefijo; no se inventa número de fila` · `…::R22: 'fila: null' y sin detalle → solo el motivo genérico, sin prefijo` |
 
 **Los 22 requisitos tienen al menos un test nombrado.**
+
+## Cierre de menores del review (post-aprobación)
+
+Del review `progress/review_143-descargar-errores-carga-masiva.md` (APROBADO, 0
+bloqueantes, 8 menores) se cerraron tres; los otros cinco quedan fuera de alcance
+(deuda preexistente de dev, verificación humana o bookkeeping del leader).
+
+- **Menor 1** — `specs/143-…/tasks.md` pasa a casillas `[x]` por task
+  (`CHECKPOINTS.md`). **T13 queda SIN marcar**, con una nota que explica la
+  sustitución por verificación ejecutable y que el paseo visual en Excel/Sheets
+  es de aceptación humana.
+- **Menor 5** — el test del parser NAVEGADOR ya no reimplementa la lectura de
+  celdas: construye un `File` real con el binario exportado e invoca
+  `parseArchivo`, es decir el camino de producción completo
+  (`xlsxAMatriz` → `celdaATexto` → `matrizAArchivo`). Si la coacción de celdas se
+  rompe (rich text, fórmula, fecha), el test cae con ella. Esto cierra además la
+  mitad (b) del menor 4: el camino `File` → `parseArchivo` sobre un archivo
+  exportado de verdad queda cubierto.
+- **Menor 6** — se elimina el `await import("@/lib/utils/xlsx-template")` del
+  handler: el módulo ya se resolvía estáticamente por `XLSX_MIME`, así que el
+  dinámico no aplazaba nada. `buildXlsxRows` pasa a import estático y **el
+  invariante de R19 sigue intacto**: la librería XLSX solo entra por el import
+  dinámico interno de `buildXlsxRows`. Añadido un test que lo blinda desde el
+  componente.
+
+Verificación tras estos arreglos: `pnpm typecheck` con los mismos 2 errores
+preexistentes (delta 0), `pnpm lint` 0 errores y sin warnings propios, y los 11
+archivos de test de la feature y colindantes en verde: **137/137**.
 
 ## Riesgos vigentes
 
