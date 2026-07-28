@@ -4,7 +4,15 @@ import { useEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Select } from "@/components/ui/select";
 import { generarEtiquetas } from "@/lib/actions/etiquetas-guia";
+import {
+  formatMm,
+  getHojaEtiqueta,
+  HOJAS_ETIQUETA,
+  HOJA_ETIQUETA_DEFAULT_ID,
+  type HojaEtiquetaId,
+} from "@/lib/config/etiquetas-hoja";
 import type {
   EtiquetaGuiaDTO,
   EtiquetaOmitidaDTO,
@@ -38,6 +46,12 @@ const MOTIVO_TEXTO: Record<EtiquetaOmitidaDTO["motivo"], string> = {
   no_encontrada: "no encontrada",
 };
 
+/** Opciones del selector de tamaño, en el orden fijo del catálogo (R1/R6). */
+const OPCIONES_HOJA = HOJAS_ETIQUETA.map((h) => ({ value: h.id, label: h.label }));
+
+/** Rótulo del selector; también es su nombre accesible (R6). */
+const LABEL_TAMANO_HOJA = "Tamaño de hoja";
+
 /** Traduce un resultado no-"ok" de la action a un mensaje para el usuario. */
 function mensajeDeError(
   status: Exclude<GenerarEtiquetasResult["status"], "ok">,
@@ -66,9 +80,13 @@ function resumenOmitidas(omitidas: EtiquetaOmitidaDTO[]): string {
  * vista previa de las etiquetas imprimibles (R9). Avisa de las órdenes omitidas
  * (N−M) con su motivo (R11). Si NINGUNA es imprimible, informa y NO ofrece
  * descarga (R12). El boton "Descargar etiquetas" arma y descarga el PDF
- * multipagina 100x100 mm (decision F1.4 (c), `descargarEtiquetasPdf`), tomando
- * el raster del QR de cada `<canvas>` de la vista previa. `forbidden`/
- * `unauthenticated`/`validation_error` se traducen a un mensaje (R13/R14/R15-UI).
+ * multipagina (`descargarEtiquetasPdf`), tomando el raster del QR de cada
+ * `<canvas>` de la vista previa. `forbidden`/`unauthenticated`/
+ * `validation_error` se traducen a un mensaje (R13/R14/R15-UI).
+ *
+ * Feature 150 — El tamaño de hoja se elige en CADA descarga con un selector que
+ * solo aparece si hay etiquetas imprimibles (R6/R11); arranca en el default del
+ * catalogo en cada apertura (R7) y no se persiste de ninguna forma (R10).
  */
 export function EtiquetasGuiaModal({
   open,
@@ -77,6 +95,10 @@ export function EtiquetasGuiaModal({
   onSuccess,
 }: EtiquetasGuiaModalProps) {
   const [estado, setEstado] = useState<Estado>({ fase: "cargando" });
+  // Feature 150 (D2/R10): el tamaño de hoja es estado LOCAL y efímero. No se
+  // persiste en ningún sitio (ni `localStorage`, ni cookie, ni servidor): cada
+  // apertura vuelve al default del catálogo (R7).
+  const [hojaId, setHojaId] = useState<HojaEtiquetaId>(HOJA_ETIQUETA_DEFAULT_ID);
   // Canvas del QR por `ordenId`, recolectados de la vista previa para rasterizar
   // al PDF (qrcode.react reenvia la ref al canvas nativo).
   const qrCanvases = useRef<Map<string, HTMLCanvasElement>>(new Map());
@@ -87,7 +109,11 @@ export function EtiquetasGuiaModal({
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (open) setEstado({ fase: "cargando" });
+    if (open) {
+      setEstado({ fase: "cargando" });
+      // R7: reabrir siempre parte del default, sin importar la elección anterior.
+      setHojaId(HOJA_ETIQUETA_DEFAULT_ID);
+    }
   }
 
   useEffect(() => {
@@ -124,12 +150,14 @@ export function EtiquetasGuiaModal({
   const etiquetas = estado.fase === "listo" ? estado.etiquetas : [];
   const omitidas = estado.fase === "listo" ? estado.omitidas : [];
   const hayImprimibles = etiquetas.length > 0;
+  const hoja = getHojaEtiqueta(hojaId);
 
   function handleDescargar() {
     // R12: sin imprimibles no se genera/descarga PDF (defensa; el botón no se
     // ofrece en ese caso).
     if (etiquetas.length === 0) return;
-    descargarEtiquetasPdf(etiquetas, qrCanvases.current);
+    // R9: el PDF sale con el tamaño que esté seleccionado en este momento.
+    descargarEtiquetasPdf(etiquetas, qrCanvases.current, hoja);
     onSuccess?.();
   }
 
@@ -142,7 +170,7 @@ export function EtiquetasGuiaModal({
       open={open}
       onOpenChange={onOpenChange}
       title="Imprimir etiquetas"
-      description="Vista previa de las etiquetas de las órdenes con guía. Cada etiqueta se descarga como una página de 100 × 100 mm."
+      description={`Vista previa de las etiquetas de las órdenes con guía. Cada etiqueta se descarga como una página de ${hoja.label} (${formatMm(hoja.anchoMm)} × ${formatMm(hoja.altoMm)} mm).`}
       confirmLabel={hayImprimibles ? "Descargar etiquetas" : "Cerrar"}
       onConfirm={hayImprimibles ? handleDescargar : cerrar}
       closeOnConfirm={!hayImprimibles}
@@ -178,6 +206,24 @@ export function EtiquetasGuiaModal({
               para imprimir.
             </AlertDescription>
           </Alert>
+        ) : null}
+
+        {hayImprimibles ? (
+          <div className="flex flex-col gap-1.5 sm:max-w-xs">
+            <label
+              htmlFor="etiquetas-tamano-hoja"
+              className="text-sm font-medium"
+            >
+              {LABEL_TAMANO_HOJA}
+            </label>
+            <Select
+              id="etiquetas-tamano-hoja"
+              aria-label={LABEL_TAMANO_HOJA}
+              value={hojaId}
+              onValueChange={(next) => setHojaId(getHojaEtiqueta(next).id)}
+              options={OPCIONES_HOJA}
+            />
+          </div>
         ) : null}
 
         {hayImprimibles ? (
