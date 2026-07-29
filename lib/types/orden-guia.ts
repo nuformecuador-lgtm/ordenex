@@ -3,15 +3,13 @@
 // CRUD de ordenes (feature 6/7), patron lib/types/asignacion-mensajero.ts.
 import { z } from "zod";
 
-// R24/decision 5: decision FINAL por orden en una sola llamada. `mensajeroId:
-// null` = "sin mensajero" (destino en_bodega_central, R23).
+// Feature 156 (R14): la entrada de "Generar guia" es un LOTE DE IDS y NADA MAS. El
+// contrato previo (`decisiones: [{ ordenId, mensajeroId }]`) se retiro: generar guia
+// ya no decide mensajero, asi que cualquier dato de mensajero en la entrada es un
+// error de contrato y se resuelve como `validation_error` en el borde, sin llamar al
+// service (zod descarta las claves no declaradas).
 export const generarGuiaSchema = z.object({
-  decisiones: z.array(
-    z.object({
-      ordenId: z.string().min(1),
-      mensajeroId: z.string().min(1).nullable(),
-    }),
-  ),
+  ordenIds: z.array(z.string().min(1)),
 });
 export type GenerarGuiaActionInput = z.infer<typeof generarGuiaSchema>;
 
@@ -25,7 +23,7 @@ export type AsignarBodegaActionInput = z.infer<typeof asignarBodegaSchema>;
 export interface GenerarGuiaResultadoItem {
   ordenId: string;
   numGuia: number;
-  estado: string;
+  estado: string; // feature 156/R3: SIEMPRE "en_bodega_central"
 }
 
 export interface AsignarBodegaResultadoItem {

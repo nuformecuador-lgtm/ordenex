@@ -109,7 +109,11 @@ describe("R7 · mecanismo loop-de-updates-en-transaccion (#3)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
     await expect(
       repo.generarGuiaLote(
-        [{ ordenId: "o1", estatusId: idEstado("por_recoger"), mensajeroAsignadoId: null }],
+        // Feature 156: el destino de generar guia es `en_bodega_central`. Antes este caso
+        // usaba `por_recoger` (arista #4, retirada del grafo) y la guardia de fallo CERRADO
+        // del choke point lo rechazaba antes de llegar al fallo que se quiere probar. El
+        // mecanismo bajo prueba —append fallido revierte el lote— es exactamente el mismo.
+        [{ ordenId: "o1", estatusId: idEstado("en_bodega_central"), mensajeroAsignadoId: null }],
         HIST_GUIA,
       ),
     ).rejects.toThrow("append boom");
@@ -121,7 +125,11 @@ describe("R7 · mecanismo loop-de-updates-en-transaccion (#3)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
     await expect(
       repo.generarGuiaLote(
-        [{ ordenId: "o1", estatusId: idEstado("por_recoger"), mensajeroAsignadoId: null }],
+        // Feature 156: el destino de generar guia es `en_bodega_central`. Antes este caso
+        // usaba `por_recoger` (arista #4, retirada del grafo) y la guardia de fallo CERRADO
+        // del choke point lo rechazaba antes de llegar al fallo que se quiere probar. El
+        // mecanismo bajo prueba —append fallido revierte el lote— es exactamente el mismo.
+        [{ ordenId: "o1", estatusId: idEstado("en_bodega_central"), mensajeroAsignadoId: null }],
         HIST_GUIA,
       ),
     ).rejects.toThrow("update boom");

@@ -292,11 +292,15 @@ describe("OrdenRepository.findMensajeroIdsValidosByZona (feature 30/R6)", () => 
 });
 
 describe("OrdenRepository.rutearBodegaSateliteLote (feature 30/R10/R13)", () => {
+  // Feature 156/R15: el origen de las filas pasa de `en_preparacion` a `en_bodega_central`.
+  // `rutearABodegaSatelite` ya solo admite ese origen y la arista #7c se retiro del grafo,
+  // asi que la guardia de fallo CERRADO del choke point rechazaba el fixture viejo. Lo que
+  // se prueba (idempotencia de num_guia + estatus + mensajero NULL) no cambia.
   it("num_guia idempotente (WHERE num_guia IS NULL, secuencia constante) + estatus + mensajero NULL", async () => {
     const { prisma, tx } = buildPrisma();
     tx.orden.findMany.mockResolvedValue([
-      { id: "o1", estatusId: idEstado("en_preparacion") },
-      { id: "o2", estatusId: idEstado("en_preparacion") },
+      { id: "o1", estatusId: idEstado("en_bodega_central") },
+      { id: "o2", estatusId: idEstado("en_bodega_central") },
     ]);
     tx.orden.update.mockResolvedValue({ id: "o1" });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -324,10 +328,13 @@ describe("OrdenRepository.rutearBodegaSateliteLote (feature 30/R10/R13)", () => 
   });
 
   // Feature 49/#5 (R13/R7): 1 historial por orden ruteada (origen leido -> en_ruta_bodega_satelite).
+  // Feature 156/R15: idem — las dos filas vienen ya de `en_bodega_central` (unico origen
+  // admitido). Lo que sigue verificandose es que el origen se LEE por orden dentro de la tx
+  // y viaja al historial, no que se hardcodee.
   it("R13: registra historial por orden con origen pre-leido y tipo ruteo_satelite", async () => {
     const { prisma, tx } = buildPrisma();
     tx.orden.findMany.mockResolvedValue([
-      { id: "o1", estatusId: idEstado("en_preparacion") },
+      { id: "o1", estatusId: idEstado("en_bodega_central") },
       { id: "o2", estatusId: idEstado("en_bodega_central") },
     ]);
     tx.orden.update.mockResolvedValue({ id: "o1" });
@@ -339,7 +346,7 @@ describe("OrdenRepository.rutearBodegaSateliteLote (feature 30/R10/R13)", () => 
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("en_preparacion"),
+        estatusOrigenId: idEstado("en_bodega_central"),
         estatusDestinoId: idEstado("en_ruta_bodega_satelite"),
         actorUsuarioId: "maestro-1",
         origenTipo: "ruteo_satelite",
@@ -405,8 +412,20 @@ describe("OrdenRepository.listOrderStatus (R15/R16)", () => {
 });
 
 describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
+  // Feature 156: la decision por defecto pasa a ser la UNICA que el service produce hoy —
+  // destino `en_bodega_central` y `mensajeroAsignadoId: null`. Antes era `por_recoger` + un
+  // mensajero, que combinado con el origen del `tx` fake (`en_preparacion`) es la arista #4,
+  // retirada por esta feature: la guardia de fallo CERRADO del choke point la rechaza.
+  // El PARAMETRO `mensajeroAsignadoId` NO se retira del repo (design §6, alternativa E): queda
+  // MUERTO —ningun productor lo rellena— y se limpia con el barrido de la 159. Los casos que
+  // lo ejercitan siguen abajo, sobre pares que el grafo si declara.
   function decision(overrides: Partial<GenerarGuiaDecisionData> = {}): GenerarGuiaDecisionData {
-    return { ordenId: "o1", estatusId: idEstado("por_recoger"), mensajeroAsignadoId: "m1", ...overrides };
+    return {
+      ordenId: "o1",
+      estatusId: idEstado("en_bodega_central"),
+      mensajeroAsignadoId: null,
+      ...overrides,
+    };
   }
 
   it("ejecuta TODO el lote dentro de una sola $transaction", async () => {
@@ -437,8 +456,14 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
     expect(ordenId).toBe("o1");
   });
 
+  // Feature 76/R23 (W1) — el estampado de `asignado_at` cuando la decision trae mensajero.
+  // Feature 156: ya ningun productor pasa por aqui con mensajero (el parametro queda muerto
+  // hasta la 159), pero el comportamiento del repo se conserva y se sigue verificando. El
+  // origen del `tx` se fija a `en_bodega_central` para que el par (origen, destino) sea uno
+  // que el grafo declara (#8) y no la arista #4 que esta feature retiro.
   it("fija estatusId y mensajeroAsignadoId (con mensajero -> por_recoger, R21/R22)", async () => {
     const { prisma, tx } = buildPrisma();
+    tx.orden.findMany.mockResolvedValue([{ id: "o1", estatusId: idEstado("en_bodega_central") }]);
     tx.orden.update.mockResolvedValue({ numGuia: 7 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
@@ -477,8 +502,15 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
     expect(resultados).toEqual([{ ordenId: "o2", numGuia: 8 }]);
   });
 
+  // Feature 156: el lote sigue siendo heterogeneo (destinos y mensajeros distintos por
+  // orden), pero cada fila usa un par que el grafo declara: o1 `en_bodega_central ->
+  // por_recoger` (#8) y o2 `en_preparacion -> en_bodega_central` (#5).
   it("lote mixto (con y sin mensajero) en una sola llamada produce todos los resultados (R24)", async () => {
     const { prisma, tx } = buildPrisma();
+    tx.orden.findMany.mockResolvedValue([
+      { id: "o1", estatusId: idEstado("en_bodega_central") },
+      { id: "o2", estatusId: idEstado("en_preparacion") },
+    ]);
     tx.orden.update
       .mockResolvedValueOnce({ numGuia: 1 })
       .mockResolvedValueOnce({ numGuia: 2 });
@@ -486,7 +518,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
 
     const resultados = await repo.generarGuiaLote(
       [
-        decision({ ordenId: "o1", mensajeroAsignadoId: "m1" }),
+        decision({ ordenId: "o1", estatusId: idEstado("por_recoger"), mensajeroAsignadoId: "m1" }),
         decision({ ordenId: "o2", mensajeroAsignadoId: null, estatusId: idEstado("en_bodega_central") }),
       ],
       HIST_GUIA,
@@ -500,11 +532,15 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
 
   // Feature 49/#3 (R11/R7/R8): lote mixto deja historial con el destino REAL por orden
   // (por_recoger / en_bodega_central) y el origen pre-leido; en la misma tx.
+  // Feature 156: los origenes pasan de dos `en_fulfillment` a `en_bodega_central` (#8) y
+  // `en_preparacion` (#5). Ademas de usar pares vivos, el caso GANA discriminacion: ahora
+  // las dos filas difieren TANTO en origen como en destino, asi que un repo que hardcodease
+  // cualquiera de los dos lados fallaria aqui.
   it("R11: registra historial con destino real por orden y origen pre-leido", async () => {
     const { prisma, tx } = buildPrisma();
     tx.orden.findMany.mockResolvedValue([
-      { id: "o1", estatusId: idEstado("en_fulfillment") },
-      { id: "o2", estatusId: idEstado("en_fulfillment") },
+      { id: "o1", estatusId: idEstado("en_bodega_central") },
+      { id: "o2", estatusId: idEstado("en_preparacion") },
     ]);
     tx.orden.update
       .mockResolvedValueOnce({ numGuia: 1 })
@@ -524,7 +560,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("en_fulfillment"),
+        estatusOrigenId: idEstado("en_bodega_central"),
         estatusDestinoId: idEstado("por_recoger"),
         actorUsuarioId: "maestro-1",
         origenTipo: "generacion_guia",
@@ -533,7 +569,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
       },
       {
         ordenId: "o2",
-        estatusOrigenId: idEstado("en_fulfillment"),
+        estatusOrigenId: idEstado("en_preparacion"),
         estatusDestinoId: idEstado("en_bodega_central"),
         actorUsuarioId: "maestro-1",
         origenTipo: "generacion_guia",

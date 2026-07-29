@@ -8,23 +8,26 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 //
 // Es la RED DE SEGURIDAD de la activacion estricta (Q7): si una arista real faltara en
 // `TRANSICIONES`, ese flujo se caeria en produccion. Por eso los tests que lo consumen
-// recorren el inventario COMPLETO (45 aristas de flujo + 4 de creacion), no un muestreo.
+// recorren el inventario COMPLETO (42 aristas de flujo + 4 de creacion), no un muestreo.
 //
-// Feature 154 (SOLO ADITIVA, decision Q2 del gate del 2026-07-29): suma #43, #44 y la creacion
-// `null -> por_recolectar_en_tienda`. NO retira ninguna fila: las seis aristas que el spec
-// original proponia retirar (#1/#3/#4/#6/#7b/#7c) las ejecuta HOY `GuiaAsignacionService`, asi
-// que su baja se muda a la feature que recablea ese service (155 y 156). Las dos aristas nuevas
-// quedan DECLARADAS y SIN PRODUCTOR: su `callSite` documenta la feature que las consumira.
+// Feature 154 (SOLO ADITIVA, decision Q2 del gate del 2026-07-29): sumo #43, #44 y la creacion
+// `null -> por_recolectar_en_tienda`, sin retirar ninguna fila, porque `GuiaAsignacionService`
+// seguia ejecutando las seis que el spec original proponia dar de baja (#1/#3/#4/#6/#7b/#7c).
+// Las dos aristas nuevas quedan DECLARADAS y SIN PRODUCTOR: su `callSite` lo documenta.
 //
-// La numeracion `n` es la del apendice (#1-#42) con el #27 RETIRADO a proposito por la
-// feature 139 (`rechazada -> devolviendo_a_tienda` ya no existe): el hueco es deliberado.
+// Feature 156 (recableado de `generarGuia`): RETIRA #4, #6 y #7c. Generar guia deja de asignar
+// mensajero y de rutear a satelite (se van #4 y #6), y `rutearABodegaSatelite` pasa a admitir
+// SOLO `en_bodega_central` (se va #7c). #5 sobrevive: es el destino unico de generar guia.
+// Las cuatro de `en_fulfillment` (#1/#2/#3/#7b) se quedan aqui pero pasan a SIN PRODUCTOR: la
+// 156 les quito el call-site y la 155 les quitara la arista junto con el estado.
 //
-// CORRECCION sobre el apendice A (hallazgo del review): `rutearABodegaSatelite` admite TRES
-// origenes (`ORIGEN_RUTEO_SATELITE`, `GuiaAsignacionService.ts:35`), no solo
-// `en_bodega_central`. El apendice solo listaba #7 (desde `en_bodega_central`); se anaden
-// #7b/#7c (`en_fulfillment`/`en_preparacion` -> `en_ruta_bodega_satelite` via `ruteo_satelite`).
-// Son PARES ya declarados (#3/#6, via `generacion_guia`): cambia el metadato de familia y el
-// recuento por call-site (41 -> 43), NO la legalidad (39 pares unicos, igual que antes).
+// La numeracion `n` es la del apendice (#1-#42) con huecos deliberados: el #27 lo retiro la
+// feature 139 (`rechazada -> devolviendo_a_tienda`) y el #4/#6/#7c los retira la 156.
+//
+// CORRECCION sobre el apendice A (hallazgo del review, hoy parcialmente superada): el apendice
+// solo listaba #7 para `rutearABodegaSatelite`, cuando `ORIGEN_RUTEO_SATELITE` admitia TRES
+// origenes; por eso se anadieron #7b/#7c. Tras la 156 esa constante vuelve a ser un solo
+// origen (`en_bodega_central`), asi que #7c desaparece y #7b queda sin productor.
 
 /** Una arista de flujo del inventario (origen no nulo). */
 export interface AristaInventario {
@@ -44,17 +47,21 @@ export interface AristaCreacionInventario {
   callSite: string;
 }
 
-/** A.2 — 45 aristas de flujo (1-42 sin el #27, mas #7b/#7c del review y #43/#44 de la 154). */
+/** A.2 — 42 aristas de flujo (1-42 sin #27/#4/#6, mas #7b del review y #43/#44 de la 154). */
 export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
-  { n: "1", origen: "en_fulfillment", destino: "por_recoger", via: "generacion_guia", callSite: "GuiaAsignacionService.generarGuia (GAM+mensajero)" },
-  { n: "2", origen: "en_fulfillment", destino: "en_bodega_central", via: "generacion_guia", callSite: "generarGuia (GAM sin mensajero)" },
-  { n: "3", origen: "en_fulfillment", destino: "en_ruta_bodega_satelite", via: "generacion_guia", callSite: "generarGuia (no-GAM)" },
-  { n: "4", origen: "en_preparacion", destino: "por_recoger", via: "generacion_guia", callSite: "generarGuia (GAM+mensajero)" },
-  { n: "5", origen: "en_preparacion", destino: "en_bodega_central", via: "generacion_guia", callSite: "generarGuia (GAM sin mensajero)" },
-  { n: "6", origen: "en_preparacion", destino: "en_ruta_bodega_satelite", via: "generacion_guia", callSite: "generarGuia (no-GAM)" },
-  { n: "7", origen: "en_bodega_central", destino: "en_ruta_bodega_satelite", via: "ruteo_satelite", callSite: "GuiaAsignacionService.rutearABodegaSatelite" },
-  { n: "7b", origen: "en_fulfillment", destino: "en_ruta_bodega_satelite", via: "ruteo_satelite", callSite: "rutearABodegaSatelite (ORIGEN_RUTEO_SATELITE, GuiaAsignacionService.ts:35)" },
-  { n: "7c", origen: "en_preparacion", destino: "en_ruta_bodega_satelite", via: "ruteo_satelite", callSite: "rutearABodegaSatelite (ORIGEN_RUTEO_SATELITE, GuiaAsignacionService.ts:35)" },
+  // #1/#2/#3/#7b: la 156 dejo `en_fulfillment` sin call-site (ni `generarGuia` ni
+  // `rutearABodegaSatelite` lo admiten ya como origen). Siguen declaradas hasta la 155.
+  { n: "1", origen: "en_fulfillment", destino: "por_recoger", via: "generacion_guia", callSite: "SIN PRODUCTOR (156): la retira la 155 con el estado" },
+  { n: "2", origen: "en_fulfillment", destino: "en_bodega_central", via: "generacion_guia", callSite: "SIN PRODUCTOR (156): la retira la 155 con el estado" },
+  { n: "3", origen: "en_fulfillment", destino: "en_ruta_bodega_satelite", via: "generacion_guia", callSite: "SIN PRODUCTOR (156): la retira la 155 con el estado" },
+  // #4 RETIRADA por la feature 156: `en_preparacion -> por_recoger` ya no existe (generar
+  // guia no asigna mensajero).
+  { n: "5", origen: "en_preparacion", destino: "en_bodega_central", via: "generacion_guia", callSite: "GuiaAsignacionService.generarGuia (destino UNICO, 156)" },
+  // #6 RETIRADA por la feature 156: `en_preparacion -> en_ruta_bodega_satelite` via
+  // `generacion_guia` ya no existe (generar guia no rutea a satelite).
+  { n: "7", origen: "en_bodega_central", destino: "en_ruta_bodega_satelite", via: "ruteo_satelite", callSite: "GuiaAsignacionService.rutearABodegaSatelite (origen UNICO, 156)" },
+  { n: "7b", origen: "en_fulfillment", destino: "en_ruta_bodega_satelite", via: "ruteo_satelite", callSite: "SIN PRODUCTOR (156): la retira la 155 con el estado" },
+  // #7c RETIRADA por la feature 156: `ORIGEN_RUTEO_SATELITE` vuelve a ser un solo origen.
   { n: "8", origen: "en_bodega_central", destino: "por_recoger", via: "asignacion_bodega", callSite: "GuiaAsignacionService.asignarDesdeBodega" },
   { n: "9", origen: "en_bodega_satelite", destino: "por_recoger", via: "asignacion_satelite", callSite: "AsignacionSateliteService.asignar" },
   { n: "10", origen: "en_ruta_bodega_satelite", destino: "en_bodega_satelite", via: "recepcion_satelite", callSite: "RecepcionSateliteService.recibir/recibirLote" },
@@ -114,12 +121,16 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
 ];
 
 /**
- * Recuentos: 45 aristas de flujo (las 41 de A.3 + #7b/#7c del review + #43/#44 de la 154), 41
- * pares dirigidos unicos (las dos del review repiten pares ya declarados; las dos de la 154
- * estrenan par) y 4 de creacion.
+ * Recuentos: 42 aristas de flujo (las 45 previas menos #4/#6/#7c, retiradas por la 156), 39
+ * pares dirigidos unicos y 4 de creacion.
+ *
+ * De 45 a 42: -3 aristas. De 41 a 39 pares: `en_preparacion -> por_recoger` (#4) era un par
+ * unico y desaparece; `en_preparacion -> en_ruta_bodega_satelite` estaba declarado dos veces
+ * (#6 `generacion_guia` + #7c `ruteo_satelite`) y desaparecen las dos, asi que el par tambien.
+ * Los 42 - 39 = 3 duplicados que quedan son #19/#23, #20/#24 y #3/#7b.
  */
 export const RECUENTO_INVENTARIO = {
-  aristasFlujo: 45,
-  paresUnicos: 41,
+  aristasFlujo: 42,
+  paresUnicos: 39,
   aristasCreacion: 4,
 } as const;

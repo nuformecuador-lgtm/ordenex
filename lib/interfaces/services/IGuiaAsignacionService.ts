@@ -4,15 +4,13 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // mensajero. Logica de negocio pura (sin HTTP, sin Prisma); el borde (Server
 // Action, `lib/actions/ordenes-guia.ts`) la traduce a resultado tipado.
 
-// R24/decision 5: decision FINAL por orden en una sola llamada; `mensajeroId:
-// null` significa "sin mensajero" (destino en_bodega_central, R23).
-export interface GenerarGuiaDecision {
-  ordenId: string;
-  mensajeroId: string | null;
-}
-
+// Feature 156 (R1/R14): "Generar guia" deja de decidir mensajero. La entrada es un
+// LOTE DE IDS, misma forma que `RutearSateliteInput`. El tipo `GenerarGuiaDecision`
+// (`{ ordenId, mensajeroId }`) se RETIRO a proposito: un campo que el servidor
+// tendria que ignorar o rechazar siempre es un contrato que miente sobre lo que la
+// operacion hace (design.md §6, alternativa A descartada).
 export interface GenerarGuiaInput {
-  decisiones: GenerarGuiaDecision[];
+  ordenIds: string[];
 }
 
 // R26: un solo mensajero para el lote completo (asignacion desde bodega).
@@ -24,7 +22,7 @@ export interface AsignarBodegaInput {
 export interface GenerarGuiaResultadoItem {
   ordenId: string;
   numGuia: number;
-  estado: string;
+  estado: string; // feature 156/R3: SIEMPRE "en_bodega_central" (destino unico)
 }
 
 export interface AsignarBodegaResultadoItem {
@@ -72,10 +70,12 @@ export type RutearSateliteServiceResult =
 
 export interface IGuiaAsignacionService {
   /**
-   * R18-R25/R27-R29: asigna num_guia (idempotente, R5) a TODAS las ordenes del
-   * lote elegibles (origen en_fulfillment | en_preparacion) y transiciona cada
-   * una a por_recoger (con mensajero) o en_bodega_central (sin mensajero),
-   * transaccional (todo-o-nada). Solo `maestro`.
+   * Feature 156 (R1-R9) — NUMERAR ≠ ASIGNAR. Asigna `num_guia` (idempotente, R5) a
+   * TODAS las ordenes del lote y las transiciona de `en_preparacion` (origen UNICO,
+   * R4) a `en_bodega_central` (destino UNICO, R3), transaccional (todo-o-nada, R6).
+   * NO escribe `mensajero_asignado_id` ni `asignado_at` (R2): la asignacion ocurre
+   * despues y SIEMPRE desde una bodega (`asignarDesdeBodega` o
+   * `AsignacionSateliteService`). Solo acceso total (`maestro`/`admin`).
    */
   generarGuia(input: GenerarGuiaInput, actor: Actor): Promise<GenerarGuiaServiceResult>;
   /**
@@ -87,11 +87,12 @@ export interface IGuiaAsignacionService {
     actor: Actor,
   ): Promise<AsignarBodegaServiceResult>;
   /**
-   * Feature 30/R13/R16/R17: rutea una o varias ordenes no-GAM a
-   * `en_ruta_bodega_satelite` desde los origenes permitidos (`en_fulfillment`,
-   * `en_preparacion`, `en_bodega_central`), asignando `num_guia` (R10) y dejando el
-   * mensajero en NULL (R9). Guardia R4 (zona GAM configurada). Una orden GAM en
-   * el lote -> `conflict` ("orden GAM no se rutea a satelite"). Solo `maestro`.
+   * Feature 30/R13/R16/R17 + feature 156/R15/R16: rutea una o varias ordenes no-GAM a
+   * `en_ruta_bodega_satelite` desde `en_bodega_central`, que tras la 156 es el UNICO
+   * origen admitido (antes tambien `en_fulfillment`/`en_preparacion`: el paquete se
+   * rutea desde donde esta fisicamente). Asigna `num_guia` (R10) y deja el mensajero
+   * en NULL (R9). Guardia R4 (zona GAM configurada). Una orden GAM en el lote ->
+   * `conflict` ("orden GAM no se rutea a satelite"). Solo acceso total.
    */
   rutearABodegaSatelite(
     input: RutearSateliteInput,
