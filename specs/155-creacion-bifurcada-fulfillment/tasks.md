@@ -37,14 +37,14 @@
 
 ## Bloque 1 — Dominio (el punto único de decisión)
 
-- [ ] **T1.1 — Crear `lib/services/destino-creacion.ts`.**
+- [x] **T1.1 — Crear `lib/services/destino-creacion.ts`.**
       Dep: T0.1, T0.2. Función pura `resolverDestinoCreacion(fulfillment: boolean): DestinoCreacion`
       con `estatus` / `conGuia` / `emiteManifiesto` (design §2). Sin Prisma, sin HTTP, sin
       `process.env`. Cubre R1–R3, R6.
       **Hecho cuando:** el módulo compila con `strict` y no importa nada de `lib/repositories/`,
       `lib/db/` ni `next/*`.
 
-- [ ] **T1.2 — `tests/unit/services/destino-creacion.test.ts`.** `[P]` con T1.1 (TDD).
+- [x] **T1.2 — `tests/unit/services/destino-creacion.test.ts`.** `[P]` con T1.1 (TDD).
       Dep: T1.1. Casos: rama `true`, rama `false`, y el invariante **"los dos `estatus` que devuelve
       pertenecen a `ESTADOS_CREACION`"** (red de seguridad contra la 154). Cubre R1–R3, R6, R31.
       **Hecho cuando:** los 3 tests pasan y el tercero **falla** si se altera a mano un value.
@@ -56,13 +56,13 @@
 > Estas cuatro tareas rompen el build entre sí a propósito (el `satisfies Record<OrderStatusValue,…>`
 > es la red). Se hacen en **un solo commit** o en commits consecutivos sin push intermedio.
 
-- [ ] **T2.1 — Retirar el value de `lib/types/order-status.ts`.**
+- [x] **T2.1 — Retirar el value de `lib/types/order-status.ts`.**
       Dep: T1.2. Quitar `"en_fulfillment"` de `ORDER_STATUS_SEED`; actualizar el comentario de
       cabecera con la referencia a esta feature. Cubre R27.
       **Hecho cuando:** `ORDER_STATUS_SEED` ya no lo contiene y el build de TS señala exactamente los
       sitios que faltan por limpiar.
 
-- [ ] **T2.2 — Retirar la clave del grafo y ajustar `ESTADOS_CREACION`.**
+- [x] **T2.2 — Retirar la clave del grafo y ajustar `ESTADOS_CREACION`.**
       Dep: T2.1. En `lib/types/order-status-transiciones.ts`: borrar la clave `en_fulfillment`; dejar
       `ESTADOS_CREACION = ["en_preparacion","por_recolectar_en_tienda"]`; reescribir el comentario
       `:151-158` para que cite `resolverDestinoCreacion` en vez de las tres constantes de config.
@@ -70,20 +70,20 @@
       **Hecho cuando:** `npm run typecheck` pasa y un experimento local (añadir un value falso al
       seed) rompe el build.
 
-- [ ] **T2.3 — Limpiar `lib/config/ordenes.ts`.** `[P]` con T2.4.
+- [x] **T2.3 — Limpiar `lib/config/ordenes.ts`.** `[P]` con T2.4.
       Dep: T2.1. Retirar `FULFILLMENT_ESTATUS_VALUE` y `DEFAULT_ESTATUS_VALUE` con sus dos variables
       de entorno; `OrdenesConfig` queda con las dos cotas de paginación. Actualizar
       `tests/unit/config/ordenes-config.test.ts`. Cubre R30.
       **Hecho cuando:** `grep -r "ORDENES_.*_ESTATUS_VALUE"` no devuelve nada fuera de `specs/` y
       `progress/`, y el test de config pasa.
 
-- [ ] **T2.4 — Retirar el value de los orígenes de guía/ruteo.** `[P]` con T2.3.
+- [x] **T2.4 — Retirar el value de los orígenes de guía/ruteo.** `[P]` con T2.3.
       Dep: T2.1. `GuiaAsignacionService.ts:31,35` (`ORIGEN_GENERAR_GUIA`, `ORIGEN_RUTEO_SATELITE`) y
       el JSDoc de `IGuiaAsignacionService.ts:76,91`. Cubre R29.
       **Hecho cuando:** `tests/unit/services/guia-asignacion-service.test.ts` pasa con los casos de
       origen `en_fulfillment` **reemplazados** (no borrados) por casos de origen no permitido.
 
-- [ ] **T2.5 — Actualizar el inventario de aristas.**
+- [x] **T2.5 — Actualizar el inventario de aristas.**
       Dep: T2.2. `tests/fixtures/inventario-transiciones-140.ts`: retirar `#1`,`#2`,`#3`,`#7b` y las
       entradas de creación `en_fulfillment` y `en_ruta_bodega_central`; verificar que la de creación
       `por_recolectar_en_tienda` esté (la pone la 154).
@@ -93,7 +93,7 @@
 
 ## Bloque 3 — Repositorio
 
-- [ ] **T3.1 — `create` con guía opcional.**
+- [x] **T3.1 — `create` con guía opcional.**
       Dep: T1.1. `IOrdenRepository.create(data, historial, opciones?: { conGuia?: boolean })`, default
       `false`. Cuando es `true`, dentro de la **misma** tx: `UPDATE … SET num_guia = siguiente_num_guia()
       WHERE id = $1 AND num_guia IS NULL` (constante `NUM_GUIA_GENERATOR`) + relectura defensiva.
@@ -101,7 +101,7 @@
       **Hecho cuando:** hay un test que crea con `conGuia: true` y otro con `false`, y un tercero que
       demuestra que una segunda pasada **no** consume un segundo número.
 
-- [ ] **T3.2 — Cerrar el hueco de geocodificación en `createManyOrdenesConGuia`.**
+- [x] **T3.2 — Cerrar el hueco de geocodificación en `createManyOrdenesConGuia`.**
       Dep: ninguna (independiente de T3.1) `[P]`. Encolar geocodificación por orden efectivamente
       insertada, dentro de la tx del chunk, con el mismo criterio de `createManyOrdenes:931-936`.
       Cubre R11.
@@ -112,7 +112,7 @@
 
 ## Bloque 4 — Servicios (las tres vías)
 
-- [ ] **T4.1 — Alta manual (`OrdenService.crear`).**
+- [x] **T4.1 — Alta manual (`OrdenService.crear`).**
       Dep: T1.1, T2.3, T3.1. Resolver el flag por `tiendaId`; usar `resolverDestinoCreacion`; borrar
       la rama de `estatusId` explícito y el campo del `crearOrdenSchema`; guarda de catálogo con el
       value nombrado. Cubre R5, R7, R13–R15.
@@ -120,7 +120,7 @@
       tienda con flag `true` y con flag `false`, adminTienda creando para sí, `estatusId` arbitrario
       ignorado, catálogo incompleto → `validation_error`, duplicado → `conflict`.
 
-- [ ] **T4.2 — Carga masiva por UI (`BulkOrdenService.cargarMasiva`).** `[P]` con T4.3.
+- [x] **T4.2 — Carga masiva por UI (`BulkOrdenService.cargarMasiva`).** `[P]` con T4.3.
       Dep: T1.1, T2.3, T3.2. Sustituir la ternaria `:272-275`; elegir repositorio por
       `destino.conGuia`; `precargar` con el value resuelto. Cubre R4, R16–R18.
       **Hecho cuando:** `bulk-orden-service.test.ts` cubre: lote con flag `true` (sin guía, en
@@ -128,14 +128,14 @@
       sin consumir guías, duplicada sin guía ni historial, y **una sola** llamada a
       `findUsuarioFulfillment` por lote.
 
-- [ ] **T4.3 — Carga por API key (`BulkOrdenService.cargarViaApi`).** `[P]` con T4.2.
+- [x] **T4.3 — Carga por API key (`BulkOrdenService.cargarViaApi`).** `[P]` con T4.2.
       Dep: T1.1, T3.2. Borrar `ESTATUS_INICIAL_API`; usar `resolverDestinoCreacion` sobre el dueño de
       la key; `CargaViaApiOrden.numGuia` pasa a `number | null`. Cubre R19–R23.
       **Hecho cuando:** `bulk-orden-service.carga-api.test.ts` pasa con los dos casos (incluido el
       defensivo de flag `true` → `numGuia: null`), y las aserciones actuales de
       `findUsuarioFulfillment).not.toHaveBeenCalled()` quedan **invertidas**, no borradas.
 
-- [ ] **T4.4 — Manifiesto de la rama (b).**
+- [x] **T4.4 — Manifiesto de la rama (b).**
       Dep: T0.1 (opción elegida), T4.1–T4.3. Según A/B/C de `design.md §8`. Cubre R24–R26.
       **Hecho cuando:** existe un test que arma el manifiesto de un lote recién nacido en
       `por_recolectar_en_tienda` con `origen` = tienda y `destino` = bodega central, y otro que
@@ -145,26 +145,26 @@
 
 ## Bloque 5 — Migración y datos
 
-- [ ] **T5.1 — Crear la migración.**
+- [x] **T5.1 — Crear la migración.**
       Dep: T2.1. `pnpm run db:migrate:create` → `db/migrations/<ts>_order_status_retiro_en_fulfillment/`.
       Escribir `migration.sql` con los 3 pasos de `design.md §4.1` (rastro → backfill → `DELETE`
       condicional). Cubre R34–R37, R40.
       **Hecho cuando:** el SQL corre dos veces seguidas contra una base local **con** órdenes en ese
       estado y la segunda pasada afecta 0 filas.
 
-- [ ] **T5.2 — Escribir `down.sql` a mano.**
+- [x] **T5.2 — Escribir `down.sql` a mano.**
       Dep: T5.1. Los 3 pasos de `design.md §4.2`. Cubre R38.
       **Hecho cuando:** `pnpm run db:rollback` deja la base **exactamente** como estaba antes de
       T5.1 (mismo conteo por estado y mismo conteo de filas de historial), verificado con consulta.
 
-- [ ] **T5.3 — Tests de integración de la migración.**
+- [x] **T5.3 — Tests de integración de la migración.**
       Dep: T5.1, T5.2. En `tests/integration/db/`: UP mueve las órdenes (incluidas las borradas
       lógicamente) sin tocar `num_guia`/mensajero; UP deja el rastro con `origen_tipo = ajuste_estado`
       y sin actor; UP **no** reescribe historial previo; `DELETE` condicional respeta las referencias;
       censo de datos = 0; DOWN restaura. Cubre R34–R39.
       **Hecho cuando:** `npm test -- tests/integration/db` pasa en verde con la base de test migrada.
 
-- [ ] **T5.4 — Verificar que el backfill no dispara efectos.**
+- [x] **T5.4 — Verificar que el backfill no dispara efectos.**
       Dep: T5.1. Cubre R40.
       **Hecho cuando:** un test comprueba que tras el UP no hay filas nuevas en la cola de jobs
       (`webhook_estado`, geocodificación) ni notificaciones para las órdenes migradas.
@@ -172,6 +172,13 @@
 ---
 
 ## Bloque 6 — UI mínima forzada por el retiro
+
+> **FASE FRONTEND.** La fase backend NO tocó ningún `.tsx` (decisión 6 de la puerta T0.1). Al
+> retirar el value de `ORDER_STATUS_SEED`, `tsc` señala exactamente **3 errores**, los tres en
+> `EstatusBadge.tsx` (líneas 15, 45 y 82: las entradas de `ORDER_STATUS_LABELS`,
+> `ORDER_STATUS_VARIANT` y `ORDER_STATUS_CLASS`), y fallan **2 tests de componente**
+> (`EstatusBadgeCatalogoV2.test.tsx`, `EstatusBadgeEnReparto.test.tsx`: ambos afirman que el mapa
+> de presentación cubre el catálogo EXACTO, sin sobrantes). Esa es la worklist compilada de T6.1.
 
 - [ ] **T6.1 — `EstatusBadge.tsx`.** `[P]` con T6.2.
       Dep: T2.1. Retirar la entrada de `ORDER_STATUS_LABELS`, de `ORDER_STATUS_VARIANT` y el
@@ -190,14 +197,14 @@
 
 ## Bloque 7 — Contrato público
 
-- [ ] **T7.1 — OpenAPI + espejo documental.**
+- [x] **T7.1 — OpenAPI + espejo documental.**
       Dep: T2.1, T4.3. `lib/api/openapi-spec.ts:12-27` y `docs/api/api-key-openapi.yaml` en el
       **mismo commit**; añadir a la descripción del endpoint de carga la nota del cambio
       incompatible de estado inicial. Cubre R42.
       **Hecho cuando:** un test compara el enum del objeto contra `ORDER_STATUS_SEED` y contra el
       `.yaml`, y falla si divergen.
 
-- [ ] **T7.2 — Política de eventos públicos.**
+- [x] **T7.2 — Política de eventos públicos.**
       Dep: T0.1 (respuesta a la pregunta 2). Añadir `por_recolectar_en_tienda` a `EVENTOS_PUBLICOS`
       si el humano lo confirma. Cubre R43.
       **Hecho cuando:** `tests/unit/services/webhook-estado-encolado.test.ts` demuestra que la
@@ -207,14 +214,16 @@
 
 ## Bloque 8 — Censo y cierre
 
-- [ ] **T8.1 — Extender el guard de censo.**
+- [ ] **T8.1 — Extender el guard de censo.** *(FASE FRONTEND: depende de T6.\*)*
       Dep: T2.*, T4.*, T6.*, T7.*. Añadir `en_fulfillment` a `OLD_VALUES` de
       `tests/unit/guards/censo-order-status-rename.test.ts` (extender, **no** duplicar el archivo) y
       justificar una a una las entradas nuevas de la allowlist. Cubre R33.
       **Hecho cuando:** el guard pasa en verde y la allowlist tiene un comentario por archivo
       explicando por qué ese archivo conserva el literal.
 
-- [ ] **T8.2 — Limpiar el resto de tests y el E2E.**
+- [ ] **T8.2 — Limpiar el resto de tests y el E2E.** *(la parte `.ts` ya está hecha por la fase
+      backend; quedan los 5 `.tsx`: `EscanerRecepcion`, `ManifiestoFlujos`,
+      `OrdenesListadoBloqueoCierre`, `OrdenesRevisionMaestro`, `EstatusBadgeEnReparto`)*
       Dep: T8.1. `orden-repository.guia.test.ts`, `guia-asignacion-service.test.ts` (28
       ocurrencias), `guia-asignacion-gate-coordenadas.test.ts`, `recepcion-satelite-service.test.ts`,
       `webhook-estado-encolado.test.ts`, `EscanerRecepcion.test.tsx`, `ManifiestoFlujos.test.tsx`,
