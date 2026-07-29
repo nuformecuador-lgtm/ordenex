@@ -69,19 +69,19 @@ export const TRANSICIONES = {
     { to: "en_ruta_bodega_satelite", via: "ruteo_satelite", rol: "maestro/admin" }, // #7
     { to: "por_recoger", via: "asignacion_bodega", rol: "maestro/admin" }, // #8
     { to: "devolviendo_a_tienda", via: "cancelacion_api", rol: "apiKey (tienda)" }, // #29
-    { to: "en_ruta", via: "deshacer_gestion", rol: "mensajero" }, // #34
+    { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #34
   ],
   en_ruta_bodega_satelite: [
     { to: "en_bodega_satelite", via: "recepcion_satelite", rol: "adminSatelite" }, // #10
   ],
   en_bodega_satelite: [
     { to: "por_recoger", via: "asignacion_satelite", rol: "adminSatelite" }, // #9
-    { to: "en_ruta", via: "deshacer_gestion", rol: "mensajero" }, // #35
+    { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #35
   ],
   por_recoger: [
-    { to: "en_ruta", via: "recoleccion", rol: "mensajero" }, // #11
+    { to: "en_reparto", via: "recoleccion", rol: "mensajero" }, // #11
   ],
-  en_ruta: [
+  en_reparto: [
     { to: "entregada", via: "gestion", rol: "mensajero" }, // #12
     { to: "reprogramada", via: "gestion", rol: "mensajero" }, // #13
     { to: "devuelta", via: "gestion", rol: "mensajero" }, // #14
@@ -92,12 +92,12 @@ export const TRANSICIONES = {
   // --- Resultados de gestion -----------------------------------------------------------
   entregada: [
     // TERMINAL (Q1). Conserva UNA salida legitima: deshacer la gestion del dia (#31).
-    { to: "en_ruta", via: "deshacer_gestion", rol: "mensajero" }, // #31
+    { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #31
   ],
   reprogramada: [
     { to: "en_bodega_central", via: "liberacion_reprogramada", rol: "sistema/cron" }, // #25
     { to: "en_bodega_satelite", via: "liberacion_reprogramada", rol: "sistema/cron" }, // #26
-    { to: "en_ruta", via: "deshacer_gestion", rol: "mensajero" }, // #32
+    { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #32
   ],
   devuelta: [
     { to: "en_bodega_central", via: "liberacion_devuelta_sla", rol: "sistema/cron" }, // #19
@@ -107,10 +107,10 @@ export const TRANSICIONES = {
     // #23/#24 comparten par con #19/#20 y difieren SOLO en familia (accion manual del admin).
     { to: "en_bodega_central", via: "recuperacion_manual", rol: "maestro/admin/adminSatelite" }, // #23
     { to: "en_bodega_satelite", via: "recuperacion_manual", rol: "adminSatelite" }, // #24
-    { to: "en_ruta", via: "deshacer_gestion", rol: "mensajero" }, // #36 (defensa filas legadas)
+    { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #36 (defensa filas legadas)
   ],
   rechazada: [
-    { to: "en_ruta", via: "deshacer_gestion", rol: "mensajero" }, // #33
+    { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #33
     { to: "por_devolver", via: "devolucion_rechazada", rol: "admin (aprobar cierre; zona satelite)" }, // #38 (139)
     {
       to: "por_devolver_a_tienda",

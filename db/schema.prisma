@@ -353,9 +353,10 @@ model EmailOtpChallenge {
 // por `value` (8 valores, ORDER_STATUS_SEED), patron rol/tipo_identificacion.
 model OrderStatus {
   id    String @id @default(uuid())
-  value String @unique // seed (15, ver ORDER_STATUS_SEED). Feature 135 renombro 6
-  //   values: p.ej. devolviendo_a_tienda, en_ruta_bodega_central, en_bodega_central,
-  //   por_recoger, en_ruta, devuelta_a_tienda (id/FK preservados por UPDATE de catalogo).
+  value String @unique // seed (18, ver ORDER_STATUS_SEED; el conteo decia 15, corregido en
+  //   la feature 153). Feature 135 renombro 6 values: p.ej. devolviendo_a_tienda,
+  //   en_ruta_bodega_central, en_bodega_central, por_recoger, devuelta_a_tienda. Feature 153
+  //   renombro uno mas a `en_reparto` (id/FK preservados por UPDATE de catalogo, sin ALTER TYPE).
 
   ordenes Orden[]
 
@@ -1113,7 +1114,7 @@ enum OrdenHistorialOrigenTipo {
   reprogramacion_tienda // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
   recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite (accion manual, actor admin)
   cancelacion_api // feature 106: tienda cancela via API key en_bodega_central/en_ruta_bodega_central -> devolviendo_a_tienda (marcador motivo="cancelada por tienda")
-  corte_sin_gestionar // feature 109: corte diario transiciona en_ruta -> sin_gestionar (actor null/cron)
+  corte_sin_gestionar // feature 109: corte diario transiciona en_reparto -> sin_gestionar (actor null/cron)
   liberacion_sin_gestionar // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin)
   recepcion_bodega_central // feature 138: recepcion fisica en la bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin)
   devolucion_rechazada // feature 139: al APROBAR el cierre, rechazada -> por_devolver (satelite) / por_devolver_a_tienda (central) (actor admin)

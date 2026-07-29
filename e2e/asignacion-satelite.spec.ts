@@ -13,7 +13,7 @@ import { test, expect, type Page } from "@playwright/test";
  *
  * MANUAL VERIFICATION (not automatable here):
  *  - The downstream consumption by the courier module (feature 36, "Recoger" →
- *    `en_ruta`) is verified by e2e/mis-asignaciones.spec.ts and manually; this
+ *    `en_reparto`) is verified by e2e/mis-asignaciones.spec.ts and manually; this
  *    spec stops at `por_recoger` (the boundary of feature 34, R17).
  *
  * EXECUTION NOTE:

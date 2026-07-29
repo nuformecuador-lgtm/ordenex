@@ -64,7 +64,7 @@ describe("recibirEnBodegaCentralPorQr — borde", () => {
     const service = buildService({
       recibirEnBodegaCentral: vi.fn(async () => ({
         status: "estado_invalido" as const,
-        estado: "en_ruta",
+        estado: "en_reparto",
       })),
     });
     const r = await recibirEnBodegaCentralPorQr(
@@ -72,7 +72,7 @@ describe("recibirEnBodegaCentralPorQr — borde", () => {
       { service, getActor: actorMaestro },
     );
 
-    expect(r).toEqual({ status: "estado_invalido", estado: "en_ruta" });
+    expect(r).toEqual({ status: "estado_invalido", estado: "en_reparto" });
   });
 
   // R10: zod en el borde — un numGuia que no es entero positivo no llega al service.

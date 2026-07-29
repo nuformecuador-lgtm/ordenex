@@ -13,7 +13,7 @@ const ESTADOS_CIERRE_ABIERTOS: CierreEstado[] = ["solicitado", "vencido", "recha
 
 // Feature 109 (R4): estado de una orden que el corte transiciona a `sin_gestionar` (mensajero que
 // no gestiono ni recogio de vuelta antes del corte del dia).
-const ESTADO_EN_REPARTO = "en_ruta";
+const ESTADO_EN_REPARTO = "en_reparto";
 
 type CortePrismaClient = Pick<PrismaClient, "gestionOrden" | "orden" | "cierreDia">;
 
@@ -28,7 +28,7 @@ export class CorteDiarioRepository implements ICorteDiarioRepository {
   /**
    * R7/R10 + feature 109 (R4/R10/R29): mensajeros DISTINCT a evaluar en el corte = UNION de
    * (a) los que tienen `gestion_orden.cierre_id IS NULL AND anulada_at IS NULL` (actividad del dia
-   * sin cerrar, comportamiento 41/67) y (b) los que tienen >=1 `orden` en `en_ruta` no borrada
+   * sin cerrar, comportamiento 41/67) y (b) los que tienen >=1 `orden` en `en_reparto` no borrada
    * (mensajero inactivo que dejo ordenes sin gestionar, nuevo en 109) — a estas ultimas el corte
    * las llevara a `sin_gestionar`. Se RESTAN (R10/R29) los que ya tienen un cierre ABIERTO
    * (`estado IN ('solicitado','vencido','rechazado')`), para no crear un 2.º cierre bloqueante ni
@@ -43,7 +43,7 @@ export class CorteDiarioRepository implements ICorteDiarioRepository {
       select: { mensajeroId: true, mensajero: { select: { zonaId: true } } },
     });
 
-    // (b) feature 109/R4: mensajeros con ordenes que siguen en `en_ruta` al pasar de dia.
+    // (b) feature 109/R4: mensajeros con ordenes que siguen en `en_reparto` al pasar de dia.
     const enReparto = await this.prisma.orden.findMany({
       where: {
         deletedAt: null,

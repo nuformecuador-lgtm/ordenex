@@ -106,7 +106,7 @@ describe("ReprogramacionTiendaService · autz por tienda (R6)", () => {
 
   it("no revela el estado a un no-dueño: forbidden aunque la orden NO este en devuelta", async () => {
     const ordenRepo = buildOrdenRepo({
-      findById: vi.fn(async () => ordenDTO({ estatusValue: "en_ruta" })),
+      findById: vi.fn(async () => ordenDTO({ estatusValue: "en_reparto" })),
     });
     const service = new ReprogramacionTiendaService(ordenRepo, buildGestionRepo());
     const r = await service.reprogramar("o1", FECHA, null, OTRA_TIENDA);
@@ -117,7 +117,7 @@ describe("ReprogramacionTiendaService · autz por tienda (R6)", () => {
 describe("ReprogramacionTiendaService · guardia de estado (R7)", () => {
   it("orden fuera de `devuelta` -> conflict, sin escribir ni resolver destino", async () => {
     const ordenRepo = buildOrdenRepo({
-      findById: vi.fn(async () => ordenDTO({ estatusValue: "en_ruta" })),
+      findById: vi.fn(async () => ordenDTO({ estatusValue: "en_reparto" })),
     });
     const gestionRepo = buildGestionRepo();
     const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo);

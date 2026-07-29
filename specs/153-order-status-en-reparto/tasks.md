@@ -10,13 +10,13 @@
 
 ## Fase 0 — Preparación
 
-- [ ] **T0.1 — Rama y base migrada.**
+- [x] **T0.1 — Rama y base migrada.**
   Crear la rama desde `dev`; `pnpm run db:migrate` para dejar la base local al día
   (última aplicada: `20260727120000_notificacion`) y `pnpm run db:generate` si el cliente
   Prisma está stale.
   _Hecho:_ `npm run typecheck` verde ANTES de tocar nada (línea base limpia).
 
-- [ ] **T0.2 — Censo de partida congelado.**
+- [x] **T0.2 — Censo de partida congelado.**
   Guardar la salida de un grep case-sensitive `\ben_ruta\b` sobre el repo y de `"En ruta"`
   (literal entre comillas).
   _Hecho:_ el conteo coincide con `design.md §Apéndice A` (84 archivos fuera de
@@ -25,14 +25,14 @@
 
 ## Fase 1 — Fuente de verdad, migración y guard
 
-- [ ] **T1.1 — `ORDER_STATUS_SEED`.** (dep: T0.1)
+- [x] **T1.1 — `ORDER_STATUS_SEED`.** (dep: T0.1)
   En `lib/types/order-status.ts` cambiar `"en_ruta"` → `"en_reparto"` **en el índice 10**
   (sin mover nada) y actualizar los 2 comentarios que lo citan (`:12`, `:44`), dejando nota
   de la feature 153.
   _Hecho:_ la tupla tiene 18 elementos, `[10] === "en_reparto"`, y `npm run typecheck`
   empieza a fallar SOLO en los mapas/aristas pendientes (red de seguridad activa). (R1)
 
-- [ ] **T1.2 — Migración nueva UP + DOWN.** (dep: T1.1)
+- [x] **T1.2 — Migración nueva UP + DOWN.** (dep: T1.1)
   Crear a mano `db/migrations/20260728120000_order_status_en_reparto/` con `migration.sql`
   (un `UPDATE … SET "value"='en_reparto' WHERE "value"='en_ruta';`) y `down.sql` (el
   inverso), copiando comentarios y estilo de
@@ -42,7 +42,7 @@
   `SELECT value FROM order_status WHERE value='en_reparto'` devuelve 1 fila con el mismo
   `id` que antes tenía `en_ruta`. (R2/R3/R4/R18)
 
-- [ ] **T1.3 — Guard de censo: SWAP (hacerlo temprano, es la checklist).** (dep: T1.1)
+- [x] **T1.3 — Guard de censo: SWAP (hacerlo temprano, es la checklist).** (dep: T1.1)
   En `tests/unit/guards/censo-order-status-rename.test.ts`: en `OLD_VALUES` **quitar**
   `en_reparto` y **agregar** `{ label: "en_ruta", re: /\ben_ruta\b/ }` (siguen siendo 6);
   agregar a `ALLOWLIST` el basename del test de T4.6; actualizar el comentario de cabecera
@@ -51,12 +51,12 @@
   ofensores exactamente los archivos pendientes del barrido (arranca en ~81 y baja a 0 al
   cerrar la fase 4). (R15)
 
-- [ ] **T1.4 — Casos de exactitud del guard.** [P] (dep: T1.3)
+- [x] **T1.4 — Casos de exactitud del guard.** [P] (dep: T1.3)
   Agregar el caso espejo del de `en_bodega`: `\ben_ruta\b` NO matchea `en_ruta_bodega_central`
   ni `en_ruta_bodega_satelite`, y SÍ matchea `estatus = "en_ruta"`.
   _Hecho:_ ese `it` pasa aislado. (R5/R16)
 
-- [ ] **T1.5 — Censo de la etiqueta antigua.** [P] (dep: T1.3)
+- [x] **T1.5 — Censo de la etiqueta antigua.** [P] (dep: T1.3)
   Agregar al guard un caso que busque el literal exacto `"En ruta"` (comillas incluidas) en
   `app/`, `lib/`, `components/`, `tests/`, `e2e/`, con aserción explícita de que NO marca
   `"En ruta a bodega central"` ni `"En ruta a bodega satélite"`.
@@ -65,7 +65,7 @@
 
 ## Fase 2 — Dominio y presentación
 
-- [ ] **T2.1 — Grafo de transiciones.** (dep: T1.1)
+- [x] **T2.1 — Grafo de transiciones.** (dep: T1.1)
   En `lib/types/order-status-transiciones.ts` renombrar la clave `en_ruta:` y los 7 destinos
   `{ to: "en_ruta" }` (aristas #11–#16 y #31–#36), **sin tocar `via`, `rol`, numeración ni
   ninguna otra arista**, y actualizar los comentarios que citen el value.
@@ -73,7 +73,7 @@
   número de aristas y el conjunto de pares `(origen,destino)` es idéntico al de `dev` salvo
   el renombre del nodo; `ESTADOS_CREACION`/`_TERMINALES`/`_VESTIGIALES` sin cambios. (R6/R7/R8)
 
-- [ ] **T2.2 — Badge: label, variante y clase.** (dep: T1.1)
+- [x] **T2.2 — Badge: label, variante y clase.** (dep: T1.1)
   En `app/(app)/ordenes/_components/EstatusBadge.tsx` mover la clave en los TRES mapas:
   `ORDER_STATUS_LABELS` (`en_reparto: "En reparto"`), `ORDER_STATUS_VARIANT`
   (`"secondary"`, sin cambio) y `ORDER_STATUS_CLASS` (**conservar byte a byte**
@@ -85,7 +85,7 @@
 
 ## Fase 3 — Lógica y contrato externo
 
-- [ ] **T3.1 — Constantes y sets de la lógica.** [P] (dep: T1.1)
+- [x] **T3.1 — Constantes y sets de la lógica.** [P] (dep: T1.1)
   Barrer los literales de `lib/repositories/{OrdenRepository,CorteDiarioRepository,
   CierreDiaRepository,GestionOrdenRepository,LiberacionReprogramadaRepository}.ts`,
   `lib/services/{MisAsignacionesService,CierreDiaService,CorteDiarioService}.ts` y
@@ -95,20 +95,20 @@
   _Hecho:_ 0 coincidencias de `en_ruta` en `lib/repositories`, `lib/services` y
   `lib/actions`; `npm run typecheck` verde en esos módulos. (R12)
 
-- [ ] **T3.2 — Interfaces y tipos de dominio.** [P] (dep: T1.1)
+- [x] **T3.2 — Interfaces y tipos de dominio.** [P] (dep: T1.1)
   `lib/interfaces/repositories/{ICierreDiaRepository,IGestionOrdenRepository,IOrdenRepository}.ts`,
   `lib/interfaces/services/{ICierreDiaService,IMisAsignacionesService}.ts` y
   `lib/types/orden-historial.ts` (todo comentarios/docstrings).
   _Hecho:_ 0 coincidencias en `lib/interfaces` y `lib/types` salvo lo ya migrado. (R12)
 
-- [ ] **T3.3 — Contrato externo.** [P] (dep: T1.1)
+- [x] **T3.3 — Contrato externo.** [P] (dep: T1.1)
   `lib/api/openapi-spec.ts` (`ORDER_STATUS_ENUM`), `docs/api/api-key-openapi.yaml`
   (4 apariciones: líneas ~168/365/575/631) y `lib/types/webhook-eventos.ts`
   (`EVENTOS_PUBLICOS`).
   _Hecho:_ los tres archivos dicen `en_reparto` y ninguno dice `en_ruta`; `EVENTOS_PUBLICOS`
   sigue con 9 elementos; el `.yaml` sigue siendo espejo textual del objeto TS. (R13)
 
-- [ ] **T3.4 — Comentarios de UI del mensajero y schema.** [P] (dep: T1.1)
+- [x] **T3.4 — Comentarios de UI del mensajero y schema.** [P] (dep: T1.1)
   `app/(app)/mis-asignaciones/_components/MisAsignacionesModule.tsx` (2, comentarios),
   `app/(app)/mis-asignaciones/_components/useRecogerPorGuia.ts` (1, comentario) y
   `db/schema.prisma:356-358` (comentario del catálogo; ver pregunta abierta nº 5 sobre el
@@ -118,21 +118,21 @@
 
 ## Fase 4 — Tests, fixtures y e2e
 
-- [ ] **T4.1 — Fixtures compartidos (primero: arrastran al resto).** (dep: T1.1)
+- [x] **T4.1 — Fixtures compartidos (primero: arrastran al resto).** (dep: T1.1)
   `tests/fixtures/catalogo-estados.ts` (comentario de uso) y
   `tests/fixtures/inventario-transiciones-140.ts` (12 filas: #11–#16 y #31–#36, conservando
   la numeración y las columnas `via`/`callSite`).
   _Hecho:_ el inventario mantiene el mismo número de filas y solo cambia el nombre del nodo.
   (R7/R20)
 
-- [ ] **T4.2 — Catálogo y grafo.** [P] (dep: T4.1)
+- [x] **T4.2 — Catálogo y grafo.** [P] (dep: T4.1)
   `tests/unit/types/order-status.test.ts` (set de 18, aserción POSICIONAL `[10]` conservando
   el índice, `rows.has(...)` del seed) y
   `tests/unit/domain/order-status-transiciones.guardia.test.ts` (incluido
   `esOrderStatusValue("EN_RUTA")` → `"EN_REPARTO"`).
   _Hecho:_ ambas suites verdes con `npx vitest run`. (R1/R6/R8/R20)
 
-- [ ] **T4.3 — Suites de servicios y repositorios.** [P] (dep: T4.1)
+- [x] **T4.3 — Suites de servicios y repositorios.** [P] (dep: T4.1)
   Los 9 archivos de alto volumen (`registrar-cambio-estado.guardia`,
   `mis-asignaciones-service`, `gestion-orden-repository`, `cierre-dia-repository`,
   `mis-asignaciones-orden-ruta`, `corte-diario-service`, `optimizacion-ruta-enqueue`,
@@ -142,19 +142,19 @@
   más allá del literal (si una aserción cambia de significado, PARAR: dejó de ser mecánico).
   (R12/R20)
 
-- [ ] **T4.4 — Suites de componentes.** [P] (dep: T4.1, T2.2)
+- [x] **T4.4 — Suites de componentes.** [P] (dep: T4.1, T2.2)
   `tests/components/EstatusLabel.test.ts` (`en_reparto: "En reparto"`),
   `tests/components/OrdenesPage.test.tsx:122` (`estatusValue: "En ruta"` → resolver según
   pregunta abierta nº 4) y el resto de tests de componentes del §A.e.
   _Hecho:_ `npx vitest run tests/components tests/unit/components` verde y el censo de
   etiqueta (T1.5) en cero. (R9/R11/R17/R20)
 
-- [ ] **T4.5 — E2E (solo comentarios).** [P] (dep: T4.1)
+- [x] **T4.5 — E2E (solo comentarios).** [P] (dep: T4.1)
   `e2e/{reintentos-escalado,cierre-dia,mis-asignaciones,historial-orden,asignacion-satelite}.spec.ts`.
   _Hecho:_ 0 coincidencias en `e2e/`; ningún selector modificado (los de texto ya usan
   "En reparto / por gestionar"). (R20)
 
-- [ ] **T4.6 — Test de la migración nueva.** (dep: T1.2)
+- [x] **T4.6 — Test de la migración nueva.** (dep: T1.2)
   Crear `tests/integration/db/order-status-en-reparto-migration.test.ts` clonando
   `order-status-rename-nomenclatura-migration.test.ts`: parseo por regex del UP y el DOWN,
   aserción del único UPDATE, ausencia de `ALTER TYPE`/`CREATE TABLE`/`DROP TABLE`/`LIKE`/
@@ -165,13 +165,13 @@
 
 ## Fase 5 — Cierre del invariante
 
-- [ ] **T5.1 — Censo en cero.** (dep: fases 2–4)
+- [x] **T5.1 — Censo en cero.** (dep: fases 2–4)
   Re-ejecutar el guard completo.
   _Hecho:_ `offenders` vacío para los 6 values antiguos y para el literal `"En ruta"`;
   allowlist con exactamente 7 basenames (los 6 previos + el de T4.6); `en_reparto` YA NO
   figura en `OLD_VALUES`. (R15/R16/R17)
 
-- [ ] **T5.2 — Verificación de que nada del flujo cambió.** (dep: T5.1)
+- [x] **T5.2 — Verificación de que nada del flujo cambió.** (dep: T5.1)
   Comparar contra `dev`: nº de values del catálogo (18 = 18), nº de aristas y conjunto de
   pares del grafo, `ESTADOS_CREACION`/`_TERMINALES`/`_VESTIGIALES`, y `git diff --stat` sin
   archivos nuevos bajo `app/api/**` ni `lib/actions/**`.
@@ -180,21 +180,28 @@
 
 ## Fase 6 — Verificación ejecutable
 
-- [ ] **T6.1 — Suite y estáticos.** (dep: fase 5)
+- [x] **T6.1 — Suite y estáticos.** (dep: fase 5)
   `npm run typecheck`, `npm run lint`, `npm test`.
   _Hecho:_ los tres en verde, salida pegada en `progress/impl_153.md`. (R21)
 
-- [ ] **T6.2 — Migración ida y vuelta.** [P] (dep: fase 5)
-  `pnpm run db:migrate` → verificar la fila; `pnpm run db:rollback` → verificar que vuelve a
-  `en_ruta` con el mismo `id`; `pnpm run db:migrate` de nuevo para dejar la base al día.
+- [ ] **T6.2 — Migración ida y vuelta.** [P] (dep: fase 5) — **NO EJECUTADA (sin DB)**
+  `pnpm run db:migrate` → verificar la fila; `pnpm run db:rollback` → verificar que vuelve al
+  value previo con el mismo `id`; `pnpm run db:migrate` de nuevo para dejar la base al día.
   _Hecho:_ ambas direcciones sin error, `id` estable, conteo de `order_status` = 18 en todo
   momento. (R3/R4/R21)
+  _Estado real:_ el worktree aislado no tiene `.env` ni `DATABASE_URL`, así que la ida y
+  vuelta contra Postgres queda PENDIENTE para quien tenga la base local. Cubierto por
+  simulación en `tests/integration/db/order-status-en-reparto-migration.test.ts` (parseo del
+  SQL real + round-trip UP→DOWN sobre catálogo en memoria con FKs por id).
 
-- [ ] **T6.3 — E2E de los flujos que tocan el estado.** [P] (dep: fase 5)
+- [ ] **T6.3 — E2E de los flujos que tocan el estado.** [P] (dep: fase 5) — **NO EJECUTADA (sin DB)**
   `npm run test:e2e` (al menos `mis-asignaciones`, `cierre-dia`, `reintentos-escalado`).
   _Hecho:_ recoger → gestionar → cerrar el día funciona igual que antes del rename. (R12)
+  _Estado real:_ Playwright necesita servidor + base sembrada; no disponibles en el worktree.
+  En `e2e/` el cambio fue exclusivamente de COMENTARIOS (ningún selector depende del value:
+  los de texto ya buscaban "En reparto / por gestionar").
 
-- [ ] **T6.4 — `./init.sh` y mapa de trazabilidad.** (dep: T6.1–T6.3)
+- [x] **T6.4 — `./init.sh` y mapa de trazabilidad.** (dep: T6.1–T6.3)
   Correr `./init.sh` y escribir en `progress/impl_153.md` el mapa `R1..R21 → test` de
   `requirements.md §Trazabilidad`.
   _Hecho:_ `./init.sh` en verde y cada requisito con un test nombrado. (R21)

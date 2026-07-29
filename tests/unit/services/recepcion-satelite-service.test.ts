@@ -103,7 +103,7 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(repo.findRecepcionSateliteByZona).not.toHaveBeenCalled();
   });
 
-  it("R4/R6/R8: separa por recibir (en_ruta) de recibidas (en_bodega_satelite) de SU zona", async () => {
+  it("R4/R6/R8: separa por recibir (en_reparto) de recibidas (en_bodega_satelite) de SU zona", async () => {
     const repo = fakeRepo({
       findRecepcionSateliteByZona: vi.fn(async () => [
         recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
@@ -416,7 +416,7 @@ describe("recibirLote (feature 63)", () => {
     expect(repo.recibirLoteEnSatelite).not.toHaveBeenCalled();
   });
 
-  it("transiciona el lote de SU zona en_ruta -> en_bodega_satelite (escritura guardada por origen+zona+historial)", async () => {
+  it("transiciona el lote de SU zona en_reparto -> en_bodega_satelite (escritura guardada por origen+zona+historial)", async () => {
     const repo = fakeRepo();
     const r = await newService(repo).recibirLote({ ordenIds: ["a", "b", "c"] }, ADMIN);
     expect(r).toEqual({ status: "ok", recibidas: 3 });

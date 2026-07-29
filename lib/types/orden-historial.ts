@@ -27,7 +27,7 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "reprogramacion_tienda", // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
   "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite (accion manual del admin)
   "cancelacion_api", // feature 106: cancelacion por API key (OrdenRepository.cancelarViaApi), en_bodega_central/en_ruta_bodega_central -> devolviendo_a_tienda
-  "corte_sin_gestionar", // feature 109: corte diario, en_ruta -> sin_gestionar (actor null/cron). NO enlaza gestion; destino != devuelta -> no altera contarIntentos (R12)
+  "corte_sin_gestionar", // feature 109: corte diario, en_reparto -> sin_gestionar (actor null/cron). NO enlaza gestion; destino != devuelta -> no altera contarIntentos (R12)
   "liberacion_sin_gestionar", // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
   "recepcion_bodega_central", // feature 138: recepcion fisica en bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
   "devolucion_rechazada", // feature 139: al APROBAR el cierre, rechazada -> por_devolver/por_devolver_a_tienda (actor admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
@@ -65,7 +65,7 @@ export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)
 //     `devuelta`.
 //
 // Feature 109 (design §2.2, R12): los dos valores nuevos TAMPOCO entran aqui, por el mismo criterio.
-//   - `corte_sin_gestionar` (en_ruta -> sin_gestionar) y `liberacion_sin_gestionar`
+//   - `corte_sin_gestionar` (en_reparto -> sin_gestionar) y `liberacion_sin_gestionar`
 //     (sin_gestionar -> en_bodega_central/en_bodega_satelite) NUNCA enlazan una gestion (nacen con
 //     `gestion_orden_id = NULL`) y sus destinos no son `devuelta`, asi que jamas caen en el conteo
 //     de intentos (`contarPorDestinoVigentes` cuenta destino = `devuelta`). Dejarlos fuera es INOCUO.

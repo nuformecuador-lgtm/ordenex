@@ -5,7 +5,7 @@ import { seedOrderStatus } from "@/scripts/seed-catalogos";
 
 // R1/R5/R12: valores canonicos tras el rename de nomenclatura (feature 135). Seis
 // values se renombraron conservando su POSICION en la tupla (indices 8/10/13, y el
-// 2/5/6): por_recoger (feature 17), en_ruta (feature 36), en_bodega_central,
+// 2/5/6): por_recoger (feature 17), en_reparto (feature 36), en_bodega_central,
 // en_ruta_bodega_central, devolviendo_a_tienda y devuelta_a_tienda. Los otros 9 no
 // cambian (en_ruta_bodega_satelite feature 30, en_bodega_satelite feature 33, etc.).
 describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename · feature 139 devolucion)", () => {
@@ -20,7 +20,7 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename · feature 139 devo
         "por_recoger",
         "en_ruta_bodega_central",
         "en_ruta_bodega_satelite",
-        "en_ruta",
+        "en_reparto",
         "rechazada",
         "entregada",
         "reprogramada",
@@ -61,8 +61,8 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename · feature 139 devo
     expect(ORDER_STATUS_SEED[9]).toBe("en_ruta_bodega_satelite");
   });
 
-  it("R5/R12: en_ruta conserva el 11mo lugar (indice 10) y rechazada el 12mo (feature 36)", () => {
-    expect(ORDER_STATUS_SEED[10]).toBe("en_ruta");
+  it("R5/R12: en_reparto conserva el 11mo lugar (indice 10) y rechazada el 12mo (feature 36)", () => {
+    expect(ORDER_STATUS_SEED[10]).toBe("en_reparto");
     expect(ORDER_STATUS_SEED[11]).toBe("rechazada");
   });
 
@@ -124,7 +124,7 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
     await seedOrderStatus(client);
     expect(fake.rows.has("por_recoger")).toBe(true);
     expect(fake.rows.has("en_ruta_bodega_satelite")).toBe(true); // feature 30/R1
-    expect(fake.rows.has("en_ruta")).toBe(true); // feature 36/R1
+    expect(fake.rows.has("en_reparto")).toBe(true); // feature 36/R1
     expect(fake.rows.has("rechazada")).toBe(true); // feature 36/R3
     expect(fake.rows.has("en_bodega_satelite")).toBe(true); // feature 33/R1
     expect(fake.rows.has("devuelta_a_tienda")).toBe(true); // cierre de devolucion

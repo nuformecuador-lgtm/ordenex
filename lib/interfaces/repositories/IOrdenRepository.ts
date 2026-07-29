@@ -522,7 +522,7 @@ export interface IOrdenRepository {
   findParaAsignabilidad(ids: string[]): Promise<OrdenAsignabilidadRow[]>;
   /**
    * Feature 92 (design §5, R35/R37/R38): paradas candidatas de la ruta de UN mensajero —
-   * sus ordenes en `en_ruta` no borradas, con sus coordenadas (nullable: una orden sin
+   * sus ordenes en `en_reparto` no borradas, con sus coordenadas (nullable: una orden sin
    * coordenadas NO se excluye aqui, el service la registra como parada sin posicion, R37).
    * Ordenadas por `createdAt asc`, que es el criterio de recorte de R38.
    */

@@ -206,7 +206,7 @@ export type SolicitarCierreServiceResult =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }; // R16 sin zona
 
 // Feature 67/R1-R6/R8-R10 — resultado del deshacer. `ok` devuelve el `ordenId` para que la
-// vista sepa que orden volvio a `en_ruta`. `forbidden` cubre R8 (rol != mensajero) y R9
+// vista sepa que orden volvio a `en_reparto`. `forbidden` cubre R8 (rol != mensajero) y R9
 // (gestion ajena o inexistente: NO se distinguen, para no revelar datos de gestiones ajenas).
 // `conflict` con motivo ACCIONABLE cubre R2 (ya en un cierre), R3 (ya deshecha), R4 (no es la
 // mas reciente), R5 (la orden ya se movio) y R6 (orden borrada). `validation_error` cubre el
@@ -233,7 +233,7 @@ export interface ICierreDiaService {
   solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult>;
   /**
    * Feature 67/R1-R6/R8/R9/R18/R19 — DESHACE una gestion: la ANULA con rastro (no la borra,
-   * decision 2 del humano) y devuelve su orden a `en_ruta` con su mensajero, de forma
+   * decision 2 del humano) y devuelve su orden a `en_reparto` con su mensajero, de forma
    * atomica. La VENTANA es `cierre_id IS NULL` (decision 1): antes de solicitar el cierre.
    * Solo el propio mensajero dueño de la gestion (F1.4-f); cualquier otro rol -> `forbidden`.
    * NO toca el puntero `usuario.orden_en_gestion_id` (R29/R30, F1.4-c): la orden se retoma con

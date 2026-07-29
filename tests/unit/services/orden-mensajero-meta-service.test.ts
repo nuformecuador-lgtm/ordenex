@@ -19,7 +19,7 @@ function ordenDTO(over: Partial<OrdenDTO> = {}): OrdenDTO {
     numGuia: 1001,
     numRemision: "REM-1",
     estatusId: "os-reparto",
-    estatusValue: "en_ruta",
+    estatusValue: "en_reparto",
     destinatario: "Ana",
     telefonoDest: "88880000",
     tiendaId: "t1",

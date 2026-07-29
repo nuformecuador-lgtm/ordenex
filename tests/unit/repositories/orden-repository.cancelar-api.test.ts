@@ -121,7 +121,7 @@ describe("OrdenRepository.cancelarViaApi (feature 106, T7)", () => {
     expect(prisma.gestionOrden.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each(["en_ruta", "devolviendo_a_tienda", "entregada", "rechazada", "en_bodega_satelite"])(
+  it.each(["en_reparto", "devolviendo_a_tienda", "entregada", "rechazada", "en_bodega_satelite"])(
     "R20: %s no es cancelable -> conflict; no toca estado ni bitacora",
     async (estado) => {
       const prisma = buildPrisma(ordenEn(estado));
