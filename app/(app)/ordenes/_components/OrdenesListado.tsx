@@ -105,9 +105,9 @@ const ESTADO_EN_BODEGA = "en_bodega_central";
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
 // Feature 156/R28: el único apartado que asigna por lote es la BODEGA CENTRAL
-// ("Asignar mensajero"). `en_fulfillment`/`en_preparacion` salieron del conjunto
-// porque su acción ("Generar guía") ya no decide mensajero: solo numera y mueve a
-// la bodega central, así que un cierre abierto en la zona no impide numerar.
+// ("Asignar mensajero"). `en_preparacion` salió del conjunto porque su acción
+// ("Generar guía") ya no decide mensajero: solo numera y mueve a la bodega central,
+// así que un cierre abierto en la zona no impide numerar.
 // Los estados que solo imprimen etiquetas (`por_recoger`,
 // `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
 // Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas"
@@ -301,7 +301,10 @@ export function OrdenesListado({
   // ofrece, así que la paridad con esa vista ya no es total.
   function accionesDe(estatusValue: string | undefined): AccionLote[] {
     switch (estatusValue) {
-      case "en_fulfillment":
+      // Feature 155/R32: el estado interno de fulfillment en bodega salió del
+      // catálogo y con él su `case`. `en_preparacion` queda como único origen de
+      // "Generar guía"; un value fuera del catálogo cae al `default` (sin acciones
+      // por lote), que es la degradación segura.
       case "en_preparacion":
         return [{ key: "guia", label: "Generar guía", onRun: abrirGenerarGuia }];
       case "por_recoger":
