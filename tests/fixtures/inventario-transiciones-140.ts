@@ -8,7 +8,13 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 //
 // Es la RED DE SEGURIDAD de la activacion estricta (Q7): si una arista real faltara en
 // `TRANSICIONES`, ese flujo se caeria en produccion. Por eso los tests que lo consumen
-// recorren el inventario COMPLETO (43 aristas de flujo + 3 de creacion), no un muestreo.
+// recorren el inventario COMPLETO (45 aristas de flujo + 4 de creacion), no un muestreo.
+//
+// Feature 154 (SOLO ADITIVA, decision Q2 del gate del 2026-07-29): suma #43, #44 y la creacion
+// `null -> por_recolectar_en_tienda`. NO retira ninguna fila: las seis aristas que el spec
+// original proponia retirar (#1/#3/#4/#6/#7b/#7c) las ejecuta HOY `GuiaAsignacionService`, asi
+// que su baja se muda a la feature que recablea ese service (155 y 156). Las dos aristas nuevas
+// quedan DECLARADAS y SIN PRODUCTOR: su `callSite` documenta la feature que las consumira.
 //
 // La numeracion `n` es la del apendice (#1-#42) con el #27 RETIRADO a proposito por la
 // feature 139 (`rechazada -> devolviendo_a_tienda` ya no existe): el hueco es deliberado.
@@ -38,7 +44,7 @@ export interface AristaCreacionInventario {
   callSite: string;
 }
 
-/** A.2 — 43 aristas de flujo (numeracion 1-42 sin el #27, mas #7b/#7c del review). */
+/** A.2 — 45 aristas de flujo (1-42 sin el #27, mas #7b/#7c del review y #43/#44 de la 154). */
 export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "1", origen: "en_fulfillment", destino: "por_recoger", via: "generacion_guia", callSite: "GuiaAsignacionService.generarGuia (GAM+mensajero)" },
   { n: "2", origen: "en_fulfillment", destino: "en_bodega_central", via: "generacion_guia", callSite: "generarGuia (GAM sin mensajero)" },
@@ -84,27 +90,36 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "40", origen: "por_devolver", destino: "devolviendo_a_bodega_central", via: "ajuste_estado", callSite: "EnvioDevolucionCentralService.enviarACentral (139)" },
   { n: "41", origen: "devolviendo_a_bodega_central", destino: "por_devolver_a_tienda", via: "recepcion_bodega_central", callSite: "RecepcionBodegaCentralService state-aware (139)" },
   { n: "42", origen: "por_devolver_a_tienda", destino: "devolviendo_a_tienda", via: "ajuste_estado", callSite: "DevolucionOrigenService.devolverATienda (139)" },
+  // #43/#44: feature 154. DECLARADAS Y SIN PRODUCTOR — ningun service las ejecuta todavia; el
+  // `callSite` nombra la feature que lo hara. Por eso NO aparecen en el mapa de puntos de
+  // escritura de `tests/unit/repositories/orden-historial-cobertura.test.ts`.
+  { n: "43", origen: "por_recolectar_en_tienda", destino: "en_ruta_bodega_central", via: "recoleccion_tienda", callSite: "SIN PRODUCTOR (154): escaner de recoleccion en tienda, feature 157" },
+  { n: "44", origen: "en_reparto", destino: "incidente", via: "gestion", callSite: "SIN PRODUCTOR (154): resultado `incidente` de la gestion, feature 158" },
 ];
 
 /**
- * A.1 — 3 aristas de creacion (`null -> X`), una por DESTINO (asi las cuenta A.3). El `via`
- * de cada fila es representativo y cubre las tres familias de creacion del enum:
+ * A.1 — 4 aristas de creacion (`null -> X`), una por DESTINO (asi las cuenta A.3). El `via`
+ * de cada fila es representativo y cubre las familias de creacion del enum:
  * `creacion_manual` y `carga_masiva` pueden producir indistintamente `en_preparacion` o
  * `en_fulfillment` (segun el flag fulfillment de la tienda); `carga_api` produce SIEMPRE
  * `en_ruta_bodega_central` (`ESTATUS_INICIAL_API`). La legalidad no depende del `via` (R2).
+ * Feature 154: se suma `por_recolectar_en_tienda`, LEGAL como estado de nacimiento pero SIN
+ * PRODUCTOR hasta que la 155 bifurque la creacion por bodega.
  */
 export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
   { destino: "en_preparacion", via: "creacion_manual", callSite: "OrdenService.crear -> OrdenRepository.create" },
   { destino: "en_fulfillment", via: "carga_masiva", callSite: "BulkOrdenService -> createManyOrdenes" },
   { destino: "en_ruta_bodega_central", via: "carga_api", callSite: "BulkOrdenService.cargarViaApi -> createManyOrdenesConGuia" },
+  { destino: "por_recolectar_en_tienda", via: "creacion_manual", callSite: "SIN PRODUCTOR (154): bifurcacion de creacion por bodega, feature 155" },
 ];
 
 /**
- * Recuentos: 43 aristas de flujo (las 41 de A.3 + #7b/#7c del review), 39 pares dirigidos
- * unicos (igual que A.3: las dos nuevas repiten pares ya declarados) y 3 de creacion.
+ * Recuentos: 45 aristas de flujo (las 41 de A.3 + #7b/#7c del review + #43/#44 de la 154), 41
+ * pares dirigidos unicos (las dos del review repiten pares ya declarados; las dos de la 154
+ * estrenan par) y 4 de creacion.
  */
 export const RECUENTO_INVENTARIO = {
-  aristasFlujo: 43,
-  paresUnicos: 39,
-  aristasCreacion: 3,
+  aristasFlujo: 45,
+  paresUnicos: 41,
+  aristasCreacion: 4,
 } as const;

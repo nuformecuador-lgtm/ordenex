@@ -31,6 +31,8 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "liberacion_sin_gestionar", // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
   "recepcion_bodega_central", // feature 138: recepcion fisica en bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
   "devolucion_rechazada", // feature 139: al APROBAR el cierre, rechazada -> por_devolver/por_devolver_a_tienda (actor admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
+  "recoleccion_tienda", // feature 154: el mensajero recolecta en la tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43). SIN PRODUCTOR hasta la 157. NO enlaza gestion; destino != devuelta -> no altera contarIntentos
+  "incidente", // feature 154: familia propia del resultado `incidente`. SIN PRODUCTOR hasta la 158 (la arista #44 viaja via `gestion`, decision Q4). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];
@@ -69,6 +71,14 @@ export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)
 //     (sin_gestionar -> en_bodega_central/en_bodega_satelite) NUNCA enlazan una gestion (nacen con
 //     `gestion_orden_id = NULL`) y sus destinos no son `devuelta`, asi que jamas caen en el conteo
 //     de intentos (`contarPorDestinoVigentes` cuenta destino = `devuelta`). Dejarlos fuera es INOCUO.
+//
+// Feature 154 (R12): los dos valores nuevos TAMPOCO entran aqui, mismo criterio que 138/139.
+//   - `recoleccion_tienda` (por_recolectar_en_tienda -> en_ruta_bodega_central) NUNCA enlaza una
+//     gestion (nace con `gestion_orden_id = NULL`) y su destino no es `devuelta`.
+//   - `incidente` no se emite todavia (SIN PRODUCTOR hasta la 158) y su destino previsto es
+//     `incidente`, no `devuelta`.
+//   Ninguno de los dos puede alterar `contarIntentos`: el derivador cuenta filas con destino
+//   `devuelta` y ninguno transiciona HACIA `devuelta`.
 export const ORIGEN_TIPOS_CON_GESTION = [
   "gestion",
   "deshacer_gestion",

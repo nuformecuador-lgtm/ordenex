@@ -6,6 +6,35 @@
 > es el value que hoy en `dev` se llama `en_ruta`. No se vuelve a nombrar `en_ruta` salvo cita
 > histórica explícita.
 
+> ## PUERTA T0 CERRADA — 2026-07-29
+>
+> Las preguntas abiertas del final de este archivo **ya están respondidas**. Lo que sigue manda
+> sobre el texto original de los requisitos donde haya contradicción:
+>
+> - **Q1 — `#5` SOBREVIVE.** `en_preparacion → en_bodega_central` vía `generacion_guia` es el
+>   destino único de generar guía y no se retira. (R22 ya está escrito con esta lectura.)
+> - **Q2 — la 154 es SOLO ADITIVA. No se retira NINGUNA arista.** **R18, R19, R20 y R21 quedan
+>   DIFERIDOS**: `#4`/`#6`/`#7c` los retira la feature **156** y `#1`/`#3`/`#7b` la feature
+>   **155**, en el mismo commit que recablea el service que hoy las ejecuta
+>   (`GuiaAsignacionService`). Retirarlas aquí dejaría `en_fulfillment` sin salidas (rompe R26) y
+>   atraparía sus órdenes vivas. En consecuencia, **R24 no se verifica sobre "una transición
+>   retirada por R18–R21"** (no hay ninguna), sino sobre cualquier par ilegal que involucre los
+>   values nuevos.
+> - **Q3 — tren a producción:** 154 + 155 + 156 viajan juntas a `prod`.
+> - **Q4 — deliberado.** `en_reparto → incidente` va vía `gestion`; el value `incidente` del enum
+>   `orden_historial_origen_tipo` queda **declarado sin productor** hasta la 158.
+> - **Q5 — CONFIRMADA tal cual la propone el spec.** `por_recolectar_en_tienda` → "Por recolectar
+>   en tienda", variante `warning`; `incidente` → "Incidente", variante `danger`. Sin refuerzo de
+>   acento de marca.
+> - **Q6 — no aplica aquí.** `por_recolectar_en_tienda` no se excluye de ningún tablero ni conteo
+>   en esta feature; si hace falta, es trabajo de la 157.
+> - **DECISIÓN NUEVA — `incidente` es TERMINAL y SIN NINGUNA salida.** El estado `indemnizada`
+>   que se planteó en el gate para desterminarlo quedó **descartado**: no se implementa, no se
+>   declara y no se deja preparado.
+>
+> Recuentos efectivos con la decisión Q2 (ver `design.md` §3.4): 45 aristas de flujo, 41 pares
+> dirigidos únicos, 4 aristas de creación.
+
 ## Alcance
 
 Alta de los DOS values nuevos del flujo v2 y reescritura del mapa de transiciones al grafo
@@ -77,16 +106,21 @@ flujo normal).
 
 **R17.** El sistema DEBE clasificar `por_recolectar_en_tienda` como estado NO terminal.
 
-### Grafo de transiciones — BAJAS
+### Grafo de transiciones — BAJAS *(DIFERIDAS a las features 155/156 por la decisión Q2)*
 
-**R18.** El sistema DEBE considerar ILEGAL la transición `en_preparacion → por_recoger`.
+> Los cuatro requisitos de abajo **no se cumplen en la 154 y es correcto que no se cumplan**. La
+> arista muere en el commit que retira a su último productor. En esta feature se verifica lo
+> contrario —que siguen siendo legales— para que el día en que la 155/156 las retire, el test se
+> ponga rojo y obligue a mover el caso.
 
-**R19.** El sistema DEBE considerar ILEGAL la transición `en_preparacion → en_ruta_bodega_satelite`,
+**R18.** *(feature 156)* El sistema DEBE considerar ILEGAL la transición `en_preparacion → por_recoger`.
+
+**R19.** *(feature 156)* El sistema DEBE considerar ILEGAL la transición `en_preparacion → en_ruta_bodega_satelite`,
 cualquiera que sea la familia que la dispare.
 
-**R20.** El sistema DEBE considerar ILEGAL la transición `en_fulfillment → por_recoger`.
+**R20.** *(feature 155)* El sistema DEBE considerar ILEGAL la transición `en_fulfillment → por_recoger`.
 
-**R21.** El sistema DEBE considerar ILEGAL la transición `en_fulfillment → en_ruta_bodega_satelite`,
+**R21.** *(feature 155)* El sistema DEBE considerar ILEGAL la transición `en_fulfillment → en_ruta_bodega_satelite`,
 cualquiera que sea la familia que la dispare.
 
 **R22.** El sistema DEBE conservar legal la transición `en_preparacion → en_bodega_central`, única
@@ -97,9 +131,11 @@ y como superviviente.)*
 `en_bodega_central → en_ruta_bodega_satelite`, `en_bodega_central → por_recoger` y
 `en_bodega_satelite → por_recoger`.
 
-**R24.** CUANDO se intente una transición retirada por R18–R21, el sistema DEBE rechazarla con el
+**R24.** CUANDO se intente una transición ilegal, el sistema DEBE rechazarla con el
 error de transición ilegal, y el mensaje del error DEBE mencionar únicamente los dos `value` del
-catálogo, sin identificadores, órdenes, actores ni ningún dato del cliente.
+catálogo, sin identificadores, órdenes, actores ni ningún dato del cliente. *(Reformulado en la
+puerta T0: la redacción original decía "una transición retirada por R18–R21" y esas bajas quedaron
+diferidas. Se verifica sobre pares ilegales que involucran los dos values nuevos.)*
 
 ### Invariantes del grafo
 
@@ -140,9 +176,10 @@ el build conoce los dos estados nuevos pero la base de datos todavía no los tie
 
 ---
 
-## Preguntas abiertas
+## Preguntas abiertas — TODAS RESPONDIDAS (2026-07-29)
 
-> Se responden en la puerta de aprobación humana. Ninguna se ha rellenado con un supuesto.
+> Se dejan con su redacción original para que quede el registro de qué se preguntó. Las
+> respuestas están arriba, en el bloque "PUERTA T0 CERRADA".
 
 **Q1 (BLOQUEANTE) — `#5` está a la vez en la lista de bajas y en la de supervivientes.**
 La ficha ordena retirar «**#4 y #5** desde `en_preparacion`» y, dos líneas después, «tras el cambio

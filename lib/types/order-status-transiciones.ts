@@ -7,12 +7,22 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // (el choke point `appendCambioEstado`) resuelve `id -> value` antes de preguntar aqui.
 //
 // El mapa es el INVENTARIO CERRADO del apendice A del design, leido del codigo de `dev`:
-// 43 aristas de flujo (numeracion #1-#42 con el #27 RETIRADO, + #7b/#7c) + 3 de creacion.
-// Las 43 colapsan a 39 pares `(origen, destino)` unicos, porque cuatro pares estan declarados
-// dos veces con familias distintas: #19/#23, #20/#24 (SLA vs. recuperacion manual) y
-// #3/#7b, #6/#7c (`generacion_guia` no-GAM vs. `ruteo_satelite`; el apendice A contaba 41
-// porque omitia estas dos ultimas — `ORIGEN_RUTEO_SATELITE` de `GuiaAsignacionService.ts:35`
-// admite `en_fulfillment`/`en_preparacion` ademas de `en_bodega_central`).
+// 45 aristas de flujo (numeracion #1-#42 con el #27 RETIRADO, + #7b/#7c + #43/#44 de la 154)
+// + 4 de creacion. Las 45 colapsan a 41 pares `(origen, destino)` unicos, porque cuatro pares
+// estan declarados dos veces con familias distintas: #19/#23, #20/#24 (SLA vs. recuperacion
+// manual) y #3/#7b, #6/#7c (`generacion_guia` no-GAM vs. `ruteo_satelite`; el apendice A
+// contaba 41 porque omitia estas dos ultimas — `ORIGEN_RUTEO_SATELITE` de
+// `GuiaAsignacionService.ts:35` admite `en_fulfillment`/`en_preparacion` ademas de
+// `en_bodega_central`).
+//
+// FEATURE 154 — SOLO ADITIVA (decision Q2 del gate, 2026-07-29). Suma #43, #44 y la creacion
+// `null -> por_recolectar_en_tienda`, y NO retira NINGUNA arista. El spec original proponia
+// retirar #1/#3/#4/#6/#7b/#7c (saltarse la bodega central al generar guia); esa retirada se
+// MUDA a la feature que recablea el service que las ejecuta: #4/#6/#7c -> feature 156,
+// #1/#3/#7b -> feature 155. Motivo: `GuiaAsignacionService` las ejecuta HOY; retirarlas aqui
+// dejaria `en_fulfillment` sin salidas (rompe el invariante de conectividad) y atraparia las
+// ordenes vivas en ese estado hasta la 155. Que la arista muera en el mismo commit que su
+// ultimo productor es la unica secuencia segura.
 //
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
@@ -63,6 +73,12 @@ export const TRANSICIONES = {
     { to: "devolviendo_a_tienda", via: "cancelacion_api", rol: "apiKey (tienda)" }, // #30
     { to: "en_bodega_central", via: "recepcion_bodega_central", rol: "maestro/admin" }, // #37 (138)
   ],
+  // Feature 154: estado de ESPERA en la tienda. Nace por creacion (esta en ESTADOS_CREACION) y
+  // sale hacia la central cuando el mensajero la recolecta. La arista queda DECLARADA y SIN USO
+  // hasta la feature 157 (escaner de recoleccion en tienda).
+  por_recolectar_en_tienda: [
+    { to: "en_ruta_bodega_central", via: "recoleccion_tienda", rol: "mensajero" }, // #43 (154)
+  ],
 
   // --- Bodegas y reparto ---------------------------------------------------------------
   en_bodega_central: [
@@ -87,6 +103,10 @@ export const TRANSICIONES = {
     { to: "devuelta", via: "gestion", rol: "mensajero" }, // #14
     { to: "rechazada", via: "gestion", rol: "mensajero" }, // #15
     { to: "sin_gestionar", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #16
+    // #44 (154): resultado `incidente` de la gestion. Va via `gestion` —y no via la familia
+    // `incidente`— porque quien la marca es el mensajero DESDE su gestion (decision Q4). La
+    // familia `incidente` del enum de historial queda declarada sin productor hasta la 158.
+    { to: "incidente", via: "gestion", rol: "mensajero" }, // #44 (154)
   ],
 
   // --- Resultados de gestion -----------------------------------------------------------
@@ -145,6 +165,11 @@ export const TRANSICIONES = {
   ],
   // TERMINAL (Q1): la tienda de origen la recibio; sin salida esperada.
   devuelta_a_tienda: [],
+  // TERMINAL (feature 154, decision del humano del 2026-07-29): `incidente` cierra el ciclo de
+  // la orden y NO tiene ninguna arista de salida. En el gate se planteo un estado `indemnizada`
+  // que lo desterminara: se DESCARTO. No se declara, ni se deja preparado. Tiene entrada (#44),
+  // asi que cumple el invariante de conectividad de los terminales.
+  incidente: [],
 } as const satisfies Record<OrderStatusValue, readonly DestinoTransicion[]>;
 
 /**
@@ -155,11 +180,15 @@ export const TRANSICIONES = {
  *   - `BulkOrdenService.ESTATUS_INICIAL_API` = `en_ruta_bodega_central` (carga por API key)
  * Nacer en cualquier otro estado del catalogo pasa a ser ILEGAL (endurecimiento deliberado
  * de `OrdenService.crear`, que aceptaba un `estatusId` explicito arbitrario; A.3-#8).
+ *
+ * Feature 154 (R13): pasa de 3 a 4 con `por_recolectar_en_tienda`. Es LEGAL que una orden NAZCA
+ * ahi (la bifurcacion de creacion por bodega llega con la 155); hoy ningun call-site lo produce.
  */
 export const ESTADOS_CREACION = [
   "en_preparacion",
   "en_fulfillment",
   "en_ruta_bodega_central",
+  "por_recolectar_en_tienda", // feature 154
 ] as const satisfies readonly OrderStatusValue[];
 
 /**
@@ -167,10 +196,15 @@ export const ESTADOS_CREACION = [
  * salida en el invariante de conectividad (R14), pero NO de tener entrada: un terminal
  * inalcanzable tambien es un bug. `entregada` conserva la salida #31 (deshacer gestion), y
  * eso es legal: el test exime, no prohibe.
+ *
+ * Feature 154 (R16): pasa de 2 a 3 con `incidente`, que a diferencia de `entregada` NO conserva
+ * ninguna salida (decision del humano del 2026-07-29; la idea de un estado `indemnizada` que lo
+ * desterminara se descarto).
  */
 export const ESTADOS_TERMINALES = [
   "entregada",
   "devuelta_a_tienda",
+  "incidente", // feature 154
 ] as const satisfies readonly OrderStatusValue[];
 
 /**

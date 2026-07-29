@@ -8,8 +8,8 @@ import { seedOrderStatus } from "@/scripts/seed-catalogos";
 // 2/5/6): por_recoger (feature 17), en_reparto (feature 36), en_bodega_central,
 // en_ruta_bodega_central, devolviendo_a_tienda y devuelta_a_tienda. Los otros 9 no
 // cambian (en_ruta_bodega_satelite feature 30, en_bodega_satelite feature 33, etc.).
-describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename · feature 139 devolucion)", () => {
-  it("contiene exactamente los 18 valores esperados", () => {
+describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename · feature 139 devolucion · feature 154 v2)", () => {
+  it("contiene exactamente los 20 valores esperados", () => {
     expect([...ORDER_STATUS_SEED].sort()).toEqual(
       [
         "devuelta",
@@ -31,8 +31,43 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename · feature 139 devo
         "por_devolver",
         "devolviendo_a_bodega_central",
         "por_devolver_a_tienda",
+        // feature 154: los 2 estados del flujo v2
+        "por_recolectar_en_tienda",
+        "incidente",
       ].sort(),
     );
+  });
+
+  // Feature 154/R1/R2/R3: alta de los dos values del flujo v2 como APENDICE. Los 18 previos
+  // conservan su value y su POSICION (los indices 0..17 no se mueven).
+  it("feature 154/R1/R2: incluye por_recolectar_en_tienda (19no) e incidente (20mo)", () => {
+    expect(ORDER_STATUS_SEED[18]).toBe("por_recolectar_en_tienda");
+    expect(ORDER_STATUS_SEED[19]).toBe("incidente");
+  });
+
+  it("feature 154/R3: los 18 values previos siguen intactos y en su posicion", () => {
+    const PREVIOS_18 = [
+      "entregada",
+      "devuelta",
+      "devolviendo_a_tienda",
+      "reprogramada",
+      "en_fulfillment",
+      "en_ruta_bodega_central",
+      "en_bodega_central",
+      "en_preparacion",
+      "por_recoger",
+      "en_ruta_bodega_satelite",
+      "en_reparto",
+      "rechazada",
+      "en_bodega_satelite",
+      "devuelta_a_tienda",
+      "sin_gestionar",
+      "por_devolver",
+      "devolviendo_a_bodega_central",
+      "por_devolver_a_tienda",
+    ];
+    expect(ORDER_STATUS_SEED.slice(0, 18)).toEqual(PREVIOS_18);
+    expect(ORDER_STATUS_SEED).toHaveLength(20);
   });
 
   it("feature 139/R1: incluye los 3 estados del flujo de devolucion como APENDICE (indices 15/16/17)", () => {
@@ -83,7 +118,7 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · feature 135 rename · feature 139 devo
 
   it("no tiene valores duplicados", () => {
     expect(new Set(ORDER_STATUS_SEED).size).toBe(ORDER_STATUS_SEED.length);
-    expect(ORDER_STATUS_SEED).toHaveLength(18);
+    expect(ORDER_STATUS_SEED).toHaveLength(20);
   });
 });
 
@@ -132,11 +167,35 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
     expect(fake.rows.has("por_devolver")).toBe(true); // feature 139
     expect(fake.rows.has("devolviendo_a_bodega_central")).toBe(true); // feature 139
     expect(fake.rows.has("por_devolver_a_tienda")).toBe(true); // feature 139
-    expect(fake.rows.size).toBe(18);
+    expect(fake.rows.has("por_recolectar_en_tienda")).toBe(true); // feature 154
+    expect(fake.rows.has("incidente")).toBe(true); // feature 154
+    expect(fake.rows.size).toBe(20);
     const idPrimera = fake.rows.get("por_recoger")?.id;
 
     await seedOrderStatus(client); // segunda ejecucion: idempotente
-    expect(fake.rows.size).toBe(18); // no crece
+    expect(fake.rows.size).toBe(20); // no crece
     expect(fake.rows.get("por_recoger")?.id).toBe(idPrimera); // id conservado
+  });
+
+  // Feature 154/R4: reaplicar el alta sobre un catalogo que YA tiene los dos values lo deja con
+  // 20 y sin duplicados. Es la contraparte en TS del `INSERT ... WHERE NOT EXISTS` de la
+  // migracion A (cuya idempotencia se verifica en tests/integration/db/order-status-v2-*).
+  it("feature 154/R4: el alta de los dos values nuevos es idempotente (20 filas, sin duplicar)", async () => {
+    const fake = createFakeOrderStatus();
+    const client = { orderStatus: { upsert: fake.upsert } } as unknown as Pick<
+      PrismaClient,
+      "orderStatus"
+    >;
+
+    await seedOrderStatus(client);
+    const idIncidente = fake.rows.get("incidente")?.id;
+    const idRecolectar = fake.rows.get("por_recolectar_en_tienda")?.id;
+
+    await seedOrderStatus(client);
+    await seedOrderStatus(client);
+
+    expect(fake.rows.size).toBe(20);
+    expect(fake.rows.get("incidente")?.id).toBe(idIncidente);
+    expect(fake.rows.get("por_recolectar_en_tienda")?.id).toBe(idRecolectar);
   });
 });

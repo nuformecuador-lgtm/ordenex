@@ -81,10 +81,16 @@ describe("Feature 138 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
     expect(valores).toHaveLength(20);
     expect(valores).not.toContain(NUEVO);
     // Los 20 previos = el SEED actual menos los valores AÑADIDOS EN O DESPUES de la feature 138:
-    // `recepcion_bodega_central` (138) y `devolucion_rechazada` (feature 139), apendido despues. El
-    // down.sql del 138 recrea el enum a su estado PRE-138 (fijo, historico); sin descontar los
-    // posteriores el SEED crecido divergiria (patron del down del 67/99/100/106).
-    const AÑADIDOS_EN_O_DESPUES_DEL_138 = new Set([NUEVO, "devolucion_rechazada"]);
+    // `recepcion_bodega_central` (138), `devolucion_rechazada` (feature 139) y los dos de la 154
+    // (`recoleccion_tienda`/`incidente`), apendidos despues. El down.sql del 138 recrea el enum a
+    // su estado PRE-138 (fijo, historico); sin descontar los posteriores el SEED crecido
+    // divergiria (patron del down del 67/99/100/106).
+    const AÑADIDOS_EN_O_DESPUES_DEL_138 = new Set([
+      NUEVO,
+      "devolucion_rechazada",
+      "recoleccion_tienda", // feature 154
+      "incidente", // feature 154
+    ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_138.has(v))),
     );

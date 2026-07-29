@@ -184,6 +184,21 @@ const PUNTOS_DE_ESCRITURA = [
   },
 ] as const;
 
+// Feature 154 (R28) — FAMILIAS DECLARADAS SIN PRODUCTOR. La 154 da de alta dos valores del enum
+// `orden_historial_origen_tipo` (`recoleccion_tienda`, `incidente`) SIN ningun call-site que los
+// emita: el catalogo, el mapa de transiciones y las migraciones los declaran, pero el productor
+// llega en las features 157 (escaner de recoleccion en tienda) y 158 (resultado `incidente` de la
+// gestion). Por eso NO estan en `PUNTOS_DE_ESCRITURA`: meterlos ahi mentiria (el test exige que
+// cada simbolo sea un metodo REAL que escribe estado).
+//
+// Esta lista es la EXCEPCION EXPLICITA, no un agujero: en cuanto la 157/158 instrumenten su
+// call-site, la familia debe MOVERSE de aqui a `PUNTOS_DE_ESCRITURA`, y este archivo lo obliga
+// (la union de ambos conjuntos tiene que cubrir el enum exactamente).
+const FAMILIAS_SIN_PRODUCTOR = [
+  { origenTipo: "recoleccion_tienda", productorFuturo: "feature 157 (recoleccion en tienda)" },
+  { origenTipo: "incidente", productorFuturo: "feature 158 (resultado incidente de la gestion)" },
+] as const;
+
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
 // softDelete (solo deleted_at),
 // setOrdenEnGestion / liberarOrdenEnGestion (puntero de bloqueo 1-a-1). Existen pero NO
@@ -217,10 +232,34 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 22 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
-    const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
+  it("los 22 origen_tipo con productor + los 2 sin productor cubren EXACTAMENTE el enum (R23)", () => {
+    const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
+    const tiposSinProductor = FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo);
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
-    expect(tiposDelMapa).toEqual(tiposDelSeed);
+    expect([...tiposDelMapa, ...tiposSinProductor].sort()).toEqual(tiposDelSeed);
+    // Y no se solapan: una familia o tiene productor instrumentado o no lo tiene, nunca las dos.
+    for (const familia of tiposSinProductor) {
+      expect(tiposDelMapa as readonly string[]).not.toContain(familia);
+    }
+  });
+
+  // Feature 154 (R28): las dos familias nuevas siguen SIN productor. Si un repo empieza a
+  // emitirlas antes de que se instrumenten como punto de escritura, este test se pone rojo.
+  it("feature 154/R28: recoleccion_tienda e incidente estan declaradas y SIN productor", () => {
+    expect(FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo)).toEqual([
+      "recoleccion_tienda",
+      "incidente",
+    ]);
+    const simbolosPorFamilia: string[] = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
+    for (const familia of FAMILIAS_SIN_PRODUCTOR) {
+      // Declarada en el enum fuente de verdad...
+      expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED] as string[]).toContain(familia.origenTipo);
+      // ...y sin ningun punto de escritura que la emita.
+      expect(
+        simbolosPorFamilia.filter((tipo) => tipo === (familia.origenTipo as string)),
+        `${familia.origenTipo} ya tiene productor: muevelo a PUNTOS_DE_ESCRITURA (${familia.productorFuturo})`,
+      ).toHaveLength(0);
+    }
   });
 
   it("cada familia (origen_tipo) aparece UNA sola vez en el mapa (1 punto por familia)", () => {

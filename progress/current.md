@@ -23,13 +23,30 @@
 
 ### 1. Lo primero que hay que hacer mañana (agente)
 
+> **⚠️ ESTE APARTADO ESTÁ EJECUTADO — sesión del 2026-07-29.** Ver «Sesión 2026-07-29» más abajo
+> para el estado real. Se conserva el texto original porque dos de sus afirmaciones resultaron
+> FALSAS y conviene que quede el rastro de por qué.
+
 **Arrancar 154 (backend) + 160 (fullstack) en paralelo.** Distinta zona, sin conflicto de archivos, y
 su única dependencia —la 153— ya está mergeada. Las dos tienen spec completa y gate aprobado: **no
 queda ninguna decisión humana pendiente para implementarlas**. Después 155 y 156; al final 157, 158
 y 159. Orden completo y specs en la sección del lote, más abajo.
 
+> **CORRECCIÓN 1 (2026-07-29): «no queda ninguna decisión humana pendiente» era FALSO.** Las dos
+> features tenían un bloque `T0` de puerta en su `tasks.md` sin cerrar. Las tres Q bloqueantes de la
+> 154 sí estaban respondidas de facto en su ficha y en este archivo, pero **nadie lo había escrito en
+> el spec**; y el `ABIERTO` de la 160 estaba **intacto**. Lección: «gate aprobado» en la bitácora no
+> es lo mismo que las preguntas del spec respondidas por escrito — al cerrar una fase 1, las
+> respuestas se escriben EN el spec, no solo aquí.
+
 ⚠️ **154 + 155 + 156 suben a producción JUNTAS o no suben.** Por separado dejan el flujo roto en el
-intermedio: la 154 sola deja `generar guía` lanzando `TransicionIlegalError`.
+intermedio: ~~la 154 sola deja `generar guía` lanzando `TransicionIlegalError`~~.
+
+> **CORRECCIÓN 2 (2026-07-29): la parte tachada quedó obsoleta con la decisión Q2.** La 154 se
+> reestructuró a **SOLO ADITIVA**: no retira ninguna arista, así que **la 154 sola es inofensiva** y
+> `generar guía` sigue funcionando con ella mergeada. **El tren sigue siendo obligatorio, pero por la
+> 156, no por la 154**: es la 156 la que retira `#4`/`#6`/`#7c`, y sin la 155 detrás el flujo queda
+> roto en el intermedio.
 
 ### 2. PRs abiertos que NO son de este lote (los cierra el humano)
 
@@ -108,6 +125,76 @@ Detalle en la sección «Deudas de arnés vivas». Las que más cuestan hoy:
 en la sección «Backlog pendiente».
 
 ---
+
+## 🗓️ Sesión 2026-07-29 — estado en vivo
+
+> Reemplaza al apartado «PENDIENTES» de arriba en todo lo que se contradiga. Lo verificado hoy va
+> con su número; lo no verificado se dice.
+
+**Arranque:** `./init.sh` **verde** sobre `dev` @ `0ed3125` (543 archivos / 5655 tests, lint 0
+errores). El `typecheck` rojo que aparece al estrenar un worktree es **cliente Prisma stale**, no
+`dev`: se salda con `pnpm db:generate`. Vale la pena recordarlo antes de diagnosticar nada.
+
+| # | Zona | Estado al momento de escribir | Rama |
+|---|------|-------------------------------|------|
+| 154 | backend | ✅ **reviewer APROBADO-CON-NOTAS, 0 bloqueantes** | `feature/154-catalogo-estados-v2` |
+| 156 | fullstack | backend en implementación | `feature/156-guia-sin-mensajero` |
+| 160 | fullstack | backend en implementación | `feature/160-columna-intentos` |
+
+**154 — catálogo v2.** `./init.sh` verde: **547 archivos / 5735 tests**, `tests/integration/db`
+67 archivos / 614 tests. Catálogo 18→20, enum de familias 22→24, `incidente` TERMINAL sin salidas,
+2 migraciones con su `down.sql`, cero services/actions/repos tocados, único `.tsx` de producción
+`EstatusBadge.tsx`. **El reviewer verificó los 33 R por MUTACIÓN** (28 mutaciones: 26 muertas, 2
+supervivientes que eran los controles) en vez de fiarse del mapa, y confirmó que la guardia sigue
+fallando **CERRADO** matando las dos formas de reabrir el hueco de la feature 140. Detalle en
+`progress/impl_154.md` y `progress/review_154.md`.
+
+**Nota de release del tren (T5.6, copiada de `impl_154.md` §7):** 154 + 155 + 156 viajan **juntas**
+a `prod`. El riesgo hoy es bajo porque **la 154 es solo aditiva y por sí sola no abre ninguna
+ventana de rotura**; el acoplamiento lo aportan la 155/156, que sí retiran aristas y tienen que
+llegar junto al recableado de `GuiaAsignacionService`. **Efecto visible aceptado:** la Server Action
+`listarOrderStatus` pasa a devolver **20** filas en vez de 18, así que los dos estados nuevos
+aparecen en el desplegable de filtro **sin resultados** hasta la 155/157.
+
+**⚠️ Deuda del tren, sin saldar: el round-trip real de migraciones contra Postgres NO EXISTE.** Ni
+el implementador ni el reviewer lo hicieron; los cuatro `.sql` están leídos y asertados por regex,
+nunca ejecutados. Es la misma deuda de 137/138/139. **Se salda antes de que el tren suba a `prod`.**
+
+**⚠️ `catalogoCache` nunca se invalida** y la 154 es la primera que hace **crecer** `order_status`
+en caliente → el orden migrar-antes-de-desplegar importa, y volverá a importar en la 157/158.
+
+**Decisiones del humano cerradas hoy (además de las de cada ficha):**
+- **`incidente` queda TERMINAL.** En chat se planteó un estado `indemnizada` que lo desterminara y
+  **se descartó**: no existe, no se declara, no se deja preparado.
+- **Feature 160 — el intento cuenta `devuelta` Y `reprogramada`**, y el criterio **gobierna también
+  el escalado automático** del cron SLA y, por esa vía, `cobroRechazado`. Se le planteó la
+  consecuencia (se rechaza y se cobra antes) y la reafirmó: su lectura es que el cron **ya debía**
+  contar así. Matiz verificado contra el mapa que el spec no había visto: solo cuenta la
+  reprogramación **del mensajero** (`#13`, vía `gestion`); la **de la tienda** (`#22`, vía
+  `reprogramacion_tienda`) se excluye porque la fila `devuelta` de esa orden ya contó el intento.
+- **La retroactividad se resolvió MIDIENDO, no suponiendo.** Consulta de solo lectura contra
+  **producción** el 2026-07-29: **0 órdenes** saltarían el umbral con el criterio nuevo (2 en
+  `devuelta`, 8 con conteo distinto sin cruzar umbral, 10 filas `reprogramada`+`gestion`, **167
+  filas de historial en toda la base**). Va sin mitigación. **La consulta se re-corre justo antes
+  del despliegue y lo DETIENE si da > 0** (task T24.1 del spec).
+- **El dato de intentos NO es un chip: es una columna** propia tras `estatus` en las tablas, y
+  **dato etiquetado «Intentos: N»** fuera de ellas. El **0 siempre se muestra**.
+- **Derogados R2/R11 de la feature 148** («exactamente 11 columnas» del manifiesto). Corrección del
+  humano: esos requisitos no significan un número fijo sino que **el manifiesto lleva los datos de
+  su tabla**, y el conjunto **crece** cuando la orden gana un dato. Reescritos como conjunto
+  ABIERTO; ni código ni tests pueden volver a afirmar «exactamente N columnas».
+
+**🔎 Hallazgo del día — la feature 159 se mergeó SIN REGISTRO.** El **PR #193** entró a `dev` el
+2026-07-29 a las 07:00 (`refactor(159): retira el flujo del mensajero sugerido`) con código,
+migración `20260728120000_drop_orden_mensajero_sugerido` (con su `down.sql`) y un guard nuevo. Pero
+**su ficha sigue `spec_ready`, sin `branch`, con las 29 tareas de `tasks.md` sin marcar y sin
+`impl_159` ni `review_159`**. Nadie ha verificado si cubre sus R1–R22. Además entró **fuera de
+orden**: su `depends_on` es la 156, que aún no existe. **Pendiente: pasarle el `reviewer` antes de
+darla por `done`.**
+
+**Límite nuevo declarado (160):** la columna de intentos es un dato derivado y **no es ordenable ni
+filtrable server-side** — el `ORDER BY` usa lista blanca de columnas reales. Queda elevado a las
+features 144/151, no resuelto a escondidas.
 
 ## Features en curso
 
