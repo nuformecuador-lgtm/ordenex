@@ -98,7 +98,12 @@ describe("carpeta y schema.prisma", () => {
       (d) =>
         d !== esta &&
         !d.endsWith("_order_status_en_reparto") && // feature 153 (rename del value): apendida despues
-        !d.endsWith("_drop_orden_mensajero_sugerido"), // feature 159 (retiro de la sugerencia): apendida despues
+        !d.endsWith("_drop_orden_mensajero_sugerido") && // feature 159 (retiro de la sugerencia): apendida despues
+        // feature 154 (catalogo de estados v2): sus DOS migraciones (20260729) se
+        // apendieron despues de esta (20260728), igual que las de la 153 y la 159. La
+        // 154 entro a `dev` sin actualizar esta lista y dejo el caso ROJO en `dev`.
+        !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
+        !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente"),
     );
     expect(esta >= previas[previas.length - 1]).toBe(true);
   });
