@@ -52,8 +52,38 @@ export type ActualizarOrdenInput = z.infer<typeof actualizarOrdenSchema>;
 // fuera de la whitelist produce un ZodError (validation_error) ANTES de construir
 // el `where`, de modo que ningun nombre de columna arbitrario llega a Prisma. Se
 // mantiene deliberadamente estrecha (un solo campo) y se amplia por demanda.
-export const ORDEN_FILTER_FIELDS = ["status_id"] as const;
+// Feature 144/B1 (R30): la whitelist pasa de 1 a 9 claves — los cinco catalogos
+// (zona/tienda/provincia/canton/distrito), mas las TRES claves temporales (atajo de
+// antiguedad, fecha desde y fecha hasta). `.strict()` sigue siendo la unica defensa
+// que impide que un nombre de columna arbitrario alcance Prisma (R31).
+export const ORDEN_FILTER_FIELDS = [
+  "status_id",
+  "zona_id",
+  "tienda_id",
+  "provincia_id",
+  "canton_id",
+  "distrito_id",
+  "created_preset",
+  "created_desde",
+  "created_hasta",
+] as const;
 export type OrdenFilterField = (typeof ORDEN_FILTER_FIELDS)[number];
+
+// Feature 144/R32: todo filtro de catalogo NUEVO es una LISTA NO VACIA de ids no
+// vacios. No se admite el escalar (eso es retrocompatibilidad exclusiva de
+// `status_id`), ni la lista vacia: una lista vacia significaria "ningun valor" y
+// degradaria a "sin filtro" si el repositorio la descartara. Falla cerrado.
+const idList = z.array(z.string().min(1)).nonempty();
+
+// Feature 144/R39: fecha CALENDARIO `YYYY-MM-DD` (lo que emite `<input type="date">`).
+// El cliente NUNCA manda instantes ni offsets: los bordes temporales se calculan
+// server-side (R43), en horario de Costa Rica (lib/utils/fecha-cr.ts).
+const fechaCalendario = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado YYYY-MM-DD");
+
+// Feature 144/R38: dominio CERRADO del atajo de antiguedad. Un solo valor (nunca
+// una lista): `["7d","30d"]` no tiene interpretacion util y seria ambiguo.
+export const CREATED_PRESETS = ["7d", "15d", "30d", "90d"] as const;
+export type CreatedPreset = (typeof CREATED_PRESETS)[number];
 
 // `status_id` acepta UN id (contrato previo, sin regresion) o una LISTA de ids
 // (filtro multi-estado del listado unico de `/ordenes`, que sustituyo a las tabs
@@ -64,8 +94,32 @@ export const ordenFilterSchema = z
     status_id: z
       .union([z.string().min(1), z.array(z.string().min(1)).nonempty()])
       .optional(),
+    // Feature 144/R30/R32: filtros de catalogo. Zona sale de `orden.zona_id`
+    // (valor CONGELADO de la orden), no se deriva del distrito.
+    zona_id: idList.optional(),
+    tienda_id: idList.optional(),
+    provincia_id: idList.optional(),
+    canton_id: idList.optional(),
+    distrito_id: idList.optional(),
+    // Feature 144/R38/R39: tiempo. Atajo (escalar de dominio cerrado) O rango.
+    created_preset: z.enum(CREATED_PRESETS).optional(),
+    created_desde: fechaCalendario.optional(),
+    created_hasta: fechaCalendario.optional(),
   })
-  .strict();
+  .strict()
+  // R39: rango no invertido. La comparacion lexicografica de `YYYY-MM-DD` es
+  // equivalente a la cronologica (formato de ancho fijo, mayor a menor).
+  .refine(
+    (f) => !(f.created_desde && f.created_hasta) || f.created_desde <= f.created_hasta,
+    { path: ["created_hasta"], message: "El rango de fechas esta invertido" },
+  )
+  // R40: atajo y rango son EXCLUYENTES. La UI ya lo hace inalcanzable (el control
+  // vacia uno al elegir el otro); el borde falla CERRADO en vez de inventar una
+  // precedencia silenciosa para un cliente que construya el filter a mano.
+  .refine((f) => !(f.created_preset && (f.created_desde || f.created_hasta)), {
+    path: ["created_preset"],
+    message: "Usa el atajo o el rango, no ambos",
+  });
 export type OrdenFilterInput = z.infer<typeof ordenFilterSchema>;
 
 // R30/R31/R32/R33: parametros del listado. page/pageSize enteros positivos (R32);

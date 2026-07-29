@@ -308,10 +308,15 @@ describe("R12 — la migracion queda registrada en el invariante de orden", () =
     const previas = dirs.filter(
       (d) =>
         !d.endsWith("_notificacion") &&
+        !d.endsWith("_orden_indices_filtros") && // feature 144 (indices de filtros de orden): apendida despues
         !d.endsWith("_order_status_en_reparto") && // feature 153 (rename del value): apendida despues
         // feature 159 (retiro de la sugerencia de mensajero): apendida despues.
         !d.endsWith("_drop_orden_mensajero_sugerido"),
     );
+    // El invariante que se protege es que `_notificacion` NO sea ANTERIOR a ninguna
+    // migracion previa; las carpetas que features posteriores apendan se excluyen aqui
+    // (mismo patron que `zonas-migration.test.ts`). Si alguien mete una migracion con
+    // timestamp anterior sin excluirla, este assert sigue fallando.
     expect(esta > previas[previas.length - 1]).toBe(true);
   });
 });

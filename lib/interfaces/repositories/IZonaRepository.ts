@@ -1,4 +1,5 @@
 import type { ArbolZonas, ZonaDTO } from "@/lib/types/zona";
+import type { OpcionCatalogo } from "@/lib/types/filtros-ordenes";
 
 // Datos listos para persistir una fila de tarifa_zona_mensajero (numbers; el repo
 // convierte a Prisma.Decimal). vehiculoId ya normalizado a string | null.
@@ -40,6 +41,13 @@ export interface IZonaRepository {
   findById(id: string, includeTarifas: boolean): Promise<ZonaDTO | null>;
   /** Listado paginado (orden por nombre asc). include tarifas opcional. */
   list(params: ListZonasParams): Promise<ListZonasResult>;
+  /**
+   * Feature 144/B2 (R48/R49): TODAS las zonas proyectadas a `{id, nombre}`, por nombre
+   * asc. Metodo propio y no `list()`: aquel pagina y arrastra tarifas + conteo de
+   * distritos, y `ZonaService.listar` ademas es `maestro`-only. El catalogo de filtros
+   * lo consumen tambien `admin` y `adminTienda`, y no necesita nada de eso.
+   */
+  listLite(): Promise<OpcionCatalogo[]>;
   /** Reemplaza datos + N:M + tarifas; null si la zona no existe. */
   update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null>;
   /** Borrado FISICO (cascade de zona_distrito y tarifas). */

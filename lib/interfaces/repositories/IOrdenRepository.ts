@@ -50,14 +50,39 @@ export interface UpdateOrdenData {
   direccion?: string | null;
 }
 
-export interface ListOrdenesParams {
+/**
+ * Feature 144 (R33/R34/R44) — `where` YA traducido por el service a columnas Prisma
+ * (nunca claves publicas del `filter`). Cada clave presente es una condicion AND; una
+ * clave con lista se traduce a `IN (...)` (OR dentro del mismo filtro). Una clave
+ * AUSENTE es "sin filtro"; una clave presente NUNCA puede degradar a "sin filtro" (un
+ * id inexistente estrecha el resultado a cero, no lo ensancha, R35).
+ *
+ * `tiendaId` admite lista (filtro de tienda) o escalar: el escalar es el ACOTAMIENTO POR
+ * ROL del `adminTienda`, que el service escribe AL FINAL y por tanto PISA cualquier lista
+ * que el filtro hubiera puesto (R36). El repositorio no decide nada de eso: recibe el
+ * `where` ya resuelto.
+ */
+export interface ListOrdenesWhere {
+  // `tiendaId` escalar = scoping por rol (adminTienda); lista = filtro de tienda.
+  tiendaId?: string | string[];
   // `estatusId` admite un id (filtro por un estado) o una lista de ids (filtro
   // multi-estado del listado de `/ordenes`), que el repositorio traduce a `IN (...)`.
-  where: {
-    tiendaId?: string;
-    estatusId?: string | string[];
-    mensajeroAsignadoId?: string;
-  };
+  estatusId?: string | string[];
+  mensajeroAsignadoId?: string;
+  // Feature 144: filtros de catalogo de la orden (columnas propias, sin JOIN).
+  zonaId?: string | string[];
+  provinciaId?: string | string[];
+  cantonId?: string | string[];
+  // `distritoId` es NULLABLE en la tabla: `IN (...)` excluye las ordenes sin distrito
+  // (decision (f) del spec: no hay opcion "sin distrito").
+  distritoId?: string | string[];
+  // Rango temporal YA calculado server-side (instantes UTC). `gte` inclusivo,
+  // `lt` EXCLUSIVO (= comienzo del dia CR siguiente al `hasta` pedido).
+  createdAt?: { gte?: Date; lt?: Date };
+}
+
+export interface ListOrdenesParams {
+  where: ListOrdenesWhere;
   sortBy: SortField;
   sortDir: SortDir;
   skip: number;

@@ -1,5 +1,9 @@
 import { NumRemisionDuplicadoError } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { IOrdenRepository, UpdateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type {
+  IOrdenRepository,
+  ListOrdenesWhere,
+  UpdateOrdenData,
+} from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
   Actor,
   ActualizarOrdenServiceResult,
@@ -11,10 +15,17 @@ import type {
 } from "@/lib/interfaces/services/IOrdenService";
 import type {
   ActualizarOrdenInput,
+  CreatedPreset,
   CrearOrdenInput,
   ListarOrdenesInput,
+  OrdenFilterInput,
 } from "@/lib/types/orden";
 import { ordenesConfig } from "@/lib/config/ordenes";
+import {
+  inicioDelDiaCREnUtc,
+  inicioDelDiaSiguienteCREnUtc,
+  inicioDeUltimosNDiasCREnUtc,
+} from "@/lib/utils/fecha-cr";
 
 // Roles reconocidos por el CRUD (los demas -> forbidden, R24). maestro/admin
 // tienen acceso total (R20); adminTienda/mensajero con restriccion (R21/R23).
@@ -25,10 +36,65 @@ const KNOWN_ROLES = new Set<string>(["maestro", "admin", "adminTienda", "mensaje
 // columna `estatus_id`); la clave publica `status_id` nunca se usa como nombre de
 // columna. El schema `.strict()` (lib/types/orden.ts) ya garantiza que solo llegan
 // claves de esta whitelist, asi que ninguna columna arbitraria alcanza el `where`.
-const FILTER_TO_COLUMN = { status_id: "estatusId" } as const;
+// Feature 144/B1 (R30/R43): el mapa crece a los cinco catalogos. Las TRES claves
+// temporales (`created_preset`/`created_desde`/`created_hasta`) NO estan aqui a
+// proposito: no son columnas, se traducen a un rango `createdAt: { gte, lt }`
+// calculado server-side (ver `rangoCreacion`).
+const FILTER_TO_COLUMN = {
+  status_id: "estatusId",
+  zona_id: "zonaId",
+  tienda_id: "tiendaId",
+  provincia_id: "provinciaId",
+  canton_id: "cantonId",
+  distrito_id: "distritoId",
+} as const;
+
+// Dias de cada atajo de antiguedad (R41). El dominio ya lo cierra `CREATED_PRESETS`
+// en el schema; este mapa solo traduce el valor a un numero de dias.
+const PRESET_DIAS: Record<CreatedPreset, number> = {
+  "7d": 7,
+  "15d": 15,
+  "30d": 30,
+  "90d": 90,
+};
+
+/**
+ * Feature 144 (R41/R42/R43) — bordes temporales del filtro de creacion, calculados
+ * SERVER-SIDE en horario de Costa Rica (UTC-6 fijo). Nunca se aceptan instantes del
+ * reloj del cliente: solo fechas calendario o un atajo de dominio cerrado.
+ *
+ *   - atajo "Nd"  -> `gte` = 00:00 CR de hace N-1 dias (N dias calendario incl. hoy).
+ *   - `desde: D`  -> `gte` = 00:00 CR de D.
+ *   - `hasta: H`  -> `lt`  = 00:00 CR del dia SIGUIENTE a H  => H es INCLUSIVO.
+ *   - un solo extremo -> rango abierto por el otro lado.
+ *
+ * Atajo y rango no pueden coexistir: `ordenFilterSchema` lo rechaza antes (R40).
+ * Devuelve `undefined` si no hay ninguna clave temporal (sin filtro, R45).
+ */
+function rangoCreacion(
+  filter: OrdenFilterInput | undefined,
+  ahora: Date,
+): { gte?: Date; lt?: Date } | undefined {
+  if (!filter) return undefined;
+  if (filter.created_preset) {
+    return { gte: inicioDeUltimosNDiasCREnUtc(PRESET_DIAS[filter.created_preset], ahora) };
+  }
+  const rango: { gte?: Date; lt?: Date } = {};
+  if (filter.created_desde) rango.gte = inicioDelDiaCREnUtc(filter.created_desde);
+  if (filter.created_hasta) rango.lt = inicioDelDiaSiguienteCREnUtc(filter.created_hasta);
+  return rango.gte || rango.lt ? rango : undefined;
+}
 
 export class OrdenService implements IOrdenService {
-  constructor(private readonly repo: IOrdenRepository) {}
+  /**
+   * `ahora` inyectable (feature 144): el atajo de antiguedad (`created_preset`) se
+   * calcula contra el reloj del SERVIDOR (R43). Se inyecta solo para que los tests
+   * puedan fijar el instante; en produccion nadie lo pasa.
+   */
+  constructor(
+    private readonly repo: IOrdenRepository,
+    private readonly ahora: () => Date = () => new Date(),
+  ) {}
 
   async crear(input: CrearOrdenInput, actor: Actor): Promise<CrearOrdenServiceResult> {
     // --- Autorizacion (R19-R24), antes de tocar datos ---
@@ -139,13 +205,12 @@ export class OrdenService implements IOrdenService {
   ): Promise<ListarOrdenesServiceResult> {
     if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
 
-    const where: {
-      tiendaId?: string;
-      // Un id o una lista de ids (filtro multi-estado); el repositorio traduce
-      // la lista a `IN (...)`.
-      estatusId?: string | string[];
-      mensajeroAsignadoId?: string;
-    } = {};
+    // Feature 144: ORDEN DE ESCRITURA del `where`, y es lo que garantiza R36/R37:
+    //   1) `estatusId` escalar heredado,
+    //   2) el `filter` traducido por la whitelist,
+    //   3) el ACOTAMIENTO POR ROL, escrito AL FINAL para que PISE lo que el filtro
+    //      hubiera puesto. Un filtro nunca amplia el alcance de un rol.
+    const where: ListOrdenesWhere = {};
     // R10: el `estatusId` escalar preexistente sigue funcionando (sin regresion).
     if (input.estatusId !== undefined) where.estatusId = input.estatusId;
     // Feature 63/R8/R9: traduce `filter.status_id` a la columna `estatusId` via el
@@ -154,8 +219,31 @@ export class OrdenService implements IOrdenService {
     if (input.filter?.status_id !== undefined) {
       where[FILTER_TO_COLUMN.status_id] = input.filter.status_id;
     }
-    // R9/R21: adminTienda sigue acotado a SUS ordenes; el filtro por estado COMPONE
-    // con este alcance por rol (ambas condiciones en el mismo `where`), no lo pisa.
+    // Feature 144/R30/R33/R34: los cinco filtros de catalogo, traducidos por el MISMO
+    // mapa explicito. La clave publica nunca se usa como nombre de columna; el schema
+    // `.strict()` ya garantiza que solo llegan claves de la whitelist (R31).
+    if (input.filter?.zona_id !== undefined) {
+      where[FILTER_TO_COLUMN.zona_id] = input.filter.zona_id;
+    }
+    if (input.filter?.tienda_id !== undefined) {
+      where[FILTER_TO_COLUMN.tienda_id] = input.filter.tienda_id;
+    }
+    if (input.filter?.provincia_id !== undefined) {
+      where[FILTER_TO_COLUMN.provincia_id] = input.filter.provincia_id;
+    }
+    if (input.filter?.canton_id !== undefined) {
+      where[FILTER_TO_COLUMN.canton_id] = input.filter.canton_id;
+    }
+    if (input.filter?.distrito_id !== undefined) {
+      where[FILTER_TO_COLUMN.distrito_id] = input.filter.distrito_id;
+    }
+    // Feature 144/R41/R42/R43: los bordes temporales se calculan AQUI (server-side),
+    // no llegan del cliente.
+    const createdAt = rangoCreacion(input.filter, this.ahora());
+    if (createdAt) where.createdAt = createdAt;
+    // R9/R21 + feature 144/R36: adminTienda sigue acotado a SUS ordenes. Se escribe
+    // DESPUES del filtro: si el actor inyecto `filter.tienda_id = [otraTienda]`, este
+    // escalar lo SOBRESCRIBE. El filtro de tienda nunca amplia su alcance.
     if (actor.rol === "adminTienda") where.tiendaId = actor.usuarioId;
     // Seguridad: el mensajero solo puede listar SUS asignadas (mensajeroAsignadoId =
     // su usuario). Sin esto, `/ordenes` filtraba el listado COMPLETO al mensajero. Su

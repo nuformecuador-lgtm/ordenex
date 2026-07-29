@@ -21,6 +21,7 @@ function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
     create: vi.fn().mockResolvedValue(dto()),
     findById: vi.fn().mockResolvedValue(dto()),
     list: vi.fn().mockResolvedValue({ items: [dto()], total: 1 }),
+    listLite: vi.fn().mockResolvedValue([]), // feature 144; no ejercitado aqui
     update: vi.fn().mockResolvedValue(dto()),
     hardDelete: vi.fn().mockResolvedValue("ok"),
     arbol: vi.fn().mockResolvedValue({}),
