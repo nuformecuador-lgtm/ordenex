@@ -94,7 +94,12 @@ describe("carpeta y schema.prisma", () => {
       .map((e) => e.name)
       .sort();
     const esta = dirs.find((d) => d.endsWith("_orden_indices_filtros"))!;
-    const previas = dirs.filter((d) => d !== esta);
+    const previas = dirs.filter(
+      (d) =>
+        d !== esta &&
+        !d.endsWith("_order_status_en_reparto") && // feature 153 (rename del value): apendida despues
+        !d.endsWith("_drop_orden_mensajero_sugerido"), // feature 159 (retiro de la sugerencia): apendida despues
+    );
     expect(esta >= previas[previas.length - 1]).toBe(true);
   });
 
