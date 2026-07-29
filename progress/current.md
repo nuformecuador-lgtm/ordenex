@@ -91,11 +91,25 @@ guía solo lleva a `en_bodega_central`, y **las asignaciones salen siempre de un
 pasa a «Por recibir en satélite» pese a que el diagrama lo dibuje así, y los participios femeninos
 (Entregada/Devuelta/Reprogramada/Rechazada/Sin gestionar) se conservan.
 
-**Tres `ABIERTO` que valen por sí solos** y se cierran en la puerta F1.4 de su spec, no antes:
-la **155** debe decidir de dónde sale la respuesta a «¿ya está en bodega?»; la **157** arrastra el que
-el propio humano declaró sin resolver — **cómo le llegan al mensajero las órdenes por recolectar**, que
-define si hace falta modelo nuevo; y la **158** debe decidir **cómo se calcula el monto de la
-indemnización** (de las tres opciones, solo la captura manual del admin no exige dato nuevo).
+**Los tres `ABIERTO` que bloqueaban el diseño se CERRARON el 2026-07-28**, antes de especificar, para
+no escribir tres specs sobre supuestos:
+
+- **155 — «¿ya está en bodega?» sale del interruptor de fulfillment de la TIENDA**, no de la orden ni
+  de la vía de carga. **Y ese flag ya existe:** `Usuario.fulfillment` (`db/schema.prisma:97`, feature
+  27) con su switch ya montado en `UsuarioForm.tsx:55,70`. → **sin migración y sin UI nueva**; la
+  feature se reduce a recablear a qué estado mapea (`true` → `en_preparacion` sin guía; `false` →
+  guía + manifiesto en el acto y nace en `por_recolectar_en_tienda`). ⚠️ No confundir con el **otro**
+  `fulfillment` del repo: el de `tarifas` (`schema.prisma:760`) es un **monto**, no este flag.
+- **157 — las órdenes por recolectar SE LE ASIGNAN** al mensajero con el mecanismo que ya existe
+  (`mensajero_asignado_id` + `mis-asignaciones`): sin bolsa libre y sin modelo de lote nuevo. **Pero el
+  humano añadió la condición que es el corazón de la feature: «el módulo de gestión debe cambiar cuando
+  es este caso».** Una recolección no es una entrega — no hay cobro, ni resultado de gestión, ni causa
+  de devolución, ni evidencia: la acción es **una sola**, escanear y confirmar. Eso obliga a un panel
+  propio de recolección en vez de `GestionarOrdenPanel`.
+- **158 — el monto de la indemnización lo captura el admin a mano** al aprobar el cierre. Descartados
+  `monto_cobrar` (una orden ya pagada lo tiene en 0 y quedaría sin indemnizar) y la columna de valor
+  declarado (habría obligado a tocar la plantilla de carga masiva v2 recién hecha y el contrato público
+  de la API).
 
 **Peajes conocidos:** la 154 y la 158 tocan **enums de Postgres** (`orden_historial_origen_tipo`,
 `WalletMovimientoCategoria`), así que además del `ALTER TYPE ADD VALUE` hay que **actualizar los
