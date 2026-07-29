@@ -19,6 +19,12 @@ import {
 // a 3. `por_recolectar_en_tienda` es NO terminal (entra por creacion, sale por #43) e `incidente`
 // es TERMINAL SIN NINGUNA salida (entra por #44). Al ser la 154 SOLO ADITIVA no se retira
 // ninguna arista, asi que ningun estado preexistente pierde entradas ni salidas.
+//
+// Feature 156 (R3): SI se retiran tres aristas (#4/#6/#7c) y `en_preparacion` se queda con UNA
+// sola salida (#5, a la bodega central). Este invariante es justo la red que impide pasarse de
+// frenada: si alguien retirara tambien #5, `en_preparacion` quedaria sin salida y estos tests
+// lo nombrarian. Lo mismo vale para `por_recoger` y `en_ruta_bodega_satelite`, que pierden un
+// productor pero conservan entradas por otras aristas.
 
 const TERMINALES = new Set<string>(ESTADOS_TERMINALES);
 const CREACION = new Set<string>(ESTADOS_CREACION);
@@ -85,6 +91,19 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
     expect([...ESTADOS_TERMINALES]).not.toContain("por_recolectar_en_tienda");
     expect(grados.get("por_recolectar_en_tienda")!.entradas).toBeGreaterThan(0);
     expect(grados.get("por_recolectar_en_tienda")!.salidas).toBeGreaterThan(0);
+  });
+
+  // Feature 156/R3: tras retirar #4/#6/#7c, `en_preparacion` conserva EXACTAMENTE una salida
+  // (#5 -> en_bodega_central) y los dos destinos que dejo de alimentar siguen siendo
+  // alcanzables por otras vias (nadie se queda huerfano por este retiro).
+  it("156/R3: en_preparacion tiene una sola salida y no deja huerfano a ningun destino", () => {
+    const grados = calcularGrados();
+    expect(grados.get("en_preparacion")!.salidas).toBe(1);
+    expect(TRANSICIONES.en_preparacion.map((d) => d.to)).toEqual(["en_bodega_central"]);
+    // `por_recoger` sigue alimentado por la asignacion desde bodega central y satelite;
+    // `en_ruta_bodega_satelite`, por el ruteo desde la bodega central.
+    expect(grados.get("por_recoger")!.entradas).toBeGreaterThan(0);
+    expect(grados.get("en_ruta_bodega_satelite")!.entradas).toBeGreaterThan(0);
   });
 
   it("cada estado de creacion es alcanzable desde START y tiene salida de flujo", () => {

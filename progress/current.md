@@ -138,8 +138,36 @@ errores). El `typecheck` rojo que aparece al estrenar un worktree es **cliente P
 | # | Zona | Estado al momento de escribir | Rama |
 |---|------|-------------------------------|------|
 | 154 | backend | ✅ **reviewer APROBADO-CON-NOTAS, 0 bloqueantes** | `feature/154-catalogo-estados-v2` |
-| 156 | fullstack | backend en implementación | `feature/156-guia-sin-mensajero` |
-| 160 | fullstack | backend en implementación | `feature/160-columna-intentos` |
+| 156 | fullstack | ✅ **reviewer APROBADO-CON-NOTAS, 0 bloqueantes; los 2 menores SALDADOS** | `feature/156-guia-sin-mensajero` |
+| 160 | fullstack | backend hecho; frontend en implementación | `feature/160-columna-intentos` |
+
+**156 — generar guía sin asignar mensajero.** `./init.sh` verde: **547 archivos / 5751 tests / 0
+fallos**. Retira `#4`, `#6` y `#7c`; **`#5` sobrevive** (destino único de generar guía); 45→42
+aristas. `GenerarGuiaModal` pasa a confirmación de lote y envía `{ ordenIds }`. Sin migración, cero
+`ordenes-columns.tsx`. `AsignacionSateliteService.ts` y `OrdenRepository.ts` **byte-idénticos**.
+
+- **El reviewer no se fió del mapa: verificó R1–R30 con 7 mutaciones propias**, todas rojas donde
+  debían. Los tests de la 154 puestos para romper aquí **se movieron e invirtieron**, ninguno
+  borrado. Cerró además el hueco de límites cliente/servidor corriendo `next build` (exit 0).
+- **La trampa del choke point se confirmó:** 7 tests rompieron en `orden-repository.guia.test.ts` y
+  `orden-historial-atomicidad.test.ts`, los dos archivos cuyos dobles de `tx` ejecutan la guardia
+  REAL. Contradice `tasks.md` T A.3.6 y `design.md` §7, que daban por hecho que no rompería nada.
+- **Menor 1 saldado:** el `validation_error` de `guia-decision-error-messages.ts` decía «revisa la
+  selección de mensajero», instrucción imposible desde que la 156 quitó esa selección. Quedó en
+  **«Datos inválidos.»**, el literal que ya usan los tres mappers vecinos. Se descartó «revisa la
+  información enviada» porque el caso realmente alcanzable es un **seed de catálogo incompleto**: no
+  es culpa del usuario y pedirle que revise lo que envió seguiría siendo falso.
+  `asignacion-satelite-error-messages.ts` **no se tocó**: ahí sí hay selección de mensajero.
+- **Menor 2 saldado, pero NO como decía el review:** su arreglo (que el `findMany` devolviera solo
+  `o1`) pone el caso **rojo**, no verde — el origen del segundo cae a `null` y la guardia de la 140
+  lo rechaza antes de escribir. Ese rechazo se convirtió en un caso nuevo que sí discrimina,
+  verificado por mutación.
+- `tasks.md` **24/27**. Sin marcar con su razón: **T A.3.6** (criterio literal imposible de
+  cumplir), **T C.2** (nadie verificó contra Postgres real: no hay `.env` ni base) y **T C.3**.
+
+⚠️ **`en_fulfillment` sigue ofreciendo «Generar guía» hacia un `conflict` garantizado hasta que
+llegue la 155.** El reviewer lo dice con todas las letras: **el tren 154+155+156 es condición de
+correctitud, no una preferencia.**
 
 **154 — catálogo v2.** `./init.sh` verde: **547 archivos / 5735 tests**, `tests/integration/db`
 67 archivos / 614 tests. Catálogo 18→20, enum de familias 22→24, `incidente` TERMINAL sin salidas,

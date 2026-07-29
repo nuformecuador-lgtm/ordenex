@@ -90,12 +90,12 @@ describe("R8/T3.4 — ninguna transicion del inventario empieza a fallar por la 
     },
   );
 
-  it("el test recorre el inventario COMPLETO (43 aristas de flujo + 3 de creacion)", () => {
+  it("el test recorre el inventario COMPLETO de flujo y de creacion, sin muestreo", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     expect(INVENTARIO_CREACION).toHaveLength(RECUENTO_INVENTARIO.aristasCreacion);
   });
 
-  it("un lote con las 43 aristas de flujo a la vez pasa en una sola llamada", async () => {
+  it("un lote con TODAS las aristas de flujo a la vez pasa en una sola llamada", async () => {
     const { tx, createMany } = buildTx();
     const emitir = vi.fn(async () => {});
     const lote = INVENTARIO_FLUJO.map((a, i) => entrada(a.origen, a.destino, a.via, `o${i}`));

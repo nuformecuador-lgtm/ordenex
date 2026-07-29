@@ -27,7 +27,7 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
     },
   );
 
-  it("el inventario de flujo tiene las 45 aristas y 41 pares unicos (A.3 + #7b/#7c + #43/#44)", () => {
+  it("el inventario de flujo tiene las 42 aristas y 39 pares unicos (A.3 + #7b + #43/#44 - #4/#6/#7c)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     const pares = new Set(INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino}`));
     expect(pares.size).toBe(RECUENTO_INVENTARIO.paresUnicos);
@@ -149,11 +149,13 @@ describe("R12 — el error de dominio es distinguible y no filtra PII", () => {
 // ---------------------------------------------------------------------------------------------
 // Feature 154 — catalogo de estados v2. Numeracion R<n> de `specs/154-catalogo-estados-v2`.
 //
-// PUERTA T0 (cerrada con el humano el 2026-07-29): la 154 es SOLO ADITIVA. No retira NINGUNA
-// arista. Por eso los requisitos de BAJA (R18-R21) NO se verifican como "ahora es ilegal" sino
-// como lo contrario: la arista SIGUE siendo legal aqui y su retiro se muda a la feature que
-// recablea `GuiaAsignacionService` (155/156). Es una discrepancia consciente entre el texto del
-// spec y la decision del gate, no un olvido; ver `progress/impl_154.md`.
+// PUERTA T0 (cerrada con el humano el 2026-07-29): la 154 es SOLO ADITIVA. No retiro NINGUNA
+// arista. Por eso sus requisitos de BAJA (R18-R21) NO se verificaron como "ahora es ilegal"
+// sino como lo contrario, con el retiro mudado a la feature que recablea
+// `GuiaAsignacionService` (155/156). Ver `progress/impl_154.md`.
+//
+// Feature 156: R18/R19 ya se COBRARON (#4/#6/#7c retiradas, describe "156 — BAJAS EJECUTADAS").
+// R20/R21 (#1/#3/#7b, de `en_fulfillment`) siguen diferidas a la 155.
 // ---------------------------------------------------------------------------------------------
 describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
   it("R13: es LEGAL que una orden nazca en por_recolectar_en_tienda", () => {
@@ -193,28 +195,64 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
   });
 });
 
-describe("154 — BAJAS DIFERIDAS: R18-R21 se mudan a las features 155/156", () => {
-  // La decision Q2 del gate (2026-07-29) supera el texto de R18-R21: retirar estas cuatro
-  // aristas aqui —mientras `GuiaAsignacionService` las sigue ejecutando— dejaria
-  // `en_fulfillment` sin salidas y atraparia sus ordenes vivas. Cada arista muere en el commit
-  // que retira a su ultimo productor. Este test es el CONTRATO de esa postergacion: cuando la
-  // 155/156 las retire, romperá aqui y obligará a mover el caso a la feature correspondiente.
+// ---------------------------------------------------------------------------------------------
+// Feature 156 — "Generar guia" SIN asignar mensajero. Aqui se COBRA la postergacion que la 154
+// dejo escrita: las bajas R18/R19 de aquel spec (#4, #6, #7c) se ejecutan en esta feature, que
+// es la que retira a su ultimo productor (`GuiaAsignacionService.generarGuia` deja de asignar y
+// de rutear; `rutearABodegaSatelite` deja de admitir `en_preparacion`).
+//
+// Los casos de abajo son los MISMOS que la 154 dejo afirmando "sigue siendo legal": no se
+// borran, se mueven a su nueva verdad ("ya no es legal"). Los de `en_fulfillment` (R20/R21 de
+// la 154, #1/#3/#7b) siguen en el describe de bajas diferidas: los retira la 155.
+// ---------------------------------------------------------------------------------------------
+describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea a satelite", () => {
   it.each([
-    ["R18 (#4, lo retira la 156)", "en_preparacion", "por_recoger"],
-    ["R19 (#6/#7c, los retira la 156)", "en_preparacion", "en_ruta_bodega_satelite"],
-    ["R20 (#1, lo retira la 155)", "en_fulfillment", "por_recoger"],
-    ["R21 (#3/#7b, los retira la 155)", "en_fulfillment", "en_ruta_bodega_satelite"],
-  ] as const)("%s: %s -> %s SIGUE siendo legal en la 154", (_r, origen, destino) => {
-    expect(() => assertTransicionValida(origen, destino)).not.toThrow();
+    ["154/R18 = #4", "en_preparacion", "por_recoger"],
+    ["154/R19 = #6 y #7c", "en_preparacion", "en_ruta_bodega_satelite"],
+  ] as const)("%s: %s -> %s ya NO es legal (lo retiro la 156)", (_r, origen, destino) => {
+    expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
   });
 
-  it("la 154 no retira ninguna arista: el mapa conserva las 43 previas y suma 2", () => {
+  it("156/R3: la UNICA salida legal de en_preparacion es en_bodega_central", () => {
+    const legales = ORDER_STATUS_SEED.filter((destino) => {
+      try {
+        assertTransicionValida("en_preparacion", destino);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    expect(legales).toEqual(["en_bodega_central"]);
+  });
+
+  it("el mapa retira EXACTAMENTE tres aristas: 45 -> 42 (y 41 -> 39 pares)", () => {
     const total = Object.entries(TRANSICIONES).reduce(
       (acc, [, destinos]) => acc + (destinos as readonly unknown[]).length,
       0,
     );
     expect(total).toBe(RECUENTO_INVENTARIO.aristasFlujo);
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(45); // 43 previas + #43 + #44
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(42); // 45 de la 154 - #4 - #6 - #7c
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(39);
+  });
+});
+
+describe("154 — BAJAS DIFERIDAS: R20/R21 se mudan a la feature 155", () => {
+  // La decision Q2 del gate (2026-07-29) supero el texto de R18-R21 de la 154: cada arista
+  // muere en el commit que retira a su ultimo productor. R18/R19 ya se cobraron arriba (156).
+  // Estas dos siguen pendientes: la 156 ya les quito el productor (`generarGuia` y
+  // `rutearABodegaSatelite` no admiten `en_fulfillment`), pero retirarlas ANTES de que la 155
+  // haga el backfill dejaria a `en_fulfillment` sin ninguna salida legal y atraparia sus
+  // ordenes vivas. Este test es el CONTRATO de esa postergacion: cuando la 155 las retire,
+  // romperá aqui y obligará a mover el caso a esa feature.
+  it.each([
+    ["R20 (#1, lo retira la 155)", "en_fulfillment", "por_recoger"],
+    ["R21 (#3/#7b, los retira la 155)", "en_fulfillment", "en_ruta_bodega_satelite"],
+  ] as const)("%s: %s -> %s SIGUE siendo legal tras la 156", (_r, origen, destino) => {
+    expect(() => assertTransicionValida(origen, destino)).not.toThrow();
+  });
+
+  it("en_fulfillment conserva sus cuatro aristas (declaradas y sin productor)", () => {
+    expect(TRANSICIONES.en_fulfillment).toHaveLength(4);
   });
 });
 
@@ -268,10 +306,11 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
     expect(INVENTARIO_CREACION.map((a) => a.destino)).toContain("por_recolectar_en_tienda");
   });
 
-  it("los recuentos del inventario son 45 flujo / 41 pares / 4 creacion", () => {
+  // Feature 156: los recuentos bajan de 45/41 a 42/39 al retirar #4/#6/#7c.
+  it("los recuentos del inventario son 42 flujo / 39 pares / 4 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 45,
-      paresUnicos: 41,
+      aristasFlujo: 42,
+      paresUnicos: 39,
       aristasCreacion: 4,
     });
   });

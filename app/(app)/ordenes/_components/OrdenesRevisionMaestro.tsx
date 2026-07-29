@@ -61,9 +61,13 @@ async function mensajerosFetcher() {
  *
  * Feature 30 (T16, R13/R15): añade un 5.º apartado solo-lectura para
  * `en_ruta_bodega_satelite` ("En ruta a bodega satélite") y una acción
- * secundaria "Rutear a bodega satélite" en los apartados de revisión y
- * `en_bodega_central` que rutea las órdenes NO-GAM seleccionadas vía
- * `rutearABodegaSatelite`.
+ * secundaria "Rutear a bodega satélite" que rutea las órdenes NO-GAM
+ * seleccionadas vía `rutearABodegaSatelite`.
+ *
+ * Feature 156 (R29): esa acción secundaria queda SOLO en `en_bodega_central`. El
+ * ruteo a satélite parte de la bodega central (que es donde el paquete está
+ * físicamente), así que ofrecerla desde `en_fulfillment`/`en_preparacion` era un
+ * camino muerto: el service lo rechaza con "estado de origen no permitido".
  *
  * `readOnly` (R12-UI, `admin`): ningún apartado es seleccionable y no se montan
  * botones ni modales de acción; el backend igual rechaza escrituras (R12,
@@ -167,8 +171,6 @@ export function OrdenesRevisionMaestro({
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Generar guía"}
         onAction={readOnly ? undefined : abrirGenerarGuia}
-        secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
-        onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
         mostrarHistorial
       />
       <OrdenesApartado
@@ -178,8 +180,6 @@ export function OrdenesRevisionMaestro({
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Generar guía"}
         onAction={readOnly ? undefined : abrirGenerarGuia}
-        secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
-        onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
         mostrarHistorial
       />
       {/* Feature 32/R13/F1.4(f): órdenes con `num_guia`. La respuesta del
@@ -246,11 +246,10 @@ export function OrdenesRevisionMaestro({
 
       {!readOnly ? (
         <>
+          {/* Feature 156/R30: "Generar guía" NO requiere mensajeros (ya no asigna). */}
           <GenerarGuiaModal
             open={modalAbierto === "generar-guia"}
             ordenes={ordenesSeleccionadas}
-            mensajeros={mensajeros}
-            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />
