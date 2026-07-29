@@ -40,4 +40,16 @@ describe("guiaDecisionErrorMessage", () => {
   it("error desconocido -> fallback generico", () => {
     expect(guiaDecisionErrorMessage(null)).toBe("No se pudo completar la operación.");
   });
+
+  // Feature 156: el mapper lo comparten "Generar guia" (sin seleccion de mensajero) y
+  // "Asignar desde bodega" (con ella), asi que el texto de validation_error NO puede
+  // pedir revisar un control que la primera pantalla no tiene.
+  it("validation_error -> texto generico que no nombra la seleccion de mensajero", () => {
+    const msg = guiaDecisionErrorMessage({
+      status: "validation_error",
+      fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
+    });
+    expect(msg).toBe("Datos inválidos.");
+    expect(msg).not.toMatch(/mensajero/i);
+  });
 });

@@ -122,10 +122,11 @@ function loteHeterogeneo(): OrdenListItemDTO[] {
 }
 
 /**
- * R26 — los tres resultados no-"ok" que la acción puede devolver a esta UI, con el
- * mensaje que `guia-decision-error-messages` les asigna. (`validation_error` queda
- * fuera: su texto sigue hablando de "selección de mensajero" porque el mapper lo
- * comparte con la asignación desde bodega; ver bitácora.)
+ * R26 — los CUATRO resultados no-"ok" que la acción puede devolver a esta UI, con el
+ * mensaje que `guia-decision-error-messages` les asigna. `validation_error` es
+ * alcanzable de verdad (el service lo devuelve si el catálogo de estados está
+ * incompleto), y desde la 156 su texto ya no nombra la selección de mensajero, que
+ * esta pantalla no tiene.
  */
 const CASOS_NO_OK: {
   nombre: string;
@@ -154,6 +155,15 @@ const CASOS_NO_OK: {
     nombre: "unauthenticated",
     resultado: { status: "unauthenticated" },
     mensaje: "Tu sesión expiró. Inicia sesión de nuevo.",
+  },
+  {
+    nombre: "validation_error",
+    resultado: {
+      status: "validation_error",
+      // Forma real del caso alcanzable en producción: catálogo de estados sin sembrar.
+      fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
+    },
+    mensaje: "Datos inválidos.",
   },
 ];
 

@@ -14,7 +14,11 @@ type GuiaErrorStatus =
 const GUIA_ERROR_MESSAGES: Record<GuiaErrorStatus, string> = {
   unauthenticated: "Tu sesión expiró. Inicia sesión de nuevo.",
   forbidden: "No tienes permiso para esta acción.",
-  validation_error: "Datos inválidos: revisa la selección de mensajero.",
+  // Feature 156: este mapper lo comparten "Generar guía" (que YA NO elige mensajero) y
+  // "Asignar desde bodega" (que sí), así que la copia no puede nombrar un control que
+  // solo existe en una de las dos. Mismo literal que los mappers vecinos de esta carpeta
+  // (`recuperar-bodega`, `envio-devolucion-central`, `devolucion-origen`).
+  validation_error: "Datos inválidos.",
   conflict: "Alguna orden ya no está en un estado válido para esta acción.",
 };
 
