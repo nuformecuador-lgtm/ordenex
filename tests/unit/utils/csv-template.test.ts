@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  buildCsvRows,
   buildCsvTemplate,
+  type CsvColumn,
   type CsvTemplateField,
 } from "@/lib/utils/csv-template";
 
@@ -104,5 +106,88 @@ describe("buildCsvTemplate", () => {
 
   it("lanza si se invoca sin campos (contrato de uso)", () => {
     expect(() => buildCsvTemplate([])).toThrow();
+  });
+});
+
+// Feature 151 (T3) — generador CSV de N filas de datos, hermano de la plantilla.
+describe("buildCsvRows", () => {
+  const columnas: CsvColumn[] = [
+    { key: "numGuia", header: "Nº Guía" },
+    { key: "destinatario", header: "Destinatario" },
+    { key: "monto", header: "Monto a cobrar" },
+  ];
+
+  it("emite una línea de cabecera y una línea por fila, en el orden recibido", () => {
+    const csv = buildCsvRows(columnas, [
+      { numGuia: 1001, destinatario: "Ana", monto: 15000 },
+      { numGuia: 1002, destinatario: "Beto", monto: 0 },
+      { numGuia: 1003, destinatario: "Cira", monto: 7.5 },
+    ]);
+
+    const filas = parseCsv(csv);
+
+    expect(filas).toHaveLength(4);
+    expect(filas[0]).toEqual(["Nº Guía", "Destinatario", "Monto a cobrar"]);
+    expect(filas[1]).toEqual(["1001", "Ana", "15000"]);
+    expect(filas[2]).toEqual(["1002", "Beto", "0"]);
+    expect(filas[3]).toEqual(["1003", "Cira", "7.5"]);
+  });
+
+  it("escapa comas, comillas y saltos de línea dentro de una celda", () => {
+    const csv = buildCsvRows(
+      [
+        { key: "direccion", header: "Dirección" },
+        { key: "nota", header: "Nota" },
+      ],
+      [
+        {
+          direccion: "Calle 1, casa 2",
+          nota: 'dijo "urgente"\nsegunda línea',
+        },
+      ],
+    );
+
+    // Texto crudo: envuelto en comillas, con las internas duplicadas.
+    expect(csv).toContain('"Calle 1, casa 2"');
+    expect(csv).toContain('"dijo ""urgente""');
+
+    const filas = parseCsv(csv);
+    expect(filas[0]).toEqual(["Dirección", "Nota"]);
+    expect(filas[1]).toEqual([
+      "Calle 1, casa 2",
+      'dijo "urgente"\nsegunda línea',
+    ]);
+  });
+
+  it("ignora las claves de la fila que no están declaradas como columna", () => {
+    const csv = buildCsvRows(
+      [{ key: "destinatario", header: "Destinatario" }],
+      [{ destinatario: "Ana", id: "uuid-interno", deletedAt: "2026-01-01" }],
+    );
+
+    const filas = parseCsv(csv);
+
+    expect(filas[0]).toEqual(["Destinatario"]);
+    expect(filas[1]).toEqual(["Ana"]);
+    expect(csv).not.toContain("uuid-interno");
+    expect(csv).not.toContain("2026-01-01");
+  });
+
+  it("deja la celda vacía cuando la fila no aporta la clave", () => {
+    const csv = buildCsvRows(columnas, [
+      { numGuia: 1001, monto: null },
+      { destinatario: "Beto" },
+    ]);
+
+    const filas = parseCsv(csv);
+
+    expect(filas[1]).toEqual(["1001", "", ""]);
+    expect(filas[2]).toEqual(["", "Beto", ""]);
+    expect(csv).not.toContain("null");
+    expect(csv).not.toContain("undefined");
+  });
+
+  it("lanza si la lista de columnas está vacía", () => {
+    expect(() => buildCsvRows([], [{ a: "1" }])).toThrow();
   });
 });

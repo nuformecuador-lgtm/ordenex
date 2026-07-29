@@ -158,6 +158,7 @@ export function OrdenesListado({
   accionesLote = false,
   catalogoFiltros = null,
   incluirFiltroTienda = true,
+  permitirDescarga = true,
 }: Readonly<{
   exclude?: string[];
   puedeCargarMasiva?: boolean;
@@ -198,6 +199,14 @@ export function OrdenesListado({
    * backend pisa cualquier `tienda_id` con la suya.
    */
   incluirFiltroTienda?: boolean;
+  /**
+   * Feature 151 (R33): ofrece la descarga del dataset COMPLETO acotado a los filtros
+   * vigentes de la barra. Por defecto `true`: ésta ES la superficie del listado de
+   * órdenes, y quien ve el listado descarga lo que ese listado ya le muestra (gate P5;
+   * el acotamiento por rol lo impone el mismo servicio). Se deja como prop para poder
+   * apagarla en una superficie concreta sin tocar el módulo.
+   */
+  permitirDescarga?: boolean;
 }>) {
   const { mutate } = useSWRConfig();
   const { data: catalogo, isLoading } = useSWR(
@@ -539,6 +548,7 @@ export function OrdenesListado({
         bloqueoSeleccion={accionesLote ? bloqueoSeleccion : undefined}
         acciones={accionesLote ? accionesPara : undefined}
         resaltarPrioridad={valueUnico === ESTADO_EN_BODEGA}
+        permitirDescarga={permitirDescarga}
       />
 
       {/* Modales de acción por lote (solo acceso total). Montados una vez; `open` por

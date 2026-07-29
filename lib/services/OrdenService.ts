@@ -10,6 +10,7 @@ import type {
   BorrarOrdenServiceResult,
   CrearOrdenServiceResult,
   IOrdenService,
+  ListarOrdenesCompletoServiceResult,
   ListarOrdenesServiceResult,
   ObtenerOrdenServiceResult,
 } from "@/lib/interfaces/services/IOrdenService";
@@ -18,10 +19,15 @@ import type {
   ActualizarOrdenInput,
   CreatedPreset,
   CrearOrdenInput,
+  ListarOrdenesCompletoInput,
   ListarOrdenesInput,
   OrdenFilterInput,
 } from "@/lib/types/orden";
 import { resolverDestinoCreacion } from "@/lib/services/destino-creacion";
+// Feature 151: el limite de filas de `listarCompleto`. `ordenesConfig` salio de este archivo
+// al integrar la 155: su unico consumidor aqui era el default `DEFAULT_ESTATUS_VALUE` del alta
+// manual, que la bifurcacion por bodega sustituyo por `resolverDestinoCreacion`.
+import { descargaConfig } from "@/lib/config/descarga";
 import {
   inicioDelDiaCREnUtc,
   inicioDelDiaSiguienteCREnUtc,
@@ -213,17 +219,21 @@ export class OrdenService implements IOrdenService {
     return { status: "ok", orden };
   }
 
-  async listar(
-    input: ListarOrdenesInput,
+  /**
+   * Feature 144: ORDEN DE ESCRITURA del `where`, y es lo que garantiza R36/R37:
+   *   1) `estatusId` escalar heredado,
+   *   2) el `filter` traducido por la whitelist,
+   *   3) el ACOTAMIENTO POR ROL, escrito AL FINAL para que PISE lo que el filtro
+   *      hubiera puesto. Un filtro nunca amplia el alcance de un rol.
+   *
+   * Feature 151/T5: extraido de `listar` SIN cambio de comportamiento, para que el
+   * modo sin paginacion (`listarCompleto`) comparta literalmente este codigo y no
+   * pueda divergir del listado en autorizacion ni en acotamiento (design §4.1, D3).
+   */
+  private construirWhere(
+    input: Pick<ListarOrdenesInput, "estatusId" | "filter">,
     actor: Actor,
-  ): Promise<ListarOrdenesServiceResult> {
-    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
-
-    // Feature 144: ORDEN DE ESCRITURA del `where`, y es lo que garantiza R36/R37:
-    //   1) `estatusId` escalar heredado,
-    //   2) el `filter` traducido por la whitelist,
-    //   3) el ACOTAMIENTO POR ROL, escrito AL FINAL para que PISE lo que el filtro
-    //      hubiera puesto. Un filtro nunca amplia el alcance de un rol.
+  ): ListOrdenesWhere {
     const where: ListOrdenesWhere = {};
     // R10: el `estatusId` escalar preexistente sigue funcionando (sin regresion).
     if (input.estatusId !== undefined) where.estatusId = input.estatusId;
@@ -269,6 +279,17 @@ export class OrdenService implements IOrdenService {
     // alcanza el listado plano.
     if (actor.rol === "mensajero") where.mensajeroAsignadoId = actor.usuarioId;
 
+    return where;
+  }
+
+  async listar(
+    input: ListarOrdenesInput,
+    actor: Actor,
+  ): Promise<ListarOrdenesServiceResult> {
+    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
+
+    const where = this.construirWhere(input, actor);
+
     const skip = (input.page - 1) * input.pageSize;
     const { items, total } = await this.repo.list({
       where,
@@ -296,6 +317,49 @@ export class OrdenService implements IOrdenService {
       pageSize: input.pageSize,
       total,
     };
+  }
+
+  /**
+   * Feature 151 (R11/R20/R21/R22, design §4.1) — el MISMO listado, sin recorte por
+   * pagina, para la descarga del dataset completo.
+   *
+   * No reimplementa nada: reusa `construirWhere` (misma autorizacion, mismo
+   * acotamiento por rol escrito AL FINAL) y la MISMA consulta `repo.list`. Diferencias
+   * con `listar`: `skip = 0`, `take = MAX_FILAS + 1` y el guard de tope.
+   */
+  async listarCompleto(
+    input: ListarOrdenesCompletoInput,
+    actor: Actor,
+  ): Promise<ListarOrdenesCompletoServiceResult> {
+    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R14/R24
+
+    const where = this.construirWhere(input, actor);
+    const limite = descargaConfig.MAX_FILAS;
+
+    // `take: limite + 1` acota la MEMORIA por construccion (R22): aunque el dataset
+    // sean 50 000 filas, nunca se materializan mas de N+1. El `total` sigue siendo
+    // exacto porque `repo.list` lo obtiene con un `count` independiente del `take`.
+    const { items, total } = await this.repo.list({
+      where,
+      sortBy: input.sortBy, // R17: mismos defaults del schema (created_at/desc)
+      sortDir: input.sortDir,
+      skip: 0,
+      take: limite + 1,
+    });
+
+    // R20/R21: por encima del tope no se entrega NADA. Nunca un dataset truncado en
+    // silencio: o van todas las filas, o va el error accionable con los conteos.
+    if (total > limite) return { status: "limite_excedido", total, limite };
+
+    // Mismo merge de intentos que `listar` (feature 160), para que la columna
+    // "intentos" del archivo no diverja de la que se ve en pantalla.
+    const intentos = await this.historial.contarIntentosEnLote(items.map((o) => o.id));
+    const itemsConIntentos = items.map((o) => ({
+      ...o,
+      intentosEntrega: intentos.get(o.id) ?? 0,
+    }));
+
+    return { status: "ok", items: itemsConIntentos, total };
   }
 
   async actualizar(

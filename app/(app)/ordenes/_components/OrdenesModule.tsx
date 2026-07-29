@@ -5,7 +5,7 @@ import { Inbox } from "lucide-react";
 import useSWR from "swr";
 
 import { DataTable } from "@/components/shared/DataTable";
-import type { Column } from "@/components/shared/DataTable";
+import type { Column, DataTableDescarga } from "@/components/shared/DataTable";
 import {
   conBadgePrioridad,
   resaltarFilaPrioridad,
@@ -15,10 +15,15 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { ordenesConfig } from "@/lib/config/ordenes";
-import { listarOrdenes } from "@/lib/actions/ordenes";
+import { listarOrdenes, listarOrdenesCompleto } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
+import { messageFromActionError } from "@/lib/utils/action-error-message";
 
 import { ordenesColumns } from "./ordenes-columns";
+import {
+  COLUMNAS_DESCARGA_ORDENES,
+  filaDescargaOrden,
+} from "./ordenes-descarga-columnas";
 import { serializarFiltro, type OrdenesFilterUI } from "./serializar-filtro";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
@@ -63,6 +68,23 @@ async function ordenesFetcher(
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
 
+// Feature 151 (design §7) — título del dataset: nombre de la hoja, base del nombre de
+// archivo (`ordenes-YYYY-MM-DD.xlsx`, R37) y parte del nombre accesible del control.
+const TITULO_DESCARGA = "Órdenes";
+
+/**
+ * R20 — Mensaje ACCIONABLE del tope: dice el total encontrado, el tope vigente y qué
+ * hacer (acotar los filtros). Solo lleva conteos, nunca PII. El tope lo decide y lo
+ * aplica el SERVICIO; aquí solo se redacta lo que devolvió.
+ */
+function mensajeLimite(total: number, limite: number): string {
+  return `La descarga supera el máximo de ${limite} filas (hay ${total}). Acota los filtros —por ejemplo, el rango de fechas o el estado— y vuelve a intentarlo.`;
+}
+
+// R27 — Cola accionable del resto de fallos: el mensaje canónico del error dice QUÉ
+// pasó; esto dice qué hacer a continuación.
+const SUFIJO_REINTENTO = "Vuelve a intentarlo; el listado no cambió.";
+
 /**
  * Módulo de órdenes reutilizable: tabla + paginación + carga masiva sobre la
  * action `listarOrdenes` (SWR). Única implementación de tabla/fetch (feature 26,
@@ -85,6 +107,7 @@ export function OrdenesModule({
   bloqueoSeleccion,
   acciones,
   resaltarPrioridad = false,
+  permitirDescarga = false,
 }: {
   columns?: Column<OrdenListItemDTO>[];
   puedeCargarMasiva?: boolean;
@@ -140,6 +163,13 @@ export function OrdenesModule({
    * estados, sin filtro, dashboard adminTienda, listado plano) no resaltan por prioridad (R10).
    */
   resaltarPrioridad?: boolean;
+  /**
+   * Feature 151 (R33/R36, design §7): ofrece la descarga del dataset COMPLETO
+   * correspondiente a los filtros vigentes. Opt-in y por defecto `false`, de modo que
+   * el dashboard del adminTienda y el resto de superficies que montan este módulo no
+   * cambian (R24/R38).
+   */
+  permitirDescarga?: boolean;
 } = {}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -275,6 +305,45 @@ export function OrdenesModule({
   const hayAcciones =
     haySeleccion && accionesActivas.length > 0 && seleccionadas.length > 0;
 
+  /**
+   * Feature 151 (design §7) — configuración de descarga del dataset completo.
+   *
+   * Se construye EN EL RENDER, no en un memo con dependencias: `obtenerFilas` cierra
+   * sobre el `filter` de ESTE render, así que la descarga siempre refleja los filtros
+   * aplicados en el momento de pulsar (R33, R36). La tabla recibe una FUNCIÓN, nunca los
+   * filtros ni una url (D4): quien conoce el dominio es este módulo.
+   *
+   * La única vía al dato es la Server Action `listarOrdenesCompleto`, que reusa el mismo
+   * servicio que el listado paginado (autorización, acotamiento por rol y tope
+   * incluidos). Aquí no se consulta el repositorio ni se duplica la query.
+   */
+  const descarga: DataTableDescarga | undefined = permitirDescarga
+    ? {
+        titulo: TITULO_DESCARGA,
+        columnas: COLUMNAS_DESCARGA_ORDENES,
+        obtenerFilas: async () => {
+          const res = await listarOrdenesCompleto(filter ? { filter } : {});
+          if (res.status === "limite_excedido") {
+            // R20: sin archivo; el mensaje lleva total, tope y qué hacer.
+            return {
+              status: "error",
+              mensaje: mensajeLimite(res.total, res.limite),
+            };
+          }
+          if (res.status !== "ok") {
+            // R27: mensaje canónico del error (mismo mapeo que el resto de acciones)
+            // + qué hacer. La tabla no traduce códigos: los recibe ya saneados.
+            return {
+              status: "error",
+              mensaje: `${messageFromActionError(res)} ${SUFIJO_REINTENTO}`,
+            };
+          }
+          // R34: una fila por orden del dataset completo, no solo la página visible.
+          return { status: "ok", filas: res.items.map(filaDescargaOrden) };
+        },
+      }
+    : undefined;
+
   return (
     <section className="flex flex-col gap-4">
       {puedeCargarMasiva && (
@@ -321,6 +390,7 @@ export function OrdenesModule({
         rowKey="id"
         ariaLabel="Órdenes"
         rowClassName={resaltarPrioridad ? resaltarFilaPrioridad : undefined}
+        descarga={descarga}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las órdenes" : null}
         emptyState={{

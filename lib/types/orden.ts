@@ -153,6 +153,17 @@ export const listarOrdenesSchema = z.object({
 });
 export type ListarOrdenesInput = z.infer<typeof listarOrdenesSchema>;
 
+// Feature 151 (design §4.2) — entrada del modo SIN paginacion (descarga del dataset
+// completo). Se DERIVA del schema del listado quitando `page`/`pageSize`: reusarlo es
+// lo que da R15 gratis (misma whitelist `.strict()` y los mismos dos `refine` del
+// `filter`), y lo que garantiza que el modo completo no acepte una entrada que el
+// listado paginado rechazaria. `sortBy`/`sortDir` conservan sus defaults (R17).
+export const listarOrdenesCompletoSchema = listarOrdenesSchema.omit({
+  page: true,
+  pageSize: true,
+});
+export type ListarOrdenesCompletoInput = z.infer<typeof listarOrdenesCompletoSchema>;
+
 // R42/N3: DTO expuesto por las Server Actions. `numGuia` crudo (entero); `peso`
 // serializado a number (no Decimal). NUNCA expone `deletedAt`.
 // Feature 17/R30: `numGuia` es `number | null` — la guia se asigna en "Generar
@@ -287,6 +298,12 @@ export type CrearOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type ObtenerOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type ListarOrdenesResult =
   | { status: "ok"; items: OrdenListItemDTO[]; page: number; pageSize: number; total: number }
+  | ActionError;
+// Feature 151 (R11/R20): resultado del modo completo en el borde. `limite_excedido`
+// lleva SOLO conteos (sin PII) y NUNCA filas; el resto de fallos son `ActionError`.
+export type ListarOrdenesCompletoResult =
+  | { status: "ok"; items: OrdenListItemDTO[]; total: number }
+  | { status: "limite_excedido"; total: number; limite: number }
   | ActionError;
 export type ActualizarOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type BorrarOrdenResult = { status: "ok" } | ActionError;
