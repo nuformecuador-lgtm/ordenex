@@ -1,4 +1,5 @@
 import type { Column } from "@/components/shared/DataTable";
+import { columnaIntentos } from "@/components/shared/intentos-entrega";
 import { PriceLabel } from "@/components/shared/PriceLabel";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { EstatusBadge } from "./EstatusBadge";
@@ -95,6 +96,13 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
       />
     ),
   },
+  // Feature 160 (D6/R17/R21): intentos de entrega como COLUMNA propia, insertada
+  // INMEDIATAMENTE despues de `estatus` (design §5.2) y no al final. El conteo
+  // califica al estado (`devuelta`/`reprogramada`): pegados se leen como una sola
+  // idea. Ademas, con 18 columnas y scroll horizontal, una columna al final
+  // quedaria permanentemente fuera del viewport. Insertar aqui deja intactos los
+  // ids, encabezados y orden relativo de las preexistentes (R21).
+  columnaIntentos<OrdenListItemDTO>(),
   { id: "destinatario", value: "Destinatario" },
   { id: "producto", value: "Producto", render: "producto" },
   {

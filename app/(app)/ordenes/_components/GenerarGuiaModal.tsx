@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { columnaIntentos } from "@/components/shared/intentos-entrega";
 import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
@@ -136,9 +137,15 @@ export function GenerarGuiaModal({
     setSeleccion((prev) => ({ ...prev, [ordenId]: mensajeroId }));
   }
 
+  // Feature 160 (R17/R23): ESTE diálogo lista las órdenes en un `DataTable`, no en un
+  // `<ul>` (design §5.4 lo daba por lista: no lo es). Como la regla se decide por la
+  // FORMA de la superficie, aquí manda R17 -> columna propia "Intentos", en la misma
+  // posición relativa que en `/ordenes` (tras el estado; aquí no hay columna de estado,
+  // así que va tras la identificación de la orden y antes del selector de acción).
   const columns: Column<OrdenListItemDTO>[] = [
     { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
     { id: "destinatario", value: "Destinatario", render: "destinatario" },
+    columnaIntentos<OrdenListItemDTO>(),
     {
       id: "mensajero",
       value: "Mensajero",
@@ -158,6 +165,7 @@ export function GenerarGuiaModal({
   const noGamColumns: Column<OrdenListItemDTO>[] = [
     { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
     { id: "destinatario", value: "Destinatario", render: "destinatario" },
+    columnaIntentos<OrdenListItemDTO>(),
   ];
 
   async function handleConfirm() {

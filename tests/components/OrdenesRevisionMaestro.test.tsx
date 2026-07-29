@@ -580,3 +580,89 @@ describe("OrdenesRevisionMaestro", () => {
     ).toBeNull();
   });
 });
+
+// Feature 160 (T16/T21, R22/R27) — la revisión del maestro es el 4.º consumidor de
+// `ordenesColumns` (vía `OrdenesApartado`) y el SEGUNDO montaje del aviso "Liberadas
+// hoy". Ninguno de los dos archivos se toca: heredan la columna y el dato.
+describe("OrdenesRevisionMaestro — intentos de entrega (feature 160)", () => {
+  it("R22: cada apartado del maestro monta la columna 'Intentos' con su número", async () => {
+    listarOrdenesMock.mockImplementation(async (input) => {
+      const { estatusId, page, pageSize } = input as {
+        estatusId?: string;
+        page: number;
+        pageSize: number;
+      };
+      const items =
+        estatusId === "id-fulfillment"
+          ? [
+              makeOrden({
+                id: "of1",
+                numRemision: "REM-F1",
+                estatusId: "id-fulfillment",
+                intentosEntrega: 2,
+              }),
+              makeOrden({
+                id: "of2",
+                numRemision: "REM-F2",
+                estatusId: "id-fulfillment",
+                intentosEntrega: 0,
+              }),
+            ]
+          : [];
+      return { status: "ok", items, page, pageSize, total: items.length };
+    });
+
+    renderComponent();
+    await screen.findByText("REM-F1");
+
+    const apartado = screen.getByRole("region", { name: "En fulfillment" });
+    expect(
+      within(apartado).getAllByRole("columnheader", { name: "Intentos" }).length,
+    ).toBeGreaterThan(0);
+    const celda = (rem: string) =>
+      within(within(apartado).getByRole("row", { name: new RegExp(rem) }))
+        .getAllByRole("cell")
+        // El apartado prepende su checkbox de selección: la columna de intentos
+        // (índice 3 en `ordenesColumns`) queda en el índice 4.
+        .at(4);
+    expect(celda("REM-F1")).toHaveTextContent(/^2$/);
+    expect(celda("REM-F2")).toHaveTextContent(/^0$/);
+  });
+
+  it("R27: el aviso 'Liberadas hoy' del maestro muestra el dato etiquetado", async () => {
+    render(
+      <ToastProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <OrdenesRevisionMaestro
+            readOnly
+            liberadasHoy={[
+              {
+                id: "l1",
+                numGuia: 5001,
+                numRemision: "REM-L1",
+                destinatario: "Ana Pérez",
+                liberadaReprogramadaAt: new Date("2026-07-13T06:00:00.000Z"),
+                intentosEntrega: 3,
+              },
+              {
+                id: "l2",
+                numGuia: 5002,
+                numRemision: "REM-L2",
+                destinatario: "Beto Ruiz",
+                liberadaReprogramadaAt: new Date("2026-07-13T06:00:00.000Z"),
+                intentosEntrega: 0,
+              },
+            ]}
+          />
+        </SWRConfig>
+      </ToastProvider>,
+    );
+
+    const region = await screen.findByRole("region", {
+      name: "Liberadas hoy (reprogramación)",
+    });
+    const items = within(region).getAllByRole("listitem");
+    expect(within(items[0]).getByText("Intentos: 3")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Intentos: 0")).toBeInTheDocument();
+  });
+});

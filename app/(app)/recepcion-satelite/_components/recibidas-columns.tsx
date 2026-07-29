@@ -1,6 +1,7 @@
 "use client";
 
 import type { Column } from "@/components/shared/DataTable";
+import { columnaIntentos } from "@/components/shared/intentos-entrega";
 import { PriceLabel } from "@/components/shared/PriceLabel";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
@@ -43,6 +44,11 @@ export function recibidasColumns(
       value: "Estado",
       render: (row) => estadoLegible(row, zonaNombre),
     },
+    // Feature 160 (R17/R25): misma columna compartida y misma posicion relativa que
+    // en `ordenes-columns` (justo tras `estatus`). Se inserta AQUI, en las columnas
+    // de datos, para que el modulo padre siga prependiendo su checkbox y
+    // `conBadgePrioridad` siga decorando `numGuia` como primera columna de datos.
+    columnaIntentos<RecepcionSateliteDTO>(),
     { id: "destinatario", value: "Destinatario", render: "destinatario" },
     { id: "producto", value: "Producto", render: "producto" },
     {
