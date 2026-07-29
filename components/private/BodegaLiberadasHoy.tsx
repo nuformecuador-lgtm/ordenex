@@ -1,3 +1,4 @@
+import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
@@ -47,6 +48,12 @@ export function BodegaLiberadasHoy({ liberadas }: BodegaLiberadasHoyProps) {
               <CardContent>
                 <p className="text-sm text-muted-foreground">
                   Remisión {orden.numRemision}
+                </p>
+                {/* Feature 160 (R18/R19/R27): el aviso es una card, no una tabla ->
+                    dato etiquetado con el mismo markup que la línea de la remisión.
+                    Siempre visible, `0` incluido; sin umbral (R20). */}
+                <p className="text-sm text-muted-foreground">
+                  <IntentosDato intentos={valorIntentos(orden)} />
                 </p>
               </CardContent>
             </Card>

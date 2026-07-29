@@ -61,6 +61,16 @@ export interface MiAsignacionDTO {
    * Bloque F) lo consume para el editor del detalle y el indicador de la card.
    */
   notaPrivada?: string | null;
+  /**
+   * Feature 160 (R11/R14/R16/R24): intentos de entrega VIGENTES de la orden, derivados del
+   * historial en el MISMO lote de la lectura (criterio unico de `OrdenHistorialService`,
+   * design §1.1: destino `devuelta`, o destino `reprogramada` con familia `gestion`).
+   *
+   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`/`notaPrivada?`: no rompe los
+   * fixtures que construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo envia, `0`
+   * incluido (R14). La UI del mensajero lo pinta con `?? 0` como un dato mas de la orden (R19).
+   */
+  intentosEntrega?: number;
 }
 
 /**
@@ -88,14 +98,14 @@ export interface RutaResumenDTO {
 
 // Feature 61: KPIs del portal del mensajero, calculados SERVER-SIDE (autoritativos).
 export interface MisAsignacionesKpis {
-  /** # de ordenes en `en_ruta` (aceptadas/recogidas, en camino). */
+  /** # de ordenes en `en_reparto` (aceptadas/recogidas, en camino). */
   pendientes: number;
   /** # de ordenes `entregada` del mensajero. */
   entregadas: number;
-  /** Suma de `montoCobrar` (COD) de las ordenes en `en_ruta`; null cuenta 0. */
+  /** Suma de `montoCobrar` (COD) de las ordenes en `en_reparto`; null cuenta 0. */
   porCobrar: number;
   /**
-   * Total a cobrar ACUMULADO: COD de las ordenes `en_ruta` + `entregada`. No baja al
+   * Total a cobrar ACUMULADO: COD de las ordenes `en_reparto` + `entregada`. No baja al
    * ENTREGAR (la orden sale de reparto pero sigue sumando como entregada); se descuenta
    * cuando se gestiona como reprogramada/devuelta/rechazada (no entra en ningun set).
    */
@@ -207,7 +217,7 @@ export type LiberarServiceResult = { status: "ok" } | { status: "forbidden" };
 export interface IMisAsignacionesService {
   /** R9-R13: dos grupos + puntero de bloqueo; solo `mensajero` (sobre sus ordenes). */
   listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult>;
-  /** R14-R17: transiciona por_recoger -> en_ruta (lote o de a una). */
+  /** R14-R17: transiciona por_recoger -> en_reparto (lote o de a una). */
   recogerAsignaciones(input: RecogerInput, actor: Actor): Promise<RecogerServiceResult>;
   /** R19-R21: fija la orden activa 1-a-1; conflict si ya hay otra activa. */
   escogerParaGestion(ordenId: string, actor: Actor): Promise<EscogerServiceResult>;

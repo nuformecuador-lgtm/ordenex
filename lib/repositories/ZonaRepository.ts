@@ -16,6 +16,7 @@ import type {
   ListZonasResult,
   UpdateZonaData,
 } from "@/lib/interfaces/repositories/IZonaRepository";
+import type { OpcionCatalogo } from "@/lib/types/filtros-ordenes";
 
 // Delegates + $transaction necesarios (permite acotar/mocakear en tests).
 type ZonaPrismaClient = Pick<
@@ -159,6 +160,14 @@ export class ZonaRepository implements IZonaRepository {
       ),
     );
     return { items, total };
+  }
+
+  /** Feature 144/B2 (R48/R49): `{id, nombre}` de TODAS las zonas, por nombre asc. */
+  async listLite(): Promise<OpcionCatalogo[]> {
+    return this.prisma.zona.findMany({
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" }, // R49: orden determinista
+    });
   }
 
   async update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null> {

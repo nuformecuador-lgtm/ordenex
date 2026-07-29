@@ -161,14 +161,14 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
     prisma.orden.count.mockResolvedValue(2);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    const n = await repo.contarOrdenesPendientesGestion("m1", ["por_recoger", "en_ruta"]);
+    const n = await repo.contarOrdenesPendientesGestion("m1", ["por_recoger", "en_reparto"]);
 
     expect(n).toBe(2);
     const arg = prisma.orden.count.mock.calls[0][0];
     expect(arg.where).toMatchObject({
       mensajeroAsignadoId: "m1",
       deletedAt: null,
-      estatus: { value: { in: ["por_recoger", "en_ruta"] } },
+      estatus: { value: { in: ["por_recoger", "en_reparto"] } },
     });
   });
 
@@ -354,7 +354,7 @@ describe("CierreDiaRepository.transicionarRechazadoASolicitado (feature 109/R28)
 });
 
 // ============================================================================
-// Feature 109 — crearCierre con corteSinGestionar (R4/R6/R8/R22): transiciona en_ruta ->
+// Feature 109 — crearCierre con corteSinGestionar (R4/R6/R8/R22): transiciona en_reparto ->
 // sin_gestionar EN LA MISMA tx, via el choke point (actor null), y relaja la guarda "algo paso".
 // ============================================================================
 
@@ -380,7 +380,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     return tx;
   }
 
-  const CORTE = { enRepartoEstatusId: idEstado("en_ruta"), sinGestionarEstatusId: idEstado("sin_gestionar") };
+  const CORTE = { enRepartoEstatusId: idEstado("en_reparto"), sinGestionarEstatusId: idEstado("sin_gestionar") };
   function corteInput(overrides: Record<string, unknown> = {}) {
     return {
       mensajeroId: "m1",
@@ -397,22 +397,22 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     };
   }
 
-  it("R4/R22: transiciona en_ruta -> sin_gestionar GUARDADO por estatus_id=en_ruta; conserva mensajero", async () => {
+  it("R4/R22: transiciona en_reparto -> sin_gestionar GUARDADO por estatus_id=en_reparto; conserva mensajero", async () => {
     const tx = buildCorteTx();
     const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     await repo.crearCierre(corteInput());
 
-    // Pre-SELECT de las ordenes del mensajero en en_ruta.
+    // Pre-SELECT de las ordenes del mensajero en en_reparto.
     expect(tx.orden.findMany.mock.calls[0][0].where).toEqual({
       mensajeroAsignadoId: "m1",
-      estatusId: idEstado("en_ruta"),
+      estatusId: idEstado("en_reparto"),
       deletedAt: null,
     });
-    // updateMany GUARDADO por estatus_id=en_ruta -> sin_gestionar; NO limpia mensajero (Q1).
+    // updateMany GUARDADO por estatus_id=en_reparto -> sin_gestionar; NO limpia mensajero (Q1).
     const upd = tx.orden.updateMany.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: { in: ["o1", "o2"] }, estatusId: idEstado("en_ruta"), deletedAt: null });
+    expect(upd.where).toEqual({ id: { in: ["o1", "o2"] }, estatusId: idEstado("en_reparto"), deletedAt: null });
     expect(upd.data).toEqual({ estatusId: idEstado("sin_gestionar") });
     expect(upd.data).not.toHaveProperty("mensajeroAsignadoId"); // se conserva
     expect(upd.data).not.toHaveProperty("prioridad"); // money-safe: no toca prioridad
@@ -429,7 +429,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("en_ruta"),
+        estatusOrigenId: idEstado("en_reparto"),
         estatusDestinoId: idEstado("sin_gestionar"),
         actorUsuarioId: null, // R6: sistema/cron
         origenTipo: "corte_sin_gestionar", // R6
@@ -438,7 +438,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       },
       {
         ordenId: "o2",
-        estatusOrigenId: idEstado("en_ruta"),
+        estatusOrigenId: idEstado("en_reparto"),
         estatusDestinoId: idEstado("sin_gestionar"),
         actorUsuarioId: null,
         origenTipo: "corte_sin_gestionar",
@@ -459,7 +459,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     expect(tx.cierreDia.create.mock.calls[0][0].data.estado).toBe("vencido");
   });
 
-  it("R8/R9: 0 gestiones + 0 en_ruta -> rollback -> null (no-op real)", async () => {
+  it("R8/R9: 0 gestiones + 0 en_reparto -> rollback -> null (no-op real)", async () => {
     const tx = buildCorteTx({ enReparto: [], vinculadas: 0 });
     const prisma = buildPrisma({ $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
@@ -467,7 +467,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     const id = await repo.crearCierre(corteInput());
 
     expect(id).toBeNull();
-    // sin en_ruta no se hace updateMany de orden ni append.
+    // sin en_reparto no se hace updateMany de orden ni append.
     expect(tx.orden.updateMany).not.toHaveBeenCalled();
     expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
@@ -819,7 +819,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     mensajeroId: "m1",
     actorUsuarioId: "m1",
     estatusEsperadoId: idEstado("en_bodega_central"),
-    estatusEnRepartoId: idEstado("en_ruta"),
+    estatusEnRepartoId: idEstado("en_reparto"),
   };
 
   function buildTx(counts: { anula?: number; mueve?: number } = {}) {
@@ -897,7 +897,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     expect(data.ingresoBodegaRechazo).toBeUndefined();
   });
 
-  it("R18/R19: devuelve la orden a `en_ruta` y REPONE la asignacion al mensajero autor", async () => {
+  it("R18/R19: devuelve la orden a `en_reparto` y REPONE la asignacion al mensajero autor", async () => {
     const tx = buildTx();
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
@@ -909,15 +909,15 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     const arg = (tx.orden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
     // R5/R6: guardias — la orden sigue en el estado leido y no esta borrada.
     expect(arg.where).toEqual({ id: "o1", estatusId: idEstado("en_bodega_central"), deletedAt: null });
-    // R18: `en_ruta` (unico estado desde el que se puede volver a gestionar).
-    expect(arg.data.estatusId).toBe(idEstado("en_ruta"));
+    // R18: `en_reparto` (unico estado desde el que se puede volver a gestionar).
+    expect(arg.data.estatusId).toBe(idEstado("en_reparto"));
     // R19: repone la asignacion que el SEGUIMIENTO del reintento (47/R6) habia limpiado.
     expect(arg.data.mensajeroAsignadoId).toBe("m1");
     // Feature 76/R23 (W4): la reposicion es una reasignacion efectiva -> estampa asignado_at.
     expect(arg.data.asignadoAt).toBeInstanceOf(Date);
   });
 
-  it("R20: appendCambioEstado con origen real, destino en_ruta, actor, enlace y `deshacer_gestion`", async () => {
+  it("R20: appendCambioEstado con origen real, destino en_reparto, actor, enlace y `deshacer_gestion`", async () => {
     const tx = buildTx();
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
@@ -931,7 +931,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
       {
         ordenId: "o1",
         estatusOrigenId: idEstado("en_bodega_central"), // origen = estado REAL previo de la orden
-        estatusDestinoId: idEstado("en_ruta"),
+        estatusDestinoId: idEstado("en_reparto"),
         actorUsuarioId: "m1", // quien deshizo
         origenTipo: "deshacer_gestion", // 12.º valor: distinguible de una gestion real
         motivo: null,

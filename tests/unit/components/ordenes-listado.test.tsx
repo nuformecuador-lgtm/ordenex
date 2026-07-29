@@ -221,14 +221,14 @@ describe("OrdenesListado — filtro de selección múltiple", () => {
     await waitFor(() => expect(ultimoStatusId()).toEqual(["est-devuelta"]));
   });
 
-  it("'Limpiar' vuelve al listado sin filtro de estado", async () => {
+  it("la X del propio filtro vuelve al listado sin filtro de estado", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado />);
     await abrirFiltro(user);
     await user.click(screen.getByRole("option", { name: OPT_ENTREGADA }));
     await waitFor(() => expect(ultimoStatusId()).toEqual(["est-entregada"]));
 
-    await user.click(screen.getByRole("button", { name: "Limpiar" }));
+    await user.click(screen.getByRole("button", { name: "Limpiar Estado" }));
 
     await waitFor(() => expect(ultimoStatusId()).toBeUndefined());
   });

@@ -18,4 +18,12 @@ export interface NovedadDTO {
   destinatario: string;
   telefonoDest: string;
   causa: GestionCausaDevolucion | null;
+  /**
+   * Feature 160 (R11/R14/R16/R26): intentos de entrega VIGENTES de la orden, derivados del
+   * historial en el MISMO lote de la pagina (criterio unico de `OrdenHistorialService`,
+   * design §1.1: destino `devuelta`, o destino `reprogramada` con familia `gestion`).
+   * Opcional (`?`) por el patron aditivo del repo: no rompe fixtures/mocks que construyen el
+   * DTO sin el; el servicio SIEMPRE lo envia, `0` incluido (R14).
+   */
+  intentosEntrega?: number;
 }

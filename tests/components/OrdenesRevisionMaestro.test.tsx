@@ -75,7 +75,7 @@ const generarEtiquetasMock = vi.mocked(generarEtiquetas);
 const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
 
 const HISTORIAL_ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_ruta",
+  estatusOrigenValue: "en_reparto",
   estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,
@@ -115,7 +115,6 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    mensajeroSugeridoId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -430,9 +429,12 @@ describe("OrdenesRevisionMaestro", () => {
     expect(asignarDesdeBodegaMock).not.toHaveBeenCalled();
   });
 
-  it("R13: 'Rutear a bodega satélite' invoca la action con los ordenIds NO-GAM seleccionados", async () => {
+  // Feature 156/R29: el ruteo a satélite parte de la BODEGA CENTRAL (único origen
+  // que el service admite desde la 156), así que el apartado que ofrece la acción es
+  // "En bodega" y no los de revisión.
+  it("R13/R29: 'Rutear a bodega satélite' desde en_bodega_central invoca la action con los ordenIds NO-GAM seleccionados", async () => {
     const user = userEvent.setup();
-    // En fulfillment: una orden NO-GAM (ruteable) y una GAM (no debe ir al lote).
+    // En bodega: una orden NO-GAM (ruteable) y una GAM (no debe ir al lote).
     listarOrdenesMock.mockImplementation(async (input) => {
       const { estatusId, page, pageSize } = input as {
         estatusId?: string;
@@ -440,19 +442,19 @@ describe("OrdenesRevisionMaestro", () => {
         pageSize: number;
       };
       const items =
-        estatusId === "id-fulfillment"
+        estatusId === "id-bodega"
           ? [
               makeOrden({
                 id: "no-gam-1",
                 numRemision: "REM-NOGAM",
-                estatusId: "id-fulfillment",
+                estatusId: "id-bodega",
                 zonaEsGam: false,
                 zonaNombre: "Limón",
               }),
               makeOrden({
                 id: "gam-1",
                 numRemision: "REM-GAM",
-                estatusId: "id-fulfillment",
+                estatusId: "id-bodega",
                 zonaEsGam: true,
                 zonaNombre: "GAM",
               }),
@@ -468,14 +470,14 @@ describe("OrdenesRevisionMaestro", () => {
     renderComponent();
 
     await screen.findByText("REM-NOGAM");
-    const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
+    const bodega = screen.getByRole("region", { name: "En bodega" });
     // Selecciona AMBAS órdenes; solo la NO-GAM debe rutearse.
-    const checkboxes = checkboxesDeFila(fulfillment);
+    const checkboxes = checkboxesDeFila(bodega);
     await user.click(checkboxes[0]);
     await user.click(checkboxes[1]);
 
     await user.click(
-      within(fulfillment).getByRole("button", {
+      within(bodega).getByRole("button", {
         name: "Rutear a bodega satélite",
       }),
     );
@@ -493,6 +495,64 @@ describe("OrdenesRevisionMaestro", () => {
     expect(rutearABodegaSateliteMock).toHaveBeenCalledWith({
       ordenIds: ["no-gam-1"],
     });
+  });
+
+  it.each([
+    ["En fulfillment", "en_fulfillment"],
+    ["En preparación", "en_preparacion"],
+  ])(
+    "R29: el apartado %s (%s) NO ofrece 'Rutear a bodega satélite'",
+    async (titulo) => {
+      renderComponent();
+
+      await screen.findByText("REM-F1");
+      const region = screen.getByRole("region", { name: titulo });
+      expect(
+        within(region).queryByRole("button", {
+          name: "Rutear a bodega satélite",
+        }),
+      ).toBeNull();
+      // La acción propia del apartado (numerar) sí sigue ahí.
+      expect(
+        within(region).getByRole("button", { name: "Generar guía" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("R29: 'Rutear a bodega satélite' se ofrece EXCLUSIVAMENTE desde el apartado de bodega central", async () => {
+    renderComponent();
+
+    await screen.findByText("REM-B1");
+    // En toda la vista hay UN solo disparador de la acción…
+    const botones = screen.getAllByRole("button", {
+      name: "Rutear a bodega satélite",
+    });
+    expect(botones).toHaveLength(1);
+    // …y vive en "En bodega".
+    const bodega = screen.getByRole("region", { name: "En bodega" });
+    expect(bodega).toContainElement(botones[0]!);
+  });
+
+  it("R30: el modal 'Generar guía' no ofrece ningún selector de mensajero", async () => {
+    const user = userEvent.setup();
+    renderComponent();
+
+    await screen.findByText("REM-P1");
+    const preparacion = screen.getByRole("region", { name: "En preparación" });
+    await user.click(checkboxesDeFila(preparacion)[0]);
+    await user.click(
+      within(preparacion).getByRole("button", { name: "Generar guía" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "Generar guía" });
+    expect(
+      within(dialog).queryByRole("combobox", { name: /mensajero/i }),
+    ).toBeNull();
+    expect(within(dialog).queryAllByRole("combobox")).toHaveLength(0);
+    expect(
+      within(dialog).getByRole("table", { name: "Órdenes por numerar" }),
+    ).toBeInTheDocument();
+    expect(generarGuiaMock).not.toHaveBeenCalled();
   });
 
   // ---------- Feature 48 (T8) — retorno a la tienda de origen ----------
@@ -579,5 +639,91 @@ describe("OrdenesRevisionMaestro", () => {
     expect(
       within(region).queryByRole("button", { name: "Devolver a la tienda" }),
     ).toBeNull();
+  });
+});
+
+// Feature 160 (T16/T21, R22/R27) — la revisión del maestro es el 4.º consumidor de
+// `ordenesColumns` (vía `OrdenesApartado`) y el SEGUNDO montaje del aviso "Liberadas
+// hoy". Ninguno de los dos archivos se toca: heredan la columna y el dato.
+describe("OrdenesRevisionMaestro — intentos de entrega (feature 160)", () => {
+  it("R22: cada apartado del maestro monta la columna 'Intentos' con su número", async () => {
+    listarOrdenesMock.mockImplementation(async (input) => {
+      const { estatusId, page, pageSize } = input as {
+        estatusId?: string;
+        page: number;
+        pageSize: number;
+      };
+      const items =
+        estatusId === "id-fulfillment"
+          ? [
+              makeOrden({
+                id: "of1",
+                numRemision: "REM-F1",
+                estatusId: "id-fulfillment",
+                intentosEntrega: 2,
+              }),
+              makeOrden({
+                id: "of2",
+                numRemision: "REM-F2",
+                estatusId: "id-fulfillment",
+                intentosEntrega: 0,
+              }),
+            ]
+          : [];
+      return { status: "ok", items, page, pageSize, total: items.length };
+    });
+
+    renderComponent();
+    await screen.findByText("REM-F1");
+
+    const apartado = screen.getByRole("region", { name: "En fulfillment" });
+    expect(
+      within(apartado).getAllByRole("columnheader", { name: "Intentos" }).length,
+    ).toBeGreaterThan(0);
+    const celda = (rem: string) =>
+      within(within(apartado).getByRole("row", { name: new RegExp(rem) }))
+        .getAllByRole("cell")
+        // El apartado prepende su checkbox de selección: la columna de intentos
+        // (índice 3 en `ordenesColumns`) queda en el índice 4.
+        .at(4);
+    expect(celda("REM-F1")).toHaveTextContent(/^2$/);
+    expect(celda("REM-F2")).toHaveTextContent(/^0$/);
+  });
+
+  it("R27: el aviso 'Liberadas hoy' del maestro muestra el dato etiquetado", async () => {
+    render(
+      <ToastProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <OrdenesRevisionMaestro
+            readOnly
+            liberadasHoy={[
+              {
+                id: "l1",
+                numGuia: 5001,
+                numRemision: "REM-L1",
+                destinatario: "Ana Pérez",
+                liberadaReprogramadaAt: new Date("2026-07-13T06:00:00.000Z"),
+                intentosEntrega: 3,
+              },
+              {
+                id: "l2",
+                numGuia: 5002,
+                numRemision: "REM-L2",
+                destinatario: "Beto Ruiz",
+                liberadaReprogramadaAt: new Date("2026-07-13T06:00:00.000Z"),
+                intentosEntrega: 0,
+              },
+            ]}
+          />
+        </SWRConfig>
+      </ToastProvider>,
+    );
+
+    const region = await screen.findByRole("region", {
+      name: "Liberadas hoy (reprogramación)",
+    });
+    const items = within(region).getAllByRole("listitem");
+    expect(within(items[0]).getByText("Intentos: 3")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Intentos: 0")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ComponentType } from "react";
+import { type ComponentType } from "react";
 import { Popover } from "@base-ui/react/popover";
 import {
   Bell,
@@ -12,24 +12,34 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import {
+  useNotificaciones,
+  type NotificacionesData,
+} from "@/hooks/useNotificaciones";
+import {
+  descartarNotificacion,
+  marcarTodasLeidas as marcarTodasLeidasAction,
+} from "@/lib/actions/notificaciones";
+import type {
+  NotificacionDTO,
+  NotificationType as NotificacionTipo,
+} from "@/lib/types/notificacion";
 
 /** Tipos de notificación soportados; cada uno mapea a un icono distinto. */
-export type NotificationType = "alert" | "box" | "warning";
+export type NotificationType = NotificacionTipo;
 
-export interface NotificationItem {
-  id: string;
-  /** Determina el icono mostrado (alert | box | warning). */
-  notification_type: NotificationType;
-  /** Descripción breve de la notificación. */
-  description: string;
-  /** Texto anexo/adjunto opcional (p. ej. Nº de remisión, guía, etc.). */
-  anexo?: string;
-  /** Marca si ya fue leída. Por defecto no leída. */
-  read?: boolean;
-}
+/**
+ * Alias PÚBLICO del DTO de la acción de listar (R50, F1.4-9). Se conserva el nombre
+ * histórico para que los consumidores existentes del componente sigan compilando;
+ * la forma la fija `lib/types/notificacion.ts`, frontera contractual de la feature.
+ */
+export type NotificationItem = NotificacionDTO;
 
 export interface NotificationsBellProps {
-  /** Lista de notificaciones. Si se omite, usa ejemplos quemados. */
+  /**
+   * Datos iniciales opcionales. Se usan como `fallbackData` de SWR: permiten testear
+   * y renderizar sin esperar al primer fetch, y NO obligan a tocar `PageHeader`.
+   */
   notifications?: NotificationItem[];
 }
 
@@ -47,103 +57,86 @@ const TYPE_ICON: Record<
   },
 };
 
-/** Notificaciones de ejemplo (quemadas) usadas cuando no llegan por props. */
-const EXAMPLE_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: "n1",
-    notification_type: "alert",
-    description: "Una orden fue rechazada por el destinatario.",
-    anexo: "REM-0042",
-  },
-  {
-    id: "n2",
-    notification_type: "box",
-    description: "Nuevo lote de 15 órdenes cargado correctamente.",
-    anexo: "Lote #128",
-  },
-  {
-    id: "n3",
-    notification_type: "warning",
-    description: "3 órdenes llevan más de 48h sin mensajero asignado.",
-    anexo: "Zona Centro",
-  },
-  {
-    id: "n4",
-    notification_type: "box",
-    description: "El mensajero Juan Pérez confirmó la recolección.",
-    anexo: "Ruta 7",
-  },
-  {
-    id: "n5",
-    notification_type: "alert",
-    description: "Un pago contra entrega no fue registrado.",
-    anexo: "REM-0051",
-  },
-  {
-    id: "n6",
-    notification_type: "warning",
-    description: "El stock de guías físicas está por agotarse.",
-    anexo: "Bodega Norte",
-  },
-  {
-    id: "n7",
-    notification_type: "box",
-    description: "5 órdenes fueron entregadas con éxito hoy.",
-    anexo: "Zona Sur",
-  },
-  {
-    id: "n8",
-    notification_type: "warning",
-    description: "Una zona quedó sin tarifa configurada.",
-    anexo: "Zona Valle",
-  },
-  {
-    id: "n9",
-    notification_type: "alert",
-    description: "Un mensajero reportó una novedad en una entrega.",
-    anexo: "REM-0063",
-    read: true,
-  },
-  {
-    id: "n10",
-    notification_type: "box",
-    description: "El cierre de caja del día está disponible.",
-    anexo: "Caja #12",
-    read: true,
-  },
-];
+/** Tope a partir del cual el distintivo deja de mostrar la cifra exacta (R42). */
+const BADGE_MAX = 99;
+
+function contarNoLeidas(items: NotificationItem[]): number {
+  return items.filter((n) => !n.read).length;
+}
+
+function datosIniciales(
+  notifications: NotificationItem[] | undefined,
+): NotificacionesData | undefined {
+  if (!notifications) return undefined;
+  return { items: notifications, noLeidas: contarNoLeidas(notifications) };
+}
 
 /**
- * Campana de notificaciones con dropdown (Popover de Base UI). Muestra un badge
- * rojo con el total sin leer; al abrir despliega la cabecera (campana + total +
- * "marcar todas como leídas") y la lista, cada una con su icono según
- * `notification_type`, descripción, anexo y una X para descartar.
+ * Campana de notificaciones con dropdown (Popover de Base UI). Los datos vienen
+ * EXCLUSIVAMENTE de la Server Action de listar vía `useNotificaciones` (R40): no hay
+ * ejemplos quemados ni estado local de datos. Muestra un badge rojo con el total sin
+ * leer (R41–R43); al abrir revalida (R47) y despliega la cabecera (campana + total +
+ * "marcar todas como leídas", R45) y la lista, cada una con su icono según
+ * `notification_type`, descripción, anexo (R49) y una X para descartar (R46).
  */
-export function NotificationsBell({
-  notifications = EXAMPLE_NOTIFICATIONS,
-}: NotificationsBellProps) {
-  const [items, setItems] = useState<NotificationItem[]>(notifications);
+export function NotificationsBell({ notifications }: NotificationsBellProps) {
+  const { items, noLeidas, mutate, mutateOptimista } = useNotificaciones({
+    fallbackData: datosIniciales(notifications),
+  });
 
   const total = items.length;
-  const unread = items.filter((n) => !n.read).length;
-  const badge = unread > 99 ? "+99" : String(unread);
+  const badge = noLeidas > BADGE_MAX ? `+${BADGE_MAX}` : String(noLeidas);
 
-  function dismiss(id: string) {
-    setItems((prev) => prev.filter((n) => n.id !== id));
+  /** R46: descarta en el servidor y retira el elemento sin recargar la página. */
+  async function dismiss(id: string) {
+    const restantes = items.filter((n) => n.id !== id);
+    try {
+      await mutateOptimista(
+        async (current) => {
+          await descartarNotificacion(id);
+          const lista = (current?.items ?? []).filter((n) => n.id !== id);
+          return { items: lista, noLeidas: contarNoLeidas(lista) };
+        },
+        { items: restantes, noLeidas: contarNoLeidas(restantes) },
+      );
+    } catch {
+      // R48: el descarte falló; SWR ya revirtió el optimismo y revalidará solo.
+      // La campana no rompe la cabecera ni interrumpe al usuario con un error.
+    }
   }
 
-  function marcarTodasLeidas() {
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+  /** R45: marca todas en el servidor y deja el contador en cero sin recargar. */
+  async function marcarTodas() {
+    const leidas = items.map((n) => ({ ...n, read: true }));
+    try {
+      await mutateOptimista(
+        async (current) => {
+          await marcarTodasLeidasAction();
+          return {
+            items: (current?.items ?? []).map((n) => ({ ...n, read: true })),
+            noLeidas: 0,
+          };
+        },
+        { items: leidas, noLeidas: 0 },
+      );
+    } catch {
+      // R48: fallo silencioso; el próximo refresco (60 s) recupera el estado real.
+    }
   }
 
   return (
-    <Popover.Root>
+    <Popover.Root
+      onOpenChange={(open) => {
+        // R47: revalidación al abrir el popover, además del polling de 60 s.
+        if (open) void mutate();
+      }}
+    >
       <Popover.Trigger
-        aria-label={`Notificaciones${unread > 0 ? `, ${unread} sin leer` : ""}`}
+        aria-label={`Notificaciones${noLeidas > 0 ? `, ${noLeidas} sin leer` : ""}`}
         className="relative flex cursor-pointer items-center rounded-md p-1 text-navy outline-none transition-colors hover:bg-navy/5 focus-visible:ring-2 focus-visible:ring-navy/40"
       >
         <Bell className="size-5" aria-hidden="true" />
-        {unread > 0 ? (
+        {noLeidas > 0 ? (
           <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold leading-none text-white">
             {badge}
           </span>
@@ -164,8 +157,8 @@ export function NotificationsBell({
               </div>
               <button
                 type="button"
-                onClick={marcarTodasLeidas}
-                disabled={unread === 0}
+                onClick={() => void marcarTodas()}
+                disabled={noLeidas === 0}
                 className="text-xs font-medium text-navy/70 outline-none transition-colors hover:text-navy focus-visible:underline disabled:pointer-events-none disabled:opacity-40"
               >
                 Marcar todas como leídas
@@ -203,7 +196,7 @@ export function NotificationsBell({
                       </div>
                       <button
                         type="button"
-                        onClick={() => dismiss(n.id)}
+                        onClick={() => void dismiss(n.id)}
                         aria-label="Descartar notificación"
                         className="shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-navy/40"
                       >

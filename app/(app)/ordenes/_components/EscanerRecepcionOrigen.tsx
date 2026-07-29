@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 
-import { QrScanner } from "@/components/shared/QrScanner";
+import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
 import { recibirEnOrigenPorQr } from "@/lib/actions/recepcion-origen";
 import { extractNumGuiaFromScan } from "@/lib/utils/paquete-url";
@@ -29,6 +29,7 @@ export function EscanerRecepcionOrigen({
 }: Readonly<EscanerRecepcionOrigenProps>) {
   const toast = useToast();
   const [procesando, setProcesando] = useState(false);
+  const [ultimaRecibida, setUltimaRecibida] = useState<number | null>(null);
 
   /** Traduce cada resultado de la acción a un toast. */
   const notificar = useCallback(
@@ -36,6 +37,7 @@ export function EscanerRecepcionOrigen({
       switch (result.status) {
         case "ok":
           toast.success(`Guía ${numGuia} recibida en tienda.`);
+          setUltimaRecibida(numGuia);
           onRecibida();
           break;
         case "ya_recibida":
@@ -102,10 +104,21 @@ export function EscanerRecepcionOrigen({
   );
 
   return (
-    <QrScanner
+    <EscanerGuiaCard
+      ariaLabel="Recepción en tienda por escaneo"
+      titulo="Recibir en tienda"
+      descripcion="Escanea el código de la guía devuelta"
       onDecoded={onDecoded}
-      disabled={procesando}
+      procesando={procesando}
       mensajeErrorCamara="No se pudo abrir la cámara."
+      exito={
+        ultimaRecibida === null ? undefined : (
+          <>
+            Guía <span className="font-semibold">{ultimaRecibida}</span> recibida
+            correctamente.
+          </>
+        )
+      }
     />
   );
 }

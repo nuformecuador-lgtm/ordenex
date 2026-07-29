@@ -1,5 +1,6 @@
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   IRechazosSlaTiendaService,
   ListarRechazosSlaTiendaInput,
@@ -25,7 +26,11 @@ type RechazosSlaTiendaRepo = Pick<
  * Prisma; testeable con dobles sin red/DB. Patron `NovedadesService`.
  */
 export class RechazosSlaTiendaService implements IRechazosSlaTiendaService {
-  constructor(private readonly repo: RechazosSlaTiendaRepo) {}
+  constructor(
+    private readonly repo: RechazosSlaTiendaRepo,
+    // Feature 160 (R11/R12/R26): derivador de intentos EN LOTE, dependencia REQUERIDA.
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
+  ) {}
 
   async listar(
     input: ListarRechazosSlaTiendaInput,
@@ -46,6 +51,10 @@ export class RechazosSlaTiendaService implements IRechazosSlaTiendaService {
       take: pageSize,
     });
 
+    // Feature 160 (R12/R13/R15): UNA sola consulta al historial para toda la pagina, sobre las
+    // ordenes YA acotadas a la tienda del actor. Pagina vacia -> 0 consultas (R13).
+    const intentos = await this.historial.contarIntentosEnLote(rows.map((r) => r.id));
+
     // R14: passthrough money-safe (el repo ya serializo el monto a STRING escala 2 / null).
     const items: RechazoSlaTiendaDTO[] = rows.map((row) => ({
       id: row.id,
@@ -53,6 +62,8 @@ export class RechazosSlaTiendaService implements IRechazosSlaTiendaService {
       numRemision: row.numRemision,
       destinatario: row.destinatario,
       monto: row.monto,
+      // Feature 160 (R14/R19): `?? 0` — el `0` SIEMPRE se expone.
+      intentosEntrega: intentos.get(row.id) ?? 0,
     }));
 
     return { status: "ok", items, total, page, pageSize };

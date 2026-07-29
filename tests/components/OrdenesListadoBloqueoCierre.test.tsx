@@ -48,24 +48,41 @@ const listarZonasBloqueadasMock = vi.mocked(listarZonasBloqueadasPorCierre);
 
 // Catalogo minimo: el filtro por estado no se toca en este archivo (el listado sin
 // filtro sirve las ordenes del mock), pero el componente lo consulta igual.
-const CATALOGO = [{ id: "id-fulfillment", value: "en_fulfillment" }];
+const CATALOGO = [
+  { id: "id-bodega", value: "en_bodega_central" },
+  { id: "id-preparacion", value: "en_preparacion" },
+  { id: "id-fulfillment", value: "en_fulfillment" },
+];
+
+const ESTATUS_ID_POR_VALUE: Record<string, string> = {
+  en_bodega_central: "id-bodega",
+  en_preparacion: "id-preparacion",
+  en_fulfillment: "id-fulfillment",
+};
 
 const ZONA_GAM = "zona-gam";
 const ZONA_SATELITE = "zona-limon";
 const ZONA_LIBRE = "zona-libre";
 
+/**
+ * Feature 156/R28: el bloqueo por cierre solo aplica al estado cuya accion por lote
+ * ASIGNA mensajero, que tras esta feature es unicamente `en_bodega_central`. Por eso
+ * el estado de la orden es ahora un parametro del fixture: los casos de bloqueo se
+ * encuadran sobre la bodega central y los de NO-bloqueo sobre los estados de guia.
+ */
 function makeOrden(
   ref: string,
   zonaId: string,
   zonaEsGam: boolean,
+  estatusValue = "en_bodega_central",
 ): OrdenListItemDTO {
   return {
     id: `id-${ref}`,
     numGuia: null,
     numRemision: ref,
-    estatusId: "id-fulfillment",
+    estatusId: ESTATUS_ID_POR_VALUE[estatusValue] ?? "id-bodega",
     // El bloqueo se deriva del estado de la ORDEN (ya no de una tab activa).
-    estatusValue: "en_fulfillment",
+    estatusValue,
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",
@@ -78,7 +95,6 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    mensajeroSugeridoId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
   };
@@ -119,6 +135,45 @@ afterEach(() => {
 });
 
 describe("OrdenesListado — bloqueo del checkbox por zona con cierre abierto", () => {
+  // ---------- Feature 156/R28: el bloqueo se acota a `en_bodega_central` ----------
+
+  it.each(["en_preparacion", "en_fulfillment"])(
+    "R28: orden en %s cuya zona tiene un cierre abierto -> checkbox HABILITADO y seleccionable (generar guia ya no asigna)",
+    async (estatusValue) => {
+      // Misma zona bloqueada que deshabilita a una orden de bodega central: lo unico
+      // que cambia es el estado de la orden.
+      renderListado([makeOrden("REM-prep", ZONA_SATELITE, false, estatusValue)]);
+
+      const checkbox = await screen.findByRole("checkbox", {
+        name: "Seleccionar orden REM-prep",
+      });
+      expect(checkbox).not.toHaveAttribute("aria-disabled", "true");
+
+      await userEvent.click(checkbox);
+      expect(checkbox).toHaveAttribute("aria-checked", "true");
+      // Y la accion por lote de ese estado sigue ofreciendose.
+      expect(
+        screen.getByRole("button", { name: "Generar guía" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("R28: en la MISMA zona bloqueada, la orden de en_preparacion se selecciona y la de en_bodega_central no", async () => {
+    renderListado([
+      makeOrden("REM-prep", ZONA_SATELITE, false, "en_preparacion"),
+      makeOrden("REM-bod", ZONA_SATELITE, false, "en_bodega_central"),
+    ]);
+
+    const libre = await screen.findByRole("checkbox", {
+      name: "Seleccionar orden REM-prep",
+    });
+    const bloqueada = screen.getByRole("checkbox", {
+      name: /No se puede seleccionar la orden REM-bod/i,
+    });
+    expect(libre).not.toHaveAttribute("aria-disabled", "true");
+    expect(bloqueada).toHaveAttribute("aria-disabled", "true");
+  });
+
   it("orden de zona SATELITE con >=1 cierre -> checkbox deshabilitado y no seleccionable", async () => {
     renderListado([makeOrden("REM-sat", ZONA_SATELITE, false)]);
 

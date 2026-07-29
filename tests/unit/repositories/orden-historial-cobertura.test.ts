@@ -19,7 +19,7 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // `anularGestionYDevolverAGestion` / `deshacer_gestion`). A diferencia de la 47 y la 48 —que
 // reutilizaron `gestion` y `ajuste_estado`—, esta SI trae valor de enum nuevo + migracion +
 // down: el proposito de la feature es el RASTRO, y reusar `gestion` haria que la linea de
-// tiempo mostrara "en_bodega_central -> en_ruta, origen: gestion", indistinguible de una gestion
+// tiempo mostrara "en_bodega_central -> en_reparto, origen: gestion", indistinguible de una gestion
 // real (F1.4-b).
 
 // Repositorio -> clase (para verificar que cada simbolo existe como metodo real).
@@ -46,7 +46,7 @@ const PUNTOS_DE_ESCRITURA = [
   { n: 7, repo: "OrdenRepository", simbolo: "asignarSateliteLote", origenTipo: "asignacion_satelite" },
   { n: 8, repo: "GestionOrdenRepository", simbolo: "recogerLote", origenTipo: "recoleccion" },
   // #9: feature 47 lo convierte en una transicion COMPUESTA cuando el resultado es `devuelta`:
-  // ademas del append de la gestion (en_ruta->devuelta, actor=mensajero), emite en la MISMA
+  // ademas del append de la gestion (en_reparto->devuelta, actor=mensajero), emite en la MISMA
   // tx un SEGUIMIENTO automatico (actor=null/sistema) hacia la bodega responsable
   // (en_bodega_central/en_bodega_satelite, reintento) o hacia rechazada (escalado). Reutiliza el mismo
   // `origen_tipo=gestion` (sin enum nuevo, sin migracion, R14/R21): sigue siendo UN punto.
@@ -62,7 +62,7 @@ const PUNTOS_DE_ESCRITURA = [
   // `DevolucionOrigenService`), igual que la 47 documento que #9 sirve el seguimiento. NO se
   // agrega un call-site nuevo ni un `origen_tipo` nuevo: sigue siendo UN punto `ajuste_estado`.
   { n: 11, repo: "OrdenRepository", simbolo: "update", origenTipo: "ajuste_estado" },
-  // #12: feature 67 (F1.4-b). El DESHACER devuelve la orden a `en_ruta` reponiendo la
+  // #12: feature 67 (F1.4-b). El DESHACER devuelve la orden a `en_reparto` reponiendo la
   // asignacion al mensajero autor, en la MISMA tx que anula la gestion (R20/R21/R22). Trae
   // `origen_tipo` NUEVO (`deshacer_gestion`, 12.º valor del enum) para que la auditoria
   // distinga un deshacer de una gestion real: la migracion `*_gestion_orden_anulacion` lo
@@ -135,7 +135,7 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "cancelarViaApi",
     origenTipo: "cancelacion_api",
   },
-  // #19: feature 109. El corte diario transiciona `en_ruta -> sin_gestionar` DENTRO de
+  // #19: feature 109. El corte diario transiciona `en_reparto -> sin_gestionar` DENTRO de
   // `CierreDiaRepository.crearCierre` (input opcional `corteSinGestionar`), en la MISMA tx, via el
   // choke point con actor null y `origen_tipo` NUEVO `corte_sin_gestionar` (19.º valor del enum,
   // migracion `*_orden_historial_origen_sin_gestionar` + su down). crearCierre ahora SI escribe
@@ -185,9 +185,10 @@ const PUNTOS_DE_ESCRITURA = [
   // #23: feature 149. `OrdenRepository.deshacerAsignacionLote` REVIERTE una asignacion/ruteo antes
   // de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite ->
   // en_bodega_central) via el choke point, con actor = maestro/admin/adminSatelite y `origen_tipo`
-  // NUEVO `deshacer_asignacion` (23.º valor del enum, migracion
+  // NUEVO `deshacer_asignacion` (25.º valor del enum tras integrar los dos de la 154, migracion
   // `*_orden_historial_origen_deshacer_asignacion` + su down). NO enlaza gestion; destino !=
-  // devuelta -> no altera intentos. NO toca num_guia ni prioridad.
+  // devuelta ni reprogramada -> fuera de las dos ramas del criterio de intento (160/R1). NO toca
+  // num_guia ni prioridad.
   {
     n: 23,
     repo: "OrdenRepository",
@@ -196,8 +197,23 @@ const PUNTOS_DE_ESCRITURA = [
   },
 ] as const;
 
+// Feature 154 (R28) — FAMILIAS DECLARADAS SIN PRODUCTOR. La 154 da de alta dos valores del enum
+// `orden_historial_origen_tipo` (`recoleccion_tienda`, `incidente`) SIN ningun call-site que los
+// emita: el catalogo, el mapa de transiciones y las migraciones los declaran, pero el productor
+// llega en las features 157 (escaner de recoleccion en tienda) y 158 (resultado `incidente` de la
+// gestion). Por eso NO estan en `PUNTOS_DE_ESCRITURA`: meterlos ahi mentiria (el test exige que
+// cada simbolo sea un metodo REAL que escribe estado).
+//
+// Esta lista es la EXCEPCION EXPLICITA, no un agujero: en cuanto la 157/158 instrumenten su
+// call-site, la familia debe MOVERSE de aqui a `PUNTOS_DE_ESCRITURA`, y este archivo lo obliga
+// (la union de ambos conjuntos tiene que cubrir el enum exactamente).
+const FAMILIAS_SIN_PRODUCTOR = [
+  { origenTipo: "recoleccion_tienda", productorFuturo: "feature 157 (recoleccion en tienda)" },
+  { origenTipo: "incidente", productorFuturo: "feature 158 (resultado incidente de la gestion)" },
+] as const;
+
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
-// asignarMensajeroSugerido (solo mensajero_sugerido_id), softDelete (solo deleted_at),
+// softDelete (solo deleted_at),
 // setOrdenEnGestion / liberarOrdenEnGestion (puntero de bloqueo 1-a-1). Existen pero NO
 // forman parte del conjunto de escritura de estado -> NO instrumentan historial.
 // Feature 67: las dos LECTURAS del deshacer (`findGestionParaDeshacer`,
@@ -206,7 +222,6 @@ const PUNTOS_DE_ESCRITURA = [
 // `crearCierre` (37) escribe `gestion_orden.cierre_id`; feature 109 lo convierte ADEMAS en el
 // punto #19 (`corte_sin_gestionar`) cuando recibe el input del corte -> ya NO va en esta lista.
 const NO_ESCRIBEN_ESTADO = [
-  { repo: "OrdenRepository", simbolo: "asignarMensajeroSugerido" },
   { repo: "OrdenRepository", simbolo: "softDelete" },
   { repo: "GestionOrdenRepository", simbolo: "setOrdenEnGestion" },
   { repo: "GestionOrdenRepository", simbolo: "liberarOrdenEnGestion" },
@@ -230,10 +245,34 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 23 origen_tipo cubren EXACTAMENTE el enum fuente de verdad (R23)", () => {
-    const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo).sort();
+  it("los 23 origen_tipo con productor + los 2 sin productor cubren EXACTAMENTE el enum (R23)", () => {
+    const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
+    const tiposSinProductor = FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo);
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
-    expect(tiposDelMapa).toEqual(tiposDelSeed);
+    expect([...tiposDelMapa, ...tiposSinProductor].sort()).toEqual(tiposDelSeed);
+    // Y no se solapan: una familia o tiene productor instrumentado o no lo tiene, nunca las dos.
+    for (const familia of tiposSinProductor) {
+      expect(tiposDelMapa as readonly string[]).not.toContain(familia);
+    }
+  });
+
+  // Feature 154 (R28): las dos familias nuevas siguen SIN productor. Si un repo empieza a
+  // emitirlas antes de que se instrumenten como punto de escritura, este test se pone rojo.
+  it("feature 154/R28: recoleccion_tienda e incidente estan declaradas y SIN productor", () => {
+    expect(FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo)).toEqual([
+      "recoleccion_tienda",
+      "incidente",
+    ]);
+    const simbolosPorFamilia: string[] = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
+    for (const familia of FAMILIAS_SIN_PRODUCTOR) {
+      // Declarada en el enum fuente de verdad...
+      expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED] as string[]).toContain(familia.origenTipo);
+      // ...y sin ningun punto de escritura que la emita.
+      expect(
+        simbolosPorFamilia.filter((tipo) => tipo === (familia.origenTipo as string)),
+        `${familia.origenTipo} ya tiene productor: muevelo a PUNTOS_DE_ESCRITURA (${familia.productorFuturo})`,
+      ).toHaveLength(0);
+    }
   });
 
   it("cada familia (origen_tipo) aparece UNA sola vez en el mapa (1 punto por familia)", () => {

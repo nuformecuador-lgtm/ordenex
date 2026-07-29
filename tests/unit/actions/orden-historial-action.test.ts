@@ -31,6 +31,8 @@ function fakeService(overrides: Partial<IOrdenHistorialService> = {}): IOrdenHis
       umbral: 3,
     })),
     contarIntentos: vi.fn(async () => 0),
+    // Feature 160: el contrato del servicio gano el conteo EN LOTE (no lo usa este borde).
+    contarIntentosEnLote: vi.fn(async () => new Map<string, number>()),
     ...overrides,
   };
 }

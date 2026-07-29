@@ -28,8 +28,9 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_ruta_bodega_satelite: "os-ruta-satelite", // feature 30
 };
 
-// Feature 30: por defecto la orden es GAM (zonaId === GAM_ZONA_ID) para que el
-// camino GAM de la feature 17 (R18) siga verde sin tocar cada test.
+// Feature 30: por defecto la orden es GAM (zonaId === GAM_ZONA_ID).
+// Feature 156: el estatus por defecto pasa de `en_fulfillment` a `en_preparacion`, que es el
+// UNICO origen valido de "generar guia" tras esta feature (R4).
 function ordenRow(overrides: Partial<{
   id: string;
   estatusValue: string;
@@ -41,7 +42,7 @@ function ordenRow(overrides: Partial<{
 }> = {}) {
   return {
     id: "o1",
-    estatusValue: "en_fulfillment",
+    estatusValue: "en_preparacion",
     numGuia: null,
     deletedAt: null,
     zonaId: GAM_ZONA_ID,
@@ -68,11 +69,7 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     findAllProvincias: vi.fn(),
     findCantonesByProvinciaIds: vi.fn(),
     findDistritosByCantonIds: vi.fn(),
-    findMensajerosByIds: vi.fn(),
     createManyOrdenes: vi.fn(),
-    findResumenByNumRemisiones: vi.fn(),
-    asignarMensajeroSugerido: vi.fn(),
-    countOrdenesDeTienda: vi.fn(),
     // Feature 17
     findByIdsForTransicion: vi.fn(async () => [ordenRow()]),
     // Feature 92 (R8): filas que consume el gate de coordenadas (ya geocodificadas).
@@ -142,48 +139,431 @@ function newService(
   return new GuiaAsignacionService(repo, zonaRepo, gate);
 }
 
-describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", () => {
-  it("R13: generarGuia hacia un mensajero bloqueado -> conflict, sin persistir", async () => {
+/** Atajo: las decisiones con las que el service llamo a `generarGuiaLote`. */
+function decisionesPersistidas(repo: IOrdenRepository): GenerarGuiaDecisionData[] {
+  const mock = vi.mocked(repo.generarGuiaLote);
+  return mock.mock.calls[0]![0] as GenerarGuiaDecisionData[];
+}
+
+// =====================  Feature 156 — generarGuia v2  =====================
+//
+// "Generar guia" tiene UN SOLO efecto: numerar y mover a la bodega central. Ningun test de
+// este bloque menciona mensajero, porque la operacion ya no lo decide.
+
+describe("156 — generarGuia numera y mueve a en_bodega_central (R1/R3/R8)", () => {
+  it("R1/R3: un lote en en_preparacion queda numerado y en en_bodega_central", async () => {
     const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1" })]),
-      findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
-      // m-bloq esta bloqueado por un cierre pendiente.
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1" }),
+        ordenRow({ id: "o2" }),
+      ]),
     });
     const service = newService(repo);
 
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: "m-bloq" }] },
-      MAESTRO,
-    );
+    const r = await service.generarGuia({ ordenIds: ["o1", "o2"] }, MAESTRO);
 
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") {
-      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: "mensajero bloqueado por cierre pendiente" }]);
-    }
-    // R23: no se persiste nada (todo-o-nada).
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.resultados).toEqual([
+      { ordenId: "o1", numGuia: 1, estado: "en_bodega_central" },
+      { ordenId: "o2", numGuia: 2, estado: "en_bodega_central" },
+    ]);
+    expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1);
+  });
+
+  it("R3: en_bodega_central es el UNICO destino; nadie termina en por_recoger ni en satelite", async () => {
+    // Se mezclan zona central y zona satelite a proposito: antes de la 156 la de zona no-GAM
+    // habria acabado en `en_ruta_bodega_satelite`. Ahora las dos van al mismo sitio.
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o-gam", zonaId: GAM_ZONA_ID }),
+        ordenRow({ id: "o-satelite", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o-gam", "o-satelite"] }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.resultados.map((x) => x.estado)).toEqual([
+      "en_bodega_central",
+      "en_bodega_central",
+    ]);
+    expect(decisionesPersistidas(repo).map((d) => d.estatusId)).toEqual([
+      "os-bodega",
+      "os-bodega",
+    ]);
+    // Ni siquiera resuelve los otros dos estados del catalogo: ya no son destinos posibles.
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledTimes(1);
+    expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_bodega_central");
+  });
+
+  it("R8: registra el lote con origenTipo generacion_guia y el actor que lo ejecuto", async () => {
+    const repo = fakeRepo();
+    const service = newService(repo);
+
+    await service.generarGuia({ ordenIds: ["o1"] }, ADMIN);
+
+    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
+      [{ ordenId: "o1", estatusId: "os-bodega", mensajeroAsignadoId: null }],
+      { actorUsuarioId: "u-admin", origenTipo: "generacion_guia" },
+    );
+  });
+
+  it("un lote vacio es ok sin efectos (ni lecturas ni escrituras)", async () => {
+    const repo = fakeRepo();
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: [] }, MAESTRO);
+
+    expect(r).toEqual({ status: "ok", resultados: [] });
+    expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
     expect(repo.generarGuiaLote).not.toHaveBeenCalled();
   });
 
-  it("R13: el ruteo a satelite (ordenes SIN mensajero) NO se bloquea", async () => {
+  it("ids repetidos en la entrada se numeran una sola vez", async () => {
+    const repo = fakeRepo();
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1", "o1"] }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(decisionesPersistidas(repo)).toHaveLength(1);
+  });
+});
+
+describe("156/R2 — generarGuia NO escribe mensajero_asignado_id ni asignado_at", () => {
+  it("toda decision persistida lleva mensajeroAsignadoId null", async () => {
     const repo = fakeRepo({
-      // orden no-GAM sin mensajero -> se rutea a satelite; no toca el bloqueo.
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1" }),
+        ordenRow({ id: "o2", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o3", numGuia: 77 }),
       ]),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
     });
     const service = newService(repo);
 
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
+    const r = await service.generarGuia({ ordenIds: ["o1", "o2", "o3"] }, MAESTRO);
 
     expect(r.status).toBe("ok");
-    expect(repo.generarGuiaLote).toHaveBeenCalled();
+    const decisiones = decisionesPersistidas(repo);
+    expect(decisiones).toHaveLength(3);
+    for (const d of decisiones) expect(d.mensajeroAsignadoId).toBeNull();
+    // `asignado_at` se estampa en el repo SOLO cuando el mensajero no es nulo
+    // (`OrdenRepository.generarGuiaLote`); con null constante nunca se toca.
   });
 
+  it("no consulta mensajeros por zona ni mensajeros bloqueados: no hay a quien asignar", async () => {
+    const repo = fakeRepo();
+    const service = newService(repo);
+
+    await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
+    expect(repo.findMensajerosBloqueados).not.toHaveBeenCalled();
+  });
+});
+
+describe("156/R4 — origen UNICO en_preparacion", () => {
+  it.each([
+    ["en_fulfillment"], // deja de ser origen valido (lo retira del flujo la 155)
+    ["en_bodega_central"],
+    ["por_recoger"],
+    ["entregada"],
+  ])("origen %s -> conflict con el motivo tipado, sin numerar nada", async (estatusValue) => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue })]),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([
+      { ordenId: "o1", motivo: `estado de origen no permitido: ${estatusValue}` },
+    ]);
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+});
+
+describe("156/R5 — num_guia idempotente", () => {
+  it("una orden que ya tiene num_guia conserva el mismo valor y lo devuelve", async () => {
+    const YA_NUMERADA = 4321;
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", numGuia: YA_NUMERADA }),
+        ordenRow({ id: "o2", numGuia: null }),
+      ]),
+      // El repo respeta `WHERE num_guia IS NULL`: la ya numerada devuelve SU numero,
+      // la otra estrena uno (cobertura del SQL: `orden-repository.guia.test.ts`).
+      generarGuiaLote: vi.fn(async (decisiones: GenerarGuiaDecisionData[]) =>
+        decisiones.map((d) => ({
+          ordenId: d.ordenId,
+          numGuia: d.ordenId === "o1" ? YA_NUMERADA : 9001,
+        })),
+      ),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1", "o2"] }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.resultados).toEqual([
+      { ordenId: "o1", numGuia: YA_NUMERADA, estado: "en_bodega_central" },
+      { ordenId: "o2", numGuia: 9001, estado: "en_bodega_central" },
+    ]);
+  });
+
+  it("dos invocaciones consecutivas devuelven guias distintas y crecientes", async () => {
+    let seq = 100;
+    const repo = fakeRepo({
+      generarGuiaLote: vi.fn(async (decisiones: GenerarGuiaDecisionData[]) =>
+        decisiones.map((d) => ({ ordenId: d.ordenId, numGuia: ++seq })),
+      ),
+    });
+    const service = newService(repo);
+
+    const r1 = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+    const r2 = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+
+    if (r1.status !== "ok" || r2.status !== "ok") throw new Error("unreachable");
+    expect(r1.resultados[0].numGuia).toBe(101);
+    expect(r2.resultados[0].numGuia).toBe(102);
+    expect(r2.resultados[0].numGuia).toBeGreaterThan(r1.resultados[0].numGuia);
+  });
+});
+
+describe("156/R6 — todo-o-nada por lote", () => {
+  it("una sola orden con origen invalido aborta el lote entero, sin numerar ninguna", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1" }),
+        ordenRow({ id: "o2" }),
+        ordenRow({ id: "o3", estatusValue: "entregada" }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1", "o2", "o3"] }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([
+      { ordenId: "o3", motivo: "estado de origen no permitido: entregada" },
+    ]);
+    // Ni o1 ni o2 se tocan aunque fueran validas.
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+
+  it("propaga el fallo de la transaccion sin envolverlo (rollback total delegado a la DB)", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1" }), ordenRow({ id: "o2" })]),
+      generarGuiaLote: vi.fn().mockRejectedValue(new Error("fallo de conexion a mitad del lote")),
+    });
+    const service = newService(repo);
+
+    await expect(service.generarGuia({ ordenIds: ["o1", "o2"] }, MAESTRO)).rejects.toThrow(
+      "fallo de conexion a mitad del lote",
+    );
+  });
+});
+
+describe("156/R7 — orden inexistente, borrada o reprogramada", () => {
+  it("orden inexistente -> conflict con motivo por orden, sin efectos", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1" })]),
+      // o2 no viene en la respuesta -> no existe
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1", "o2"] }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([{ ordenId: "o2", motivo: "orden no existe" }]);
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+
+  it("orden borrada (deletedAt) -> conflict, sin efectos", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1" }),
+        ordenRow({ id: "o2", deletedAt: new Date() }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1", "o2"] }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([{ ordenId: "o2", motivo: "orden borrada" }]);
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+
+  // Feature 46/R2: la reprogramada tiene motivo propio, ANTES del de origen invalido.
+  it("orden reprogramada -> conflict con el motivo tipado de reprogramacion", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1" }),
+        ordenRow({ id: "o2", estatusValue: "reprogramada" }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1", "o2"] }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([{ ordenId: "o2", motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA }]);
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+});
+
+describe("156/R9 — autorizacion de generar guia", () => {
+  it("maestro puede generar guia", async () => {
+    const repo = fakeRepo();
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+  });
+
+  it("feature 94: admin tiene paridad con maestro y puede generar guia", async () => {
+    const repo = fakeRepo();
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1"] }, ADMIN);
+
+    expect(r.status).toBe("ok");
+  });
+
+  it("adminTienda/mensajero -> forbidden sin tocar datos", async () => {
+    const repo = fakeRepo();
+    const service = newService(repo);
+
+    for (const actor of [ADMIN_TIENDA, MENSAJERO]) {
+      const r = await service.generarGuia({ ordenIds: ["o1"] }, actor);
+      expect(r).toEqual({ status: "forbidden" });
+    }
+    expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Feature 156 — GUARDAS QUE DEJAN DE APLICAR AL NUMERAR (R10-R13).
+//
+// Los cuatro casos de abajo son los MISMOS escenarios que antes producian `conflict` o
+// `validation_error` en `generarGuia`. Ahora terminan en `ok` y con `generarGuiaLote` llamado:
+// son guardas de la ASIGNACION, y numerar ya no asigna. Cada una de las cuatro se conserva
+// INTACTA en el metodo que si asigna o si rutea (ver los describes de no-regresion mas abajo).
+// ---------------------------------------------------------------------------------------------
+describe("156 — guardas retiradas de generar guia (R10/R11/R12/R13)", () => {
+  const MENSAJEROS_ZONA = [
+    { id: "m-lim1", nombre: "Ana" },
+    { id: "m-lim2", nombre: "Beto" },
+  ];
+
+  it("R10: con TODOS los mensajeros en cierre abierto, generar guia sigue funcionando", async () => {
+    const repo = fakeRepo({
+      findMensajerosByZona: vi.fn(async () => MENSAJEROS_ZONA),
+      findMensajerosBloqueados: vi.fn(
+        async (): Promise<Set<string>> => new Set(["m-lim1", "m-lim2"]),
+      ),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1);
+  });
+
+  it("R11: una orden de zona satelite con un cierre abierto se numera igual", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+      findMensajerosByZona: vi.fn(async () => MENSAJEROS_ZONA),
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1"])),
+    });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    // Ni conflict por bodega bloqueada ni ruteo: va a la bodega central como todas.
+    expect(r.resultados[0]).toMatchObject({ estado: "en_bodega_central" });
+    expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "direccion_no_geocodificable",
+    "geocodificacion_agotada",
+    "geocodificacion_en_curso",
+    "geocodificacion_encolada",
+    "geocodificacion_no_encolable",
+  ] as EstadoAsignabilidad[])(
+    "R12: una orden en estado %s se numera igual (el gate de coordenadas no participa)",
+    async (estado) => {
+      const gateQueRechaza: IAsignabilidadCoordenadasService = {
+        evaluar: vi.fn(async (ordenes: OrdenAsignabilidadRow[]) =>
+          new Map<string, EstadoAsignabilidad>(ordenes.map((o) => [o.id, estado])),
+        ),
+      };
+      const repo = fakeRepo();
+      const service = newService(repo, fakeZonaRepo(), gateQueRechaza);
+
+      const r = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+
+      expect(r.status).toBe("ok");
+      expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1);
+      // Ni siquiera se consulta: no hay a quien asignar, no hay coordenadas que exigir.
+      expect(gateQueRechaza.evaluar).not.toHaveBeenCalled();
+      expect(repo.findParaAsignabilidad).not.toHaveBeenCalled();
+    },
+  );
+
+  it("R13: sin zona GAM configurada, generar guia funciona con normalidad", async () => {
+    const repo = fakeRepo();
+    const zonaRepo = fakeZonaRepo({ findCentralZonaId: vi.fn(async () => null) });
+    const service = newService(repo, zonaRepo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1);
+    // La clasificacion GAM/no-GAM ya no participa: ni se consulta la zona central.
+    expect(zonaRepo.findCentralZonaId).not.toHaveBeenCalled();
+  });
+});
+
+describe("GuiaAsignacionService.generarGuia — validation_error si falta el seed de estados", () => {
+  it("catalogo incompleto -> validation_error sin llamar generarGuiaLote", async () => {
+    const repo = fakeRepo({ findEstatusIdByValue: vi.fn(async () => null) });
+    const service = newService(repo);
+
+    const r = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("unreachable");
+    expect(r.fieldErrors.estatus).toEqual(["catalogo de estados incompleto (seed pendiente)"]);
+    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
+  });
+});
+
+// =====================  No-regresion: asignarDesdeBodega (156/R17)  =====================
+//
+// Cero cambios de codigo en este metodo. Estos tests son la prueba de que las guardas que
+// `generarGuia` dejo de aplicar SIGUEN vivas donde si se asigna un mensajero.
+
+describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", () => {
   it("R13: asignarDesdeBodega hacia mensajero bloqueado -> conflict, sin persistir", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega_central" })]),
@@ -203,32 +583,6 @@ describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", 
 });
 
 describe("GuiaAsignacionService — bloqueo por reprogramacion (feature 46/R1/R2/R5)", () => {
-  it("R2: generarGuia con una orden reprogramada en el lote -> conflict con motivo tipado, 0 escrituras", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
-        ordenRow({ id: "o2", estatusValue: "reprogramada" }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      {
-        decisiones: [
-          { ordenId: "o1", mensajeroId: null },
-          { ordenId: "o2", mensajeroId: null },
-        ],
-      },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([{ ordenId: "o2", motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA }]);
-    // R5/R2: aborta el lote completo sin persistir (todo-o-nada).
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-  });
-
   it("R2: asignarDesdeBodega con una orden reprogramada -> conflict con motivo tipado, sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
@@ -243,336 +597,6 @@ describe("GuiaAsignacionService — bloqueo por reprogramacion (feature 46/R1/R2
     if (r.status !== "conflict") throw new Error("unreachable");
     expect(r.detalle).toEqual([{ ordenId: "o1", motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA }]);
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
-  });
-});
-
-describe("GuiaAsignacionService.generarGuia — autorizacion (R11-R13)", () => {
-  it("R11: maestro puede generar guia", async () => {
-    const repo = fakeRepo();
-    const service = newService(repo);
-
-    const r = await service.generarGuia({ decisiones: [{ ordenId: "o1", mensajeroId: null }] }, MAESTRO);
-
-    expect(r.status).toBe("ok");
-  });
-
-  it("feature 94: admin tiene paridad con maestro y puede generar guia", async () => {
-    const repo = fakeRepo();
-    const service = newService(repo);
-
-    const r = await service.generarGuia({ decisiones: [{ ordenId: "o1", mensajeroId: null }] }, ADMIN);
-
-    expect(r.status).toBe("ok");
-  });
-
-  it("R13: adminTienda/mensajero en escritura -> forbidden", async () => {
-    const repo = fakeRepo();
-    const service = newService(repo);
-
-    const rTienda = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      ADMIN_TIENDA,
-    );
-    const rMsg = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MENSAJERO,
-    );
-
-    expect(rTienda).toEqual({ status: "forbidden" });
-    expect(rMsg).toEqual({ status: "forbidden" });
-  });
-});
-
-describe("GuiaAsignacionService.generarGuia — origen y destino (R18/R19/R21/R22/R23)", () => {
-  it("R18: acepta origen en_fulfillment Y en_preparacion", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
-        ordenRow({ id: "o2", estatusValue: "en_preparacion" }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      {
-        decisiones: [
-          { ordenId: "o1", mensajeroId: null },
-          { ordenId: "o2", mensajeroId: null },
-        ],
-      },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-  });
-
-  it("R19: TODAS las ordenes del lote reciben num_guia, incluidas las que van a en_bodega_central", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
-        ordenRow({ id: "o2", estatusValue: "en_preparacion" }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      {
-        decisiones: [
-          { ordenId: "o1", mensajeroId: "m1" }, // -> por_recoger
-          { ordenId: "o2", mensajeroId: null }, // -> en_bodega_central
-        ],
-      },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados).toHaveLength(2);
-    for (const res of r.resultados) {
-      expect(typeof res.numGuia).toBe("number");
-    }
-  });
-
-  it("R21: confirmar mensajero sugerido -> mensajero_asignado_id=sugerido, por_recoger", async () => {
-    const repo = fakeRepo();
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: "m-sugerido" }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "por_recoger" });
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
-      [{ ordenId: "o1", estatusId: "os-espera", mensajeroAsignadoId: "m-sugerido" }],
-      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
-    );
-  });
-
-  it("R22: override a otro mensajero -> mensajero_asignado_id=elegido, por_recoger", async () => {
-    const repo = fakeRepo();
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: "m-override" }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "por_recoger" });
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
-      [{ ordenId: "o1", estatusId: "os-espera", mensajeroAsignadoId: "m-override" }],
-      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
-    );
-  });
-
-  it("R23: sin mensajero -> mensajero_asignado_id NULL, en_bodega_central, con num_guia igual", async () => {
-    const repo = fakeRepo();
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_bodega_central" });
-    expect(typeof r.resultados[0].numGuia).toBe("number");
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
-      [{ ordenId: "o1", estatusId: "os-bodega", mensajeroAsignadoId: null }],
-      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
-    );
-  });
-});
-
-describe("GuiaAsignacionService.generarGuia — lote mixto en una sola llamada (R24)", () => {
-  it("resuelve con-mensajero y sin-mensajero en UNA sola invocacion de generarGuiaLote", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
-        ordenRow({ id: "o2", estatusValue: "en_preparacion" }),
-        ordenRow({ id: "o3", estatusValue: "en_fulfillment" }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      {
-        decisiones: [
-          { ordenId: "o1", mensajeroId: "m1" },
-          { ordenId: "o2", mensajeroId: null },
-          { ordenId: "o3", mensajeroId: "m2" },
-        ],
-      },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1); // R24: una sola llamada
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados).toHaveLength(3);
-  });
-});
-
-describe("GuiaAsignacionService.generarGuia — guardias de origen/mensajero (R27/R28/R25/R29)", () => {
-  it("R27: estado de origen no permitido -> conflict.detalle, ABORTA sin llamar generarGuiaLote", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "entregada" })]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([{ ordenId: "o1", motivo: expect.stringContaining("entregada") }]);
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-  });
-
-  it("R28: mensajeroId sin rol mensajero en una decision -> conflict.detalle, ABORTA todo el lote", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
-        ordenRow({ id: "o2", estatusValue: "en_fulfillment" }),
-      ]),
-      // Feature 30/R6: el service valida el mensajero contra la zona GAM.
-      findMensajeroIdsValidosByZona: vi.fn(async () => new Set(["m-valido"])),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      {
-        decisiones: [
-          { ordenId: "o1", mensajeroId: "m-valido" },
-          { ordenId: "o2", mensajeroId: "m-invalido" },
-        ],
-      },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([{ ordenId: "o2", motivo: expect.stringContaining("mensajeroId") }]);
-    // R25/R29: ninguna orden se numera, ni siquiera o1 (que era valida).
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-  });
-
-  it("R29: orden inexistente en el lote -> fallo aislado sin transaccion a medias", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_fulfillment" })]),
-      // o2 no viene en la respuesta -> no existe
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      {
-        decisiones: [
-          { ordenId: "o1", mensajeroId: null },
-          { ordenId: "o2", mensajeroId: null },
-        ],
-      },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([{ ordenId: "o2", motivo: "orden no existe" }]);
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-  });
-
-  it("R29: orden borrada (deletedAt) en el lote -> fallo aislado", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
-        ordenRow({ id: "o2", estatusValue: "en_fulfillment", deletedAt: new Date() }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      {
-        decisiones: [
-          { ordenId: "o1", mensajeroId: null },
-          { ordenId: "o2", mensajeroId: null },
-        ],
-      },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([{ ordenId: "o2", motivo: "orden borrada" }]);
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-  });
-});
-
-describe("GuiaAsignacionService.generarGuia — atomicidad (R25)", () => {
-  it("propaga el fallo de la transaccion sin envolverlo (rollback total delegado a la DB)", async () => {
-    const repo = fakeRepo({
-      // Ambas ordenes validas (existen, no borradas, origen permitido) para que
-      // la validacion previa pase y se llegue a invocar la transaccion.
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
-        ordenRow({ id: "o2", estatusValue: "en_preparacion" }),
-      ]),
-      generarGuiaLote: vi.fn().mockRejectedValue(new Error("fallo de conexion a mitad del lote")),
-    });
-    const service = newService(repo);
-
-    await expect(
-      service.generarGuia(
-        {
-          decisiones: [
-            { ordenId: "o1", mensajeroId: null },
-            { ordenId: "o2", mensajeroId: null },
-          ],
-        },
-        MAESTRO,
-      ),
-    ).rejects.toThrow("fallo de conexion a mitad del lote");
-  });
-});
-
-describe("GuiaAsignacionService.generarGuia — num_guia unico e incremental entre llamadas (R4)", () => {
-  it("dos invocaciones consecutivas devuelven valores de guia distintos y crecientes", async () => {
-    let seq = 100;
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1" })]),
-      generarGuiaLote: vi.fn(async (decisiones: GenerarGuiaDecisionData[]) =>
-        decisiones.map((d) => ({ ordenId: d.ordenId, numGuia: ++seq })),
-      ),
-    });
-    const service = newService(repo);
-
-    const r1 = await service.generarGuia({ decisiones: [{ ordenId: "o1", mensajeroId: null }] }, MAESTRO);
-    const r2 = await service.generarGuia({ decisiones: [{ ordenId: "o1", mensajeroId: null }] }, MAESTRO);
-
-    if (r1.status !== "ok" || r2.status !== "ok") throw new Error("unreachable");
-    expect(r1.resultados[0].numGuia).toBe(101);
-    expect(r2.resultados[0].numGuia).toBe(102);
-    expect(r2.resultados[0].numGuia).toBeGreaterThan(r1.resultados[0].numGuia);
-  });
-});
-
-describe("GuiaAsignacionService.generarGuia — validation_error si falta el seed de estados", () => {
-  it("catalogo incompleto -> validation_error sin llamar generarGuiaLote", async () => {
-    const repo = fakeRepo({ findEstatusIdByValue: vi.fn(async () => null) });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("validation_error");
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
   });
 });
 
@@ -601,7 +625,7 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
   it("R27: origen distinto de en_bodega_central -> conflict, sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment" }),
+        ordenRow({ id: "o1", estatusValue: "en_preparacion" }),
       ]),
     });
     const service = newService(repo);
@@ -610,7 +634,7 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
 
     expect(r.status).toBe("conflict");
     if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([{ ordenId: "o1", motivo: expect.stringContaining("en_fulfillment") }]);
+    expect(r.detalle).toEqual([{ ordenId: "o1", motivo: expect.stringContaining("en_preparacion") }]);
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
   });
 
@@ -656,23 +680,9 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
 // =====================  Feature 30  =====================
 
 describe("Feature 30 — guardia zona GAM no configurada (R4)", () => {
-  it("R4: generarGuia sin zona GAM -> validation_error 'zona GAM no configurada', sin efectos", async () => {
-    const repo = fakeRepo();
-    const service = newService(repo, fakeZonaRepo({ findCentralZonaId: vi.fn(async () => null) }));
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("validation_error");
-    if (r.status !== "validation_error") throw new Error("unreachable");
-    expect(r.fieldErrors.zona).toEqual(["zona GAM no configurada"]);
-    // Sin efectos: no se cargan ordenes ni se persiste nada.
-    expect(repo.findByIdsForTransicion).not.toHaveBeenCalled();
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-  });
-
+  // Feature 156/R13: `generarGuia` ya NO tiene esta guarda (no clasifica GAM/no-GAM);
+  // su caso vive arriba, en "guardas retiradas". Los dos metodos que si clasifican la
+  // conservan INTACTA.
   it("R4: asignarDesdeBodega sin zona GAM -> validation_error, sin efectos", async () => {
     const repo = fakeRepo();
     const service = newService(repo, fakeZonaRepo({ findCentralZonaId: vi.fn(async () => null) }));
@@ -680,6 +690,8 @@ describe("Feature 30 — guardia zona GAM no configurada (R4)", () => {
     const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, MAESTRO);
 
     expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("unreachable");
+    expect(r.fieldErrors.zona).toEqual(["zona GAM no configurada"]);
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
   });
 
@@ -690,132 +702,9 @@ describe("Feature 30 — guardia zona GAM no configurada (R4)", () => {
     const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
 
     expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("unreachable");
+    expect(r.fieldErrors.zona).toEqual(["zona GAM no configurada"]);
     expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
-  });
-});
-
-describe("Feature 30 — generarGuia clasifica GAM/no-GAM (R6/R8/R9/R11)", () => {
-  it("R6: mensajero de otra zona (no GAM) en orden GAM -> conflict, sin efectos", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
-      ]),
-      // El mensajero pasado NO es GAM: findMensajeroIdsValidosByZona lo excluye.
-      findMensajeroIdsValidosByZona: vi.fn(async () => new Set<string>()),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: "m-otra-zona" }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([{ ordenId: "o1", motivo: expect.stringContaining("mensajeroId") }]);
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-  });
-
-  it("R8: orden no-GAM con mensajeroId != null -> rechazo por orden, sin efectos", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: "m1" }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([{ ordenId: "o1", motivo: expect.stringContaining("no-GAM") }]);
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-  });
-
-  it("R9/R10: orden no-GAM (sin mensajero) -> en_ruta_bodega_satelite, mensajeroAsignadoId NULL, con num_guia", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_ruta_bodega_satelite" });
-    expect(typeof r.resultados[0].numGuia).toBe("number");
-    // R9/R10: se rutea con estatus satelite y mensajeroAsignadoId NULL (num_guia via lote).
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
-      [{ ordenId: "o1", estatusId: "os-ruta-satelite", mensajeroAsignadoId: null }],
-      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
-    );
-  });
-
-  it("R11: lote mixto GAM/no-GAM se resuelve en UNA sola llamada (GAM regla 17, no-GAM a satelite)", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o-gam-msg", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
-        ordenRow({ id: "o-gam-sin", estatusValue: "en_preparacion", zonaId: GAM_ZONA_ID }),
-        ordenRow({ id: "o-nogam", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      {
-        decisiones: [
-          { ordenId: "o-gam-msg", mensajeroId: "m1" }, // GAM + mensajero -> espera
-          { ordenId: "o-gam-sin", mensajeroId: null }, // GAM sin mensajero -> bodega
-          { ordenId: "o-nogam", mensajeroId: null }, // no-GAM -> satelite
-        ],
-      },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1); // R11: una sola transaccion
-    expect(repo.generarGuiaLote).toHaveBeenCalledWith(
-      [
-        { ordenId: "o-gam-msg", estatusId: "os-espera", mensajeroAsignadoId: "m1" },
-        { ordenId: "o-gam-sin", estatusId: "os-bodega", mensajeroAsignadoId: null },
-        { ordenId: "o-nogam", estatusId: "os-ruta-satelite", mensajeroAsignadoId: null },
-      ],
-      { actorUsuarioId: "u-maestro", origenTipo: "generacion_guia" },
-    );
-    const estados = r.resultados.map((x) => x.estado);
-    expect(estados).toEqual(["por_recoger", "en_bodega_central", "en_ruta_bodega_satelite"]);
-  });
-
-  it("R11/R17: lote mixto con una orden invalida -> conflict todo-o-nada (ni GAM ni no-GAM se tocan)", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o-gam", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
-        ordenRow({ id: "o-nogam", estatusValue: "entregada", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      {
-        decisiones: [
-          { ordenId: "o-gam", mensajeroId: "m1" },
-          { ordenId: "o-nogam", mensajeroId: null }, // origen invalido
-        ],
-      },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
   });
 });
 
@@ -837,31 +726,71 @@ describe("Feature 30 — asignarDesdeBodega rechaza no-GAM (R12)", () => {
   });
 });
 
-describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
-  it("R13: rutea N ordenes no-GAM desde origen permitido -> en_ruta_bodega_satelite", async () => {
+describe("Feature 30 + 156 — rutearABodegaSatelite (R13/R16/R17 · 156/R15/R16)", () => {
+  it("156/R15: rutea N ordenes no-GAM desde en_bodega_central -> en_ruta_bodega_satelite", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-        ordenRow({ id: "o2", estatusValue: "en_preparacion", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-        ordenRow({ id: "o3", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
     });
     const service = newService(repo);
 
-    const r = await service.rutearABodegaSatelite({ ordenIds: ["o1", "o2", "o3"] }, MAESTRO);
+    const r = await service.rutearABodegaSatelite({ ordenIds: ["o1", "o2"] }, MAESTRO);
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.resultados).toEqual([
       { ordenId: "o1", estado: "en_ruta_bodega_satelite" },
       { ordenId: "o2", estado: "en_ruta_bodega_satelite" },
-      { ordenId: "o3", estado: "en_ruta_bodega_satelite" },
     ]);
     expect(repo.rutearBodegaSateliteLote).toHaveBeenCalledWith(
-      ["o1", "o2", "o3"],
+      ["o1", "o2"],
       "os-ruta-satelite",
       { actorUsuarioId: "u-maestro", origenTipo: "ruteo_satelite" },
     );
+  });
+
+  // Feature 156/R16: los DOS origenes que la feature retira (`ORIGEN_RUTEO_SATELITE` pasa de
+  // un Set de tres a la constante `en_bodega_central`).
+  it.each([["en_preparacion"], ["en_fulfillment"]])(
+    "156/R16: origen %s -> conflict 'estado de origen no permitido', sin efectos",
+    async (estatusValue) => {
+      const repo = fakeRepo({
+        findByIdsForTransicion: vi.fn(async () => [
+          ordenRow({ id: "o1", estatusValue, zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ]),
+      });
+      const service = newService(repo);
+
+      const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
+
+      expect(r.status).toBe("conflict");
+      if (r.status !== "conflict") throw new Error("unreachable");
+      expect(r.detalle).toEqual([
+        { ordenId: "o1", motivo: `estado de origen no permitido: ${estatusValue}` },
+      ]);
+      expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
+    },
+  );
+
+  it("156/R6: una orden en en_preparacion aborta el lote entero (las de bodega tampoco se rutean)", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o2", estatusValue: "en_preparacion", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+    });
+    const service = newService(repo);
+
+    const r = await service.rutearABodegaSatelite({ ordenIds: ["o1", "o2"] }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([
+      { ordenId: "o2", motivo: "estado de origen no permitido: en_preparacion" },
+    ]);
+    expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
   });
 
   it("una orden GAM en el lote -> conflict 'orden GAM no se rutea a satelite', sin efectos", async () => {
@@ -927,139 +856,16 @@ describe("Feature 30 — rutearABodegaSatelite (R13/R16/R17)", () => {
   });
 });
 
-describe("Feature 30 — no-regresion camino GAM feature 17 (R18)", () => {
-  it("R18: orden GAM con mensajero GAM -> por_recoger (regla 17 intacta)", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: "m1" }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "por_recoger" });
-  });
-
-  it("R18: orden GAM sin mensajero -> en_bodega_central (regla 17 intacta)", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: GAM_ZONA_ID }),
-      ]),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_bodega_central" });
-  });
-});
-
 // Decision del humano 2026-07-16: la regla se unifica a >=1 (antes "TODOS"): basta un
 // mensajero con cierre abierto para que la bodega destino no reciba ordenes nuevas.
+// Feature 156: los casos de `generarGuia` de este bloque se mudaron a "guardas retiradas"
+// (R11) — numerar ya no rutea a ninguna bodega satelite. El de `rutearABodegaSatelite`, que es
+// quien de verdad envia el paquete, se conserva INTACTO.
 describe("Ajuste maestro — no rutear a bodega satelite con >=1 mensajero en cierre", () => {
   const MENSAJEROS_LIMON = [
     { id: "m-lim1", nombre: "Ana" },
     { id: "m-lim2", nombre: "Beto" },
   ];
-
-  it("generarGuia: orden NO-GAM a una zona con TODOS los mensajeros en cierre -> conflict, sin persistir", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-      ]),
-      findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1", "m-lim2"])),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([
-      { ordenId: "o1", motivo: expect.stringContaining("bodega satelite bloqueada") },
-    ]);
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-    expect(repo.findMensajerosByZona).toHaveBeenCalledWith(NO_GAM_ZONA_ID);
-  });
-
-  // Decision del humano 2026-07-16: 1 solo mensajero en cierre YA bloquea la zona
-  // destino (antes este caso ruteaba ok con los mensajeros libres).
-  it("generarGuia: 1 solo mensajero de la zona destino en cierre -> conflict, sin persistir", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-      ]),
-      findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1"])), // solo uno
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([
-      { ordenId: "o1", motivo: expect.stringContaining("bodega satelite bloqueada") },
-    ]);
-    expect(repo.generarGuiaLote).not.toHaveBeenCalled();
-  });
-
-  it("generarGuia: NINGUN mensajero de la zona destino en cierre -> rutea normal (ok)", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-      ]),
-      findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados[0]).toMatchObject({ ordenId: "o1", estado: "en_ruta_bodega_satelite" });
-    expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1);
-  });
-
-  it("generarGuia: zona destino SIN mensajeros -> no bloquea (rutea ok)", async () => {
-    const repo = fakeRepo({
-      findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "en_fulfillment", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
-      ]),
-      findMensajerosByZona: vi.fn(async () => []), // sin mensajeros: no hay cierre que resolver
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
-    });
-    const service = newService(repo);
-
-    const r = await service.generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      MAESTRO,
-    );
-
-    expect(r.status).toBe("ok");
-  });
 
   it("rutearABodegaSatelite: zona destino con TODOS los mensajeros en cierre -> conflict, sin persistir", async () => {
     const repo = fakeRepo({
@@ -1079,5 +885,53 @@ describe("Ajuste maestro — no rutear a bodega satelite con >=1 mensajero en ci
       { ordenId: "o1", motivo: expect.stringContaining("bodega satelite bloqueada") },
     ]);
     expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
+    expect(repo.findMensajerosByZona).toHaveBeenCalledWith(NO_GAM_ZONA_ID);
+  });
+
+  it("rutearABodegaSatelite: 1 solo mensajero de la zona destino en cierre -> conflict", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+      findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1"])),
+    });
+    const service = newService(repo);
+
+    const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("rutearABodegaSatelite: NINGUN mensajero de la zona destino en cierre -> rutea normal (ok)", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+      findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    });
+    const service = newService(repo);
+
+    const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(repo.rutearBodegaSateliteLote).toHaveBeenCalledTimes(1);
+  });
+
+  it("rutearABodegaSatelite: zona destino SIN mensajeros -> no bloquea (rutea ok)", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+      ]),
+      findMensajerosByZona: vi.fn(async () => []), // sin mensajeros: no hay cierre que resolver
+      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    });
+    const service = newService(repo);
+
+    const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
+
+    expect(r.status).toBe("ok");
   });
 });

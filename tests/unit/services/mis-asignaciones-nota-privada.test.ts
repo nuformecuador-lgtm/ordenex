@@ -10,6 +10,7 @@ import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IR
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 
 // Feature 116 — E1: reflejo de `notaPrivada` en el listado (R6/R8). Espejo del test de
 // `marcarLuego` (115): el service mergea la nota del PROPIO actor por orden, y la privacidad es
@@ -21,7 +22,7 @@ function row(over: Partial<MiAsignacionRow> & { id: string }): MiAsignacionRow {
   return {
     numGuia: 1,
     numRemision: "R-1",
-    estatusValue: "en_ruta",
+    estatusValue: "en_reparto",
     destinatario: "Ana",
     telefonoDest: "099",
     direccion: "calle",
@@ -81,6 +82,7 @@ function build(rows: MiAsignacionRow[], notas: Map<string, string>) {
     {} as ISignedUrlProvider,
     fakeRutaRepo,
     metaRepo,
+    fakeIntentosEnLote(), // feature 160: dep requerida, no ejercitada aqui
   );
   return { service, metaRepo };
 }
@@ -88,8 +90,8 @@ function build(rows: MiAsignacionRow[], notas: Map<string, string>) {
 describe("R6 — el DTO refleja la nota privada del mensajero", () => {
   it("notaPrivada con el texto para las ordenes con nota; null para el resto", async () => {
     const rows = [
-      row({ id: "o1", estatusValue: "en_ruta" }),
-      row({ id: "o2", estatusValue: "en_ruta" }),
+      row({ id: "o1", estatusValue: "en_reparto" }),
+      row({ id: "o2", estatusValue: "en_reparto" }),
     ];
     const { service } = build(rows, new Map([["o1", "recoger atras"]]));
     const r = await service.listarMisAsignaciones(MENSAJERO);
@@ -100,7 +102,7 @@ describe("R6 — el DTO refleja la nota privada del mensajero", () => {
   });
 
   it("null por defecto cuando no existe NINGUNA nota", async () => {
-    const rows = [row({ id: "o1", estatusValue: "en_ruta" })];
+    const rows = [row({ id: "o1", estatusValue: "en_reparto" })];
     const { service } = build(rows, new Map());
     const r = await service.listarMisAsignaciones(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
@@ -108,7 +110,7 @@ describe("R6 — el DTO refleja la nota privada del mensajero", () => {
   });
 
   it("la nota privada NO altera `notas` (nota de la tienda): son campos distintos (R7)", async () => {
-    const rows = [row({ id: "o1", estatusValue: "en_ruta", notas: "nota de la tienda" })];
+    const rows = [row({ id: "o1", estatusValue: "en_reparto", notas: "nota de la tienda" })];
     const { service } = build(rows, new Map([["o1", "mi nota privada"]]));
     const r = await service.listarMisAsignaciones(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
@@ -119,7 +121,7 @@ describe("R6 — el DTO refleja la nota privada del mensajero", () => {
 
 describe("R8 — privacidad: el listado solo consulta y refleja las notas del propio actor", () => {
   it("consulta findNotasByMensajero EXCLUSIVAMENTE con el usuarioId del actor", async () => {
-    const rows = [row({ id: "o1", estatusValue: "en_ruta" })];
+    const rows = [row({ id: "o1", estatusValue: "en_reparto" })];
     const { service, metaRepo } = build(rows, new Map([["o1", "x"]]));
     await service.listarMisAsignaciones(MENSAJERO);
     expect(metaRepo.findNotasByMensajero).toHaveBeenCalledWith("m1");
@@ -127,7 +129,7 @@ describe("R8 — privacidad: el listado solo consulta y refleja las notas del pr
   });
 
   it("una nota de otra orden (no listada) no ensucia el DTO de las ordenes del actor", async () => {
-    const rows = [row({ id: "o1", estatusValue: "en_ruta" })];
+    const rows = [row({ id: "o1", estatusValue: "en_reparto" })];
     const { service } = build(rows, new Map([["o9", "nota de otra orden"]]));
     const r = await service.listarMisAsignaciones(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");

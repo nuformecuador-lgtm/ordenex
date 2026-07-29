@@ -6,6 +6,11 @@ import type {
   RecepcionSateliteRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import {
+  fakeIntentosEnLote,
+  llamadasIntentos,
+  type IntentosSvcDoble,
+} from "@/tests/fixtures/intentos-entrega";
 
 const ADMIN: Actor = { usuarioId: "as1", rol: "adminSatelite" };
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
@@ -74,8 +79,12 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
   };
 }
 
-function newService(repo: RepoMethods = fakeRepo()) {
-  return new RecepcionSateliteService(repo as unknown as IOrdenRepository);
+function newService(
+  repo: RepoMethods = fakeRepo(),
+  // Feature 160: derivador de intentos EN LOTE, dependencia REQUERIDA del constructor.
+  intentos: IntentosSvcDoble = fakeIntentosEnLote(),
+) {
+  return new RecepcionSateliteService(repo as unknown as IOrdenRepository, intentos);
 }
 
 // --- listar (R3/R4/R5/R6/R8/R9) ---
@@ -104,7 +113,7 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(repo.findRecepcionSateliteByZona).not.toHaveBeenCalled();
   });
 
-  it("R4/R6/R8: separa por recibir (en_ruta) de recibidas (en_bodega_satelite) de SU zona", async () => {
+  it("R4/R6/R8: separa por recibir (en_reparto) de recibidas (en_bodega_satelite) de SU zona", async () => {
     const repo = fakeRepo({
       findRecepcionSateliteByZona: vi.fn(async () => [
         recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
@@ -160,6 +169,61 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(r.porRecibir.map((o) => o.id)).toEqual(["a"]);
     expect(r.recibidas.map((o) => o.id)).toEqual(["b"]);
     expect(r.sinZona).toBe(false);
+  });
+
+  // --- Feature 160 (T10): un SOLO lote para los CINCO grupos ---
+
+  it("160/R12: UN solo lote con la union de los ids de los CINCO grupos (no cinco llamadas)", async () => {
+    const repo = fakeRepo({
+      findRecepcionSateliteByZona: vi.fn(async () => [
+        recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
+        recepcionRow({ id: "b", estatusValue: "en_bodega_satelite" }),
+        recepcionRow({ id: "d1", estatusValue: "por_devolver" }),
+        recepcionRow({ id: "t1", estatusValue: "devolviendo_a_bodega_central" }),
+        recepcionRow({ id: "v1", estatusValue: "devuelta" }),
+      ]),
+    });
+    const intentos = fakeIntentosEnLote();
+    await newService(repo, intentos).listar(ADMIN);
+
+    expect(intentos.contarIntentosEnLote).toHaveBeenCalledTimes(1);
+    expect(llamadasIntentos(intentos)).toEqual([["a", "b", "d1", "t1", "v1"]]);
+  });
+
+  it("160/R11/R14: los CINCO grupos salen con `intentosEntrega`, el `0` INCLUIDO", async () => {
+    const repo = fakeRepo({
+      findRecepcionSateliteByZona: vi.fn(async () => [
+        recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
+        recepcionRow({ id: "b", estatusValue: "en_bodega_satelite" }),
+        recepcionRow({ id: "d1", estatusValue: "por_devolver" }),
+        recepcionRow({ id: "t1", estatusValue: "devolviendo_a_bodega_central" }),
+        recepcionRow({ id: "v1", estatusValue: "devuelta" }),
+      ]),
+    });
+    // Solo `v1` y `b` tienen intentos; el resto debe salir con 0, no con `undefined`.
+    const r = await newService(repo, fakeIntentosEnLote({ v1: 2, b: 1 })).listar(ADMIN);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.devueltas[0].intentosEntrega).toBe(2);
+    expect(r.recibidas[0].intentosEntrega).toBe(1);
+    expect(r.porRecibir[0].intentosEntrega).toBe(0);
+    expect(r.porDevolver[0].intentosEntrega).toBe(0);
+    expect(r.enTransitoACentral[0].intentosEntrega).toBe(0);
+  });
+
+  it("160/R13/R15: sin filas -> lote vacio; sin zona ni siquiera se pregunta", async () => {
+    const vacio = fakeIntentosEnLote();
+    await newService(fakeRepo(), vacio).listar(ADMIN); // findRecepcionSateliteByZona -> []
+    expect(llamadasIntentos(vacio)).toEqual([[]]);
+
+    const sinZona = fakeIntentosEnLote();
+    const repoSinZona = fakeRepo({ findUsuarioZonaId: vi.fn(async () => null) });
+    await newService(repoSinZona, sinZona).listar(ADMIN);
+    expect(sinZona.contarIntentosEnLote).not.toHaveBeenCalled();
+
+    const ajeno = fakeIntentosEnLote();
+    await newService(fakeRepo(), ajeno).listar(MAESTRO); // rol no autorizado
+    expect(ajeno.contarIntentosEnLote).not.toHaveBeenCalled();
   });
 
   // Feature 101/R9: el service propaga `prioridad` de la fila del repo al DTO del grupo
@@ -419,7 +483,7 @@ describe("recibirLote (feature 63)", () => {
     expect(repo.recibirLoteEnSatelite).not.toHaveBeenCalled();
   });
 
-  it("transiciona el lote de SU zona en_ruta -> en_bodega_satelite (escritura guardada por origen+zona+historial)", async () => {
+  it("transiciona el lote de SU zona en_reparto -> en_bodega_satelite (escritura guardada por origen+zona+historial)", async () => {
     const repo = fakeRepo();
     const r = await newService(repo).recibirLote({ ordenIds: ["a", "b", "c"] }, ADMIN);
     expect(r).toEqual({ status: "ok", recibidas: 3 });

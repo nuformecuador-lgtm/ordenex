@@ -4,9 +4,22 @@
 // en el `actualizar` generico (design.md, alternativa D descartada).
 // Feature 30 — extiende el cuerpo (no las firmas, R18): resuelve la zona GAM
 // (guardia R4), clasifica cada orden GAM/no-GAM por `zonaId === centralZonaId`, valida
-// el mensajero contra la zona GAM (R6), rechaza mensajero en ordenes no-GAM (R8),
-// rutea las no-GAM a `en_ruta_bodega_satelite` con num_guia (R9/R10/R11) y agrega
-// la accion dedicada `rutearABodegaSatelite` (R13). Inyecta `IZonaRepository`.
+// el mensajero contra la zona GAM (R6) y agrega la accion dedicada
+// `rutearABodegaSatelite` (R13). Inyecta `IZonaRepository`.
+//
+// FEATURE 156 — NUMERAR ≠ ASIGNAR. "Generar guia" pasa de tres efectos (numerar +
+// asignar mensajero + rutear a satelite) a UNO SOLO: numerar y mover de
+// `en_preparacion` a `en_bodega_central`. `generarGuia` ya NO escribe
+// `mensajero_asignado_id` (R2), ya no clasifica GAM/no-GAM (R13), ya no rutea a
+// satelite (R3) y por tanto ya no aplica ni la guarda de mensajero bloqueado (R10),
+// ni la de bodega satelite bloqueada (R11), ni el gate de coordenadas (R12): son
+// guardas de la ASIGNACION, y esta via ya no asigna a nadie.
+//
+// Los DOS caminos de asignacion vivos NO cambian y conservan sus guardas intactas:
+//   - `asignarDesdeBodega`  (en_bodega_central  -> por_recoger, mensajero central)
+//   - `AsignacionSateliteService` (en_bodega_satelite -> por_recoger, mensajero satelite)
+// Tras esta feature esos dos son los UNICOS escritores de `mensajero_asignado_id`
+// del sistema (R19), y ambos siguen exigiendo `gateCoordenadas`/`asignabilidad`.
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -27,18 +40,22 @@ import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
-// R27: unicos estados de origen validos para "Generar guia".
-const ORIGEN_GENERAR_GUIA = new Set(["en_fulfillment", "en_preparacion"]);
+// Feature 156/R4: UNICO estado de origen valido para "Generar guia". `en_fulfillment`
+// deja de serlo (la 155 retira ese estado del flujo y hace el backfill).
+const ORIGEN_GENERAR_GUIA = "en_preparacion";
 // R27: unico estado de origen valido para "asignar desde bodega".
 const ORIGEN_BODEGA = "en_bodega_central";
-// Feature 30/R13 (decision (d)): origenes validos para rutear a satelite.
-const ORIGEN_RUTEO_SATELITE = new Set(["en_fulfillment", "en_preparacion", "en_bodega_central"]);
+// Feature 156/R15: UNICO estado de origen valido para rutear a satelite (antes un Set
+// con `en_fulfillment`/`en_preparacion`). Se deja como constante SEPARADA de
+// `ORIGEN_BODEGA` aunque hoy valgan lo mismo: documentan dos acciones distintas y un
+// cambio futuro en una no debe arrastrar a la otra por accidente.
+const ORIGEN_RUTEO_SATELITE = "en_bodega_central";
 
 // Feature 46/R2: estatus bloqueado por reprogramacion (guardia explicito y tipado).
 const ESTATUS_REPROGRAMADA = "reprogramada";
 
-const ESTATUS_EN_ESPERA_ACEPTACION = "por_recoger"; // R21/R22/R26
-const ESTATUS_EN_BODEGA = "en_bodega_central"; // R23
+const ESTATUS_EN_ESPERA_ACEPTACION = "por_recoger"; // R26 (asignarDesdeBodega)
+const ESTATUS_EN_BODEGA = "en_bodega_central"; // feature 156/R3: destino UNICO de generar guia
 const ESTATUS_EN_RUTA_BODEGA_SATELITE = "en_ruta_bodega_satelite"; // feature 30/R9
 
 // Feature 30/R4: mensaje del guardia de zona GAM no configurada (accionable, sin
@@ -73,15 +90,17 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
   ) {}
 
   /**
-   * Feature 92 (R8) — guarda comun de los DOS writers de `mensajero_asignado_id` de este
-   * service. Devuelve el `detalle` de las ordenes NO asignables (vacio si todas lo son).
+   * Feature 92 (R8) — guarda del writer de `mensajero_asignado_id` de este service.
+   * Devuelve el `detalle` de las ordenes NO asignables (vacio si todas lo son).
    *
    * TODO-O-NADA POR LOTE: es el contrato ya vigente de estos services (una sola orden
    * conflictiva aborta el lote entero sin efectos), no se cambia aqui.
    *
-   * Solo se evaluan las ordenes que REALMENTE reciben mensajero: una orden no-GAM que se
-   * rutea a satelite no se asigna a nadie, asi que su falta de coordenadas no bloquea nada
-   * todavia (se le exigiran cuando la bodega satelite la asigne, via
+   * Solo se evaluan las ordenes que REALMENTE reciben mensajero. Feature 156/R12/R19:
+   * tras retirar la asignacion de `generarGuia`, el UNICO consumidor de este gate en
+   * esta clase es `asignarDesdeBodega` — y ahi se conserva INTACTO. Numerar una orden
+   * y moverla a la bodega central no la mete en la ruta de nadie, asi que no se le
+   * exigen coordenadas todavia: se le exigiran cuando la bodega la asigne (aqui o via
    * `AsignacionSateliteService`).
    */
   private async gateCoordenadas(ordenIds: string[]): Promise<DetalleConflicto[]> {
@@ -130,187 +149,90 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     return bloqueadas;
   }
 
+  /**
+   * Feature 156 — "Generar guia" con UN SOLO efecto: numerar y mover a la bodega
+   * central. `en_preparacion -> en_bodega_central` (arista #5 del grafo), sin
+   * mensajero y sin ruteo.
+   *
+   * Lo que este metodo YA NO hace (y por que no se traslada a ningun sitio nuevo):
+   *   - resolver la zona GAM / clasificar GAM-no-GAM (R13): sin destino que decidir,
+   *     el dato no hace falta; la clasificacion vive intacta en `asignarDesdeBodega`
+   *     y `rutearABodegaSatelite`, que si la necesitan;
+   *   - validar el mensajero contra la zona GAM (R2): no hay mensajero que validar;
+   *   - la guarda de mensajero bloqueado por cierre (R10): idem;
+   *   - la guarda de bodega satelite bloqueada (R11): esta via ya no rutea a ninguna;
+   *   - el gate de asignabilidad por coordenadas (R12): numerar no mete la orden en
+   *     la ruta de nadie. Se le exigiran coordenadas a la orden cuando la bodega la
+   *     asigne — ahi el gate sigue puesto (R19).
+   */
   async generarGuia(input: GenerarGuiaInput, actor: Actor): Promise<GenerarGuiaServiceResult> {
-    // --- Autorizacion (R11-R13/R16), antes de tocar datos ---
+    // --- Autorizacion (R9), antes de tocar datos ---
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
 
-    const { decisiones } = input;
-    if (decisiones.length === 0) return { status: "ok", resultados: [] };
+    const ordenIds = distinct(input.ordenIds);
+    if (ordenIds.length === 0) return { status: "ok", resultados: [] };
 
-    // --- Guardia R4: la zona GAM debe estar configurada ---
-    const centralZonaId = await this.zonaRepo.findCentralZonaId();
-    if (centralZonaId === null) {
-      return { status: "validation_error", fieldErrors: GAM_NO_CONFIGURADA };
-    }
-
-    const ordenIds = distinct(decisiones.map((d) => d.ordenId));
-    const mensajeroIds = distinct(
-      decisiones.map((d) => d.mensajeroId).filter((id): id is string => id !== null),
-    );
-
-    // --- Precarga: ordenes (con zona/GAM) + mensajeros validos de la zona GAM (R6) ---
-    const [ordenes, mensajerosValidos] = await Promise.all([
-      this.repo.findByIdsForTransicion(ordenIds),
-      this.repo.findMensajeroIdsValidosByZona(mensajeroIds, centralZonaId),
-    ]);
+    const ordenes = await this.repo.findByIdsForTransicion(ordenIds);
     const ordenMap = new Map(ordenes.map((o) => [o.id, o]));
 
-    // --- Validacion por orden (R27/R6/R8); fallo -> ABORTA sin efectos (R11/R17) ---
+    // --- Validacion por orden (R4/R7); fallo -> ABORTA el lote sin efectos (R6) ---
     const detalle: DetalleConflicto[] = [];
-    for (const d of decisiones) {
-      const orden = ordenMap.get(d.ordenId);
+    for (const id of ordenIds) {
+      const orden = ordenMap.get(id);
       if (!orden) {
-        detalle.push({ ordenId: d.ordenId, motivo: "orden no existe" });
+        detalle.push({ ordenId: id, motivo: "orden no existe" });
         continue;
       }
       if (orden.deletedAt !== null) {
-        detalle.push({ ordenId: d.ordenId, motivo: "orden borrada" });
+        detalle.push({ ordenId: id, motivo: "orden borrada" });
         continue;
       }
       // Feature 46/R2: orden reprogramada -> bloqueada hasta su fecha; motivo tipado.
       if (orden.estatusValue === ESTATUS_REPROGRAMADA) {
-        detalle.push({ ordenId: d.ordenId, motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA });
+        detalle.push({ ordenId: id, motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA });
         continue;
       }
-      if (!ORIGEN_GENERAR_GUIA.has(orden.estatusValue)) {
+      // R4: origen UNICO `en_preparacion`. `en_fulfillment` deja de valer aqui.
+      if (orden.estatusValue !== ORIGEN_GENERAR_GUIA) {
         detalle.push({
-          ordenId: d.ordenId,
+          ordenId: id,
           motivo: `estado de origen no permitido: ${orden.estatusValue}`,
         });
-        continue;
-      }
-      const esGam = orden.zonaId === centralZonaId;
-      if (esGam) {
-        // R6: mensajero (sugerido confirmado u override) debe ser de la zona GAM.
-        if (d.mensajeroId !== null && !mensajerosValidos.has(d.mensajeroId)) {
-          detalle.push({ ordenId: d.ordenId, motivo: "mensajeroId no valido (no GAM)" });
-        }
-      } else {
-        // R8: una orden no-GAM NO puede recibir mensajero; su unica transicion es
-        // el ruteo a satelite (mensajeroId debe venir null).
-        if (d.mensajeroId !== null) {
-          detalle.push({
-            ordenId: d.ordenId,
-            motivo: "no se puede asignar mensajero a orden de zona no-GAM",
-          });
-        }
       }
     }
     if (detalle.length > 0) return { status: "conflict", detalle };
 
-    // --- Feature 41/R13/R23: guarda de mensajero bloqueado, ANTES de persistir ---
-    // Un mensajero con cierre `solicitado`/`vencido` no recibe nuevas asignaciones. El
-    // ruteo a satelite (ordenes sin mensajero) NO se bloquea (no asigna mensajero).
-    const bloqueados = await this.repo.findMensajerosBloqueados(mensajeroIds);
-    if (bloqueados.size > 0) {
-      const detalleBloqueo: DetalleConflicto[] = [];
-      for (const d of decisiones) {
-        if (d.mensajeroId !== null && bloqueados.has(d.mensajeroId)) {
-          detalleBloqueo.push({ ordenId: d.ordenId, motivo: MSG_MENSAJERO_BLOQUEADO });
-        }
-      }
-      if (detalleBloqueo.length > 0) return { status: "conflict", detalle: detalleBloqueo };
-    }
-
-    // --- Ajuste maestro: no se puede rutear a una bodega satelite cuyos mensajeros
-    // esten TODOS en cierre. Aplica a las ordenes NO-GAM del lote (destino satelite). ---
-    const zonasNoGam = new Set<string>();
-    for (const d of decisiones) {
-      const orden = ordenMap.get(d.ordenId);
-      if (orden && orden.zonaId !== centralZonaId) zonasNoGam.add(orden.zonaId);
-    }
-    const zonasBloqueadas = await this.zonasSateliteBloqueadas([...zonasNoGam]);
-    if (zonasBloqueadas.size > 0) {
-      const detalleZona: DetalleConflicto[] = [];
-      for (const d of decisiones) {
-        const orden = ordenMap.get(d.ordenId);
-        if (orden && orden.zonaId !== centralZonaId && zonasBloqueadas.has(orden.zonaId)) {
-          detalleZona.push({ ordenId: d.ordenId, motivo: MSG_BODEGA_SATELITE_BLOQUEADA });
-        }
-      }
-      if (detalleZona.length > 0) return { status: "conflict", detalle: detalleZona };
-    }
-
-    // --- Feature 92/R8: gate de asignabilidad por coordenadas, ANTES de persistir ---
-    // Solo las ordenes GAM que reciben mensajero: son las unicas que escriben
-    // `mensajero_asignado_id` y, por tanto, las unicas que entran a la ruta de alguien.
-    const idsQueRecibenMensajero = decisiones
-      .filter((d) => d.mensajeroId !== null && ordenMap.get(d.ordenId)?.zonaId === centralZonaId)
-      .map((d) => d.ordenId);
-    const detalleCoords = await this.gateCoordenadas(distinct(idsQueRecibenMensajero));
-    if (detalleCoords.length > 0) return { status: "conflict", detalle: detalleCoords };
-
-    const [estatusEsperaId, estatusBodegaId, estatusRutaSateliteId] = await Promise.all([
-      this.repo.findEstatusIdByValue(ESTATUS_EN_ESPERA_ACEPTACION),
-      this.repo.findEstatusIdByValue(ESTATUS_EN_BODEGA),
-      this.repo.findEstatusIdByValue(ESTATUS_EN_RUTA_BODEGA_SATELITE),
-    ]);
+    const estatusBodegaId = await this.repo.findEstatusIdByValue(ESTATUS_EN_BODEGA);
     // Guardia de catalogo (mismo criterio que `asignarDesdeBodega`/`rutearABodegaSatelite`):
-    // los tres destinos posibles del lote deben existir en `order_status`. Si falta alguno,
-    // se aborta ANTES de persistir (R11/R17) con un error accionable, en vez de dejar pasar
-    // un null disfrazado de string hasta la escritura.
-    if (estatusEsperaId === null || estatusBodegaId === null || estatusRutaSateliteId === null) {
+    // el destino debe existir en `order_status`. Si falta, se aborta ANTES de persistir
+    // con un error accionable, en vez de dejar pasar un null disfrazado de string.
+    if (estatusBodegaId === null) {
       return {
         status: "validation_error",
         fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
       };
     }
 
-    // --- Construir decisiones del lote: GAM por regla 17, no-GAM a satelite (R11) ---
-    // Arrow `const` (no `function`): una declaracion se hoistea y TS descarta el
-    // estrechamiento de la guardia de catalogo de arriba; asi los tres ids entran ya
-    // como `string` y no hace falta ningun cast.
-    const estatusDestino = (
-      ordenId: string,
-      mensajeroId: string | null,
-    ): {
-      estatusId: string;
-      mensajeroAsignadoId: string | null;
-      estado: string;
-    } => {
-      const orden = ordenMap.get(ordenId);
-      const esGam = orden !== undefined && orden.zonaId === centralZonaId;
-      if (!esGam) {
-        // R9/R10: no-GAM -> en_ruta_bodega_satelite, sin mensajero, con num_guia.
-        return {
-          estatusId: estatusRutaSateliteId,
-          mensajeroAsignadoId: null,
-          estado: ESTATUS_EN_RUTA_BODEGA_SATELITE,
-        };
-      }
-      if (mensajeroId !== null) {
-        return {
-          estatusId: estatusEsperaId,
-          mensajeroAsignadoId: mensajeroId,
-          estado: ESTATUS_EN_ESPERA_ACEPTACION,
-        };
-      }
-      return {
+    // --- Persistencia transaccional (R6): TODAS reciben num_guia idempotente (R5) ---
+    // R2: `mensajeroAsignadoId: null` SIEMPRE. Ademas de no escribir el mensajero, deja
+    // `asignado_at` sin estampar (el repo solo lo toca cuando el mensajero no es nulo).
+    const resultadosRaw = await this.repo.generarGuiaLote(
+      ordenIds.map((ordenId) => ({
+        ordenId,
         estatusId: estatusBodegaId,
         mensajeroAsignadoId: null,
-        estado: ESTATUS_EN_BODEGA,
-      };
-    };
-
-    // --- Persistencia transaccional (R11/R17): TODAS reciben num_guia (R10/R19) ---
-    const resultadosRaw = await this.repo.generarGuiaLote(
-      decisiones.map((d) => {
-        const destino = estatusDestino(d.ordenId, d.mensajeroId);
-        return {
-          ordenId: d.ordenId,
-          estatusId: destino.estatusId,
-          mensajeroAsignadoId: destino.mensajeroAsignadoId,
-        };
-      }),
-      // Feature 49/#3 (R11): actor = el maestro; origen leido por-orden dentro de la tx.
+      })),
+      // Feature 49/#3 (R8): actor = quien ejecuto; origen leido por-orden dentro de la tx.
       { actorUsuarioId: actor.usuarioId, origenTipo: "generacion_guia" },
     );
     const numGuiaByOrden = new Map(resultadosRaw.map((r) => [r.ordenId, r.numGuia]));
 
-    const resultados = decisiones.map((d) => ({
-      ordenId: d.ordenId,
-      numGuia: numGuiaByOrden.get(d.ordenId) as number, // presente: paso por generarGuiaLote
-      estado: estatusDestino(d.ordenId, d.mensajeroId).estado,
+    // R1/R3/R5: destino UNICO `en_bodega_central` y el num_guia efectivo (el que ya
+    // tenia, si lo tenia: la guarda `WHERE num_guia IS NULL` del repo es idempotente).
+    const resultados = ordenIds.map((ordenId) => ({
+      ordenId,
+      numGuia: numGuiaByOrden.get(ordenId) as number, // presente: paso por generarGuiaLote
+      estado: ESTATUS_EN_BODEGA,
     }));
 
     return { status: "ok", resultados };
@@ -446,7 +368,10 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         detalle.push({ ordenId: id, motivo: "orden borrada" });
         continue;
       }
-      if (!ORIGEN_RUTEO_SATELITE.has(orden.estatusValue)) {
+      // Feature 156/R15/R16: origen UNICO `en_bodega_central`. Antes tambien se
+      // admitia `en_fulfillment`/`en_preparacion`; el paquete se rutea desde donde
+      // esta fisicamente, y eso es la bodega central.
+      if (orden.estatusValue !== ORIGEN_RUTEO_SATELITE) {
         detalle.push({
           ordenId: id,
           motivo: `estado de origen no permitido: ${orden.estatusValue}`,

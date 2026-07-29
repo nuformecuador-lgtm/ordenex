@@ -16,6 +16,7 @@ import {
   type UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
 import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
+import type { CuentaTiendaDTO } from "@/lib/types/filtros-ordenes";
 
 type UserPrismaClient = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;
 
@@ -111,6 +112,26 @@ export class UserRepository implements IUserRepository {
       select: { id: true, nombre: true },
       orderBy: { nombre: "asc" },
     });
+  }
+
+  /**
+   * Feature 144/B2 (R50/R54): cuentas dueñas posibles de una orden — roles
+   * `adminTienda` y `apiKey` — SIN filtrar por `estado` (las inactivas se incluyen,
+   * marcadas por la bandera `activa`). Proyeccion minima: id, nombre y dos booleanos.
+   * Nada de email/telefono/cedula/hash.
+   */
+  async listCuentasTienda(): Promise<CuentaTiendaDTO[]> {
+    const rows = await this.prisma.usuario.findMany({
+      where: { rol: { value: { in: ["adminTienda", "apiKey"] } } },
+      select: { id: true, nombre: true, estado: true, rol: { select: { value: true } } },
+      orderBy: { nombre: "asc" }, // R49: orden determinista
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      esApiKey: r.rol.value === "apiKey",
+      activa: r.estado === "activo",
+    }));
   }
 
   /**

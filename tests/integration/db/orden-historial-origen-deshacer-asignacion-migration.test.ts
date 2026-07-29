@@ -90,16 +90,16 @@ describe("Feature 149 · UP — ADD VALUE aditivo del origen_tipo (T0.1, R25)", 
 });
 
 describe("Feature 149 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)", () => {
-  it("recrea el enum SIN deshacer_asignacion, con los 22 previos", () => {
+  it("recrea el enum SIN deshacer_asignacion, con los 24 previos", () => {
     expect(downSql).toMatch(
       /ALTER TYPE "orden_historial_origen_tipo" RENAME TO "orden_historial_origen_tipo_old";/,
     );
     const match = downSql.match(/CREATE TYPE "orden_historial_origen_tipo" AS ENUM \(([\s\S]*?)\);/);
     expect(match).not.toBeNull();
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-    expect(valores).toHaveLength(22);
+    expect(valores).toHaveLength(24);
     expect(valores).not.toContain(NUEVO);
-    // Los 22 previos = el SEED actual menos los valores AÑADIDOS EN O DESPUES de la feature 149.
+    // Los 24 previos = el SEED actual menos los valores AÑADIDOS EN O DESPUES de la feature 149.
     // Hoy el unico es el propio `deshacer_asignacion` (es el ultimo del enum); cuando una feature
     // futura añada otro valor, DEBE apendirlo a este set —igual que la 149 hizo con los downs del
     // 67/99/100/106/138—, porque este down recrea el enum a su estado PRE-149 (fijo, historico).
@@ -109,7 +109,7 @@ describe("Feature 149 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
     );
   });
 
-  it("el orden de los 22 valores del down coincide con el del SEED (sin reordenar el enum)", () => {
+  it("el orden de los 24 valores del down coincide con el del SEED (sin reordenar el enum)", () => {
     const match = downSql.match(/CREATE TYPE "orden_historial_origen_tipo" AS ENUM \(([\s\S]*?)\);/);
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(valores).toEqual(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => v !== NUEVO));

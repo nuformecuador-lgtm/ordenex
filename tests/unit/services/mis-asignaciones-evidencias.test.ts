@@ -11,6 +11,7 @@ import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 
 // Feature 119 (R9/R10/R11/R13) — atomicidad Storage <-> DB de la evidencia MULTIPLE. La subida
 // es SECUENCIAL y acumula los paths en `uploaded`; ante cualquier fallo se compensa con
@@ -22,7 +23,7 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
   return {
     id: "o1",
-    estatusValue: "en_ruta",
+    estatusValue: "en_reparto",
     deletedAt: null,
     mensajeroAsignadoId: "m1",
     montoCobrar: 100,
@@ -49,7 +50,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 
 function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados"> {
   const ids: Record<string, string> = {
-    en_ruta: "os-reparto",
+    en_reparto: "os-reparto",
     entregada: "os-entregada",
     rechazada: "os-rechazada",
     devuelta: "os-devuelta",
@@ -105,6 +106,7 @@ function newService(
     signed,
     fakeRutaRepo(),
     fakeMetaRepo(),
+    fakeIntentosEnLote(), // feature 160: dep requerida, no ejercitada aqui
   );
 }
 

@@ -23,11 +23,17 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // por_devolver/por_devolver_a_tienda por zona): valor propio para que la linea de tiempo distinga la
 // salida de `rechazada` disparada por la aprobacion del cierre de las cuatro transiciones de lote/recepcion
 // del flujo (que reusan `ajuste_estado` / `recepcion_bodega_central`).
-// Feature 149: el conjunto pasa a 23 con `deshacer_asignacion` (reversion de la asignacion/ruteo
+// Feature 154: el conjunto pasa a 24 con `recoleccion_tienda` (el mensajero recolecta en la tienda:
+// por_recolectar_en_tienda -> en_ruta_bodega_central, #43) e `incidente` (familia propia del
+// resultado `incidente` de la gestion). AMBAS nacen DECLARADAS Y SIN PRODUCTOR: ningun repo las
+// emite hasta las features 157/158 (por eso no estan en PUNTOS_DE_ESCRITURA, ver
+// tests/unit/repositories/orden-historial-cobertura.test.ts).
+// Feature 149: el conjunto pasa a 25 con `deshacer_asignacion` (reversion de la asignacion/ruteo
 // ANTES de la recogida: por_recoger -> en_bodega_central/en_bodega_satelite y
 // en_ruta_bodega_satelite -> en_bodega_central): valor propio para que la linea de tiempo distinga
 // la reversion de la asignacion que la produjo (`asignacion_bodega`/`asignacion_satelite`/
-// `ruteo_satelite`) y de un parche administrativo generico (`ajuste_estado`).
+// `ruteo_satelite`) y de un parche administrativo generico (`ajuste_estado`). SI tiene productor
+// (`OrdenRepository.deshacerAsignacionLote`), a diferencia de las dos de la 154.
 describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
   const ESPERADOS = [
     "carga_masiva",
@@ -48,22 +54,36 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "reprogramacion_tienda", // feature 100: adminTienda reprograma devuelta -> reprogramada
     "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite
     "cancelacion_api", // feature 106: OrdenRepository.cancelarViaApi (cancelacion por API key)
-    "corte_sin_gestionar", // feature 109: CierreDiaRepository.crearCierre (corte, en_ruta -> sin_gestionar, actor null)
+    "corte_sin_gestionar", // feature 109: CierreDiaRepository.crearCierre (corte, en_reparto -> sin_gestionar, actor null)
     "liberacion_sin_gestionar", // feature 109: CierresAdminRepository.resolverCierre (aprobar, sin_gestionar -> bodega)
     "recepcion_bodega_central", // feature 138: OrdenRepository.recibirEnBodegaCentral (recepcion fisica, en_ruta_bodega_central -> en_bodega_central)
     "devolucion_rechazada", // feature 139: CierresAdminRepository.resolverCierre (aprobar, rechazada -> por_devolver/por_devolver_a_tienda)
+    "recoleccion_tienda", // feature 154 (R7): recoleccion en tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43). SIN PRODUCTOR hasta la 157
+    "incidente", // feature 154 (R8): familia propia del resultado `incidente`. SIN PRODUCTOR hasta la 158
     "deshacer_asignacion", // feature 149: OrdenRepository.deshacerAsignacionLote (reversion antes de la recogida)
   ];
 
-  it("contiene exactamente los 23 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(23);
+  it("contiene exactamente los 25 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(25);
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 
+  // Feature 154/R9: correspondencia EXACTA en AMBAS direcciones entre el catalogo declarado en
+  // TS y el enum respaldado en base de datos. La direccion codigo -> DB la fuerza el `satisfies`
+  // del modulo y la direccion DB -> codigo el `_EnsureExhaustive`: las dos rompen el BUILD. Este
+  // test lo verifica ademas en runtime contra el enum que Prisma genera del schema.
   it("coincide 1:1 con los valores del enum Prisma orden_historial_origen_tipo", () => {
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual(
       Object.values(PrismaOrdenHistorialOrigenTipo).sort(),
     );
+  });
+
+  it("feature 154/R7/R8: reconoce recoleccion_tienda e incidente como familias de origen", () => {
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("recoleccion_tienda");
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("incidente");
+    // Y el enum de la DB (via Prisma) tambien: sin drift en ninguna direccion (R9).
+    expect(Object.values(PrismaOrdenHistorialOrigenTipo)).toContain("recoleccion_tienda");
+    expect(Object.values(PrismaOrdenHistorialOrigenTipo)).toContain("incidente");
   });
 
   it("no tiene valores duplicados", () => {

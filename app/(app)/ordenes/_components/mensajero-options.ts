@@ -3,8 +3,10 @@ import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
 // Feature 17 (T18/T19) — traduce la lista de mensajeros del loader
 // `listarMensajerosParaAsignacion` (R28, TODOS los mensajeros, SIN filtro de
-// zona) a las opciones del `Select` compartido. Reutilizado por
-// `GenerarGuiaModal` y `AsignarBodegaModal`.
+// zona) a las opciones del `Select` compartido.
+//
+// Feature 156/R30: `GenerarGuiaModal` dejó de consumirlo (generar guía ya no asigna
+// mensajero). Su único consumidor en este directorio es `AsignarBodegaModal`.
 //
 // `bloqueadosIds` (opcional, pedido admin_satelite): mensajeros con un cierre abierto.
 // Se muestran deshabilitados y con un sufijo aclaratorio para que no se puedan asignar,

@@ -2,7 +2,6 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
-import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import type {
   CambioEstadoEntrada,
   HistorialContexto,
@@ -28,6 +27,7 @@ import {
   type ListOrdenesParams,
   type ListOrdenesResult,
   type CausaDevueltaVigente,
+  type ManifiestoOrdenRow,
   type MensajeroLiteRow,
   type NovedadOrdenRow,
   type OrdenTransicionRow,
@@ -46,7 +46,7 @@ import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabil
 import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 /** Feature 92: unico estatus cuyas ordenes son paradas de la ruta de un mensajero. */
-const ESTATUS_EN_REPARTO = "en_ruta";
+const ESTATUS_EN_REPARTO = "en_reparto";
 
 // Feature 106 (design §4, R19/R20): unicos estados desde los que la tienda puede cancelar
 // una orden via API; cualquier otro (incl. una orden ya en `devolviendo_a_tienda`) es 409.
@@ -159,7 +159,7 @@ const WITH_ESTATUS = {
 
 // El LISTADO trae, en el MISMO query (via joins de Prisma `include`), los datos
 // de TODAS las relaciones DIRECTAS (FK) de la orden: estatus, tienda, zona,
-// provincia, canton, distrito, mensajeroSugerido y mensajeroAsignado. La relacion
+// provincia, canton, distrito y mensajeroAsignado. La relacion
 // `tienda` (Orden.tienda -> Usuario) trae ademas su tarifa ACTIVA (Usuario.
 // tarifasTienda, 1:N por-tienda; se acota a `status: 'activo'`, no borrada,
 // `take: 1`). NO requiere migracion: son includes sobre relaciones ya existentes.
@@ -184,6 +184,10 @@ const TARIFA_SELECT = {
 // `gestion_orden.resultado` de una reprogramacion (espejo de
 // `LiberacionReprogramadaRepository`, el cron que consume la misma fecha).
 const RESULTADO_REPROGRAMADA = "reprogramada";
+
+// `order_status.value` de una orden reprogramada: sigue bloqueada hasta que el cron de
+// liberacion la desbloquee, asi que queda FUERA del filtro de reasignables.
+const ESTATUS_REPROGRAMADA = "reprogramada";
 
 // Feature 87 (T2/R6): `gestion_orden.resultado` de una DEVOLUCION. Mismo valor del enum
 // `GestionResultado` que ya usa el historial; la vigencia se filtra por `anuladaAt: null`
@@ -234,7 +238,6 @@ const WITH_ESTATUS_Y_TIENDA = {
     provincia: { select: { id: true, nombre: true } },
     canton: { select: { id: true, nombre: true } },
     distrito: { select: { id: true, nombre: true } },
-    mensajeroSugerido: { select: { id: true, nombre: true } },
     mensajeroAsignado: { select: { id: true, nombre: true } },
     // Gestion de reprogramacion VIGENTE (a lo sumo una, `take: 1`): alimenta la
     // columna "Liberada el" de la tab `reprogramada`. `orden -> gestiones` es 1:N
@@ -322,9 +325,6 @@ function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
     provincia: row.provincia ? { id: row.provincia.id, nombre: row.provincia.nombre } : null,
     canton: row.canton ? { id: row.canton.id, nombre: row.canton.nombre } : null,
     distrito: row.distrito ? { id: row.distrito.id, nombre: row.distrito.nombre } : null,
-    mensajeroSugerido: row.mensajeroSugerido
-      ? { id: row.mensajeroSugerido.id, nombre: row.mensajeroSugerido.nombre }
-      : null,
     mensajeroAsignado: row.mensajeroAsignado
       ? { id: row.mensajeroAsignado.id, nombre: row.mensajeroAsignado.nombre }
       : null,
@@ -333,15 +333,14 @@ function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
 
 // R25/R26: serializa una fila del listado a OrdenListItemDTO, agregando el nombre
 // legible de la tienda. Solo el listado usa este mapeo; el resto del CRUD usa toDTO.
-// Feature 17/R20: agrega mensajeroSugeridoId/mensajeroAsignadoId (ya vienen en el
-// row via WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
+// Feature 17/R20: agrega mensajeroAsignadoId (ya viene en el row via
+// WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
 // Ademas expone en `relaciones` los datos de TODAS las relaciones directas (FK),
 // con la tarifa activa anidada dentro de `tienda` (resueltas via joins en el listado).
 function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
   return {
     ...toDTO(row),
     tiendaNombre: row.tienda.nombre,
-    mensajeroSugeridoId: row.mensajeroSugeridoId,
     mensajeroAsignadoId: row.mensajeroAsignadoId,
     // Feature 30/R14/R19: nombre de zona (columna del listado) + flag GAM (la UI
     // decide por fila si muestra select de mensajero o "-> bodega satelite").
@@ -359,46 +358,6 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // derivar "hoy" desde un instante real). Sin gestion vigente -> null.
     fechaReprogramacion: toFechaISO(row.gestiones[0]?.fechaReprogramacion),
     relaciones: toRelaciones(row),
-  };
-}
-
-// Feature 16 — resumen del lote: estatus.value + mensajeroSugerido.nombre.
-const WITH_RESUMEN = {
-  select: {
-    id: true,
-    numGuia: true,
-    numRemision: true,
-    destinatario: true,
-    telefonoDest: true,
-    producto: true,
-    montoCobrar: true,
-    direccion: true,
-    mensajeroSugeridoId: true,
-    zonaId: true,
-    estatus: { select: { value: true } },
-    zona: { select: { nombre: true } },
-    mensajeroSugerido: { select: { nombre: true } },
-  },
-} as const;
-
-type OrdenResumenRow = Prisma.OrdenGetPayload<typeof WITH_RESUMEN>;
-
-// R6/R9: mapea Decimal montoCobrar -> number|null; NO expone deletedAt/internos.
-function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
-  return {
-    id: row.id,
-    numGuia: row.numGuia,
-    numRemision: row.numRemision,
-    destinatario: row.destinatario,
-    telefonoDest: row.telefonoDest,
-    producto: row.producto,
-    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
-    direccion: row.direccion,
-    estatusValue: row.estatus?.value,
-    zonaId: row.zonaId,
-    zonaNombre: row.zona.nombre,
-    mensajeroSugeridoId: row.mensajeroSugeridoId,
-    mensajeroSugeridoNombre: row.mensajeroSugerido?.nombre ?? null,
   };
 }
 
@@ -447,6 +406,52 @@ function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
     provinciaNombre: row.provincia.nombre,
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
+  };
+}
+
+// Feature 148/R4/R6/R7/R11 — proyeccion del MANIFIESTO (patron WITH_ETIQUETA). Solo
+// las columnas que consumen las 11 celdas de R2 + `tiendaId` (dueño, para el filtro
+// por API key de R29). Suma dos datos que la etiqueta no tiene: el NOMBRE del
+// mensajero ASIGNADO (columna `responsable`, R9) y `zona.esCentral` (decide
+// GAM/no-GAM en `origen`/`destino`, design.md §4). NO selecciona producto,
+// provincia/canton/distrito, notas ni `deletedAt` (R11); el filtro `deletedAt: null`
+// va en el `where` (R12).
+const WITH_MANIFIESTO = {
+  select: {
+    id: true,
+    tiendaId: true, // R29: dueño, para el filtro por propietario del service
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    direccion: true,
+    montoCobrar: true,
+    tienda: { select: { nombre: true } },
+    zona: { select: { nombre: true, esCentral: true } },
+    mensajeroAsignado: { select: { nombre: true } },
+  },
+} as const;
+
+type OrdenManifiestoRow = Prisma.OrdenGetPayload<typeof WITH_MANIFIESTO>;
+
+// R4/R6/R7/R11: serializa la fila a ManifiestoOrdenRow. Resuelve los nombres
+// legibles (zona por NOMBRE, R6), mapea Decimal montoCobrar -> number|null (R7) y
+// deja `mensajeroAsignadoNombre` null si la orden no tiene mensajero asignado (el
+// service cae entonces al actor, design.md §9.8). NO expone deletedAt (R11).
+function toManifiestoOrdenRow(row: OrdenManifiestoRow): ManifiestoOrdenRow {
+  return {
+    id: row.id,
+    tiendaId: row.tiendaId,
+    numGuia: row.numGuia,
+    numRemision: row.numRemision,
+    destinatario: row.destinatario,
+    telefonoDest: row.telefonoDest,
+    direccion: row.direccion,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    tiendaNombre: row.tienda.nombre,
+    zonaNombre: row.zona.nombre,
+    zonaEsCentral: row.zona.esCentral,
+    mensajeroAsignadoNombre: row.mensajeroAsignado?.nombre ?? null,
   };
 }
 
@@ -531,7 +536,6 @@ export class OrdenRepository implements IOrdenRepository {
             notas: data.notas ?? null,
             direccion: data.direccion ?? null,
             montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
-            mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
           },
           ...WITH_ESTATUS,
         });
@@ -567,23 +571,68 @@ export class OrdenRepository implements IOrdenRepository {
     return row ? toDTO(row) : null;
   }
 
+  /**
+   * Feature 63 + 144 — traduce UN valor del `where` (ya resuelto por el service) al
+   * criterio Prisma de su columna: LISTA -> `IN (...)` (OR dentro del mismo filtro,
+   * R34); ESCALAR -> igualdad; AUSENTE -> clave omitida (sin filtro). Las claves
+   * resultantes son hermanas del mismo objeto `where` => AND entre filtros distintos
+   * (R33).
+   *
+   * `listaVaciaSinFiltro` existe SOLO por retrocompatibilidad de `estatusId` (feature
+   * 63: una lista vacia equivalia a "sin filtro"). Los filtros de la 144 fallan
+   * CERRADO: lista vacia -> `IN ()` -> cero filas. Un filtro presente jamas puede
+   * degradar a "sin filtro" y devolver de mas (R35). El schema `.nonempty()` ya hace
+   * la lista vacia inalcanzable desde el borde; esto es defensa en profundidad.
+   */
+  private static criterio(
+    columna: string,
+    valor: string | string[] | undefined,
+    listaVaciaSinFiltro = false,
+  ): Record<string, unknown> {
+    if (valor === undefined) return {};
+    if (Array.isArray(valor)) {
+      if (valor.length === 0 && listaVaciaSinFiltro) return {};
+      return { [columna]: { in: valor } };
+    }
+    return valor ? { [columna]: valor } : {};
+  }
+
   async list(params: ListOrdenesParams): Promise<ListOrdenesResult> {
+    const criterioColumna = OrdenRepository.criterio;
     const where: Prisma.OrdenWhereInput = {
       deletedAt: null, // R34
-      ...(params.where.tiendaId ? { tiendaId: params.where.tiendaId } : {}),
+      ...criterioColumna("tiendaId", params.where.tiendaId),
       // Un id -> igualdad; una lista de ids -> `IN (...)` (filtro multi-estado).
-      // Lista vacia = sin filtro (se descarta, igual que un `estatusId` ausente).
-      ...(Array.isArray(params.where.estatusId)
-        ? params.where.estatusId.length > 0
-          ? { estatusId: { in: params.where.estatusId } }
-          : {}
-        : params.where.estatusId
-          ? { estatusId: params.where.estatusId }
-          : {}),
+      // `true`: retrocompatibilidad de la feature 63 — una lista vacia de estados
+      // equivalia a "sin filtro". Los filtros de la 144 NO heredan esa concesion.
+      ...criterioColumna("estatusId", params.where.estatusId, true),
       // Acotamiento por dueño para el rol mensajero: solo sus asignadas (evita fuga
       // del listado completo en /ordenes). El service lo setea; aqui se traduce al WHERE.
       ...(params.where.mensajeroAsignadoId
         ? { mensajeroAsignadoId: params.where.mensajeroAsignadoId }
+        : {}),
+      // Feature 144 (R33/R34/R35): filtros de catalogo de la orden. Mismo patron:
+      // lista -> `IN (...)` (OR interno), escalar -> igualdad, ausente -> sin clave.
+      // Claves hermanas del mismo objeto = AND entre filtros distintos.
+      ...criterioColumna("zonaId", params.where.zonaId),
+      ...criterioColumna("provinciaId", params.where.provinciaId),
+      ...criterioColumna("cantonId", params.where.cantonId),
+      // `distrito_id` es NULLABLE: `IN (...)` deja fuera las ordenes sin distrito.
+      ...criterioColumna("distritoId", params.where.distritoId),
+      // Feature 144 (R41/R42): rango temporal ya resuelto a instantes UTC por el service.
+      ...(params.where.createdAt ? { createdAt: params.where.createdAt } : {}),
+      // Filtro REASIGNABLES: las tres condiciones van como claves hermanas => AND
+      // entre ellas y con el resto de filtros. El estado se compara por VALUE (no por
+      // id): `reprogramada` esta bloqueada hasta que el cron la libere, asi que no es
+      // reasignable todavia. `mensajeroAsignadoId: null` es la parte "sin mensajero";
+      // no colisiona con el acotamiento del rol mensajero, que fija un id concreto
+      // (un mensajero pidiendo reasignables obtiene cero filas, que es lo correcto).
+      ...(params.where.reasignables
+        ? {
+            prioridad: true,
+            mensajeroAsignadoId: null,
+            estatus: { value: { not: ESTATUS_REPROGRAMADA } },
+          }
         : {}),
     };
     // Feature 101/R6: `prioridad DESC` PRIMERO y LUEGO el orden vigente (lista blanca R31:
@@ -825,16 +874,6 @@ export class OrdenRepository implements IOrdenRepository {
     }));
   }
 
-  /** R22: subconjunto de `ids` con rol `mensajero`. */
-  async findMensajerosByIds(ids: string[]): Promise<Set<string>> {
-    if (ids.length === 0) return new Set();
-    const rows = await this.prisma.usuario.findMany({
-      where: { id: { in: ids }, rol: { value: "mensajero" } },
-      select: { id: true },
-    });
-    return new Set(rows.map((r) => r.id));
-  }
-
   /** R27: insercion masiva en lotes de `batchSize`, tolerando carreras de num_remision. */
   async createManyOrdenes(
     data: CreateOrdenData[],
@@ -989,45 +1028,7 @@ export class OrdenRepository implements IOrdenRepository {
       notas: data.notas ?? null,
       direccion: data.direccion ?? null,
       montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
-      mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
     };
-  }
-
-  // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
-
-  /** R6/R8/R9/R10: filas del resumen, acotadas a tienda del actor y no borradas. */
-  async findResumenByNumRemisiones(
-    nums: string[],
-    tiendaId: string,
-  ): Promise<ResumenCargaOrdenDTO[]> {
-    if (nums.length === 0) return [];
-    const rows = await this.prisma.orden.findMany({
-      where: { numRemision: { in: nums }, tiendaId, deletedAt: null },
-      ...WITH_RESUMEN,
-    });
-    return rows.map(toResumenDTO);
-  }
-
-  /** R15/R16: actualiza en lote, solo ordenes no borradas de `tiendaId`. */
-  async asignarMensajeroSugerido(
-    ordenIds: string[],
-    mensajeroSugeridoId: string,
-    tiendaId: string,
-  ): Promise<number> {
-    if (ordenIds.length === 0) return 0;
-    const result = await this.prisma.orden.updateMany({
-      where: { id: { in: ordenIds }, tiendaId, deletedAt: null },
-      data: { mensajeroSugeridoId },
-    });
-    return result.count;
-  }
-
-  /** R14: cuenta cuantas de `ordenIds` pertenecen a `tiendaId` y no estan borradas. */
-  async countOrdenesDeTienda(ordenIds: string[], tiendaId: string): Promise<number> {
-    if (ordenIds.length === 0) return 0;
-    return this.prisma.orden.count({
-      where: { id: { in: ordenIds }, tiendaId, deletedAt: null },
-    });
   }
 
   // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
@@ -1490,6 +1491,49 @@ export class OrdenRepository implements IOrdenRepository {
       ...WITH_ETIQUETA,
     });
     return row ? toEtiquetaRow(row) : null;
+  }
+
+  // --- Feature 148: manifiesto Excel por lote (READ derivado, R4/R6/R7/R12/R29) ---
+
+  /**
+   * Feature 148/R4/R6/R7/R12: filas del manifiesto por id. `deletedAt: null` (R12):
+   * la orden borrada no aparece y el service la reporta como `no_encontrada`. Solo
+   * query, sin logica de negocio (el mapeo flujo -> origen/destino/responsable vive
+   * en `ManifiestoService`).
+   */
+  async findManifiestoByIds(ids: string[]): Promise<ManifiestoOrdenRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { id: { in: ids }, deletedAt: null }, // R12
+      ...WITH_MANIFIESTO,
+    });
+    return rows.map(toManifiestoOrdenRow);
+  }
+
+  /**
+   * Feature 148/R4/R12/R29: filas del manifiesto por `num_remision`, ACOTADAS a
+   * `tiendaId` (mismo `where` que `findResumenByNumRemisiones`, R29) y no borradas
+   * (R12). Es la via de la carga masiva, cuyo summary no lleva ids (design.md §2).
+   */
+  async findManifiestoByRemisiones(
+    remisiones: string[],
+    tiendaId: string,
+  ): Promise<ManifiestoOrdenRow[]> {
+    if (remisiones.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { numRemision: { in: remisiones }, tiendaId, deletedAt: null }, // R12/R29
+      ...WITH_MANIFIESTO,
+    });
+    return rows.map(toManifiestoOrdenRow);
+  }
+
+  /** Feature 148/R9: `usuario.nombre` del actor; `null` si el usuario no resuelve. */
+  async findUsuarioNombre(usuarioId: string): Promise<string | null> {
+    const row = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { nombre: true },
+    });
+    return row?.nombre ?? null;
   }
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---

@@ -91,6 +91,8 @@ describe("Feature 99 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
       "liberacion_sin_gestionar", // feature 109
       "recepcion_bodega_central", // feature 138
       "devolucion_rechazada", // feature 139
+      "recoleccion_tienda", // feature 154
+      "incidente", // feature 154
       "deshacer_asignacion", // feature 149
     ]);
     expect(new Set(valores)).toEqual(

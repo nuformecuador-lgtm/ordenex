@@ -331,7 +331,7 @@ describe("T4.6/R13 — fallo CERRADO: sin origen derivable no se escribe nada", 
   it.each([
     ["sin fila de historial", new Map<string, string | null>()],
     ["fila de creacion (origen NULL)", new Map<string, string | null>([["o1", null]])],
-    ["origen fuera de la tabla (en_ruta)", new Map<string, string | null>([["o1", "en_ruta"]])],
+    ["origen fuera de la tabla (en_reparto)", new Map<string, string | null>([["o1", "en_reparto"]])],
     ["origen fuera de la tabla (devuelta)", new Map<string, string | null>([["o1", "devuelta"]])],
   ])("%s -> conflict con motivo tipado y 0 escrituras", async (_n, origenes) => {
     const e = escenario({ origenes });
@@ -400,7 +400,7 @@ describe("T4.7/R14/R15 — la inferencia de la normalizacion se VERIFICA contra 
 // ---------------------------------------------------------------------------------------
 describe("T4.8/R16 — solo por_recoger y en_ruta_bodega_satelite son reversibles", () => {
   it.each([
-    "en_ruta",
+    "en_reparto",
     "en_bodega_satelite",
     "entregada",
     "reprogramada",
@@ -447,7 +447,7 @@ describe("T4.10/R20/R21 — todo-o-nada por lote", () => {
     const e = escenario({
       ordenes: [
         ordenRow({ id: "o1" }),
-        ordenRow({ id: "o2", estatusValue: "en_ruta" }), // ya recogida
+        ordenRow({ id: "o2", estatusValue: "en_reparto" }), // ya recogida
         ordenRow({ id: "o3" }),
       ],
       origenes: new Map([
@@ -458,7 +458,7 @@ describe("T4.10/R20/R21 — todo-o-nada por lote", () => {
     const r = await e.service.deshacer(input(["o1", "o2", "o3"]), MAESTRO);
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") {
-      expect(r.detalle).toEqual([{ ordenId: "o2", motivo: msgEstadoNoReversible("en_ruta") }]);
+      expect(r.detalle).toEqual([{ ordenId: "o2", motivo: msgEstadoNoReversible("en_reparto") }]);
     }
     expect(e.deshacerAsignacionLote).not.toHaveBeenCalled();
   });
@@ -467,7 +467,7 @@ describe("T4.10/R20/R21 — todo-o-nada por lote", () => {
     const ordenes = [
       ordenRow({ id: "o1" }),
       // Al re-leer, o2 ya fue recogida: ese es el motivo real de la carrera.
-      ordenRow({ id: "o2", estatusValue: "en_ruta" }),
+      ordenRow({ id: "o2", estatusValue: "en_reparto" }),
     ];
     const e = escenario({
       ordenes: [ordenRow({ id: "o1" }), ordenRow({ id: "o2" })],
@@ -488,7 +488,7 @@ describe("T4.10/R20/R21 — todo-o-nada por lote", () => {
 
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") {
-      expect(r.detalle).toEqual([{ ordenId: "o2", motivo: msgEstadoNoReversible("en_ruta") }]);
+      expect(r.detalle).toEqual([{ ordenId: "o2", motivo: msgEstadoNoReversible("en_reparto") }]);
     }
   });
 
@@ -515,7 +515,7 @@ describe("T4.13/R40 — ningun motivo expone UUIDs ni datos del destinatario", (
     MSG_ZONA_DESTINO_INCOHERENTE,
     MSG_ZONA_CENTRAL_NO_CONFIGURADA,
     MSG_CATALOGO_INCOMPLETO,
-    msgEstadoNoReversible("en_ruta"),
+    msgEstadoNoReversible("en_reparto"),
   ])("la constante `%s` no contiene UUID", (motivo) => {
     expect(motivo).not.toMatch(UUID);
   });

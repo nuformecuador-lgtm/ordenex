@@ -3,7 +3,9 @@
 import { z } from "zod";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { NovedadesService } from "@/lib/services/NovedadesService";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -57,7 +59,12 @@ function toNovedadesActionError(
 
 function buildService(): INovedadesService {
   const prisma = getPrismaClient();
-  return new NovedadesService(new OrdenRepository(prisma));
+  const ordenRepo = new OrdenRepository(prisma);
+  return new NovedadesService(
+    ordenRepo,
+    // Feature 160 (R11/R26): derivador de intentos EN LOTE de la pagina de novedades.
+    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+  );
 }
 
 export interface NovedadesDeps {

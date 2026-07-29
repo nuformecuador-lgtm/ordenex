@@ -4,6 +4,7 @@ import type {
   NovedadOrdenRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   INovedadesService,
   ListarNovedadesInput,
@@ -28,7 +29,11 @@ type NovedadesRepo = Pick<
  * ni Prisma; testeable con dobles sin red/DB.
  */
 export class NovedadesService implements INovedadesService {
-  constructor(private readonly repo: NovedadesRepo) {}
+  constructor(
+    private readonly repo: NovedadesRepo,
+    // Feature 160 (R11/R12/R26): derivador de intentos EN LOTE, dependencia REQUERIDA.
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
+  ) {}
 
   async listar(
     input: ListarNovedadesInput,
@@ -56,6 +61,9 @@ export class NovedadesService implements INovedadesService {
 
     // R8: UNA sola consulta agregada para las causas de TODAS las ordenes de la pagina.
     const causas = await this.repo.findCausasDevueltaVigentes(rows.map((r) => r.id)); // R6/R7
+    // Feature 160 (R12/R15): UNA sola consulta al historial para toda la pagina, sobre las
+    // ordenes YA acotadas a la tienda del actor (`findDevueltasByTienda(actor.usuarioId, ...)`).
+    const intentos = await this.historial.contarIntentosEnLote(rows.map((r) => r.id));
 
     // R12 (estricto): reordena la PAGINA por la fecha de la ultima gestion `devuelta` vigente
     // desc, con la fecha ya traida por `findCausasDevueltaVigentes` (sin query extra). Las
@@ -72,6 +80,8 @@ export class NovedadesService implements INovedadesService {
       destinatario: row.destinatario,
       telefonoDest: row.telefonoDest,
       causa: causas.get(row.id)?.causa ?? null,
+      // Feature 160 (R14/R19): `?? 0` — el `0` SIEMPRE se expone.
+      intentosEntrega: intentos.get(row.id) ?? 0,
     }));
 
     return { status: "ok", items, total, page, pageSize };

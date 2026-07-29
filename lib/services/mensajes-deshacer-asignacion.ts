@@ -4,7 +4,7 @@
 //
 // R40: ninguno de estos textos incluye identificadores internos (UUID de orden, de estado o de
 // usuario) ni datos personales del destinatario. El unico dato variable que aparece es el
-// `value` del catalogo de estados (`por_recoger`, `en_ruta`, ...), que es publico y no es PII.
+// `value` del catalogo de estados (`por_recoger`, `en_reparto`, ...), que es publico y no es PII.
 //
 // NO EXISTE, deliberadamente, una constante de "mensajero con cierre pendiente": por la
 // decision Q1 del gate F1.4 (CERRADA, R19) el cierre pendiente NO bloquea el deshacer, asi que
@@ -35,7 +35,7 @@ export const MSG_ZONA_DESTINO_INCOHERENTE =
 export const MSG_ESTADO_NO_REVERSIBLE = "estado no reversible";
 
 /**
- * R16: motivo que NOMBRA el estado actual de la orden (`en_ruta`, `en_bodega_satelite`,
+ * R16: motivo que NOMBRA el estado actual de la orden (`en_reparto`, `en_bodega_satelite`,
  * `entregada`, ...). Solo estados de origen `por_recoger` y `en_ruta_bodega_satelite` son
  * reversibles.
  */

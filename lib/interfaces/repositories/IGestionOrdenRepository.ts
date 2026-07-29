@@ -117,7 +117,7 @@ export interface IGestionOrdenRepository {
   /**
    * Suma de `montoCobrar` (COD) de las ordenes ENTREGADAS del mensajero (mismas
    * condiciones que `contarEntregadas`: propias, `entregada`, no borradas). Alimenta el
-   * KPI "Total a cobrar" (acumulado): junto al COD de `en_ruta` mantiene el total
+   * KPI "Total a cobrar" (acumulado): junto al COD de `en_reparto` mantiene el total
    * estable al entregar (la orden sale de reparto pero sigue sumando aqui) y lo descuenta
    * cuando se gestiona como reprogramada/devuelta/rechazada (no entra en ningun set).
    * `null` (sin entregadas o montos nulos) cuenta 0.

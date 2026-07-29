@@ -1,6 +1,7 @@
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { RecepcionSateliteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   IRecepcionSateliteService,
   ListarRecepcionSateliteServiceResult,
@@ -65,7 +66,12 @@ function distinct(values: string[]): string[] {
  * Prisma; testeable con dobles sin red/DB.
  */
 export class RecepcionSateliteService implements IRecepcionSateliteService {
-  constructor(private readonly repo: RecepcionSateliteRepo) {}
+  constructor(
+    private readonly repo: RecepcionSateliteRepo,
+    // Feature 160 (R11/R12/R25): derivador de intentos EN LOTE, dependencia REQUERIDA.
+    // `import type` + `Pick`: sin ciclo de modulos y testeable con dobles.
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
+  ) {}
 
   async listar(actor: Actor): Promise<ListarRecepcionSateliteServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R3/R17
@@ -100,6 +106,11 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       ESTADO_ASIGNADA, // Feature 149/T6.3/R35
     ]); // R6/R8 + Feature 139/R21 + Feature 100/R12 + Feature 149/R35
 
+    // Feature 160 (R12/R13/R15): UN SOLO lote con la union de los ids de los CINCO grupos, ya
+    // acotados a la zona del actor por `findRecepcionSateliteByZona`. Cinco llamadas (una por
+    // grupo) serian un incumplimiento gratuito de R12. Sin filas -> 0 consultas (R13).
+    const intentos = await this.historial.contarIntentosEnLote(rows.map((r) => r.id));
+
     const porRecibir: RecepcionSateliteDTO[] = [];
     const recibidas: RecepcionSateliteDTO[] = [];
     const porDevolver: RecepcionSateliteDTO[] = []; // Feature 139/R21: por_devolver (accionable)
@@ -109,7 +120,8 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     let zonaNombre: string | null = null;
     for (const row of rows) {
       zonaNombre = row.zonaNombre; // derivado de orden.zonaId (misma zona para todas)
-      const dto = toDTO(row);
+      // Feature 160 (R14/R19): `?? 0` — el `0` SIEMPRE se expone, no se omite.
+      const dto = { ...toDTO(row), intentosEntrega: intentos.get(row.id) ?? 0 };
       if (row.estatusValue === ORIGEN_RECEPCION) porRecibir.push(dto);
       else if (row.estatusValue === ESTADO_RECIBIDA) recibidas.push(dto);
       else if (row.estatusValue === ESTADO_POR_DEVOLVER) porDevolver.push(dto);

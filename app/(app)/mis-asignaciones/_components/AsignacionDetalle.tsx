@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
 
+import {
+  INTENTOS_LABEL,
+  IntentosValor,
+  valorIntentos,
+} from "@/components/shared/intentos-entrega";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Feature 36 (R11) / rediseño 63 (pedido humano): detalle de una orden asignada,
@@ -87,6 +92,14 @@ export function AsignacionDetalle({ orden }: AsignacionDetalleProps) {
             <Campo label="Distrito">{orden.distritoNombre ?? "—"}</Campo>
           </div>
           <Campo label="Notas">{orden.notas ?? "—"}</Campo>
+          {/* Feature 160 (R18/R19/R24): intentos de entrega como UN CAMPO MAS del
+              detalle, con el mismo `Campo` (<dt>/<dd>) que Nº Guía, Nombre, Teléfono o
+              Producto. Vive en "Entrega" porque califica al reparto, no al pedido. Lo
+              ve el mensajero en "por recoger" (PorAceptarSection) y dentro del
+              desplegable de la card POS. Siempre visible, `0` incluido; sin umbral. */}
+          <Campo label={INTENTOS_LABEL}>
+            <IntentosValor intentos={valorIntentos(orden)} />
+          </Campo>
         </dl>
       </Seccion>
 

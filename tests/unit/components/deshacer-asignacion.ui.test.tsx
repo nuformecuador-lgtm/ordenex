@@ -473,7 +473,7 @@ describe("R38 — éxito en el listado del maestro", () => {
     const user = userEvent.setup();
     deshacerAsignacionMock.mockResolvedValue({
       status: "conflict",
-      detalle: [{ ordenId: "o1", motivo: msgEstadoNoReversible("en_ruta") }],
+      detalle: [{ ordenId: "o1", motivo: msgEstadoNoReversible("en_reparto") }],
     });
     renderConSwr(<OrdenesListado accionesLote />);
 
@@ -483,7 +483,7 @@ describe("R38 — éxito en el listado del maestro", () => {
     await user.click(screen.getAllByRole("button", { name: ACCION }).at(-1)!);
 
     await waitFor(() => expect(errorMock).toHaveBeenCalledTimes(1));
-    expect(errorMock.mock.calls[0][0]).toContain(ORDER_STATUS_LABELS.en_ruta);
+    expect(errorMock.mock.calls[0][0]).toContain(ORDER_STATUS_LABELS.en_reparto);
     expect(successMock).not.toHaveBeenCalled();
   });
 });
@@ -507,7 +507,7 @@ describe("R39 — mensajes accionables por causa", () => {
     ],
     [
       "orden ya recogida",
-      { status: "conflict", detalle: [{ ordenId: "x", motivo: msgEstadoNoReversible("en_ruta") }] },
+      { status: "conflict", detalle: [{ ordenId: "x", motivo: msgEstadoNoReversible("en_reparto") }] },
     ],
     [
       "orden ya recibida en satélite",

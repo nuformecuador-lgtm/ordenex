@@ -5,6 +5,7 @@ import type {
   RecepcionSateliteRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { fakeIntentosEnLote, type IntentosSvcDoble } from "@/tests/fixtures/intentos-entrega";
 
 // Feature 149 — T6.3 (R35/R36): bucket `asignadas` del modulo de la bodega satelite.
 //
@@ -62,8 +63,14 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
   };
 }
 
-function newService(repo: RepoMethods = fakeRepo()) {
-  return new RecepcionSateliteService(repo as unknown as IOrdenRepository);
+function newService(
+  repo: RepoMethods = fakeRepo(),
+  // Feature 160 (integrada desde `dev`): el derivador de intentos EN LOTE es una dependencia
+  // REQUERIDA del constructor. El bucket `asignadas` no lo usa (las `por_recoger` no tienen
+  // intentos), pero el doble tiene que estar para construir el service.
+  intentos: IntentosSvcDoble = fakeIntentosEnLote(),
+) {
+  return new RecepcionSateliteService(repo as unknown as IOrdenRepository, intentos);
 }
 
 describe("T6.3/R35 — el modulo satelite lista las `por_recoger` de SU zona", () => {

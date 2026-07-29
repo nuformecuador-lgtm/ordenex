@@ -315,3 +315,55 @@ todos los cortes.
 4. **No se vuelve a `en_fulfillment`/`en_preparacion`** aunque el historial lo diga (D3′): esos
    orígenes normalizan a `en_bodega_central`, porque una orden en estado pre-guía con `num_guia`
    impreso sería un híbrido inconsistente y reabriría «Generar guía» sobre una orden ya etiquetada.
+
+---
+
+## 11. Integración con `dev` (2026-07-29, previa al PR)
+
+La rama se abrió desde `origin/dev @ 55b0cd4`. Al cerrar la feature, `dev` había avanzado hasta
+`aa7ac34` con las features 144, 146, 148, 151, 153, 154, 156, 159 y 160, así que el merge trajo
+**19 conflictos**. Todos eran ADITIVOS —censos del enum de historial, inventario de transiciones de
+la 140, denylists de orden de migraciones— y se resolvieron conservando AMBOS lados. Tres de los
+ajustes NO son cosméticos y quedan aquí registrados:
+
+1. **Renumeración de las tres aristas: #43/#44/#45 → #45/#46/#47.** La 154 aterrizó en `dev` sus
+   propias #43 (`por_recolectar_en_tienda -> en_ruta_bodega_central`) y #44
+   (`en_reparto -> incidente`) mientras la 149 iba en su rama. La #45 de la 149 (caso b) no
+   colisionaba y conserva su número; las dos del caso (a) pasan a #46 y #47. Los recuentos del
+   inventario auditable van de 42/39 a **45 aristas / 42 pares únicos** (las tres son pares
+   NUEVOS, así que suben los dos recuentos por igual) y se actualizaron sus dos tests de censo.
+2. **Renumeración de la migración: `20260728120000` → `20260729140000`.** La de la 154
+   (`20260729130000_..._recoleccion_tienda_incidente`) ya estaba aplicada en `dev`. Dejar la de la
+   149 con un timestamp anterior habría producido un enum con ORDEN DISTINTO en una base nueva
+   (`deshacer_asignacion` antes de las dos de la 154) que en la base ya migrada (después). Con el
+   renumerado el orden es el mismo en los dos casos. Consecuencia obligatoria: su `down.sql` recrea
+   ahora el enum con los **24** valores previos, incluidos `recoleccion_tienda` e `incidente`;
+   omitirlos habría MUTILADO el enum de la 154 al revertir. El censo de su propio test de migración
+   pasa de 22 a 24, y el `AÑADIDOS_EN_O_DESPUES_DEL_154` del test de la 154 descuenta ahora también
+   `deshacer_asignacion`.
+3. **`en_ruta` → `en_reparto` en las aserciones de la 149.** Las features 135/153 renombraron ese
+   `value` y dejaron un GUARD (`tests/unit/guards/censo-order-status-rename.test.ts`) que falla si
+   el literal antiguo reaparece en `app/`, `lib/`, `tests/`, … La 149 lo usaba en
+   `lib/services/mensajes-deshacer-asignacion.ts` (comentarios) y en dos de sus tests; sin el
+   cambio el guard habría puesto la suite en rojo.
+
+Además: `tests/unit/services/asignacion-mensajero-service.test.ts` se acepta **BORRADO** (la 159
+retiró el flujo del mensajero sugerido completo; lo único que la 149 le había hecho era añadir un
+stub de `deshacerAsignacionLote` al doble del repo), y
+`tests/unit/services/recepcion-satelite-asignadas.test.ts` (test nuevo de T6.3) pasa a inyectar el
+doble `fakeIntentosEnLote()`, porque la 160 volvió el derivador de intentos una dependencia
+REQUERIDA del constructor de `RecepcionSateliteService`.
+
+### Medición POST-MERGE (worktree `ordenex-wt-149`, tras `pnpm install` + `pnpm db:generate`)
+
+```
+$ pnpm typecheck  → 0 errores
+$ pnpm lint       → 0 errores, 19 warnings (parámetros de doble sin usar; estilo ya vigente)
+$ pnpm test       → 588 archivos / 6440 tests, 0 fallos
+```
+
+Los 588/6440 son la suite COMPLETA de `dev` + la 149: no hay delta de rotos que repartir. Sí quedó
+constancia de una **fragilidad de entorno ajena a esta feature**: bajo carga alta, los guards que
+recorren el filesystem del repo (`tests/unit/guards/no-embalaje.test.ts`) fallan de forma
+intermitente y en aislamiento pasan. Es la misma deuda ya registrada en la bitácora de la feature
+72; no se toca aquí.

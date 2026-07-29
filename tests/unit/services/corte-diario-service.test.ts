@@ -50,9 +50,9 @@ function gestion(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGest
 }
 
 // Feature 109 (T1.3): ids del catalogo que el service resuelve UNA vez por corrida para la
-// transicion `en_ruta -> sin_gestionar`. Por defecto ambos presentes; `null` simula seed pendiente.
+// transicion `en_reparto -> sin_gestionar`. Por defecto ambos presentes; `null` simula seed pendiente.
 const ESTATUS_IDS: Record<string, string | null> = {
-  en_ruta: "s-reparto",
+  en_reparto: "s-reparto",
   sin_gestionar: "s-sin-gestionar",
 };
 
@@ -61,7 +61,7 @@ function build(opts: {
   gestionesByMensajero?: Record<string, CierreGestionPendienteRow[]>;
   centralZonaId?: string | null;
   crearCierre?: ReturnType<typeof vi.fn>;
-  estatusIds?: Record<string, string | null>; // feature 109: override en_ruta/sin_gestionar
+  estatusIds?: Record<string, string | null>; // feature 109: override en_reparto/sin_gestionar
 } = {}) {
   const corteRepo: ICorteDiarioRepository = {
     findMensajerosConActividadSinCierre: vi.fn(async () => opts.mensajeros ?? []),
@@ -82,7 +82,7 @@ function build(opts: {
   const findEstatusIdByValue = vi.fn(async (v: string) => estatusIds[v] ?? null);
   const ordenRepo = {
     findUsuarioVehiculoId: vi.fn(async () => null),
-    // Feature 109/T1.3: resuelve en_ruta/sin_gestionar para la transicion del corte.
+    // Feature 109/T1.3: resuelve en_reparto/sin_gestionar para la transicion del corte.
     findEstatusIdByValue,
   } as unknown as Pick<IOrdenRepository, "findUsuarioVehiculoId" | "findEstatusIdByValue">;
   const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
@@ -165,7 +165,7 @@ describe("CorteDiarioService.ejecutarCorte", () => {
   });
 
   // Feature 109 (R8): 0 gestiones YA NO corta el flujo (antes hacia `continue`). El mensajero
-  // puede estar en la lista SOLO por ordenes `en_ruta` -> se llama crearCierre igual (con
+  // puede estar en la lista SOLO por ordenes `en_reparto` -> se llama crearCierre igual (con
   // corteSinGestionar) para el `vencido` money-neutral. El null (verdadero no-op) lo decide el repo.
   it("R8: 0 gestiones NO corta el flujo — llama crearCierre con corteSinGestionar (vencido money-neutral)", async () => {
     const { service, crearCierre } = build({
@@ -178,7 +178,7 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     expect(crearCierre).toHaveBeenCalledTimes(1);
     const arg = crearCierre.mock.calls[0][0];
     expect(arg.estado).toBe("vencido"); // R7
-    // R4/R6: la transicion en_ruta -> sin_gestionar viaja en el input del corte.
+    // R4/R6: la transicion en_reparto -> sin_gestionar viaja en el input del corte.
     expect(arg.corteSinGestionar).toEqual({
       enRepartoEstatusId: "s-reparto",
       sinGestionarEstatusId: "s-sin-gestionar",
@@ -187,10 +187,10 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     expect(res.vencidosCreados).toBe(1);
   });
 
-  // Feature 109 (R5): la transicion aplica EXCLUSIVAMENTE a `en_ruta`. El service resuelve y
-  // pasa el id de `en_ruta` como `enRepartoEstatusId` (guarda del updateMany en el repo); NUNCA
+  // Feature 109 (R5): la transicion aplica EXCLUSIVAMENTE a `en_reparto`. El service resuelve y
+  // pasa el id de `en_reparto` como `enRepartoEstatusId` (guarda del updateMany en el repo); NUNCA
   // resuelve/pasa `por_recoger` -> una orden en ese estado no puede transicionar.
-  it("R5: el corte solo apunta a `en_ruta` (nunca `por_recoger`)", async () => {
+  it("R5: el corte solo apunta a `en_reparto` (nunca `por_recoger`)", async () => {
     const { service, crearCierre, findEstatusIdByValue } = build({
       mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
     });
@@ -198,7 +198,7 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     await service.ejecutarCorte();
 
     const pedidos = findEstatusIdByValue.mock.calls.map((c) => c[0]);
-    expect(pedidos).toContain("en_ruta");
+    expect(pedidos).toContain("en_reparto");
     expect(pedidos).toContain("sin_gestionar");
     expect(pedidos).not.toContain("por_recoger");
     expect(crearCierre.mock.calls[0][0].corteSinGestionar.enRepartoEstatusId).toBe("s-reparto");
@@ -209,7 +209,7 @@ describe("CorteDiarioService.ejecutarCorte", () => {
   it("catalogo sin `sin_gestionar` -> crearCierre SIN corteSinGestionar (fallback 41)", async () => {
     const { service, crearCierre } = build({
       mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
-      estatusIds: { en_ruta: "s-reparto", sin_gestionar: null },
+      estatusIds: { en_reparto: "s-reparto", sin_gestionar: null },
     });
 
     await service.ejecutarCorte();

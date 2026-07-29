@@ -19,7 +19,7 @@ import { test, expect, type Page } from "@playwright/test";
  *
  * SUPERFICIE (verificada en el código, features 36/47/49):
  *  - GESTIÓN (mensajero): `/mis-asignaciones` → "Por recoger" → botón "Recoger"
- *    (por_recoger → en_ruta) → "En reparto / por gestionar" →
+ *    (por_recoger → en_reparto) → "En reparto / por gestionar" →
  *    "Gestionar" (candado 1-a-1) → modal role="dialog" name="Gestionar orden" →
  *    Select "Resultado de la gestión" opción "Devolución" (value `devuelta`) →
  *    campo "Motivo" → "Guardar gestión". Tras una devolución BAJO umbral la orden
@@ -63,7 +63,7 @@ import { test, expect, type Page } from "@playwright/test";
  * - A running Next.js dev server (pnpm dev).
  * - A test database with Supabase/Postgres and the feature 49 migration
  *   (`orden_historial_estado` + índices + RLS) applied, plus the order-status
- *   catalog seeded (incl. `por_recoger`, `en_ruta`, `devuelta`,
+ *   catalog seeded (incl. `por_recoger`, `en_reparto`, `devuelta`,
  *   `en_bodega_central`, `rechazada`).
  * - The seeded mensajero, maestro and adminTienda users, and the order in
  *   `por_recoger` per PRECONDITION above, with the retry threshold = 3.
@@ -148,14 +148,14 @@ async function elegirEnSelect(
 
 /**
  * El mensajero registra UNA devolución de la orden semilla:
- * Recoger (por_recoger → en_ruta) → Gestionar → resultado "Devolución"
+ * Recoger (por_recoger → en_reparto) → Gestionar → resultado "Devolución"
  * (value `devuelta`) + Motivo → Guardar gestión.
  */
 async function mensajeroDevuelveOrden(page: Page) {
   await login(page, MENSAJERO_EMAIL, MENSAJERO_PASSWORD);
   await page.goto("/mis-asignaciones");
 
-  // Recoger la orden (pasa a en_ruta).
+  // Recoger la orden (pasa a en_reparto).
   const porRecoger = page.getByRole("region", { name: "Por recoger" });
   await expect(porRecoger).toBeVisible();
   await porRecoger.getByRole("button", { name: "Recoger" }).first().click();
@@ -201,6 +201,13 @@ async function maestroReasignaDesdeBodega(page: Page) {
   await expect(modal).toBeVisible();
   await elegirEnSelect(page, "Mensajero", "Juan Mensajero");
   await modal.getByRole("button", { name: "Asignar mensajero" }).click();
+  // Feature 148 (§9.7): el modal ya NO se cierra al confirmar; pasa a la fase
+  // "resultado" (resumen de la asignación ya cometida + botón del manifiesto del
+  // lote) y el refresco del listado se difiere al cierre de esa fase.
+  await expect(
+    modal.getByRole("button", { name: /Descargar manifiesto/i }),
+  ).toBeVisible();
+  await modal.getByRole("button", { name: "Cerrar" }).click();
   await expect(modal).toBeHidden();
   await logout(page);
 }

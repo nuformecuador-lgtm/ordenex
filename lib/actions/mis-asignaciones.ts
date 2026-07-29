@@ -4,8 +4,10 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenMensajeroMetaRepository } from "@/lib/repositories/OrdenMensajeroMetaRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { gestionConfig, type GestionMimeType } from "@/lib/config/gestion";
@@ -65,11 +67,12 @@ function toMisAsignacionesActionError(
 
 function buildService(): IMisAsignacionesService {
   const prisma = getPrismaClient();
+  const ordenRepo = new OrdenRepository(prisma);
   // Reusa la infraestructura de Storage de la feature 21/22 apuntando al bucket
   // NUEVO de evidencias (constructor acepta el bucket, R8/T7).
   return new MisAsignacionesService(
     new GestionOrdenRepository(prisma),
-    new OrdenRepository(prisma),
+    ordenRepo,
     new SupabaseFileStorage(undefined, gestionConfig.EVIDENCIA_BUCKET),
     new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET),
     // Feature 92 (R23/R28): secuencia optimizada al listar + persistencia del origen `gps`.
@@ -79,6 +82,9 @@ function buildService(): IMisAsignacionesService {
     new RutaOptimizadaRepository(prisma),
     // Feature 115 (R17/R20): meta-repo para reflejar la marca "gestionar mas tarde" del actor.
     new OrdenMensajeroMetaRepository(prisma),
+    // Feature 160 (R11/R24): derivador de intentos EN LOTE de las dos listas del mensajero.
+    // Mismo servicio (y por tanto mismo criterio) que el cron SLA y el drawer de historial.
+    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
   );
 }
 
@@ -108,7 +114,7 @@ export async function listarMisAsignaciones(
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
-/** R14-R17: recoger (lote o de a una) por_recoger -> en_ruta. */
+/** R14-R17: recoger (lote o de a una) por_recoger -> en_reparto. */
 export async function recogerAsignaciones(
   input: unknown,
   deps: MisAsignacionesDeps = {},

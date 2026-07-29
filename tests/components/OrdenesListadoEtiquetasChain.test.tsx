@@ -66,7 +66,7 @@ function makeOrden(
   return {
     numGuia: null,
     numRemision: "REM-000",
-    estatusValue: "en_fulfillment",
+    estatusValue: "en_preparacion",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",
@@ -79,7 +79,6 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    mensajeroSugeridoId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -156,8 +155,8 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
     });
 
     renderListado(
-      { id: "est-fulfillment", value: "en_fulfillment" },
-      [makeOrden({ id: "id-o1", numRemision: "REM-1", estatusId: "est-fulfillment" })],
+      { id: "est-preparacion", value: "en_preparacion" },
+      [makeOrden({ id: "id-o1", numRemision: "REM-1", estatusId: "est-preparacion" })],
     );
 
     // Selecciona la orden -> aparece la barra de acciones por lote.
@@ -166,13 +165,23 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
     );
     await user.click(screen.getByRole("button", { name: "Generar guía" }));
 
-    // Confirma dentro del modal "Generar guía" (sin mensajero -> en_bodega_central).
+    // Confirma dentro del modal "Generar guía" (feature 156: solo numera y mueve a
+    // la bodega central; el modal ya no ofrece selector de mensajero).
     const guiaDialog = await screen.findByRole("dialog", { name: "Generar guía" });
+    expect(
+      within(guiaDialog).queryByRole("combobox", { name: /mensajero/i }),
+    ).toBeNull();
     await user.click(
       within(guiaDialog).getByRole("button", { name: "Generar guía" }),
     );
 
     expect(generarGuiaMock).toHaveBeenCalledTimes(1);
+    expect(generarGuiaMock).toHaveBeenCalledWith({ ordenIds: ["id-o1"] });
+
+    // Feature 148 (§9.7): tras confirmar, el modal de guía pasa a su fase
+    // "resultado" (manifiesto del lote) y el encadenado a etiquetas ocurre al
+    // CERRAR esa fase, no al confirmar. El lote encadenado es el mismo.
+    await user.click(within(guiaDialog).getByRole("button", { name: "Cerrar" }));
 
     // Encadena: el modal de etiquetas se abre con el lote (re-fetch por id).
     const etiquetasDialog = await screen.findByRole("dialog", {
@@ -237,6 +246,13 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
 
     expect(asignarDesdeBodegaMock).toHaveBeenCalledTimes(1);
 
+    // Feature 148 (§9.7): tras confirmar, el modal de asignación pasa a su fase
+    // "resultado" (manifiesto del lote) y el encadenado a etiquetas ocurre al
+    // CERRAR esa fase, no al confirmar. El lote encadenado es el mismo.
+    await user.click(
+      within(asignarDialog).getByRole("button", { name: "Cerrar" }),
+    );
+
     const etiquetasDialog = await screen.findByRole("dialog", {
       name: "Imprimir etiquetas",
     });
@@ -259,8 +275,8 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
     });
 
     renderListado(
-      { id: "est-fulfillment", value: "en_fulfillment" },
-      [makeOrden({ id: "id-o1", numRemision: "REM-1", estatusId: "est-fulfillment" })],
+      { id: "est-preparacion", value: "en_preparacion" },
+      [makeOrden({ id: "id-o1", numRemision: "REM-1", estatusId: "est-preparacion" })],
     );
 
     await user.click(
@@ -271,6 +287,11 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
     await user.click(
       within(guiaDialog).getByRole("button", { name: "Generar guía" }),
     );
+
+    // Feature 148 (§9.7): tras confirmar, el modal de guía pasa a su fase
+    // "resultado" (manifiesto del lote) y el encadenado a etiquetas ocurre al
+    // CERRAR esa fase, no al confirmar. El lote encadenado es el mismo.
+    await user.click(within(guiaDialog).getByRole("button", { name: "Cerrar" }));
 
     const etiquetasDialog = await screen.findByRole("dialog", {
       name: "Imprimir etiquetas",
@@ -285,5 +306,47 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
     );
     // No se reabrió ningún modal (no re-encadenó).
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  // Feature 156/R30: la carga de mensajeros solo condiciona las acciones de
+  // ASIGNACIÓN desde bodega. "Generar guía" ya no la necesita, así que el flujo
+  // completo (confirmar -> Cerrar -> etiquetas) debe funcionar aunque el loader de
+  // mensajeros falle. Si el modal volviera a depender de esa lista, este caso lo
+  // delataría.
+  it("R30: con la carga de mensajeros CAÍDA, 'Generar guía' sigue disponible y completa el encadenado", async () => {
+    const user = userEvent.setup();
+    listarMensajerosMock.mockRejectedValue(new Error("loader caído"));
+    generarGuiaMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "id-o1", numGuia: 5001, estado: "en_bodega_central" }],
+    });
+    generarEtiquetasMock.mockResolvedValue({
+      status: "ok",
+      etiquetas: [makeEtiqueta({ ordenId: "id-o1", numGuia: 5001 })],
+      omitidas: [],
+    });
+
+    renderListado(
+      { id: "est-preparacion", value: "en_preparacion" },
+      [makeOrden({ id: "id-o1", numRemision: "REM-1", estatusId: "est-preparacion" })],
+    );
+
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Seleccionar orden REM-1" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Generar guía" }));
+
+    const guiaDialog = await screen.findByRole("dialog", { name: "Generar guía" });
+    await user.click(
+      within(guiaDialog).getByRole("button", { name: "Generar guía" }),
+    );
+
+    expect(generarGuiaMock).toHaveBeenCalledWith({ ordenIds: ["id-o1"] });
+
+    await user.click(within(guiaDialog).getByRole("button", { name: "Cerrar" }));
+    expect(
+      await screen.findByRole("dialog", { name: "Imprimir etiquetas" }),
+    ).toBeInTheDocument();
+    expect(generarEtiquetasMock).toHaveBeenCalledWith({ ordenIds: ["id-o1"] });
   });
 });

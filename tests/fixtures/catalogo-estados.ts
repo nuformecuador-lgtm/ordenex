@@ -13,7 +13,7 @@ import { ORDER_STATUS_SEED, type OrderStatusValue } from "@/lib/types/order-stat
 //
 // Uso tipico en una suite de call-site:
 //   beforeEach(async () => { await sembrarCatalogoEstados(); });
-//   ... y usar `idEstado("en_ruta")` en vez de un id sintetico tipo "os-x", para que el par
+//   ... y usar `idEstado("en_reparto")` en vez de un id sintetico tipo "os-x", para que el par
 //   `origen -> destino` que el repo registra sea uno REAL del mapa `TRANSICIONES`.
 //
 // `sembrarCatalogoEstados` calienta la cache POR PROCESO del resolvedor real usando su API

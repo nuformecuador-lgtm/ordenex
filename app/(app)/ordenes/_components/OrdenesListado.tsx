@@ -3,8 +3,13 @@
 import { useMemo, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 
-import { MultiSelectFilter } from "@/components/shared/MultiSelectFilter";
+import {
+  FilterComponent,
+  type FilterDef,
+  type FilterSelection,
+} from "@/components/shared/FilterComponent";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
 import {
@@ -18,9 +23,9 @@ import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
 import { EscanerRecepcionBodegaCentral } from "./EscanerRecepcionBodegaCentral";
+import { ReceptorDesplegable } from "./ReceptorDesplegable";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
 import {
-  ordenesColumnsMensajeroSugerido,
   ordenesColumnsReprogramada,
 } from "./ordenes-columns";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
@@ -29,6 +34,13 @@ import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
 import { DeshacerAsignacionModal } from "./DeshacerAsignacionModal";
+import {
+  construirFiltrosOrdenes,
+  CATALOGO_FILTROS_VACIO,
+  CLAVE_ESTADO,
+} from "./ordenes-filtros-def";
+import { seleccionAFilter } from "./seleccion-a-filter";
+import type { OrdenesFilterUI } from "./serializar-filtro";
 
 type ModalAbierto =
   | "generar-guia"
@@ -68,10 +80,6 @@ async function zonasBloqueadasFetcher(): Promise<Set<string>> {
 // filtra antes de construir las opciones del filtro (aclaración del humano, R14).
 const DEFAULT_EXCLUDE = ["pendiente"];
 
-// Estados PREVIOS a la asignación de mensajero: muestran "Mensajero sugerido" en
-// lugar de "Mensajero" (aún no hay asignado; la asignación es en "Generar guía").
-const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"]);
-
 // Estado cuyo listado muestra ademas "Liberada el" (la fecha para la que quedo
 // reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
 const ESTADO_REPROGRAMADA = "reprogramada";
@@ -98,17 +106,15 @@ const ESTADO_EN_BODEGA = "en_bodega_central";
 
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
-// Derivado de `accionesDe()`: `en_fulfillment`/`en_preparacion` -> "Generar guía"
-// (asigna mensajero) y `en_bodega_central` -> "Asignar mensajero".
+// Feature 156/R28: el único apartado que asigna por lote es la BODEGA CENTRAL
+// ("Asignar mensajero"). `en_fulfillment`/`en_preparacion` salieron del conjunto
+// porque su acción ("Generar guía") ya no decide mensajero: solo numera y mueve a
+// la bodega central, así que un cierre abierto en la zona no impide numerar.
 // Los estados que solo imprimen etiquetas (`por_recoger`,
 // `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
 // Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas"
 // (comparte el checkbox); es el precio de una única columna de selección.
-const ESTADOS_ASIGNACION = new Set([
-  "en_fulfillment",
-  "en_preparacion",
-  "en_bodega_central",
-]);
+const ESTADOS_ASIGNACION = new Set(["en_bodega_central"]);
 const MOTIVO_ZONA_CIERRE_ABIERTO =
   "La bodega de esta zona tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar la orden.";
 
@@ -152,6 +158,9 @@ export function OrdenesListado({
   puedeRecibirBodegaCentral = false,
   mostrarHistorial = false,
   accionesLote = false,
+  catalogoFiltros = null,
+  incluirFiltroTienda = true,
+  permitirDescarga = true,
 }: Readonly<{
   exclude?: string[];
   puedeCargarMasiva?: boolean;
@@ -178,6 +187,28 @@ export function OrdenesListado({
    * recibe en `false`.
    */
   accionesLote?: boolean;
+  /**
+   * Feature 144 (R47/R64): catálogo de los filtros (zonas, cuentas tienda y
+   * geografía) resuelto EN EL SERVIDOR durante la carga de la página y bajado por
+   * props, de modo que los filtros están operativos sin una petición posterior ni
+   * una consulta por cada selección. `null` = no se pudo resolver: la barra se monta
+   * DESHABILITADA y el listado sigue funcionando sin esos filtros (R64).
+   */
+  catalogoFiltros?: CatalogoFiltrosOrdenesDTO | null;
+  /**
+   * Feature 144 (R62): declara el filtro de tienda. Los roles acotados a su propia
+   * tienda (`adminTienda`) NO lo reciben: filtrar por tienda no les añade nada y el
+   * backend pisa cualquier `tienda_id` con la suya.
+   */
+  incluirFiltroTienda?: boolean;
+  /**
+   * Feature 151 (R33): ofrece la descarga del dataset COMPLETO acotado a los filtros
+   * vigentes de la barra. Por defecto `true`: ésta ES la superficie del listado de
+   * órdenes, y quien ve el listado descarga lo que ese listado ya le muestra (gate P5;
+   * el acotamiento por rol lo impone el mismo servicio). Se deja como prop para poder
+   * apagarla en una superficie concreta sin tocar el módulo.
+   */
+  permitirDescarga?: boolean;
 }>) {
   const { mutate } = useSWRConfig();
   const { data: catalogo, isLoading } = useSWR(
@@ -356,8 +387,15 @@ export function OrdenesListado({
     [catalogo, exclude],
   );
 
-  // Ids marcados en el filtro. Vacío = sin filtro (todas las órdenes).
-  const [estadosMarcados, setEstadosMarcados] = useState<string[]>([]);
+  // Feature 144: selección agregada de la barra genérica (estado, zona, tienda,
+  // geografía y tiempo). El componente es dueño de su estado; aquí solo se guarda lo
+  // emitido.
+  const [seleccionFiltros, setSeleccionFiltros] = useState<FilterSelection>({});
+
+  // Ids marcados en el filtro de estado. Vacío = sin filtro (todas las órdenes). Ya no
+  // es un estado aparte: el estado es UN filtro más de la barra (misma clave que el
+  // `filter` del backend), así que sale de la selección agregada.
+  const estadosMarcados = seleccionFiltros[CLAVE_ESTADO] ?? [];
 
   const opciones = useMemo(
     () =>
@@ -365,19 +403,50 @@ export function OrdenesListado({
     [estadosDisponibles],
   );
 
+  // R55/R56: las declaraciones de la barra salen del catálogo precargado (más la de
+  // estado, que sale del catálogo de estatus). Sin catálogo geográfico se declaran
+  // igual, pero sin opciones y deshabilitadas (R64): la tabla sigue viva.
+  const filtrosBarra = useMemo<FilterDef[]>(
+    () => [
+      // El estado va parametrizado como un filtro más, no por fuera: mismo control,
+      // misma limpieza y misma salida agregada que zona, tienda o geografía.
+      {
+        key: CLAVE_ESTADO,
+        label: "Estado",
+        kind: "multi",
+        placeholder: "Todos",
+        searchPlaceholder: "Filtrar estados…",
+        emptyMessage: "Ningún estado coincide",
+        options: opciones,
+      },
+      // R64: si el catálogo geográfico no cargó, se deshabilitan SUS filtros; el de
+      // estado viene de otra fuente y sigue operativo.
+      ...construirFiltrosOrdenes(catalogoFiltros ?? CATALOGO_FILTROS_VACIO, {
+        incluirTienda: incluirFiltroTienda,
+      }).map((f) => (catalogoFiltros === null ? { ...f, disabled: true } : f)),
+    ],
+    [catalogoFiltros, incluirFiltroTienda, opciones],
+  );
+
+  // R46/R58/R59: `status_id` (feature 63) y los filtros nuevos se funden en UN solo
+  // `filter`. Sin nada seleccionado, el objeto queda vacío y se envía `undefined`, de
+  // modo que la entrada de `listarOrdenes` es IDÉNTICA a la previa a esta feature.
+  const filter = useMemo<OrdenesFilterUI | undefined>(() => {
+    const compuesto: OrdenesFilterUI = seleccionAFilter(seleccionFiltros);
+    return Object.keys(compuesto).length > 0 ? compuesto : undefined;
+  }, [seleccionFiltros]);
+
   // Si el filtro está acotado a EXACTAMENTE un estado, ese estado decide las columnas
-  // (mensajero sugerido / "Liberada el") y el resalte de prioridad. Con varios estados
-  // mezclados —o sin filtro— no hay un estado que mande, así que se usan las columnas
-  // por defecto y no se resalta.
+  // ("Liberada el") y el resalte de prioridad. Con varios estados mezclados —o sin
+  // filtro— no hay un estado que mande, así que se usan las columnas por defecto y no
+  // se resalta.
   const valueUnico =
     estadosMarcados.length === 1
       ? estadosDisponibles.find((s) => s.id === estadosMarcados[0])?.value
       : undefined;
 
   let columns: Column<OrdenListItemDTO>[] | undefined;
-  if (valueUnico && ESTADOS_MENSAJERO_SUGERIDO.has(valueUnico)) {
-    columns = ordenesColumnsMensajeroSugerido;
-  } else if (valueUnico === ESTADO_REPROGRAMADA) {
+  if (valueUnico === ESTADO_REPROGRAMADA) {
     columns = ordenesColumnsReprogramada;
   }
 
@@ -442,17 +511,31 @@ export function OrdenesListado({
   // origen se ofrecen al adminTienda (feature 26); la recepción en bodega central
   // (feature 138) al maestro/admin. `onRecibida={handleSuccess}` revalida el listado
   // (R14), de modo que la orden recibida refleja su nuevo estado.
+  //
+  // El receptor es una TARJETA (cámara + número de guía), demasiado alta para vivir
+  // desplegada encima de la tabla: se abre desde la barra de acciones y se cierra
+  // igual. Quien no puede recibir no ve ni el botón.
+  // El receptor y su disparador viven a la IZQUIERDA, donde empieza la lectura de la
+  // pagina; la carga masiva sigue a la derecha de la misma fila. El disparador despliega
+  // la tarjeta con animacion y la desmonta al cerrar (apaga la camara).
   const header =
     puedeCargarMasiva || puedeEscanearQr || puedeRecibirBodegaCentral ? (
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {puedeRecibirBodegaCentral ? (
-          <EscanerRecepcionBodegaCentral onRecibida={handleSuccess} />
-        ) : null}
-        {puedeEscanearQr ? (
-          <EscanerRecepcionOrigen onRecibida={handleSuccess} />
-        ) : null}
-        {puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
-      </div>
+      puedeEscanearQr || puedeRecibirBodegaCentral ? (
+        <ReceptorDesplegable
+          acciones={puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
+        >
+          {puedeRecibirBodegaCentral ? (
+            <EscanerRecepcionBodegaCentral onRecibida={handleSuccess} />
+          ) : null}
+          {puedeEscanearQr ? (
+            <EscanerRecepcionOrigen onRecibida={handleSuccess} />
+          ) : null}
+        </ReceptorDesplegable>
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <OrdenesCargaMasivaButton />
+        </div>
+      )
     ) : null;
 
   if (isLoading) {
@@ -468,41 +551,37 @@ export function OrdenesListado({
     <div className="flex flex-col gap-4">
       {header}
 
-      {/* Filtro de estados: sustituye a las tabs por estado. Sin marcar nada, el
-          listado muestra TODAS las órdenes (equivalente a la antigua tab "Todas"). */}
-      <MultiSelectFilter
-        label="Estado"
-        options={opciones}
-        value={estadosMarcados}
-        onChange={setEstadosMarcados}
-        placeholder="Todos"
-        searchPlaceholder="Filtrar estados…"
-        emptyMessage="Ningún estado coincide"
-        disabled={opciones.length === 0}
+      {/* Feature 144 (R55, R63): barra genérica con TODOS los filtros declarados —
+          estado incluido (siete; seis sin tienda). Toda la lógica de selección,
+          búsqueda, acotamiento, agrupado, exclusión mutua y poda vive en el
+          componente; aquí solo se declara y se traduce lo emitido. */}
+      <FilterComponent
+        filters={filtrosBarra}
+        onChange={setSeleccionFiltros}
+        showClearAll
       />
 
       <OrdenesModule
-        filter={
-          estadosMarcados.length > 0
-            ? { status_id: estadosMarcados }
-            : undefined
-        }
+        filter={filter}
         columns={columns}
         mostrarHistorial={mostrarHistorial}
         selectable={accionesLote ? haySeleccionables : false}
         bloqueoSeleccion={accionesLote ? bloqueoSeleccion : undefined}
         acciones={accionesLote ? accionesPara : undefined}
         resaltarPrioridad={valueUnico === ESTADO_EN_BODEGA}
+        permitirDescarga={permitirDescarga}
       />
 
       {/* Modales de acción por lote (solo acceso total). Montados una vez; `open` por
           `modalAbierto`. */}
       {accionesLote ? (
         <>
+          {/* Feature 156/R30: "Generar guía" NO requiere la lista de mensajeros
+              (ya no asigna); el `useSWR` de mensajeros sigue existiendo solo para
+              `AsignarBodegaModal`. */}
           <GenerarGuiaModal
             open={modalAbierto === "generar-guia"}
             ordenes={ordenesSeleccionadas}
-            mensajeros={mensajeros ?? []}
             onOpenChange={cerrarModal}
             onSuccess={encadenarEtiquetas}
           />

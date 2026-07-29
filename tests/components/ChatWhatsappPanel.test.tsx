@@ -43,7 +43,7 @@ const ORDEN: MiAsignacionDTO = {
   id: "orden-1",
   numGuia: 12345,
   numRemision: "R-001",
-  estatusValue: "en_ruta",
+  estatusValue: "en_reparto",
   destinatario: "María López",
   telefonoDest: "88887777",
   direccion: "Calle 1",

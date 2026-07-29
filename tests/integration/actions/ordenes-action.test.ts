@@ -53,6 +53,14 @@ function fakeService(overrides: Partial<IOrdenService> = {}): IOrdenService {
     }),
     actualizar: vi.fn().mockResolvedValue({ status: "ok", orden: dto() }),
     borrar: vi.fn().mockResolvedValue({ status: "ok" }),
+    // Feature 151: modo sin paginacion (descarga). El doble lo satisface para cumplir
+    // el contrato de IOrdenService; su comportamiento se prueba en
+    // tests/unit/actions/ordenes-descarga-action.test.ts.
+    listarCompleto: vi.fn().mockResolvedValue({
+      status: "ok",
+      items: [{ ...dto(), tiendaNombre: "Tienda Uno" }],
+      total: 1,
+    }),
     ...overrides,
   };
 }

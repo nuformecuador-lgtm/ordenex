@@ -183,7 +183,7 @@ describe("EscanerRecepcionBodegaCentral — toast por resultado (R15) + refresco
     const onRecibida = vi.fn();
     recibirMock.mockResolvedValue({
       status: "estado_invalido",
-      estado: "en_ruta",
+      estado: "en_reparto",
     });
     render(<EscanerRecepcionBodegaCentral onRecibida={onRecibida} />);
 
@@ -191,8 +191,8 @@ describe("EscanerRecepcionBodegaCentral — toast por resultado (R15) + refresco
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     // Legible, no el value crudo: la etiqueta sale del mapa de presentación.
-    expect(errorMock.mock.calls[0][0]).toMatch(ORDER_STATUS_LABELS.en_ruta);
-    expect(errorMock.mock.calls[0][0]).not.toMatch("en_ruta");
+    expect(errorMock.mock.calls[0][0]).toMatch(ORDER_STATUS_LABELS.en_reparto);
+    expect(errorMock.mock.calls[0][0]).not.toMatch("en_reparto");
     expect(onRecibida).not.toHaveBeenCalled();
   });
 
@@ -287,14 +287,17 @@ describe("EscanerRecepcionBodegaCentral — corte en cliente del código inváli
     expect(recibirMock).not.toHaveBeenCalled();
   });
 
-  it("una guía manual vacía se corta en cliente (sin llamar a la acción)", async () => {
+  it("con el campo vacío no hay nada que enviar: el botón está inerte", async () => {
     const user = userEvent.setup();
     render(<EscanerRecepcionBodegaCentral onRecibida={vi.fn()} />);
 
+    // El vacío ya no llega al guard de "Código inválido": la tarjeta deshabilita el
+    // botón, que es la forma honesta de decir que aún no hay nada que recibir.
+    expect(screen.getByRole("button", { name: "Recibir" })).toBeDisabled();
+
     await recibirManual(user, "");
 
-    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
-    expect(errorMock.mock.calls[0][0]).toMatch(/inválido/i);
     expect(recibirMock).not.toHaveBeenCalled();
+    expect(errorMock).not.toHaveBeenCalled();
   });
 });

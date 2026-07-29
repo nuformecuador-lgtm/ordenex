@@ -1,17 +1,21 @@
 import { describe, it, expect, vi } from "vitest";
 import { OrdenService } from "@/lib/services/OrdenService";
 import { TarifaService } from "@/lib/services/TarifaService";
-import { AsignacionMensajeroService } from "@/lib/services/AsignacionMensajeroService";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { ITarifaRepository } from "@/lib/interfaces/repositories/ITarifaRepository";
 import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
-import type { IUserRepository } from "@/lib/interfaces/repositories/IUserRepository";
 import type { Actor as OrdenActor } from "@/lib/interfaces/services/IOrdenService";
 import type { Actor as TarifaActor } from "@/lib/interfaces/services/ITarifaService";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+
+// Feature 160: `OrdenService` gano el derivador de intentos EN LOTE como dependencia
+// REQUERIDA. Estas pruebas son de AUTORIZACION (`crear`), que ni siquiera lo consume: doble
+// neutro compartido, sin aserciones sobre el.
+const intentos = fakeIntentosEnLote();
 
 // Feature 98: la via sesion no tarifa; stub neutro para el 2do parametro del constructor.
 const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
@@ -75,12 +79,8 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
-    findMensajerosByIds: vi.fn().mockResolvedValue(new Set()),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
     createManyOrdenesConGuia: vi.fn().mockResolvedValue([]), // feature 88
-    findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
-    asignarMensajeroSugerido: vi.fn().mockResolvedValue(0),
-    countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados aqui
     // pero exigidos por la interfaz IOrdenRepository.
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
@@ -104,6 +104,10 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     // Feature 32: etiqueta de guia, exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
     findEtiquetaByNumGuia: vi.fn().mockResolvedValue(null),
+    // Feature 148: stubs del manifiesto (READ derivado, no lo ejercita este test).
+    findManifiestoByIds: vi.fn().mockResolvedValue([]),
+    findManifiestoByRemisiones: vi.fn().mockResolvedValue([]),
+    findUsuarioNombre: vi.fn().mockResolvedValue(null),
     // Feature 33: recepcion en bodega satelite, no ejercitada aqui pero exigida
     // por la interfaz IOrdenRepository.
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
@@ -201,25 +205,6 @@ function crearTarifaInput(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function buildUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepository {
-  return {
-    findByEmailWithHash: vi.fn(),
-    findById: vi.fn(),
-    findByEmail: vi.fn(),
-    create: vi.fn(),
-    listMensajeros: vi.fn().mockResolvedValue([{ id: "msg-1", nombre: "Ana" }]),
-    listByRol: vi.fn().mockResolvedValue([]), // exigido por IUserRepository; no ejercitado aqui
-    updatePasswordHash: vi.fn(),
-    list: vi.fn(),
-    count: vi.fn(),
-    update: vi.fn(),
-    setEstado: vi.fn(),
-    listTiposIdentificacion: vi.fn(),
-    listRoles: vi.fn(),
-    ...overrides,
-  };
-}
-
 function bulkRow(overrides: Partial<RawRow> = {}): RawRow {
   return {
     num_remision: "REM-1",
@@ -232,7 +217,6 @@ function bulkRow(overrides: Partial<RawRow> = {}): RawRow {
     producto: "Caja",
     notas: "",
     monto_cobrar: "",
-    mensajero_sugerido_id: "",
     ...overrides,
   };
 }
@@ -240,7 +224,7 @@ function bulkRow(overrides: Partial<RawRow> = {}): RawRow {
 describe("OrdenService.crear — adminSatelite sin permisos nuevos (R9, R11)", () => {
   it("adminSatelite -> forbidden, no crea", async () => {
     const repo = buildOrdenRepo();
-    const service = new OrdenService(repo);
+    const service = new OrdenService(repo, intentos);
 
     const r = await service.crear(crearOrdenInput(), ADMIN_SATELITE_ORDEN);
 
@@ -250,7 +234,7 @@ describe("OrdenService.crear — adminSatelite sin permisos nuevos (R9, R11)", (
 
   it("no-regresion: maestro conserva su resultado exitoso (R11)", async () => {
     const repo = buildOrdenRepo();
-    const service = new OrdenService(repo);
+    const service = new OrdenService(repo, intentos);
 
     const r = await service.crear(crearOrdenInput({ tiendaId: "storeX" }), MAESTRO_ORDEN);
 
@@ -291,27 +275,6 @@ describe("TarifaService — adminSatelite sin permisos nuevos (R9, R11)", () => 
 
     const rEscritura = await service.crear(crearTarifaInput(), MAESTRO_TARIFA);
     expect(rEscritura.status).toBe("ok");
-  });
-});
-
-describe("AsignacionMensajeroService.listarMensajeros — adminSatelite sin permisos nuevos (R9, R11)", () => {
-  it("adminSatelite -> forbidden, no consulta el repo", async () => {
-    const userRepo = buildUserRepo();
-    const service = new AsignacionMensajeroService(userRepo, buildOrdenRepo());
-
-    const r = await service.listarMensajeros(ADMIN_SATELITE_ORDEN);
-
-    expect(r.status).toBe("forbidden");
-    expect(userRepo.listMensajeros).not.toHaveBeenCalled();
-  });
-
-  it("no-regresion: adminTienda conserva su resultado exitoso (R11)", async () => {
-    const userRepo = buildUserRepo();
-    const service = new AsignacionMensajeroService(userRepo, buildOrdenRepo());
-
-    const r = await service.listarMensajeros(TIENDA_ORDEN);
-
-    expect(r.status).toBe("ok");
   });
 });
 
