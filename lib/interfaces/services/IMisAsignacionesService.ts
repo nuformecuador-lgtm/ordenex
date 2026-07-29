@@ -61,6 +61,16 @@ export interface MiAsignacionDTO {
    * Bloque F) lo consume para el editor del detalle y el indicador de la card.
    */
   notaPrivada?: string | null;
+  /**
+   * Feature 160 (R11/R14/R16/R24): intentos de entrega VIGENTES de la orden, derivados del
+   * historial en el MISMO lote de la lectura (criterio unico de `OrdenHistorialService`,
+   * design §1.1: destino `devuelta`, o destino `reprogramada` con familia `gestion`).
+   *
+   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`/`notaPrivada?`: no rompe los
+   * fixtures que construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo envia, `0`
+   * incluido (R14). La UI del mensajero lo pinta con `?? 0` como un dato mas de la orden (R19).
+   */
+  intentosEntrega?: number;
 }
 
 /**

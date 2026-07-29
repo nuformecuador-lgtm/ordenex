@@ -24,15 +24,27 @@ export const MANIFIESTO_FLUJOS = [
 export type ManifiestoFlujo = (typeof MANIFIESTO_FLUJOS)[number];
 
 /**
- * R2 — Fila del manifiesto: EXACTAMENTE las 11 columnas pedidas, en este orden
- * (`num_guia`, `num_remision`, `destinatario`, `telefono`, `direccion`, `zona`,
- * `monto`, `origen`, `destino`, `responsable`, `fecha`), ya en el valor de salida.
+ * Fila del manifiesto, ya en el valor de salida.
  *
- * R11 — NO lleva ningun dato mas: ni `ordenId`, ni `tiendaId`, ni `deletedAt`, ni
- * notas, ni producto. Si se agrega una propiedad aqui, se rompe R2/R11.
+ * REGLA VIGENTE (feature 160/R28, design 160 §6.3 — DEROGA y REEMPLAZA los R2/R11 de la
+ * feature 148, decision del humano del 2026-07-29):
  *
- * `numGuia` null -> celda vacia (R5). `monto` null -> celda vacia (R7). `direccion`
- * es nullable en la orden y se emite tal cual (nunca un texto inventado).
+ *   > **El manifiesto refleja los datos de la orden.** Lleva una columna por cada dato propio
+ *   > de la orden que el producto haya decidido exponer, y ese conjunto **crece** cuando la
+ *   > orden gana un dato nuevo. El conjunto es ABIERTO: ni el codigo ni las pruebas pueden
+ *   > afirmar "exactamente N columnas".
+ *
+ * Lo que se derogo es el NUMERO CERRADO ("EXACTAMENTE las 11 columnas"), no el filtro. SIGUE
+ * VIGENTE el lado prohibitivo del viejo R11: identificadores internos (`ordenId`, `tiendaId`),
+ * banderas de borrado (`deletedAt`) y datos que NO son de la orden siguen SIN entrar.
+ *
+ * Orden de las columnas (estable, se verifica en los tests por clave y orden RELATIVO):
+ * `num_guia`, `num_remision`, `destinatario`, `telefono`, `direccion`, `zona`, `monto`,
+ * `intentos`, `origen`, `destino`, `responsable`, `fecha`.
+ *
+ * `numGuia` null -> celda vacia (R5). `monto` null -> celda vacia (R7). `direccion` es
+ * nullable en la orden y se emite tal cual (nunca un texto inventado). `intentos` es NUMERICO
+ * y NO nullable: una orden sin intentos emite `0`, no celda vacia (160/R28a).
  */
 export interface ManifiestoFilaDTO {
   numGuia: number | null; // R5
@@ -42,6 +54,13 @@ export interface ManifiestoFilaDTO {
   direccion: string | null;
   zona: string; // R6: NOMBRE de la zona, nunca su id
   monto: number | null; // R7/§9.3: `orden.monto_cobrar` (COD)
+  /**
+   * Feature 160 (R28a): intentos de entrega VIGENTES de la orden (criterio unico de
+   * `OrdenHistorialService`, design 160 §1.1). NO opcional a proposito: este DTO enumera sus
+   * propiedades una a una para que el archivo no omita campos en silencio, y el `0` de una
+   * orden sin intentos DEBE emitirse como `0` (en Excel una celda vacia NO es `0`).
+   */
+  intentos: number;
   origen: string; // R8: ubicacion de SALIDA del movimiento de ESTE flujo
   destino: string; // R8: ubicacion de LLEGADA del movimiento de ESTE flujo
   responsable: string; // R9/§9.8: mensajero asignado, si no el usuario que ejecuto

@@ -22,9 +22,23 @@ export interface IOrdenHistorialService {
    */
   obtenerHistorial(ordenId: string, actor: Actor): Promise<ObtenerHistorialServiceResult>;
   /**
-   * R24/R25: numero de intentos de entrega fallidos DERIVADO del historial (conteo de
-   * transiciones a `devuelta`), sin columna materializada. Consulta reutilizable que la
-   * feature 47 leera para la regla de escalado a rechazo (la 49 NO implementa esa regla).
+   * R24/R25 + feature 160/R1/R4: numero de intentos de entrega DERIVADO del historial, sin
+   * columna materializada. Es el PUNTO UNICO del criterio (160/R4): lo consumen el cron SLA
+   * (99, `DevolucionSlaService`), el drawer de historial (47, `obtenerHistorial`) y —via
+   * `contarIntentosEnLote`— todas las superficies que muestran la orden.
+   *
+   * Cuenta una transicion VIGENTE por cada (a) destino `devuelta` o (b) destino `reprogramada`
+   * con familia de origen `gestion`. La FIRMA no cambio con la 160; lo que cambio es el NUMERO
+   * que devuelve, y eso gobierna dinero real (`rechazada` -> `cobroRechazado`, 56).
    */
   contarIntentos(ordenId: string): Promise<number>;
+  /**
+   * Feature 160/R12/R13/R14 — el MISMO conteo para un LOTE de ordenes, resuelto con UNA sola
+   * consulta al historial (mas la lectura del catalogo, que es por LLAMADA y no por orden).
+   * Lo consumen los servicios de lectura que alimentan las superficies paginadas.
+   *
+   * Las ordenes sin intentos NO vienen en el Map; el llamador emite `?? 0` (R14: el `0` es un
+   * valor conocido, no un dato ausente). `ordenIds` vacio -> Map vacio sin consultar (R13).
+   */
+  contarIntentosEnLote(ordenIds: string[]): Promise<Map<string, number>>;
 }

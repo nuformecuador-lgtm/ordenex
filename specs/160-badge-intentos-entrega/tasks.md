@@ -21,7 +21,7 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
 
 ## Bloque 1 — Backend · el criterio y su derivador
 
-- [ ] **T1. Declarar la familia admitida por la rama B, verificando el mapa v2.**
+- [x] **T1. Declarar la familia admitida por la rama B, verificando el mapa v2.**
   - En `lib/types/orden-historial.ts`: `ORIGEN_TIPOS_REPROGRAMADA_INTENTO =
     ["gestion"]` con `satisfies readonly OrdenHistorialOrigenTipo[]` y el
     comentario que explica por qué es lista de INCLUSIÓN y por qué
@@ -39,7 +39,7 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
     está en la constante y `gestion` sí; (b) el mapa de transiciones tiene 2
     aristas a `reprogramada` y `incidente` 0 salidas. (R1, R2, R3)
 
-- [ ] **T2. Predicado único `whereIntentosVigentes` + renombre del conteo
+- [x] **T2. Predicado único `whereIntentosVigentes` + renombre del conteo
       individual.** (depende de T1)
   - En `lib/repositories/OrdenHistorialRepository.ts`: función pura
     `whereIntentosVigentes(ordenId, criterio)` que acepta `string` o
@@ -59,7 +59,7 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
     `devuelta`) sigue contando; (h) destino `incidente` no altera el conteo.
     (R1, R2, R3, R5)
 
-- [ ] **T3. Conteo EN LOTE `contarIntentosVigentesEnLote`.** (depende de T2)
+- [x] **T3. Conteo EN LOTE `contarIntentosVigentesEnLote`.** (depende de T2)
   - Firma: `(ordenIds: string[], criterio: CriterioIntento) =>
     Promise<Map<string, number>>`, documentada (órdenes sin filas ausentes del
     Map; `ids` vacío → Map vacío **sin query**).
@@ -75,7 +75,7 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
     (d) para una misma orden, individual y lote coinciden en los 8 escenarios de
     T2. (R4, R12, R13)
 
-- [ ] **T4. `OrdenHistorialService`: criterio resuelto una vez + versión en
+- [x] **T4. `OrdenHistorialService`: criterio resuelto una vez + versión en
       lote.** (depende de T3)
   - `ESTATUS_REPROGRAMADA` junto a `ESTATUS_DEVUELTA`; privado
     `resolverCriterio()` que resuelve los DOS ids con un solo `Promise.all` y
@@ -97,7 +97,7 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
 > órdenes saltan el umbral hoy. Este bloque ya no está bloqueado, pero **sigue
 > siendo el que mueve dinero**: sus tests son los más importantes de la feature.
 
-- [ ] **T5. Aserciones del cambio de escalado en `DevolucionSlaService`.**
+- [x] **T5. Aserciones del cambio de escalado en `DevolucionSlaService`.**
       (depende de T4)
   - **No se toca `DevolucionSlaService.ts`**: consume `contarIntentos`, que ya
     devuelve el número nuevo. Lo que se escribe son los tests que fijan el
@@ -114,7 +114,7 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
     omite; (f) el resto de la suite del cron verde sin cambios de aserción.
     (R8, R9)
 
-- [ ] **T6. `[P]` Aserciones del drawer de historial.** (depende de T4)
+- [x] **T6. `[P]` Aserciones del drawer de historial.** (depende de T4)
   - `obtenerHistorial` no cambia de forma; cambia el número que devuelve.
   - **Hecho:** unit test verde: una orden con reprogramación de mensajero reporta
     el conteo ampliado en `intentos`, y el `umbral` sigue viajando igual. Suite de
@@ -125,7 +125,7 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
 
 ## Bloque 3 — Backend · exposición en lote (depende de T4)
 
-- [ ] **T7. Campo de conteo en los DTO.**
+- [x] **T7. Campo de conteo en los DTO.**
   - `intentosEntrega?: number` (aditivo, opcional, con el comentario del patrón)
     en: `OrdenListItemDTO` (`lib/types/orden.ts`), `MiAsignacionDTO`
     (`IMisAsignacionesService.ts`), `RecepcionSateliteDTO`
@@ -139,12 +139,12 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
   - **Hecho:** `tsc` verde y ningún fixture/mock existente roto (campo opcional).
     Un test afirma que los DTO excluidos NO tienen el campo. (R16, R30, R31)
 
-- [ ] **T8. `[P]` Merge en `OrdenService.listar`.** (depende de T7)
-- [ ] **T9. `[P]` Merge en `MisAsignacionesService.listarMisAsignaciones`.**
-- [ ] **T10. `[P]` Merge en `RecepcionSateliteService.listar`.**
-- [ ] **T11. `[P]` Merge en `NovedadesService`.**
-- [ ] **T12. `[P]` Merge en `RechazosSlaTiendaService`.**
-- [ ] **T13. `[P]` Merge en `LiberacionReprogramadaService` (liberadas hoy).**
+- [x] **T8. `[P]` Merge en `OrdenService.listar`.** (depende de T7)
+- [x] **T9. `[P]` Merge en `MisAsignacionesService.listarMisAsignaciones`.**
+- [x] **T10. `[P]` Merge en `RecepcionSateliteService.listar`.**
+- [x] **T11. `[P]` Merge en `NovedadesService`.**
+- [x] **T12. `[P]` Merge en `RechazosSlaTiendaService`.**
+- [x] **T13. `[P]` Merge en `LiberacionReprogramadaService` (liberadas hoy).**
 
   Las seis comparten forma y criterio de hecho:
   - Dependencia nueva **requerida** de constructor:
@@ -167,10 +167,19 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
 
 ## Bloque 4 — Gate de fin de fase backend
 
-- [ ] **T14. Gate backend.** (depende de T5, T6, T8–T13)
+- [x] **T14. Gate backend.** (depende de T5, T6, T8–T13)
   - **Hecho:** `./init.sh` verde + suite completa verde + `git diff` **sin**
     cambios en `db/schema.prisma` ni `db/migrations/`. Recién aquí arranca el
     frontend. (R7, R32)
+
+> **AQUÍ TERMINA LA FASE BACKEND** (2026-07-29). Gate verde: 546 archivos de test,
+> 5731 tests, 0 fallos; `db/` sin cambios. Bitácora en
+> `progress/impl_160_backend.md`.
+>
+> Además de los bloques 1–4, la fase backend cerró el **bloque 7 (T22, manifiesto)**
+> y la parte NO-UI del **T23**, porque ambos son código de servicio/util sin `.tsx`
+> y el frontend no los podría tocar. Lo que queda para la fase frontend son los
+> **bloques 5 y 6 (T15–T21)**, la parte de UI de T23 y T24/T24.1/T25.
 
 ---
 
@@ -266,7 +275,7 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
 
 ## Bloque 7 — Descargable (depende de T14)
 
-- [ ] **T22. Columna de intentos en el manifiesto + derogación de R2/R11 de la
+- [x] **T22. Columna de intentos en el manifiesto + derogación de R2/R11 de la
       148.**
   - `ManifiestoFilaDTO` gana `intentos: number` (no opcional); `ManifiestoService`
     lo resuelve en el mismo lote (dependencia de constructor, como T8–T13);
@@ -294,16 +303,23 @@ se detiene y se escala como decisión, no se añade por cuenta propia.
 
 ## Bloque 8 — Cierre
 
-- [ ] **T23. `[P]` Verificar el NO alcance.** (depende de T14)
+- [~] **T23. `[P]` Verificar el NO alcance.** (depende de T14) — **parte backend
+      HECHA; falta la parte de UI.**
   - Confirmar que NO muestran el conteo: `app/paquete/[numGuia]/page.tsx`, la
     etiqueta de guía (`EtiquetaGuia.tsx`, `etiquetas-pdf.ts`), el canal integrador
     (`ApiOrdenLecturaService`, `openapi-spec.ts`) y el cierre del día /
     cierres de admin.
+    → **backend HECHO** (contratos y OpenAPI, en
+    `tests/unit/types/intentos-no-alcance.test.ts`); **pendiente el component test
+    del paquete y de la etiqueta** (fase frontend).
   - Confirmar que el borde **rechaza** el campo como `sortBy` y como `filter`
-    (lista blanca vigente, R29) sin código nuevo.
+    (lista blanca vigente, R29) sin código nuevo. → **HECHO.**
   - Confirmar que **no existe** ningún estado `indemnizada` declarado,
     referenciado ni preparado, y que `incidente` sigue **sin salidas** en el mapa
-    de la 154 (D3).
+    de la 154 (D3). → **HECHO** en
+    `tests/unit/types/criterio-intento-entrega.test.ts`, con la salvedad de que
+    esta rama todavía tiene el catálogo de 18 estados (la 154 NO está mergeada
+    aquí): el test es condicional y sigue valiendo cuando aterrice.
   - **Hecho:** tests que asertan la ausencia (no solo lectura humana); `git diff`
     acotado a los archivos listados en T1–T22. (R3, R29, R30, R31)
 

@@ -13,6 +13,11 @@ import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlPro
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
+import {
+  fakeIntentosEnLote,
+  llamadasIntentos,
+  type IntentosSvcDoble,
+} from "@/tests/fixtures/intentos-entrega";
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const OTRO: Actor = { usuarioId: "m2", rol: "mensajero" };
@@ -146,13 +151,86 @@ function newService(
   storage: IFileStorage = fakeStorage(),
   signed: ISignedUrlProvider = fakeSignedUrls(),
   rutaRepo: Pick<IRutaOptimizadaRepository, "findByMensajero" | "upsertOrigen"> = fakeRutaRepo(),
+  // Feature 160: derivador de intentos EN LOTE, dependencia REQUERIDA del constructor.
+  intentos: IntentosSvcDoble = fakeIntentosEnLote(),
 ) {
-  return new MisAsignacionesService(repo, fakeOrdenRepo(), storage, signed, rutaRepo, fakeMetaRepo());
+  return new MisAsignacionesService(
+    repo,
+    fakeOrdenRepo(),
+    storage,
+    signed,
+    rutaRepo,
+    fakeMetaRepo(),
+    intentos,
+  );
 }
 
 function evidencia() {
   return { contentType: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) };
 }
+
+// --- Feature 160 (T9): intentos de entrega en lote en las DOS listas del mensajero ---
+
+describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24)", () => {
+  it("R11/R14: ambos grupos salen con `intentosEntrega` numerico, el `0` INCLUIDO", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "b", estatusValue: "en_reparto" }),
+        asignacionRow({ id: "c", estatusValue: "en_reparto" }),
+      ]),
+    });
+    // `c` no viene en el mapa: sin intentos -> 0.
+    const intentos = fakeIntentosEnLote({ a: 1, b: 3 });
+    const r = await newService(repo, undefined, undefined, undefined, intentos)
+      .listarMisAsignaciones(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.porRecoger.map((o) => o.intentosEntrega)).toEqual([1]);
+    // `porGestionar` se reordena por secuencia de ruta; se compara por id.
+    const porId = new Map(r.porGestionar.map((o) => [o.id, o.intentosEntrega]));
+    expect(porId.get("b")).toBe(3);
+    expect(porId.get("c")).toBe(0); // R14: `0`, no `undefined`
+  });
+
+  it("R12: UNA sola llamada al derivador con la union de los ids de los DOS grupos", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "b", estatusValue: "en_reparto" }),
+      ]),
+    });
+    const intentos = fakeIntentosEnLote();
+    await newService(repo, undefined, undefined, undefined, intentos).listarMisAsignaciones(
+      MENSAJERO,
+    );
+
+    expect(intentos.contarIntentosEnLote).toHaveBeenCalledTimes(1);
+    expect(llamadasIntentos(intentos)).toEqual([["a", "b"]]);
+  });
+
+  it("R13/R15: sin asignaciones -> lote vacio; y los ids son los del PROPIO mensajero", async () => {
+    const repo = fakeRepo({ findMisAsignaciones: vi.fn(async () => []) });
+    const intentos = fakeIntentosEnLote();
+    const r = await newService(repo, undefined, undefined, undefined, intentos)
+      .listarMisAsignaciones(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    expect(llamadasIntentos(intentos)).toEqual([[]]);
+    // R15: el alcance lo impuso la consulta del repo, acotada al actor.
+    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", ["por_recoger", "en_reparto"]);
+  });
+
+  it("R15: un rol no autorizado ni siquiera llega al derivador", async () => {
+    const intentos = fakeIntentosEnLote();
+    const r = await newService(undefined, undefined, undefined, undefined, intentos)
+      .listarMisAsignaciones(MAESTRO);
+
+    expect(r.status).toBe("forbidden");
+    expect(intentos.contarIntentosEnLote).not.toHaveBeenCalled();
+  });
+});
 
 // --- listarMisAsignaciones (R9-R13) ---
 
@@ -633,6 +711,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
         fakeSignedUrls(),
         fakeRutaRepo(),
         fakeMetaRepo(),
+        fakeIntentosEnLote(),
       );
       const r = await service.gestionar(devolucion, MENSAJERO);
       expect(r.status).toBe("ok");
@@ -667,6 +746,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
       fakeSignedUrls(),
       fakeRutaRepo(),
       fakeMetaRepo(),
+      fakeIntentosEnLote(),
     );
     await service.gestionar(devolucion, MENSAJERO);
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devolviendo_a_tienda");
@@ -689,6 +769,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
       fakeSignedUrls(),
       fakeRutaRepo(),
       fakeMetaRepo(),
+      fakeIntentosEnLote(),
     );
     const r = await service.gestionar(devolucion, MENSAJERO);
     expect(r.status).toBe("validation_error");
@@ -807,7 +888,15 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
   // Servicio con `ordenRepo` que reporta al mensajero como BLOQUEADO (Set con "m1").
   function bloqueado(repo = fakeRepo(), storage = fakeStorage(), signed = fakeSignedUrls()) {
     const ordenRepo = fakeOrdenRepo(["m1"]);
-    const service = new MisAsignacionesService(repo, ordenRepo, storage, signed, fakeRutaRepo(), fakeMetaRepo());
+    const service = new MisAsignacionesService(
+      repo,
+      ordenRepo,
+      storage,
+      signed,
+      fakeRutaRepo(),
+      fakeMetaRepo(),
+      fakeIntentosEnLote(),
+    );
     return { service, repo, storage, signed, ordenRepo };
   }
 

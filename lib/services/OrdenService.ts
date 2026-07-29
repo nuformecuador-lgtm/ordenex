@@ -9,6 +9,7 @@ import type {
   ListarOrdenesServiceResult,
   ObtenerOrdenServiceResult,
 } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   ActualizarOrdenInput,
   CrearOrdenInput,
@@ -27,8 +28,19 @@ const KNOWN_ROLES = new Set<string>(["maestro", "admin", "adminTienda", "mensaje
 // claves de esta whitelist, asi que ninguna columna arbitraria alcanza el `where`.
 const FILTER_TO_COLUMN = { status_id: "estatusId" } as const;
 
+// Feature 160 (design §3.5): el derivador de intentos EN LOTE. `Pick` para dobles de test sin
+// DB, e `import type` para que la dependencia sea SOLO de tipo (sin ciclo de modulos:
+// `OrdenHistorialService` depende de repositorios, nunca de los servicios de lista).
+type IntentosSvc = Pick<IOrdenHistorialService, "contarIntentosEnLote">;
+
 export class OrdenService implements IOrdenService {
-  constructor(private readonly repo: IOrdenRepository) {}
+  constructor(
+    private readonly repo: IOrdenRepository,
+    // Feature 160 (R11/R12): dependencia REQUERIDA a proposito. Una dep opcional dejaria que
+    // el wiring de produccion se la olvidara y el dato desapareciera en silencio de las 5
+    // superficies que come este listado; requerida, el compilador lo impide.
+    private readonly historial: IntentosSvc,
+  ) {}
 
   async crear(input: CrearOrdenInput, actor: Actor): Promise<CrearOrdenServiceResult> {
     // --- Autorizacion (R19-R24), antes de tocar datos ---
@@ -172,9 +184,20 @@ export class OrdenService implements IOrdenService {
       take: input.pageSize, // ya acotado a MAX_PAGE_SIZE por el schema (R33)
     });
 
+    // Feature 160 (R11/R12/R14/R15): merge del conteo de intentos en UNA sola consulta al
+    // historial, sobre los items YA acotados por rol/tienda/mensajero (el alcance del actor lo
+    // impuso el `where` de arriba: no se pide el conteo de ninguna orden que el actor no pueda
+    // leer). Pagina vacia -> 0 consultas (R13). `?? 0` porque las ordenes sin intentos no
+    // vienen en el Map y el `0` SIEMPRE se expone (R14/R19).
+    const intentos = await this.historial.contarIntentosEnLote(items.map((o) => o.id));
+    const itemsConIntentos = items.map((o) => ({
+      ...o,
+      intentosEntrega: intentos.get(o.id) ?? 0,
+    }));
+
     return {
       status: "ok",
-      items,
+      items: itemsConIntentos,
       page: input.page,
       pageSize: input.pageSize,
       total,

@@ -35,6 +35,16 @@ export interface LiberadaHoyRow {
   numRemision: string;
   destinatario: string;
   liberadaReprogramadaAt: Date;
+  /**
+   * Feature 160 (R11/R14/R16/R27): intentos de entrega VIGENTES de la orden, derivados del
+   * historial en UN solo lote para todo el aviso (criterio unico de `OrdenHistorialService`,
+   * design §1.1: destino `devuelta`, o destino `reprogramada` con familia `gestion`).
+   *
+   * NO lo emite el repositorio (esta fila es una proyeccion de `orden`): lo mergea el borde que
+   * arma el aviso (`listarLiberadasHoy`), con `?? 0`. Opcional (`?`) por el patron aditivo del
+   * repo: no rompe fixtures/mocks que construyen la fila sin el.
+   */
+  intentosEntrega?: number;
 }
 
 export interface ILiberacionReprogramadaRepository {

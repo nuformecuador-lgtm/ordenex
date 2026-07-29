@@ -168,6 +168,18 @@ export type OrdenListItemDTO = OrdenDTO & {
   // descarta objetos al renderizar. `null` = la orden no tiene gestion de
   // reprogramacion vigente; en las tabs que no son "reprogramada" lo normal es null.
   fechaReprogramacion?: string | null;
+  /**
+   * Feature 160 (R11/R14/R16): intentos de entrega VIGENTES de la orden, derivados del
+   * historial EN EL MISMO LOTE de la lectura (criterio unico de `OrdenHistorialService`,
+   * design §1.1: destino `devuelta`, o destino `reprogramada` con familia `gestion`).
+   *
+   * Opcional (`?`) por el patron aditivo del repo (`zonaEsGam?`/`prioridad?`): no rompe los
+   * fixtures ni los mocks que construyen el DTO sin el. El servicio SIEMPRE lo envia, `0`
+   * incluido (R14): el `0` es un valor CONOCIDO, no un dato ausente, y la superficie lo pinta
+   * con `?? 0` — el dato SIEMPRE se muestra (R19). NO es ordenable ni filtrable server-side
+   * (R29): es derivado en tiempo de lectura, no una columna de `orden`.
+   */
+  intentosEntrega?: number;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
   // que solo usa los escalares/`*Nombre` sigue funcionando. La relacion `tienda`
