@@ -66,6 +66,7 @@ export const ORDEN_FILTER_FIELDS = [
   "created_preset",
   "created_desde",
   "created_hasta",
+  "reasignables",
 ] as const;
 export type OrdenFilterField = (typeof ORDEN_FILTER_FIELDS)[number];
 
@@ -105,6 +106,11 @@ export const ordenFilterSchema = z
     created_preset: z.enum(CREATED_PRESETS).optional(),
     created_desde: fechaCalendario.optional(),
     created_hasta: fechaCalendario.optional(),
+    // Filtro REASIGNABLES: ordenes que esperan que alguien les vuelva a poner
+    // mensajero. Es un predicado COMPUESTO (prioridad + no reprogramada + sin
+    // mensajero asignado), no una columna, y solo sabe ACOTAR: `z.literal(true)`
+    // porque "no filtrar" se expresa OMITIENDO la clave, no mandando `false`.
+    reasignables: z.literal(true).optional(),
   })
   .strict()
   // R39: rango no invertido. La comparacion lexicografica de `YYYY-MM-DD` es

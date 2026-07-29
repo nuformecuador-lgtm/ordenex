@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
 import { SWRConfig } from "swr";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 
 import { RolValue } from "@prisma/client";
@@ -395,12 +396,14 @@ describe("OrdenesPage", () => {
       total: 0,
     });
 
+    const user = userEvent.setup();
     for (const rol of [RolValue.maestro, RolValue.admin]) {
       resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
       await renderPage();
-      // El receptor de bodega central aporta la entrada manual: input "Número de
-      // guía" + botón "Recibir" (distinto del escáner de origen del adminTienda,
-      // que solo tiene cámara).
+      // El receptor es una tarjeta plegada: la barra de acciones ofrece el botón que
+      // la despliega. Dentro está la entrada manual (input "Número de guía" + botón
+      // "Recibir"), que el escáner de origen del adminTienda no tiene.
+      await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
       expect(screen.getByLabelText("Número de guía")).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Recibir" }),
@@ -418,20 +421,26 @@ describe("OrdenesPage", () => {
       total: 0,
     });
 
-    // adminTienda opera la recepción en ORIGEN (cámara), NO la de bodega central:
-    // no debe ver la entrada manual de guía.
+    const user = userEvent.setup();
+
+    // adminTienda opera la recepción en ORIGEN (cámara), NO la de bodega central: al
+    // desplegar su receptor no aparece la entrada manual de guía.
     resolveActorMock.mockResolvedValueOnce({
       usuarioId: "t1",
       rol: RolValue.adminTienda,
     });
     await renderPage();
+    await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
     expect(screen.queryByLabelText("Número de guía")).toBeNull();
     expect(screen.queryByRole("button", { name: "Recibir" })).toBeNull();
     cleanup();
 
-    // Sin sesión (actor null): tampoco.
+    // Sin sesión (actor null): ni siquiera se ofrece el receptor.
     resolveActorMock.mockResolvedValueOnce(null);
     await renderPage();
+    expect(
+      screen.queryByRole("button", { name: "Recibir paquete" }),
+    ).toBeNull();
     expect(screen.queryByLabelText("Número de guía")).toBeNull();
     expect(screen.queryByRole("button", { name: "Recibir" })).toBeNull();
   });

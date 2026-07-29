@@ -175,3 +175,40 @@ describe("sin regresion del where previo (R45)", () => {
     expect(findMany).toEqual({ deletedAt: null, mensajeroAsignadoId: "msg1" });
   });
 });
+
+describe("filtro REASIGNABLES -> predicado compuesto", () => {
+  it("traduce el interruptor a las TRES condiciones, como claves hermanas (AND)", async () => {
+    const { findMany } = await whereDe({ reasignables: true });
+    expect(findMany).toEqual({
+      deletedAt: null,
+      prioridad: true,
+      mensajeroAsignadoId: null,
+      estatus: { value: { not: "reprogramada" } },
+    });
+  });
+
+  it("el estado se compara por VALUE, no por id: `reprogramada` queda fuera", async () => {
+    const { findMany } = await whereDe({ reasignables: true });
+    // Una reprogramada sigue bloqueada hasta que el cron la libere: no es reasignable.
+    expect(findMany.estatus).toEqual({ value: { not: "reprogramada" } });
+  });
+
+  it("convive con el resto de filtros sin pisarlos (AND)", async () => {
+    const { findMany } = await whereDe({ reasignables: true, zonaId: ["z1"] });
+    expect(findMany.zonaId).toEqual({ in: ["z1"] });
+    expect(findMany.prioridad).toBe(true);
+  });
+
+  it("`count` usa EXACTAMENTE el mismo where que la pagina", async () => {
+    const { findMany, count } = await whereDe({ reasignables: true });
+    expect(count).toEqual(findMany);
+  });
+
+  it("sin la clave no aparece ninguna de las tres condiciones", async () => {
+    const { findMany } = await whereDe({ zonaId: ["z1"] });
+    expect(findMany).not.toHaveProperty("prioridad");
+    expect(findMany).not.toHaveProperty("mensajeroAsignadoId");
+    expect(findMany).not.toHaveProperty("estatus");
+  });
+});
+

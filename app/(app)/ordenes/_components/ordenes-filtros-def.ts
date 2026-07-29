@@ -1,5 +1,6 @@
 import type { FilterDef } from "@/components/shared/FilterComponent";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
+import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // Feature 144 / B3 (design.md §4.1) — TODO lo especifico de ordenes vive aqui.
 //
@@ -16,19 +17,36 @@ export const GRUPO_INTEGRACIONES = "Integraciones (API)";
 export const SUFIJO_INACTIVA = " (inactiva)";
 
 /**
- * Atajos de antiguedad ofrecidos DENTRO del filtro de tiempo (R9). Sus valores son
- * los de `CREATED_PRESETS` del contrato server-side; el componente generico los
- * emite tal cual y `seleccionAFilter` los coloca en `created_preset`.
+ * Atajos de antiguedad ofrecidos DENTRO del filtro de tiempo (R9). Sus valores siguen
+ * siendo los de `CREATED_PRESETS` del contrato server-side, pero ya NO viajan a la
+ * salida: el atajo se resuelve AQUI a su rango de fechas calendario de Costa Rica y lo
+ * que se emite (y se pinta en el calendario) son `created_desde`/`created_hasta`. El
+ * rango se calcula con la misma regla que aplica el servidor a `created_preset`
+ * (`inicioDeUltimosNDiasCREnUtc`: N dias calendario incluido hoy).
  */
 export const ATAJOS_CREACION = [
-  { value: "7d", label: "Últimos 7 días" },
-  { value: "15d", label: "Últimos 15 días" },
-  { value: "30d", label: "Últimos 30 días" },
-  { value: "90d", label: "Últimos 90 días" },
+  { value: "7d", dias: 7, label: "Últimos 7 días" },
+  { value: "15d", dias: 15, label: "Últimos 15 días" },
+  { value: "30d", dias: 30, label: "Últimos 30 días" },
+  { value: "90d", dias: 90, label: "Últimos 90 días" },
 ] as const;
 
 /** Clave del filtro de tiempo en la seleccion agregada (posicional `[atajo, desde, hasta]`). */
 export const CLAVE_CREACION = "created";
+
+/**
+ * Clave del filtro de ESTADO. Es la misma que espera el `filter` de `listarOrdenes`,
+ * asi que `seleccionAFilter` la deja pasar tal cual (identidad, como el resto de
+ * claves de catalogo).
+ */
+export const CLAVE_ESTADO = "status_id";
+
+/**
+ * Clave del filtro REASIGNABLES. Marcado, el backend devuelve solo las ordenes que
+ * esperan que alguien les vuelva a poner mensajero: con prioridad, no reprogramadas y
+ * sin mensajero asignado. Desmarcado, el filtro no existe.
+ */
+export const CLAVE_REASIGNABLES = "reasignables";
 
 /**
  * Declara los SEIS filtros de la barra de ordenes (cinco si el rol no lleva tienda,
@@ -36,8 +54,11 @@ export const CLAVE_CREACION = "created";
  */
 export function construirFiltrosOrdenes(
   cat: CatalogoFiltrosOrdenesDTO,
-  opts: { incluirTienda: boolean },
+  opts: { incluirTienda: boolean; ahora?: Date },
 ): FilterDef[] {
+  // `ahora` inyectable para poder fijar los rangos de los atajos en los tests.
+  const ahora = opts.ahora ?? new Date();
+
   const tienda: FilterDef[] = opts.incluirTienda
     ? [
         {
@@ -97,12 +118,24 @@ export function construirFiltrosOrdenes(
       })),
     },
     {
-      // UN solo filtro de tiempo (decision (p)): atajos y rango excluyentes por dentro.
+      // UN solo filtro de tiempo (decision (p)): los atajos son ajustes rapidos del
+      // rango, dentro del propio calendario.
       key: CLAVE_CREACION,
       label: "Fecha de creación",
       kind: "dateRange",
       placeholder: "Cualquier fecha",
-      options: ATAJOS_CREACION.map((a) => ({ value: a.value, label: a.label })),
+      options: ATAJOS_CREACION.map((a) => ({
+        value: a.value,
+        label: a.label,
+        defaultRange: ultimosNDiasCalendarioCR(a.dias, ahora),
+      })),
+    },
+    {
+      // Interruptor: o esta puesto o no esta. El predicado (prioridad + no
+      // reprogramada + sin mensajero) lo resuelve el backend; aqui solo se declara.
+      key: CLAVE_REASIGNABLES,
+      label: "Reasignables",
+      kind: "boolean",
     },
   ];
 }

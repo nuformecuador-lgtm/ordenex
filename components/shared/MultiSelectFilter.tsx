@@ -166,7 +166,7 @@ export function MultiSelectFilter({
 
   return (
     <div ref={contenedorRef} className={cn("relative", className)}>
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center">
         <Button
           type="button"
           variant="outline"
@@ -181,18 +181,27 @@ export function MultiSelectFilter({
             <span className="text-muted-foreground">{label}: </span>
             {resumen}
           </span>
-          <ChevronDown className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+          {/* Con seleccion, el hueco de la derecha lo ocupa la X que limpia; sin ella,
+              la flecha que anuncia el desplegable. */}
+          {value.length > 0 ? (
+            <span className="h-4 w-4 shrink-0" aria-hidden />
+          ) : (
+            <ChevronDown className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+          )}
         </Button>
+        {/* La X NO puede vivir dentro del disparador (un boton no anida otro): va
+            superpuesta sobre su borde derecho, dentro del mismo control. */}
         {value.length > 0 ? (
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon-xs"
             disabled={disabled}
+            aria-label={`Limpiar ${label}`}
+            className="absolute right-1 hover:bg-transparent hover:text-foreground"
             onClick={() => onChange([])}
           >
-            <X className="h-4 w-4" aria-hidden />
-            Limpiar
+            <X className="h-4 w-4 opacity-60" aria-hidden />
           </Button>
         ) : null}
       </div>
@@ -217,13 +226,20 @@ export function MultiSelectFilter({
               // R28: `listbox > group > option` es una composicion ARIA valida. La
               // `ul` interna va como `presentation` para que las opciones sigan
               // siendo hijas directas del grupo a ojos del lector de pantalla.
-              secciones.map(({ grupo, opciones }) =>
+              secciones.map(({ grupo, opciones }, i) =>
                 grupo === "" ? (
                   opciones.map(renderOpcion)
                 ) : (
-                  <li key={`grupo:${grupo}`} role="group" aria-label={grupo}>
+                  <li
+                    key={`grupo:${grupo}`}
+                    role="group"
+                    aria-label={grupo}
+                    // Una linea separa un grupo del anterior; el primero no la lleva
+                    // (no hay nada de lo que separarlo).
+                    className={cn(i > 0 && "mt-1 border-t border-border pt-1")}
+                  >
                     <div
-                      className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      className="px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground"
                       aria-hidden
                     >
                       {grupo}

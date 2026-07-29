@@ -1,12 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import {
-  render,
-  screen,
-  cleanup,
-  fireEvent,
-  within,
-} from "@testing-library/react";
+import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -41,14 +35,28 @@ const TALLA_DEPENDIENTE: FilterDef = {
   ],
 };
 
+// Los atajos del rango declaran QUE rango representan: pulsarlos no emite su valor,
+// pinta ese rango en el calendario y emite sus dos extremos.
+const RANGO_CORTO = { desde: "2026-07-20", hasta: "2026-07-24" };
+
 const PERIODO: FilterDef = {
   key: "periodo",
   label: "Periodo",
   kind: "dateRange",
   options: [
-    { value: "corto", label: "Plazo corto" },
-    { value: "largo", label: "Plazo largo" },
+    { value: "corto", label: "Plazo corto", defaultRange: RANGO_CORTO },
+    {
+      value: "largo",
+      label: "Plazo largo",
+      defaultRange: { desde: "2026-07-05", hasta: "2026-07-24" },
+    },
   ],
+};
+
+const DESTACADO: FilterDef = {
+  key: "destacado",
+  label: "Destacado",
+  kind: "boolean",
 };
 
 const ACABADO_UNICO: FilterDef = {
@@ -61,9 +69,21 @@ const ACABADO_UNICO: FilterDef = {
   ],
 };
 
-function renderBarra(filters: FilterDef[], props: { showClearAll?: boolean; disabled?: boolean } = {}) {
+// `debounceMs: 0` por defecto en los tests: lo que se afirma aqui es QUE se emite, no
+// CUANDO. El retardo tiene su propio bloque al final, que si lo mide.
+function renderBarra(
+  filters: FilterDef[],
+  props: { showClearAll?: boolean; disabled?: boolean; debounceMs?: number } = {},
+) {
   const onChange = vi.fn();
-  render(<FilterComponent filters={filters} onChange={onChange} {...props} />);
+  render(
+    <FilterComponent
+      filters={filters}
+      onChange={onChange}
+      debounceMs={0}
+      {...props}
+    />,
+  );
   return onChange;
 }
 
@@ -92,6 +112,46 @@ async function marcar(
 ) {
   const lista = await abrirMulti(user, label);
   await user.click(within(lista).getByRole("option", { name: opcion }));
+}
+
+// El filtro `dateRange` elige sus extremos en un calendario. Aqui el orquestador no le
+// pasa `defaultMonth`, asi que el calendario abre en el mes ACTUAL: los dias se eligen
+// en ese mes y la fecha esperada se deriva de el (los dias 1 y 28 existen siempre).
+const HOY = new Date();
+
+function diaDelMesActual(dia: number): string {
+  const mes = String(HOY.getMonth() + 1).padStart(2, "0");
+  return `${HOY.getFullYear()}-${mes}-${String(dia).padStart(2, "0")}`;
+}
+
+/** Abre el calendario del filtro de rango si no lo esta (repulsar el disparador lo cerraria). */
+async function abrirCalendario(user: ReturnType<typeof userEvent.setup>) {
+  if (screen.queryAllByRole("grid").length === 0) {
+    await user.click(screen.getByRole("button", { name: "Periodo" }));
+  }
+}
+
+/** Elige `dia` del mes actual en el calendario del filtro de rango. */
+async function elegirDia(user: ReturnType<typeof userEvent.setup>, dia: number) {
+  await abrirCalendario(user);
+  const cuadriculas = await screen.findAllByRole("grid");
+  await user.click(within(cuadriculas[0]).getByText(String(dia)));
+}
+
+/** Pulsa un rango predefinido; viven dentro del propio calendario, como botones. */
+async function clicAtajo(user: ReturnType<typeof userEvent.setup>, texto: string) {
+  await abrirCalendario(user);
+  const grupo = screen.getByRole("group", { name: "Rangos predefinidos" });
+  await user.click(within(grupo).getByRole("button", { name: texto }));
+}
+
+/** Quita uno de los dos extremos ya elegidos, desde el pie del calendario. */
+async function quitarExtremo(
+  user: ReturnType<typeof userEvent.setup>,
+  extremo: "desde" | "hasta",
+) {
+  await abrirCalendario(user);
+  await user.click(screen.getByRole("button", { name: `Quitar ${extremo}` }));
 }
 
 afterEach(() => cleanup());
@@ -250,8 +310,7 @@ describe("FilterComponent — tipos de control (R6, R7, R13, R14)", () => {
 
     expect(screen.getByRole("button", { name: /^Color:/ })).toBeDisabled();
     expect(screen.getByRole("combobox", { name: "Acabado" })).toBeDisabled();
-    expect(screen.getByLabelText("Desde")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Limpiar todo" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Periodo" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: /^Color:/ }));
     expect(screen.queryByRole("listbox", { name: "Color" })).toBeNull();
@@ -275,13 +334,11 @@ describe("FilterComponent — salida agregada (R16-R20)", () => {
     const onChange = renderBarra([COLOR, PERIODO]);
 
     await marcar(user, "Color", "Rojo");
-    fireEvent.change(screen.getByLabelText("Desde"), {
-      target: { value: "2026-07-01" },
-    });
+    await elegirDia(user, 1);
 
     expect(ultima(onChange)).toEqual({
       color: ["rojo"],
-      periodo: ["", "2026-07-01", ""],
+      periodo: ["", diaDelMesActual(1), diaDelMesActual(1)],
     });
   });
 
@@ -315,14 +372,16 @@ describe("FilterComponent — salida agregada (R16-R20)", () => {
   });
 
   it("R18: un rango sin atajo y sin extremos cuenta como SIN SELECCION", async () => {
+    const user = userEvent.setup();
     const onChange = renderBarra([PERIODO]);
 
-    fireEvent.change(screen.getByLabelText("Desde"), {
-      target: { value: "2026-07-01" },
+    await elegirDia(user, 1);
+    expect(ultima(onChange)).toEqual({
+      periodo: ["", diaDelMesActual(1), diaDelMesActual(1)],
     });
-    expect(ultima(onChange)).toEqual({ periodo: ["", "2026-07-01", ""] });
 
-    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "" } });
+    // Volver a pulsar el unico dia del rango lo deselecciona por completo.
+    await elegirDia(user, 1);
     expect(ultima(onChange)).toEqual({});
   });
 
@@ -335,15 +394,16 @@ describe("FilterComponent — salida agregada (R16-R20)", () => {
     await user.click(
       within(await screen.findByRole("listbox")).getByRole("option", { name: "Mate" }),
     );
-    fireEvent.change(screen.getByLabelText("Hasta"), {
-      target: { value: "2026-07-28" },
-    });
+    // Rango abierto por abajo: se eligen los dos extremos y se quita el inicial.
+    await elegirDia(user, 1);
+    await elegirDia(user, 28);
+    await quitarExtremo(user, "desde");
 
     const salida = ultima(onChange);
     expect(salida).toEqual({
       color: ["rojo"],
       acabado: ["mate"], // `single` = exactamente 1 valor
-      periodo: ["", "", "2026-07-28"], // `dateRange` = 3 posiciones, sin compactar
+      periodo: ["", "", diaDelMesActual(28)], // `dateRange` = 3 posiciones, sin compactar
     });
     for (const valores of Object.values(salida)) {
       expect(Array.isArray(valores)).toBe(true);
@@ -351,18 +411,16 @@ describe("FilterComponent — salida agregada (R16-R20)", () => {
     }
   });
 
-  it("R19: el atajo del rango viaja en la PRIMERA posicion, sin compactar la lista", async () => {
+  it("R19: el atajo emite el RANGO que representa, sin compactar la lista", async () => {
     const user = userEvent.setup();
     const onChange = renderBarra([PERIODO]);
 
-    await user.click(screen.getByRole("combobox", { name: "Periodo" }));
-    await user.click(
-      within(await screen.findByRole("listbox")).getByRole("option", {
-        name: "Plazo corto",
-      }),
-    );
+    await clicAtajo(user, "Plazo corto");
 
-    expect(ultima(onChange)).toEqual({ periodo: ["corto", "", ""] });
+    // El atajo no es un valor propio: la primera posicion sigue vacia.
+    expect(ultima(onChange)).toEqual({
+      periodo: ["", RANGO_CORTO.desde, RANGO_CORTO.hasta],
+    });
   });
 
   it("R20: la salida es agnostica: no construye el objeto de consulta de nadie", async () => {
@@ -370,15 +428,13 @@ describe("FilterComponent — salida agregada (R16-R20)", () => {
     const onChange = renderBarra([COLOR, PERIODO]);
 
     await marcar(user, "Color", "Rojo");
-    fireEvent.change(screen.getByLabelText("Desde"), {
-      target: { value: "2026-07-01" },
-    });
+    await elegirDia(user, 1);
 
     const salida = ultima(onChange);
     // Ni claves de transporte, ni anidamiento, ni `filter`: solo clave declarada -> lista.
     expect(Object.keys(salida).sort()).toEqual(["color", "periodo"]);
     expect(salida).not.toHaveProperty("filter");
-    expect(salida.periodo).toEqual(["", "2026-07-01", ""]);
+    expect(salida.periodo).toEqual(["", diaDelMesActual(1), diaDelMesActual(1)]);
   });
 });
 
@@ -388,16 +444,16 @@ describe("FilterComponent — limpieza y poda (R21, R22, R26)", () => {
     const onChange = renderBarra([COLOR, PERIODO], { showClearAll: true });
 
     await marcar(user, "Color", "Rojo");
-    fireEvent.change(screen.getByLabelText("Desde"), {
-      target: { value: "2026-07-01" },
-    });
+    await elegirDia(user, 1);
     onChange.mockClear();
 
     await user.click(screen.getByRole("button", { name: "Limpiar todo" }));
 
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith({});
-    expect(screen.getByLabelText("Desde")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Periodo" })).toHaveTextContent(
+      "Cualquier fecha",
+    );
     expect(screen.getByRole("button", { name: "Color: Todos" })).toBeInTheDocument();
   });
 
@@ -411,15 +467,14 @@ describe("FilterComponent — limpieza y poda (R21, R22, R26)", () => {
     const onChange = renderBarra([COLOR, PERIODO]);
 
     await marcar(user, "Color", "Rojo");
-    fireEvent.change(screen.getByLabelText("Desde"), {
-      target: { value: "2026-07-01" },
+    await elegirDia(user, 1);
+
+    // Limpieza individual del multiple: la X dentro de su propio control.
+    await user.click(screen.getByRole("button", { name: "Limpiar Color" }));
+
+    expect(ultima(onChange)).toEqual({
+      periodo: ["", diaDelMesActual(1), diaDelMesActual(1)],
     });
-
-    // Limpieza individual del multiple (su propio boton "Limpiar").
-    const limpiadores = screen.getAllByRole("button", { name: /limpiar/i });
-    await user.click(limpiadores[0]);
-
-    expect(ultima(onChange)).toEqual({ periodo: ["", "2026-07-01", ""] });
   });
 
   it("R26: al cambiar el padre, el hijo huerfano YA NO aparece en lo emitido", async () => {
@@ -476,3 +531,116 @@ describe("FilterComponent — accesibilidad (R29)", () => {
     );
   });
 });
+
+describe("FilterComponent — filtro de interruptor (`boolean`)", () => {
+  it("se monta como una casilla con su etiqueta, sin opciones que elegir", () => {
+    renderBarra([DESTACADO]);
+
+    const casilla = screen.getByRole("checkbox", { name: "Destacado" });
+    expect(casilla).toBeInTheDocument();
+    expect(casilla).not.toBeChecked();
+  });
+
+  it("R19: marcado emite UNA lista de cadenas, como el resto de tipos", async () => {
+    const user = userEvent.setup();
+    const onChange = renderBarra([DESTACADO]);
+
+    await user.click(screen.getByRole("checkbox", { name: "Destacado" }));
+
+    expect(ultima(onChange)).toEqual({ destacado: ["true"] });
+  });
+
+  it("R18: desmarcado NO emite `false`: la clave desaparece de la salida", async () => {
+    const user = userEvent.setup();
+    const onChange = renderBarra([DESTACADO, COLOR]);
+
+    await user.click(screen.getByRole("checkbox", { name: "Destacado" }));
+    await marcar(user, "Color", "Rojo");
+    await user.click(screen.getByRole("checkbox", { name: "Destacado" }));
+
+    expect(ultima(onChange)).toEqual({ color: ["rojo"] });
+  });
+
+  it("R16: convive con el resto de filtros en la MISMA salida agregada", async () => {
+    const user = userEvent.setup();
+    const onChange = renderBarra([COLOR, DESTACADO]);
+
+    await marcar(user, "Color", "Rojo");
+    await user.click(screen.getByRole("checkbox", { name: "Destacado" }));
+
+    expect(ultima(onChange)).toEqual({ color: ["rojo"], destacado: ["true"] });
+  });
+
+  it("R15: deshabilitado no acepta cambios ni emite", async () => {
+    const user = userEvent.setup();
+    const onChange = renderBarra([DESTACADO], { disabled: true });
+
+    // Base UI renderiza la casilla como `span[role=checkbox]`: la inhabilitacion se
+    // expone en `aria-disabled`, no en el atributo `disabled` de un input nativo.
+    const casilla = screen.getByRole("checkbox", { name: "Destacado" });
+    expect(casilla).toHaveAttribute("aria-disabled", "true");
+
+    await user.click(casilla);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("R22: 'Limpiar todo' tambien lo desmarca", async () => {
+    const user = userEvent.setup();
+    const onChange = renderBarra([DESTACADO], { showClearAll: true });
+
+    await user.click(screen.getByRole("checkbox", { name: "Destacado" }));
+    await user.click(screen.getByRole("button", { name: "Limpiar todo" }));
+
+    expect(ultima(onChange)).toEqual({});
+    expect(screen.getByRole("checkbox", { name: "Destacado" })).not.toBeChecked();
+  });
+});
+
+describe("FilterComponent — emision con debounce", () => {
+  it("no avisa al consumidor en el acto: espera a que pare el manoseo", async () => {
+    const user = userEvent.setup();
+    const onChange = renderBarra([COLOR], { debounceMs: 150 });
+
+    await marcar(user, "Color", "Rojo");
+
+    // El control YA refleja la seleccion; lo que se aplaza es la emision.
+    expect(onChange).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledWith({ color: ["rojo"] }));
+  });
+
+  it("una racha de clics colapsa en UNA sola emision, la del estado final", async () => {
+    const user = userEvent.setup();
+    const onChange = renderBarra([COLOR], { debounceMs: 150 });
+
+    await marcar(user, "Color", "Rojo");
+    await marcar(user, "Color", "Azul");
+
+    await vi.waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith({ color: ["rojo", "azul"] }),
+    );
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("'Limpiar todo' tambien pasa por el retardo, sin adelantarse a lo pendiente", async () => {
+    const user = userEvent.setup();
+    const onChange = renderBarra([COLOR], { showClearAll: true, debounceMs: 150 });
+
+    await marcar(user, "Color", "Rojo");
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: "Limpiar todo" }));
+
+    await vi.waitFor(() => expect(onChange).toHaveBeenLastCalledWith({}));
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("`debounceMs={0}` emite en el acto (sin esperar un tick)", async () => {
+    const user = userEvent.setup();
+    const onChange = renderBarra([COLOR], { debounceMs: 0 });
+
+    await marcar(user, "Color", "Rojo");
+
+    expect(onChange).toHaveBeenCalledWith({ color: ["rojo"] });
+  });
+});
+

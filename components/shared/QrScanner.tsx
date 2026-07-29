@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { Camera, Loader2, ScanLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
@@ -30,6 +31,10 @@ export function QrScanner({
 }: Readonly<QrScannerProps>) {
   const toast = useToast();
   const [camaraAbierta, setCamaraAbierta] = useState(false);
+  // Entre abrir el visor y el primer frame hay un hueco (permisos + arranque de la
+  // lib): sin esto el usuario mira un rectangulo negro sin saber si algo pasa. Se
+  // enciende en el propio clic (no en un efecto) y se apaga cuando la camara arranca.
+  const [iniciando, setIniciando] = useState(false);
 
   const regionId = useId().replace(/:/g, "_") + "-camara";
 
@@ -79,9 +84,11 @@ export function QrScanner({
           undefined,
         );
         iniciado = true;
+        if (!cancelado) setIniciando(false);
       } catch {
         if (!cancelado) {
           toastRef.current.error(mensajeErrorCamaraRef.current);
+          setIniciando(false);
           setCamaraAbierta(false);
         }
       }
@@ -105,26 +112,90 @@ export function QrScanner({
     };
   }, [camaraAbierta, regionId]);
 
-  return (
-    <>
-      <Button
+  if (!camaraAbierta || disabled) {
+    return (
+      <button
         type="button"
-        variant={camaraAbierta ? "outline" : "default"}
+        // El nombre accesible se fija a mano: el boton lleva dos lineas de texto y
+        // sin esto se leeria "Escanear con camara Apunta al codigo de la guia".
+        aria-label="Escanear con cámara"
         aria-pressed={camaraAbierta}
         disabled={disabled}
-        onClick={() => setCamaraAbierta((a) => !a)}
+        onClick={() => {
+          setIniciando(true);
+          setCamaraAbierta(true);
+        }}
+        className="group flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/40 px-6 py-10 text-center transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {camaraAbierta ? "Cerrar cámara" : "Escanear con cámara"}
-      </Button>
+        <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary transition-transform group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100">
+          <Camera className="size-6" aria-hidden="true" />
+        </span>
+        <span className="space-y-0.5">
+          <span className="block text-sm font-medium text-card-foreground">
+            Escanear con cámara
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            Apunta al código de la guía
+          </span>
+        </span>
+      </button>
+    );
+  }
 
-      {camaraAbierta && !disabled ? (
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-black">
+      <div className="relative aspect-[4/3] w-full">
+        {/* html5-qrcode inyecta SU <video> dentro de esta region; los selectores de
+            hijo lo hacen llenar el marco en vez de quedar centrado a su tamaño. */}
         <div
           id={regionId}
           role="region"
           aria-label="Visor de cámara QR"
-          className="w-full max-w-sm overflow-hidden rounded-lg border"
+          className="size-full [&_canvas]:hidden [&_video]:size-full [&_video]:object-cover"
         />
-      ) : null}
-    </>
+
+        {iniciando ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 text-white">
+            <Loader2
+              className="size-6 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+            <span className="text-sm">Iniciando cámara…</span>
+          </div>
+        ) : (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            {/* Recuadro de enfoque: la mascara oscura de alrededor la pinta la sombra
+                gigante del propio recuadro, asi no hacen falta cuatro divs de borde. */}
+            <div className="relative aspect-square w-[62%] rounded-lg">
+              <div className="absolute inset-0 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+              <span className="absolute -top-0.5 -left-0.5 size-7 rounded-tl-lg border-t-4 border-l-4 border-primary" />
+              <span className="absolute -top-0.5 -right-0.5 size-7 rounded-tr-lg border-t-4 border-r-4 border-primary" />
+              <span className="absolute -bottom-0.5 -left-0.5 size-7 rounded-bl-lg border-b-4 border-l-4 border-primary" />
+              <span className="absolute -right-0.5 -bottom-0.5 size-7 rounded-br-lg border-r-4 border-b-4 border-primary" />
+              <div className="animate-scanline absolute inset-x-3 h-0.5 rounded-full bg-primary shadow-primary/70 shadow-[0_0_12px_2px]" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-black px-4 py-3">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-white/70">
+          <ScanLine className="size-4 text-primary" aria-hidden="true" />
+          Buscando código…
+        </span>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          aria-pressed={camaraAbierta}
+          onClick={() => {
+            setIniciando(false);
+            setCamaraAbierta(false);
+          }}
+        >
+          Cerrar cámara
+        </Button>
+      </div>
+    </div>
   );
 }

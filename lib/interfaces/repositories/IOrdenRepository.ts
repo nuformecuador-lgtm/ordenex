@@ -79,6 +79,14 @@ export interface ListOrdenesWhere {
   // Rango temporal YA calculado server-side (instantes UTC). `gte` inclusivo,
   // `lt` EXCLUSIVO (= comienzo del dia CR siguiente al `hasta` pedido).
   createdAt?: { gte?: Date; lt?: Date };
+  /**
+   * Filtro REASIGNABLES: ordenes pendientes de que alguien les vuelva a poner
+   * mensajero. NO es una columna: es el predicado COMPUESTO `prioridad = true` Y
+   * estado distinto de `reprogramada` Y `mensajero_asignado_id IS NULL`, que el
+   * repositorio traduce (el estado se compara por VALUE, via la relacion). Solo
+   * acota: `true` filtra, ausente no filtra.
+   */
+  reasignables?: true;
 }
 
 export interface ListOrdenesParams {

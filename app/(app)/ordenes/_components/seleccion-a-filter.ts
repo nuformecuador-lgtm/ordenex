@@ -1,7 +1,9 @@
 import type { FilterSelection } from "@/components/shared/FilterComponent";
 import type { OrdenFilterInput } from "@/lib/types/orden";
 
-import { CLAVE_CREACION } from "./ordenes-filtros-def";
+import { BOOLEAN_MARCADO } from "@/components/shared/FilterComponent";
+
+import { CLAVE_CREACION, CLAVE_REASIGNABLES } from "./ordenes-filtros-def";
 
 // Feature 144 / B3 (design.md §4.2, R58) — traduccion de la seleccion agregada del
 // componente GENERICO a las claves del `filter` de `listarOrdenes`.
@@ -37,6 +39,13 @@ export function seleccionAFilter(sel: FilterSelection): Partial<OrdenFilterInput
       }
       if (desde !== "") out.created_desde = desde;
       if (hasta !== "") out.created_hasta = hasta;
+      continue;
+    }
+
+    if (key === CLAVE_REASIGNABLES) {
+      // Interruptor: marcado -> `true`; desmarcado no llega hasta aqui (el control
+      // omite la clave), y el borde solo acepta `true` (nunca `false`).
+      if (values[0] === BOOLEAN_MARCADO) out.reasignables = true;
       continue;
     }
 

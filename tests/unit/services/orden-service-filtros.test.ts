@@ -229,3 +229,28 @@ describe("sin regresion del contrato previo (R45)", () => {
     expect(where).toEqual({});
   });
 });
+
+describe("filtro REASIGNABLES (interruptor)", () => {
+  it("marcado, viaja al `where` como bandera; el predicado lo resuelve el repositorio", async () => {
+    const where = await whereDe({ reasignables: true });
+    expect(where.reasignables).toBe(true);
+  });
+
+  it("ausente, no deja rastro en el `where` (sin filtro)", async () => {
+    const where = await whereDe({ zona_id: ["z1"] });
+    expect(where).not.toHaveProperty("reasignables");
+  });
+
+  it("solo ACOTA: no toca el acotamiento por rol, que se escribe despues", async () => {
+    const where = await whereDe({ reasignables: true }, TIENDA);
+    expect(where.tiendaId).toBe("store1");
+    expect(where.reasignables).toBe(true);
+  });
+
+  it("el borde RECHAZA `false`: 'sin filtro' se expresa omitiendo la clave", () => {
+    expect(() =>
+      listarOrdenesSchema.parse({ filter: { reasignables: false } }),
+    ).toThrow();
+  });
+});
+

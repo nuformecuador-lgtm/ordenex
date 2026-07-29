@@ -287,14 +287,17 @@ describe("EscanerRecepcionBodegaCentral — corte en cliente del código inváli
     expect(recibirMock).not.toHaveBeenCalled();
   });
 
-  it("una guía manual vacía se corta en cliente (sin llamar a la acción)", async () => {
+  it("con el campo vacío no hay nada que enviar: el botón está inerte", async () => {
     const user = userEvent.setup();
     render(<EscanerRecepcionBodegaCentral onRecibida={vi.fn()} />);
 
+    // El vacío ya no llega al guard de "Código inválido": la tarjeta deshabilita el
+    // botón, que es la forma honesta de decir que aún no hay nada que recibir.
+    expect(screen.getByRole("button", { name: "Recibir" })).toBeDisabled();
+
     await recibirManual(user, "");
 
-    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
-    expect(errorMock.mock.calls[0][0]).toMatch(/inválido/i);
     expect(recibirMock).not.toHaveBeenCalled();
+    expect(errorMock).not.toHaveBeenCalled();
   });
 });

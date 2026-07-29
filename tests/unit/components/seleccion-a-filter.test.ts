@@ -120,3 +120,31 @@ describe("seleccionAFilter — combinacion (R46, R58)", () => {
     expect(Object.keys(filter).sort()).toEqual(["created_desde", "zona_id"]);
   });
 });
+
+describe("seleccionAFilter — reasignables (interruptor)", () => {
+  it("marcado se traduce al booleano `true` del borde, no a la cadena \"true\"", () => {
+    const filter = seleccionAFilter({ reasignables: ["true"] });
+    expect(filter).toEqual({ reasignables: true });
+    expect(aceptadoPorElBorde(filter)).toBe(true);
+  });
+
+  it("desmarcado no llega a la traduccion: sin clave, sin filtro", () => {
+    expect(seleccionAFilter({})).toEqual({});
+  });
+
+  it("convive con el resto de claves en el mismo objeto", () => {
+    const filter = seleccionAFilter({
+      reasignables: ["true"],
+      zona_id: ["z1"],
+      created: ["", "2026-07-01", "2026-07-28"],
+    });
+    expect(filter).toEqual({
+      reasignables: true,
+      zona_id: ["z1"],
+      created_desde: "2026-07-01",
+      created_hasta: "2026-07-28",
+    });
+    expect(aceptadoPorElBorde(filter)).toBe(true);
+  });
+});
+

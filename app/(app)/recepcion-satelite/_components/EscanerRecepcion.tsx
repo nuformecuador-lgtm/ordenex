@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 
-import { QrScanner } from "@/components/shared/QrScanner";
+import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
 import { recibirPorQr } from "@/lib/actions/recepcion-satelite";
 import { extractNumGuiaFromScan } from "@/lib/utils/paquete-url";
@@ -28,6 +28,9 @@ export interface EscanerRecepcionProps {
 export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
   const toast = useToast();
   const [procesando, setProcesando] = useState(false);
+  // Confirmacion PERSISTENTE del ultimo acierto: el toast se va solo y en una tanda
+  // de escaneos seguidos el mensajero necesita ver que la anterior si entro.
+  const [ultimaRecibida, setUltimaRecibida] = useState<number | null>(null);
 
   /**
    * Traduce cada resultado de la acción a un toast por ítem (R12–R16). El
@@ -40,6 +43,7 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
       switch (result.status) {
         case "ok":
           toast.success(`Guía ${numGuia} recibida.`);
+          setUltimaRecibida(numGuia);
           onRecibida();
           break;
         case "ya_recibida":
@@ -115,12 +119,21 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
   );
 
   return (
-    <section aria-label="Recepción por escaneo" className="flex flex-col gap-3">
-      <QrScanner
-        onDecoded={onDecoded}
-        disabled={procesando}
-        mensajeErrorCamara="No se pudo abrir la cámara."
-      />
-    </section>
+    <EscanerGuiaCard
+      ariaLabel="Recepción por escaneo"
+      titulo="Recibir paquete"
+      descripcion="Escanea el código de la guía"
+      onDecoded={onDecoded}
+      procesando={procesando}
+      mensajeErrorCamara="No se pudo abrir la cámara."
+      exito={
+        ultimaRecibida === null ? undefined : (
+          <>
+            Guía <span className="font-semibold">{ultimaRecibida}</span> recibida
+            correctamente.
+          </>
+        )
+      }
+    />
   );
 }
