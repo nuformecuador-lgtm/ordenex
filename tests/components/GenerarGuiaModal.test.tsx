@@ -8,8 +8,8 @@ import { generarGuia } from "@/lib/actions/ordenes-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
-// Feature 17 (T18) — Modal async "Generar guía": agrupa por sugerido/sin
-// sugerido (R20) y resuelve el lote mixto en UNA sola llamada (R24).
+// Feature 17 (T18) — Modal async "Generar guía": lista las órdenes GAM sin
+// mensajero preseleccionado (R20) y resuelve el lote mixto en UNA sola llamada (R24).
 vi.mock("@/lib/actions/ordenes-guia", () => ({
   generarGuia: vi.fn(),
 }));
@@ -56,7 +56,6 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    mensajeroSugeridoId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -89,28 +88,30 @@ afterEach(() => {
 });
 
 describe("GenerarGuiaModal", () => {
-  it("R20: agrupa la selección en 'con sugerido' y 'sin sugerido'", () => {
+  it("R20: lista TODAS las órdenes GAM juntas, sin mensajero preseleccionado", () => {
+    // Retirado el "mensajero sugerido": ya no hay subgrupos ni preselección; la
+    // asignación se decide aquí, orden por orden, partiendo de "sin mensajero".
     const ordenes = [
-      makeOrden({ id: "o1", numRemision: "REM-001", mensajeroSugeridoId: "m1" }),
-      makeOrden({ id: "o2", numRemision: "REM-002", mensajeroSugeridoId: null }),
+      makeOrden({ id: "o1", numRemision: "REM-001" }),
+      makeOrden({ id: "o2", numRemision: "REM-002" }),
     ];
     renderModal(ordenes);
 
-    expect(screen.getByText("Con mensajero sugerido")).toBeInTheDocument();
-    expect(screen.getByText("Sin mensajero sugerido")).toBeInTheDocument();
+    expect(screen.queryByText("Con mensajero sugerido")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sin mensajero sugerido")).not.toBeInTheDocument();
 
-    const conSugeridoTable = screen.getByRole("table", {
-      name: "Órdenes con mensajero sugerido",
-    });
-    expect(within(conSugeridoTable).getByText("REM-001")).toBeInTheDocument();
+    const tabla = screen.getByRole("table", { name: "Órdenes por asignar" });
+    expect(within(tabla).getByText("REM-001")).toBeInTheDocument();
+    expect(within(tabla).getByText("REM-002")).toBeInTheDocument();
 
-    const sinSugeridoTable = screen.getByRole("table", {
-      name: "Órdenes sin mensajero sugerido",
-    });
-    expect(within(sinSugeridoTable).getByText("REM-002")).toBeInTheDocument();
+    // Ambos selectores arrancan en el placeholder "Sin mensajero".
+    for (const rem of ["REM-001", "REM-002"]) {
+      const select = screen.getByRole("combobox", { name: `Mensajero para la orden ${rem}` });
+      expect(select).toHaveTextContent("Sin mensajero");
+    }
   });
 
-  it("R24: caso mixto (sugerido + override + sin mensajero) resuelve en UNA sola llamada a generarGuia", async () => {
+  it("R24: caso mixto (con mensajero elegido + sin mensajero) resuelve en UNA sola llamada a generarGuia", async () => {
     const user = userEvent.setup();
     generarGuiaMock.mockResolvedValue({
       status: "ok",
@@ -122,22 +123,33 @@ describe("GenerarGuiaModal", () => {
     });
 
     const ordenes = [
-      // (a) con sugerido: se confirma el sugerido tal cual.
-      makeOrden({ id: "o1", numRemision: "REM-001", mensajeroSugeridoId: "m1" }),
-      // (b) sin sugerido: el maestro elige otro mensajero (override).
-      makeOrden({ id: "o2", numRemision: "REM-002", mensajeroSugeridoId: null }),
-      // (b) sin sugerido: el maestro deja "sin mensajero" -> en_bodega_central.
-      makeOrden({ id: "o3", numRemision: "REM-003", mensajeroSugeridoId: null }),
+      // (a) el maestro elige mensajero.
+      makeOrden({ id: "o1", numRemision: "REM-001" }),
+      // (b) el maestro elige otro mensajero.
+      makeOrden({ id: "o2", numRemision: "REM-002" }),
+      // (c) el maestro deja "sin mensajero" -> en_bodega_central.
+      makeOrden({ id: "o3", numRemision: "REM-003" }),
     ];
     const { onSuccess } = renderModal(ordenes);
 
-    // o2: elige mensajero override (Select por click + listbox, no <select> nativo).
-    const selectO2 = screen.getByRole("combobox", {
-      name: "Mensajero para la orden REM-002",
-    });
-    await user.click(selectO2);
-    const listbox = await screen.findByRole("listbox");
-    await user.click(within(listbox).getByRole("option", { name: "Beto Mensajero" }));
+    // o1 y o2: eligen mensajero (Select por click + listbox, no <select> nativo).
+    await user.click(
+      screen.getByRole("combobox", { name: "Mensajero para la orden REM-001" }),
+    );
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "Ana Mensajera",
+      }),
+    );
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Mensajero para la orden REM-002" }),
+    );
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "Beto Mensajero",
+      }),
+    );
 
     // o3 queda sin mensajero (placeholder "Sin mensajero").
     await user.click(screen.getByRole("button", { name: "Generar guía" }));
@@ -145,8 +157,8 @@ describe("GenerarGuiaModal", () => {
     expect(generarGuiaMock).toHaveBeenCalledTimes(1);
     expect(generarGuiaMock).toHaveBeenCalledWith({
       decisiones: [
-        { ordenId: "o1", mensajeroId: "m1" }, // sugerido confirmado
-        { ordenId: "o2", mensajeroId: "m2" }, // override
+        { ordenId: "o1", mensajeroId: "m1" }, // elegido por el maestro
+        { ordenId: "o2", mensajeroId: "m2" }, // elegido por el maestro
         { ordenId: "o3", mensajeroId: null }, // sin mensajero -> en_bodega_central
       ],
     });
@@ -175,7 +187,6 @@ describe("GenerarGuiaModal", () => {
         numRemision: "REM-GAM",
         zonaEsGam: true,
         zonaNombre: "GAM",
-        mensajeroSugeridoId: "m1",
       }),
       // NO-GAM: se rutea a la bodega satélite de su zona, SIN select.
       makeOrden({
@@ -199,17 +210,22 @@ describe("GenerarGuiaModal", () => {
         name: "Mensajero para la orden REM-NOGAM",
       }),
     ).toBeNull();
-    // La orden GAM sí conserva su select.
-    expect(
+    // La orden GAM sí conserva su select; el maestro elige ahí.
+    await user.click(
       screen.getByRole("combobox", { name: "Mensajero para la orden REM-GAM" }),
-    ).toBeInTheDocument();
+    );
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "Ana Mensajera",
+      }),
+    );
 
     await user.click(screen.getByRole("button", { name: "Generar guía" }));
 
     expect(generarGuiaMock).toHaveBeenCalledTimes(1);
     expect(generarGuiaMock).toHaveBeenCalledWith({
       decisiones: [
-        { ordenId: "o1", mensajeroId: "m1" }, // GAM: sugerido confirmado
+        { ordenId: "o1", mensajeroId: "m1" }, // GAM: elegido por el maestro
         { ordenId: "o2", mensajeroId: null }, // NO-GAM: siempre null (→ satélite)
       ],
     });

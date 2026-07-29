@@ -212,7 +212,6 @@ describe("el notificador real, cableado en un service, emite de punta a punta", 
       findAllProvincias: vi.fn().mockResolvedValue([]),
       findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
       findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
-      findMensajerosByIds: vi.fn().mockResolvedValue([]),
       createManyOrdenesConGuia: vi.fn().mockResolvedValue([]),
     };
     const service = new BulkOrdenService(

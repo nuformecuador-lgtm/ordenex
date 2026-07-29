@@ -2,7 +2,6 @@
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
-import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
 import { OrdenesExistentesTabla } from "@/app/(app)/ordenes/_components/OrdenesExistentesTabla";
 import { OrdenesConErrorTabla } from "@/app/(app)/ordenes/_components/OrdenesConErrorTabla";
 import type { ClasificacionCarga } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
@@ -10,20 +9,17 @@ import type { ClasificacionCarga } from "@/app/(app)/ordenes/_components/carga-m
 export interface OrdenesCargaResumenPasoProps {
   /** Clasificación del `BulkSummary` (nuevas / existentes / con error), R1. */
   clasificacion: ClasificacionCarga;
-  /** Se propaga a `OrdenesCargaResumen` (feature 16). */
-  onDone?: () => void;
 }
 
 /**
  * Feature 29 — Contenedor del paso "resumen" (design D3). Compone, de arriba a
- * abajo: aviso explícito (R7, R8), resumen de asignación de las NUEVAS (R9, R10),
- * tabla de solo lectura de existentes (R4) y tabla de solo lectura de errores
- * (R18). Cada sección se renderiza solo si su grupo no está vacío. NO modifica
- * `OrdenesCargaResumen` ni ninguna primitiva (R16).
+ * abajo: aviso explícito (R7, R8), manifiesto del lote nuevo, tabla de solo
+ * lectura de existentes (R4) y tabla de solo lectura de errores (R18). Cada
+ * sección se renderiza solo si su grupo no está vacío. NO modifica ninguna
+ * primitiva (R16).
  */
 export function OrdenesCargaResumenPaso({
   clasificacion,
-  onDone,
 }: OrdenesCargaResumenPasoProps) {
   const { numRemisionesNuevas, existentes, errores } = clasificacion;
   const nuevasCount = numRemisionesNuevas.length;
@@ -61,10 +57,6 @@ export function OrdenesCargaResumenPaso({
             seleccion={{ numRemisiones: numRemisionesNuevas }}
           />
         </div>
-      ) : null}
-
-      {nuevasCount > 0 ? (
-        <OrdenesCargaResumen numRemisiones={numRemisionesNuevas} onDone={onDone} />
       ) : null}
 
       {existentesCount > 0 ? (

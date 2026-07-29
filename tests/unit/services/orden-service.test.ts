@@ -64,14 +64,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
-    findMensajerosByIds: vi.fn().mockResolvedValue(new Set()),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
     createManyOrdenesConGuia: vi.fn().mockResolvedValue([]), // feature 88
     // Feature 16: metodos de resumen/asignacion, no ejercitados por el CRUD
     // (feature 6) pero exigidos por la interfaz IOrdenRepository.
-    findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
-    asignarMensajeroSugerido: vi.fn().mockResolvedValue(0),
-    countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados por el
     // CRUD (feature 6) pero exigidos por la interfaz IOrdenRepository.
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),

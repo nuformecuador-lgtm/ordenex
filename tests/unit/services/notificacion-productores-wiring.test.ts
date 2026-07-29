@@ -280,7 +280,6 @@ function bulkService(notificar: CargaMasivaNotificador) {
     findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
-    findMensajerosByIds: vi.fn().mockResolvedValue([]),
     createManyOrdenesConGuia: vi.fn().mockResolvedValue([]),
   };
   const tarifas = { resolveTarifaPorTienda: vi.fn().mockResolvedValue(null) };

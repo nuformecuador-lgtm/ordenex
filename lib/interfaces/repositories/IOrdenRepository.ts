@@ -1,6 +1,5 @@
 import type { GestionCausaDevolucion } from "@prisma/client";
 import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
-import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 
@@ -8,8 +7,8 @@ import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabil
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
 // la secuencia de la DB, nunca se envia (R8). `peso` nullable (feature 15/R4:
 // la carga masiva no trae peso); el CRUD (feature 6) siempre envia un numero,
-// pues `crearOrdenSchema` sigue exigiendo `peso > 0`. `direccion`/`montoCobrar`/
-// `mensajeroSugeridoId` son columnas nuevas de feature 15, opcionales.
+// pues `crearOrdenSchema` sigue exigiendo `peso > 0`. `direccion` y `montoCobrar`
+// son columnas nuevas de feature 15, opcionales.
 export interface CreateOrdenData {
   numRemision: string;
   estatusId: string;
@@ -25,7 +24,6 @@ export interface CreateOrdenData {
   notas?: string | null;
   direccion?: string | null;
   montoCobrar?: number | null;
-  mensajeroSugeridoId?: string | null;
 }
 
 // Campos actualizables a nivel de datos (ya filtrados por rol en el servicio).
@@ -454,8 +452,6 @@ export interface IOrdenRepository {
   findCantonesByProvinciaIds(provinciaIds: string[]): Promise<CantonRow[]>;
   /** R19: distritos de los cantones resueltos. */
   findDistritosByCantonIds(cantonIds: string[]): Promise<DistritoRow[]>;
-  /** R22: subconjunto de `ids` que corresponde a un usuario con rol `mensajero`. */
-  findMensajerosByIds(ids: string[]): Promise<Set<string>>;
   /**
    * R27: inserta en lotes de `batchSize` con `skipDuplicates`; devuelve el total insertado.
    * Feature 49/#1 (R9/R8/R20): por cada orden EFECTIVAMENTE insertada (no las duplicadas que
@@ -484,25 +480,6 @@ export interface IOrdenRepository {
     batchSize: number,
     historial: HistorialContexto,
   ): Promise<CreateOrdenConGuiaResultRow[]>;
-
-  // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
-
-  /**
-   * R6/R8/R9/R10: filas del resumen del lote (por `num_remision`), acotadas a la
-   * tienda del actor y no borradas. Preserva unicidad de `num_remision`.
-   */
-  findResumenByNumRemisiones(nums: string[], tiendaId: string): Promise<ResumenCargaOrdenDTO[]>;
-  /**
-   * R15/R16: actualiza `mensajero_sugerido_id` en lote, solo ordenes no borradas
-   * de `tiendaId`; devuelve el numero de filas afectadas.
-   */
-  asignarMensajeroSugerido(
-    ordenIds: string[],
-    mensajeroSugeridoId: string,
-    tiendaId: string,
-  ): Promise<number>;
-  /** R14: cuenta cuantas de `ordenIds` pertenecen a `tiendaId` y no estan borradas. */
-  countOrdenesDeTienda(ordenIds: string[], tiendaId: string): Promise<number>;
 
   // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
 

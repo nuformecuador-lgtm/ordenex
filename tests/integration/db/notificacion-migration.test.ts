@@ -305,7 +305,12 @@ describe("R12 — la migracion queda registrada en el invariante de orden", () =
       .map((e) => e.name)
       .sort();
     const esta = dirs.find((d) => d.endsWith("_notificacion"))!;
-    const previas = dirs.filter((d) => !d.endsWith("_notificacion"));
+    const previas = dirs.filter(
+      (d) =>
+        !d.endsWith("_notificacion") &&
+        // feature 159 (retiro de la sugerencia de mensajero): apendida despues.
+        !d.endsWith("_drop_orden_mensajero_sugerido"),
+    );
     expect(esta > previas[previas.length - 1]).toBe(true);
   });
 });

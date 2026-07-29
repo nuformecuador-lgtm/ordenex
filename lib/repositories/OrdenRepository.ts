@@ -2,7 +2,6 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
-import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import type {
   CambioEstadoEntrada,
   HistorialContexto,
@@ -158,7 +157,7 @@ const WITH_ESTATUS = {
 
 // El LISTADO trae, en el MISMO query (via joins de Prisma `include`), los datos
 // de TODAS las relaciones DIRECTAS (FK) de la orden: estatus, tienda, zona,
-// provincia, canton, distrito, mensajeroSugerido y mensajeroAsignado. La relacion
+// provincia, canton, distrito y mensajeroAsignado. La relacion
 // `tienda` (Orden.tienda -> Usuario) trae ademas su tarifa ACTIVA (Usuario.
 // tarifasTienda, 1:N por-tienda; se acota a `status: 'activo'`, no borrada,
 // `take: 1`). NO requiere migracion: son includes sobre relaciones ya existentes.
@@ -233,7 +232,6 @@ const WITH_ESTATUS_Y_TIENDA = {
     provincia: { select: { id: true, nombre: true } },
     canton: { select: { id: true, nombre: true } },
     distrito: { select: { id: true, nombre: true } },
-    mensajeroSugerido: { select: { id: true, nombre: true } },
     mensajeroAsignado: { select: { id: true, nombre: true } },
     // Gestion de reprogramacion VIGENTE (a lo sumo una, `take: 1`): alimenta la
     // columna "Liberada el" de la tab `reprogramada`. `orden -> gestiones` es 1:N
@@ -321,9 +319,6 @@ function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
     provincia: row.provincia ? { id: row.provincia.id, nombre: row.provincia.nombre } : null,
     canton: row.canton ? { id: row.canton.id, nombre: row.canton.nombre } : null,
     distrito: row.distrito ? { id: row.distrito.id, nombre: row.distrito.nombre } : null,
-    mensajeroSugerido: row.mensajeroSugerido
-      ? { id: row.mensajeroSugerido.id, nombre: row.mensajeroSugerido.nombre }
-      : null,
     mensajeroAsignado: row.mensajeroAsignado
       ? { id: row.mensajeroAsignado.id, nombre: row.mensajeroAsignado.nombre }
       : null,
@@ -332,15 +327,14 @@ function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
 
 // R25/R26: serializa una fila del listado a OrdenListItemDTO, agregando el nombre
 // legible de la tienda. Solo el listado usa este mapeo; el resto del CRUD usa toDTO.
-// Feature 17/R20: agrega mensajeroSugeridoId/mensajeroAsignadoId (ya vienen en el
-// row via WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
+// Feature 17/R20: agrega mensajeroAsignadoId (ya viene en el row via
+// WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
 // Ademas expone en `relaciones` los datos de TODAS las relaciones directas (FK),
 // con la tarifa activa anidada dentro de `tienda` (resueltas via joins en el listado).
 function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
   return {
     ...toDTO(row),
     tiendaNombre: row.tienda.nombre,
-    mensajeroSugeridoId: row.mensajeroSugeridoId,
     mensajeroAsignadoId: row.mensajeroAsignadoId,
     // Feature 30/R14/R19: nombre de zona (columna del listado) + flag GAM (la UI
     // decide por fila si muestra select de mensajero o "-> bodega satelite").
@@ -358,46 +352,6 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // derivar "hoy" desde un instante real). Sin gestion vigente -> null.
     fechaReprogramacion: toFechaISO(row.gestiones[0]?.fechaReprogramacion),
     relaciones: toRelaciones(row),
-  };
-}
-
-// Feature 16 — resumen del lote: estatus.value + mensajeroSugerido.nombre.
-const WITH_RESUMEN = {
-  select: {
-    id: true,
-    numGuia: true,
-    numRemision: true,
-    destinatario: true,
-    telefonoDest: true,
-    producto: true,
-    montoCobrar: true,
-    direccion: true,
-    mensajeroSugeridoId: true,
-    zonaId: true,
-    estatus: { select: { value: true } },
-    zona: { select: { nombre: true } },
-    mensajeroSugerido: { select: { nombre: true } },
-  },
-} as const;
-
-type OrdenResumenRow = Prisma.OrdenGetPayload<typeof WITH_RESUMEN>;
-
-// R6/R9: mapea Decimal montoCobrar -> number|null; NO expone deletedAt/internos.
-function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
-  return {
-    id: row.id,
-    numGuia: row.numGuia,
-    numRemision: row.numRemision,
-    destinatario: row.destinatario,
-    telefonoDest: row.telefonoDest,
-    producto: row.producto,
-    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
-    direccion: row.direccion,
-    estatusValue: row.estatus?.value,
-    zonaId: row.zonaId,
-    zonaNombre: row.zona.nombre,
-    mensajeroSugeridoId: row.mensajeroSugeridoId,
-    mensajeroSugeridoNombre: row.mensajeroSugerido?.nombre ?? null,
   };
 }
 
@@ -576,7 +530,6 @@ export class OrdenRepository implements IOrdenRepository {
             notas: data.notas ?? null,
             direccion: data.direccion ?? null,
             montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
-            mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
           },
           ...WITH_ESTATUS,
         });
@@ -870,16 +823,6 @@ export class OrdenRepository implements IOrdenRepository {
     }));
   }
 
-  /** R22: subconjunto de `ids` con rol `mensajero`. */
-  async findMensajerosByIds(ids: string[]): Promise<Set<string>> {
-    if (ids.length === 0) return new Set();
-    const rows = await this.prisma.usuario.findMany({
-      where: { id: { in: ids }, rol: { value: "mensajero" } },
-      select: { id: true },
-    });
-    return new Set(rows.map((r) => r.id));
-  }
-
   /** R27: insercion masiva en lotes de `batchSize`, tolerando carreras de num_remision. */
   async createManyOrdenes(
     data: CreateOrdenData[],
@@ -1034,45 +977,7 @@ export class OrdenRepository implements IOrdenRepository {
       notas: data.notas ?? null,
       direccion: data.direccion ?? null,
       montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
-      mensajeroSugeridoId: data.mensajeroSugeridoId ?? null,
     };
-  }
-
-  // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
-
-  /** R6/R8/R9/R10: filas del resumen, acotadas a tienda del actor y no borradas. */
-  async findResumenByNumRemisiones(
-    nums: string[],
-    tiendaId: string,
-  ): Promise<ResumenCargaOrdenDTO[]> {
-    if (nums.length === 0) return [];
-    const rows = await this.prisma.orden.findMany({
-      where: { numRemision: { in: nums }, tiendaId, deletedAt: null },
-      ...WITH_RESUMEN,
-    });
-    return rows.map(toResumenDTO);
-  }
-
-  /** R15/R16: actualiza en lote, solo ordenes no borradas de `tiendaId`. */
-  async asignarMensajeroSugerido(
-    ordenIds: string[],
-    mensajeroSugeridoId: string,
-    tiendaId: string,
-  ): Promise<number> {
-    if (ordenIds.length === 0) return 0;
-    const result = await this.prisma.orden.updateMany({
-      where: { id: { in: ordenIds }, tiendaId, deletedAt: null },
-      data: { mensajeroSugeridoId },
-    });
-    return result.count;
-  }
-
-  /** R14: cuenta cuantas de `ordenIds` pertenecen a `tiendaId` y no estan borradas. */
-  async countOrdenesDeTienda(ordenIds: string[], tiendaId: string): Promise<number> {
-    if (ordenIds.length === 0) return 0;
-    return this.prisma.orden.count({
-      where: { id: { in: ordenIds }, tiendaId, deletedAt: null },
-    });
   }
 
   // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
