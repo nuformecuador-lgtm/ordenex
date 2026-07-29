@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Worktrees de agentes: copias completas del repo dentro de `.claude/`.
+    // Sin esto el lint recorre cada copia (minutos de corrida) y un error de
+    // OTRA rama pone `./init.sh` en rojo en `dev`.
+    ".claude/**",
   ]),
 ]);
 
