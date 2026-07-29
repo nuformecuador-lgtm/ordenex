@@ -365,6 +365,31 @@ describe("OrdenRepository.rutearBodegaSateliteLote (feature 30/R10/R13)", () => 
     ]);
   });
 
+  // Feature 156 (review, menor 1): el caso de arriba dejo de distinguir "lee el origen de CADA
+  // orden" de "lee el de la primera" — tras retirar #7c el unico origen legal hacia
+  // `en_ruta_bodega_satelite` es `en_bodega_central`, asi que ambas filas comparten origen.
+  // Este caso recupera ese grado de libertad SIN apoyarse en #7b (la arista que retira la 155):
+  // si la pre-lectura no devuelve `o2`, su origen tiene que caer a `null` — la rama
+  // `origenById.get(id) ?? null` — y la guardia de fallo CERRADO lo rechaza como "creacion"
+  // ilegal. Un repo que reusara `origenRows[0]` para todo el lote NO lanzaria y este caso lo
+  // delata. (Por eso no basta con quitar `o2` del fixture del caso anterior: ahi la guardia
+  // corre de verdad y el append nunca llegaria a `createMany`.)
+  it("R13: el origen se resuelve POR ORDEN — la que no aparece en la pre-lectura cae a null y la guardia la rechaza", async () => {
+    const { prisma, tx } = buildPrisma();
+    tx.orden.findMany.mockResolvedValue([
+      { id: "o1", estatusId: idEstado("en_bodega_central") },
+    ]);
+    tx.orden.update.mockResolvedValue({ id: "o1" });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await expect(
+      repo.rutearBodegaSateliteLote(["o1", "o2"], idEstado("en_ruta_bodega_satelite"), HIST_RUTEO),
+    ).rejects.toThrow(/creacion -> en_ruta_bodega_satelite/);
+
+    // R7: la guardia corre ANTES del append, asi que no queda historial parcial del lote.
+    expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
+  });
+
   it("devuelve 0 sin abrir transaccion cuando el lote esta vacio", async () => {
     const { prisma } = buildPrisma();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
