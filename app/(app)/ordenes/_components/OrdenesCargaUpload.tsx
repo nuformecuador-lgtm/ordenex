@@ -128,7 +128,6 @@ export function OrdenesCargaUpload({ onValidated }: OrdenesCargaUploadProps) {
       const { unicas, duplicadas } = dedupPorRemision(filas);
       const chunkResults = await procesarEnChunks(unicas, {
         dryRun: true,
-        mensajeroSugeridoId: "", // el mensajero se aplica en la carga real
         chunkSize: cargaMasivaConfig.CHUNK_SIZE,
         onProgress: (hechas, total) => setProgreso({ hechas, total }),
       });

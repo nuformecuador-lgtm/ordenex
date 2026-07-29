@@ -1,12 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { OrdenService } from "@/lib/services/OrdenService";
 import { TarifaService } from "@/lib/services/TarifaService";
-import { AsignacionMensajeroService } from "@/lib/services/AsignacionMensajeroService";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { ITarifaRepository } from "@/lib/interfaces/repositories/ITarifaRepository";
 import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
-import type { IUserRepository } from "@/lib/interfaces/repositories/IUserRepository";
 import type { Actor as OrdenActor } from "@/lib/interfaces/services/IOrdenService";
 import type { Actor as TarifaActor } from "@/lib/interfaces/services/ITarifaService";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
@@ -75,12 +73,8 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
-    findMensajerosByIds: vi.fn().mockResolvedValue(new Set()),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
     createManyOrdenesConGuia: vi.fn().mockResolvedValue([]), // feature 88
-    findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
-    asignarMensajeroSugerido: vi.fn().mockResolvedValue(0),
-    countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados aqui
     // pero exigidos por la interfaz IOrdenRepository.
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
@@ -203,25 +197,6 @@ function crearTarifaInput(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function buildUserRepo(overrides: Partial<IUserRepository> = {}): IUserRepository {
-  return {
-    findByEmailWithHash: vi.fn(),
-    findById: vi.fn(),
-    findByEmail: vi.fn(),
-    create: vi.fn(),
-    listMensajeros: vi.fn().mockResolvedValue([{ id: "msg-1", nombre: "Ana" }]),
-    listByRol: vi.fn().mockResolvedValue([]), // exigido por IUserRepository; no ejercitado aqui
-    updatePasswordHash: vi.fn(),
-    list: vi.fn(),
-    count: vi.fn(),
-    update: vi.fn(),
-    setEstado: vi.fn(),
-    listTiposIdentificacion: vi.fn(),
-    listRoles: vi.fn(),
-    ...overrides,
-  };
-}
-
 function bulkRow(overrides: Partial<RawRow> = {}): RawRow {
   return {
     num_remision: "REM-1",
@@ -234,7 +209,6 @@ function bulkRow(overrides: Partial<RawRow> = {}): RawRow {
     producto: "Caja",
     notas: "",
     monto_cobrar: "",
-    mensajero_sugerido_id: "",
     ...overrides,
   };
 }
@@ -293,27 +267,6 @@ describe("TarifaService — adminSatelite sin permisos nuevos (R9, R11)", () => 
 
     const rEscritura = await service.crear(crearTarifaInput(), MAESTRO_TARIFA);
     expect(rEscritura.status).toBe("ok");
-  });
-});
-
-describe("AsignacionMensajeroService.listarMensajeros — adminSatelite sin permisos nuevos (R9, R11)", () => {
-  it("adminSatelite -> forbidden, no consulta el repo", async () => {
-    const userRepo = buildUserRepo();
-    const service = new AsignacionMensajeroService(userRepo, buildOrdenRepo());
-
-    const r = await service.listarMensajeros(ADMIN_SATELITE_ORDEN);
-
-    expect(r.status).toBe("forbidden");
-    expect(userRepo.listMensajeros).not.toHaveBeenCalled();
-  });
-
-  it("no-regresion: adminTienda conserva su resultado exitoso (R11)", async () => {
-    const userRepo = buildUserRepo();
-    const service = new AsignacionMensajeroService(userRepo, buildOrdenRepo());
-
-    const r = await service.listarMensajeros(TIENDA_ORDEN);
-
-    expect(r.status).toBe("ok");
   });
 });
 

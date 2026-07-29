@@ -7,7 +7,6 @@ import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { cn } from "@/lib/utils";
-import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
 import { OrdenesCargaPreview } from "@/app/(app)/ordenes/_components/OrdenesCargaPreview";
 import {
   OrdenesCargaUpload,
@@ -39,26 +38,25 @@ const CLASIFICACION_VACIA: ClasificacionCarga = {
 
 /**
  * Pasos del modal: `upload` (elegir archivo → parseo/validación por chunks en el
- * navegador, dry-run, sin persistir), `preview` (hallazgos: duplicados + errores,
- * con chips) y `asignacion` (tras la carga real: asignar mensajero a las nuevas).
+ * navegador, dry-run, sin persistir) y `preview` (hallazgos: duplicados +
+ * errores, con chips). Al confirmar se persiste y el modal se cierra: el
+ * mensajero de una orden se decide después, en "Generar guía".
  */
-type Step = "upload" | "preview" | "asignacion";
+type Step = "upload" | "preview";
 
 /** Orden y etiqueta de los pasos, para el indicador de progreso. */
 const PASOS: { id: Step; label: string }[] = [
   { id: "upload", label: "Subir archivo" },
   { id: "preview", label: "Revisar hallazgos" },
-  { id: "asignacion", label: "Asignar mensajero" },
 ];
 
 /** Subtítulo del modal según el paso; orienta sin repetir lo que ya dice el paso. */
 const PASO_DESCRIPCION: Record<Step, string> = {
   upload: "Sube un archivo CSV o XLSX. Se valida en tu navegador antes de guardar nada.",
   preview: "Revisa los hallazgos de la validación y confirma para cargar.",
-  asignacion: "Asigna un mensajero a las órdenes recién creadas.",
 };
 
-/** Indicador de progreso de los 3 pasos del modal (presentacional). */
+/** Indicador de progreso de los pasos del modal (presentacional). */
 function OrdenesCargaPasos({ step }: { step: Step }) {
   const actual = PASOS.findIndex((p) => p.id === step);
 
@@ -188,9 +186,10 @@ export function OrdenesCargaMasivaButton() {
         { revalidate: true },
       );
 
-      setClasificacion(clasif);
-      if (nuevas > 0) setStep("asignacion");
-      else handleOpenChange(false);
+      // La carga ya está cometida y el listado se está revalidando: no queda paso
+      // posterior en el modal (el mensajero se decide en "Generar guía"), así que
+      // se cierra y el toast de arriba es el reporte del resultado.
+      handleOpenChange(false);
     } catch (cause) {
       toast.error(
         cause instanceof ChunkRequestError
@@ -238,7 +237,7 @@ export function OrdenesCargaMasivaButton() {
 
           {step === "upload" ? (
             <OrdenesCargaUpload onValidated={handleValidated} />
-          ) : step === "preview" ? (
+          ) : (
             <OrdenesCargaPreview
               clasificacion={clasificacion}
               // Feature 143: valores CRUDOS del archivo para el export de errores.
@@ -246,11 +245,6 @@ export function OrdenesCargaMasivaButton() {
               confirmando={confirmando}
               progresoTexto={progresoTexto}
               onConfirmar={handleConfirmar}
-            />
-          ) : (
-            <OrdenesCargaResumen
-              numRemisiones={clasificacion.numRemisionesNuevas}
-              onDone={() => handleOpenChange(false)}
             />
           )}
         </div>

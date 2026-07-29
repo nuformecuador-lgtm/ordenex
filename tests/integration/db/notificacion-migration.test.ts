@@ -308,7 +308,9 @@ describe("R12 — la migracion queda registrada en el invariante de orden", () =
     const previas = dirs.filter(
       (d) =>
         !d.endsWith("_notificacion") &&
-        !d.endsWith("_order_status_en_reparto"), // feature 153 (rename del value): apendida despues
+        !d.endsWith("_order_status_en_reparto") && // feature 153 (rename del value): apendida despues
+        // feature 159 (retiro de la sugerencia de mensajero): apendida despues.
+        !d.endsWith("_drop_orden_mensajero_sugerido"),
     );
     expect(esta > previas[previas.length - 1]).toBe(true);
   });

@@ -68,11 +68,7 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     findAllProvincias: vi.fn(),
     findCantonesByProvinciaIds: vi.fn(),
     findDistritosByCantonIds: vi.fn(),
-    findMensajerosByIds: vi.fn(),
     createManyOrdenes: vi.fn(),
-    findResumenByNumRemisiones: vi.fn(),
-    asignarMensajeroSugerido: vi.fn(),
-    countOrdenesDeTienda: vi.fn(),
     // Feature 17
     findByIdsForTransicion: vi.fn(async () => [ordenRow()]),
     // Feature 92 (R8): filas que consume el gate de coordenadas (ya geocodificadas).

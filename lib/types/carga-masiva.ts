@@ -92,13 +92,6 @@ export const filaCargaSchema = z.object({
       }
       return parsed;
     }),
-  // R22: string o vacio -> null. La existencia/rol se valida en el service.
-  mensajero_sugerido_id: z
-    .string()
-    .trim()
-    .optional()
-    .default("")
-    .transform((value) => (value === "" ? null : value)),
 });
 
 export type FilaCargaInput = z.infer<typeof filaCargaSchema>;

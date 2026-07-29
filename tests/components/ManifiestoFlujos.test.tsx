@@ -46,18 +46,6 @@ vi.mock("@/lib/actions/envio-devolucion-central", () => ({
 vi.mock("@/lib/actions/devolucion-origen", () => ({ devolverATienda: vi.fn() }));
 vi.mock("@/lib/actions/resolver-novedad", () => ({ recuperarABodega: vi.fn() }));
 
-// El paso de carga masiva monta `OrdenesCargaResumen` (SWR + acciones de mensajero).
-const { listarMensajerosMock, resumenCargaMasivaMock, asignarMensajeroSugeridoMock } =
-  vi.hoisted(() => ({
-    listarMensajerosMock: vi.fn(),
-    resumenCargaMasivaMock: vi.fn(),
-    asignarMensajeroSugeridoMock: vi.fn(),
-  }));
-vi.mock("@/lib/actions/mensajeros", () => ({
-  listarMensajeros: listarMensajerosMock,
-  resumenCargaMasiva: resumenCargaMasivaMock,
-  asignarMensajeroSugerido: asignarMensajeroSugeridoMock,
-}));
 vi.mock("swr", async (importOriginal) => {
   const actual = await importOriginal<typeof import("swr")>();
   return { ...actual, useSWRConfig: () => ({ mutate: vi.fn() }) };
@@ -138,7 +126,6 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    mensajeroSugeridoId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...over,
@@ -187,8 +174,6 @@ beforeEach(() => {
     filas: [makeFila()],
     omitidas: [],
   });
-  listarMensajerosMock.mockResolvedValue({ status: "ok", mensajeros: [] });
-  resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: [] });
 });
 
 afterEach(() => {

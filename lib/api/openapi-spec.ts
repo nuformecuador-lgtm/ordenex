@@ -476,10 +476,6 @@ export const openApiSpec = {
           peso: { type: "string", description: "Peso en kg como texto (p. ej. \"1.5\")." },
           monto_cobrar: { type: "string", description: "Monto COD como texto (p. ej. \"25.90\")." },
           notas: { type: "string" },
-          mensajero_sugerido_id: {
-            type: "string",
-            description: "Opcional: id del mensajero sugerido.",
-          },
         },
         additionalProperties: { type: "string" },
       },

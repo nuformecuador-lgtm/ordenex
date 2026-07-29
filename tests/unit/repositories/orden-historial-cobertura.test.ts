@@ -185,7 +185,7 @@ const PUNTOS_DE_ESCRITURA = [
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
-// asignarMensajeroSugerido (solo mensajero_sugerido_id), softDelete (solo deleted_at),
+// softDelete (solo deleted_at),
 // setOrdenEnGestion / liberarOrdenEnGestion (puntero de bloqueo 1-a-1). Existen pero NO
 // forman parte del conjunto de escritura de estado -> NO instrumentan historial.
 // Feature 67: las dos LECTURAS del deshacer (`findGestionParaDeshacer`,
@@ -194,7 +194,6 @@ const PUNTOS_DE_ESCRITURA = [
 // `crearCierre` (37) escribe `gestion_orden.cierre_id`; feature 109 lo convierte ADEMAS en el
 // punto #19 (`corte_sin_gestionar`) cuando recibe el input del corte -> ya NO va en esta lista.
 const NO_ESCRIBEN_ESTADO = [
-  { repo: "OrdenRepository", simbolo: "asignarMensajeroSugerido" },
   { repo: "OrdenRepository", simbolo: "softDelete" },
   { repo: "GestionOrdenRepository", simbolo: "setOrdenEnGestion" },
   { repo: "GestionOrdenRepository", simbolo: "liberarOrdenEnGestion" },

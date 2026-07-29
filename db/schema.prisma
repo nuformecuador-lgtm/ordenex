@@ -110,7 +110,6 @@ model Usuario {
   otpChallenges                       EmailOtpChallenge[]
   documentos                          MensajeroDocumento[] // feature 21
   ordenesTienda                       Orden[]                   @relation("OrdenTienda")
-  ordenesMensajeria                   Orden[]                   @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
   ordenesAsignadas                    Orden[]                   @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
   gestionesRealizadas                 GestionOrden[]            @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
   gestionesAnuladas                   GestionOrden[]            @relation("GestionAnuladaPor") // feature 67/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
@@ -464,7 +463,6 @@ model Orden {
   notas                  String? // R14a: texto nullable
   direccion              String? // feature 15/R1: nuevo, carga masiva
   montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
-  mensajeroSugeridoId    String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
@@ -491,7 +489,6 @@ model Orden {
   provincia         Provincia   @relation(fields: [provinciaId], references: [id])
   canton            Canton      @relation(fields: [cantonId], references: [id])
   distrito          Distrito?   @relation(fields: [distritoId], references: [id])
-  mensajeroSugerido Usuario?    @relation("OrdenMensajeroSugerido", fields: [mensajeroSugeridoId], references: [id])
   mensajeroAsignado Usuario?    @relation("OrdenMensajeroAsignado", fields: [mensajeroAsignadoId], references: [id], onDelete: SetNull) // feature 17/R7
 
   gestiones             GestionOrden[] // feature 36: gestiones registradas sobre esta orden
@@ -505,7 +502,6 @@ model Orden {
   @@index([tiendaId])
   @@index([estatusId])
   @@index([createdAt])
-  @@index([mensajeroSugeridoId])
   @@index([mensajeroAsignadoId]) // feature 17/R7
   @@index([mensajeroAsignadoId, asignadoAt]) // feature 76/R1: denominador del ranking diario (asignadas HOY por mensajero)
   @@map("orden")

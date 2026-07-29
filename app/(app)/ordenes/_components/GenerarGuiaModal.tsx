@@ -36,11 +36,14 @@ interface GuiaGeneradaResumen {
   mensaje: string;
 }
 
-/** `ordenId -> mensajeroId` ("" = sin mensajero). Preselecciona el sugerido (R20/R21). */
+/**
+ * `ordenId -> mensajeroId` ("" = sin mensajero). Todas arrancan SIN mensajero: el
+ * maestro elige aquí, que es donde se decide la asignación real (R20/R21).
+ */
 function seleccionInicial(ordenes: OrdenListItemDTO[]): Record<string, string> {
   const next: Record<string, string> = {};
   for (const orden of ordenes) {
-    next[orden.id] = orden.mensajeroSugeridoId ?? "";
+    next[orden.id] = "";
   }
   return next;
 }
@@ -75,9 +78,9 @@ function groupByZona(
 }
 
 /**
- * Modal async "Generar guía" (feature 17, T18, R20/R24): agrupa la selección
- * en (a) órdenes CON `mensajeroSugeridoId` (preselecciona, permite override o
- * "sin mensajero") y (b) SIN sugerido (elige mensajero o deja "sin"). Al
+ * Modal async "Generar guía" (feature 17, T18, R20/R24): lista las órdenes GAM
+ * seleccionadas con un selector de mensajero por fila, todas sin mensajero de
+ * partida (se elige aquí o se deja "sin mensajero"). Al
  * confirmar construye `decisiones: [{ ordenId, mensajeroId | null }]` y hace
  * UNA sola llamada a `generarGuia` (R19/R21-R24), con independencia de que la
  * orden termine en `por_recoger` o `en_bodega_central` (R23).
@@ -123,12 +126,9 @@ export function GenerarGuiaModal({
     mensajeros,
     new Set(mensajerosBloqueadosIds),
   );
-  // Feature 30/R8: primero se separa GAM (con select) de NO-GAM (a satélite, sin
-  // select). Dentro de GAM se conserva el subgrupo sugerido/sin-sugerido (feat 17).
+  // Feature 30/R8: se separa GAM (con select) de NO-GAM (a satélite, sin select).
   const gamOrdenes = ordenes.filter(esGam);
   const noGamOrdenes = ordenes.filter((o) => !esGam(o));
-  const conSugerido = gamOrdenes.filter((o) => o.mensajeroSugeridoId != null);
-  const sinSugerido = gamOrdenes.filter((o) => o.mensajeroSugeridoId == null);
   // Grupos NO-GAM por zona: cada zona informa su bodega satélite destino (R8/R15).
   const noGamPorZona = groupByZona(noGamOrdenes);
 
@@ -246,25 +246,14 @@ export function GenerarGuiaModal({
         />
       ) : (
       <div className="flex flex-col gap-4">
-        {conSugerido.length > 0 ? (
+        {gamOrdenes.length > 0 ? (
           <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-medium">Con mensajero sugerido</h3>
+            <h3 className="text-sm font-medium">Asignar mensajero</h3>
             <DataTable
               columns={columns}
-              data={conSugerido}
+              data={gamOrdenes}
               rowKey="id"
-              ariaLabel="Órdenes con mensajero sugerido"
-            />
-          </div>
-        ) : null}
-        {sinSugerido.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-medium">Sin mensajero sugerido</h3>
-            <DataTable
-              columns={columns}
-              data={sinSugerido}
-              rowKey="id"
-              ariaLabel="Órdenes sin mensajero sugerido"
+              ariaLabel="Órdenes por asignar"
             />
           </div>
         ) : null}

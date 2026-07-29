@@ -2,11 +2,6 @@
 // Servicio PROPIO, consumido por los TRES writers de `mensajero_asignado_id`
 // (`GuiaAsignacionService.generarGuia` rama GAM con mensajero, `.asignarDesdeBodega` y
 // `AsignacionSateliteService.asignar`), para que la regla no se escriba tres veces.
-//
-// `AsignacionMensajeroService.asignarMensajeroSugerido` queda FUERA a proposito: escribe
-// `mensajero_sugerido_id`, que es una SUGERENCIA de la tienda, no una asignacion. Bloquear
-// la sugerencia castigaria a la tienda por una geocodificacion que todavia no ha corrido
-// (gate F1.4-Q6).
 
 /**
  * R1 — los SEIS estados posibles. La union es cerrada a proposito: la UI mapea cada valor

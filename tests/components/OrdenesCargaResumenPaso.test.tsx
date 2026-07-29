@@ -1,27 +1,21 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
 import { OrdenesCargaResumenPaso } from "@/app/(app)/ordenes/_components/OrdenesCargaResumenPaso";
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import type { ClasificacionCarga } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
-import type { MensajeroDTO, ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 
 // ---------------------------------------------------------------------------
-// Mocks (mismo patrón que OrdenesCargaResumen.test.tsx)
+// Mocks
 // ---------------------------------------------------------------------------
 
-const { successMock, errorMock, warningMock } = vi.hoisted(() => ({
-  successMock: vi.fn(),
-  errorMock: vi.fn(),
-  warningMock: vi.fn(),
-}));
-
+// `DescargarManifiestoButton` (sección de nuevas) consume useToast.
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
-    success: successMock,
-    error: errorMock,
-    warning: warningMock,
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
     info: vi.fn(),
     show: vi.fn(),
     dismiss: vi.fn(),
@@ -38,48 +32,9 @@ vi.mock("swr", async (importOriginal) => {
   };
 });
 
-const {
-  listarMensajerosMock,
-  resumenCargaMasivaMock,
-  asignarMensajeroSugeridoMock,
-} = vi.hoisted(() => ({
-  listarMensajerosMock: vi.fn(),
-  resumenCargaMasivaMock: vi.fn(),
-  asignarMensajeroSugeridoMock: vi.fn(),
-}));
-
-vi.mock("@/lib/actions/mensajeros", () => ({
-  listarMensajeros: listarMensajerosMock,
-  resumenCargaMasiva: resumenCargaMasivaMock,
-  asignarMensajeroSugerido: asignarMensajeroSugeridoMock,
-}));
-
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
-
-const MENSAJEROS: MensajeroDTO[] = [
-  { id: "u1", nombre: "Ana", zonaId: "z1", zonaNombre: "Norte" },
-  { id: "u2", nombre: "Beto", zonaId: "z1", zonaNombre: "Norte" },
-];
-
-const ORDENES: ResumenCargaOrdenDTO[] = [
-  {
-    id: "o1",
-    numGuia: 1,
-    numRemision: "REM-0001",
-    destinatario: "Juan Pérez",
-    telefonoDest: "0999999999",
-    producto: "Camiseta",
-    montoCobrar: 25.9,
-    direccion: "Av. Amazonas",
-    estatusValue: "en_preparacion",
-    zonaId: "z1",
-    zonaNombre: "Norte",
-    mensajeroSugeridoId: "u1",
-    mensajeroSugeridoNombre: "Ana",
-  },
-];
 
 const CLASIFICACION: ClasificacionCarga = {
   numRemisionesNuevas: ["REM-0001"],
@@ -89,19 +44,12 @@ const CLASIFICACION: ClasificacionCarga = {
   ],
 };
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  listarMensajerosMock.mockResolvedValue({ status: "ok", mensajeros: MENSAJEROS });
-  resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: ORDENES });
-  asignarMensajeroSugeridoMock.mockResolvedValue({ status: "ok", asignadas: 0 });
-});
-
 afterEach(() => {
   cleanup();
 });
 
-describe("OrdenesCargaResumenPaso — tres secciones (R4, R7, R8, R9, R10, R18)", () => {
-  it("deja claro que solo se cargan las nuevas y muestra las tres secciones", async () => {
+describe("OrdenesCargaResumenPaso — secciones (R4, R7, R8, R18)", () => {
+  it("deja claro que solo se cargan las nuevas y muestra existentes y errores", () => {
     render(<OrdenesCargaResumenPaso clasificacion={CLASIFICACION} />);
 
     // Aviso explícito (R7, R8).
@@ -109,9 +57,6 @@ describe("OrdenesCargaResumenPaso — tres secciones (R4, R7, R8, R9, R10, R18)"
       screen.getByText(/solo se cargan las órdenes nuevas/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/no se recarga/i)).toBeInTheDocument();
-
-    // Sección de nuevas: OrdenesCargaResumen resuelve su fetch y pinta REM-0001.
-    expect(await screen.findByText("REM-0001")).toBeInTheDocument();
 
     // Sección de existentes (solo lectura, etiqueta legible del mapa de
     // presentación — no el value crudo `en_bodega_central`).
@@ -123,16 +68,16 @@ describe("OrdenesCargaResumenPaso — tres secciones (R4, R7, R8, R9, R10, R18)"
     expect(screen.getByText("telefono: obligatorio")).toBeInTheDocument();
   });
 
-  it("conserva el select de mensajero por fila para las nuevas (R9)", async () => {
+  it("retirado el mensajero sugerido: ninguna sección ofrece asignar mensajero", () => {
     render(<OrdenesCargaResumenPaso clasificacion={CLASIFICACION} />);
-    await screen.findByText("REM-0001");
 
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "Mensajero para la orden REM-0001" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /sugerir asignación/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it("con creadas===0 muestra solo existentes, sin resumen de mensajero (R11)", async () => {
+  it("con creadas===0 muestra solo existentes (R11)", () => {
     const soloExistentes: ClasificacionCarga = {
       numRemisionesNuevas: [],
       existentes: [{ numRemision: "REM-0100", estatus: "en_bodega_central" }],
@@ -141,9 +86,6 @@ describe("OrdenesCargaResumenPaso — tres secciones (R4, R7, R8, R9, R10, R18)"
     render(<OrdenesCargaResumenPaso clasificacion={soloExistentes} />);
 
     expect(screen.getByText("REM-0100")).toBeInTheDocument();
-    // No se pide el resumen de asignación con lista vacía.
-    expect(resumenCargaMasivaMock).not.toHaveBeenCalled();
-    // Sin órdenes nuevas no se muestra ningún select de mensajero.
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 });
