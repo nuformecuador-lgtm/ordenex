@@ -3,6 +3,7 @@ import type {
   CrearOrdenInput,
   ActualizarOrdenInput,
   ListarOrdenesInput,
+  ListarOrdenesCompletoInput,
   OrdenDTO,
   OrdenListItemDTO,
 } from "@/lib/types/orden";
@@ -39,6 +40,17 @@ export type ListarOrdenesServiceResult =
   | { status: "ok"; items: OrdenListItemDTO[]; page: number; pageSize: number; total: number }
   | { status: "forbidden" };
 
+/**
+ * Feature 151 (design §4.1) — lectura SIN paginacion para la descarga del dataset
+ * completo. Mismo servicio que `listar` para heredar autorizacion y acotamiento por
+ * rol/zona (D3): `limite_excedido` NUNCA viaja con filas (R20/R21) y `forbidden`
+ * tampoco (R14).
+ */
+export type ListarOrdenesCompletoServiceResult =
+  | { status: "ok"; items: OrdenListItemDTO[]; total: number }
+  | { status: "limite_excedido"; total: number; limite: number } // R20
+  | { status: "forbidden" }; // R14
+
 export type ActualizarOrdenServiceResult =
   | { status: "ok"; orden: OrdenDTO }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
@@ -54,6 +66,11 @@ export interface IOrdenService {
   crear(input: CrearOrdenInput, actor: Actor): Promise<CrearOrdenServiceResult>;
   obtener(id: string, actor: Actor): Promise<ObtenerOrdenServiceResult>;
   listar(input: ListarOrdenesInput, actor: Actor): Promise<ListarOrdenesServiceResult>;
+  /** Feature 151/R11: mismo listado, sin recorte por pagina y con tope duro (R20/R22). */
+  listarCompleto(
+    input: ListarOrdenesCompletoInput,
+    actor: Actor,
+  ): Promise<ListarOrdenesCompletoServiceResult>;
   actualizar(
     id: string,
     input: ActualizarOrdenInput,
