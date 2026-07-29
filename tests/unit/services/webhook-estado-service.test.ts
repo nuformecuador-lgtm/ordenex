@@ -29,7 +29,7 @@ const DATOS_BASE: DatosEntregaOrden = {
   numGuia: 12345,
   numRemision: NUM_REMISION,
   deletedAt: null,
-  estado: "en_ruta",
+  estado: "en_reparto",
 };
 
 function job(payload: Record<string, unknown> = {
@@ -91,7 +91,7 @@ describe("R17/R19 — entrega y complete", () => {
     ];
     expect(url).toBe("https://a.example.com/hook");
     const body = JSON.parse(cuerpo);
-    expect(body.data).toEqual({ numGuia: 12345, numRemision: NUM_REMISION, estado: "en_ruta" });
+    expect(body.data).toEqual({ numGuia: 12345, numRemision: NUM_REMISION, estado: "en_reparto" });
     // R2: blindaje del breaking change — la clave vieja `orden` ya no existe en el cuerpo.
     expect(body.orden).toBeUndefined();
     expect(body.evento).toBe("orden.estado_actualizado");

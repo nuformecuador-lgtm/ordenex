@@ -237,7 +237,7 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         rows.map((r) => ({
           ordenId: r.id,
           estatusOrigenId: origenEstatusId, // por_recoger (fijado por la guarda)
-          estatusDestinoId: destinoEstatusId, // en_ruta
+          estatusDestinoId: destinoEstatusId, // en_reparto
           actorUsuarioId: mensajeroId, // R21: el mensajero que recoge
           origenTipo: "recoleccion", // R23
         })),
@@ -273,7 +273,7 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
   }): Promise<string> {
     const { ordenId, mensajeroId, gestion, nuevoEstatusId } = input;
     return this.prisma.$transaction(async (tx) => {
-      // Feature 49/#9 (R20): estatus de ORIGEN (en_ruta) pre-leido dentro de la tx.
+      // Feature 49/#9 (R20): estatus de ORIGEN (en_reparto) pre-leido dentro de la tx.
       const actual = await tx.orden.findFirst({
         where: { id: ordenId },
         select: { estatusId: true },
@@ -348,7 +348,7 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
       // (`DevolucionSlaService`/`DevolucionSlaRepository`) decide el reintento a bodega o el
       // escalado a `rechazada` al vencer la ventana. Antes, aqui vivia un segundo `orden.update`
       // + append (feature 47); se relocalizo al cron.
-      // Feature 92 (R19): la gestion SACA la orden de `en_ruta` -> reoptimizacion
+      // Feature 92 (R19): la gestion SACA la orden de `en_reparto` -> reoptimizacion
       // INMEDIATA (sin delay), dentro de esta misma transaccion (outbox).
       //
       // ⚠️ Este encolado usa el namespace `:inmediato:`, DISJUNTO del `:debounce:`. Si

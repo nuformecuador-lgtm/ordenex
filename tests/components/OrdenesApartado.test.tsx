@@ -29,7 +29,7 @@ const listarOrdenesMock = vi.mocked(listarOrdenes);
 const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
 
 const ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_ruta",
+  estatusOrigenValue: "en_reparto",
   estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,

@@ -44,7 +44,7 @@ import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabil
 import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 /** Feature 92: unico estatus cuyas ordenes son paradas de la ruta de un mensajero. */
-const ESTATUS_EN_REPARTO = "en_ruta";
+const ESTATUS_EN_REPARTO = "en_reparto";
 
 // Feature 106 (design §4, R19/R20): unicos estados desde los que la tienda puede cancelar
 // una orden via API; cualquier otro (incl. una orden ya en `devolviendo_a_tienda`) es 409.

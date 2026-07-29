@@ -75,7 +75,7 @@ const generarEtiquetasMock = vi.mocked(generarEtiquetas);
 const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
 
 const HISTORIAL_ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_ruta",
+  estatusOrigenValue: "en_reparto",
   estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,

@@ -69,6 +69,14 @@ const WHITELIST_PREFIXES = [
 const WHITELIST_FILES = new Set([
   "feature_list.json",
   "tests/integration/db/rename-order-status-migration.test.ts",
+  // Lote 153-160: estos specs NO citan el value 'embalaje'; citan el NOMBRE DE ARCHIVO de
+  // este guard (`tests/unit/guards/no-embalaje.test.ts`) como precedente de modelado para
+  // sus propios guards. El guard busca /embalaje/i linea a linea y no distingue el nombre
+  // del guard del value prohibido, asi que hay que whitelistearlos por archivo (mas estrecho
+  // que whitelistear la carpeta entera del spec, como se hizo con specs/27 y specs/137).
+  "specs/155-creacion-bifurcada-fulfillment/design.md",
+  "specs/159-quitar-sugerencia-mensajeros/design.md",
+  "specs/159-quitar-sugerencia-mensajeros/tasks.md",
 ]);
 
 function toRelPosix(absPath: string): string {

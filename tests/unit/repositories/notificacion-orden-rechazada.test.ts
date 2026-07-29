@@ -33,11 +33,11 @@ function buildTx(orden: Record<string, unknown> = ORDEN) {
   return { tx, creadas: creadas as Record<string, unknown>[] };
 }
 
-/** Entrada de lote: `en_ruta -> rechazada` por la GESTION del mensajero (transicion #15). */
+/** Entrada de lote: `en_reparto -> rechazada` por la GESTION del mensajero (transicion #15). */
 function rechazoPorGestion() {
   return {
     ordenId: "o-1",
-    estatusOrigenId: idEstado("en_ruta"),
+    estatusOrigenId: idEstado("en_reparto"),
     estatusDestinoId: idEstado("rechazada"),
     actorUsuarioId: "men-1",
     origenTipo: "gestion" as const,
@@ -133,7 +133,7 @@ describe("R19 — el escalado automatico por SLA NO notifica", () => {
       [
         {
           ordenId: "o-1",
-          estatusOrigenId: idEstado("en_ruta"),
+          estatusOrigenId: idEstado("en_reparto"),
           estatusDestinoId: idEstado("entregada"),
           actorUsuarioId: "men-1",
           origenTipo: "gestion" as const,

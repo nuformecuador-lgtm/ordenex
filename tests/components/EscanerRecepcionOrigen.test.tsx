@@ -140,7 +140,7 @@ describe("EscanerRecepcionOrigen", () => {
 
   it("estado_invalido -> error con el estado actual en legible", async () => {
     const user = userEvent.setup();
-    recibirMock.mockResolvedValue({ status: "estado_invalido", estado: "en_ruta" });
+    recibirMock.mockResolvedValue({ status: "estado_invalido", estado: "en_reparto" });
     render(<EscanerRecepcionOrigen onRecibida={vi.fn()} />);
 
     await escanear(user, qrDeGuia(14));
@@ -148,8 +148,8 @@ describe("EscanerRecepcionOrigen", () => {
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     // Legible, no el value crudo: la etiqueta sale del mapa de presentación
     // (fuente de verdad), blindado aparte en `EstatusLabel.test.ts`.
-    expect(errorMock.mock.calls[0][0]).toMatch(ORDER_STATUS_LABELS.en_ruta);
-    expect(errorMock.mock.calls[0][0]).not.toMatch("en_ruta");
+    expect(errorMock.mock.calls[0][0]).toMatch(ORDER_STATUS_LABELS.en_reparto);
+    expect(errorMock.mock.calls[0][0]).not.toMatch("en_reparto");
   });
 
   // Un QR ajeno (o el UUID de una etiqueta vieja) se rechaza en cliente.

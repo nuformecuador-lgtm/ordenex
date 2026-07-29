@@ -20,7 +20,7 @@ const ORDER_STATUS_ENUM = [
   "en_preparacion",
   "por_recoger",
   "en_ruta_bodega_satelite",
-  "en_ruta",
+  "en_reparto",
   "rechazada",
   "en_bodega_satelite",
   "devuelta_a_tienda",

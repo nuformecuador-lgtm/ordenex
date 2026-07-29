@@ -34,7 +34,7 @@ describe("registrarCambioEstado (R6/R7)", () => {
     await repo.registrarCambioEstado(tx as never, [
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("en_ruta"),
+        estatusOrigenId: idEstado("en_reparto"),
         estatusDestinoId: idEstado("entregada"),
         actorUsuarioId: "u1",
         origenTipo: "gestion",
@@ -122,14 +122,14 @@ describe("findHistorialByOrden (R26/R5)", () => {
       {
         id: "h2",
         ordenId: "o1",
-        estatusOrigenId: idEstado("en_ruta"),
+        estatusOrigenId: idEstado("en_reparto"),
         estatusDestinoId: idEstado("devuelta"),
         actorUsuarioId: null, // sistema
         origenTipo: "gestion",
         motivo: "cliente ausente",
         gestionOrdenId: "g1",
         createdAt: new Date("2026-07-13T12:00:00.000Z"),
-        estatusOrigen: { value: "en_ruta" },
+        estatusOrigen: { value: "en_reparto" },
         estatusDestino: { value: "devuelta" },
         actor: null,
       },
@@ -157,7 +157,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
         createdAt: new Date("2026-07-13T10:00:00.000Z"),
       },
       {
-        estatusOrigenValue: "en_ruta",
+        estatusOrigenValue: "en_reparto",
         estatusDestinoValue: "devuelta",
         origenTipo: "gestion",
         actorNombre: null, // sistema (R21)

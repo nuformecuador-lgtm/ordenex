@@ -17,7 +17,7 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   en_preparacion: "En preparación",
   por_recoger: "Por recoger", // feature 17 (renombrado en feature 135)
   en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30 (R8)
-  en_ruta: "En ruta", // feature 36 (renombrado en feature 135)
+  en_reparto: "En reparto", // feature 36 (renombrado en la 135 y de vuelta en la 153/R9)
   rechazada: "Rechazada", // feature 36
   en_bodega_satelite: "En bodega satélite", // feature 33 (R8)
   devuelta_a_tienda: "Devuelta a tienda", // feature 135 (R8)

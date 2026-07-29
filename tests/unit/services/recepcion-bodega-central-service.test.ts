@@ -210,12 +210,12 @@ describe("RecepcionBodegaCentralService.recibirEnBodegaCentral", () => {
   it("R8: estado_invalido lleva el estado actual, sin efectos", async () => {
     const repo = fakeRepo({
       findByNumGuiaForTransicion: vi.fn(async () =>
-        transicionRow({ estatusValue: "en_ruta" }),
+        transicionRow({ estatusValue: "en_reparto" }),
       ),
     });
     const res = await newService(repo).recibirEnBodegaCentral(NUM_GUIA, MAESTRO);
 
-    expect(res).toEqual({ status: "estado_invalido", estado: "en_ruta" });
+    expect(res).toEqual({ status: "estado_invalido", estado: "en_reparto" });
     expect(repo.recibirEnBodegaCentral).not.toHaveBeenCalled();
   });
 
@@ -263,7 +263,7 @@ describe("RecepcionBodegaCentralService.recibirEnBodegaCentral", () => {
   it("R9: si pierde la carrera y el estado es otro -> conflict", async () => {
     const lecturas = [
       transicionRow(),
-      transicionRow({ estatusValue: "en_ruta" }), // cambio a otra cosa
+      transicionRow({ estatusValue: "en_reparto" }), // cambio a otra cosa
     ];
     let i = 0;
     const repo = fakeRepo({

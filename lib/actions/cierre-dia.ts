@@ -135,7 +135,7 @@ function toDeshacerGestionActionError(
 
 /**
  * Feature 67/R1-R10 — DESHACE una gestion (la anula con rastro y devuelve su orden a
- * `en_ruta`). Mutacion interna del propio proyecto -> Server Action, no Route API
+ * `en_reparto`). Mutacion interna del propio proyecto -> Server Action, no Route API
  * (`docs/architecture.md`). `unauthenticated` (R7, sin sesion) y `validation_error` (R10,
  * gestionId no-uuid) se resuelven en el borde; `forbidden` (R8/R9) y `conflict` (R2-R6) los
  * devuelve el service como resultado de dominio.
