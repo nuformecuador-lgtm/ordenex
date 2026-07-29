@@ -4,6 +4,11 @@
 > Entrada: `progress/review_159.md` (veredicto RECHAZADO, 5 bloqueantes).
 > El código de la 159 ya estaba mergeado en `dev` (PR #193, commit `b2181e7`); esto es
 > trabajo **encima** de `dev`, no un merge que se bloquea.
+>
+> **Actualizado el 2026-07-29 tras `progress/review_159_cierre.md`** (APROBADO-CON-NOTAS,
+> 2 bloqueantes). Ambos se saldan **sin tocar código de producción**: BLOQ-1 con la
+> ejecución real del round-trip de la migración (§3.1) y BLOQ-2 con la reconciliación de
+> R10 en `requirements.md` (§5). Lo que sigue sin verificarse está en §3.1 y §6.
 
 ---
 
@@ -15,7 +20,7 @@ autor. No existían por escrito. Se registran aquí:
 | Q | Decisión | Autor / fecha |
 |---|---|---|
 | **Q2** — ¿el resumen del lote sobrevive como paso propio del modal? | **SÍ, se restituye.** El `b2181e7` había ejecutado la alternativa **A3**, que `design.md §6` descarta. | **Humano**, 2026-07-29 (instrucción de cierre) |
-| **Q1** — contrato público (`mensajero_sugerido_id` en `CargaRow`) | **(a) borrar la propiedad** — de facto, ejecutada por el implementador de `b2181e7` sin registro. **No se revierte:** ver §5, R10. | **Humano**, 2026-07-29: "R10 ya no tiene arreglo retroactivo; no intentes revertirlo" |
+| **Q1** — contrato público (`mensajero_sugerido_id` en `CargaRow`) | **(a) borrar la propiedad** — de facto, ejecutada por el implementador de `b2181e7` sin registro. **No se revierte.** ✅ **Reconciliada en el spec el 2026-07-29:** R10 reescrito a su forma sustituida y Q1 marcada CERRADA en `requirements.md`. Ver §5. | **Humano**, 2026-07-29: "R10 ya no tiene arreglo retroactivo; no intentes revertirlo" |
 | **Q3** — ¿se borra `OrdenesCargaResumenPaso.tsx`? | **NO** (recomendación del spec). Sigue huérfano; deuda **abierta**, ver §6. | recomendación del spec, no revocada |
 | **Q5** — ¿respaldo de los valores antes del `DROP`? | **(a) aceptar la pérdida**, declarada en la cabecera del `down.sql`. Ya estaba así en `b2181e7` y el test nuevo lo blinda. | recomendación del spec, no revocada |
 
@@ -140,7 +145,7 @@ tenerlo.
 
 ---
 
-## 3. BLOQ-4 — Test de la migración (R1, R2, R3) · **round-trip real NO ejecutado**
+## 3. BLOQ-4 — Test de la migración (R1, R2, R3) · **round-trip real EJECUTADO el 2026-07-29**
 
 Nuevo: `tests/integration/db/drop-mensajero-sugerido-migration.test.ts` (19 `it`),
 modelado sobre `orden-indices-filtros-migracion.test.ts` / `zonas-migration.test.ts`.
@@ -162,24 +167,62 @@ cuente):
 **Verificado por mutación:** invertir el orden del UP y cambiar `ON DELETE SET NULL` por
 `ON DELETE CASCADE` en el DOWN → **4 tests en rojo**. Revertido.
 
-> ### ⛔ Lo que sigue SIN verificarse: el round-trip real contra Postgres
+### 3.1 Round-trip real contra Postgres — **EJECUTADO** (2026-07-29)
+
+> **Actualización posterior al review de cierre.** `progress/review_159_cierre.md` §9 y su
+> BLOQUEANTE-1 afirman que *"este `DROP COLUMN` no se ha ejecutado todavía en ningún
+> entorno, y su primera ejecución del mundo sería contra la base de producción"*. **Eso ya
+> no es cierto.**
 >
-> **NO se ejecutó `pnpm run db:migrate` / `db:rollback` / `db:migrate`** contra una base
-> con `mensajero_sugerido_id` no nulo. Motivo: **este worktree no tiene `.env`** (`./init.sh`
-> lo avisa: `! no hay .env`) y no hay `DATABASE_URL` disponible.
+> **Autoría de la ejecución: el humano/coordinador, 2026-07-29, contra una base Postgres
+> local.** No la corrí yo: este worktree sigue sin `.env` (`./init.sh` lo avisa) y
+> `pnpm db:generate` falla aquí por `DATABASE_URL`. Lo que sigue es el resultado
+> **reportado**, no medido por mí; se registra como tal.
+
+**Resultado:** `20260728120000_drop_orden_mensajero_sugerido` → **OK**, `down.sql` (3
+sentencias) + `migration.sql` (3 sentencias). Verificadas de paso, en la misma sesión:
+`*_orden_indices_filtros` (feature 144) y las dos de la 154.
+
+**Método:** cada par `down.sql` + `migration.sql` dentro de una transacción **revertida al
+final**. Es decir, ejecutan **de verdad** contra el esquema real de Postgres —el planificador
+las valida y las aplica— pero no persisten. Estado comprobado después: `mensajero_sugerido_id`
+**ausente**; catálogo de estados con 21 filas = 20 del código + `pendiente` (el huérfano ya
+documentado por la 154).
+
+**El dato que más vale de todo esto:** la base local **no tenía aplicadas** las migraciones de
+la 154, la 159 ni la 144; hubo que correr `prisma migrate deploy` antes —lo que significa que
+el UP de la 159 se aplicó de verdad por el camino de deploy real—. **El primer intento del
+round-trip falló justo por eso**: el `down` quería restituir una columna que nunca se había
+borrado. Es la demostración de que "verificado por lectura" no vale: el test estático de esta
+misma sección estaba verde mientras la migración no había tocado nunca una base.
+
+**Qué queda demostrado (R1, R2 y R3 en su parte ejecutable):**
+
+- el UP corre sin error contra el esquema real y deja fuera columna, índice y FK;
+- el DOWN los repone —3 sentencias, mismos nombres, la FK con su semántica— y volver a
+  aplicar el UP los vuelve a quitar;
+- ningún objeto queda huérfano tras el ciclo.
+
+> ### ⚠️ Lo que sigue SIN verificarse: la **preservación de datos**
 >
-> Lo que el test nuevo demuestra es que el **texto** de los dos archivos es correcto y
-> está blindado. Lo que **no** demuestra:
-> - que el UP corra sin error sobre datos reales (**R3** en su parte ejecutable);
-> - que el DOWN restituya de verdad columna, índice y FK (**R2**);
-> - que ningún objeto de la base quede huérfano.
+> **No se validó que la migración aplique sobre una base con `mensajero_sugerido_id` NO
+> NULO.** En el round-trip ejecutado la columna la repone el `down.sql` **vacía** —tal como
+> declara su propia cabecera—, así que el UP se aplicó sobre una columna sin valores.
 >
-> **Sigue siendo obligatorio antes del deploy a producción**, porque el `DROP COLUMN`
-> es irreversible en datos. La 159 ya está en `dev`: esto es deuda **viva**, no futura.
+> Por tanto **R3 sigue sin demostrar su mitad de datos**: que la migración complete sin
+> error sobre filas con valor y **sin modificar `mensajero_asignado_id` de ninguna orden**.
+> Lo que hay a favor: (1) el UP es DDL puro y el test estático asserta que no contiene DML
+> ni menciona `mensajero_asignado_id`; (2) `ALTER TABLE ... DROP COLUMN` no puede, por
+> construcción, tocar otra columna. Lo que falta es reproducirlo: sembrar al menos una fila
+> con valor no nulo, correr el ciclo y comprobar `mensajero_asignado_id` antes y después.
+>
+> **Consecuencia práctica: ya no es un estreno en producción**, que era el agravante real
+> del BLOQUEANTE-1 del review. Queda una comprobación acotada, no un salto al vacío.
 >
 > *(Nota heredada del review, no exigida: `ADD CONSTRAINT` no admite `IF NOT EXISTS` en
 > Postgres, así que aplicar el DOWN dos veces falla en su tercera sentencia. Es el patrón
-> del resto del repo; se deja anotado.)*
+> del resto del repo; se deja anotado. El round-trip ejecutado aplica el DOWN **una** vez,
+> así que no lo destapa ni lo desmiente.)*
 
 ---
 
@@ -232,7 +275,26 @@ cuente):
 
 ---
 
-## 5. R10 — INCUMPLIDO, deuda declarada (no se revierte)
+## 5. R10 — INCUMPLIDO en su forma original; **reconciliado en el spec** (no se revierte)
+
+> **Actualización 2026-07-29 (BLOQ-2 del review de cierre).** El problema no era la
+> decisión —el humano la ratificó— sino que `requirements.md` **seguía exigiendo lo
+> contrario de lo que hace el código**: R10 pedía marcar la propiedad `deprecated` mientras
+> el documento publicado ya la había borrado. Un requisito que contradice al código es peor
+> que no tenerlo: el siguiente agente que lea R10 concluye que hay un bug y "lo arregla"
+> reponiendo la propiedad.
+>
+> **Aplicada la sustitución que `design.md §4:232-234` dejaba prevista para la opción (a).**
+> `requirements.md` ahora dice: ***"El documento OpenAPI publicado NO DEBE declarar la
+> propiedad `mensajero_sugerido_id` de `CargaRow`"***, con una nota fechada que conserva el
+> texto original, declara el incumplimiento y explica el porqué. Q1 queda marcada como
+> **CERRADA** (opción (a), humano, 2026-07-29) y Q4 se reetiqueta como abierta **y ya no
+> informativa**. **Cero cambios de código**: los dos artefactos de OpenAPI no se tocan.
+>
+> Efecto en la trazabilidad, dicho sin inflar: la forma **vigente** de R10 sí tiene test
+> —el describe "159/R10 (sustituido…)" de `openapi-carga-row-paridad.test.ts`, que ya
+> existía—. Eso **no es cobertura nueva**: es que el requisito ahora dice lo que el test
+> siempre verificó. La forma **original** sigue incumplida y así queda escrito.
 
 R10 pedía: *"El documento OpenAPI publicado DEBE declarar la propiedad
 `mensajero_sugerido_id` de `CargaRow` como obsoleta y describirla como aceptada e
@@ -267,8 +329,15 @@ los dos artefactos, que ambos siguen diciendo exactamente lo mismo, y que
 
 ## 6. Deuda que queda viva (no la abre esta rama, no la cierra)
 
-1. **El round-trip real de la migración** — §3. **Bloqueante para producción.**
-2. **R10 / Q4** — §5. El cambio semántico ya viajó sin aviso.
+1. **La preservación de datos de la migración** — §3.1. El round-trip estructural **ya se
+   ejecutó** contra Postgres (2026-07-29) y pasa, así que **ya no es un estreno en
+   producción**. Lo que queda es acotado: sembrar una fila con `mensajero_sugerido_id` no
+   nulo, correr el ciclo y comprobar que `mensajero_asignado_id` no cambia (R3, mitad de
+   datos).
+2. **Q4** — §5. R10 ya está reconciliado en el spec; lo que sigue sin saberse es si hay
+   integradores enviando la clave. El cambio semántico ya viajó sin aviso y **el documento
+   ya no puede darlo**: si los hay, el aviso sale por canal externo. Dato de producción,
+   no del repo.
 3. **`OrdenesCargaResumenPaso.tsx` sigue huérfano (Q3).** El modal monta
    `OrdenesCargaResumen` **directo**, como manda `design.md §5.2`; el contenedor —y con él
    el botón de manifiesto de la **feature 148**— sigue sin consumidor de producción. Es
@@ -288,16 +357,16 @@ los dos artefactos, que ambos siguen diciendo exactamente lo mismo, y que
 
 | R | Test que lo verifica | Estado |
 |---|---|---|
-| R1 | `tests/integration/db/drop-mensajero-sugerido-migration.test.ts` › "UP — retira FK, indice y columna, EN ESE ORDEN (R1)" (4 `it`) | **estático** (round-trip pendiente, §3) |
-| R2 | ídem › "DOWN — restituye la ESTRUCTURA en orden inverso (R2)" (6 `it`) | **estático** (round-trip pendiente, §3) |
-| R3 | ídem › "R3 — la migracion no toca dato alguno, ni el mensajero ASIGNADO" (3 `it`) | **estático** (round-trip pendiente, §3) |
+| R1 | `tests/integration/db/drop-mensajero-sugerido-migration.test.ts` › "UP — retira FK, indice y columna, EN ESE ORDEN (R1)" (4 `it`) **+ ejecución real contra Postgres** (§3.1) | OK |
+| R2 | ídem › "DOWN — restituye la ESTRUCTURA en orden inverso (R2)" (6 `it`) **+ el DOWN ejecutado de verdad y el UP re-aplicado** (§3.1) | OK |
+| R3 | ídem › "R3 — la migracion no toca dato alguno, ni el mensajero ASIGNADO" (3 `it`) + el UP ejecutado sin error contra el esquema real | **parcial**: la mitad de **datos** (aplicar sobre valores NO NULOS sin tocar `mensajero_asignado_id`) sigue sin reproducirse — §3.1 |
 | R4 | `tests/unit/guards/sin-mensajero-sugerido.test.ts:87` + migración › "R4: `schema.prisma` no declara…" | OK |
 | R5 | `tests/unit/services/bulk-orden-service.test.ts` › "una columna `mensajero_sugerido_id`… se ignora" | OK |
 | R6 | ídem › "R6: el RowResult es EXACTAMENTE el de la misma fila sin la clave" | OK |
 | R7 | ídem › "R7: procesar un lote NO consulta el catalogo" + `bulk-orden-service.carga-api.test.ts` › "R7: la via API tampoco…" | OK |
 | R8 | `bulk-orden-service.test.ts` (`not.toHaveProperty`) + `carga-api` › "R8: la clave no llega a la persistencia" + guard sobre `lib/` | OK |
 | R9 | `bulk-orden-service.carga-api.test.ts` › "R9: la MISMA fila con y sin…" + `tests/integration/api/ordenes-api-key-carga.route.test.ts` › "carga API: mensajero sugerido retirado (159/R9)" | OK |
-| R10 | — | **INCUMPLIDO**, sin arreglo retroactivo (§5). Su sustituto: `openapi-carga-row-paridad.test.ts` › "159/R10 (sustituido…)" |
+| R10 | `openapi-carga-row-paridad.test.ts` › "159/R10 (sustituido…)" (3 `it`) | **forma VIGENTE** (reconciliada en `requirements.md` el 2026-07-29): OK. **Forma ORIGINAL: INCUMPLIDA**, sin arreglo retroactivo (§5) |
 | R11 | `tests/unit/api/openapi-carga-row-paridad.test.ts` › "159/R11 — CargaRow…" (5 `it`) | OK |
 | R12 | `tests/components/OrdenesCargaResumen.test.tsx` (11 `it`) + `OrdenesCargaMasivaButton.test.tsx` › "confirma → … y resumen del lote" + guard › "el resumen del lote SIGUE en pie" | OK |
 | R13 | `OrdenesCargaResumen.test.tsx` › "no ofrece ningún selector…" y "la tabla no tiene columna de mensajero"; `OrdenesCargaResumenPaso.test.tsx`; `CargaMasivaChunks.test.ts`; guard | OK |
@@ -315,8 +384,18 @@ los dos artefactos, que ambos siguen diciendo exactamente lo mismo, y que
 | R22(f) | `ManifiestoFlujos.test.tsx`, `OrdenesCargaResumenPaso.test.tsx` | OK |
 | R22(g) | `tests/integration/actions/carga-masiva-resumen-action.test.ts` | **recuperado** |
 
-**21 de 22 con test.** El único sin cobertura es **R10**, incumplido y declarado en §5.
-R1/R2/R3 tienen cobertura **estática** y su parte ejecutable está declarada en §3.
+**Los 22 requisitos, en su redacción vigente, tienen test.** Dos salvedades que **no** se
+tapan con eso:
+
+1. **R10 se cumple solo porque el requisito se reescribió** (2026-07-29, decisión humana
+   ratificada) para que diga lo que el código hace. Su forma **original** —marcar la
+   propiedad `deprecated` antes de retirarla— **quedó incumplida y no tiene arreglo
+   retroactivo**. No es cobertura ganada: es un requisito reconciliado. §5.
+2. **R3 está cubierto a medias:** el DDL ya se ejecuta de verdad contra Postgres (§3.1),
+   pero la rama de **datos no nulos** sigue sin reproducirse.
+
+Antes de esta actualización el recuento honesto era **21 de 22**; sigue siendo el número
+que hay que citar si lo que se mide es "requisitos cumplidos como se escribieron".
 
 ---
 
@@ -338,3 +417,12 @@ Los 6 archivos nuevos son `OrdenesCargaResumen.test.tsx`, `orden-repository.resu
 
 `git status --porcelain` vacío tras el commit (el guard recorre `fs.readdir`: basura local
 lo pone en rojo).
+
+**La actualización del 2026-07-29 (§3.1 y §5) no toca código:** solo `requirements.md`,
+`tasks.md` y esta bitácora. Los números de arriba siguen siendo los vigentes —re-medidos
+tras la actualización: **575 archivos / 6286 tests / 0 fallos**, `./init.sh` en verde—.
+
+> **Nota de método, para que nadie la confunda:** el round-trip de §3.1 **no se ejecutó
+> desde este worktree** (sigue sin `.env`). Lo ejecutó el humano/coordinador contra una base
+> Postgres local y aquí se registra su resultado **reportado**. Los números de `./init.sh`
+> sí están medidos aquí.

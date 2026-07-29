@@ -13,9 +13,16 @@
 > `*Cierre 2026-07-29:*` con su evidencia. Bitacora completa en
 > `progress/impl_159_cierre.md`.
 >
-> **Sin marcar a proposito: T1, T4 y T5.** T4 y T5 son el round-trip real de la
-> migracion contra Postgres, que **no se ejecuto** (este worktree no tiene `.env`) y
-> sigue siendo obligatorio antes del deploy a produccion.
+> **Sin marcar a proposito: T1 y T4.**
+>
+> **Actualizacion 2026-07-29 (tras `progress/review_159_cierre.md`):** **T5 pasa a `[x]`**
+> — el round-trip **se ejecuto de verdad** contra una base Postgres local y el ciclo
+> estructural (down 3 + up 3) pasa. **T4 sigue sin marcar**, y no por inercia: su criterio
+> exige aplicar la migracion *"sobre una base con ordenes que tienen `mensajero_sugerido_id`
+> no nulo"*, y **la preservacion de datos no se valido**. La asimetria T5 `[x]` / T4 `[ ]`
+> es deliberada: la migracion **si** se aplico (via `prisma migrate deploy`), lo que falta
+> es solo esa condicion de evidencia. R10 tambien queda reconciliado en `requirements.md`.
+> Todo el detalle en `progress/impl_159_cierre.md` secciones 3.1 y 5.
 
 ---
 
@@ -67,15 +74,40 @@
   *Depende de:* T3. *Cubre:* R1, R2, R3.
   *Hecho:* `pnpm run db:migrate` aplica sin error sobre una base con órdenes que tienen
   `mensajero_sugerido_id` no nulo, y `\d orden` ya no muestra columna, índice ni FK.
-  *Cierre 2026-07-29:* El SQL **esta escrito y es correcto** (`db/migrations/20260728120000_drop_orden_mensajero_sugerido/`), y T6 lo blinda sentencia a sentencia. Lo que falta es **solo la ejecucion**: el criterio de "Hecho" exige `pnpm run db:migrate` sobre una base con valores no nulos y **no se corrio** (este worktree no tiene `.env`). Se deja sin marcar a proposito -- ver `progress/impl_159_cierre.md` seccion 3.
+  *Cierre 2026-07-29:* El SQL **esta escrito y es correcto**, y T6 lo blinda sentencia a sentencia.
+  *Actualizacion 2026-07-29 (round-trip ejecutado por el humano contra Postgres local):* la
+  migracion **SI se aplico de verdad** — la base local no la tenia y hubo que correr
+  `prisma migrate deploy`; despues, `mensajero_sugerido_id` **ausente**. Es decir, la primera
+  clausula del criterio esta cumplida. **Se deja SIN MARCAR por la segunda:** el criterio dice
+  *"sobre una base con ordenes que tienen `mensajero_sugerido_id` no nulo"*, y esa condicion
+  **no se reprodujo** (el `down.sql` repone la columna vacia, como declara su cabecera, asi que
+  el UP se aplico sobre una columna sin valores). Falta poco y es acotado: sembrar **una** fila
+  con valor no nulo, correr el ciclo y comprobar `mensajero_asignado_id` antes y despues (es la
+  mitad de datos de R3). Ante la duda, casilla vacia. Detalle en `progress/impl_159_cierre.md`
+  seccion 3.1.
 
-- [ ] **T5 — Probar el rollback en entorno de prueba.**
+- [x] **T5 — Probar el rollback en entorno de prueba.**
   `pnpm run db:rollback` y volver a aplicar.
   *Depende de:* T4. *Cubre:* R2.
   *Hecho:* tras el rollback la columna, el índice y la FK vuelven con los mismos nombres
   y con `ON DELETE SET NULL ON UPDATE CASCADE`; re-aplicar la migración vuelve a
   dejarlos fuera. Salida real pegada en `progress/impl_159.md`.
-  *Cierre 2026-07-29:* **NO se hizo.** `pnpm run db:rollback` no se ejecuto (sin `.env`/`DATABASE_URL`). El DOWN esta verificado solo en su **texto** (T6). Obligatorio antes del deploy a produccion: el `DROP COLUMN` es irreversible en datos.
+  *Cierre 2026-07-29:* estaba SIN MARCAR (el DOWN solo verificado en su texto, T6).
+  *Actualizacion 2026-07-29 — **HECHO**, round-trip ejecutado por el humano contra una base
+  Postgres local:* el par `down.sql` (3 sentencias) + `migration.sql` (3 sentencias) de
+  `20260728120000_drop_orden_mensajero_sugerido` **ejecuta correctamente**, dentro de una
+  transaccion revertida al final —de verdad contra el esquema real, sin persistir—. El DOWN
+  repone columna, indice y FK con los mismos nombres (la FK con su `ON DELETE SET NULL ON
+  UPDATE CASCADE`: la sentencia corrio sin error), y re-aplicar el UP los vuelve a dejar fuera
+  (`mensajero_sugerido_id` ausente al terminar). Se verificaron de paso `*_orden_indices_filtros`
+  (144) y las dos de la 154.
+  **Salvedad exacta, no se marca de mas:** lo probado es el ciclo **ESTRUCTURAL**. **NO se
+  valido la preservacion de datos** — el DOWN restituye la columna **vacia**, tal como declara
+  su cabecera (Q5), asi que el ciclo no dice nada sobre filas con valor. Eso pertenece a T4 y a
+  la mitad de datos de R3, y sigue pendiente.
+  Salida reportada en `progress/impl_159_cierre.md` seccion 3.1 (la task decia
+  `progress/impl_159.md`; ese archivo nunca existio y la bitacora de esta feature es
+  `impl_159_cierre.md`).
 
 - [x] **T6 [P] — Test de la migración.**
   `tests/integration/db/drop-mensajero-sugerido-migration.test.ts`, modelado sobre los
@@ -159,7 +191,12 @@
   *Depende de:* T0. *Cubre:* R10, R11.
   *Hecho:* un test compara la propiedad en ambos artefactos y pasa; el yaml y el objeto
   TS dicen lo mismo.
-  *Cierre 2026-07-29:* Q1 se resolvio por la opcion **(a)**, no por la (b) que el spec recomendaba. El test de paridad que la task exige existe: `tests/unit/api/openapi-carga-row-paridad.test.ts` (verificado por mutacion). ATENCION: **R10 queda INCUMPLIDO** -- ver `progress/impl_159_cierre.md` seccion 5.
+  *Cierre 2026-07-29:* Q1 se resolvio por la opcion **(a)**, no por la (b) que el spec recomendaba. El test de paridad que la task exige existe: `tests/unit/api/openapi-carga-row-paridad.test.ts` (verificado por mutacion). ATENCION: **R10 queda INCUMPLIDO en su forma original** -- ver `progress/impl_159_cierre.md` seccion 5.
+  *Actualizacion 2026-07-29:* R10 **reconciliado en `requirements.md`** con la sustitucion que
+  `design.md` seccion 4 dejaba prevista para la opcion (a), con nota fechada del incumplimiento y su
+  motivo; Q1 marcada CERRADA y Q4 reetiquetada (abierta y ya no informativa). **Cero cambios de
+  codigo:** los dos artefactos de OpenAPI no se tocan. Se reconcilia el requisito con el codigo
+  porque un requisito que dice lo contrario de lo que el sistema hace es peor que no tenerlo.
 
 - [x] **T15 [P] — Comentarios que citan símbolos que dejan de existir.**
   `lib/interfaces/services/IAsignabilidadCoordenadasService.ts:6-9` (cita
@@ -287,3 +324,8 @@ typecheck global sigue en rojo por la UI; se documenta y se continúa.
   *Depende de:* T27.
   *Hecho:* `progress/impl_159.md` contiene la tabla completa, sin ningún `R<n>` sin test.
   *Cierre 2026-07-29:* Tabla completa en `progress/impl_159_cierre.md` seccion 7. ATENCION: el criterio literal de la task ("sin ningun `R<n>` sin test") **no se cumple**: **R10 no tiene test porque quedo incumplido**, y R1/R2/R3 tienen cobertura solo **estatica**. La tabla lo declara en vez de ocultarlo.
+  *Actualizacion 2026-07-29:* los 22 requisitos **en su redaccion vigente** ya tienen test, pero eso
+  **no se presenta como cobertura ganada**: R10 pasa a verde solo porque el requisito se reescribio
+  para decir lo que el codigo hace (su forma original sigue incumplida), y R3 queda **parcial** —el
+  DDL ya se ejecuta de verdad contra Postgres, la rama de datos no nulos no—. Si lo que se mide es
+  "requisitos cumplidos como se escribieron", el numero honesto sigue siendo **21 de 22**.
