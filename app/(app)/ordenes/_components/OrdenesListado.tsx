@@ -91,17 +91,15 @@ const ESTADO_EN_BODEGA = "en_bodega_central";
 
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
-// Derivado de `accionesDe()`: `en_fulfillment`/`en_preparacion` -> "Generar guía"
-// (asigna mensajero) y `en_bodega_central` -> "Asignar mensajero".
+// Feature 156/R28: el único apartado que asigna por lote es la BODEGA CENTRAL
+// ("Asignar mensajero"). `en_fulfillment`/`en_preparacion` salieron del conjunto
+// porque su acción ("Generar guía") ya no decide mensajero: solo numera y mueve a
+// la bodega central, así que un cierre abierto en la zona no impide numerar.
 // Los estados que solo imprimen etiquetas (`por_recoger`,
 // `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
 // Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas"
 // (comparte el checkbox); es el precio de una única columna de selección.
-const ESTADOS_ASIGNACION = new Set([
-  "en_fulfillment",
-  "en_preparacion",
-  "en_bodega_central",
-]);
+const ESTADOS_ASIGNACION = new Set(["en_bodega_central"]);
 const MOTIVO_ZONA_CIERRE_ABIERTO =
   "La bodega de esta zona tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar la orden.";
 
@@ -468,10 +466,12 @@ export function OrdenesListado({
           `modalAbierto`. */}
       {accionesLote ? (
         <>
+          {/* Feature 156/R30: "Generar guía" NO requiere la lista de mensajeros
+              (ya no asigna); el `useSWR` de mensajeros sigue existiendo solo para
+              `AsignarBodegaModal`. */}
           <GenerarGuiaModal
             open={modalAbierto === "generar-guia"}
             ordenes={ordenesSeleccionadas}
-            mensajeros={mensajeros ?? []}
             onOpenChange={cerrarModal}
             onSuccess={encadenarEtiquetas}
           />
