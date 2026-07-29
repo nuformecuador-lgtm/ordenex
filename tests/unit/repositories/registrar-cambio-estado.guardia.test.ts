@@ -362,6 +362,77 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     expect(emitir).not.toHaveBeenCalled();
   });
 
+  // Feature 154 (R32): la 154 hace crecer el catalogo, asi que el drift DB->build vuelve a estar
+  // sobre la mesa (base migrada, build viejo). El contrato no cambia: se RECHAZA con
+  // `TransicionNoValidableError` y motivo `estatus_desconocido`, sin permitirla ni registrarla.
+  it("154/R32: un estado de la DB que el build no reconoce -> motivo `estatus_desconocido`", async () => {
+    const createMany = vi.fn(async () => ({ count: 1 }));
+    const tx = {
+      ordenHistorialEstado: { createMany },
+      // La tabla ya tiene un value del flujo v3 que este build no lista en ORDER_STATUS_SEED.
+      $queryRaw: vi.fn(async () => [
+        ...filasCatalogoEstados(),
+        { id: "os-estado-de-otra-feature", value: "estado_de_otra_feature" },
+      ]),
+    };
+    const emitir = vi.fn(async () => {});
+    let capturado: unknown;
+    try {
+      await appendCambioEstado(
+        tx as never,
+        [
+          {
+            ordenId: "o1",
+            estatusOrigenId: idDe("en_reparto"),
+            estatusDestinoId: "os-estado-de-otra-feature",
+            actorUsuarioId: "u1",
+            origenTipo: "gestion",
+          },
+        ],
+        emitir,
+      );
+    } catch (error) {
+      capturado = error;
+    }
+    expect(capturado).toBeInstanceOf(TransicionNoValidableError);
+    expect((capturado as TransicionNoValidableError).motivo).toBe("estatus_desconocido");
+    expect((capturado as TransicionNoValidableError).lado).toBe("destino");
+    expect(createMany).not.toHaveBeenCalled();
+    expect(emitir).not.toHaveBeenCalled();
+  });
+
+  // Feature 154 (R33): la direccion contraria del drift — el BUILD conoce los dos values nuevos
+  // pero la DB todavia no los tiene (codigo desplegado antes de migrar). Todas las transiciones
+  // PREEXISTENTES deben seguir validando exactamente igual.
+  it("154/R33: con la DB sin los dos values nuevos, las transiciones previas siguen validando", async () => {
+    const createMany = vi.fn(async (arg: CreateManyArg) => ({ count: arg.data.length }));
+    const sinLosNuevos = filasCatalogoEstados().filter(
+      (fila) => fila.value !== "por_recolectar_en_tienda" && fila.value !== "incidente",
+    );
+    expect(sinLosNuevos).toHaveLength(18); // la foto de la DB pre-154
+    const tx = {
+      ordenHistorialEstado: { createMany },
+      $queryRaw: vi.fn(async () => sinLosNuevos),
+      $executeRaw: vi.fn(),
+    };
+    const emitir = vi.fn(async () => {});
+    const previas = INVENTARIO_FLUJO.filter(
+      (a) =>
+        a.origen !== "por_recolectar_en_tienda" &&
+        a.destino !== "por_recolectar_en_tienda" &&
+        a.origen !== "incidente" &&
+        a.destino !== "incidente",
+    );
+    expect(previas).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo - 2);
+    await appendCambioEstado(
+      tx as never,
+      previas.map((a, i) => entrada(a.origen, a.destino, a.via, `o${i}`)),
+      emitir,
+    );
+    expect(createMany).toHaveBeenCalledTimes(1);
+    expect(createMany.mock.calls[0][0].data).toHaveLength(previas.length);
+  });
+
   it("el error de no-validable no filtra ids ni PII", async () => {
     const createMany = vi.fn(async () => ({ count: 1 }));
     const tx = { ordenHistorialEstado: { createMany } };

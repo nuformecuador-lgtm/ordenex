@@ -14,6 +14,11 @@ import {
 //     botella inalcanzable = fallo, R15, nombrando los `value` ofensores);
 //   - todo estado terminal: >= 1 entrada (un terminal inalcanzable tambien es un bug);
 //   - cobertura EXACTA del catalogo (R16): sin exenciones, el conjunto vestigial esta VACIO.
+//
+// Feature 154 (R16/R17/R25/R26): el catalogo pasa a 20 values, la creacion a 4 y los terminales
+// a 3. `por_recolectar_en_tienda` es NO terminal (entra por creacion, sale por #43) e `incidente`
+// es TERMINAL SIN NINGUNA salida (entra por #44). Al ser la 154 SOLO ADITIVA no se retira
+// ninguna arista, asi que ningun estado preexistente pierde entradas ni salidas.
 
 const TERMINALES = new Set<string>(ESTADOS_TERMINALES);
 const CREACION = new Set<string>(ESTADOS_CREACION);
@@ -64,10 +69,33 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
     expect(grados.get("entregada")!.salidas).toBeGreaterThan(0);
   });
 
+  // Feature 154/R16: `incidente` es TERMINAL y ademas cierra de verdad — 0 salidas. El estado
+  // `indemnizada` que se planteo en el gate para desterminarlo se DESCARTO (2026-07-29).
+  it("154/R16: incidente es terminal, alcanzable (#44) y SIN ninguna arista de salida", () => {
+    const grados = calcularGrados();
+    expect([...ESTADOS_TERMINALES]).toContain("incidente");
+    expect(grados.get("incidente")!.entradas).toBeGreaterThan(0);
+    expect(grados.get("incidente")!.salidas).toBe(0);
+    expect(TRANSICIONES.incidente).toEqual([]);
+  });
+
+  // Feature 154/R17: `por_recolectar_en_tienda` NO es terminal: tiene entrada (creacion) y salida.
+  it("154/R17: por_recolectar_en_tienda NO es terminal y tiene entrada y salida", () => {
+    const grados = calcularGrados();
+    expect([...ESTADOS_TERMINALES]).not.toContain("por_recolectar_en_tienda");
+    expect(grados.get("por_recolectar_en_tienda")!.entradas).toBeGreaterThan(0);
+    expect(grados.get("por_recolectar_en_tienda")!.salidas).toBeGreaterThan(0);
+  });
+
   it("cada estado de creacion es alcanzable desde START y tiene salida de flujo", () => {
     const grados = calcularGrados();
     expect([...CREACION].sort()).toEqual(
-      ["en_fulfillment", "en_preparacion", "en_ruta_bodega_central"].sort(),
+      [
+        "en_fulfillment",
+        "en_preparacion",
+        "en_ruta_bodega_central",
+        "por_recolectar_en_tienda", // feature 154/R13
+      ].sort(),
     );
     for (const value of ESTADOS_CREACION) {
       expect(grados.get(value)!.salidas, `estado de creacion sin salida: ${value}`).toBeGreaterThan(
@@ -78,7 +106,7 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
 });
 
 describe("R16 — cobertura EXACTA del catalogo, sin exenciones", () => {
-  it("los value que aparecen en el mapa, terminales y creacion cubren los 18 del SEED", () => {
+  it("los value que aparecen en el mapa, terminales y creacion cubren los 20 del SEED", () => {
     const cubiertos = new Set<string>([...CREACION, ...TERMINALES]);
     for (const [origen, destinos] of Object.entries(TRANSICIONES)) {
       cubiertos.add(origen);
@@ -90,7 +118,17 @@ describe("R16 — cobertura EXACTA del catalogo, sin exenciones", () => {
     );
     expect(faltantes, `value del catalogo sin clasificar: ${faltantes.join(", ")}`).toEqual([]);
     expect(sobrantes, `value fuera del catalogo: ${sobrantes.join(", ")}`).toEqual([]);
-    expect(ORDER_STATUS_SEED.length).toBe(18);
+    expect(ORDER_STATUS_SEED.length).toBe(20); // feature 154: 18 -> 20
+  });
+
+  // Feature 154/R25: los DOS values nuevos quedan clasificados en el mapa. Es la contraparte
+  // en runtime del `satisfies Record<OrderStatusValue, ...>` (que rompe el BUILD si falta uno):
+  // aqui se nombra explicitamente a los recien llegados para que el fallo sea legible.
+  it("154/R25: los dos values nuevos estan clasificados en el mapa (sin sobrantes)", () => {
+    expect(Object.keys(TRANSICIONES)).toContain("por_recolectar_en_tienda");
+    expect(Object.keys(TRANSICIONES)).toContain("incidente");
+    expect(ORDER_STATUS_SEED).toContain("por_recolectar_en_tienda");
+    expect(ORDER_STATUS_SEED).toContain("incidente");
   });
 
   it("el conjunto de estados vestigiales declarados esta VACIO (Q2)", () => {
