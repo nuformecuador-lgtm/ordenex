@@ -62,10 +62,61 @@ registro, el próximo que toque WhatsApp la duplica. Detalle y deudas en `histor
 >    `origin/prod` y sobre `origin/feature/log-fallos-whatsapp`). Mergear el #183 tal cual las mete
 >    también en `dev`.
 
+## Lote 153–160 — flujo de estados v2 (registrado el 2026-07-28)
+
+Ocho features nuevas pedidas por el humano, **sin spec, sin rama y sin código**. Boceto aprobado en
+chat antes de escribir. Nacen de un diagrama del flujo nuevo + cuatro pedidos sueltos.
+
+**Lo que realmente cambia del catálogo:** de los 18 estados de hoy, **14 se mantienen tal cual**.
+Entran `por_recolectar_en_tienda` e `incidente`, `en_ruta` se renombra a `en_reparto` y
+`en_fulfillment` se retira. **El cambio de fondo no son los estados sino las aristas:** hoy
+`en_preparacion`/`en_fulfillment` pueden ir directo a `por_recoger` y a `en_ruta_bodega_satelite` al
+generar la guía (aristas #1–#6 del mapa de la feature 140); en el flujo v2 esas se retiran — generar
+guía solo lleva a `en_bodega_central`, y **las asignaciones salen siempre de una bodega**.
+
+| # | Feature | Zona | Cplx | Depende |
+|---|---------|------|------|---------|
+| 153 | `en_ruta` → `en_reparto` (rename mecánico, 76 archivos) | backend | medium | — |
+| 154 | catálogo v2: `por_recolectar_en_tienda` + `incidente` + grafo nuevo | backend | high | 153 |
+| 155 | creación bifurcada por bodega + retiro de `en_fulfillment` | backend | high | 154 |
+| 156 | generar guía sin asignar mensajero | fullstack | medium | 154 |
+| 157 | recolección en tienda por el mensajero (QR) | fullstack | high | 155 |
+| 158 | estado `incidente` + indemnización desde la wallet | fullstack | high | 154 |
+| 159 | quitar la sugerencia de mensajeros de la carga masiva | fullstack | medium | 156 |
+| 160 | badge de intentos de entrega | fullstack | low | — |
+
+**Decisiones del humano ya cerradas (valen como parte de la gate F1.4 de cada spec):** `en_fulfillment`
+**se retira** (no aparece en el flujo nuevo; las órdenes que ya están en bodega nacen en
+`en_preparacion`); **`en_ruta` → `en_reparto` es el ÚNICO rename** — «En ruta a bodega satélite» no
+pasa a «Por recibir en satélite» pese a que el diagrama lo dibuje así, y los participios femeninos
+(Entregada/Devuelta/Reprogramada/Rechazada/Sin gestionar) se conservan.
+
+**Tres `ABIERTO` que valen por sí solos** y se cierran en la puerta F1.4 de su spec, no antes:
+la **155** debe decidir de dónde sale la respuesta a «¿ya está en bodega?»; la **157** arrastra el que
+el propio humano declaró sin resolver — **cómo le llegan al mensajero las órdenes por recolectar**, que
+define si hace falta modelo nuevo; y la **158** debe decidir **cómo se calcula el monto de la
+indemnización** (de las tres opciones, solo la captura manual del admin no exige dato nuevo).
+
+**Peajes conocidos:** la 154 y la 158 tocan **enums de Postgres** (`orden_historial_origen_tipo`,
+`WalletMovimientoCategoria`), así que además del `ALTER TYPE ADD VALUE` hay que **actualizar los
+`down.sql` previos** que recrean el tipo — no existe `DROP VALUE` — y correr `tests/integration/db`.
+La 159 toca el **contrato público de integradores** (`mensajero_sugerido_id` viaja en el payload de la
+carga por API key y está documentado en `openapi-spec.ts`).
+
+**Lo que NO se duplicó:** el pedido «que las bodegas puedan filtrar solo las órdenes asignables» ya
+estaba registrado como **feature 147**. Se actualizó en vez de crear una novena: su `ABIERTO` sobre qué
+estados cuentan como asignable **queda cerrado** por este flujo (`en_bodega_central` y
+`en_bodega_satelite`, y solo esos), y pasa a `depends_on: 154`.
+
+**Pendiente de revisar:** la **149** («deshacer asignación antes de la recogida») queda tocada por el
+flujo v2 — deshacer devuelve la orden a su bodega, no a `en_preparacion`. Se actualiza cuando le toque,
+no ahora.
+
 ## Backlog pendiente
 
 > **Auditado contra el código de `dev` el 2026-07-28** (la auditoría previa es del 2026-07-26). Cada
-> fila se verificó abriendo el archivo, no por la ficha. **24 pendientes: 9 sueltas + 15 de analítica.**
+> fila se verificó abriendo el archivo, no por la ficha. **24 pendientes sueltas + 15 de analítica +
+> las 8 del lote 153–160** (arriba, con su propia tabla).
 
 | # | Feature | Zona | Estado real verificado |
 |---|---------|------|------------------------|

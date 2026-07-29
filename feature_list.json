@@ -1663,12 +1663,12 @@
     {
       "id": 147,
       "name": "filtro por bodega de las ordenes asignables",
-      "description": "Fullstack. Filtro de bodega en el modulo de ordenes que acota las ordenes ASIGNABLES a la bodega elegida. No existe tabla bodega: la bodega se deriva de la zona (bodega central/GAM vs bodega satelite por zona), asi que el filtro se resuelve por orden.zona_id + estatus. Backend: parametro de filtro en el repo/service de listado (OrdenService) respetando el scope por rol vigente. Frontend: select de bodega en el apartado de asignacion. ABIERTO: catalogo exacto de opciones (central + una por zona con satelite) y que estados cuentan como 'asignable' (en_bodega_central, en_bodega_satelite, por_recoger).",
+      "description": "Fullstack. Filtro de bodega en el modulo de ordenes que acota las ordenes ASIGNABLES a la bodega elegida. No existe tabla bodega: la bodega se deriva de la zona (bodega central/GAM vs bodega satelite por zona), asi que el filtro se resuelve por orden.zona_id + estatus. Backend: parametro de filtro en el repo/service de listado (OrdenService) respetando el scope por rol vigente. Frontend: select de bodega en el apartado de asignacion. ABIERTO: catalogo exacto de opciones (central + una por zona con satelite) y que estados cuentan como 'asignable' (en_bodega_central, en_bodega_satelite, por_recoger). ACTUALIZADA 2026-07-28 por el lote 153-160 (flujo v2). El ABIERTO sobre que estados cuentan como asignable QUEDA CERRADO por el flujo nuevo: son en_bodega_central y en_bodega_satelite, y solo esos. en_preparacion deja de ser asignable (generar guia ya no asigna, feature 156), en_fulfillment desaparece del catalogo (feature 155) y por_recoger ya no es un estado asignable sino el RESULTADO de haber asignado. depends_on pasa de null a 154, que es la feature que reescribe el mapa de transiciones.",
       "status": "pending",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
-      "depends_on": null
+      "depends_on": 154
     },
     {
       "id": 148,
@@ -1724,6 +1724,86 @@
       "sdd": false,
       "complexity": "high",
       "zone": "backend",
+      "depends_on": null
+    },
+    {
+      "id": 153,
+      "name": "order_status: en_ruta -> en_reparto",
+      "description": "Backend. Rename MECANICO del value en_ruta a en_reparto, sin ningun cambio de flujo: mismas aristas, mismos servicios, misma semantica. Va solo para no mezclar ~76 archivos de cambio mecanico con los cambios semanticos del lote. order_status es TABLA CATALOGO, no enum, asi que el rename es un UPDATE en migracion; precedente exacto y a copiar: db/migrations/20260724120000_order_status_rename_nomenclatura (feature 135). Superficie verificada en dev: ORDER_STATUS_SEED (lib/types/order-status.ts:40), el mapa TRANSICIONES de lib/types/order-status-transiciones.ts (aristas #11 a #16 mas las seis de deshacer_gestion #31 a #36), ORDER_STATUS_LABELS + ORDER_STATUS_VARIANT + ORDER_STATUS_CLASS de app/(app)/ordenes/_components/EstatusBadge.tsx (ojo: en_ruta tiene refuerzo de acento de marca, no solo label), services, seeds y tests: 76 archivos citan el value. El label pasa de 'En ruta' a 'En reparto'. DECIDIDO (humano 2026-07-28): este es el UNICO rename del lote; el resto de labels queda como esta -- 'En ruta a bodega satelite' NO se renombra a 'Por recibir en satelite' pese a que el diagrama lo dibuje asi, y los participios femeninos (Entregada / Devuelta / Reprogramada / Rechazada / Sin gestionar) se conservan. AL CERRAR: guard de censo con los values viejos siguiendo tests/unit/guards/censo-order-status-rename.test.ts, que ya existe de la 135 y hay que EXTENDER, no duplicar.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "depends_on": null
+    },
+    {
+      "id": 154,
+      "name": "catalogo de estados v2: por_recolectar_en_tienda + incidente + grafo nuevo",
+      "description": "Backend. Alta de los DOS values nuevos del flujo v2 y reescritura del mapa de transiciones al grafo aprobado, SIN tocar todavia ningun service: las aristas nuevas quedan declaradas y sin uso hasta que lleguen las features 155 a 158. Values nuevos: por_recolectar_en_tienda (orden de una tienda SIN fulfillment; nace con guia y espera a que un mensajero la recolecte) e incidente (paquete danado, perdido o robado; TERMINAL, se indemniza). Migracion sobre la tabla catalogo order_status (INSERT, no enum) + down.sql. ARISTAS DE ALTA en lib/types/order-status-transiciones.ts: creacion null -> por_recolectar_en_tienda (suma a ESTADOS_CREACION); por_recolectar_en_tienda -> en_ruta_bodega_central (via recoleccion_tienda, rol mensajero); en_reparto -> incidente (via gestion, rol mensajero); incidente entra en ESTADOS_TERMINALES. ARISTAS QUE SE RETIRAN: las que hoy permiten saltarse la bodega central al generar la guia -- #4 y #5 desde en_preparacion, #1 a #3 desde en_fulfillment, y #6/#7b/#7c hacia en_ruta_bodega_satelite. Tras el cambio generar guia solo puede llevar a en_bodega_central, y las asignaciones salen de en_bodega_central (#7 a satelite, #8 a mensajero) y de en_bodega_satelite (#9). El enum orden_historial_origen_tipo (22 values hoy) gana recoleccion_tienda e incidente: es ENUM de Postgres, asi que ALTER TYPE ADD VALUE y hay que ACTUALIZAR LOS down.sql PREVIOS que recrean el tipo -- no existe DROP VALUE. La fase backend debe correr tests/integration/db. Tambien: labels y variante de badge de los dos nuevos en EstatusBadge.tsx. El 'satisfies Record<OrderStatusValue,...>' del mapa hace que el build ROMPA si un value queda sin clasificar: es la red de seguridad, no relajarla.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "backend",
+      "depends_on": 153
+    },
+    {
+      "id": 155,
+      "name": "creacion bifurcada por bodega + retiro de en_fulfillment",
+      "description": "Backend. Al crear una orden el sistema decide donde nace segun si el paquete YA ESTA EN LA BODEGA. (a) SI esta: nace en en_preparacion y SIN num_guia (guia pendiente); la guia se genera despues por seleccion, y eso lo cubre la 156. (b) NO esta (tienda sin fulfillment, carga masiva o carga por API key): se le genera la guia EN EL ACTO, se emite el manifiesto y nace en por_recolectar_en_tienda. Retira los dos caminos de creacion viejos: ordenesConfig.FULFILLMENT_ESTATUS_VALUE (= en_fulfillment) y BulkOrdenService.ESTATUS_INICIAL_API (= en_ruta_bodega_central, que dejaba la orden viajando sin haber sido recolectada). Actualiza ESTADOS_CREACION. RETIRO DE en_fulfillment (decidido por el humano 2026-07-28: no aparece en el flujo nuevo y las ordenes que ya estan en bodega nacen en en_preparacion): 34 archivos lo citan; hay que hacer BACKFILL de las ordenes vivas en ese estado hacia en_preparacion en la misma migracion, retirar el value del catalogo y de ORDER_STATUS_SEED, del mapa TRANSICIONES, de ORDER_STATUS_LABELS/VARIANT/CLASS (tiene refuerzo de acento propio) y de ESTADOS_CREACION, y sumarlo al guard de censo. ABIERTO (se cierra en la puerta F1.4): de donde sale la respuesta a 'esta ya en bodega' -- flag por tienda en el modelo, campo del payload publico de la API key (contrato de integradores, feature 88), o implicito por via de carga; y si el manifiesto del caso (b) reusa la Server Action obtenerManifiesto de la feature 148 o necesita punto de enganche propio.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "backend",
+      "depends_on": 154
+    },
+    {
+      "id": 156,
+      "name": "generar guia sin asignar mensajero",
+      "description": "Fullstack. Generar la guia deja de asignar mensajero y de rutear a bodega satelite: pasa a ser SOLO numerar la orden y moverla de en_preparacion a en_bodega_central. Es el cambio de fondo del flujo v2 -- las asignaciones dejan de ocurrir al numerar y pasan a ocurrir SIEMPRE desde una bodega. Backend: GuiaAsignacionService.generarGuia pierde la asignacion de mensajero y el ruteo (ORIGEN_RUTEO_SATELITE, GuiaAsignacionService.ts:35, deja de admitir en_fulfillment/en_preparacion). Los dos caminos de asignacion que SI quedan ya existen y no se tocan: asignarDesdeBodega (central -> mensajero) y AsignacionSateliteService (central -> bodega satelite, y satelite -> su mensajero). Frontend: GenerarGuiaModal pierde el selector de mensajero y queda como confirmacion de lote; revisar el encadenado a 'Imprimir etiquetas' (feature 95) y al manifiesto (feature 148), que hoy cuelgan de ese modal. Sin migracion.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "depends_on": 154
+    },
+    {
+      "id": 157,
+      "name": "recoleccion en tienda por el mensajero (QR)",
+      "description": "Fullstack. Cierra el tramo nuevo del flujo: un mensajero recoge fisicamente en la tienda las ordenes en por_recolectar_en_tienda y, al escanear el QR de la etiqueta, la orden pasa a en_ruta_bodega_central. De ahi en adelante el camino ya existe: la bodega central la recibe por QR (feature 138, RecepcionBodegaCentralService) y queda en en_bodega_central. Reuso directo: EscanerRecepcionBodegaCentral.tsx + lib/actions/recepcion-bodega-central.ts como plantilla del escaner y de la Server Action, QrScanner de components/shared, y el patron de listado del mensajero de mis-asignaciones. Familia de historial: recoleccion_tienda (la da de alta la 154). ABIERTO Y BLOQUEANTE DEL DISEnO (el humano lo declaro explicitamente como no resuelto): COMO le llegan esas ordenes al mensajero. Opciones a cerrar en la puerta F1.4: se le asignan como hoy con mensajero_asignado_id, las toma libremente de una bolsa por zona o por tienda, o las agrupa un lote de recoleccion por tienda. La respuesta decide si hace falta modelo nuevo, si el listado del maestro gana un apartado de recoleccion y que ve el mensajero en su pantalla. NO especificar el resto de la feature sin cerrar esto primero.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "depends_on": 155
+    },
+    {
+      "id": 158,
+      "name": "estado incidente + indemnizacion desde la wallet",
+      "description": "Fullstack. Desenlace nuevo de la gestion del mensajero: incidente, para el paquete danado, perdido o robado. Es TERMINAL -- no entra al flujo de devolucion ni vuelve a bodega -- y obliga a INDEMNIZAR, asi que genera un egreso en la wallet. Backend: la gestion admite el resultado incidente (arista en_reparto -> incidente, declarada por la 154), y WalletMovimientoCategoria gana egreso_indemnizacion (ENUM de Postgres: ALTER TYPE ADD VALUE + actualizar los down.sql previos que recrean el tipo). El egreso se emite al APROBARSE el cierre, por el mismo camino que el resto de conceptos, para no inventar un segundo productor de dinero. Frontend: la opcion en el panel de gestion del mensajero (GestionarOrdenPanel) y el concepto visible en el desglose de la wallet. ABIERTO (se cierra en la puerta F1.4): quien reporta el incidente -- el mensajero al gestionar, o solo un admin; si exige motivo tipado y evidencia fotografica, reusando el patron de causa_devolucion (feature 73) y de evidencias 1..N (feature 119); y COMO SE CALCULA EL MONTO de la indemnizacion -- monto_cobrar de la orden, un valor declarado por la tienda que hoy no existe en el modelo, o captura manual del admin (la unica de las tres que no exige dato nuevo).",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "depends_on": 154
+    },
+    {
+      "id": 159,
+      "name": "quitar la sugerencia de mensajeros de la carga masiva",
+      "description": "Fullstack. La sugerencia de mensajero de la carga masiva deja de existir: con el flujo v2 las ordenes nacen SIN mensajero y se asignan despues desde su bodega. Es retiro de codigo, no feature nueva. Superficie verificada en dev (20 archivos): columna orden.mensajero_sugerido_id (db/schema.prisma:466) con su relacion OrdenMensajeroSugerido (:493) y su indice (:507) -> migracion de DROP con down.sql; AsignacionMensajeroService + IAsignacionMensajeroService; IAsignabilidadCoordenadasService (la sugerencia por cercania de coordenadas); la Server Action asignarMensajeroSugerido de lib/actions/mensajeros.ts; el paso 'Sugerir asignacion' de OrdenesCargaResumen.tsx (incluida la eleccion AL AZAR entre mensajeros validos, :44 y :53); aplicarMensajero de carga-masiva-chunks.ts; el campo mensajero_sugerido_id del schema de fila y de ORDENES_BULK_FIELDS; resolveMensajero de BulkOrdenService (:219, :505, :565); y las menciones en lib/types/orden.ts, lib/types/asignacion-mensajero.ts, ordenes-columns.tsx, GenerarGuiaModal.tsx y openapi-spec.ts. OJO al contrato publico: mensajero_sugerido_id viaja en el payload de la carga por API key (feature 88) y esta documentado en openapi-spec.ts -- decidir en la puerta F1.4 si se retira del contrato (breaking para integradores) o si se acepta y se ignora.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "depends_on": 156
+    },
+    {
+      "id": 160,
+      "name": "badge de intentos de entrega en el listado de ordenes",
+      "description": "Fullstack. Chip en la orden que muestra cuantos intentos de entrega lleva. EL CONTEO YA EXISTE, no hay que derivarlo de nuevo: OrdenHistorialService lo calcula con contarPorDestinoVigentes(ordenId, devueltaId) (lib/repositories/OrdenHistorialRepository.ts:92, features 46/47/67) contando filas de orden_historial con estatus_destino = devuelta y gestion vigente, y db/schema.prisma:1155 ya tiene el @@index([ordenId, estatusDestinoId]) puesto para eso. LO QUE FALTA: exponerlo en OrdenListItemDTO (lib/types/orden.ts) como campo derivado opcional, siguiendo la plantilla de zonaEsGam (:140-143), resuelto EN LOTE con una sola query por pagina -- patron OrdenRepository.findMensajerosBloqueados, que devuelve un Set -- y NUNCA una query por fila: el listado es paginado en servidor. Frontend: chip en ordenes-columns.tsx y en la card del mensajero, oculto cuando el conteo es 0. Sin migracion. ABIERTO (puerta F1.4): si el intento cuenta solo destino devuelta como hoy, o tambien reprogramada; y si el estado nuevo incidente (feature 158) cuenta como intento -- por ser terminal, lo natural es que no.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "low",
+      "zone": "fullstack",
       "depends_on": null
     }
   ]
