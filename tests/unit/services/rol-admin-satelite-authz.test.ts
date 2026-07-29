@@ -10,6 +10,12 @@ import type { Actor as TarifaActor } from "@/lib/interfaces/services/ITarifaServ
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+
+// Feature 160: `OrdenService` gano el derivador de intentos EN LOTE como dependencia
+// REQUERIDA. Estas pruebas son de AUTORIZACION (`crear`), que ni siquiera lo consume: doble
+// neutro compartido, sin aserciones sobre el.
+const intentos = fakeIntentosEnLote();
 
 // Feature 98: la via sesion no tarifa; stub neutro para el 2do parametro del constructor.
 const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
@@ -216,7 +222,7 @@ function bulkRow(overrides: Partial<RawRow> = {}): RawRow {
 describe("OrdenService.crear — adminSatelite sin permisos nuevos (R9, R11)", () => {
   it("adminSatelite -> forbidden, no crea", async () => {
     const repo = buildOrdenRepo();
-    const service = new OrdenService(repo);
+    const service = new OrdenService(repo, intentos);
 
     const r = await service.crear(crearOrdenInput(), ADMIN_SATELITE_ORDEN);
 
@@ -226,7 +232,7 @@ describe("OrdenService.crear — adminSatelite sin permisos nuevos (R9, R11)", (
 
   it("no-regresion: maestro conserva su resultado exitoso (R11)", async () => {
     const repo = buildOrdenRepo();
-    const service = new OrdenService(repo);
+    const service = new OrdenService(repo, intentos);
 
     const r = await service.crear(crearOrdenInput({ tiendaId: "storeX" }), MAESTRO_ORDEN);
 

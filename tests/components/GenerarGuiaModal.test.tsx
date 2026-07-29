@@ -399,3 +399,69 @@ describe("GenerarGuiaModal — feature 156: confirmación de lote", () => {
     expect(generarGuiaMock).toHaveBeenCalledWith({ ordenIds: [] });
   });
 });
+
+// Feature 160 (T17, R17/R19/R23) — este diálogo lista las órdenes seleccionadas en un
+// `DataTable`, NO en un `<ul>` (design §5.4 lo daba por lista: no lo es). La regla se
+// decide por la FORMA de la superficie, así que aquí manda R17: columna propia.
+//
+// INTEGRACIÓN con la 156: cuando se escribieron estos casos el modal tenía DOS tablas
+// (GAM con selector de mensajero y un grupo NO-GAM por zona satélite). La 156 colapsó
+// las dos en la ÚNICA tabla `TABLA` ("Órdenes por numerar") y borró la separación
+// GAM/NO-GAM de esta superficie, así que los casos apuntan ahora a esa tabla. Lo que
+// afirman —encabezado propio, valor en TODAS las filas incluido el `0`, y sin umbral—
+// no cambia; el caso "NO-GAM" conserva su intención (una orden fuera del GAM también
+// trae el dato) sobre la tabla que hoy la contiene.
+describe("GenerarGuiaModal — intentos de entrega (feature 160)", () => {
+  it("R17: la tabla de órdenes del lote monta la columna 'Intentos'", () => {
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-001", intentosEntrega: 2 })]);
+    const tabla = screen.getByRole("table", { name: TABLA });
+    expect(
+      within(tabla).getByRole("columnheader", { name: "Intentos" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R19: muestra el número de cada orden, y `0` cuando no tiene intentos", () => {
+    renderModal([
+      makeOrden({ id: "o1", numRemision: "REM-C2", intentosEntrega: 2 }),
+      makeOrden({ id: "o2", numRemision: "REM-C0", intentosEntrega: 0 }),
+      makeOrden({ id: "o3", numRemision: "REM-CX" }), // sin el campo
+    ]);
+    const tabla = screen.getByRole("table", { name: TABLA });
+    const celda = (rem: string) =>
+      within(within(tabla).getByRole("row", { name: new RegExp(rem) })).getAllByRole(
+        "cell",
+      )[2];
+    expect(celda("REM-C2")).toHaveTextContent(/^2$/);
+    expect(celda("REM-C0")).toHaveTextContent(/^0$/);
+    expect(celda("REM-CX")).toHaveTextContent(/^0$/);
+  });
+
+  it("R19: una orden NO-GAM (zona con bodega satélite) también muestra el dato", () => {
+    renderModal([
+      makeOrden({
+        id: "o1",
+        numRemision: "REM-NG",
+        zonaEsGam: false,
+        zonaNombre: "Limón",
+        intentosEntrega: 3,
+      }),
+    ]);
+    const tabla = screen.getByRole("table", { name: TABLA });
+    expect(
+      within(tabla).getByRole("columnheader", { name: "Intentos" }),
+    ).toBeInTheDocument();
+    const celdas = within(
+      within(tabla).getByRole("row", { name: /REM-NG/ }),
+    ).getAllByRole("cell");
+    expect(celdas[2]).toHaveTextContent(/^3$/);
+  });
+
+  it("R20: la celda del conteo no trae el umbral ('2 de 3')", () => {
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-U", intentosEntrega: 2 })]);
+    const tabla = screen.getByRole("table", { name: TABLA });
+    const celdas = within(
+      within(tabla).getByRole("row", { name: /REM-U/ }),
+    ).getAllByRole("cell");
+    expect(celdas[2].textContent).toBe("2");
+  });
+});

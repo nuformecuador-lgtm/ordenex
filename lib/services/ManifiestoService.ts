@@ -1,6 +1,6 @@
 // Feature 148 — SERVICIO UNICO del manifiesto (R1): el unico modulo de software que
 // arma filas de manifiesto, para los 6 puntos de enganche. Ningun flujo construye las
-// 11 columnas por su cuenta y NINGUNO de los 5 servicios de negocio
+// columnas por su cuenta y NINGUNO de los 5 servicios de negocio
 // (BulkOrdenService, GuiaAsignacionService, AsignacionSateliteService,
 // EnvioDevolucionCentralService, DevolucionOrigenService) se toca: el manifiesto es un
 // READ derivado posterior a la operacion ya cometida (R27, design.md §1/D4).
@@ -10,6 +10,7 @@
 import type { IOrdenRepository, ManifiestoOrdenRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   IManifiestoService,
   ManifiestoServiceResult,
@@ -133,6 +134,9 @@ export class ManifiestoService implements IManifiestoService {
   constructor(
     private readonly ordenRepo: OrdenRepo,
     private readonly zonaRepo: ZonaRepo,
+    // Feature 160 (R11/R12/R28): derivador de intentos EN LOTE, dependencia REQUERIDA (va
+    // ANTES de `now`, que tiene default). `import type` + `Pick`: sin ciclo de modulos.
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -165,6 +169,12 @@ export class ManifiestoService implements IManifiestoService {
     };
     const fecha = fechaCalendarioCR(this.now()); // R10: calendario CR, NO toISOString
 
+    // Feature 160 (R12/R13/R15/R28a): UNA sola consulta al historial para TODO el lote, sobre
+    // las ordenes que la propia query ya devolvio (y por tanto ya acotadas por el alcance del
+    // actor: `findManifiestoByRemisiones` filtra por tienda, y `esVisiblePara` descarta abajo
+    // las ajenas de una API key). Lote vacio -> 0 consultas.
+    const intentos = await this.historial.contarIntentosEnLote(rows.map((r) => r.id));
+
     const filas: ManifiestoFilaDTO[] = [];
     const omitidas: ManifiestoOmitidaDTO[] = [];
 
@@ -178,7 +188,9 @@ export class ManifiestoService implements IManifiestoService {
         omitidas.push({ ref, motivo: "no_encontrada" });
         continue;
       }
-      filas.push(this.toFilaDTO(input.flujo, row, ctx, fecha));
+      // Feature 160 (R14/R28a): `?? 0` — las ordenes sin intentos no vienen en el Map y la
+      // celda debe llevar `0`, nunca quedar vacia (en Excel vacio NO es cero).
+      filas.push(this.toFilaDTO(input.flujo, row, ctx, fecha, intentos.get(row.id) ?? 0));
     }
 
     return { status: "ok", filas, omitidas };
@@ -197,16 +209,21 @@ export class ManifiestoService implements IManifiestoService {
   }
 
   /**
-   * R2/R4/R5/R6/R7/R11 — arma UNA fila con EXACTAMENTE las 11 columnas, con los datos
-   * VIGENTES de la orden (R4). `numGuia`/`monto` null viajan como null y la celda
-   * queda vacia (R5/R7), sin texto inventado. `zona` es el NOMBRE (R6). NO se copia
-   * `row.id` ni `row.tiendaId` ni ningun otro campo interno (R11).
+   * R4/R5/R6/R7 + feature 160/R28 — arma UNA fila del manifiesto con los datos VIGENTES de la
+   * orden (R4). `numGuia`/`monto` null viajan como null y la celda queda vacia (R5/R7), sin
+   * texto inventado. `zona` es el NOMBRE (R6). `intentos` es NUMERICO y ya resuelto por el
+   * lote (0 incluido, 160/R28a).
+   *
+   * SIGUE VIGENTE el lado prohibitivo del viejo R11: NO se copia `row.id`, ni `row.tiendaId`,
+   * ni ningun otro identificador interno o bandera de borrado. Lo que la feature 160 derogo es
+   * el numero CERRADO de columnas, no este filtro (design 160 §6.3).
    */
   private toFilaDTO(
     flujo: ManifiestoFlujo,
     row: ManifiestoOrdenRow,
     ctx: UbicacionCtx,
     fecha: string,
+    intentos: number,
   ): ManifiestoFilaDTO {
     const { origen, destino, responsable } = ubicacionesDe(flujo, row, ctx);
     return {
@@ -217,6 +234,7 @@ export class ManifiestoService implements IManifiestoService {
       direccion: row.direccion,
       zona: row.zonaNombre,
       monto: row.montoCobrar, // §9.3: monto_cobrar (COD)
+      intentos, // feature 160/R28a: dato propio de la orden
       origen,
       destino,
       responsable,

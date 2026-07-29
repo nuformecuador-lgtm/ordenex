@@ -26,6 +26,7 @@ function fila(): ManifiestoFilaDTO {
     direccion: "Av. Siempre Viva 742",
     zona: "Cartago",
     monto: 25.5,
+    intentos: 0, // feature 160/R28a: dato de la orden, numerico y no nullable
     origen: "Bodega Central GAM",
     destino: "Cartago",
     responsable: "Ana Maestra",

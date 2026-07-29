@@ -12,6 +12,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IOrdenMensajeroMetaRepository } from "@/lib/interfaces/repositories/IOrdenMensajeroMetaRepository";
 import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   DetalleConflicto,
   EscogerServiceResult,
@@ -81,6 +82,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       IOrdenMensajeroMetaRepository,
       "findMarcarLuegoByMensajero" | "findNotasByMensajero"
     >,
+    // Feature 160 (R11/R12/R24): derivador de intentos EN LOTE, dependencia REQUERIDA (una dep
+    // opcional dejaria que el wiring se la olvidara y el dato desapareciera en silencio de las
+    // superficies del mensajero). `import type` + `Pick`: sin ciclo de modulos y testeable con
+    // dobles.
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
   ) {}
 
   /**
@@ -138,16 +144,24 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // quedan "sin posicion" y conservan el orden actual, que es el comportamiento previo.
     const secuencias = ruta?.secuenciaPorOrden ?? new Map<string, number>();
 
+    // Feature 160 (R12/R13/R15): UN solo lote con la union de los ids de los DOS grupos, sobre
+    // las ordenes YA acotadas al mensajero actor (`findMisAsignaciones(actor.usuarioId, ...)`).
+    // Sin asignaciones -> 0 consultas al historial (R13).
+    const intentos = await this.historial.contarIntentosEnLote(rows.map((r) => r.id));
+
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
     for (const row of rows) {
       // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
       // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
       // Feature 116 (R6/R8): merge de la nota privada del propio actor (`null` si no hay nota).
+      // Feature 160 (R14/R19): `?? 0` — las ordenes sin intentos no vienen en el Map y el `0`
+      // es un valor CONOCIDO que SIEMPRE se expone, no un dato ausente.
       const dto = {
         ...toDTO(row),
         marcarLuego: marcadasLuego.has(row.id),
         notaPrivada: notasPrivadas.get(row.id) ?? null,
+        intentosEntrega: intentos.get(row.id) ?? 0,
       };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.

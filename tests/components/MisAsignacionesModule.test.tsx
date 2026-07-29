@@ -2201,3 +2201,147 @@ describe("MisAsignacionesModule", () => {
     ).toBeNull();
   });
 });
+
+// Feature 160 (T18, R18/R19/R24) — el conteo de intentos en el portal del mensajero.
+// Dos sitios y un mismo criterio: DATO (no chip, D6). En la card POS va en el bloque de
+// campos, junto a Destinatario/Producto; en `AsignacionDetalle` va como un `Campo` más
+// del detalle (mismo `<dt>`/`<dd>` que Nº Guía, Nombre, Teléfono o Producto), que es lo
+// que ve el mensajero tanto en "por recoger" como en el desplegable de la card.
+describe("MisAsignaciones — intentos de entrega (feature 160)", () => {
+  it("R18/R24: la card POS de 'por gestionar' muestra el dato con 2 intentos", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", intentosEntrega: 2 }),
+      ],
+    });
+    const card = cardDe("REM-G1");
+    expect(within(card).getAllByText("Intentos: 2").length).toBeGreaterThan(0);
+  });
+
+  it("R19: la card con 0 intentos LO MUESTRA igual (no se omite)", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", intentosEntrega: 0 }),
+      ],
+    });
+    const card = cardDe("REM-G1");
+    expect(within(card).getAllByText("Intentos: 0").length).toBeGreaterThan(0);
+    expect(within(card).queryByText("Intentos: 2")).toBeNull();
+  });
+
+  it("R19: sin el campo (DTO viejo) la card muestra 0", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+    expect(
+      within(cardDe("REM-G1")).getAllByText("Intentos: 0").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("R24: cada card lleva SU número, no el de la vecina", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", intentosEntrega: 3 }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2", intentosEntrega: 0 }),
+      ],
+    });
+    expect(
+      within(cardDe("REM-G1")).getAllByText("Intentos: 3").length,
+    ).toBeGreaterThan(0);
+    expect(within(cardDe("REM-G1")).queryByText("Intentos: 0")).toBeNull();
+    expect(
+      within(cardDe("REM-G2")).getAllByText("Intentos: 0").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("R18: el detalle lo presenta como un CAMPO más (<dt>/<dd>), como sus hermanos", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", intentosEntrega: 4 }),
+      ],
+    });
+    const card = cardDe("REM-G1");
+    const etiqueta = within(card).getByText("Intentos");
+    expect(etiqueta.tagName).toBe("DT");
+    // Mismo envoltorio que un campo hermano cualquiera del detalle.
+    expect(within(card).getByText("Producto").tagName).toBe("DT");
+    const valor = etiqueta.parentElement?.querySelector("dd");
+    expect(valor?.textContent).toBe("4");
+  });
+
+  it("R24: 'por recoger' (PorAceptarSection.renderDetalle) también muestra el dato", () => {
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-R1", intentosEntrega: 1 }),
+      ],
+    });
+    const region = screen.getByRole("region", { name: "Por recoger" });
+    const etiqueta = within(region).getByText("Intentos");
+    expect(etiqueta.tagName).toBe("DT");
+    expect(etiqueta.parentElement?.querySelector("dd")?.textContent).toBe("1");
+  });
+
+  it("R24: 'por recoger' con 0 intentos también lo muestra", () => {
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-R1", intentosEntrega: 0 }),
+      ],
+    });
+    const region = screen.getByRole("region", { name: "Por recoger" });
+    const etiqueta = within(region).getByText("Intentos");
+    expect(etiqueta.parentElement?.querySelector("dd")?.textContent).toBe("0");
+  });
+
+  it("R32/D6: el dato NO vive en la fila de marcas informativas (que son badges)", () => {
+    // Orden con AMBAS marcas: la fila de marcas existe y se puede identificar.
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          secuenciaRuta: null,
+          marcarLuego: true,
+          intentosEntrega: 2,
+        }),
+      ],
+    });
+    const card = cardDe("REM-G1");
+    const marca = within(card).getByText("Pendiente de optimizar");
+    const filaMarcas = marca.parentElement as HTMLElement;
+    // Es de verdad la fila de marcas: contiene las DOS marcas de excepción.
+    expect(within(filaMarcas).getByText("Gestionar más tarde")).toBeInTheDocument();
+    // ...y NO el conteo: los intentos son un dato, no una marca de excepción (D6).
+    expect(filaMarcas.textContent ?? "").not.toContain("Intentos");
+    // El dato sigue en la card, en el bloque de campos.
+    expect(within(card).getAllByText("Intentos: 2").length).toBeGreaterThan(0);
+  });
+
+  it("R32: sin ninguna marca, la fila de marcas sigue sin renderizarse (sin hueco)", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-G1",
+          secuenciaRuta: 1,
+          marcarLuego: false,
+          intentosEntrega: 2,
+        }),
+      ],
+    });
+    const card = cardDe("REM-G1");
+    expect(within(card).queryByText("Pendiente de optimizar")).toBeNull();
+    expect(within(card).queryByText("Gestionar más tarde")).toBeNull();
+    // Y el dato de intentos se muestra igual: no dependía de esa fila.
+    expect(within(card).getAllByText("Intentos: 2").length).toBeGreaterThan(0);
+  });
+
+  it("R20: el dato no trae el umbral ('de N')", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1", intentosEntrega: 2 }),
+      ],
+    });
+    const dato = within(cardDe("REM-G1")).getAllByText("Intentos: 2")[0];
+    expect(dato.textContent).toBe("Intentos: 2");
+  });
+});

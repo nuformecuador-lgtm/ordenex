@@ -20,9 +20,14 @@
 **R1** — El sistema DEBE armar el manifiesto de CUALQUIER flujo con un único módulo de
 manifiesto; ningún flujo DEBE construir filas de manifiesto por su cuenta.
 
-**R2** — El manifiesto DEBE tener exactamente estas 11 columnas, en este orden:
+**R2** — ~~El manifiesto DEBE tener exactamente estas 11 columnas, en este orden:
 `num_guia`, `num_remision`, `destinatario`, `telefono`, `direccion`, `zona`, `monto`,
-`origen`, `destino`, `responsable`, `fecha`.
+`origen`, `destino`, `responsable`, `fecha`.~~
+
+> **DEROGADO Y REFORMULADO el 2026-07-29 por la feature 160 (su R28).** Ver la nota de
+> corrección al final de esta sección. El manifiesto SIGUE teniendo esas columnas, en ese
+> orden relativo; lo que deja de ser cierto es el **"exactamente"**: el conjunto es ABIERTO
+> y crece cuando la orden gana un dato nuevo.
 
 **R3** — CUANDO se arma un manifiesto para un lote de N órdenes válidas, el sistema DEBE
 producir exactamente N filas de datos, una por orden, en el mismo orden en que las órdenes
@@ -48,8 +53,36 @@ ubicación de llegada del movimiento propio de CADA flujo, según la tabla de `d
 **R10** — El sistema DEBE poblar `fecha` con la fecha calendario de Costa Rica del momento
 en que se ejecuta la operación, en formato `YYYY-MM-DD`.
 
-**R11** — El manifiesto NO DEBE contener ningún dato de la orden fuera de las 11 columnas
-de R2 (en particular: ids internos, `deleted_at`, notas ni datos de otras entidades).
+**R11** — El manifiesto NO DEBE contener identificadores internos, banderas de borrado ni
+datos que no sean de la orden (en particular: ids internos, `deleted_at`, notas ni datos de
+otras entidades).
+
+> **REFORMULADO el 2026-07-29 por la feature 160 (su R28).** El texto original decía "fuera
+> de las 11 columnas de R2". El lado PROHIBITIVO sigue intacto y es lo que se conserva
+> arriba; la referencia al conjunto cerrado de 11 columnas se retira.
+
+### Nota de corrección — 2026-07-29 (feature 160, R28 · design 160 §6.3)
+
+Decisión del humano, textual: *"cada que un dato de una orden es agregado, este dato también
+debe aparecer en los manifiestos, y el número de intentos es un dato propio de una orden"*.
+
+Lectura correcta de esta spec: R2/R11 nunca quisieron decir "el manifiesto está congelado en
+11 columnas". Su intención era **que el manifiesto refleje los datos de la tabla de órdenes** y
+que no se cuelen ahí campos que no son de la orden (`ordenId`, `tiendaId`, `deletedAt`). El
+"11" era el inventario **de ese momento**, no un tope.
+
+**Regla vigente, que reemplaza al conjunto cerrado:**
+
+> **El manifiesto refleja los datos de la orden.** Lleva una columna por cada dato propio de la
+> orden que el producto haya decidido exponer, y ese conjunto **crece** cuando la orden gana un
+> dato nuevo. Ni el código ni sus pruebas DEBEN afirmar que el manifiesto tiene un número
+> cerrado de columnas: las pruebas verifican que ciertas columnas ESTÁN, con su clave y su
+> orden relativo, no que no existan otras.
+
+**Efecto concreto:** el manifiesto suma la columna `intentos` (intentos de entrega vigentes de
+la orden), con valor numérico `0` para las órdenes sin intentos — celda con `0`, no celda
+vacía. Las aserciones de "exactamente N columnas" se retiraron de
+`tests/unit/utils/manifiesto-xlsx.test.ts` y `tests/unit/services/manifiesto-service.test.ts`.
 
 **R12** — SI una orden solicitada no existe o está borrada, ENTONCES el sistema DEBE
 omitirla del manifiesto, reportar cuántas se omitieron y NO abortar el manifiesto de las

@@ -176,3 +176,64 @@ describe("RechazosSlaModule", () => {
     expect(screen.getByText("Ana Cliente")).toBeInTheDocument();
   });
 });
+
+// Feature 160 (T20, R18/R19/R26) — la pestaña de rechazadas por plazo vencido también
+// es una lista de cards, no un `DataTable`: dato etiquetado, no columna.
+describe("RechazosSlaModule — intentos de entrega (feature 160)", () => {
+  it("R18: cada rechazo muestra el dato etiquetado junto a sus otros campos", () => {
+    render(
+      <RechazosSlaModule
+        items={[rechazo({ id: "o1", numRemision: "REM-777", intentosEntrega: 3 })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+    const item = screen.getByRole("listitem");
+    expect(item).toHaveTextContent("REM-777");
+    const dato = within(item).getByText("Intentos: 3");
+    expect(dato.closest("p")).not.toBeNull();
+  });
+
+  it("R19: con 0 intentos el dato SE MUESTRA igual", () => {
+    render(
+      <RechazosSlaModule
+        items={[rechazo({ id: "o1", intentosEntrega: 0 })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+    expect(
+      within(screen.getByRole("listitem")).getByText("Intentos: 0"),
+    ).toBeInTheDocument();
+  });
+
+  it("R19: sin el campo (DTO viejo) muestra 0", () => {
+    render(
+      <RechazosSlaModule items={[rechazo({ id: "o1" })]} total={1} page={1} pageSize={10} />,
+    );
+    expect(
+      within(screen.getByRole("listitem")).getByText("Intentos: 0"),
+    ).toBeInTheDocument();
+  });
+
+  it("R26/R32: cada rechazo lleva SU número y el monto sigue intacto", () => {
+    render(
+      <RechazosSlaModule
+        items={[
+          rechazo({ id: "o1", monto: "3500.00", intentosEntrega: 2 }),
+          rechazo({ id: "o2", monto: null, intentosEntrega: 0 }),
+        ]}
+        total={2}
+        page={1}
+        pageSize={10}
+      />,
+    );
+    const items = screen.getAllByRole("listitem");
+    expect(within(items[0]).getByText("Intentos: 2")).toBeInTheDocument();
+    expect(within(items[0]).getByText("₡3500.00")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Intentos: 0")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Pendiente de cierre")).toBeInTheDocument();
+  });
+});

@@ -351,3 +351,25 @@ describe("EtiquetasGuiaModal — tamaño de hoja (feature 150)", () => {
     expect(descargarEtiquetasPdfMock).not.toHaveBeenCalled();
   });
 });
+
+// Feature 160 (T17/T23, R30) — DISCREPANCIA DECLARADA con `tasks.md` T17, que lista
+// este diálogo entre los que reciben el dato etiquetado. No lo recibe, por dos razones
+// verificadas contra el código: (1) NO lista las órdenes seleccionadas —renderiza la
+// VISTA PREVIA de las etiquetas imprimibles—, y (2) lo que se ve aquí es la etiqueta
+// física, que R30 deja explícitamente fuera del alcance. Este test fija esa ausencia
+// para que nadie la "arregle" sin querer.
+describe("EtiquetasGuiaModal — R30: la etiqueta NO muestra los intentos", () => {
+  it("la vista previa no trae la etiqueta 'Intentos' ni su columna", async () => {
+    generarEtiquetasMock.mockResolvedValue({
+      status: "ok",
+      etiquetas: [makeEtiqueta({ ordenId: "o1", numRemision: "REM-o1" })],
+      omitidas: [],
+    });
+
+    renderModal([makeOrden("o1")]);
+    await screen.findByText("REM-o1");
+
+    expect(screen.queryByText(/Intentos/)).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Intentos" })).toBeNull();
+  });
+});

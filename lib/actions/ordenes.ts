@@ -13,7 +13,9 @@ import {
 } from "@/lib/types/orden";
 import type { Actor, IOrdenService } from "@/lib/interfaces/services/IOrdenService";
 import { OrdenService } from "@/lib/services/OrdenService";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError, ValidationError, MSG } from "@/lib/errors";
@@ -23,7 +25,13 @@ const idSchema = z.string().min(1);
 
 function buildOrdenService(): IOrdenService {
   const prisma = getPrismaClient();
-  return new OrdenService(new OrdenRepository(prisma));
+  const ordenRepo = new OrdenRepository(prisma);
+  return new OrdenService(
+    ordenRepo,
+    // Feature 160 (R11): derivador de intentos EN LOTE del listado. Mismo servicio (y por tanto
+    // mismo criterio) que consumen el cron SLA y el drawer de historial: un solo numero.
+    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+  );
 }
 
 export interface OrdenActionDeps {

@@ -148,10 +148,14 @@ describe("AdminTiendaDashboard (feature 26)", () => {
     // tienda). "Zona" SÍ se muestra al adminTienda (decisión del humano
     // 2026-07-14). El resto —geografía, dinero (monto/flete/fulfillment/comisión)
     // y mensajero— se muestra igual que al maestro, independiente del rol.
+    // Feature 160 (R22): "Intentos" entra a esta lista por herencia de
+    // `ordenesColumns` (el dashboard deriva por `filter` de ids ocultos), en su
+    // posición fija justo después de "Estado".
     expect(headers.map((h) => h.textContent)).toEqual([
       "Nº Guía",
       "Nº Remisión",
       "Estado",
+      "Intentos",
       "Destinatario",
       "Producto",
       "Dirección",

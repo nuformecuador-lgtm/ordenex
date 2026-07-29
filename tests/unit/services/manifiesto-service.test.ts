@@ -11,6 +11,11 @@ import type {
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { MANIFIESTO_FLUJOS, type ManifiestoFlujo } from "@/lib/types/manifiesto";
+import {
+  fakeIntentosEnLote,
+  llamadasIntentos,
+  type IntentosSvcDoble,
+} from "@/tests/fixtures/intentos-entrega";
 
 // Feature 148 — unit del SERVICIO UNICO del manifiesto (T15). Dobles a mano, sin
 // Prisma ni HTTP: el service se instancia con repos falsos por constructor.
@@ -88,7 +93,12 @@ function fakeZonaRepo(central: { id: string; nombre: string } | null = { id: "z-
 
 function build(
   rows: ManifiestoOrdenRow[] = [row()],
-  opts: { central?: { id: string; nombre: string } | null; nombre?: string | null } = {},
+  opts: {
+    central?: { id: string; nombre: string } | null;
+    nombre?: string | null;
+    // Feature 160: derivador de intentos EN LOTE, dependencia REQUERIDA del constructor.
+    intentos?: IntentosSvcDoble;
+  } = {},
 ) {
   const { repo, lectura, prohibidas } = fakeOrdenRepo(
     rows,
@@ -97,8 +107,9 @@ function build(
     opts.nombre === undefined ? ACTOR_NOMBRE : opts.nombre,
   );
   const zonaRepo = fakeZonaRepo(opts.central === undefined ? { id: "z-c", nombre: CENTRAL_NOMBRE } : opts.central);
-  const service = new ManifiestoService(repo, zonaRepo, () => AHORA);
-  return { service, repo, lectura, prohibidas, zonaRepo };
+  const intentos = opts.intentos ?? fakeIntentosEnLote();
+  const service = new ManifiestoService(repo, zonaRepo, intentos, () => AHORA);
+  return { service, repo, lectura, prohibidas, zonaRepo, intentos };
 }
 
 async function unaFila(flujo: ManifiestoFlujo, fila: ManifiestoOrdenRow, actor: Actor = MAESTRO) {
@@ -117,9 +128,13 @@ describe("R1 — un unico modulo arma el manifiesto de TODOS los flujos", () => 
       const r = await service.armar({ flujo, ordenIds: ["o1"] }, MAESTRO);
       expect(r.status).toBe("ok");
       if (r.status !== "ok") throw new Error("unreachable");
-      // Cada flujo produce su fila con las 11 columnas: ninguno construye las suyas.
+      // Cada flujo produce su fila con el MISMO servicio: ninguno construye las suyas.
+      // Feature 160/R28b: el conjunto de columnas es ABIERTO — se verifica que las columnas
+      // ESTAN, nunca "exactamente N".
       expect(r.filas).toHaveLength(1);
-      expect(Object.keys(r.filas[0])).toHaveLength(11);
+      expect(Object.keys(r.filas[0])).toEqual(
+        expect.arrayContaining(["numGuia", "numRemision", "zona", "monto", "intentos", "fecha"]),
+      );
     }
     expect(lectura.findManifiestoByIds).toHaveBeenCalledTimes(MANIFIESTO_FLUJOS.length);
   });
@@ -366,11 +381,18 @@ describe("R10 — fecha calendario de Costa Rica de la operacion", () => {
   });
 });
 
-describe("R2/R11 — exactamente las 11 columnas y nada mas", () => {
-  it("no expone ids internos ni campos fuera de las 11 columnas", async () => {
+// Feature 160/R28 (design 160 §6.3) — DEROGA y REEMPLAZA los R2/R11 de la 148: el manifiesto
+// refleja los DATOS DE LA ORDEN y su conjunto de columnas es ABIERTO. Lo que sobrevive es el
+// lado PROHIBITIVO: ids internos, banderas de borrado y datos que no son de la orden siguen
+// fuera. Por eso este bloque ya no afirma "exactamente N columnas" (eso volveria a chocar con
+// la proxima feature que agregue un dato de la orden), sino presencia, orden RELATIVO y
+// ausencia de lo prohibido.
+describe("R28 — el manifiesto refleja los datos de la orden (conjunto ABIERTO)", () => {
+  it("las columnas conocidas ESTAN, con su orden relativo", async () => {
     const fila = await unaFila("ruteo_satelite", row());
+    const claves = Object.keys(fila);
 
-    expect(Object.keys(fila)).toEqual([
+    for (const esperada of [
       "numGuia",
       "numRemision",
       "destinatario",
@@ -378,16 +400,63 @@ describe("R2/R11 — exactamente las 11 columnas y nada mas", () => {
       "direccion",
       "zona",
       "monto",
+      "intentos", // feature 160/R28a
       "origen",
       "destino",
       "responsable",
       "fecha",
-    ]);
+    ]) {
+      expect(claves).toContain(esperada);
+    }
+    // Orden RELATIVO (no cardinalidad): el bloque de la orden precede al del movimiento.
+    expect(claves.indexOf("monto")).toBeLessThan(claves.indexOf("intentos"));
+    expect(claves.indexOf("intentos")).toBeLessThan(claves.indexOf("origen"));
+    expect(claves.indexOf("origen")).toBeLessThan(claves.indexOf("fecha"));
+  });
+
+  it("R11 (lado prohibitivo, VIGENTE): no expone ids internos ni banderas de borrado", async () => {
+    const fila = await unaFila("ruteo_satelite", row());
     // Ni el id de la orden, ni el de la tienda, ni deleted_at, ni notas/producto.
     const serializada = JSON.stringify(fila);
     expect(serializada).not.toContain("o1");
     expect(serializada).not.toContain("tienda-1");
     expect(serializada).not.toContain("deleted");
+  });
+});
+
+// --- Feature 160 (T22): la columna de intentos del manifiesto ---
+
+describe("R28a — la columna de intentos del manifiesto", () => {
+  it("emite el conteo de la orden como NUMERO", async () => {
+    const { service } = build([row({ id: "o1" })], {
+      intentos: fakeIntentosEnLote({ o1: 2 }),
+    });
+    const r = await service.armar({ flujo: "ruteo_satelite", ordenIds: ["o1"] }, MAESTRO);
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.filas[0].intentos).toBe(2);
+    expect(typeof r.filas[0].intentos).toBe("number");
+  });
+
+  // En Excel una celda VACIA no es `0`. La 148 distingue los dos casos a proposito
+  // (`numGuia`/`monto` null -> celda vacia); el conteo es un numero conocido -> `0`.
+  it("una orden SIN intentos emite `0`, no `null` ni celda vacia", async () => {
+    const { service } = build([row({ id: "o1" })], { intentos: fakeIntentosEnLote() });
+    const r = await service.armar({ flujo: "ruteo_satelite", ordenIds: ["o1"] }, MAESTRO);
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.filas[0].intentos).toBe(0);
+    expect(r.filas[0].intentos).not.toBeNull();
+  });
+
+  it("R12: UNA sola consulta al historial para todo el lote", async () => {
+    const { service, intentos } = build([
+      row({ id: "o1" }),
+      row({ id: "o2", numRemision: "REM-2" }),
+      row({ id: "o3", numRemision: "REM-3" }),
+    ]);
+    await service.armar({ flujo: "ruteo_satelite", ordenIds: ["o1", "o2", "o3"] }, MAESTRO);
+
+    expect(intentos.contarIntentosEnLote).toHaveBeenCalledTimes(1);
+    expect(llamadasIntentos(intentos)).toEqual([["o1", "o2", "o3"]]);
   });
 });
 

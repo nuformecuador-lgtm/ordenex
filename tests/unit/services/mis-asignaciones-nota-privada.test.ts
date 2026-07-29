@@ -10,6 +10,7 @@ import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IR
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 
 // Feature 116 — E1: reflejo de `notaPrivada` en el listado (R6/R8). Espejo del test de
 // `marcarLuego` (115): el service mergea la nota del PROPIO actor por orden, y la privacidad es
@@ -81,6 +82,7 @@ function build(rows: MiAsignacionRow[], notas: Map<string, string>) {
     {} as ISignedUrlProvider,
     fakeRutaRepo,
     metaRepo,
+    fakeIntentosEnLote(), // feature 160: dep requerida, no ejercitada aqui
   );
   return { service, metaRepo };
 }

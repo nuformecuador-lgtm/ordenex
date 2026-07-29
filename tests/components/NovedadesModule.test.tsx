@@ -279,3 +279,83 @@ describe("NovedadesModule", () => {
     );
   });
 });
+
+// Feature 160 (T20, R18/R19/R26) — `/novedades` es una lista de cards (<ul>/<li>), NO
+// un `DataTable` (verificado contra el componente), así que el conteo va como DATO
+// ETIQUETADO con el mismo markup que las líneas hermanas (guía, destinatario, causa).
+describe("NovedadesModule — intentos de entrega (feature 160)", () => {
+  it("R18: cada novedad muestra el dato etiquetado junto a sus otros campos", () => {
+    render(
+      <NovedadesModule
+        items={[novedad({ id: "o1", destinatario: "Ana Cliente", intentosEntrega: 2 })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+    const item = screen.getByRole("listitem");
+    expect(within(item).getByText("Ana Cliente")).toBeInTheDocument();
+    const dato = within(item).getByText("Intentos: 2");
+    expect(dato).toBeInTheDocument();
+    // Mismo markup que sus hermanas: el dato vive dentro de un <p> como los demás.
+    expect(dato.closest("p")).not.toBeNull();
+  });
+
+  it("R19: con 0 intentos el dato SE MUESTRA (no se omite ni se deja vacío)", () => {
+    render(
+      <NovedadesModule
+        items={[novedad({ id: "o1", intentosEntrega: 0 })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+    expect(
+      within(screen.getByRole("listitem")).getByText("Intentos: 0"),
+    ).toBeInTheDocument();
+  });
+
+  it("R19: sin el campo (DTO viejo) muestra 0", () => {
+    render(
+      <NovedadesModule items={[novedad({ id: "o1" })]} total={1} page={1} pageSize={10} />,
+    );
+    expect(
+      within(screen.getByRole("listitem")).getByText("Intentos: 0"),
+    ).toBeInTheDocument();
+  });
+
+  it("R26: cada novedad lleva SU número", () => {
+    render(
+      <NovedadesModule
+        items={[
+          novedad({ id: "o1", destinatario: "Uno", intentosEntrega: 3 }),
+          novedad({ id: "o2", destinatario: "Dos", intentosEntrega: 0 }),
+        ]}
+        total={2}
+        page={1}
+        pageSize={10}
+      />,
+    );
+    const items = screen.getAllByRole("listitem");
+    expect(within(items[0]).getByText("Intentos: 3")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Intentos: 0")).toBeInTheDocument();
+  });
+
+  it("R20/R32: el dato no trae umbral y el estado vacío sigue sin lista", () => {
+    render(
+      <NovedadesModule
+        items={[novedad({ id: "o1", intentosEntrega: 2 })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+    expect(
+      within(screen.getByRole("listitem")).getByText("Intentos: 2").textContent,
+    ).toBe("Intentos: 2");
+    cleanup();
+
+    render(<NovedadesModule items={[]} total={0} page={1} pageSize={10} />);
+    expect(screen.queryByText(/Intentos/)).toBeNull();
+  });
+});

@@ -8,9 +8,22 @@ import {
 } from "@/lib/utils/manifiesto-xlsx";
 import type { ManifiestoFilaDTO } from "@/lib/types/manifiesto";
 
-// Feature 148 (T17) — generador del binario del manifiesto: R2 (las 11 columnas en
-// orden), R13 (XLSX válido y recargable, una sola hoja), R14 (nombre del archivo) y
-// R17 (sin filas no se genera nada).
+// Feature 148 (T17) — generador del binario del manifiesto: las columnas y su orden, R13
+// (XLSX válido y recargable, una sola hoja), R14 (nombre del archivo) y R17 (sin filas no se
+// genera nada).
+//
+// Feature 160/R28b: el conjunto de columnas es ABIERTO. Los asertos de "exactamente 11
+// columnas" que tenía esta suite se RETIRARON a propósito (design 160 §6.3): afirmaban una
+// cardinalidad que ya no es la regla y hacían que agregar un dato de la orden rompiera la
+// suite. Lo que se verifica ahora es que ciertas columnas ESTÁN, con su clave y su orden
+// relativo — y que lo prohibido (ids internos, banderas de borrado) sigue fuera.
+
+/** Índice 1-based de una columna del manifiesto por su `key` (sin fijar cardinalidad). */
+function colDe(key: string): number {
+  const i = COLUMNAS_MANIFIESTO.findIndex((c) => c.key === key);
+  if (i < 0) throw new Error(`columna ${key} ausente de COLUMNAS_MANIFIESTO`);
+  return i + 1;
+}
 
 /** Recarga el binario con la misma librería (round-trip real, sin dobles). */
 async function loadWorkbook(buffer: ArrayBuffer): Promise<ExcelJS.Workbook> {
@@ -44,6 +57,7 @@ function makeFila(over: Partial<ManifiestoFilaDTO> = {}): ManifiestoFilaDTO {
     direccion: "Calle 1, casa 2",
     zona: "Limón",
     monto: 15000,
+    intentos: 0, // feature 160/R28a: numérico y NO nullable (sin intentos -> 0)
     origen: "Bodega central",
     destino: "Limón",
     responsable: "Beto Mensajero",
@@ -53,11 +67,13 @@ function makeFila(over: Partial<ManifiestoFilaDTO> = {}): ManifiestoFilaDTO {
 }
 
 describe("manifiesto-xlsx (feature 148)", () => {
-  it("R2: la cabecera trae las 11 columnas pedidas, en el orden pedido", async () => {
+  // Feature 160/R28b: presencia y ORDEN RELATIVO, nunca cardinalidad.
+  it("R28b: la cabecera trae las columnas conocidas, en su orden relativo", async () => {
     const workbook = await loadWorkbook(await buildManifiestoXlsx([makeFila()]));
     const worksheet = workbook.worksheets[0];
+    const cabecera = rowValues(worksheet, 1, COLUMNAS_MANIFIESTO.length);
 
-    expect(rowValues(worksheet, 1, 11)).toEqual([
+    const esperadas = [
       "num_guia",
       "num_remision",
       "destinatario",
@@ -65,14 +81,33 @@ describe("manifiesto-xlsx (feature 148)", () => {
       "direccion",
       "zona",
       "monto",
+      "intentos", // feature 160/R28a
       "origen",
       "destino",
       "responsable",
       "fecha",
-    ]);
-    // Ni una columna más: el manifiesto es exactamente esas 11 (R2/R11).
-    expect(worksheet.columnCount).toBe(11);
-    expect(COLUMNAS_MANIFIESTO).toHaveLength(11);
+    ];
+    for (const h of esperadas) expect(cabecera).toContain(h);
+    // Orden relativo estable: la secuencia de las conocidas es EXACTAMENTE esta, aunque
+    // mañana se sumen otras.
+    expect(cabecera.filter((h) => esperadas.includes(h))).toEqual(esperadas);
+    // La cabecera del archivo y la declaracion de columnas no pueden divergir.
+    expect(cabecera).toEqual(COLUMNAS_MANIFIESTO.map((c) => c.header));
+  });
+
+  // Feature 160/R28a: en Excel una celda VACIA no es `0`. Este test es el que garantiza que la
+  // tabla de la UI y el archivo digan lo MISMO del mismo hecho.
+  it("R28a: la columna de intentos emite el numero, y `0` cuando no hay intentos", async () => {
+    const workbook = await loadWorkbook(
+      await buildManifiestoXlsx([makeFila({ intentos: 3 }), makeFila({ intentos: 0 })]),
+    );
+    const worksheet = workbook.worksheets[0];
+    const col = colDe("intentos");
+
+    expect(worksheet.getRow(2).getCell(col).value).toBe(3);
+    // `0` viaja como NUMERO cero, no como celda vacia ni como texto.
+    expect(worksheet.getRow(3).getCell(col).value).toBe(0);
+    expect(worksheet.getRow(3).getCell(col).value).not.toBeNull();
   });
 
   it("R13: produce un binario XLSX recargable con UNA sola hoja", async () => {
@@ -117,7 +152,7 @@ describe("manifiesto-xlsx (feature 148)", () => {
     );
     const worksheet = workbook.worksheets[0];
 
-    expect(rowValues(worksheet, 2, 11)).toEqual([
+    expect(rowValues(worksheet, 2, COLUMNAS_MANIFIESTO.length)).toEqual([
       "2002",
       "REM-001",
       "Ana Pérez",
@@ -125,13 +160,14 @@ describe("manifiesto-xlsx (feature 148)", () => {
       "Calle 1, casa 2",
       "Guápiles",
       "12500.5",
+      "0", // feature 160/R28a: intentos
       "Bodega central",
       "Guápiles",
       "Ana Mensajera",
       "2026-07-28",
     ]);
     // El monto viaja como NÚMERO, no como texto (sumable en la hoja).
-    expect(worksheet.getRow(2).getCell(7).value).toBe(12500.5);
+    expect(worksheet.getRow(2).getCell(colDe("monto")).value).toBe(12500.5);
   });
 
   it("R5/R7: sin guía y sin monto las celdas quedan VACÍAS (sin texto inventado)", async () => {
@@ -142,14 +178,18 @@ describe("manifiesto-xlsx (feature 148)", () => {
     );
     const worksheet = workbook.worksheets[0];
 
-    expect(worksheet.getRow(2).getCell(1).value ?? "").toBe("");
-    expect(worksheet.getRow(2).getCell(7).value ?? "").toBe("");
-    expect(worksheet.getRow(2).getCell(5).value ?? "").toBe("");
+    expect(worksheet.getRow(2).getCell(colDe("numGuia")).value ?? "").toBe("");
+    expect(worksheet.getRow(2).getCell(colDe("monto")).value ?? "").toBe("");
+    expect(worksheet.getRow(2).getCell(colDe("direccion")).value ?? "").toBe("");
     // …y la fila sigue completa en el resto de columnas (no aborta por un hueco).
-    expect(worksheet.getRow(2).getCell(2).value).toBe("REM-001");
+    expect(worksheet.getRow(2).getCell(colDe("numRemision")).value).toBe("REM-001");
+    // Feature 160/R28a: el CONTRASTE — `intentos` NO se vacia, emite `0`.
+    expect(worksheet.getRow(2).getCell(colDe("intentos")).value).toBe(0);
   });
 
-  it("R11: un campo ajeno a las 11 columnas NO llega al archivo", async () => {
+  // Feature 160/R28: el conjunto de columnas es abierto, pero el lado PROHIBITIVO del R11 de
+  // la 148 sigue vigente: un campo que no esta declarado en `COLUMNAS_MANIFIESTO` no se emite.
+  it("R11 (vigente): un campo NO declarado en las columnas NO llega al archivo", async () => {
     const conExtra = {
       ...makeFila(),
       ordenId: "id-interno-uuid",
@@ -159,8 +199,7 @@ describe("manifiesto-xlsx (feature 148)", () => {
     const workbook = await loadWorkbook(await buildManifiestoXlsx([conExtra]));
     const worksheet = workbook.worksheets[0];
 
-    expect(worksheet.columnCount).toBe(11);
-    expect(rowValues(worksheet, 2, 12).join("|")).not.toContain(
+    expect(rowValues(worksheet, 2, COLUMNAS_MANIFIESTO.length + 1).join("|")).not.toContain(
       "id-interno-uuid",
     );
   });

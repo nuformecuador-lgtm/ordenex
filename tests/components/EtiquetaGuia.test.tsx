@@ -119,3 +119,14 @@ describe("EtiquetaGuia", () => {
     ).toBeInTheDocument();
   });
 });
+
+// Feature 160 (T23, R30) — la etiqueta imprimible es un documento FÍSICO del paquete,
+// no una vista de gestión: NO lleva el conteo de intentos. QA4 se decidió "no" y esta
+// ausencia es la decisión, no un olvido.
+describe("EtiquetaGuia — R30: no expone el conteo de intentos", () => {
+  it("no muestra la etiqueta 'Intentos' ni un valor de conteo", () => {
+    const { container } = render(<EtiquetaGuia etiqueta={makeEtiqueta()} />);
+    expect(screen.queryByText(/Intentos/i)).toBeNull();
+    expect(container.textContent ?? "").not.toContain("Intentos");
+  });
+});

@@ -10,6 +10,7 @@ import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IR
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 
 // Feature 115 — T6: reflejo de `marcarLuego` en el listado (R17) y privacidad por actor (R20).
 
@@ -79,6 +80,7 @@ function build(rows: MiAsignacionRow[], marcadas: Set<string>) {
     {} as ISignedUrlProvider,
     fakeRutaRepo,
     metaRepo,
+    fakeIntentosEnLote(), // feature 160: dep requerida, no ejercitada aqui
   );
   return { service, metaRepo };
 }

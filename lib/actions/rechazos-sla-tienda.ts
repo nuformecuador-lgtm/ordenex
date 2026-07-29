@@ -3,7 +3,9 @@
 import { z } from "zod";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { RechazosSlaTiendaService } from "@/lib/services/RechazosSlaTiendaService";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -55,7 +57,12 @@ function toRechazosSlaTiendaActionError(
 
 function buildService(): IRechazosSlaTiendaService {
   const prisma = getPrismaClient();
-  return new RechazosSlaTiendaService(new OrdenRepository(prisma));
+  const ordenRepo = new OrdenRepository(prisma);
+  return new RechazosSlaTiendaService(
+    ordenRepo,
+    // Feature 160 (R11/R26): derivador de intentos EN LOTE de la pagina de rechazos por plazo.
+    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+  );
 }
 
 export interface RechazosSlaTiendaDeps {

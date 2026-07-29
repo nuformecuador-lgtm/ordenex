@@ -12,6 +12,7 @@ import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlPro
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 
 // Feature 73 (R11/R12/R13) — el SERVICE propaga la causa a los datos de la gestion, en su
 // campo propio y SIN tocar el texto libre. Dobles del repo/storage (nada de DB real): lo que
@@ -83,7 +84,15 @@ function newService(repo: IGestionOrdenRepository) {
     findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
     findNotasByMensajero: vi.fn(async () => new Map<string, string>()),
   };
-  return new MisAsignacionesService(repo, ordenRepo, storage, signed, rutaRepo, metaRepo);
+  return new MisAsignacionesService(
+    repo,
+    ordenRepo,
+    storage,
+    signed,
+    rutaRepo,
+    metaRepo,
+    fakeIntentosEnLote(), // feature 160: derivador de intentos EN LOTE (no ejercitado aqui)
+  );
 }
 
 function gestionEmitida(repo: IGestionOrdenRepository): GestionOrdenData {

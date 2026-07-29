@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
+import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { useToast } from "@/hooks/useToast";
 import {
@@ -125,10 +126,15 @@ export function DevolverATiendaModal({
         </p>
       ) : (
         <ul className="max-h-40 list-disc overflow-auto pl-5 text-sm text-muted-foreground">
+          {/* Feature 160 (R18/R19/R23): dato etiquetado junto a cada orden listada, en
+              la misma linea y con el mismo markup que el resto del `<li>`. Siempre
+              visible, `0` incluido; sin umbral (R20). */}
           {ordenes.map((orden) => (
             <li key={orden.id}>
               {orden.numRemision}
               {orden.zonaNombre ? ` — ${orden.zonaNombre}` : ""}
+              {" · "}
+              <IntentosDato intentos={valorIntentos(orden)} />
             </li>
           ))}
         </ul>

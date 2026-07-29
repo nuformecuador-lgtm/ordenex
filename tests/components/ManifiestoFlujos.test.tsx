@@ -99,6 +99,7 @@ function makeFila(over: Partial<ManifiestoFilaDTO> = {}): ManifiestoFilaDTO {
     direccion: "Calle 1",
     zona: "Limón",
     monto: 15000,
+    intentos: 0, // feature 160/R28a: dato de la orden, numerico y no nullable
     origen: "Bodega central",
     destino: "Limón",
     responsable: "Beto Mensajero",

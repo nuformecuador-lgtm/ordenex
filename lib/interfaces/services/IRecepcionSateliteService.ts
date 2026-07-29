@@ -30,6 +30,14 @@ export interface RecepcionSateliteDTO {
   // SIEMPRE lo envia (boolean desde la fila del repo). El grupo "Recibidas" lo usa para el
   // resalte de fila (R8); las prioritarias ademas llegan primero por el sort del repo (R7).
   prioridad?: boolean;
+  /**
+   * Feature 160 (R11/R14/R16/R25): intentos de entrega VIGENTES de la orden, derivados del
+   * historial en UN SOLO lote para los CINCO grupos del modulo (criterio unico de
+   * `OrdenHistorialService`, design §1.1). Opcional (`?`, mismo patron aditivo que
+   * `prioridad?`): no rompe fixtures/mocks que construyen el DTO sin el; el service SIEMPRE lo
+   * envia, `0` incluido (R14).
+   */
+  intentosEntrega?: number;
 }
 
 // R3/R4/R5/R6/R8: dos grupos separados (por recibir vs recibidas) + nombre de la

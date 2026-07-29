@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { columnaIntentos } from "@/components/shared/intentos-entrega";
 import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { useToast } from "@/hooks/useToast";
 import { generarGuia } from "@/lib/actions/ordenes-guia";
@@ -31,12 +32,19 @@ interface GuiaGeneradaResumen {
 const TABLA_ARIA_LABEL = "Órdenes por numerar";
 
 /**
- * Columnas de la fase de edición: identifican la orden y nada más (R20). No hay
+ * Columnas de la fase de edición: identifican la orden y nada más (156/R20). No hay
  * columna de mensajero porque generar guía ya no decide mensajero.
+ *
+ * Feature 160 (R17/R23): ESTE diálogo lista las órdenes en un `DataTable`, no en un
+ * `<ul>` (design §5.4 lo daba por lista: no lo es). Como la regla se decide por la
+ * FORMA de la superficie, aquí manda R17 -> columna propia "Intentos". Va tras la
+ * identificación de la orden porque esta tabla no tiene columna de estado, que es el
+ * ancla habitual (design §5.2).
  */
 const COLUMNS: Column<OrdenListItemDTO>[] = [
   { id: "numRemision", value: "Nº Remisión", render: "numRemision" },
   { id: "destinatario", value: "Destinatario", render: "destinatario" },
+  columnaIntentos<OrdenListItemDTO>(),
 ];
 
 /**

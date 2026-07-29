@@ -4,7 +4,9 @@ import { manifiestoSchema, type ManifiestoResult } from "@/lib/types/manifiesto"
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IManifiestoService } from "@/lib/interfaces/services/IManifiestoService";
 import { ManifiestoService } from "@/lib/services/ManifiestoService";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -13,7 +15,14 @@ import type { AppErrorShape } from "@/lib/errors";
 
 function buildManifiestoService(): IManifiestoService {
   const prisma = getPrismaClient();
-  return new ManifiestoService(new OrdenRepository(prisma), new ZonaRepository(prisma));
+  const ordenRepo = new OrdenRepository(prisma);
+  return new ManifiestoService(
+    ordenRepo,
+    new ZonaRepository(prisma),
+    // Feature 160 (R28): derivador de intentos EN LOTE. El manifiesto lleva los datos de la
+    // orden, y el numero de intentos es uno de ellos (design 160 §6.3).
+    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+  );
 }
 
 export interface ManifiestoActionDeps {
