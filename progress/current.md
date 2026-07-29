@@ -16,6 +16,99 @@
 > a `dev`. Sus bitácoras se movieron a `history.md` y se podaron ~600 líneas de bloques ya cerrados
 > (lote 137–140, 121, 136, 109, 107, 103–106) que seguían aquí pese a estar en `history.md`.
 
+## ⏭️ PENDIENTES — retomar por aquí (cierre del 2026-07-28)
+
+> Inventario COMPLETO de lo que queda abierto, **incluido lo que no depende del agente**. Cada línea
+> dice quién la puede cerrar. Verificado contra `gh pr list` y `git rev-list` el 2026-07-28, no supuesto.
+
+### 1. Lo primero que hay que hacer mañana (agente)
+
+**Arrancar 154 (backend) + 160 (fullstack) en paralelo.** Distinta zona, sin conflicto de archivos, y
+su única dependencia —la 153— ya está mergeada. Las dos tienen spec completa y gate aprobado: **no
+queda ninguna decisión humana pendiente para implementarlas**. Después 155 y 156; al final 157, 158
+y 159. Orden completo y specs en la sección del lote, más abajo.
+
+⚠️ **154 + 155 + 156 suben a producción JUNTAS o no suben.** Por separado dejan el flujo roto en el
+intermedio: la 154 sola deja `generar guía` lanzando `TransicionIlegalError`.
+
+### 2. PRs abiertos que NO son de este lote (los cierra el humano)
+
+| PR | Rama | Qué es | Antigüedad |
+|---|---|---|---|
+| **#168** | `feature/141-tabla-cargas-orden` | Tabla `carga` + `carga_id`. Reviewer APROBADO, 0 bloqueantes. **Es la feature `in_progress` más vieja del tablero.** | abierto desde el 27/07 |
+| **#180** | `feature/144-filtros-ordenes` | Componente de filtros parametrizable. **Trae su propia reconciliación** del registro y una migración de índices. 64 archivos. | 28/07 |
+| **#183** | `feature/log-fallos-whatsapp` | Porta a `dev` el hotfix de WhatsApp que ya está en `prod`. ⚠️ **No mergear tal cual** — ver punto 3. | 28/07 |
+
+### 3. Infra y despliegue (humano)
+
+- ⚠️ **`dev` y `prod` DIVERGEN EN AMBOS SENTIDOS.** Medido: `origin/dev...origin/prod` → **16 / 18**.
+  `prod` tiene 18 commits del hotfix de WhatsApp que `dev` no tiene, y `dev` tiene los 16 de hoy que
+  `prod` no tiene. Ya no es «`dev` va atrasado»: son dos ramas separadas y hay que reunirlas.
+- **Antes de mergear el PR #183**, dos cosas que el propio PR arrastra:
+  1. `lib/actions/_tmp-probar-jobs.ts` y `lib/actions/_tmp-sincronizar-plantillas.ts` — dos Server
+     Actions de depuración que **hoy están en PRODUCCIÓN** y también en la rama del PR. El commit
+     `f950f14` decía haberlas sacado; **no las sacó** (verificado con `git ls-tree` sobre
+     `origin/prod` y sobre la rama).
+  2. La migración `20260728230000_chat_mensaje_error_meta` **no tiene `down.sql`**, contra la regla
+     del repo.
+- **Migración `20260727120000_notificacion` (feature 146):** está en `dev`, **no aplicada a
+  producción**. Con `scripts/migrate-deploy.ts` se aplica sola en el próximo deploy a `prod`;
+  verificar que corrió.
+- **La base LOCAL quedó al día** con las migraciones de la 146 y la 153 (`prisma migrate deploy`
+  contra `localhost` el 28/07). **Producción no se tocó en ningún momento.**
+
+### 4. Decisiones de producto sin dueño (humano)
+
+- **Retirar la página `/qr`.** Trabajo declarado por el humano al cancelar la feature 66 («las
+  lecturas de QR se hacen desde un botón»). **No está registrado como feature todavía** — candidato
+  al próximo lote. Toca `app/(app)/qr/`, `lib/auth/menu-visibility.ts` y lo que dependa de
+  `useQrNavigate`; verificar antes que `QrScanner`/`useQrNavigate` no queden huérfanos (el botón de
+  recepción los reusa).
+- **Quién entrega la búsqueda global.** Al redefinirse la 144, la búsqueda global **quedó huérfana**:
+  la ficha de la **145** la da por hecha y ninguna feature la entrega. Hay que decidirlo **antes** de
+  especificar la 145.
+- **Revalidar la feature 149** («deshacer asignación antes de la recogida») contra el flujo v2:
+  deshacer devuelve la orden a su bodega, no a `en_preparacion`.
+
+### 5. Deuda que dejó el lote de hoy — declarada, no disfrazada
+
+- **T6.3 de la 153 quedó en `[ ]` a propósito.** Playwright no se ejecutó porque **no hay harness de
+  E2E** en el repo. En `e2e/` el cambio fue solo de comentarios; marcar la casilla habría sido fingir
+  una verificación que nadie hizo.
+- **Mutante superviviente:** `ESTATUS_EN_REPARTO` en `OrdenRepository` — desalinearlo pasa la suite
+  completa porque su único consumidor (`findParadasEnReparto`) está siempre mockeado. Hueco
+  **preexistente en `dev`**, no introducido por la 153.
+- **Menores del review de la 153, sin cerrar:** la `ALLOWLIST` del guard de censo **no está asertada**
+  (inflarla con archivos de producción deja el guard verde), y el spec dice 7 basenames cuando son 8.
+- **`db/schema.prisma:353`** sigue diciendo «8 valores» dos líneas encima del «18» que sí se corrigió.
+  El gate autorizó solo la línea 356 y el implementador no amplió por su cuenta. Correcto, pero queda.
+- **Follow-ups que las specs dejaron explícitos:** la **158** no acredita la indemnización al ledger
+  por tienda (feature 43), fuera de alcance a propósito; y la **159** deja `OrdenesCargaResumenPaso.tsx`
+  huérfano sin borrar, porque de ese contenedor cuelga el botón de manifiesto de la 148.
+- **Contrato externo roto SIN aviso dos veces en una semana** (feature 135 el 24/07 y feature 153 el
+  28/07): `api-key-openapi.yaml` sigue en `info.version: 1.0.0` y no hay changelog. Fue **decisión
+  explícita del humano** las dos veces, pero si algún integrador compara contra el value, ya se le
+  rompió dos veces.
+
+### 6. Deudas de arnés vivas (ya estaban antes de hoy)
+
+Detalle en la sección «Deudas de arnés vivas». Las que más cuestan hoy:
+
+- **Los guards que recorren el árbol usan `fs.readdir`, no `git ls-files`** → se disparan con
+  documentación y con basura local. Rompieron el gate **dos veces hoy**: con los restos sin trackear
+  y con los archivos de spec que citan el guard por su nombre.
+- **No hay harness de E2E.** Los `e2e/*.spec.ts` usan emails placeholder y no corren en ningún gate.
+  Ya dejó pasar 3 specs rotas en la feature 148 y bloquea T6.3 de todo este lote.
+- Sin regla `no-console` (el OTP sigue en logs, feature 80) · `zonas-migration.test.ts` con denylist a
+  mano · fakes de repositorio duplicados · `ordenes-columns.tsx` como imán de drift.
+
+### 7. Backlog no tocado
+
+**24 features `pending` sueltas + 15 de analítica**, ninguna empezada. Tabla auditada contra el código
+en la sección «Backlog pendiente».
+
+---
+
 ## Features en curso
 
 **Tabla `carga` + `carga_id` en orden — feature 141 → `in_progress`, `PR #168` ABIERTO.** Backend,
