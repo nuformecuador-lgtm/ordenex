@@ -293,7 +293,7 @@ describe("Feature 30/R13/R16: rutearABodegaSatelite (server action)", () => {
 describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, value)", () => {
   it("maestro: repo.listOrderStatus resuelve el catalogo completo", async () => {
     const listOrderStatus = vi.fn().mockResolvedValue([
-      { id: "os-1", value: "en_fulfillment" },
+      { id: "os-1", value: "por_recolectar_en_tienda" },
       { id: "os-2", value: "en_preparacion" },
       { id: "os-3", value: "por_recoger" },
       { id: "os-4", value: "en_bodega_central" },
@@ -306,7 +306,7 @@ describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, 
     expect(r).toEqual({
       status: "ok",
       estatus: [
-        { id: "os-1", value: "en_fulfillment" },
+        { id: "os-1", value: "por_recolectar_en_tienda" },
         { id: "os-2", value: "en_preparacion" },
         { id: "os-3", value: "por_recoger" },
         { id: "os-4", value: "en_bodega_central" },

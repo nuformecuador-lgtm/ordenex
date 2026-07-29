@@ -11,8 +11,8 @@
 // verdad: si el catalogo cambia, este literal debe seguirlo (y con el, el .yaml espejo).
 //
 // FEATURE 155/R42 — dos cambios y solo dos:
-//   - BAJA de `en_fulfillment`: el catalogo dejo de tenerlo, asi que no puede llegar en ninguna
-//     respuesta (la migracion de esta feature reasigna las ordenes que estuvieran ahi);
+//   - BAJA del estado de fulfillment: el catalogo dejo de tenerlo, asi que no puede llegar
+//     en ninguna respuesta (la migracion de esta feature reasigna las ordenes que hubiera);
 //   - ALTA de `por_recolectar_en_tienda`: es el estado en que nacen ahora las ordenes creadas
 //     por API, asi que documentarlo no es opcional.
 // DEUDA CONOCIDA, no introducida aqui: esta lista lleva desde la feature 109 sin incorporar

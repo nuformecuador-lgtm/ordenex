@@ -103,7 +103,9 @@ describe("carpeta y schema.prisma", () => {
         // apendieron despues de esta (20260728), igual que las de la 153 y la 159. La
         // 154 entro a `dev` sin actualizar esta lista y dejo el caso ROJO en `dev`.
         !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
-        !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente"),
+        !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") &&
+        // feature 155 (retiro del value de fulfillment): apendida despues.
+        !d.endsWith("_order_status_retiro_en_fulfillment"),
     );
     expect(esta >= previas[previas.length - 1]).toBe(true);
   });

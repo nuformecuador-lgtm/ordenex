@@ -41,8 +41,8 @@
 // 20260729120000_order_status_v2_por_recolectar_incidente (INSERT ... WHERE NOT EXISTS por value).
 // La 154 es SOLO ADITIVA (decision Q2 del gate, 2026-07-29): DECLARA los values y sus aristas,
 // pero ningun service los produce todavia — eso llega con las features 155/157/158.
-// Feature 155/R27: RETIRA `en_fulfillment` (que ocupaba el indice 4), de modo que el sembrado
-// idempotente (`seedOrderStatus`) deja de incluirlo y el catalogo pasa de 20 a 19 values. Es el
+// Feature 155/R27: RETIRA el estado de fulfillment (que ocupaba el indice 4), de modo que el
+// sembrado idempotente (`seedOrderStatus`) deja de incluirlo y el catalogo pasa de 20 a 19. Es el
 // PRIMER value que sale del seed: los 19 restantes conservan su orden relativo y solo se corren
 // una posicion los que estaban despues del 4. La 155 sustituye las tres reglas de nacimiento que
 // convivian (default global, estado de fulfillment y estado fijo de la API) por UNA sola

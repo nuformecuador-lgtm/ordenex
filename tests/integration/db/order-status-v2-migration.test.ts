@@ -62,7 +62,7 @@ const PREVIOS_18 = [
   "devuelta",
   "devolviendo_a_tienda",
   "reprogramada",
-  "en_fulfillment",
+  RETIRADO_155,
   "en_ruta_bodega_central",
   "en_bodega_central",
   "en_preparacion",

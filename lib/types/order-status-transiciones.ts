@@ -10,8 +10,8 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // 38 aristas de flujo (numeracion #1-#44 con el #27 RETIRADO por la 139, #4/#6/#7c por la 156 y
 // #1/#2/#3/#7b por la 155) + 2 de creacion. Las 38 colapsan a 36 pares `(origen, destino)`
 // unicos, porque dos pares estan declarados dos veces con familias distintas: #19/#23 y #20/#24
-// (SLA vs. recuperacion manual). El tercer duplicado historico (#3/#7b) se fue con
-// `en_fulfillment`.
+// (SLA vs. recuperacion manual). El tercer duplicado historico (#3/#7b) se fue con el
+// estado de fulfillment que retiro la 155.
 //
 // FEATURE 154 — SOLO ADITIVA (decision Q2 del gate, 2026-07-29). Sumo #43, #44 y la creacion
 // `null -> por_recolectar_en_tienda`, sin retirar NINGUNA arista: `GuiaAsignacionService` las
@@ -23,10 +23,10 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // pasa a admitir SOLO el origen `en_bodega_central` -> se va #7c. La superviviente es #5
 // (`en_preparacion -> en_bodega_central`), destino UNICO de generar guia.
 //
-// FEATURE 155 — RETIRA la clave `en_fulfillment` con sus cuatro aristas (#1/#2/#3/#7b) y las dos
-// entradas de creacion que sobraban (`en_fulfillment` y `en_ruta_bodega_central`). Es la mitad
-// de codigo del retiro del estado; la otra mitad es la migracion que reasigna a `en_preparacion`
-// las ordenes vivas. Ese backfill es la condicion que hace que retirar las aristas no atrape a
+// FEATURE 155 — RETIRA la clave del estado de fulfillment con sus cuatro aristas
+// (#1/#2/#3/#7b) y las dos entradas de creacion que sobraban (ese mismo estado y
+// `en_ruta_bodega_central`). Es la mitad de codigo del retiro del estado; la otra mitad es la
+// migracion que reasigna a `en_preparacion` las ordenes vivas. Ese backfill es la condicion que hace que retirar las aristas no atrape a
 // nadie: la 156 no podia retirarlas justamente porque todavia habia ordenes ahi.
 //
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
@@ -68,15 +68,14 @@ export const TRANSICIONES = {
   en_preparacion: [
     { to: "en_bodega_central", via: "generacion_guia", rol: "maestro/admin" }, // #5
   ],
-  // FEATURE 155: la clave `en_fulfillment` y sus cuatro aristas (#1/#2/#3/#7b) quedaron
-  // RETIRADAS junto con el value del catalogo. Las cuatro estaban SIN PRODUCTOR desde la 156, y
-  // la 155 cierra el circulo: (i) ninguna orden nace ya ahi —la bifurcacion de creacion manda a
-  // `en_preparacion` o a `por_recolectar_en_tienda`— y (ii) la migracion
+  // FEATURE 155: la clave del estado de fulfillment y sus cuatro aristas (#1/#2/#3/#7b)
+  // quedaron RETIRADAS junto con el value del catalogo. Las cuatro estaban SIN PRODUCTOR desde
+  // la 156, y la 155 cierra el circulo: (i) ninguna orden nace ya ahi —la bifurcacion de
+  // creacion manda a `en_preparacion` o a `por_recolectar_en_tienda`— y (ii) la migracion
   // `20260729140000_order_status_retiro_en_fulfillment` reasigna a `en_preparacion` TODAS las
   // ordenes vivas que quedaran en ese estado. Ese backfill es la razon por la que retirarlas
-  // AHORA no atrapa a nadie: cuando el codigo nuevo corre, el conjunto de ordenes en
-  // `en_fulfillment` es vacio. Si el orden se invirtiera (retirar aristas sin backfill), esas
-  // ordenes se quedarian sin ninguna salida legal.
+  // AHORA no atrapa a nadie: cuando el codigo nuevo corre, ese conjunto es vacio. Si el orden
+  // se invirtiera (retirar aristas sin backfill), esas ordenes se quedarian sin salida legal.
   en_ruta_bodega_central: [
     { to: "devolviendo_a_tienda", via: "cancelacion_api", rol: "apiKey (tienda)" }, // #30
     { to: "en_bodega_central", via: "recepcion_bodega_central", rol: "maestro/admin" }, // #37 (138)
@@ -192,7 +191,7 @@ export const TRANSICIONES = {
  * dos values son SUS DOS UNICAS SALIDAS —
  *   - `fulfillment = true`  -> `en_preparacion`            (el paquete ya esta en bodega)
  *   - `fulfillment = false` -> `por_recolectar_en_tienda`  (el paquete sigue en la tienda)
- * Se retiran `en_fulfillment` (el estado desaparece del catalogo) y `en_ruta_bodega_central`
+ * Se retiran el estado de fulfillment (que desaparece del catalogo) y `en_ruta_bodega_central`
  * (el estado fijo del canal de API key, `ESTATUS_INICIAL_API`: dejaba la orden viajando sin
  * haber sido recolectada). Ninguna orden puede volver a nacer en ninguno de los dos.
  *

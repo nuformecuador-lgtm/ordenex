@@ -155,7 +155,7 @@ describe("R12 — el error de dominio es distinguible y no filtra PII", () => {
 // `GuiaAsignacionService` (155/156). Ver `progress/impl_154.md`.
 //
 // Feature 156: R18/R19 ya se COBRARON (#4/#6/#7c retiradas, describe "156 — BAJAS EJECUTADAS").
-// R20/R21 (#1/#3/#7b, de `en_fulfillment`) siguen diferidas a la 155.
+// R20/R21 (#1/#3/#7b, del estado de fulfillment) las cobra la 155, mas abajo.
 // ---------------------------------------------------------------------------------------------
 describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
   it("R13: es LEGAL que una orden nazca en por_recolectar_en_tienda", () => {
@@ -202,8 +202,8 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
 // de rutear; `rutearABodegaSatelite` deja de admitir `en_preparacion`).
 //
 // Los casos de abajo son los MISMOS que la 154 dejo afirmando "sigue siendo legal": no se
-// borran, se mueven a su nueva verdad ("ya no es legal"). Los de `en_fulfillment` (R20/R21 de
-// la 154, #1/#3/#7b) siguen en el describe de bajas diferidas: los retira la 155.
+// borran, se mueven a su nueva verdad ("ya no es legal"). Los del estado de fulfillment
+// (R20/R21 de la 154, #1/#3/#7b) los cobra el describe de la 155, mas abajo.
 // ---------------------------------------------------------------------------------------------
 describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea a satelite", () => {
   it.each([

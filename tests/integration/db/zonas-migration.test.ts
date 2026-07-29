@@ -213,6 +213,7 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_order_status_en_reparto") && // feature 153 (rename del value a en_reparto): apendida despues
         !d.endsWith("_drop_orden_mensajero_sugerido") && // feature 159 (retiro de la sugerencia): apendida despues
         !d.endsWith("_order_status_v2_por_recolectar_incidente") && // feature 154 (catalogo v2): apendida despues
+        !d.endsWith("_order_status_retiro_en_fulfillment") && // feature 155 (retiro del value): apendida despues
         !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente"), // feature 154 (familias v2): apendida despues
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
