@@ -180,18 +180,39 @@
 > (`EstatusBadgeCatalogoV2.test.tsx`, `EstatusBadgeEnReparto.test.tsx`: ambos afirman que el mapa
 > de presentación cubre el catálogo EXACTO, sin sobrantes). Esa es la worklist compilada de T6.1.
 
-- [ ] **T6.1 — `EstatusBadge.tsx`.** `[P]` con T6.2.
+- [x] **T6.1 — `EstatusBadge.tsx`.** `[P]` con T6.2.
       Dep: T2.1. Retirar la entrada de `ORDER_STATUS_LABELS`, de `ORDER_STATUS_VARIANT` y el
       **refuerzo de acento propio** de `ORDER_STATUS_CLASS:74-75`. Cubre R28, R41.
       **Hecho cuando:** `tests/components/EstatusLabel.test.ts` pasa y hay un caso que verifica que un
       value desconocido cae al chip neutro con el texto crudo (R41).
+      **Hecho:** retiradas las 3 entradas (líneas 15, 45 y 82-83); `satisfies`/`Record` **no** se
+      relajan. `EstatusLabel.test.ts` pasa. R41 lo cubre el archivo nuevo
+      `tests/components/EstatusBadgeRetiroFulfillment.test.tsx`, describe "155/R41" (4 casos): chip
+      neutro con igualdad EXACTA de clases contra `en_preparacion` usando el value retirado, ídem con
+      un desconocido cualquiera, `estatusLabel` al value crudo, y una fila de historial con el value
+      retirado renderizada en `HistorialOrdenTimeline` sin romper la vista.
+      **Efecto lateral declarado:** `en_reparto` pierde su gemelo de acento, así que el caso de la 153
+      que los comparaba pasa a afirmar los 4 tokens directamente + un caso nuevo de "único portador".
 
-- [ ] **T6.2 — Listado y revisión del maestro.** `[P]` con T6.1.
+- [x] **T6.2 — Listado y revisión del maestro.** `[P]` con T6.1.
       Dep: T2.1. `OrdenesRevisionMaestro.tsx:163-176` (apartado "En fulfillment"),
       `OrdenesListado.tsx:71,106,282` (`ESTADOS_MENSAJERO_SUGERIDO`, `ESTADOS_ASIGNACION`,
       `accionesDe`), comentario de `ordenes-columns.tsx:192`. Cubre R32.
       **Hecho cuando:** `OrdenesRevisionMaestro.test.tsx`, `OrdenesListadoBloqueoCierre.test.tsx`,
       `OrdenesListadoEtiquetasChain.test.tsx` y `GenerarGuiaModal.test.tsx` pasan sin el value.
+      **Hecho:** los 4 archivos pasan (51 tests) y ninguno contiene el literal. Retirado el
+      `<OrdenesApartado titulo="En fulfillment">` completo con su acción por lote, y el `case` del
+      `switch` de `accionesDe`. R32 lo afirman 5 casos nuevos.
+      **Salvedades (drift del spec, verificado con `git log -S`, no supuesto):** (a) el comentario de
+      `ordenes-columns.tsx:192` **ya no existe**: lo retiró la feature 159 (`b2181e7`); hoy la línea
+      192 es el JSDoc de "Liberada el" y las 3 menciones de "fulfillment" del archivo son el **monto
+      de tarifa**, que `requirements.md` advierte no confundir → **el archivo no se tocó**. (b)
+      `ESTADOS_MENSAJERO_SUGERIDO` (`:71`) **ya no existe**: lo retiró la 159 con el flujo entero. (c)
+      `ESTADOS_ASIGNACION` ya venía limpio desde la 156; solo sobrevivía su comentario histórico, que
+      sí se reescribió.
+
+> Detalle de las dos tasks del bloque, con el censo medido y las discrepancias, en
+> `progress/impl_155.md §3` y `§4`.
 
 ---
 
@@ -214,14 +235,28 @@
 
 ## Bloque 8 — Censo y cierre
 
-- [ ] **T8.1 — Extender el guard de censo.** *(FASE FRONTEND: depende de T6.\*)*
+- [x] **T8.1 — Extender el guard de censo.** *(FASE FRONTEND: depende de T6.\*)*
       Dep: T2.*, T4.*, T6.*, T7.*. Añadir `en_fulfillment` a `OLD_VALUES` de
       `tests/unit/guards/censo-order-status-rename.test.ts` (extender, **no** duplicar el archivo) y
       justificar una a una las entradas nuevas de la allowlist. Cubre R33.
       **Hecho cuando:** el guard pasa en verde y la allowlist tiene un comentario por archivo
       explicando por qué ese archivo conserva el literal.
+      **Hecho:** el archivo se **extendió** (no se duplicó): `OLD_VALUES` pasa de 6 a **7** entradas —
+      primera AMPLIACIÓN del censo (la 153 fue un *swap*), y el value nuevo no tiene sucesor. El guard
+      pasa en verde con **cero ofensores** y las **9** entradas de la allowlist tienen comentario
+      propio. Solo hizo falta **1 entrada nueva** (`rename-order-status-migration.test.ts`: afirma por
+      regex el UP/DOWN de la migración histórica de la feature 28, texto inmutable);
+      `order-status-enum-migration.test.ts` **ya estaba** desde la 135 (se le amplió el comentario) y
+      el test de la migración de esta feature **no la necesita**, porque construye el literal por
+      concatenación. La bitácora del backend predijo 3 entradas: son 2 y solo 1 es nueva.
+      Se añadieron 2 casos que blindan la extensión (frontera de palabra contra las carpetas REALES de
+      `db/migrations`, con aserción de no-vacuidad; y disyunción con el catálogo vigente).
+      **Hallazgo:** justificar la entrada nueva citando el nombre de la carpeta histórica pone rojo al
+      **otro** guard de nomenclatura, el del value predecesor de la feature 28 (que además solo
+      whitelistea el `design.md` de este spec, no sus otros archivos). Se resolvió reescribiendo los
+      comentarios, **no** ampliando la whitelist ajena. Detalle en `progress/impl_155.md §4.6`.
 
-- [ ] **T8.2 — Limpiar el resto de tests y el E2E.** *(la parte `.ts` ya está hecha por la fase
+- [x] **T8.2 — Limpiar el resto de tests y el E2E.** *(la parte `.ts` ya está hecha por la fase
       backend; quedan los 5 `.tsx`: `EscanerRecepcion`, `ManifiestoFlujos`,
       `OrdenesListadoBloqueoCierre`, `OrdenesRevisionMaestro`, `EstatusBadgeEnReparto`)*
       Dep: T8.1. `orden-repository.guia.test.ts`, `guia-asignacion-service.test.ts` (28
@@ -229,11 +264,27 @@
       `webhook-estado-encolado.test.ts`, `EscanerRecepcion.test.tsx`, `ManifiestoFlujos.test.tsx`,
       `order-status.test.ts` (conteo e índices), `e2e/reprogramacion-liberacion.spec.ts`.
       **Hecho cuando:** `npm test` en verde y el guard de T8.1 sin ofensores.
+      **Hecho:** `pnpm test` en **573 archivos / 6329 tests, 0 fallos**, y el guard sin ofensores.
+      Limpiados los 5 `.tsx` más `EstatusBadgeCatalogoV2.test.tsx` (conteo 20 → **19**). Se verificó
+      uno por uno que los archivos `.ts` de la lista tienen **0 ocurrencias** (los limpiaron la 156 y la
+      fase backend). La cirugía mayor fue `OrdenesRevisionMaestro.test.tsx`: las 2 órdenes del fixture
+      del apartado retirado se **mudaron** a `en_preparacion` para no perder los casos que necesitan
+      >1 fila por apartado; 2 pares de `it` que quedaron **duplicados exactos** tras el retarget se
+      consolidaron conservando la aserción más fuerte de cada par.
 
-- [ ] **T8.3 — Mapa `R<n> → test` en `progress/impl_155.md`.**
+- [x] **T8.3 — Mapa `R<n> → test` en `progress/impl_155.md`.**
       Dep: todo lo anterior. Una fila por requisito R1–R43 con el test concreto que lo cubre, más la
       salida real de `npm test` y de `./init.sh`.
       **Hecho cuando:** no queda ningún requisito sin test y `./init.sh` termina en verde.
+      **Hecho:** mapa completo **R1–R43** en `progress/impl_155.md §5`, con la fase dueña de cada fila;
+      el detalle por caso del backend se **referencia** a `progress/impl_155_backend.md §5` en vez de
+      duplicarlo. Todos los archivos y marcadores citados se verificaron por grep. `./init.sh` termina
+      **en verde** (`EXIT=0`): typecheck sin errores (antes: 3), lint con los mismos 10 warnings
+      preexistentes y **0 nuevos**, y 573/6329 tests.
+      **NO verificado (deudas que siguen vivas, `progress/impl_155.md §7`):** nada contra Postgres real
+      —el round-trip `deploy → rollback → deploy` de T5.1/T5.2 sigue **sin ejecutar** sobre una base con
+      órdenes en el estado retirado—, el censo de R39 sobre datos de producción, el wiring real del
+      manifiesto del canal API, Playwright, y el aviso a integradores del cambio incompatible.
 
 ---
 
