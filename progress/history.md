@@ -2200,3 +2200,45 @@
   `useQrNavigate`). No se retiró en la reconciliación: borrar una ruta es cambio de producto, no
   bookkeeping, y antes hay que verificar que `QrScanner`/`useQrNavigate` no queden huérfanos — el botón
   de recepción los reusa.
+
+## 2026-07-28 — 153 `order_status`: `en_ruta` → `en_reparto` (primera del lote de flujo v2)
+- Rename **mecánico** del value, sin ningún cambio de flujo: mismas aristas, mismos servicios,
+  misma semántica. 94 archivos en el diff, de los cuales **75 son byte a byte idénticos a `dev`**
+  tras normalizar el rename. Migración `20260728120000_order_status_en_reparto` (UPDATE sobre la
+  tabla catálogo, no `ALTER TYPE`) + `down.sql`. R1–R21. **PR #190**, mergeado en `f7dbda4`.
+- **`en_reparto` es el nombre VIEJO, y esta feature revierte una decisión de hace cuatro días.**
+  La feature 135 lo renombró *a* `en_ruta` el 24/07 bajo «unificar nomenclatura» y dejó
+  `censo-order-status-rename.test.ts` **prohibiendo** que reapareciera (estaba en `OLD_VALUES`).
+  El arreglo correcto fue un **swap** del guard —entra `en_ruta`, sale `en_reparto`— conservando
+  la allowlist que protege las migraciones y tests históricos de la 135. Borrarlo no era opción.
+- **Arregló un fallo que venía de `dev`, no de la feature.** El guard `no-embalaje` estaba rojo
+  desde el merge de las specs (PR #189): recorre el árbol con `fs.readdir` y tres archivos de
+  `specs/155-*` y `specs/159-*` citan el guard **por su nombre de archivo**. Arreglo de 8 líneas
+  en commit aparte y revertible. Es la segunda vez en el día que esa clase de guard se dispara
+  por documentación (la primera fueron los restos sin trackear de la reconciliación).
+- **Dos requisitos no tenían NINGÚN test y ahora sí.** `ORDER_STATUS_CLASS` es un
+  `Partial<Record<...>>`: perder una clave al moverla **no rompe el build**, solo apaga el color
+  del chip en silencio. Y `docs/api/api-key-openapi.yaml` es texto plano, sin nada que
+  garantizara que seguía siendo espejo del objeto TS. Los cubrió el implementador por iniciativa
+  propia, no estaban en el plan.
+- **Verificación medida por el reviewer, no por el implementador:** suite `5712/5712` (baseline
+  de `dev`: `1 failed / 5680`), `typecheck` 0, `eslint` sin errores nuevos, `tests/integration/db`
+  584/584, `./init.sh` en `== init OK ==`. Delta **+31 tests, −1 suite rota**.
+- **Review por MUTACIÓN: 27 aplicadas, 25 muertas.** El reviewer detectó que su primer arnés de
+  mutación daba falsos positivos (un flag inválido de vitest) y **lo rehízo entero** con una
+  mutación de control que sí debía sobrevivir.
+- **Round-trip de migración ejecutado contra Postgres real** (lo cerró el leader tras verificar
+  que `DATABASE_URL` apunta a `localhost` y no a producción): `deploy` → `en_reparto`,
+  `db:rollback` → `en_ruta`, `deploy` → `en_reparto`, sin pérdida de filas. El conteo es **19 y
+  no 18** por la fila huérfana `pendiente` (migración `20260714140000`, nunca añadida al SEED),
+  ya documentada como inofensiva.
+- **Deuda declarada, no disfrazada:** **T6.3 (Playwright) quedó en `[ ]` a propósito.** No hay
+  harness de E2E en el repo y los `e2e/*.spec.ts` usan emails placeholder, así que no corren ni
+  en `pnpm test` ni en `./init.sh`. En `e2e/` el cambio fue solo de comentarios. Marcar la
+  casilla habría sido fingir una verificación que nadie hizo.
+- **Menor conocido:** el mutante de `ESTATUS_EN_REPARTO` en `OrdenRepository` **sobrevive** — su
+  único consumidor (`findParadasEnReparto`) está siempre mockeado. Hueco **preexistente en
+  `dev`**; el valor entregado es correcto por el diff byte-idéntico, pero la red no lo protege.
+- **Contrato externo roto sin aviso, por decisión del humano** (misma política que la 135): el
+  value cambia en `api-key-openapi.yaml` y en el payload de webhook sin bumpear `info.version`
+  (sigue en `1.0.0`) ni publicar changelog. Segunda rotura en una semana, anotada a conciencia.

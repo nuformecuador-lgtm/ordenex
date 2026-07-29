@@ -62,10 +62,23 @@ registro, el próximo que toque WhatsApp la duplica. Detalle y deudas en `histor
 >    `origin/prod` y sobre `origin/feature/log-fallos-whatsapp`). Mergear el #183 tal cual las mete
 >    también en `dev`.
 
-## Lote 153–160 — flujo de estados v2 (registrado el 2026-07-28)
+## Lote 153–160 — flujo de estados v2 · **EN CURSO (1/8 mergeada)**
 
-Ocho features nuevas pedidas por el humano, **sin spec, sin rama y sin código**. Boceto aprobado en
-chat antes de escribir. Nacen de un diagrama del flujo nuevo + cuatro pedidos sueltos.
+> ### Estado al cerrar el 2026-07-28
+>
+> **Fase 1 COMPLETA para las 8** (7314 líneas de spec, PR #189) con el **gate F1.4 APROBADO** y sus
+> decisiones escritas en cada ficha. **153 `done`** (PR #190). Las otras 7 quedan en `spec_ready`,
+> listas para implementar sin ninguna decisión pendiente.
+>
+> **Retomar por aquí:** **154 (backend) + 160 (fullstack) en paralelo** — distinta zona, sin
+> conflicto de archivos, y ninguna depende de nada más que de la 153, ya mergeada. Después 155 y
+> 156; al final 157, 158 y 159.
+>
+> ⚠️ **154 + 155 + 156 tienen que ir a producción en la MISMA entrega.** Por separado cada una deja
+> el flujo roto en el intermedio: la 154 sola dejaría `generar guía` lanzando `TransicionIlegalError`.
+
+Ocho features pedidas por el humano a partir de un diagrama del flujo nuevo + cuatro pedidos sueltos.
+Boceto aprobado en chat antes de escribir.
 
 **Lo que realmente cambia del catálogo:** de los 18 estados de hoy, **14 se mantienen tal cual**.
 Entran `por_recolectar_en_tienda` e `incidente`, `en_ruta` se renombra a `en_reparto` y
@@ -74,16 +87,23 @@ Entran `por_recolectar_en_tienda` e `incidente`, `en_ruta` se renombra a `en_rep
 generar la guía (aristas #1–#6 del mapa de la feature 140); en el flujo v2 esas se retiran — generar
 guía solo lleva a `en_bodega_central`, y **las asignaciones salen siempre de una bodega**.
 
-| # | Feature | Zona | Cplx | Depende |
-|---|---------|------|------|---------|
-| 153 | `en_ruta` → `en_reparto` (rename mecánico, 76 archivos) | backend | medium | — |
-| 154 | catálogo v2: `por_recolectar_en_tienda` + `incidente` + grafo nuevo | backend | high | 153 |
-| 155 | creación bifurcada por bodega + retiro de `en_fulfillment` | backend | high | 154 |
-| 156 | generar guía sin asignar mensajero | fullstack | medium | 154 |
-| 157 | recolección en tienda por el mensajero (QR) | fullstack | high | 155 |
-| 158 | estado `incidente` + indemnización desde la wallet | fullstack | high | 154 |
-| 159 | quitar la sugerencia de mensajeros de la carga masiva | fullstack | medium | 156 |
-| 160 | badge de intentos de entrega | fullstack | low | — |
+| # | Feature | Zona | Cplx | Depende | Estado | Spec |
+|---|---------|------|------|---------|--------|------|
+| 153 | `en_ruta` → `en_reparto` (rename mecánico, 94 archivos) | backend | medium | — | ✅ **`done`** (PR #190) | R1–R21 |
+| 154 | catálogo v2: `por_recolectar_en_tienda` + `incidente` + grafo nuevo | backend | high | 153 ✔ | `spec_ready` | R1–R31 |
+| 155 | creación bifurcada por bodega + retiro de `en_fulfillment` | backend | high | 154 | `spec_ready` | R1–R43 |
+| 156 | generar guía sin asignar mensajero | fullstack | medium | 154 | `spec_ready` | R1–R30 |
+| 157 | recolección en tienda por el mensajero (QR) | fullstack | high | 155 | `spec_ready` | R1–R40 |
+| 158 | estado `incidente` + indemnización desde la wallet | fullstack | high | 154 | `spec_ready` | R1–R36 |
+| 159 | quitar la sugerencia de mensajeros de la carga masiva | fullstack | medium | 156 | `spec_ready` | R1–R22 |
+| 160 | badge de intentos de entrega | fullstack | low | — | `spec_ready` | R1–R16 |
+
+**Restructuración del corte, decidida al revisar las specs y ya escrita en las fichas:** la **154 es
+SOLO ADITIVA**. Retirar aristas ahí haría que generar guía lanzara `TransicionIlegalError` entre su
+merge y el de la 156, y dejaría `en_fulfillment` sin salidas siendo aún estado de nacimiento —
+órdenes vivas atrapadas con el guard fallando cerrado. Cada retiro se muda a la feature que cambia el
+servicio que lo ejecuta: `#4/#6/#7c` → **156**, `#1/#2/#3/#7b` → **155**. Y `#5`
+(`en_preparacion → en_bodega_central`) **sobrevive**: es el destino único de generar guía.
 
 **Decisiones del humano ya cerradas (valen como parte de la gate F1.4 de cada spec):** `en_fulfillment`
 **se retira** (no aparece en el flujo nuevo; las órdenes que ya están en bodega nacen en
@@ -193,6 +213,9 @@ no ahora.
 - **Portar el hotfix de WhatsApp a `dev`** — mergear el PR #183, **pero antes** sacar los dos
   `lib/actions/_tmp-*.ts` y escribir el `down.sql` que falta (ver el aviso de la sección `dev` vs
   `prod`). Es lo único que hoy separa a los dos.
+- **La base local ya tiene la migración de la 153 aplicada** (`20260728120000_order_status_en_reparto`),
+  incluida la de la 146 que estaba pendiente. Se aplicaron con `prisma migrate deploy` contra
+  `localhost` el 2026-07-28 al cerrar el round-trip. **No se tocó producción.**
 - **Retirar la página `/qr`** — trabajo declarado por el humano al cancelar la 66 (las lecturas de QR se
   hacen desde un botón en el punto de uso). Toca `app/(app)/qr/`, `lib/auth/menu-visibility.ts` y lo que
   dependa de `useQrNavigate`; hay que verificar primero que `QrScanner`/`useQrNavigate` no queden
