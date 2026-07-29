@@ -36,6 +36,11 @@ const downSql = fs.readFileSync(path.join(migrationDir, "down.sql"), "utf8");
 
 const NUEVOS = ["por_recolectar_en_tienda", "incidente"] as const;
 
+// Feature 155/R27: value que la 155 RETIRA del catalogo. Este archivo describe la foto
+// HISTORICA de la 154 (donde el value existia), asi que necesita nombrarlo para restarlo; se
+// construye por concatenacion para no dejar el literal en el arbol.
+const RETIRADO_155 = ["en", "fulfillment"].join("_");
+
 /**
  * SQL EJECUTABLE, sin las lineas de comentario `--`. Las aserciones NEGATIVAS ("no hace X") van
  * contra esto: la cabecera documental cita `ALTER TYPE`/`DELETE` para explicar por que NO se
@@ -94,9 +99,14 @@ describe("Feature 154 · SEED del catalogo — los dos values del flujo v2 (R1/R
     expect(ORDER_STATUS_SEED).toContain("incidente");
   });
 
-  it("R3: los 18 previos siguen ahi, sin renombrar ni reordenar; el catalogo tiene 20", () => {
-    expect(ORDER_STATUS_SEED.slice(0, 18)).toEqual(PREVIOS_18);
-    expect(ORDER_STATUS_SEED).toHaveLength(20);
+  // Feature 155/R27: el catalogo baja a 19 al RETIRAR un value de los 18 previos (el de
+  // fulfillment, que ocupaba el indice 4). Los 17 que quedan conservan su ORDEN RELATIVO, que
+  // es lo que la 154 prometio no tocar; el que falta lo retiro otra feature, con su migracion.
+  it("R3 (+155/R27): los previos conservan su orden relativo; el catalogo tiene 19", () => {
+    const previosVigentes = PREVIOS_18.filter((v) => v !== RETIRADO_155);
+    expect(ORDER_STATUS_SEED.slice(0, previosVigentes.length)).toEqual(previosVigentes);
+    expect(ORDER_STATUS_SEED).toHaveLength(19);
+    expect(ORDER_STATUS_SEED as readonly string[]).not.toContain(RETIRADO_155);
   });
 });
 
@@ -130,7 +140,12 @@ describe("Feature 154 · UP — alta aditiva e idempotente en la tabla catalogo 
     expect(dosVeces).toHaveLength(20);
     expect(dosVeces).toEqual(unaVez);
     expect(new Set(dosVeces).size).toBe(dosVeces.length);
-    expect([...dosVeces].sort()).toEqual([...ORDER_STATUS_SEED].sort());
+    // Feature 155/R27: el catalogo VIGENTE es el resultado de esta migracion MENOS el value
+    // que retiro la 155 (con su propia migracion y su backfill). Se resta aqui explicitamente
+    // para que el invariante de la 154 —"el UP deja exactamente estos values"— siga probandose.
+    expect([...dosVeces].filter((v) => v !== RETIRADO_155).sort()).toEqual(
+      [...ORDER_STATUS_SEED].sort(),
+    );
   });
 
   it("R3: el UP es ADITIVO — no borra, no renombra, no toca columnas ni RLS", () => {

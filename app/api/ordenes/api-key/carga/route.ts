@@ -1,8 +1,17 @@
 // Feature 88 — Carga de órdenes por API (canal integrador). A diferencia de la carga
 // masiva por sesión (`carga-masiva/chunk`), este endpoint se autentica por API KEY en el
-// header `Authorization: Bearer ordx_...` (no por cookie de sesión), fija el estado inicial
-// en `en_ruta_bodega_central`, asigna `num_guia` en el acto y devuelve cada orden con su
-// guía. Reutiliza `BulkOrdenService` por dentro (misma validación/dedup/geo).
+// header `Authorization: Bearer ordx_...` (no por cookie de sesión), asigna `num_guia` en el
+// acto y devuelve cada orden con su guía. Reutiliza `BulkOrdenService` por dentro (misma
+// validación/dedup/geo).
+//
+// FEATURE 155 — el estado inicial deja de ser fijo: lo resuelve la bifurcación por bodega
+// (`resolverDestinoCreacion`) sobre el flag `fulfillment` del dueño de la key. En la práctica
+// eso es siempre la rama (b): `por_recolectar_en_tienda` con guía en el acto. Y como ese lote
+// SÍ produce un movimiento físico (tienda → bodega central), la respuesta gana el bloque
+// `manifiesto` (R24, opción C de la puerta T0.1): el canal de API key no puede invocar la
+// Server Action `obtenerManifiesto` —resuelve al actor por cookie de sesión— así que necesita
+// su propio borde. Se sigue el precedente EXACTO de `etiquetasPdf`: best-effort, la carga ya
+// commiteada nunca se revierte por él (R25), y el fallo se hace visible con `{ error }`.
 //
 // SEGURIDAD (R6): la key viaja en cada request. NUNCA se loguea (ni la key ni su hash), ni
 // entra al cuerpo de una respuesta de error (`appErrorToResponse` no incluye headers).
@@ -23,7 +32,11 @@ import type {
   IApiKeyAuthService,
 } from "@/lib/interfaces/services/IApiKeyAuthService";
 import type { IEtiquetasLotePdfService } from "@/lib/interfaces/services/IEtiquetasLotePdfService";
+import type { IManifiestoService } from "@/lib/interfaces/services/IManifiestoService";
+import type { ManifiestoFilaDTO, ManifiestoOmitidaDTO } from "@/lib/types/manifiesto";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
+import { ManifiestoService } from "@/lib/services/ManifiestoService";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { ApiKeyAuthService } from "@/lib/services/ApiKeyAuthService";
 import { EtiquetaGuiaService } from "@/lib/services/EtiquetaGuiaService";
 import {
@@ -31,6 +44,8 @@ import {
   EtiquetasLoteExcedeTopeError,
 } from "@/lib/services/EtiquetasLotePdfService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
 import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
@@ -57,6 +72,10 @@ export interface CargaApiDeps {
   bulkService?: IBulkOrdenService;
   // Feature 136: orquestador del PDF consolidado de etiquetas (inyectable en tests).
   etiquetasService?: IEtiquetasLotePdfService;
+  // Feature 155/R24: SERVICIO UNICO de manifiesto (inyectable en tests). Este borde NO arma
+  // filas: se las pide al mismo service que las 6 vias de sesion (R24 prohibe que otro modulo
+  // construya columnas de manifiesto).
+  manifiestoService?: IManifiestoService;
 }
 
 // Feature 136 (T3.1) — bloque `etiquetasPdf` de la respuesta. El fallo se hace
@@ -67,8 +86,25 @@ type EtiquetasPdf =
   | { error: string } // fallo best-effort (R12), HTTP 200, carga NO revertida
   | null; // nada que generar (R13/R14)
 
+/**
+ * Feature 155/R24/R25/R26 — bloque `manifiesto` de la respuesta, espejo EXACTO de la
+ * disciplina de `etiquetasPdf`:
+ *   - filas + omitidas -> el manifiesto del lote, INLINE (el `.xlsx` se arma en el cliente,
+ *     igual que en la via de sesion: el servidor no genera binarios de manifiesto);
+ *   - `{ error }`      -> fallo best-effort VISIBLE. HTTP 200, carga NO revertida (R25);
+ *   - `null`           -> no habia nada que emitir: sin ordenes creadas, o el lote nacio por
+ *     la rama (a), que no produce movimiento fisico y por tanto no emite manifiesto (R26).
+ */
+type ManifiestoBloque =
+  | { filas: ManifiestoFilaDTO[]; omitidas: ManifiestoOmitidaDTO[] }
+  | { error: string }
+  | null;
+
 /** Mensaje generico al cliente ante un fallo de generacion/almacenamiento (R12). */
 const MSG_ETIQUETAS_FALLO = "no se pudo generar el PDF de etiquetas del lote";
+
+/** Feature 155/R25: mensaje generico ante un fallo del manifiesto. Sin PII ni internals. */
+const MSG_MANIFIESTO_FALLO = "no se pudo armar el manifiesto del lote";
 
 /**
  * Mensaje del lote que excede el tope (R12, BLOQ-1): explica el motivo y que hacer,
@@ -126,6 +162,19 @@ function buildEtiquetasService(): IEtiquetasLotePdfService {
     new SupabaseSignedUrlProvider(undefined, bucket),
     etiquetasConfig.SIGNED_URL_TTL_SECONDS,
     etiquetasConfig.MAX_ETIQUETAS_POR_PDF,
+  );
+}
+
+// Feature 155/R24 — composition root del SERVICIO UNICO de manifiesto para este borde. Mismo
+// cableado que `lib/actions/manifiesto.ts` (repos reales + derivador de intentos de la 160);
+// lo unico que cambia es quien resuelve el actor: alli la cookie de sesion, aqui la API key.
+function buildManifiestoService(): IManifiestoService {
+  const prisma = getPrismaClient();
+  const ordenRepo = new OrdenRepository(prisma);
+  return new ManifiestoService(
+    ordenRepo,
+    new ZonaRepository(prisma),
+    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
   );
 }
 
@@ -222,8 +271,42 @@ export async function handleCargaApi(req: Request, deps: CargaApiDeps = {}): Pro
       }
     }
 
-    // R17: preserva TODOS los campos del summary y añade `etiquetasPdf`.
-    return { ...summary, etiquetasPdf };
+    // Feature 155/R24/R25/R26 — manifiesto del lote de la rama (b). Va DESPUÉS de la carga
+    // (ya commiteada) y absorbe su propio fallo: un manifiesto que no se arma no revierte ni
+    // altera el estado, la guía o el historial de ninguna orden (R25). No se emite cuando el
+    // lote nació por la rama (a) —no hubo movimiento físico— ni cuando no se creó nada (R26).
+    //
+    // La selección va por `ordenIds`: este canal SÍ tiene los ids en la mano (el bloque
+    // `ordenes` del summary), y es la selección más precisa. El service acota por sí mismo lo
+    // que una API key puede ver (`esVisiblePara`: solo su propia tienda).
+    let manifiesto: ManifiestoBloque = null;
+    if (cargaResult.destino.emiteManifiesto && summary.ordenes.length > 0) {
+      try {
+        const manifiestoSvc = deps.manifiestoService ?? buildManifiestoService();
+        const out = await manifiestoSvc.armar(
+          { flujo: "recoleccion_tienda", ordenIds: summary.ordenes.map((o) => o.id) },
+          auth.actor,
+        );
+        // `forbidden` es un resultado de dominio, no una excepción: se degrada a `{ error }`
+        // igual que un fallo, sin filtrar por qué.
+        manifiesto =
+          out.status === "ok"
+            ? { filas: out.filas, omitidas: out.omitidas }
+            : { error: MSG_MANIFIESTO_FALLO };
+      } catch (err) {
+        // Best-effort (R25). Se registra el TIPO del error, nunca su mensaje crudo: la
+        // consulta del manifiesto toca datos de la orden y podrían acabar en los logs.
+        console.error("manifiesto-lote: fallo best-effort en carga por API", {
+          error: describirErrorSeguro(err),
+          ordenes: summary.ordenes.length,
+        });
+        manifiesto = { error: MSG_MANIFIESTO_FALLO };
+      }
+    }
+
+    // R17 + 155/R23: preserva TODOS los campos del summary (`total`/`creadas`/`duplicadas`/
+    // `conError`/`filas`/`ordenes` con su `costoEnvio`) y añade `etiquetasPdf` y `manifiesto`.
+    return { ...summary, etiquetasPdf, manifiesto };
   });
 
   if (isAppErrorShape(result)) return appErrorToResponse(result);

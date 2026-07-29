@@ -18,15 +18,19 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
 const VALUE_POR_ID: Record<string, string> = {
   [idEstado("entregada")]: "entregada",
   [idEstado("en_reparto")]: "en_reparto",
-  [idEstado("en_ruta_bodega_central")]: "en_ruta_bodega_central",
+  // Feature 155: el estado de nacimiento de la via API. Sustituye a `en_ruta_bodega_central`,
+  // que dejo de ser estado de creacion (R22).
+  [idEstado("por_recolectar_en_tienda")]: "por_recolectar_en_tienda",
 };
 
 // Feature 140: la guardia del choke point valida el par `origen -> destino` contra
 // `TRANSICIONES` (fallo CERRADO), asi que cada destino de este test se emite desde SU origen
 // legal del mapa: `en_reparto -> entregada` (#12) y `por_recoger -> en_reparto` (#11). La creacion
-// (`carga_api`) nace en `en_ruta_bodega_central`, uno de los tres ESTADOS_CREACION (A.1) y
-// ademas evento publico, que es lo que este test necesita para ver el encolado; ese caso NO
-// lleva entrada aqui: su `estatusOrigenId` es `null` (A.1), asi que nunca consulta este mapa.
+// (`carga_api`) nace, desde la feature 155, en `por_recolectar_en_tienda`: uno de los DOS
+// ESTADOS_CREACION vigentes (A.1) y, por la decision 155/R43, evento publico — de modo que el
+// integrador sigue recibiendo el evento de nacimiento que ya recibia. Ser evento publico es lo
+// que este test necesita para ver el encolado; ese caso NO lleva entrada en el mapa de origenes:
+// su `estatusOrigenId` es `null` (A.1), asi que nunca lo consulta.
 const ORIGEN_LEGAL: Record<string, OrderStatusValue> = {
   [idEstado("entregada")]: "en_reparto",
   [idEstado("en_reparto")]: "por_recoger",
@@ -139,7 +143,7 @@ describe("R16 — transiciones por dos mecanismos encolan por igual", () => {
     const a = buildTx(new Set(["o-creada"]));
     await appendCambioEstado(
       a.tx as never,
-      [entrada("o-creada", idEstado("en_ruta_bodega_central"), "carga_api")],
+      [entrada("o-creada", idEstado("por_recolectar_en_tienda"), "carga_api")],
       emisorReal(repo),
     );
     const b = buildTx(new Set(["o-gestion"]));

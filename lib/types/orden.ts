@@ -9,15 +9,20 @@ export const SORT_DIRS = ["asc", "desc"] as const;
 export type SortDir = (typeof SORT_DIRS)[number];
 
 // R25/R26: validacion de creacion en el borde. zona/provincia/canton obligatorios
-// (R12); distrito/estatus/notas/tienda opcionales. peso numerico estrictamente > 0
+// (R12); distrito/notas/tienda opcionales. peso numerico estrictamente > 0
 // (R13/R26). num_remision provisto por el usuario, no vacio (R9).
+//
+// FEATURE 155/R5 — la entrada de creacion DEJA de exponer un estatus inicial. `estatusId`
+// se retiro: el estado en que nace la orden lo decide `resolverDestinoCreacion` a partir del
+// flag `fulfillment` de la tienda dueña, y NADA de la peticion puede alterarlo. El schema no
+// es `.strict()` a proposito, asi que una entrada legada que siga mandando `estatusId` se
+// ignora en silencio en vez de romper — pero no cambia donde nace la orden.
 export const crearOrdenSchema = z.object({
   numRemision: z.string().min(1),
   destinatario: z.string().min(1),
   telefonoDest: z.string().min(1),
   producto: z.string().min(1),
   peso: z.number().positive(),
-  estatusId: z.string().min(1).optional(),
   tiendaId: z.string().min(1).optional(),
   zonaId: z.string().min(1),
   provinciaId: z.string().min(1),

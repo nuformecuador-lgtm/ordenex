@@ -179,12 +179,29 @@ export interface GenerarGuiaResultRow {
 
 // Feature 88 — fila devuelta por `createManyOrdenesConGuia`: por cada orden EFECTIVAMENTE
 // creada (no las duplicadas que `skipDuplicates` salto), su `numGuia` YA asignado en la
-// misma tx (R9/R10) y el `value` del estado inicial fijado (`en_ruta_bodega_central`).
+// misma tx (R9/R10) y el `value` del estado inicial, que desde la feature 155 lo resuelve la
+// bifurcacion por bodega y ya no es un literal fijo.
 export interface CreateOrdenConGuiaResultRow {
   ordenId: string;
   numRemision: string;
-  numGuia: number;
+  /** Feature 155/R21: `null` si el lote se creo con `conGuia: false` (rama defensiva). */
+  numGuia: number | null;
   estatusValue: string;
+}
+
+/**
+ * Feature 155 (R3/R8/R12) — opciones de `create`. Hoy solo lleva la numeracion de la rama (b)
+ * de la bifurcacion de creacion; el default (`conGuia` ausente = `false`) es el comportamiento
+ * historico: la orden nace SIN `num_guia`.
+ */
+export interface CreateOrdenOpciones {
+  /**
+   * `true` => dentro de la MISMA transaccion de la creacion se ejecuta
+   * `UPDATE orden SET num_guia = siguiente_num_guia() WHERE id = $1 AND num_guia IS NULL`.
+   * La guarda `num_guia IS NULL` lo hace idempotente: nunca consume dos numeros para la misma
+   * orden, y la secuencia es la MISMA que usa el resto del sistema (ninguna guia colisiona).
+   */
+  conGuia?: boolean;
 }
 
 // Feature 15 — filas de catalogo geografico usadas para resolver por nombre
@@ -435,8 +452,19 @@ export interface IOrdenRepository {
    * Feature 49/#2 (R10/R20): crea la orden y su primera fila de historial (origen null =
    * creacion, destino = estado inicial) en la MISMA transaccion (R7). `historial` aporta el
    * actor (usuario que crea) y `origenTipo` = `creacion_manual`.
+   *
+   * Feature 155 (R3/R8/R12): `opciones.conGuia` numera la orden DENTRO de esa misma tx. Se
+   * eligio un parametro con default en vez de un `createConGuia` hermano porque duplicaria
+   * la transaccion entera (create + historial + geocodificacion) por UNA sentencia de
+   * diferencia — y ya sabemos como termina eso: `createManyOrdenes` y
+   * `createManyOrdenesConGuia` divergieron hasta que una encolaba geocodificacion y la otra
+   * no. El default preserva el comportamiento de todos los llamadores previos.
    */
-  create(data: CreateOrdenData, historial: HistorialContexto): Promise<OrdenDTO>;
+  create(
+    data: CreateOrdenData,
+    historial: HistorialContexto,
+    opciones?: CreateOrdenOpciones,
+  ): Promise<OrdenDTO>;
   /** Excluye borradas (deleted_at IS NOT NULL); null si no existe o esta borrada (R34). */
   findById(id: string): Promise<OrdenDTO | null>;
   list(params: ListOrdenesParams): Promise<ListOrdenesResult>;
@@ -503,15 +531,27 @@ export interface IOrdenRepository {
    * EFECTIVAMENTE creada un `num_guia = siguiente_num_guia()` SOLO si `num_guia IS
    * NULL` (idempotente, misma secuencia y guarda que `generarGuiaLote` -> ninguna guia puede
    * colisionar con la feature 17/30) y registra su primera fila de historial (origen null,
-   * destino = estado inicial `en_ruta_bodega_central`, `origenTipo` = `carga_api`). Las
-   * filas duplicadas (saltadas por `skipDuplicates`) NO consumen `num_guia` (R11). Devuelve
-   * una fila por orden creada con su `num_guia` asignado. El estado inicial ya viene resuelto
-   * en `data[].estatusId` (el service lo fija a `en_ruta_bodega_central`).
+   * destino = estado inicial, `origenTipo` = `carga_api`). Las filas duplicadas (saltadas por
+   * `skipDuplicates`) NO consumen `num_guia` (R11). Devuelve una fila por orden creada con su
+   * `num_guia` asignado. El estado inicial ya viene resuelto en `data[].estatusId`: desde la
+   * feature 155 lo decide `resolverDestinoCreacion`, no un literal fijo del service.
+   *
+   * Feature 155/R11: encola ademas la geocodificacion de cada orden EFECTIVAMENTE insertada,
+   * dentro de la misma tx del chunk. Antes NO lo hacia (a diferencia de `createManyOrdenes`):
+   * las ordenes de esta ruta nacian sin coordenadas y el gate de asignabilidad de la 92 las
+   * bloqueaba despues sin explicacion.
    */
   createManyOrdenesConGuia(
     data: CreateOrdenData[],
     batchSize: number,
     historial: HistorialContexto,
+    /**
+     * Feature 155/R21: `conGuia: false` inserta y registra historial igual, pero NO toca la
+     * secuencia y devuelve `numGuia: null`. Es un PARAMETRO y no un metodo hermano por el
+     * mismo motivo que en `create`: duplicar la tx entera por una sentencia de diferencia es
+     * como esta ruta y `createManyOrdenes` acabaron divergiendo. Default `true`.
+     */
+    opciones?: CreateOrdenOpciones,
   ): Promise<CreateOrdenConGuiaResultRow[]>;
 
   // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---

@@ -8,20 +8,26 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // `censo-order-status-rename.test.ts`, pero al reves: alla se censaban values RETIRADOS; aqui
 // se censan values RECIEN DECLARADOS que TODAVIA NO deben usarse.
 //
-// La 154 declara dos estados (`por_recolectar_en_tienda`, `incidente`) y dos familias de
-// historial (`recoleccion_tienda`, `incidente`) que NINGUN service, action, repository, hook,
-// componente ni script puede producir hasta las features 155-158. Mientras tanto solo pueden
-// aparecer en:
+// La 154 declaro dos estados (`por_recolectar_en_tienda`, `incidente`) y dos familias de
+// historial (`recoleccion_tienda`, `incidente`) que ningun modulo podia producir todavia.
+// Mientras siguen sin productor solo pueden aparecer en:
 //   - el catalogo (`lib/types/order-status.ts`),
 //   - las familias (`lib/types/orden-historial.ts`),
 //   - el mapa de transiciones (`lib/types/order-status-transiciones.ts`),
 //   - la capa de presentacion del estatus (`EstatusBadge.tsx`),
 //   - `db/` (migraciones), `tests/` y `specs/` — que NO se escanean.
 //
-// Si un service empieza a escribir uno de estos literales antes de tiempo, este guard se pone
-// rojo y obliga a que el cambio llegue con SU feature (155/156/157/158), no de contrabando.
-// Cuando esa feature llegue, se añade su archivo a la allowlist o se retira el literal de
-// LITERALES_154 con la justificacion correspondiente.
+// FEATURE 155 — DOS LITERALES SE GRADUAN Y SALEN DEL CENSO. El guard funciono como se diseño:
+// mientras nadie los producia estuvieron confinados, y ahora salen POR SU FEATURE, no de
+// contrabando.
+//   - `por_recolectar_en_tienda`: es el estado en que NACE la rama (b) de la bifurcacion de
+//     creacion. Lo produce `resolverDestinoCreacion` y lo consumen las tres vias, la politica
+//     de eventos publicos y el contrato OpenAPI.
+//   - `recoleccion_tienda`: es el flujo del manifiesto de esa rama (`MANIFIESTO_FLUJOS`), y
+//     tambien la familia de historial de la arista #43, que producira la 157.
+//
+// `incidente` SIGUE censado: no tiene productor hasta la feature 158. Si alguien lo escribiera
+// antes de tiempo, este guard se pone rojo.
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 // Deliberadamente SIN `tests`, `db` ni `specs`: R28 los admite como sitios legitimos.
@@ -31,10 +37,11 @@ const SCAN_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sql",
 // Frontera de palabra a proposito: `\bincidente\b` NO marca "coincidentes"/"coincidente", que
 // aparecen en nombres de test y en textos de filtros de la UI.
 const LITERALES_154: Array<{ label: string; re: RegExp }> = [
-  { label: "por_recolectar_en_tienda", re: /\bpor_recolectar_en_tienda\b/ },
   { label: "incidente", re: /\bincidente\b/ },
-  { label: "recoleccion_tienda", re: /\brecoleccion_tienda\b/ },
 ];
+
+/** Los que la 155 GRADUO: siguen siendo values/familias reales, pero ya tienen productor. */
+const GRADUADOS_155 = ["por_recolectar_en_tienda", "recoleccion_tienda"] as const;
 
 // Archivos que SI pueden nombrarlos (por ruta relativa POSIX, no por basename: `incidente` es
 // una palabra comun y un basename suelto seria una allowlist demasiado ancha).
@@ -75,7 +82,7 @@ function ofensores(): string[] {
   return out;
 }
 
-describe("154/R28 — los values y familias de la 154 estan DECLARADOS y SIN USO", () => {
+describe("154/R28 — los values y familias TODAVIA sin productor estan DECLARADOS y SIN USO", () => {
   it("ningun archivo de app/, lib/, components/, hooks/, scripts/ ni e2e/ fuera de la allowlist los nombra", () => {
     expect(ofensores()).toEqual([]);
   });
@@ -84,7 +91,7 @@ describe("154/R28 — los values y familias de la 154 estan DECLARADOS y SIN USO
     for (const relativo of ALLOWLIST) {
       const contenido = fs.readFileSync(path.join(REPO_ROOT, relativo), "utf8");
       const hits = LITERALES_154.filter((v) => v.re.test(contenido)).map((v) => v.label);
-      expect(hits.length, `${relativo} no declara ningun literal de la 154`).toBeGreaterThan(0);
+      expect(hits.length, `${relativo} no declara ningun literal censado`).toBeGreaterThan(0);
     }
   });
 
@@ -96,23 +103,28 @@ describe("154/R28 — los values y familias de la 154 estan DECLARADOS y SIN USO
     expect(re.test("origenTipo: incidente,")).toBe(true);
   });
 
-  it("el censo de `recoleccion_tienda` no marca la familia preexistente `recoleccion`", () => {
-    const re = LITERALES_154.find((v) => v.label === "recoleccion_tienda")!.re;
-    expect(re.test('via: "recoleccion"')).toBe(false);
-    expect(re.test('via: "recoleccion_tienda"')).toBe(true);
+  it("155: el censo queda reducido a `incidente`, el unico todavia sin productor", () => {
+    expect(LITERALES_154.map((v) => v.label)).toEqual(["incidente"]);
+    // Y sigue siendo un value/familia real: si una feature posterior lo renombrara, este
+    // guard dejaria de censar lo que cree censar.
+    expect(ORDER_STATUS_SEED).toContain("incidente");
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("incidente");
   });
 
-  it("los literales censados son EXACTAMENTE los que la 154 da de alta", () => {
-    expect(LITERALES_154.map((v) => v.label)).toEqual([
-      "por_recolectar_en_tienda",
-      "incidente",
-      "recoleccion_tienda",
-    ]);
-    // Y siguen siendo values reales del catalogo / del enum de familias: si una feature
-    // posterior los renombrara, este guard dejaria de censar lo que cree censar.
-    expect(ORDER_STATUS_SEED).toContain("por_recolectar_en_tienda");
-    expect(ORDER_STATUS_SEED).toContain("incidente");
-    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("recoleccion_tienda");
-    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("incidente");
+  it("155: los dos literales graduados siguen existiendo en el catalogo y en las familias", () => {
+    // Salen del CENSO, no del sistema. Si alguien los borrara, el guard no lo veria (ya no los
+    // busca), asi que se afirma aqui explicitamente.
+    expect(ORDER_STATUS_SEED).toContain(GRADUADOS_155[0]);
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain(GRADUADOS_155[1]);
+  });
+
+  it("155: los dos graduados SI aparecen ya en modulos de negocio (tienen productor real)", () => {
+    const conEstado = fs.readFileSync(
+      path.join(REPO_ROOT, "lib", "services", "destino-creacion.ts"),
+      "utf8",
+    );
+    expect(conEstado).toMatch(/\bpor_recolectar_en_tienda\b/);
+    const conFlujo = fs.readFileSync(path.join(REPO_ROOT, "lib", "types", "manifiesto.ts"), "utf8");
+    expect(conFlujo).toMatch(/\brecoleccion_tienda\b/);
   });
 });

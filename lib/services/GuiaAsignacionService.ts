@@ -40,15 +40,17 @@ import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
-// Feature 156/R4: UNICO estado de origen valido para "Generar guia". `en_fulfillment`
-// deja de serlo (la 155 retira ese estado del flujo y hace el backfill).
+// Feature 156/R4 + 155/R29: UNICO estado de origen valido para "Generar guia". El estado
+// de fulfillment que la 156 ya habia sacado de esta constante quedo RETIRADO del catalogo
+// por la 155, asi que no hay forma de volver a nombrarlo aqui.
 const ORIGEN_GENERAR_GUIA = "en_preparacion";
 // R27: unico estado de origen valido para "asignar desde bodega".
 const ORIGEN_BODEGA = "en_bodega_central";
-// Feature 156/R15: UNICO estado de origen valido para rutear a satelite (antes un Set
-// con `en_fulfillment`/`en_preparacion`). Se deja como constante SEPARADA de
-// `ORIGEN_BODEGA` aunque hoy valgan lo mismo: documentan dos acciones distintas y un
-// cambio futuro en una no debe arrastrar a la otra por accidente.
+// Feature 156/R15 + 155/R29: UNICO estado de origen valido para rutear a satelite (antes un
+// Set de tres estados). Se deja como constante SEPARADA de `ORIGEN_BODEGA` aunque hoy valgan
+// lo mismo: documentan dos acciones distintas y un cambio futuro en una no debe arrastrar a
+// la otra por accidente. Una orden en un origen NO admitido produce `conflict` y NO altera
+// ninguna otra orden del lote (155/R29).
 const ORIGEN_RUTEO_SATELITE = "en_bodega_central";
 
 // Feature 46/R2: estatus bloqueado por reprogramacion (guardia explicito y tipado).
@@ -192,7 +194,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         detalle.push({ ordenId: id, motivo: MSG_ORDEN_REPROGRAMADA_BLOQUEADA });
         continue;
       }
-      // R4: origen UNICO `en_preparacion`. `en_fulfillment` deja de valer aqui.
+      // R4: origen UNICO `en_preparacion`. Cualquier otro estado -> conflict (155/R29).
       if (orden.estatusValue !== ORIGEN_GENERAR_GUIA) {
         detalle.push({
           ordenId: id,
@@ -368,9 +370,9 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         detalle.push({ ordenId: id, motivo: "orden borrada" });
         continue;
       }
-      // Feature 156/R15/R16: origen UNICO `en_bodega_central`. Antes tambien se
-      // admitia `en_fulfillment`/`en_preparacion`; el paquete se rutea desde donde
-      // esta fisicamente, y eso es la bodega central.
+      // Feature 156/R15/R16: origen UNICO `en_bodega_central`. Antes se admitian tres
+      // estados; el paquete se rutea desde donde esta fisicamente, y eso es la bodega
+      // central. Cualquier otro origen -> conflict, sin efecto sobre el lote (155/R29).
       if (orden.estatusValue !== ORIGEN_RUTEO_SATELITE) {
         detalle.push({
           ordenId: id,

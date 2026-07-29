@@ -15,6 +15,7 @@ import {
   type CantonRow,
   type CreateOrdenData,
   type CreateOrdenConGuiaResultRow,
+  type CreateOrdenOpciones,
   type DistritoRow,
   type EtiquetaRow,
   type GenerarGuiaDecisionData,
@@ -514,7 +515,11 @@ export class OrdenRepository implements IOrdenRepository {
     private readonly jobRepo: IJobRepository = new JobRepository(prisma),
   ) {}
 
-  async create(data: CreateOrdenData, historial: HistorialContexto): Promise<OrdenDTO> {
+  async create(
+    data: CreateOrdenData,
+    historial: HistorialContexto,
+    opciones: CreateOrdenOpciones = {},
+  ): Promise<OrdenDTO> {
     try {
       // Feature 49/#2 (R7/R10): create + append del historial en la MISMA transaccion.
       return await this.prisma.$transaction(async (tx) => {
@@ -537,6 +542,29 @@ export class OrdenRepository implements IOrdenRepository {
           },
           ...WITH_ESTATUS,
         });
+        // Feature 155/R3/R8/R12 — numeracion OPCIONAL en la MISMA tx que la creacion. Va
+        // ANTES del historial para que la orden ya este numerada cuando se registre su
+        // nacimiento. Idempotente por la guarda `num_guia IS NULL` (R8), misma secuencia
+        // atomica que el resto del sistema (`NUM_GUIA_GENERATOR`), y todo-o-nada con el
+        // resto de la tx (R12): si el historial o el encolado fallan, la guia se revierte
+        // con ellos y el numero no se pierde.
+        let numGuia = row.numGuia;
+        if (opciones.conGuia === true) {
+          await tx.$executeRawUnsafe(
+            `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
+            row.id,
+          );
+          // Relectura DEFENSIVA (patron `createManyOrdenesConGuia`): nunca un `as number`
+          // sobre un valor que no se ha visto.
+          const numerada = await tx.orden.findUniqueOrThrow({
+            where: { id: row.id },
+            select: { numGuia: true },
+          });
+          if (numerada.numGuia === null) {
+            throw new Error(`num_guia no asignado para la orden ${row.id}`);
+          }
+          numGuia = numerada.numGuia;
+        }
         // R10/R20: la creacion es la transicion `vacio -> estado inicial`.
         await appendCambioEstado(tx, [
           {
@@ -554,7 +582,9 @@ export class OrdenRepository implements IOrdenRepository {
           id: row.id,
           direccion: row.direccion,
         });
-        return toDTO(row);
+        // El DTO refleja el estado FINAL de la fila dentro de la tx: si se numero aqui, el
+        // llamador ve el `num_guia` (el `row` del create es previo al UPDATE).
+        return toDTO({ ...row, numGuia });
       });
     } catch (error) {
       throw mapCreateError(error, data.numRemision);
@@ -946,7 +976,9 @@ export class OrdenRepository implements IOrdenRepository {
     data: CreateOrdenData[],
     batchSize: number,
     historial: HistorialContexto,
+    opciones: CreateOrdenOpciones = {},
   ): Promise<CreateOrdenConGuiaResultRow[]> {
+    const conGuia = opciones.conGuia ?? true; // default historico: esta ruta numera
     const creadas: CreateOrdenConGuiaResultRow[] = [];
     for (let i = 0; i < data.length; i += batchSize) {
       const chunk = data.slice(i, i + batchSize);
@@ -965,32 +997,47 @@ export class OrdenRepository implements IOrdenRepository {
         });
         const after = await tx.orden.findMany({
           where: { numRemision: { in: chunkNums } },
-          select: { id: true, numRemision: true, estatusId: true, estatus: { select: { value: true } } },
+          // Feature 155/R11: `direccion` se anade al select para decidir POR FILA si encolar
+          // geocodificacion, exactamente como ya hacia `createManyOrdenes`. Es aditivo sobre
+          // una query que YA se ejecutaba: no anade round-trip.
+          select: {
+            id: true,
+            numRemision: true,
+            estatusId: true,
+            direccion: true,
+            estatus: { select: { value: true } },
+          },
         });
         const nuevas = after.filter((r) => !beforeIds.has(r.id));
 
         const resultado: CreateOrdenConGuiaResultRow[] = [];
         const entradas: CambioEstadoEntrada[] = [];
         for (const nueva of nuevas) {
-          // R9: idempotente — solo consume nextval() si num_guia es NULL. Secuencia por la
-          // constante del modulo (jamas se interpola entrada de usuario en el SQL).
-          await tx.$executeRawUnsafe(
-            `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
-            nueva.id,
-          );
-          const numerada = await tx.orden.findUniqueOrThrow({
-            where: { id: nueva.id },
-            select: { numGuia: true },
-          });
-          if (numerada.numGuia === null) {
-            // Guarda defensiva (patron generarGuiaLote): el UPDATE previo siempre deja
-            // num_guia asignado; se documenta en vez de mentir con `as number`.
-            throw new Error(`num_guia no asignado para la orden ${nueva.id}`);
+          // Feature 155/R21: `conGuia: false` (rama defensiva) NO toca la secuencia y devuelve
+          // `numGuia: null`. Ninguna orden consume un numero que no le corresponde.
+          let numGuia: number | null = null;
+          if (conGuia) {
+            // R9: idempotente — solo consume nextval() si num_guia es NULL. Secuencia por la
+            // constante del modulo (jamas se interpola entrada de usuario en el SQL).
+            await tx.$executeRawUnsafe(
+              `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
+              nueva.id,
+            );
+            const numerada = await tx.orden.findUniqueOrThrow({
+              where: { id: nueva.id },
+              select: { numGuia: true },
+            });
+            if (numerada.numGuia === null) {
+              // Guarda defensiva (patron generarGuiaLote): el UPDATE previo siempre deja
+              // num_guia asignado; se documenta en vez de mentir con `as number`.
+              throw new Error(`num_guia no asignado para la orden ${nueva.id}`);
+            }
+            numGuia = numerada.numGuia;
           }
           resultado.push({
             ordenId: nueva.id,
             numRemision: nueva.numRemision,
-            numGuia: numerada.numGuia,
+            numGuia,
             estatusValue: nueva.estatus.value,
           });
           // R8/R20: origen null (creacion) -> destino estado inicial; origenTipo carga_api (D7).
@@ -1003,6 +1050,18 @@ export class OrdenRepository implements IOrdenRepository {
           });
         }
         await appendCambioEstado(tx, entradas);
+        // Feature 155/R11 — HUECO CERRADO. Esta ruta NO encolaba geocodificacion (comparar con
+        // `createManyOrdenes`), asi que sus ordenes nacian sin coordenadas y el gate de
+        // asignabilidad de la feature 92 las bloqueaba mas tarde sin explicacion. Mismo
+        // criterio que la otra ruta de lote: UN job por orden EFECTIVAMENTE insertada (las
+        // duplicadas saltadas por `skipDuplicates` no estan en `nuevas`), dentro de la MISMA
+        // tx del chunk, y no-op si la direccion no es geocodificable.
+        for (const nueva of nuevas) {
+          await encolarGeocodificacion(this.jobRepo, tx as unknown as JobTxClient, {
+            id: nueva.id,
+            direccion: nueva.direccion,
+          });
+        }
         return resultado;
       });
       creadas.push(...chunkCreadas);
@@ -1327,7 +1386,8 @@ export class OrdenRepository implements IOrdenRepository {
     if (decisiones.length === 0) return [];
     return this.prisma.$transaction(async (tx) => {
       // Feature 49/#3 (R20): estatus de ORIGEN por orden, leido dentro de la tx antes de
-      // escribir (cada orden puede venir de en_fulfillment/en_preparacion/en_bodega_central).
+      // escribir (tras la 156 el origen admitido es uno solo, pero el historial se resuelve
+      // por lo que la fila DICE, no por lo que el service supone).
       const origenRows = await tx.orden.findMany({
         where: { id: { in: decisiones.map((d) => d.ordenId) } },
         select: { id: true, estatusId: true },

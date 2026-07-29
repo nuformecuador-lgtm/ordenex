@@ -9,19 +9,29 @@
 
 ## Bloque 0 — Puerta (BLOQUEA TODO)
 
-- [ ] **T0.1 — Cerrar las preguntas abiertas con el humano.**
+- [x] **T0.1 — Cerrar las preguntas abiertas con el humano.** *(cerrada 2026-07-29)*
       Dep: ninguna. Entrada: `design.md §8` (manifiesto: A/B/C) y `requirements.md > Preguntas
       abiertas` (2 eventos públicos, 3 integradores con bodega propia, 4 arista de la 154, 5 etiqueta
       en el acto, 6 zona de la feature).
       **Hecho cuando:** las 6 respuestas están escritas en `design.md §11` con fecha, y R24/R43
       quedan redactados en su forma final en `requirements.md`.
+      **Hecho:** las 6 respuestas están en `design.md §11` (tabla con fecha) y R24/R43 quedan en
+      forma final en `requirements.md`. Resumen: (1) manifiesto → **opción C**; (2) evento público →
+      **sí**; (3) `apiKey` siempre en la rama (b), R21 se escribe igual como rama defensiva; (4) `#5`
+      sobrevive; (5) etiqueta en el acto → 157; (6) zona → backend → frontend, sin `.tsx`.
 
-- [ ] **T0.2 — Confirmar que 153 y 154 están en `dev`.**
+- [x] **T0.2 — Confirmar que 153 y 154 están en `dev`.** *(verificado 2026-07-29)*
       Dep: ninguna. `por_recolectar_en_tienda` presente en `ORDER_STATUS_SEED`, en `TRANSICIONES`, en
       `ESTADOS_CREACION` y en `ORDER_STATUS_LABELS/VARIANT`; migración de la 154 aplicada en local
       (`prisma migrate deploy`).
       **Hecho cuando:** `npm test` pasa en verde en la rama base **antes** de tocar nada, y una
       consulta al catálogo local devuelve el value nuevo.
+      **Hecho:** la rama base (`feature/155-creacion-bifurcada`, salida de `origin/dev` con 153, 154,
+      156 y 160) da `pnpm run typecheck` sin errores y `pnpm test` en **569 archivos / 6218 tests, 0
+      fallos**, ANTES de tocar nada. `por_recolectar_en_tienda` está en `ORDER_STATUS_SEED` (índice
+      18), en `TRANSICIONES` (#43), en `ESTADOS_CREACION` y en los mapas de badge/label.
+      **NO verificado:** la consulta al catálogo de una base local (no hay Postgres en este entorno;
+      los tests de `tests/integration/db` son estáticos sobre el SQL). Queda declarado como deuda.
 
 ---
 
