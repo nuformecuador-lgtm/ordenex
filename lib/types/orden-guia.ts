@@ -1,6 +1,6 @@
 // Feature 17 — Tipos y schemas del backend de "Generar guia" / asignacion de
 // mensajero. DTOs propios (no amplian OrdenDTO) para no alterar el contrato del
-// CRUD de ordenes (feature 6/7), patron lib/types/asignacion-mensajero.ts.
+// CRUD de ordenes (feature 6/7), patron lib/types/carga-masiva-resumen.ts.
 import { z } from "zod";
 
 // Feature 156 (R14): la entrada de "Generar guia" es un LOTE DE IDS y NADA MAS. El

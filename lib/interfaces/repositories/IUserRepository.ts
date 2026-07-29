@@ -1,5 +1,5 @@
 import type { EstadoUsuario, RolValue } from "@prisma/client";
-import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
+import type { MensajeroDTO } from "@/lib/types/mensajero";
 import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
 import type { CuentaTiendaDTO } from "@/lib/types/filtros-ordenes";
 
