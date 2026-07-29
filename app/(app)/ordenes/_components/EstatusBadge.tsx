@@ -29,6 +29,8 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   por_devolver: "Por devolver", // feature 139/R4: rechazada de bodega satélite tras aprobar el cierre (elegible para "enviar a central")
   devolviendo_a_bodega_central: "Devolviendo a bodega central", // feature 139/R4: en tránsito satélite → central
   por_devolver_a_tienda: "Por devolver a tienda", // feature 139/R4: en la central, elegible para "enviar a la tienda"
+  por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29: espera en la tienda a que el mensajero la recolecte
+  incidente: "Incidente", // feature 154/R30: resultado terminal de la gestión
 };
 
 /**
@@ -63,6 +65,12 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   por_devolver: "warning",
   devolviendo_a_bodega_central: "info",
   por_devolver_a_tienda: "warning",
+  // Feature 154/R29/R30 (Q5 confirmada por el humano). Mismo criterio que los estados ya
+  // clasificados: `por_recolectar_en_tienda` es un estado de ESPERA (acción pendiente) ->
+  // `warning`, igual que `por_devolver`; `incidente` es un cierre en error -> `danger`, igual
+  // que `rechazada`. Ninguno lleva refuerzo de acento de marca en `ORDER_STATUS_CLASS`.
+  por_recolectar_en_tienda: "warning",
+  incidente: "danger",
 };
 
 /**
