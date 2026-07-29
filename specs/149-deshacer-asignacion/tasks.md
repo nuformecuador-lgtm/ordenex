@@ -250,15 +250,20 @@
 
 ## F7 — Cierre
 
-- [ ] **T7.1 — Suite completa y arnés.** Depende de todo lo anterior.
+- [x] **T7.1 — Suite completa y arnés.** Depende de todo lo anterior.
   `./init.sh`, `pnpm typecheck`, `pnpm lint`, `pnpm test` en verde; delta de tests fallidos
   respecto al baseline medido = 0.
-- [ ] **T7.2 — Bitácora de implementación.**
+  **Medido:** `./init.sh` verde (exit 0, medición del reviewer); `pnpm typecheck` 0 errores;
+  `pnpm lint` 0 errores / 154 warnings; `pnpm test` en verde con **delta de fallidos = 0**.
+  Números finales en `progress/impl_149.md` §9.
+- [x] **T7.2 — Bitácora de implementación.**
   `progress/impl_149.md` con la matriz `R -> test` REAL (archivo + nombre del test), el registro
   de los tests de la 140 modificados y por qué, y una sección «Deuda diferida a la 146» que
   apunte al ancla `TODO(146)` (archivo + función) para que la feature 146 la encuentre.
-  **Hecho:** los 41 requisitos aparecen mapeados; el reviewer puede verificar cada uno y el ancla
-  está registrada.
+  **Hecho:** `progress/impl_149.md` consolida las dos bitácoras parciales (que se conservan como
+  detalle): los 41 requisitos aparecen mapeados a archivo + nombre de test (§5), los tests de la
+  140 modificados están registrados con su porqué (§4) y la sección «Deuda diferida a la 146» (§6)
+  apunta al ancla `TODO(146)` con archivo, función y ubicación exacta.
 
 ---
 
