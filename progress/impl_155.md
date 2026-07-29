@@ -341,14 +341,21 @@ rojo.
 
 **Heredadas del backend, NO saldadas por esta fase (se repiten porque siguen vivas y pesan):**
 
-4. **Nada se corrió contra Postgres real.** El *Hecho cuando* de T5.1/T5.2 pide el round-trip
-   `deploy → rollback → deploy` contra una base **con** órdenes en el estado retirado, con conteos
-   antes/después. Los tests de `tests/integration/db` son estáticos (leen el SQL) más una simulación
-   en memoria. **Recomendación viva: correrlo antes de mergear**, porque esta migración **escribe
-   datos**.
+4. ~~**Nada se corrió contra Postgres real.**~~ **SALDADA el 2026-07-29 por el leader**, en
+   paralelo a esta fase (de ahí que quedara escrita como viva). El round-trip
+   `deploy → rollback → deploy` se ejecutó contra `localhost:5432` / base `ordenex` sobre una base
+   **con 47 órdenes en `en_fulfillment`**, con conteos antes/después y checksum de la tabla `orden`.
+   Cumple el *Hecho cuando* literal de T5.1 (2.ª pasada del UP = **0 filas en los 3 pasos**) y de
+   T5.2 (el rollback deja la base **exactamente** como estaba: 47/3 órdenes, 108 filas de historial,
+   mismo checksum). Verificado además **por mutación**: quitarle al DOWN el filtro del rastro lo pone
+   en rojo. **Registro completo con números, mutaciones y limitaciones en
+   `progress/roundtrip_155_migracion.md`.** Lo que sigue sin medirse está ahí, en su §«Lo que este
+   round-trip NO demuestra» — en particular la rama de **base limpia** del paso 3.
 5. **El `DELETE` del catálogo es no-op en cuanto se migra UNA orden** (el rastro de R35 referencia el
    value en `estatus_origen_id`). Es correcto y está testeado, pero significa que "el value
    desaparece de la tabla" **no es una promesa** de esta migración en producción.
+   **Confirmado por medición el 2026-07-29:** en el round-trip real el catálogo se quedó en 21 filas
+   y `en_fulfillment` **sobrevivió** al UP. Es la rama que se dará en producción.
 6. **El censo de R39 sobre datos reales está sin hacer**: no se consultó producción.
 7. **El wiring real del manifiesto del canal API** (`buildManifiestoService` con Prisma) no se
    ejerció; un fallo ahí saldría como `manifiesto: { error }` en producción, no como test rojo.

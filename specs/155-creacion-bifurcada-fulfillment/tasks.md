@@ -151,11 +151,20 @@
       condicional). Cubre R34–R37, R40.
       **Hecho cuando:** el SQL corre dos veces seguidas contra una base local **con** órdenes en ese
       estado y la segunda pasada afecta 0 filas.
+      *Round-trip 2026-07-29 (leader):* **cumplido literalmente y medido.** Base local con **47
+      órdenes** en `en_fulfillment`; 1.ª pasada 47/47/0 filas, **2.ª pasada 0 filas en los 3 pasos**
+      y el rastro no se duplica. Se marcó `[x]` antes sobre el SQL escrito + tests estáticos; ahora
+      lo respalda la ejecución. Detalle en `progress/roundtrip_155_migracion.md`.
 
 - [x] **T5.2 — Escribir `down.sql` a mano.**
       Dep: T5.1. Los 3 pasos de `design.md §4.2`. Cubre R38.
       **Hecho cuando:** `pnpm run db:rollback` deja la base **exactamente** como estaba antes de
       T5.1 (mismo conteo por estado y mismo conteo de filas de historial), verificado con consulta.
+      *Round-trip 2026-07-29 (leader):* **cumplido literalmente y medido.** `pnpm db:rollback`
+      devolvió la base a 47 órdenes en `en_fulfillment` / 3 en `en_preparacion`, 108 filas de
+      historial, rastro borrado y **mismo checksum** de `orden` menos `estatus_id`. Verificado
+      además **por mutación**: sin el filtro del rastro el DOWN arrastra 50 en vez de 47, y el arnés
+      lo caza. Detalle en `progress/roundtrip_155_migracion.md`.
 
 - [x] **T5.3 — Tests de integración de la migración.**
       Dep: T5.1, T5.2. En `tests/integration/db/`: UP mueve las órdenes (incluidas las borradas
