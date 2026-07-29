@@ -145,8 +145,30 @@ El guard busca `/embalaje/i` línea a línea y no distingue el nombre del guard 
 prohibido. Arreglado aparte, en su propio commit (§7), siguiendo el patrón de whitelist que
 ya usan `specs/27-fulfillment-tienda/` y `specs/137-order-status-rename-nomenclatura/`.
 
-Con ese arreglo, `pnpm test` queda en **546/546 archivos y 5712/5712 tests** y `./init.sh`
-termina en verde.
+Con ese arreglo (commit aparte, §7):
+
+```
+$ ./init.sh
+✓ node v24.13.0
+✓ dependencias presentes
+✓ regla max-2-por-zona respetada (in_progress=4)
+✓ specs presentes para features sdd en vuelo
+-> pnpm run typecheck
+✓ typecheck paso
+-> pnpm run lint
+✖ 10 problems (0 errors, 10 warnings)
+✓ lint paso
+-> pnpm run test
+ Test Files  546 passed (546)
+      Tests  5712 passed (5712)
+   Duration  141.67s
+✓ test paso
+✓ todas las migraciones tienen down.sql
+! no hay .env. Crea uno a partir de .env.example
+== init OK ==
+```
+
+(El `!` del `.env` es un **warning**, no un fallo: el worktree aislado no lleva `.env`.)
 
 ## 6. Lo que NO se pudo verificar aquí (y por qué)
 
