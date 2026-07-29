@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
 import { listarRechazosSlaTiendaAction } from "@/lib/actions/rechazos-sla-tienda";
@@ -118,6 +119,12 @@ export function RechazosSlaModule({
                 {REMISION_LABEL} {rechazo.numRemision}
               </p>
               <p className="text-sm text-foreground">{rechazo.destinatario}</p>
+              {/* Feature 160 (R18/R19/R26): igual que la pestaña de novedades, esto es
+                  una lista de cards y no un `DataTable` -> dato etiquetado con el
+                  markup de sus líneas hermanas. Siempre visible, `0` incluido. */}
+              <p className="text-sm text-muted-foreground">
+                <IntentosDato intentos={valorIntentos(rechazo)} />
+              </p>
             </div>
             <div className="flex items-center">
               {rechazo.monto === null ? (

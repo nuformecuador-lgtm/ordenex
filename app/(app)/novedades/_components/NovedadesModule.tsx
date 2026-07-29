@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
+import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { Pagination } from "@/components/shared/Pagination";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
@@ -117,6 +118,13 @@ export function NovedadesModule({
               <p className="text-sm text-foreground">{novedad.destinatario}</p>
               <p className="text-sm text-muted-foreground">
                 {causaLabel(novedad.causa)}
+              </p>
+              {/* Feature 160 (R18/R19/R26): esta pestaña es una lista de cards
+                  (<ul>/<li>), NO un `DataTable`, así que el conteo va como DATO
+                  ETIQUETADO con el mismo markup que sus líneas hermanas. Siempre
+                  visible, `0` incluido; sin umbral (R20). */}
+              <p className="text-sm text-muted-foreground">
+                <IntentosDato intentos={valorIntentos(novedad)} />
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">

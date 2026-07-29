@@ -3,6 +3,7 @@
 import { Package, StickyNote, Truck } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "../AsignacionDetalle";
@@ -62,6 +63,15 @@ export function PosOrderCard({
             </h3>
             <p className="truncate font-mono text-xs uppercase text-muted-foreground">
               {orden.producto}
+            </p>
+            {/* Feature 160 (R18/R19/R24): intentos de entrega como DATO de la card, en
+                el mismo bloque de campos que Destinatario y Producto y con su mismo
+                tratamiento. NO va en la fila de marcas informativas de abajo: ahí viven
+                "Pendiente de optimizar" y "Gestionar más tarde", que son marcas de
+                EXCEPCIÓN, y D6 decidió que los intentos son un dato. Siempre visible,
+                `0` incluido; sin umbral (R20). */}
+            <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+              <IntentosDato intentos={valorIntentos(orden)} />
             </p>
           </div>
         </div>

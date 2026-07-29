@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
+import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
@@ -133,8 +134,13 @@ export function AsignarBodegaModal({
       ) : (
       <div className="flex flex-col gap-2">
         <ul className="max-h-40 list-disc overflow-auto pl-5 text-sm text-muted-foreground">
+          {/* Feature 160 (R18/R19/R23): dato etiquetado junto a cada orden listada, en
+              la misma línea y con el mismo markup que el resto del `<li>`. Siempre
+              visible, `0` incluido; sin umbral (R20). */}
           {ordenes.map((orden) => (
-            <li key={orden.id}>{orden.numRemision}</li>
+            <li key={orden.id}>
+              {orden.numRemision} · <IntentosDato intentos={valorIntentos(orden)} />
+            </li>
           ))}
         </ul>
         <Select

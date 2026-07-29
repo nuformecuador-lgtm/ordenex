@@ -111,6 +111,7 @@ function renderModule(
           porCierreBodega: false,
         }
       }
+      liberadasHoy={props?.liberadasHoy ?? []}
     />,
   );
 }
@@ -290,6 +291,9 @@ describe("RecepcionSateliteModule", () => {
       "Nº Guía",
       "Nº Remisión",
       "Estado",
+      // Feature 160 (R17/R25): columna propia, misma posición relativa que en
+      // `/ordenes` (justo tras "Estado").
+      "Intentos",
       "Destinatario",
       "Producto",
       "Dirección",
@@ -869,5 +873,205 @@ describe("RecepcionSateliteModule", () => {
     expect(within(region).getAllByText(/REM-DEV/).length).toBeGreaterThan(0);
     expect(within(region).queryByText("Prioritaria")).toBeNull();
     expect(region.querySelector(".bg-warning\\/15")).toBeNull();
+  });
+});
+
+// Feature 160 (T19, R17/R18/R19/R25) — los CINCO grupos del módulo satélite, con las
+// DOS formas: los tres presentados como tabla reciben la columna propia; los dos
+// presentados como cards reciben el dato etiquetado dentro de `RecepcionDetalle`.
+describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => {
+  /**
+   * Celda de intentos de una fila. En "Recibidas" y "Por devolver" la primera columna
+   * es el checkbox de selección, así que el índice corre uno; en "En tránsito" no.
+   */
+  function celdaIntentos(tabla: HTMLElement, rem: string, conCheckbox: boolean) {
+    const fila = within(tabla).getByRole("row", { name: new RegExp(rem) });
+    // numGuia, numRemision, estatus, INTENTOS  (+1 si hay checkbox delante)
+    return within(fila).getAllByRole("cell")[conCheckbox ? 4 : 3];
+  }
+
+  it("R17/R25: 'Recibidas' muestra el número en su columna, y `0` cuando no hay intentos", () => {
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "r1",
+          numRemision: "REM-R1",
+          estatusValue: "en_bodega_satelite",
+          intentosEntrega: 2,
+        }),
+        makeOrden({
+          id: "r2",
+          numRemision: "REM-R0",
+          estatusValue: "en_bodega_satelite",
+          intentosEntrega: 0,
+        }),
+        makeOrden({
+          id: "r3",
+          numRemision: "REM-RX",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+    });
+    const tabla = screen.getByRole("table", { name: "Recibidas" });
+    expect(
+      within(tabla).getByRole("columnheader", { name: "Intentos" }),
+    ).toBeInTheDocument();
+    expect(celdaIntentos(tabla, "REM-R1", true)).toHaveTextContent(/^2$/);
+    expect(celdaIntentos(tabla, "REM-R0", true)).toHaveTextContent(/^0$/);
+    expect(celdaIntentos(tabla, "REM-RX", true)).toHaveTextContent(/^0$/);
+  });
+
+  it("R25: 'Por devolver' muestra la columna con su número (≥1 y 0)", () => {
+    renderModule({
+      porDevolver: [
+        makeOrden({
+          id: "d1",
+          numRemision: "REM-D1",
+          estatusValue: "por_devolver_a_bodega_central",
+          intentosEntrega: 3,
+        }),
+        makeOrden({
+          id: "d2",
+          numRemision: "REM-D0",
+          estatusValue: "por_devolver_a_bodega_central",
+          intentosEntrega: 0,
+        }),
+      ],
+    });
+    const tabla = screen.getByRole("table", { name: "Por devolver" });
+    expect(
+      within(tabla).getByRole("columnheader", { name: "Intentos" }),
+    ).toBeInTheDocument();
+    expect(celdaIntentos(tabla, "REM-D1", true)).toHaveTextContent(/^3$/);
+    expect(celdaIntentos(tabla, "REM-D0", true)).toHaveTextContent(/^0$/);
+  });
+
+  it("R25: 'En tránsito a central' (sin checkbox) muestra la columna con su número", () => {
+    renderModule({
+      enTransitoACentral: [
+        makeOrden({
+          id: "t1",
+          numRemision: "REM-T1",
+          estatusValue: "devolviendo_a_bodega_central",
+          intentosEntrega: 1,
+        }),
+        makeOrden({
+          id: "t2",
+          numRemision: "REM-T0",
+          estatusValue: "devolviendo_a_bodega_central",
+          intentosEntrega: 0,
+        }),
+      ],
+    });
+    const tabla = screen.getByRole("table", { name: "En tránsito a central" });
+    expect(
+      within(tabla).getByRole("columnheader", { name: "Intentos" }),
+    ).toBeInTheDocument();
+    expect(celdaIntentos(tabla, "REM-T1", false)).toHaveTextContent(/^1$/);
+    expect(celdaIntentos(tabla, "REM-T0", false)).toHaveTextContent(/^0$/);
+  });
+
+  it("R18/R25: 'Por recibir' (cards) muestra el dato etiquetado como un campo más", () => {
+    renderModule({
+      porRecibir: [
+        makeOrden({ id: "p1", numRemision: "REM-P1", intentosEntrega: 2 }),
+      ],
+    });
+    const region = screen.getByRole("region", { name: "Por recibir" });
+    const etiqueta = within(region).getByText("Intentos");
+    expect(etiqueta.tagName).toBe("DT");
+    expect(etiqueta.parentElement?.querySelector("dd")?.textContent).toBe("2");
+  });
+
+  it("R19: 'Por recibir' con 0 intentos LO MUESTRA igual", () => {
+    renderModule({
+      porRecibir: [
+        makeOrden({ id: "p1", numRemision: "REM-P0", intentosEntrega: 0 }),
+      ],
+    });
+    const region = screen.getByRole("region", { name: "Por recibir" });
+    expect(
+      within(region).getByText("Intentos").parentElement?.querySelector("dd")
+        ?.textContent,
+    ).toBe("0");
+  });
+
+  it("R18/R25: 'Devueltas' (cards) muestra el dato, y `0` cuando no hay intentos", () => {
+    renderModule({
+      devueltas: [
+        makeOrden({
+          id: "n1",
+          numRemision: "REM-N1",
+          estatusValue: "devuelta",
+          intentosEntrega: 4,
+        }),
+        makeOrden({
+          id: "n2",
+          numRemision: "REM-N0",
+          estatusValue: "devuelta",
+          intentosEntrega: 0,
+        }),
+      ],
+    });
+    const region = screen.getByRole("region", { name: "Devueltas" });
+    const valores = within(region)
+      .getAllByText("Intentos")
+      .map((dt) => dt.parentElement?.querySelector("dd")?.textContent);
+    expect(valores).toEqual(["4", "0"]);
+  });
+
+  it("R21/R32: el badge 'Prioritaria' sigue en la celda de Nº Guía, no en la nueva columna", () => {
+    renderModule({
+      recibidas: [
+        makeOrden({
+          id: "r1",
+          numRemision: "REM-PR",
+          estatusValue: "en_bodega_satelite",
+          prioridad: true,
+          intentosEntrega: 2,
+        }),
+      ],
+    });
+    const tabla = screen.getByRole("table", { name: "Recibidas" });
+    const celdas = within(
+      within(tabla).getByRole("row", { name: /REM-PR/ }),
+    ).getAllByRole("cell");
+    // Índice 1 = primera columna de DATOS (la 0 es el checkbox).
+    expect(celdas[1]).toHaveTextContent("Prioritaria");
+    expect(celdas[4]).toHaveTextContent(/^2$/);
+  });
+});
+
+// Feature 160 (T21, R27) — el aviso "Liberadas hoy" en su montaje de RECEPCIÓN
+// SATÉLITE (el otro es la revisión del maestro). El dato viaja por props desde el
+// Server Component padre; aquí se verifica que llega hasta la card.
+describe("RecepcionSateliteModule — 'Liberadas hoy' con intentos (feature 160)", () => {
+  it("R27: la card del aviso muestra el dato etiquetado, con 0 incluido", () => {
+    renderModule({
+      liberadasHoy: [
+        {
+          id: "l1",
+          numGuia: 5001,
+          numRemision: "REM-L1",
+          destinatario: "Ana Pérez",
+          liberadaReprogramadaAt: new Date("2026-07-13T06:00:00.000Z"),
+          intentosEntrega: 2,
+        },
+        {
+          id: "l2",
+          numGuia: 5002,
+          numRemision: "REM-L2",
+          destinatario: "Beto Ruiz",
+          liberadaReprogramadaAt: new Date("2026-07-13T06:00:00.000Z"),
+          intentosEntrega: 0,
+        },
+      ],
+    });
+    const region = screen.getByRole("region", {
+      name: "Liberadas hoy (reprogramación)",
+    });
+    const items = within(region).getAllByRole("listitem");
+    expect(within(items[0]).getByText("Intentos: 2")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Intentos: 0")).toBeInTheDocument();
   });
 });
