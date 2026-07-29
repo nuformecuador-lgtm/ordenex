@@ -3,9 +3,10 @@
 > Requisitos: `specs/154-catalogo-estados-v2/requirements.md` · Depende de la **153** aplicada
 > (`en_ruta` → `en_reparto`). Todo lo de aquí se escribe contra `en_reparto`.
 >
-> **Este design tiene TRES preguntas bloqueantes abiertas (Q1, Q2, Q3 de requirements.md).** El
-> inventario de §3 está calculado con la lectura propuesta para Q1 y Q2; §3.5 da los recuentos de
-> las otras lecturas para que el humano vea el coste de cada respuesta antes de decidir.
+> **PUERTA T0 CERRADA (2026-07-29).** Q1/Q2/Q3 ya están respondidas (ver el bloque de cabecera de
+> `requirements.md`). La respuesta a **Q2 cambia el diseño**: la 154 es **SOLO ADITIVA** y **no
+> retira ninguna arista**. §3.2 pasa de "BAJAS" a "BAJAS DIFERIDAS" y §3.4 lleva los recuentos
+> reales. Lo que queda de §3.5 es histórico.
 
 ---
 
@@ -17,7 +18,7 @@ Tres artefactos son fuente única de verdad y esta feature toca los tres:
 | --- | --- | --- |
 | `lib/types/order-status.ts` → `ORDER_STATUS_SEED` | catálogo de estados, respaldado por la **TABLA** `order_status` | +2 values (18 → 20) |
 | `lib/types/orden-historial.ts` → `ORDEN_HISTORIAL_ORIGEN_TIPO_SEED` | familias de transición, respaldadas por el **ENUM PG** `orden_historial_origen_tipo` | +2 values (22 → 24) |
-| `lib/types/order-status-transiciones.ts` → `TRANSICIONES` | grafo de legalidad de la feature 140 | +2 aristas de flujo, +1 de creación, −6 aristas de flujo |
+| `lib/types/order-status-transiciones.ts` → `TRANSICIONES` | grafo de legalidad de la feature 140 | +2 aristas de flujo, +1 de creación (**0 bajas**, decisión Q2) |
 
 Y la capa de presentación: `app/(app)/ordenes/_components/EstatusBadge.tsx`
 (`ORDER_STATUS_LABELS` / `ORDER_STATUS_VARIANT` / `ORDER_STATUS_CLASS`).
@@ -139,7 +140,8 @@ Numeración: la del apéndice A de la feature 140, tal como vive hoy en
 
 - `ESTADOS_CREACION` pasa de 3 a **4**: `["en_preparacion", "en_fulfillment", "en_ruta_bodega_central", "por_recolectar_en_tienda"]`.
 - `ESTADOS_TERMINALES` pasa de 2 a **3**: `["entregada", "devuelta_a_tienda", "incidente"]`.
-- `incidente: []` en el mapa (terminal). Tiene entrada (#44) → cumple R26.
+- `incidente: []` en el mapa (terminal **sin ninguna salida**; el `indemnizada` que se planteó en
+  el gate quedó descartado). Tiene entrada (#44) → cumple R26.
 - `por_recolectar_en_tienda: [#43]` — entrada por creación, salida #43 → cumple R26.
 - `ESTADOS_VESTIGIALES` sigue **vacío** (salvo que Q2 se resuelva por la opción (ii)).
 
@@ -149,10 +151,15 @@ por #43) e `incidente` (ver **Q4**: hoy queda declarada sin arista que la produz
 gestión y su destino no es `devuelta`; el value `incidente` no se emite todavía. Mismo criterio
 documentado para `recepcion_bodega_central` (138) y `devolucion_rechazada` (139).
 
-### 3.2 BAJAS — 6 aristas de flujo
+### 3.2 BAJAS — DIFERIDAS a las features 155/156 (decisión Q2, 2026-07-29)
+
+> **La 154 NO retira ninguna de estas seis.** La tabla se conserva como inventario de lo que hay
+> que retirar y de en qué feature. Motivo: `GuiaAsignacionService` las ejecuta HOY; retirarlas sin
+> tocar el service deja `en_fulfillment` sin salidas (rompe R26) y atrapa sus órdenes vivas.
+> Reparto: `#4`/`#6`/`#7c` → feature **156**; `#1`/`#3`/`#7b` → feature **155**.
 
 Las que hoy permiten **saltarse la bodega central al generar la guía**. Auditable línea a línea
-contra `lib/types/order-status-transiciones.ts:47-61`:
+contra `lib/types/order-status-transiciones.ts` (numeración previa a la 154):
 
 | # | origen | destino | `via` | línea hoy | quién la ejecuta hoy |
 | --- | --- | --- | --- | --- | --- |
@@ -163,39 +170,44 @@ contra `lib/types/order-status-transiciones.ts:47-61`:
 | #3 | `en_fulfillment` | `en_ruta_bodega_satelite` | `generacion_guia` | `:58` | `generarGuia` (no-GAM) |
 | #7b | `en_fulfillment` | `en_ruta_bodega_satelite` | `ruteo_satelite` | `:60` | `rutearABodegaSatelite` |
 
-**4 pares dirigidos únicos** desaparecen (#6/#7c comparten par, #3/#7b comparten par):
-`(en_preparacion, por_recoger)`, `(en_preparacion, en_ruta_bodega_satelite)`,
-`(en_fulfillment, por_recoger)`, `(en_fulfillment, en_ruta_bodega_satelite)`.
+**4 pares dirigidos únicos** desaparecerán cuando se retiren (#6/#7c comparten par, #3/#7b
+comparten par): `(en_preparacion, por_recoger)`, `(en_preparacion, en_ruta_bodega_satelite)`,
+`(en_fulfillment, por_recoger)`, `(en_fulfillment, en_ruta_bodega_satelite)`. **En la 154 los
+cuatro siguen siendo legales.**
 
 ### 3.3 SUPERVIVIENTES que el spec fija explícitamente
 
 | # | arista | por qué sobrevive |
 | --- | --- | --- |
-| #5 | `en_preparacion → en_bodega_central` (`generacion_guia`) | **única** salida de "generar guía" tras el cambio; es la arista sobre la que se construye la 156. **Sujeta a Q1.** |
-| #2 | `en_fulfillment → en_bodega_central` (`generacion_guia`) | PUENTE hasta que la 155 retire `en_fulfillment`; sin ella el estado queda sin salida y las órdenes vivas ahí quedan atrapadas. **Sujeta a Q2.** |
+| #5 | `en_preparacion → en_bodega_central` (`generacion_guia`) | **única** salida de "generar guía" tras el cambio; es la arista sobre la que se construye la 156. **Q1 CERRADA: sobrevive.** |
+| #2 | `en_fulfillment → en_bodega_central` (`generacion_guia`) | PUENTE hasta que la 155 retire `en_fulfillment`. **Q2 CERRADA: sobrevive (y con ella las otras cuatro salidas de `en_fulfillment`).** |
 | #7 | `en_bodega_central → en_ruta_bodega_satelite` (`ruteo_satelite`) | asignación a satélite, sale de bodega |
 | #8 | `en_bodega_central → por_recoger` (`asignacion_bodega`) | asignación a mensajero, sale de bodega |
 | #9 | `en_bodega_satelite → por_recoger` (`asignacion_satelite`) | asignación del satélite a su mensajero |
 
 Todo lo demás del mapa (#10–#42) queda **byte-idéntico**.
 
-### 3.4 Recuentos
+### 3.4 Recuentos (REALES, con la decisión Q2 = solo aditiva)
 
 | | antes (post-153) | después |
 | --- | --- | --- |
 | `ORDER_STATUS_SEED` | 18 | **20** |
 | `ORDEN_HISTORIAL_ORIGEN_TIPO_SEED` | 22 | **24** |
-| aristas de flujo (`RECUENTO_INVENTARIO.aristasFlujo`) | 43 | **39** (43 − 6 + 2) |
-| pares dirigidos únicos (`paresUnicos`) | 39 | **37** (39 − 4 + 2) |
+| aristas de flujo (`RECUENTO_INVENTARIO.aristasFlujo`) | 43 | **45** (43 + 2, sin bajas) |
+| pares dirigidos únicos (`paresUnicos`) | 39 | **41** (39 + 2: las dos nuevas estrenan par) |
 | aristas de creación (`aristasCreacion`) | 3 | **4** |
+| `ESTADOS_CREACION` | 3 | **4** |
+| `ESTADOS_TERMINALES` | 2 | **3** |
+| `ESTADOS_VESTIGIALES` | 0 | **0** (sigue vacío) |
 
-### 3.5 Cómo cambian los recuentos según se respondan Q1 y Q2
+### 3.5 Cómo habrían cambiado los recuentos según Q1 y Q2 *(histórico)*
 
 | escenario | flujo | pares | riesgo |
 | --- | --- | --- | --- |
-| **Propuesto** (#5 y #2 sobreviven) | 39 | 37 | ninguno estructural |
-| Q2 = (ii)/(iii): se retira también #2 | 38 | 36 | `en_fulfillment: []` → rompe R26; hay que reescribir el test de conectividad y/o el de vestigiales |
-| Q1 = "retirar también #5" | 37 | 35 | `en_preparacion: []` → rompe R26 **y** deja a la 156 sin destino. No implementable tal cual |
+| **ELEGIDO** — Q2 = solo aditiva, 0 bajas | **45** | **41** | ninguno: nada se rompe entre la 154 y la 155/156 |
+| Propuesta original (retirar 6, #5 y #2 sobreviven) | 39 | 37 | ventana en la que "generar guía" y "rutear a satélite" lanzan `TransicionIlegalError` |
+| Q2 = (ii)/(iii): se retira también #2 | 38 | 36 | `en_fulfillment: []` → rompe R26 |
+| Q1 = "retirar también #5" | 37 | 35 | `en_preparacion: []` → rompe R26 **y** deja a la 156 sin destino |
 
 ---
 
@@ -210,8 +222,9 @@ crezca, **el build rompe** hasta que se añadan las dos entradas. Es la misma re
 | `por_recolectar_en_tienda` | "Por recolectar en tienda" | `warning` (estado de ESPERA, criterio de `por_devolver`) | ninguno |
 | `incidente` | "Incidente" | `danger` (criterio de `rechazada`) | ninguno |
 
-Pendiente de confirmar en **Q5**. `EstatusBadge` ya cae a chip neutro con el valor crudo ante un
-value desconocido (`isKnownStatus`, `:103-112`) → R31 no requiere cambio.
+**Q5 CONFIRMADA por el humano (2026-07-29) tal cual.** `EstatusBadge` ya cae a chip neutro con el
+valor crudo ante un value desconocido (`isKnownStatus`) → R31 no requiere cambio de código, solo
+un test que lo fije.
 
 ---
 
@@ -250,8 +263,11 @@ Requiere confirmación humana.
 
 ## 6. Alternativas descartadas
 
-**A1 — Retirar las 6 aristas en la feature 156, junto al recableado de `GuiaAsignacionService`, y
-dejar la 154 puramente aditiva.**
+**A1 — Retirar las 6 aristas en la feature 155/156, junto al recableado de
+`GuiaAsignacionService`, y dejar la 154 puramente aditiva.** → **ES LA ELEGIDA (Q2, 2026-07-29).**
+El humano cerró el gate por aquí: el coste de "diff duplicado" que se le imputaba abajo resultó
+menor que el de una ventana de despliegue con "generar guía" roto. El texto original queda como
+registro de por qué se había descartado.
 Es la alternativa más segura desde el punto de vista de despliegue: elimina por completo el riesgo
 de §5.1, porque la arista muere en el mismo commit que su último productor.
 **Descartada** porque el lote asigna a la 154 el rol de "único diff del grafo": partir la reescritura
