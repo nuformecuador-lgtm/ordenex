@@ -131,6 +131,43 @@ en la sección «Backlog pendiente».
 > Reemplaza al apartado «PENDIENTES» de arriba en todo lo que se contradiga. Lo verificado hoy va
 > con su número; lo no verificado se dice.
 
+> ### ✅ Cierre de la sesión del 2026-07-29 — retomar por aquí
+>
+> **Dos PRs abiertos, los dos con gate verde sobre `dev` ya integrado:**
+>
+> | PR | Rama | Qué es | Veredicto |
+> |---|---|---|---|
+> | **#203** | `feature/155-creacion-bifurcada` | Creación bifurcada por bodega + retiro de `en_fulfillment`. 582 archivos / 6386 tests | **APROBADO-CON-NOTAS**, 0 bloqueantes, 9 menores, **69 mutaciones** (62 muertas, 7 supervivientes, todas huecos de cobertura) |
+> | **#204** | `fix/159-cierre` | Cierre de la 159: cobertura recuperada, R10 reconciliado, registro desatascado. 584 archivos / 6343 tests | **APROBADO-CON-NOTAS**, 21/22 R, 23 mutaciones |
+>
+> **🎉 La deuda del round-trip de migraciones QUEDA SALDADA para el tren.** Era la que decía
+> *«el round-trip real contra Postgres NO EXISTE (…) se salda antes de que el tren suba a `prod`»*.
+> La migración de la 155 —la única del tren que **mueve datos**— se ejecutó de verdad contra
+> `localhost:5432` sobre una base con **47 órdenes reales** en el estado retirado:
+> `migrate deploy` → `db:rollback` → `migrate deploy`, con el **mismo checksum** de `orden` menos
+> `estatus_id` a la ida y a la vuelta, y verificado **por mutación**. Números, mutaciones y las
+> cuatro limitaciones declaradas en `progress/roundtrip_155_migracion.md`. **Ya no es un estreno en
+> producción.** Las migraciones de la 154 son aditivas y no mueven datos.
+>
+> **🔴 TRES DECISIONES HUMANAS bloquean el cierre de la 155** (detalle en el cuerpo del PR #203 y en
+> `progress/review_155.md` §5.1, §5.7, §5.9):
+> 1. **Dispensa del E2E.** `CHECKPOINTS.md` lo exige para «ingesta de órdenes» y «webhooks», y la 155
+>    toca ambos. **Leído de forma literal, la casilla no se puede marcar y el veredicto sería
+>    RECHAZADO.** No existe ni un E2E de ingesta en todo el repo. La dispensa tiene que ser
+>    **explícita, no por omisión**.
+> 2. **Aviso a integradores** del cambio de estado inicial en la carga por API key. Es lo único capaz
+>    de romperle la integración a un tercero.
+> 3. **El manifiesto de la rama (b) por la vía sesión no tiene llamador** desde `b2181e7` (159):
+>    `OrdenesCargaResumenPaso.tsx` quedó huérfano. Decidir si pasa a la 157.
+>
+> **Registro reconciliado en el PR #204** (verificado con `gh pr view`, no por la ficha): **151 →
+> `done`** (PR #201 MERGED) y **160 → `done`** (PR #197 MERGED — la rama de la 155 ya lo había
+> corregido, pero esa corrección nunca llegó a `dev`). Sin esto `./init.sh` quedaba **rojo** por la
+> regla 1: la zona fullstack llegó a tener 3 `in_progress`.
+>
+> **Lo siguiente del lote:** 157 y 158 (las dos `spec_ready`, `depends_on` 155 y 154). El tren
+> **154 + 155 + 156** sigue siendo condición de correctitud, no preferencia.
+
 **Arranque:** `./init.sh` **verde** sobre `dev` @ `0ed3125` (543 archivos / 5655 tests, lint 0
 errores). El `typecheck` rojo que aparece al estrenar un worktree es **cliente Prisma stale**, no
 `dev`: se salda con `pnpm db:generate`. Vale la pena recordarlo antes de diagnosticar nada.
@@ -244,9 +281,16 @@ vuelo necesita spec en disco). Se reconcilia sola al mergear el PR. El PR trae a
 > **Nadie debe tomar el id 144 ni su alcance viejo sin leer el PR #180.** La ficha de `dev` lleva la
 > advertencia escrita en su `description`.
 
-## ⚠️ `dev` está 18 commits DETRÁS de `prod`
+## ⚠️ `dev` y `prod` DIVERGEN 87 / 18 (medido el 2026-07-29)
 
-`git rev-list --left-right --count origin/dev...origin/prod` → `0  18`. Los arreglos del **log de
+> **Actualizado el 2026-07-29:** `git rev-list --left-right --count origin/dev...origin/prod` →
+> **`87  18`**. El 28/07 era `16  18`; el titular viejo («`dev` está 18 commits DETRÁS») ya no
+> describe la situación: **`dev` va 87 commits POR DELANTE** y sigue sin recibir los 18 del hotfix.
+> La distancia crece cada día que el PR #183 no se mergea, y el tren 154+155+156 va a subir a
+> producción sobre una `dev` muy alejada de `prod`. **Es tarea humana**, no del agente.
+
+`git rev-list --left-right --count origin/dev...origin/prod` → `0  18` *(medición del 28/07, ver
+aviso de arriba)*. Los arreglos del **log de
 fallos de WhatsApp** (fin de los reintentos infinitos) se mergearon **directo a `prod`** en los PRs
 **#182, #184 y #185**, y el PR que los porta a `dev` (**#183**, misma rama
 `feature/log-fallos-whatsapp`, MERGEABLE) **sigue abierto**.
