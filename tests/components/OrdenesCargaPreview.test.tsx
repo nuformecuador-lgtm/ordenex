@@ -266,6 +266,12 @@ describe("OrdenesCargaPreview — descargar filas con error (feature 143)", () =
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
     const [fields, rows] = buildXlsxRowsMock.mock.calls[0];
     expect((fields as { key: string }[]).at(-1)?.key).toBe("motivo_error");
+    // Feature 148 (unificación del generador): el primer argumento pasó a ser
+    // COLUMNAS y la cabecera se fija en el call-site. R2/R14 exige que sea la
+    // clave máquina, así que se comprueba aquí, donde se decide.
+    for (const columna of fields as { key: string; header: string }[]) {
+      expect(columna.header).toBe(columna.key);
+    }
     expect((rows as Record<string, string>[])[0]).toMatchObject({
       destinatario: "Ana",
       telefono: "8888",

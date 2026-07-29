@@ -86,7 +86,7 @@ function makeAsignacion(
     secuenciaRuta: null,
     numGuia: 1001,
     numRemision: "REM-001",
-    estatusValue: "en_ruta",
+    estatusValue: "en_reparto",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",

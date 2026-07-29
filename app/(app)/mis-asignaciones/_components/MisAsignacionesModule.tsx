@@ -53,7 +53,7 @@ import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
 export interface MisAsignacionesModuleProps {
   /** Órdenes en `por_recoger`. */
   porRecoger: MiAsignacionDTO[];
-  /** Órdenes en `en_ruta` (por gestionar), YA ordenadas por la ruta (R28). */
+  /** Órdenes en `en_reparto` (por gestionar), YA ordenadas por la ruta (R28). */
   porGestionar: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
   ordenEnGestionId: string | null;
@@ -402,7 +402,7 @@ export function MisAsignacionesModule({
             renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
           />
 
-          {/* ---------- Apartado: En reparto / por gestionar (en_ruta) ---------- */}
+          {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
           {/* Feature 113/R1: cada card en grilla (1/2/3 col) muestra el detalle COMPLETO
               inline (`AsignacionDetalle`). Seleccionar una la lleva también al panel de
               gestión grande de abajo (donde vive el gate "Gestionar pedido"). El bloqueo

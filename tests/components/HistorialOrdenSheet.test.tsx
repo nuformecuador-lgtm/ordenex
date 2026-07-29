@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 const ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_ruta",
+  estatusOrigenValue: "en_reparto",
   estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,

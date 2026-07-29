@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { generarGuia } from "@/lib/actions/ordenes-guia";
@@ -29,11 +30,20 @@ export interface GenerarGuiaModalProps {
 
 const SIN_MENSAJERO_LABEL = "Sin mensajero";
 
-/** `ordenId -> mensajeroId` ("" = sin mensajero). Preselecciona el sugerido (R20/R21). */
+/** Feature 148: lote ya cometido + su resumen, para la fase "resultado". */
+interface GuiaGeneradaResumen {
+  ordenIds: string[];
+  mensaje: string;
+}
+
+/**
+ * `ordenId -> mensajeroId` ("" = sin mensajero). Todas arrancan SIN mensajero: el
+ * maestro elige aquí, que es donde se decide la asignación real (R20/R21).
+ */
 function seleccionInicial(ordenes: OrdenListItemDTO[]): Record<string, string> {
   const next: Record<string, string> = {};
   for (const orden of ordenes) {
-    next[orden.id] = orden.mensajeroSugeridoId ?? "";
+    next[orden.id] = "";
   }
   return next;
 }
@@ -68,9 +78,9 @@ function groupByZona(
 }
 
 /**
- * Modal async "Generar guía" (feature 17, T18, R20/R24): agrupa la selección
- * en (a) órdenes CON `mensajeroSugeridoId` (preselecciona, permite override o
- * "sin mensajero") y (b) SIN sugerido (elige mensajero o deja "sin"). Al
+ * Modal async "Generar guía" (feature 17, T18, R20/R24): lista las órdenes GAM
+ * seleccionadas con un selector de mensajero por fila, todas sin mensajero de
+ * partida (se elige aquí o se deja "sin mensajero"). Al
  * confirmar construye `decisiones: [{ ordenId, mensajeroId | null }]` y hace
  * UNA sola llamada a `generarGuia` (R19/R21-R24), con independencia de que la
  * orden termine en `por_recoger` o `en_bodega_central` (R23).
@@ -99,22 +109,26 @@ export function GenerarGuiaModal({
   const [seleccion, setSeleccion] = useState<Record<string, string>>(() =>
     open ? seleccionInicial(ordenes) : {},
   );
+  // Feature 148 (T11, §9.7): fase "resultado". Guarda el LOTE ya cometido (ids del
+  // resultado de negocio) para poder ofrecer el manifiesto sin perderlo al cerrar.
+  // `null` = fase de edición; array = la guía ya se generó.
+  const [resultado, setResultado] = useState<GuiaGeneradaResumen | null>(null);
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (open) setSeleccion(seleccionInicial(ordenes));
+    if (open) {
+      setSeleccion(seleccionInicial(ordenes));
+      setResultado(null);
+    }
   }
 
   const mensajeroOptions = toMensajeroOptions(
     mensajeros,
     new Set(mensajerosBloqueadosIds),
   );
-  // Feature 30/R8: primero se separa GAM (con select) de NO-GAM (a satélite, sin
-  // select). Dentro de GAM se conserva el subgrupo sugerido/sin-sugerido (feat 17).
+  // Feature 30/R8: se separa GAM (con select) de NO-GAM (a satélite, sin select).
   const gamOrdenes = ordenes.filter(esGam);
   const noGamOrdenes = ordenes.filter((o) => !esGam(o));
-  const conSugerido = gamOrdenes.filter((o) => o.mensajeroSugeridoId != null);
-  const sinSugerido = gamOrdenes.filter((o) => o.mensajeroSugeridoId == null);
   // Grupos NO-GAM por zona: cada zona informa su bodega satélite destino (R8/R15).
   const noGamPorZona = groupByZona(noGamOrdenes);
 
@@ -174,47 +188,72 @@ export function GenerarGuiaModal({
     const satelite = result.resultados.filter(
       (r) => r.estado === "en_ruta_bodega_satelite",
     ).length;
-    toast.success(
-      `Guía generada para ${result.resultados.length} orden(es): ${espera} en espera de aceptación, ${bodega} en bodega, ${satelite} en ruta a bodega satélite.`,
-    );
-    onSuccess();
+    const mensaje = `Guía generada para ${result.resultados.length} orden(es): ${espera} en espera de aceptación, ${bodega} en bodega, ${satelite} en ruta a bodega satélite.`;
+    toast.success(mensaje);
+    // Feature 148 (§9.7): la operación YA está cometida; en vez de cerrar, el modal
+    // pasa a la fase "resultado" con el mismo resumen + el botón de manifiesto.
+    // `onSuccess()` (refresco del padre) se difiere al cierre de esa fase: nada de
+    // la llamada de negocio, su input ni su toast cambian (R27).
+    setResultado({
+      ordenIds: result.resultados.map((r) => r.ordenId),
+      mensaje,
+    });
   }
 
   function handleError(error: unknown) {
     toast.error(guiaDecisionErrorMessage(error));
   }
 
+  /**
+   * Cierre de la fase "resultado" por cualquier vía (botón, Escape, overlay): recién
+   * ahí se avisa al padre para que refresque. Un fallo de la descarga no pasa por
+   * aquí, así que no puede alterar el resultado ya cometido (R25).
+   */
+  function handleOpenChange(next: boolean) {
+    if (!next && resultado) {
+      setResultado(null);
+      onOpenChange(false);
+      onSuccess();
+      return;
+    }
+    onOpenChange(next);
+  }
+
   return (
     <Modal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="Generar guía"
-      description="Confirma el mensajero por orden. Las órdenes sin mensajero pasan a bodega."
+      description={
+        resultado
+          ? "Guías generadas. Descarga el manifiesto del lote antes de cerrar."
+          : "Confirma el mensajero por orden. Las órdenes sin mensajero pasan a bodega."
+      }
       confirmLabel="Generar guía"
+      cancelLabel={resultado ? "Cerrar" : "Cancelar"}
+      hideConfirm={resultado !== null}
+      // El modal NO se cierra al confirmar: pasa a la fase "resultado" (§9.7).
+      closeOnConfirm={false}
       onConfirm={handleConfirm}
       onError={handleError}
       className="max-w-2xl"
     >
+      {resultado ? (
+        <ManifiestoResultado
+          mensaje={resultado.mensaje}
+          flujo="generacion_guia"
+          seleccion={{ ordenIds: resultado.ordenIds }}
+        />
+      ) : (
       <div className="flex flex-col gap-4">
-        {conSugerido.length > 0 ? (
+        {gamOrdenes.length > 0 ? (
           <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-medium">Con mensajero sugerido</h3>
+            <h3 className="text-sm font-medium">Asignar mensajero</h3>
             <DataTable
               columns={columns}
-              data={conSugerido}
+              data={gamOrdenes}
               rowKey="id"
-              ariaLabel="Órdenes con mensajero sugerido"
-            />
-          </div>
-        ) : null}
-        {sinSugerido.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-medium">Sin mensajero sugerido</h3>
-            <DataTable
-              columns={columns}
-              data={sinSugerido}
-              rowKey="id"
-              ariaLabel="Órdenes sin mensajero sugerido"
+              ariaLabel="Órdenes por asignar"
             />
           </div>
         ) : null}
@@ -233,6 +272,7 @@ export function GenerarGuiaModal({
           );
         })}
       </div>
+      )}
     </Modal>
   );
 }

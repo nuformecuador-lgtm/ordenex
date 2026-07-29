@@ -110,7 +110,6 @@ model Usuario {
   otpChallenges                       EmailOtpChallenge[]
   documentos                          MensajeroDocumento[] // feature 21
   ordenesTienda                       Orden[]                   @relation("OrdenTienda")
-  ordenesMensajeria                   Orden[]                   @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
   ordenesAsignadas                    Orden[]                   @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
   gestionesRealizadas                 GestionOrden[]            @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
   gestionesAnuladas                   GestionOrden[]            @relation("GestionAnuladaPor") // feature 67/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
@@ -353,9 +352,10 @@ model EmailOtpChallenge {
 // por `value` (8 valores, ORDER_STATUS_SEED), patron rol/tipo_identificacion.
 model OrderStatus {
   id    String @id @default(uuid())
-  value String @unique // seed (15, ver ORDER_STATUS_SEED). Feature 135 renombro 6
-  //   values: p.ej. devolviendo_a_tienda, en_ruta_bodega_central, en_bodega_central,
-  //   por_recoger, en_ruta, devuelta_a_tienda (id/FK preservados por UPDATE de catalogo).
+  value String @unique // seed (18, ver ORDER_STATUS_SEED; el conteo decia 15, corregido en
+  //   la feature 153). Feature 135 renombro 6 values: p.ej. devolviendo_a_tienda,
+  //   en_ruta_bodega_central, en_bodega_central, por_recoger, devuelta_a_tienda. Feature 153
+  //   renombro uno mas a `en_reparto` (id/FK preservados por UPDATE de catalogo, sin ALTER TYPE).
 
   ordenes Orden[]
 
@@ -463,7 +463,6 @@ model Orden {
   notas                  String? // R14a: texto nullable
   direccion              String? // feature 15/R1: nuevo, carga masiva
   montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
-  mensajeroSugeridoId    String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
@@ -490,7 +489,6 @@ model Orden {
   provincia         Provincia   @relation(fields: [provinciaId], references: [id])
   canton            Canton      @relation(fields: [cantonId], references: [id])
   distrito          Distrito?   @relation(fields: [distritoId], references: [id])
-  mensajeroSugerido Usuario?    @relation("OrdenMensajeroSugerido", fields: [mensajeroSugeridoId], references: [id])
   mensajeroAsignado Usuario?    @relation("OrdenMensajeroAsignado", fields: [mensajeroAsignadoId], references: [id], onDelete: SetNull) // feature 17/R7
 
   gestiones             GestionOrden[] // feature 36: gestiones registradas sobre esta orden
@@ -504,7 +502,6 @@ model Orden {
   @@index([tiendaId])
   @@index([estatusId])
   @@index([createdAt])
-  @@index([mensajeroSugeridoId])
   @@index([mensajeroAsignadoId]) // feature 17/R7
   @@index([mensajeroAsignadoId, asignadoAt]) // feature 76/R1: denominador del ranking diario (asignadas HOY por mensajero)
   // Feature 144/B5: filtros de zona y geografia del listado (`IN (...)` en ruta caliente:
@@ -1119,7 +1116,7 @@ enum OrdenHistorialOrigenTipo {
   reprogramacion_tienda // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
   recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite (accion manual, actor admin)
   cancelacion_api // feature 106: tienda cancela via API key en_bodega_central/en_ruta_bodega_central -> devolviendo_a_tienda (marcador motivo="cancelada por tienda")
-  corte_sin_gestionar // feature 109: corte diario transiciona en_ruta -> sin_gestionar (actor null/cron)
+  corte_sin_gestionar // feature 109: corte diario transiciona en_reparto -> sin_gestionar (actor null/cron)
   liberacion_sin_gestionar // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin)
   recepcion_bodega_central // feature 138: recepcion fisica en la bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin)
   devolucion_rechazada // feature 139: al APROBAR el cierre, rechazada -> por_devolver (satelite) / por_devolver_a_tienda (central) (actor admin)

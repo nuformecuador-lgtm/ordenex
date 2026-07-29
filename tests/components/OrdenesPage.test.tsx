@@ -135,7 +135,9 @@ describe("OrdenesPage", () => {
         numGuia: 1002,
         numRemision: "REM-002",
         estatusId: "est-2",
-        estatusValue: "En ruta",
+        // Feature 153/R17: el fixture pasaba la ETIQUETA del estado donde va un `value` del
+        // catálogo. Se corrige a un value real; la celda no se aserta en esta fila.
+        estatusValue: "en_reparto",
         destinatario: "Beto Ruiz",
         tiendaId: "tienda-uuid-2",
         tiendaNombre: "Tienda Dos",

@@ -2,7 +2,6 @@
 // remisión, trocea las filas y las envía en lotes JSON al endpoint de chunk,
 // reusando `BulkOrdenService` en el servidor. Remapea la "fila" (relativa al
 // lote) a la línea original del archivo para el reporte de errores.
-import type { RawRow } from "@/lib/parsers/spreadsheet";
 import type { BulkSummary, RowResult } from "@/lib/types/carga-masiva";
 import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
 
@@ -43,19 +42,8 @@ export function dedupPorRemision(filas: FilaParseada[]): {
   return { unicas, duplicadas };
 }
 
-/**
- * Aplica el mensajero sugerido del lote a una fila que no traiga uno propio. El
- * backend valida el id; el select del formulario solo ofrece ids válidos.
- */
-function aplicarMensajero(row: RawRow, mensajeroSugeridoId?: string): RawRow {
-  if (!mensajeroSugeridoId) return row;
-  if ((row.mensajero_sugerido_id ?? "").trim() !== "") return row;
-  return { ...row, mensajero_sugerido_id: mensajeroSugeridoId };
-}
-
 export interface ProcesarChunksOpts {
   dryRun: boolean;
-  mensajeroSugeridoId?: string;
   chunkSize: number;
   endpoint?: string;
   onProgress?: (procesadas: number, total: number) => void;
@@ -85,7 +73,7 @@ export async function procesarEnChunks(
   let procesadas = 0;
 
   for (const lote of lotes) {
-    const rows = lote.map((f) => aplicarMensajero(f.row, opts.mensajeroSugeridoId));
+    const rows = lote.map((f) => f.row);
     const res = await doFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -38,7 +38,7 @@ const ROL_AUTORIZADO = "mensajero";
 
 // R10: estados de una orden asignada que aun cuenta como "pendiente de gestion".
 // Mientras el mensajero tenga alguna en estos estados, no puede cerrar.
-const ESTADOS_PENDIENTES = ["por_recoger", "en_ruta"];
+const ESTADOS_PENDIENTES = ["por_recoger", "en_reparto"];
 
 // Mensajes accionables del gate/precondicion (R10/R11) y del ruteo (R12/R16).
 const MSG_PENDIENTES = "Tenes ordenes sin gestionar; gestionalas antes de cerrar."; // R10
@@ -62,7 +62,7 @@ const MSG_CATALOGO = "catalogo de estados incompleto (seed pendiente)"; // patro
 
 // Feature 67/R18: unico estado desde el que se puede volver a gestionar (`ORIGEN_GESTION` de
 // MisAsignacionesService, guardia `cargarOrdenGestionable`). Destino del deshacer.
-const ESTADO_EN_REPARTO = "en_ruta";
+const ESTADO_EN_REPARTO = "en_reparto";
 
 /**
  * Feature 67/R5 (design §5.3) — REGLA: estado en el que la orden DEBE estar para que su gestion
@@ -86,7 +86,7 @@ const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
 // como Pick para dobles de test sin DB/red (patron RecepcionSateliteService).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 39: ademas de la zona (37), el service resuelve el vehiculo del mensajero
-// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_ruta`).
+// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_reparto`).
 // Feature 111/R5: + `findMensajerosBloqueados` (guarda de bloqueo EXPLICITA de `deshacerGestion`,
 // mismo predicado derivado que la asignacion; sin duplicar la derivacion ni flag persistido).
 type OrdenRepo = Pick<

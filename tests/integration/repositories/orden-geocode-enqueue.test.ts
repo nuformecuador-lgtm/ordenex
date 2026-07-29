@@ -88,7 +88,6 @@ const CREATE_DATA: CreateOrdenData = {
   notas: null,
   direccion: "Av. Central 100",
   montoCobrar: null,
-  mensajeroSugeridoId: null,
 };
 
 /** Prisma fake cuyo `$transaction` propaga el rechazo del callback (R7). */

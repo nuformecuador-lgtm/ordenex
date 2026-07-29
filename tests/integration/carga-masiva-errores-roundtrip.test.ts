@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { buildXlsxRows } from "@/lib/utils/xlsx-template";
+import { buildXlsxRows, toXlsxColumns } from "@/lib/utils/xlsx-template";
 import { parseSpreadsheet } from "@/lib/parsers/spreadsheet";
 import { parseArchivo } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
 import { findMissingHeaders, filaCargaSchema } from "@/lib/types/carga-masiva";
@@ -102,7 +102,7 @@ async function parsearComoNavegador(buffer: ArrayBuffer) {
 describe("Carga masiva — round-trip del export de filas con error", () => {
   it("R14: parser SERVIDOR — el archivo exportado no reporta cabeceras obligatorias ausentes", async () => {
     const { conMotivo } = filasExport();
-    const buffer = await buildXlsxRows(ERRORES_EXPORT_FIELDS, conMotivo);
+    const buffer = await buildXlsxRows(toXlsxColumns(ERRORES_EXPORT_FIELDS), conMotivo);
     const { headers } = await parseSpreadsheet(Buffer.from(buffer), "xlsx");
     expect(findMissingHeaders(headers)).toEqual([]);
     expect(headers).toEqual([...CLAVES_PLANTILLA, COLUMNA_MOTIVO_ERROR]);
@@ -110,7 +110,7 @@ describe("Carga masiva — round-trip del export de filas con error", () => {
 
   it("R14: parser NAVEGADOR — el archivo exportado no reporta cabeceras obligatorias ausentes", async () => {
     const { conMotivo } = filasExport();
-    const buffer = await buildXlsxRows(ERRORES_EXPORT_FIELDS, conMotivo);
+    const buffer = await buildXlsxRows(toXlsxColumns(ERRORES_EXPORT_FIELDS), conMotivo);
     const { headers } = await parsearComoNavegador(buffer);
     expect(findMissingHeaders(headers)).toEqual([]);
     expect(headers).toEqual([...CLAVES_PLANTILLA, COLUMNA_MOTIVO_ERROR]);
@@ -118,7 +118,7 @@ describe("Carga masiva — round-trip del export de filas con error", () => {
 
   it("R14: cada clave de columna aparece VERBATIM en la cabecera (sin label ni sufijo)", async () => {
     const { conMotivo } = filasExport();
-    const buffer = await buildXlsxRows(ERRORES_EXPORT_FIELDS, conMotivo);
+    const buffer = await buildXlsxRows(toXlsxColumns(ERRORES_EXPORT_FIELDS), conMotivo);
     const { headers } = await parseSpreadsheet(Buffer.from(buffer), "xlsx");
     for (const clave of [...CLAVES_PLANTILLA, COLUMNA_MOTIVO_ERROR]) {
       expect(
@@ -130,8 +130,8 @@ describe("Carga masiva — round-trip del export de filas con error", () => {
 
   it("R15: parser SERVIDOR — la columna extra no altera el valor de ninguna otra", async () => {
     const { conMotivo, sinMotivo } = filasExport();
-    const conBuffer = await buildXlsxRows(ERRORES_EXPORT_FIELDS, conMotivo);
-    const sinBuffer = await buildXlsxRows(CAMPOS_SIN_MOTIVO, sinMotivo);
+    const conBuffer = await buildXlsxRows(toXlsxColumns(ERRORES_EXPORT_FIELDS), conMotivo);
+    const sinBuffer = await buildXlsxRows(toXlsxColumns(CAMPOS_SIN_MOTIVO), sinMotivo);
 
     const con = await parseSpreadsheet(Buffer.from(conBuffer), "xlsx");
     const sin = await parseSpreadsheet(Buffer.from(sinBuffer), "xlsx");
@@ -151,8 +151,8 @@ describe("Carga masiva — round-trip del export de filas con error", () => {
 
   it("R15: parser NAVEGADOR — la columna extra no altera el valor de ninguna otra", async () => {
     const { conMotivo, sinMotivo } = filasExport();
-    const conBuffer = await buildXlsxRows(ERRORES_EXPORT_FIELDS, conMotivo);
-    const sinBuffer = await buildXlsxRows(CAMPOS_SIN_MOTIVO, sinMotivo);
+    const conBuffer = await buildXlsxRows(toXlsxColumns(ERRORES_EXPORT_FIELDS), conMotivo);
+    const sinBuffer = await buildXlsxRows(toXlsxColumns(CAMPOS_SIN_MOTIVO), sinMotivo);
 
     const con = await parsearComoNavegador(conBuffer);
     const sin = await parsearComoNavegador(sinBuffer);
@@ -177,7 +177,7 @@ describe("Carga masiva — round-trip del export de filas con error", () => {
       telefono: "88887777",
       monto_cobrar: "25.90",
     }));
-    const buffer = await buildXlsxRows(ERRORES_EXPORT_FIELDS, corregidas);
+    const buffer = await buildXlsxRows(toXlsxColumns(ERRORES_EXPORT_FIELDS), corregidas);
     const { rows } = await parseSpreadsheet(Buffer.from(buffer), "xlsx");
 
     expect(rows).toHaveLength(2);

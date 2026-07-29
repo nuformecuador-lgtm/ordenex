@@ -1,6 +1,5 @@
 import type { GestionCausaDevolucion } from "@prisma/client";
 import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
-import type { ResumenCargaOrdenDTO } from "@/lib/types/asignacion-mensajero";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 
@@ -8,8 +7,8 @@ import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabil
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
 // la secuencia de la DB, nunca se envia (R8). `peso` nullable (feature 15/R4:
 // la carga masiva no trae peso); el CRUD (feature 6) siempre envia un numero,
-// pues `crearOrdenSchema` sigue exigiendo `peso > 0`. `direccion`/`montoCobrar`/
-// `mensajeroSugeridoId` son columnas nuevas de feature 15, opcionales.
+// pues `crearOrdenSchema` sigue exigiendo `peso > 0`. `direccion` y `montoCobrar`
+// son columnas nuevas de feature 15, opcionales.
 export interface CreateOrdenData {
   numRemision: string;
   estatusId: string;
@@ -25,7 +24,6 @@ export interface CreateOrdenData {
   notas?: string | null;
   direccion?: string | null;
   montoCobrar?: number | null;
-  mensajeroSugeridoId?: string | null;
 }
 
 // Campos actualizables a nivel de datos (ya filtrados por rol en el servicio).
@@ -232,6 +230,34 @@ export interface EtiquetaRow {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+}
+
+// Feature 148 — fila proyectada para armar el MANIFIESTO de un lote (R4/R6/R7).
+// Molde de `EtiquetaRow` (nombres legibles, no IDs; `montoCobrar` Decimal->number),
+// con dos diferencias que el manifiesto SI necesita y la etiqueta no:
+//   - `mensajeroAsignadoNombre`: alimenta la columna `responsable` cuando el flujo
+//     dejo mensajero asignado (R9 / design.md §9.8). Null si la orden no lo tiene.
+//   - `zonaEsCentral`: distingue la orden GAM de la no-GAM para resolver
+//     `origen`/`destino` de `generacion_guia` sin un parametro extra (design.md §4).
+// A cambio NO trae producto ni provincia/canton/distrito: el manifiesto no los usa
+// (R11). NUNCA incluye `deletedAt` (R11): el repo YA filtra `deletedAt: null` para
+// que una orden borrada cuente como no encontrada (R12). `numGuia` puede venir null
+// (R5): la celda queda vacia, la fila NO se descarta.
+export interface ManifiestoOrdenRow {
+  id: string;
+  // Dueño de la orden. Lo necesita `ManifiestoService` para filtrar por propietario
+  // cuando el actor es una API key (R29), igual que `EtiquetaRow.tiendaId`.
+  tiendaId: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  telefonoDest: string;
+  direccion: string | null;
+  montoCobrar: number | null;
+  tiendaNombre: string;
+  zonaNombre: string;
+  zonaEsCentral: boolean;
+  mensajeroAsignadoNombre: string | null;
 }
 
 // Feature 33 — fila proyectada para el modulo de la bodega satelite ("Mis
@@ -451,8 +477,6 @@ export interface IOrdenRepository {
   findCantonesByProvinciaIds(provinciaIds: string[]): Promise<CantonRow[]>;
   /** R19: distritos de los cantones resueltos. */
   findDistritosByCantonIds(cantonIds: string[]): Promise<DistritoRow[]>;
-  /** R22: subconjunto de `ids` que corresponde a un usuario con rol `mensajero`. */
-  findMensajerosByIds(ids: string[]): Promise<Set<string>>;
   /**
    * R27: inserta en lotes de `batchSize` con `skipDuplicates`; devuelve el total insertado.
    * Feature 49/#1 (R9/R8/R20): por cada orden EFECTIVAMENTE insertada (no las duplicadas que
@@ -482,25 +506,6 @@ export interface IOrdenRepository {
     historial: HistorialContexto,
   ): Promise<CreateOrdenConGuiaResultRow[]>;
 
-  // --- Feature 16: carga masiva etapa 2 (resumen + asignacion de mensajero) ---
-
-  /**
-   * R6/R8/R9/R10: filas del resumen del lote (por `num_remision`), acotadas a la
-   * tienda del actor y no borradas. Preserva unicidad de `num_remision`.
-   */
-  findResumenByNumRemisiones(nums: string[], tiendaId: string): Promise<ResumenCargaOrdenDTO[]>;
-  /**
-   * R15/R16: actualiza `mensajero_sugerido_id` en lote, solo ordenes no borradas
-   * de `tiendaId`; devuelve el numero de filas afectadas.
-   */
-  asignarMensajeroSugerido(
-    ordenIds: string[],
-    mensajeroSugeridoId: string,
-    tiendaId: string,
-  ): Promise<number>;
-  /** R14: cuenta cuantas de `ordenIds` pertenecen a `tiendaId` y no estan borradas. */
-  countOrdenesDeTienda(ordenIds: string[], tiendaId: string): Promise<number>;
-
   // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
 
   /**
@@ -519,7 +524,7 @@ export interface IOrdenRepository {
   findParaAsignabilidad(ids: string[]): Promise<OrdenAsignabilidadRow[]>;
   /**
    * Feature 92 (design §5, R35/R37/R38): paradas candidatas de la ruta de UN mensajero —
-   * sus ordenes en `en_ruta` no borradas, con sus coordenadas (nullable: una orden sin
+   * sus ordenes en `en_reparto` no borradas, con sus coordenadas (nullable: una orden sin
    * coordenadas NO se excluye aqui, el service la registra como parada sin posicion, R37).
    * Ordenadas por `createdAt asc`, que es el criterio de recorte de R38.
    */
@@ -622,6 +627,38 @@ export interface IOrdenRepository {
    * Solo query, sin logica de negocio.
    */
   findEtiquetaByNumGuia(numGuia: number): Promise<EtiquetaRow | null>;
+
+  // --- Feature 148: manifiesto Excel por lote (READ derivado, R4/R6/R7/R12/R29) ---
+
+  /**
+   * Feature 148/R4/R6/R7/R12: filas del manifiesto por id de orden, con el NOMBRE de
+   * la zona (R6, no su id), el de la tienda y el del mensajero ASIGNADO resueltos, y
+   * `montoCobrar` ya como number|null (Decimal->number, R7). Filtra `deletedAt: null`
+   * (R12): una orden borrada NO aparece y el service la reporta como `no_encontrada`.
+   * NO filtra por `num_guia`: devuelve filas con `numGuia` posible null y el service
+   * deja la celda vacia (R5). Solo query, sin logica de negocio. Vacio si `ids` esta
+   * vacio.
+   */
+  findManifiestoByIds(ids: string[]): Promise<ManifiestoOrdenRow[]>;
+  /**
+   * Feature 148/R4/R12/R29: mismas filas resueltas por `num_remision`, la UNICA
+   * seleccion disponible tras una carga masiva (su `BulkSummary` no lleva ids,
+   * design.md §2). Acotado por `tiendaId` —igual que `findResumenByNumRemisiones`—
+   * para que el lote no pueda alcanzar ordenes de otra tienda (R29). Mismo filtro
+   * `deletedAt: null` (R12). Vacio si `remisiones` esta vacio.
+   */
+  findManifiestoByRemisiones(
+    remisiones: string[],
+    tiendaId: string,
+  ): Promise<ManifiestoOrdenRow[]>;
+  /**
+   * Feature 148/R9: `usuario.nombre` del actor que ejecuto la operacion, resuelto
+   * server-side por `usuarioId` (espejo de `findUsuarioFulfillment`/`findUsuarioZonaId`).
+   * Alimenta la columna `responsable` cuando el flujo NO deja mensajero asignado
+   * (design.md §9.8). `null` si el usuario no resuelve. `Actor` solo lleva
+   * `{ usuarioId, rol }`, por eso el nombre se lee aqui y no viaja desde el borde.
+   */
+  findUsuarioNombre(usuarioId: string): Promise<string | null>;
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
 

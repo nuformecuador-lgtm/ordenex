@@ -41,7 +41,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findDistritosByCantonIds: vi.fn().mockResolvedValue([
       { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" },
     ]),
-    findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1"])),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
     // Feature 88: persistencia con guia inmediata (carga por API). Por defecto vacio;
     // los tests de cargarViaApi lo sobreescriben para devolver las guias asignadas.
@@ -60,12 +59,13 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findMensajerosByZona: vi.fn().mockResolvedValue([]),
     findMensajeroIdsValidosByZona: vi.fn().mockResolvedValue(new Set()),
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
-    findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
-    asignarMensajeroSugerido: vi.fn().mockResolvedValue(0),
-    countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
     // Feature 32: etiqueta de guia, exigida por la interfaz IOrdenRepository.
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
     findEtiquetaByNumGuia: vi.fn().mockResolvedValue(null),
+    // Feature 148: stubs del manifiesto (READ derivado, no lo ejercita este test).
+    findManifiestoByIds: vi.fn().mockResolvedValue([]),
+    findManifiestoByRemisiones: vi.fn().mockResolvedValue([]),
+    findUsuarioNombre: vi.fn().mockResolvedValue(null),
     // Feature 33: recepcion en bodega satelite, no ejercitada aqui pero exigida
     // por la interfaz IOrdenRepository.
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
@@ -127,7 +127,6 @@ function row(overrides: Partial<RawRow> = {}): RawRow {
     producto: "Caja",
     notas: "",
     monto_cobrar: "",
-    mensajero_sugerido_id: "",
     ...overrides,
   };
 }
@@ -497,37 +496,20 @@ describe("BulkOrdenService.cargarMasiva — peso fuera de alcance (R39)", () => 
   });
 });
 
-describe("BulkOrdenService.cargarMasiva — mensajero sugerido (R22)", () => {
-  it("vacio -> persiste null", async () => {
+describe("BulkOrdenService.cargarMasiva — mensajero sugerido retirado", () => {
+  it("una columna mensajero_sugerido_id en el archivo se ignora: ni se valida ni se persiste", async () => {
     const repo = buildRepo();
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
-    await service.cargarMasiva([row({ mensajero_sugerido_id: "" })], TIENDA);
-
-    const arg = createManyArg(repo);
-    expect(arg[0].mensajeroSugeridoId).toBeNull();
-  });
-
-  it("id valido con rol mensajero -> se persiste", async () => {
-    const repo = buildRepo();
-    const service = new BulkOrdenService(repo, tarifaRepoStub);
-
-    await service.cargarMasiva([row({ mensajero_sugerido_id: "msg-1" })], TIENDA);
-
-    const arg = createManyArg(repo);
-    expect(arg[0].mensajeroSugeridoId).toBe("msg-1");
-  });
-
-  it("id inexistente o sin rol mensajero -> error de fila", async () => {
-    const repo = buildRepo({ findMensajerosByIds: vi.fn().mockResolvedValue(new Set()) });
-    const service = new BulkOrdenService(repo, tarifaRepoStub);
-
+    // Un id que ANTES habria sido rechazado por no existir: ahora la columna es
+    // texto libre sobrante y la fila se crea sin mas.
     const r = await service.cargarMasiva([row({ mensajero_sugerido_id: "no-existe" })], TIENDA);
 
     if (r.status === "ok") {
-      expect(r.summary.filas[0].errores).toHaveProperty("mensajero_sugerido_id");
+      expect(r.summary.filas[0].resultado).toBe("creada");
     }
-    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    const arg = createManyArg(repo);
+    expect(arg[0]).not.toHaveProperty("mensajeroSugeridoId");
   });
 });
 

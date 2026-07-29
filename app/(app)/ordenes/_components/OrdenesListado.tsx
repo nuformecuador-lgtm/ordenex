@@ -25,7 +25,6 @@ import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
 import { EscanerRecepcionBodegaCentral } from "./EscanerRecepcionBodegaCentral";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
 import {
-  ordenesColumnsMensajeroSugerido,
   ordenesColumnsReprogramada,
 } from "./ordenes-columns";
 import { GenerarGuiaModal } from "./GenerarGuiaModal";
@@ -76,10 +75,6 @@ async function zonasBloqueadasFetcher(): Promise<Set<string>> {
 // `exclude`: `listarOrderStatus()` devuelve el catálogo COMPLETO (R1) y el front
 // filtra antes de construir las opciones del filtro (aclaración del humano, R14).
 const DEFAULT_EXCLUDE = ["pendiente"];
-
-// Estados PREVIOS a la asignación de mensajero: muestran "Mensajero sugerido" en
-// lugar de "Mensajero" (aún no hay asignado; la asignación es en "Generar guía").
-const ESTADOS_MENSAJERO_SUGERIDO = new Set(["en_fulfillment", "en_preparacion"]);
 
 // Estado cuyo listado muestra ademas "Liberada el" (la fecha para la que quedo
 // reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
@@ -395,18 +390,16 @@ export function OrdenesListado({
   );
 
   // Si el filtro está acotado a EXACTAMENTE un estado, ese estado decide las columnas
-  // (mensajero sugerido / "Liberada el") y el resalte de prioridad. Con varios estados
-  // mezclados —o sin filtro— no hay un estado que mande, así que se usan las columnas
-  // por defecto y no se resalta.
+  // ("Liberada el") y el resalte de prioridad. Con varios estados mezclados —o sin
+  // filtro— no hay un estado que mande, así que se usan las columnas por defecto y no
+  // se resalta.
   const valueUnico =
     estadosMarcados.length === 1
       ? estadosDisponibles.find((s) => s.id === estadosMarcados[0])?.value
       : undefined;
 
   let columns: Column<OrdenListItemDTO>[] | undefined;
-  if (valueUnico && ESTADOS_MENSAJERO_SUGERIDO.has(valueUnico)) {
-    columns = ordenesColumnsMensajeroSugerido;
-  } else if (valueUnico === ESTADO_REPROGRAMADA) {
+  if (valueUnico === ESTADO_REPROGRAMADA) {
     columns = ordenesColumnsReprogramada;
   }
 

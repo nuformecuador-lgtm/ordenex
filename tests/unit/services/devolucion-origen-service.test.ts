@@ -88,7 +88,7 @@ describe("DevolucionOrigenService · transicion (R15)", () => {
 describe("DevolucionOrigenService · guardia de estado (R22/R9)", () => {
   it("estado != por_devolver_a_tienda devuelve conflict, sin escribir", async () => {
     const ordenRepo = buildOrdenRepo({
-      findById: vi.fn(async () => ordenDTO({ estatusValue: "en_ruta" })),
+      findById: vi.fn(async () => ordenDTO({ estatusValue: "en_reparto" })),
     });
     const r = await new DevolucionOrigenService(ordenRepo).devolverATienda("ord-1", MAESTRO);
 

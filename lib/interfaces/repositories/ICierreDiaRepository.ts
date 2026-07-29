@@ -55,7 +55,7 @@ export interface CierreGestionPendienteRow {
 }
 
 // Feature 109 (T1.2, R6/R8): input OPCIONAL del corte diario. Cuando esta presente,
-// `crearCierre` transiciona en la MISMA tx las ordenes `en_ruta` del mensajero a
+// `crearCierre` transiciona en la MISMA tx las ordenes `en_reparto` del mensajero a
 // `sin_gestionar` (via el choke point 49, actor null, `origen_tipo = corte_sin_gestionar`) y
 // RELAJA la guarda de "algo paso" (crea el `vencido` money-neutral si transiciono >=1 orden aunque
 // vincule 0 gestiones, R8). Ausente = flujo de la 37 (solicitar) SIN cambios. Los estatus ids los
@@ -74,7 +74,7 @@ export interface CrearCierreInput {
   // (default); el corte diario crea `vencido` reusando la MISMA tx de vinculacion +
   // snapshot. Solo estos dos valores son validos como estado de creacion.
   estado?: Extract<CierreEstado, "solicitado" | "vencido">;
-  // Feature 109 (T1.2, R6/R8): presente SOLO en el corte diario -> transiciona `en_ruta ->
+  // Feature 109 (T1.2, R6/R8): presente SOLO en el corte diario -> transiciona `en_reparto ->
   // sin_gestionar` y relaja la guarda "algo paso". Ausente en `solicitarCierre` (37).
   corteSinGestionar?: CorteSinGestionarInput;
   totales: CierreTotales;
@@ -138,7 +138,7 @@ export interface ICierreDiaRepository {
   findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]>;
   /**
    * R10: cuenta las ordenes asignadas al mensajero (no borradas) cuyo estado esta
-   * en `estados` (por_recoger/en_ruta = pendientes de gestion).
+   * en `estados` (por_recoger/en_reparto = pendientes de gestion).
    */
   contarOrdenesPendientesGestion(mensajeroId: string, estados: string[]): Promise<number>;
   /** R12: `true` si el mensajero ya tiene un cierre en estado `solicitado`. */
@@ -219,7 +219,7 @@ export interface ICierreDiaRepository {
   /**
    * Feature 67/R11/R18-R23 — UNICA escritura del deshacer, todo-o-nada en UNA `$transaction`
    * (R22): (1) ANULA la gestion con rastro (`anulada_at`/`anulada_por`) conservando intactos
-   * todos sus datos originales (R11/R12), (2) devuelve la orden a `en_ruta` REPONIENDO la
+   * todos sus datos originales (R11/R12), (2) devuelve la orden a `en_reparto` REPONIENDO la
    * asignacion al mensajero autor (R18/R19: una gestion `devuelta` con reintento habia limpiado
    * `mensajero_asignado_id`), (3) registra la transicion por el CHOKE POINT del historial
    * (`appendCambioEstado`, `origen_tipo = deshacer_gestion`) en la MISMA tx (R20/R21). NO toca

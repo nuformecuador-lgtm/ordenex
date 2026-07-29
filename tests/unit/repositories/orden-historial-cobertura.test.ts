@@ -19,7 +19,7 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // `anularGestionYDevolverAGestion` / `deshacer_gestion`). A diferencia de la 47 y la 48 —que
 // reutilizaron `gestion` y `ajuste_estado`—, esta SI trae valor de enum nuevo + migracion +
 // down: el proposito de la feature es el RASTRO, y reusar `gestion` haria que la linea de
-// tiempo mostrara "en_bodega_central -> en_ruta, origen: gestion", indistinguible de una gestion
+// tiempo mostrara "en_bodega_central -> en_reparto, origen: gestion", indistinguible de una gestion
 // real (F1.4-b).
 
 // Repositorio -> clase (para verificar que cada simbolo existe como metodo real).
@@ -46,7 +46,7 @@ const PUNTOS_DE_ESCRITURA = [
   { n: 7, repo: "OrdenRepository", simbolo: "asignarSateliteLote", origenTipo: "asignacion_satelite" },
   { n: 8, repo: "GestionOrdenRepository", simbolo: "recogerLote", origenTipo: "recoleccion" },
   // #9: feature 47 lo convierte en una transicion COMPUESTA cuando el resultado es `devuelta`:
-  // ademas del append de la gestion (en_ruta->devuelta, actor=mensajero), emite en la MISMA
+  // ademas del append de la gestion (en_reparto->devuelta, actor=mensajero), emite en la MISMA
   // tx un SEGUIMIENTO automatico (actor=null/sistema) hacia la bodega responsable
   // (en_bodega_central/en_bodega_satelite, reintento) o hacia rechazada (escalado). Reutiliza el mismo
   // `origen_tipo=gestion` (sin enum nuevo, sin migracion, R14/R21): sigue siendo UN punto.
@@ -62,7 +62,7 @@ const PUNTOS_DE_ESCRITURA = [
   // `DevolucionOrigenService`), igual que la 47 documento que #9 sirve el seguimiento. NO se
   // agrega un call-site nuevo ni un `origen_tipo` nuevo: sigue siendo UN punto `ajuste_estado`.
   { n: 11, repo: "OrdenRepository", simbolo: "update", origenTipo: "ajuste_estado" },
-  // #12: feature 67 (F1.4-b). El DESHACER devuelve la orden a `en_ruta` reponiendo la
+  // #12: feature 67 (F1.4-b). El DESHACER devuelve la orden a `en_reparto` reponiendo la
   // asignacion al mensajero autor, en la MISMA tx que anula la gestion (R20/R21/R22). Trae
   // `origen_tipo` NUEVO (`deshacer_gestion`, 12.º valor del enum) para que la auditoria
   // distinga un deshacer de una gestion real: la migracion `*_gestion_orden_anulacion` lo
@@ -135,7 +135,7 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "cancelarViaApi",
     origenTipo: "cancelacion_api",
   },
-  // #19: feature 109. El corte diario transiciona `en_ruta -> sin_gestionar` DENTRO de
+  // #19: feature 109. El corte diario transiciona `en_reparto -> sin_gestionar` DENTRO de
   // `CierreDiaRepository.crearCierre` (input opcional `corteSinGestionar`), en la MISMA tx, via el
   // choke point con actor null y `origen_tipo` NUEVO `corte_sin_gestionar` (19.º valor del enum,
   // migracion `*_orden_historial_origen_sin_gestionar` + su down). crearCierre ahora SI escribe
@@ -185,7 +185,7 @@ const PUNTOS_DE_ESCRITURA = [
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
-// asignarMensajeroSugerido (solo mensajero_sugerido_id), softDelete (solo deleted_at),
+// softDelete (solo deleted_at),
 // setOrdenEnGestion / liberarOrdenEnGestion (puntero de bloqueo 1-a-1). Existen pero NO
 // forman parte del conjunto de escritura de estado -> NO instrumentan historial.
 // Feature 67: las dos LECTURAS del deshacer (`findGestionParaDeshacer`,
@@ -194,7 +194,6 @@ const PUNTOS_DE_ESCRITURA = [
 // `crearCierre` (37) escribe `gestion_orden.cierre_id`; feature 109 lo convierte ADEMAS en el
 // punto #19 (`corte_sin_gestionar`) cuando recibe el input del corte -> ya NO va en esta lista.
 const NO_ESCRIBEN_ESTADO = [
-  { repo: "OrdenRepository", simbolo: "asignarMensajeroSugerido" },
   { repo: "OrdenRepository", simbolo: "softDelete" },
   { repo: "GestionOrdenRepository", simbolo: "setOrdenEnGestion" },
   { repo: "GestionOrdenRepository", simbolo: "liberarOrdenEnGestion" },

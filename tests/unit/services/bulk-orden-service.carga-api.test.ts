@@ -80,7 +80,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
       .mockResolvedValue([
         { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
       ]),
-    findMensajerosByIds: vi.fn().mockResolvedValue(new Set(["msg-1"])),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
     createManyOrdenesConGuia: vi.fn(async (data: CreateOrdenData[]) => conGuiaEco(data)),
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
@@ -93,11 +92,12 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findMensajerosByZona: vi.fn().mockResolvedValue([]),
     findMensajeroIdsValidosByZona: vi.fn().mockResolvedValue(new Set()),
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
-    findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
-    asignarMensajeroSugerido: vi.fn().mockResolvedValue(0),
-    countOrdenesDeTienda: vi.fn().mockResolvedValue(0),
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),
     findEtiquetaByNumGuia: vi.fn().mockResolvedValue(null),
+    // Feature 148: stubs del manifiesto (READ derivado, no lo ejercita este test).
+    findManifiestoByIds: vi.fn().mockResolvedValue([]),
+    findManifiestoByRemisiones: vi.fn().mockResolvedValue([]),
+    findUsuarioNombre: vi.fn().mockResolvedValue(null),
     findUsuarioZonaId: vi.fn().mockResolvedValue(null),
     findUsuarioVehiculoId: vi.fn().mockResolvedValue(null),
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
@@ -145,7 +145,6 @@ function row(overrides: Partial<RawRow> = {}): RawRow {
     producto: "Caja",
     notas: "",
     monto_cobrar: "",
-    mensajero_sugerido_id: "",
     ...overrides,
   };
 }

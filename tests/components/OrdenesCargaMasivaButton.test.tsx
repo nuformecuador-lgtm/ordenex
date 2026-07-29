@@ -53,14 +53,6 @@ vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaPreview", () => ({
   },
 }));
 
-const asignacion = vi.hoisted(() => ({ props: null as { numRemisiones: string[] } | null }));
-vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumen", () => ({
-  OrdenesCargaResumen: (props: { numRemisiones: string[] }) => {
-    asignacion.props = props;
-    return <div data-testid="asignacion-double" />;
-  },
-}));
-
 // Orquestación de chunks: se espía `procesarEnChunks`; el resto (combinar, error)
 // se conserva del módulo real para que la clasificación sea la de producción.
 const { procesarEnChunksMock } = vi.hoisted(() => ({ procesarEnChunksMock: vi.fn() }));
@@ -70,9 +62,6 @@ vi.mock("@/app/(app)/ordenes/_components/carga-masiva-chunks", async (importOrig
   >();
   return { ...actual, procesarEnChunks: procesarEnChunksMock };
 });
-
-const { listarMensajerosMock } = vi.hoisted(() => ({ listarMensajerosMock: vi.fn() }));
-vi.mock("@/lib/actions/mensajeros", () => ({ listarMensajeros: listarMensajerosMock }));
 
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 vi.mock("swr", async (importOriginal) => {
@@ -88,8 +77,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   upload.props = null;
   preview.props = null;
-  asignacion.props = null;
-  listarMensajerosMock.mockResolvedValue({ status: "ok", mensajeros: [] });
 });
 
 afterEach(() => cleanup());
@@ -191,7 +178,7 @@ describe("OrdenesCargaMasivaButton — validación", () => {
 // Fase 2 — confirmar (carga real por chunks)
 // ---------------------------------------------------------------------------
 describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
-  it("confirma → procesarEnChunks(dryRun:false), mutate, toast y asignación", async () => {
+  it("confirma → procesarEnChunks(dryRun:false), mutate, toast y cierra el modal", async () => {
     const user = userEvent.setup();
     procesarEnChunksMock.mockResolvedValue([
       { fila: 1, numRemision: "REM-A", resultado: "creada" },
@@ -210,11 +197,13 @@ describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
     expect(mutateMock).toHaveBeenCalledTimes(1);
     expect(successMock).toHaveBeenCalledTimes(1);
 
-    expect(await screen.findByTestId("asignacion-double")).toBeInTheDocument();
-    expect(asignacion.props?.numRemisiones).toEqual(["REM-A"]);
+    // Retirado el "mensajero sugerido": tras la carga real no queda paso
+    // posterior (el mensajero se decide en "Generar guía"), el modal cierra.
+    await screen.findByRole("button", { name: /carga masiva/i });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("R20 (feature 143): en el paso 'asignacion' no existe ningún botón de descarga de errores", async () => {
+  it("R20 (feature 143): tras la carga real no existe ningún botón de descarga de errores", async () => {
     // Decisión de gate G-1: la descarga vive SOLO en la vista previa. Tras la
     // carga real el modal no ofrece exportar nada.
     const user = userEvent.setup();
@@ -231,9 +220,9 @@ describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "confirmar-double" }));
-    expect(await screen.findByTestId("asignacion-double")).toBeInTheDocument();
+    await screen.findByRole("button", { name: /carga masiva/i });
 
-    // Aunque la carga real dejó una fila con error, el paso no ofrece descarga.
+    // Aunque la carga real dejó una fila con error, nada ofrece descargarlas.
     expect(
       screen.queryByRole("button", { name: /descargar filas con error/i }),
     ).toBeNull();

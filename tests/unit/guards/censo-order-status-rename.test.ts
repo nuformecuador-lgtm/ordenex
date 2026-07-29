@@ -18,6 +18,16 @@ import path from "path";
 // CUIDADO case-sensitive: `en_bodega` se censa por igualdad EXACTA (word boundary),
 // sin marcar `en_bodega_satelite`, `en_ruta_bodega_satelite` ni el nuevo
 // `en_bodega_central` (R11).
+//
+// Feature 153 (R15/R16/R17) — SWAP, no duplicado. La 153 REVIERTE uno de los 6 renames de
+// la 135: el value vigente vuelve a ser `en_reparto` y el prohibido pasa a ser `en_ruta`.
+// Por eso `OLD_VALUES` sigue teniendo 6 entradas: sale `en_reparto`, entra `en_ruta`. Los
+// otros cinco values antiguos de la 135 no cambian. `\ben_ruta\b` NO marca a los vecinos
+// `en_ruta_bodega_central` / `en_ruta_bodega_satelite`, que siguen vigentes y NO se
+// renombraron (`_` es caracter de palabra: no hay frontera tras `en_ruta`).
+// La 153 agrega ademas un censo de la ETIQUETA antigua (`"En ruta"` entre comillas, R17),
+// que atrapa fixtures que usan el label como si fuera un value y que el censo de values
+// no ve; tampoco marca las etiquetas compuestas ("En ruta a bodega central"/"... satelite").
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 const SCAN_DIRS = ["app", "lib", "components", "hooks", "scripts", "tests", "e2e"];
@@ -26,7 +36,7 @@ const SCAN_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sql",
 // 6 values antiguos (regex case-sensitive, word boundary). El word boundary evita
 // falsos positivos: `\ben_bodega\b` no matchea `en_bodega_satelite`/`en_bodega_central`.
 const OLD_VALUES: Array<{ label: string; re: RegExp }> = [
-  { label: "en_reparto", re: /\ben_reparto\b/ },
+  { label: "en_ruta", re: /\ben_ruta\b/ }, // feature 153: sustituye a `en_reparto`, hoy vigente
   { label: "en_espera_aceptacion", re: /\ben_espera_aceptacion\b/ },
   { label: "en_ruta_bodega_principal", re: /\ben_ruta_bodega_principal\b/ },
   { label: "en_bodega", re: /\ben_bodega\b/ },
@@ -42,8 +52,14 @@ const ALLOWLIST = new Set([
   "cierre-detail-migration.test.ts", // R10: referencia el nombre de carpeta historica *_recibido_origen
   "zonas-migration.test.ts", // R10: referencia el nombre de carpeta historica *_recibido_origen
   "orden-num-guia-deferred.test.ts", // R10: afirma el ADD VALUE/INSERT historico 'en_espera_aceptacion'
-  "order-status-rename-nomenclatura-migration.test.ts", // R2/R3: traza UP/DOWN del rename
+  "order-status-rename-nomenclatura-migration.test.ts", // R2/R3: traza UP/DOWN del rename de la 135 (contiene `en_ruta`)
+  "order-status-en-reparto-migration.test.ts", // 153/R2/R3: traza UP/DOWN del rename en_ruta -> en_reparto
 ]);
+
+// Feature 153 (R17) — censo de la ETIQUETA antigua. Se busca el literal EXACTO entre
+// comillas dobles para no marcar las etiquetas compuestas, que siguen vigentes:
+// "En ruta a bodega central" y "En ruta a bodega satelite" no cierran comilla tras "ruta".
+const OLD_LABEL_RE = /"En ruta"/;
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -83,5 +99,56 @@ describe("R13 — invariante de censo: ningun value antiguo de order_status fuer
     expect(enBodega.test("en_ruta_bodega_satelite")).toBe(false);
     expect(enBodega.test("en_bodega_central")).toBe(false);
     expect(enBodega.test('estatus = "en_bodega"')).toBe(true);
+  });
+
+  // Feature 153 (R5/R15/R16): espejo del caso de en_bodega para el value que la 153 prohibe.
+  it("el censo de en_ruta es por igualdad EXACTA (no marca en_ruta_bodega_central ni en_ruta_bodega_satelite)", () => {
+    const enRuta = OLD_VALUES.find((v) => v.label === "en_ruta")!.re;
+    expect(enRuta.test("en_ruta_bodega_central")).toBe(false);
+    expect(enRuta.test("en_ruta_bodega_satelite")).toBe(false);
+    expect(enRuta.test('estatus = "en_ruta"')).toBe(true);
+  });
+
+  it("OLD_VALUES sigue teniendo 6 entradas: incluye en_ruta y ya NO incluye en_reparto (swap de la 153)", () => {
+    const labels = OLD_VALUES.map((v) => v.label);
+    expect(labels).toHaveLength(6);
+    expect(labels).toContain("en_ruta");
+    expect(labels).not.toContain("en_reparto");
+    expect(labels).toEqual([
+      "en_ruta",
+      "en_espera_aceptacion",
+      "en_ruta_bodega_principal",
+      "en_bodega",
+      "devuelta_origen",
+      "recibido_origen",
+    ]);
+  });
+});
+
+// Feature 153 (R17) — censo de la etiqueta antigua "En ruta". Va aparte del censo de values
+// porque atrapa un caso que aquel no ve: fixtures que pasan la ETIQUETA donde va un `value`
+// (p.ej. `estatusValue: "En ruta"`).
+describe("153/R17 — invariante de censo: la etiqueta antigua “En ruta” no sobrevive en el arbol", () => {
+  it("no hay ninguna aparicion del literal exacto en app/, lib/, components/, hooks/, scripts/, tests/, e2e/", () => {
+    const offenders: string[] = [];
+    for (const rel of SCAN_DIRS) {
+      const base = path.join(REPO_ROOT, rel);
+      if (!fs.existsSync(base)) continue;
+      for (const file of walk(base)) {
+        if (ALLOWLIST.has(path.basename(file))) continue;
+        if (OLD_LABEL_RE.test(fs.readFileSync(file, "utf8"))) {
+          offenders.push(path.relative(REPO_ROOT, file));
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("el censo de la etiqueta NO marca las etiquetas compuestas, que siguen vigentes", () => {
+    expect(OLD_LABEL_RE.test('"En ruta a bodega central"')).toBe(false);
+    expect(OLD_LABEL_RE.test('"En ruta a bodega satélite"')).toBe(false);
+    expect(OLD_LABEL_RE.test('"En ruta a bodega <zona>"')).toBe(false);
+    expect(OLD_LABEL_RE.test('label: "En ruta"')).toBe(true);
+    expect(OLD_LABEL_RE.test('"En reparto"')).toBe(false);
   });
 });

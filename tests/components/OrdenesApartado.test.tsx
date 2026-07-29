@@ -29,7 +29,7 @@ const listarOrdenesMock = vi.mocked(listarOrdenes);
 const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
 
 const ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_ruta",
+  estatusOrigenValue: "en_reparto",
   estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,
@@ -56,7 +56,6 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    mensajeroSugeridoId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,

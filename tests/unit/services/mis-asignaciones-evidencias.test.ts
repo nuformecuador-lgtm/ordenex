@@ -22,7 +22,7 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
   return {
     id: "o1",
-    estatusValue: "en_ruta",
+    estatusValue: "en_reparto",
     deletedAt: null,
     mensajeroAsignadoId: "m1",
     montoCobrar: 100,
@@ -49,7 +49,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 
 function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados"> {
   const ids: Record<string, string> = {
-    en_ruta: "os-reparto",
+    en_reparto: "os-reparto",
     entregada: "os-entregada",
     rechazada: "os-rechazada",
     devuelta: "os-devuelta",

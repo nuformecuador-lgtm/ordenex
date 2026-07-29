@@ -24,7 +24,6 @@ function ordenRow(overrides: Record<string, unknown> = {}) {
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     estatus: { value: "en_bodega_central" },
-    mensajeroSugeridoId: null,
     mensajeroAsignadoId: null,
     prioridad: false, // feature 101/R9: escalar de la fila que toDTO propaga al DTO
     ...overrides,
@@ -70,7 +69,6 @@ function ordenListRow(overrides: Record<string, unknown> = {}) {
     provincia: { id: "p1", nombre: "San José" },
     canton: { id: "c1", nombre: "Central" },
     distrito: null,
-    mensajeroSugerido: null,
     mensajeroAsignado: null,
     // Gestión de reprogramación vigente (`take: 1`): vacío = sin reprogramación.
     gestiones: [],
@@ -373,13 +371,13 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(arg.include).toMatchObject({ estatus: { select: { value: true } } });
   });
 
-  // Feature 17/R20: el modal "Generar guia" agrupa por mensajero sugerido y las
-  // secciones por_recoger/en_bodega_central muestran el mensajero asignado.
-  it("R20: mapea mensajeroSugeridoId y mensajeroAsignadoId en el DTO del listado", async () => {
+  // Feature 17/R20: las secciones por_recoger/en_bodega_central muestran el
+  // mensajero asignado (el "sugerido" se retiro por completo).
+  it("R20: mapea mensajeroAsignadoId en el DTO del listado", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
-      ordenListRow({ id: "ord-con", mensajeroSugeridoId: "msj-1", mensajeroAsignadoId: "msj-2" }),
-      ordenListRow({ id: "ord-sin", mensajeroSugeridoId: null, mensajeroAsignadoId: null }),
+      ordenListRow({ id: "ord-con", mensajeroAsignadoId: "msj-2" }),
+      ordenListRow({ id: "ord-sin", mensajeroAsignadoId: null }),
     ]);
     prisma.orden.count.mockResolvedValue(2);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -392,9 +390,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
       take: 20,
     });
 
-    expect(res.items[0].mensajeroSugeridoId).toBe("msj-1");
     expect(res.items[0].mensajeroAsignadoId).toBe("msj-2");
-    expect(res.items[1].mensajeroSugeridoId).toBeNull();
     expect(res.items[1].mensajeroAsignadoId).toBeNull();
   });
 
@@ -435,8 +431,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     prisma.orden.findMany.mockResolvedValue([
       ordenListRow({
         distrito: { id: "d1", nombre: "Carmen" },
-        mensajeroSugerido: { id: "msj-1", nombre: "Luis" },
-        mensajeroAsignado: null,
+        mensajeroAsignado: { id: "msj-1", nombre: "Luis" },
       }),
     ]);
     prisma.orden.count.mockResolvedValue(1);
@@ -456,8 +451,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(rel.provincia).toEqual({ id: "p1", nombre: "San José" });
     expect(rel.canton).toEqual({ id: "c1", nombre: "Central" });
     expect(rel.distrito).toEqual({ id: "d1", nombre: "Carmen" });
-    expect(rel.mensajeroSugerido).toEqual({ id: "msj-1", nombre: "Luis" });
-    expect(rel.mensajeroAsignado).toBeNull();
+    expect(rel.mensajeroAsignado).toEqual({ id: "msj-1", nombre: "Luis" });
     // La tienda trae sus datos + tarifas anidadas (Decimal -> number).
     expect(rel.tienda).toMatchObject({
       id: "t1",

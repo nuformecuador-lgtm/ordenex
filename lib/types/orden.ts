@@ -189,9 +189,8 @@ export type ActionError =
 // R25/R26: elemento del LISTADO. Extiende OrdenDTO con el nombre legible de la
 // tienda (`Usuario.nombre` del usuario tienda). Solo aplica al listado; crear/
 // obtener/actualizar siguen devolviendo OrdenDTO sin `tiendaNombre`.
-// Feature 17/R20: agrega `mensajeroSugeridoId`/`mensajeroAsignadoId` (solo el
-// listado, para que el modal "Generar guia" agrupe por sugerido y las secciones
-// por_recoger/en_bodega_central muestren el mensajero asignado). Cambio aditivo:
+// Feature 17/R20: agrega `mensajeroAsignadoId` (solo el listado, para que las
+// secciones por_recoger/en_bodega_central muestren el mensajero asignado). Cambio aditivo:
 // NO se agrega a OrdenDTO base para no ampliar el contrato del CRUD. Opcionales
 // (`?`) para no romper mocks/fixtures de UI existentes que construyen
 // OrdenListItemDTO sin estos campos; el repositorio SIEMPRE los envia (string|null).
@@ -203,7 +202,6 @@ export type ActionError =
 // SIEMPRE los envia (string/boolean concretos desde la relacion Orden.zona).
 export type OrdenListItemDTO = OrdenDTO & {
   tiendaNombre: string;
-  mensajeroSugeridoId?: string | null;
   mensajeroAsignadoId?: string | null;
   zonaNombre?: string;
   zonaEsGam?: boolean;
@@ -259,7 +257,6 @@ export interface OrdenListItemRelaciones {
   provincia: RefNombre | null;
   canton: RefNombre | null;
   distrito: RefNombre | null;
-  mensajeroSugerido: RefNombre | null;
   mensajeroAsignado: RefNombre | null;
 }
 

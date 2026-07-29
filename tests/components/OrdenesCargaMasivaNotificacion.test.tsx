@@ -53,10 +53,6 @@ vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaPreview", () => ({
   ),
 }));
 
-vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumen", () => ({
-  OrdenesCargaResumen: () => <div data-testid="asignacion-double" />,
-}));
-
 const { procesarEnChunksMock } = vi.hoisted(() => ({ procesarEnChunksMock: vi.fn() }));
 vi.mock("@/app/(app)/ordenes/_components/carga-masiva-chunks", async (importOriginal) => {
   const actual = await importOriginal<
@@ -64,10 +60,6 @@ vi.mock("@/app/(app)/ordenes/_components/carga-masiva-chunks", async (importOrig
   >();
   return { ...actual, procesarEnChunks: procesarEnChunksMock };
 });
-
-vi.mock("@/lib/actions/mensajeros", () => ({
-  listarMensajeros: vi.fn().mockResolvedValue({ status: "ok", mensajeros: [] }),
-}));
 
 // Se espía la generación del loteId conservando la implementación real: permite
 // comprobar que se genera UNA vez por carga (al validar), no una por reintento.
@@ -213,7 +205,7 @@ describe("OrdenesCargaMasivaButton — aviso de carga terminada (R39)", () => {
     expect(nuevoLoteIdSpy.mock.results[1].value).not.toBe(primero);
   });
 
-  it("R39/R25: si la acción de aviso falla, la carga y su resumen no se ven afectados", async () => {
+  it("R39/R25: si la acción de aviso falla, la carga no se ve afectada", async () => {
     const user = userEvent.setup();
     notificarMock.mockRejectedValue(new Error("aviso caído"));
     procesarEnChunksMock.mockResolvedValue([
@@ -226,7 +218,7 @@ describe("OrdenesCargaMasivaButton — aviso de carga terminada (R39)", () => {
 
     await user.click(screen.getByRole("button", { name: "confirmar-double" }));
 
-    expect(await screen.findByTestId("asignacion-double")).toBeInTheDocument();
+    await screen.findByRole("button", { name: /carga masiva/i });
     expect(successMock).toHaveBeenCalledTimes(1);
     expect(errorMock).not.toHaveBeenCalled();
   });

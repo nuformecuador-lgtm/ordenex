@@ -183,7 +183,7 @@ describe("EscanerRecepcionBodegaCentral — toast por resultado (R15) + refresco
     const onRecibida = vi.fn();
     recibirMock.mockResolvedValue({
       status: "estado_invalido",
-      estado: "en_ruta",
+      estado: "en_reparto",
     });
     render(<EscanerRecepcionBodegaCentral onRecibida={onRecibida} />);
 
@@ -191,8 +191,8 @@ describe("EscanerRecepcionBodegaCentral — toast por resultado (R15) + refresco
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
     // Legible, no el value crudo: la etiqueta sale del mapa de presentación.
-    expect(errorMock.mock.calls[0][0]).toMatch(ORDER_STATUS_LABELS.en_ruta);
-    expect(errorMock.mock.calls[0][0]).not.toMatch("en_ruta");
+    expect(errorMock.mock.calls[0][0]).toMatch(ORDER_STATUS_LABELS.en_reparto);
+    expect(errorMock.mock.calls[0][0]).not.toMatch("en_reparto");
     expect(onRecibida).not.toHaveBeenCalled();
   });
 

@@ -203,6 +203,9 @@ export function BulkUpload({
     setIsGeneratingTemplate(true);
     try {
       // Import dinámico (R6b): exceljs queda fuera del bundle inicial del componente.
+      // El MIME NO viaja por aquí: es el `XLSX_MIME` exportado que se importa
+      // arriba de forma estática (una sola definición para los tres consumidores
+      // de XLSX; features 143 y 148 lo unificaron en `lib/utils/xlsx-template`).
       const { buildXlsxTemplate } = await import("@/lib/utils/xlsx-template");
       const buffer = await buildXlsxTemplate(fields);
       const blob = new Blob([buffer], { type: XLSX_MIME });

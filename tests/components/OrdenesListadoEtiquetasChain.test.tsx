@@ -79,7 +79,6 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    mensajeroSugeridoId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -174,6 +173,11 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
 
     expect(generarGuiaMock).toHaveBeenCalledTimes(1);
 
+    // Feature 148 (§9.7): tras confirmar, el modal de guía pasa a su fase
+    // "resultado" (manifiesto del lote) y el encadenado a etiquetas ocurre al
+    // CERRAR esa fase, no al confirmar. El lote encadenado es el mismo.
+    await user.click(within(guiaDialog).getByRole("button", { name: "Cerrar" }));
+
     // Encadena: el modal de etiquetas se abre con el lote (re-fetch por id).
     const etiquetasDialog = await screen.findByRole("dialog", {
       name: "Imprimir etiquetas",
@@ -237,6 +241,13 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
 
     expect(asignarDesdeBodegaMock).toHaveBeenCalledTimes(1);
 
+    // Feature 148 (§9.7): tras confirmar, el modal de asignación pasa a su fase
+    // "resultado" (manifiesto del lote) y el encadenado a etiquetas ocurre al
+    // CERRAR esa fase, no al confirmar. El lote encadenado es el mismo.
+    await user.click(
+      within(asignarDialog).getByRole("button", { name: "Cerrar" }),
+    );
+
     const etiquetasDialog = await screen.findByRole("dialog", {
       name: "Imprimir etiquetas",
     });
@@ -271,6 +282,11 @@ describe("OrdenesListado — feature 95: encadenar etiquetas tras generar guía 
     await user.click(
       within(guiaDialog).getByRole("button", { name: "Generar guía" }),
     );
+
+    // Feature 148 (§9.7): tras confirmar, el modal de guía pasa a su fase
+    // "resultado" (manifiesto del lote) y el encadenado a etiquetas ocurre al
+    // CERRAR esa fase, no al confirmar. El lote encadenado es el mismo.
+    await user.click(within(guiaDialog).getByRole("button", { name: "Cerrar" }));
 
     const etiquetasDialog = await screen.findByRole("dialog", {
       name: "Imprimir etiquetas",

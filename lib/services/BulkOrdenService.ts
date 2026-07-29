@@ -211,28 +211,11 @@ function geoInputDesdeColumnasSeparadas(raw: RawRow): GeoInput {
   };
 }
 
-type MensajeroResult =
-  | { ok: true; id: string | null }
-  | { ok: false; fieldErrors: Record<string, string[]> };
-
-// R22: vacio -> null; provisto -> debe existir con rol mensajero.
-function resolveMensajero(mensajeroSugeridoId: string | null, validos: Set<string>): MensajeroResult {
-  if (mensajeroSugeridoId === null) return { ok: true, id: null };
-  if (!validos.has(mensajeroSugeridoId)) {
-    return {
-      ok: false,
-      fieldErrors: { mensajero_sugerido_id: ["mensajero_sugerido_id no valido"] },
-    };
-  }
-  return { ok: true, id: mensajeroSugeridoId };
-}
-
 interface PreloadedContext {
   existingMap: Map<string, string>;
   provinciaIndex: Map<string, ProvinciaRow[]>;
   cantonIndex: Map<string, CantonRow[]>;
   distritoIndex: Map<string, DistritoRow[]>;
-  mensajerosValidos: Set<string>;
   estatusId: string | null;
   // Feature 27/R18/R19: `value` del estatus inicial resuelto UNA vez por lote
   // (en_fulfillment | en_preparacion), reportado por fila creada y en el dedup.
@@ -502,20 +485,17 @@ export class BulkOrdenService implements IBulkOrdenService {
     const geoResult: GeoResult = geoInput.ok
       ? resolveGeo(geoInput, ctx.provinciaIndex, ctx.cantonIndex, ctx.distritoIndex)
       : { ok: false, fieldErrors: geoInput.fieldErrors };
-    const mensajeroResult = resolveMensajero(data.mensajero_sugerido_id, ctx.mensajerosValidos);
 
     const fieldErrors: Record<string, string[]> = {};
     if (!geoResult.ok) Object.assign(fieldErrors, geoResult.fieldErrors);
-    if (!mensajeroResult.ok) Object.assign(fieldErrors, mensajeroResult.fieldErrors);
     if (Object.keys(fieldErrors).length > 0) {
       return { status: "error", numRemision: data.num_remision, errores: fieldErrors };
     }
-    // Invariante: fieldErrors vacio implica que ambos resolvieron "ok" (los
-    // unicos casos que agregan claves a fieldErrors son las ramas !ok). Y un
-    // geoResult ok implica un geoInput ok (es su unica fuente).
+    // Invariante: fieldErrors vacio implica que geoResult resolvio "ok" (su rama
+    // !ok es la unica que agrega claves a fieldErrors). Y un geoResult ok implica
+    // un geoInput ok (es su unica fuente).
     const geo = (geoResult as Extract<GeoResult, { ok: true }>).geo;
     const direccionLiteral = (geoInput as Extract<GeoInput, { ok: true }>).direccion;
-    const mensajeroSugeridoId = (mensajeroResult as Extract<MensajeroResult, { ok: true }>).id;
 
     // R26: dedup intra-archivo, primera ocurrencia gana; reporta el mismo
     // estatus que se reporto/reportara para la ganadora.
@@ -551,7 +531,6 @@ export class BulkOrdenService implements IBulkOrdenService {
         // vacia -> null (igual que la columna `direccion` vacia de hoy, R26).
         direccion: direccionLiteral === "" ? null : direccionLiteral,
         montoCobrar: data.monto_cobrar,
-        mensajeroSugeridoId,
       },
     };
   }
@@ -561,9 +540,6 @@ export class BulkOrdenService implements IBulkOrdenService {
     estatusInicialValue: string,
   ): Promise<PreloadedContext> {
     const numRemisiones = distinct(rows.map((r) => (r.num_remision ?? "").trim()).filter(Boolean));
-    const mensajeroIds = distinct(
-      rows.map((r) => (r.mensajero_sugerido_id ?? "").trim()).filter(Boolean),
-    );
 
     const [existingMap, provincias, estatusId] = await Promise.all([
       this.repo.findExistingRemisiones(numRemisiones), // R25
@@ -579,10 +555,7 @@ export class BulkOrdenService implements IBulkOrdenService {
     const cantonIndex = indexBy(cantones, (c) => `${c.provinciaId}::${normalize(c.nombre)}`);
 
     const cantonIds = distinct(cantones.map((c) => c.id));
-    const [distritos, mensajerosValidos] = await Promise.all([
-      this.repo.findDistritosByCantonIds(cantonIds), // R19
-      this.repo.findMensajerosByIds(mensajeroIds), // R22
-    ]);
+    const distritos = await this.repo.findDistritosByCantonIds(cantonIds); // R19
     const distritoIndex = indexBy(distritos, (d) => `${d.cantonId}::${normalize(d.nombre)}`);
 
     return {
@@ -590,7 +563,6 @@ export class BulkOrdenService implements IBulkOrdenService {
       provinciaIndex,
       cantonIndex,
       distritoIndex,
-      mensajerosValidos,
       estatusId,
       estatusInicialValue,
     };
