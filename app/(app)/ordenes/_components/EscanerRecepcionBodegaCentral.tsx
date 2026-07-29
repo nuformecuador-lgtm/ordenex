@@ -1,11 +1,8 @@
 "use client";
 
-import { useCallback, useId, useState } from "react";
+import { useCallback, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { QrScanner } from "@/components/shared/QrScanner";
+import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
 import { recibirEnBodegaCentralPorQr } from "@/lib/actions/recepcion-bodega-central";
 import { extractNumGuiaFromScan } from "@/lib/utils/paquete-url";
@@ -33,8 +30,9 @@ export function EscanerRecepcionBodegaCentral({
 }: Readonly<EscanerRecepcionBodegaCentralProps>) {
   const toast = useToast();
   const [procesando, setProcesando] = useState(false);
-  const [guiaManual, setGuiaManual] = useState("");
-  const inputId = useId();
+  // Confirmacion PERSISTENTE del ultimo acierto: el toast se va solo y quien recibe
+  // una tanda seguida necesita ver que la anterior si entro.
+  const [ultimaRecibida, setUltimaRecibida] = useState<number | null>(null);
 
   /** Traduce cada resultado de la acción a un toast (R15, los 8 estados). */
   const notificar = useCallback(
@@ -50,6 +48,7 @@ export function EscanerRecepcionBodegaCentral({
               ? `Guía ${numGuia} recibida; queda por devolver a la tienda.`
               : `Guía ${numGuia} recibida en bodega central.`,
           );
+          setUltimaRecibida(numGuia);
           onRecibida();
           break;
         case "ya_recibida":
@@ -114,56 +113,41 @@ export function EscanerRecepcionBodegaCentral({
   );
 
   /**
-   * Entrada manual (R12b): parsea el input a entero positivo y dispara la misma
+   * Entrada manual (R12b): parsea lo tecleado a entero positivo y dispara la misma
    * acción. Un valor no numérico/no positivo se corta en cliente con el mismo
-   * mensaje "Código inválido", sin llamar a la acción (coherente con el borde, R10).
+   * mensaje "Código inválido", sin llamar a la acción (coherente con el borde, R10);
+   * devolver `false` deja el valor en el campo para corregirlo.
    */
-  const enviarManual = useCallback(() => {
-    const numGuia = Number(guiaManual.trim());
-    if (!Number.isSafeInteger(numGuia) || numGuia <= 0) {
-      toast.error("Código inválido.");
-      return;
-    }
-    void recibir(numGuia);
-    setGuiaManual("");
-  }, [guiaManual, recibir, toast]);
+  const enviarManual = useCallback(
+    (valor: string) => {
+      const numGuia = Number(valor);
+      if (!Number.isSafeInteger(numGuia) || numGuia <= 0) {
+        toast.error("Código inválido.");
+        return false;
+      }
+      void recibir(numGuia);
+      return true;
+    },
+    [recibir, toast],
+  );
 
   return (
-    <div className="flex flex-wrap items-end justify-end gap-2">
-      <QrScanner
-        onDecoded={procesarEscaneo}
-        disabled={procesando}
-        mensajeErrorCamara="No se pudo abrir la cámara."
-      />
-      <form
-        className="flex items-end gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          enviarManual();
-        }}
-      >
-        <div className="flex flex-col gap-1">
-          <Label htmlFor={inputId}>Número de guía</Label>
-          {/* type=number para el teclado numérico; SIN `min`/`step` a propósito:
-              esos disparan la validación nativa del form y bloquearían el submit
-              de un valor no positivo (p. ej. "0") ANTES de nuestro guard, ocultando
-              el corte limpio con "Código inválido" (R10). La validación la hace
-              `enviarManual` en JS, coherente con el borde de la Server Action. */}
-          <Input
-            id={inputId}
-            type="number"
-            inputMode="numeric"
-            value={guiaManual}
-            onChange={(e) => setGuiaManual(e.target.value)}
-            disabled={procesando}
-            placeholder="Ej. 1024"
-            className="w-32"
-          />
-        </div>
-        <Button type="submit" loading={procesando}>
-          Recibir
-        </Button>
-      </form>
-    </div>
+    <EscanerGuiaCard
+      ariaLabel="Recepción en bodega central"
+      titulo="Recibir paquete"
+      descripcion="Escanea o ingresa el número de guía"
+      onDecoded={procesarEscaneo}
+      procesando={procesando}
+      mensajeErrorCamara="No se pudo abrir la cámara."
+      manual={{ onSubmit: enviarManual, submitLabel: "Recibir" }}
+      exito={
+        ultimaRecibida === null ? undefined : (
+          <>
+            Guía <span className="font-semibold">{ultimaRecibida}</span> recibida
+            correctamente.
+          </>
+        )
+      }
+    />
   );
 }

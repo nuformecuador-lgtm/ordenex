@@ -48,8 +48,8 @@ function porClave(clave: string, incluirTienda = true) {
   return def;
 }
 
-describe("construirFiltrosOrdenes — seis filtros declarados (R55)", () => {
-  it("R55: declara SEIS filtros (zona, tienda, provincia, canton, distrito y tiempo)", () => {
+describe("construirFiltrosOrdenes — filtros declarados (R55)", () => {
+  it("R55: declara los filtros de catalogo, el de tiempo y el de reasignables", () => {
     expect(claves(true)).toEqual([
       "zona_id",
       "tienda_id",
@@ -57,16 +57,18 @@ describe("construirFiltrosOrdenes — seis filtros declarados (R55)", () => {
       "canton_id",
       "distrito_id",
       "created",
+      "reasignables",
     ]);
   });
 
-  it("R62: sin el filtro de tienda son CINCO (rol acotado a su propia tienda)", () => {
+  it("R62: sin el filtro de tienda cae SOLO esa clave (rol acotado a su propia tienda)", () => {
     expect(claves(false)).toEqual([
       "zona_id",
       "provincia_id",
       "canton_id",
       "distrito_id",
       "created",
+      "reasignables",
     ]);
     expect(claves(false)).not.toContain("tienda_id");
   });
@@ -168,14 +170,28 @@ describe("construirFiltrosOrdenes — cuentas tienda (R51)", () => {
 });
 
 describe("construirFiltrosOrdenes — catalogo vacio (R64)", () => {
-  it("con catalogo vacio sigue declarando los seis filtros, sin opciones", () => {
+  it("con catalogo vacio sigue declarando TODOS los filtros, sin opciones", () => {
     const defs = construirFiltrosOrdenes(
       { zonas: [], tiendas: [], provincias: [], cantones: [], distritos: [] },
       { incluirTienda: true },
     );
-    expect(defs).toHaveLength(6);
+    expect(defs).toHaveLength(7);
     for (const def of defs.filter((d) => d.kind === "multi")) {
       expect(def.options).toEqual([]);
     }
   });
 });
+
+describe("construirFiltrosOrdenes — filtro REASIGNABLES", () => {
+  it("es un interruptor: `boolean` y sin opciones que elegir", () => {
+    const def = porClave("reasignables");
+    expect(def.kind).toBe("boolean");
+    expect(def.label).toBe("Reasignables");
+    expect(def.options).toBeUndefined();
+  });
+
+  it("no depende de ningun otro filtro (no se poda ni se acota)", () => {
+    expect(porClave("reasignables").dependsOn).toBeUndefined();
+  });
+});
+

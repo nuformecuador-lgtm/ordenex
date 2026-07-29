@@ -52,6 +52,22 @@ export function mananaCalendarioCR(now: Date = new Date()): string {
 }
 
 /**
+ * Feature 144 — el atajo "ultimos N dias" como RANGO de fechas calendario de Costa Rica
+ * (`YYYY-MM-DD`), para pintarlo en el calendario del filtro. Cuenta `N` dias calendario
+ * INCLUIDO hoy (por eso retrocede `N - 1`), la misma regla que
+ * `inicioDeUltimosNDiasCREnUtc` aplica server-side para `created_preset`.
+ */
+export function ultimosNDiasCalendarioCR(
+  dias: number,
+  now: Date = new Date(),
+): { desde: string; hasta: string } {
+  return {
+    desde: fechaCalendarioCR(new Date(now.getTime() - (dias - 1) * UN_DIA_MS)),
+    hasta: fechaCalendarioCR(now),
+  };
+}
+
+/**
  * Feature 144 (R41/R42/R43) — INSTANTE UTC del comienzo (00:00 hora de pared de Costa
  * Rica) de la fecha calendario `YYYY-MM-DD`. Es `${fecha}T06:00:00.000Z`.
  *

@@ -8,7 +8,9 @@ import type { OrdenFilterField } from "@/lib/types/orden";
  * `OrdenFilterInput` (que exige listas NO vacias): la UI omite las claves vacias
  * ANTES de enviarlas (`seleccionAFilter`), y el borde valida igualmente.
  */
-export type OrdenesFilterUI = Partial<Record<OrdenFilterField, string | string[]>>;
+export type OrdenesFilterUI = Partial<
+  Record<OrdenFilterField, string | string[] | boolean>
+>;
 
 /**
  * Serializacion ESTABLE del filtro para la key de SWR (R61): claves ordenadas y, en

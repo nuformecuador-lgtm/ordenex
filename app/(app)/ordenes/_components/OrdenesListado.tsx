@@ -3,9 +3,9 @@
 import { useMemo, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 
-import { MultiSelectFilter } from "@/components/shared/MultiSelectFilter";
 import {
   FilterComponent,
+  type FilterDef,
   type FilterSelection,
 } from "@/components/shared/FilterComponent";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +23,7 @@ import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
 import { EscanerRecepcionBodegaCentral } from "./EscanerRecepcionBodegaCentral";
+import { ReceptorDesplegable } from "./ReceptorDesplegable";
 import { ORDER_STATUS_LABELS } from "./EstatusBadge";
 import {
   ordenesColumnsReprogramada,
@@ -35,6 +36,7 @@ import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
 import {
   construirFiltrosOrdenes,
   CATALOGO_FILTROS_VACIO,
+  CLAVE_ESTADO,
 } from "./ordenes-filtros-def";
 import { seleccionAFilter } from "./seleccion-a-filter";
 import type { OrdenesFilterUI } from "./serializar-filtro";
@@ -354,40 +356,54 @@ export function OrdenesListado({
     [catalogo, exclude],
   );
 
-  // Ids marcados en el filtro. Vacío = sin filtro (todas las órdenes).
-  const [estadosMarcados, setEstadosMarcados] = useState<string[]>([]);
-
-  // Feature 144: selección agregada de la barra genérica (zona, tienda, geografía y
-  // tiempo). El componente es dueño de su estado; aquí solo se guarda lo emitido.
+  // Feature 144: selección agregada de la barra genérica (estado, zona, tienda,
+  // geografía y tiempo). El componente es dueño de su estado; aquí solo se guarda lo
+  // emitido.
   const [seleccionFiltros, setSeleccionFiltros] = useState<FilterSelection>({});
 
-  // R55/R56: las SEIS declaraciones (cinco sin tienda) salen del catálogo precargado.
-  // Sin catálogo, se declaran igual pero sin opciones y con la barra deshabilitada
-  // (R64): la tabla sigue viva.
-  const filtrosBarra = useMemo(
-    () =>
-      construirFiltrosOrdenes(catalogoFiltros ?? CATALOGO_FILTROS_VACIO, {
-        incluirTienda: incluirFiltroTienda,
-      }),
-    [catalogoFiltros, incluirFiltroTienda],
-  );
-
-  // R46/R58/R59: `status_id` (feature 63) y los filtros nuevos se funden en UN solo
-  // `filter`. Sin nada seleccionado, el objeto queda vacío y se envía `undefined`, de
-  // modo que la entrada de `listarOrdenes` es IDÉNTICA a la previa a esta feature.
-  const filter = useMemo<OrdenesFilterUI | undefined>(() => {
-    const compuesto: OrdenesFilterUI = {
-      ...(estadosMarcados.length > 0 ? { status_id: estadosMarcados } : {}),
-      ...seleccionAFilter(seleccionFiltros),
-    };
-    return Object.keys(compuesto).length > 0 ? compuesto : undefined;
-  }, [estadosMarcados, seleccionFiltros]);
+  // Ids marcados en el filtro de estado. Vacío = sin filtro (todas las órdenes). Ya no
+  // es un estado aparte: el estado es UN filtro más de la barra (misma clave que el
+  // `filter` del backend), así que sale de la selección agregada.
+  const estadosMarcados = seleccionFiltros[CLAVE_ESTADO] ?? [];
 
   const opciones = useMemo(
     () =>
       estadosDisponibles.map((s) => ({ value: s.id, label: labelDe(s.value) })),
     [estadosDisponibles],
   );
+
+  // R55/R56: las declaraciones de la barra salen del catálogo precargado (más la de
+  // estado, que sale del catálogo de estatus). Sin catálogo geográfico se declaran
+  // igual, pero sin opciones y deshabilitadas (R64): la tabla sigue viva.
+  const filtrosBarra = useMemo<FilterDef[]>(
+    () => [
+      // El estado va parametrizado como un filtro más, no por fuera: mismo control,
+      // misma limpieza y misma salida agregada que zona, tienda o geografía.
+      {
+        key: CLAVE_ESTADO,
+        label: "Estado",
+        kind: "multi",
+        placeholder: "Todos",
+        searchPlaceholder: "Filtrar estados…",
+        emptyMessage: "Ningún estado coincide",
+        options: opciones,
+      },
+      // R64: si el catálogo geográfico no cargó, se deshabilitan SUS filtros; el de
+      // estado viene de otra fuente y sigue operativo.
+      ...construirFiltrosOrdenes(catalogoFiltros ?? CATALOGO_FILTROS_VACIO, {
+        incluirTienda: incluirFiltroTienda,
+      }).map((f) => (catalogoFiltros === null ? { ...f, disabled: true } : f)),
+    ],
+    [catalogoFiltros, incluirFiltroTienda, opciones],
+  );
+
+  // R46/R58/R59: `status_id` (feature 63) y los filtros nuevos se funden en UN solo
+  // `filter`. Sin nada seleccionado, el objeto queda vacío y se envía `undefined`, de
+  // modo que la entrada de `listarOrdenes` es IDÉNTICA a la previa a esta feature.
+  const filter = useMemo<OrdenesFilterUI | undefined>(() => {
+    const compuesto: OrdenesFilterUI = seleccionAFilter(seleccionFiltros);
+    return Object.keys(compuesto).length > 0 ? compuesto : undefined;
+  }, [seleccionFiltros]);
 
   // Si el filtro está acotado a EXACTAMENTE un estado, ese estado decide las columnas
   // ("Liberada el") y el resalte de prioridad. Con varios estados mezclados —o sin
@@ -464,17 +480,31 @@ export function OrdenesListado({
   // origen se ofrecen al adminTienda (feature 26); la recepción en bodega central
   // (feature 138) al maestro/admin. `onRecibida={handleSuccess}` revalida el listado
   // (R14), de modo que la orden recibida refleja su nuevo estado.
+  //
+  // El receptor es una TARJETA (cámara + número de guía), demasiado alta para vivir
+  // desplegada encima de la tabla: se abre desde la barra de acciones y se cierra
+  // igual. Quien no puede recibir no ve ni el botón.
+  // El receptor y su disparador viven a la IZQUIERDA, donde empieza la lectura de la
+  // pagina; la carga masiva sigue a la derecha de la misma fila. El disparador despliega
+  // la tarjeta con animacion y la desmonta al cerrar (apaga la camara).
   const header =
     puedeCargarMasiva || puedeEscanearQr || puedeRecibirBodegaCentral ? (
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {puedeRecibirBodegaCentral ? (
-          <EscanerRecepcionBodegaCentral onRecibida={handleSuccess} />
-        ) : null}
-        {puedeEscanearQr ? (
-          <EscanerRecepcionOrigen onRecibida={handleSuccess} />
-        ) : null}
-        {puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
-      </div>
+      puedeEscanearQr || puedeRecibirBodegaCentral ? (
+        <ReceptorDesplegable
+          acciones={puedeCargarMasiva ? <OrdenesCargaMasivaButton /> : null}
+        >
+          {puedeRecibirBodegaCentral ? (
+            <EscanerRecepcionBodegaCentral onRecibida={handleSuccess} />
+          ) : null}
+          {puedeEscanearQr ? (
+            <EscanerRecepcionOrigen onRecibida={handleSuccess} />
+          ) : null}
+        </ReceptorDesplegable>
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <OrdenesCargaMasivaButton />
+        </div>
+      )
     ) : null;
 
   if (isLoading) {
@@ -490,28 +520,14 @@ export function OrdenesListado({
     <div className="flex flex-col gap-4">
       {header}
 
-      {/* Filtro de estados: sustituye a las tabs por estado. Sin marcar nada, el
-          listado muestra TODAS las órdenes (equivalente a la antigua tab "Todas"). */}
-      <MultiSelectFilter
-        label="Estado"
-        options={opciones}
-        value={estadosMarcados}
-        onChange={setEstadosMarcados}
-        placeholder="Todos"
-        searchPlaceholder="Filtrar estados…"
-        emptyMessage="Ningún estado coincide"
-        disabled={opciones.length === 0}
-      />
-
-      {/* Feature 144 (R55, R63): barra genérica con los seis filtros declarados
-          (cinco sin tienda). Toda la lógica de selección, búsqueda, acotamiento,
-          agrupado, exclusión mutua y poda vive en el componente; aquí solo se
-          declara y se traduce lo emitido. */}
+      {/* Feature 144 (R55, R63): barra genérica con TODOS los filtros declarados —
+          estado incluido (siete; seis sin tienda). Toda la lógica de selección,
+          búsqueda, acotamiento, agrupado, exclusión mutua y poda vive en el
+          componente; aquí solo se declara y se traduce lo emitido. */}
       <FilterComponent
         filters={filtrosBarra}
         onChange={setSeleccionFiltros}
         showClearAll
-        disabled={catalogoFiltros === null}
       />
 
       <OrdenesModule

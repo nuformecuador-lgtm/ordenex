@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
@@ -13,8 +14,11 @@ import {
 import { DateRangeFilter } from "./DateRangeFilter";
 import { MultiSelectFilter } from "./MultiSelectFilter";
 
-/** Tipos de control soportados en v1 (decision (k) del spec). */
-export type FilterKind = "multi" | "single" | "dateRange";
+/**
+ * Tipos de control soportados (decision (k) del spec). `boolean` es un INTERRUPTOR:
+ * o el filtro esta puesto o no esta, sin opciones que elegir.
+ */
+export type FilterKind = "multi" | "single" | "dateRange" | "boolean";
 
 export interface FilterOption {
   /** Valor emitido TAL CUAL (R5): id de catalogo, o valor de atajo en `dateRange`. */
@@ -28,6 +32,12 @@ export interface FilterOption {
   parentValue?: string;
   /** Grupo al que pertenece la opcion (R28). Puro contrato de opciones. */
   group?: string;
+  /**
+   * Solo en `dateRange`: el RANGO de fechas calendario (`YYYY-MM-DD`) que este atajo
+   * representa. El control no lo calcula ni lo interpreta: pinta ese rango en el
+   * calendario y emite sus dos extremos. Sin el, el atajo no se ofrece.
+   */
+  defaultRange?: { desde: string; hasta: string };
 }
 
 export interface FilterDef {
@@ -40,6 +50,7 @@ export interface FilterDef {
    * `multi`/`single`: las opciones seleccionables.
    * `dateRange`: los ATAJOS ofrecidos dentro del control (R9). Vacio/ausente = solo
    * desde/hasta.
+   * `boolean`: no lleva opciones; su unico valor es el de `BOOLEAN_MARCADO`.
    */
   options?: FilterOption[];
   /** Clave del UNICO filtro padre del que depende (R23). No aplica a `dateRange`. */
@@ -62,10 +73,32 @@ export interface FilterComponentProps {
   showClearAll?: boolean;
   /** Deshabilita TODOS los controles; ninguno emite (R15). */
   disabled?: boolean;
+  /**
+   * Espera (ms) entre el último cambio y la emisión de `onChange`. Los controles
+   * responden al instante; lo que se aplaza es AVISAR al consumidor, para que marcar
+   * cuatro casillas seguidas no dispare cuatro consultas. `0` emite en el acto (útil
+   * en tests y en consumidores que no consultan nada).
+   */
+  debounceMs?: number;
   className?: string;
 }
 
-const KINDS_SOPORTADOS = new Set<string>(["multi", "single", "dateRange"]);
+const KINDS_SOPORTADOS = new Set<string>([
+  "multi",
+  "single",
+  "dateRange",
+  "boolean",
+]);
+
+/**
+ * Valor UNICO que emite un filtro `boolean` marcado (R19: la salida siempre es una
+ * lista de cadenas por clave). Desmarcado no emite `["false"]`: la clave DESAPARECE,
+ * como cualquier otro filtro sin seleccion (R18).
+ */
+export const BOOLEAN_MARCADO = "true";
+
+/** Espera por defecto entre el último cambio y la emisión (ms). */
+export const DEBOUNCE_MS_DEFAULT = 500;
 /** Los tipos basados en opciones: sin opciones ofrecidas, su control va deshabilitado (R14). */
 const KINDS_CON_OPCIONES = new Set<string>(["multi", "single"]);
 
@@ -93,7 +126,13 @@ const KINDS_CON_OPCIONES = new Set<string>(["multi", "single"]);
  *
  * ## Contrato de props
  * `filters: FilterDef[]` (clave, etiqueta, `kind` y —si es de opciones— su lista),
- * `onChange`, `showClearAll`, `disabled`.
+ * `onChange`, `showClearAll`, `disabled`, `debounceMs`.
+ *
+ * ## Emision con debounce
+ * Los controles responden al instante; `onChange` se emite `debounceMs` despues del
+ * ultimo cambio (500 ms por defecto), de modo que una racha de clics produce UNA sola
+ * emision —la del estado final— y no una consulta por clic. `debounceMs={0}` emite
+ * en el acto.
  *
  * ## `dependsOn` / `parentValue` (R23-R27)
  * Un filtro declara `dependsOn: "<key de otro filtro>"` y cada opcion suya trae
@@ -116,6 +155,7 @@ const KINDS_CON_OPCIONES = new Set<string>(["multi", "single"]);
  * | `multi` | N valores |
  * | `single` | exactamente 1 valor |
  * | `dateRange` | exactamente 3 posiciones `[atajo, desde, hasta]`, **sin compactar** |
+ * | `boolean` | `["true"]` marcado; **clave ausente** desmarcado (nunca `["false"]`) |
  *
  * ### Que emite el filtro de tiempo en cada caso (R19)
  *
@@ -136,6 +176,7 @@ export function FilterComponent({
   onChange,
   showClearAll = false,
   disabled = false,
+  debounceMs = DEBOUNCE_MS_DEFAULT,
   className,
 }: FilterComponentProps) {
   const [seleccion, setSeleccion] = useState<FilterSelection>({});
@@ -150,11 +191,47 @@ export function FilterComponent({
     [filters],
   );
 
+  // `onChange` cambia de identidad en cada render del consumidor; se lee por ref para
+  // que el temporizador pendiente use SIEMPRE la version fresca sin reprogramarse.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Al desmontar se cancela lo pendiente: emitir sobre un consumidor que ya no esta
+  // seria un setState en un arbol muerto.
+  useEffect(
+    () => () => {
+      if (temporizador.current) clearTimeout(temporizador.current);
+    },
+    [],
+  );
+
+  /**
+   * Emite la seleccion agregada con el retardo configurado. Cada cambio CANCELA el
+   * anterior: una racha de clics se resuelve en UNA sola emision, la del estado final.
+   */
+  function emitir(seleccionFinal: FilterSelection) {
+    if (temporizador.current) {
+      clearTimeout(temporizador.current);
+      temporizador.current = null;
+    }
+    if (debounceMs <= 0) {
+      onChange(seleccionFinal);
+      return;
+    }
+    temporizador.current = setTimeout(() => {
+      temporizador.current = null;
+      onChangeRef.current(seleccionFinal);
+    }, debounceMs);
+  }
+
   /** Aplica la poda (R26) y emite la seleccion agregada ya coherente (R16/R18). */
   function aplicar(siguiente: FilterSelection) {
     const podada = podarSeleccion(montados, siguiente);
     setSeleccion(podada);
-    onChange(podada);
+    emitir(podada);
   }
 
   function fijar(key: string, valores: string[]) {
@@ -167,7 +244,7 @@ export function FilterComponent({
   function limpiarTodo() {
     setSeleccion({});
     setResetSignal((n) => n + 1);
-    onChange({}); // R22: una sola emision, vacia
+    emitir({}); // R22: una sola emision, vacia
   }
 
   return (
@@ -199,6 +276,31 @@ export function FilterComponent({
           );
         }
 
+        if (filtro.kind === "boolean") {
+          const marcado = valores[0] === BOOLEAN_MARCADO;
+          return (
+            <label
+              key={filtro.key}
+              className={cn(
+                "flex h-8 items-center gap-2 rounded-lg border border-border px-2.5 text-sm select-none",
+                inhabilitado
+                  ? "cursor-not-allowed opacity-50"
+                  : "cursor-pointer hover:bg-muted",
+              )}
+            >
+              <Checkbox
+                checked={marcado}
+                disabled={inhabilitado}
+                // R18: desmarcado NO emite `["false"]`, deja la clave fuera.
+                onCheckedChange={(v) =>
+                  fijar(filtro.key, v ? [BOOLEAN_MARCADO] : [])
+                }
+              />
+              {filtro.label}
+            </label>
+          );
+        }
+
         if (filtro.kind === "single") {
           return (
             <Select
@@ -219,7 +321,12 @@ export function FilterComponent({
           <DateRangeFilter
             key={filtro.key}
             label={filtro.label}
-            shortcuts={visibles}
+            // Solo son atajos ofrecibles los que declaran QUE rango representan.
+            shortcuts={visibles.flatMap((o) =>
+              o.defaultRange
+                ? [{ value: o.value, label: o.label, ...o.defaultRange }]
+                : [],
+            )}
             resetSignal={resetSignal}
             disabled={inhabilitado}
             placeholder={filtro.placeholder}
@@ -231,7 +338,9 @@ export function FilterComponent({
         );
       })}
 
-      {showClearAll ? (
+      {/* R22: "Limpiar todo" solo existe cuando hay algo que limpiar. Sin ningun
+          filtro activo no ocupa sitio ni ofrece una accion que no haria nada. */}
+      {showClearAll && Object.keys(seleccion).length > 0 ? (
         <Button
           type="button"
           variant="outline"

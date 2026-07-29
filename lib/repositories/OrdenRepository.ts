@@ -183,6 +183,10 @@ const TARIFA_SELECT = {
 // `LiberacionReprogramadaRepository`, el cron que consume la misma fecha).
 const RESULTADO_REPROGRAMADA = "reprogramada";
 
+// `order_status.value` de una orden reprogramada: sigue bloqueada hasta que el cron de
+// liberacion la desbloquee, asi que queda FUERA del filtro de reasignables.
+const ESTATUS_REPROGRAMADA = "reprogramada";
+
 // Feature 87 (T2/R6): `gestion_orden.resultado` de una DEVOLUCION. Mismo valor del enum
 // `GestionResultado` que ya usa el historial; la vigencia se filtra por `anuladaAt: null`
 // (mismo criterio que `contarPorDestinoVigentes`, feature 67).
@@ -615,6 +619,19 @@ export class OrdenRepository implements IOrdenRepository {
       ...criterioColumna("distritoId", params.where.distritoId),
       // Feature 144 (R41/R42): rango temporal ya resuelto a instantes UTC por el service.
       ...(params.where.createdAt ? { createdAt: params.where.createdAt } : {}),
+      // Filtro REASIGNABLES: las tres condiciones van como claves hermanas => AND
+      // entre ellas y con el resto de filtros. El estado se compara por VALUE (no por
+      // id): `reprogramada` esta bloqueada hasta que el cron la libere, asi que no es
+      // reasignable todavia. `mensajeroAsignadoId: null` es la parte "sin mensajero";
+      // no colisiona con el acotamiento del rol mensajero, que fija un id concreto
+      // (un mensajero pidiendo reasignables obtiene cero filas, que es lo correcto).
+      ...(params.where.reasignables
+        ? {
+            prioridad: true,
+            mensajeroAsignadoId: null,
+            estatus: { value: { not: ESTATUS_REPROGRAMADA } },
+          }
+        : {}),
     };
     // Feature 101/R6: `prioridad DESC` PRIMERO y LUEGO el orden vigente (lista blanca R31:
     // created_at/num_guia/num_remision). El sort va en la QUERY para respetar la paginacion
