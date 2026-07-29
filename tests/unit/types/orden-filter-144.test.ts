@@ -15,7 +15,7 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 // el `where`: si el schema lanza, no hay consulta.
 
 describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
-  it("R30: la whitelist son exactamente las 9 claves de la feature", () => {
+  it("R30: la whitelist son exactamente estas claves (9 de la 144 + `reasignables`)", () => {
     expect([...ORDEN_FILTER_FIELDS]).toEqual([
       "status_id",
       "zona_id",
@@ -26,7 +26,21 @@ describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
       "created_preset",
       "created_desde",
       "created_hasta",
+      "reasignables",
     ]);
+  });
+
+  it("`reasignables` solo admite `true`: 'sin filtro' se expresa OMITIENDO la clave", () => {
+    expect(
+      listarOrdenesSchema.parse({ filter: { reasignables: true } }).filter,
+    ).toEqual({ reasignables: true });
+    // `false` seria una tercera forma de decir "sin filtro" y se rechaza (falla cerrado).
+    expect(() =>
+      listarOrdenesSchema.parse({ filter: { reasignables: false } }),
+    ).toThrow();
+    expect(() =>
+      listarOrdenesSchema.parse({ filter: { reasignables: "true" } }),
+    ).toThrow();
   });
 
   it("R30: acepta las cinco claves de catalogo y las tres temporales", () => {

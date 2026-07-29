@@ -6,7 +6,6 @@ import {
   cleanup,
   waitFor,
   within,
-  fireEvent,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
@@ -15,6 +14,7 @@ import type { ReactElement } from "react";
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
+import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // Feature 144 / TB4.1 (R46, R55, R57, R59, R62, R63, R64) — cableado del listado.
 
@@ -154,7 +154,8 @@ describe("OrdenesListado — barra de filtros (R55, R63)", () => {
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
     await screen.findByRole("button", { name: /^Zona:/ });
 
-    expect(screen.getByRole("button", { name: "Limpiar todo" })).toBeInTheDocument();
+    // Sin ningún filtro activo no hay nada que limpiar: el botón no se ofrece.
+    expect(screen.queryByRole("button", { name: "Limpiar todo" })).toBeNull();
 
     await marcar(user, "Zona", "GAM");
     await waitFor(() => expect(ultimoFilter()).toEqual({ zona_id: ["z1"] }));
@@ -207,31 +208,71 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
   });
 
   it("R58: el filtro de tiempo se traduce a `created_desde`/`created_hasta`", async () => {
-    renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Zona:/ });
-
-    fireEvent.change(screen.getByLabelText("Desde"), {
-      target: { value: "2026-07-01" },
-    });
-
-    await waitFor(() =>
-      expect(ultimoFilter()).toEqual({ created_desde: "2026-07-01" }),
-    );
-  });
-
-  it("R58: el atajo de antigüedad se traduce a `created_preset` (escalar)", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
     await screen.findByRole("button", { name: /^Zona:/ });
 
-    await user.click(screen.getByRole("combobox", { name: "Fecha de creación" }));
-    await user.click(
-      within(await screen.findByRole("listbox")).getByRole("option", {
-        name: "Últimos 30 días",
+    // El rango se elige en el calendario, que abre en el mes actual; el primer clic
+    // deja un rango de un dia (`desde === hasta`).
+    await user.click(screen.getByRole("button", { name: "Fecha de creación" }));
+    const cuadriculas = await screen.findAllByRole("grid");
+    await user.click(within(cuadriculas[0]).getByText("1"));
+
+    const hoy = new Date();
+    const primero = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-01`;
+    await waitFor(() =>
+      expect(ultimoFilter()).toEqual({
+        created_desde: primero,
+        created_hasta: primero,
       }),
     );
+  });
 
-    await waitFor(() => expect(ultimoFilter()).toEqual({ created_preset: "30d" }));
+  it("R58: 'Reasignables' marcado viaja al `filter` como bandera booleana", async () => {
+    const user = userEvent.setup();
+    renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
+    await screen.findByRole("button", { name: /^Zona:/ });
+
+    await user.click(screen.getByRole("checkbox", { name: "Reasignables" }));
+
+    await waitFor(() => expect(ultimoFilter()).toEqual({ reasignables: true }));
+  });
+
+  it("R58: al desmarcar 'Reasignables' el filtro DESAPARECE de la consulta", async () => {
+    const user = userEvent.setup();
+    renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
+    await screen.findByRole("button", { name: /^Zona:/ });
+
+    const casilla = screen.getByRole("checkbox", { name: "Reasignables" });
+    await user.click(casilla);
+    await waitFor(() => expect(ultimoFilter()).toEqual({ reasignables: true }));
+
+    await user.click(casilla);
+    await waitFor(() => expect(ultimoFilter()).toBeUndefined());
+  });
+
+  it("R58: el atajo de antigüedad se traduce al RANGO que representa", async () => {
+    const user = userEvent.setup();
+    renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
+    await screen.findByRole("button", { name: /^Zona:/ });
+
+    // Los atajos son botones dentro del propio calendario, no un control aparte, y no
+    // emiten un valor propio: fijan el rango (30 días calendario CR incluido hoy).
+    await user.click(screen.getByRole("button", { name: "Fecha de creación" }));
+    const predefinidos = await screen.findByRole("group", {
+      name: "Rangos predefinidos",
+    });
+    await user.click(
+      within(predefinidos).getByRole("button", { name: "Últimos 30 días" }),
+    );
+
+    const esperado = ultimosNDiasCalendarioCR(30);
+    await waitFor(() =>
+      expect(ultimoFilter()).toEqual({
+        created_desde: esperado.desde,
+        created_hasta: esperado.hasta,
+      }),
+    );
   });
 
   it("R46: los filtros nuevos se COMBINAN con el de estado, sin anularse", async () => {

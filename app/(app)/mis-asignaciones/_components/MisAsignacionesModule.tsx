@@ -25,8 +25,7 @@ import {
 } from "./mis-asignaciones-buscador";
 import { FiltroCantonDistrito } from "./FiltroCantonDistrito";
 import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
-import { EscanerRecoger } from "./EscanerRecoger";
-import { InputRecoger } from "./InputRecoger";
+import { RecogerPaqueteCard } from "./RecogerPaqueteCard";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { PosOrderCard } from "./pos-card/PosOrderCard";
@@ -371,16 +370,10 @@ export function MisAsignacionesModule({
               Feature 111/R14: BLOQUEADO oculta ambos controles de recogida (defensa suave;
               la lista de "Por recoger" sigue visible, solo-visualización). */}
           {bloqueado ? null : (
-            <>
-              <InputRecoger
-                porRecoger={porRecoger}
-                onRecogida={() => router.refresh()}
-              />
-              <EscanerRecoger
-                porRecoger={porRecoger}
-                onRecogida={() => router.refresh()}
-              />
-            </>
+            <RecogerPaqueteCard
+              porRecoger={porRecoger}
+              onRecogida={() => router.refresh()}
+            />
           )}
 
           {/* Lista de SOLO-VISUALIZACIÓN (feature 96): reutiliza la sección compartida "por

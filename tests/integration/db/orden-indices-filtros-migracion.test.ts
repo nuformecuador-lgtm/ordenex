@@ -101,8 +101,7 @@ describe("carpeta y schema.prisma", () => {
         !d.endsWith("_drop_orden_mensajero_sugerido") && // feature 159 (retiro de la sugerencia): apendida despues
         // feature 154 (catalogo de estados v2): sus DOS migraciones (20260729) se
         // apendieron despues de esta (20260728), igual que las de la 153 y la 159. La
-        // exclusion se anadio al integrar la 160: la 154 entro a `dev` sin actualizar
-        // esta lista y dejo el caso rojo en `dev` (no lo causo el merge de la 160).
+        // 154 entro a `dev` sin actualizar esta lista y dejo el caso ROJO en `dev`.
         !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
         !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente"),
     );

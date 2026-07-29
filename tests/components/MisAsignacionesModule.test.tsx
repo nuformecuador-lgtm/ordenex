@@ -250,8 +250,8 @@ async function elegirEnSelect(
  * `numGuia` (default 1001, el de `makeAsignacion`) en el gate del panel de
  * detalle y pulsa "Gestionar" → fija el puntero y revela los 4 botones; (3)
  * opcionalmente elige un resultado (muestra sus campos). El input de guía se
- * busca DENTRO del panel para no chocar con el "Número de guía" de la sección
- * "Recoger por número de guía" (InputRecoger), que vive fuera del panel.
+ * busca DENTRO del panel para no chocar con el "Número de guía" de la tarjeta
+ * "Recoger paquete" (RecogerPaqueteCard), que vive fuera del panel.
  */
 async function iniciarGestion(
   user: ReturnType<typeof userEvent.setup>,
@@ -384,10 +384,10 @@ describe("MisAsignacionesModule", () => {
     renderModule({ porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })] });
 
     expect(
-      screen.getByRole("region", { name: "Recoger por número de guía" }),
+      screen.getByRole("region", { name: "Recoger por número de guía o escaneo" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Recoger por escaneo" }),
+      screen.getByRole("button", { name: "Escanear con cámara" }),
     ).toBeInTheDocument();
     // Ya no existe el modal de confirmación de recogida.
     expect(
@@ -405,7 +405,7 @@ describe("MisAsignacionesModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Recoger por número de guía" });
+    const region = screen.getByRole("region", { name: "Recoger por número de guía o escaneo" });
     await user.type(within(region).getByLabelText("Número de guía"), "1002");
     await user.click(within(region).getByRole("button", { name: "Recoger" }));
 
@@ -421,7 +421,7 @@ describe("MisAsignacionesModule", () => {
       porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
     });
 
-    const region = screen.getByRole("region", { name: "Recoger por número de guía" });
+    const region = screen.getByRole("region", { name: "Recoger por número de guía o escaneo" });
     await user.type(within(region).getByLabelText("Número de guía"), "9999");
     await user.click(within(region).getByRole("button", { name: "Recoger" }));
 
@@ -1099,7 +1099,7 @@ describe("MisAsignacionesModule", () => {
 
     // Los controles de recogida no se renderizan; sí la lista de solo-visualización.
     expect(
-      screen.queryByRole("region", { name: "Recoger por número de guía" }),
+      screen.queryByRole("region", { name: "Recoger por número de guía o escaneo" }),
     ).toBeNull();
     expect(
       screen.queryByRole("region", { name: "Recoger por escaneo" }),
@@ -1143,7 +1143,7 @@ describe("MisAsignacionesModule", () => {
       screen.getByRole("region", { name: "Detalle de la orden" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Recoger por número de guía" }),
+      screen.getByRole("region", { name: "Recoger por número de guía o escaneo" }),
     ).toBeInTheDocument();
   });
 
@@ -1317,7 +1317,7 @@ describe("MisAsignacionesModule", () => {
 
     expect(screen.queryByRole("region", { name: "Por recoger" })).toBeNull();
     expect(
-      screen.queryByRole("region", { name: "Recoger por número de guía" }),
+      screen.queryByRole("region", { name: "Recoger por número de guía o escaneo" }),
     ).toBeNull();
     expect(
       screen.queryByRole("region", { name: "Recoger por escaneo" }),

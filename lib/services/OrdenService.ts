@@ -252,6 +252,10 @@ export class OrdenService implements IOrdenService {
     // no llegan del cliente.
     const createdAt = rangoCreacion(input.filter, this.ahora());
     if (createdAt) where.createdAt = createdAt;
+    // REASIGNABLES: predicado compuesto, no columna, asi que no pasa por
+    // FILTER_TO_COLUMN; el repositorio lo traduce. Solo acota (nunca amplia), asi que
+    // convive sin conflicto con el acotamiento por rol que se escribe debajo.
+    if (input.filter?.reasignables) where.reasignables = true;
     // R9/R21 + feature 144/R36: adminTienda sigue acotado a SUS ordenes. Se escribe
     // DESPUES del filtro: si el actor inyecto `filter.tienda_id = [otraTienda]`, este
     // escalar lo SOBRESCRIBE. El filtro de tienda nunca amplia su alcance.
