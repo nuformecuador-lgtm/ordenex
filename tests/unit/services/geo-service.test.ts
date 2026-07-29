@@ -30,6 +30,10 @@ function buildRepo(overrides: Partial<IGeoRepository> = {}): IGeoRepository {
     listProvincias: vi.fn().mockResolvedValue(PROVINCIAS),
     listCantones: vi.fn().mockResolvedValue(CANTONES),
     listDistritos: vi.fn().mockResolvedValue(DISTRITOS),
+    // Feature 144: proyecciones planas del catalogo; no ejercitadas por GeoService.
+    listProvinciasLite: vi.fn().mockResolvedValue([]),
+    listCantonesLite: vi.fn().mockResolvedValue([]),
+    listDistritosLite: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }

@@ -285,3 +285,167 @@ merge más. `lib/`, `db/` y `app/api/` quedaron sin tocar en esta fase.
    `Column<T>` no tiene ancho y el `DataTable` ya resuelve el desborde con
    `overflow-x-auto`, así que el diseño dice que no hay layout que ajustar — pero
    eso es razonamiento, no medición.
+
+---
+
+## Integración con dev (merge `origin/dev` -> `feature/160-columna-intentos`, 2026-07-29)
+
+`dev` había avanzado con la **154** (catálogo de estados v2), la **156** (generar guía
+sin mensajero) y la **144** (componente de filtros + orden). El merge trajo **tres
+conflictos**, los tres del tipo "ambos lados suman": en ninguno se descartó un lado.
+
+### 1. `lib/types/orden-historial.ts` — dos familias nuevas, criterio nuevo
+
+- **Qué chocó:** la 160 reescribió los comentarios de las familias al criterio vigente
+  (*"fuera del criterio de intento"*); la 154 añadió dos valores de enum nuevos
+  —`recoleccion_tienda` e `incidente`— con comentarios redactados en el lenguaje viejo
+  (*"destino != devuelta -> no altera contarIntentos"*).
+- **Resolución:** se conservan **los dos valores de la 154** (son valores del enum
+  Postgres: perderlos rompería `_EnsureExhaustive` y el build) y se **reescriben sus
+  comentarios al criterio de la 160**, igual que los otros cuatro. En el bloque de
+  comentario largo se conserva la versión de la 160 y se **añade el párrafo de la 154
+  reescrito**, comprobando las **dos ramas** del criterio (R1): ninguno de los dos
+  transiciona hacia `devuelta` ni produce el par (`reprogramada`, `gestion`), así que
+  dejarlos fuera de `ORIGEN_TIPOS_CON_GESTION` sigue siendo inocuo.
+- **Nada que decidir de dominio:** el conteo de intentos no cambia.
+
+### 2. `lib/services/OrdenService.ts` — `historial` (160) + `ahora` (144)
+
+- **Qué chocó:** la 160 añadió `historial: IntentosSvc` **requerido**; la 144 añadió
+  `ahora: () => Date` **opcional**.
+- **Resolución:** el constructor se queda con **las dos**, en el orden
+  `(repo, historial, ahora = () => new Date())`. `historial` **no se volvió opcional**:
+  es requerido a propósito (R11/R12) para que el wiring de producción no pueda
+  olvidarlo y el dato desaparecer en silencio; `ahora` va al final por ser el único
+  parámetro con default.
+- **Call-sites revisados (los 2 sitios que lo construyen):**
+  - `lib/actions/ordenes.ts` (**producción**): ya pasaba `(ordenRepo, OrdenHistorialService)`
+    y `ahora` cae en su default. **Sin cambios.**
+  - `tests/unit/services/orden-service-filtros.test.ts` (**suite de la 144**): sus 5
+    construcciones pasaban `ahora` en la 2.ª posición, que ahora es `historial`. Se
+    intercala el doble compartido `fakeIntentosEnLote()` de
+    `tests/fixtures/intentos-entrega.ts`. **Ninguna aserción cambió**: esa suite no
+    afirma nada sobre intentos, el doble solo satisface el contrato.
+  - `tests/unit/services/orden-service.test.ts` y `rol-admin-satelite-authz.test.ts` ya
+    venían de la 160 con el doble. Sin tocar.
+
+### 3. `app/(app)/ordenes/_components/GenerarGuiaModal.tsx` — la 156 lo reescribió
+
+- **Qué chocó:** la 156 reescribió el modal (fuera el selector de mensajero, fuera la
+  separación GAM / NO-GAM, ahora es confirmación de lote que envía `{ ordenIds }`); la
+  160 había añadido la columna "Intentos" a **sus dos** `DataTable`.
+- **Resolución:** se queda **el modal de la 156** y la columna de intentos se monta en
+  la **única tabla que hoy existe** (`COLUMNS`, aria-label "Órdenes por numerar"), tras
+  la identificación de la orden. No se forzó ninguna tabla: la 156 no eliminó las
+  tablas, las **colapsó en una**, así que la columna tiene dónde ir y R17 se sigue
+  cumpliendo en esta superficie.
+- **DISCREPANCIA DOCUMENTADA (no es un error, es un hecho nuevo):** el diseño de la 160
+  hablaba de **dos** tablas en este diálogo (la GAM con selector de mensajero y el
+  grupo NO-GAM por zona satélite). Tras la 156 **hay una sola**. El texto de
+  `specs/160-columna-intentos/design.md §5.4` y la trazabilidad de R17 quedan
+  describiendo una superficie que ya no tiene esa forma. **No se editó el spec**:
+  reescribir un design aprobado es decisión del leader, no de la integración.
+
+#### Tests de la 160 en `tests/components/GenerarGuiaModal.test.tsx`
+
+Git auto-mergeó el archivo (la reescritura de la 156 + el `describe` de la 160
+apendido), pero los 4 casos de la 160 apuntaban a tablas que la 156 borró
+(`"Órdenes por asignar"` y `"Se enviarán a la bodega satélite de Limón"`). Se
+**movieron a su nueva verdad**, no se relajaron ni se borraron:
+
+- los 4 casos apuntan ahora a la única tabla, vía la constante `TABLA` del propio archivo;
+- el caso "NO-GAM" **conserva su intención** (una orden fuera del GAM también trae el
+  dato) sobre la tabla que hoy la contiene, con el mismo valor esperado (`3`);
+- **ninguna aserción perdió fuerza**: siguen `getByRole("columnheader")`, los
+  `toHaveTextContent(/^N$/)` exactos y el `textContent === "2"` que fija la ausencia
+  del umbral (R20).
+
+### Verificación del límite R29/QA8 frente a la 144 (obligatoria)
+
+La 160 declaró que la columna de intentos es un **dato derivado** y, por tanto, **no es
+ordenable ni filtrable server-side**. La 144 llegó a `dev` después. Comprobado contra el
+código ya mergeado: **el límite sigue siendo cierto y no rompe nada.**
+
+| Riesgo a descartar | Resultado | Evidencia |
+| --- | --- | --- |
+| ¿La columna hace que `ordenFilterSchema.strict()` rechace un payload legítimo? | **No** | `ORDEN_FILTER_FIELDS` sigue con sus 9 claves (`lib/types/orden.ts`). `intentosEntrega` no es clave de filtro y nadie la emite: `seleccionAFilter` (`seleccion-a-filter.ts`) itera la selección del `FilterComponent`, cuyas claves salen de `construirFiltrosOrdenes`, no de las columnas. |
+| ¿Aparece en un selector de orden que el servidor rechace? | **No** | `SORT_FIELDS` sigue siendo el enum cerrado `["created_at","num_guia","num_remision"]` y `SORT_COLUMN` (`OrdenRepository.ts:143`) su lista blanca de 3 columnas reales. Además **no existe ningún selector de orden en la UI**: `grep -rn "sortBy\|sortable\|onSort" app/ components/` no devuelve **ninguna** coincidencia en `.tsx`. La columna no puede ofrecerse porque no hay dónde. |
+| ¿El componente de filtros de la 144 deriva sus opciones de la lista de columnas? | **No** | `construirFiltrosOrdenes(cat, opts)` (`ordenes-filtros-def.ts`) es una función **pura del catálogo** (`CatalogoFiltrosOrdenesDTO`: zonas, tiendas, provincias, cantones, distritos) más el filtro de fecha. En `OrdenesListado.tsx`, `filtrosBarra` (l. 365) y `columns` (l. 399) se construyen por vías **independientes**: la barra nunca ve `ordenesColumns`. "Intentos" no puede colarse como filtrable. |
+
+Comprobado además que `ordenesColumnsReprogramada` deriva de `ordenesColumns`
+(`ordenes-columns.tsx:207`), así que la tab `reprogramada` hereda la columna sin
+duplicación y sin que la 144 la altere.
+
+### Hallazgos ajenos al merge (rojos que ya venían de `dev`)
+
+1. **`tests/integration/db/orden-indices-filtros-migracion.test.ts` (guard de la 144)
+   estaba ROJO en `dev`.** El caso *"su timestamp NO es anterior al de ninguna
+   migración previa"* excluye las migraciones apendidas después (153 y 159), pero la
+   **154** entró a `dev` con dos migraciones `20260729…` —posteriores a
+   `20260728120000_orden_indices_filtros`— **sin actualizar esa lista**.
+   - **Probado ajeno al merge:** la 160 no aporta **ninguna** migración
+     (`git diff --name-only $(git merge-base HEAD MERGE_HEAD) HEAD -- db/migrations`
+     vacío) y el set de `db/migrations` del árbol mergeado es **idéntico** al de
+     `origin/dev`; el test también es el de `dev` sin una sola línea de diferencia.
+     Falla igual en `dev` solo.
+   - **Arreglado** con el **mecanismo del propio autor**: dos exclusiones nombradas, una
+     por migración, con su comentario —exactamente como ya estaban 153 y 159. La
+     aserción **no perdió fuerza**: se actualizó el hecho (qué migraciones se apendieron
+     después), no el predicado.
+2. **`./init.sh` no llega a verde por la feature 149, y NO se tocó.** El gate 4 corta:
+   `✗ faltan specs para features sdd en vuelo (por id): 149`. En el `feature_list.json`
+   de `dev` la 149 está en `spec_ready` con `spec_path: specs/149-deshacer-asignacion`,
+   pero **esa carpeta no existe en ninguna rama del repo** (comprobadas todas las
+   remotas) ni en ningún worktree. Viene del commit de bookkeeping `7fafa7d`. En el
+   `HEAD` previo al merge la 149 estaba en `pending`, y por eso `init.sh` estaba verde.
+   - **No se arregló a propósito:** las dos salidas son (a) escribir el spec o (b)
+     devolver la 149 a `pending`. La primera está fuera del alcance de una integración;
+     la segunda es **bookkeeping del registro**, que es del leader, y tocarlo podría
+     pisar trabajo en vuelo de otra sesión. **Se reporta, no se decide.**
+
+### Verificación (salida real)
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+(sin salida — verde)
+```
+
+Nota: el primer `typecheck` falló con `"recoleccion_tienda" is not assignable to
+OrdenHistorialOrigenTipo` por un **cliente Prisma stale** (los dos valores de enum de la
+154). Se resolvió con `pnpm db:generate`, sin tocar código.
+
+```
+$ pnpm run lint
+✖ 10 problems (0 errors, 10 warnings)
+```
+
+0 errores. Los 10 warnings son preexistentes y ajenos a este merge (`CENTRO_FALLBACK`,
+`exhaustive-deps` de `OrdenesApartado`/`OrdenesModule`, imports sin usar en 4 tests).
+
+```
+$ pnpm test
+ Test Files  569 passed (569)
+      Tests  6177 passed (6177)
+   Duration  137.20s
+```
+
+**0 fallos.** Antes del merge la rama tenía 548 archivos / 5828 tests; `dev` aportó
+21 archivos y 349 casos.
+
+```
+$ ./init.sh
+== Arnes SDD :: init ==
+✓ node v24.13.0
+✓ dependencias presentes
+✓ regla max-2-por-zona respetada (in_progress=4)
+✗ faltan specs para features sdd en vuelo (por id): 149
+```
+
+Los gates que `init.sh` no alcanza a correr se ejecutaron **a mano** y están arriba
+(typecheck / lint / test). Gates 6 y 7 comprobados aparte: **todas** las migraciones
+tienen su `down.sql` y `.env` está presente.
+
+**Veredicto: merge resuelto y verde en typecheck / lint / tests (0 fallos); `init.sh`
+queda rojo únicamente por el spec ausente de la feature 149, que viene de `dev` y es
+decisión del leader.**

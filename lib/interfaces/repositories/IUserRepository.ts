@@ -1,6 +1,7 @@
 import type { EstadoUsuario, RolValue } from "@prisma/client";
 import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
 import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
+import type { CuentaTiendaDTO } from "@/lib/types/filtros-ordenes";
 
 /** Usuario sin datos sensibles: nunca incluye el hash de la contrasena (R7). */
 export interface UsuarioPublico {
@@ -141,6 +142,18 @@ export interface IUserRepository {
    * `{ id, nombre }` (nunca PII/hash), ordenados por `nombre`.
    */
   listByRol(rolValue: RolValue): Promise<UsuarioPorRolDTO[]>;
+  /**
+   * Feature 144/B2 (R50/R54): TODAS las cuentas que pueden ser DUEÑAS de una orden
+   * (`orden.tienda_id` -> `usuario`): rol `adminTienda` (por sesion) o `apiKey` (por
+   * integracion, feature 88).
+   *
+   * NO filtra por `estado` a proposito (decision (e) del spec): una cuenta inactiva
+   * sigue siendo dueña de ordenes historicas, y excluirla las haria imposibles de
+   * filtrar. La bandera `activa` viaja en la fila para que la UI la marque; `esApiKey`
+   * para que las agrupe aparte (R51). Proyeccion `{id, nombre}` + 2 booleanos: NUNCA
+   * email, telefono, cedula ni hash (R54). Orden determinista por nombre (R49).
+   */
+  listCuentasTienda(): Promise<CuentaTiendaDTO[]>;
   /**
    * Feature 25/R13/R14/R15: listado paginado con `rolValue`, ordenado por una
    * columna de lista blanca. Nunca proyecta `passwordHash` (R24).

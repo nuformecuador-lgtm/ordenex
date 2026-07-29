@@ -1,0 +1,24 @@
+-- Feature 154 (T1.3, R7/R8): añade los DOS valores nuevos al enum
+-- `orden_historial_origen_tipo` (22 -> 24), las FAMILIAS de origen de las transiciones del
+-- flujo v2:
+--   - `recoleccion_tienda`: el mensajero RECOLECTA en la tienda
+--     (`por_recolectar_en_tienda -> en_ruta_bodega_central`, arista #43; la ejecutara la 157).
+--   - `incidente`: familia propia del resultado `incidente` de la gestion (la escribira la 158).
+--     Queda DECLARADA SIN PRODUCTOR en esta feature: la arista `en_reparto -> incidente` (#44)
+--     viaja via `gestion`, porque la marca el mensajero desde su gestion (decision Q4 del gate).
+--     Es deliberado, no un olvido.
+--
+-- POR QUE VA SOLA (sin ningun uso de los valores en la misma transaccion): Postgres NO permite
+-- USAR un valor de enum recien añadido en la transaccion que lo añadio (55P04 "unsafe use of new
+-- value of enum type") y Prisma Migrate corre cada `migration.sql` en una transaccion. Aqui SOLO
+-- se añaden; su primer uso ocurrira en runtime, en transacciones posteriores (features 157/158).
+-- Añadir DOS valores en una misma migracion SI es legal: precedente exacto en
+-- `20260721120000_orden_historial_origen_tipo_sla_devuelta` (feature 99). El catalogo
+-- `order_status` va en carpeta SEPARADA y anterior (`20260729120000_order_status_v2_*`) por la
+-- misma razon que la 139 partio sus dos migraciones: objetos con reversibilidad muy distinta.
+-- `IF NOT EXISTS` lo hace idempotente si se reintenta.
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva
+-- su RLS de la feature 49).
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'recoleccion_tienda';
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'incidente';

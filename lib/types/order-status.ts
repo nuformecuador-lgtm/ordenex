@@ -33,6 +33,14 @@
 // un UPDATE sobre la tabla catalogo order_status (20260728120000_order_status_en_reparto).
 // OJO: los vecinos "en_ruta_bodega_central" y "en_ruta_bodega_satelite" NO se tocan
 // (ni value ni etiqueta); el censo del guard usa frontera de palabra por eso.
+// Feature 154/R1/R2/R3: suma los DOS values del flujo v2 como APENDICE (indices 18/19), sin
+// renombrar, reordenar ni borrar ninguno de los 18 previos -> el catalogo pasa a 20.
+// "por_recolectar_en_tienda" (19no value): la orden nace en la tienda y espera que el mensajero
+// la RECOLECTE ahi; "incidente" (20mo value): resultado TERMINAL de la gestion. Sembrados
+// idempotentemente por seedOrderStatus + la migracion
+// 20260729120000_order_status_v2_por_recolectar_incidente (INSERT ... WHERE NOT EXISTS por value).
+// La 154 es SOLO ADITIVA (decision Q2 del gate, 2026-07-29): DECLARA los values y sus aristas,
+// pero ningun service los produce todavia — eso llega con las features 155/157/158.
 export const ORDER_STATUS_SEED = [
   "entregada",
   "devuelta",
@@ -52,6 +60,8 @@ export const ORDER_STATUS_SEED = [
   "por_devolver", // feature 139 (16mo valor): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
   "devolviendo_a_bodega_central", // feature 139 (17mo valor): en transito satelite -> central (tras "enviar a central")
   "por_devolver_a_tienda", // feature 139 (18mo valor): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)
+  "por_recolectar_en_tienda", // feature 154 (19no valor): estado de ESPERA en la tienda; el mensajero la recolecta y sale hacia en_ruta_bodega_central (#43, feature 157)
+  "incidente", // feature 154 (20mo valor): resultado TERMINAL de la gestion del mensajero (#44, feature 158). Sin aristas de salida (decision del gate 2026-07-29)
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

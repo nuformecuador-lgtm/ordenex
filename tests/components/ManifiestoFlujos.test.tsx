@@ -227,10 +227,12 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
 
   it("R19: tras generar guía ofrece el manifiesto de las órdenes del lote", async () => {
     const user = userEvent.setup();
+    // Feature 156: generar guía tiene un destino ÚNICO (`en_bodega_central`) y el
+    // modal ya no recibe `mensajeros`. Las aserciones del manifiesto no cambian.
     generarGuiaMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "o1", numGuia: 1, estado: "por_recoger" },
+        { ordenId: "o1", numGuia: 1, estado: "en_bodega_central" },
         { ordenId: "o2", numGuia: 2, estado: "en_bodega_central" },
       ],
     });
@@ -239,7 +241,6 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
       <GenerarGuiaModal
         open
         ordenes={[makeOrden({ id: "o1" }), makeOrden({ id: "o2" })]}
-        mensajeros={[{ id: "m1", nombre: "Ana" }]}
         onOpenChange={vi.fn()}
         onSuccess={onSuccess}
       />,
@@ -445,7 +446,7 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
     const user = userEvent.setup();
     generarGuiaMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "o1", numGuia: 7, estado: "por_recoger" }],
+      resultados: [{ ordenId: "o1", numGuia: 7, estado: "en_bodega_central" }],
     });
     obtenerManifiestoMock.mockRejectedValue(new Error("red caída"));
     const onSuccess = vi.fn();
@@ -453,7 +454,6 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
       <GenerarGuiaModal
         open
         ordenes={[makeOrden({ id: "o1" })]}
-        mensajeros={[{ id: "m1", nombre: "Ana" }]}
         onOpenChange={vi.fn()}
         onSuccess={onSuccess}
       />,

@@ -7,12 +7,25 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // (el choke point `appendCambioEstado`) resuelve `id -> value` antes de preguntar aqui.
 //
 // El mapa es el INVENTARIO CERRADO del apendice A del design, leido del codigo de `dev`:
-// 43 aristas de flujo (numeracion #1-#42 con el #27 RETIRADO, + #7b/#7c) + 3 de creacion.
-// Las 43 colapsan a 39 pares `(origen, destino)` unicos, porque cuatro pares estan declarados
-// dos veces con familias distintas: #19/#23, #20/#24 (SLA vs. recuperacion manual) y
-// #3/#7b, #6/#7c (`generacion_guia` no-GAM vs. `ruteo_satelite`; el apendice A contaba 41
-// porque omitia estas dos ultimas — `ORIGEN_RUTEO_SATELITE` de `GuiaAsignacionService.ts:35`
-// admite `en_fulfillment`/`en_preparacion` ademas de `en_bodega_central`).
+// 42 aristas de flujo (numeracion #1-#42 con el #27 RETIRADO por la 139, + #7b de la revision
+// del inventario + #43/#44 de la 154, - #4/#6/#7c retiradas por la 156) + 4 de creacion. Las
+// 42 colapsan a 39 pares `(origen, destino)` unicos, porque tres pares estan declarados dos
+// veces con familias distintas: #19/#23, #20/#24 (SLA vs. recuperacion manual) y #3/#7b
+// (`generacion_guia` no-GAM vs. `ruteo_satelite` desde `en_fulfillment`).
+//
+// FEATURE 154 — SOLO ADITIVA (decision Q2 del gate, 2026-07-29). Sumo #43, #44 y la creacion
+// `null -> por_recolectar_en_tienda`, sin retirar NINGUNA arista: `GuiaAsignacionService` las
+// ejecutaba todavia, y una arista solo puede morir en el mismo commit que su ultimo productor.
+//
+// FEATURE 156 — RETIRA #4, #6 y #7c, que es justo lo que su recableado deja sin productor:
+// "Generar guia" pasa a numerar y mover a la bodega central, y nada mas (ya no asigna
+// mensajero -> se va #4; ya no rutea a satelite -> se va #6), y "rutear a bodega satelite"
+// pasa a admitir SOLO el origen `en_bodega_central` -> se va #7c. La superviviente es #5
+// (`en_preparacion -> en_bodega_central`), destino UNICO de generar guia.
+// Las cuatro de `en_fulfillment` (#1/#2/#3/#7b) quedan DECLARADAS Y SIN PRODUCTOR desde esta
+// feature: las retira la 155 junto con el estado, en la misma entrega (154+155+156 viajan como
+// un tren). No se retiran aqui a proposito: `en_fulfillment` se quedaria sin salidas y romperia
+// el invariante de conectividad mientras siga habiendo ordenes vivas en ese estado.
 //
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
@@ -44,24 +57,35 @@ export interface DestinoTransicion {
  */
 export const TRANSICIONES = {
   // --- Estados de entrada (creacion) --------------------------------------------------
+  // Feature 156: SALIDA UNICA. `generarGuia` numera y mueve a la bodega central, y nada mas.
+  // Se retiraron #4 (`-> por_recoger`: generar guia ya no asigna mensajero), #6 (`->
+  // en_ruta_bodega_satelite` via `generacion_guia`: ya no rutea) y #7c (el mismo par via
+  // `ruteo_satelite`: `rutearABodegaSatelite` solo admite `en_bodega_central`). Reintroducir
+  // cualquiera de las tres reabre el atajo que el flujo v2 cierra: el paquete se asigna y se
+  // rutea desde la bodega donde esta fisicamente, no al numerarlo.
   en_preparacion: [
-    { to: "por_recoger", via: "generacion_guia", rol: "maestro/admin" }, // #4
     { to: "en_bodega_central", via: "generacion_guia", rol: "maestro/admin" }, // #5
-    { to: "en_ruta_bodega_satelite", via: "generacion_guia", rol: "maestro/admin" }, // #6
-    // #7c: `rutearABogegaSatelite` admite este origen (`ORIGEN_RUTEO_SATELITE`,
-    // GuiaAsignacionService.ts:35) y emite `ruteo_satelite`. Mismo PAR que #6, otra familia.
-    { to: "en_ruta_bodega_satelite", via: "ruteo_satelite", rol: "maestro/admin" }, // #7c
   ],
+  // Feature 156: las cuatro quedan DECLARADAS Y SIN PRODUCTOR (`generarGuia` y
+  // `rutearABodegaSatelite` dejaron de admitir este origen). Se conservan hasta que la 155
+  // retire el estado y haga el backfill de sus ordenes vivas: retirarlas ya dejaria
+  // `en_fulfillment` sin ninguna salida legal y atraparia esas ordenes.
   en_fulfillment: [
-    { to: "por_recoger", via: "generacion_guia", rol: "maestro/admin" }, // #1
-    { to: "en_bodega_central", via: "generacion_guia", rol: "maestro/admin" }, // #2
-    { to: "en_ruta_bodega_satelite", via: "generacion_guia", rol: "maestro/admin" }, // #3
-    // #7b: idem #7c desde `en_fulfillment` (mismo PAR que #3, familia `ruteo_satelite`).
-    { to: "en_ruta_bodega_satelite", via: "ruteo_satelite", rol: "maestro/admin" }, // #7b
+    { to: "por_recoger", via: "generacion_guia", rol: "maestro/admin" }, // #1 (sin productor)
+    { to: "en_bodega_central", via: "generacion_guia", rol: "maestro/admin" }, // #2 (sin productor)
+    { to: "en_ruta_bodega_satelite", via: "generacion_guia", rol: "maestro/admin" }, // #3 (sin productor)
+    // #7b: mismo PAR que #3, familia `ruteo_satelite`.
+    { to: "en_ruta_bodega_satelite", via: "ruteo_satelite", rol: "maestro/admin" }, // #7b (sin productor)
   ],
   en_ruta_bodega_central: [
     { to: "devolviendo_a_tienda", via: "cancelacion_api", rol: "apiKey (tienda)" }, // #30
     { to: "en_bodega_central", via: "recepcion_bodega_central", rol: "maestro/admin" }, // #37 (138)
+  ],
+  // Feature 154: estado de ESPERA en la tienda. Nace por creacion (esta en ESTADOS_CREACION) y
+  // sale hacia la central cuando el mensajero la recolecta. La arista queda DECLARADA y SIN USO
+  // hasta la feature 157 (escaner de recoleccion en tienda).
+  por_recolectar_en_tienda: [
+    { to: "en_ruta_bodega_central", via: "recoleccion_tienda", rol: "mensajero" }, // #43 (154)
   ],
 
   // --- Bodegas y reparto ---------------------------------------------------------------
@@ -87,6 +111,10 @@ export const TRANSICIONES = {
     { to: "devuelta", via: "gestion", rol: "mensajero" }, // #14
     { to: "rechazada", via: "gestion", rol: "mensajero" }, // #15
     { to: "sin_gestionar", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #16
+    // #44 (154): resultado `incidente` de la gestion. Va via `gestion` —y no via la familia
+    // `incidente`— porque quien la marca es el mensajero DESDE su gestion (decision Q4). La
+    // familia `incidente` del enum de historial queda declarada sin productor hasta la 158.
+    { to: "incidente", via: "gestion", rol: "mensajero" }, // #44 (154)
   ],
 
   // --- Resultados de gestion -----------------------------------------------------------
@@ -145,6 +173,11 @@ export const TRANSICIONES = {
   ],
   // TERMINAL (Q1): la tienda de origen la recibio; sin salida esperada.
   devuelta_a_tienda: [],
+  // TERMINAL (feature 154, decision del humano del 2026-07-29): `incidente` cierra el ciclo de
+  // la orden y NO tiene ninguna arista de salida. En el gate se planteo un estado `indemnizada`
+  // que lo desterminara: se DESCARTO. No se declara, ni se deja preparado. Tiene entrada (#44),
+  // asi que cumple el invariante de conectividad de los terminales.
+  incidente: [],
 } as const satisfies Record<OrderStatusValue, readonly DestinoTransicion[]>;
 
 /**
@@ -155,11 +188,15 @@ export const TRANSICIONES = {
  *   - `BulkOrdenService.ESTATUS_INICIAL_API` = `en_ruta_bodega_central` (carga por API key)
  * Nacer en cualquier otro estado del catalogo pasa a ser ILEGAL (endurecimiento deliberado
  * de `OrdenService.crear`, que aceptaba un `estatusId` explicito arbitrario; A.3-#8).
+ *
+ * Feature 154 (R13): pasa de 3 a 4 con `por_recolectar_en_tienda`. Es LEGAL que una orden NAZCA
+ * ahi (la bifurcacion de creacion por bodega llega con la 155); hoy ningun call-site lo produce.
  */
 export const ESTADOS_CREACION = [
   "en_preparacion",
   "en_fulfillment",
   "en_ruta_bodega_central",
+  "por_recolectar_en_tienda", // feature 154
 ] as const satisfies readonly OrderStatusValue[];
 
 /**
@@ -167,10 +204,15 @@ export const ESTADOS_CREACION = [
  * salida en el invariante de conectividad (R14), pero NO de tener entrada: un terminal
  * inalcanzable tambien es un bug. `entregada` conserva la salida #31 (deshacer gestion), y
  * eso es legal: el test exime, no prohibe.
+ *
+ * Feature 154 (R16): pasa de 2 a 3 con `incidente`, que a diferencia de `entregada` NO conserva
+ * ninguna salida (decision del humano del 2026-07-29; la idea de un estado `indemnizada` que lo
+ * desterminara se descarto).
  */
 export const ESTADOS_TERMINALES = [
   "entregada",
   "devuelta_a_tienda",
+  "incidente", // feature 154
 ] as const satisfies readonly OrderStatusValue[];
 
 /**

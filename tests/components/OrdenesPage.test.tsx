@@ -33,6 +33,22 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
 }));
 
+// Feature 144/TB2.5: la página resuelve el catálogo de filtros server-side. Se
+// mockea para que estos tests sigan siendo herméticos (sin DB), igual que
+// `listarOrdenes`. La resolución en sí se cubre en `OrdenesPageFiltros.test.tsx`.
+vi.mock("@/lib/actions/filtros-ordenes", () => ({
+  obtenerCatalogoFiltrosOrdenes: vi.fn(async () => ({
+    status: "ok" as const,
+    catalogo: {
+      zonas: [],
+      tiendas: [],
+      provincias: [],
+      cantones: [],
+      distritos: [],
+    },
+  })),
+}));
+
 // Feature 57: el PageHeader del topbar monta el LogoutButton (client:
 // useRouter/useToast). Se stubbea para aislar la página; su comportamiento se
 // cubre en LogoutButton.test.tsx.

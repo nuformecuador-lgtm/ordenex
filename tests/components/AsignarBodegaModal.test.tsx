@@ -134,9 +134,9 @@ describe("AsignarBodegaModal", () => {
 
     expect(asignarDesdeBodegaMock).not.toHaveBeenCalled();
     await vi.waitFor(() =>
-      expect(errorMock).toHaveBeenCalledWith(
-        "Datos inválidos: revisa la selección de mensajero.",
-      ),
+      // Feature 156: el mapper es compartido con "Generar guía", que ya no elige
+      // mensajero, así que el texto es genérico.
+      expect(errorMock).toHaveBeenCalledWith("Datos inválidos."),
     );
   });
 

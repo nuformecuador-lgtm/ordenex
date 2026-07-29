@@ -4,7 +4,12 @@ import { useMemo, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 
 import { MultiSelectFilter } from "@/components/shared/MultiSelectFilter";
+import {
+  FilterComponent,
+  type FilterSelection,
+} from "@/components/shared/FilterComponent";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
 import {
@@ -27,6 +32,12 @@ import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
+import {
+  construirFiltrosOrdenes,
+  CATALOGO_FILTROS_VACIO,
+} from "./ordenes-filtros-def";
+import { seleccionAFilter } from "./seleccion-a-filter";
+import type { OrdenesFilterUI } from "./serializar-filtro";
 
 type ModalAbierto =
   | "generar-guia"
@@ -91,17 +102,15 @@ const ESTADO_EN_BODEGA = "en_bodega_central";
 
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
-// Derivado de `accionesDe()`: `en_fulfillment`/`en_preparacion` -> "Generar guía"
-// (asigna mensajero) y `en_bodega_central` -> "Asignar mensajero".
+// Feature 156/R28: el único apartado que asigna por lote es la BODEGA CENTRAL
+// ("Asignar mensajero"). `en_fulfillment`/`en_preparacion` salieron del conjunto
+// porque su acción ("Generar guía") ya no decide mensajero: solo numera y mueve a
+// la bodega central, así que un cierre abierto en la zona no impide numerar.
 // Los estados que solo imprimen etiquetas (`por_recoger`,
 // `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
 // Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas"
 // (comparte el checkbox); es el precio de una única columna de selección.
-const ESTADOS_ASIGNACION = new Set([
-  "en_fulfillment",
-  "en_preparacion",
-  "en_bodega_central",
-]);
+const ESTADOS_ASIGNACION = new Set(["en_bodega_central"]);
 const MOTIVO_ZONA_CIERRE_ABIERTO =
   "La bodega de esta zona tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar la orden.";
 
@@ -145,6 +154,8 @@ export function OrdenesListado({
   puedeRecibirBodegaCentral = false,
   mostrarHistorial = false,
   accionesLote = false,
+  catalogoFiltros = null,
+  incluirFiltroTienda = true,
 }: Readonly<{
   exclude?: string[];
   puedeCargarMasiva?: boolean;
@@ -171,6 +182,20 @@ export function OrdenesListado({
    * recibe en `false`.
    */
   accionesLote?: boolean;
+  /**
+   * Feature 144 (R47/R64): catálogo de los filtros (zonas, cuentas tienda y
+   * geografía) resuelto EN EL SERVIDOR durante la carga de la página y bajado por
+   * props, de modo que los filtros están operativos sin una petición posterior ni
+   * una consulta por cada selección. `null` = no se pudo resolver: la barra se monta
+   * DESHABILITADA y el listado sigue funcionando sin esos filtros (R64).
+   */
+  catalogoFiltros?: CatalogoFiltrosOrdenesDTO | null;
+  /**
+   * Feature 144 (R62): declara el filtro de tienda. Los roles acotados a su propia
+   * tienda (`adminTienda`) NO lo reciben: filtrar por tienda no les añade nada y el
+   * backend pisa cualquier `tienda_id` con la suya.
+   */
+  incluirFiltroTienda?: boolean;
 }>) {
   const { mutate } = useSWRConfig();
   const { data: catalogo, isLoading } = useSWR(
@@ -330,6 +355,32 @@ export function OrdenesListado({
   // Ids marcados en el filtro. Vacío = sin filtro (todas las órdenes).
   const [estadosMarcados, setEstadosMarcados] = useState<string[]>([]);
 
+  // Feature 144: selección agregada de la barra genérica (zona, tienda, geografía y
+  // tiempo). El componente es dueño de su estado; aquí solo se guarda lo emitido.
+  const [seleccionFiltros, setSeleccionFiltros] = useState<FilterSelection>({});
+
+  // R55/R56: las SEIS declaraciones (cinco sin tienda) salen del catálogo precargado.
+  // Sin catálogo, se declaran igual pero sin opciones y con la barra deshabilitada
+  // (R64): la tabla sigue viva.
+  const filtrosBarra = useMemo(
+    () =>
+      construirFiltrosOrdenes(catalogoFiltros ?? CATALOGO_FILTROS_VACIO, {
+        incluirTienda: incluirFiltroTienda,
+      }),
+    [catalogoFiltros, incluirFiltroTienda],
+  );
+
+  // R46/R58/R59: `status_id` (feature 63) y los filtros nuevos se funden en UN solo
+  // `filter`. Sin nada seleccionado, el objeto queda vacío y se envía `undefined`, de
+  // modo que la entrada de `listarOrdenes` es IDÉNTICA a la previa a esta feature.
+  const filter = useMemo<OrdenesFilterUI | undefined>(() => {
+    const compuesto: OrdenesFilterUI = {
+      ...(estadosMarcados.length > 0 ? { status_id: estadosMarcados } : {}),
+      ...seleccionAFilter(seleccionFiltros),
+    };
+    return Object.keys(compuesto).length > 0 ? compuesto : undefined;
+  }, [estadosMarcados, seleccionFiltros]);
+
   const opciones = useMemo(
     () =>
       estadosDisponibles.map((s) => ({ value: s.id, label: labelDe(s.value) })),
@@ -450,12 +501,19 @@ export function OrdenesListado({
         disabled={opciones.length === 0}
       />
 
+      {/* Feature 144 (R55, R63): barra genérica con los seis filtros declarados
+          (cinco sin tienda). Toda la lógica de selección, búsqueda, acotamiento,
+          agrupado, exclusión mutua y poda vive en el componente; aquí solo se
+          declara y se traduce lo emitido. */}
+      <FilterComponent
+        filters={filtrosBarra}
+        onChange={setSeleccionFiltros}
+        showClearAll
+        disabled={catalogoFiltros === null}
+      />
+
       <OrdenesModule
-        filter={
-          estadosMarcados.length > 0
-            ? { status_id: estadosMarcados }
-            : undefined
-        }
+        filter={filter}
         columns={columns}
         mostrarHistorial={mostrarHistorial}
         selectable={accionesLote ? haySeleccionables : false}
@@ -468,10 +526,12 @@ export function OrdenesListado({
           `modalAbierto`. */}
       {accionesLote ? (
         <>
+          {/* Feature 156/R30: "Generar guía" NO requiere la lista de mensajeros
+              (ya no asigna); el `useSWR` de mensajeros sigue existiendo solo para
+              `AsignarBodegaModal`. */}
           <GenerarGuiaModal
             open={modalAbierto === "generar-guia"}
             ordenes={ordenesSeleccionadas}
-            mensajeros={mensajeros ?? []}
             onOpenChange={cerrarModal}
             onSuccess={encadenarEtiquetas}
           />

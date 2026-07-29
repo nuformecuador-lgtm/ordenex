@@ -39,7 +39,7 @@ describe("153/R9 — etiqueta del catalogo de presentacion", () => {
     expect(ORDER_STATUS_LABELS.en_ruta_bodega_satelite).toBe("En ruta a bodega satélite");
   });
 
-  it("el mapa cubre los 18 values del catalogo, sin sobrantes", () => {
+  it("el mapa cubre los 20 values del catalogo, sin sobrantes", () => {
     expect(Object.keys(ORDER_STATUS_LABELS).sort()).toEqual([...ORDER_STATUS_SEED].sort());
   });
 });
