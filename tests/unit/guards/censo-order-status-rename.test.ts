@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
+import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
+
 // Feature 135 (R13) — GUARD de censo case-sensitive de los 6 values ANTIGUOS de
 // order_status renombrados por esta feature. Recorre el arbol de fuentes y tests
 // (app/, lib/, components/, hooks/, scripts/, tests/, e2e/) y falla si ALGUN archivo
@@ -28,13 +30,25 @@ import path from "path";
 // La 153 agrega ademas un censo de la ETIQUETA antigua (`"En ruta"` entre comillas, R17),
 // que atrapa fixtures que usan el label como si fuera un value y que el censo de values
 // no ve; tampoco marca las etiquetas compuestas ("En ruta a bodega central"/"... satelite").
+//
+// Feature 155 (R33) — se EXTIENDE este guard (no se duplica) con un SEPTIMO value: el estado
+// interno de fulfillment en bodega, RETIRADO del catalogo por esa feature (primera baja de la
+// historia de `ORDER_STATUS_SEED`). No es un rename como los 6 anteriores: no tiene sucesor.
+// Las ordenes que ya estan en bodega nacen ahora en `en_preparacion`, y el backfill de la
+// migracion mueve alli las que quedaran vivas.
+//
+// Detalle que evita un falso positivo (verificado, no supuesto): los nombres de carpeta de
+// migracion que terminan en `_en_fulfillment` NO disparan `\ben_fulfillment\b`, porque el
+// caracter previo es `_` (caracter de palabra) y por tanto no hay frontera. Por eso los tests
+// que solo citan esas RUTAS no necesitan entrada en la allowlist; el caso 155/R33 de abajo lo
+// comprueba contra las carpetas reales de `db/migrations`, no de palabra.
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 const SCAN_DIRS = ["app", "lib", "components", "hooks", "scripts", "tests", "e2e"];
 const SCAN_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".css", ".json"]);
 
-// 6 values antiguos (regex case-sensitive, word boundary). El word boundary evita
-// falsos positivos: `\ben_bodega\b` no matchea `en_bodega_satelite`/`en_bodega_central`.
+// 7 values retirados del catalogo (regex case-sensitive, word boundary). El word boundary
+// evita falsos positivos: `\ben_bodega\b` no matchea `en_bodega_satelite`/`en_bodega_central`.
 const OLD_VALUES: Array<{ label: string; re: RegExp }> = [
   { label: "en_ruta", re: /\ben_ruta\b/ }, // feature 153: sustituye a `en_reparto`, hoy vigente
   { label: "en_espera_aceptacion", re: /\ben_espera_aceptacion\b/ },
@@ -42,18 +56,31 @@ const OLD_VALUES: Array<{ label: string; re: RegExp }> = [
   { label: "en_bodega", re: /\ben_bodega\b/ },
   { label: "devuelta_origen", re: /\bdevuelta_origen\b/ },
   { label: "recibido_origen", re: /\brecibido_origen\b/ },
+  { label: "en_fulfillment", re: /\ben_fulfillment\b/ }, // feature 155/R33: RETIRADO, sin sucesor
 ];
 
-// Archivos que legitimamente conservan literales antiguos (allowlist, por basename):
+// Archivos que legitimamente conservan literales antiguos (allowlist, por basename).
+// Cada entrada dice POR QUE ese archivo conserva el literal; si el motivo desaparece, la
+// entrada se retira (una allowlist sin justificacion es un agujero, no una excepcion).
 const ALLOWLIST = new Set([
   "censo-order-status-rename.test.ts", // este guard (contiene los patrones)
-  "order-status-enum-migration.test.ts", // R10: afirma los 8 literales HISTORICOS del enum
+  // R10 + 155/R33: afirma los 8 literales HISTORICOS del enum `order_status`, que incluyen
+  // el value retirado por la 155. Es la foto del enum ANTES de los ADD VALUE posteriores:
+  // se declara fija a proposito (no se deriva del seed vigente), asi que no puede seguir al
+  // catalogo cuando este pierde un value.
+  "order-status-enum-migration.test.ts",
   "gestion-orden-migration.test.ts", // R10: afirma el ADD VALUE historico 'en_reparto'
   "cierre-detail-migration.test.ts", // R10: referencia el nombre de carpeta historica *_recibido_origen
   "zonas-migration.test.ts", // R10: referencia el nombre de carpeta historica *_recibido_origen
   "orden-num-guia-deferred.test.ts", // R10: afirma el ADD VALUE/INSERT historico 'en_espera_aceptacion'
   "order-status-rename-nomenclatura-migration.test.ts", // R2/R3: traza UP/DOWN del rename de la 135 (contiene `en_ruta`)
   "order-status-en-reparto-migration.test.ts", // 153/R2/R3: traza UP/DOWN del rename en_ruta -> en_reparto
+  // 155/R33: cobertura estatica de la migracion historica de la feature 28, que renombro el
+  // value PREDECESOR al que la 155 retira. Afirma por regex el UPDATE del UP y el inverso del
+  // DOWN, y ambos nombran el literal. Es una migracion ya aplicada: su texto es inmutable, asi
+  // que el literal no se puede limpiar de aqui sin dejar de verificar esa migracion. (El otro
+  // guard de nomenclatura, el del value predecesor, vigila que ESE no reaparezca.)
+  "rename-order-status-migration.test.ts",
 ]);
 
 // Feature 153 (R17) — censo de la ETIQUETA antigua. Se busca el literal EXACTO entre
@@ -76,7 +103,7 @@ function walk(dir: string): string[] {
 }
 
 describe("R13 — invariante de censo: ningun value antiguo de order_status fuera de la allowlist", () => {
-  it("no hay coincidencias case-sensitive de los 6 values antiguos en app/, lib/, components/, hooks/, scripts/, tests/, e2e/", () => {
+  it("no hay coincidencias case-sensitive de los 7 values retirados en app/, lib/, components/, hooks/, scripts/, tests/, e2e/", () => {
     const offenders: string[] = [];
     for (const rel of SCAN_DIRS) {
       const base = path.join(REPO_ROOT, rel);
@@ -109,11 +136,14 @@ describe("R13 — invariante de censo: ningun value antiguo de order_status fuer
     expect(enRuta.test('estatus = "en_ruta"')).toBe(true);
   });
 
-  it("OLD_VALUES sigue teniendo 6 entradas: incluye en_ruta y ya NO incluye en_reparto (swap de la 153)", () => {
+  // Feature 155 (R33): la 153 hizo un SWAP (6 entradas antes y despues); la 155 es la primera
+  // AMPLIACION del censo, asi que el conteo pasa de 6 a 7. Se sigue afirmando la lista
+  // completa y en orden para que una entrada no se cuele ni desaparezca sin revisar.
+  it("OLD_VALUES tiene 7 entradas: los 6 renames previos mas el value RETIRADO por la 155", () => {
     const labels = OLD_VALUES.map((v) => v.label);
-    expect(labels).toHaveLength(6);
-    expect(labels).toContain("en_ruta");
-    expect(labels).not.toContain("en_reparto");
+    expect(labels).toHaveLength(7);
+    expect(labels).toContain("en_ruta"); // swap de la 153
+    expect(labels).not.toContain("en_reparto"); // vigente: es el sucesor
     expect(labels).toEqual([
       "en_ruta",
       "en_espera_aceptacion",
@@ -121,7 +151,38 @@ describe("R13 — invariante de censo: ningun value antiguo de order_status fuer
       "en_bodega",
       "devuelta_origen",
       "recibido_origen",
+      "en_fulfillment",
     ]);
+  });
+
+  // Feature 155 (R33): el value retirado NO tiene sucesor, asi que el censo debe ser
+  // compatible con los values VIGENTES y con los nombres de carpeta de migracion que lo
+  // citan. Espejo de los dos casos de igualdad exacta de arriba.
+  it("155/R33: el censo del value retirado NO marca a `en_preparacion` ni a ningun nombre de carpeta de migracion", () => {
+    const retirado = OLD_VALUES.find((v) => v.label === "en_fulfillment")!.re;
+    // Su sucesor de facto (donde nacen y donde caen por backfill las ordenes) no se marca.
+    expect(retirado.test("en_preparacion")).toBe(false);
+    // Las carpetas REALES de migraciones: el value siempre va tras `_` (caracter de palabra),
+    // asi que no hay frontera y ninguna se marca. Se lee del disco para que el dia que alguien
+    // cree una carpeta con otra forma, este caso lo diga.
+    const carpetas = fs
+      .readdirSync(path.join(REPO_ROOT, "db", "migrations"), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+    expect(carpetas.filter((n) => retirado.test(n))).toEqual([]);
+    // Y la comprobacion no es vacua: hay carpetas que SI nombran el value.
+    expect(carpetas.filter((n) => n.endsWith("_en_fulfillment")).length).toBeGreaterThan(1);
+    // Pero el value escrito como value SI se marca.
+    expect(retirado.test('estatus = "en_fulfillment"')).toBe(true);
+  });
+
+  // Feature 155 (R33): el retiro es de verdad, no solo de nomenclatura. El censo vigila el
+  // literal; este caso vigila que el catalogo del build no lo reintroduzca por otra puerta.
+  it("155/R33: los values del censo son DISJUNTOS del catalogo vigente", () => {
+    const vigentes = new Set<string>(ORDER_STATUS_SEED);
+    for (const { label } of OLD_VALUES) {
+      expect(vigentes.has(label)).toBe(false);
+    }
   });
 });
 
