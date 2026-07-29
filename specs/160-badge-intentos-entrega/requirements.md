@@ -243,45 +243,44 @@ contenido sin cambios observables más allá del dato nuevo.
 
 ## Trazabilidad R → test
 
-Mapa PROPUESTO; se completa con rutas reales en la última task (`tasks.md`, T25).
-Ningún requisito queda sin dueño.
+Mapa **COMPLETADO con rutas reales** al cerrar la implementación (T25). Los
+requisitos de backend se detallan en `progress/impl_160_backend.md §2`; los de
+frontend, en `progress/impl_160_frontend.md §2`. Ningún requisito queda sin dueño.
 
-| Req | Test propuesto |
+| Req | Test real |
 | --- | --- |
-| R1  | unit del predicado: cuenta `devuelta`; cuenta `reprogramada`+`gestion`; no cuenta otros destinos |
-| R2  | unit: `reprogramada`+`reprogramacion_tienda` NO suma; 1 devuelta + 1 reprogramación de tienda → 1 |
-| R3  | unit: destino `incidente` no altera el conteo; guard sobre el mapa de transiciones (154): `incidente` sin salidas y sin estado que lo desterminalice |
-| R4  | unit: conteo individual y en lote comparten predicado y coinciden; el cron y el drawer consumen ese punto único |
-| R5  | unit: gestión anulada no cuenta en AMBAS ramas; huérfana no cuenta; fila sin gestión cuenta |
-| R6  | unit del servicio: sin `devuelta` → 0/mapa vacío sin excepción; sin `reprogramada` → solo rama (a) |
-| R7  | revisión + `./init.sh`: `git diff` sin cambios en `db/schema.prisma` ni `db/migrations/` |
-| R8  | unit de `DevolucionSlaService`: 2 reprogramaciones de mensajero + 1 devuelta con umbral 3 → ESCALA |
-| R9  | suite existente del cron verde sin cambios de aserción salvo la del umbral |
-| R10 | unit de `obtenerHistorial`: `intentos` refleja el criterio nuevo; el umbral sigue viajando |
-| R11 | unit por servicio de lectura (7): el DTO propaga el conteo |
-| R12 | unit por repositorio/servicio: con N ids, exactamente 1 llamada al historial |
-| R13 | unit: `ids = []` → 0 llamadas, mapa vacío |
-| R14 | unit: orden sin filas en el lote → `0`, no `undefined` |
-| R15 | unit: los ids del lote son EXACTAMENTE los ya acotados por rol/zona/tienda |
-| R16 | type-check + suites existentes que construyen los DTO sin el campo, en verde |
-| R17 | component test: existe un `columnheader` "Intentos"; el número no aparece dentro de la celda de estado |
-| R18 | component test por superficie sin tabla: el dato etiquetado se renderiza con el markup de los campos hermanos |
-| R19 | component test: fila con `0` y fila con el campo ausente muestran `0`; nunca celda vacía ni marcador de ausencia |
-| R20 | component test + grep de contrato: el umbral no viaja al cliente en ninguna de las superficies |
-| R21 | unit de columnas: ids, encabezados y orden relativo de las preexistentes intactos; la nueva en la posición declarada; los asserts vigentes de `tests/unit/components/ordenes-columns.test.tsx:113-117` verdes SIN tocarlos |
-| R22 | component tests de las 4 variantes de columnas del listado |
-| R23 | component tests de los 6 diálogos de acción por lote |
-| R24 | component tests de la card POS, de "por recoger" y del detalle |
-| R25 | component tests de los 5 grupos de recepción satélite (3 tablas + 2 grupos de cards) |
-| R26 | component tests de novedades y de rechazadas por plazo vencido |
-| R27 | component test del aviso "Liberadas hoy" en sus dos montajes |
-| R28 | unit del generador del manifiesto: la columna existe con su clave y su orden; `0` cuando no hay intentos; ninguna aserción de "exactamente N columnas" queda en la suite |
-| R29 | unit del borde: `sortBy`/`filter` con el campo → rechazo por la lista blanca vigente |
-| R30 | component/route test: la vista del paquete y la etiqueta no muestran el conteo |
-| R31 | unit del DTO público + guard de la especificación OpenAPI: sin campo nuevo |
-| R32 | suites existentes de las 12 superficies verdes sin cambios de aserción |
-
----
+| R1  | `tests/unit/repositories/orden-historial-repository.test.ts` (bloque "160/R1…"); `tests/unit/types/criterio-intento-entrega.test.ts` |
+| R2  | `orden-historial-repository.test.ts` ("160/R2…"); `criterio-intento-entrega.test.ts`; `tests/unit/services/devolucion-sla-service.test.ts` ("160/R2/R8…") |
+| R3  | `orden-historial-repository.test.ts` ("160/R3…"); `criterio-intento-entrega.test.ts` ("R3…", "D3…") |
+| R4  | `tests/unit/services/intentos-entrega-criterio-unico.test.ts` (suite entera); `orden-historial-repository.test.ts` ("R4…"); `tests/unit/services/orden-historial-service.test.ts` ("R4…") |
+| R5  | `orden-historial-repository.test.ts` ("R24…", "160/R5…", "R26…", "R25…"); `intentos-entrega-criterio-unico.test.ts` ("160/R5…") |
+| R6  | `orden-historial-service.test.ts` ("160/R6…"); `orden-historial-repository.test.ts` ("160/R6…") |
+| R7  | `./init.sh` verde + `git diff --name-only -- db/` vacío (verificado en ambas fases) |
+| R8  | `devolucion-sla-service.test.ts` ("160/R8…"); `intentos-entrega-criterio-unico.test.ts` ("160/R8…") |
+| R9  | `devolucion-sla-service.test.ts` ("160/R9…") + resto de la suite del cron sin cambios de aserción |
+| R10 | `orden-historial-service.test.ts` ("160/R10…"); `intentos-entrega-criterio-unico.test.ts` |
+| R11 | `orden-service.test.ts`, `mis-asignaciones-service.test.ts`, `recepcion-satelite-service.test.ts`, `NovedadesService.test.ts`, `rechazos-sla-tienda-service.test.ts`, `liberacion-reprogramada-action.test.ts`, `manifiesto-service.test.ts` (bloques "R11/R14…") |
+| R12 | `orden-historial-repository.test.ts` ("R12…"); `orden-historial-service.test.ts` ("R12…"); `intentos-entrega-criterio-unico.test.ts` ("R12…") + un "R12" en cada uno de los 7 servicios |
+| R13 | `orden-historial-repository.test.ts` ("R13…"); `orden-historial-service.test.ts` ("R13…") + un caso de lote vacío por servicio |
+| R14 | Los mismos de R11 (todos asertan el `0` explícito); `manifiesto-service.test.ts` ("…emite `0`, no `null` ni celda vacia") |
+| R15 | `orden-service.test.ts` ("R15…") y equivalentes por rol/zona/tienda en los otros 5 servicios |
+| R16 | `tests/unit/types/intentos-no-alcance.test.ts` + `pnpm run typecheck` verde con los fixtures preexistentes sin el campo |
+| R17 | `tests/unit/components/intentos-entrega.test.tsx` ("columnaIntentos — R17…"); `tests/unit/components/ordenes-columns.test.tsx` ("R17: la tabla monta un columnheader 'Intentos'", "R17: el numero NO se incrusta en la celda de estado"); `tests/components/RecepcionSateliteModule.test.tsx` (3 grupos de tabla); `tests/components/GenerarGuiaModal.test.tsx` |
+| R18 | `intentos-entrega.test.tsx` ("IntentosDato — R18…"); `AsignarBodegaModal.test.tsx`, `RutearSateliteModal.test.tsx`, `RecuperarABodegaModal.test.tsx`, `DevolverATiendaModal.test.tsx`, `MisAsignacionesModule.test.tsx`, `RecepcionSateliteModule.test.tsx`, `NovedadesModule.test.tsx`, `RechazosSlaModule.test.tsx`, `BodegaLiberadasHoy.test.tsx` |
+| R19 | `intentos-entrega.test.tsx` ("valorIntentos — R19…"); y en **cada** superficie un caso con `0` y otro con el campo AUSENTE (ver `progress/impl_160_frontend.md §2`) |
+| R20 | `intentos-entrega.test.tsx` ("R20 — el umbral NO viaja al cliente…", incluida la guarda de fuente del módulo); casos "R20" en `ordenes-columns.test.tsx`, `GenerarGuiaModal.test.tsx`, `AsignarBodegaModal.test.tsx`, `MisAsignacionesModule.test.tsx`, `BodegaLiberadasHoy.test.tsx` |
+| R21 | `ordenes-columns.test.tsx` ("R21: la columna nueva va JUSTO DESPUES de `estatus`…", "R21: ids, encabezados y orden relativo de las 18 preexistentes, intactos"); los tres asserts vigentes de `ordenes-columns.test.tsx` (hoy `:116-119`; `:113-117` cuando se escribió el spec, corridos por el import nuevo) siguen verdes **sin tocarlos**; `RecepcionSateliteModule.test.tsx` ("R21/R32: el badge 'Prioritaria' sigue en la celda de Nº Guía") |
+| R22 | `ordenes-columns.test.tsx` ("R22: las tres variantes derivadas heredan la columna…"); `tests/components/OrdenesPage.test.tsx`, `AdminTiendaDashboard.test.tsx`, `OrdenesModuleReuse.test.tsx`, `OrdenesRevisionMaestro.test.tsx` ("R22: cada apartado del maestro monta la columna…") |
+| R23 | `AsignarBodegaModal.test.tsx`, `RutearSateliteModal.test.tsx`, `RecuperarABodegaModal.test.tsx`, `DevolverATiendaModal.test.tsx` (dato etiquetado) y `GenerarGuiaModal.test.tsx` (columna: **es tabla**, no lista). `EtiquetasGuiaModal.test.tsx` fija la EXCLUSIÓN por R30 (ver discrepancias en `progress/impl_160_frontend.md §3`) |
+| R24 | `MisAsignacionesModule.test.tsx` (bloque "intentos de entrega (feature 160)": card POS, detalle plegado y "por recoger") |
+| R25 | `RecepcionSateliteModule.test.tsx` (bloque "intentos de entrega (feature 160)": 3 tablas + 2 grupos de cards) |
+| R26 | `NovedadesModule.test.tsx` y `RechazosSlaModule.test.tsx` (bloques "intentos de entrega (feature 160)") |
+| R27 | `BodegaLiberadasHoy.test.tsx` (bloque "intentos de entrega") + los DOS montajes: `RecepcionSateliteModule.test.tsx` y `OrdenesRevisionMaestro.test.tsx` |
+| R28 | `tests/unit/utils/manifiesto-xlsx.test.ts` ("R28a…", "R28b…"); `tests/unit/services/manifiesto-service.test.ts` |
+| R29 | `tests/unit/types/intentos-no-alcance.test.ts` (`sortBy` y `filter` rechazados) |
+| R30 | `intentos-no-alcance.test.ts` (contrato `EtiquetaGuiaDTO`); `tests/components/EtiquetaGuia.test.tsx` ("R30: no expone el conteo"); `EtiquetasGuiaModal.test.tsx`; `tests/unit/components/intentos-no-alcance-ui.test.ts` (guarda de fuente de la vista del paquete, la etiqueta y el PDF) |
+| R31 | `intentos-no-alcance.test.ts` (guarda sobre `openapi-spec` + tipos `ApiOrden*`) |
+| R32 | Las suites completas de las 12 superficies, verdes. Los cambios de aserción —5 en total, todos por el dato nuevo— están enumerados uno a uno en `progress/impl_160_frontend.md §3` |
 
 ## Preguntas abiertas
 
