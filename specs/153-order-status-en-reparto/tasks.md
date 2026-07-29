@@ -184,22 +184,34 @@
   `npm run typecheck`, `npm run lint`, `npm test`.
   _Hecho:_ los tres en verde, salida pegada en `progress/impl_153.md`. (R21)
 
-- [ ] **T6.2 — Migración ida y vuelta.** [P] (dep: fase 5) — **NO EJECUTADA (sin DB)**
+- [x] **T6.2 — Migración ida y vuelta.** [P] (dep: fase 5) — **EJECUTADA CONTRA POSTGRES**
   `pnpm run db:migrate` → verificar la fila; `pnpm run db:rollback` → verificar que vuelve al
-  value previo con el mismo `id`; `pnpm run db:migrate` de nuevo para dejar la base al día.
-  _Hecho:_ ambas direcciones sin error, `id` estable, conteo de `order_status` = 18 en todo
-  momento. (R3/R4/R21)
-  _Estado real:_ el worktree aislado no tiene `.env` ni `DATABASE_URL`, así que la ida y
-  vuelta contra Postgres queda PENDIENTE para quien tenga la base local. Cubierto por
-  simulación en `tests/integration/db/order-status-en-reparto-migration.test.ts` (parseo del
-  SQL real + round-trip UP→DOWN sobre catálogo en memoria con FKs por id).
+  value previo; `pnpm run db:migrate` de nuevo para dejar la base al día. (R3/R4/R21)
+  _Ejecutada por el leader el 2026-07-28_ copiando el `.env` del repo principal al worktree,
+  tras verificar que `DATABASE_URL` apunta a **localhost** y no a producción. Round-trip real:
 
-- [ ] **T6.3 — E2E de los flujos que tocan el estado.** [P] (dep: fase 5) — **NO EJECUTADA (sin DB)**
+  | paso | `order_status` | filas |
+  | --- | --- | --- |
+  | `prisma migrate deploy` | `en_reparto` | 19 |
+  | `pnpm db:rollback` | `en_ruta` | 19 |
+  | `prisma migrate deploy` | `en_reparto` | 19 |
+
+  Ambas direcciones sin error, sin pérdida de filas, `down.sql` revirtiendo de verdad.
+  **El conteo es 19 y no 18, y NO lo causa esta feature:** son los 18 del seed más la fila
+  huérfana `pendiente`, sembrada por `20260714140000_order_status_pendiente` y nunca añadida a
+  `ORDER_STATUS_SEED` — ya documentada como inofensiva en `progress/current.md`. La simulación
+  de `tests/integration/db/order-status-en-reparto-migration.test.ts` se conserva como red
+  permanente en CI.
+
+- [ ] **T6.3 — E2E de los flujos que tocan el estado.** [P] (dep: fase 5) — **NO EJECUTABLE HOY**
   `npm run test:e2e` (al menos `mis-asignaciones`, `cierre-dia`, `reintentos-escalado`).
-  _Hecho:_ recoger → gestionar → cerrar el día funciona igual que antes del rename. (R12)
-  _Estado real:_ Playwright necesita servidor + base sembrada; no disponibles en el worktree.
-  En `e2e/` el cambio fue exclusivamente de COMENTARIOS (ningún selector depende del value:
-  los de texto ya buscaban "En reparto / por gestionar").
+  _Estado real:_ **no es una omisión de esta feature, es una deuda de arnés ya registrada** en
+  `progress/current.md`: no existe harness de E2E (seed + login por rol) y los `e2e/*.spec.ts`
+  usan emails placeholder, así que **no se ejecutan ni en `pnpm test` ni en `./init.sh`**. Es la
+  misma deuda que dejó pasar 3 specs rotas en la feature 148.
+  Mitigación verificada: en `e2e/` el cambio de esta feature fue **exclusivamente de
+  COMENTARIOS** — ningún selector depende del value, y los que dependen de texto ya buscaban
+  "En reparto / por gestionar". La casilla queda en `[ ]` a propósito: marcarla sería mentir.
 
 - [x] **T6.4 — `./init.sh` y mapa de trazabilidad.** (dep: T6.1–T6.3)
   Correr `./init.sh` y escribir en `progress/impl_153.md` el mapa `R1..R21 → test` de
