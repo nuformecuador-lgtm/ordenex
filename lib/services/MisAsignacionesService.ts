@@ -34,9 +34,9 @@ const MSG_BLOQUEADO =
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "por_recoger";
-const ESTADO_EN_REPARTO = "en_ruta";
+const ESTADO_EN_REPARTO = "en_reparto";
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
-const ORIGEN_GESTION = "en_ruta";
+const ORIGEN_GESTION = "en_reparto";
 
 // El `value` de order_status destino coincide 1:1 con el `resultado` de la
 // gestion (entregada/reprogramada/devuelta/rechazada).
@@ -171,14 +171,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       return a.secuenciaRuta - b.secuenciaRuta;
     });
     const paradasSinOptimizar = porGestionar.filter((o) => o.secuenciaRuta === null).length;
-    // Feature 61: KPIs derivados de las ordenes en_ruta (porGestionar) + el conteo
+    // Feature 61: KPIs derivados de las ordenes en_reparto (porGestionar) + el conteo
     // de entregadas. `pendientes` = en camino; `porCobrar` = COD por recaudar (null = 0).
     const codEnReparto = porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
     const kpis: MisAsignacionesKpis = {
       pendientes: porGestionar.length,
       entregadas,
       porCobrar: codEnReparto,
-      // Total a cobrar ACUMULADO: COD en_ruta + COD ya entregado. Estable al entregar;
+      // Total a cobrar ACUMULADO: COD en_reparto + COD ya entregado. Estable al entregar;
       // se descuenta al gestionar como reprogramada/devuelta/rechazada (fuera de ambos sets).
       totalACobrar: codEnReparto + montoEntregadas,
     };
@@ -407,7 +407,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
   /**
    * Guardia comun (R18/R31): la orden existe, es del actor y su origen es
-   * `en_ruta`. Devuelve la fila o un resultado de rechazo.
+   * `en_reparto`. Devuelve la fila o un resultado de rechazo.
    */
   private async cargarOrdenGestionable(
     ordenId: string,

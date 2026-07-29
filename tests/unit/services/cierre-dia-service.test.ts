@@ -109,7 +109,7 @@ function newService(opts: {
   vehiculoMensajero?: string | null;
   tarifa?: PagoTarifa | null; // feature 39: tarifa resuelta (default TARIFA_DEFECTO)
   signedUrls?: ISignedUrlProvider;
-  // Feature 67: id de `en_ruta` en el catalogo (null = seed pendiente -> validation_error).
+  // Feature 67: id de `en_reparto` en el catalogo (null = seed pendiente -> validation_error).
   estatusEnRepartoId?: string | null;
   // Feature 111/R5: ids de mensajeros bloqueados que devuelve `findMensajerosBloqueados`.
   bloqueados?: string[];
@@ -121,7 +121,7 @@ function newService(opts: {
   const ordenRepo = {
     findUsuarioZonaId: vi.fn(async () => (opts.zonaMensajero === undefined ? ZONA_MENSAJERO : opts.zonaMensajero)),
     findUsuarioVehiculoId: vi.fn(async () => opts.vehiculoMensajero ?? null),
-    // Feature 67/R18: resuelve el destino `en_ruta`.
+    // Feature 67/R18: resuelve el destino `en_reparto`.
     findEstatusIdByValue: vi.fn(async () =>
       opts.estatusEnRepartoId === undefined ? "s-reparto" : opts.estatusEnRepartoId,
     ),
@@ -166,7 +166,7 @@ describe("listarCierreDia — autorizacion y alcance (R1/R2)", () => {
     expect(repo.findGestionesPendientes).toHaveBeenCalledWith("m1");
     expect(repo.contarOrdenesPendientesGestion).toHaveBeenCalledWith("m1", [
       "por_recoger",
-      "en_ruta",
+      "en_reparto",
     ]);
     expect(repo.findCierresByMensajero).toHaveBeenCalledWith("m1");
   });
@@ -882,7 +882,7 @@ describe("Feature 67 · deshacerGestion — guardia de estado de la orden (R5, F
     { resultado: "entregada" as const, estatusValue: "en_bodega_central", nota: "la bodega ya la recibio" },
     { resultado: "reprogramada" as const, estatusValue: "en_bodega_central", nota: "el cron de la 46 ya la libero" },
     { resultado: "rechazada" as const, estatusValue: "devolviendo_a_tienda", nota: "48: ya se devolvio a la tienda" },
-    { resultado: "devuelta" as const, estatusValue: "en_ruta", nota: "la bodega la reasigno y ruteo" },
+    { resultado: "devuelta" as const, estatusValue: "en_reparto", nota: "la bodega la reasigno y ruteo" },
     { resultado: "entregada" as const, estatusValue: "en_preparacion", nota: "ajuste administrativo" },
   ];
 
@@ -945,7 +945,7 @@ describe("Feature 67 · deshacerGestion — autorizacion (R8/R9)", () => {
 });
 
 describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R30/R32/R34)", () => {
-  it("R18/R19: pide al repo `en_ruta` como destino y el mensajero AUTOR como asignado", async () => {
+  it("R18/R19: pide al repo `en_reparto` como destino y el mensajero AUTOR como asignado", async () => {
     const repo = fakeRepo({
       findGestionParaDeshacer: vi.fn(async () =>
         gestionDeshacer({
@@ -960,7 +960,7 @@ describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R3
     const r = await service.deshacerGestion("g1", MENSAJERO);
 
     expect(r).toEqual({ status: "ok", ordenId: "o1" });
-    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_ruta"); // R18
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_reparto"); // R18
     expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledWith({
       gestionId: "g1",
       ordenId: "o1",
@@ -980,7 +980,7 @@ describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R3
     expect(r.status).toBe("conflict"); // sin efectos parciales: la tx hizo rollback
   });
 
-  it("catalogo sin `en_ruta` (seed pendiente) -> validation_error, sin escribir", async () => {
+  it("catalogo sin `en_reparto` (seed pendiente) -> validation_error, sin escribir", async () => {
     const repo = fakeRepo();
     const { service } = newService({ repo, estatusEnRepartoId: null });
 
@@ -1138,7 +1138,7 @@ describe("Feature 111 · solicitarCierre — transición del vencido (R6/R9/R10)
     const repo = fakeRepo({
       existeCierreVencido: vi.fn(async () => true),
       transicionarVencidoASolicitado: vi.fn(async () => true),
-      contarOrdenesPendientesGestion: vi.fn(async () => 3), // hay órdenes en_ruta
+      contarOrdenesPendientesGestion: vi.fn(async () => 3), // hay órdenes en_reparto
     });
     const { service } = newService({ repo });
 
@@ -1337,7 +1337,7 @@ describe("Feature 111 · deshacerGestion — bloqueo total del mensajero (R5/R20
     // R5 (Q2, belt-and-suspenders): usa el MISMO predicado derivado, ANTES de cualquier lectura.
     expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
     expect(repo.findGestionParaDeshacer).not.toHaveBeenCalled();
-    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled(); // sin devolver a en_ruta
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled(); // sin devolver a en_reparto
   });
 
   it("R20: el motivo del bloqueo es texto fijo SIN PII (ni ids de cierre ni del actor)", async () => {

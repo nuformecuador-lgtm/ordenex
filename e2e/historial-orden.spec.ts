@@ -40,7 +40,7 @@ import { test, expect, type Page } from "@playwright/test";
  *   orden cronológico (la creación primero, la liberación del cron al final):
  *     1. CREACIÓN (carga masiva, R9): origen vacío → `en_preparacion`
  *        ("En preparación"), actor HUMANO (el adminTienda que la subió).
- *     2. GESTIÓN del mensajero (feature 36, R17/R22): `en_ruta` →
+ *     2. GESTIÓN del mensajero (feature 36, R17/R22): `en_reparto` →
  *        `reprogramada` ("Reprogramada"), actor HUMANO = ACTOR_HUMANO, con MOTIVO.
  *     3. LIBERACIÓN del cron (feature 46, R18/R21): `reprogramada` → `en_bodega_central`
  *        ("En bodega"), actor VACÍO → se muestra "Sistema", sin motivo; es la más

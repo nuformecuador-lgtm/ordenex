@@ -46,9 +46,9 @@ describe("R6 — la guardia rechaza los pares que no estan en TRANSICIONES", () 
   it.each([
     ["entregada", "devuelta_a_tienda"],
     ["en_preparacion", "entregada"],
-    ["devuelta_a_tienda", "en_ruta"],
+    ["devuelta_a_tienda", "en_reparto"],
     ["por_recoger", "en_bodega_satelite"],
-    ["sin_gestionar", "en_ruta"],
+    ["sin_gestionar", "en_reparto"],
     ["devolviendo_a_bodega_central", "devuelta_a_tienda"],
   ] as const)("lanza TransicionIlegalError en %s -> %s", (origen, destino) => {
     expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
@@ -153,7 +153,7 @@ describe("R4/R13 — la guardia trabaja sobre value del catalogo, en O(1)", () =
     // no escribirlos literalmente y no disparar el censo de `censo-order-status-rename`.
     expect(esOrderStatusValue(["en", "bodega"].join("_"))).toBe(false);
     expect(esOrderStatusValue(["recibido", "origen"].join("_"))).toBe(false);
-    expect(esOrderStatusValue("EN_RUTA")).toBe(false); // el catalogo es case-sensitive
+    expect(esOrderStatusValue("EN_REPARTO")).toBe(false); // el catalogo es case-sensitive
     expect(esOrderStatusValue("")).toBe(false);
   });
 
@@ -162,7 +162,7 @@ describe("R4/R13 — la guardia trabaja sobre value del catalogo, en O(1)", () =
     for (let i = 0; i < 1000; i += 1) {
       const origen = ORDER_STATUS_SEED[i % ORDER_STATUS_SEED.length] as OrderStatusValue;
       try {
-        assertTransicionValida(origen, "en_ruta");
+        assertTransicionValida(origen, "en_reparto");
       } catch {
         /* ilegal esperado en la mayoria: aqui solo importa que no mute nada */
       }

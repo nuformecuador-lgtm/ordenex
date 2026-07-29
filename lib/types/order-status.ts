@@ -9,7 +9,7 @@
 // ruteada hacia la bodega satelite de su zona (nombre de zona derivado de
 // orden.zonaId para el display, R15/R20). Recibe num_guia en el ruteo (R10).
 // Feature 36/R1/R3 (decision F1.4-a,b): suma dos valores del flujo del mensajero:
-// "en_ruta" (11mo) — la orden fue RECOGIDA por el mensajero (transiciona desde
+// "en_reparto" (11mo) — la orden fue RECOGIDA por el mensajero (transiciona desde
 // por_recoger al pulsar "Recoger") y sale a reparto; "rechazada" (12mo)
 // — resultado RECHAZO de la gestion (NO se mapea a devuelta/devolviendo_a_tienda,
 // que pertenecen a los flujos 47/48). Sembrados idempotentemente por seedOrderStatus.
@@ -26,6 +26,13 @@
 // (en transito satelite->central) y "por_devolver_a_tienda" (en la central, elegible para
 // "enviar a la tienda"). Sembrados idempotentemente por seedOrderStatus + migracion
 // 20260724140000_order_status_devolucion_rechazadas (INSERT ... WHERE NOT EXISTS por value).
+// Feature 153/R1: rename MECANICO de UN solo value, conservando su POSICION (indice 10):
+// el 11mo value vuelve a llamarse "en_reparto" y su etiqueta UI pasa a ser "En reparto".
+// Revierte, solo para ese value, el rename que hizo la 135; el resto de la nomenclatura
+// queda igual. Sin cambio de flujo: mismas aristas, mismos id, mismas FKs. La migracion es
+// un UPDATE sobre la tabla catalogo order_status (20260728120000_order_status_en_reparto).
+// OJO: los vecinos "en_ruta_bodega_central" y "en_ruta_bodega_satelite" NO se tocan
+// (ni value ni etiqueta); el censo del guard usa frontera de palabra por eso.
 export const ORDER_STATUS_SEED = [
   "entregada",
   "devuelta",
@@ -37,11 +44,11 @@ export const ORDER_STATUS_SEED = [
   "en_preparacion",
   "por_recoger", // feature 17 (renombrado en feature 135)
   "en_ruta_bodega_satelite", // feature 30
-  "en_ruta", // feature 36: recogida por el mensajero / en reparto (renombrado en feature 135)
+  "en_reparto", // feature 36: recogida por el mensajero / en reparto (renombrado en feature 135 y en la 153)
   "rechazada", // feature 36: resultado RECHAZO de la gestion
   "en_bodega_satelite", // feature 33: recibida en la bodega satelite de su zona
   "devuelta_a_tienda", // 14mo valor: cierre del flujo de devolucion, la tienda de origen la recibio (renombrado en feature 135)
-  "sin_gestionar", // feature 109 (15mo valor): orden que quedo en en_ruta al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
+  "sin_gestionar", // feature 109 (15mo valor): orden que quedo en en_reparto al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
   "por_devolver", // feature 139 (16mo valor): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
   "devolviendo_a_bodega_central", // feature 139 (17mo valor): en transito satelite -> central (tras "enviar a central")
   "por_devolver_a_tienda", // feature 139 (18mo valor): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)

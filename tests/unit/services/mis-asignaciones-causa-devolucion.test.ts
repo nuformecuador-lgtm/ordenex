@@ -20,7 +20,7 @@ import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  en_ruta: "os-reparto",
+  en_reparto: "os-reparto",
   entregada: "os-entregada",
   devuelta: "os-devuelta",
   rechazada: "os-rechazada",
@@ -31,7 +31,7 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
   return {
     id: "o1",
-    estatusValue: "en_ruta",
+    estatusValue: "en_reparto",
     deletedAt: null,
     mensajeroAsignadoId: "m1",
     montoCobrar: 100,

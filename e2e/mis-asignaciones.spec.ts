@@ -8,7 +8,7 @@ import { test, expect, type Page } from "@playwright/test";
  * These tests cover the critical happy path of the recaudo (cash-on-delivery)
  * flow plus the rejection and reschedule branches:
  * (a) Happy path (delivery): mensajero logs in → /mis-asignaciones → "Por
- *     recoger" → "Recoger" (por_recoger → en_ruta) → the order shows
+ *     recoger" → "Recoger" (por_recoger → en_reparto) → the order shows
  *     up under "En reparto / por gestionar" → "Gestionar" (sets the 1-to-1 lock)
  *     → in the "Gestionar orden" modal, result "Entregada" + monto == montoCobrar
  *     + método de pago + evidence photo → "Guardar gestión" → order becomes
@@ -58,7 +58,7 @@ async function loginMensajero(page: Page) {
   await page.waitForURL("/", { timeout: 5000 });
 }
 
-/** Picks up the first order under "Por recoger" (por_recoger → en_ruta). */
+/** Picks up the first order under "Por recoger" (por_recoger → en_reparto). */
 async function recogerPrimeraOrden(page: Page) {
   const porRecoger = page.getByRole("region", { name: "Por recoger" });
   await expect(porRecoger).toBeVisible();

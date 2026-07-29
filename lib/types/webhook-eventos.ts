@@ -12,7 +12,7 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 export const EVENTOS_PUBLICOS: ReadonlySet<OrderStatusValue> = new Set<OrderStatusValue>([
   "en_ruta_bodega_central",
   "en_bodega_central",
-  "en_ruta",
+  "en_reparto",
   "entregada",
   "reprogramada",
   "devuelta",

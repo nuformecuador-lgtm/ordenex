@@ -338,11 +338,11 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         });
 
         // Feature 109 (T1.2, R4/R6/R22): CORTE DIARIO — transiciona en la MISMA tx las ordenes que
-        // siguen en `en_ruta` del mensajero a `sin_gestionar`, CONSERVANDO
+        // siguen en `en_reparto` del mensajero a `sin_gestionar`, CONSERVANDO
         // `mensajero_asignado_id` (asociacion orden<->cierre por mensajero, Q1: se limpia SOLO al
         // liberar al aprobar, R16) y registrando el cambio por el CHOKE POINT (49) con actor null y
         // `origen_tipo = corte_sin_gestionar`. Pre-SELECT de ids + updateMany GUARDADO por
-        // `estatus_id = en_ruta` (money-safe: NO toca prioridad ni totales) -> el append es SOLO
+        // `estatus_id = en_reparto` (money-safe: NO toca prioridad ni totales) -> el append es SOLO
         // de las que efectivamente transicionaron (R6/R8). Ausente el input = flujo 37 sin cambios.
         let sinGestionarTransicionadas = 0;
         if (corteSinGestionar) {
@@ -600,7 +600,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         });
         if (anulada.count === 0) throw new NoAnulable();
 
-        // 2) R18/R19: devuelve la orden a `en_ruta` (unico estado desde el que se puede
+        // 2) R18/R19: devuelve la orden a `en_reparto` (unico estado desde el que se puede
         // volver a gestionar) y REPONE la asignacion al mensajero autor. `mensajeroAsignadoId`
         // incondicional: es idempotente cuando la asignacion ya era ese mensajero
         // (entregada/reprogramada/rechazada) y repone la que el seguimiento de un reintento
@@ -620,7 +620,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         if (movida.count === 0) throw new NoAnulable();
 
         // 3) R20/R21/R23: CHOKE POINT del historial (49) en la MISMA tx que el cambio de estado.
-        // Origen = estado real previo, destino = `en_ruta`, actor = quien deshizo,
+        // Origen = estado real previo, destino = `en_reparto`, actor = quien deshizo,
         // `gestion_orden_id` = la gestion anulada, `origen_tipo` = `deshacer_gestion` (12.º
         // valor, F1.4-b) para que la linea de tiempo NO lo confunda con una gestion real.
         // Es un APPEND: ninguna fila previa del historial se modifica ni se borra (R23).

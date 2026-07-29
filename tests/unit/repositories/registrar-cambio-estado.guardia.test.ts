@@ -110,9 +110,9 @@ describe("R7 — un lote con una sola transicion ilegal se rechaza ENTERO", () =
     const { tx, createMany } = buildTx();
     const emitir = vi.fn(async () => {});
     const lote = [
-      entrada("en_ruta", "entregada"), // legal (#12)
+      entrada("en_reparto", "entregada"), // legal (#12)
       entrada("entregada", "devuelta_a_tienda"), // ILEGAL
-      entrada("por_recoger", "en_ruta", "recoleccion"), // legal (#11)
+      entrada("por_recoger", "en_reparto", "recoleccion"), // legal (#11)
     ];
     await expect(appendCambioEstado(tx as never, lote, emitir)).rejects.toBeInstanceOf(
       TransicionIlegalError,
@@ -126,11 +126,11 @@ describe("R7 — un lote con una sola transicion ilegal se rechaza ENTERO", () =
       const { tx, createMany } = buildTx();
       const emitir = vi.fn(async () => {});
       const lote = [
-        entrada("en_ruta", "devuelta"),
-        entrada("en_ruta", "rechazada"),
-        entrada("en_ruta", "reprogramada"),
+        entrada("en_reparto", "devuelta"),
+        entrada("en_reparto", "rechazada"),
+        entrada("en_reparto", "reprogramada"),
       ];
-      lote[posicion] = entrada("devuelta_a_tienda", "en_ruta"); // ilegal
+      lote[posicion] = entrada("devuelta_a_tienda", "en_reparto"); // ilegal
       await expect(appendCambioEstado(tx as never, lote, emitir)).rejects.toBeInstanceOf(
         TransicionIlegalError,
       );
@@ -179,7 +179,7 @@ describe("R11 — con transiciones legales el comportamiento es identico al prev
     const emitir = vi.fn(async () => {});
     const lote = [
       {
-        ...entrada("en_ruta", "entregada"),
+        ...entrada("en_reparto", "entregada"),
         motivo: "entregada al cliente",
         gestionOrdenId: "g1",
       },
@@ -190,7 +190,7 @@ describe("R11 — con transiciones legales el comportamiento es identico al prev
       data: [
         {
           ordenId: "o1",
-          estatusOrigenId: idDe("en_ruta"),
+          estatusOrigenId: idDe("en_reparto"),
           estatusDestinoId: idDe("entregada"),
           actorUsuarioId: "u1",
           origenTipo: "gestion",
@@ -217,7 +217,7 @@ describe("R13 — validacion O(1) sin round-trips de DB adicionales", () => {
     const { tx, $queryRaw } = buildTx();
     const emitir = vi.fn(async () => {});
     for (let i = 0; i < 5; i += 1) {
-      await appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir);
+      await appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir);
     }
     expect(consultasDeCatalogo($queryRaw)).toBe(1); // cache por proceso
   });
@@ -225,7 +225,7 @@ describe("R13 — validacion O(1) sin round-trips de DB adicionales", () => {
   it("un lote de 50 transiciones no dispara una consulta por transicion", async () => {
     const { tx, $queryRaw } = buildTx();
     const emitir = vi.fn(async () => {});
-    const lote = Array.from({ length: 50 }, (_, i) => entrada("por_recoger", "en_ruta", "recoleccion", `o${i}`));
+    const lote = Array.from({ length: 50 }, (_, i) => entrada("por_recoger", "en_reparto", "recoleccion", `o${i}`));
     await appendCambioEstado(tx as never, lote, emitir);
     expect(consultasDeCatalogo($queryRaw)).toBe(1);
   });
@@ -233,9 +233,9 @@ describe("R13 — validacion O(1) sin round-trips de DB adicionales", () => {
   it("la cache se comparte entre llamadas con distintos tx (el catalogo es inmutable)", async () => {
     const emitir = vi.fn(async () => {});
     const primero = buildTx();
-    await appendCambioEstado(primero.tx as never, [entrada("en_ruta", "devuelta")], emitir);
+    await appendCambioEstado(primero.tx as never, [entrada("en_reparto", "devuelta")], emitir);
     const segundo = buildTx();
-    await appendCambioEstado(segundo.tx as never, [entrada("en_ruta", "rechazada")], emitir);
+    await appendCambioEstado(segundo.tx as never, [entrada("en_reparto", "rechazada")], emitir);
     expect(consultasDeCatalogo(primero.$queryRaw)).toBe(1);
     expect(consultasDeCatalogo(segundo.$queryRaw)).toBe(0);
   });
@@ -247,11 +247,11 @@ describe("resolvedor de catalogo inyectable (patron del emisor de webhooks)", ()
     const emitir = vi.fn(async () => {});
     const catalogo = vi.fn(async () =>
       new Map<string, OrderStatusValue>([
-        [idDe("en_ruta"), "en_ruta"],
+        [idDe("en_reparto"), "en_reparto"],
         [idDe("entregada"), "entregada"],
       ]),
     );
-    await appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir, catalogo);
+    await appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir, catalogo);
     expect(catalogo).toHaveBeenCalledTimes(1);
     expect(consultasDeCatalogo($queryRaw)).toBe(0);
     expect(createMany).toHaveBeenCalledTimes(1);
@@ -284,7 +284,7 @@ describe("resolvedor de catalogo inyectable (patron del emisor de webhooks)", ()
       new Map<string, OrderStatusValue>([[idDe("entregada"), "entregada"]]),
     );
     await expect(
-      appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir, catalogo),
+      appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir, catalogo),
     ).rejects.toBeInstanceOf(TransicionNoValidableError);
     expect(createMany).not.toHaveBeenCalled();
   });
@@ -300,7 +300,7 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     const tx = { ordenHistorialEstado: { createMany } };
     const emitir = vi.fn(async () => {});
     await expect(
-      appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir),
+      appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir),
     ).rejects.toBeInstanceOf(TransicionNoValidableError);
     expect(createMany).not.toHaveBeenCalled();
     expect(emitir).not.toHaveBeenCalled();
@@ -310,7 +310,7 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     const { tx, createMany } = buildTx(false); // responde [] a la consulta del catalogo
     const emitir = vi.fn(async () => {});
     await expect(
-      appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir),
+      appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir),
     ).rejects.toBeInstanceOf(TransicionNoValidableError);
     expect(createMany).not.toHaveBeenCalled();
   });
@@ -325,7 +325,7 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     };
     const emitir = vi.fn(async () => {});
     await expect(
-      appendCambioEstado(tx as never, [entrada("en_ruta", "entregada")], emitir),
+      appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir),
     ).rejects.toThrow("connection terminated");
     expect(createMany).not.toHaveBeenCalled();
   });
@@ -349,7 +349,7 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
         [
           {
             ordenId: "o1",
-            estatusOrigenId: idDe("en_ruta"),
+            estatusOrigenId: idDe("en_reparto"),
             estatusDestinoId: "os-estado-del-futuro",
             actorUsuarioId: "u1",
             origenTipo: "gestion",
@@ -369,14 +369,14 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     await expect(
       appendCambioEstado(
         tx as never,
-        [entrada("en_ruta", "entregada", "gestion", "orden-secreta")],
+        [entrada("en_reparto", "entregada", "gestion", "orden-secreta")],
         emitir,
       ),
     ).rejects.toThrow("transicion no validable: el catalogo de estados no esta disponible");
     await expect(
       appendCambioEstado(
         tx as never,
-        [entrada("en_ruta", "entregada", "gestion", "orden-secreta")],
+        [entrada("en_reparto", "entregada", "gestion", "orden-secreta")],
         emitir,
       ),
     ).rejects.not.toThrow(/orden-secreta|u1|os-/);

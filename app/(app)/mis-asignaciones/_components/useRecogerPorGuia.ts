@@ -9,7 +9,7 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 // Feature 96 (DRY): lógica compartida por el escáner de cámara (`EscanerRecoger`) y el
 // input de número de guía (`InputRecoger`). Resuelve un `num_guia` contra las órdenes
 // "por recoger" del PROPIO mensajero para obtener el UUID y ACEPTA la orden con la MISMA
-// Server Action `recogerAsignaciones` (por_recoger -> en_ruta), traduciendo
+// Server Action `recogerAsignaciones` (por_recoger -> en_reparto), traduciendo
 // el resultado a toasts. Restricción "asignada a mí": una guía que NO esté entre las
 // "por recoger" se rechaza AQUÍ con toast, SIN llamar a la action (el backend la vuelve a
 // exigir: R17 en el service + WHERE del repo).

@@ -166,7 +166,7 @@ describe("OrdenRepository.recibirEnSatelite (R11/R18 · feature 49/#6)", () => {
     expect(arg.data).not.toHaveProperty("numGuia");
   });
 
-  // Feature 49/#6 (R14/R7): al recibir, 1 historial (origen en_ruta -> en_bodega_satelite).
+  // Feature 49/#6 (R14/R7): al recibir, 1 historial (origen en_reparto -> en_bodega_satelite).
   it("R14: recepcion deja 1 historial con origen pre-leido y tipo recepcion_satelite", async () => {
     const prisma = buildPrisma();
     prisma.orden.findFirst.mockResolvedValue({ estatusId: idEstado("en_ruta_bodega_satelite") });

@@ -34,7 +34,7 @@ const ENTRADAS: OrdenHistorialEntradaDTO[] = [
     createdAt: new Date("2026-01-01T10:00:00Z"),
   },
   {
-    estatusOrigenValue: "en_ruta",
+    estatusOrigenValue: "en_reparto",
     estatusDestinoValue: "reprogramada",
     origenTipo: "gestion",
     actorNombre: "Ana Mensajera",
@@ -57,7 +57,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
 
     // Etiquetas legibles (estatus-label), una por value presente en las entradas.
     expect(screen.getByText(L.en_preparacion)).toBeInTheDocument();
-    expect(screen.getByText(L.en_ruta)).toBeInTheDocument();
+    expect(screen.getByText(L.en_reparto)).toBeInTheDocument();
     expect(screen.getByText(L.en_bodega_central)).toBeInTheDocument();
     // "reprogramada" aparece 2 veces (destino de la 2.ª entrada, origen de la 3.ª).
     expect(screen.getAllByText(L.reprogramada)).toHaveLength(2);
@@ -65,7 +65,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     // Los values crudos NO se muestran (R30).
     for (const value of [
       "en_preparacion",
-      "en_ruta",
+      "en_reparto",
       "reprogramada",
       "en_bodega_central",
     ]) {
@@ -82,7 +82,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     // Orden cronológico: creación primero, liberación del sistema al final.
     expect(within(items[0]).getByText("Creación")).toBeInTheDocument();
     expect(within(items[0]).getByText(L.en_preparacion)).toBeInTheDocument();
-    expect(within(items[1]).getByText(L.en_ruta)).toBeInTheDocument();
+    expect(within(items[1]).getByText(L.en_reparto)).toBeInTheDocument();
     expect(within(items[2]).getByText(L.en_bodega_central)).toBeInTheDocument();
     // Actor null -> "Sistema" (R21/R29), en la última entrada.
     expect(within(items[2]).getByText(/Sistema/)).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
   it("R15: incluye la transición 'rechazada → devolviendo_a_tienda' como una entrada más, con su actor y timestamp", () => {
     const entradas: OrdenHistorialEntradaDTO[] = [
       {
-        estatusOrigenValue: "en_ruta",
+        estatusOrigenValue: "en_reparto",
         estatusDestinoValue: "rechazada",
         origenTipo: "gestion",
         actorNombre: "Ana Mensajera",

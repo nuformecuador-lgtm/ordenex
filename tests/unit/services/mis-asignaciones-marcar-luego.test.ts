@@ -19,7 +19,7 @@ function row(over: Partial<MiAsignacionRow> & { id: string }): MiAsignacionRow {
   return {
     numGuia: 1,
     numRemision: "R-1",
-    estatusValue: "en_ruta",
+    estatusValue: "en_reparto",
     destinatario: "Ana",
     telefonoDest: "099",
     direccion: "calle",
@@ -86,8 +86,8 @@ function build(rows: MiAsignacionRow[], marcadas: Set<string>) {
 describe("R17 — el DTO refleja marcar_luego del mensajero", () => {
   it("marcarLuego=true para las ordenes con fila marcada; false para el resto", async () => {
     const rows = [
-      row({ id: "o1", estatusValue: "en_ruta" }),
-      row({ id: "o2", estatusValue: "en_ruta" }),
+      row({ id: "o1", estatusValue: "en_reparto" }),
+      row({ id: "o2", estatusValue: "en_reparto" }),
     ];
     const { service } = build(rows, new Set(["o1"]));
     const r = await service.listarMisAsignaciones(MENSAJERO);
@@ -99,7 +99,7 @@ describe("R17 — el DTO refleja marcar_luego del mensajero", () => {
   });
 
   it("R17: false por defecto cuando no existe NINGUNA fila de marca", async () => {
-    const rows = [row({ id: "o1", estatusValue: "en_ruta" })];
+    const rows = [row({ id: "o1", estatusValue: "en_reparto" })];
     const { service } = build(rows, new Set());
     const r = await service.listarMisAsignaciones(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
@@ -117,7 +117,7 @@ describe("R17 — el DTO refleja marcar_luego del mensajero", () => {
 
 describe("R20 — privacidad: el listado solo refleja las marcas del propio actor", () => {
   it("solo consulta las marcas del actor (usuarioId) y no las de otro mensajero", async () => {
-    const rows = [row({ id: "o1", estatusValue: "en_ruta" })];
+    const rows = [row({ id: "o1", estatusValue: "en_reparto" })];
     // El repo mock devolveria un Set solo con las del actor; aqui verificamos que el service
     // consulta EXCLUSIVAMENTE con el usuarioId del actor (nunca con otro).
     const { service, metaRepo } = build(rows, new Set(["o1"]));
@@ -127,7 +127,7 @@ describe("R20 — privacidad: el listado solo refleja las marcas del propio acto
   });
 
   it("una marca de otra orden (no listada) no ensucia el DTO de las ordenes del actor", async () => {
-    const rows = [row({ id: "o1", estatusValue: "en_ruta" })];
+    const rows = [row({ id: "o1", estatusValue: "en_reparto" })];
     // El Set del actor trae "o9" (otra orden suya no presente en el listado): no debe afectar o1.
     const { service } = build(rows, new Set(["o9"]));
     const r = await service.listarMisAsignaciones(MENSAJERO);

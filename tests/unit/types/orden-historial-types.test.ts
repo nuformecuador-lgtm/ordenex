@@ -43,7 +43,7 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "reprogramacion_tienda", // feature 100: adminTienda reprograma devuelta -> reprogramada
     "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite
     "cancelacion_api", // feature 106: OrdenRepository.cancelarViaApi (cancelacion por API key)
-    "corte_sin_gestionar", // feature 109: CierreDiaRepository.crearCierre (corte, en_ruta -> sin_gestionar, actor null)
+    "corte_sin_gestionar", // feature 109: CierreDiaRepository.crearCierre (corte, en_reparto -> sin_gestionar, actor null)
     "liberacion_sin_gestionar", // feature 109: CierresAdminRepository.resolverCierre (aprobar, sin_gestionar -> bodega)
     "recepcion_bodega_central", // feature 138: OrdenRepository.recibirEnBodegaCentral (recepcion fisica, en_ruta_bodega_central -> en_bodega_central)
     "devolucion_rechazada", // feature 139: CierresAdminRepository.resolverCierre (aprobar, rechazada -> por_devolver/por_devolver_a_tienda)
