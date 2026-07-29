@@ -200,13 +200,22 @@ describe("R18 — migracion NUEVA, historicas inmutables", () => {
     const dirName = path.basename(migrationDir);
     const renameDir = path.basename(migrationDirFor("_order_status_rename_nomenclatura"));
     expect(dirName > renameDir).toBe(true);
-    // y despues de la ultima migracion existente al crearla.
-    const todas = fs
+    // y despues de la ultima migracion existente AL CREARLA. Las carpetas apendidas por
+    // features POSTERIORES se descuentan (patron de denylist de `zonas-migration.test.ts`):
+    // el invariante es que la 153 no nacio ANTES de lo que ya existia, no que sea la ultima
+    // carpeta del repo para siempre.
+    const previas = fs
       .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
+      // feature 154 (catalogo de estados v2): las dos apendidas despues.
+      .filter(
+        (d) =>
+          !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
+          !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente"),
+      )
       .sort();
-    expect(todas[todas.length - 1]).toBe(dirName);
+    expect(previas[previas.length - 1]).toBe(dirName);
   });
 
   it("la migracion de la 135 sigue intacta: conserva sus 6 UPDATE originales", () => {
