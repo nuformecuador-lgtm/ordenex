@@ -178,6 +178,27 @@ creadas dentro de un mismo lote, y NO DEBE modificar el `carga_id` de órdenes p
 **R37.** CUANDO se crea una orden por el alta manual individual (fuera de la carga masiva),
 el sistema DEBE dejar `carga_id` en NULL y NO DEBE crear fila alguna en `carga`.
 
+**R56.** CUANDO una orden cambia de estado por una vía que NO es la carga masiva —en
+particular al **deshacer la asignación**— el sistema DEBE conservar intactos su `carga_id` y su
+`download_url`.
+
+> **Añadido el 2026-07-30, después del resto de la spec** (de ahí que su número rompa el orden
+> de lectura: los `R<n>` son identificadores, no posiciones). Lo destapó una **mutación
+> superviviente** del re-review: añadir `carga_id = NULL, download_url = NULL` al `SET` de
+> `deshacerAsignacionLote` dejaba **7110/7110 tests en verde**. El comportamiento ya era
+> correcto, pero se cumplía **por accidente de implementación, no por contrato**: nada impedía
+> que alguien ampliara ese `SET` «por limpieza» y se llevara por delante la trazabilidad de la
+> carga.
+>
+> **Está redactado a propósito más ancho que el mutante** —«una vía que no es la carga masiva»,
+> no «`deshacerAsignacionLote`»— para que alcance a vías futuras que hoy no existen. **R36** cubre
+> el caso hermano (la carga no pisa el `carga_id` de órdenes preexistentes); éste cubre el de
+> salida.
+>
+> Verificado en `tests/integration/repositories/deshacer-asignacion.trazabilidad-carga.test.ts`,
+> colocado deliberadamente **lejos** de los tests unitarios que afirman la *forma* del SQL: un
+> aserto de esa familia habría fijado el texto del `SET` en vez de su efecto.
+
 ## 7. Contratos expuestos
 
 **R38.** CUANDO una carga masiva por sesión termina, la respuesta DEBE incluir el
