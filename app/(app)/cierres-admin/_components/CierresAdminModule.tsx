@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { useToast } from "@/hooks/useToast";
@@ -16,10 +18,12 @@ import {
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
+  CierreDetalleGestion,
   CierreGrupos,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo } from "@/lib/types/cierre";
+import { montoValido } from "@/app/(app)/wallet/_components/wallet-labels";
 import {
   money,
   EstadoCierreBadge,
@@ -70,6 +74,17 @@ const DESTINO_LABEL: Record<CierreDestinoTipo, string> = {
   bodega_satelite: "Bodega satélite",
 };
 
+// --- Feature 158 (R19/R34): captura del monto de indemnización al aprobar. Textos
+// separados de la lógica (i18n-ready), como el resto del módulo. ---
+const INDEMNIZACION_TITULO = "Indemnizar los incidentes del cierre";
+const INDEMNIZACION_DETALLE =
+  "Este cierre trae paquetes dañados, perdidos o robados. Indicá cuánto se indemniza por cada uno: al aprobar, la suma sale de la caja principal como un solo egreso.";
+const INDEMNIZACION_CONFIRMAR = "Aprobar e indemnizar";
+const INDEMNIZACION_MONTO_LABEL = "Monto de la indemnización";
+const INDEMNIZACION_MONTO_AYUDA = "Mayor que 0, con hasta 2 decimales (por ejemplo 12500.00).";
+const INDEMNIZACION_FALTAN =
+  "Falta el monto de al menos un incidente, o alguno no es válido. No se puede aprobar así.";
+
 /** Destino legible de un cierre (tipo + zona). */
 function destino(c: CierreAdminResumen): string {
   return `${DESTINO_LABEL[c.destinoTipo]} · ${c.destinoZonaNombre}`;
@@ -113,6 +128,16 @@ export function CierresAdminModule({
   // Feature 111/R16 (VÁLVULA DE ESCAPE): cierre `vencido` pendiente de confirmar el
   // destrabe; null = modal cerrado. Acción de EXCEPCIÓN, separada de aprobar/rechazar.
   const [destrabar, setDestrabar] = useState<CierreAdminResumen | null>(null);
+  // Feature 158/R34: sub-modal de captura de los montos de indemnización; true = abierto.
+  // Sólo se abre si el cierre TIENE incidentes; sin ellos se aprueba directo (R36).
+  const [indemnizando, setIndemnizando] = useState(false);
+  // Monto por `gestionId`, tal cual lo teclea el admin: STRING de extremo a extremo
+  // (money-safe, R24). NUNCA se parsea a number acá; el borde y el repo lo tratan como
+  // texto/Decimal.
+  const [montos, setMontos] = useState<Record<string, string>>({});
+  // Errores por gestión que devuelve el SERVIDOR (`fieldErrors` con clave = gestionId,
+  // `CierresAdminService.validarCoberturaIndemnizaciones`). Se pintan por fila.
+  const [montoErrores, setMontoErrores] = useState<Record<string, string>>({});
 
   // R3: adminSatelite sin zona → aviso accionable, sin tablas de acción.
   if (sinZona) {
@@ -125,6 +150,16 @@ export function CierresAdminModule({
       </p>
     );
   }
+
+  // Feature 158/R19/R34: las gestiones `incidente` del cierre abierto. Salen del MISMO
+  // detalle que ya se pidió al servidor (`grupos.incidente`), no de una consulta aparte:
+  // el conjunto que la UI pide indemnizar es exactamente el que el service exige cubrir.
+  const incidentes: CierreDetalleGestion[] = detalle?.grupos.incidente ?? [];
+  // R34: no se puede confirmar mientras falte o sea inválido algún monto. Mismo criterio
+  // que el servidor (`montoValido` de la wallet: > 0, hasta 2 decimales, sin `parseFloat`).
+  const todosLosMontosValidos =
+    incidentes.length > 0 &&
+    incidentes.every((g) => montoValido(montos[g.gestionId] ?? ""));
 
   /** Abre el detalle de un cierre (pide las gestiones + evidencias firmadas). */
   async function abrirDetalle(cierreId: string) {
@@ -157,6 +192,11 @@ export function CierresAdminModule({
     setRechazando(false);
     setMotivo("");
     setMotivoError(null);
+    // Feature 158: cerrar el detalle descarta también la captura en curso; el siguiente
+    // cierre que se abra arranca con sus propias filas y sin montos heredados.
+    setIndemnizando(false);
+    setMontos({});
+    setMontoErrores({});
   }
 
   /** Traduce un resultado de dominio de error a feedback accionable + refresco. */
@@ -183,17 +223,62 @@ export function CierresAdminModule({
     router.refresh();
   }
 
-  /** R10: aprueba el cierre abierto. */
-  async function confirmarAprobacion() {
+  /**
+   * R10 + feature 158/R22/R36: aprueba el cierre abierto. `indemnizaciones` sólo viaja
+   * cuando el cierre TIENE incidentes; sin ellos se manda el MISMO payload de la 38
+   * (`{ cierreId }`), así el camino sin incidentes no cambia ni un byte (R36).
+   */
+  async function confirmarAprobacion(
+    indemnizaciones?: { gestionId: string; monto: string }[],
+  ) {
     if (!detalle) return;
-    const result = await aprobarCierre({ cierreId: detalle.cierre.cierreId });
+    const result = await aprobarCierre(
+      indemnizaciones === undefined
+        ? { cierreId: detalle.cierre.cierreId }
+        : { cierreId: detalle.cierre.cierreId, indemnizaciones },
+    );
     if (result.status === "ok") {
       toast.success("Cierre aprobado correctamente.");
       cerrarDetalle();
       router.refresh();
       return;
     }
+    // Feature 158/R19-R21: el servidor valida la cobertura EXACTA de los montos y devuelve
+    // un error POR GESTIÓN. Se pintan en su fila y el sub-modal SIGUE ABIERTO: cerrarlo
+    // obligaría a recapturar todo lo ya tecleado.
+    if (result.status === "validation_error") {
+      setMontoErrores(
+        Object.fromEntries(
+          Object.entries(result.fieldErrors).map(([campo, mensajes]) => [
+            campo,
+            mensajes[0] ?? INDEMNIZACION_FALTAN,
+          ]),
+        ),
+      );
+      return;
+    }
     manejarErrorDecision(result.status);
+  }
+
+  /**
+   * Feature 158/R34: pulsa "Aprobar" en el detalle. Con incidentes abre el sub-modal de
+   * captura; sin incidentes aprueba directo, exactamente como hasta ahora (R36).
+   */
+  function pedirAprobacion() {
+    if (incidentes.length === 0) {
+      void confirmarAprobacion();
+      return;
+    }
+    setMontoErrores({});
+    setIndemnizando(true);
+  }
+
+  /** Feature 158/R34: confirma la aprobación CON los montos capturados. */
+  async function confirmarAprobacionConMontos() {
+    if (!todosLosMontosValidos) return; // R34: el botón ya está deshabilitado; doble candado.
+    await confirmarAprobacion(
+      incidentes.map((g) => ({ gestionId: g.gestionId, monto: montos[g.gestionId].trim() })),
+    );
   }
 
   /** R11: rechaza el cierre abierto con motivo obligatorio. */
@@ -458,7 +543,7 @@ export function CierresAdminModule({
                 >
                   Rechazar
                 </Button>
-                <Button type="button" onClick={confirmarAprobacion}>
+                <Button type="button" onClick={pedirAprobacion}>
                   Aprobar
                 </Button>
               </section>
@@ -509,6 +594,84 @@ export function CierresAdminModule({
               {motivoError}
             </p>
           ) : null}
+        </div>
+      </Modal>
+
+      {/* ---------- Sub-modal de captura de indemnizaciones (feature 158/R19/R34) ----------
+          Espejo del sub-modal de rechazo: se abre DESDE el detalle, con un dato extra
+          obligatorio antes de confirmar. Una fila por incidente; el confirmar queda
+          deshabilitado mientras falte o sea inválido algún monto, con el mismo criterio
+          (`montoValido`) que revalida el servidor. Los montos son STRING de punta a punta. */}
+      <Modal
+        open={indemnizando}
+        onOpenChange={(next) => {
+          if (!next) {
+            setIndemnizando(false);
+            setMontoErrores({});
+          }
+        }}
+        title={INDEMNIZACION_TITULO}
+        description={INDEMNIZACION_DETALLE}
+        confirmLabel={INDEMNIZACION_CONFIRMAR}
+        confirmDisabled={!todosLosMontosValidos}
+        onConfirm={confirmarAprobacionConMontos}
+        closeOnConfirm={false}
+      >
+        <div className="flex flex-col gap-4">
+          {incidentes.map((g) => {
+            const inputId = `indemnizacion-${g.gestionId}`;
+            const error = montoErrores[g.gestionId];
+            return (
+              <div
+                key={g.gestionId}
+                className="flex flex-col gap-1.5 rounded-lg border border-border p-3"
+              >
+                <p className="text-sm font-medium">
+                  {g.numRemision} · {g.destinatario}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {`Nº Guía ${g.numGuia ?? "—"} · ${g.tiendaNombre}`}
+                  {g.motivo ? ` · ${g.motivo}` : ""}
+                </p>
+                <Label htmlFor={inputId}>{INDEMNIZACION_MONTO_LABEL}</Label>
+                <Input
+                  id={inputId}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0.00"
+                  value={montos[g.gestionId] ?? ""}
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? `${inputId}-error` : `${inputId}-ayuda`}
+                  onChange={(e) => {
+                    const valor = e.target.value;
+                    setMontos((prev) => ({ ...prev, [g.gestionId]: valor }));
+                    // Teclear limpia el error del servidor de ESA fila (no el de las otras).
+                    setMontoErrores((prev) => {
+                      if (!prev[g.gestionId]) return prev;
+                      const rest = { ...prev };
+                      delete rest[g.gestionId];
+                      return rest;
+                    });
+                  }}
+                />
+                {error ? (
+                  <p id={`${inputId}-error`} role="alert" className="text-sm text-destructive">
+                    {error}
+                  </p>
+                ) : (
+                  <p id={`${inputId}-ayuda`} className="text-xs text-muted-foreground">
+                    {INDEMNIZACION_MONTO_AYUDA}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+          {/* El motivo del bloqueo se dice con TEXTO, no sólo con un botón apagado. */}
+          {todosLosMontosValidos ? null : (
+            <p role="note" className="text-sm text-muted-foreground">
+              {INDEMNIZACION_FALTAN}
+            </p>
+          )}
         </div>
       </Modal>
 
