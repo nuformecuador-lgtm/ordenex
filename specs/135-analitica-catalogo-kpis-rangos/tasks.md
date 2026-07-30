@@ -42,7 +42,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
 
 ## T1 — Andamiaje (T0.1 ✅ cerrada)
 
-- [ ] **T1.1** Crear `lib/analytics/types.ts` con los dominios cerrados de `design.md §3.1`
+- [x] **T1.1** Crear `lib/analytics/types.ts` con los dominios cerrados de `design.md §3.1`
   (`MetricaDominio`, `MetricaClase`, `MetricaUnidad`, `DimensionAnalitica`, `RolAnalitica`,
   `AlcanceMetrica`, `RangoPreset` **de 4 valores incl. `personalizado`** (D4), `UnidadDeConteo`
   (D10), `EstadoProduccion` (D8), la constante `MENSAJERO_SIN_ASIGNAR` (D5) y
@@ -52,7 +52,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   **Hecho:** `pnpm run typecheck` en verde; el archivo no importa nada salvo `type`; `Metrica`
   tiene exactamente 12 claves.
 
-- [ ] **T1.2 [P]** Test de consistencia de roles: los 5 literales de `RolAnalitica` existen en
+- [x] **T1.2 [P]** Test de consistencia de roles: los 5 literales de `RolAnalitica` existen en
   `RolValue` del esquema y `apiKey` NO está.
   **Hecho:** `tests/unit/analytics/types.test.ts` en verde; falla si alguien renombra un rol en
   `db/schema.prisma`.
@@ -61,13 +61,13 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
 
 ## T2 — Guards de frontera (depende de T1.1; `[P]` entre sí)
 
-- [ ] **T2.1 [P]** `tests/unit/analytics/modulo-puro.guardia.test.ts` (R1/R2): censo sobre
+- [x] **T2.1 [P]** `tests/unit/analytics/modulo-puro.guardia.test.ts` (R1/R2): censo sobre
   `lib/analytics/**` de `'use server'`, `next/headers`, `@/lib/db`, `@/lib/repositories`,
   `@/lib/services`, `@prisma/client` en import de valor; + import de los 4 módulos con el
   entorno sin `DATABASE_URL` sin que lance; + censo de declaraciones de métricas fuera de
   `metrics.ts`. **Hecho:** el guard pasa y falla si se le añade a mano un import prohibido.
 
-- [ ] **T2.2 [P]** `tests/unit/analytics/frontera.guardia.test.ts` (R25): la rama no añade
+- [x] **T2.2 [P]** `tests/unit/analytics/frontera.guardia.test.ts` (R25): la rama no añade
   carpetas en `db/migrations/`, ni archivos en `app/**`, `components/**`, `lib/actions/**`,
   `lib/services/**`, `lib/repositories/**`. **Hecho:** el guard pasa contra el diff de la rama.
 
@@ -75,7 +75,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
 
 ## T3 — Catálogo de métricas (T0.1 ✅; depende de T1.1)
 
-- [ ] **T3.1** Escribir `lib/analytics/metrics.ts` con `METRICAS` (`as const`) = **las 23
+- [x] **T3.1** Escribir `lib/analytics/metrics.ts` con `METRICAS` (`as const`) = **las 23
   métricas de `design.md §3.3`** (15 operativas + 8 financieras, aprobadas íntegras por D1),
   `MetricaId`, `getMetrica`, `listarMetricas` (con filtro `estadoProduccion`), `sonSumables`,
   `ANALITICA_TAGS`, `tagDeDominio`. Cada entrada con `descripcion` de una frase que diga también
@@ -84,7 +84,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   126/127 y dejar la lista en `progress/impl_135.md` (D8).
   **Hecho:** typecheck en verde; `METRICAS.length === 23`; `getMetrica` es total y no lanza.
 
-- [ ] **T3.2** `tests/unit/analytics/metrics.test.ts` — invariantes estructurales:
+- [x] **T3.2** `tests/unit/analytics/metrics.test.ts` — invariantes estructurales:
   R3 (**12** claves exactas, con `@ts-expect-error` al omitir `unidadDeConteo`), R4 (ids
   únicos/snake_case/lookup), R5 (`snapshot` ⇔ `rollup`), R7 (los 5 roles, sin `apiKey`,
   maestro/admin `total` contrastado contra `esAccesoTotal`), R10 (`granos ⊆ DIMENSIONES` e
@@ -94,7 +94,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   **R36** (`unidadDeConteo` + `sonSumables`).
   **Hecho:** los 10 grupos de aserciones en verde y cada uno etiquetado con su `R<n>`.
 
-- [ ] **T3.3** `tests/unit/analytics/metrics-dinero.guardia.test.ts` (R6 + **R32**): toda métrica
+- [x] **T3.3** `tests/unit/analytics/metrics-dinero.guardia.test.ts` (R6 + **R32**): toda métrica
   financiera cita solo ledgers/cierres, con intersección vacía con `orden`/`gestion_orden`/
   `orden_historial_estado`/`analytics_daily`; **y** su alcance es `total` para `maestro` y
   `admin` (los dos de `esAccesoTotal`) y `prohibido` para `adminSatelite`, `adminTienda` y
@@ -102,13 +102,13 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   para esos tres roles. **Hecho:** el guard falla si se declara a mano una métrica financiera
   leyendo `orden` **o** si alguien le abre el dinero a un cuarto rol.
 
-- [ ] **T3.4** `tests/unit/analytics/definiciones-catalogo.guardia.test.ts` (R8/R9 + **R34**):
+- [x] **T3.4** `tests/unit/analytics/definiciones-catalogo.guardia.test.ts` (R8/R9 + **R34**):
   todo estado citado ∈ `ORDER_STATUS_SEED` (con caso explícito para `en_fulfillment`), toda
   categoría ∈ el enum correspondiente del esquema, y toda métrica con grano `zona` declara
   `atribucionZona: "orden"` (censo de `usuario.zona_id` en `lib/analytics/**` = 0).
   **Hecho:** en verde; documenta en un comentario que el catálogo vigente tiene **19** values.
 
-- [ ] **T3.5** Test de **R11**: `getMetrica("primer_intento_ok")` remite a
+- [x] **T3.5** Test de **R11**: `getMetrica("primer_intento_ok")` remite a
   `criterio: "intentos_vigentes_historial"` y no declara umbral propio.
   **Hecho:** test en verde. *(Ya no es condicional: D1 metió la métrica en v1; sin `it.skip`.)*
 
@@ -116,7 +116,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
 
 ## T4 — Rangos (T0.1 ✅ con D2/D3/D4/D6; depende de T1.1; `[P]` respecto de T3)
 
-- [ ] **T4.1** Escribir `lib/analytics/ranges.ts`: `resolverRango(entrada, now?)` para los
+- [x] **T4.1** Escribir `lib/analytics/ranges.ts`: `resolverRango(entrada, now?)` para los
   **cuatro** casos de `design.md §4.3` — `dia`, `semana` (**empieza lunes**, D2), `mes`
   (**ventana móvil de 30 días**, D3) y `personalizado` (D4) — construido **solo** sobre
   `fechaCalendarioCR` / `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc` (D6). Comentario
@@ -126,7 +126,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   **Hecho:** typecheck en verde; el archivo no contiene ninguna constante de offset propia y sí
   contiene los tres comentarios.
 
-- [ ] **T4.2** `tests/unit/analytics/ranges.test.ts`: R13 (forma + semiapertura, preset y
+- [x] **T4.2** `tests/unit/analytics/ranges.test.ts`: R13 (forma + semiapertura, preset y
   arbitrario), R15 (caso canónico y borde `T05:59:59.999Z`), R16 (invariantes (b)–(e) para las
   cuatro entradas + (a) solo para presets, con cruces de mes y de año), R17 (`now` inyectable,
   sin fake timers), R18 (`TZ` = `UTC` / `Asia/Tokyo` dan lo mismo), **R27** (lunes: caso
@@ -134,7 +134,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   `30*24 h` + `now` el día 1 del mes), **R31** (todo borde en `T06:00:00.000Z`, nunca en
   `T00:00:00.000Z`). **Hecho:** todos en verde con `now` explícito en cada caso.
 
-- [ ] **T4.3** `tests/unit/analytics/ranges-reuso.guardia.test.ts` (R14): `ranges.ts` importa de
+- [x] **T4.3** `tests/unit/analytics/ranges-reuso.guardia.test.ts` (R14): `ranges.ts` importa de
   `@/lib/utils/fecha-cr`; censo de `6 * 60 * 60 * 1000`, `toISOString().slice` y `startOfDayCR`
   en `lib/analytics/**` = 0. **Hecho:** el guard pasa y su comentario cita la trampa de
   `startOfDayCR` (`RankingService.ts:60-61`) para que nadie la "arregle" copiándola.
@@ -143,7 +143,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
 
 ## T5 — Filtros zod (T0.1 ✅ con D4; depende de T1.1; `[P]` respecto de T3/T4)
 
-- [ ] **T5.1** Escribir `lib/analytics/filters.ts`: `analiticaFiltroSchema` `.strict()` con
+- [x] **T5.1** Escribir `lib/analytics/filters.ts`: `analiticaFiltroSchema` `.strict()` con
   `rango` obligatorio sobre los **cuatro** valores, `idList` para
   `zona_id`/`tienda_id`/`mensajero_id`, y la rama de rango arbitrario aprobada en D4 —`desde`/
   `hasta` como `YYYY-MM-DD` de ancho fijo más los cuatro `.refine` de `design.md §5`
@@ -152,7 +152,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   `fieldErrors`. **Hecho:** typecheck en verde; el schema no expone rol ni sesión; el tope vive
   en una constante única, no en un literal.
 
-- [ ] **T5.2** `tests/unit/analytics/filters.test.ts`: R19 (clave desconocida), R20 (rango
+- [x] **T5.2** `tests/unit/analytics/filters.test.ts`: R19 (clave desconocida), R20 (rango
   ausente / `"trimestre"` / los 4 válidos), R21 (escalar, `[]`, `[""]`, lista válida, ausencia),
   R22 (instante ISO, epoch, offset y `"2026-7-5"` rechazados), R23 (`fieldErrors` con la clave
   culpable, sin `throw`), R24 (`rol` y `usuario_id` rechazados), **R29** (`personalizado` sin
@@ -168,7 +168,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
 - [ ] **T6.1** Ejecutar `pnpm run typecheck`, `pnpm run lint`, `pnpm test` y `./init.sh`.
   **Hecho:** los cuatro en verde, con la salida real pegada en `progress/impl_135.md`.
 
-- [ ] **T6.2** Escribir en `progress/impl_135.md` el mapa completo **`R1..R36 → test`** (archivo
+- [x] **T6.2** Escribir en `progress/impl_135.md` el mapa completo **`R1..R36 → test`** (archivo
   + nombre del test). **Hecho:** los **36** requisitos aparecen, ninguno con "pendiente"; el
   reviewer puede verificar cada fila sin abrir el código.
 
@@ -179,7 +179,7 @@ Ningún archivo fuera de `lib/analytics/**` y `tests/unit/analytics/**` (R25).
   deshacer). *(La `status_note` es bookkeeping: la fuente de verdad de las decisiones es el
   spec, no la bitácora.)*
 
-- [ ] **T6.4** Documentar en `progress/impl_135.md` los hallazgos colaterales y las consecuencias
+- [x] **T6.4** Documentar en `progress/impl_135.md` los hallazgos colaterales y las consecuencias
   aceptadas para que no se pierdan: (a) la divergencia de "día" entre `RankingService` y los
   filtros de la 144, **aceptada en D6**, con el ticket de T0.3; (b) la fila huérfana
   `en_fulfillment` que puede aparecer en un `GROUP BY estatus_id` real, que la 123/126 deben

@@ -82,7 +82,9 @@ la consumen pueda definir un KPI, una ventana temporal o un filtro por su cuenta
    `total_pago_mensajero` / `total_ingreso_bodega_rechazos`. Métodos de pago:
    `enum MetodoPagoValue = efectivo | SINPE | transferencia` (:554, ojo `SINPE` en mayúsculas).
 9. **Motivos y resultados de gestión**: `enum GestionResultado = entregada | reprogramada |
-   devuelta | rechazada | incidente` (:563), `GestionCausaDevolucion` (5 valores en inglés,
+   devuelta | rechazada | incidente` (:563), `GestionCausaDevolucion` (**3** valores en inglés — corregido el 2026-07-30 contra
+   `db/schema.prisma:634` y contra `origin/dev`: son `not_found`, `wrong_number`,
+   `wrong_address`; este hecho decía «5» y era falso,
    :597), `GestionCausaIncidente = danado | perdido | robado` (:583). Una gestión **anulada**
    (`gestion_orden.anulada_at IS NOT NULL`, :643) NO cuenta.
 10. **Intento de entrega (feature 160)**: es **derivado, sin columna materializada**. El
@@ -264,7 +266,7 @@ la consumen pueda definir un KPI, una ventana temporal o un filtro por su cuenta
   semana calendario de Costa Rica que contiene a `now` (`desde =
   inicioDelDiaCREnUtc(lunes)`) y termine en el **inicio del día CR siguiente al de `now`**
   (período **en curso hasta ahora**, no la semana completa de 7 días): para
-  `now = 2026-07-15T02:00:00Z` (miércoles 14 en CR ⇒ semana del lunes 13), el sistema DEBE
+  `now = 2026-07-15T02:00:00Z` (**martes** 14 en CR ⇒ semana del lunes 13; decía «miércoles», corregido el 2026-07-30 — los valores exigidos no cambian), el sistema DEBE
   devolver `desdeFecha = "2026-07-13"`, `hastaFecha = "2026-07-14"`,
   `desde = 2026-07-13T06:00:00.000Z`, `hasta = 2026-07-15T06:00:00.000Z`.
 

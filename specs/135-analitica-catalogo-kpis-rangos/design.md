@@ -168,7 +168,7 @@ filas lo hace la 122 y el gating de la ruta la 129.
 | `tasa_devolucion` | porcentaje | **gestion** | snapshot | ídem | mismo denominador de gestiones |
 | `tasa_rechazo` | porcentaje | **gestion** | snapshot | ídem | mismo denominador de gestiones |
 | `primer_intento_ok` | porcentaje | **gestion** | snapshot | fecha, zona, mensajero | entregas con 0 intentos previos (`criterio: "intentos_vigentes_historial"`, feature 160) |
-| `motivos_devolucion` | conteo | **gestion** | snapshot | fecha, zona, tienda, causa_devolucion | `gestion_orden.causa_devolucion` (5 valores, feature 73), gestiones vigentes |
+| `motivos_devolucion` | conteo | **gestion** | snapshot | fecha, zona, tienda, causa_devolucion | `gestion_orden.causa_devolucion` (**3** valores: `not_found`, `wrong_number`, `wrong_address` — corregido el 2026-07-30, decía 5), gestiones vigentes |
 | `tiempo_ciclo` | segundos | **tiempo** | snapshot | fecha, zona, tienda | creación → estado terminal (`ESTADOS_TERMINALES`) |
 | `aging_por_estado` | segundos | **tiempo** | live | fecha, zona, tienda, estatus | antigüedad en el estado actual (intradía, `orden` + `orden_historial_estado`) |
 
