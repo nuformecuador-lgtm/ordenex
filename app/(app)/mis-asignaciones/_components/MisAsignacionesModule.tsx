@@ -18,7 +18,6 @@ import type {
 } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { normalizeName } from "@/lib/utils/normalize";
 
-import { AsignacionDetalle } from "./AsignacionDetalle";
 import {
   coincideBusqueda,
   filtrarAsignaciones,
@@ -28,9 +27,15 @@ import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
 import { RecogerPaqueteCard } from "./RecogerPaqueteCard";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
-import { PosOrderCard } from "./pos-card/PosOrderCard";
+import { ChatFlotante } from "./chat-demo/ChatFlotante";
+import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
+import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
 import { RutaMapa } from "./RutaMapa";
 import { SincronizarRutaButton } from "./SincronizarRutaButton";
+import { CarruselCards } from "@/components/shared/CarruselCards";
+
+import { VistaCardsToggle, type VistaCards } from "./VistaCardsToggle";
+import { CLASE_FASE, useTransicionVista } from "./useTransicionVista";
 import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano): módulo del mensajero.
@@ -106,6 +111,23 @@ export function MisAsignacionesModule({
     null,
   );
   const [mostrarMapa, setMostrarMapa] = useState(true);
+
+  // Rediseño ux: apertura del CHAT (el modal del botón flotante). Vive aquí porque tiene
+  // DOS disparadores: el propio botón flotante y la acción "Mensaje" del panel de detalle.
+  const [chatAbierto, setChatAbierto] = useState(false);
+
+  // Rama ux (pedido humano): presentación de las cards de "En reparto / por gestionar".
+  // Estado de UI EFÍMERO de un solo consumidor (no sube a URL ni a contexto) y puramente
+  // visual: NO filtra ni reordena nada, solo cambia el componente que pinta cada orden.
+  // Arranca en "mosaico" (más órdenes visibles de un vistazo en la calle). El cambio va
+  // ANIMADO en dos tramos encadenados (bajan las viejas, suben las nuevas): de eso se
+  // encarga `useTransicionVista`, que sostiene la vista vieja hasta terminar la salida.
+  const {
+    vista: vistaCards,
+    vistaPedida: vistaCardsPedida,
+    fase: faseVista,
+    cambiarVista,
+  } = useTransicionVista<VistaCards>("mosaico");
 
   // Feature 114: texto del buscador de guías. Estado de UI EFÍMERO, de un solo consumidor
   // (no sube a URL ni a contexto). Se muestra solo en la VISTA COMPLETA; en modo foco no
@@ -289,6 +311,51 @@ export function MisAsignacionesModule({
     router.refresh();
   }
 
+  /**
+   * Una card de "En reparto". Extraída para que el CARRUSEL (vista mosaico) y la LISTA
+   * (vista detalle) rendericen exactamente la misma card con las mismas señales: el
+   * conmutador solo cambia el envoltorio y el componente de presentación.
+   *
+   * Feature 111/R14 + 113/R3: con el mensajero BLOQUEADO todas las cards quedan
+   * deshabilitadas (no puede escoger para gestión); el porqué lo explica el aviso de bloqueo
+   * total de arriba. La deshabilitación restringe la ACCIÓN, no la visibilidad: el detalle
+   * completo sigue montado (R3). Fuera de foco `ordenEnGestionId` es null (una gestión activa
+   * sin bloqueo colapsa a foco, R5), así que no existe aquí el estado "card visible con
+   * detalle oculto" que introducía el spec 36 (eliminado).
+   *
+   * Rediseño POS (rama ux): las dos vistas comparten interfaz de props con la card completa
+   * (`PosOrderCardMosaico`, que "Por recoger" también usa). Conserva las señales
+   * del módulo (parada/ruta, "gestionar más tarde", nota privada, intentos) y el gate de
+   * selección: pulsar la card fija esta orden en el panel de gestión de arriba (R19/R20),
+   * donde vive el detalle completo. Pedido humano: el toggle "gestionar más tarde" va DENTRO
+   * de la card (slot `acciones`, al pie), no como hermano suelto debajo. La card es un
+   * `<article>`, no un botón, así que alojar controles es HTML válido y el gate de selección
+   * los ignora (no seleccionan de rebote).
+   */
+  function renderCardEnReparto(orden: MiAsignacionDTO, vista: VistaCards) {
+    const CardVista =
+      vista === "mosaico" ? PosOrderCardMosaico : PosOrderCardDetalle;
+    return (
+      <CardVista
+        orden={orden}
+        total={porGestionar.length}
+        esActiva={ordenEnGestionId === orden.id}
+        esDetalle={detalleOrden?.id === orden.id}
+        bloqueado={bloqueado}
+        onGestionar={() => seleccionar(orden)}
+        acciones={
+          // Feature 115/R5/R6: puramente informativo (no cambia estado ni ruta), así que
+          // sigue disponible aunque la card esté deshabilitada por el cierre pendiente.
+          <MarcarLuegoToggle
+            ordenId={orden.id}
+            marcada={orden.marcarLuego ?? false}
+            numRemision={orden.numRemision}
+          />
+        }
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8">
       {/* ---------- Aviso de BLOQUEO TOTAL del mensajero (feature 111/R12) ---------- */}
@@ -320,37 +387,18 @@ export function MisAsignacionesModule({
           onCancelarGestion={cancelarGestion}
           onSuccess={handleGestionSuccess}
           count={1}
+          onAbrirChat={() => setChatAbierto(true)}
         />
       ) : (
         /* ---------- VISTA COMPLETA (fuera de foco) ---------- */
         <>
-          {/* ---------- Feature 114: buscador de guías (solo en vista de lista) ----------
-              Filtra AMBOS grupos por número de guía, remisión, teléfono o nombre del
-              destinatario (parcial,
-              insensible a mayúsculas/acentos). En modo foco no se renderiza: no hay cards
-              que filtrar. Es un filtro puro de cliente, así que permanece visible aunque el
-              mensajero esté bloqueado (la lista sigue como solo-visualización). */}
-          <section aria-label={BUSCADOR_REGION} className="flex flex-col gap-1">
-            <label htmlFor={buscarId} className="text-sm font-medium">
-              {BUSCADOR_LABEL}
-            </label>
-            <Input
-              id={buscarId}
-              type="search"
-              autoComplete="off"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={BUSCADOR_PLACEHOLDER}
-            />
-          </section>
-
           {/* ---------- Feature 117: filtro por cantón y distrito (solo vista de lista) ----------
               Se compone en AND con el buscador sobre AMBOS grupos. Las opciones se derivan del
               conjunto completo cargado (R13); elegir cantón resetea el distrito (R5) y el
               distrito va deshabilitado sin cantón (R3). En modo foco no se renderiza (no hay
               cards que filtrar). Puro filtro de cliente, así que permanece aunque el mensajero
               esté bloqueado (la lista sigue como solo-visualización). */}
-          <FiltroCantonDistrito
+          {/* <FiltroCantonDistrito
             canton={filtro.canton}
             distrito={filtro.distrito}
             cantones={filtro.cantones}
@@ -359,7 +407,7 @@ export function MisAsignacionesModule({
             onCantonChange={filtro.setCantonYReset}
             onDistritoChange={filtro.setDistrito}
             onLimpiar={filtro.limpiar}
-          />
+          /> */}
 
           {/* ---------- Apartado: Por recoger (por_recoger) ---------- */}
           {/* Feature 96: la recogida queda SOLO por dos vías, ambas resuelven el num_guia
@@ -368,8 +416,12 @@ export function MisAsignacionesModule({
                 (1) input de número de guía tecleado + Enter/botón;
                 (2) escáner de cámara (QR de la etiqueta -> num_guia).
               Feature 111/R14: BLOQUEADO oculta ambos controles de recogida (defensa suave;
-              la lista de "Por recoger" sigue visible, solo-visualización). */}
-          {bloqueado ? null : (
+              la lista de "Por recoger" sigue visible, solo-visualización).
+              Pedido humano: sin NADA por recoger la card tampoco se muestra — no hay guía
+              que resolver, así que el input y el escáner solo estorbarían. Se mira
+              `porRecoger` COMPLETO, no el filtrado: el buscador/filtro de la lista no debe
+              quitarle al mensajero la forma de recoger lo que sigue pendiente. */}
+          {bloqueado || porRecoger.length === 0 ? null : (
             <RecogerPaqueteCard
               porRecoger={porRecoger}
               onRecogida={() => router.refresh()}
@@ -379,7 +431,12 @@ export function MisAsignacionesModule({
           {/* Lista de SOLO-VISUALIZACIÓN (feature 96): reutiliza la sección compartida "por
               aceptar" con `mostrarAcciones={false}` (ya no hay botones "Recoger todas" /
               "Recoger"). El mensajero sigue viendo qué guías tiene por recoger; la acción
-              vive en el input y el escáner de arriba. */}
+              vive en el input y el escáner de arriba.
+              Rediseño POS (rama ux): las cards son las MISMAS que "En reparto"
+              (`PosOrderCardMosaico`, misma grilla y mismo lenguaje visual), pero sin selección
+              (`onGestionar` ausente): aquí no hay nada que gestionar. También se omiten
+              las señales de ruta (`mostrarRuta={false}`): estas órdenes todavía no están
+              en la ruta. */}
           <PorAceptarSection
             titulo="Por recoger"
             nuevasLabel={(n) => `${n} Órdenes nuevas asignadas`}
@@ -392,10 +449,18 @@ export function MisAsignacionesModule({
                   ? SIN_COINCIDENCIAS_RECOGER
                   : "No hay órdenes por recoger."
             }
-            renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
+            listClassName="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            renderItem={(orden) => (
+              <PosOrderCardMosaico
+                orden={orden}
+                total={porRecogerFiltrado.length}
+                estado="Por recoger"
+                mostrarRuta={false}
+              />
+            )}
           />
 
-          {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
+          {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}          
           {/* Feature 113/R1: cada card en grilla (1/2/3 col) muestra el detalle COMPLETO
               inline (`AsignacionDetalle`). Seleccionar una la lleva también al panel de
               gestión grande de abajo (donde vive el gate "Gestionar pedido"). El bloqueo
@@ -466,64 +531,13 @@ export function MisAsignacionesModule({
                 Mostrar mapa de ruta
               </Button>
             ) : null}
-
-            {porGestionarFiltrado.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {buscando
-                  ? SIN_RESULTADOS_REPARTO
-                  : filtro.hayFiltro
-                    ? SIN_COINCIDENCIAS_REPARTO
-                    : "No hay órdenes en reparto."}
-              </p>
-            ) : (
-              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {porGestionarVisual.map((orden) => {
-                  // Feature 111/R14 + 113/R3: con el mensajero BLOQUEADO todas las cards
-                  // quedan deshabilitadas (no puede escoger para gestión); el porqué lo
-                  // explica el aviso de bloqueo total de arriba. La deshabilitación
-                  // restringe la ACCIÓN, no la visibilidad: el detalle completo sigue
-                  // montado (R3). Fuera de foco `ordenEnGestionId` es null (una gestión
-                  // activa sin bloqueo colapsa a foco, R5), así que no existe aquí el estado
-                  // "card visible con detalle oculto" que introducía el spec 36 (eliminado).
-                  const esActiva = ordenEnGestionId === orden.id;
-                  const esDetalle = detalleOrden?.id === orden.id;
-                  return (
-                    // Feature 115/T8: la card POS (`PosOrderCard`, un `<article>` con su
-                    // propio botón "Gestionar orden") y el toggle "gestionar más tarde"
-                    // (otro `<button>`) son HERMANOS dentro del `<li>` — nunca anidados —
-                    // para no producir botones dentro de botones (HTML inválido).
-                    <li key={orden.id} className="flex flex-col gap-2">
-                      {/* Rediseño POS (rama ux): card estilo terminal de reparto. Conserva
-                          las señales del módulo (parada/ruta, "gestionar más tarde", nota
-                          privada, detalle completo) y el gate de selección: "Gestionar
-                          orden" fija esta orden en el panel grande de abajo (R19/R20). */}
-                      <PosOrderCard
-                        orden={orden}
-                        total={porGestionar.length}
-                        esActiva={esActiva}
-                        esDetalle={esDetalle}
-                        bloqueado={bloqueado}
-                        onGestionar={() => seleccionar(orden)}
-                      />
-                      {/* Feature 115/R5/R6: toggle de "gestionar más tarde", HERMANO de la
-                          card. Puramente informativo (no cambia estado ni ruta), así que sigue
-                          disponible aunque la card esté deshabilitada por el cierre pendiente. */}
-                      <MarcarLuegoToggle
-                        ordenId={orden.id}
-                        marcada={orden.marcarLuego ?? false}
-                        numRemision={orden.numRemision}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
             {/* Panel de detalle grande e inline (gate "Gestionar pedido"): muestra la
                 orden seleccionada o la primera. Fuera de foco el puntero está en `null`,
                 así que arranca en el paso de detalle (`yaActiva=false`); al fijarse el
                 puntero la vista pasa a MODO FOCO (arriba). Feature 111/R14: BLOQUEADO no
-                renderiza el panel (debe resolver su cierre antes de operar con las guías). */}
+                renderiza el panel (debe resolver su cierre antes de operar con las guías).
+                Pedido humano (rama ux): el detalle va PRIMERO y la lista de cards debajo,
+                así el mensajero ve la orden con la que está trabajando sin desplazarse. */}
             {detalleOrden && !bloqueado ? (
               <GestionarOrdenPanel
                 key={detalleOrden.id}
@@ -533,11 +547,100 @@ export function MisAsignacionesModule({
                 onCancelarGestion={cancelarGestion}
                 onSuccess={handleGestionSuccess}
                 count={porGestionar.length}
+                onAbrirChat={() => setChatAbierto(true)}
               />
             ) : null}
+
+            {/* ---------- Feature 114: buscador de guías (solo en vista de lista) ----------
+              Filtra AMBOS grupos por número de guía, remisión, teléfono o nombre del
+              destinatario (parcial,
+              insensible a mayúsculas/acentos). En modo foco no se renderiza: no hay cards
+              que filtrar. Es un filtro puro de cliente, así que permanece visible aunque el
+              mensajero esté bloqueado (la lista sigue como solo-visualización). */}
+            {/* Buscador y conmutador de vista comparten fila: son los dos controles de la
+                lista. En pantallas angostas se apilan (`flex-col`) para que el input no se
+                estruje; desde `sm` van en la MISMA línea, el input ocupando el espacio libre
+                y el conmutador alineado a su base. */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+              <section
+                aria-label={BUSCADOR_REGION}
+                className="flex min-w-0 flex-1 flex-col gap-1"
+              >
+                <label htmlFor={buscarId} className="text-sm font-medium">
+                  {BUSCADOR_LABEL}
+                </label>
+                <Input
+                  id={buscarId}
+                  type="search"
+                  autoComplete="off"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={BUSCADOR_PLACEHOLDER}
+                />
+              </section>
+              {/* Rama ux: conmutador mosaico/detalle de las cards de abajo. Puramente
+                  visual (no filtra ni reordena), pegado al buscador que sí filtra. */}
+              <VistaCardsToggle
+                vista={vistaCardsPedida}
+                onVistaChange={cambiarVista}
+              />
+            </div>
+            {porGestionarFiltrado.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {buscando
+                  ? SIN_RESULTADOS_REPARTO
+                  : filtro.hayFiltro
+                    ? SIN_COINCIDENCIAS_REPARTO
+                    : "No hay órdenes en reparto."}
+              </p>
+            ) : vistaCards === "mosaico" ? (
+              /* Pedido humano: en MOSAICO las cards van en carrusel (`CarruselCards`,
+                 componente shared sobre la primitiva shadcn), no en grilla. Se ven de 3 en 3
+                 según el ancho —1 en móvil, 2 desde `sm`, 3 desde `lg`, los mismos cortes que
+                 tenía la grilla— y debajo queda la etiqueta de posición ("Órdenes 1-3 de 5").
+                 La vista "detalle" NO se toca: sigue siendo la lista de una fila por orden. */
+              <div className={CLASE_FASE[faseVista]}>
+                <CarruselCards
+                  items={porGestionarVisual}
+                  getKey={(orden) => orden.id}
+                  ariaLabel="Órdenes en reparto"
+                  singular="Orden"
+                  plural="Órdenes"
+                  renderItem={(orden) => renderCardEnReparto(orden, "mosaico")}
+                />
+              </div>
+            ) : (
+              /* La clase de fase anima la lista ENTERA como bloque (bajar+desvanecer /
+                 subir+aparecer). Sin transición (`estable`) no añade nada, así que la
+                 lista no queda con estilos de animación colgando. */
+              <ul className={`flex flex-col gap-3 ${CLASE_FASE[faseVista]}`}>
+                {porGestionarVisual.map((orden) => (
+                  <li key={orden.id}>
+                    {renderCardEnReparto(orden, "detalle")}
+                  </li>
+                ))}
+              </ul>
+            )}
+
           </section>
         </>
       )}
+
+      {/* Rediseño del chat (rama ux) — MAQUETA: botón flotante fijo abajo a la derecha que
+          abre el chat con los clientes como modal. Se muestra en las dos vistas (foco y
+          lista) porque el mensajero puede necesitar escribir en cualquier momento.
+          Contactos = SOLO las órdenes EN REPARTO (`porGestionar`, sin filtrar: el chat es
+          una capa aparte del buscador/filtro de la lista); las de "Por recoger" no tienen
+          gestión que conversar. La marcada "en gestión" es la que el módulo tiene en
+          DETALLE, y es por donde entra al abrirse. El hilo y las plantillas son los MISMOS
+          que consume `ChatWhatsappPanel` dentro del panel del detalle (feature 120/87):
+          los dos conviven y muestran la misma conversación. */}
+      <ChatFlotante
+        ordenes={porGestionar}
+        ordenEnDetalleId={detalleOrden?.id ?? null}
+        abierto={chatAbierto}
+        onAbiertoChange={setChatAbierto}
+      />
     </div>
   );
 }

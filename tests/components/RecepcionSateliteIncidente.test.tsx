@@ -128,22 +128,28 @@ function disparador(numRemision = "REM-001") {
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
+// Rediseño ux (merge de dev en `ux`, 2026-07-30): la bodega satélite dejó de tener una tabla
+// por sección y pasó a UN SOLO listado filtrable, `SateliteOrdenesListado` (aria-label
+// «Órdenes de la bodega»). Los casos de abajo se reescribieron contra esa tabla única; lo que
+// se AFIRMA no cambió: qué filas ofrecen la acción y cuáles no.
+const TABLA_BODEGA = "Órdenes de la bodega";
+
 describe("Feature 158 (T2.7 · satélite) — el adminSatelite SÍ tiene desde dónde reportar", () => {
-  it("«Recibidas» (`en_bodega_satelite`) ofrece la acción por fila", () => {
+  it("una orden `en_bodega_satelite` ofrece la acción por fila", () => {
     renderModule({ recibidas: [makeOrden({ id: ORDEN_ID })] });
-    const tabla = screen.getByRole("table", { name: "Recibidas" });
+    const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
     expect(within(tabla).getByRole("button", {
       name: `${REPORTAR_INCIDENTE_ACCION_LABEL} de la orden REM-001`,
     })).toBeInTheDocument();
   });
 
-  it("«Asignadas (por recoger)» (`por_recoger`) también la ofrece", () => {
+  it("una orden `por_recoger` también la ofrece", () => {
     renderModule({
       asignadas: [
         makeOrden({ id: ORDEN_ID, estatusValue: "por_recoger", numRemision: "REM-A1" }),
       ],
     });
-    const tabla = screen.getByRole("table", { name: "Asignadas (por recoger)" });
+    const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
     expect(within(tabla).getByRole("button", {
       name: `${REPORTAR_INCIDENTE_ACCION_LABEL} de la orden REM-A1`,
     })).toBeInTheDocument();
@@ -173,19 +179,19 @@ describe("Feature 158 (T2.7 · satélite) — el adminSatelite SÍ tiene desde d
 });
 
 describe("Feature 158 (T2.7 · satélite) — R41: sólo en los estados que son orígenes válidos", () => {
-  it("«Por devolver» (`por_devolver`) NO ofrece la acción", () => {
+  it("una orden `por_devolver` NO ofrece la acción", () => {
     renderModule({
       porDevolver: [
         makeOrden({ id: ORDEN_ID, estatusValue: "por_devolver", numRemision: "REM-D1" }),
       ],
     });
-    const tabla = screen.getByRole("table", { name: "Por devolver" });
+    const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
     expect(
       within(tabla).queryByRole("button", { name: /Reportar incidente/ }),
     ).toBeNull();
   });
 
-  it("«En tránsito a central» (`devolviendo_a_bodega_central`) NO ofrece la acción", () => {
+  it("una orden `devolviendo_a_bodega_central` NO ofrece la acción", () => {
     renderModule({
       enTransitoACentral: [
         makeOrden({
@@ -195,39 +201,55 @@ describe("Feature 158 (T2.7 · satélite) — R41: sólo en los estados que son 
         }),
       ],
     });
-    const tabla = screen.getByRole("table", { name: "En tránsito a central" });
+    const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
     expect(
       within(tabla).queryByRole("button", { name: /Reportar incidente/ }),
     ).toBeNull();
   });
 
-  // ⚠️ Los dos casos de arriba miran el BOTÓN, y el botón falta igual aunque la columna se
-  // cuele: el disparador se auto-oculta por estado. Se midió (mutación Z4: 0 rojos) y por eso
-  // estos dos miran la CABECERA: una columna de acción muerta en una sección donde la acción
-  // no puede aplicar nunca es ruido permanente en una tabla que ya tiene 14 columnas.
-  it("«Por devolver» no monta siquiera la COLUMNA de incidente", () => {
+  // ⚠️ CAMBIO DECLARADO por el rediseño ux. Antes había una tabla por sección y estos dos
+  // casos miraban la CABECERA: no montar la columna en «Por devolver» evitaba una columna
+  // muerta. Con UNA tabla que mezcla los cinco estados eso ya no es posible —la columna es del
+  // listado, no de la sección—, así que la garantía se traslada íntegra a la FILA: en una tabla
+  // mixta, la fila `por_devolver` no pinta disparador y la `en_bodega_satelite` de al lado sí.
+  // Es la afirmación más fuerte que la nueva estructura admite, y no depende de que las dos
+  // filas estén en tablas distintas.
+  it("en la MISMA tabla, sólo la fila cuyo estado es origen pinta el disparador", () => {
     renderModule({
-      porDevolver: [makeOrden({ id: ORDEN_ID, estatusValue: "por_devolver" })],
+      recibidas: [makeOrden({ id: ORDEN_ID, numRemision: "REM-OK" })],
+      porDevolver: [
+        makeOrden({
+          id: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+          estatusValue: "por_devolver",
+          numRemision: "REM-D1",
+        }),
+      ],
     });
-    const tabla = screen.getByRole("table", { name: "Por devolver" });
-    const headers = within(tabla)
-      .getAllByRole("columnheader")
-      .map((h) => h.textContent);
-    expect(headers).not.toContain("Incidente");
+    const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
+    expect(
+      within(tabla).getByRole("button", {
+        name: `${REPORTAR_INCIDENTE_ACCION_LABEL} de la orden REM-OK`,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(tabla).queryByRole("button", {
+        name: `${REPORTAR_INCIDENTE_ACCION_LABEL} de la orden REM-D1`,
+      }),
+    ).toBeNull();
   });
 
-  it("caso de CONTROL: «Recibidas» SÍ monta la columna", () => {
+  it("caso de CONTROL: el listado SÍ monta la columna de incidente", () => {
     renderModule({ recibidas: [makeOrden({ id: ORDEN_ID })] });
-    const tabla = screen.getByRole("table", { name: "Recibidas" });
+    const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
     const headers = within(tabla)
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
     expect(headers).toContain("Incidente");
   });
 
-  it("una orden en un estado NO reportable dentro de «Recibidas» tampoco la ofrece", () => {
-    // La sección se llama «Recibidas» pero la decisión la toma el ESTADO de cada fila, no la
-    // sección: si el servidor mandara ahí una orden en otro estado, no se ofrece.
+  it("una orden en un estado NO reportable tampoco la ofrece", () => {
+    // La decisión la toma el ESTADO de cada fila: si el servidor mandara al grupo de las
+    // recibidas una orden en otro estado, no se ofrece.
     renderModule({
       recibidas: [makeOrden({ id: ORDEN_ID, estatusValue: "entregada" })],
     });

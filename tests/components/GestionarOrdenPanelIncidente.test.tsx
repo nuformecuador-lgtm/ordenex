@@ -96,6 +96,9 @@ function montar(yaActiva: boolean, onGestionarPedido = vi.fn().mockResolvedValue
       onGestionarPedido={onGestionarPedido}
       onCancelarGestion={vi.fn()}
       onSuccess={vi.fn()}
+      // Rediseño ux: el chat salió del panel al widget flotante, así que el panel pide
+      // quién lo abre. Este test no ejerce esa vía; basta con satisfacer el contrato.
+      onAbrirChat={vi.fn()}
       count={1}
     />,
   );

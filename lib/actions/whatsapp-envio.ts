@@ -59,6 +59,29 @@ export async function listarPlantillasParaEnvio(
   return { status: "ok", items };
 }
 
+/**
+ * Chat del mensajero (rediseno ux): plantillas ACTIVAS con su cuerpo y variables. Cruza las
+ * dos lecturas que ya existen — `listarUsablesParaTexto` (aporta cuerpo/variables) y
+ * `listarEnviables` (impone `estado: "activo"` + enlazada con Meta) — para ofrecer SOLO las
+ * que el chat puede enviar de verdad: fuera de la ventana de 24 h `enviarPlantillaChat`
+ * resuelve por `findEnviableById`, que exige exactamente ese criterio. Sin este filtro el
+ * chat mostraria plantillas `pending` que fallarian con `not_found` al enviarlas.
+ */
+export async function listarPlantillasActivasParaEnvio(
+  deps: WhatsappEnvioDeps = {},
+): Promise<ListarPlantillasTextoResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+
+  const repo = new PlantillaMensajeRepository(getPrismaClient());
+  const [textos, enviables] = await Promise.all([
+    repo.listarUsablesParaTexto(),
+    repo.listarEnviables(),
+  ]);
+  const activas = new Set(enviables.map((p) => p.id));
+  return { status: "ok", items: textos.filter((p) => activas.has(p.id)) };
+}
+
 /** Lista las plantillas enviables (activas + enlazadas con Meta) para el envio server-side por Meta. */
 export async function listarPlantillasEnviables(
   deps: WhatsappEnvioDeps = {},

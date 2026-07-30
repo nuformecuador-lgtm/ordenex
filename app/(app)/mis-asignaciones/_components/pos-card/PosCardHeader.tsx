@@ -12,34 +12,51 @@ export interface PosCardHeaderProps {
   total: number;
   /** Etiqueta de estado (p. ej. "En gestión", "En detalle", "En reparto"). */
   estado: string;
+  /**
+   * `false` para las superficies SIN ruta optimizada (p. ej. "Por recoger"): se omiten
+   * el cuadro de parada y el "N de total", que ahí no significan nada. Default `true`.
+   */
+  mostrarParada?: boolean;
 }
 
-export function PosCardHeader({ orden, total, estado }: PosCardHeaderProps) {
+export function PosCardHeader({
+  orden,
+  total,
+  estado,
+  mostrarParada = true,
+}: PosCardHeaderProps) {
   // R28: nº de parada en la ruta optimizada; "·" cuando aún no tiene posición.
   const parada = orden.secuenciaRuta;
   return (
     <div className="flex items-center justify-between border-b-4 border-navy px-4 py-3">
       <div className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="flex size-9 items-center justify-center rounded-lg bg-navy text-base font-black text-white"
-        >
-          {parada ?? "·"}
-        </span>
+        {mostrarParada ? (
+          <span
+            aria-hidden="true"
+            className="flex size-9 items-center justify-center rounded-lg bg-navy text-base font-black text-white"
+          >
+            {parada ?? "·"}
+          </span>
+        ) : null}
         <div className="leading-none">
           <p className="font-mono text-sm font-bold tracking-wide text-foreground">
             {orden.numRemision}
           </p>
           <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
-            {parada !== null ? (
+            {mostrarParada ? (
               <>
-                <span className="sr-only">Parada </span>
-                {parada} de {total}
+                {parada !== null ? (
+                  <>
+                    <span className="sr-only">Parada </span>
+                    {parada} de {total}
+                  </>
+                ) : (
+                  "Sin posición"
+                )}{" "}
+                ·{" "}
               </>
-            ) : (
-              "Sin posición"
-            )}{" "}
-            · {formatPeso(orden.peso)}
+            ) : null}
+            {formatPeso(orden.peso)}
           </p>
         </div>
       </div>

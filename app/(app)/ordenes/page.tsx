@@ -89,6 +89,10 @@ export default async function OrdenesPage() {
   const catalogoFiltros = usaFiltroEstado ? await resolverCatalogoFiltros() : null;
   // R62: el rol acotado a su propia tienda no declara el filtro de tienda.
   const incluirFiltroTienda = rol !== RolValue.adminTienda;
+  // "Reasignables" es un filtro de despacho (prioridad + no reprogramada + sin
+  // mensajero): solo le sirve a quien reasigna mensajeros. `adminTienda` no opera esa
+  // transición, así que el interruptor no se le declara.
+  const incluirFiltroReasignables = rol !== RolValue.adminTienda;
 
   return (
     <AppPage title="Órdenes" description="Listado y gestión de órdenes">
@@ -102,6 +106,7 @@ export default async function OrdenesPage() {
           accionesLote={accionesLote}
           catalogoFiltros={catalogoFiltros}
           incluirFiltroTienda={incluirFiltroTienda}
+          incluirFiltroReasignables={incluirFiltroReasignables}
           puedeReportarIncidente={puedeReportarIncidente}
         />
       ) : (

@@ -193,5 +193,26 @@ describe("construirFiltrosOrdenes — filtro REASIGNABLES", () => {
   it("no depende de ningun otro filtro (no se poda ni se acota)", () => {
     expect(porClave("reasignables").dependsOn).toBeUndefined();
   });
+
+  it("`incluirReasignables: false` (adminTienda) cae SOLO esa clave", () => {
+    const claves = construirFiltrosOrdenes(CATALOGO, {
+      incluirTienda: false,
+      incluirReasignables: false,
+    }).map((f) => f.key);
+    expect(claves).toEqual([
+      "zona_id",
+      "provincia_id",
+      "canton_id",
+      "distrito_id",
+      "created",
+    ]);
+  });
+
+  it("se declara por omision (no hay que pedirlo para maestro/admin)", () => {
+    const claves = construirFiltrosOrdenes(CATALOGO, { incluirTienda: true }).map(
+      (f) => f.key,
+    );
+    expect(claves).toContain("reasignables");
+  });
 });
 

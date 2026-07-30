@@ -33,6 +33,14 @@ vi.mock("@/lib/actions/whatsapp-envio", () => ({
     listarPlantillasParaEnvioMock(...a),
 }));
 
+// Feature 161 — el tono de aviso. jsdom no tiene Web Audio API: se espía el generador.
+const reproducirTonoMock = vi.fn();
+vi.mock("@/lib/audio/tono-notificacion", () => ({
+  reproducirTono: (...a: unknown[]) => reproducirTonoMock(...a),
+  prepararAudio: vi.fn(),
+  reiniciarAudioParaTests: vi.fn(),
+}));
+
 import {
   ChatWhatsappPanel,
   BORRADOR_CHAT_VACIO,
@@ -145,6 +153,7 @@ beforeEach(() => {
   enviarMensajeChatMock.mockReset();
   enviarPlantillaChatMock.mockReset();
   listarPlantillasParaEnvioMock.mockReset();
+  reproducirTonoMock.mockReset();
   // SWR solo refresca con el documento visible (refreshWhenHidden por defecto = false).
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
@@ -334,5 +343,73 @@ describe("ChatWhatsappPanel", () => {
     ).toBeNull();
     expect(enviarMensajeChatMock).not.toHaveBeenCalled();
     expect(enviarPlantillaChatMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 161 — tono de aviso al llegar un mensaje del cliente (R21–R23)
+// ---------------------------------------------------------------------------
+describe("ChatWhatsappPanel — tono de aviso (feature 161, R21–R23)", () => {
+  const ENTRANTE_2: ChatMensajeVista = {
+    ...ENTRANTE,
+    id: "m3",
+    cuerpo: "¿Ya venís?",
+    ocurridoAt: "2026-07-23T15:10:00.000Z",
+  };
+
+  const SALIENTE_2: ChatMensajeVista = {
+    ...SALIENTE,
+    id: "m4",
+    cuerpo: "Sí, a 5 minutos.",
+    ocurridoAt: "2026-07-23T15:11:00.000Z",
+  };
+
+  /** Monta el panel, resuelve el fetch inicial y luego avanza un tick de refresco. */
+  async function conRefresco(
+    inicial: ChatMensajeVista[],
+    tras: ChatMensajeVista[],
+  ): Promise<void> {
+    listarHiloChatMock
+      .mockResolvedValueOnce(okHilo(true, inicial))
+      .mockResolvedValue(okHilo(true, tras));
+
+    renderPanel(<PanelHarness orden={ORDEN} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+  }
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("R21: un mensaje entrante nuevo en el refresco suena", async () => {
+    await conRefresco([ENTRANTE], [ENTRANTE, ENTRANTE_2]);
+
+    expect(screen.getByText("¿Ya venís?")).toBeInTheDocument();
+    expect(reproducirTonoMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("R22: un saliente nuevo no suena", async () => {
+    await conRefresco([ENTRANTE], [ENTRANTE, SALIENTE_2]);
+
+    expect(screen.getByText("Sí, a 5 minutos.")).toBeInTheDocument();
+    expect(reproducirTonoMock).not.toHaveBeenCalled();
+  });
+
+  it("R23: abrir el panel sobre un hilo con entrantes previos no suena", async () => {
+    await conRefresco([ENTRANTE, SALIENTE], [ENTRANTE, SALIENTE]);
+
+    expect(screen.getByText("Hola, ¿cuándo llega mi paquete?")).toBeInTheDocument();
+    expect(reproducirTonoMock).not.toHaveBeenCalled();
+  });
+
+  it("R13: dos entrantes de golpe suenan una sola vez", async () => {
+    await conRefresco([], [ENTRANTE, ENTRANTE_2]);
+
+    expect(reproducirTonoMock).toHaveBeenCalledTimes(1);
   });
 });

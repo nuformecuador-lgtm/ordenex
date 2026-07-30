@@ -28,7 +28,12 @@ export const MAQUETA_BASE = {
   fontRemision: 10,
   fontGuia: 22,
   lineHeight: 4,
-  fieldGap: 1.5,
+  // Separacion ENTRE campos. Bajo de 1.5 a 1.0 al pasar la maqueta a rotulo y
+  // valor en la misma linea (ver `drawCampos` en etiquetas-pdf.ts): con 1.5 el
+  // cupo vertical se quedaba en 9 lineas para 7 campos y una direccion real de
+  // tres lineas ya obligaba a recortar. Con 1.0 el cupo es 10 y el caso normal
+  // entra completo.
+  fieldGap: 1.0,
   qrSize: 26,
   barcodeHeight: 16,
   gapQrBarcode: 4,

@@ -174,6 +174,20 @@ describe("OrdenesListado — barra de filtros (R55, R63)", () => {
     expect(screen.getByRole("button", { name: /^Provincia:/ })).toBeInTheDocument();
   });
 
+  it("sin `incluirFiltroReasignables` (adminTienda) el interruptor no se monta", async () => {
+    renderListado(
+      <OrdenesListado
+        catalogoFiltros={CATALOGO}
+        incluirFiltroTienda={false}
+        incluirFiltroReasignables={false}
+      />,
+    );
+    await screen.findByRole("button", { name: /^Zona:/ });
+
+    expect(screen.queryByRole("checkbox", { name: "Reasignables" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Provincia:/ })).toBeInTheDocument();
+  });
+
   it("R51: las cuentas por API key se ofrecen en un grupo aparte", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
