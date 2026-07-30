@@ -261,6 +261,12 @@ model ChatMensaje {
   estado         ChatMensajeEstado? // solo salientes (R7)
   latitud        Float?               @map("latitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
   longitud       Float?               @map("longitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
+  // Motivo del fallo que Meta reporta en el status `failed` (`errors[0]`). Solo se pueblan
+  // en salientes fallidos; NULL en todo lo demas. Sin ellos un `failed` es mudo y obliga a
+  // entrar al panel de Meta para saber por que no se entrego.
+  errorCodigo    Int?                 @map("error_codigo") // p. ej. 131026 (indeliverable), 130429 (cuota)
+  errorTitulo    String?              @map("error_titulo")
+  errorDetalle   String?              @map("error_detalle") // texto de Meta SOBRE EL ERROR, nunca el destino
   ocurridoAt     DateTime             @map("ocurrido_at") // timestamp del evento (de Meta en entrantes)
   createdAt      DateTime             @default(now()) @map("created_at")
 
@@ -268,6 +274,7 @@ model ChatMensaje {
   plantilla    PlantillaMensaje? @relation("ChatMensajePlantilla", fields: [plantillaId], references: [id], onDelete: SetNull)
 
   @@index([conversacionId, ocurridoAt]) // R22: historial ordenado
+  @@index([errorCodigo, ocurridoAt(sort: Desc)]) // diagnostico: fallos recientes por codigo
   @@map("chat_mensaje")
 }
 

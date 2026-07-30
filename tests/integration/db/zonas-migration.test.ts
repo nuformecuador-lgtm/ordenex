@@ -214,7 +214,8 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_drop_orden_mensajero_sugerido") && // feature 159 (retiro de la sugerencia): apendida despues
         !d.endsWith("_order_status_v2_por_recolectar_incidente") && // feature 154 (catalogo v2): apendida despues
         !d.endsWith("_order_status_retiro_en_fulfillment") && // feature 155 (retiro del value): apendida despues
-        !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente"), // feature 154 (familias v2): apendida despues
+        !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") && // feature 154 (familias v2): apendida despues
+        !d.endsWith("_chat_mensaje_error_meta"), // feature 152 (hotfix WhatsApp, portado el 2026-07-29): apendida despues
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar
     // en timestamp con otra carpeta es tolerable (ver deuda de 20260712100000 arriba);
