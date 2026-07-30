@@ -1743,7 +1743,8 @@
       "zone": "backend",
       "depends_on": null,
       "spec_path": "specs/153-order-status-en-reparto",
-      "branch": "feature/153-order-status-en-reparto"
+      "branch": "feature/153-order-status-en-reparto",
+      "merged_pr": 190
     },
     {
       "id": 154,
@@ -1814,14 +1815,15 @@
       "id": 159,
       "name": "quitar la sugerencia de mensajeros de la carga masiva",
       "description": "Fullstack. La sugerencia de mensajero de la carga masiva deja de existir: con el flujo v2 las ordenes nacen SIN mensajero y se asignan despues desde su bodega. Es retiro de codigo, no feature nueva. Superficie verificada en dev (20 archivos): columna orden.mensajero_sugerido_id (db/schema.prisma:466) con su relacion OrdenMensajeroSugerido (:493) y su indice (:507) -> migracion de DROP con down.sql; AsignacionMensajeroService + IAsignacionMensajeroService; IAsignabilidadCoordenadasService (la sugerencia por cercania de coordenadas); la Server Action asignarMensajeroSugerido de lib/actions/mensajeros.ts; el paso 'Sugerir asignacion' de OrdenesCargaResumen.tsx (incluida la eleccion AL AZAR entre mensajeros validos, :44 y :53); aplicarMensajero de carga-masiva-chunks.ts; el campo mensajero_sugerido_id del schema de fila y de ORDENES_BULK_FIELDS; resolveMensajero de BulkOrdenService (:219, :505, :565); y las menciones en lib/types/orden.ts, lib/types/asignacion-mensajero.ts, ordenes-columns.tsx, GenerarGuiaModal.tsx y openapi-spec.ts. OJO al contrato publico: mensajero_sugerido_id viaja en el payload de la carga por API key (feature 88) y esta documentado en openapi-spec.ts -- decidir en la puerta F1.4 si se retira del contrato (breaking para integradores) o si se acepta y se ignora. CORRECCIONES DEL SPEC (2026-07-28), con evidencia: (1) IAsignabilidadCoordenadasService NO es la sugerencia de mensajero y NO se retira; (2) ORDENES_BULK_FIELDS ya no tiene el campo desde la feature 142; (3) aplicarMensajero ya es codigo muerto hoy. Ademas el retiro NO es breaking en runtime para integradores: filaCargaSchema no es .strict() (ancla de la feature 143) y CargaRow declara additionalProperties, asi que 'aceptado e ignorado' es el comportamiento por defecto y no cuesta codigo -- lo unico que se decide es que dice la documentacion.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "depends_on": 156,
       "spec_path": "specs/159-quitar-sugerencia-mensajeros",
       "branch": "fix/159-cierre",
-      "status_note": "Codigo mergeado en dev por el PR #193 SIN registro ni verificacion (causa raiz). El primer reviewer la RECHAZO con 5 bloqueantes y cobertura real 14/22 (progress/review_159.md). CIERRE COMPLETADO el 2026-07-29 en fix/159-cierre: los 5 bloqueantes SALDADOS y review de cierre APROBADO-CON-NOTAS con 23 mutaciones (progress/review_159_cierre.md, progress/impl_159_cierre.md). R10 RECONCILIADO en requirements.md con la sustitucion que design.md 4 dejaba prevista para la opcion (a), con nota fechada que conserva el texto original y declara el incumplimiento; Q1 CERRADA. RECUENTO HONESTO: 21 de 22 si se mide 'requisitos cumplidos como se escribieron' -- R10 pasa a verde solo porque el requisito se reescribio para decir lo que el codigo hace, y su forma original no tiene arreglo retroactivo. Round-trip ESTRUCTURAL de su migracion ejecutado (T5 marcada); T4 SIGUE sin marcar a proposito: la preservacion de datos sobre filas con mensajero_sugerido_id NO NULO no se reprodujo. Q4 sigue ABIERTA y ya no es informativa: no se sabe si hay integradores enviando la clave, y el documento publicado ya no puede avisar del cambio semantico -- si los hay, el aviso sale por canal externo. OrdenesCargaResumenPaso.tsx sigue huerfano (Q3, no se borra aqui): de ese contenedor cuelga el boton de manifiesto de la 148, y su falta de llamador es lo que el review de la 155 levanta como decision pendiente. PR #204 ABIERTO; la ficha NO pasa a done hasta que este en dev."
+      "merged_pr": 204,
+      "status_note": "Codigo mergeado en dev por el PR #193 SIN registro ni verificacion (causa raiz). El primer reviewer la RECHAZO con 5 bloqueantes y cobertura real 14/22 (progress/review_159.md). CIERRE COMPLETADO el 2026-07-29 en fix/159-cierre: los 5 bloqueantes SALDADOS y review de cierre APROBADO-CON-NOTAS con 23 mutaciones (progress/review_159_cierre.md, progress/impl_159_cierre.md). R10 RECONCILIADO en requirements.md con la sustitucion que design.md 4 dejaba prevista para la opcion (a), con nota fechada que conserva el texto original y declara el incumplimiento; Q1 CERRADA. RECUENTO HONESTO: 21 de 22 si se mide 'requisitos cumplidos como se escribieron' -- R10 pasa a verde solo porque el requisito se reescribio para decir lo que el codigo hace, y su forma original no tiene arreglo retroactivo. Round-trip ESTRUCTURAL de su migracion ejecutado (T5 marcada); T4 SIGUE sin marcar a proposito: la preservacion de datos sobre filas con mensajero_sugerido_id NO NULO no se reprodujo. Q4 sigue ABIERTA y ya no es informativa: no se sabe si hay integradores enviando la clave, y el documento publicado ya no puede avisar del cambio semantico -- si los hay, el aviso sale por canal externo. OrdenesCargaResumenPaso.tsx sigue huerfano (Q3, no se borra aqui): de ese contenedor cuelga el boton de manifiesto de la 148, y su falta de llamador es lo que el review de la 155 levanta como decision pendiente. CERRADA: PR #204 MERGEADO a dev el 2026-07-30 (verificado con `gh pr view`, no por la ficha)."
     },
     {
       "id": 160,
