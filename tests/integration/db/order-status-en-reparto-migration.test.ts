@@ -204,24 +204,22 @@ describe("R18 — migracion NUEVA, historicas inmutables", () => {
     // features POSTERIORES se descuentan (patron de denylist de `zonas-migration.test.ts`):
     // el invariante es que la 153 no nacio ANTES de lo que ya existia, no que sea la ultima
     // carpeta del repo para siempre.
-    const previas = fs
-      .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name)
-      // feature 154 (catalogo de estados v2): las dos apendidas despues.
-      // features 155 (retiro del value de fulfillment) y 149 (origen_tipo
-      // deshacer_asignacion): ambas apendidas despues.
-      .filter(
-        (d) =>
-          !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
-          !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") &&
-          !d.endsWith("_order_status_retiro_en_fulfillment") &&
-          !d.endsWith("_orden_historial_origen_deshacer_asignacion") &&
-          // feature 152 (hotfix de WhatsApp, portado el 2026-07-29): apendida despues.
-          !d.endsWith("_chat_mensaje_error_meta"),
-      )
-      .sort();
-    expect(previas[previas.length - 1]).toBe(dirName);
+    // BASELINE PINNEADO (2026-07-30). El invariante es HISTORICO: cuando esta migracion
+    // se escribio, la carpeta mas reciente del arbol era `20260727120000_*`, asi que no
+    // nacio ANTES de nada que ya existiera. Eso es un hecho cerrado, no algo que cambie.
+    //
+    // Antes se comparaba contra el arbol VIVO con una denylist a mano que habia que ampliar
+    // con CADA migracion nueva —su assert era aun mas fragil: exigia ser la ULTIMA carpeta del repo para siempre—; el patron rompio CINCO veces
+    // solo el 2026-07-29 (159, 149, el porte del hotfix y dos integraciones mas). Las
+    // migraciones posteriores son IRRELEVANTES para el invariante: son posteriores por
+    // definicion. Pinneado no vuelve a dar falsos rojos y sigue cazando lo unico que si lo
+    // violaria: que alguien RENOMBRE esta carpeta ya aplicada a un timestamp anterior.
+    const TS = (d: string) => d.slice(0, 14);
+    const MAX_AL_ESCRIBIRLA = "20260727120000";
+    expect(TS(dirName) >= MAX_AL_ESCRIBIRLA).toBe(true);
+    // Y la carpeta debe seguir siendo EXACTAMENTE la que se aplico: renombrar una migracion
+    // ya aplicada descuadra el registro de `_prisma_migrations`.
+    expect(TS(dirName)).toBe("20260728120000");
   });
 
   it("la migracion de la 135 sigue intacta: conserva sus 6 UPDATE originales", () => {
