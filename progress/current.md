@@ -149,24 +149,49 @@ en la sección «Backlog pendiente».
 > cuatro limitaciones declaradas en `progress/roundtrip_155_migracion.md`. **Ya no es un estreno en
 > producción.** Las migraciones de la 154 son aditivas y no mueven datos.
 >
-> **🔴 TRES DECISIONES HUMANAS bloquean el cierre de la 155** (detalle en el cuerpo del PR #203 y en
-> `progress/review_155.md` §5.1, §5.7, §5.9):
-> 1. **Dispensa del E2E.** `CHECKPOINTS.md` lo exige para «ingesta de órdenes» y «webhooks», y la 155
->    toca ambos. **Leído de forma literal, la casilla no se puede marcar y el veredicto sería
->    RECHAZADO.** No existe ni un E2E de ingesta en todo el repo. La dispensa tiene que ser
->    **explícita, no por omisión**.
-> 2. **Aviso a integradores** del cambio de estado inicial en la carga por API key. Es lo único capaz
->    de romperle la integración a un tercero.
-> 3. **El manifiesto de la rama (b) por la vía sesión no tiene llamador** desde `b2181e7` (159):
->    `OrdenesCargaResumenPaso.tsx` quedó huérfano. Decidir si pasa a la 157.
+> **✅ LAS TRES DECISIONES HUMANAS QUEDARON RESUELTAS** el 2026-07-29 (constan en
+> `progress/review_155.md` §8, que es la fuente):
+> 1. **Dispensa del E2E — CONCEDIDA y explícita.** `CHECKPOINTS.md` lo exige para «ingesta de
+>    órdenes» y «webhooks»; leído literal, la casilla no se marca y el veredicto sería RECHAZADO. Se
+>    dispensa porque **no existe ni un E2E de ingesta en todo el repo**, la 155 no altera la
+>    **mecánica** de la ingesta sino su **resultado**, y el borde HTTP sí tiene integración real.
+>    ⚠️ **El precedente NO es extensible** a cualquier feature que toque ingesta, y **la deuda de
+>    fondo —que no haya harness de E2E— sigue viva y sin dueño**: es lo que hace este checkpoint
+>    inaplicable en la práctica.
+> 2. **Aviso a integradores — NO NECESARIO.** Se cierra sin traspaso a nadie.
+> 3. **El manifiesto de la rama (b) por la vía sesión — PASA A LA 157**, escrito como **R41/R42/R43**
+>    en el Bloque E de `specs/157-recoleccion-tienda-qr/requirements.md`. La causa no fue la 155 sino
+>    `b2181e7` de la **159**, que dejó `OrdenesCargaResumenPaso.tsx` huérfano.
 >
-> **Registro reconciliado en el PR #204** (verificado con `gh pr view`, no por la ficha): **151 →
-> `done`** (PR #201 MERGED) y **160 → `done`** (PR #197 MERGED — la rama de la 155 ya lo había
-> corregido, pero esa corrección nunca llegó a `dev`). Sin esto `./init.sh` quedaba **rojo** por la
+> **Registro reconciliado** (verificado con `gh pr view`, no por la ficha): **151 → `done`**
+> (PR #201), **160 → `done`** (PR #197 — la rama de la 155 ya lo había corregido, pero esa corrección
+> nunca llegó a `dev`) y **155 → `done`** (PR #203). Sin esto `./init.sh` quedaba **rojo** por la
 > regla 1: la zona fullstack llegó a tener 3 `in_progress`.
 >
-> **Lo siguiente del lote:** 157 y 158 (las dos `spec_ready`, `depends_on` 155 y 154). El tren
-> **154 + 155 + 156** sigue siendo condición de correctitud, no preferencia.
+> **Lo siguiente del lote:** **157** (ya DESBLOQUEADA: su `depends_on` 155 está mergeado) y **158**.
+> Las dos `spec_ready`, pero ⚠️ **ninguna tiene su puerta F1.4 cerrada**: la 157 arrastra **6
+> preguntas abiertas** sin responder en su `requirements.md`. Cerrar la puerta ANTES de implementar,
+> que es la lección de la CORRECCIÓN 1 de más arriba.
+>
+> ### ⚠️ Hallazgos de esta sesión que NO son del lote y siguen abiertos
+>
+> - **El hotfix de WhatsApp NO está en `dev` y ya no hay PR que lo porte.** El **#183 se CERRÓ SIN
+>   MERGEAR** (2026-07-29 13:03). Verificado por archivos: `lib/services/whatsapp/errores-meta.ts` y
+>   `chat-logger.ts` existen en `prod` y **no** en `dev`. `dev` arrastra el bug de reintentos
+>   infinitos, y las dos Server Actions `_tmp-probar-jobs.ts` / `_tmp-sincronizar-plantillas.ts`
+>   **siguen en producción**. El texto de la sección «`dev` vs `prod`» de más abajo daba el #183 por
+>   abierto y mergeable: **era falso en las tres partes**.
+> - **La denylist a mano de las migraciones costó trabajo TRES veces en un día** (159, 149 y el propio
+>   assert de la 159). El arreglo existe y está aplicado como precedente en
+>   `tests/integration/db/drop-mensajero-sugerido-migration.test.ts`: **pinnear el baseline** en vez
+>   de mantener la lista, porque el invariante es histórico y las migraciones posteriores son
+>   irrelevantes por definición. Extenderlo al resto (`zonas`, `notificacion`,
+>   `orden-indices-filtros`, `order-status-en-reparto`) es un **chore propio**, no se colgó del PR de
+>   ninguna feature.
+> - **Las decisiones D1–D9 de las puertas de la 160 viven SOLO en su `status_note`** de
+>   `feature_list.json`; `progress/` documenta D3 y D6, no el resto. Iba a recortar esa nota por
+>   longitud y se conservó al comprobarlo. Moverlas a `progress/impl_160_*.md` es trabajo pendiente:
+>   hasta entonces, **no recortar esa nota**.
 
 **Arranque:** `./init.sh` **verde** sobre `dev` @ `0ed3125` (543 archivos / 5655 tests, lint 0
 errores). El `typecheck` rojo que aparece al estrenar un worktree es **cliente Prisma stale**, no

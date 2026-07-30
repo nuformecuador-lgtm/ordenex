@@ -357,3 +357,41 @@ el mapa. Correcciones al mapa declarado, ninguna de ellas un requisito sin cubri
    `en_ruta_bodega_central` se rompe.
 3. **Dónde vive el manifiesto de la rama (b) por la vía sesión** (5.7): aceptar que la 155 lo entrega
    solo para el canal de API key y pasar la superficie de UI a la 157, o pedirlo ahora.
+
+---
+
+## 8. RESOLUCIÓN de las tres decisiones — humano, 2026-07-29
+
+> Escritas aquí porque el §7 las dejó abiertas y una de ellas condicionaba el veredicto. La 155 se
+> mergeó a `dev` en el **PR #203**.
+
+**1. Dispensa del E2E — CONCEDIDA.** El humano recibió el planteamiento completo del §5.1 —incluido
+que *«leído de forma literal, esa casilla no se puede marcar y el veredicto sería RECHAZADO»*— e
+instruyó proceder. Queda como **dispensa explícita, no por omisión**, con su fundamento:
+
+- **no existe ni un E2E de ingesta en todo el repo**, y ninguna feature de esa familia (27, 88, 98,
+  136, 142, 143) construyó la infraestructura Playwright que haría falta;
+- la 155 **no altera la mecánica** de la ingesta (auth por key, parseo, dedup, tarifa,
+  idempotencia), sino su **resultado**, y el borde HTTP sí tiene integración real
+  (`tests/integration/api/ordenes-api-key-carga.route.test.ts`, donde murieron 7 mutaciones);
+- el cambio en webhooks es **saliente y aditivo**, no un webhook entrante nuevo.
+
+**El precedente que esto fija, dicho para que no se use como coartada:** la dispensa vale para esta
+feature por las tres razones de arriba, no para cualquier feature que toque ingesta. El día que
+exista harness de E2E, esta casilla vuelve a ser exigible. **La deuda de fondo —que no haya harness
+de E2E— sigue viva y sin dueño**, y es la que hace que este checkpoint sea inaplicable en la
+práctica: sigue registrada en `progress/current.md`.
+
+**2. Aviso a integradores — NO NECESARIO.** Decisión del humano. Se cierra: no queda como deuda de
+esta feature ni se traspasa a ninguna otra. La nota del cambio incompatible ya viaja en el documento
+OpenAPI y en su espejo (R42, verificado por las mutaciones M40/M41).
+
+**3. El manifiesto de la rama (b) por la vía sesión — PASA A LA FEATURE 157.** Escrito como
+requisitos **R41/R42/R43** en `specs/157-recoleccion-tienda-qr/requirements.md`, Bloque E, con la
+causa real anotada: el hueco lo abrió `b2181e7` de la **159** al dejar
+`OrdenesCargaResumenPaso.tsx` huérfano, no la 155. Se acepta que la 155 lo entrega solo para el
+canal de API key, que es donde R24 lo exigía.
+
+**Veredicto final: APROBADO-CON-NOTAS sostenido, 0 bloqueantes.** Las 7 mutaciones supervivientes
+siguen siendo huecos de cobertura declarados, no defectos, y el mapa `R<n> → test` conserva las dos
+correcciones del §5.5 y §7.
