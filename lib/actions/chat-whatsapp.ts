@@ -15,6 +15,7 @@ import { crearEncolarReintentoChatEnvio } from "@/lib/services/jobs/whatsapp-cha
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { PlantillaMensajeRepository } from "@/lib/repositories/PlantillaMensajeRepository";
 import { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
+import { consoleLogger } from "@/lib/services/whatsapp/chat-logger";
 import { loadWhatsappConfig } from "@/lib/config/whatsapp";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { construirComponentsEnvio } from "@/lib/utils/whatsapp-template";
@@ -62,7 +63,7 @@ function buildEnvioService(): ChatWhatsappService | null {
   return new ChatWhatsappService({
     conversacionRepo: new ChatConversacionRepository(prisma),
     mensajeRepo: new ChatMensajeRepository(prisma),
-    client: new WhatsappCloudClient({ config }),
+    client: new WhatsappCloudClient({ config, logger: consoleLogger }),
     encolarReintento: crearEncolarReintentoChatEnvio(new JobRepository(prisma)),
   });
 }
@@ -100,6 +101,12 @@ export async function enviarMensajeChat(
 
   if (outcome.status === "ok") return { status: "ok", mensajeChatId: outcome.mensajeChatId };
   if (outcome.status === "fuera_ventana") return { status: "fuera_ventana" };
+  // Rechazo determinista de la Graph API: el saliente ya quedo `failed` con su motivo y NO
+  // hay reintento. Se devuelve el detalle porque es justo lo que hace falta para corregir
+  // (plantilla, idioma, parametros); el cliente ya lo redacta de secretos.
+  if (outcome.status === "permanente") {
+    return { status: "permanente", mensajeChatId: outcome.mensajeChatId, detalle: outcome.detalle };
+  }
   // R21: transitorio -> ya persistido `queued` y encolado; la UI lo trata como reintentable.
   // No se filtra el detalle del cliente (podria ecoar el destino): solo el desenlace.
   return { status: "transitorio", mensajeChatId: outcome.mensajeChatId };
@@ -165,6 +172,9 @@ export async function enviarPlantillaChat(
   });
 
   if (outcome.status === "ok") return { status: "ok", mensajeChatId: outcome.mensajeChatId };
+  if (outcome.status === "permanente") {
+    return { status: "permanente", mensajeChatId: outcome.mensajeChatId, detalle: outcome.detalle };
+  }
   // R21: transitorio -> ya persistido `queued` y encolado; la UI lo trata como reintentable.
   // No se filtra el detalle (podria ecoar el destino): solo el desenlace.
   return { status: "transitorio", mensajeChatId: outcome.mensajeChatId };

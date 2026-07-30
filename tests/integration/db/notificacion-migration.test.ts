@@ -290,12 +290,22 @@ describe("R11 — borrar un usuario, una tienda o una zona no deja filas huerfan
 });
 
 describe("R12 — la migracion queda registrada en el invariante de orden", () => {
-  it("`zonas-migration.test.ts` excluye la carpeta `_notificacion`", () => {
+  // Este caso EXIGIA que `zonas-migration.test.ts` llevara la exclusion `_notificacion` en su
+  // denylist. Era el meta-test que SOSTENIA el patron: obligaba a que cada migracion nueva
+  // fuera a editar el test de otra feature. Esa denylist se retiro el 2026-07-30 (llego a
+  // quince entradas y rompio cinco veces el 2026-07-29), asi que la exigencia ya no aplica.
+  //
+  // Lo que se afirma ahora es el invariante NUEVO, y es mas fuerte: que el assert de `zonas`
+  // esta PINNEADO, o sea que no vuelve a necesitar mantenimiento cuando se apende una
+  // migracion. Si alguien reintroduce la comparacion contra el arbol vivo, este caso lo caza.
+  it("`zonas-migration.test.ts` NO vuelve a depender del arbol vivo: su baseline esta pinneado", () => {
     const zonasTest = fs.readFileSync(
       path.join(ROOT, "tests", "integration", "db", "zonas-migration.test.ts"),
       "utf8",
     );
-    expect(zonasTest).toMatch(/!d\.endsWith\("_notificacion"\)/);
+    expect(zonasTest).toMatch(/const MAX_AL_ESCRIBIRLA = "\d{14}"/);
+    // Y ya NO contiene la denylist que obligaba a editarlo con cada migracion nueva.
+    expect(zonasTest).not.toMatch(/!d\.endsWith\("_notificacion"\)/);
   });
 
   it("la carpeta tiene timestamp posterior a la ultima migracion previa", () => {
@@ -305,25 +315,21 @@ describe("R12 — la migracion queda registrada en el invariante de orden", () =
       .map((e) => e.name)
       .sort();
     const esta = dirs.find((d) => d.endsWith("_notificacion"))!;
-    const previas = dirs.filter(
-      (d) =>
-        !d.endsWith("_notificacion") &&
-        !d.endsWith("_orden_indices_filtros") && // feature 144 (indices de filtros de orden): apendida despues
-        !d.endsWith("_order_status_en_reparto") && // feature 153 (rename del value): apendida despues
-        // feature 159 (retiro de la sugerencia de mensajero): apendida despues.
-        !d.endsWith("_drop_orden_mensajero_sugerido") &&
-        // feature 154 (catalogo de estados v2): las dos apendidas despues.
-        !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
-        !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") &&
-        // feature 155 (retiro del value de fulfillment): apendida despues.
-        !d.endsWith("_order_status_retiro_en_fulfillment") &&
-        // feature 149 (origen_tipo deshacer_asignacion): apendida despues.
-        !d.endsWith("_orden_historial_origen_deshacer_asignacion"),
-    );
-    // El invariante que se protege es que `_notificacion` NO sea ANTERIOR a ninguna
-    // migracion previa; las carpetas que features posteriores apendan se excluyen aqui
-    // (mismo patron que `zonas-migration.test.ts`). Si alguien mete una migracion con
-    // timestamp anterior sin excluirla, este assert sigue fallando.
-    expect(esta > previas[previas.length - 1]).toBe(true);
+    // BASELINE PINNEADO (2026-07-30). El invariante es HISTORICO: cuando esta migracion
+    // se escribio, la carpeta mas reciente del arbol era `20260724150000_*`, asi que no
+    // nacio ANTES de nada que ya existiera. Eso es un hecho cerrado, no algo que cambie.
+    //
+    // Antes se comparaba contra el arbol VIVO con una denylist a mano que habia que ampliar
+    // con CADA migracion nueva; el patron rompio CINCO veces
+    // solo el 2026-07-29 (159, 149, el porte del hotfix y dos integraciones mas). Las
+    // migraciones posteriores son IRRELEVANTES para el invariante: son posteriores por
+    // definicion. Pinneado no vuelve a dar falsos rojos y sigue cazando lo unico que si lo
+    // violaria: que alguien RENOMBRE esta carpeta ya aplicada a un timestamp anterior.
+    const TS = (d: string) => d.slice(0, 14);
+    const MAX_AL_ESCRIBIRLA = "20260724150000";
+    expect(TS(esta) > MAX_AL_ESCRIBIRLA).toBe(true);
+    // Y la carpeta debe seguir siendo EXACTAMENTE la que se aplico: renombrar una migracion
+    // ya aplicada descuadra el registro de `_prisma_migrations`.
+    expect(TS(esta)).toBe("20260727120000");
   });
 });

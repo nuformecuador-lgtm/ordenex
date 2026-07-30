@@ -29,11 +29,31 @@ const metaMessageSchema = z.object({
     .catch(undefined),
 });
 
+/**
+ * Motivo del fallo que Meta adjunta a un status `failed`. TODOS los campos son opcionales
+ * salvo `code`: Meta ha ido variando la forma (`title` a secas en versiones viejas, `message`
+ * + `error_data.details` en las nuevas) y un cambio suyo NO debe romper la ingesta, que debe
+ * seguir devolviendo 200. `.catch(undefined)` en los blandos asegura que un tipo inesperado
+ * degrade a "sin dato" en vez de tirar el lote entero.
+ */
+const metaErrorSchema = z.object({
+  code: z.number().int(),
+  title: z.string().optional().catch(undefined),
+  message: z.string().optional().catch(undefined),
+  error_data: z
+    .object({ details: z.string().optional().catch(undefined) })
+    .optional()
+    .catch(undefined),
+});
+
 // Una actualizacion de ESTADO de un saliente. `status` es vocabulario de Meta.
+// `errors` solo viene en los `failed`; es la UNICA fuente del motivo del fallo y antes se
+// perdia por el strip de zod, dejando un `failed` mudo e indiagnosticable.
 const metaStatusSchema = z.object({
   id: z.string().min(1),
   status: z.string().min(1),
   timestamp: z.string().min(1),
+  errors: z.array(metaErrorSchema).optional().catch(undefined),
 });
 
 const metaValueSchema = z.object({
@@ -75,11 +95,24 @@ export interface WebhookMensajeEntrante {
   ocurridoAt: Date;
 }
 
+/**
+ * Motivo del fallo, ya normalizado. `detalle` prefiere `error_data.details` (el texto mas
+ * especifico que da Meta) y cae a `message`; nunca contiene el numero destino ni el cuerpo
+ * del mensaje, solo la descripcion del error.
+ */
+export interface WebhookStatusError {
+  codigo: number;
+  titulo: string | null;
+  detalle: string | null;
+}
+
 /** Una actualizacion de estado de entrega de un saliente, normalizada. */
 export interface WebhookStatus {
   waMessageId: string;
   estado: ChatMensajeEstado;
   ocurridoAt: Date;
+  /** Solo en `estado === "failed"` y solo si Meta mando `errors`; `null` en el resto. */
+  error: WebhookStatusError | null;
 }
 
 /** Eventos accionables extraidos del lote del webhook. */
@@ -95,6 +128,24 @@ const ESTADOS_META: Record<string, ChatMensajeEstado> = {
   read: "read",
   failed: "failed",
 };
+
+/**
+ * Normaliza el PRIMER error del array de un status `failed`. Meta siempre manda uno solo en
+ * la practica; si mandara varios, el primero es el que describe la causa raiz. Ausente o
+ * vacio -> `null` (un `failed` sin motivo sigue siendo un `failed` valido).
+ */
+function primerError(
+  errores: z.infer<typeof metaErrorSchema>[] | undefined,
+): WebhookStatusError | null {
+  const e = errores?.[0];
+  if (e === undefined) return null;
+  return {
+    codigo: e.code,
+    titulo: e.title ?? null,
+    // `error_data.details` es mas especifico que `message` cuando viene; si no, `message`.
+    detalle: e.error_data?.details ?? e.message ?? null,
+  };
+}
 
 /** Convierte el timestamp de Meta (segundos unix como string) a Date. */
 function timestampAMeta(ts: string): Date {
@@ -174,6 +225,7 @@ export function parseWebhookEventos(raw: unknown): WebhookEventos {
           waMessageId: s.id,
           estado,
           ocurridoAt: timestampAMeta(s.timestamp),
+          error: primerError(s.errors),
         });
       }
     }

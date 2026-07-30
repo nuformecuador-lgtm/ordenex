@@ -178,13 +178,18 @@ describe("carpeta, schema.prisma y registro de la migracion", () => {
     expect(cuerpo).toMatch(/mensajeroAsignadoId/);
   });
 
-  it("la carpeta esta registrada en el invariante de orden de las migraciones previas", () => {
-    // Mismo patron que `notificacion-migration.test.ts`: una migracion apendida al
-    // final debe excluirse de los tests que verifican "ninguna previa es posterior",
-    // o los deja en rojo. Sin este assert, borrar la exclusion pasa inadvertido.
+  it("los invariantes de orden de otras migraciones NO dependen del arbol vivo", () => {
+    // Antes este caso exigia que `zonas` y `notificacion` llevaran ESTA carpeta en su denylist.
+    // Ese patron se AUTO-REFORZABA —cada migracion nueva sumaba una entrada a la lista y un test
+    // que la exigia— y rompio cinco veces el 2026-07-29. Las denylist se retiraron el 2026-07-30
+    // en favor de un baseline PINNEADO: el invariante es historico y no necesita mantenimiento.
+    //
+    // Lo que se vigila ahora es que ese arreglo no se revierta, que es mas util que exigir una
+    // entrada en una lista.
     for (const archivo of ["zonas-migration.test.ts", "notificacion-migration.test.ts"]) {
       const texto = fs.readFileSync(path.join(__dirname, archivo), "utf8");
-      expect(texto).toMatch(new RegExp(`!d\\.endsWith\\("${SUFFIX}"\\)`));
+      expect(texto, archivo).toMatch(/const MAX_AL_ESCRIBIRLA = "\d{14}"/);
+      expect(texto, archivo).not.toMatch(new RegExp(`!d\\.endsWith\\("${SUFFIX}"\\)`));
     }
   });
 

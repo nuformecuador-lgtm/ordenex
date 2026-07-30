@@ -8,7 +8,7 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 //
 // Es la RED DE SEGURIDAD de la activacion estricta (Q7): si una arista real faltara en
 // `TRANSICIONES`, ese flujo se caeria en produccion. Por eso los tests que lo consumen
-// recorren el inventario COMPLETO (41 aristas de flujo + 2 de creacion), no un muestreo.
+// recorren el inventario COMPLETO (42 aristas de flujo + 2 de creacion), no un muestreo.
 //
 // Feature 154 (SOLO ADITIVA, decision Q2 del gate del 2026-07-29): sumo #43, #44 y la creacion
 // `null -> por_recolectar_en_tienda`, sin retirar ninguna fila, porque `GuiaAsignacionService`
@@ -29,8 +29,13 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // EXACTAMENTE las dos salidas de `resolverDestinoCreacion`. La entrada
 // `por_recolectar_en_tienda` deja de estar SIN PRODUCTOR: la 155 la produce por las tres vias.
 //
-// La numeracion `n` es la del apendice (#1-#44) con huecos deliberados: #27 lo retiro la 139
-// (`rechazada -> devolviendo_a_tienda`), #4/#6/#7c la 156 y #1/#2/#3/#7b la 155.
+// Feature 158 (Q-D/Q-G, 2026-07-30): suma UNA arista, #53 (`incidente -> en_reparto`, familia
+// `deshacer_gestion`), y REALINEA el `via` de #44 a `incidente`. La #44 deja de estar SIN
+// PRODUCTOR: la 158 es quien la ejecuta.
+//
+// La numeracion `n` es la del apendice (#1-#53) con huecos deliberados: #27 lo retiro la 139
+// (`rechazada -> devolviendo_a_tienda`), #4/#6/#7c la 156 y #1/#2/#3/#7b la 155; #48-#52 y
+// #54-#58 quedan RESERVADOS para el camino del ADMIN de la 158, que llega en su propio PR.
 //
 // CORRECCION sobre el apendice A (hallazgo del review, hoy superada): el apendice solo listaba
 // #7 para `rutearABodegaSatelite`, cuando `ORIGEN_RUTEO_SATELITE` admitia TRES origenes; por eso
@@ -106,13 +111,25 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // `callSite` nombra la feature que lo hara. Por eso NO aparecen en el mapa de puntos de
   // escritura de `tests/unit/repositories/orden-historial-cobertura.test.ts`.
   { n: "43", origen: "por_recolectar_en_tienda", destino: "en_ruta_bodega_central", via: "recoleccion_tienda", callSite: "SIN PRODUCTOR (154): escaner de recoleccion en tienda, feature 157" },
-  { n: "44", origen: "en_reparto", destino: "incidente", via: "gestion", callSite: "SIN PRODUCTOR (154): resultado `incidente` de la gestion, feature 158" },
+  // #44: la 154 la declaro SIN PRODUCTOR y con `via: "gestion"`. La feature 158 le pone
+  // PRODUCTOR (`crearGestionYTransicionar` con `resultado = incidente`) y le REALINEA el `via`
+  // a la familia `incidente`, que es la que el append persiste (Q-G). La fila NO se borra: se
+  // mueve a su verdad nueva.
+  { n: "44", origen: "en_reparto", destino: "incidente", via: "incidente", callSite: "MisAsignacionesService.gestionar -> GestionOrdenRepository.crearGestionYTransicionar (158)" },
   // Feature 149 (design §2, R27): reversion de la asignacion/ruteo ANTES de la recogida. Las
   // TRES aristas son pares NUEVOS (no repiten ningun par ya declarado), por eso suben tanto el
   // recuento de aristas (42 -> 45) como el de pares unicos (39 -> 42).
   { n: "45", origen: "en_ruta_bodega_satelite", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso b)" },
   { n: "46", origen: "por_recoger", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "DeshacerAsignacionService.deshacer -> OrdenRepository.deshacerAsignacionLote (149, caso a central)" },
   { n: "47", origen: "por_recoger", destino: "en_bodega_satelite", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso a satelite)" },
+  // Feature 158 (Q-D, 2026-07-30): DESHACER un `incidente`. Es un par NUEVO, asi que sube
+  // tanto el recuento de aristas (41 -> 42) como el de pares unicos (39 -> 40).
+  //
+  // NUMERACION: la 158 salta del #47 al #53 A PROPOSITO. Los #48-#52 quedan RESERVADOS para
+  // las cinco entradas del camino del ADMIN y los #54-#58 para sus cinco inversas; ninguna de
+  // esas diez se declara todavia porque su PRODUCTOR llega en el PR siguiente (design §15.2).
+  // Un hueco de numeracion documentado es mas barato que una arista legal sin productor.
+  { n: "53", origen: "incidente", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion -> CierreDiaRepository.anularGestionYDevolverAGestion (158)" },
 ];
 
 /**
@@ -132,7 +149,7 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
 ];
 
 /**
- * Recuentos: 41 aristas de flujo, 39 pares dirigidos unicos y 2 de creacion.
+ * Recuentos: 42 aristas de flujo, 40 pares dirigidos unicos y 2 de creacion.
  *
  * CADENA COMPLETA, para que nadie tenga que reconstruirla:
  *   - la 156 dejo 42 aristas / 39 pares (retiro #4/#6/#7c);
@@ -141,13 +158,19 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
  *     `-> en_bodega_central` (#2) y `-> en_ruta_bodega_satelite` (#3 y #7b, que compartian par).
  *     Las de creacion bajaron de 4 a 2;
  *   - la 149 suma sus TRES aristas (#45/#46/#47) y las tres son pares NUEVOS, asi que suben
- *     ambos recuentos por igual: 38 -> 41 aristas y 36 -> 39 pares.
+ *     ambos recuentos por igual: 38 -> 41 aristas y 36 -> 39 pares;
+ *   - la 158 suma UNA (#53, `incidente -> en_reparto`), tambien par NUEVO: 41 -> 42 y 39 -> 40.
+ *     Ademas REALINEA el `via` de #44 (`gestion` -> `incidente`), que no mueve ningun recuento.
  *
- * Los 41 - 39 = 2 duplicados que quedan son #19/#23 y #20/#24 (SLA vs. recuperacion manual). El
+ * Los 42 - 40 = 2 duplicados que quedan son #19/#23 y #20/#24 (SLA vs. recuperacion manual). El
  * tercer duplicado historico (#3/#7b) se fue con el estado de fulfillment.
+ *
+ * PENDIENTE DECLARADO (no olvido): el camino del ADMIN de la 158 suma DIEZ aristas mas
+ * (#48-#52 y #54-#58) y dejaria estos recuentos en 52 / 50. NO estan aqui porque su productor
+ * llega en el PR siguiente (design §15.2).
  */
 export const RECUENTO_INVENTARIO = {
-  aristasFlujo: 41,
-  paresUnicos: 39,
+  aristasFlujo: 42,
+  paresUnicos: 40,
   aristasCreacion: 2,
 } as const;

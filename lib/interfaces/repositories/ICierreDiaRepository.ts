@@ -1,5 +1,6 @@
 import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
+import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type {
   CierrePasadoDTO,
   CierreTotales,
@@ -49,6 +50,16 @@ export interface CierreGestionPendienteRow {
   // columna nueva. La pueblan los repos de ADMIN (38/40); en la vista EN VIVO del mensajero (37)
   // es `false` por defecto (no expone el desglose, R11).
   esRechazoSla: boolean;
+  // Feature 158/R9: causa TIPIFICADA del incidente, leida de `gestion_orden.causa_incidente`.
+  // `null` en cualquier otro resultado (campo POR RAMA). La pueblan LOS DOS caminos: la vista
+  // en vivo del mensajero (37) y los detalles de admin (38/40).
+  causaIncidente: CausaIncidente | null;
+  // Feature 158/R19/R22: monto de la indemnizacion SNAPSHOTEADO en la gestion (money-safe
+  // STRING). `null` si el resultado no es `incidente` o si el cierre aun no se aprobo (el
+  // monto lo captura el admin AL APROBAR). Solo lo pueblan los repos de ADMIN (38/40): la
+  // vista EN VIVO del mensajero (37) NO lo selecciona — la indemnizacion no es plata suya
+  // (design §7.2), y no exponerlo en la consulta es mas fuerte que ocultarlo en la pantalla.
+  indemnizacion: string | null;
   // Desglose del ingreso de Ordenex + tarifa congelada, DERIVADO del snapshot. Solo lo
   // pueblan los repos de ADMIN (38/40): la vista en vivo del mensajero (37) no lo expone.
   ingresoOrdenex?: IngresoOrdenexDTO | null;

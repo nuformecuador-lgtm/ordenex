@@ -187,14 +187,20 @@ describe("Feature 154 · estructura de la carpeta de migracion B", () => {
     );
   });
 
-  it("`zonas-migration.test.ts` excluye esta carpeta del invariante de orden", () => {
+  // Este caso exigia que `zonas-migration.test.ts` llevara esta carpeta en su denylist. Era
+  // parte de un patron que se AUTO-REFORZABA: cada migracion nueva sumaba una entrada a esa
+  // lista y un test exigiendola. La denylist se retiro el 2026-07-30 (habia llegado a quince
+  // entradas y rompio cinco veces el 2026-07-29), asi que la exigencia desaparece.
+  //
+  // Se afirma el invariante NUEVO, mas fuerte: que el assert de `zonas` siga PINNEADO a un
+  // baseline historico y por tanto NO necesite mantenimiento al apendir migraciones.
+  it("`zonas-migration.test.ts` NO depende del arbol vivo: su baseline sigue pinneado", () => {
     const zonasTest = fs.readFileSync(
       path.join(ROOT, "tests", "integration", "db", "zonas-migration.test.ts"),
       "utf8",
     );
-    expect(zonasTest).toMatch(
-      /!d\.endsWith\("_orden_historial_origen_recoleccion_tienda_incidente"\)/,
-    );
+    expect(zonasTest).toMatch(/const MAX_AL_ESCRIBIRLA = "\d{14}"/);
+    expect(zonasTest).not.toMatch(/const previas = dirs\.filter\(/);
   });
 
   it("los 8 down.sql PREVIOS que recrean el enum NO se tocan (son fotos historicas)", () => {

@@ -74,12 +74,16 @@ const ESTADO_EN_REPARTO = "en_reparto";
  *   - devuelta: la 47 emite un SEGUIMIENTO en la MISMA tx y la orden NUNCA reposa en `devuelta`
  *     (reintento -> `en_bodega_central`/`en_bodega_satelite`; escalado -> `rechazada`). `devuelta` se
  *     acepta SOLO por defensa ante filas anteriores a la 47.
+ *   - incidente (feature 158/R14, Q-D): destino = `resultado`, sin seguimiento. `incidente` es
+ *     TERMINAL: ninguna otra via la mueve de ahi (R13), asi que si la orden NO esta exactamente
+ *     en `incidente` es que alguien la saco por un camino que esta feature no declara -> conflict.
  */
 const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
   entregada: ["entregada"],
   reprogramada: ["reprogramada"],
   rechazada: ["rechazada"],
   devuelta: ["en_bodega_central", "en_bodega_satelite", "rechazada", "devuelta"],
+  incidente: ["incidente"], // feature 158 (Q-D): el incidente SI se puede deshacer
 };
 
 // Metodos de repo que consume el service (inyeccion por constructor). Se declaran
@@ -185,7 +189,14 @@ export class CierreDiaService implements ICierreDiaService {
 
     // R3: agrupa por resultado (las 4 claves siempre presentes). R10: cada DTO expone el
     // pago DERIVADO en vivo (override del snapshot, que aqui es null: gestion sin cerrar).
-    const grupos: CierreGrupos = { entregada: [], reprogramada: [], devuelta: [], rechazada: [] };
+    // Feature 158/R16/R18: 5 claves — el `incidente` es un grupo PROPIO del detalle.
+    const grupos: CierreGrupos = {
+      entregada: [],
+      reprogramada: [],
+      devuelta: [],
+      rechazada: [],
+      incidente: [],
+    };
     for (const g of gestiones) {
       grupos[g.resultado].push(
         toDetalleDTO(
@@ -454,6 +465,15 @@ export function toDetalleDTO(
     // Feature 102/R9/R11: passthrough del flag ya derivado en el repo (admin: del historial;
     // vista en vivo del mensajero: `false`). El service no re-deriva la clasificacion.
     esRechazoSla: g.esRechazoSla,
+    // Feature 158/R9/R34: passthrough de la causa tipificada del incidente. La pueblan los DOS
+    // repos (vista en vivo y detalles de admin); `null` en cualquier otro resultado.
+    causaIncidente: g.causaIncidente,
+    // Feature 158/R19/R22/R34: passthrough del monto de la indemnizacion (money-safe STRING,
+    // ya serializado por el repo). Solo llega poblado desde los repos de ADMIN (38/40): la
+    // vista EN VIVO del mensajero no lo selecciona (design §7.2), asi que ahi es SIEMPRE
+    // `null`. El mapper NO decide eso — lo decide la proyeccion de cada repo, que es donde
+    // una feature futura tendria que ir a cambiarlo a proposito.
+    indemnizacion: g.indemnizacion,
     // Passthrough: solo viene poblado desde los repos de admin (38/40), que lo derivan del
     // snapshot. En la vista en vivo del mensajero es `undefined` y la UI no muestra nada.
     ingresoOrdenex: g.ingresoOrdenex,

@@ -3,6 +3,7 @@ import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
+import { CAUSA_INCIDENTE_SEED } from "@/lib/types/causa-incidente";
 import { ubicacionSchema } from "@/lib/types/ruta-mensajero";
 import type {
   DetalleConflicto,
@@ -115,6 +116,12 @@ const motivoSchema = z.string().trim().min(1, "motivo requerido");
 // al `motivo` ni afloja su validacion (R7): son campos APARTE.
 const causaDevolucionSchema = z.enum(CAUSA_DEVOLUCION_SEED, { message: "causa requerida" });
 
+// Feature 158 (R9, Q-B): causa TIPIFICADA del INCIDENTE. Lista CERRADA de 3 valores en
+// espanol, sin "Otro". La obligatoriedad vive AQUI, en el borde, y SOLO en la rama
+// `incidente`. Un valor fuera del catalogo o su ausencia producen un error en el campo
+// `causaIncidente`. NO sustituye al `motivo` ni afloja su validacion (R11): son campos APARTE.
+const causaIncidenteSchema = z.enum(CAUSA_INCIDENTE_SEED, { message: "causa requerida" });
+
 // R22/R25/R27/R29: entrada de gestion DISCRIMINADA por `resultado` con las
 // obligatoriedades por rama (decision F1.4-i). La evidencia (File) va en el mismo
 // schema como file-like (obligatoria en entrega/rechazo).
@@ -155,6 +162,26 @@ const gestionarUnionSchema = z.discriminatedUnion("resultado", [
     resultado: z.literal("rechazada"),
     motivo: motivoSchema,
     // Feature 119 (R5): lista de 1..N fotos (antes una sola).
+    evidencias: evidenciasSchema,
+    ubicacion: ubicacionSchema.optional(), // feature 92/R22
+  }),
+  // Feature 158 (R9/R10/R11, Q-B) — QUINTA variante: el paquete esta danado, perdido o
+  // robado. NO hay recaudo (`montoRecibido`/`metodoPago` no existen en esta rama), y al ser
+  // una `discriminatedUnion` un cliente que los envie NO los consigue persistir: el campo no
+  // existe en el tipo parseado de esta rama (mismo blindaje que la causa de la 73).
+  z.object({
+    ordenId: z.string().min(1),
+    resultado: z.literal("incidente"),
+    // R9: la causa vive SOLO en esta variante (los 3 valores en espanol, sin "Otro").
+    causaIncidente: causaIncidenteSchema,
+    // R11: el motivo en texto libre se CONSERVA obligatorio y APARTE de la causa, mismo
+    // contrato que la devolucion (73/R7).
+    motivo: motivoSchema,
+    // R10 (Q-B): evidencia 1..N OBLIGATORIA con independencia de la causa, incluidas
+    // `perdido` y `robado`. La objecion («no hay paquete que fotografiar; bloquea al mensajero
+    // en la calle») se le planteo al humano y eligio esto igual: es su decision, esta
+    // declarada en requirements.md y NO se re-litiga. Se reusa `evidenciasSchema` -> mismos
+    // limites por archivo y por lista que el resto de los resultados con foto.
     evidencias: evidenciasSchema,
     ubicacion: ubicacionSchema.optional(), // feature 92/R22
   }),

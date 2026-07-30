@@ -47,6 +47,10 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     pagoMensajero: null, // feature 39: en vivo el snapshot es null; el service lo DERIVA
     ingresoBodegaRechazo: null, // feature 56: en vivo el snapshot es null; el service lo DERIVA
     esRechazoSla: false, // feature 102/R11: la vista en vivo del mensajero no expone el desglose
+    // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
+    // de resultados; los casos del incidente los sobreescriben.
+    causaIncidente: null,
+    indemnizacion: null,
     ...overrides,
   };
 }
@@ -1083,7 +1087,14 @@ describe("Feature 67 · gestion anulada ausente de la vista y los totales (R13/R
     const r = await service.listarCierreDia(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");
 
-    expect(r.grupos).toEqual({ entregada: [], reprogramada: [], devuelta: [], rechazada: [] });
+    // Feature 158: los grupos pasan a CINCO claves (`incidente` es un grupo propio, R18).
+    expect(r.grupos).toEqual({
+      entregada: [],
+      reprogramada: [],
+      devuelta: [],
+      rechazada: [],
+      incidente: [],
+    });
     expect(r.totales.general).toBe("0.00");
     expect(r.totalPagoMensajero).toBe("0.00");
     expect(r.totalIngresoBodegaRechazos).toBe("0.00");
@@ -1359,5 +1370,339 @@ describe("Feature 111 · deshacerGestion — bloqueo total del mensajero (R5/R20
 
     expect(r).toEqual({ status: "ok", ordenId: "o1" });
     expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ============================================================================
+// Feature 158 (Q-D, 2026-07-30) — deshacerGestion sobre una gestion `incidente`.
+//
+// Esto REVIERTE PARCIALMENTE la decision de la 154 de dejar `incidente` sin ninguna salida.
+// La ventana es la MISMA que la del resto de resultados (`cierre_id IS NULL`) y el destino es
+// `en_reparto`, que para una gestion NO es un hardcode aproximado: es el UNICO estado desde el
+// que una gestion puede nacer (guardia `cargarOrdenGestionable` de `MisAsignacionesService`),
+// asi que destino = origen (design §13.1).
+// ============================================================================
+
+describe("Feature 158 · deshacerGestion de un `incidente` (R14/R15, Q-D)", () => {
+  it("R14: la gestion `incidente` vigente con la orden en `incidente` SE PUEDE deshacer", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "incidente",
+          cierreId: null, // R14: dentro de la ventana
+          orden: { deletedAt: null, estatusId: "s-incidente", estatusValue: "incidente" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+  });
+
+  it("R14: el destino es `en_reparto` (el estado de origen) y REPONE la asignacion al autor", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "incidente",
+          mensajeroId: "m1",
+          orden: { deletedAt: null, estatusId: "s-incidente", estatusValue: "incidente" },
+        }),
+      ),
+    });
+    const { service, ordenRepo } = newService({ repo });
+
+    await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_reparto");
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledWith({
+      gestionId: "g1",
+      ordenId: "o1",
+      mensajeroId: "m1", // R14: la asignacion vuelve al mensajero AUTOR
+      actorUsuarioId: "m1",
+      estatusEsperadoId: "s-incidente", // guardia optimista sobre el estado REAL leido
+      estatusEnRepartoId: "s-reparto",
+    });
+  });
+
+  it("R13/R14: si la orden YA NO esta en `incidente`, el deshacer da conflict sin tocarla", async () => {
+    // `incidente` es TERMINAL: ninguna via de negocio la mueve. Que la orden este en otro
+    // estado significa que alguien la saco por un camino no declarado -> arrancarla de ahi es
+    // peligroso. `ESTADOS_ESPERADOS.incidente` es EXACTAMENTE `["incidente"]`, ni uno mas.
+    for (const estatusValue of [
+      "en_reparto",
+      "en_bodega_central",
+      "en_bodega_satelite",
+      "entregada",
+      "rechazada",
+      "devuelta",
+    ]) {
+      const repo = fakeRepo({
+        findGestionParaDeshacer: vi.fn(async () =>
+          gestionDeshacer({
+            resultado: "incidente",
+            orden: { deletedAt: null, estatusId: "s-x", estatusValue },
+          }),
+        ),
+      });
+      const { service } = newService({ repo });
+
+      const r = await service.deshacerGestion("g1", MENSAJERO);
+
+      expect(r.status, `gestion incidente con la orden en ${estatusValue}`).toBe("conflict");
+      expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+    }
+  });
+
+  it("R15: gestion `incidente` YA vinculada a un cierre -> conflict accionable, sin tocar la orden", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "incidente",
+          cierreId: "c1", // fuera de la ventana: sus totales ya estan snapshoteados
+          orden: { deletedAt: null, estatusId: "s-incidente", estatusValue: "incidente" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("esperaba conflict");
+    expect(r.motivo).toMatch(/cierre/i); // accionable: dice POR QUE no se puede
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R15: quien NO es el mensajero autor -> forbidden, sin revelar NADA de la gestion", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "incidente",
+          mensajeroId: "otro-mensajero",
+          orden: { deletedAt: null, estatusId: "s-incidente", estatusValue: "incidente" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", { usuarioId: "m1", rol: "mensajero" });
+
+    // `forbidden` no lleva payload: no filtra ni la orden, ni el autor, ni el estado.
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R15: un rol que no es mensajero tampoco puede deshacer un incidente", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "incidente",
+          orden: { deletedAt: null, estatusId: "s-incidente", estatusValue: "incidente" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", OTRO_ROL);
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.findGestionParaDeshacer).not.toHaveBeenCalled();
+  });
+
+  it("R14: el deshacer de un incidente NO mueve dinero (no resuelve tarifa ni crea cierre)", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "incidente",
+          orden: { deletedAt: null, estatusId: "s-incidente", estatusValue: "incidente" },
+        }),
+      ),
+    });
+    const { service, tarifaZonaRepo } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    // La indemnizacion se captura al APROBAR el cierre; con `cierre_id = NULL` no hay monto
+    // persistido ni movimiento que compensar.
+    expect(tarifaZonaRepo.resolvePagoTarifa).not.toHaveBeenCalled();
+    expect(repo.crearCierre).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// Feature 158 (T1.10, R16/R17/R18) — la gestion `incidente` en el detalle y en el cierre.
+// ============================================================================
+
+describe("Feature 158 · listarCierreDia con incidentes (R16/R17/R18)", () => {
+  it("R18: el `incidente` cae en su grupo PROPIO, no mezclado con los otros cuatro", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g1", resultado: "entregada", montoRecibido: "10.00" }),
+        pendiente({
+          gestionId: "g2",
+          ordenId: "o2",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+          motivo: "caja aplastada",
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(Object.keys(r.grupos).sort()).toEqual(
+      ["devuelta", "entregada", "incidente", "rechazada", "reprogramada"].sort(),
+    );
+    expect(r.grupos.incidente.map((g) => g.gestionId)).toEqual(["g2"]);
+    // Y NO se cuela en ningun otro grupo.
+    expect(r.grupos.entregada.map((g) => g.gestionId)).toEqual(["g1"]);
+    expect(r.grupos.reprogramada).toEqual([]);
+    expect(r.grupos.devuelta).toEqual([]);
+    expect(r.grupos.rechazada).toEqual([]);
+  });
+
+  it("R17: un `incidente` no aporta pago al mensajero, ni ingreso de bodega, ni totales", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({
+          gestionId: "g-inc",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+          motivo: "robado",
+        }),
+      ]),
+    });
+    // Tarifa con montos ALTOS: si el incidente pagara algo, se veria.
+    const { service } = newService({
+      repo,
+      tarifa: { cobroEntregado: "5000.00", cobroRechazado: "2500.00" },
+    });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalPagoMensajero).toBe("0.00");
+    expect(r.totalIngresoBodegaRechazos).toBe("0.00");
+    expect(r.totales.general).toBe("0.00");
+    expect(r.grupos.incidente[0].pagoMensajero).toBe("0.00");
+    expect(r.grupos.incidente[0].ingresoBodegaRechazo).toBe("0.00");
+  });
+
+  it("R16: un dia SOLO con incidentes se puede cerrar (no es un dia vacio)", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g-inc", resultado: "incidente", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const listado = await service.listarCierreDia(MENSAJERO);
+    if (listado.status !== "ok") throw new Error("esperaba ok");
+    expect(listado.puedesSolicitar).toBe(true);
+
+    const solicitado = await service.solicitarCierre(MENSAJERO);
+    expect(solicitado.status).toBe("ok");
+    // R16: la gestion viaja al snapshot del cierre con su dinero en 0.00, MISMO grano que el resto.
+    const input = (repo.crearCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(input.pagoByGestionId).toEqual({ "g-inc": "0.00" });
+    expect(input.ingresoByGestionId).toEqual({ "g-inc": "0.00" });
+    expect(input.totalPagoMensajero).toBe("0.00");
+    expect(input.totalIngresoBodegaRechazos).toBe("0.00");
+  });
+
+  it("R17: mezclado con una entrega, el incidente NO altera el pago de la entrega", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g1", resultado: "entregada", montoRecibido: "100.00" }),
+        pendiente({
+          gestionId: "g-inc",
+          ordenId: "o2",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+        }),
+      ]),
+    });
+    const { service } = newService({ repo, tarifa: { cobroEntregado: "7.00", cobroRechazado: "3.00" } });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // Solo la entrega paga: 7.00, no 14.00.
+    expect(r.totalPagoMensajero).toBe("7.00");
+    expect(r.grupos.entregada[0].pagoMensajero).toBe("7.00");
+    expect(r.grupos.incidente[0].pagoMensajero).toBe("0.00");
+  });
+});
+
+describe("Feature 158 · listarCierreDia — la causa sí, el monto NO (R17, design §7.2)", () => {
+  it("R9: el detalle del mensajero expone la causa de su propio incidente", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({
+          gestionId: "g-inc",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+          motivo: "me lo robaron en la parada",
+          causaIncidente: "robado",
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.incidente[0].causaIncidente).toBe("robado");
+  });
+
+  it("R17: el monto de la indemnizacion NO llega a la vista del mensajero (no es plata suya)", async () => {
+    // Aunque el repo lo trajera (no lo hace: `WITH_DETALLE` ni lo selecciona), el DTO que ve
+    // el mensajero lo lleva en `null`. La indemnizacion la paga Ordenex por el paquete; un
+    // numero grande junto a su gestion se leeria como una deuda suya.
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({
+          gestionId: "g-inc",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+          causaIncidente: "danado",
+          indemnizacion: null,
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.incidente[0].indemnizacion).toBeNull();
+  });
+
+  it("R35: las gestiones de los otros cuatro resultados siguen con los dos campos en `null`", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g1", resultado: "entregada" }),
+        pendiente({ gestionId: "g2", ordenId: "o2", resultado: "rechazada", motivo: "x" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    for (const g of [...r.grupos.entregada, ...r.grupos.rechazada]) {
+      expect(g.causaIncidente).toBeNull();
+      expect(g.indemnizacion).toBeNull();
+    }
   });
 });

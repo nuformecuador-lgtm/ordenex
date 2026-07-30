@@ -347,7 +347,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     if (
       input.resultado === "entregada" ||
       input.resultado === "rechazada" ||
-      input.resultado === "devuelta" // feature 75: evidencia obligatoria tambien en Devolver
+      input.resultado === "devuelta" || // feature 75: evidencia obligatoria tambien en Devolver
+      // Feature 158 (R10, Q-B): el INCIDENTE sube sus 1..N fotos por el MISMO camino
+      // compensado, en las TRES causas (tambien `perdido` y `robado`). El borde ya exigio
+      // `min(1)`, asi que aqui nunca llega una lista vacia.
+      input.resultado === "incidente"
     ) {
       try {
         for (let i = 0; i < input.evidencias.length; i++) {
@@ -512,6 +516,17 @@ function buildGestionData(
     case "rechazada":
       return {
         resultado: "rechazada",
+        motivo: input.motivo,
+        evidencias,
+      };
+    // Feature 158/R9/R10/R11: la causa va en su COLUMNA propia, APARTE del texto libre; el
+    // `motivo` se persiste EXACTAMENTE como lo escribio el mensajero. NO se arma
+    // `montoRecibido` ni `metodoPago` (no hay recaudo) ni `indemnizacion` (el monto lo captura
+    // el admin al aprobar el cierre, R19/R22).
+    case "incidente":
+      return {
+        resultado: "incidente",
+        causaIncidente: input.causaIncidente,
         motivo: input.motivo,
         evidencias,
       };

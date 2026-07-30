@@ -26,7 +26,12 @@ export type EnviarMensajeChatResult =
   | { status: "forbidden" } // la orden no esta asignada a este mensajero (R17)
   | { status: "fuera_ventana" } // R19/D2: fuera de la ventana 24 h -> exige plantilla
   | { status: "no_configurado" } // WhatsApp aun sin credenciales de envio
-  | { status: "transitorio"; mensajeChatId: string }; // R21: reintentable, encolado
+  | { status: "transitorio"; mensajeChatId: string } // R21: reintentable, encolado
+  // La Graph API rechazo la peticion (4xx que no es 429): plantilla inexistente, idioma
+  // equivocado, parametros que no cuadran, destinatario no permitido. NO se reintenta; el
+  // saliente queda `failed` con su motivo. `detalle` lleva el mensaje de Meta, que es
+  // accionable y por eso SI se expone a la UI.
+  | { status: "permanente"; mensajeChatId: string; detalle: string };
 
 /**
  * Resultado del envio de una PLANTILLA desde el chat. Sirve dentro Y fuera de la ventana de
@@ -39,7 +44,12 @@ export type EnviarPlantillaChatResult =
   | { status: "forbidden" } // la orden no esta asignada a este mensajero
   | { status: "not_found" } // plantilla inexistente o no enviable
   | { status: "no_configurado" } // WhatsApp aun sin credenciales de envio
-  | { status: "transitorio"; mensajeChatId: string }; // R21: reintentable, encolado
+  | { status: "transitorio"; mensajeChatId: string } // R21: reintentable, encolado
+  // La Graph API rechazo la peticion (4xx que no es 429): plantilla inexistente, idioma
+  // equivocado, parametros que no cuadran, destinatario no permitido. NO se reintenta; el
+  // saliente queda `failed` con su motivo. `detalle` lleva el mensaje de Meta, que es
+  // accionable y por eso SI se expone a la UI.
+  | { status: "permanente"; mensajeChatId: string; detalle: string };
 
 /** Resultado del listado del hilo de una orden (R16/R22/R24). */
 export type ListarHiloChatResult =

@@ -94,22 +94,22 @@ describe("carpeta y schema.prisma", () => {
       .map((e) => e.name)
       .sort();
     const esta = dirs.find((d) => d.endsWith("_orden_indices_filtros"))!;
-    const previas = dirs.filter(
-      (d) =>
-        d !== esta &&
-        !d.endsWith("_order_status_en_reparto") && // feature 153 (rename del value): apendida despues
-        !d.endsWith("_drop_orden_mensajero_sugerido") && // feature 159 (retiro de la sugerencia): apendida despues
-        // feature 154 (catalogo de estados v2): sus DOS migraciones (20260729) se
-        // apendieron despues de esta (20260728), igual que las de la 153 y la 159. La
-        // 154 entro a `dev` sin actualizar esta lista y dejo el caso ROJO en `dev`.
-        !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
-        !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") &&
-        // feature 155 (retiro del value de fulfillment): apendida despues.
-        !d.endsWith("_order_status_retiro_en_fulfillment") &&
-        // feature 149 (origen_tipo deshacer_asignacion): apendida despues.
-        !d.endsWith("_orden_historial_origen_deshacer_asignacion"),
-    );
-    expect(esta >= previas[previas.length - 1]).toBe(true);
+    // BASELINE PINNEADO (2026-07-30). El invariante es HISTORICO: cuando esta migracion
+    // se escribio, la carpeta mas reciente del arbol era `20260727120000_*`, asi que no
+    // nacio ANTES de nada que ya existiera. Eso es un hecho cerrado, no algo que cambie.
+    //
+    // Antes se comparaba contra el arbol VIVO con una denylist a mano que habia que ampliar
+    // con CADA migracion nueva; el patron rompio CINCO veces
+    // solo el 2026-07-29 (159, 149, el porte del hotfix y dos integraciones mas). Las
+    // migraciones posteriores son IRRELEVANTES para el invariante: son posteriores por
+    // definicion. Pinneado no vuelve a dar falsos rojos y sigue cazando lo unico que si lo
+    // violaria: que alguien RENOMBRE esta carpeta ya aplicada a un timestamp anterior.
+    const TS = (d: string) => d.slice(0, 14);
+    const MAX_AL_ESCRIBIRLA = "20260727120000";
+    expect(TS(esta) >= MAX_AL_ESCRIBIRLA).toBe(true);
+    // Y la carpeta debe seguir siendo EXACTAMENTE la que se aplico: renombrar una migracion
+    // ya aplicada descuadra el registro de `_prisma_migrations`.
+    expect(TS(esta)).toBe("20260728120000");
   });
 
   it("schema.prisma y SQL no divergen: los cuatro @@index estan declarados", () => {

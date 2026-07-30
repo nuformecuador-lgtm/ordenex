@@ -1,6 +1,7 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
+import type { CausaIncidente } from "@/lib/types/causa-incidente";
 
 // Feature 36 — contrato del servicio del flujo del mensajero: listar mis
 // asignaciones, recoger (una o varias), escoger una para gestionar (bloqueo
@@ -201,6 +202,15 @@ export type GestionarInput = { ubicacion?: UbicacionInput } & (
       evidencias: EvidenciaArchivo[];
     }
   | { ordenId: string; resultado: "rechazada"; motivo: string; evidencias: EvidenciaArchivo[] }
+  // Feature 158 (R9/R10/R11): el INCIDENTE. Causa tipificada + motivo libre + 1..N fotos
+  // OBLIGATORIAS en las TRES causas (Q-B). Sin `montoRecibido`/`metodoPago`: no hay recaudo.
+  | {
+      ordenId: string;
+      resultado: "incidente";
+      causaIncidente: CausaIncidente;
+      motivo: string;
+      evidencias: EvidenciaArchivo[];
+    }
 );
 
 export type GestionarServiceResult =

@@ -132,3 +132,40 @@ describe("crearGestionYTransicionar — ramas sin foto (reprogramada)", () => {
     expect(gArg.data.evidenciaContentType).toBeNull();
   });
 });
+
+// Feature 158 (R10, Q-B) — el INCIDENTE reusa el MISMO camino de 1..N evidencias, sin ninguna
+// rama especial: las filas hijas, la portada dual-escrita y la atomicidad son las de la 119.
+describe("crearGestionYTransicionar — evidencias del INCIDENTE (158/R10)", () => {
+  const evidenciasIncidente = [
+    { storagePath: "o1/incidente-1-0.jpg", contentType: "image/jpeg", indice: 0 },
+    { storagePath: "o1/incidente-1-1.png", contentType: "image/png", indice: 1 },
+  ];
+
+  it("158/R10: persiste las N filas hijas y la portada, en la MISMA tx que la gestion", async () => {
+    const { repo, gestionCreate, evidenciaCreateMany, $transaction } = buildTxRepo();
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: {
+        resultado: "incidente",
+        causaIncidente: "danado",
+        motivo: "caja aplastada",
+        evidencias: evidenciasIncidente,
+      },
+      nuevoEstatusId: idEstado("incidente"),
+    });
+
+    expect($transaction).toHaveBeenCalledTimes(1);
+    const arg = (evidenciaCreateMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
+    expect(arg.data).toEqual([
+      { gestionId: "g1", storagePath: "o1/incidente-1-0.jpg", contentType: "image/jpeg", indice: 0 },
+      { gestionId: "g1", storagePath: "o1/incidente-1-1.png", contentType: "image/png", indice: 1 },
+    ]);
+    // R12 (119): la portada (indice 0) se dual-escribe, igual que en los otros resultados.
+    const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
+    expect(gArg.data.evidenciaStoragePath).toBe("o1/incidente-1-0.jpg");
+    expect(gArg.data.evidenciaContentType).toBe("image/jpeg");
+    expect(gArg.data.causaIncidente).toBe("danado");
+  });
+});
