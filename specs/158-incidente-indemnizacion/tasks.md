@@ -431,12 +431,21 @@
 
 ---
 
-## Fase 2B — Frontend del camino del ADMIN (arranca con F1B en verde)
+## Fase 2B — Frontend del camino del ADMIN · ✅ **COMPLETA el 2026-07-30**
 
 > **T0.6 (Q-H y Q-I) BLOQUEA esta fase entera.** Las tasks se escriben contra la recomendación del
-> diseño; si el humano decide otra cosa, cambia el sitio, no el contenido.
+> diseño; si el humano decide otra cosa, cambia el sitio, no el contenido. **El humano cerró las dos
+> en la segunda ronda de la puerta**, así que la fase se implementó tal cual está escrita.
+>
+> Bitácora: **`progress/impl_158b_frontend.md`** (mapa R→test de **R1-R64**, **25 mutaciones** de las
+> que **2 NO discriminaron** —una obligó a reforzar el caso del dinero y la otra dejó al descubierto
+> una guardia redundante que se declara en vez de fingir cobertura—, y el hueco del `adminSatelite`,
+> que **no tiene superficie de reporte** y se dice en voz alta).
+> `./init.sh` verde: **629 archivos / 7329 tests / 0 fallos** (baseline de F1B: 624 / 7228); lint
+> **0 errores / 19 warnings** (los del baseline).
+> **R49 y R51 quedan CERRADOS en sus dos mitades**: la de servidor la puso F1B, la visible es de aquí.
 
-- [ ] **T2.7** Modal de reporte `app/(app)/ordenes/_components/ReportarIncidenteModal.tsx`, abierto desde
+- [x] **T2.7** Modal de reporte `app/(app)/ordenes/_components/ReportarIncidenteModal.tsx`, abierto desde
       la acción de fila del listado, visible **sólo** si el estado de la orden está en los 5 y el rol lo
       permite. Calcado de `RecuperarABodegaModal` (100) y `DeshacerAsignacionModal` (149). Causa en radios
       (`causa-incidente-options.ts`, reusado de T2.1), motivo obligatorio y selector de 1..N fotos con los
@@ -445,7 +454,16 @@
       *Hecho cuando:* R45/R46 con test de componente: no aparece en estados fuera de los 5 ni para roles
       no autorizados; no deja enviar sin causa, sin motivo o sin al menos una foto; y el envío válido
       llama a la action con la forma esperada.
-- [ ] **T2.8** Cola de aprobación `app/(app)/incidentes/` + `IncidentesAdminModule.tsx`, espejo de
+      ✅ **CERRADA 2026-07-30.** `ReportarIncidenteModal.tsx` + `ReportarIncidenteAccion.tsx`
+      (disparador por fila, patrón `EtiquetaOrdenAccion`) + `incidente-origenes.ts`. Los cinco
+      estados NO se teclean: se **derivan** del mapa de la 140 (las salidas de `incidente` de
+      familia `incidente`, que por diseño son el mismo conjunto que los orígenes) y un test los
+      fija **por igualdad** contra `ORIGENES_INCIDENTE_ADMIN` del servidor — el service no se puede
+      importar desde el cliente porque arrastra `@prisma/client`.
+      ⚠️ **Declarado, no disimulado:** el service autoriza además al `adminSatelite` (R48), pero
+      `/ordenes` le hace `notFound` (su superficie es `/recepcion-satelite`), así que hoy **sólo
+      maestro/admin tienen desde dónde reportar**. Ver `progress/impl_158b_frontend.md` §5.
+- [x] **T2.8** Cola de aprobación `app/(app)/incidentes/` + `IncidentesAdminModule.tsx`, espejo de
       `CierresAdminModule`: **dos** `DataTable` («Pendientes de decisión» + «Histórico»), modal de detalle
       con causa, motivo, evidencias **firmadas** y datos de la orden; sub-modal de aprobación con el
       `Input` de monto (confirmar deshabilitado mientras el monto no sea válido, mismo criterio
@@ -455,15 +473,32 @@
       *Hecho cuando:* R49/R50/R54 con test de componente: las dos colas se pintan; no deja aprobar con
       monto inválido; no deja rechazar sin motivo; los montos se renderizan **TAL CUAL** (sin
       `parseFloat`); y el menú sólo lo muestra a los roles autorizados.
-- [ ] **T2.9** [P] **R51 en la interfaz**: en un incidente reportado por el propio actor, las acciones de
+      ✅ **CERRADA 2026-07-30.** `app/(app)/incidentes/page.tsx` (guardia de rol server-side; los
+      datos bajan por props) + `_components/IncidentesAdminModule.tsx`. Entrada nueva en
+      `menu-visibility.ts` con `iconKey` propio (`shieldAlert`) y los **mismos** roles que autoriza
+      el service. El tope del monto se **importa** (`INDEMNIZACION_MONTO_MAX`), no se reescribe.
+      **Lo que NO se reusó de los cierres:** `EstadoHistoricoRotulo`, cuyo marcador «bloqueante
+      hasta re-solicitud» (109/R31) sería FALSO aquí; hay un caso que lo fija.
+- [x] **T2.9** [P] **R51 en la interfaz**: en un incidente reportado por el propio actor, las acciones de
       decisión aparecen deshabilitadas con el motivo visible («no podés aprobar un incidente que
       reportaste vos»), y el servidor lo vuelve a rechazar.
       *Depende de:* T2.8.
       *Hecho cuando:* test de componente + el test de servidor de T1.28 citados juntos en el mapa: la
       regla está en los **dos** lados, no sólo en el cliente.
-- [ ] **T2.10** Cierre de fase F2B: `./init.sh` + suite completa en verde; mapa R→test completo (R1-R64).
+      ✅ **CERRADA 2026-07-30.** `tests/components/IncidentesAdminR51.test.tsx` (11 casos), con su
+      bloque de **CONTROL** sobre un incidente AJENO para que el bloqueo no pase por la razón
+      equivocada. El dato es `esPropio`, calculado en el SERVIDOR: la UI no compara ids.
+      **Añadido con su razón:** en un incidente propio se ofrece **«Retractar reporte»** (R59), la
+      salida que sí le corresponde al autor. Sin ella, `retractarIncidente` —ya implementada y
+      probada en F1B— se quedaba sin superficie y el mensaje de R51 no era accionable.
+- [x] **T2.10** Cierre de fase F2B: `./init.sh` + suite completa en verde; mapa R→test completo (R1-R64).
       *Depende de:* T2.7-T2.9.
       *Hecho cuando:* el reviewer puede recorrer cada uno de los 64 R hasta un test concreto.
+      ✅ `./init.sh` verde: **629 archivos / 7329 tests / 0 fallos** (baseline de F1B: 624 / 7228);
+      lint **0 errores / 19 warnings** (los del baseline). Mapa R→test de **R1-R64 completo** en
+      `progress/impl_158b_frontend.md` §2, con el archivo concreto de cada uno de los 64.
+      **25 mutaciones, 23 discriminan**; las 2 que NO lo hicieron están escritas con su razón (§3),
+      y una de ellas obligó a reforzar el caso del dinero (commit propio).
 
 ---
 
