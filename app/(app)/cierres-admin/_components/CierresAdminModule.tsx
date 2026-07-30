@@ -24,6 +24,10 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo } from "@/lib/types/cierre";
 import { montoValido } from "@/app/(app)/wallet/_components/wallet-labels";
+// Feature 158/R34: la etiqueta visible de la causa sale del catálogo derivado del SEED (mismo
+// módulo que usa el panel del mensajero para capturarla). El admin decide el monto MIRANDO la
+// causa: no puede ser un slug crudo ni, peor, no estar.
+import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import {
   money,
   EstadoCierreBadge,
@@ -81,6 +85,10 @@ const INDEMNIZACION_DETALLE =
   "Este cierre trae paquetes dañados, perdidos o robados. Indicá cuánto se indemniza por cada uno: al aprobar, la suma sale de la caja principal como un solo egreso.";
 const INDEMNIZACION_CONFIRMAR = "Aprobar e indemnizar";
 const INDEMNIZACION_MONTO_LABEL = "Monto de la indemnización";
+/** R34: rótulo de la causa en la fila del incidente (el dato que justifica el monto). */
+const INDEMNIZACION_CAUSA_LABEL = "Causa";
+/** Causa ausente: no debería pasar (el borde la exige, R9), pero no se inventa un valor. */
+const INDEMNIZACION_CAUSA_DESCONOCIDA = "Sin causa registrada";
 const INDEMNIZACION_MONTO_AYUDA = "Mayor que 0, con hasta 2 decimales (por ejemplo 12500.00).";
 const INDEMNIZACION_FALTAN =
   "Falta el monto de al menos un incidente, o alguno no es válido. No se puede aprobar así.";
@@ -632,6 +640,17 @@ export function CierresAdminModule({
                 <p className="text-xs text-muted-foreground">
                   {`Nº Guía ${g.numGuia ?? "—"} · ${g.tiendaNombre}`}
                   {g.motivo ? ` · ${g.motivo}` : ""}
+                </p>
+                {/* R34: la CAUSA, destacada y no escondida en la línea de contexto. Es el dato
+                    que justifica el monto: no es lo mismo indemnizar un paquete raspado que uno
+                    robado, y el admin lo decide mirando esto. */}
+                <p className="text-sm">
+                  <span className="text-muted-foreground">{INDEMNIZACION_CAUSA_LABEL}: </span>
+                  <span className="font-medium">
+                    {g.causaIncidente
+                      ? CAUSA_INCIDENTE_LABEL[g.causaIncidente]
+                      : INDEMNIZACION_CAUSA_DESCONOCIDA}
+                  </span>
                 </p>
                 <Label htmlFor={inputId}>{INDEMNIZACION_MONTO_LABEL}</Label>
                 <Input

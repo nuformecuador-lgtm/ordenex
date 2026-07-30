@@ -9,14 +9,25 @@
 
 ## Veredicto
 
-**Fase 2 verde, con UNA task incompleta y declarada.** `./init.sh` OK:
-**615 archivos / 6892 tests / 0 fallos**, lint **0 errores / 19 warnings** (los mismos 19 del
-baseline). Delta sobre el baseline de la fase backend (610 / 6829): **+5 archivos de test,
-+63 tests, 0 fallos, 0 warnings nuevos**.
+**Fase 2 COMPLETA y verde.** `./init.sh` OK: **616 archivos / 6936 tests / 0 fallos**, lint
+**0 errores / 19 warnings** (los mismos 19 del baseline).
 
-**T2.3 queda SIN marcar**: dos de sus cuatro columnas (causa tipificada y monto de la
-indemnización) no se pueden pintar porque **no viajan en el DTO** y poblarlas es trabajo de
-backend. Detalle y candado en §5.
+> **Actualizado el 2026-07-30 (segunda pasada).** La primera pasada cerró T2.1/T2.2/T2.4/T2.5
+> y dejó **T2.3 y T2.6 sin marcar**, porque la causa y el monto **no viajaban en el DTO** y
+> traerlos era backend. **El backend los añadió** (commit `a9354a7`), así que esta segunda
+> pasada pinta las dos columnas, mete la causa en el sub-modal de aprobación —que es lo que
+> **cierra R34** literalmente— e **invierte** el caso `PENDIENTE T2.3` en vez de borrarlo.
+> **T2.3 y T2.6 quedan marcadas.** Lo de la primera pasada se conserva abajo tal cual, con su
+> delta; el §5 pasó de «deuda declarada» a «deuda cerrada, con su rastro».
+
+| hito | archivos | tests |
+| --- | --- | --- |
+| baseline (cierre de la fase backend) | 610 | 6829 |
+| 1.ª pasada del frontend (T2.1–T2.5) | 615 | 6892 |
+| el backend extiende el DTO (`a9354a7`) | 616 | 6921 |
+| **2.ª pasada del frontend (cierre de T2.3/R34)** | **616** | **6936** |
+
+**Delta total del frontend: +6 archivos de test, +78 tests, 0 fallos, 0 warnings nuevos.**
 
 ---
 
@@ -63,9 +74,11 @@ backend. Detalle y candado en §5.
 - La columna de evidencia se extrae a `columnaEvidencia` y la comparten `rechazada` e
   `incidente` (mismo render, sin duplicar).
 
-### T2.3 — Detalle del cierre del ADMIN ⚠️ **PARCIAL (casilla SIN marcar)**
+### T2.3 — Detalle del cierre del ADMIN ✅ *(cerrada en la 2.ª pasada)*
 
 `app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx`.
+
+**1.ª pasada:**
 
 - `incidente` entra en `ORDEN_RESULTADOS`, al final.
 - Rama propia en `columnasPara`: comunes + «A cobrar» + motivo + evidencia firmada. Fuera
@@ -73,7 +86,31 @@ backend. Detalle y candado en §5.
   Ordenex, pago al mensajero, ingreso de bodega): un incidente no deriva ninguno y serían «—»
   en todas las filas.
 - La columna de evidencia se extrae a `COLUMNA_EVIDENCIA`, compartida con `rechazada`.
-- **Lo que falta y por qué: ver §5.**
+
+**2.ª pasada (con el DTO ya extendido):**
+
+- **`COLUMNA_CAUSA_INCIDENTE`** — la causa traducida con `CAUSA_INCIDENTE_LABEL`, el **mismo**
+  catálogo que usa el panel del mensajero para capturarla: las dos pantallas no pueden
+  divergir en la etiqueta, y el slug crudo (`danado`) no se pinta nunca. El módulo de
+  etiquetas se importa desde `mis-asignaciones/_components/` en vez de duplicarlo; hay
+  **precedente exacto** en el repo (`GestionarOrdenPanel` importa `estatus-label` de
+  `app/(app)/ordenes/_components/`).
+- **`COLUMNA_INDEMNIZACION`** — `money()` sobre el STRING, sin `parseFloat`. Y el `null` **no
+  se pinta como un guion pelado**: lleva `title`/`aria-label` con
+  `INDEMNIZACION_PENDIENTE_NOTA` («Se captura al aprobar el cierre; todavía no se
+  indemnizó»). Un «—» a secas se leería como *«esta orden no se indemniza»*, que es justo lo
+  contrario de lo que pasa (R19: el monto lo pone el admin AL APROBAR).
+- Orden final: comunes + «A cobrar» + **Causa** + Motivo + Evidencia + **Indemnización** (el
+  dinero al final, como en las otras ramas).
+
+### T2.2 (ampliada en la 2.ª pasada) — la CAUSA también en la vista del mensajero
+
+El backend decidió, con criterio y en el sitio correcto, que **el monto NO llega a la vista
+del mensajero pero la causa SÍ** (`WITH_DETALLE` ni selecciona la columna del monto). Si la UI
+no pintara la causa, ese `select` deliberado **no lo vería nadie**: sería código muerto. Así
+que el grupo `incidente` del detalle del mensajero gana la **misma** `COLUMNA_CAUSA_INCIDENTE`
+(importada, no reescrita) y **sigue sin** columna de monto — con un caso que lo fija, porque un
+«—» permanente ahí se leería como «me deben algo y no me lo han pagado».
 
 ### T2.4 — Sub-modal de captura al aprobar ✅
 
@@ -93,6 +130,14 @@ backend. Detalle y candado en §5.
   sub-modal **sigue abierto** (cerrarlo obligaría a recapturar todo) y teclear limpia el error
   de **esa** fila. Un `conflict`/`forbidden`/`no_encontrada` sigue el camino de la 38.
 - Cerrar el detalle descarta los montos: reabrir otro cierre no hereda nada.
+- **2.ª pasada — la CAUSA en cada fila, que es lo que cierra R34.** El requisito dice, literal,
+  que la interfaz debe mostrar «la identificación de la orden **y su causa**, y pedir su
+  monto». La primera pasada tenía la identificación y el monto; **la causa no aparecía por
+  ninguna parte del archivo**, y no era un adorno: es el dato con el que el admin decide
+  cuánto pagar (no se indemniza igual un paquete raspado que uno robado). Ahora va en su
+  propia línea, rotulada («Causa: Paquete robado»), no escondida en la línea de contexto. Una
+  causa ausente —que el borde impide (R9)— se rotula «Sin causa registrada»: no se inventa un
+  valor ni se pinta vacío.
 
 ### T2.5 — Wallet ✅
 
@@ -127,7 +172,9 @@ La casilla no se marca porque **T2.3, de la que depende, está incompleta**.
 | --- | --- |
 | **R12** *(llegaba SIN test)* | `tests/components/GestionarOrdenPanelIncidente.test.tsx` › bloque «R12 — el gate de verificación de guía sigue siendo la puerta…» (3 casos: sin verificar no hay ningún resultado **ni el incidente**; guía que no coincide → no se fija el puntero; guía correcta → el incidente queda disponible) |
 | **R33** *(llegaba SIN test)* | `…/GestionarOrdenPanelIncidente.test.tsx` › bloque «R33 — la opción existe y está DIFERENCIADA» (3 casos) · bloque «R33 — el envío válido manda el FormData esperado» (2 casos) · bloque «R33 — cliente y servidor validan con el MISMO esquema» (1 caso estructural: los dos importan `gestionarSchema` del mismo módulo y el panel **no** define un schema paralelo) |
-| **R34** *(llegaba SIN test)* | `tests/components/CierresAdminIndemnizacion.test.tsx` › bloque «R34 — con incidentes, aprobar pasa SIEMPRE por la captura» (6 casos + `it.each` de 7 montos inválidos) y «R34 — cerrar y reabrir no arrastra montos» (1 caso) |
+| **R34** *(llegaba SIN test)* | **la cláusula del MONTO:** `tests/components/CierresAdminIndemnizacion.test.tsx` › bloque «R34 — con incidentes, aprobar pasa SIEMPRE por la captura» (6 casos + `it.each` de 7 montos inválidos) y «R34 — cerrar y reabrir no arrastra montos» (1 caso). **La cláusula de la CAUSA** *(2.ª pasada)*: mismo archivo › «R34: muestra la CAUSA de cada incidente, traducida y no como slug», «R34: la causa sale del MISMO catálogo que el panel del mensajero» y «una causa ausente NO se inventa ni se pinta vacía» |
+| **R34 / R19** *(detalle, 2.ª pasada)* | `tests/components/CierreDetalleIncidente.test.tsx` › bloque «R34/R9 — la CAUSA se pinta traducida, nunca el slug» (`it.each` de las 3 causas + el catálogo compartido) y bloque «R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero» (4 casos: monto TAL CUAL, el «—» **con** su nota, y que ninguna de las dos columnas se cuela en los otros cuatro resultados) · «T2.3: las columnas de causa y monto SÍ se pintan» (el caso `PENDIENTE T2.3` **invertido**) |
+| **R9** *(vista del mensajero, 2.ª pasada)* | `tests/components/CierreDiaModuleIncidente.test.tsx` › bloque «R9 — el mensajero SÍ ve la causa que él mismo reportó» (`it.each` de las 3 + que la columna no se cuela en los otros resultados) · «tampoco trae la columna del MONTO» (la otra mitad de la decisión del backend) |
 | **R31** *(mitad de componente)* | `tests/unit/components/wallet-indemnizacion-libro.test.tsx` › «R31 — el concepto tiene etiqueta legible en el libro» (3 casos) y «R31 — el concepto es una opción del filtro por categoría» (3 casos, abriendo el `Select` de verdad) |
 | **R32** *(mitad de componente)* | `tests/unit/components/wallet-desglose-egresos-card.test.tsx` › «Feature 158/R32 — la indemnización es una fila propia y suma al total» (3 casos) + «el copy del título deja de decir 'administrativos'» (2 casos) |
 | **R30** *(refuerzo visible)* | `…/wallet-indemnizacion-libro.test.tsx` › «R30 — la indemnización NO ofrece reversa en el libro» (el backend lo tenía por servicio; aquí se fija que la UI **tampoco** ofrece el botón) |
@@ -142,7 +189,8 @@ La casilla no se marca porque **T2.3, de la que depende, está incompleta**.
 | **R35** *(no regresión)* | `tests/components/CierreDiaModuleIncidente.test.tsx` › «la sección de una ENTREGA sí conserva sus columnas de dinero» · `tests/components/CierreDetalleIncidente.test.tsx` › «un RECHAZO conserva exactamente sus columnas» + «los cuatro previos conservan su orden exacto» · `…/GestionarOrdenPanelIncidente.test.tsx` › «el selector de causa del incidente NO aparece en los otros cuatro resultados» · **la suite de componente completa en verde sin tocar las expectativas de los 4 resultados previos** |
 | **R36** *(no regresión)* | `tests/components/CierresAdminIndemnizacion.test.tsx` › «R36 — un cierre SIN incidentes se aprueba exactamente como hoy» (afirma que las claves del payload son **exactamente** `["cierreId"]`) · `tests/components/CierresAdminModule.test.tsx` › «R10: aprobar llama a aprobarCierre…» (el test de la 38, **intacto**) |
 
-**Con esto, R1–R36 quedan todos con test concreto.** Los tres que llegaban sin cobertura
+**Con esto, R1–R36 quedan todos con test concreto**, y **R34 con sus DOS cláusulas** (la del
+monto y la de la causa), que era lo que faltaba de verdad. Los tres que llegaban sin cobertura
 (R12, R33, R34) son ahora los mejor cubiertos de la fase. La única salvedad que sigue viva es
 **R29**, que pide «exactamente DOS» emisores y en este PR hay **UNO** — está declarada por la
 fase backend (`impl_158_backend.md` §6) y no cambia aquí.
@@ -166,7 +214,7 @@ Todas en memoria; los archivos se restauraron (`git status` limpio antes de cada
 | I | `incidente` sale de `ORDEN_RESULTADOS` del detalle de admin | 4 rojos |
 | J | el detalle de admin deja caer el incidente en la rama del rechazo | 2 rojos |
 | K | la etiqueta del grupo pasa a ser el slug (`"incidente"`) | 4 rojos |
-| L | **el DTO gana `causaIncidente`** | **el BUILD rompe** (`tests/components/CierreDetalleIncidente.test.tsx: Type 'true' is not assignable to type 'never'`) — es el candado de §5 |
+| L | **el DTO gana `causaIncidente`** | **el BUILD rompe** (`tests/components/CierreDetalleIncidente.test.tsx: Type 'true' is not assignable to type 'never'`) — el candado de §5. **No se quedó en simulacro: el backend lo hizo de verdad y el build se puso rojo, que es exactamente para lo que estaba** |
 | M | «Aprobar» vuelve a aprobar directo (sin sub-modal) | **16 rojos** |
 | N | el confirmar deja de guardarse con `montoValido` (sólo «no vacío») | **6 rojos** (los 6 montos inválidos que no son la cadena vacía) |
 | O | el payload manda **siempre** `indemnizaciones` (rompe R36) | 2 rojos, **uno de ellos el test de la 38** |
@@ -177,6 +225,17 @@ Todas en memoria; los archivos se restauraron (`git status` limpio antes de cada
 | T | la etiqueta de la categoría pasa a ser el slug | 4 rojos |
 | U | la reversa deja de exigir `origen_tipo = "gasto"` | 1 rojo |
 | V | el desglose parsea el monto con `parseFloat` | 1 rojo |
+
+### Mutaciones de la 2.ª pasada (las columnas nuevas), 6 de 6 discriminan
+
+| # | mutación | resultado |
+| --- | --- | --- |
+| W | se quita la **columna de causa** del detalle de admin | **6 rojos** en 1 archivo (incluido el caso invertido) |
+| X | se quita la **columna del monto** del detalle de admin | **4 rojos** |
+| Y | se quita la **causa del sub-modal** de aprobación | **3 rojos** — es la cláusula de R34 que faltaba |
+| Z | la causa se pinta **como slug crudo** (sin traducir) en el sub-modal | 2 rojos |
+| AA | el **mensajero** pierde su columna de causa | 3 rojos |
+| AB | el «—» del monto pierde su nota (vuelve a ser un guion pelado) | 1 rojo |
 
 ### La mutación que NO discriminó, dicha porque cambia lo que estos tests significan
 
@@ -204,50 +263,46 @@ mutación O.
 
 ---
 
-## 5. Lo que NO se hizo, con su razón
+## 5. La deuda de T2.3: cómo se declaró y cómo se cerró
 
-### T2.3 — casilla SIN marcar (las dos columnas que faltan)
+**Ya no hay deuda.** Se deja el rastro completo porque el mecanismo funcionó y conviene que se
+vea funcionando, no sólo que quede el resultado.
 
-`tasks.md` T2.3 pide para el grupo `incidente` «causa, motivo, evidencias, **monto** o `—`».
-Se hicieron **motivo y evidencias** (+ «A cobrar»). **Causa y monto NO se pintan**, y no es un
-olvido:
+### Lo que se declaró en la 1.ª pasada
 
-- **El dato no llega.** `CierreDetalleGestion`
-  (`lib/interfaces/services/ICierreDiaService.ts`) **no expone** `causaIncidente` ni
-  `indemnizacion`. No es una carencia de esta feature: tampoco expone la `causaDevolucion` de
-  la 73, así que el detalle del cierre **nunca** ha mostrado la causa tipificada de ninguna
-  gestión. Ese es el estado del **código**, que es la fuente de verdad cuando la spec y el
-  código se contradicen.
-- **Traerlo es backend.** Exige tocar el DTO, el `select` de `CierresAdminRepository` y el
-  mapper `toDetalleDTO` (`lib/services/CierreDiaService.ts`). La instrucción de esta fase es
-  explícita: no tocar `lib/services`, `lib/repositories`, `lib/actions` ni `db/`, y **parar y
-  decirlo** si una task lo necesita. Es lo que se hace aquí.
-- **No se disimula con un «—».** Un guion en la columna se lee como «este incidente no tiene
-  causa», que es falso: la causa **está persistida** (`gestion_orden.causa_incidente`, T1.2) y
-  el monto también tras aprobar. Pintar «—» sería mentir sobre un dato que existe.
-- **El hueco queda cerrado con un candado que rompe el build**, no con un comentario:
+`tasks.md` T2.3 pide «causa, motivo, evidencias, **monto** o `—`». Se hicieron motivo y
+evidencias; **causa y monto no**, porque el DTO `CierreDetalleGestion` no los traía y poblarlos
+exige tocar el `select` del repo y el mapper del service — **backend**, fuera del alcance de la
+fase, con instrucción explícita de **parar y decirlo**. Tampoco se disimuló con un «—»: un
+guion se lee como «este incidente no tiene causa», y la causa **sí** estaba persistida
+(`gestion_orden.causa_incidente`, T1.2). Se dejó un **candado de compilación**:
 
-  ```ts
-  // tests/components/CierreDetalleIncidente.test.tsx
-  type _SinCausaEnElDto = "causaIncidente" extends keyof CierreDetalleGestion ? never : true;
-  type _SinMontoEnElDto = "indemnizacion" extends keyof CierreDetalleGestion ? never : true;
-  ```
+```ts
+type _SinCausaEnElDto = "causaIncidente" extends keyof CierreDetalleGestion ? never : true;
+type _SinMontoEnElDto = "indemnizacion"  extends keyof CierreDetalleGestion ? never : true;
+```
 
-  El día que el DTO gane cualquiera de los dos campos, `pnpm run typecheck` —que corre en
-  `./init.sh`— **falla**, y quien lo añada tiene que completar las columnas. **Verificado por
-  mutación** (§3, mutación L).
+### Lo que pasó
 
-**Trabajo pendiente concreto, para quien lo retome:** añadir `causaIncidente` y
-`indemnizacion` a `CierreDetalleGestion`, poblarlos en el `select`/mapper del repo de admin, y
-entonces añadir las dos columnas (la de monto con `money()`, `null` → `—` mientras el cierre
-no esté aprobado). Es media hora de backend y diez minutos de frontend; lo que no se puede es
-hacerlo desde aquí sin saltarse la instrucción.
+El backend extendió el DTO (`a9354a7`) y **el candado se puso rojo**: `typecheck` falló con
+`Type 'true' is not assignable to type 'never'`. Hizo exactamente su trabajo — impedir que el
+dato llegara al cliente y se quedara invisible. El backend **lo invirtió en vez de borrarlo**
+(ahora rompe si los campos **desaparecen**) y conservó, renombrado `PENDIENTE T2.3`, el caso
+que afirmaba que las columnas aún no se pintaban.
 
-### T2.6 — casilla SIN marcar
+### Lo que se cerró en la 2.ª pasada
 
-`./init.sh` está **verde** y el mapa R→test de R1–R36 está **completo** (§2), que son sus dos
-condiciones. Pero T2.6 declara `Depende de: T2.1-T2.5` y **T2.3 está incompleta**, así que
-marcarla afirmaría que la fase cerró. No cerró. La casilla es del leader cuando T2.3 lo esté.
+Las dos columnas del detalle de admin, la causa en el sub-modal (**la cláusula de R34 que
+faltaba**) y la causa en la vista del mensajero. Y el caso `PENDIENTE T2.3` **se invirtió
+también**, no se borró: ahora exige que las dos columnas **estén**, y quitarlas lo pone en
+rojo. El archivo lleva escrita esa historia en su cabecera, para que quien lo lea entienda por
+qué dos de sus casos afirman hoy lo contrario de lo que afirmaban al nacer.
+
+**Ningún test se borró en ninguna de las dos inversiones.** Es la misma regla que la fase
+backend aplicó con los tests de la 154: si el invariante cambia, el test sigue protegiendo el
+invariante nuevo con la misma fuerza.
+
+## 5-bis. Lo que NO se hizo, con su razón
 
 ### Tasks que no son de esta fase
 
@@ -277,20 +332,46 @@ marcarla afirmaría que la fase cerró. No cerró. La casilla es del leader cuan
 - **Título de la tarjeta de la wallet.** El design decía «"Egresos" o similar». Se eligió
   «Egresos» **+ una descripción explícita de qué no incluye**, porque «Total de egresos» a
   secas seguiría siendo inexacto: la tarjeta nunca sumó los pagos a tiendas ni a mensajeros.
+- *(2.ª pasada)* **Dónde vive `CAUSA_INCIDENTE_LABEL`.** Se **importa** desde
+  `mis-asignaciones/_components/` en los dos detalles en vez de duplicarse o promoverse a
+  `components/shared/`. Razón: `docs/architecture.md` reserva `shared/` para **componentes**
+  compuestos, y esto es un catálogo de etiquetas; el repo ya tiene el precedente exacto
+  (`GestionarOrdenPanel` importa `estatus-label` de `app/(app)/ordenes/_components/`).
+  Duplicarlo habría dejado que las dos pantallas dijeran cosas distintas de la misma causa.
+- *(2.ª pasada)* **La causa también en la vista del mensajero**, aunque T2.2 no la pedía. El
+  backend la selecciona ahí **a propósito** (a diferencia del monto, que ni pide): sin la
+  columna, ese `select` sería código muerto y nadie se enteraría si se cayera.
+- *(2.ª pasada)* **El «—» del monto lleva nota.** Un guion pelado en esa columna significa dos
+  cosas incompatibles («no se indemniza» vs. «todavía no se capturó») y la correcta es la
+  segunda. Se resolvió con `title`/`aria-label`, el mismo patrón que usan los badges de
+  `cierre-detalle-shared` (`PAGO_SIN_TARIFA_NOTA`, `RECHAZO_SLA_BADGE_NOTA`).
 
 ### Preguntas abiertas que deja esta fase
 
-1. **¿Se muestran la causa y el monto en el detalle del cierre?** (la deuda de T2.3). El spec
-   dice que sí; el código no lo permite todavía. **Necesita decisión + backend.**
-2. **La causa tampoco se ve en el detalle del MENSAJERO** (T2.2), por el mismo motivo. Ahí el
-   spec no la pedía explícitamente, pero es la misma carencia del DTO.
+1. ~~¿Se muestran la causa y el monto en el detalle del cierre?~~ **CERRADA el 2026-07-30**: el
+   backend extendió el DTO y esta fase pintó las columnas (§5).
+2. ~~La causa tampoco se ve en el detalle del MENSAJERO.~~ **CERRADA**: ahí se pinta la causa;
+   el monto **no**, y eso es una decisión, no una carencia (design §7.2, implementada en la
+   consulta del repo).
 3. **Flake conocido de la suite de componentes.** En una corrida de `tests/components/` un
    archivo cayó por timeout bajo carga y pasó al repetir (es el fenómeno que documenta
-   `vitest.config.ts:8-17`). `./init.sh` completo pasó a la primera. No se cambió el timeout.
+   `vitest.config.ts:8-17`). Las dos corridas completas de `./init.sh` pasaron a la primera. No
+   se cambió el timeout. *(El backend reportó el mismo fenómeno en los tres tests que barren el
+   árbol de archivos: es E/S bajo carga, no regresión.)*
 
 ---
 
 ## 6. Salida real de la verificación
+
+**1.ª pasada** (T2.1–T2.5), sobre el baseline de la fase backend (610 / 6829):
+
+```
+ Test Files  615 passed (615)
+      Tests  6892 passed (6892)
+```
+
+**2.ª pasada** (cierre de T2.3 y R34), sobre el baseline que dejó el backend al extender el
+DTO (616 / 6921):
 
 ```
 $ ./init.sh
@@ -305,17 +386,17 @@ $ ./init.sh
 ✖ 19 problems (0 errors, 19 warnings)
 ✓ lint paso
 -> pnpm run test
- Test Files  615 passed (615)
-      Tests  6892 passed (6892)
-   Duration  165.50s
+ Test Files  616 passed (616)
+      Tests  6936 passed (6936)
+   Duration  161.79s
 ✓ test paso
 ✓ todas las migraciones tienen down.sql
 ✓ .env presente
 == init OK ==
 ```
 
-Baseline al empezar (cierre de la fase backend): **610 archivos / 6829 tests**, lint 0 errores
-/ 19 warnings. **Delta: +5 archivos de test, +63 tests, 0 fallos, 0 warnings nuevos.**
+**Delta total del frontend** sobre el baseline de la fase backend: **+6 archivos de test,
++78 tests** (63 de la 1.ª pasada + 15 de la 2.ª), **0 fallos, 0 warnings nuevos.**
 
 ---
 
@@ -332,23 +413,26 @@ tests/components/CierresAdminIndemnizacion.test.tsx
 tests/unit/components/wallet-indemnizacion-libro.test.tsx
 ```
 
-### Modificados — producción (4)
+### Modificados — producción (5)
 
 ```
 app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx
-app/(app)/cierre-dia/_components/CierreDiaModule.tsx
-app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx
-app/(app)/cierres-admin/_components/CierresAdminModule.tsx
+app/(app)/cierre-dia/_components/CierreDiaModule.tsx            ← 1.ª y 2.ª pasada
+app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx   ← 1.ª y 2.ª pasada
+app/(app)/cierres-admin/_components/CierresAdminModule.tsx      ← 1.ª y 2.ª pasada
 app/(app)/wallet/_components/DesgloseEgresosCard.tsx
 ```
 
 *(`wallet-labels.ts` **no** se tocó en esta fase: su entrada de `CATEGORIA_LABEL` ya la puso la
 fase backend por exhaustividad, y era correcta.)*
 
-### Modificados — tests (1)
+### Modificados — tests (4)
 
 ```
 tests/unit/components/wallet-desglose-egresos-card.test.tsx   ← copy corregido + 4 casos nuevos
+tests/components/CierreDetalleIncidente.test.tsx              ← caso `PENDIENTE T2.3` INVERTIDO + 9 casos
+tests/components/CierresAdminIndemnizacion.test.tsx           ← +3 casos (la cláusula de la causa, R34)
+tests/components/CierreDiaModuleIncidente.test.tsx            ← +5 casos (causa sí, monto no)
 ```
 
 ---

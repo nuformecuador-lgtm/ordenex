@@ -5,11 +5,13 @@ import userEvent from "@testing-library/user-event";
 
 import {
   DetalleSecciones,
+  INDEMNIZACION_PENDIENTE_NOTA,
   ORDEN_RESULTADOS,
   RESULTADO_LABEL,
   RESULTADO_VACIO,
   columnasPara,
 } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
+import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -17,17 +19,22 @@ import type {
   IngresoOrdenexDTO,
 } from "@/lib/interfaces/services/ICierreDiaService";
 
-// Feature 158 (T2.3 — R18/R17) — el grupo "Incidentes" en el detalle COMPARTIDO por los
-// módulos de admin (`CierresAdminModule` de la 38 y los de bodega de la 40). Lo que protege:
+// Feature 158 (T2.3 — R18/R17/R34/R19) — el grupo "Incidentes" en el detalle COMPARTIDO por
+// los módulos de admin (`CierresAdminModule` de la 38 y los de bodega de la 40). Lo que
+// protege:
 //   - el grupo existe, está etiquetado en español y va AL FINAL del orden fijo (R18);
 //   - sus columnas son las suyas y NO las de un rechazo: sin origen SLA/manual, sin conceptos
 //     de ingreso de Ordenex, sin pago al mensajero y sin ingreso de bodega (R17);
-//   - la evidencia se abre con la URL FIRMADA, como en el resto.
+//   - la evidencia se abre con la URL FIRMADA, como en el resto;
+//   - la CAUSA se pinta traducida y nunca como slug del enum (R34/R9);
+//   - el MONTO se pinta TAL CUAL (STRING) y su "—" lleva la nota de que se captura al aprobar,
+//     porque un "—" pelado se leería como «esta orden no se indemniza» (R19).
 //
-// ⚠️ Deuda declarada (ver `progress/impl_158_frontend.md`): la CAUSA tipificada y el MONTO de
-// la indemnización NO se pintan porque no viajan en `CierreDetalleGestion`. Exponerlos es
-// trabajo de backend (DTO + repo + service) y esta fase no toca `lib/`. Hay un caso abajo que
-// FIJA el hueco, para que aparezca en rojo el día que el DTO los traiga y nadie los pinte.
+// 📌 Historia de este archivo, que explica dos de sus casos: nació con la causa y el monto SIN
+// pintar, porque el DTO no los traía, y dejó un candado de compilación + un caso que afirmaba
+// el hueco. El backend extendió el DTO (el candado se puso rojo y se INVIRTIÓ) y esta fase
+// pintó las columnas (el caso del hueco se puso rojo y se INVIRTIÓ también). Ninguno de los
+// dos se borró: los dos siguen protegiendo el invariante, ahora en su sentido correcto.
 
 function ingreso(over: Partial<IngresoOrdenexDTO> = {}): IngresoOrdenexDTO {
   return {
@@ -230,8 +237,10 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
       "producto",
       "tiendaNombre",
       "montoCobrar",
+      "causaIncidente", // feature 158/R34 (T2.3, 2026-07-30)
       "motivo",
       "evidencia",
+      "indemnizacion", // feature 158/R19/R22 (T2.3, 2026-07-30)
     ]);
   });
 });
@@ -252,7 +261,7 @@ type _ConMontoEnElDto = "indemnizacion" extends keyof CierreDetalleGestion ? tru
 const _conCausa: _ConCausaEnElDto = true;
 const _conMonto: _ConMontoEnElDto = true;
 
-describe("El dato YA viaja en el DTO — las columnas quedan pendientes del frontend", () => {
+describe("El dato viaja en el DTO y AHORA SÍ se pinta (T2.3 cerrada el 2026-07-30)", () => {
   it("`CierreDetalleGestion` lleva la causa y el monto (si se quitan, el build rompe)", () => {
     expect(_conCausa).toBe(true);
     expect(_conMonto).toBe(true);
@@ -268,16 +277,90 @@ describe("El dato YA viaja en el DTO — las columnas quedan pendientes del fron
     expect(makeGestion({ gestionId: "ge", resultado: "entregada" }).causaIncidente).toBeNull();
   });
 
-  // ⚠️ PENDIENTE DE `frontend_dev` (T2.3): pintar las DOS columnas. El backend ya deja el dato
-  // disponible; lo que falta es la presentación (la causa traducida con `CAUSA_INCIDENTE_LABEL`
-  // y el monto con `money()`, `—` mientras el cierre no esté aprobado).
-  //
-  // Este caso se conserva afirmando el estado ACTUAL —las columnas todavía no están— para que
-  // el día que se añadan se ponga ROJO y quien las añada tenga que venir aquí a invertirlo, en
-  // vez de que el hueco se cierre en silencio y nadie revise que se pintan bien.
-  it("PENDIENTE T2.3: las columnas de causa y monto aún NO se pintan (invertir al añadirlas)", () => {
+  // Este caso nació afirmando lo contrario («las columnas aún NO se pintan»), a propósito, para
+  // ponerse ROJO el día que se añadieran y obligar a revisarlas en vez de cerrar el hueco en
+  // silencio. **Ese día llegó**: se INVIERTE, con la misma fuerza y sin borrar nada — ahora
+  // exige que las dos columnas ESTÉN. Quitarlas vuelve a poner esto en rojo.
+  it("T2.3: las columnas de causa y monto SÍ se pintan (antes exigía lo contrario)", () => {
     const columnas = columnasPara("incidente", () => {}).map((c) => c.id);
-    expect(columnas).not.toContain("causaIncidente");
-    expect(columnas).not.toContain("indemnizacion");
+    expect(columnas).toContain("causaIncidente");
+    expect(columnas).toContain("indemnizacion");
+  });
+});
+
+describe("R34/R9 — la CAUSA se pinta traducida, nunca el slug del enum", () => {
+  it.each([
+    ["danado", "Paquete dañado"],
+    ["perdido", "Paquete perdido"],
+    ["robado", "Paquete robado"],
+  ] as const)("causa `%s` se muestra como «%s»", (value, etiqueta) => {
+    render(
+      <DetalleSecciones
+        grupos={{ ...emptyGrupos(), incidente: [unIncidente({ causaIncidente: value })] }}
+        onVerEvidencia={() => {}}
+      />,
+    );
+
+    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    expect(within(tabla).getByText(etiqueta)).toBeInTheDocument();
+    // El value crudo del enum no aparece por ninguna parte (se comprueba con `danado`, el
+    // único que difiere textualmente de su etiqueta acentuada).
+    expect(tabla.textContent).not.toMatch(/danado/);
+    cleanup();
+  });
+
+  it("la etiqueta sale del MISMO catálogo que usa el panel del mensajero", () => {
+    // Si las dos pantallas tuvieran cadenas propias, podrían divergir sin que nada avisara.
+    expect(CAUSA_INCIDENTE_LABEL.robado).toBe("Paquete robado");
+    render(
+      <DetalleSecciones
+        grupos={{ ...emptyGrupos(), incidente: [unIncidente({ causaIncidente: "robado" })] }}
+        onVerEvidencia={() => {}}
+      />,
+    );
+    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    expect(within(tabla).getByText(CAUSA_INCIDENTE_LABEL.robado)).toBeInTheDocument();
+  });
+});
+
+describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero", () => {
+  it("un incidente ya indemnizado muestra su monto TAL CUAL (STRING, sin parseFloat)", () => {
+    render(
+      <DetalleSecciones
+        grupos={{
+          ...emptyGrupos(),
+          incidente: [unIncidente({ indemnizacion: "12345678901.99" })],
+        }}
+        onVerEvidencia={() => {}}
+      />,
+    );
+
+    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    expect(within(tabla).getByText("₡12345678901.99")).toBeInTheDocument();
+  });
+
+  it("sin monto todavía muestra '—' CON la nota de que se captura al aprobar", () => {
+    render(
+      <DetalleSecciones
+        grupos={{ ...emptyGrupos(), incidente: [unIncidente({ indemnizacion: null })] }}
+        onVerEvidencia={() => {}}
+      />,
+    );
+
+    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    // Un "—" pelado se leería como «esta orden no se indemniza», que es lo contrario de lo
+    // que pasa: el monto todavía no se capturó (R19: lo pone el admin AL APROBAR).
+    const celda = within(tabla).getByLabelText(INDEMNIZACION_PENDIENTE_NOTA);
+    expect(celda).toHaveTextContent("—");
+    expect(celda).toHaveAttribute("title", INDEMNIZACION_PENDIENTE_NOTA);
+    expect(INDEMNIZACION_PENDIENTE_NOTA).toMatch(/aprobar/i);
+  });
+
+  it("la columna del monto NO aparece en los otros cuatro resultados", () => {
+    for (const resultado of ["entregada", "reprogramada", "devuelta", "rechazada"] as const) {
+      const ids = columnasPara(resultado, () => {}).map((c) => c.id);
+      expect(ids, `${resultado} no debería tener la columna`).not.toContain("indemnizacion");
+      expect(ids, `${resultado} no debería tener la columna`).not.toContain("causaIncidente");
+    }
   });
 });

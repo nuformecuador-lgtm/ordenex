@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
 import { verCierreDetalle, aprobarCierre } from "@/lib/actions/cierres-admin";
+import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
   CierreDetalleGestion,
@@ -158,6 +159,7 @@ const INC_1 = makeGestion({
   destinatario: "Beto Ruiz",
   numGuia: 5001,
   motivo: "Caja aplastada",
+  causaIncidente: "danado", // feature 158/R34: el dato que justifica el monto
 });
 const INC_2 = makeGestion({
   gestionId: "gi2",
@@ -166,6 +168,7 @@ const INC_2 = makeGestion({
   destinatario: "Carla Mora",
   numGuia: 5002,
   motivo: "Robo en la parada",
+  causaIncidente: "robado",
 });
 
 /** Abre el detalle del cierre `c1` y pulsa "Aprobar". */
@@ -231,6 +234,46 @@ describe("R34 — con incidentes, aprobar pasa SIEMPRE por la captura del monto"
       expect(document.getElementById(`indemnizacion-${inc.gestionId}`)).toBeInTheDocument();
     }
     expect(within(dialog).getAllByLabelText("Monto de la indemnización")).toHaveLength(2);
+  });
+
+  // --- R34, la cláusula de la CAUSA ---
+  // El requisito dice, literal: «la interfaz DEBE mostrar, por cada incidente, la
+  // identificación de la orden Y SU CAUSA, y pedir su monto». Sin la causa, el admin fija el
+  // monto sin saber si el paquete se raspó o se lo robaron: es la mitad del requisito que
+  // decide el DINERO, no un adorno.
+  it("R34: muestra la CAUSA de cada incidente, traducida y no como slug", async () => {
+    const user = userEvent.setup();
+    conIncidentes([INC_1, INC_2]);
+    await pulsarAprobar(user);
+
+    const dialog = await screen.findByRole("dialog", { name: SUB_MODAL });
+    expect(within(dialog).getByText("Paquete dañado")).toBeInTheDocument();
+    expect(within(dialog).getByText("Paquete robado")).toBeInTheDocument();
+    // Nunca el value crudo del enum (`danado` es el único que difiere de su etiqueta).
+    expect(dialog.textContent).not.toMatch(/danado/);
+    // Y va rotulada, no suelta entre el resto del contexto.
+    expect(within(dialog).getAllByText("Causa:")).toHaveLength(2);
+  });
+
+  it("R34: la causa sale del MISMO catálogo que el panel del mensajero", async () => {
+    const user = userEvent.setup();
+    conIncidentes([INC_1]);
+    await pulsarAprobar(user);
+
+    const dialog = await screen.findByRole("dialog", { name: SUB_MODAL });
+    // Si la pantalla de aprobación tuviera cadenas propias, podría decir una cosa distinta de
+    // la que el mensajero eligió, sin que nada avisara.
+    expect(within(dialog).getByText(CAUSA_INCIDENTE_LABEL.danado)).toBeInTheDocument();
+  });
+
+  it("una causa ausente NO se inventa ni se pinta vacía", async () => {
+    const user = userEvent.setup();
+    // No debería ocurrir (el borde la exige, R9), pero si ocurriera, la UI lo dice.
+    conIncidentes([makeGestion({ ...INC_1, causaIncidente: null })]);
+    await pulsarAprobar(user);
+
+    const dialog = await screen.findByRole("dialog", { name: SUB_MODAL });
+    expect(within(dialog).getByText("Sin causa registrada")).toBeInTheDocument();
   });
 
   it("no deja confirmar mientras falte algún monto, y lo dice con TEXTO", async () => {

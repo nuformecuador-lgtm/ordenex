@@ -329,10 +329,12 @@
 
 ## Fase 2 — Frontend del camino del MENSAJERO (arranca con la Fase 1 en verde)
 
-> Bitácora: **`progress/impl_158_frontend.md`** (mapa R→test de la parte visible, 22 mutaciones
-> + la que NO discriminó y por qué, y la deuda de T2.3 con su candado de compilación).
-> `./init.sh` verde: **615 archivos / 6892 tests / 0 fallos** (baseline de la fase backend:
-> 610 / 6829). **R12, R33 y R34, que llegaban SIN test, quedan cubiertos.**
+> Bitácora: **`progress/impl_158_frontend.md`** (mapa R→test de la parte visible, **28
+> mutaciones** + la que NO discriminó y por qué, y la deuda de T2.3: cómo se declaró con un
+> candado de compilación y cómo se cerró cuando el candado se puso rojo de verdad).
+> ✅ **COMPLETA.** `./init.sh` verde: **616 archivos / 6936 tests / 0 fallos** (baseline de la
+> fase backend: 610 / 6829). **R12, R33 y R34, que llegaban SIN test, quedan cubiertos**, y R34
+> con sus dos cláusulas: la del monto **y la de la causa**.
 
 - [x] **T2.1** Panel del mensajero (`GestionarOrdenPanel.tsx`): `type Resultado` (`:50`),
       `RESULTADO_BOTONES` (`:63`) con "Reportar incidente" visualmente separado, rama en `buildRaw`
@@ -347,11 +349,12 @@
       (sin montos de dinero).
       *Depende de:* T1.18.
       *Hecho cuando:* R18 con test de componente; el grupo vacío no se pinta (patrón actual).
-- [ ] **T2.3** Detalle del admin (`cierre-detalle-shared.tsx:30,37,176,742`): etiquetas, orden de
+- [x] **T2.3** Detalle del admin (`cierre-detalle-shared.tsx:30,37,176,742`): etiquetas, orden de
       grupos y columnas del grupo `incidente` (causa, motivo, evidencias, monto o `—`).
       *Depende de:* T1.18.
       *Hecho cuando:* R18 con test de componente y las evidencias se abren firmadas como en el resto.
-      ⚠️ **PARCIAL — la casilla queda SIN marcar a propósito.** Hechas las etiquetas, el orden de
+      ⚠️ *(historia, conservada: la casilla estuvo SIN marcar y por qué)* **PARCIAL en la 1.ª
+      pasada.** Hechas las etiquetas, el orden de
       grupos, la rama propia de columnas (comunes + «A cobrar» + motivo + **evidencia firmada**) y
       su test (8 casos). **Faltan la columna de CAUSA y la de MONTO**: no viajan en
       `CierreDetalleGestion` (el DTO tampoco expone la `causaDevolucion` de la 73), así que
@@ -371,29 +374,46 @@
       cumplir R34— es pintar las dos columnas** (causa traducida con `CAUSA_INCIDENTE_LABEL`,
       monto con `money()` y `—` mientras el cierre no esté aprobado) y la causa en el sub-modal
       de aprobación. El dato ya está disponible; es trabajo de `frontend_dev`.
+      ✅ **CERRADA 2026-07-30 (2.ª pasada de `frontend_dev`).** Pintadas `COLUMNA_CAUSA_INCIDENTE`
+      (etiqueta del MISMO catálogo que usa el panel del mensajero, importado y no duplicado, con
+      el precedente de `estatus-label`) y `COLUMNA_INDEMNIZACION` (`money()` sobre el STRING; el
+      `—` va **con su nota** «se captura al aprobar el cierre», porque un guion pelado se leería
+      como «esta orden no se indemniza»). El caso `PENDIENTE T2.3` se puso rojo, como estaba
+      diseñado, y **se invirtió** (ahora exige que las columnas ESTÉN). Añadida además la causa
+      —no el monto— al detalle del MENSAJERO: el backend la selecciona ahí a propósito y sin la
+      columna ese `select` sería código muerto. **6 mutaciones nuevas, 6 discriminan.**
 - [x] **T2.4** Sub-modal de captura al aprobar (`CierresAdminModule.tsx:187,461`), espejo del de
       rechazo: una fila por incidente, confirmación deshabilitada mientras falte o sea inválido algún
       monto, errores del servidor pintados por fila.
       *Depende de:* T2.3.
       *Hecho cuando:* R34 con test de componente: sin incidentes aprueba directo (R36); con
       incidentes no deja confirmar hasta completar; envía `{ cierreId, indemnizaciones }`.
+      ✅ Completada la **cláusula de la CAUSA de R34** en la 2.ª pasada (2026-07-30): el requisito
+      exige mostrar «la identificación de la orden **Y SU CAUSA**, y pedir su monto», y la causa no
+      aparecía por ninguna parte del archivo. Ahora va rotulada en cada fila («Causa: Paquete
+      robado»), traducida con `CAUSA_INCIDENTE_LABEL`; una causa ausente —que el borde impide,
+      R9— se rotula «Sin causa registrada», no se inventa ni se pinta vacía. Con test propio.
 - [x] **T2.5** [P] Wallet (`wallet-labels.ts:31` + `DesgloseEgresosCard.tsx:15`): etiqueta del
       concepto, fila "Indemnizaciones" y copy del título de la tarjeta (deja de ser sólo
       "administrativos").
       *Depende de:* T1.18.
       *Hecho cuando:* R31/R32 con test de componente: el concepto aparece en el libro, en el filtro de
       categoría y en el desglose, con montos renderizados TAL CUAL (sin `parseFloat`).
-- [ ] **T2.6** Cierre de fase frontend del camino del mensajero: `./init.sh` + suite completa (incluidos
+- [x] **T2.6** Cierre de fase frontend del camino del mensajero: `./init.sh` + suite completa (incluidos
       tests de componente) en verde; mapa R→test completo (R1-R36) en
       `progress/impl_158-incidente-indemnizacion.md`.
       *Depende de:* T2.1-T2.5.
       *Hecho cuando:* el reviewer puede recorrer cada R hasta un test concreto.
-      ⚠️ **SIN marcar porque depende de T2.3, que quedó PARCIAL.** Sus dos condiciones propias SÍ
-      se cumplen: `./init.sh` verde (**615 / 6892 / 0**, lint 0 errores) con los tests de componente
-      incluidos, y el mapa R→test de **R1-R36 completo** — R12, R33 y R34, que llegaban sin
-      cobertura, ya tienen su test citado en `progress/impl_158_frontend.md` §2 (la bitácora se
-      escribió con ese nombre, no con el del enunciado, para no pisar la de la fase backend).
-      Marcarla afirmaría que la fase cerró, y no cerró: la marca es del leader cuando T2.3 lo esté.
+      ✅ `./init.sh` verde: **616 archivos / 6936 tests / 0 fallos**; lint **0 errores / 19
+      warnings** (los del baseline). Mapa R→test de **R1-R36 completo** en
+      `progress/impl_158_frontend.md` §2 —la bitácora se escribió con ese nombre, no con el del
+      enunciado, para no pisar la de la fase backend—, con **R12, R33 y R34** (los tres que
+      llegaban sin cobertura) cubiertos y **R34 con sus DOS cláusulas**.
+      ⚠️ *(historia: esta casilla estuvo SIN marcar mientras T2.3 lo estuvo; se marca ahora que
+      T2.3 cerró, no antes.)* Queda viva una única salvedad, heredada y ya declarada por la fase
+      backend: **R29** pide «exactamente DOS» emisores de `egreso_indemnizacion` y en este PR hay
+      **UNO** (el segundo es del PR del admin); el guard de T1.15 lo fija y exige que el segundo
+      se sume cuando llegue.
 
 ---
 

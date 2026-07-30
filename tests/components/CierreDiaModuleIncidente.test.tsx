@@ -201,6 +201,19 @@ describe("R17 — el incidente no muestra dinero en la vista del mensajero", () 
     expect(within(tabla).queryByText(/₡/)).toBeNull();
   });
 
+  it("tampoco trae la columna del MONTO de la indemnización (no es plata suya)", () => {
+    // El backend lo garantiza en la CONSULTA (`WITH_DETALLE` ni selecciona la columna), así
+    // que aquí el dato es SIEMPRE `null`. Este caso fija la otra mitad: que la pantalla del
+    // mensajero tampoco intente pintarlo. Si alguien añadiera la columna, mostraría un "—"
+    // permanente que se leería como «me deben algo y todavía no me lo pagan».
+    renderModule({ ...emptyGrupos(), incidente: [incidente()] });
+
+    const cabeceras = within(screen.getByRole("table", { name: "Incidentes" }))
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent);
+    expect(cabeceras).not.toContain("Indemnización");
+  });
+
   it("la sección de una ENTREGA sí conserva sus columnas de dinero (no regresión)", () => {
     renderModule({
       ...emptyGrupos(),
@@ -222,6 +235,36 @@ describe("R17 — el incidente no muestra dinero en la vista del mensajero", () 
     expect(cabeceras).toContain("Ganancia");
     expect(cabeceras).toContain("Monto");
     expect(within(tabla).getByText("₡150.00")).toBeInTheDocument();
+  });
+});
+
+describe("R9 — el mensajero SÍ ve la causa que él mismo reportó", () => {
+  it.each([
+    ["danado", "Paquete dañado"],
+    ["perdido", "Paquete perdido"],
+    ["robado", "Paquete robado"],
+  ] as const)("causa `%s` se muestra como «%s», nunca el slug", (value, etiqueta) => {
+    // El backend selecciona la causa en la consulta del mensajero A PROPÓSITO (a diferencia
+    // del monto, que ni siquiera pide): es el hecho que él reportó, no dinero. Sin esta
+    // columna ese `select` no lo vería nadie y sería código muerto.
+    renderModule({ ...emptyGrupos(), incidente: [incidente({ causaIncidente: value })] });
+
+    const tabla = screen.getByRole("table", { name: "Incidentes" });
+    expect(within(tabla).getByText(etiqueta)).toBeInTheDocument();
+    expect(tabla.textContent).not.toMatch(/danado/);
+    cleanup();
+  });
+
+  it("la columna de causa NO aparece en los otros cuatro resultados", () => {
+    renderModule({
+      ...emptyGrupos(),
+      devuelta: [makeGestion({ gestionId: "gd", resultado: "devuelta" })],
+    });
+
+    const cabeceras = within(screen.getByRole("table", { name: "Devueltas" }))
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent);
+    expect(cabeceras).not.toContain("Causa");
   });
 });
 

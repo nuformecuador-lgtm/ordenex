@@ -18,6 +18,9 @@ import type {
   CierreResultado,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+// Feature 158 (T2.3): la columna de la causa es la MISMA que la del detalle del admin — se
+// reusa en vez de reescribirla, para que las dos pantallas no puedan divergir en la etiqueta.
+import { COLUMNA_CAUSA_INCIDENTE } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 
 // Feature 37 (T15, R3-R7/R10/R11/R18): módulo cliente del "Cierre del día". Recibe
 // del Server Component padre los grupos ya resueltos (por resultado), los totales
@@ -636,11 +639,18 @@ function columnasPara(
   // Feature 158/R17/R18: el `incidente` es un grupo PROPIO y NO lleva NINGUNA columna de
   // dinero — ni pago al mensajero (un incidente no se paga) ni el monto de la indemnización
   // (es plata que se le paga a la tienda, no al mensajero: no es suya y no la ve, design §7.2).
+  // El backend lo garantiza en la CONSULTA: `WITH_DETALLE` ni siquiera selecciona la columna,
+  // así que aquí `indemnizacion` es SIEMPRE `null` y no hay monto que pintar.
+  //
+  // La CAUSA sí llega y sí se muestra: es el hecho que el propio mensajero reportó, no dinero.
+  // Sin esta columna, el `select` que el backend puso a propósito no lo vería nadie.
+  //
   // Sí conserva la columna de acciones: un `incidente` SE PUEDE deshacer mientras no esté
   // vinculado a un cierre (Q-D/R14), por la misma vía que el resto de resultados.
   if (resultado === "incidente") {
     return [
       ...COLUMNAS_COMUNES,
+      COLUMNA_CAUSA_INCIDENTE,
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
       columnaEvidencia(verEvidencia),
       columnaAcciones,
