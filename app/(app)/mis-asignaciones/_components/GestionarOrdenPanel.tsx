@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { PackageCheck, RotateCcw, Undo2, X, XCircle } from "lucide-react";
+import { PackageCheck, RotateCcw, ShieldAlert, Undo2, X, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
@@ -17,6 +17,7 @@ import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
+import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
@@ -28,6 +29,7 @@ import {
 } from "./ChatWhatsappPanel";
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
+import { CAUSA_INCIDENTE_OPTIONS } from "./causa-incidente-options";
 import { METODO_PAGO_OPTIONS } from "./metodo-pago-options";
 import { VerificarGuiaGate } from "./VerificarGuiaGate";
 
@@ -35,7 +37,8 @@ import { VerificarGuiaGate } from "./VerificarGuiaGate";
 // orden en reparto con gestión multi-paso, ahora como PANEL INLINE (no modal /
 // overlay). Se renderiza en la página, debajo de la grilla de cards. Flujo:
 // (1) detalle + botón "Gestionar pedido" (fija el puntero 1-a-1 vía
-// `onGestionarPedido`); (2) 4 botones de resultado; (3) campos CONDICIONALES por
+// `onGestionarPedido`); (2) botones de resultado —4 desenlaces normales + el reporte de
+// incidente aparte (feature 158/R33)—; (3) campos CONDICIONALES por
 // resultado. Valida en cliente con el MISMO schema que revalida el servidor
 // (gestionarSchema, R24) y envía FormData a la Server Action `gestionar`. El
 // resultado de dominio se refleja como errores por campo (validation_error) o
@@ -47,7 +50,15 @@ import { VerificarGuiaGate } from "./VerificarGuiaGate";
 // orden. El reset del estado interno lo garantiza el padre remontando el panel
 // con `key={orden.id}` al cambiar de orden.
 
-type Resultado = "entregada" | "reprogramada" | "devuelta" | "rechazada";
+// Feature 158 (R33): quinto resultado. NO es un desenlace de la entrega ("cómo terminó"),
+// sino el reporte de que el paquete ya no existe o no sirve — por eso se ofrece APARTE de
+// los cuatro botones normales (ver `RESULTADO_BOTONES.aparte`).
+type Resultado =
+  | "entregada"
+  | "reprogramada"
+  | "devuelta"
+  | "rechazada"
+  | "incidente";
 
 /** Pasos del flujo de gestión dentro del panel. */
 type Paso = "detalle" | "resultados" | "formulario";
@@ -59,12 +70,30 @@ const ACCEPT_MIME = GESTION_ALLOWED_MIME.join(",");
 // (no lleva `NEXT_PUBLIC_`), asi que cae al default 3, igual que el schema en cliente.
 const MAX_EVIDENCIAS = gestionConfig.MAX_EVIDENCIAS_POR_GESTION;
 
-/** Configuración visual de los 4 botones de resultado (jerarquía + color). */
+// Feature 158 (R33/Q-B): textos del reporte de incidente (separados de la lógica, i18n-ready).
+const INCIDENTE_APARTE_NOTA =
+  "El paquete ya no se puede entregar ni devolver: está dañado, perdido o robado.";
+/**
+ * Copy de la evidencia del incidente. La foto es OBLIGATORIA en las TRES causas (decisión del
+ * humano, Q-B), también cuando NO hay paquete que fotografiar: en vez de un "campo requerido"
+ * seco, se le dice al mensajero —que está en la calle— QUÉ se espera que fotografíe.
+ */
+const INCIDENTE_EVIDENCIA_AYUDA =
+  "La foto es obligatoria también si el paquete se perdió o se lo robaron. Si no tienes el paquete, fotografía lo que sí tienes delante: el compartimento o el vehículo vacío, la guía o la etiqueta, el lugar del hecho, o la denuncia.";
+
+/**
+ * Configuración visual de los botones de resultado (jerarquía + color). Los cuatro
+ * desenlaces normales van en la grilla; el `incidente` va `aparte` (feature 158/R33): se
+ * pinta bajo un separador, con su propio aviso, para que no se lea como una quinta forma
+ * de terminar la entrega.
+ */
 const RESULTADO_BOTONES: {
   value: Resultado;
   label: string;
   Icon: typeof PackageCheck;
   className: string;
+  /** `true` = se pinta FUERA de la grilla de desenlaces normales (feature 158/R33). */
+  aparte?: boolean;
 }[] = [
   {
     value: "entregada",
@@ -93,7 +122,22 @@ const RESULTADO_BOTONES: {
     Icon: Undo2,
     className: "border-border bg-muted/40 text-foreground hover:bg-muted",
   },
+  // Feature 158 (R33): tratamiento visual de EXCEPCIÓN (borde punteado + tono de alerta) y
+  // fuera de la grilla. No compite con los cuatro desenlaces normales.
+  {
+    value: "incidente",
+    label: "Reportar incidente",
+    Icon: ShieldAlert,
+    className:
+      "border-dashed border-destructive/60 bg-transparent text-destructive hover:bg-destructive/10",
+    aparte: true,
+  },
 ];
+
+/** Los cuatro desenlaces normales de la entrega (grilla principal del paso 2). */
+const RESULTADO_BOTONES_NORMALES = RESULTADO_BOTONES.filter((b) => !b.aparte);
+/** Resultados que se ofrecen APARTE, bajo el separador (feature 158/R33). */
+const RESULTADO_BOTONES_APARTE = RESULTADO_BOTONES.filter((b) => b.aparte);
 
 export interface GestionarOrdenPanelProps {
   /** Orden a mostrar/gestionar (la del panel de detalle). */
@@ -158,6 +202,9 @@ export function GestionarOrdenPanel({
   // Feature 73 (R4): causa TIPIFICADA de la rama `devuelta`. `""` = sin elegir; el mensajero
   // DEBE escoger una (R6). Es un campo APARTE del `motivo`, que sigue obligatorio (R7).
   const [causaDevolucion, setCausaDevolucion] = useState<CausaDevolucion | "">("");
+  // Feature 158 (R9/R33): causa TIPIFICADA de la rama `incidente`. `""` = sin elegir; el
+  // mensajero DEBE escoger una de las 3. Campo APARTE del `motivo`, que sigue obligatorio (R11).
+  const [causaIncidente, setCausaIncidente] = useState<CausaIncidente | "">("");
   // Feature 119 (R14): la evidencia UNICA pasa a una LISTA de 1..N fotos (tope MAX_EVIDENCIAS).
   const [evidencias, setEvidencias] = useState<File[]>([]);
   const [comprimiendo, setComprimiendo] = useState(false);
@@ -250,6 +297,16 @@ export function GestionarOrdenPanel({
         };
       case "rechazada":
         return { ...base, motivo, evidencias };
+      case "incidente":
+        // Feature 158 (R9/R10/R11): causa tipificada + motivo libre + 1..N fotos, obligatorias
+        // en las TRES causas. `|| undefined` (patrón de `causaDevolucion`) para que zod diga
+        // "causa requerida" y no "valor inválido" cuando no se eligió ninguna.
+        return {
+          ...base,
+          causaIncidente: causaIncidente || undefined,
+          motivo,
+          evidencias,
+        };
     }
   }
 
@@ -276,6 +333,10 @@ export function GestionarOrdenPanel({
       fd.set("causaDevolucion", causaDevolucion); // feature 73 (R9)
       fd.set("motivo", motivo);
       anexarEvidencias(); // feature 75/119: evidencia obligatoria
+    } else if (resultado === "incidente") {
+      fd.set("causaIncidente", causaIncidente); // feature 158 (R9)
+      fd.set("motivo", motivo); // feature 158 (R11)
+      anexarEvidencias(); // feature 158 (R10/Q-B): obligatoria en las TRES causas
     } else {
       fd.set("motivo", motivo);
       anexarEvidencias();
@@ -310,6 +371,7 @@ export function GestionarOrdenPanel({
     setFechaReprogramacion(mananaISO());
     setMotivo("");
     setCausaDevolucion(""); // feature 73/R4: cambiar de resultado no arrastra la causa anterior
+    setCausaIncidente(""); // feature 158/R9: ídem para la causa del incidente
     setEvidencias([]); // feature 119: cambiar de resultado limpia las fotos elegidas
     setPaso("formulario");
   }
@@ -360,6 +422,7 @@ export function GestionarOrdenPanel({
   const fechaError = firstError(fieldErrors, "fechaReprogramacion");
   const motivoError = firstError(fieldErrors, "motivo");
   const causaError = firstError(fieldErrors, "causaDevolucion");
+  const causaIncidenteError = firstError(fieldErrors, "causaIncidente"); // feature 158/R9
 
   const resultadoLabel =
     RESULTADO_BOTONES.find((b) => b.value === resultado)?.label ?? "";
@@ -440,14 +503,15 @@ export function GestionarOrdenPanel({
         </div>
       ) : null}
 
-      {/* Paso 2: 4 botones GRANDES de resultado (entrada suave). */}
+      {/* Paso 2: botones GRANDES de resultado (entrada suave). Los 4 desenlaces normales en
+          la grilla; el reporte de incidente aparte, bajo el separador (feature 158/R33). */}
       {paso === "resultados" ? (
         <div className="flex flex-col gap-3 duration-300 animate-in fade-in slide-in-from-bottom-2">
           <p className="text-sm font-medium text-muted-foreground">
             ¿Cómo terminó la gestión?
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {RESULTADO_BOTONES.map(({ value, label, Icon, className }) => (
+            {RESULTADO_BOTONES_NORMALES.map(({ value, label, Icon, className }) => (
               <Button
                 key={value}
                 type="button"
@@ -459,6 +523,30 @@ export function GestionarOrdenPanel({
               </Button>
             ))}
           </div>
+
+          {/* Feature 158 (R33): el incidente NO es un desenlace más de la entrega, así que se
+              ofrece en su propio bloque, bajo un separador y con el aviso que explica cuándo
+              aplica. Diferenciado visualmente Y con texto (no solo por color). */}
+          <div
+            aria-label="Reportar un incidente con el paquete"
+            role="group"
+            className="flex flex-col gap-2 border-t border-border pt-3"
+          >
+            <p className="text-sm text-muted-foreground">{INCIDENTE_APARTE_NOTA}</p>
+            {RESULTADO_BOTONES_APARTE.map(({ value, label, Icon, className }) => (
+              <Button
+                key={value}
+                type="button"
+                variant="outline"
+                onClick={() => elegirResultado(value)}
+                className={`h-14 w-full gap-2 text-base font-semibold ${className}`}
+              >
+                <Icon className="size-5" aria-hidden="true" />
+                {label}
+              </Button>
+            ))}
+          </div>
+
           <Button
             type="button"
             variant="outline"
@@ -584,6 +672,33 @@ export function GestionarOrdenPanel({
             </>
           ) : null}
 
+          {/* Feature 158 (R9/R10/R11): causa tipificada + fotos obligatorias en las TRES
+              causas + motivo libre. El orden es el mismo que en `devuelta` (causa → fotos →
+              motivo) para que el flujo se sienta conocido. */}
+          {resultado === "incidente" ? (
+            <>
+              <p role="note" className="text-sm text-muted-foreground">
+                {INCIDENTE_APARTE_NOTA}
+              </p>
+              <CausaIncidenteField
+                value={causaIncidente}
+                onChange={setCausaIncidente}
+                error={causaIncidenteError}
+              />
+              <EvidenciasField
+                inputId="gestion-evidencia-incidente"
+                label="Fotos de evidencia"
+                ariaLabel="Foto de evidencia del incidente"
+                files={evidencias}
+                error={evidenciaError}
+                onSelect={handleEvidenciaChange}
+                onRemove={quitarEvidencia}
+                ayuda={INCIDENTE_EVIDENCIA_AYUDA}
+              />
+              <MotivoField value={motivo} onChange={setMotivo} error={motivoError} />
+            </>
+          ) : null}
+
           <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
             <Button
               type="button"
@@ -646,6 +761,41 @@ function CausaField({
 }
 
 /**
+ * Feature 158 (R9/R33): selector de la causa TIPIFICADA del incidente, sólo en la rama
+ * `incidente`. Espejo exacto de `CausaField` (73): radios, las 3 opciones visibles de una,
+ * móvil-first, sin dropdown que abrir en la calle. Las etiquetas salen SIEMPRE de
+ * `CAUSA_INCIDENTE_OPTIONS` (derivadas del SEED) → aquí no se duplica ninguna cadena ni se
+ * pinta el slug crudo del enum (`danado` se muestra como "Paquete dañado").
+ */
+function CausaIncidenteField({
+  value,
+  onChange,
+  error,
+}: {
+  value: CausaIncidente | "";
+  onChange: (value: CausaIncidente | "") => void;
+  error: string | undefined;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label>Causa del incidente</Label>
+      <RadioGroup
+        value={value}
+        onValueChange={(next) => onChange(next as CausaIncidente | "")}
+        options={CAUSA_INCIDENTE_OPTIONS}
+        aria-label="Causa del incidente"
+        aria-invalid={error ? true : undefined}
+      />
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * Feature 119 (R14/R15/R16): campo de evidencias MÚLTIPLES, reusado en las 3 ramas con foto
  * (entregada/devuelta/rechazada). Vive en este archivo, como `MotivoField`/`CausaField`: un solo
  * consumidor (docs/architecture.md "sin sobre-ingeniería"). Ofrece selección múltiple, una
@@ -662,6 +812,7 @@ function EvidenciasField({
   error,
   onSelect,
   onRemove,
+  ayuda,
 }: {
   inputId: string;
   label: string;
@@ -670,6 +821,13 @@ function EvidenciasField({
   error: string | undefined;
   onSelect: (e: ChangeEvent<HTMLInputElement>) => void;
   onRemove: (index: number) => void;
+  /**
+   * Feature 158 (Q-B): texto de ayuda de la rama que lo necesite, ENCIMA del selector. Existe
+   * porque el incidente exige foto también cuando no hay paquete que fotografiar y el
+   * mensajero necesita saber qué se espera de él, no solo que el campo es obligatorio.
+   * Omitido en las otras ramas → se comportan exactamente igual que antes.
+   */
+  ayuda?: string;
 }) {
   // Una object URL por foto para la previsualización (R15). Se derivan con `useMemo` (sin
   // `setState` en efecto) y sólo se recalculan cuando cambia `files` —que sólo cambia de
@@ -684,6 +842,11 @@ function EvidenciasField({
   return (
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={inputId}>{label}</Label>
+      {ayuda ? (
+        <p id={`${inputId}-ayuda`} className="text-xs text-muted-foreground">
+          {ayuda}
+        </p>
+      ) : null}
       {previews.length > 0 ? (
         <ul className="flex flex-wrap gap-2" aria-label="Fotos de evidencia seleccionadas">
           {previews.map((url, i) => (
@@ -715,6 +878,7 @@ function EvidenciasField({
         onChange={onSelect}
         aria-invalid={error ? true : undefined}
         aria-label={ariaLabel}
+        aria-describedby={ayuda ? `${inputId}-ayuda` : undefined}
         className="text-sm"
       />
       <p className="text-xs text-muted-foreground">
