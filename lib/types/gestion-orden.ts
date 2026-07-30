@@ -57,7 +57,12 @@ const evidenciaSchema = z.custom<ArchivoLike>(
 // Feature 119 (R5/R6/R7/R8): la evidencia UNICA pasa a una LISTA de 1..N fotos. Cada foto se
 // valida POR ARCHIVO con el `evidenciaSchema` de la 36/75 (R8: una foto invalida invalida el
 // envio); la lista exige al menos 1 (R6) y como maximo `MAX_EVIDENCIAS_POR_GESTION` (R7, def 3).
-const evidenciasSchema = z
+//
+// Feature 158 (R46, camino del ADMIN): se EXPORTA para que el borde del incidente del admin
+// (`lib/types/incidente.ts`) reuse EXACTAMENTE los mismos limites por archivo y por lista, en
+// vez de reescribirlos. Si un dia cambian, cambian para los dos caminos a la vez — que es lo
+// que R46 pide al remitir a R10.
+export const evidenciasSchema = z
   .array(evidenciaSchema)
   .min(1, "se requiere al menos una foto de evidencia") // R6
   .max(
