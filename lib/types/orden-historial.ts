@@ -27,10 +27,12 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "reprogramacion_tienda", // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
   "recuperacion_manual", // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite (accion manual del admin)
   "cancelacion_api", // feature 106: cancelacion por API key (OrdenRepository.cancelarViaApi), en_bodega_central/en_ruta_bodega_central -> devolviendo_a_tienda
-  "corte_sin_gestionar", // feature 109: corte diario, en_ruta -> sin_gestionar (actor null/cron). NO enlaza gestion; destino != devuelta -> no altera contarIntentos (R12)
-  "liberacion_sin_gestionar", // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
-  "recepcion_bodega_central", // feature 138: recepcion fisica en bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
-  "devolucion_rechazada", // feature 139: al APROBAR el cierre, rechazada -> por_devolver/por_devolver_a_tienda (actor admin). NO enlaza gestion; destino != devuelta -> no altera contarIntentos
+  "corte_sin_gestionar", // feature 109: corte diario, en_reparto -> sin_gestionar (actor null/cron). NO enlaza gestion; fuera del criterio de intento (160, ver nota abajo)
+  "liberacion_sin_gestionar", // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin). NO enlaza gestion; fuera del criterio de intento (160)
+  "recepcion_bodega_central", // feature 138: recepcion fisica en bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin). NO enlaza gestion; fuera del criterio de intento (160)
+  "devolucion_rechazada", // feature 139: al APROBAR el cierre, rechazada -> por_devolver/por_devolver_a_tienda (actor admin). NO enlaza gestion; fuera del criterio de intento (160)
+  "recoleccion_tienda", // feature 154: el mensajero recolecta en la tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43). SIN PRODUCTOR hasta la 157. NO enlaza gestion; fuera del criterio de intento (160)
+  "incidente", // feature 154: familia propia del resultado `incidente`. SIN PRODUCTOR hasta la 158 (la arista #44 viaja via `gestion`, decision Q4). NO enlaza gestion; fuera del criterio de intento (160)
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];
@@ -45,33 +47,89 @@ export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)
 //     fila HUERFANA (la gestion se borro) -> NO cuenta (R26).
 // El `satisfies` rompe el build si un valor deja de existir en el enum.
 //
+// AVISO (feature 160): las notas de abajo se escribieron cuando el criterio de intento era
+// "destino = `devuelta`" a secas, y por eso concluian con "destino != `devuelta` -> no altera
+// `contarIntentos`". Esa RAZON ya no es suficiente. El criterio vigente (160/R1, design §1.1) es:
+//
+//     (destino = `devuelta`)  OR  (destino = `reprogramada` AND origen_tipo = `gestion`)
+//
+// La CONCLUSION de cada nota sigue siendo cierta —ninguna de esas familias produce el par
+// (`reprogramada`, `gestion`)— pero el razonamiento correcto es el de arriba, no "destino !=
+// devuelta". Quien agregue una familia nueva debe comprobar AMBAS ramas, no solo la primera.
+//
 // Feature 99 (design §1.4): los dos valores nuevos NO entran aqui a proposito.
 //   - `liberacion_devuelta_sla` (devuelta -> en_bodega_central/en_bodega_satelite) NUNCA enlaza una
 //     gestion (`gestion_orden_id` siempre NULL), y su destino no es `devuelta`.
 //   - `escalado_devuelta_sla` (devuelta -> rechazada) SI enlaza la gestion sintetica de la
 //     Option A, pero su destino es `rechazada`, NO `devuelta`.
-// El derivador de intentos (`contarPorDestinoVigentes`) cuenta filas con destino = `devuelta`;
-// ninguno de los dos transiciona HACIA `devuelta`, asi que jamas entra en ese conteo y dejarlos
-// fuera de esta familia no altera `contarIntentos`.
+// Ninguno de los dos transiciona HACIA `devuelta` ni HACIA `reprogramada`, asi que no cae en
+// NINGUNA de las dos ramas del criterio (160/R1) y dejarlos fuera de esta familia no altera
+// `contarIntentos`.
 //
 // Feature 100 (design §1.1): los dos valores nuevos TAMPOCO entran aqui, por el mismo criterio.
 //   - `reprogramacion_tienda` (devuelta -> reprogramada) SI enlaza una gestion sintetica
-//     (`resultado = reprogramada`), pero su destino es `reprogramada`, NO `devuelta`, asi que
-//     jamas cae en el conteo de intentos (R8). Ademas su fila SIEMPRE nace con `gestion_orden_id`
+//     (`resultado = reprogramada`) y su destino SI es `reprogramada`, pero NO es `gestion`, asi que
+//     la rama B del criterio (160/R1b/R2) lo deja fuera: la fila `devuelta` de esa misma orden
+//     sigue VIGENTE y ya aporto ese intento (`reprogramarDesdeDevuelta` no anula la gestion
+//     previa) — contarlo seria DOBLE CONTEO. Ademas su fila SIEMPRE nace con `gestion_orden_id`
 //     poblado, con lo que la disambiguacion por-nulidad que aporta esta familia nunca se ejerce
-//     sobre ella: dejarla fuera es INOCUO (mismo precedente que `escalado_devuelta_sla` de la 99).
+//     sobre ella: dejarla fuera de ORIGEN_TIPOS_CON_GESTION es INOCUO (mismo precedente que
+//     `escalado_devuelta_sla` de la 99).
 //   - `recuperacion_manual` (devuelta -> en_bodega_central/en_bodega_satelite) NUNCA enlaza una gestion
 //     (`gestion_orden_id` siempre NULL, molde de `liberacion_devuelta_sla`) y su destino no es
-//     `devuelta`.
+//     `devuelta` ni `reprogramada`.
 //
 // Feature 109 (design §2.2, R12): los dos valores nuevos TAMPOCO entran aqui, por el mismo criterio.
-//   - `corte_sin_gestionar` (en_ruta -> sin_gestionar) y `liberacion_sin_gestionar`
+//   - `corte_sin_gestionar` (en_reparto -> sin_gestionar) y `liberacion_sin_gestionar`
 //     (sin_gestionar -> en_bodega_central/en_bodega_satelite) NUNCA enlazan una gestion (nacen con
-//     `gestion_orden_id = NULL`) y sus destinos no son `devuelta`, asi que jamas caen en el conteo
-//     de intentos (`contarPorDestinoVigentes` cuenta destino = `devuelta`). Dejarlos fuera es INOCUO.
+//     `gestion_orden_id = NULL`) y sus destinos no son `devuelta` ni `reprogramada`, asi que jamas
+//     caen en el conteo de intentos. Dejarlos fuera es INOCUO.
+//
+// Feature 138/139: `recepcion_bodega_central` (en_ruta_bodega_central -> en_bodega_central,
+// devolviendo_a_bodega_central -> por_devolver_a_tienda) y `devolucion_rechazada`
+// (rechazada -> por_devolver/por_devolver_a_tienda) tampoco enlazan gestion y sus destinos no son
+// `devuelta` ni `reprogramada`: fuera de las dos ramas del criterio.
+//
+// Feature 154 (R12): los dos valores nuevos TAMPOCO entran aqui, mismo criterio que 138/139.
+//   - `recoleccion_tienda` (por_recolectar_en_tienda -> en_ruta_bodega_central) NUNCA enlaza una
+//     gestion (nace con `gestion_orden_id = NULL`) y su destino no es `devuelta` ni `reprogramada`.
+//   - `incidente` no se emite todavia (SIN PRODUCTOR hasta la 158) y su destino previsto es
+//     `incidente`, que tampoco es `devuelta` ni `reprogramada`.
+//   Ninguno de los dos cae en NINGUNA de las dos ramas del criterio (160/R1): no transicionan
+//   HACIA `devuelta`, y tampoco producen el par (`reprogramada`, `gestion`). Dejarlos fuera es
+//   INOCUO para `contarIntentos`.
 export const ORIGEN_TIPOS_CON_GESTION = [
   "gestion",
   "deshacer_gestion",
+] as const satisfies readonly OrdenHistorialOrigenTipo[];
+
+/**
+ * Feature 160 (D1, design §1.2/§1.3, R1b/R2) — familias de ORIGEN que, con destino
+ * `reprogramada`, cuentan como INTENTO de entrega.
+ *
+ * Es una lista de **INCLUSION**, no de exclusion, y eso es un REQUISITO (R1), no un gusto:
+ * con una lista negra (`origen_tipo NOT IN ('reprogramacion_tienda')`) cualquier familia
+ * FUTURA que produzca `reprogramada` empezaria a contar sola, subiria el conteo, adelantaria
+ * el escalado del cron SLA (99) y cobraria un `cobroRechazado` (56) antes de tiempo — en
+ * silencio. Con la lista blanca, una familia nueva NO cuenta hasta que alguien lo decida aqui
+ * explicitamente. Contar de menos retrasa el escalado (inofensivo); contar de mas es dinero
+ * mal cobrado. Mismo razonamiento con el que la 67 resolvio las filas huerfanas.
+ *
+ * Por que SOLO `gestion`: el mapa cerrado de la 140 tiene EXACTAMENTE dos aristas con destino
+ * `reprogramada`.
+ *   - `#13` `en_reparto -> reprogramada` (familia `gestion`, mensajero): el mensajero FUE, no
+ *     entrego y acordo nueva fecha. Es una VISITA real -> CUENTA.
+ *   - `#22` `devuelta -> reprogramada` (familia `reprogramacion_tienda`, adminTienda): tramite
+ *     de escritorio sobre una orden YA devuelta. `GestionOrdenRepository.reprogramarDesdeDevuelta`
+ *     NO anula la gestion `devuelta` previa, asi que esa fila sigue vigente y YA conto el
+ *     intento: contar tambien esta seria DOBLE CONTEO -> NO cuenta.
+ * `deshacer_gestion` es la otra familia de `ORIGEN_TIPOS_CON_GESTION`, pero su unico destino
+ * declarado es `en_reparto`: nunca produce `reprogramada`.
+ *
+ * El `satisfies` rompe el build si un valor deja de existir en el enum.
+ */
+export const ORIGEN_TIPOS_REPROGRAMADA_INTENTO = [
+  "gestion",
 ] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
 // Exhaustividad frente al enum Prisma: si `OrdenHistorialOrigenTipo` gana un valor que no

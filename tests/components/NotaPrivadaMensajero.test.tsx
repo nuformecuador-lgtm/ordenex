@@ -66,6 +66,19 @@ vi.mock("next/navigation", () => ({
 const guardarMock = vi.mocked(guardarNotaPrivada);
 const limpiarMock = vi.mocked(limpiarNotaPrivada);
 
+/**
+ * Card (`<article>` de `PosOrderCard`) de una remisión. El rediseño POS dejó el
+ * `<article>` sin nombre accesible, así que se llega a él desde su CTA interno.
+ */
+function cardDe(numRemision: string): HTMLElement {
+  const cta = screen.getByRole("button", {
+    name: new RegExp(`Gestionar orden ${numRemision}`),
+  });
+  const card = cta.closest("article");
+  if (card === null) throw new Error(`sin <article> para ${numRemision}`);
+  return card;
+}
+
 function makeAsignacion(
   over: Partial<MiAsignacionDTO> & { id: string },
 ): MiAsignacionDTO {
@@ -73,7 +86,7 @@ function makeAsignacion(
     secuenciaRuta: null,
     numGuia: 1001,
     numRemision: "REM-001",
-    estatusValue: "en_ruta",
+    estatusValue: "en_reparto",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",
@@ -260,6 +273,8 @@ describe("Inserción en el detalle: 'Notas' (tienda) vs 'Mi nota' (privada) (F2 
         onGestionarPedido={vi.fn().mockResolvedValue(true)}
         onCancelarGestion={vi.fn()}
         onSuccess={vi.fn()}
+        // Total de órdenes en reparto ("N de total" de la cabecera): una sola aquí.
+        count={1}
       />,
     );
 
@@ -303,18 +318,15 @@ describe("Indicador de nota privada en la card (F3 / R12)", () => {
     );
 
     // Card CON nota: badge "Mi nota" + preview truncado (1 línea) con el texto.
-    const cardCon = screen.getByRole("button", {
-      name: /Gestionar orden REM-CON/,
-    });
+    // Rediseño POS: la card es el `<article>` de `PosOrderCard` y el botón
+    // "Gestionar orden" es su CTA interno, así que se acota al article.
+    const cardCon = cardDe("REM-CON");
     expect(within(cardCon).getByText("Mi nota")).toBeInTheDocument();
     expect(
       within(cardCon).getByText("Cliente pidió llamar antes"),
     ).toBeInTheDocument();
 
     // Card SIN nota: no aparece el indicador.
-    const cardSin = screen.getByRole("button", {
-      name: /Gestionar orden REM-SIN/,
-    });
-    expect(within(cardSin).queryByText("Mi nota")).toBeNull();
+    expect(within(cardDe("REM-SIN")).queryByText("Mi nota")).toBeNull();
   });
 });

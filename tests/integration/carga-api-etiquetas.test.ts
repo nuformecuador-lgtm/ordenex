@@ -9,11 +9,14 @@ import type {
   CargaViaApiSummary,
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
+import { resolverDestinoCreacion } from "@/lib/services/destino-creacion";
 import type { IEtiquetasDescargaService } from "@/lib/interfaces/services/IEtiquetasDescargaService";
+import type { IManifiestoService } from "@/lib/interfaces/services/IManifiestoService";
 import { etiquetasConfig } from "@/lib/config/etiquetas";
 
 // Feature 136 (T3.1) — cableado del PDF de etiquetas en el endpoint de carga por
-// API. Se inyectan fakes de `autenticar`, `bulkService` y `descargaService`: sin
+// API. Se inyectan fakes de `autenticar`, `bulkService`, `descargaService` y
+// `manifiestoService` (feature 155: el borde tambien emite el manifiesto del lote): sin
 // DB, sin Storage, sin red. Cubre R10/R12/R13/R16/R17 + el tope de BLOQ-1.
 //
 // Feature 141 (T28): la ruta ya no habla con `EtiquetasLotePdfService` directamente, sino
@@ -31,10 +34,10 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     duplicadas: 0,
     conError: 0,
     filas: [
-      { fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "en_ruta_bodega_central", numGuia: 1042 },
+      { fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 1042 },
     ],
     ordenes: [
-      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
+      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", costoEnvio: "3.92" },
     ],
     cargaId: "33333333-3333-4333-8333-333333333333", // feature 141/R39
     ...overrides,
@@ -44,7 +47,14 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
 function fakeBulk(summary: CargaViaApiSummary): IBulkOrdenService {
   return {
     cargarMasiva: vi.fn(),
-    cargarViaApi: vi.fn().mockResolvedValue({ status: "ok", summary } satisfies CargaViaApiResult),
+    // Feature 155/R24: el resultado del service lleva la bifurcacion resuelta del lote.
+    cargarViaApi: vi
+      .fn()
+      .mockResolvedValue({
+        status: "ok",
+        summary,
+        destino: resolverDestinoCreacion(false),
+      } satisfies CargaViaApiResult),
   };
 }
 
@@ -72,11 +82,19 @@ function reqConBearer(body: unknown, bearer?: string): Request {
 
 const BODY = { ordenes: [{ num_remision: "REM-1", destinatario: "Ana", telefono: "099" }] };
 
+// Feature 155/R24: doble del servicio de manifiesto. Este archivo NO prueba el manifiesto
+// (eso vive en `ordenes-api-key-carga.route.test.ts`), solo necesita que el borde no intente
+// construir el service real —con Prisma— en un test sin base.
+const manifiestoStub = {
+  armar: vi.fn().mockResolvedValue({ status: "ok", filas: [], omitidas: [] }),
+} as unknown as IManifiestoService;
+
 function depsOk(bulk: IBulkOrdenService, etiquetas: IEtiquetasDescargaService): CargaApiDeps {
   return {
     autenticar: async () => ({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }) as ApiKeyAuthResult,
     bulkService: bulk,
     descargaService: etiquetas,
+    manifiestoService: manifiestoStub,
   };
 }
 
@@ -173,6 +191,7 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
       autenticar: async () => ({ status: "unauthenticated" }) as ApiKeyAuthResult,
       bulkService: fakeBulk(okSummary()),
       descargaService: etiquetas,
+      manifiestoService: manifiestoStub,
     };
     const res = await handleCargaApi(reqConBearer(BODY), deps);
     expect(res.status).toBe(401);
@@ -185,6 +204,7 @@ describe("carga API + etiquetas PDF (feature 136)", () => {
       autenticar: async () => ({ status: "forbidden" }) as ApiKeyAuthResult,
       bulkService: fakeBulk(okSummary()),
       descargaService: etiquetas,
+      manifiestoService: manifiestoStub,
     };
     const res = await handleCargaApi(reqConBearer(BODY, SECRETO), deps);
     expect(res.status).toBe(403);

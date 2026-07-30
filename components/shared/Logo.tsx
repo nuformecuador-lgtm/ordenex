@@ -10,6 +10,11 @@ interface LogoProps {
  * Encapsula el estilo del wordmark ya presente en login/postulación/recuperación
  * (`font-heading text-2xl font-semibold tracking-tight`). Presentación pura,
  * server-compatible; sin dependencias de datos.
+ *
+ * Identidad de marca: "Orden" toma el color del contexto (heredado vía
+ * `currentColor` desde `className` — blanco sobre navy, navy sobre fondo claro) y
+ * "ex" siempre va en el naranja de marca. Así el wordmark es una sola fuente de
+ * verdad en toda la app.
  */
 export function Logo({ className }: Readonly<LogoProps>) {
   return (
@@ -19,7 +24,7 @@ export function Logo({ className }: Readonly<LogoProps>) {
         className,
       )}
     >
-      Ordenex
+      Orden<span className="text-brand">ex</span>
     </span>
   );
 }

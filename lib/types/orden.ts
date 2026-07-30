@@ -9,15 +9,20 @@ export const SORT_DIRS = ["asc", "desc"] as const;
 export type SortDir = (typeof SORT_DIRS)[number];
 
 // R25/R26: validacion de creacion en el borde. zona/provincia/canton obligatorios
-// (R12); distrito/estatus/notas/tienda opcionales. peso numerico estrictamente > 0
+// (R12); distrito/notas/tienda opcionales. peso numerico estrictamente > 0
 // (R13/R26). num_remision provisto por el usuario, no vacio (R9).
+//
+// FEATURE 155/R5 — la entrada de creacion DEJA de exponer un estatus inicial. `estatusId`
+// se retiro: el estado en que nace la orden lo decide `resolverDestinoCreacion` a partir del
+// flag `fulfillment` de la tienda dueña, y NADA de la peticion puede alterarlo. El schema no
+// es `.strict()` a proposito, asi que una entrada legada que siga mandando `estatusId` se
+// ignora en silencio en vez de romper — pero no cambia donde nace la orden.
 export const crearOrdenSchema = z.object({
   numRemision: z.string().min(1),
   destinatario: z.string().min(1),
   telefonoDest: z.string().min(1),
   producto: z.string().min(1),
   peso: z.number().positive(),
-  estatusId: z.string().min(1).optional(),
   tiendaId: z.string().min(1).optional(),
   zonaId: z.string().min(1),
   provinciaId: z.string().min(1),
@@ -52,14 +57,80 @@ export type ActualizarOrdenInput = z.infer<typeof actualizarOrdenSchema>;
 // fuera de la whitelist produce un ZodError (validation_error) ANTES de construir
 // el `where`, de modo que ningun nombre de columna arbitrario llega a Prisma. Se
 // mantiene deliberadamente estrecha (un solo campo) y se amplia por demanda.
-export const ORDEN_FILTER_FIELDS = ["status_id"] as const;
+// Feature 144/B1 (R30): la whitelist pasa de 1 a 9 claves — los cinco catalogos
+// (zona/tienda/provincia/canton/distrito), mas las TRES claves temporales (atajo de
+// antiguedad, fecha desde y fecha hasta). `.strict()` sigue siendo la unica defensa
+// que impide que un nombre de columna arbitrario alcance Prisma (R31).
+export const ORDEN_FILTER_FIELDS = [
+  "status_id",
+  "zona_id",
+  "tienda_id",
+  "provincia_id",
+  "canton_id",
+  "distrito_id",
+  "created_preset",
+  "created_desde",
+  "created_hasta",
+  "reasignables",
+] as const;
 export type OrdenFilterField = (typeof ORDEN_FILTER_FIELDS)[number];
 
+// Feature 144/R32: todo filtro de catalogo NUEVO es una LISTA NO VACIA de ids no
+// vacios. No se admite el escalar (eso es retrocompatibilidad exclusiva de
+// `status_id`), ni la lista vacia: una lista vacia significaria "ningun valor" y
+// degradaria a "sin filtro" si el repositorio la descartara. Falla cerrado.
+const idList = z.array(z.string().min(1)).nonempty();
+
+// Feature 144/R39: fecha CALENDARIO `YYYY-MM-DD` (lo que emite `<input type="date">`).
+// El cliente NUNCA manda instantes ni offsets: los bordes temporales se calculan
+// server-side (R43), en horario de Costa Rica (lib/utils/fecha-cr.ts).
+const fechaCalendario = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado YYYY-MM-DD");
+
+// Feature 144/R38: dominio CERRADO del atajo de antiguedad. Un solo valor (nunca
+// una lista): `["7d","30d"]` no tiene interpretacion util y seria ambiguo.
+export const CREATED_PRESETS = ["7d", "15d", "30d", "90d"] as const;
+export type CreatedPreset = (typeof CREATED_PRESETS)[number];
+
+// `status_id` acepta UN id (contrato previo, sin regresion) o una LISTA de ids
+// (filtro multi-estado del listado unico de `/ordenes`, que sustituyo a las tabs
+// por estado). La lista se traduce a `IN (...)` en el repositorio; una lista VACIA
+// no es valida (equivaldria a "ningun estado": el front omite el filtro en su lugar).
 export const ordenFilterSchema = z
   .object({
-    status_id: z.string().min(1).optional(),
+    status_id: z
+      .union([z.string().min(1), z.array(z.string().min(1)).nonempty()])
+      .optional(),
+    // Feature 144/R30/R32: filtros de catalogo. Zona sale de `orden.zona_id`
+    // (valor CONGELADO de la orden), no se deriva del distrito.
+    zona_id: idList.optional(),
+    tienda_id: idList.optional(),
+    provincia_id: idList.optional(),
+    canton_id: idList.optional(),
+    distrito_id: idList.optional(),
+    // Feature 144/R38/R39: tiempo. Atajo (escalar de dominio cerrado) O rango.
+    created_preset: z.enum(CREATED_PRESETS).optional(),
+    created_desde: fechaCalendario.optional(),
+    created_hasta: fechaCalendario.optional(),
+    // Filtro REASIGNABLES: ordenes que esperan que alguien les vuelva a poner
+    // mensajero. Es un predicado COMPUESTO (prioridad + no reprogramada + sin
+    // mensajero asignado), no una columna, y solo sabe ACOTAR: `z.literal(true)`
+    // porque "no filtrar" se expresa OMITIENDO la clave, no mandando `false`.
+    reasignables: z.literal(true).optional(),
   })
-  .strict();
+  .strict()
+  // R39: rango no invertido. La comparacion lexicografica de `YYYY-MM-DD` es
+  // equivalente a la cronologica (formato de ancho fijo, mayor a menor).
+  .refine(
+    (f) => !(f.created_desde && f.created_hasta) || f.created_desde <= f.created_hasta,
+    { path: ["created_hasta"], message: "El rango de fechas esta invertido" },
+  )
+  // R40: atajo y rango son EXCLUYENTES. La UI ya lo hace inalcanzable (el control
+  // vacia uno al elegir el otro); el borde falla CERRADO en vez de inventar una
+  // precedencia silenciosa para un cliente que construya el filter a mano.
+  .refine((f) => !(f.created_preset && (f.created_desde || f.created_hasta)), {
+    path: ["created_preset"],
+    message: "Usa el atajo o el rango, no ambos",
+  });
 export type OrdenFilterInput = z.infer<typeof ordenFilterSchema>;
 
 // R30/R31/R32/R33: parametros del listado. page/pageSize enteros positivos (R32);
@@ -81,6 +152,17 @@ export const listarOrdenesSchema = z.object({
   sortDir: z.enum(SORT_DIRS).default("desc"),
 });
 export type ListarOrdenesInput = z.infer<typeof listarOrdenesSchema>;
+
+// Feature 151 (design §4.2) — entrada del modo SIN paginacion (descarga del dataset
+// completo). Se DERIVA del schema del listado quitando `page`/`pageSize`: reusarlo es
+// lo que da R15 gratis (misma whitelist `.strict()` y los mismos dos `refine` del
+// `filter`), y lo que garantiza que el modo completo no acepte una entrada que el
+// listado paginado rechazaria. `sortBy`/`sortDir` conservan sus defaults (R17).
+export const listarOrdenesCompletoSchema = listarOrdenesSchema.omit({
+  page: true,
+  pageSize: true,
+});
+export type ListarOrdenesCompletoInput = z.infer<typeof listarOrdenesCompletoSchema>;
 
 // R42/N3: DTO expuesto por las Server Actions. `numGuia` crudo (entero); `peso`
 // serializado a number (no Decimal). NUNCA expone `deletedAt`.
@@ -129,9 +211,8 @@ export type ActionError =
 // R25/R26: elemento del LISTADO. Extiende OrdenDTO con el nombre legible de la
 // tienda (`Usuario.nombre` del usuario tienda). Solo aplica al listado; crear/
 // obtener/actualizar siguen devolviendo OrdenDTO sin `tiendaNombre`.
-// Feature 17/R20: agrega `mensajeroSugeridoId`/`mensajeroAsignadoId` (solo el
-// listado, para que el modal "Generar guia" agrupe por sugerido y las secciones
-// por_recoger/en_bodega_central muestren el mensajero asignado). Cambio aditivo:
+// Feature 17/R20: agrega `mensajeroAsignadoId` (solo el listado, para que las
+// secciones por_recoger/en_bodega_central muestren el mensajero asignado). Cambio aditivo:
 // NO se agrega a OrdenDTO base para no ampliar el contrato del CRUD. Opcionales
 // (`?`) para no romper mocks/fixtures de UI existentes que construyen
 // OrdenListItemDTO sin estos campos; el repositorio SIEMPRE los envia (string|null).
@@ -143,7 +224,6 @@ export type ActionError =
 // SIEMPRE los envia (string/boolean concretos desde la relacion Orden.zona).
 export type OrdenListItemDTO = OrdenDTO & {
   tiendaNombre: string;
-  mensajeroSugeridoId?: string | null;
   mensajeroAsignadoId?: string | null;
   zonaNombre?: string;
   zonaEsGam?: boolean;
@@ -164,6 +244,18 @@ export type OrdenListItemDTO = OrdenDTO & {
   // descarta objetos al renderizar. `null` = la orden no tiene gestion de
   // reprogramacion vigente; en las tabs que no son "reprogramada" lo normal es null.
   fechaReprogramacion?: string | null;
+  /**
+   * Feature 160 (R11/R14/R16): intentos de entrega VIGENTES de la orden, derivados del
+   * historial EN EL MISMO LOTE de la lectura (criterio unico de `OrdenHistorialService`,
+   * design §1.1: destino `devuelta`, o destino `reprogramada` con familia `gestion`).
+   *
+   * Opcional (`?`) por el patron aditivo del repo (`zonaEsGam?`/`prioridad?`): no rompe los
+   * fixtures ni los mocks que construyen el DTO sin el. El servicio SIEMPRE lo envia, `0`
+   * incluido (R14): el `0` es un valor CONOCIDO, no un dato ausente, y la superficie lo pinta
+   * con `?? 0` — el dato SIEMPRE se muestra (R19). NO es ordenable ni filtrable server-side
+   * (R29): es derivado en tiempo de lectura, no una columna de `orden`.
+   */
+  intentosEntrega?: number;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
   // que solo usa los escalares/`*Nombre` sigue funcionando. La relacion `tienda`
@@ -199,7 +291,6 @@ export interface OrdenListItemRelaciones {
   provincia: RefNombre | null;
   canton: RefNombre | null;
   distrito: RefNombre | null;
-  mensajeroSugerido: RefNombre | null;
   mensajeroAsignado: RefNombre | null;
 }
 
@@ -207,6 +298,12 @@ export type CrearOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type ObtenerOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type ListarOrdenesResult =
   | { status: "ok"; items: OrdenListItemDTO[]; page: number; pageSize: number; total: number }
+  | ActionError;
+// Feature 151 (R11/R20): resultado del modo completo en el borde. `limite_excedido`
+// lleva SOLO conteos (sin PII) y NUNCA filas; el resto de fallos son `ActionError`.
+export type ListarOrdenesCompletoResult =
+  | { status: "ok"; items: OrdenListItemDTO[]; total: number }
+  | { status: "limite_excedido"; total: number; limite: number }
   | ActionError;
 export type ActualizarOrdenResult = { status: "ok"; orden: OrdenDTO } | ActionError;
 export type BorrarOrdenResult = { status: "ok" } | ActionError;

@@ -49,7 +49,7 @@ function makeOrden(over: Partial<MiAsignacionDTO> = {}): MiAsignacionDTO {
     id: "g1",
     numGuia: 1001,
     numRemision: "REM-001",
-    estatusValue: "en_ruta",
+    estatusValue: "en_reparto",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",
@@ -87,6 +87,9 @@ async function abrirRama(
       onGestionarPedido={vi.fn().mockResolvedValue(true)}
       onCancelarGestion={vi.fn()}
       onSuccess={vi.fn()}
+      // Total de órdenes en reparto, para el "N de total" de la cabecera: aquí se
+      // monta el panel con una sola orden.
+      count={1}
     />,
   );
   await user.click(await screen.findByRole("button", { name: rama }));

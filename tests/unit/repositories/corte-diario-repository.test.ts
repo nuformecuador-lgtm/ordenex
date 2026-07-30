@@ -4,7 +4,7 @@ import { CorteDiarioRepository } from "@/lib/repositories/CorteDiarioRepository"
 
 // Feature 41/C2 (R7/R10) + feature 109 (R4/R10/R29) — repo del corte diario.
 // `findMensajerosConActividadSinCierre` devuelve la UNION de (a) mensajeros con gestiones sin
-// cerrar (cierre_id IS NULL, anulada_at IS NULL) y (b) mensajeros con >=1 orden en `en_ruta`
+// cerrar (cierre_id IS NULL, anulada_at IS NULL) y (b) mensajeros con >=1 orden en `en_reparto`
 // no borrada, menos los que ya tienen un cierre ABIERTO ('solicitado'|'vencido'|'rechazado').
 // Mockea Prisma (sin DB real).
 
@@ -33,8 +33,8 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     expect(rows).toEqual([{ mensajeroId: "m1", zonaId: "z1" }]);
   });
 
-  // Feature 109/R4: la seleccion suma a los mensajeros con ordenes en `en_ruta` (sin gestiones).
-  it("R4: incluye mensajeros con >=1 orden en `en_ruta` no borrada (sin gestiones pendientes)", async () => {
+  // Feature 109/R4: la seleccion suma a los mensajeros con ordenes en `en_reparto` (sin gestiones).
+  it("R4: incluye mensajeros con >=1 orden en `en_reparto` no borrada (sin gestiones pendientes)", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
       { mensajeroAsignadoId: "m2", mensajeroAsignado: { zonaId: "z2" } },
@@ -46,22 +46,22 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({
       deletedAt: null,
-      estatus: { value: "en_ruta" },
+      estatus: { value: "en_reparto" },
       mensajeroAsignadoId: { not: null },
     });
     expect(arg.distinct).toEqual(["mensajeroAsignadoId"]);
     expect(rows).toEqual([{ mensajeroId: "m2", zonaId: "z2" }]);
   });
 
-  // Feature 109/R4: UNION sin duplicar — un mensajero con gestiones Y en_ruta aparece 1 vez.
-  it("R4: UNION de gestiones + en_ruta, sin duplicar mensajeros", async () => {
+  // Feature 109/R4: UNION sin duplicar — un mensajero con gestiones Y en_reparto aparece 1 vez.
+  it("R4: UNION de gestiones + en_reparto, sin duplicar mensajeros", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findMany.mockResolvedValue([
       { mensajeroId: "m1", mensajero: { zonaId: "z1" } },
     ]);
     prisma.orden.findMany.mockResolvedValue([
       { mensajeroAsignadoId: "m1", mensajeroAsignado: { zonaId: "z1" } }, // ya esta por gestiones
-      { mensajeroAsignadoId: "m2", mensajeroAsignado: { zonaId: "z2" } }, // nuevo por en_ruta
+      { mensajeroAsignadoId: "m2", mensajeroAsignado: { zonaId: "z2" } }, // nuevo por en_reparto
     ]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
@@ -110,7 +110,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     expect(rows).toEqual([]);
   });
 
-  it("sin actividad (ni gestiones ni en_ruta) -> lista vacia, sin consultar cierres", async () => {
+  it("sin actividad (ni gestiones ni en_reparto) -> lista vacia, sin consultar cierres", async () => {
     const prisma = buildPrisma();
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 

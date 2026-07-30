@@ -13,12 +13,20 @@ const XLSX_MIME =
 
 // Mock del generador XLSX: el componente lo carga con import dinámico (R6b). Se
 // aísla de exceljs para observar el flujo de descarga de forma determinista.
+// Feature 148/T21: el MIME ya NO es una constante local del componente, sino un
+// export del generador; el mock lo conserva del módulo real para que la descarga de
+// plantilla siga produciendo idéntico Blob (R13, no regresión).
 const { buildXlsxTemplateMock } = vi.hoisted(() => ({
   buildXlsxTemplateMock: vi.fn<(fields: TemplateField[]) => Promise<ArrayBuffer>>(),
 }));
-vi.mock("@/lib/utils/xlsx-template", () => ({
-  buildXlsxTemplate: buildXlsxTemplateMock,
-}));
+// Mock PARCIAL: `XLSX_MIME` se conserva del módulo REAL (no se declara aquí), así
+// que la aserción del MIME comprueba la constante de producción y no una copia que
+// se auto-cumpliría. Lo exportan las features 143/148 desde `xlsx-template` y
+// BulkUpload lo importa de forma estática.
+vi.mock("@/lib/utils/xlsx-template", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils/xlsx-template")>();
+  return { ...actual, buildXlsxTemplate: buildXlsxTemplateMock };
+});
 
 const fields: TemplateField[] = [
   { key: "num_remision", label: "Nº Remisión", example: "R-001" },

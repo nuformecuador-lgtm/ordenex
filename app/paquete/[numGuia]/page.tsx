@@ -5,6 +5,7 @@ import { obtenerEtiquetaPorGuia } from "@/lib/actions/etiquetas-guia";
 import { formatMonto } from "@/lib/config/moneda";
 import { PAQUETE_BASE_PATH } from "@/lib/utils/paquete-url";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
+import { Logo } from "@/components/shared/Logo";
 
 const SIN_DATO = "—";
 
@@ -57,9 +58,7 @@ export default async function PaquetePage({
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 px-5 py-10">
       <header className="flex flex-col gap-1">
-        <span className="font-heading text-lg font-semibold tracking-tight text-navy">
-          Ordenex
-        </span>
+        <Logo className="text-lg text-navy" />
         <div className="h-1 w-10 rounded-full bg-brand" />
       </header>
 

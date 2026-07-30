@@ -6,7 +6,7 @@ import {
   ESTADOS_FLUJO_DEVOLUCION,
 } from "@/app/(app)/ordenes/exclude-por-rol";
 
-// Feature 139 (T3.4, R19/R20) — `OrdenesTabs` deriva las tabs del catálogo `order_status`
+// Feature 139 (T3.4, R19/R20) — `OrdenesListado` deriva las opciones del filtro por estado del catálogo `order_status`
 // MENOS `EXCLUDE_POR_ROL[rol]`. Estos tests blindan que NINGÚN estado del flujo de
 // devolución de rechazadas quede excluido, para maestro/admin (R19) ni para adminTienda
 // (R20, gate F1.4-Q4: ve TODOS los estados del retorno, incluidos los internos de bodega).

@@ -10,8 +10,13 @@ import {
 // El schema `.strict()` con whitelist es la unica defensa que impide que un nombre
 // de columna arbitrario llegue a Prisma (R11).
 describe("ordenFilterSchema / listarOrdenesSchema.filter (feature 63)", () => {
-  it("R8: la whitelist v1 es exactamente ['status_id']", () => {
-    expect(ORDEN_FILTER_FIELDS).toEqual(["status_id"]);
+  // La whitelist v1 de la feature 63 era exactamente `['status_id']`. La feature 144 la
+  // AMPLIO a nueve claves (R30) — es un cambio de contrato deliberado, no una regresion:
+  // el invariante que esta feature defiende es que `status_id` SIGUE en la whitelist y
+  // que todo lo que no esta en ella se rechaza (los tests de abajo, intactos). El censo
+  // exacto de las nueve claves vive en `orden-filter-144.test.ts`.
+  it("R8: `status_id` sigue en la whitelist server-side", () => {
+    expect(ORDEN_FILTER_FIELDS).toContain("status_id");
   });
 
   it("R6: listarOrdenesSchema acepta un filter con status_id", () => {
@@ -46,5 +51,24 @@ describe("ordenFilterSchema / listarOrdenesSchema.filter (feature 63)", () => {
 
   it("R7: status_id vacio se rechaza (min(1))", () => {
     expect(() => ordenFilterSchema.parse({ status_id: "" })).toThrow(z.ZodError);
+  });
+
+  // Filtro MULTI-ESTADO: el listado unico de /ordenes ofrece un selector de seleccion
+  // multiple, asi que `status_id` acepta tambien una LISTA de ids (-> `IN (...)`).
+  it("status_id acepta una LISTA de ids", () => {
+    const parsed = listarOrdenesSchema.parse({
+      filter: { status_id: ["os-a", "os-b"] },
+    });
+    expect(parsed.filter).toEqual({ status_id: ["os-a", "os-b"] });
+  });
+
+  it("una lista VACIA se rechaza (equivaldria a 'ningun estado': se omite el filtro)", () => {
+    expect(() => ordenFilterSchema.parse({ status_id: [] })).toThrow(z.ZodError);
+  });
+
+  it("un id vacio dentro de la lista se rechaza (min(1) por elemento)", () => {
+    expect(() => ordenFilterSchema.parse({ status_id: ["os-a", ""] })).toThrow(
+      z.ZodError,
+    );
   });
 });

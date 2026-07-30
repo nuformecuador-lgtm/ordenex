@@ -12,6 +12,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IOrdenMensajeroMetaRepository } from "@/lib/interfaces/repositories/IOrdenMensajeroMetaRepository";
 import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   DetalleConflicto,
   EscogerServiceResult,
@@ -34,9 +35,9 @@ const MSG_BLOQUEADO =
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "por_recoger";
-const ESTADO_EN_REPARTO = "en_ruta";
+const ESTADO_EN_REPARTO = "en_reparto";
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
-const ORIGEN_GESTION = "en_ruta";
+const ORIGEN_GESTION = "en_reparto";
 
 // El `value` de order_status destino coincide 1:1 con el `resultado` de la
 // gestion (entregada/reprogramada/devuelta/rechazada).
@@ -81,6 +82,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       IOrdenMensajeroMetaRepository,
       "findMarcarLuegoByMensajero" | "findNotasByMensajero"
     >,
+    // Feature 160 (R11/R12/R24): derivador de intentos EN LOTE, dependencia REQUERIDA (una dep
+    // opcional dejaria que el wiring se la olvidara y el dato desapareciera en silencio de las
+    // superficies del mensajero). `import type` + `Pick`: sin ciclo de modulos y testeable con
+    // dobles.
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
   ) {}
 
   /**
@@ -138,16 +144,24 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // quedan "sin posicion" y conservan el orden actual, que es el comportamiento previo.
     const secuencias = ruta?.secuenciaPorOrden ?? new Map<string, number>();
 
+    // Feature 160 (R12/R13/R15): UN solo lote con la union de los ids de los DOS grupos, sobre
+    // las ordenes YA acotadas al mensajero actor (`findMisAsignaciones(actor.usuarioId, ...)`).
+    // Sin asignaciones -> 0 consultas al historial (R13).
+    const intentos = await this.historial.contarIntentosEnLote(rows.map((r) => r.id));
+
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
     for (const row of rows) {
       // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
       // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
       // Feature 116 (R6/R8): merge de la nota privada del propio actor (`null` si no hay nota).
+      // Feature 160 (R14/R19): `?? 0` — las ordenes sin intentos no vienen en el Map y el `0`
+      // es un valor CONOCIDO que SIEMPRE se expone, no un dato ausente.
       const dto = {
         ...toDTO(row),
         marcarLuego: marcadasLuego.has(row.id),
         notaPrivada: notasPrivadas.get(row.id) ?? null,
+        intentosEntrega: intentos.get(row.id) ?? 0,
       };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
@@ -171,14 +185,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       return a.secuenciaRuta - b.secuenciaRuta;
     });
     const paradasSinOptimizar = porGestionar.filter((o) => o.secuenciaRuta === null).length;
-    // Feature 61: KPIs derivados de las ordenes en_ruta (porGestionar) + el conteo
+    // Feature 61: KPIs derivados de las ordenes en_reparto (porGestionar) + el conteo
     // de entregadas. `pendientes` = en camino; `porCobrar` = COD por recaudar (null = 0).
     const codEnReparto = porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
     const kpis: MisAsignacionesKpis = {
       pendientes: porGestionar.length,
       entregadas,
       porCobrar: codEnReparto,
-      // Total a cobrar ACUMULADO: COD en_ruta + COD ya entregado. Estable al entregar;
+      // Total a cobrar ACUMULADO: COD en_reparto + COD ya entregado. Estable al entregar;
       // se descuenta al gestionar como reprogramada/devuelta/rechazada (fuera de ambos sets).
       totalACobrar: codEnReparto + montoEntregadas,
     };
@@ -407,7 +421,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
   /**
    * Guardia comun (R18/R31): la orden existe, es del actor y su origen es
-   * `en_ruta`. Devuelve la fila o un resultado de rechazo.
+   * `en_reparto`. Devuelve la fila o un resultado de rechazo.
    */
   private async cargarOrdenGestionable(
     ordenId: string,

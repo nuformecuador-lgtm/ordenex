@@ -7,7 +7,6 @@ import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { cn } from "@/lib/utils";
-import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
 import { OrdenesCargaPreview } from "@/app/(app)/ordenes/_components/OrdenesCargaPreview";
 import {
   OrdenesCargaUpload,
@@ -25,6 +24,8 @@ import {
 import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
 import { useToast } from "@/hooks/useToast";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
+import { notificarCargaMasivaTerminada } from "@/lib/actions/notificaciones";
+import { nuevoLoteId } from "@/app/(app)/ordenes/_components/lote-id";
 
 // Re-export por compatibilidad con consumidores previos de la constante.
 export { ORDENES_BULK_FIELDS } from "@/app/(app)/ordenes/_components/carga-masiva-fields";
@@ -37,26 +38,25 @@ const CLASIFICACION_VACIA: ClasificacionCarga = {
 
 /**
  * Pasos del modal: `upload` (elegir archivo → parseo/validación por chunks en el
- * navegador, dry-run, sin persistir), `preview` (hallazgos: duplicados + errores,
- * con chips) y `asignacion` (tras la carga real: asignar mensajero a las nuevas).
+ * navegador, dry-run, sin persistir) y `preview` (hallazgos: duplicados +
+ * errores, con chips). Al confirmar se persiste y el modal se cierra: el
+ * mensajero de una orden se decide después, en "Generar guía".
  */
-type Step = "upload" | "preview" | "asignacion";
+type Step = "upload" | "preview";
 
 /** Orden y etiqueta de los pasos, para el indicador de progreso. */
 const PASOS: { id: Step; label: string }[] = [
   { id: "upload", label: "Subir archivo" },
   { id: "preview", label: "Revisar hallazgos" },
-  { id: "asignacion", label: "Asignar mensajero" },
 ];
 
 /** Subtítulo del modal según el paso; orienta sin repetir lo que ya dice el paso. */
 const PASO_DESCRIPCION: Record<Step, string> = {
   upload: "Sube un archivo CSV o XLSX. Se valida en tu navegador antes de guardar nada.",
   preview: "Revisa los hallazgos de la validación y confirma para cargar.",
-  asignacion: "Asigna un mensajero a las órdenes recién creadas.",
 };
 
-/** Indicador de progreso de los 3 pasos del modal (presentacional). */
+/** Indicador de progreso de los pasos del modal (presentacional). */
 function OrdenesCargaPasos({ step }: { step: Step }) {
   const actual = PASOS.findIndex((p) => p.id === step);
 
@@ -116,6 +116,9 @@ export function OrdenesCargaMasivaButton() {
     useState<ClasificacionCarga>(CLASIFICACION_VACIA);
   // Filas únicas validadas, para re-enviarlas en la carga real al confirmar.
   const [filasUnicas, setFilasUnicas] = useState<FilaParseada[]>([]);
+  // R39: identificador del lote, generado al iniciar la carga y ESTABLE entre
+  // reintentos de la confirmación; es la clave de idempotencia del aviso.
+  const [loteId, setLoteId] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [confirmProgreso, setConfirmProgreso] = useState<{
     hechas: number;
@@ -128,6 +131,8 @@ export function OrdenesCargaMasivaButton() {
   function handleValidated(result: OrdenesCargaUploadResult) {
     setClasificacion(result.clasificacion);
     setFilasUnicas(result.filasUnicas);
+    // La carga (aún no persistida) empieza aquí: su lote ya tiene identidad.
+    setLoteId(nuevoLoteId());
 
     const nuevas = result.clasificacion.numRemisionesNuevas.length;
     const dup = result.clasificacion.existentes.length;
@@ -135,6 +140,18 @@ export function OrdenesCargaMasivaButton() {
     toast.info(`Validación: ${nuevas} nuevas, ${dup} duplicadas, ${err} con error`);
 
     setStep("preview");
+  }
+
+  /**
+   * R39: avisa UNA sola vez, al cerrar el último chunk de la carga real (nunca en
+   * dry-run). El aviso es informativo: si la acción falla, la carga ya persistida y
+   * su resumen siguen intactos, por eso el error se descarta deliberadamente.
+   */
+  function avisarCargaTerminada(creadas: number, total: number) {
+    if (!loteId) return;
+    void notificarCargaMasivaTerminada({ creadas, total, loteId }).catch(() => {
+      // Best-effort (R25): una notificación perdida no invalida la carga.
+    });
   }
 
   // Fase 2: carga real. Re-envía las filas únicas en chunks SIN dryRun para
@@ -159,15 +176,20 @@ export function OrdenesCargaMasivaButton() {
       if (err > 0) toast.warning(message);
       else toast.success(message);
 
+      // R22/R39: la carga por interfaz terminó — el servidor no puede saberlo solo.
+      // Best-effort: no se espera ni se propaga el fallo, el resumen no depende de él.
+      avisarCargaTerminada(nuevas, filasUnicas.length);
+
       void mutate(
         (key) => Array.isArray(key) && key[0] === "ordenes:list",
         undefined,
         { revalidate: true },
       );
 
-      setClasificacion(clasif);
-      if (nuevas > 0) setStep("asignacion");
-      else handleOpenChange(false);
+      // La carga ya está cometida y el listado se está revalidando: no queda paso
+      // posterior en el modal (el mensajero se decide en "Generar guía"), así que
+      // se cierra y el toast de arriba es el reporte del resultado.
+      handleOpenChange(false);
     } catch (cause) {
       toast.error(
         cause instanceof ChunkRequestError
@@ -185,6 +207,7 @@ export function OrdenesCargaMasivaButton() {
       setStep("upload");
       setClasificacion(CLASIFICACION_VACIA);
       setFilasUnicas([]);
+      setLoteId(null);
       setConfirmando(false);
       setConfirmProgreso(null);
     }
@@ -214,17 +237,14 @@ export function OrdenesCargaMasivaButton() {
 
           {step === "upload" ? (
             <OrdenesCargaUpload onValidated={handleValidated} />
-          ) : step === "preview" ? (
+          ) : (
             <OrdenesCargaPreview
               clasificacion={clasificacion}
+              // Feature 143: valores CRUDOS del archivo para el export de errores.
+              filas={filasUnicas}
               confirmando={confirmando}
               progresoTexto={progresoTexto}
               onConfirmar={handleConfirmar}
-            />
-          ) : (
-            <OrdenesCargaResumen
-              numRemisiones={clasificacion.numRemisionesNuevas}
-              onDone={() => handleOpenChange(false)}
             />
           )}
         </div>

@@ -72,7 +72,6 @@ describe("carga-masiva-chunks — procesarEnChunks", () => {
 
     const results = await procesarEnChunks(filas, {
       dryRun: true,
-      mensajeroSugeridoId: "",
       chunkSize: 2,
       fetchImpl,
       onProgress: (h, t) => progreso.push([h, t]),
@@ -91,8 +90,10 @@ describe("carga-masiva-chunks — procesarEnChunks", () => {
     expect(progreso).toEqual([[2, 3], [3, 3]]);
   });
 
-  it("inyecta el mensajero sugerido del lote en filas sin uno propio", async () => {
-    const filas = [fila("A", 1), fila("B", 2, { mensajero_sugerido_id: "propio" })];
+  it("envía las filas del archivo TAL CUAL, sin inyectar campos", async () => {
+    // Retirado el "mensajero sugerido": `procesarEnChunks` ya no reescribe la
+    // fila; lo que se manda es exactamente lo que trae el archivo.
+    const filas = [fila("A", 1), fila("B", 2, { notas: "propia" })];
     let enviados: Array<Record<string, string>> = [];
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse((init?.body as string) ?? "{}");
@@ -100,15 +101,10 @@ describe("carga-masiva-chunks — procesarEnChunks", () => {
       return okResponse(body.rows);
     }) as unknown as typeof fetch;
 
-    await procesarEnChunks(filas, {
-      dryRun: false,
-      mensajeroSugeridoId: "global",
-      chunkSize: 10,
-      fetchImpl,
-    });
+    await procesarEnChunks(filas, { dryRun: false, chunkSize: 10, fetchImpl });
 
-    expect(enviados[0].mensajero_sugerido_id).toBe("global"); // sin propio -> global
-    expect(enviados[1].mensajero_sugerido_id).toBe("propio"); // conserva el propio
+    expect(enviados).toEqual(filas.map((f) => f.row));
+    expect(enviados[1].notas).toBe("propia");
   });
 
   it("lanza ChunkRequestError si un lote responde no-ok", async () => {
@@ -116,7 +112,6 @@ describe("carga-masiva-chunks — procesarEnChunks", () => {
     await expect(
       procesarEnChunks([fila("A", 1)], {
         dryRun: true,
-        mensajeroSugeridoId: "",
         chunkSize: 10,
         fetchImpl,
       }),

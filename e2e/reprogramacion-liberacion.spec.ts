@@ -12,7 +12,7 @@ import { test, expect, type Page } from "@playwright/test";
  *     `reprogramada`, keeping its `zonaId` (central for the maestro path).
  *  2. Bloqueo (R1/R2): while `fecha_reprogramacion > hoy`, the order is NOT
  *     assignable. In the maestro's "Órdenes" view it is NOT listed under any
- *     assignable apartado (`en_bodega_central`/`en_fulfillment`), so it cannot be selected
+ *     assignable apartado (`en_bodega_central`), so it cannot be selected
  *     nor sent — the block is server-side (guardas de `generarGuia`/`asignarDesdeBodega`).
  *  3. Corte de fecha + cron (R7/R12): invoking `GET /api/cron/liberar-reprogramadas`
  *     with the correct `Authorization: Bearer <CRON_SECRET>` returns `200` with the

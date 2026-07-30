@@ -1,20 +1,38 @@
 import { NumRemisionDuplicadoError } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { IOrdenRepository, UpdateOrdenData } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type {
+  IOrdenRepository,
+  ListOrdenesWhere,
+  UpdateOrdenData,
+} from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
   Actor,
   ActualizarOrdenServiceResult,
   BorrarOrdenServiceResult,
   CrearOrdenServiceResult,
   IOrdenService,
+  ListarOrdenesCompletoServiceResult,
   ListarOrdenesServiceResult,
   ObtenerOrdenServiceResult,
 } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   ActualizarOrdenInput,
+  CreatedPreset,
   CrearOrdenInput,
+  ListarOrdenesCompletoInput,
   ListarOrdenesInput,
+  OrdenFilterInput,
 } from "@/lib/types/orden";
-import { ordenesConfig } from "@/lib/config/ordenes";
+import { resolverDestinoCreacion } from "@/lib/services/destino-creacion";
+// Feature 151: el limite de filas de `listarCompleto`. `ordenesConfig` salio de este archivo
+// al integrar la 155: su unico consumidor aqui era el default `DEFAULT_ESTATUS_VALUE` del alta
+// manual, que la bifurcacion por bodega sustituyo por `resolverDestinoCreacion`.
+import { descargaConfig } from "@/lib/config/descarga";
+import {
+  inicioDelDiaCREnUtc,
+  inicioDelDiaSiguienteCREnUtc,
+  inicioDeUltimosNDiasCREnUtc,
+} from "@/lib/utils/fecha-cr";
 
 // Roles reconocidos por el CRUD (los demas -> forbidden, R24). maestro/admin
 // tienen acceso total (R20); adminTienda/mensajero con restriccion (R21/R23).
@@ -25,10 +43,75 @@ const KNOWN_ROLES = new Set<string>(["maestro", "admin", "adminTienda", "mensaje
 // columna `estatus_id`); la clave publica `status_id` nunca se usa como nombre de
 // columna. El schema `.strict()` (lib/types/orden.ts) ya garantiza que solo llegan
 // claves de esta whitelist, asi que ninguna columna arbitraria alcanza el `where`.
-const FILTER_TO_COLUMN = { status_id: "estatusId" } as const;
+// Feature 144/B1 (R30/R43): el mapa crece a los cinco catalogos. Las TRES claves
+// temporales (`created_preset`/`created_desde`/`created_hasta`) NO estan aqui a
+// proposito: no son columnas, se traducen a un rango `createdAt: { gte, lt }`
+// calculado server-side (ver `rangoCreacion`).
+const FILTER_TO_COLUMN = {
+  status_id: "estatusId",
+  zona_id: "zonaId",
+  tienda_id: "tiendaId",
+  provincia_id: "provinciaId",
+  canton_id: "cantonId",
+  distrito_id: "distritoId",
+} as const;
+
+// Dias de cada atajo de antiguedad (R41). El dominio ya lo cierra `CREATED_PRESETS`
+// en el schema; este mapa solo traduce el valor a un numero de dias.
+const PRESET_DIAS: Record<CreatedPreset, number> = {
+  "7d": 7,
+  "15d": 15,
+  "30d": 30,
+  "90d": 90,
+};
+
+/**
+ * Feature 144 (R41/R42/R43) — bordes temporales del filtro de creacion, calculados
+ * SERVER-SIDE en horario de Costa Rica (UTC-6 fijo). Nunca se aceptan instantes del
+ * reloj del cliente: solo fechas calendario o un atajo de dominio cerrado.
+ *
+ *   - atajo "Nd"  -> `gte` = 00:00 CR de hace N-1 dias (N dias calendario incl. hoy).
+ *   - `desde: D`  -> `gte` = 00:00 CR de D.
+ *   - `hasta: H`  -> `lt`  = 00:00 CR del dia SIGUIENTE a H  => H es INCLUSIVO.
+ *   - un solo extremo -> rango abierto por el otro lado.
+ *
+ * Atajo y rango no pueden coexistir: `ordenFilterSchema` lo rechaza antes (R40).
+ * Devuelve `undefined` si no hay ninguna clave temporal (sin filtro, R45).
+ */
+function rangoCreacion(
+  filter: OrdenFilterInput | undefined,
+  ahora: Date,
+): { gte?: Date; lt?: Date } | undefined {
+  if (!filter) return undefined;
+  if (filter.created_preset) {
+    return { gte: inicioDeUltimosNDiasCREnUtc(PRESET_DIAS[filter.created_preset], ahora) };
+  }
+  const rango: { gte?: Date; lt?: Date } = {};
+  if (filter.created_desde) rango.gte = inicioDelDiaCREnUtc(filter.created_desde);
+  if (filter.created_hasta) rango.lt = inicioDelDiaSiguienteCREnUtc(filter.created_hasta);
+  return rango.gte || rango.lt ? rango : undefined;
+}
+
+// Feature 160 (design §3.5): el derivador de intentos EN LOTE. `Pick` para dobles de test sin
+// DB, e `import type` para que la dependencia sea SOLO de tipo (sin ciclo de modulos:
+// `OrdenHistorialService` depende de repositorios, nunca de los servicios de lista).
+type IntentosSvc = Pick<IOrdenHistorialService, "contarIntentosEnLote">;
 
 export class OrdenService implements IOrdenService {
-  constructor(private readonly repo: IOrdenRepository) {}
+  /**
+   * `ahora` inyectable (feature 144): el atajo de antiguedad (`created_preset`) se
+   * calcula contra el reloj del SERVIDOR (R43). Se inyecta solo para que los tests
+   * puedan fijar el instante; en produccion nadie lo pasa. Va al FINAL por ser el
+   * unico parametro opcional: `historial` (160) es requerido y lo precede.
+   */
+  constructor(
+    private readonly repo: IOrdenRepository,
+    // Feature 160 (R11/R12): dependencia REQUERIDA a proposito. Una dep opcional dejaria que
+    // el wiring de produccion se la olvidara y el dato desapareciera en silencio de las 5
+    // superficies que come este listado; requerida, el compilador lo impide.
+    private readonly historial: IntentosSvc,
+    private readonly ahora: () => Date = () => new Date(),
+  ) {}
 
   async crear(input: CrearOrdenInput, actor: Actor): Promise<CrearOrdenServiceResult> {
     // --- Autorizacion (R19-R24), antes de tocar datos ---
@@ -56,23 +139,23 @@ export class OrdenService implements IOrdenService {
     // --- Validacion de FKs (estatus + geografia), R26/R12/R27 ---
     const fieldErrors: Record<string, string[]> = {};
 
-    let estatusId: string;
-    if (input.estatusId !== undefined) {
-      const exists = await this.repo.existsEstatus(input.estatusId);
-      if (!exists) fieldErrors.estatusId = ["estatusId no existe en el catalogo"];
-      estatusId = input.estatusId;
-    } else {
-      // N1/R27: default en_bodega_central (configurable) resuelto por value.
-      const defaultId = await this.repo.findEstatusIdByValue(
-        ordenesConfig.DEFAULT_ESTATUS_VALUE,
-      );
-      if (defaultId === null) {
-        fieldErrors.estatusId = ["estatus por defecto no disponible (seed pendiente)"];
-        estatusId = "";
-      } else {
-        estatusId = defaultId;
-      }
+    // Feature 155 (R1/R5/R6/R13/R14) — BIFURCACION POR BODEGA. El estado inicial NO sale del
+    // payload ni de una constante de configuracion: sale del flag `fulfillment` de la tienda
+    // DUEÑA (`tiendaId`, ya resuelto arriba: la indicada en la entrada para maestro/admin, la
+    // propia para adminTienda). El alta manual dejo de aceptar un `estatusId` explicito (R5):
+    // el campo salio de `crearOrdenSchema` y, como el schema no es `.strict()`, una entrada
+    // legada que lo traiga se IGNORA en silencio en vez de romper.
+    const destino = resolverDestinoCreacion(await this.repo.findUsuarioFulfillment(tiendaId));
+
+    // R7: sin el value del catalogo no se crea NADA. El error nombra el value que falta, para
+    // que el operador sepa que sembrar (patron de la guarda previa).
+    const estatusIdResuelto = await this.repo.findEstatusIdByValue(destino.estatus);
+    if (estatusIdResuelto === null) {
+      fieldErrors.estatusId = [
+        `estatus inicial "${destino.estatus}" no disponible en el catalogo (seed pendiente)`,
+      ];
     }
+    const estatusId = estatusIdResuelto ?? "";
 
     // R14b/R12: zona/provincia/canton NOT NULL y geografia creada vacia; deben
     // existir filas referenciables. distrito opcional.
@@ -110,6 +193,9 @@ export class OrdenService implements IOrdenService {
         },
         // Feature 49/#2 (R10/R21/R23): la crea el usuario autenticado; origen null.
         { actorUsuarioId: actor.usuarioId, origenTipo: "creacion_manual" },
+        // Feature 155/R3/R8/R9/R12: la rama (b) numera en la MISMA tx; la (a) nace sin guia.
+        // El mensajero NO se asigna en ninguna de las dos (`create` nunca lo escribe, R9).
+        { conGuia: destino.conGuia },
       );
       return { status: "ok", orden };
     } catch (error) {
@@ -133,17 +219,22 @@ export class OrdenService implements IOrdenService {
     return { status: "ok", orden };
   }
 
-  async listar(
-    input: ListarOrdenesInput,
+  /**
+   * Feature 144: ORDEN DE ESCRITURA del `where`, y es lo que garantiza R36/R37:
+   *   1) `estatusId` escalar heredado,
+   *   2) el `filter` traducido por la whitelist,
+   *   3) el ACOTAMIENTO POR ROL, escrito AL FINAL para que PISE lo que el filtro
+   *      hubiera puesto. Un filtro nunca amplia el alcance de un rol.
+   *
+   * Feature 151/T5: extraido de `listar` SIN cambio de comportamiento, para que el
+   * modo sin paginacion (`listarCompleto`) comparta literalmente este codigo y no
+   * pueda divergir del listado en autorizacion ni en acotamiento (design §4.1, D3).
+   */
+  private construirWhere(
+    input: Pick<ListarOrdenesInput, "estatusId" | "filter">,
     actor: Actor,
-  ): Promise<ListarOrdenesServiceResult> {
-    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
-
-    const where: {
-      tiendaId?: string;
-      estatusId?: string;
-      mensajeroAsignadoId?: string;
-    } = {};
+  ): ListOrdenesWhere {
+    const where: ListOrdenesWhere = {};
     // R10: el `estatusId` escalar preexistente sigue funcionando (sin regresion).
     if (input.estatusId !== undefined) where.estatusId = input.estatusId;
     // Feature 63/R8/R9: traduce `filter.status_id` a la columna `estatusId` via el
@@ -152,14 +243,52 @@ export class OrdenService implements IOrdenService {
     if (input.filter?.status_id !== undefined) {
       where[FILTER_TO_COLUMN.status_id] = input.filter.status_id;
     }
-    // R9/R21: adminTienda sigue acotado a SUS ordenes; el filtro por estado COMPONE
-    // con este alcance por rol (ambas condiciones en el mismo `where`), no lo pisa.
+    // Feature 144/R30/R33/R34: los cinco filtros de catalogo, traducidos por el MISMO
+    // mapa explicito. La clave publica nunca se usa como nombre de columna; el schema
+    // `.strict()` ya garantiza que solo llegan claves de la whitelist (R31).
+    if (input.filter?.zona_id !== undefined) {
+      where[FILTER_TO_COLUMN.zona_id] = input.filter.zona_id;
+    }
+    if (input.filter?.tienda_id !== undefined) {
+      where[FILTER_TO_COLUMN.tienda_id] = input.filter.tienda_id;
+    }
+    if (input.filter?.provincia_id !== undefined) {
+      where[FILTER_TO_COLUMN.provincia_id] = input.filter.provincia_id;
+    }
+    if (input.filter?.canton_id !== undefined) {
+      where[FILTER_TO_COLUMN.canton_id] = input.filter.canton_id;
+    }
+    if (input.filter?.distrito_id !== undefined) {
+      where[FILTER_TO_COLUMN.distrito_id] = input.filter.distrito_id;
+    }
+    // Feature 144/R41/R42/R43: los bordes temporales se calculan AQUI (server-side),
+    // no llegan del cliente.
+    const createdAt = rangoCreacion(input.filter, this.ahora());
+    if (createdAt) where.createdAt = createdAt;
+    // REASIGNABLES: predicado compuesto, no columna, asi que no pasa por
+    // FILTER_TO_COLUMN; el repositorio lo traduce. Solo acota (nunca amplia), asi que
+    // convive sin conflicto con el acotamiento por rol que se escribe debajo.
+    if (input.filter?.reasignables) where.reasignables = true;
+    // R9/R21 + feature 144/R36: adminTienda sigue acotado a SUS ordenes. Se escribe
+    // DESPUES del filtro: si el actor inyecto `filter.tienda_id = [otraTienda]`, este
+    // escalar lo SOBRESCRIBE. El filtro de tienda nunca amplia su alcance.
     if (actor.rol === "adminTienda") where.tiendaId = actor.usuarioId;
     // Seguridad: el mensajero solo puede listar SUS asignadas (mensajeroAsignadoId =
     // su usuario). Sin esto, `/ordenes` filtraba el listado COMPLETO al mensajero. Su
     // experiencia normal es /mis-asignaciones; este acotamiento cierra la fuga por si
     // alcanza el listado plano.
     if (actor.rol === "mensajero") where.mensajeroAsignadoId = actor.usuarioId;
+
+    return where;
+  }
+
+  async listar(
+    input: ListarOrdenesInput,
+    actor: Actor,
+  ): Promise<ListarOrdenesServiceResult> {
+    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
+
+    const where = this.construirWhere(input, actor);
 
     const skip = (input.page - 1) * input.pageSize;
     const { items, total } = await this.repo.list({
@@ -170,13 +299,67 @@ export class OrdenService implements IOrdenService {
       take: input.pageSize, // ya acotado a MAX_PAGE_SIZE por el schema (R33)
     });
 
+    // Feature 160 (R11/R12/R14/R15): merge del conteo de intentos en UNA sola consulta al
+    // historial, sobre los items YA acotados por rol/tienda/mensajero (el alcance del actor lo
+    // impuso el `where` de arriba: no se pide el conteo de ninguna orden que el actor no pueda
+    // leer). Pagina vacia -> 0 consultas (R13). `?? 0` porque las ordenes sin intentos no
+    // vienen en el Map y el `0` SIEMPRE se expone (R14/R19).
+    const intentos = await this.historial.contarIntentosEnLote(items.map((o) => o.id));
+    const itemsConIntentos = items.map((o) => ({
+      ...o,
+      intentosEntrega: intentos.get(o.id) ?? 0,
+    }));
+
     return {
       status: "ok",
-      items,
+      items: itemsConIntentos,
       page: input.page,
       pageSize: input.pageSize,
       total,
     };
+  }
+
+  /**
+   * Feature 151 (R11/R20/R21/R22, design §4.1) — el MISMO listado, sin recorte por
+   * pagina, para la descarga del dataset completo.
+   *
+   * No reimplementa nada: reusa `construirWhere` (misma autorizacion, mismo
+   * acotamiento por rol escrito AL FINAL) y la MISMA consulta `repo.list`. Diferencias
+   * con `listar`: `skip = 0`, `take = MAX_FILAS + 1` y el guard de tope.
+   */
+  async listarCompleto(
+    input: ListarOrdenesCompletoInput,
+    actor: Actor,
+  ): Promise<ListarOrdenesCompletoServiceResult> {
+    if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R14/R24
+
+    const where = this.construirWhere(input, actor);
+    const limite = descargaConfig.MAX_FILAS;
+
+    // `take: limite + 1` acota la MEMORIA por construccion (R22): aunque el dataset
+    // sean 50 000 filas, nunca se materializan mas de N+1. El `total` sigue siendo
+    // exacto porque `repo.list` lo obtiene con un `count` independiente del `take`.
+    const { items, total } = await this.repo.list({
+      where,
+      sortBy: input.sortBy, // R17: mismos defaults del schema (created_at/desc)
+      sortDir: input.sortDir,
+      skip: 0,
+      take: limite + 1,
+    });
+
+    // R20/R21: por encima del tope no se entrega NADA. Nunca un dataset truncado en
+    // silencio: o van todas las filas, o va el error accionable con los conteos.
+    if (total > limite) return { status: "limite_excedido", total, limite };
+
+    // Mismo merge de intentos que `listar` (feature 160), para que la columna
+    // "intentos" del archivo no diverja de la que se ve en pantalla.
+    const intentos = await this.historial.contarIntentosEnLote(items.map((o) => o.id));
+    const itemsConIntentos = items.map((o) => ({
+      ...o,
+      intentosEntrega: intentos.get(o.id) ?? 0,
+    }));
+
+    return { status: "ok", items: itemsConIntentos, total };
   }
 
   async actualizar(

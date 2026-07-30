@@ -1,8 +1,14 @@
 // Feature 15 — Orquesta la carga masiva de ordenes: autorizacion, resolucion
 // geografica/mensajero por fila, deduplicacion y persistencia batch. Logica de
 // negocio pura (sin HTTP, sin Prisma directo, sin parseo de archivo).
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { ordenesConfig } from "@/lib/config/ordenes";
+import { resolverDestinoCreacion } from "@/lib/services/destino-creacion";
+import {
+  emitirBestEffort,
+  notificadorNoOp,
+  type CargaMasivaNotificador,
+} from "@/lib/notificaciones/notificadores";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
 import { filaCargaSchema, type BulkSummary, type RowResult } from "@/lib/types/carga-masiva";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
@@ -24,12 +30,14 @@ import type {
 } from "@/lib/interfaces/services/IBulkOrdenService";
 import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import { normalizeName } from "@/lib/utils/normalize";
+import { parseDireccionDestinatario } from "@/lib/utils/direccion-destinatario";
 import { costoEnvioDeTarifa } from "@/lib/utils/ingreso-ordenex";
 
-// Feature 88/R8: estado inicial FIJO de las ordenes cargadas por API (canal integrador),
-// distinto del default de la carga masiva por sesion (en_preparacion/en_fulfillment). Valor
-// de enum EXISTENTE (order-status.ts), sin migracion de estado.
-const ESTATUS_INICIAL_API = "en_ruta_bodega_central";
+// FEATURE 155/R19/R22: la constante `ESTATUS_INICIAL_API` (= `en_ruta_bodega_central`) se
+// RETIRO. Era la tercera regla de nacimiento del sistema y la peor: declaraba que una orden
+// recien creada por el integrador ya estaba VIAJANDO hacia la bodega central, sin que nadie la
+// hubiera recolectado. Las tres vias comparten ahora el mismo punto de decision
+// (`resolverDestinoCreacion`), aplicado sobre el dueño de la orden.
 
 // La resolucion geografica compara nombres del archivo contra los de la DB con el
 // MISMO normalizador que indexa el arbol de zonas (lib/utils/normalize): minusculas,
@@ -169,20 +177,39 @@ function resolveGeo(
   };
 }
 
-type MensajeroResult =
-  | { ok: true; id: string | null }
+// Feature 142 (design.md §4) — extractor de geografia INYECTADO POR VIA.
+//
+// `resolveFila` lo comparten `cargarMasiva` (via sesion, plantilla v2 con la
+// columna unica `direccion_destinatario`) y `cargarViaApi` (via API key, feature
+// 88: contrato PUBLICO con `provincia`/`canton`/`distrito`/`direccion` como campos
+// separados). Cada via aporta su propio extractor; `resolveGeo` sigue recibiendo
+// los mismos 3 nombres y no cambia (R33-R38).
+type GeoInput =
+  | { ok: true; provincia: string; canton: string; distrito: string; direccion: string }
   | { ok: false; fieldErrors: Record<string, string[]> };
 
-// R22: vacio -> null; provisto -> debe existir con rol mensajero.
-function resolveMensajero(mensajeroSugeridoId: string | null, validos: Set<string>): MensajeroResult {
-  if (mensajeroSugeridoId === null) return { ok: true, id: null };
-  if (!validos.has(mensajeroSugeridoId)) {
-    return {
-      ok: false,
-      fieldErrors: { mensajero_sugerido_id: ["mensajero_sugerido_id no valido"] },
-    };
+type GeoInputExtractor = (raw: RawRow) => GeoInput;
+
+// R29: via sesion. La terna sale de parsear `direccion_destinatario`; cualquier
+// fallo de formato es un fieldError bajo esa misma clave (fila a error, R30).
+function geoInputDesdeDireccionUnificada(raw: RawRow): GeoInput {
+  const parsed = parseDireccionDestinatario(raw.direccion_destinatario ?? "");
+  if (!parsed.ok) {
+    return { ok: false, fieldErrors: { direccion_destinatario: [parsed.mensaje] } };
   }
-  return { ok: true, id: mensajeroSugeridoId };
+  return { ok: true, ...parsed.partes };
+}
+
+// R38: via API key. Contrato de la feature 88 intacto: los 4 campos separados,
+// con el mismo `trim()` que antes hacia `filaCargaSchema`.
+function geoInputDesdeColumnasSeparadas(raw: RawRow): GeoInput {
+  return {
+    ok: true,
+    provincia: (raw.provincia ?? "").trim(),
+    canton: (raw.canton ?? "").trim(),
+    distrito: (raw.distrito ?? "").trim(),
+    direccion: (raw.direccion ?? "").trim(),
+  };
 }
 
 interface PreloadedContext {
@@ -190,10 +217,9 @@ interface PreloadedContext {
   provinciaIndex: Map<string, ProvinciaRow[]>;
   cantonIndex: Map<string, CantonRow[]>;
   distritoIndex: Map<string, DistritoRow[]>;
-  mensajerosValidos: Set<string>;
   estatusId: string | null;
-  // Feature 27/R18/R19: `value` del estatus inicial resuelto UNA vez por lote
-  // (en_fulfillment | en_preparacion), reportado por fila creada y en el dedup.
+  // Feature 27/R18/R19 + 155/R4/R16: `value` del estatus inicial resuelto UNA sola vez por
+  // LOTE (nunca por fila), reportado por fila creada y en el dedup.
   estatusInicialValue: string;
 }
 
@@ -204,6 +230,15 @@ export class BulkOrdenService implements IBulkOrdenService {
   constructor(
     private readonly repo: IOrdenRepository,
     private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
+    /**
+     * Feature 146 (R22/R25): notificador de "carga masiva terminada". El DEFAULT es NO-OP: el
+     * composition root (`app/api/ordenes/api-key/carga/route.ts`) inyecta el real. Solo lo usa
+     * `cargarViaApi`, que SI tiene fin de lote real (una peticion = un lote); la carga por UI
+     * la trocea el cliente y se cierra con la Server Action `notificarCargaMasivaTerminada`
+     * (F1.4-4). BEST-EFFORT: una notificacion perdida no puede invalidar una carga de cientos
+     * de ordenes ya persistidas.
+     */
+    private readonly notificarCarga: CargaMasivaNotificador = notificadorNoOp,
   ) {}
 
   async cargarMasiva(
@@ -216,24 +251,22 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     const tiendaId = actor.usuarioId; // R24: siempre la tienda del actor
 
-    // Feature 27/R15/R16/R17/R18: se resuelve UNA sola vez por lote el estatus
-    // inicial a partir del flag `fulfillment` de la tienda que carga (el actor).
-    const fulfillment = await this.repo.findUsuarioFulfillment(tiendaId);
-    const estatusInicialValue = fulfillment
-      ? ordenesConfig.FULFILLMENT_ESTATUS_VALUE // "en_fulfillment"
-      : ordenesConfig.DEFAULT_ESTATUS_VALUE; // "en_preparacion"
+    // Feature 27/R15-R18 + 155/R1/R4/R6/R16: UNA sola lectura del flag `fulfillment` por
+    // LOTE (no por fila) y UNA sola llamada al punto de decision compartido. El adminTienda
+    // solo puede cargar para si mismo, asi que el dueño de las ordenes es el actor.
+    const destino = resolverDestinoCreacion(await this.repo.findUsuarioFulfillment(tiendaId));
 
-    const ctx = await this.precargar(rows, estatusInicialValue);
+    const ctx = await this.precargar(rows, destino.estatus);
 
     if (ctx.estatusId === null) {
-      // Guarda defensiva (patron OrdenService.crear): el seed del estatus inicial
-      // requerido no esta disponible. Ninguna fila puede crearse (R20).
+      // R7/R20: sin el value del catalogo NO se crea ninguna orden y el error NOMBRA el
+      // value que falta (guarda defensiva, patron `OrdenService.crear`).
       const filas: RowResult[] = rows.map((raw, idx) => ({
         fila: idx + 1,
         numRemision: (raw.num_remision ?? "").trim(),
         resultado: "error",
         errores: {
-          estatus: [`estatus inicial "${estatusInicialValue}" no disponible (seed pendiente)`],
+          estatus: [`estatus inicial "${destino.estatus}" no disponible (seed pendiente)`],
         },
       }));
       // Feature 141/R28: ninguna orden persistida -> ningun lote (`cargaId` null).
@@ -250,7 +283,9 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     rows.forEach((raw, idx) => {
       const fila = idx + 1;
-      const result = this.resolveFila(raw, ctx, seen);
+      // Feature 142: la via sesion deriva la geografia de `direccion_destinatario`
+      // (plantilla v2, corte duro D1: no hay camino desde las columnas viejas).
+      const result = this.resolveFila(raw, ctx, seen, geoInputDesdeDireccionUnificada);
       if (result.status === "error") {
         filas.push({ fila, numRemision: result.numRemision, resultado: "error", errores: result.errores });
         return;
@@ -269,8 +304,10 @@ export class BulkOrdenService implements IBulkOrdenService {
       });
     });
 
-    // Dry-run (validación previa): se omite la persistencia; el summary ya lleva
-    // la clasificación completa (creadas/duplicadas/error) para el preview.
+    // Dry-run / validación previa (R17): se omite TODA la persistencia; el summary ya lleva
+    // la clasificación completa (creadas/duplicadas/error) para el preview, con el estado
+    // inicial que correspondería. Al salir antes de tocar el repositorio, el dry-run no
+    // consume NINGÚN `num_guia` ni deja historial, tampoco en la rama (b).
     // Feature 141 (R27/R28): sin persistencia no hay lote — ni en dry-run ni cuando el chunk
     // no aporta ninguna orden nueva.
     let cargaId: string | null = null;
@@ -278,23 +315,42 @@ export class BulkOrdenService implements IBulkOrdenService {
       // R27 + feature 49/#1 (R9/R21/R23): el actor de la carga masiva es la tienda que
       // carga (el adminTienda autenticado); cada orden creada deja su primera fila de
       // historial (origen null -> estado inicial, origenTipo carga_masiva) en la MISMA tx.
-      const persistido = await this.repo.createManyOrdenes(
-        toCreate,
-        cargaMasivaConfig.BATCH_SIZE,
-        { actorUsuarioId: tiendaId, origenTipo: "carga_masiva" },
-        {
-          // Feature 141 (R15/R16/R17): token de lote EMITIDO POR EL SERVIDOR en el primer
-          // chunk y reenviado por el cliente en los siguientes. `null` = esta petición crea
-          // el lote (el repo genera el id); el cliente nunca lo propone.
-          cargaId: options.cargaId ?? null,
-          usuarioCargaId: tiendaId, // R2: el adminTienda autenticado realiza la carga
-          // R29: total de la SESIÓN declarado por el cliente. El fallback `rows.length` solo
-          // aplica si el cliente no lo declara: degrada al tamaño del chunk, nunca a 0.
-          totalFiles: options.totalFiles ?? rows.length,
-          name: options.name ?? null, // R21/R22: solo lo persiste la creación del lote
-        },
-      );
-      cargaId = persistido.cargaId;
+      const historial = { actorUsuarioId: tiendaId, origenTipo: "carga_masiva" } as const;
+      // Feature 141 (R15/R16/R17/R26/R29): contexto del LOTE, IDENTICO en las dos ramas de
+      // la bifurcación de la 155 — el lote es del canal de carga, no del destino físico de
+      // las órdenes, así que una tienda con bodega propia y una sin ella cuelgan sus órdenes
+      // del mismo tipo de fila de `carga`.
+      const lote = {
+        // Token de lote EMITIDO POR EL SERVIDOR en el primer chunk y reenviado por el
+        // cliente en los siguientes. `null` = esta petición crea el lote (el repo genera el
+        // id); el cliente nunca lo propone.
+        cargaId: options.cargaId ?? null,
+        usuarioCargaId: tiendaId, // R2: el adminTienda autenticado realiza la carga
+        // R29: total de la SESIÓN declarado por el cliente. El fallback `rows.length` solo
+        // aplica si el cliente no lo declara: degrada al tamaño del chunk, nunca a 0.
+        totalFiles: options.totalFiles ?? rows.length,
+        name: options.name ?? null, // R21/R22: solo lo persiste la creación del lote
+      };
+      // Feature 155/R3/R8/R11: la rama que numera usa la ruta de lote CON guia (misma
+      // secuencia atomica, guarda `num_guia IS NULL`); la otra, la de siempre. Las dos
+      // encolan geocodificacion por orden efectivamente insertada.
+      if (destino.conGuia) {
+        const persistido = await this.repo.createManyOrdenesConGuia(
+          toCreate,
+          cargaMasivaConfig.BATCH_SIZE,
+          historial,
+          lote,
+        );
+        cargaId = persistido.cargaId;
+      } else {
+        const persistido = await this.repo.createManyOrdenes(
+          toCreate,
+          cargaMasivaConfig.BATCH_SIZE,
+          historial,
+          lote,
+        );
+        cargaId = persistido.cargaId;
+      }
     }
 
     return { status: "ok", summary: this.buildSummary(rows.length, filas, cargaId) };
@@ -312,22 +368,30 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     const tiendaId = actor.usuarioId; // D4: el usuario dedicado de la key es el dueño.
 
-    // R8: estado inicial FIJO `en_ruta_bodega_central` (no se consulta `fulfillment`).
-    const ctx = await this.precargar(rows, ESTATUS_INICIAL_API);
+    // Feature 155/R19: MISMA llamada que la via sesion, sobre el dueño de la key. El canal
+    // por el que entra un dato no dice nada sobre donde esta fisicamente el paquete, asi que
+    // deja de haber un estado inicial fijo para la API.
+    const destino = resolverDestinoCreacion(await this.repo.findUsuarioFulfillment(tiendaId));
+
+    const ctx = await this.precargar(rows, destino.estatus);
 
     if (ctx.estatusId === null) {
-      // Guarda defensiva (patrón cargarMasiva): sin el seed del estatus inicial, ninguna
-      // fila puede crearse (todas a error).
+      // R7: sin el value del catalogo, ninguna fila puede crearse y el error NOMBRA el value
+      // que falta (guarda defensiva, patrón `cargarMasiva`).
       const filas: CargaViaApiRow[] = rows.map((raw, idx) => ({
         fila: idx + 1,
         numRemision: (raw.num_remision ?? "").trim(),
         resultado: "error",
         errores: {
-          estatus: [`estatus inicial "${ESTATUS_INICIAL_API}" no disponible (seed pendiente)`],
+          estatus: [`estatus inicial "${destino.estatus}" no disponible (seed pendiente)`],
         },
       }));
       // Feature 141/R33: sin ordenes creadas no hay lote.
-      return { status: "ok", summary: this.buildViaApiSummary(rows.length, filas, [], null) };
+      return {
+        status: "ok",
+        summary: this.buildViaApiSummary(rows.length, filas, [], null),
+        destino,
+      };
     }
     const estatusId = ctx.estatusId;
 
@@ -340,7 +404,9 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     rows.forEach((raw, idx) => {
       const fila = idx + 1;
-      const result = this.resolveFila(raw, ctx, seen); // R7: mismas reglas que la carga masiva.
+      // R7: mismas reglas que la carga masiva, pero con la geografia en columnas
+      // separadas (feature 142/R38: el contrato publico de la 88 no cambia).
+      const result = this.resolveFila(raw, ctx, seen, geoInputDesdeColumnasSeparadas);
       if (result.status === "error") {
         filas.push({ fila, numRemision: result.numRemision, resultado: "error", errores: result.errores });
         return;
@@ -367,6 +433,14 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     // R9/R10: persistencia con `num_guia` inmediato (misma tx que la creación). El actor del
     // historial es el usuario dedicado de la key; origenTipo `carga_api` (D7).
+    //
+    // Feature 155/R21: la rama `conGuia: false` es DEFENSIVA y hoy inalcanzable — el switch de
+    // fulfillment solo se acepta para el rol `adminTienda` y el dueño de una key es un usuario
+    // de rol `apiKey`, asi que estructuralmente cae siempre en la rama (b) (decision del gate
+    // del 2026-07-29, pregunta 3). Se escribe igual: el dia que un integrador con bodega
+    // propia pueda marcarse, sus ordenes nacen en `en_preparacion` y su `numGuia` viaja como
+    // `null` — nunca un numero fabricado.
+    //
     // Feature 141 (R30/R31/R32/R33): UNA fila de `carga` por peticion, con `usuario_carga` =
     // usuario dedicado de la key y `total_files` = cantidad de objetos del array recibido
     // (`rows.length`, incluyendo duplicadas y filas con error), NUNCA el tamaño de los batches
@@ -384,6 +458,7 @@ export class BulkOrdenService implements IBulkOrdenService {
               totalFiles: rows.length,
               name: options.name ?? null,
             },
+            { conGuia: destino.conGuia },
           )
         : { creadas: [], cargaId: null };
     const creadas = persistido.creadas;
@@ -408,10 +483,25 @@ export class BulkOrdenService implements IBulkOrdenService {
       });
     }
 
-    return {
-      status: "ok",
-      summary: this.buildViaApiSummary(rows.length, filas, ordenes, persistido.cargaId),
-    };
+    // Feature 141/R39: el `cargaId` del lote de ESTA peticion viaja dentro del summary.
+    const summary = this.buildViaApiSummary(rows.length, filas, ordenes, persistido.cargaId);
+
+    // Feature 146/R22/R25: aviso `box` al usuario ejecutor (el dueño de la API key), server-side
+    // porque esta via SI conoce el fin del lote. Va DESPUES de la persistencia y absorbe su
+    // propio fallo: la carga ya esta hecha y su respuesta no puede depender del aviso.
+    await emitirBestEffort("carga_masiva_terminada", () =>
+      this.notificarCarga({
+        usuarioId: tiendaId,
+        creadas: summary.creadas,
+        total: summary.total,
+        loteId: randomUUID(),
+      }),
+    );
+
+    // Feature 155/R24: `destino` viaja en el RESULTADO DEL SERVICE, no en el summary JSON. El
+    // borde (route handler) lo necesita para saber si este lote emite manifiesto, y esa es una
+    // decision interna: el contrato publico solo gana el bloque `manifiesto` cuando lo hay.
+    return { status: "ok", summary, destino };
   }
 
   private buildViaApiSummary(
@@ -453,6 +543,8 @@ export class BulkOrdenService implements IBulkOrdenService {
     raw: RawRow,
     ctx: PreloadedContext,
     seen: Map<string, string>,
+    // Feature 142 (design.md §4): la via decide de donde sale la geografia.
+    geoInputOf: GeoInputExtractor,
   ):
     | { status: "error"; numRemision: string; errores: Record<string, string[]> }
     | { status: "duplicada"; numRemision: string; estatus: string }
@@ -468,24 +560,25 @@ export class BulkOrdenService implements IBulkOrdenService {
     }
     const data = parsed.data;
 
-    const geoResult = resolveGeo(
-      { provincia: raw.provincia ?? "", canton: raw.canton ?? "", distrito: raw.distrito ?? "" },
-      ctx.provinciaIndex,
-      ctx.cantonIndex,
-      ctx.distritoIndex,
-    );
-    const mensajeroResult = resolveMensajero(data.mensajero_sugerido_id, ctx.mensajerosValidos);
+    // Feature 142/R29: si el extractor de la via falla (p. ej. formato invalido de
+    // `direccion_destinatario`), la fila va a error con SU clave, sin llegar a
+    // resolveGeo. Si tiene exito, resolveGeo recibe exactamente los mismos 3
+    // nombres de siempre (R33-R36, mensajes intactos).
+    const geoInput = geoInputOf(raw);
+    const geoResult: GeoResult = geoInput.ok
+      ? resolveGeo(geoInput, ctx.provinciaIndex, ctx.cantonIndex, ctx.distritoIndex)
+      : { ok: false, fieldErrors: geoInput.fieldErrors };
 
     const fieldErrors: Record<string, string[]> = {};
     if (!geoResult.ok) Object.assign(fieldErrors, geoResult.fieldErrors);
-    if (!mensajeroResult.ok) Object.assign(fieldErrors, mensajeroResult.fieldErrors);
     if (Object.keys(fieldErrors).length > 0) {
       return { status: "error", numRemision: data.num_remision, errores: fieldErrors };
     }
-    // Invariante: fieldErrors vacio implica que ambos resolvieron "ok" (los
-    // unicos casos que agregan claves a fieldErrors son las ramas !ok).
+    // Invariante: fieldErrors vacio implica que geoResult resolvio "ok" (su rama
+    // !ok es la unica que agrega claves a fieldErrors). Y un geoResult ok implica
+    // un geoInput ok (es su unica fuente).
     const geo = (geoResult as Extract<GeoResult, { ok: true }>).geo;
-    const mensajeroSugeridoId = (mensajeroResult as Extract<MensajeroResult, { ok: true }>).id;
+    const direccionLiteral = (geoInput as Extract<GeoInput, { ok: true }>).direccion;
 
     // R26: dedup intra-archivo, primera ocurrencia gana; reporta el mismo
     // estatus que se reporto/reportara para la ganadora.
@@ -517,9 +610,10 @@ export class BulkOrdenService implements IBulkOrdenService {
         producto: data.producto,
         peso: null, // R4: la carga masiva no trae peso
         notas: data.notas === "" ? null : data.notas,
-        direccion: data.direccion === "" ? null : data.direccion,
+        // R37: la direccion literal se persiste en el mismo campo de siempre;
+        // vacia -> null (igual que la columna `direccion` vacia de hoy, R26).
+        direccion: direccionLiteral === "" ? null : direccionLiteral,
         montoCobrar: data.monto_cobrar,
-        mensajeroSugeridoId,
       },
     };
   }
@@ -529,9 +623,6 @@ export class BulkOrdenService implements IBulkOrdenService {
     estatusInicialValue: string,
   ): Promise<PreloadedContext> {
     const numRemisiones = distinct(rows.map((r) => (r.num_remision ?? "").trim()).filter(Boolean));
-    const mensajeroIds = distinct(
-      rows.map((r) => (r.mensajero_sugerido_id ?? "").trim()).filter(Boolean),
-    );
 
     const [existingMap, provincias, estatusId] = await Promise.all([
       this.repo.findExistingRemisiones(numRemisiones), // R25
@@ -547,10 +638,7 @@ export class BulkOrdenService implements IBulkOrdenService {
     const cantonIndex = indexBy(cantones, (c) => `${c.provinciaId}::${normalize(c.nombre)}`);
 
     const cantonIds = distinct(cantones.map((c) => c.id));
-    const [distritos, mensajerosValidos] = await Promise.all([
-      this.repo.findDistritosByCantonIds(cantonIds), // R19
-      this.repo.findMensajerosByIds(mensajeroIds), // R22
-    ]);
+    const distritos = await this.repo.findDistritosByCantonIds(cantonIds); // R19
     const distritoIndex = indexBy(distritos, (d) => `${d.cantonId}::${normalize(d.nombre)}`);
 
     return {
@@ -558,7 +646,6 @@ export class BulkOrdenService implements IBulkOrdenService {
       provinciaIndex,
       cantonIndex,
       distritoIndex,
-      mensajerosValidos,
       estatusId,
       estatusInicialValue,
     };

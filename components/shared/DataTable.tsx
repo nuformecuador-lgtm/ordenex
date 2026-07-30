@@ -1,10 +1,24 @@
 "use client";
 
-import { Fragment, isValidElement, useState, type ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import {
+  Fragment,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 
+import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
+import type {
+  DescargaColumna,
+  DescargaFila,
+  DescargaTipo,
+} from "@/lib/types/descarga";
 import { cn } from "@/lib/utils";
 
 /** Nº de filas placeholder mostradas mientras carga (estado skeleton). */
@@ -54,6 +68,35 @@ export interface DataTableEmptyState {
   description?: ReactNode;
   /** CTA opcional (normalmente un `<Button>`). */
   action?: ReactNode;
+}
+
+/**
+ * Resultado de la obtención de filas del dataset completo (feature 151, design.md §5).
+ * El `mensaje` de error llega YA saneado y accionable desde el consumidor (R27): la
+ * tabla no traduce códigos de error ni conoce sus causas.
+ */
+export type DescargaFilasResult =
+  | { status: "ok"; filas: DescargaFila[] }
+  | { status: "error"; mensaje: string };
+
+/**
+ * Configuración OPT-IN de la descarga del dataset completo (R29).
+ *
+ * La tabla NO recibe ni interpreta filtros, urls ni parámetros de consulta: recibe una
+ * FUNCIÓN (`obtenerFilas`) sobre la que el consumidor cierra sus propios filtros, más
+ * los datos de presentación del archivo. Así la tabla sigue siendo genérica sobre `T` y
+ * sin dominio (D4). Si al cablear una tabla nueva hiciera falta ampliar este contrato,
+ * es señal de que el diseño falló, no permiso para meter dominio aquí (design.md §8).
+ */
+export interface DataTableDescarga {
+  /** Nombre de la hoja y base del nombre de archivo. También el nombre accesible. */
+  titulo: string;
+  /** Columnas del EXPORT, declaradas aparte de `Column<T>` y con valor crudo (D5). */
+  columnas: DescargaColumna[];
+  /** Obtiene el dataset completo. Es el ÚNICO punto que conoce filtros y acciones. */
+  obtenerFilas: () => Promise<DescargaFilasResult>;
+  /** R28: más de uno ⇒ el usuario elige; ausente o uno solo ⇒ descarga directa. */
+  formatos?: DescargaTipo[];
 }
 
 export interface DataTableProps<T> {
@@ -107,6 +150,14 @@ export interface DataTableProps<T> {
    * La tabla sigue sin conocer dominio (R1): recibe el mapeo fila→clase por prop.
    */
   rowClassName?: (row: T) => string | undefined;
+  /**
+   * Descarga del dataset completo (feature 151, R24). OPT-IN: sin esta prop la tabla
+   * se comporta EXACTAMENTE igual que antes y no renderiza control alguno; con ella
+   * antepone el control de descarga encima de la tabla (gate P4). La descarga no toca
+   * la página, la selección ni las filas visibles (R31): vive fuera del `<table>` y no
+   * llama a ningún setter de la tabla.
+   */
+  descarga?: DataTableDescarga;
 }
 
 /** Chevron del botón de expandir; rota al abrir. Decorativo (el botón ya tiene nombre). */
@@ -195,11 +246,64 @@ export function DataTable<T>({
   renderExpanded,
   expandAriaLabel,
   rowClassName,
+  descarga,
 }: DataTableProps<T>) {
   // Filas desplegadas, por key de fila. Vive acá (y no en el consumidor) porque es estado
   // de PRESENTACIÓN de la tabla; el consumidor solo dice QUÉ se despliega.
   const [expandidas, setExpandidas] = useState<ReadonlySet<string>>(new Set());
   const expandible = renderExpanded !== undefined;
+
+  // --- Flechas de scroll horizontal ---
+  // Solo aparecen cuando la tabla desborda su contenedor. Cada flecha se
+  // deshabilita cuando no hay más scroll en su dirección (inicio → izquierda off,
+  // fin → derecha off). Van centradas verticalmente en el CUERPO de la tabla (no
+  // sobre la cabecera: por eso el offset con el alto del <thead>) y fijas a los
+  // bordes del viewport de scroll, no a las columnas.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const theadRef = useRef<HTMLTableSectionElement | null>(null);
+  const [scrollNav, setScrollNav] = useState({
+    scrollable: false,
+    canLeft: false,
+    canRight: false,
+  });
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  const actualizarScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    const maxScroll = scrollWidth - clientWidth;
+    // Tolerancia de 1px: evita parpadeo por redondeo subpíxel.
+    setScrollNav({
+      scrollable: maxScroll > 1,
+      canLeft: scrollLeft > 1,
+      canRight: scrollLeft < maxScroll - 1,
+    });
+    if (theadRef.current) setHeaderHeight(theadRef.current.offsetHeight);
+  }, []);
+
+  useEffect(() => {
+    actualizarScroll();
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    // Recalcula ante cambios de tamaño del viewport y del contenido de la tabla
+    // (columnas/datos/carga cambian el ancho y por tanto si hay scroll).
+    const ro = new ResizeObserver(actualizarScroll);
+    ro.observe(el);
+    const table = el.querySelector("table");
+    if (table) ro.observe(table);
+    return () => ro.disconnect();
+  }, [actualizarScroll, data, columns, isLoading, error]);
+
+  const desplazar = useCallback((dir: 1 | -1) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // Paso ≈ 80% del ancho visible. behavior: "smooth" para el desplazamiento suave.
+    el.scrollTo({
+      left: el.scrollLeft + dir * el.clientWidth * 0.8,
+      behavior: "smooth",
+    });
+  }, []);
 
   function toggle(key: string) {
     setExpandidas((prev) => {
@@ -282,7 +386,10 @@ export function DataTable<T>({
       const abierta = expandidas.has(key);
       return (
         <Fragment key={key}>
-          <tr className={cn("border-b", rowClassName?.(row))}>
+          {/* Zebra striping: fila de dato en índice par (0, 2, 4…) con un fondo
+              naranja tenue → la raya empieza en la PRIMERA fila. */}
+          <tr className={cn("border-b", index % 2 === 0 && "bg-brand/5", rowClassName?.(row))}>
+
             {expandible ? (
               <td className="px-3 py-2 align-middle">
                 {expandido === null ? null : (
@@ -318,22 +425,41 @@ export function DataTable<T>({
   }
 
   return (
-    // Contenedor con scroll horizontal: cuando la tabla excede el ancho
-    // disponible, desborda DENTRO de este contenedor en vez de empujar la página.
-    // Requiere que los ancestros flex (p. ej. SidebarInset) permitan encogerse
-    // (`min-w-0`), si no el overflow nunca se activa.
-    <div className="w-full max-w-full overflow-x-auto">
-      <table
-        aria-label={ariaLabel}
-        className={cn("w-full border-collapse text-left text-sm")}
+    // Wrapper relativo: ancla las flechas de scroll a los bordes de la tabla.
+    <div className="relative w-full max-w-full">
+      {/* Control de descarga (R24): solo existe si el consumidor declaró `descarga`.
+          Va ENCIMA de la tabla para que cualquier tabla lo herede aunque no tenga
+          barra de filtros propia (gate P4). */}
+      {descarga ? (
+        <div className="mb-2 flex justify-end">
+          <DescargarDatasetButton
+            titulo={descarga.titulo}
+            columnas={descarga.columnas}
+            obtenerFilas={descarga.obtenerFilas}
+            formatos={descarga.formatos}
+          />
+        </div>
+      ) : null}
+      {/* Contenedor con scroll horizontal: cuando la tabla excede el ancho
+          disponible, desborda DENTRO de este contenedor en vez de empujar la
+          página. Requiere que los ancestros flex (p. ej. SidebarInset) permitan
+          encogerse (`min-w-0`), si no el overflow nunca se activa. */}
+      <div
+        ref={scrollRef}
+        onScroll={actualizarScroll}
+        className="w-full max-w-full overflow-x-auto scroll-smooth"
       >
-        {caption ? (
-          <caption className="mb-2 text-sm text-muted-foreground">
-            {caption}
-          </caption>
-        ) : null}
-        <thead>
-          <tr className="border-b">
+        <table
+          aria-label={ariaLabel}
+          className={cn("w-full border-collapse text-left text-sm")}
+        >
+          {caption ? (
+            <caption className="mb-2 text-sm text-muted-foreground">
+              {caption}
+            </caption>
+          ) : null}
+          <thead ref={theadRef}>
+            <tr className="border-b">
             {/* Cabecera de la columna del botón: sin texto visible, pero con nombre para
                 que la tabla no quede con una columna anónima para un lector de pantalla. */}
             {expandible ? (
@@ -352,8 +478,48 @@ export function DataTable<T>({
             ))}
           </tr>
         </thead>
-        <tbody>{body}</tbody>
-      </table>
+          <tbody>{body}</tbody>
+        </table>
+      </div>
+
+      {/* Flechas de scroll: solo si la tabla desborda. Cada una se deshabilita en
+          su extremo (inicio → izquierda off, fin → derecha off). Van en tiras
+          absolutas a cada borde de la tabla (no de las columnas); el botón usa
+          position: sticky para quedar al 50% de la pantalla mientras la tabla
+          está a la vista, clamped dentro de la tira, que arranca bajo el <thead>
+          para no tapar la cabecera. */}
+      {scrollNav.scrollable ? (
+        <>
+          <div
+            className="pointer-events-none absolute left-0 z-20 flex items-start"
+            style={{ top: headerHeight, bottom: 0 }}
+          >
+            <button
+              type="button"
+              onClick={() => desplazar(-1)}
+              disabled={!scrollNav.canLeft}
+              aria-label="Desplazar la tabla a la izquierda"
+              className="pointer-events-auto sticky top-1/2 ml-2 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-background/90 text-foreground shadow-md backdrop-blur-sm transition hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
+            >
+              <ChevronLeft className="size-5" aria-hidden="true" />
+            </button>
+          </div>
+          <div
+            className="pointer-events-none absolute right-0 z-20 flex items-start justify-end"
+            style={{ top: headerHeight, bottom: 0 }}
+          >
+            <button
+              type="button"
+              onClick={() => desplazar(1)}
+              disabled={!scrollNav.canRight}
+              aria-label="Desplazar la tabla a la derecha"
+              className="pointer-events-auto sticky top-1/2 mr-2 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-background/90 text-foreground shadow-md backdrop-blur-sm transition hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
+            >
+              <ChevronRight className="size-5" aria-hidden="true" />
+            </button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

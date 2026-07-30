@@ -159,6 +159,78 @@ describe("ejecutar — wrong_number / wrong_address: 5 dias -> rechazo directo (
   );
 });
 
+// Feature 160 (T5, D1/D2, R8) — EL BLOQUE DEL DINERO. El criterio de "intento" cambio y ese
+// numero es el que decide entre liberar a bodega (reintento) y escalar a `rechazada`, que
+// dispara `cobroRechazado` (56) contra la tienda. El servicio NO cambio de codigo: consume
+// `contarIntentos`, que ahora devuelve el numero nuevo. Lo que se fija aqui es el DESENLACE.
+//
+// Nota de lectura: el doble `fakeHistorial(n)` representa el conteo que el derivador ya
+// resolvio con el criterio unico (destino `devuelta`, o destino `reprogramada` con familia
+// `gestion`). La semantica de ESE conteo se prueba en `orden-historial-repository.test.ts`.
+describe("ejecutar — el criterio ampliado de intentos y el escalado (160/R8/R9)", () => {
+  it("160/R8: 2 reprogramaciones del MENSAJERO + 1 devuelta, umbral 3 -> ESCALA (antes liberaba)", async () => {
+    const repo = fakeRepo({ findDevueltasSla: vi.fn(async () => [row({ causa: "not_found" })]) });
+    // Criterio nuevo: 1 devuelta + 2 `en_reparto -> reprogramada` via `gestion` = 3 intentos.
+    // Con el criterio VIEJO (solo `devuelta`) habrian sido 1 y la orden se habria liberado.
+    const res = await newService(repo, fakeHistorial(3)).ejecutar(NOW);
+
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0 });
+    expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
+    const arg = (repo.escalarDevueltaSla as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as EscalarDevueltaSlaInput;
+    expect(arg.estatusRechazadaId).toBe("os-rechazada");
+  });
+
+  it("160/R5/R8: las MISMAS reprogramaciones ANULADAS -> el conteo baja a 1 y la orden se LIBERA", async () => {
+    const repo = fakeRepo({ findDevueltasSla: vi.fn(async () => [row({ causa: "not_found" })]) });
+    // Anular la gestion no borra la fila del historial: la excluye de la LECTURA (67/R23).
+    const res = await newService(repo, fakeHistorial(1)).ejecutar(NOW);
+
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
+  });
+
+  it("160/R2/R8: 1 devuelta + 1 reprogramacion de la TIENDA -> conteo 1, LIBERA (sin doble conteo)", async () => {
+    const repo = fakeRepo({ findDevueltasSla: vi.fn(async () => [row({ causa: "not_found" })]) });
+    // `reprogramacion_tienda` (#22) NO cuenta: su intento ya lo aporto la fila `devuelta`, que
+    // sigue vigente. Si contara, el conteo seria 2 y —con mas historia— la orden escalaria y se
+    // le cobraria el rechazo a la tienda antes de tiempo.
+    const res = await newService(repo, fakeHistorial(1)).ejecutar(NOW);
+
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
+  });
+
+  it("160/R9: `wrong_number`/`wrong_address` siguen escalando DIRECTO, sin consultar el conteo", async () => {
+    const historial = fakeHistorial(0);
+    const repo = fakeRepo({
+      findDevueltasSla: vi.fn(async () => [
+        row({ causa: "wrong_address", ancladaAt: new Date(NOW.getTime() - 6 * DIA) }),
+      ]),
+    });
+    const res = await newService(repo, historial).ejecutar(NOW);
+
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0 });
+    // El criterio nuevo NO puede haber alterado esta rama: ni siquiera se pregunta el conteo.
+    expect(historial.contarIntentos).not.toHaveBeenCalled();
+  });
+
+  it("160/R9: la orden sigue consultandose UNA vez por orden y con SU id (contrato intacto)", async () => {
+    const historial = fakeHistorial(0);
+    const repo = fakeRepo({
+      findDevueltasSla: vi.fn(async () => [
+        row({ ordenId: "o-a", causa: "not_found" }),
+        row({ ordenId: "o-b", causa: "not_found" }),
+      ]),
+    });
+    await newService(repo, historial).ejecutar(NOW);
+
+    expect(historial.contarIntentos).toHaveBeenCalledTimes(2);
+    expect(historial.contarIntentos).toHaveBeenNthCalledWith(1, "o-a");
+    expect(historial.contarIntentos).toHaveBeenNthCalledWith(2, "o-b");
+  });
+});
+
 describe("ejecutar — atribucion del escalado (R22)", () => {
   it("R22: escalar atribuye el mensajero de la gestion devuelta vigente + motivo 'escalado SLA <causa>'", async () => {
     const repo = fakeRepo({

@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 
-import { fechaCalendarioCR, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
+import {
+  fechaCalendarioCR,
+  mananaCalendarioCR,
+  ultimosNDiasCalendarioCR,
+} from "@/lib/utils/fecha-cr";
 
 // Regresión (off-by-one por zona horaria): `new Date().toISOString().slice(0, 10)`
 // emite la fecha en UTC, así que a partir de las 18:00 de CR (UTC-6) ya devuelve el
@@ -55,5 +59,30 @@ describe("mananaCalendarioCR", () => {
     expect(mananaCalendarioCR(new Date("2026-07-31T14:00:00.000Z"))).toBe(
       "2026-08-01",
     );
+  });
+});
+
+describe("ultimosNDiasCalendarioCR", () => {
+  it("cuenta N días calendario INCLUIDO hoy (retrocede N - 1)", () => {
+    // 08:00 CR del 15 jul. "Últimos 7 días" = del 9 al 15, ambos incluidos.
+    expect(ultimosNDiasCalendarioCR(7, new Date("2026-07-15T14:00:00.000Z"))).toEqual({
+      desde: "2026-07-09",
+      hasta: "2026-07-15",
+    });
+  });
+
+  it("de noche en CR no adelanta el rango un día (usa el calendario de CR)", () => {
+    // 20:00 CR del 15 = 02:00 UTC del 16: el rango sigue terminando el 15.
+    expect(ultimosNDiasCalendarioCR(30, new Date("2026-07-16T02:00:00.000Z"))).toEqual({
+      desde: "2026-06-16",
+      hasta: "2026-07-15",
+    });
+  });
+
+  it("un solo día deja los dos extremos en hoy", () => {
+    expect(ultimosNDiasCalendarioCR(1, new Date("2026-07-15T14:00:00.000Z"))).toEqual({
+      desde: "2026-07-15",
+      hasta: "2026-07-15",
+    });
   });
 });

@@ -21,7 +21,7 @@ function buildTxRepo() {
   const gestionCreate = vi.fn(async () => ({ id: "g1" }));
   const evidenciaCreateMany = vi.fn(async () => ({ count: 0 }));
   const ordenUpdate = vi.fn(async () => ({}));
-  const ordenFindFirst = vi.fn(async () => ({ estatusId: idEstado("en_ruta") }));
+  const ordenFindFirst = vi.fn(async () => ({ estatusId: idEstado("en_reparto") }));
   const usuarioUpdate = vi.fn(async () => ({}));
   const historialCreateMany = vi.fn();
   const tx = {

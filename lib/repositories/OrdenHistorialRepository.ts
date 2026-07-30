@@ -1,13 +1,16 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CambioEstadoEntrada,
+  CriterioIntento,
   IOrdenHistorialRepository,
-  OrdenHistorialTxClient,
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
-import type { JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
-import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import {
+  appendCambioEstado,
+  type ChokePointTx,
+} from "@/lib/repositories/registrar-cambio-estado";
 import {
   ORIGEN_TIPOS_CON_GESTION,
+  ORIGEN_TIPOS_REPROGRAMADA_INTENTO,
   type OrdenHistorialEntradaDTO,
 } from "@/lib/types/orden-historial";
 
@@ -41,6 +44,63 @@ function toEntradaDTO(row: HistorialRow): OrdenHistorialEntradaDTO {
 }
 
 /**
+ * Feature 160 (design §3.2, R1/R2/R4/R5/R6) — PREDICADO UNICO de "intento de entrega vigente",
+ * en UNA sola funcion pura que consumen los DOS metodos de conteo (individual y en lote). Que
+ * este extraido es lo que impide que el numero de la UI y el que dispara `rechazada` ->
+ * `cobroRechazado` (56, dinero real) diverjan por copia-pega.
+ *
+ * `ordenId` acepta un id suelto (`string`) o un lote (`{ in: [...] }`): es el MISMO where.
+ *
+ * Se compone de dos condiciones en AND:
+ *
+ *  1. DESTINO (160/R1) — OR de las dos ramas del criterio:
+ *     - rama A: destino `devuelta`, con CUALQUIER `origen_tipo` (comportamiento historico
+ *       intacto: incluye `ajuste_estado`, 67/R25). No se endurece: endurecerla reduciria
+ *       conteos y retrasaria escalados, y nadie lo pidio.
+ *     - rama B: destino `reprogramada` Y `origen_tipo` en la lista de INCLUSION
+ *       `ORIGEN_TIPOS_REPROGRAMADA_INTENTO` (= `gestion`, la visita real del mensajero,
+ *       arista #13). La reprogramacion de la TIENDA (arista #22, `reprogramacion_tienda`) NO
+ *       casa: su intento ya lo aporto la fila `devuelta` vigente de la misma orden (R2).
+ *       Se OMITE entera si `criterio.reprogramadaId === null` (catalogo sin `reprogramada`,
+ *       R6): sin rama B, no sin conteo.
+ *
+ *  2. VIGENCIA (67/R24-R26) — EXACTAMENTE el mismo OR de siempre, sin cambios.
+ */
+export function whereIntentosVigentes(
+  ordenId: Prisma.OrdenHistorialEstadoWhereInput["ordenId"],
+  criterio: CriterioIntento,
+): Prisma.OrdenHistorialEstadoWhereInput {
+  // 160/R1: OR de DESTINOS que cuentan. Lista de INCLUSION (design §1.3): lo que no esta
+  // declarado aqui NO cuenta, y una familia nueva no empieza a contar sola.
+  const destinos: Prisma.OrdenHistorialEstadoWhereInput[] = [
+    { estatusDestinoId: criterio.devueltaId }, // rama A
+  ];
+  if (criterio.reprogramadaId !== null) {
+    destinos.push({
+      estatusDestinoId: criterio.reprogramadaId, // rama B
+      origenTipo: { in: [...ORIGEN_TIPOS_REPROGRAMADA_INTENTO] },
+    });
+  }
+  return {
+    ordenId,
+    AND: [
+      { OR: destinos },
+      {
+        OR: [
+          // 67/R25: la transicion NUNCA vino de una gestion (p. ej. `ajuste_estado` de un
+          // admin) -> no es anulable por esta feature -> SIEMPRE cuenta.
+          { gestionOrdenId: null, origenTipo: { notIn: [...ORIGEN_TIPOS_CON_GESTION] } },
+          // 67/R24: vino de una gestion -> cuenta SOLO si esa gestion sigue VIGENTE (no
+          // anulada). 67/R26: una fila de la familia gestion SIN enlace es HUERFANA y no casa
+          // ninguna de las dos ramas -> no cuenta.
+          { gestion: { anuladaAt: null } },
+        ],
+      },
+    ],
+  };
+}
+
+/**
  * Feature 49 — repositorio del HISTORIAL de estados. SOLO queries Prisma; sin logica de
  * negocio (la autorizacion por rol vive en `OrdenHistorialService`, R27).
  *
@@ -59,7 +119,7 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
    * reutilizado por los 3 repos de escritura de estado sin instanciar esta clase).
    */
   async registrarCambioEstado(
-    tx: OrdenHistorialTxClient & JobTxClient,
+    tx: ChokePointTx,
     entradas: CambioEstadoEntrada[],
   ): Promise<void> {
     await appendCambioEstado(tx, entradas);
@@ -76,9 +136,10 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
   }
 
   /**
-   * R24 (49) + feature 67/R23-R26: conteo de transiciones VIGENTES de la orden hacia un
-   * destino dado (usa el indice `(orden_id, estatus_destino_id)`; el join a `gestion_orden` es
-   * por PK sobre un punado de filas).
+   * R24 (49) + feature 67/R23-R26 + feature 160/R1: conteo de INTENTOS DE ENTREGA VIGENTES de
+   * UNA orden, segun el criterio compuesto de `whereIntentosVigentes` (usa el indice
+   * `(orden_id, estatus_destino_id)`; el join a `gestion_orden` es por PK sobre un punado de
+   * filas).
    *
    * El historial es append-only e INMUTABLE (49/R2): la exclusion de los intentos anulados es
    * un filtro de LECTURA, no una escritura (67/R23). El predicado discrimina por `origen_tipo`
@@ -88,22 +149,32 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
    * minimo legal (inofensivo); contar de mas = escalar antes de tiempo a `rechazada` y cobrar
    * `cobroRechazado` (56) mal.
    */
-  async contarPorDestinoVigentes(ordenId: string, estatusDestinoId: string): Promise<number> {
+  async contarIntentosVigentes(ordenId: string, criterio: CriterioIntento): Promise<number> {
     return this.prisma.ordenHistorialEstado.count({
-      where: {
-        ordenId,
-        estatusDestinoId,
-        OR: [
-          // R25: la transicion NUNCA vino de una gestion (p. ej. `ajuste_estado` de un admin)
-          // -> no es anulable por esta feature -> SIEMPRE cuenta.
-          { gestionOrdenId: null, origenTipo: { notIn: [...ORIGEN_TIPOS_CON_GESTION] } },
-          // R24: vino de una gestion -> cuenta SOLO si esa gestion sigue VIGENTE (no anulada).
-          // R26: una fila de la familia gestion SIN enlace es HUERFANA y no casa ninguna de las
-          // dos ramas -> no cuenta.
-          { gestion: { anuladaAt: null } },
-        ],
-      },
+      where: whereIntentosVigentes(ordenId, criterio),
     });
+  }
+
+  /**
+   * Feature 160/R12/R13/R14 — el MISMO conteo para un LOTE de ordenes, en UNA sola consulta
+   * (`groupBy` por `orden_id` con el MISMO `whereIntentosVigentes`). El listado de ordenes es
+   * paginado en servidor: una consulta por fila seria un N+1 gratuito.
+   *
+   * Las ordenes sin filas que cumplan el criterio NO aparecen en el Map (Postgres no emite
+   * grupos vacios); el llamador aplica `?? 0` (R14). Guarda temprana con `ids` vacio: Map vacio
+   * SIN query (R13), patron `OrdenRepository.findMensajerosBloqueados`.
+   */
+  async contarIntentosVigentesEnLote(
+    ordenIds: string[],
+    criterio: CriterioIntento,
+  ): Promise<Map<string, number>> {
+    if (ordenIds.length === 0) return new Map(); // R13: ni una consulta
+    const rows = await this.prisma.ordenHistorialEstado.groupBy({
+      by: ["ordenId"],
+      where: whereIntentosVigentes({ in: ordenIds }, criterio),
+      _count: { _all: true },
+    });
+    return new Map(rows.map((r) => [r.ordenId, r._count._all]));
   }
 
   /** R27: `true` si la orden tuvo al menos una transicion actuada por `usuarioId`. */

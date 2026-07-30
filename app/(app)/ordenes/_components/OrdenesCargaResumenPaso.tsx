@@ -1,7 +1,7 @@
 "use client";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
+import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
 import { OrdenesExistentesTabla } from "@/app/(app)/ordenes/_components/OrdenesExistentesTabla";
 import { OrdenesConErrorTabla } from "@/app/(app)/ordenes/_components/OrdenesConErrorTabla";
 import type { ClasificacionCarga } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
@@ -9,20 +9,17 @@ import type { ClasificacionCarga } from "@/app/(app)/ordenes/_components/carga-m
 export interface OrdenesCargaResumenPasoProps {
   /** Clasificación del `BulkSummary` (nuevas / existentes / con error), R1. */
   clasificacion: ClasificacionCarga;
-  /** Se propaga a `OrdenesCargaResumen` (feature 16). */
-  onDone?: () => void;
 }
 
 /**
  * Feature 29 — Contenedor del paso "resumen" (design D3). Compone, de arriba a
- * abajo: aviso explícito (R7, R8), resumen de asignación de las NUEVAS (R9, R10),
- * tabla de solo lectura de existentes (R4) y tabla de solo lectura de errores
- * (R18). Cada sección se renderiza solo si su grupo no está vacío. NO modifica
- * `OrdenesCargaResumen` ni ninguna primitiva (R16).
+ * abajo: aviso explícito (R7, R8), manifiesto del lote nuevo, tabla de solo
+ * lectura de existentes (R4) y tabla de solo lectura de errores (R18). Cada
+ * sección se renderiza solo si su grupo no está vacío. NO modifica ninguna
+ * primitiva (R16).
  */
 export function OrdenesCargaResumenPaso({
   clasificacion,
-  onDone,
 }: OrdenesCargaResumenPasoProps) {
   const { numRemisionesNuevas, existentes, errores } = clasificacion;
   const nuevasCount = numRemisionesNuevas.length;
@@ -48,8 +45,18 @@ export function OrdenesCargaResumenPaso({
         </AlertDescription>
       </Alert>
 
+      {/* Feature 148 (T10, R18): manifiesto del lote RECIÉN CARGADO. La selección es
+          `numRemisionesNuevas` —la única vía de este flujo, porque el resumen de la
+          carga masiva no lleva ids (design.md §2)— y cubre el archivo completo, no
+          chunk por chunk (§9.6). Con 0 nuevas el botón no se ofrece (R17). La carga
+          ya está cometida: esto es un añadido posterior, no un paso del flujo. */}
       {nuevasCount > 0 ? (
-        <OrdenesCargaResumen numRemisiones={numRemisionesNuevas} onDone={onDone} />
+        <div className="flex flex-wrap gap-2">
+          <DescargarManifiestoButton
+            flujo="carga_masiva"
+            seleccion={{ numRemisiones: numRemisionesNuevas }}
+          />
+        </div>
       ) : null}
 
       {existentesCount > 0 ? (

@@ -10,8 +10,14 @@ describe("app/page.tsx — landing pública (feature 86, R2–R5)", () => {
     const { default: LandingPage } = await import("@/app/page");
     render(LandingPage());
 
-    // El logo (wordmark) aparece (topbar + hero).
-    expect(screen.getAllByText("Ordenex").length).toBeGreaterThanOrEqual(1);
+    // El logo (wordmark) aparece (topbar + hero). El texto va partido en dos
+    // spans ("Orden" + "ex" en naranja de marca), así que se matchea el span
+    // completo del wordmark por su textContent y su clase base.
+    const wordmarks = screen.getAllByText(
+      (_content, el) =>
+        el?.textContent === "Ordenex" && el.classList.contains("font-heading"),
+    );
+    expect(wordmarks.length).toBeGreaterThanOrEqual(1);
 
     const trabaja = screen.getAllByRole("link", { name: "Trabaja con nosotros" });
     expect(trabaja.length).toBeGreaterThanOrEqual(1);

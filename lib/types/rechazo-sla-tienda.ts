@@ -17,4 +17,12 @@ export interface RechazoSlaTiendaDTO {
   numRemision: string;
   destinatario: string;
   monto: string | null;
+  /**
+   * Feature 160 (R11/R14/R16/R26): intentos de entrega VIGENTES de la orden, derivados del
+   * historial en el MISMO lote de la pagina (criterio unico de `OrdenHistorialService`,
+   * design §1.1). Es el MISMO numero que llevo a esta orden al escalado: el conteo que el cron
+   * SLA comparo contra el umbral. Opcional (`?`) por el patron aditivo del repo: no rompe
+   * fixtures/mocks que construyen el DTO sin el; el servicio SIEMPRE lo envia, `0` incluido.
+   */
+  intentosEntrega?: number;
 }

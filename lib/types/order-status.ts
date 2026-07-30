@@ -9,7 +9,7 @@
 // ruteada hacia la bodega satelite de su zona (nombre de zona derivado de
 // orden.zonaId para el display, R15/R20). Recibe num_guia en el ruteo (R10).
 // Feature 36/R1/R3 (decision F1.4-a,b): suma dos valores del flujo del mensajero:
-// "en_ruta" (11mo) — la orden fue RECOGIDA por el mensajero (transiciona desde
+// "en_reparto" (11mo) — la orden fue RECOGIDA por el mensajero (transiciona desde
 // por_recoger al pulsar "Recoger") y sale a reparto; "rechazada" (12mo)
 // — resultado RECHAZO de la gestion (NO se mapea a devuelta/devolviendo_a_tienda,
 // que pertenecen a los flujos 47/48). Sembrados idempotentemente por seedOrderStatus.
@@ -26,25 +26,51 @@
 // (en transito satelite->central) y "por_devolver_a_tienda" (en la central, elegible para
 // "enviar a la tienda"). Sembrados idempotentemente por seedOrderStatus + migracion
 // 20260724140000_order_status_devolucion_rechazadas (INSERT ... WHERE NOT EXISTS por value).
+// Feature 153/R1: rename MECANICO de UN solo value, conservando su POSICION (indice 10):
+// el 11mo value vuelve a llamarse "en_reparto" y su etiqueta UI pasa a ser "En reparto".
+// Revierte, solo para ese value, el rename que hizo la 135; el resto de la nomenclatura
+// queda igual. Sin cambio de flujo: mismas aristas, mismos id, mismas FKs. La migracion es
+// un UPDATE sobre la tabla catalogo order_status (20260728120000_order_status_en_reparto).
+// OJO: los vecinos "en_ruta_bodega_central" y "en_ruta_bodega_satelite" NO se tocan
+// (ni value ni etiqueta); el censo del guard usa frontera de palabra por eso.
+// Feature 154/R1/R2/R3: suma los DOS values del flujo v2 como APENDICE (indices 18/19), sin
+// renombrar, reordenar ni borrar ninguno de los 18 previos -> el catalogo pasa a 20.
+// "por_recolectar_en_tienda" (19no value): la orden nace en la tienda y espera que el mensajero
+// la RECOLECTE ahi; "incidente" (20mo value): resultado TERMINAL de la gestion. Sembrados
+// idempotentemente por seedOrderStatus + la migracion
+// 20260729120000_order_status_v2_por_recolectar_incidente (INSERT ... WHERE NOT EXISTS por value).
+// La 154 es SOLO ADITIVA (decision Q2 del gate, 2026-07-29): DECLARA los values y sus aristas,
+// pero ningun service los produce todavia — eso llega con las features 155/157/158.
+// Feature 155/R27: RETIRA el estado de fulfillment (que ocupaba el indice 4), de modo que el
+// sembrado idempotente (`seedOrderStatus`) deja de incluirlo y el catalogo pasa de 20 a 19. Es el
+// PRIMER value que sale del seed: los 19 restantes conservan su orden relativo y solo se corren
+// una posicion los que estaban despues del 4. La 155 sustituye las tres reglas de nacimiento que
+// convivian (default global, estado de fulfillment y estado fijo de la API) por UNA sola
+// bifurcacion (`lib/services/destino-creacion.ts`), en la que este estado ya no aparece: la orden
+// cuya tienda tiene el paquete en bodega nace en `en_preparacion`. La migracion
+// `20260729140000_order_status_retiro_en_fulfillment` reasigna las ordenes vivas y solo borra la
+// fila del catalogo si NADIE la referencia (el historial pasado es inmutable), asi que en una base
+// con historial real la fila SOBREVIVE huerfana y deliberadamente inalcanzable desde el codigo.
 export const ORDER_STATUS_SEED = [
   "entregada",
   "devuelta",
   "devolviendo_a_tienda", // feature 135 (antes en el flujo de devolucion)
   "reprogramada",
-  "en_fulfillment",
   "en_ruta_bodega_central", // feature 135
   "en_bodega_central", // feature 135
   "en_preparacion",
   "por_recoger", // feature 17 (renombrado en feature 135)
   "en_ruta_bodega_satelite", // feature 30
-  "en_ruta", // feature 36: recogida por el mensajero / en reparto (renombrado en feature 135)
+  "en_reparto", // feature 36: recogida por el mensajero / en reparto (renombrado en feature 135 y en la 153)
   "rechazada", // feature 36: resultado RECHAZO de la gestion
   "en_bodega_satelite", // feature 33: recibida en la bodega satelite de su zona
-  "devuelta_a_tienda", // 14mo valor: cierre del flujo de devolucion, la tienda de origen la recibio (renombrado en feature 135)
-  "sin_gestionar", // feature 109 (15mo valor): orden que quedo en en_ruta al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
-  "por_devolver", // feature 139 (16mo valor): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
-  "devolviendo_a_bodega_central", // feature 139 (17mo valor): en transito satelite -> central (tras "enviar a central")
-  "por_devolver_a_tienda", // feature 139 (18mo valor): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)
+  "devuelta_a_tienda", // 13er valor (14mo antes de la 155): cierre del flujo de devolucion, la tienda de origen la recibio (renombrado en feature 135)
+  "sin_gestionar", // feature 109 (14mo; 15mo antes de la 155): orden que quedo en en_reparto al pasar de dia; el corte la congela y bloquea al mensajero via un cierre `vencido` hasta que se APRUEBE
+  "por_devolver", // feature 139 (15mo; 16mo antes de la 155): rechazada de bodega satelite tras APROBAR el cierre; el adminSatelite la envia a la central (por lote)
+  "devolviendo_a_bodega_central", // feature 139 (16mo; 17mo antes de la 155): en transito satelite -> central (tras "enviar a central")
+  "por_devolver_a_tienda", // feature 139 (17mo; 18mo antes de la 155): en la central (llego por cierre central directo o por recepcion central); maestro/admin la envia a la tienda (por lote)
+  "por_recolectar_en_tienda", // feature 154 (18mo; 19no antes de la 155): estado de ESPERA en la tienda; ahi NACE la rama (b) de la 155 y de ahi sale hacia en_ruta_bodega_central (#43, feature 157)
+  "incidente", // feature 154 (19no; 20mo antes de la 155): resultado TERMINAL de la gestion del mensajero (#44, feature 158). Sin aristas de salida (decision del gate 2026-07-29)
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

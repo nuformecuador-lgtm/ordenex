@@ -29,7 +29,7 @@ const listarOrdenesMock = vi.mocked(listarOrdenes);
 const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
 
 const ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_ruta",
+  estatusOrigenValue: "en_reparto",
   estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,
@@ -56,7 +56,6 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    mensajeroSugeridoId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -194,5 +193,31 @@ describe("OrdenesApartado — acción 'Ver historial' por fila (feature 49, R27/
     expect(onAction.mock.calls[0][0]).toEqual([
       expect.objectContaining({ id: "o1" }),
     ]);
+  });
+
+  it("Sin barra flotante: las acciones de lote son un bloque en el flujo, deshabilitadas sin selección", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    renderApartado({
+      selectable: true,
+      actionLabel: "Asignar mensajero",
+      onAction,
+    });
+
+    await screen.findByText("REM-1");
+    const accion = screen.getByRole("button", { name: "Asignar mensajero" });
+    // Bloque normal: sin posicionamiento absoluto ni capas/transiciones.
+    const bloque = accion.parentElement as HTMLElement;
+    expect(bloque.className).toBe("flex flex-wrap items-center justify-end gap-2");
+    // Sin selección la acción está visible pero deshabilitada.
+    expect(accion).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-1" }),
+    );
+
+    expect(accion).toBeEnabled();
+    await user.click(accion);
+    expect(onAction).toHaveBeenCalledTimes(1);
   });
 });

@@ -117,6 +117,10 @@ describe("AsignarSateliteModal", () => {
       mensajeroId: "m1",
     });
 
+    // Feature 148 (§9.7): tras el éxito el modal pasa a la fase "resultado" (con el
+    // manifiesto del lote) y `onSuccess` se difiere al cierre de esa fase. La llamada
+    // de negocio, su input y su toast NO cambian (R27).
+    await user.click(await screen.findByRole("button", { name: "Cerrar" }));
     await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(successMock).toHaveBeenCalledWith("Mensajero asignado a 2 orden(es).");
   });

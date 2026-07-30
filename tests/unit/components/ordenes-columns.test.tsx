@@ -7,6 +7,8 @@ import {
   ordenesColumns,
   ordenesColumnsReprogramada,
 } from "@/app/(app)/ordenes/_components/ordenes-columns";
+import { ordenesColumnsAdminTienda } from "@/app/(app)/_components/ordenes-columns-admin-tienda";
+import { INTENTOS_COLUMN_ID } from "@/components/shared/intentos-entrega";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 afterEach(() => {
@@ -152,5 +154,226 @@ describe("ordenesColumnsReprogramada — columna 'Liberada el'", () => {
 
   it("las columnas base NO incluyen 'Liberada el' (solo la tab reprogramada)", () => {
     expect(ordenesColumns.some((c) => c.id === "liberada")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------
+// Feature 160 (T16) — el conteo de intentos de entrega como COLUMNA propia (D6/R17),
+// insertada INMEDIATAMENTE despues de `estatus` (design §5.2) y no al final. Los tres
+// asserts de "ordenesColumnsReprogramada — columna 'Liberada el'" de mas arriba
+// (length + 1, ultima = `liberada`, `slice(0,-1)` = base) siguen verdes SIN tocarlos:
+// insertar en el medio no cambia ninguna de esas tres verdades. Esa compatibilidad es
+// una de las tres razones por las que la posicion es esa.
+// ---------------------------------------------------------------------------------
+
+/** Ids de las 18 columnas PREEXISTENTES, en su orden original (R21). */
+const IDS_PREEXISTENTES = [
+  "numGuia",
+  "numRemision",
+  "estatus",
+  "destinatario",
+  "producto",
+  "direccion",
+  "tienda",
+  "zona",
+  "provincia",
+  "canton",
+  "distrito",
+  "montoCobrar",
+  "flete",
+  "fulfillment",
+  "comision",
+  "mensajero",
+  "fechaCreacion",
+  "tiempo",
+];
+
+/** Encabezados de esas 18, en el mismo orden. */
+const HEADERS_PREEXISTENTES = [
+  "Nº Guía",
+  "Nº Remisión",
+  "Estado",
+  "Destinatario",
+  "Producto",
+  "Dirección",
+  "Tienda",
+  "Zona",
+  "Provincia",
+  "Cantón",
+  "Distrito",
+  "Monto a cobrar",
+  "Flete + IVA",
+  "Fulfillment",
+  "Comisión + IVA",
+  "Mensajero",
+  "Fecha de creación",
+  "Tiempo",
+];
+
+describe("ordenesColumns — feature 160 (R21: posicion e integridad de la columna)", () => {
+  it("R21: la columna nueva va JUSTO DESPUES de `estatus`, no al final", () => {
+    const idx = ordenesColumns.findIndex((c) => c.id === INTENTOS_COLUMN_ID);
+    const idxEstatus = ordenesColumns.findIndex((c) => c.id === "estatus");
+    expect(idx).toBe(idxEstatus + 1);
+    // Posicion fija y determinista (4.a de 19), no "en algun sitio".
+    expect(idx).toBe(3);
+    // Y explicitamente NO al final: ahi quedaria fuera del viewport (design §7.7).
+    expect(ordenesColumns.at(-1)?.id).toBe("tiempo");
+  });
+
+  it("R21: ids, encabezados y orden relativo de las 18 preexistentes, intactos", () => {
+    const sinIntentos = ordenesColumns.filter((c) => c.id !== INTENTOS_COLUMN_ID);
+    expect(sinIntentos.map((c) => c.id)).toEqual(IDS_PREEXISTENTES);
+    expect(sinIntentos.map((c) => c.value)).toEqual(HEADERS_PREEXISTENTES);
+    // Y la tabla queda con 19 columnas: las 18 de siempre + la nueva, ni una mas.
+    expect(ordenesColumns).toHaveLength(IDS_PREEXISTENTES.length + 1);
+  });
+
+  it("R22: las tres variantes derivadas heredan la columna sin tocar sus archivos", () => {
+    // `reprogramada` deriva por spread; el dashboard del adminTienda por `filter` de ids
+    // ocultos (y `intentos` no esta oculto).
+    expect(
+      ordenesColumnsReprogramada.some((c) => c.id === INTENTOS_COLUMN_ID),
+    ).toBe(true);
+    expect(
+      ordenesColumnsAdminTienda.some((c) => c.id === INTENTOS_COLUMN_ID),
+    ).toBe(true);
+    // Y siguen en la misma posicion relativa (tras `estatus`) en las derivadas.
+    for (const cols of [ordenesColumnsReprogramada, ordenesColumnsAdminTienda]) {
+      expect(cols.findIndex((c) => c.id === INTENTOS_COLUMN_ID)).toBe(
+        cols.findIndex((c) => c.id === "estatus") + 1,
+      );
+    }
+  });
+});
+
+describe("ordenesColumns — feature 160 (R17/R19: el numero, siempre, incluido el 0)", () => {
+  /** Indice de celda de la columna de intentos (= su indice de columna). */
+  const IDX_INTENTOS = 3;
+  const IDX_ESTATUS = 2;
+
+  it("R17: la tabla monta un columnheader 'Intentos'", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[makeOrden({ id: "o1", intentosEntrega: 2 })]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "Intentos" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R19: una fila con 2 intentos muestra 2 en SU celda", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[makeOrden({ id: "o1", numRemision: "REM-I2", intentosEntrega: 2 })]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const celdas = within(
+      screen.getByRole("row", { name: /REM-I2/ }),
+    ).getAllByRole("cell");
+    expect(celdas[IDX_INTENTOS]).toHaveTextContent(/^2$/);
+  });
+
+  it("R19: una fila con 0 intentos muestra 0 — ni celda vacia ni el placeholder '—'", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[makeOrden({ id: "o1", numRemision: "REM-I0", intentosEntrega: 0 })]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const celda = within(
+      screen.getByRole("row", { name: /REM-I0/ }),
+    ).getAllByRole("cell")[IDX_INTENTOS];
+    expect(celda).toHaveTextContent(/^0$/);
+    expect(celda.textContent).not.toBe("");
+    expect(celda.textContent).not.toContain("—");
+  });
+
+  it("R19: una fila SIN el campo (fixture viejo) tambien muestra 0", () => {
+    // `makeOrden` no pone `intentosEntrega`: es exactamente el caso del DTO que
+    // no trae el campo opcional.
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[makeOrden({ id: "o1", numRemision: "REM-IX" })]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const celda = within(
+      screen.getByRole("row", { name: /REM-IX/ }),
+    ).getAllByRole("cell")[IDX_INTENTOS];
+    expect(celda).toHaveTextContent(/^0$/);
+  });
+
+  it("R17: el numero NO se incrusta en la celda de estado (no es un chip)", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[
+          makeOrden({
+            id: "o1",
+            numRemision: "REM-IC",
+            estatusValue: "devuelta",
+            intentosEntrega: 3,
+          }),
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const celdas = within(
+      screen.getByRole("row", { name: /REM-IC/ }),
+    ).getAllByRole("cell");
+    // La celda de estado sigue siendo solo el estado: ni un digito dentro.
+    expect(celdas[IDX_ESTATUS].textContent ?? "").not.toMatch(/\d/);
+    // El conteo vive en SU columna.
+    expect(celdas[IDX_INTENTOS]).toHaveTextContent(/^3$/);
+  });
+
+  it("R20: la fila no muestra el umbral ('de N') en ninguna celda", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[makeOrden({ id: "o1", numRemision: "REM-IU", intentosEntrega: 2 })]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const celda = within(
+      screen.getByRole("row", { name: /REM-IU/ }),
+    ).getAllByRole("cell")[IDX_INTENTOS];
+    expect(celda.textContent).not.toMatch(/de\s*\d/);
+  });
+
+  it("R19: cada fila lleva SU numero (2, 0 y ausente conviven en la misma tabla)", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[
+          makeOrden({ id: "o1", numRemision: "REM-M1", intentosEntrega: 2 }),
+          makeOrden({ id: "o2", numRemision: "REM-M2", intentosEntrega: 0 }),
+          makeOrden({ id: "o3", numRemision: "REM-M3" }),
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+    const celdaDe = (rem: string) =>
+      within(screen.getByRole("row", { name: new RegExp(rem) })).getAllByRole(
+        "cell",
+      )[IDX_INTENTOS];
+    expect(celdaDe("REM-M1")).toHaveTextContent(/^2$/);
+    expect(celdaDe("REM-M2")).toHaveTextContent(/^0$/);
+    expect(celdaDe("REM-M3")).toHaveTextContent(/^0$/);
   });
 });

@@ -1,4 +1,5 @@
 import type { Column } from "@/components/shared/DataTable";
+import { columnaIntentos } from "@/components/shared/intentos-entrega";
 import { PriceLabel } from "@/components/shared/PriceLabel";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { EstatusBadge } from "./EstatusBadge";
@@ -95,6 +96,13 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
       />
     ),
   },
+  // Feature 160 (D6/R17/R21): intentos de entrega como COLUMNA propia, insertada
+  // INMEDIATAMENTE despues de `estatus` (design §5.2) y no al final. El conteo
+  // califica al estado (`devuelta`/`reprogramada`): pegados se leen como una sola
+  // idea. Ademas, con 18 columnas y scroll horizontal, una columna al final
+  // quedaria permanentemente fuera del viewport. Insertar aqui deja intactos los
+  // ids, encabezados y orden relativo de las preexistentes (R21).
+  columnaIntentos<OrdenListItemDTO>(),
   { id: "destinatario", value: "Destinatario" },
   { id: "producto", value: "Producto", render: "producto" },
   {
@@ -162,11 +170,8 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   {
     id: "mensajero",
     value: "Mensajero",
-    // Nombre del mensajero asignado (o el sugerido si aún no hay asignado); no el id.
-    render: (row) =>
-      row.relaciones?.mensajeroAsignado?.nombre ??
-      row.relaciones?.mensajeroSugerido?.nombre ??
-      SIN_DATO,
+    // Nombre del mensajero asignado; no el id.
+    render: (row) => row.relaciones?.mensajeroAsignado?.nombre ?? SIN_DATO,
   },
   {
     id: "fechaCreacion",
@@ -180,24 +185,6 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
     render: (row) => tiempoTranscurrido(row.createdAt),
   },
 ];
-
-/** Columna de mensajero SUGERIDO (carga masiva); no el asignado. */
-const mensajeroSugeridoColumn: Column<OrdenListItemDTO> = {
-  id: "mensajeroSugerido",
-  value: "Mensajero sugerido",
-  render: (row) => row.relaciones?.mensajeroSugerido?.nombre ?? SIN_DATO,
-};
-
-/**
- * Variante de columnas para estados PREVIOS a la asignación (`en_fulfillment`,
- * `en_preparacion`): reemplaza la columna "Mensajero" (asignado/sugerido) por
- * "Mensajero sugerido", ya que en esos estados aún no se asignó mensajero (la
- * asignación ocurre en "Generar guía"). Deriva de `ordenesColumns` para no duplicar.
- */
-export const ordenesColumnsMensajeroSugerido: Column<OrdenListItemDTO>[] =
-  ordenesColumns.map((col) =>
-    col.id === "mensajero" ? mensajeroSugeridoColumn : col,
-  );
 
 /**
  * Columna "Liberada el" de la tab `reprogramada`: el día para el que quedó

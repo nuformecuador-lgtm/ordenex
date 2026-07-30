@@ -87,7 +87,7 @@ function prismaGestion(opts: { gestionId?: string; falla?: boolean } = {}) {
         return { id: opts.gestionId ?? "gestion-1" };
       }),
     },
-    orden: { update: vi.fn(async () => ({})), findFirst: vi.fn(async () => ({ estatusId: idEstado("en_ruta") })) },
+    orden: { update: vi.fn(async () => ({})), findFirst: vi.fn(async () => ({ estatusId: idEstado("en_reparto") })) },
     usuario: { update: vi.fn(async () => ({})) },
     ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
   };
@@ -117,7 +117,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma } = prismaRecoger([{ id: "o1" }]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_ruta"));
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"));
 
     expect(cola.ruta).toHaveLength(1);
     // PII: el payload lleva SOLO el id del mensajero.
@@ -137,7 +137,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
       ids.map((i) => i.id),
       MENSAJERO,
       idEstado("por_recoger"),
-      idEstado("en_ruta"),
+      idEstado("en_reparto"),
     );
 
     expect(cola.ruta).toHaveLength(1);
@@ -147,7 +147,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma, tx } = prismaRecoger([{ id: "o1" }]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_ruta"));
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"));
 
     // El 4.º argumento de `enqueue` es el cliente transaccional del writer (outbox).
     expect(cola.ruta[0].tx).toBe(tx);
@@ -158,7 +158,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma } = prismaRecoger([]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_ruta"));
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"));
 
     expect(cola.ruta).toHaveLength(0);
   });
@@ -173,7 +173,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
       ["o1"],
       MENSAJERO,
       idEstado("por_recoger"),
-      idEstado("en_ruta"),
+      idEstado("en_reparto"),
     );
     const runAfterPrimero = cola.ruta[0].opts.runAfter;
 
@@ -183,7 +183,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
       ["o2"],
       MENSAJERO,
       idEstado("por_recoger"),
-      idEstado("en_ruta"),
+      idEstado("en_reparto"),
     );
 
     expect(cola.ruta).toHaveLength(1);
@@ -194,7 +194,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
     const cola = new ColaEnMemoria();
     for (const m of ["m-1", "m-2"]) {
       const { prisma } = prismaRecoger([{ id: "o1" }]);
-      await repoRecoger(prisma, cola, T0).recogerLote(["o1"], m, idEstado("por_recoger"), idEstado("en_ruta"));
+      await repoRecoger(prisma, cola, T0).recogerLote(["o1"], m, idEstado("por_recoger"), idEstado("en_reparto"));
     }
     expect(cola.ruta).toHaveLength(2);
   });
@@ -223,7 +223,7 @@ describe("R19 — gestionar encola una reoptimizacion INMEDIATA", () => {
       ["o1"],
       MENSAJERO,
       idEstado("por_recoger"),
-      idEstado("en_ruta"),
+      idEstado("en_reparto"),
     );
     expect(cola.ruta).toHaveLength(1);
 
@@ -249,7 +249,7 @@ describe("R16/R19 — una transaccion REVERTIDA no deja jobs huerfanos", () => {
     const cola = new ColaEnMemoria();
 
     await expect(
-      repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_ruta")),
+      repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto")),
     ).rejects.toThrow();
 
     // El encolado va DESPUES del append en la misma tx: nunca llego a ejecutarse.

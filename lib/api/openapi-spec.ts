@@ -9,18 +9,32 @@
 
 // Enum de estados de orden (ORDER_STATUS_SEED, lib/types/order-status.ts). Es la fuente unica de
 // verdad: si el catalogo cambia, este literal debe seguirlo (y con el, el .yaml espejo).
+//
+// FEATURE 155/R42 — dos cambios y solo dos:
+//   - BAJA del estado de fulfillment: el catalogo dejo de tenerlo, asi que no puede llegar
+//     en ninguna respuesta (la migracion de esta feature reasigna las ordenes que hubiera);
+//   - ALTA de `por_recolectar_en_tienda`: es el estado en que nacen ahora las ordenes creadas
+//     por API, asi que documentarlo no es opcional.
+// DEUDA CONOCIDA, no introducida aqui: esta lista lleva desde la feature 109 sin incorporar
+// values que una orden del integrador SI puede alcanzar (`sin_gestionar` y los tres del flujo
+// de devolucion de la 139). Ponerla al dia entera excede el alcance de la 155 —y el value
+// terminal que declaro la 154 sigue ademas bajo el censo de "declarado y sin productor"
+// (`tests/unit/guards/censo-catalogo-estados-v2.test.ts`) hasta la feature 158—, asi que la
+// deuda se declara en `progress/impl_155_backend.md` en vez de arreglarse de contrabando.
+// `tests/unit/api/openapi-contrato-en-reparto.test.ts` verifica que todo value de aqui exista
+// en `ORDER_STATUS_SEED` y que el `.yaml` sea espejo EXACTO de este literal.
 const ORDER_STATUS_ENUM = [
   "entregada",
   "devuelta",
   "devolviendo_a_tienda",
   "reprogramada",
-  "en_fulfillment",
+  "por_recolectar_en_tienda", // feature 155/R42: estado de nacimiento del canal por API key
   "en_ruta_bodega_central",
   "en_bodega_central",
   "en_preparacion",
   "por_recoger",
   "en_ruta_bodega_satelite",
-  "en_ruta",
+  "en_reparto",
   "rechazada",
   "en_bodega_satelite",
   "devuelta_a_tienda",
@@ -71,9 +85,20 @@ export const openApiSpec = {
         operationId: "cargarOrdenes",
         description: [
           "Crea una o más órdenes en firme. Cada orden nueva arranca en estado",
-          "`en_ruta_bodega_central` y recibe un `num_guia` en el acto. La respuesta incluye,",
+          "`por_recolectar_en_tienda` y recibe un `num_guia` en el acto. La respuesta incluye,",
           "por cada orden creada, su `costoEnvio` (flete + IVA de la tarifa vigente de la tienda;",
           "`\"0.00\"` si la tienda no tiene tarifa vigente).",
+          "",
+          "**CAMBIO INCOMPATIBLE (2026-07): el estado inicial cambió.** Antes las órdenes nacían",
+          "en `en_ruta_bodega_central`, que afirmaba que el paquete ya viajaba hacia la bodega",
+          "central sin que nadie lo hubiera recolectado. Ahora nacen en",
+          "`por_recolectar_en_tienda`: el paquete espera en la tienda a que pase el mensajero, y",
+          "pasa a `en_ruta_bodega_central` cuando este lo recolecta. Si tu integración compara el",
+          "estado devuelto contra un literal, actualízala. El evento de webhook del nacimiento se",
+          "conserva: `por_recolectar_en_tienda` es un evento público.",
+          "",
+          "Además, el estado interno de fulfillment en bodega fue retirado del catálogo: ya no",
+          "aparece en el enum `estado` y no puede llegar en ninguna respuesta.",
           "",
           "Éxito parcial: las filas se clasifican en `creada`, `duplicada` (num_remision ya",
           "existente) o `error` (validación/geografía). Una respuesta 200 puede contener filas con",
@@ -137,7 +162,7 @@ export const openApiSpec = {
                       duplicadas: 0,
                       conError: 1,
                       filas: [
-                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "en_ruta_bodega_central", numGuia: 100234 },
+                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { telefono: ["requerido"] } },
                       ],
                       ordenes: [
@@ -145,7 +170,7 @@ export const openApiSpec = {
                           id: "6f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
                           numRemision: "REM-0001",
                           numGuia: 100234,
-                          estado: "en_ruta_bodega_central",
+                          estado: "por_recolectar_en_tienda",
                           costoEnvio: "3.39",
                         },
                       ],
@@ -476,10 +501,6 @@ export const openApiSpec = {
           peso: { type: "string", description: "Peso en kg como texto (p. ej. \"1.5\")." },
           monto_cobrar: { type: "string", description: "Monto COD como texto (p. ej. \"25.90\")." },
           notas: { type: "string" },
-          mensajero_sugerido_id: {
-            type: "string",
-            description: "Opcional: id del mensajero sugerido.",
-          },
         },
         additionalProperties: { type: "string" },
       },

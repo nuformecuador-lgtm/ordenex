@@ -6,6 +6,7 @@ import type {
   NovedadOrdenRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { fakeIntentosEnLote, llamadasIntentos } from "@/tests/fixtures/intentos-entrega";
 
 // Feature 89/99 (T14) — service de NOVEDADES con el repo mockeado (sin DB/HTTP). INVIERTE al
 // predicado de la feature 99 (Q7): la novedad se ancla al ESTADO REAL `estatus = devuelta`, no a
@@ -48,11 +49,16 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
   };
 }
 
+// Feature 160: derivador de intentos EN LOTE, dependencia REQUERIDA del constructor. Por
+// defecto Map vacio, que ejerce el `?? 0` del servicio (R14); los tests de la 160 usan su
+// propio doble.
+const intentos = fakeIntentosEnLote();
+
 describe("NovedadesService.listar (feature 89)", () => {
   it("R11: rol != adminTienda -> forbidden sin tocar el repo", async () => {
     for (const actor of [MENSAJERO, MAESTRO]) {
       const repo = fakeRepo();
-      const service = new NovedadesService(repo);
+      const service = new NovedadesService(repo, intentos);
       const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, actor);
       expect(res).toEqual({ status: "forbidden" });
       expect(repo.countDevueltasByTienda).not.toHaveBeenCalled();
@@ -65,7 +71,7 @@ describe("NovedadesService.listar (feature 89)", () => {
       countDevueltasByTienda: vi.fn(async () => 3),
       findDevueltasByTienda: vi.fn(async () => [ordenRow()]),
     });
-    const service = new NovedadesService(repo);
+    const service = new NovedadesService(repo, intentos);
     await service.listar({ page: 1, pageSize: PAGE_SIZE }, OTRA_TIENDA);
 
     // Feature 99: sin conjunto `cerrados` -> el service solo pasa la tienda (+ paginacion en find).
@@ -81,7 +87,7 @@ describe("NovedadesService.listar (feature 89)", () => {
       countDevueltasByTienda: vi.fn(async () => 1),
       findDevueltasByTienda: vi.fn(async () => [ordenRow()]),
     });
-    const service = new NovedadesService(repo);
+    const service = new NovedadesService(repo, intentos);
     await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
 
     // Feature 99 (Q7): el service YA NO computa un conjunto de estatus CERRADOS; el filtro de
@@ -108,7 +114,7 @@ describe("NovedadesService.listar (feature 89)", () => {
           ]),
       ),
     });
-    const service = new NovedadesService(repo);
+    const service = new NovedadesService(repo, intentos);
     const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
 
     expect(res.status).toBe("ok");
@@ -134,7 +140,7 @@ describe("NovedadesService.listar (feature 89)", () => {
           ]),
       ),
     });
-    const service = new NovedadesService(repo);
+    const service = new NovedadesService(repo, intentos);
     const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
@@ -160,7 +166,7 @@ describe("NovedadesService.listar (feature 89)", () => {
           ]),
       ),
     });
-    const service = new NovedadesService(repo);
+    const service = new NovedadesService(repo, intentos);
     const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
@@ -179,7 +185,7 @@ describe("NovedadesService.listar (feature 89)", () => {
         async () => new Map<string, CausaDevueltaVigente>(),
       ),
     });
-    const service = new NovedadesService(repo);
+    const service = new NovedadesService(repo, intentos);
     const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
@@ -191,7 +197,7 @@ describe("NovedadesService.listar (feature 89)", () => {
       countDevueltasByTienda: vi.fn(async () => 25),
       findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
     });
-    const service = new NovedadesService(repo);
+    const service = new NovedadesService(repo, intentos);
     const res = await service.listar({ page: 3, pageSize: PAGE_SIZE }, ADMIN);
 
     expect(res).toMatchObject({ status: "ok", total: 25, page: 3, pageSize: PAGE_SIZE });
@@ -209,10 +215,62 @@ describe("NovedadesService.listar (feature 89)", () => {
       countDevueltasByTienda: vi.fn(async () => 0),
       findDevueltasByTienda: vi.fn(async () => []),
     });
-    const service = new NovedadesService(repo);
+    const service = new NovedadesService(repo, intentos);
     const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
 
     expect(res).toEqual({ status: "ok", items: [], total: 0, page: 1, pageSize: PAGE_SIZE });
     expect(repo.findCausasDevueltaVigentes).not.toHaveBeenCalled();
+  });
+});
+
+// --- Feature 160 (T11): el conteo de intentos en la pagina de novedades ---
+
+describe("NovedadesService.listar — intentos de entrega en lote (160/R11-R15/R26)", () => {
+  it("R11/R14: cada novedad sale con `intentosEntrega` numerico, el `0` INCLUIDO", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 2),
+      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "n1" }), ordenRow({ id: "n2" })]),
+    });
+    // `n2` no viene en el mapa -> 0.
+    const doble = fakeIntentosEnLote({ n1: 3 });
+    const service = new NovedadesService(repo, doble);
+    const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    const porId = new Map(res.items.map((i) => [i.id, i.intentosEntrega]));
+    expect(porId.get("n1")).toBe(3);
+    expect(porId.get("n2")).toBe(0);
+  });
+
+  it("R12/R15: UNA sola llamada, con los ids de la pagina YA acotada a la tienda del actor", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 2),
+      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "n1" }), ordenRow({ id: "n2" })]),
+    });
+    const doble = fakeIntentosEnLote();
+    await new NovedadesService(repo, doble).listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+
+    expect(doble.contarIntentosEnLote).toHaveBeenCalledTimes(1);
+    expect(llamadasIntentos(doble)).toEqual([["n1", "n2"]]);
+    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", {
+      skip: 0,
+      take: PAGE_SIZE,
+    });
+  });
+
+  it("R13: pagina vacia -> ni una llamada al derivador", async () => {
+    const doble = fakeIntentosEnLote();
+    await new NovedadesService(fakeRepo(), doble).listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+    expect(doble.contarIntentosEnLote).not.toHaveBeenCalled();
+  });
+
+  it("R15: un rol no autorizado ni siquiera llega al derivador", async () => {
+    const doble = fakeIntentosEnLote();
+    const res = await new NovedadesService(fakeRepo(), doble).listar(
+      { page: 1, pageSize: PAGE_SIZE },
+      MENSAJERO,
+    );
+    expect(res).toEqual({ status: "forbidden" });
+    expect(doble.contarIntentosEnLote).not.toHaveBeenCalled();
   });
 });

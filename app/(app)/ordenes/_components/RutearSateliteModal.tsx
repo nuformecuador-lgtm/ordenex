@@ -1,6 +1,10 @@
 "use client";
 
+import { useState } from "react";
+
 import { Modal } from "@/components/shared/Modal";
+import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
+import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { useToast } from "@/hooks/useToast";
 import { rutearABodegaSatelite } from "@/lib/actions/ordenes-guia";
 import type { RutearSateliteResult } from "@/lib/types/orden-guia";
@@ -34,6 +38,16 @@ export function RutearSateliteModal({
   onSuccess,
 }: RutearSateliteModalProps) {
   const toast = useToast();
+  // Feature 148 (T12, §9.7): fase "resultado" con el lote ya ruteado.
+  const [resultado, setResultado] = useState<{
+    ordenIds: string[];
+    mensaje: string;
+  } | null>(null);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setResultado(null);
+  }
 
   async function handleConfirm() {
     if (ordenes.length === 0) {
@@ -54,34 +68,69 @@ export function RutearSateliteModal({
       throw result;
     }
 
-    toast.success(
-      `${result.resultados.length} orden(es) en ruta a bodega satélite.`,
-    );
-    onSuccess();
+    const mensaje = `${result.resultados.length} orden(es) en ruta a bodega satélite.`;
+    toast.success(mensaje);
+    // Feature 148 (§9.7): ruteo ya cometido → fase "resultado"; `onSuccess()` se
+    // difiere al cierre. Input, toast y manejo del resultado de negocio intactos (R27).
+    setResultado({
+      ordenIds: result.resultados.map((r) => r.ordenId),
+      mensaje,
+    });
   }
 
   function handleError(error: unknown) {
     toast.error(guiaDecisionErrorMessage(error));
   }
 
+  /** Cierre de la fase "resultado" por cualquier vía: recién ahí refresca el padre. */
+  function handleOpenChange(next: boolean) {
+    if (!next && resultado) {
+      setResultado(null);
+      onOpenChange(false);
+      onSuccess();
+      return;
+    }
+    onOpenChange(next);
+  }
+
   return (
     <Modal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="Rutear a bodega satélite"
-      description={`Se enviarán ${ordenes.length} orden(es) no-GAM a la bodega satélite de su zona.`}
+      description={
+        resultado
+          ? "Órdenes ruteadas. Descarga el manifiesto del lote antes de cerrar."
+          : `Se enviarán ${ordenes.length} orden(es) no-GAM a la bodega satélite de su zona.`
+      }
       confirmLabel="Rutear a bodega satélite"
+      cancelLabel={resultado ? "Cerrar" : "Cancelar"}
+      hideConfirm={resultado !== null}
+      closeOnConfirm={false}
       onConfirm={handleConfirm}
       onError={handleError}
     >
-      <ul className="max-h-40 list-disc overflow-auto pl-5 text-sm text-muted-foreground">
-        {ordenes.map((orden) => (
-          <li key={orden.id}>
-            {orden.numRemision}
-            {orden.zonaNombre ? ` — ${orden.zonaNombre}` : ""}
-          </li>
-        ))}
-      </ul>
+      {resultado ? (
+        <ManifiestoResultado
+          mensaje={resultado.mensaje}
+          flujo="ruteo_satelite"
+          seleccion={{ ordenIds: resultado.ordenIds }}
+        />
+      ) : (
+        <ul className="max-h-40 list-disc overflow-auto pl-5 text-sm text-muted-foreground">
+          {/* Feature 160 (R18/R19/R23): dato etiquetado junto a cada orden listada, en
+              la misma linea y con el mismo markup que el resto del `<li>`. Siempre
+              visible, `0` incluido; sin umbral (R20). */}
+          {ordenes.map((orden) => (
+            <li key={orden.id}>
+              {orden.numRemision}
+              {orden.zonaNombre ? ` — ${orden.zonaNombre}` : ""}
+              {" · "}
+              <IntentosDato intentos={valorIntentos(orden)} />
+            </li>
+          ))}
+        </ul>
+      )}
     </Modal>
   );
 }

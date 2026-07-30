@@ -197,3 +197,82 @@ transiciones y las etiquetas PDF de la 136 siguen intactas; el lote se resuelve 
   producción se observa presión, la palanca es un tope propio (alternativa O, hoy descartada).
 - **Sin UI ni listado por lote** (gate F1.4-5): `carga_id`, `name` y las URLs se persisten y se
   devuelven; nadie las pinta todavía.
+
+---
+
+## Reintegración contra `dev` (2026-07-29) — merge del lote 153–160
+
+La rama estaba **188 commits por detrás de `dev`**. `git merge origin/dev` dio **19 archivos en
+conflicto**; ninguno semántico: la 141 es ortogonal al flujo de estados (aporta el modelo `Carga`,
+`orden.carga_id` / `orden.download_url` y el cableado de `cargaId`, y no toca estados, fulfillment
+ni transiciones), así que los choques fueron **textuales** — las dos features editaron las mismas
+funciones.
+
+**Regla aplicada en todo archivo compartido:** `dev` es AUTORITATIVO en la lógica de estados y de
+creación; la 141 solo vuelve a enhebrar `cargaId` sobre esa base. Nunca al revés.
+
+### Lo que se preservó de `dev`
+
+- **155** — `resolverDestinoCreacion(...)` sobre el flag `fulfillment` de la tienda dueña en las dos
+  vías; la bifurcación de `cargarMasiva` entre `createManyOrdenesConGuia` (rama b) y
+  `createManyOrdenes` (rama a); `opciones.conGuia`; el bloque `manifiesto` de la respuesta de la
+  API key; la desaparición de `ESTATUS_INICIAL_API`; el retiro del value `en_fulfillment`.
+- **153/154/156** — `en_reparto`, catálogo v2 y `generarGuia` con destino único.
+- **144/146/159** — índices de filtros y relaciones de `Notificacion` en `schema.prisma`; el aviso
+  `carga_masiva_terminada` con su `loteId` propio; el retiro de `mensajero_sugerido_id` y de los
+  métodos de `IOrdenRepository` que se fueron con él.
+
+### Resolución de los 7 archivos de código
+
+| archivo | resolución |
+|---|---|
+| `lib/services/BulkOrdenService.ts` | base `dev`; el `LoteContexto` se extrae a una variable ÚNICA que alimenta las DOS ramas de la 155 (el lote es del canal de carga, no del destino físico); `cargarViaApi` pasa `lote` (4.º) y `{ conGuia }` (5.º) y el `cargaId` viaja en el summary |
+| `lib/repositories/OrdenRepository.ts` | `createManyOrdenesConGuia(data, batchSize, historial, lote, opciones?)`: `lote` requerido antes de `opciones`; se conservan el `conGuia` y el encolado de geocodificación de la 155 y se devuelve `{ creadas, cargaId }`; se aceptó la eliminación del bloque de la feature 16 que la 159 borró |
+| `lib/interfaces/repositories/IOrdenRepository.ts` | unión: `LoteContexto`, los 2 errores de dominio y `setCargaDownloadUrl`/`setOrdenesDownloadUrl` sobre las firmas de `dev` (`CreateOrdenOpciones` incluido) |
+| `lib/interfaces/services/IBulkOrdenService.ts` | unión de docs; `cargaId` en `CargaViaApiSummary`, `destino` de la 155 intacto |
+| `app/api/ordenes/api-key/carga/route.ts` | `descargaService` (141) **y** `manifiestoService` (155) en `CargaApiDeps`; schema con `name` + `download_type`; la respuesta suma `downloadType`, `ordenes[].downloadUrl` y conserva `etiquetasPdf` **y** `manifiesto` |
+| `app/(app)/ordenes/_components/carga-masiva-chunks.ts` | filas sin `aplicarMensajero` (159) + el cuerpo con `cargaId`/`name`/`totalFiles` (141) |
+| `db/schema.prisma` | unión pura: relaciones de `Notificacion` + `cargasRealizadas`; índices de la 144 + `@@index([cargaId])` |
+
+`db/migrations/20260727120000_carga_orden_carga_id/` quedó **intacta** (verificado con
+`git diff`). Su timestamp la deja ANTES de las migraciones 0728/0729 de `dev`: `migrate deploy`
+la aplicará fuera de orden de fecha, sin conflicto (solo crea `carga` y dos columnas de `orden`).
+
+### Tests
+
+- `feature_list.json`: se conservó la ficha de `dev` (que ya nombra el PR #168) y las 18 fichas
+  142–160; convención `merged_pr` intacta.
+- `specs/141-*`: `dev` traía un snapshot **viejo** (R1–R30) del propio spec de la 141; se tomó la
+  versión de la rama (R1–R55), que es la vigente.
+- `tests/integration/db/zonas-migration.test.ts`: denylist resuelta por **UNIÓN**.
+- `tests/integration/api/ordenes-api-key-carga.route.test.ts` y `carga-api-etiquetas.test.ts`: se
+  conservaron **ambos** bloques de casos (141 y 155); los dobles de la 141 inyectan además
+  `manifiestoService` y `destino`.
+- `tests/unit/services/bulk-orden-service.carga-lote.test.ts`: las filas de la vía sesión pasan a
+  `direccion_destinatario` (142) y las de la vía API conservan las columnas separadas (142/R38);
+  los casos que afirman el contexto del lote se ejecutan **sobre las dos ramas** de la 155
+  (`describe.each`) preguntando por la ruta usada, no por un método fijo.
+- `tests/unit/repositories/orden-repository.carga-lote.test.ts`: el estado de creación pasa de
+  `en_ruta_bodega_central` (que la 155 retiró de `ESTADOS_CREACION`) a `por_recolectar_en_tienda`.
+- `tests/unit/repositories/orden-repository.creacion-bifurcada.test.ts` (de `dev`): el fake de
+  Prisma gana el delegate `carga` y las llamadas el 4.º parámetro.
+- Se aceptó el borrado de `tests/unit/services/asignacion-mensajero-service.test.ts` (la 159 borró
+  el service entero).
+
+### Verificación real tras el merge
+
+```
+pnpm db:generate  -> Generated Prisma Client (v7.8.0)
+pnpm typecheck    -> 0 errores
+pnpm lint         -> 10 problems (0 errors, 10 warnings)   [las 10 preexistentes en dev]
+pnpm test         -> Test Files 587 passed (587) | Tests 6523 passed (6523)
+./init.sh         -> == init OK ==
+```
+
+### AVISO PARA EL REVIEWER
+
+El informe `progress/review_141.md` (APROBADO-CON-NOTAS, 2026-07-27) se emitió contra una base que
+desde entonces cambió en **188 commits**, incluida la reescritura de `BulkOrdenService`,
+`OrdenRepository` y el borde de la API key — los mismos módulos que esta feature toca. **Esta
+reintegración NO revalida ese review.** Hace falta un re-review del merge antes de mergear el PR
+#168.

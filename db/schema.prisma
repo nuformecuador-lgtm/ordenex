@@ -110,7 +110,6 @@ model Usuario {
   otpChallenges                       EmailOtpChallenge[]
   documentos                          MensajeroDocumento[] // feature 21
   ordenesTienda                       Orden[]                   @relation("OrdenTienda")
-  ordenesMensajeria                   Orden[]                   @relation("OrdenMensajeroSugerido") // feature 15: sugerencia de mensajero en carga masiva
   ordenesAsignadas                    Orden[]                   @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
   gestionesRealizadas                 GestionOrden[]            @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
   gestionesAnuladas                   GestionOrden[]            @relation("GestionAnuladaPor") // feature 67/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
@@ -133,6 +132,9 @@ model Usuario {
   webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
   ordenMensajeroMetas                 OrdenMensajeroMeta[]      @relation("OrdenMensajeroMetaMensajero") // feature 115: marcas privadas ("gestionar mas tarde") de ESTE mensajero sobre sus ordenes
   chatConversaciones                  ChatConversacion[]        @relation("ChatConversacionMensajero") // feature 120/R13/R16: hilos de chat asignados a ESTE mensajero
+  notificacionesRecibidas             Notificacion[]            @relation("NotificacionDestinatario") // feature 146/R1: notificaciones dirigidas a ESTE usuario (D4)
+  notificacionesDeSuTienda            Notificacion[]            @relation("NotificacionTienda") // feature 146/F1.4-1: notificaciones ACOTADAS a esta tienda (el adminTienda ES la tienda)
+  notificacionLecturas                NotificacionLectura[] // feature 146/R2/R3: lectura/descarte de ESTE usuario, aislado de los demas del mismo rol
   cargasRealizadas                    Carga[]                   @relation("CargaUsuario") // feature 141/R2: lotes de carga masiva que ESTE usuario realizo (adminTienda o usuario dedicado de la API key)
 
   @@index([tipoIdentificacionId])
@@ -351,9 +353,12 @@ model EmailOtpChallenge {
 // por `value` (8 valores, ORDER_STATUS_SEED), patron rol/tipo_identificacion.
 model OrderStatus {
   id    String @id @default(uuid())
-  value String @unique // seed (15, ver ORDER_STATUS_SEED). Feature 135 renombro 6
-  //   values: p.ej. devolviendo_a_tienda, en_ruta_bodega_central, en_bodega_central,
-  //   por_recoger, en_ruta, devuelta_a_tienda (id/FK preservados por UPDATE de catalogo).
+  value String @unique // seed (20, ver ORDER_STATUS_SEED; el conteo decia 15, corregido en
+  //   la feature 153). Feature 135 renombro 6 values: p.ej. devolviendo_a_tienda,
+  //   en_ruta_bodega_central, en_bodega_central, por_recoger, devuelta_a_tienda. Feature 153
+  //   renombro uno mas a `en_reparto` (id/FK preservados por UPDATE de catalogo, sin ALTER TYPE).
+  //   Feature 154 apendio dos values (18 -> 20): por_recolectar_en_tienda e incidente
+  //   (INSERT idempotente, `20260729120000_order_status_v2_por_recolectar_incidente`).
 
   ordenes Orden[]
 
@@ -384,6 +389,7 @@ model Zona {
   cierresDestino       CierreDia[] // feature 37: cierres cuyo destino_zona_id apunta a esta zona
   cierresBodega        CierreBodega[] // feature 40: cierres de bodega de esta zona satelite
   cierreDetalles       CierreDetail[] // feature 69/R6: snapshots que congelaron esta zona
+  notificaciones       Notificacion[] // feature 146/F1.4-1: notificaciones ACOTADAS a esta zona (alcance del adminSatelite)
 
   @@map("zona")
 }
@@ -460,7 +466,6 @@ model Orden {
   notas                  String? // R14a: texto nullable
   direccion              String? // feature 15/R1: nuevo, carga masiva
   montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
-  mensajeroSugeridoId    String?   @map("mensajero_sugerido_id") // feature 15/R1/R2: SUGERENCIA de la carga masiva
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
@@ -493,7 +498,6 @@ model Orden {
   provincia         Provincia   @relation(fields: [provinciaId], references: [id])
   canton            Canton      @relation(fields: [cantonId], references: [id])
   distrito          Distrito?   @relation(fields: [distritoId], references: [id])
-  mensajeroSugerido Usuario?    @relation("OrdenMensajeroSugerido", fields: [mensajeroSugeridoId], references: [id])
   mensajeroAsignado Usuario?    @relation("OrdenMensajeroAsignado", fields: [mensajeroAsignadoId], references: [id], onDelete: SetNull) // feature 17/R7
   carga             Carga?      @relation("OrdenCarga", fields: [cargaId], references: [id], onDelete: Restrict) // feature 141/R4: un lote con ordenes no se puede borrar
 
@@ -508,9 +512,14 @@ model Orden {
   @@index([tiendaId])
   @@index([estatusId])
   @@index([createdAt])
-  @@index([mensajeroSugeridoId])
   @@index([mensajeroAsignadoId]) // feature 17/R7
   @@index([mensajeroAsignadoId, asignadoAt]) // feature 76/R1: denominador del ranking diario (asignadas HOY por mensajero)
+  // Feature 144/B5: filtros de zona y geografia del listado (`IN (...)` en ruta caliente:
+  // findMany + count por cada cambio de filtro). `createdAt` ya esta indexado arriba.
+  @@index([zonaId])
+  @@index([provinciaId])
+  @@index([cantonId])
+  @@index([distritoId])
   @@index([cargaId]) // feature 141/R4: "ordenes de este lote"
   @@map("orden")
 }
@@ -1143,10 +1152,12 @@ enum OrdenHistorialOrigenTipo {
   reprogramacion_tienda // feature 100: adminTienda reprograma devuelta -> reprogramada (gestion sintetica reprogramada)
   recuperacion_manual // feature 100: bodega recupera devuelta -> en_bodega_central/en_bodega_satelite (accion manual, actor admin)
   cancelacion_api // feature 106: tienda cancela via API key en_bodega_central/en_ruta_bodega_central -> devolviendo_a_tienda (marcador motivo="cancelada por tienda")
-  corte_sin_gestionar // feature 109: corte diario transiciona en_ruta -> sin_gestionar (actor null/cron)
+  corte_sin_gestionar // feature 109: corte diario transiciona en_reparto -> sin_gestionar (actor null/cron)
   liberacion_sin_gestionar // feature 109: al APROBAR el cierre, sin_gestionar -> en_bodega_central/en_bodega_satelite (actor admin)
   recepcion_bodega_central // feature 138: recepcion fisica en la bodega central, en_ruta_bodega_central -> en_bodega_central (actor maestro/admin)
   devolucion_rechazada // feature 139: al APROBAR el cierre, rechazada -> por_devolver (satelite) / por_devolver_a_tienda (central) (actor admin)
+  recoleccion_tienda // feature 154: el mensajero recolecta en la tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43; lo ejecutara la 157)
+  incidente // feature 154: familia propia del resultado `incidente` de la gestion. DECLARADA SIN PRODUCTOR hasta la 158 (la arista #44 en_reparto -> incidente viaja via `gestion`, decision Q4)
 
   @@map("orden_historial_origen_tipo")
 }
@@ -1441,4 +1452,99 @@ model RutaOptimizadaParada {
   @@unique([rutaId, secuencia])
   @@index([ordenId])
   @@map("ruta_optimizada_parada")
+}
+
+// Feature 146 (design §1.1) — tipo de PRESENTACION de la notificacion: mapea 1:1 al icono
+// que pinta el indicador de avisos. Enum Postgres nativo (patron RolValue / ChatMensajeTipo).
+enum NotificacionTipo {
+  alert
+  box
+  warning
+
+  @@map("notificacion_tipo")
+}
+
+// Feature 146 (design §1.1) — evento de dominio que origino la notificacion. INVENTARIO
+// CERRADO de D1 (exactamente cuatro productores): anadir un evento exige migracion de enum,
+// deliberado (mismo criterio que OrdenHistorialOrigenTipo), para que ningun productor no
+// especificado se cuele sin revision (R26).
+enum NotificacionEvento {
+  orden_rechazada
+  carga_masiva_terminada
+  postulacion_mensajero_pendiente
+  cierre_dia_por_aprobar
+
+  @@map("notificacion_evento")
+}
+
+// Feature 146 (design §1.1) — tipo de la entidad de origen. Discrimina a que tabla apunta
+// `entidadId` (referencia POLIMORFICA, sin FK).
+enum NotificacionEntidadTipo {
+  orden
+  usuario
+  cierre_dia
+  carga
+
+  @@map("notificacion_entidad_tipo")
+}
+
+// Feature 146 (design §1.2, R1/R4/R5/R6) — una notificacion DIRIGIDA (D4): o a un ROL
+// (`destinatarioRol`) o a un USUARIO concreto (`destinatarioUsuarioId`), nunca a ambos ni a
+// ninguno (CHECK XOR `notificacion_destinatario_xor` en la migracion; Prisma no expresa
+// CHECK). Un evento con N roles destinatarios produce N filas (F1.4-5).
+//
+// `tiendaId` y `zonaId` son el ALCANCE (F1.4-1): opcionales e INDEPENDIENTES entre si.
+// NULL en ambos = visible a todo el rol (R13). Ambos con FK ON DELETE CASCADE (R11).
+// `tiendaId` referencia `usuario` porque en este esquema la tienda ES el usuario adminTienda.
+//
+// `leidaAt` NO vive aqui a proposito (D4): el estado de lectura es POR USUARIO y vive en
+// `NotificacionLectura`. Fila INMUTABLE (sin updatedAt): nada de la notificacion cambia
+// despues de crearse.
+model Notificacion {
+  id                    String                  @id @default(uuid())
+  tipo                  NotificacionTipo
+  evento                NotificacionEvento
+  descripcion           String
+  anexo                 String?
+  entidadTipo           NotificacionEntidadTipo @map("entidad_tipo")
+  entidadId             String?                 @map("entidad_id") // referencia polimorfica: SIN FK (design Riesgo 4)
+  destinatarioRol       RolValue?               @map("destinatario_rol")
+  destinatarioUsuarioId String?                 @map("destinatario_usuario_id")
+  tiendaId              String?                 @map("tienda_id") // alcance: el adminTienda dueno de la orden
+  zonaId                String?                 @map("zona_id") // alcance: la zona del adminSatelite
+  createdAt             DateTime                @default(now()) @map("created_at")
+
+  destinatarioUsuario Usuario? @relation("NotificacionDestinatario", fields: [destinatarioUsuarioId], references: [id], onDelete: Cascade)
+  tienda              Usuario? @relation("NotificacionTienda", fields: [tiendaId], references: [id], onDelete: Cascade)
+  zona                Zona?    @relation(fields: [zonaId], references: [id], onDelete: Cascade)
+
+  lecturas NotificacionLectura[]
+
+  // Los indices del listado y del alcance son PARCIALES (WHERE ... IS NOT NULL) y van a
+  // mano en la migracion; Prisma no los expresa. Lo mismo el unico de dedupe
+  // (`notificacion_dedupe_key`, NULLS NOT DISTINCT). Se declaran aqui los btree simples
+  // equivalentes para que el cliente generado conozca la forma de la tabla.
+  @@index([entidadTipo, entidadId])
+  @@map("notificacion")
+}
+
+// Feature 146 (design §1.3, R2/R3) — estado de una notificacion PARA UN USUARIO. La
+// AUSENCIA de fila significa "no leida y no descartada". Descartar implica leida (se
+// escriben ambos instantes) para que descartar una no leida no descuadre el contador.
+// Unico (notificacionId, usuarioId): a lo sumo una fila por par, y es la clave del upsert
+// idempotente de marcar/descartar (R37). Que el estado viva aqui —y no en `Notificacion`—
+// es lo que hace que un admin que lee NO apague el aviso de los demas admins (R3).
+model NotificacionLectura {
+  id             String    @id @default(uuid())
+  notificacionId String    @map("notificacion_id")
+  usuarioId      String    @map("usuario_id")
+  leidaAt        DateTime? @map("leida_at")
+  descartadaAt   DateTime? @map("descartada_at")
+
+  notificacion Notificacion @relation(fields: [notificacionId], references: [id], onDelete: Cascade)
+  usuario      Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([notificacionId, usuarioId])
+  @@index([usuarioId])
+  @@map("notificacion_lectura")
 }

@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
 import { SWRConfig } from "swr";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 
 import { RolValue } from "@prisma/client";
@@ -15,7 +16,7 @@ import type {
   OrdenListItemDTO,
 } from "@/lib/types/orden";
 
-// `OrdenesTabs` usa `useRouter` (navegación al escanear el QR de una etiqueta),
+// `OrdenesListado` usa `useRouter` (navegación al escanear el QR de una etiqueta),
 // que exige el App Router montado: se mockea como en el resto de la suite.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -31,6 +32,22 @@ vi.mock("@/lib/actions/ordenes", () => ({
 // Devuelve null por defecto: sin adminTienda no hay botón, igual que antes.
 vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
+}));
+
+// Feature 144/TB2.5: la página resuelve el catálogo de filtros server-side. Se
+// mockea para que estos tests sigan siendo herméticos (sin DB), igual que
+// `listarOrdenes`. La resolución en sí se cubre en `OrdenesPageFiltros.test.tsx`.
+vi.mock("@/lib/actions/filtros-ordenes", () => ({
+  obtenerCatalogoFiltrosOrdenes: vi.fn(async () => ({
+    status: "ok" as const,
+    catalogo: {
+      zonas: [],
+      tiendas: [],
+      provincias: [],
+      cantones: [],
+      distritos: [],
+    },
+  })),
 }));
 
 // Feature 57: el PageHeader del topbar monta el LogoutButton (client:
@@ -119,7 +136,9 @@ describe("OrdenesPage", () => {
         numGuia: 1002,
         numRemision: "REM-002",
         estatusId: "est-2",
-        estatusValue: "En ruta",
+        // Feature 153/R17: el fixture pasaba la ETIQUETA del estado donde va un `value` del
+        // catálogo. Se corrige a un value real; la celda no se aserta en esta fila.
+        estatusValue: "en_reparto",
         destinatario: "Beto Ruiz",
         tiendaId: "tienda-uuid-2",
         tiendaNombre: "Tienda Dos",
@@ -149,14 +168,16 @@ describe("OrdenesPage", () => {
     // Espera la resolución async de SWR.
     await screen.findByText("Tienda Uno");
 
-    // Cabeceras en orden: las 18 columnas ricas del listado del maestro
+    // Cabeceras en orden: las 19 columnas ricas del listado del maestro
     // (incluye columna "Zona" propia, "Monto a cobrar", "Flete + IVA",
-    // "Fulfillment" y "Comisión + IVA") + "Acciones" (feature 49/R29).
+    // "Fulfillment", "Comisión + IVA" e "Intentos" —feature 160/R17/R22, justo
+    // después de "Estado"—) + "Acciones" (feature 49/R29).
     const headers = screen.getAllByRole("columnheader");
     expect(headers.map((h) => h.textContent)).toEqual([
       "Nº Guía",
       "Nº Remisión",
       "Estado",
+      "Intentos",
       "Destinatario",
       "Producto",
       "Dirección",
@@ -179,20 +200,22 @@ describe("OrdenesPage", () => {
     const rows = bodyRows();
     expect(rows).toHaveLength(3);
 
-    // Fila 1: mapeo campo a campo.
+    // Fila 1: mapeo campo a campo. Feature 160: "Intentos" ocupa el índice 3, así
+    // que las columnas posteriores corren UNA posición (el dato nuevo y nada más).
     const c1 = within(rows[0]).getAllByRole("cell");
     expect(c1[0]).toHaveTextContent("1001"); // numGuia por column.id (R8)
     expect(c1[1]).toHaveTextContent("REM-001"); // numRemision por render-string (R7)
     expect(c1[2]).toHaveTextContent("En bodega"); // estatusValue por render-función (R6)
-    expect(c1[3]).toHaveTextContent("Ana Pérez"); // destinatario por column.id (R8)
-    // Tienda ahora es la columna 7 (índice 6): Producto y Dirección la preceden.
-    expect(c1[6]).toHaveTextContent("Tienda Uno"); // tiendaNombre por render-función (R24)
+    expect(c1[3]).toHaveTextContent("0"); // intentos de entrega (feature 160/R19)
+    expect(c1[4]).toHaveTextContent("Ana Pérez"); // destinatario por column.id (R8)
+    // Tienda ahora es la columna 8 (índice 7): Intentos, Producto y Dirección la preceden.
+    expect(c1[7]).toHaveTextContent("Tienda Uno"); // tiendaNombre por render-función (R24)
 
     // Fila 3: sin estatusValue ni relaciones.estatus → placeholder "—" (nunca
     // filtra el uuid interno estatusId a la UI).
     const c3 = within(rows[2]).getAllByRole("cell");
     expect(c3[2]).toHaveTextContent("—");
-    expect(c3[6]).toHaveTextContent("Tienda Tres");
+    expect(c3[7]).toHaveTextContent("Tienda Tres");
 
     // La celda Tienda muestra el NOMBRE, nunca el uuid tiendaId (R24).
     expect(screen.getByText("Tienda Dos")).toBeInTheDocument();
@@ -232,8 +255,9 @@ describe("OrdenesPage", () => {
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent("No hay órdenes");
-    // La cabecera sigue presente (18 columnas del listado del maestro + "Acciones" feature 49/R29).
-    expect(screen.getAllByRole("columnheader")).toHaveLength(19);
+    // La cabecera sigue presente (19 columnas del listado del maestro —18 + "Intentos",
+    // feature 160— + "Acciones" feature 49/R29).
+    expect(screen.getAllByRole("columnheader")).toHaveLength(20);
   });
 
   it("D4: cualquier resultado no-ok o throw del transporte muestra error accesible genérico, sin tabla de datos ni internals (R21)", async () => {
@@ -377,12 +401,14 @@ describe("OrdenesPage", () => {
       total: 0,
     });
 
+    const user = userEvent.setup();
     for (const rol of [RolValue.maestro, RolValue.admin]) {
       resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol });
       await renderPage();
-      // El receptor de bodega central aporta la entrada manual: input "Número de
-      // guía" + botón "Recibir" (distinto del escáner de origen del adminTienda,
-      // que solo tiene cámara).
+      // El receptor es una tarjeta plegada: la barra de acciones ofrece el botón que
+      // la despliega. Dentro está la entrada manual (input "Número de guía" + botón
+      // "Recibir"), que el escáner de origen del adminTienda no tiene.
+      await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
       expect(screen.getByLabelText("Número de guía")).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Recibir" }),
@@ -400,20 +426,26 @@ describe("OrdenesPage", () => {
       total: 0,
     });
 
-    // adminTienda opera la recepción en ORIGEN (cámara), NO la de bodega central:
-    // no debe ver la entrada manual de guía.
+    const user = userEvent.setup();
+
+    // adminTienda opera la recepción en ORIGEN (cámara), NO la de bodega central: al
+    // desplegar su receptor no aparece la entrada manual de guía.
     resolveActorMock.mockResolvedValueOnce({
       usuarioId: "t1",
       rol: RolValue.adminTienda,
     });
     await renderPage();
+    await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
     expect(screen.queryByLabelText("Número de guía")).toBeNull();
     expect(screen.queryByRole("button", { name: "Recibir" })).toBeNull();
     cleanup();
 
-    // Sin sesión (actor null): tampoco.
+    // Sin sesión (actor null): ni siquiera se ofrece el receptor.
     resolveActorMock.mockResolvedValueOnce(null);
     await renderPage();
+    expect(
+      screen.queryByRole("button", { name: "Recibir paquete" }),
+    ).toBeNull();
     expect(screen.queryByLabelText("Número de guía")).toBeNull();
     expect(screen.queryByRole("button", { name: "Recibir" })).toBeNull();
   });

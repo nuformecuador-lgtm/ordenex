@@ -45,3 +45,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# worktrees de agentes (copias completas del repo)
+/.claude/worktrees/

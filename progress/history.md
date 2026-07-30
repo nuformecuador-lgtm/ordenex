@@ -2032,3 +2032,213 @@
   hecha y le falta explotarla (mostrarla/agruparla en listados).
 - **Backlog real resultante: 20 pendientes, de las cuales 15 son la cadena de analítica.** El trabajo
   suelto son 5 features (80, 85, 74, 70, 71) más la 66. Sin features `in_progress` ni `spec_ready`.
+
+## 2026-07-27 — 142 plantilla de carga masiva v2 (nuevo orden + `direccion_destinatario` unificada)
+- Rehecha la plantilla de carga masiva: orden de columnas nuevo (`destinatario`, `telefono`,
+  `direccion_destinatario`, `monto_cobrar`, `producto`, `num_remision`, `peso`, `notas`) y las 4
+  columnas `provincia`/`canton`/`distrito`/`direccion` **reemplazadas por una sola** con formato
+  `País / Provincia / Cantón (Distrito) / Dirección literal`. Parser puro nuevo en
+  `lib/utils/direccion-destinatario.ts`. Sin migración. **PR #174**, mergeado a `dev` en `c3e6954`.
+- Decisiones del humano: **corte duro** (sin modo compatibilidad; un archivo viejo falla en
+  `findMissingHeaders`) y **distrito obligatorio** (de él se deriva `zona_id`, que decide tarifa y ruteo).
+- Hallazgo que salvó el contrato público: `filaCargaSchema`/`resolveFila` los comparte `cargarViaApi`
+  (feature 88, API key, con las 3 columnas geográficas SEPARADAS). Meter el parser en el schema lo habría
+  roto en silencio → **extractor de geografía inyectado por vía**, con `resolveGeo` intacto.
+- El ejemplo canónico de la plantilla se sustituyó: `Cartago / Jimenez (Juan Vinas)` existe en el
+  catálogo pero **no recibe zona** al cruzarlo con el mapa → habría fallado. Quedó
+  `Costa Rica / Cartago / Cartago (Occidental) / …`. El guard `carga-masiva-ejemplos-geo.test.ts` **no se
+  relajó**. Deuda de datos detrás: solo **198 ternas** del catálogo reciben zona en el seed.
+- Reviewer APROBADO 0 bloqueantes: typecheck 0, lint 0 errores, 517 archivos / 5280 tests verdes,
+  mutación (R19/R22 → 5 tests caen) y fuzz de 50.000 entradas al parser (0 excepciones, falla cerrado).
+- Deuda: falta E2E cliente→ruta chunk→service con la columna nueva; el mensaje de «paréntesis no cerrado»
+  confunde si hay una `/` dentro del paréntesis.
+- **Aviso operativo:** el corte es duro — todo archivo de carga masiva con las 4 columnas viejas dejó de
+  funcionar al mergear; hay que redescargar la plantilla.
+
+## 2026-07-27 — 143 descargar en Excel las filas con error de la carga masiva
+- Botón en la vista previa de la carga masiva que descarga un `.xlsx` con **solo las filas con error**,
+  con los valores **crudos** del archivo original y una columna extra `motivo_error` al final.
+  Descarga de cliente puro (Blob + anchor), sin backend, sin migración. **PR #177** → `dev`.
+- Requisitos: R1–R22, todos con test. Módulos nuevos: `carga-masiva-errores-formato.ts`,
+  `carga-masiva-export-errores.ts`, `buildXlsxRows` + `XLSX_MIME` en `lib/utils/xlsx-template.ts`.
+  `exceljs` sigue entrando **solo** por import dinámico.
+- El ABIERTO del backlog («una columna extra rompe el round-trip») resultó **falso**, pero por diseño
+  permisivo, no por contrato: `findMissingHeaders` solo comprueba presencia, ambos parsers indexan por
+  nombre de cabecera y `filaCargaSchema` no es `.strict()`. Como funcionaba **por accidente afortunado**,
+  se fijó con R14/R15/R16 + test de round-trip + comentarios-ancla: un futuro `.strict()` rompe un test,
+  no la producción.
+- Hallazgo del spec: el cruce `fila` ↔ `linea` solo es válido porque `procesarEnChunks` **remapea** la
+  fila del lote a la línea original (`carga-masiva-chunks.ts:99`). Sin ese remapeo el archivo saldría con
+  datos de otras filas y el usuario corregiría la fila equivocada. Blindado con test dedicado.
+- Alcance cerrado en F1.4: **solo vista previa** (los errores post-confirmación quedan fuera, R20);
+  prefijo `Fila N — campo: motivo` una sola vez y **sin inventar número** si no hay línea (R22); sin CSV.
+- Review **por mutación**: `.strict()` mata 2 tests, lista blanca en `findMissingHeaders` mata 2, quitar
+  el remapeo mata el del cruce, un sufijo en la cabecera mata 9, un prefijo inventado mata 2.
+- Deuda: T13 (paseo manual en Excel/Sheets) **no se ejecutó**; se sustituyó por
+  `tests/integration/carga-masiva-errores-roundtrip.test.ts`, que genera el xlsx real y lo re-parsea con
+  ambos parsers.
+
+## 2026-07-27 — 146 campana de notificaciones funcional
+- `NotificationsBell` deja de tener notificaciones quemadas y consume datos reales. Modelo nuevo
+  `notificacion` + `notificacion_lectura` (leída/descartada **por usuario**), migración
+  `20260727120000_notificacion` (up + down), RLS habilitada sin policies (patrón del repo) y toda la
+  autorización en un único `predicadoVisibilidad(actor)` compartido por las 5 Server Actions.
+  R1–R50, 24 tasks. **PR #176** → `dev`.
+- Decisiones del humano: 4 eventos que notifican (rechazo, carga masiva terminada, postulación
+  pendiente, cierre por aprobar); refresco por **polling SWR**, no Realtime; direccionamiento por rol
+  con lectura por usuario.
+- **El humano omitió el aviso de «órdenes con más de 1 día sin asignación»**, el único que exigía
+  barrido periódico → cayeron el cron, el `JobTipo` y el env de umbral que la ficha daba por hechos.
+  Queda como candidato a feature aparte (el reloj corre «desde la creación», ya respondido).
+- Contradicción resuelta en el gate: el rechazo llega a maestro + admin + `adminTienda` dueño +
+  `adminSatelite` de la zona → obligó a **dos columnas de alcance** (`tienda_id`, `zona_id`). `Actor`
+  gana `zonaId` (aditivo).
+- **Bloqueante atajado por el leader:** la 1.ª entrega metía `if (enTest()) return` en producción — el
+  mismo anti-patrón de guardia-apagada-bajo-test que hizo rechazar la 140. Recableado: el default de los
+  services es un **no-op** y el real se inyecta en los composition roots, con test de barrido que falla
+  si alguien reintroduce un apagado por entorno.
+- Guardia ajena editada con aprobación: `no-migration-102.test.ts` afirmaba que el esquema no tiene
+  NINGUNA infra de notificaciones; pasó a una allowlist de una entrada, sin tocar los invariantes de la 102.
+- Deudas: sin purga (los 30 días son solo ventana de consulta); sin paginación (`PAGE_SIZE=50` trunca en
+  silencio); sin marcar leída por elemento en la UI; la campana arranca vacía en cada página y cada una
+  abre su propio polling. El `down.sql` se revisó por lectura, **sin round-trip real**.
+
+## 2026-07-28 — 148 manifiesto Excel al crear o mover órdenes
+- Tras cada operación **por lote** sobre órdenes se ofrece la descarga de un `.xlsx` con el manifiesto
+  (11 columnas: guía, remisión, destinatario, teléfono, dirección, zona, monto, origen, destino,
+  responsable, fecha). Los 5 puntos de enganche: carga masiva, generar guía / asignar mensajero, ruteo a
+  bodega satélite, envío de devolución a central y devolución a la tienda. R1–R30, 22 tasks.
+  **PR #178**, mergeado a `dev` en `0bcc360`.
+- Decisiones del humano: generación **en cliente** sobre el resultado de la acción (`exceljs` por import
+  dinámico + Blob/anchor), **sin Storage ni bucket nuevo** (el manifiesto NO es reimprimible), los 5
+  enganches en esta feature y **sin modelo nuevo en DB**.
+- Hallazgo estructural que evitó tocar 5 servicios de negocio: ningún flujo devuelve hoy las 11 columnas
+  (la carga masiva ni siquiera trae `ordenId`) y **dos de los cinco no tienen lote en el service** —
+  `EnvioDevolucionCentralService.enviarACentral` y `DevolucionOrigenService.devolverATienda` son **por
+  orden**, con el lote como un loop en la UI. Solución: **Server Action de LECTURA aparte**
+  (`obtenerManifiesto`, unión discriminada `ordenIds` vs `numRemisiones`) → los 5 servicios quedan
+  intactos (R27, verificado contra el diff). Precedente idéntico: `generarEtiquetas({ ordenIds })`.
+- **Cambio de UX real, confirmado por el humano:** para que exista la fase «resultado» con botón
+  explícito, `onSuccess()` se **difiere al cierre** de esa fase (el `onSuccess` de los padres cierra el
+  modal y destruiría la pantalla donde vive el botón). El encadenado a «Imprimir etiquetas» de la
+  feature 95 ahora ocurre **después**: manifiesto → etiquetas.
+- **Bloqueante que solo apareció mirando los E2E:** el diferimiento rompió 3 specs
+  (`asignacion-satelite`, `reintentos-escalado`, `devolucion-origen`). **No salió en rojo porque los E2E
+  no corren en `pnpm test` ni en `./init.sh`** — deuda de arnés viva.
+- Review por mutación: 10 mutaciones, 9 KILL. Sobrevive la rama `mensajero ?? actor` de
+  `asignacion_satelite` (menor, abierto). El guion largo (U+2014) quedó fijado por test; el helper viejo
+  colapsaba `nombre: null` al nombre del actor, así que el caso **no era ni expresable**.
+- Sin migración, sin `db/schema.prisma`, sin RLS.
+
+## 2026-07-28 — 150 tamaño de hoja seleccionable en las etiquetas
+- Catálogo de tamaños de hoja (100×100 mm, 4×6 in, A4, carta) en `lib/config/etiquetas-hoja.ts` +
+  escalado en `app/(app)/ordenes/_components/etiquetas-layout.ts`, con selector en el modal de descarga.
+  R1–R21, 11 tasks. **PR #179**, mergeado a `dev` en `28d9e8e`.
+- Decisiones del humano: **una etiqueta por página escalada** (no mosaico N-up); el tamaño se elige **en
+  cada descarga**, default 100×100 mm, **sin persistencia**; alcance = **solo el generador de cliente**.
+- Esa tercera decisión recortó la feature a la mitad y no estaba en la ficha: el generador server-side
+  `lib/pdf/etiquetas-pdf-lote.ts` (feature 136) corre **solo, dentro del `POST /api/ordenes/api-key/carga`,
+  sin humano delante** → un selector ahí no existe; sería preferencia persistida o un campo en el payload
+  público de integradores. El humano eligió ninguna → la 150 queda sin backend, sin migración y sin tocar
+  contrato público.
+- **Riesgo aceptado:** los dos generadores quedan divergentes (cliente parametrizable, servidor fijo en
+  100×100), blindado con test de no-regresión (R21). ⚠️ Ese blindaje se apoya en `Function.length` y
+  **no cazaría** una parametrización con parámetro por defecto — punto débil conocido.
+- El catálogo NO fue a `lib/config/etiquetas.ts` como decía la ficha: ese archivo es config server-side
+  por `process.env` y un componente cliente no puede importarlo sin arrastrar el entorno al bundle.
+- `carta` = **215.9 × 279.4 mm** exactos, no el `216 × 279` redondeado de la ficha. La implementación usa
+  `lado = min(ancho, alto)` en vez de `100·s` porque el ida y vuelta por el factor daba `offX = −1.4e−14`
+  y violaba R17 por ruido de coma flotante.
+- Trampa que costó un archivo de test extra: `doc.save` de jsPDF es propiedad **de instancia** y en Node
+  usa `fs.writeFileSync` → llamarlo con jspdf real **escribía PDFs en la raíz del repo**. R19 se aisló
+  sustituyendo jspdf entero.
+- Deuda: el centrado **nunca se validó con impresión física**.
+
+## 2026-07-28 — 152 hotfix WhatsApp: diagnóstico de salientes fallidos y fin de los reintentos infinitos
+- **Registrada retroactivamente. NO pasó por el arnés:** se implementó fuera del ciclo SDD y se mergeó
+  **directo a `prod`** (PRs **#182**, **#184**, **#185**, rama `feature/log-fallos-whatsapp`). El PR
+  **#183**, que la porta a `dev`, seguía abierto al reconciliar. Se registra porque cambia el modelo de
+  datos y las reglas de reintento del chat: quien toque WhatsApp después necesita saber que existe.
+- **Los dos fallos mudos que resuelve:** (1) Meta responde 2xx con `wa_message_id` y luego reporta
+  `failed` por webhook con `errors:[{code,title,message,error_data}]`, pero `metaStatusSchema` no lo
+  declaraba y zod lo descartaba por *strip* → el `failed` quedaba sin motivo y había que entrar al panel
+  de Meta. (2) El cliente clasificaba **cualquier** no-2xx como `transitorio` y tiraba el cuerpo: un 400
+  determinista (plantilla inexistente, idioma equivocado, parámetros que no cuadran, destinatario no
+  permitido) dejaba el saliente **`queued` para siempre**, con 5 reintentos contra el mismo 400 y muerte
+  en dead-letter.
+- **Qué entrega:** el borde tipado normaliza `errors[0]` a `WebhookStatus.error`; migración aditiva
+  `20260728230000_chat_mensaje_error_meta` (`chat_mensaje.error_codigo/error_titulo/error_detalle` +
+  índice parcial); volcado del status crudo completo con redacción de `recipient_id` (mantiene la
+  invariante de no-PII de la 109/R11) en `lib/services/whatsapp/chat-logger.ts`; desenlace nuevo
+  **`permanente`** (4xx salvo 429 → `failed` sin encolar; 5xx y 429 siguen `transitorio`); **lista
+  blanca conservadora** de códigos reintentables (`130429`, `131000`, `131056`) en
+  `lib/services/whatsapp/errores-meta.ts`, con el criterio de que un código desconocido **no** se
+  reintenta; y la UI muestra el motivo real en vez de caer en el `default` del switch, que decía
+  «Tu sesión expiró».
+- **Bug latente corregido de paso:** `reintentarEnvio` reenviaba **siempre** con `enviarTexto`, incluso
+  salientes `tipo=plantilla` → degradaba la plantilla a texto libre, que Meta rechaza fuera de la
+  ventana de 24 h. Ahora re-resuelve la plantilla y la re-renderiza con los datos vigentes de la orden.
+- **Deudas que deja, verificadas contra `origin/prod`:** (a) la migración
+  `20260728230000_chat_mensaje_error_meta` **no tiene `down.sql`**, contra la regla del repo; (b) `prod`
+  **y la rama del PR #183** llevan dos Server Actions de depuración —`lib/actions/_tmp-probar-jobs.ts` y
+  `lib/actions/_tmp-sincronizar-plantillas.ts`— que hay que sacar antes de portar; (c) no tiene spec, ni
+  requirements EARS, ni mapa `R<n>` → test, ni review del arnés: su verificación es la que declara el PR
+  (typecheck limpio, 97/97 en las 12 suites de WhatsApp, 20 tests nuevos en
+  `whatsapp-fallo-saliente.test.ts`).
+- **Lección de proceso, la segunda vez en dos días:** un hotfix ramificado desde `origin/prod` que no se
+  porta a `dev` el mismo día deja `prod` sano mientras todo lo que sale de `dev` arrastra el bug. Ya
+  pasó el 2026-07-27 con el fix del pooler (PR #172).
+
+## 2026-07-28 — 66 `qr - detalle`: cancelada
+- Nunca se empezó. `app/(app)/qr/page.tsx` quedó siendo solo el escáner de la feature 65 (`QrScanner` +
+  `useQrNavigate`), sin switch por rol ni pantalla de detalle.
+- **Cancelada por decisión del humano** porque el flujo cambió: las lecturas de QR ya **no** se hacen
+  desde una página dedicada sino **desde un botón en el punto de uso** (patrón que introdujo la
+  recepción en bodega central, feature 138). Un detalle por rol colgado de `/qr` no tiene consumidor.
+- **Deja trabajo declarado, aún sin registrar como feature:** la página `/qr` ya no se necesita y hay
+  que retirarla (ruta `app/(app)/qr/`, su entrada en `lib/auth/menu-visibility.ts` y lo que dependa de
+  `useQrNavigate`). No se retiró en la reconciliación: borrar una ruta es cambio de producto, no
+  bookkeeping, y antes hay que verificar que `QrScanner`/`useQrNavigate` no queden huérfanos — el botón
+  de recepción los reusa.
+
+## 2026-07-28 — 153 `order_status`: `en_ruta` → `en_reparto` (primera del lote de flujo v2)
+- Rename **mecánico** del value, sin ningún cambio de flujo: mismas aristas, mismos servicios,
+  misma semántica. 94 archivos en el diff, de los cuales **75 son byte a byte idénticos a `dev`**
+  tras normalizar el rename. Migración `20260728120000_order_status_en_reparto` (UPDATE sobre la
+  tabla catálogo, no `ALTER TYPE`) + `down.sql`. R1–R21. **PR #190**, mergeado en `f7dbda4`.
+- **`en_reparto` es el nombre VIEJO, y esta feature revierte una decisión de hace cuatro días.**
+  La feature 135 lo renombró *a* `en_ruta` el 24/07 bajo «unificar nomenclatura» y dejó
+  `censo-order-status-rename.test.ts` **prohibiendo** que reapareciera (estaba en `OLD_VALUES`).
+  El arreglo correcto fue un **swap** del guard —entra `en_ruta`, sale `en_reparto`— conservando
+  la allowlist que protege las migraciones y tests históricos de la 135. Borrarlo no era opción.
+- **Arregló un fallo que venía de `dev`, no de la feature.** El guard `no-embalaje` estaba rojo
+  desde el merge de las specs (PR #189): recorre el árbol con `fs.readdir` y tres archivos de
+  `specs/155-*` y `specs/159-*` citan el guard **por su nombre de archivo**. Arreglo de 8 líneas
+  en commit aparte y revertible. Es la segunda vez en el día que esa clase de guard se dispara
+  por documentación (la primera fueron los restos sin trackear de la reconciliación).
+- **Dos requisitos no tenían NINGÚN test y ahora sí.** `ORDER_STATUS_CLASS` es un
+  `Partial<Record<...>>`: perder una clave al moverla **no rompe el build**, solo apaga el color
+  del chip en silencio. Y `docs/api/api-key-openapi.yaml` es texto plano, sin nada que
+  garantizara que seguía siendo espejo del objeto TS. Los cubrió el implementador por iniciativa
+  propia, no estaban en el plan.
+- **Verificación medida por el reviewer, no por el implementador:** suite `5712/5712` (baseline
+  de `dev`: `1 failed / 5680`), `typecheck` 0, `eslint` sin errores nuevos, `tests/integration/db`
+  584/584, `./init.sh` en `== init OK ==`. Delta **+31 tests, −1 suite rota**.
+- **Review por MUTACIÓN: 27 aplicadas, 25 muertas.** El reviewer detectó que su primer arnés de
+  mutación daba falsos positivos (un flag inválido de vitest) y **lo rehízo entero** con una
+  mutación de control que sí debía sobrevivir.
+- **Round-trip de migración ejecutado contra Postgres real** (lo cerró el leader tras verificar
+  que `DATABASE_URL` apunta a `localhost` y no a producción): `deploy` → `en_reparto`,
+  `db:rollback` → `en_ruta`, `deploy` → `en_reparto`, sin pérdida de filas. El conteo es **19 y
+  no 18** por la fila huérfana `pendiente` (migración `20260714140000`, nunca añadida al SEED),
+  ya documentada como inofensiva.
+- **Deuda declarada, no disfrazada:** **T6.3 (Playwright) quedó en `[ ]` a propósito.** No hay
+  harness de E2E en el repo y los `e2e/*.spec.ts` usan emails placeholder, así que no corren ni
+  en `pnpm test` ni en `./init.sh`. En `e2e/` el cambio fue solo de comentarios. Marcar la
+  casilla habría sido fingir una verificación que nadie hizo.
+- **Menor conocido:** el mutante de `ESTATUS_EN_REPARTO` en `OrdenRepository` **sobrevive** — su
+  único consumidor (`findParadasEnReparto`) está siempre mockeado. Hueco **preexistente en
+  `dev`**; el valor entregado es correcto por el diff byte-idéntico, pero la red no lo protege.
+- **Contrato externo roto sin aviso, por decisión del humano** (misma política que la 135): el
+  value cambia en `api-key-openapi.yaml` y en el payload de webhook sin bumpear `info.version`
+  (sigue en `1.0.0`) ni publicar changelog. Segunda rotura en una semana, anotada a conciencia.

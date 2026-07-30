@@ -285,8 +285,8 @@ describe("createManyOrdenesConGuia — un lote por peticion (R30/R32/R36)", () =
         {
           id: "o1",
           numRemision: "REM-1",
-          estatusId: idEstado("en_ruta_bodega_central"),
-          estatus: { value: "en_ruta_bodega_central" },
+          estatusId: idEstado("por_recolectar_en_tienda"),
+          estatus: { value: "por_recolectar_en_tienda" },
         },
       ]) // batch 1 · after
       .mockResolvedValueOnce([]) // batch 2 · before
@@ -294,8 +294,8 @@ describe("createManyOrdenesConGuia — un lote por peticion (R30/R32/R36)", () =
         {
           id: "o2",
           numRemision: "REM-2",
-          estatusId: idEstado("en_ruta_bodega_central"),
-          estatus: { value: "en_ruta_bodega_central" },
+          estatusId: idEstado("por_recolectar_en_tienda"),
+          estatus: { value: "por_recolectar_en_tienda" },
         },
       ]); // batch 2 · after
     prisma.orden.findUniqueOrThrow
@@ -305,8 +305,8 @@ describe("createManyOrdenesConGuia — un lote por peticion (R30/R32/R36)", () =
 
     const res = await repo.createManyOrdenesConGuia(
       [
-        baseCreateData({ numRemision: "REM-1", estatusId: idEstado("en_ruta_bodega_central") }),
-        baseCreateData({ numRemision: "REM-2", estatusId: idEstado("en_ruta_bodega_central") }),
+        baseCreateData({ numRemision: "REM-1", estatusId: idEstado("por_recolectar_en_tienda") }),
+        baseCreateData({ numRemision: "REM-2", estatusId: idEstado("por_recolectar_en_tienda") }),
       ],
       1, // batchSize 1 -> DOS transacciones
       HIST_API,
@@ -337,7 +337,7 @@ describe("createManyOrdenesConGuia — un lote por peticion (R30/R32/R36)", () =
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const res = await repo.createManyOrdenesConGuia(
-      [baseCreateData({ numRemision: "REM-1", estatusId: idEstado("en_ruta_bodega_central") })],
+      [baseCreateData({ numRemision: "REM-1", estatusId: idEstado("por_recolectar_en_tienda") })],
       500,
       HIST_API,
       loteCtx({ cargaId: null, usuarioCargaId: "key-user-1" }),

@@ -2,11 +2,9 @@
 
 import { useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { StickyNote } from "lucide-react";
 
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/useToast";
@@ -27,10 +25,10 @@ import {
 } from "./mis-asignaciones-buscador";
 import { FiltroCantonDistrito } from "./FiltroCantonDistrito";
 import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
-import { EscanerRecoger } from "./EscanerRecoger";
-import { InputRecoger } from "./InputRecoger";
+import { RecogerPaqueteCard } from "./RecogerPaqueteCard";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
+import { PosOrderCard } from "./pos-card/PosOrderCard";
 import { RutaMapa } from "./RutaMapa";
 import { SincronizarRutaButton } from "./SincronizarRutaButton";
 import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
@@ -54,7 +52,7 @@ import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
 export interface MisAsignacionesModuleProps {
   /** Órdenes en `por_recoger`. */
   porRecoger: MiAsignacionDTO[];
-  /** Órdenes en `en_ruta` (por gestionar), YA ordenadas por la ruta (R28). */
+  /** Órdenes en `en_reparto` (por gestionar), YA ordenadas por la ruta (R28). */
   porGestionar: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
   ordenEnGestionId: string | null;
@@ -77,7 +75,8 @@ const BLOQUEO_AVISO =
 // accesible del `searchbox` (de su `<label>`) chocaría con el de la región.
 const BUSCADOR_REGION = "Buscar guías asignadas";
 const BUSCADOR_LABEL = "Buscar guías";
-const BUSCADOR_PLACEHOLDER = "Filtra por número de guía, remisión o destinatario";
+const BUSCADOR_PLACEHOLDER =
+  "Filtra por número de guía, remisión, teléfono o nombre";
 // R6: mensajes de "sin resultados", distintos del vacío sin búsqueda; contienen la
 // frase «coincide con la búsqueda» para ser reconocibles.
 const SIN_RESULTADOS_RECOGER = "Ninguna guía por recoger coincide con la búsqueda.";
@@ -320,12 +319,14 @@ export function MisAsignacionesModule({
           onGestionarPedido={gestionarPedido}
           onCancelarGestion={cancelarGestion}
           onSuccess={handleGestionSuccess}
+          count={1}
         />
       ) : (
         /* ---------- VISTA COMPLETA (fuera de foco) ---------- */
         <>
           {/* ---------- Feature 114: buscador de guías (solo en vista de lista) ----------
-              Filtra AMBOS grupos por número de guía, remisión o destinatario (parcial,
+              Filtra AMBOS grupos por número de guía, remisión, teléfono o nombre del
+              destinatario (parcial,
               insensible a mayúsculas/acentos). En modo foco no se renderiza: no hay cards
               que filtrar. Es un filtro puro de cliente, así que permanece visible aunque el
               mensajero esté bloqueado (la lista sigue como solo-visualización). */}
@@ -369,16 +370,10 @@ export function MisAsignacionesModule({
               Feature 111/R14: BLOQUEADO oculta ambos controles de recogida (defensa suave;
               la lista de "Por recoger" sigue visible, solo-visualización). */}
           {bloqueado ? null : (
-            <>
-              <InputRecoger
-                porRecoger={porRecoger}
-                onRecogida={() => router.refresh()}
-              />
-              <EscanerRecoger
-                porRecoger={porRecoger}
-                onRecogida={() => router.refresh()}
-              />
-            </>
+            <RecogerPaqueteCard
+              porRecoger={porRecoger}
+              onRecogida={() => router.refresh()}
+            />
           )}
 
           {/* Lista de SOLO-VISUALIZACIÓN (feature 96): reutiliza la sección compartida "por
@@ -400,7 +395,7 @@ export function MisAsignacionesModule({
             renderDetalle={(orden) => <AsignacionDetalle orden={orden} />}
           />
 
-          {/* ---------- Apartado: En reparto / por gestionar (en_ruta) ---------- */}
+          {/* ---------- Apartado: En reparto / por gestionar (en_reparto) ---------- */}
           {/* Feature 113/R1: cada card en grilla (1/2/3 col) muestra el detalle COMPLETO
               inline (`AsignacionDetalle`). Seleccionar una la lleva también al panel de
               gestión grande de abajo (donde vive el gate "Gestionar pedido"). El bloqueo
@@ -493,92 +488,23 @@ export function MisAsignacionesModule({
                   const esActiva = ordenEnGestionId === orden.id;
                   const esDetalle = detalleOrden?.id === orden.id;
                   return (
-                    // Feature 115/T8: la card (un `<button>`) y el toggle "gestionar más
-                    // tarde" (otro `<button>`) son HERMANOS dentro del `<li>` — nunca
-                    // anidados — para no producir botones dentro de botones (HTML inválido).
+                    // Feature 115/T8: la card POS (`PosOrderCard`, un `<article>` con su
+                    // propio botón "Gestionar orden") y el toggle "gestionar más tarde"
+                    // (otro `<button>`) son HERMANOS dentro del `<li>` — nunca anidados —
+                    // para no producir botones dentro de botones (HTML inválido).
                     <li key={orden.id} className="flex flex-col gap-2">
-                      <button
-                        type="button"
-                        disabled={bloqueado}
-                        aria-pressed={esDetalle}
-                        onClick={() => seleccionar(orden)}
-                        aria-label={`Gestionar orden ${orden.numRemision} · ${orden.destinatario}`}
-                        className={`group flex w-full flex-1 flex-col gap-3 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60 ${
-                          esDetalle
-                            ? "border-primary ring-2 ring-primary/40"
-                            : "border-border"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="flex items-center gap-2 font-semibold text-foreground">
-                            {/* R28: nº de parada en la ruta optimizada. */}
-                            {orden.secuenciaRuta !== null ? (
-                              <>
-                                <span className="sr-only">
-                                  Parada {orden.secuenciaRuta} de la ruta
-                                </span>
-                                <span
-                                  aria-hidden="true"
-                                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
-                                >
-                                  {orden.secuenciaRuta}
-                                </span>
-                              </>
-                            ) : null}
-                            {orden.numRemision}
-                          </span>
-                          {esActiva ? (
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                              En gestión
-                            </span>
-                          ) : esDetalle ? (
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                              En detalle
-                            </span>
-                          ) : null}
-                        </div>
-                        {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más
-                            tarde): ambas son marcas informativas de la card; van juntas en
-                            una fila que envuelve. */}
-                        {orden.secuenciaRuta === null || orden.marcarLuego ? (
-                          <div className="flex flex-wrap gap-1.5">
-                            {orden.secuenciaRuta === null ? (
-                              <Badge variant="outline" className="w-fit">
-                                Pendiente de optimizar
-                              </Badge>
-                            ) : null}
-                            {/* R18: mientras la orden esté marcada, su card lo muestra. */}
-                            {orden.marcarLuego ? (
-                              <Badge variant="warning" className="w-fit">
-                                Gestionar más tarde
-                              </Badge>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {/* Feature 116/R12: indicador de la NOTA PRIVADA del mensajero en la card
-                            (badge "Mi nota" + preview truncado de 1 línea, P3). Todas las cards son
-                            órdenes PROPIAS (la page valida rol server-side), así que el preview es
-                            privado por construcción (R6). Es DISTINTO de la "Notas" de la tienda,
-                            que vive dentro del detalle (`AsignacionDetalle`). */}
-                        {orden.notaPrivada ? (
-                          <div className="flex items-center gap-1.5">
-                            <Badge variant="secondary" className="shrink-0">
-                              <StickyNote aria-hidden="true" />
-                              Mi nota
-                            </Badge>
-                            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                              {orden.notaPrivada}
-                            </span>
-                          </div>
-                        ) : null}
-                        {/* Feature 113/R1/R2: detalle COMPLETO inline (Pedido/Entrega/Cobro)
-                            reutilizando `AsignacionDetalle`. Sustituye a la vista compacta y
-                            elimina la rama "card bloqueada que oculta el detalle" + el texto
-                            "Termina la gestión en curso…" del spec 36. */}
-                        <div className="mt-1 border-t border-border pt-3">
-                          <AsignacionDetalle orden={orden} />
-                        </div>
-                      </button>
+                      {/* Rediseño POS (rama ux): card estilo terminal de reparto. Conserva
+                          las señales del módulo (parada/ruta, "gestionar más tarde", nota
+                          privada, detalle completo) y el gate de selección: "Gestionar
+                          orden" fija esta orden en el panel grande de abajo (R19/R20). */}
+                      <PosOrderCard
+                        orden={orden}
+                        total={porGestionar.length}
+                        esActiva={esActiva}
+                        esDetalle={esDetalle}
+                        bloqueado={bloqueado}
+                        onGestionar={() => seleccionar(orden)}
+                      />
                       {/* Feature 115/R5/R6: toggle de "gestionar más tarde", HERMANO de la
                           card. Puramente informativo (no cambia estado ni ruta), así que sigue
                           disponible aunque la card esté deshabilitada por el cierre pendiente. */}
@@ -606,6 +532,7 @@ export function MisAsignacionesModule({
                 onGestionarPedido={gestionarPedido}
                 onCancelarGestion={cancelarGestion}
                 onSuccess={handleGestionSuccess}
+                count={porGestionar.length}
               />
             ) : null}
           </section>

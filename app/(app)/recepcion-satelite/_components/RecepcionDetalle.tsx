@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
 
+import {
+  INTENTOS_LABEL,
+  IntentosValor,
+  valorIntentos,
+} from "@/components/shared/intentos-entrega";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 // Feature 33 (R9): detalle de presentación de una orden del módulo satélite,
@@ -57,6 +62,13 @@ export function RecepcionDetalle({ orden, estadoLegible }: RecepcionDetalleProps
       <Campo label="Ubicación">{ubicacion(orden) || "—"}</Campo>
       <Campo label="Producto">{orden.producto}</Campo>
       <Campo label="Monto a cobrar">{formatMonto(orden.montoCobrar)}</Campo>
+      {/* Feature 160 (R18/R19/R25): intentos de entrega como UN CAMPO MAS del detalle
+          —mismo `Campo` (<dt>/<dd>) que sus hermanos, misma jerarquia—, en los dos
+          grupos que se presentan como cards ("Por recibir" y "Devueltas"). Se muestra
+          siempre, `0` incluido; sin umbral (R20). */}
+      <Campo label={INTENTOS_LABEL}>
+        <IntentosValor intentos={valorIntentos(orden)} />
+      </Campo>
     </dl>
   );
 }

@@ -208,6 +208,13 @@ describe("DOWN — revierte lo aditivo (R11)", () => {
         !d.endsWith("_orden_historial_origen_recepcion_bodega_central") && // feature 138 (recepcion bodega central): apendida despues
         !d.endsWith("_order_status_devolucion_rechazadas") && // feature 139 (devolucion rechazadas): apendida despues
         !d.endsWith("_orden_historial_origen_devolucion_rechazada") && // feature 139 (origen_tipo devolucion): apendida despues
+        !d.endsWith("_notificacion") && // feature 146 (campana de notificaciones): apendida despues
+        !d.endsWith("_orden_indices_filtros") && // feature 144 (indices de filtros de orden): apendida despues
+        !d.endsWith("_order_status_en_reparto") && // feature 153 (rename del value a en_reparto): apendida despues
+        !d.endsWith("_drop_orden_mensajero_sugerido") && // feature 159 (retiro de la sugerencia): apendida despues
+        !d.endsWith("_order_status_v2_por_recolectar_incidente") && // feature 154 (catalogo v2): apendida despues
+        !d.endsWith("_order_status_retiro_en_fulfillment") && // feature 155 (retiro del value): apendida despues
+        !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") && // feature 154 (familias v2): apendida despues
         !d.endsWith("_carga_orden_carga_id"), // feature 141 (tabla carga + orden.carga_id): apendida despues
     );
     // `>=`, no `>`: el invariante es que zonas NO sea ANTERIOR a las previas. Empatar

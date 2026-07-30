@@ -117,6 +117,10 @@ describe("AsignarBodegaModal", () => {
       mensajeroId: "m1",
     });
 
+    // Feature 148 (§9.7): tras el éxito el modal pasa a la fase "resultado" (con el
+    // manifiesto del lote) y `onSuccess` se difiere al cierre de esa fase. La llamada
+    // de negocio, su input y su toast NO cambian (R27).
+    await user.click(await screen.findByRole("button", { name: "Cerrar" }));
     await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(successMock).toHaveBeenCalledWith("Mensajero asignado a 2 orden(es).");
   });
@@ -130,9 +134,9 @@ describe("AsignarBodegaModal", () => {
 
     expect(asignarDesdeBodegaMock).not.toHaveBeenCalled();
     await vi.waitFor(() =>
-      expect(errorMock).toHaveBeenCalledWith(
-        "Datos inválidos: revisa la selección de mensajero.",
-      ),
+      // Feature 156: el mapper es compartido con "Generar guía", que ya no elige
+      // mensajero, así que el texto es genérico.
+      expect(errorMock).toHaveBeenCalledWith("Datos inválidos."),
     );
   });
 
@@ -181,5 +185,45 @@ describe("AsignarBodegaModal", () => {
         "La dirección aún se está validando. Vuelve a intentarlo en unos minutos.",
       ),
     );
+  });
+});
+
+// Feature 160 (T17, R18/R19/R23) — el diálogo lista las órdenes en un `<ul>`: el
+// conteo va como DATO ETIQUETADO en la misma línea, con el markup del resto del `<li>`.
+describe("AsignarBodegaModal — intentos de entrega (feature 160)", () => {
+  it("R18: cada orden listada muestra el dato etiquetado junto a su remisión", () => {
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-A1", intentosEntrega: 2 })]);
+    const item = screen.getByRole("listitem");
+    expect(item).toHaveTextContent("REM-A1");
+    expect(within(item).getByText("Intentos: 2")).toBeInTheDocument();
+  });
+
+  it("R19: con 0 intentos el dato SE MUESTRA igual (no se omite)", () => {
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-A0", intentosEntrega: 0 })]);
+    const item = screen.getByRole("listitem");
+    expect(within(item).getByText("Intentos: 0")).toBeInTheDocument();
+  });
+
+  it("R19: sin el campo (DTO viejo) el dato se muestra como 0", () => {
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-AX" })]);
+    expect(
+      within(screen.getByRole("listitem")).getByText("Intentos: 0"),
+    ).toBeInTheDocument();
+  });
+
+  it("R19: cada orden lleva SU número, no el de la primera", () => {
+    renderModal([
+      makeOrden({ id: "o1", numRemision: "REM-B1", intentosEntrega: 3 }),
+      makeOrden({ id: "o2", numRemision: "REM-B2", intentosEntrega: 0 }),
+    ]);
+    const items = screen.getAllByRole("listitem");
+    expect(within(items[0]).getByText("Intentos: 3")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Intentos: 0")).toBeInTheDocument();
+  });
+
+  it("R20: el dato no incluye el umbral ('de N')", () => {
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-U", intentosEntrega: 2 })]);
+    const dato = within(screen.getByRole("listitem")).getByText("Intentos: 2");
+    expect(dato.textContent).toBe("Intentos: 2");
   });
 });

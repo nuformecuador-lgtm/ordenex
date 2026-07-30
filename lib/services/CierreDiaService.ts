@@ -26,6 +26,11 @@ import {
   derivarPagos,
   derivarIngresoBodega,
 } from "@/lib/utils/cierre-totales";
+import {
+  emitirBestEffort,
+  notificadorNoOp,
+  type CierreNotificador,
+} from "@/lib/notificaciones/notificadores";
 
 // Solo el rol autorizado en el modulo (R1/R2): el mensajero, SIEMPRE acotado a su
 // propio `usuario.id` (el filtro por mensajero vive en el repo, en el WHERE).
@@ -33,7 +38,7 @@ const ROL_AUTORIZADO = "mensajero";
 
 // R10: estados de una orden asignada que aun cuenta como "pendiente de gestion".
 // Mientras el mensajero tenga alguna en estos estados, no puede cerrar.
-const ESTADOS_PENDIENTES = ["por_recoger", "en_ruta"];
+const ESTADOS_PENDIENTES = ["por_recoger", "en_reparto"];
 
 // Mensajes accionables del gate/precondicion (R10/R11) y del ruteo (R12/R16).
 const MSG_PENDIENTES = "Tenes ordenes sin gestionar; gestionalas antes de cerrar."; // R10
@@ -57,7 +62,7 @@ const MSG_CATALOGO = "catalogo de estados incompleto (seed pendiente)"; // patro
 
 // Feature 67/R18: unico estado desde el que se puede volver a gestionar (`ORIGEN_GESTION` de
 // MisAsignacionesService, guardia `cargarOrdenGestionable`). Destino del deshacer.
-const ESTADO_EN_REPARTO = "en_ruta";
+const ESTADO_EN_REPARTO = "en_reparto";
 
 /**
  * Feature 67/R5 (design §5.3) — REGLA: estado en el que la orden DEBE estar para que su gestion
@@ -81,7 +86,7 @@ const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
 // como Pick para dobles de test sin DB/red (patron RecepcionSateliteService).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 39: ademas de la zona (37), el service resuelve el vehiculo del mensajero
-// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_ruta`).
+// para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_reparto`).
 // Feature 111/R5: + `findMensajerosBloqueados` (guarda de bloqueo EXPLICITA de `deshacerGestion`,
 // mismo predicado derivado que la asignacion; sin duplicar la derivacion ni flag persistido).
 type OrdenRepo = Pick<
@@ -103,7 +108,33 @@ export class CierreDiaService implements ICierreDiaService {
     private readonly signedUrls: ISignedUrlProvider,
     // Feature 39: resolver de la tarifa de pago al mensajero (por zona+vehiculo).
     private readonly tarifaZonaRepo: ITarifaZonaMensajeroRepository,
+    /**
+     * Feature 146 (R24/R25): notificador de "cierre por aprobar". El DEFAULT es NO-OP: el
+     * composition root (`lib/actions/cierre-dia.ts`) inyecta el real. BEST-EFFORT: corre
+     * despues de la escritura ya guardada del cierre y nunca altera su resultado.
+     */
+    private readonly notificarCierre: CierreNotificador = notificadorNoOp,
   ) {}
+
+  /**
+   * Feature 146/R24 — punto UNICO de emision del aviso "cierre por aprobar", compartido por
+   * los TRES caminos de exito de `solicitarCierre` (`vencido -> solicitado`,
+   * `rechazado -> solicitado` y creacion). Los dos de transicion solo devuelven un booleano, de
+   * modo que el id del cierre, su zona destino y el nombre del mensajero se leen aqui, despues
+   * del exito. La dedupe del emisor evita el segundo aviso cuando el MISMO cierre se
+   * re-solicita sin que nadie haya leido el primero (R27).
+   */
+  private async avisarCierrePorAprobar(mensajeroId: string): Promise<void> {
+    await emitirBestEffort("cierre_dia_por_aprobar", async () => {
+      const info = await this.repo.findCierreSolicitado?.(mensajeroId);
+      if (!info) return; // sin cierre resoluble no se inventa un aviso
+      await this.notificarCierre({
+        cierreId: info.id,
+        zonaId: info.destinoZonaId,
+        mensajeroNombre: info.mensajeroNombre,
+      });
+    });
+  }
 
   /**
    * Feature 39/R1-R4: resuelve la tarifa de pago vigente del mensajero (por su zona +
@@ -218,6 +249,7 @@ export class CierreDiaService implements ICierreDiaService {
       const ok = await this.repo.transicionarVencidoASolicitado(actor.usuarioId);
       // R7: 0 filas = el vencido ya fue resuelto/transicionado entre la lectura y la escritura.
       if (!ok) return { status: "conflict", motivo: MSG_DUPLICADO };
+      await this.avisarCierrePorAprobar(actor.usuarioId); // feature 146/R24
       return { status: "ok", via: "vencido_solicitado" }; // R8: sin snapshot nuevo
     }
 
@@ -229,6 +261,7 @@ export class CierreDiaService implements ICierreDiaService {
     if (await this.repo.existeCierreRechazado(actor.usuarioId)) {
       const ok = await this.repo.transicionarRechazadoASolicitado(actor.usuarioId);
       if (!ok) return { status: "conflict", motivo: MSG_DUPLICADO };
+      await this.avisarCierrePorAprobar(actor.usuarioId); // feature 146/R24
       return { status: "ok", via: "rechazado_solicitado" }; // R28: sin snapshot nuevo
     }
 
@@ -297,6 +330,8 @@ export class CierreDiaService implements ICierreDiaService {
       totalIngresoBodegaRechazos, // feature 56/R12: total snapshoteado del ingreso de bodega
     });
     if (cierreId === null) return { status: "conflict", motivo: MSG_VACIO };
+
+    await this.avisarCierrePorAprobar(actor.usuarioId); // feature 146/R24
 
     // Feature 111/P2: `via: "creado"` distingue el toast del camino de creación (37) del de
     // transición del vencido; los consumidores previos ignoran el campo.

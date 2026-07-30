@@ -107,6 +107,13 @@ export class DevolucionSlaService implements IDevolucionSlaService {
 
         if (orden.causa === "not_found") {
           // Q4: `contarIntentos` YA incluye la devolucion vigente (la orden reposa en `devuelta`).
+          // Feature 160 (D1/D2, R8): ademas de las devoluciones, ese conteo YA incluye las
+          // transiciones VIGENTES `en_reparto -> reprogramada` de familia `gestion` (la visita
+          // real del mensajero que no entrego y acordo fecha). NO incluye la reprogramacion de
+          // la TIENDA (`reprogramacion_tienda`), cuyo intento ya lo aporto la fila `devuelta`.
+          // Consecuencia aceptada y reafirmada por el humano: una orden con reprogramaciones
+          // alcanza el umbral ANTES, escala a `rechazada` antes y se le cobra el
+          // `cobroRechazado` (56) antes. Es dinero: no se relaja el criterio sin decision.
           const intentos = await this.historial.contarIntentos(orden.ordenId); // R3
           if (intentos >= umbral) {
             // R16: alcanzo el umbral -> escala a `rechazada`.

@@ -5,15 +5,19 @@ import {
   actualizarOrdenSchema,
   crearOrdenSchema,
   listarOrdenesSchema,
+  listarOrdenesCompletoSchema,
   type ActualizarOrdenResult,
   type BorrarOrdenResult,
   type CrearOrdenResult,
+  type ListarOrdenesCompletoResult,
   type ListarOrdenesResult,
   type ObtenerOrdenResult,
 } from "@/lib/types/orden";
 import type { Actor, IOrdenService } from "@/lib/interfaces/services/IOrdenService";
 import { OrdenService } from "@/lib/services/OrdenService";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError, ValidationError, MSG } from "@/lib/errors";
@@ -23,7 +27,13 @@ const idSchema = z.string().min(1);
 
 function buildOrdenService(): IOrdenService {
   const prisma = getPrismaClient();
-  return new OrdenService(new OrdenRepository(prisma));
+  const ordenRepo = new OrdenRepository(prisma);
+  return new OrdenService(
+    ordenRepo,
+    // Feature 160 (R11): derivador de intentos EN LOTE del listado. Mismo servicio (y por tanto
+    // mismo criterio) que consumen el cron SLA y el drawer de historial: un solo numero.
+    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+  );
 }
 
 export interface OrdenActionDeps {
@@ -76,6 +86,26 @@ export async function listarOrdenes(
     const data = listarOrdenesSchema.parse(input ?? {}); // R32: ZodError -> VALIDATION_ERROR
     const service = deps.ordenService ?? buildOrdenService();
     return service.listar(data, actor);
+  });
+  return isAppErrorShape(r) ? toActionError(r) : r;
+}
+
+/**
+ * Feature 151 (R11/R13/R14/R15/R20): dataset COMPLETO del listado, sin paginacion, para
+ * la descarga. Calcado de `listarOrdenes` a proposito: mismo borde, mismo actor, mismo
+ * schema (menos `page`/`pageSize`) y el MISMO servicio, que es quien autoriza, acota por
+ * rol y aplica el tope. Ninguna fila viaja junto a un error.
+ */
+export async function listarOrdenesCompleto(
+  input: unknown,
+  deps: OrdenActionDeps = {},
+): Promise<ListarOrdenesCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R13
+    const data = listarOrdenesCompletoSchema.parse(input ?? {}); // R15: ZodError -> VALIDATION_ERROR
+    const service = deps.ordenService ?? buildOrdenService();
+    return service.listarCompleto(data, actor);
   });
   return isAppErrorShape(r) ? toActionError(r) : r;
 }

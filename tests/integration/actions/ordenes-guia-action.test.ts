@@ -27,7 +27,7 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
   it("generarGuia", async () => {
     const service = fakeGuiaService();
     const r = await generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
+      { ordenIds: ["o1"] },
       { guiaService: service, getActor: getActor(null) },
     );
 
@@ -85,15 +85,12 @@ describe("feature 94: admin en escritura -> permitido (delegado al service con e
       generarGuia: vi.fn().mockResolvedValue({ status: "ok", resultados: [] }),
     });
     const r = await generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
+      { ordenIds: ["o1"] },
       { guiaService: service, getActor: getActor(ADMIN) },
     );
 
     expect(r).toEqual({ status: "ok", resultados: [] });
-    expect(service.generarGuia).toHaveBeenCalledWith(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
-      ADMIN,
-    );
+    expect(service.generarGuia).toHaveBeenCalledWith({ ordenIds: ["o1"] }, ADMIN);
   });
 
   it("asignarDesdeBodega", async () => {
@@ -113,23 +110,58 @@ describe("feature 94: admin en escritura -> permitido (delegado al service con e
   });
 });
 
-describe("generarGuia — validacion de entrada (zod)", () => {
+// Feature 156/R14 — la entrada de generar guia es un LOTE DE IDS y nada mas. El contrato
+// previo (`decisiones: [{ ordenId, mensajeroId }]`) ya no valida, y ningun dato de mensajero
+// llega al service.
+describe("generarGuia — validacion de entrada (zod, 156/R14)", () => {
   it("input invalido -> validation_error sin llamar al service", async () => {
     const service = fakeGuiaService();
-    const r = await generarGuia({ decisiones: "no-es-array" }, { guiaService: service, getActor: getActor(MAESTRO) });
+    const r = await generarGuia(
+      { ordenIds: "no-es-array" },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
 
     expect(r.status).toBe("validation_error");
     expect(service.generarGuia).not.toHaveBeenCalled();
   });
 
-  it("mensajeroId ausente (undefined) es invalido; null si es valido", async () => {
+  it("156/R14: el contrato viejo con decisiones/mensajeroId -> validation_error, sin llamar al service", async () => {
     const service = fakeGuiaService();
     const r = await generarGuia(
-      { decisiones: [{ ordenId: "o1" }] },
+      { decisiones: [{ ordenId: "o1", mensajeroId: "m1" }] },
       { guiaService: service, getActor: getActor(MAESTRO) },
     );
 
     expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("unreachable");
+    expect(r.fieldErrors.ordenIds).toBeDefined(); // el motivo es la falta de `ordenIds`
+    expect(service.generarGuia).not.toHaveBeenCalled();
+  });
+
+  it("156/R14: un mensajeroId colado junto a ordenIds NO llega al service", async () => {
+    const service = fakeGuiaService();
+    await generarGuia(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    // zod descarta lo no declarado: el service recibe EXACTAMENTE el lote de ids.
+    expect(service.generarGuia).toHaveBeenCalledWith({ ordenIds: ["o1"] }, MAESTRO);
+  });
+
+  it("ordenIds vacio es valido (lote vacio); un id vacio no lo es", async () => {
+    const service = fakeGuiaService();
+    const rVacio = await generarGuia(
+      { ordenIds: [] },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+    expect(rVacio.status).toBe("ok");
+
+    const rIdVacio = await generarGuia(
+      { ordenIds: [""] },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+    expect(rIdVacio.status).toBe("validation_error");
   });
 });
 
@@ -143,7 +175,7 @@ describe("generarGuia — camino ok delega al service con el actor resuelto", ()
     });
 
     const r = await generarGuia(
-      { decisiones: [{ ordenId: "o1", mensajeroId: null }] },
+      { ordenIds: ["o1"] },
       { guiaService: service, getActor: getActor(MAESTRO) },
     );
 
@@ -261,7 +293,7 @@ describe("Feature 30/R13/R16: rutearABodegaSatelite (server action)", () => {
 describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, value)", () => {
   it("maestro: repo.listOrderStatus resuelve el catalogo completo", async () => {
     const listOrderStatus = vi.fn().mockResolvedValue([
-      { id: "os-1", value: "en_fulfillment" },
+      { id: "os-1", value: "por_recolectar_en_tienda" },
       { id: "os-2", value: "en_preparacion" },
       { id: "os-3", value: "por_recoger" },
       { id: "os-4", value: "en_bodega_central" },
@@ -274,7 +306,7 @@ describe("R15/R16: listarCatalogoEstatus devuelve el catalogo order_status (id, 
     expect(r).toEqual({
       status: "ok",
       estatus: [
-        { id: "os-1", value: "en_fulfillment" },
+        { id: "os-1", value: "por_recolectar_en_tienda" },
         { id: "os-2", value: "en_preparacion" },
         { id: "os-3", value: "por_recoger" },
         { id: "os-4", value: "en_bodega_central" },

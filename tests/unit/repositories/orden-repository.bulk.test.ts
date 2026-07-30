@@ -91,26 +91,6 @@ describe("OrdenRepository.findExistingRemisiones (R25)", () => {
   });
 });
 
-describe("OrdenRepository.findMensajerosByIds (R22)", () => {
-  it("devuelve solo los ids con rol mensajero", async () => {
-    const prisma = buildPrisma();
-    prisma.usuario.findMany.mockResolvedValue([{ id: "msg-1" }, { id: "msg-2" }]);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const set = await repo.findMensajerosByIds(["msg-1", "msg-2", "no-mensajero"]);
-
-    expect(set.has("msg-1")).toBe(true);
-    expect(set.has("msg-2")).toBe(true);
-    expect(set.has("no-mensajero")).toBe(false);
-
-    const arg = prisma.usuario.findMany.mock.calls[0][0];
-    expect(arg.where).toMatchObject({
-      id: { in: ["msg-1", "msg-2", "no-mensajero"] },
-      rol: { value: "mensajero" },
-    });
-  });
-});
-
 describe("OrdenRepository — resolucion geografica batch (R19)", () => {
   it("findAllProvincias trae TODAS (sin filtrar por nombre; el match normalizado lo hace el service)", async () => {
     const prisma = buildPrisma();
@@ -242,7 +222,7 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     expect(secondCall.data).toHaveLength(1);
   });
 
-  it("mapea peso null a null y no revienta con montoCobrar/mensajeroSugeridoId ausentes", async () => {
+  it("mapea peso null a null y no revienta con montoCobrar ausente", async () => {
     const prisma = buildPrisma();
     prisma.orden.createMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -252,7 +232,6 @@ describe("OrdenRepository.createManyOrdenes (R27)", () => {
     const arg = prisma.orden.createMany.mock.calls[0][0];
     expect(arg.data[0].peso).toBeNull();
     expect(arg.data[0].montoCobrar).toBeNull();
-    expect(arg.data[0].mensajeroSugeridoId).toBeNull();
   });
 
   // Feature 17/R2/R8: la carga masiva NUNCA fija num_guia (queda NULL, se asigna

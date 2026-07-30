@@ -4,6 +4,7 @@ import type {
   OrdenHistorialOrigenTipo,
 } from "@/lib/types/orden-historial";
 import type { JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
+import type { NotificacionTxClient } from "@/lib/interfaces/repositories/INotificacionRepository";
 
 // Feature 49 (design §3.1/§4.2) — contrato del repositorio del HISTORIAL de estados de la
 // orden. Solo queries Prisma; sin logica de negocio (la autorizacion vive en el service,
@@ -41,6 +42,23 @@ export interface HistorialContexto {
   origenTipo: OrdenHistorialOrigenTipo;
 }
 
+/**
+ * Feature 160 (design §1.1/§3.2, R1/R6) — ids de catalogo que materializan el criterio de
+ * "intento de entrega". El repositorio NO conoce los `value` del catalogo (eso vive en
+ * `OrdenHistorialService`, unico dueño de la traduccion value -> id): recibe los ids ya
+ * resueltos.
+ *
+ *   intento = VIGENTE  AND  ( destino = devueltaId
+ *                             OR (destino = reprogramadaId AND origen ∈ ORIGEN_TIPOS_REPROGRAMADA_INTENTO) )
+ *
+ * `reprogramadaId: null` = el catalogo no tiene `reprogramada` (seed parcial): se cuenta
+ * SOLO la rama A y la lectura no falla (R6).
+ */
+export interface CriterioIntento {
+  devueltaId: string;
+  reprogramadaId: string | null;
+}
+
 export interface IOrdenHistorialRepository {
   /**
    * R6/R7: CHOKE POINT del historial. Inserta un LOTE de transiciones (createMany) en la
@@ -51,8 +69,11 @@ export interface IOrdenHistorialRepository {
   // Feature 99 (design §6.1): el `tx` se ensancha con `JobTxClient` para poder emitir el
   // webhook en la misma transaccion (transactional-outbox); el `tx` real de Prisma ya lo
   // satisface.
+  // Feature 146 (design §4.1): se ensancha una vez mas con las tablas de notificacion + `orden`,
+  // porque el choke point emite el aviso del rechazo DENTRO de la misma transaccion (F1.4-3).
+  // Mismo movimiento que hizo la 99: se ensancha el TIPO, no la semantica.
   registrarCambioEstado(
-    tx: OrdenHistorialTxClient & JobTxClient,
+    tx: OrdenHistorialTxClient & JobTxClient & NotificacionTxClient & Pick<PrismaClient, "orden">,
     entradas: CambioEstadoEntrada[],
   ): Promise<void>;
   /**
@@ -62,19 +83,37 @@ export interface IOrdenHistorialRepository {
    */
   findHistorialByOrden(ordenId: string): Promise<OrdenHistorialEntradaDTO[]>;
   /**
-   * R24 (49) + feature 67/R24-R26: cuenta las transiciones VIGENTES de `ordenId` cuyo destino
-   * es `estatusDestinoId`. Insumo del derivador de intentos (destinos `devuelta`); usa el
-   * indice (orden_id, estatus_destino_id).
+   * R24 (49) + feature 67/R24-R26 + feature 160/R1: cuenta los INTENTOS DE ENTREGA VIGENTES de
+   * `ordenId` segun el `criterio` (design 160 §1.1). Usa el indice
+   * (orden_id, estatus_destino_id); `origen_tipo` y `gestion.anulada_at` quedan como filtros
+   * residuales sobre el puñado de filas ya recuperadas, y el join a `gestion_orden` es por PK.
    *
    * "Vigente" EXCLUYE las transiciones causadas por una gestion ANULADA (67/R24) y las
    * HUERFANAS (67/R26), pero SIGUE contando las que nunca vinieron de una gestion (67/R25).
    * Es un filtro de LECTURA: el historial NO se modifica jamas (49/R2, 67/R23).
    *
-   * Sustituye a `contarPorDestino` (feature 49): el nombre es explicito para que un futuro
-   * call-site no elija por error un conteo que incluya intentos anulados -> escalado a
-   * `rechazada` antes de tiempo -> `cobroRechazado` (56) mal cobrado.
+   * Sustituye a `contarPorDestinoVigentes` (features 49/67), que contaba "por destino" suelto.
+   * El RENOMBRE es deliberado (160, design §3.3): el metodo ya no cuenta un destino, cuenta
+   * intentos segun un criterio COMPUESTO. Conservar el nombre viejo invitaria a un call-site
+   * futuro a pasarle un destino a secas y obtener un numero que NO es el que gobierna el
+   * escalado a `rechazada` -> `cobroRechazado` (56, dinero real).
    */
-  contarPorDestinoVigentes(ordenId: string, estatusDestinoId: string): Promise<number>;
+  contarIntentosVigentes(ordenId: string, criterio: CriterioIntento): Promise<number>;
+  /**
+   * Feature 160/R12/R13/R14 — el gemelo EN LOTE de `contarIntentosVigentes`: los conteos de N
+   * ordenes en UNA sola consulta al historial, sea cual sea N (una consulta por fila es un
+   * incumplimiento de R12, no una nota menor).
+   *
+   * MISMO predicado que la version individual (una sola definicion de "intento vigente", R4).
+   *   - Las ordenes SIN filas que cumplan el criterio NO aparecen en el Map: el llamador
+   *     resuelve el default con `?? 0` (R14).
+   *   - `ordenIds` vacio -> Map vacio SIN emitir consulta alguna (R13), patron
+   *     `OrdenRepository.findMensajerosBloqueados`.
+   */
+  contarIntentosVigentesEnLote(
+    ordenIds: string[],
+    criterio: CriterioIntento,
+  ): Promise<Map<string, number>>;
   /**
    * R27: `true` si existe al menos una transicion de `ordenId` cuyo actor sea `usuarioId`
    * (la orden estuvo actuada por ese usuario). Sostiene la autorizacion del mensajero: ve

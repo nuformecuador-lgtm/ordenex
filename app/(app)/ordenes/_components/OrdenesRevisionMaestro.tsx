@@ -54,16 +54,25 @@ async function mensajerosFetcher() {
  * carga en paralelo el catálogo de estados (para resolver `value -> estatusId`,
  * design.md §4) y la lista de mensajeros (R28), y renderiza los apartados por
  * estado (R15/R16) con selección por lote (R17) y las acciones "Generar guía"
- * (R18, sobre `en_fulfillment`/`en_preparacion`) y "Asignar mensajero" (R26,
- * sobre `en_bodega_central`). El apartado `por_recoger` es de solo lectura en
- * esta feature: no tiene acción propia (la respuesta del mensajero es de la
+ * (R18, sobre `en_preparacion`) y "Asignar mensajero" (R26, sobre
+ * `en_bodega_central`). El apartado `por_recoger` es de solo lectura en esta
+ * feature: no tiene acción propia (la respuesta del mensajero es de la
  * feature 36).
  *
  * Feature 30 (T16, R13/R15): añade un 5.º apartado solo-lectura para
  * `en_ruta_bodega_satelite` ("En ruta a bodega satélite") y una acción
- * secundaria "Rutear a bodega satélite" en los apartados de revisión y
- * `en_bodega_central` que rutea las órdenes NO-GAM seleccionadas vía
- * `rutearABodegaSatelite`.
+ * secundaria "Rutear a bodega satélite" que rutea las órdenes NO-GAM
+ * seleccionadas vía `rutearABodegaSatelite`.
+ *
+ * Feature 156 (R29): esa acción secundaria queda SOLO en `en_bodega_central`. El
+ * ruteo a satélite parte de la bodega central (que es donde el paquete está
+ * físicamente), así que ofrecerla desde `en_preparacion` era un camino muerto: el
+ * service lo rechaza con "estado de origen no permitido".
+ *
+ * Feature 155 (R32): se retira el apartado del estado interno de fulfillment en
+ * bodega, con su acción por lote. Ese value salió del catálogo: las órdenes que ya
+ * están en bodega nacen directamente en `en_preparacion`, que es el único apartado
+ * de revisión que ofrece "Generar guía".
  *
  * `readOnly` (R12-UI, `admin`): ningún apartado es seleccionable y no se montan
  * botones ni modales de acción; el backend igual rechaza escrituras (R12,
@@ -161,25 +170,12 @@ export function OrdenesRevisionMaestro({
       ) : null}
 
       <OrdenesApartado
-        titulo="En fulfillment"
-        estatusValue="en_fulfillment"
-        estatusId={estatusIdPorValue.get("en_fulfillment")}
-        selectable={!readOnly}
-        actionLabel={readOnly ? undefined : "Generar guía"}
-        onAction={readOnly ? undefined : abrirGenerarGuia}
-        secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
-        onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
-        mostrarHistorial
-      />
-      <OrdenesApartado
         titulo="En preparación"
         estatusValue="en_preparacion"
         estatusId={estatusIdPorValue.get("en_preparacion")}
         selectable={!readOnly}
         actionLabel={readOnly ? undefined : "Generar guía"}
         onAction={readOnly ? undefined : abrirGenerarGuia}
-        secondaryActionLabel={readOnly ? undefined : "Rutear a bodega satélite"}
-        onSecondaryAction={readOnly ? undefined : abrirRutearSatelite}
         mostrarHistorial
       />
       {/* Feature 32/R13/F1.4(f): órdenes con `num_guia`. La respuesta del
@@ -246,11 +242,10 @@ export function OrdenesRevisionMaestro({
 
       {!readOnly ? (
         <>
+          {/* Feature 156/R30: "Generar guía" NO requiere mensajeros (ya no asigna). */}
           <GenerarGuiaModal
             open={modalAbierto === "generar-guia"}
             ordenes={ordenesSeleccionadas}
-            mensajeros={mensajeros}
-            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />

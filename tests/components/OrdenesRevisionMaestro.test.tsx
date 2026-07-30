@@ -75,7 +75,7 @@ const generarEtiquetasMock = vi.mocked(generarEtiquetas);
 const obtenerHistorialMock = vi.mocked(obtenerHistorialOrden);
 
 const HISTORIAL_ENTRADA: OrdenHistorialEntradaDTO = {
-  estatusOrigenValue: "en_ruta",
+  estatusOrigenValue: "en_reparto",
   estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
   actorNombre: null,
@@ -83,8 +83,10 @@ const HISTORIAL_ENTRADA: OrdenHistorialEntradaDTO = {
   createdAt: new Date("2026-01-03T08:00:00Z"),
 };
 
+// Feature 155/R32: el estado de fulfillment en bodega salio del catalogo, asi que sale de
+// este catalogo minimo. `en_preparacion` queda como UNICO apartado de revision con accion
+// por lote ("Generar guia"): las ordenes que ya estan en bodega nacen ahi.
 const ESTATUS: EstatusLiteDTO[] = [
-  { id: "id-fulfillment", value: "en_fulfillment" },
   { id: "id-preparacion", value: "en_preparacion" },
   { id: "id-espera", value: "por_recoger" },
   { id: "id-bodega", value: "en_bodega_central" },
@@ -115,20 +117,19 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    mensajeroSugeridoId: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
   };
 }
 
+// Feature 155/R32: las DOS ordenes del apartado retirado se mudan a `en_preparacion` (el
+// apartado que hereda la accion), para conservar los casos que necesitan mas de una fila
+// en un mismo apartado (seleccion multiple, un disparador de historial por fila).
 const ORDENES_POR_ESTATUS: Record<string, OrdenListItemDTO[]> = {
-  "id-fulfillment": [
-    makeOrden({ id: "of1", numRemision: "REM-F1", estatusId: "id-fulfillment" }),
-    makeOrden({ id: "of2", numRemision: "REM-F2", estatusId: "id-fulfillment" }),
-  ],
   "id-preparacion": [
     makeOrden({ id: "op1", numRemision: "REM-P1", estatusId: "id-preparacion" }),
+    makeOrden({ id: "op2", numRemision: "REM-P2", estatusId: "id-preparacion" }),
   ],
   "id-espera": [
     makeOrden({ id: "oe1", numRemision: "REM-E1", estatusId: "id-espera" }),
@@ -204,22 +205,40 @@ afterEach(() => {
 });
 
 describe("OrdenesRevisionMaestro", () => {
-  it("R15: muestra los apartados en_fulfillment y en_preparacion como secciones separadas", async () => {
+  it("R15: muestra el apartado en_preparacion como sección propia", async () => {
     renderComponent();
 
-    await screen.findByText("REM-F1");
-    expect(
-      screen.getByRole("region", { name: "En fulfillment" }),
-    ).toBeInTheDocument();
+    await screen.findByText("REM-P1");
     expect(
       screen.getByRole("region", { name: "En preparación" }),
     ).toBeInTheDocument();
   });
 
+  // Feature 155/R32: la vista de revisión NO ofrece apartado NI acciones por lote para el
+  // estado retirado. Las dos mitades del requisito se afirman por separado. La etiqueta se
+  // construye por piezas para no reintroducir el literal censado (T8.1).
+  it("155/R32: NO monta el apartado del estado de fulfillment retirado", async () => {
+    renderComponent();
+
+    await screen.findByText("REM-P1");
+    // (a) sin apartado: ni región con ese nombre accesible, ni la etiqueta en la vista.
+    expect(
+      screen.queryByRole("region", { name: ["En", "fulfillment"].join(" ") }),
+    ).toBeNull();
+    expect(screen.queryByText(["En", "fulfillment"].join(" "))).toBeNull();
+    // (b) sin acciones por lote: "Generar guía" queda con UN solo disparador en toda la
+    // vista, y vive en el apartado que hereda la acción.
+    const botones = screen.getAllByRole("button", { name: "Generar guía" });
+    expect(botones).toHaveLength(1);
+    expect(
+      screen.getByRole("region", { name: "En preparación" }),
+    ).toContainElement(botones[0]!);
+  });
+
   it("R16: muestra los apartados por_recoger y en_bodega_central", async () => {
     renderComponent();
 
-    await screen.findByText("REM-F1");
+    await screen.findByText("REM-P1");
     expect(
       screen.getByRole("region", {
         name: "En espera de aceptación del mensajero",
@@ -231,7 +250,7 @@ describe("OrdenesRevisionMaestro", () => {
   it("R12-UI: readOnly (admin) no muestra checkboxes ni botones de ESCRITURA", async () => {
     renderComponent(true);
 
-    await screen.findByText("REM-F1");
+    await screen.findByText("REM-P1");
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
     expect(screen.queryByRole("button", { name: "Generar guía" })).toBeNull();
     expect(
@@ -252,17 +271,17 @@ describe("OrdenesRevisionMaestro", () => {
     const user = userEvent.setup();
     renderComponent();
 
-    await screen.findByText("REM-F1");
-    const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
-    // Un disparador por fila del apartado (2 órdenes en_fulfillment).
-    const triggers = within(fulfillment).getAllByRole("button", {
+    await screen.findByText("REM-P1");
+    const preparacion = screen.getByRole("region", { name: "En preparación" });
+    // Un disparador por fila del apartado (2 órdenes en `en_preparacion`).
+    const triggers = within(preparacion).getAllByRole("button", {
       name: /Ver historial de la orden/i,
     });
     expect(triggers).toHaveLength(2);
 
     await user.click(
-      within(fulfillment).getByRole("button", {
-        name: "Ver historial de la orden REM-F1",
+      within(preparacion).getByRole("button", {
+        name: "Ver historial de la orden REM-P1",
       }),
     );
 
@@ -274,7 +293,7 @@ describe("OrdenesRevisionMaestro", () => {
     expect(
       await within(dialog).findByText(ORDER_STATUS_LABELS.en_bodega_central),
     ).toBeInTheDocument();
-    expect(obtenerHistorialMock).toHaveBeenCalledWith("of1");
+    expect(obtenerHistorialMock).toHaveBeenCalledWith("op1");
   });
 
   it("Feature 49/R27: el admin (readOnly) también tiene 'Ver historial' por fila y abre el drawer", async () => {
@@ -300,9 +319,9 @@ describe("OrdenesRevisionMaestro", () => {
     const user = userEvent.setup();
     renderComponent();
 
-    await screen.findByText("REM-F1");
-    const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
-    const checkboxes = checkboxesDeFila(fulfillment);
+    await screen.findByText("REM-P1");
+    const preparacion = screen.getByRole("region", { name: "En preparación" });
+    const checkboxes = checkboxesDeFila(preparacion);
     expect(checkboxes).toHaveLength(2);
 
     await user.click(checkboxes[0]);
@@ -312,26 +331,10 @@ describe("OrdenesRevisionMaestro", () => {
     expect(checkboxes[1]).toHaveAttribute("aria-checked", "true");
   });
 
-  it("R18: el botón 'Generar guía' de en_fulfillment abre el modal con la selección", async () => {
-    const user = userEvent.setup();
-    renderComponent();
-
-    await screen.findByText("REM-F1");
-    const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
-    const checkbox = checkboxesDeFila(fulfillment)[0];
-    await user.click(checkbox);
-    await user.click(
-      within(fulfillment).getByRole("button", { name: "Generar guía" }),
-    );
-
-    expect(
-      await screen.findByRole("dialog", { name: "Generar guía" }),
-    ).toBeInTheDocument();
-    // No dispara la acción de escritura solo por abrir el modal.
-    expect(generarGuiaMock).not.toHaveBeenCalled();
-  });
-
-  it("R18: el botón 'Generar guía' de en_preparacion también abre el modal (ambos estados de revisión)", async () => {
+  // Feature 155/R32: eran DOS casos gemelos (uno por cada estado de revisión que ofrecía
+  // "Generar guía"). Retirado el value, queda uno; se conserva la aserción más fuerte de
+  // los dos (abrir el modal NO dispara la escritura).
+  it("R18: el botón 'Generar guía' de en_preparacion abre el modal con la selección", async () => {
     const user = userEvent.setup();
     renderComponent();
 
@@ -345,6 +348,8 @@ describe("OrdenesRevisionMaestro", () => {
     expect(
       await screen.findByRole("dialog", { name: "Generar guía" }),
     ).toBeInTheDocument();
+    // No dispara la acción de escritura solo por abrir el modal.
+    expect(generarGuiaMock).not.toHaveBeenCalled();
   });
 
   it("por_recoger: solo ofrece 'Imprimir etiquetas' (la respuesta del mensajero sigue fuera de alcance, feature 36)", async () => {
@@ -430,9 +435,12 @@ describe("OrdenesRevisionMaestro", () => {
     expect(asignarDesdeBodegaMock).not.toHaveBeenCalled();
   });
 
-  it("R13: 'Rutear a bodega satélite' invoca la action con los ordenIds NO-GAM seleccionados", async () => {
+  // Feature 156/R29: el ruteo a satélite parte de la BODEGA CENTRAL (único origen
+  // que el service admite desde la 156), así que el apartado que ofrece la acción es
+  // "En bodega" y no los de revisión.
+  it("R13/R29: 'Rutear a bodega satélite' desde en_bodega_central invoca la action con los ordenIds NO-GAM seleccionados", async () => {
     const user = userEvent.setup();
-    // En fulfillment: una orden NO-GAM (ruteable) y una GAM (no debe ir al lote).
+    // En bodega: una orden NO-GAM (ruteable) y una GAM (no debe ir al lote).
     listarOrdenesMock.mockImplementation(async (input) => {
       const { estatusId, page, pageSize } = input as {
         estatusId?: string;
@@ -440,19 +448,19 @@ describe("OrdenesRevisionMaestro", () => {
         pageSize: number;
       };
       const items =
-        estatusId === "id-fulfillment"
+        estatusId === "id-bodega"
           ? [
               makeOrden({
                 id: "no-gam-1",
                 numRemision: "REM-NOGAM",
-                estatusId: "id-fulfillment",
+                estatusId: "id-bodega",
                 zonaEsGam: false,
                 zonaNombre: "Limón",
               }),
               makeOrden({
                 id: "gam-1",
                 numRemision: "REM-GAM",
-                estatusId: "id-fulfillment",
+                estatusId: "id-bodega",
                 zonaEsGam: true,
                 zonaNombre: "GAM",
               }),
@@ -468,14 +476,14 @@ describe("OrdenesRevisionMaestro", () => {
     renderComponent();
 
     await screen.findByText("REM-NOGAM");
-    const fulfillment = screen.getByRole("region", { name: "En fulfillment" });
+    const bodega = screen.getByRole("region", { name: "En bodega" });
     // Selecciona AMBAS órdenes; solo la NO-GAM debe rutearse.
-    const checkboxes = checkboxesDeFila(fulfillment);
+    const checkboxes = checkboxesDeFila(bodega);
     await user.click(checkboxes[0]);
     await user.click(checkboxes[1]);
 
     await user.click(
-      within(fulfillment).getByRole("button", {
+      within(bodega).getByRole("button", {
         name: "Rutear a bodega satélite",
       }),
     );
@@ -495,12 +503,65 @@ describe("OrdenesRevisionMaestro", () => {
     });
   });
 
+  // Feature 155/R32: mismo motivo que en R18, el `it.each` se queda con una sola fila.
+  it("R29: el apartado En preparación (en_preparacion) NO ofrece 'Rutear a bodega satélite'", async () => {
+    renderComponent();
+
+    await screen.findByText("REM-P1");
+    const region = screen.getByRole("region", { name: "En preparación" });
+    expect(
+      within(region).queryByRole("button", {
+        name: "Rutear a bodega satélite",
+      }),
+    ).toBeNull();
+    // La acción propia del apartado (numerar) sí sigue ahí.
+    expect(
+      within(region).getByRole("button", { name: "Generar guía" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R29: 'Rutear a bodega satélite' se ofrece EXCLUSIVAMENTE desde el apartado de bodega central", async () => {
+    renderComponent();
+
+    await screen.findByText("REM-B1");
+    // En toda la vista hay UN solo disparador de la acción…
+    const botones = screen.getAllByRole("button", {
+      name: "Rutear a bodega satélite",
+    });
+    expect(botones).toHaveLength(1);
+    // …y vive en "En bodega".
+    const bodega = screen.getByRole("region", { name: "En bodega" });
+    expect(bodega).toContainElement(botones[0]!);
+  });
+
+  it("R30: el modal 'Generar guía' no ofrece ningún selector de mensajero", async () => {
+    const user = userEvent.setup();
+    renderComponent();
+
+    await screen.findByText("REM-P1");
+    const preparacion = screen.getByRole("region", { name: "En preparación" });
+    await user.click(checkboxesDeFila(preparacion)[0]);
+    await user.click(
+      within(preparacion).getByRole("button", { name: "Generar guía" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "Generar guía" });
+    expect(
+      within(dialog).queryByRole("combobox", { name: /mensajero/i }),
+    ).toBeNull();
+    expect(within(dialog).queryAllByRole("combobox")).toHaveLength(0);
+    expect(
+      within(dialog).getByRole("table", { name: "Órdenes por numerar" }),
+    ).toBeInTheDocument();
+    expect(generarGuiaMock).not.toHaveBeenCalled();
+  });
+
   // ---------- Feature 48 (T8) — retorno a la tienda de origen ----------
 
   it("Feature 48/R4/R14: monta los apartados 'Rechazadas' y 'Devueltas a origen'", async () => {
     renderComponent();
 
-    await screen.findByText("REM-F1");
+    await screen.findByText("REM-P1");
     expect(
       screen.getByRole("region", { name: "Rechazadas" }),
     ).toBeInTheDocument();
@@ -511,7 +572,7 @@ describe("OrdenesRevisionMaestro", () => {
 
   it("Feature 139/R9: el apartado 'Rechazadas' NO ofrece la salida manual 'Devolver a la tienda'", async () => {
     // La única salida de `rechazada` es ahora la aprobación del cierre (backend); la
-    // acción manual se retiró de esta vista (y de OrdenesTabs). El apartado sigue
+    // acción manual se retiró de esta vista (y de OrdenesListado). El apartado sigue
     // listando las órdenes, pero sin acción de escritura ni modal.
     listarOrdenesMock.mockImplementation(async (input) => {
       const { estatusId, page, pageSize } = input as {
@@ -579,5 +640,91 @@ describe("OrdenesRevisionMaestro", () => {
     expect(
       within(region).queryByRole("button", { name: "Devolver a la tienda" }),
     ).toBeNull();
+  });
+});
+
+// Feature 160 (T16/T21, R22/R27) — la revisión del maestro es el 4.º consumidor de
+// `ordenesColumns` (vía `OrdenesApartado`) y el SEGUNDO montaje del aviso "Liberadas
+// hoy". Ninguno de los dos archivos se toca: heredan la columna y el dato.
+describe("OrdenesRevisionMaestro — intentos de entrega (feature 160)", () => {
+  it("R22: cada apartado del maestro monta la columna 'Intentos' con su número", async () => {
+    listarOrdenesMock.mockImplementation(async (input) => {
+      const { estatusId, page, pageSize } = input as {
+        estatusId?: string;
+        page: number;
+        pageSize: number;
+      };
+      const items =
+        estatusId === "id-preparacion"
+          ? [
+              makeOrden({
+                id: "op1",
+                numRemision: "REM-P1",
+                estatusId: "id-preparacion",
+                intentosEntrega: 2,
+              }),
+              makeOrden({
+                id: "op2",
+                numRemision: "REM-P2",
+                estatusId: "id-preparacion",
+                intentosEntrega: 0,
+              }),
+            ]
+          : [];
+      return { status: "ok", items, page, pageSize, total: items.length };
+    });
+
+    renderComponent();
+    await screen.findByText("REM-P1");
+
+    const apartado = screen.getByRole("region", { name: "En preparación" });
+    expect(
+      within(apartado).getAllByRole("columnheader", { name: "Intentos" }).length,
+    ).toBeGreaterThan(0);
+    const celda = (rem: string) =>
+      within(within(apartado).getByRole("row", { name: new RegExp(rem) }))
+        .getAllByRole("cell")
+        // El apartado prepende su checkbox de selección: la columna de intentos
+        // (índice 3 en `ordenesColumns`) queda en el índice 4.
+        .at(4);
+    expect(celda("REM-P1")).toHaveTextContent(/^2$/);
+    expect(celda("REM-P2")).toHaveTextContent(/^0$/);
+  });
+
+  it("R27: el aviso 'Liberadas hoy' del maestro muestra el dato etiquetado", async () => {
+    render(
+      <ToastProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <OrdenesRevisionMaestro
+            readOnly
+            liberadasHoy={[
+              {
+                id: "l1",
+                numGuia: 5001,
+                numRemision: "REM-L1",
+                destinatario: "Ana Pérez",
+                liberadaReprogramadaAt: new Date("2026-07-13T06:00:00.000Z"),
+                intentosEntrega: 3,
+              },
+              {
+                id: "l2",
+                numGuia: 5002,
+                numRemision: "REM-L2",
+                destinatario: "Beto Ruiz",
+                liberadaReprogramadaAt: new Date("2026-07-13T06:00:00.000Z"),
+                intentosEntrega: 0,
+              },
+            ]}
+          />
+        </SWRConfig>
+      </ToastProvider>,
+    );
+
+    const region = await screen.findByRole("region", {
+      name: "Liberadas hoy (reprogramación)",
+    });
+    const items = within(region).getAllByRole("listitem");
+    expect(within(items[0]).getByText("Intentos: 3")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Intentos: 0")).toBeInTheDocument();
   });
 });

@@ -12,6 +12,7 @@ import {
   resaltarFilaPrioridad,
 } from "@/components/shared/PrioridadResalte";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
+import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
@@ -189,6 +190,10 @@ export function RecepcionSateliteModule({
     Set<string>
   >(new Set());
   const [enviandoACentral, setEnviandoACentral] = useState(false);
+  // Feature 148 (T13, R22): ids del ÚLTIMO envío a central que salieron `ok`. El lote
+  // vive solo aquí (el service es por-orden, §9.1), así que se conserva para poder
+  // ofrecer su manifiesto después del refresco. Vacío = sin descarga que ofrecer (R17).
+  const [ultimoEnvioACentral, setUltimoEnvioACentral] = useState<string[]>([]);
 
   // Feature 63: recepción EN LOTE ("Aceptar todas" / "Aceptar" por-orden), análoga
   // al "Recoger" del mensajero. Cablea la Server Action `recibirLote`; tras éxito
@@ -350,13 +355,19 @@ export function RecepcionSateliteModule({
     setEnviandoACentral(true);
     let enviadas = 0;
     const errores: string[] = [];
+    // Feature 148/R22: solo las EFECTIVAMENTE enviadas entran al manifiesto; las que
+    // fallaron quedan fuera. No cambia el manejo del resultado de negocio (R25/R27).
+    const enviadasIds: string[] = [];
     for (const id of ids) {
       const result = await enviarACentral({ ordenId: id });
-      if (result.status === "ok") enviadas += 1;
-      else errores.push(envioDevolucionCentralErrorMessage(result.status));
+      if (result.status === "ok") {
+        enviadas += 1;
+        enviadasIds.push(id);
+      } else errores.push(envioDevolucionCentralErrorMessage(result.status));
     }
     setEnviandoACentral(false);
     setSeleccionadosPorDevolver(new Set());
+    setUltimoEnvioACentral(enviadasIds);
     if (enviadas > 0) {
       toast.success(`${enviadas} orden(es) enviada(s) a bodega central.`);
     }
@@ -439,6 +450,10 @@ export function RecepcionSateliteModule({
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Recibidas</h2>
+        </div>
+        {/* "Asignar" vive en el flujo, encima de la tabla y alineado a la derecha;
+            queda deshabilitado sin selección o con la bodega bloqueada. */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             onClick={() => setModalOpen(true)}
@@ -494,7 +509,17 @@ export function RecepcionSateliteModule({
         aria-label="En tránsito a central"
         className="flex flex-col gap-3 border-t pt-6"
       >
-        <h2 className="text-lg font-semibold">En tránsito a central</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">En tránsito a central</h2>
+          {/* Feature 148 (T13, R22): manifiesto del último envío a central, solo con
+              las órdenes que salieron `ok`. Botón EXPLÍCITO (§9.7): ni descarga
+              automática ni acción en el toast. */}
+          <DescargarManifiestoButton
+            flujo="devolucion_central"
+            seleccion={{ ordenIds: ultimoEnvioACentral }}
+            label="Descargar manifiesto del último envío"
+          />
+        </div>
         <p className="text-sm text-muted-foreground">
           Órdenes ya enviadas; la bodega central las recibirá por escaneo. Aquí solo
           se muestran para seguimiento.
