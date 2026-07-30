@@ -54,14 +54,18 @@ intermedio: ~~la 154 sola deja `generar guía` lanzando `TransicionIlegalError`~
 |---|---|---|---|
 | **#168** | `feature/141-tabla-cargas-orden` | Tabla `carga` + `carga_id`. Reviewer APROBADO, 0 bloqueantes. **Es la feature `in_progress` más vieja del tablero.** | abierto desde el 27/07 |
 | **#180** | `feature/144-filtros-ordenes` | Componente de filtros parametrizable. **Trae su propia reconciliación** del registro y una migración de índices. 64 archivos. | 28/07 |
-| **#183** | `feature/log-fallos-whatsapp` | Porta a `dev` el hotfix de WhatsApp que ya está en `prod`. ⚠️ **No mergear tal cual** — ver punto 3. | 28/07 |
+| ~~**#183**~~ | ~~`feature/log-fallos-whatsapp`~~ | **CERRADO SIN MERGEAR** el 2026-07-29. Lo REEMPLAZA el **PR #205** (`fix/portar-hotfix-whatsapp`), que sí porta el hotfix y salda las dos deudas del punto 3. | cerrado 29/07 |
 
 ### 3. Infra y despliegue (humano)
 
 - ⚠️ **`dev` y `prod` DIVERGEN EN AMBOS SENTIDOS.** Medido: `origin/dev...origin/prod` → **16 / 18**.
   `prod` tiene 18 commits del hotfix de WhatsApp que `dev` no tiene, y `dev` tiene los 16 de hoy que
   `prod` no tiene. Ya no es «`dev` va atrasado»: son dos ramas separadas y hay que reunirlas.
-- **Antes de mergear el PR #183**, dos cosas que el propio PR arrastra:
+- ✅ **SALDADO en el PR #205** (2026-07-29). Lo que sigue era la lista de lo que el #183 arrastraba;
+  se conserva porque explica por qué ese PR no se podía mergear tal cual, y las dos cosas **ya están
+  hechas** en el #205: las Server Actions `_tmp-*` retiradas tras verificar que nadie las importa, y
+  el `down.sql` escrito **y ejecutado** en round-trip contra Postgres, no revisado por lectura.
+- **Lo que el PR #183 arrastraba** (histórico):
   1. `lib/actions/_tmp-probar-jobs.ts` y `lib/actions/_tmp-sincronizar-plantillas.ts` — dos Server
      Actions de depuración que **hoy están en PRODUCCIÓN** y también en la rama del PR. El commit
      `f950f14` decía haberlas sacado; **no las sacó** (verificado con `git ls-tree` sobre
@@ -175,7 +179,15 @@ en la sección «Backlog pendiente».
 >
 > ### ⚠️ Hallazgos de esta sesión que NO son del lote y siguen abiertos
 >
-> - **El hotfix de WhatsApp NO está en `dev` y ya no hay PR que lo porte.** El **#183 se CERRÓ SIN
+> - **El hotfix de WhatsApp NO estaba en `dev` y no quedaba PR que lo portara → RESUELTO en el
+>   PR #205** (`fix/portar-hotfix-whatsapp`, abierto el 2026-07-29). Reúne las dos ramas
+>   (`git merge origin/prod`, **sin conflictos**), retira las dos Server Actions `_tmp-*` tras
+>   verificar que nadie las importa, y le escribe a `20260728230000_chat_mensaje_error_meta` el
+>   `down.sql` que le faltaba, **verificado por ejecución** (round-trip UP → DOWN → DOWN → UP en una
+>   transacción revertida, con las 3 columnas y el índice parcial apareciendo y desapareciendo).
+>   Revisado además que el volcado de la petición a la Graph API **no filtra secretos**: redacta por
+>   defecto y el modo crudo es opt-in por `WHATSAPP_DEBUG_LOG`, que llega vacía. El diagnóstico
+>   original queda escrito abajo. El **#183 se CERRÓ SIN
 >   MERGEAR** (2026-07-29 13:03). Verificado por archivos: `lib/services/whatsapp/errores-meta.ts` y
 >   `chat-logger.ts` existen en `prod` y **no** en `dev`. `dev` arrastra el bug de reintentos
 >   infinitos, y las dos Server Actions `_tmp-probar-jobs.ts` / `_tmp-sincronizar-plantillas.ts`
@@ -311,8 +323,10 @@ vuelo necesita spec en disco). Se reconcilia sola al mergear el PR. El PR trae a
 > **Actualizado el 2026-07-29:** `git rev-list --left-right --count origin/dev...origin/prod` →
 > **`87  18`**. El 28/07 era `16  18`; el titular viejo («`dev` está 18 commits DETRÁS») ya no
 > describe la situación: **`dev` va 87 commits POR DELANTE** y sigue sin recibir los 18 del hotfix.
-> La distancia crece cada día que el PR #183 no se mergea, y el tren 154+155+156 va a subir a
-> producción sobre una `dev` muy alejada de `prod`. **Es tarea humana**, no del agente.
+> **El PR #205 reúne las dos ramas** (`git merge origin/prod` sin conflictos): al mergearlo, los 18
+> commits del hotfix entran en `dev` y esa mitad de la divergencia desaparece. Queda la otra: los 87
+> que `dev` tiene y `prod` no, que se cierran con el despliegue `dev → prod` del tren 154+155+156.
+> **Ese despliegue sigue siendo tarea humana.**
 
 `git rev-list --left-right --count origin/dev...origin/prod` → `0  18` *(medición del 28/07, ver
 aviso de arriba)*. Los arreglos del **log de
@@ -329,10 +343,16 @@ trae migración (`20260728230000_chat_mensaje_error_meta`), un desenlace nuevo (
 **lista blanca de códigos reintentables** en `lib/services/whatsapp/errores-meta.ts`. Sin eso en el
 registro, el próximo que toque WhatsApp la duplica. Detalle y deudas en `history.md`.
 
-> ### ⚠️ Dos cosas que revisar ANTES de mergear el PR #183
+> ### ✅ Las dos cosas que había que revisar antes de portarlo — HECHAS en el PR #205
 >
-> 1. **La migración `20260728230000_chat_mensaje_error_meta` no tiene `down.sql`** — contra la regla
->    del repo (`./init.sh` avisa de migraciones sin `down.sql`).
+> Se conservan enunciadas porque son el diagnóstico que explica por qué el #183 no se podía mergear
+> tal cual, y porque el patrón se va a repetir con el próximo hotfix.
+>
+> 1. **La migración `20260728230000_chat_mensaje_error_meta` no tenía `down.sql`** — contra la regla
+>    del repo (`./init.sh` avisa de migraciones sin `down.sql`). **Escrito en el #205 y verificado
+>    por EJECUCIÓN**, no por lectura: round-trip UP → DOWN → DOWN otra vez → UP contra Postgres
+>    local en una transacción revertida. La pérdida de datos del DOWN (el motivo de los salientes ya
+>    fallidos, que es dato de diagnóstico) queda declarada en su cabecera.
 > 2. **`prod` y la rama del PR llevan dos Server Actions de depuración en producción:**
 >    `lib/actions/_tmp-probar-jobs.ts` y `lib/actions/_tmp-sincronizar-plantillas.ts`. El commit
 >    `f950f14` decía sacarlas de la rama, pero **siguen ahí** (verificado con `git ls-tree` sobre
@@ -481,15 +501,27 @@ no ahora.
   mataría de raíz.
 - **`app/(app)/ordenes/_components/ordenes-columns.tsx` es un imán de drift** (ya lo revirtieron 2
   veces) → mirarlo con lupa en todo PR que lo toque.
-- **Migraciones sin round-trip real:** los `down.sql` de las últimas features (141, 146) se revisaron
-  **por lectura**, sin aplicar y revertir contra una base. Ahora que preview tiene base propia, ese
-  round-trip por fin es posible.
+- **Migraciones sin round-trip real:** los `down.sql` de las features **141 y 146** siguen revisados
+  solo **por lectura**. ✅ **Ya NO es así para todas:** el 2026-07-29 se ejecutó el round-trip real
+  contra Postgres de la migración de la **155** (`progress/roundtrip_155_migracion.md`, sobre 47
+  órdenes reales y verificado por mutación) y de la del chat de WhatsApp (**PR #205**). El método
+  está escrito y es repetible: ensayo en transacción revertida → mutaciones para probar que el arnés
+  discrimina → tramo persistido por la herramienta del repo.
+- **La denylist a mano de las migraciones costó trabajo CUATRO veces el 2026-07-29** (159, el propio
+  assert de la 159, 149 y el porte del hotfix). El arreglo existe y está aplicado como precedente en
+  `tests/integration/db/drop-mensajero-sugerido-migration.test.ts`: **pinnear el baseline**, porque
+  el invariante es histórico y las migraciones posteriores son irrelevantes por definición.
+  Extenderlo a `zonas`, `notificacion`, `orden-indices-filtros` y `order-status-en-reparto` es un
+  **chore propio** — deliberadamente NO se colgó del PR de ninguna feature ni del porte del hotfix,
+  que tiene que ser fácil de revisar y de revertir.
 
 ## Tareas humanas pendientes
 
-- **Portar el hotfix de WhatsApp a `dev`** — mergear el PR #183, **pero antes** sacar los dos
-  `lib/actions/_tmp-*.ts` y escribir el `down.sql` que falta (ver el aviso de la sección `dev` vs
-  `prod`). Es lo único que hoy separa a los dos.
+- **Portar el hotfix de WhatsApp a `dev`** → ✅ **listo para mergear: PR #205**. El #183 se cerró sin
+  mergear y el trabajo se rehízo: las dos `lib/actions/_tmp-*.ts` fuera, el `down.sql` escrito y
+  ejecutado en round-trip, y `./init.sh` verde (583 archivos / 6403 tests). **Lo único que queda es
+  darle merge.** Nota: al entrar, `dev` recibe los 18 commits de `prod` y hay que correr
+  `prisma migrate deploy` en local (la migración del chat no está aplicada ahí).
 - **La base local ya tiene la migración de la 153 aplicada** (`20260728120000_order_status_en_reparto`),
   incluida la de la 146 que estaba pendiente. Se aplicaron con `prisma migrate deploy` contra
   `localhost` el 2026-07-28 al cerrar el round-trip. **No se tocó producción.**
