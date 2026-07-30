@@ -155,7 +155,66 @@ PR 2. **El PR 2 lo cumplió** (ver abajo).
 **⚠️ La dispensa de E2E del PR 1 es explícita y NO EXTENSIBLE al PR 2.** La deuda de fondo —que no
 haya harness de E2E en el repo— sigue viva y sin dueño.
 
-### 🔨 PR 2 de la 158 — camino del admin (R37-R64), EN CURSO
+### ✅ PR 2 de la 158 ENTREGADO — **PR #209** · y **PR #168 RESCATADO**
+
+**PR #209** (`feature/158b-incidente-admin`) — ⚠️ **apilado sobre el #208, no sobre `dev`. Mergear el
+#208 primero.** `./init.sh` **630 archivos / 7354 tests / 0 fallos** · `next build` exit 0 con
+`/incidentes` en el manifiesto · **Reviewer OK, 0 bloqueantes**, 7 menores, **28/28 R verificados**,
+**32 mutaciones, 31 discriminan**.
+
+- **`R29` cumplido y verificado EN LAS DOS DIRECCIONES**: son exactamente dos emisores — un tercero
+  pone el guard rojo **y quitar uno también**. Es igualdad, no `some()`.
+- **Contra Postgres real**: el `USING` del down aborta con filas en las tres tablas; los 6 índices
+  vuelven byte-idénticos; y **la idempotencia del egreso contra el índice real de la 42**, que hasta
+  ahora sólo estaba simulada en memoria.
+- **E2E declarado INAPLICABLE con razón verificada** (no por inercia): `./init.sh` no corre
+  `test:e2e` y los 20+ specs existentes declaran *«WRITTEN but NOT EXECUTED»*. **No se dispensó
+  gratis**: el reviewer cubrió por otra vía el riesgo concreto. **La deuda del harness sigue viva
+  desde la 148.**
+- **Alcance añadido a media fase por el humano**: el `adminSatelite` reporta desde
+  `/recepcion-satelite`. El modal se **reusó, no se duplicó**. `en_ruta_bodega_satelite` queda fuera
+  con razón escrita y el reviewer lo juzgó: **ningún requisito incumplido**.
+
+**PR #168 (feature 141) RESCATADO** — de `CONFLICTING` a **`MERGEABLE`/`CLEAN`**. Un solo conflicto y
+era `zonas-migration.test.ts`: la rama traía la denylist a mano de 107 líneas, `dev` el baseline
+pinneado del #207. **Re-review OK, 0 bloqueantes, el veredicto del 27/07 sigue válido** y queda
+**saldada su nota menor 2** (round-trip, hecho ahora con la 141 aplicada DESPUÉS de las del 28/29/30,
+`DOWN` con datos vivos y RE-UP con esquema idéntico). 27 mutaciones, 26 muertas.
+
+> **El mutante superviviente, cerrado:** añadir `carga_id = NULL, download_url = NULL` al `SET` de
+> `deshacerAsignacionLote` dejaba **7110/7110 tests verdes**. El comportamiento era correcto, pero
+> **nada lo protegía**. Test nuevo colocado a propósito LEJOS de los unitarios que afirman la *forma*
+> del SQL. `./init.sh` 623 / 7112 / 0.
+
+### 🚀 Pre-vuelo del despliegue `dev → prod` — HECHO el 2026-07-30
+
+- **✅ `T24.1` PASA: CERO órdenes.** Consulta de retroactividad contra producción (solo lectura).
+  Contexto comparable: órdenes en `devuelta` **2 → 0**, filas de historial **167 → 169**,
+  `reprogramada`+`gestion` **10**, `reprogramada`+`reprogramacion_tienda` **0**.
+- **✅ Verificado lo único que podía romper: no rompe.** La 155 retira `en_fulfillment` y producción
+  tiene **8 filas de historial** apuntando a ese value. Su `DELETE` es **CONDICIONAL** y su comentario
+  ya anticipaba este caso: en base con historial real es **NO-OP** y la fila del catálogo sobrevive,
+  inalcanzable desde la app. **Sin violación de FK.**
+- **🔎 Encontrado el desfase que las specs arrastraban:** producción tiene un value **`pendiente`** con
+  **0 órdenes y 0 filas de historial** — vestigial. Por eso las specs decían «18 estados de hoy»
+  mientras la base tiene 19.
+- **⚠️ Consecuencia cosmética tras desplegar:** el desplegable de filtro leerá 21 filas, incluidas
+  `en_fulfillment` y `pendiente`, que **no están en `ORDER_STATUS_SEED`**. El fallback está
+  documentado (`R17` de la feature 29): **se muestran como slug crudo**. No rompe.
+
+### ⏭️ Decisiones humanas pendientes al cerrar
+
+1. **Desplegar `dev → prod`** (140 commits, tren 154+155+156). **No queda nada técnico por comprobar.**
+2. **Mergear #208 → luego #209** (están apilados) y **#168**.
+3. **¿Se añade el `R56` a la spec de la 141?** («al deshacer la asignación el sistema DEBE conservar
+   `carga_id` y `download_url`»). Redactado más ancho que el mutante a propósito. **No se aplicó: es
+   decisión humana.**
+4. **⚠️ Candidata a ficha propia — `OrdenEnvioReader.findParaEnvio` NO filtra por estado**, sólo por
+   `mensajeroAsignadoId`: un mensajero podría seguir mandando plantillas de WhatsApp **al destinatario
+   de un paquete robado**. Patrón **preexistente** (pasa igual con `entregada`/`devuelta`), pero Q-J y
+   Q-K juntas lo agravan.
+
+### 🔨 PR 2 de la 158 — camino del admin (R37-R64) · detalle de implementación
 
 Rama `feature/158b-incidente-admin`, apilada sobre el #208 (su migración es aditiva sobre la del PR 1).
 
