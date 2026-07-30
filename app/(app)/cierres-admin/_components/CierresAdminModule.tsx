@@ -24,6 +24,11 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo } from "@/lib/types/cierre";
 import { montoValido } from "@/app/(app)/wallet/_components/wallet-labels";
+// Feature 158 (m5 del review): el tope del monto se IMPORTA del borde del servidor, no se
+// reescribe. Sale de la precisión de la columna (`DECIMAL(12,2)` → 9999999999.99); si algún
+// día cambia, un literal duplicado aquí se quedaría desalineado en silencio y volvería el
+// mismo callejón: el cliente habilitando un monto que la transacción no puede escribir.
+import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 // Feature 158/R34: la etiqueta visible de la causa sale del catálogo derivado del SEED (mismo
 // módulo que usa el panel del mensajero para capturarla). El admin decide el monto MIRANDO la
 // causa: no puede ser un slug crudo ni, peor, no estar.
@@ -85,11 +90,19 @@ const INDEMNIZACION_DETALLE =
   "Este cierre trae paquetes dañados, perdidos o robados. Indicá cuánto se indemniza por cada uno: al aprobar, la suma sale de la caja principal como un solo egreso.";
 const INDEMNIZACION_CONFIRMAR = "Aprobar e indemnizar";
 const INDEMNIZACION_MONTO_LABEL = "Monto de la indemnización";
+/**
+ * Feature 158 (m5 del review) — mensajes POR FILA del monto inválido. Dicen QUÉ corregir, no
+ * sólo que está mal: un «monto inválido» deja al admin adivinando si sobra un dígito, si el
+ * problema es la coma o si el tope es otro. El máximo se interpola del contrato, no se teclea.
+ */
+const INDEMNIZACION_MONTO_EXCEDE = `El monto no puede superar ₡${INDEMNIZACION_MONTO_MAX} (10 dígitos y 2 decimales). Revisá si sobra un dígito.`;
+const INDEMNIZACION_MONTO_FORMATO =
+  "Escribí un monto mayor que 0, con punto decimal y sin separador de miles (por ejemplo 12500.00).";
 /** R34: rótulo de la causa en la fila del incidente (el dato que justifica el monto). */
 const INDEMNIZACION_CAUSA_LABEL = "Causa";
 /** Causa ausente: no debería pasar (el borde la exige, R9), pero no se inventa un valor. */
 const INDEMNIZACION_CAUSA_DESCONOCIDA = "Sin causa registrada";
-const INDEMNIZACION_MONTO_AYUDA = "Mayor que 0, con hasta 2 decimales (por ejemplo 12500.00).";
+const INDEMNIZACION_MONTO_AYUDA = `Mayor que 0 y hasta ₡${INDEMNIZACION_MONTO_MAX}, con hasta 2 decimales (por ejemplo 12500.00).`;
 const INDEMNIZACION_FALTAN =
   "Falta el monto de al menos un incidente, o alguno no es válido. No se puede aprobar así.";
 
@@ -164,10 +177,25 @@ export function CierresAdminModule({
   // el conjunto que la UI pide indemnizar es exactamente el que el service exige cubrir.
   const incidentes: CierreDetalleGestion[] = detalle?.grupos.incidente ?? [];
   // R34: no se puede confirmar mientras falte o sea inválido algún monto. Mismo criterio
-  // que el servidor (`montoValido` de la wallet: > 0, hasta 2 decimales, sin `parseFloat`).
+  // que el servidor (`montoValido` de la wallet: > 0, hasta 2 decimales, sin `parseFloat`) —
+  // incluido el TOPE (m5): sin él la UI habilitaba «Confirmar» con un monto de 11 dígitos que
+  // el servidor rechaza después, y ese rechazo llega bajo la clave `indemnizaciones` (no por
+  // gestión), así que no se pintaba en ninguna celda: el admin veía que algo falló y no dónde.
   const todosLosMontosValidos =
     incidentes.length > 0 &&
-    incidentes.every((g) => montoValido(montos[g.gestionId] ?? ""));
+    incidentes.every((g) => montoValido(montos[g.gestionId] ?? "", INDEMNIZACION_MONTO_MAX));
+
+  /**
+   * Mensaje accionable de un monto tecleado que NO pasa la validación de cliente. `undefined`
+   * si el campo está vacío (ahí el aviso general del sub-modal ya dice que falta) o si es
+   * válido. Distingue el tope del formato: son dos correcciones distintas.
+   */
+  function errorDeMonto(valor: string): string | undefined {
+    const limpio = valor.trim();
+    if (limpio === "" || montoValido(limpio, INDEMNIZACION_MONTO_MAX)) return undefined;
+    // Bien formado pero por encima del tope → el problema es el tamaño, no la sintaxis.
+    return montoValido(limpio) ? INDEMNIZACION_MONTO_EXCEDE : INDEMNIZACION_MONTO_FORMATO;
+  }
 
   /** Abre el detalle de un cierre (pide las gestiones + evidencias firmadas). */
   async function abrirDetalle(cierreId: string) {
@@ -628,7 +656,9 @@ export function CierresAdminModule({
         <div className="flex flex-col gap-4">
           {incidentes.map((g) => {
             const inputId = `indemnizacion-${g.gestionId}`;
-            const error = montoErrores[g.gestionId];
+            // El error del servidor manda (llegó de una decisión real); si no lo hay, se pinta
+            // el del cliente, que es el que caza el tope ANTES de intentar aprobar.
+            const error = montoErrores[g.gestionId] ?? errorDeMonto(montos[g.gestionId] ?? "");
             return (
               <div
                 key={g.gestionId}

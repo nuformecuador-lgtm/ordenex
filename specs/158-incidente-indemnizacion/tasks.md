@@ -332,9 +332,13 @@
 > Bitácora: **`progress/impl_158_frontend.md`** (mapa R→test de la parte visible, **28
 > mutaciones** + la que NO discriminó y por qué, y la deuda de T2.3: cómo se declaró con un
 > candado de compilación y cómo se cerró cuando el candado se puso rojo de verdad).
-> ✅ **COMPLETA.** `./init.sh` verde: **616 archivos / 6936 tests / 0 fallos** (baseline de la
+> ✅ **COMPLETA.** `./init.sh` verde: **617 archivos / 6973 tests / 0 fallos** (baseline de la
 > fase backend: 610 / 6829). **R12, R33 y R34, que llegaban SIN test, quedan cubiertos**, y R34
 > con sus dos cláusulas: la del monto **y la de la causa**.
+> **3.ª pasada (m5 del review):** el tope del monto se cierra también en el cliente
+> —`montoValido` gana un máximo **opcional** y el sub-modal le pasa `INDEMNIZACION_MONTO_MAX`
+> importado, no reescrito—, con su mensaje accionable por fila. 5 mutaciones nuevas, 5
+> discriminan; una 6.ª no discriminaba y por eso hay un archivo de test más (§3 del impl).
 
 - [x] **T2.1** Panel del mensajero (`GestionarOrdenPanel.tsx`): `type Resultado` (`:50`),
       `RESULTADO_BOTONES` (`:63`) con "Reportar incidente" visualmente separado, rama en `buildRaw`
@@ -404,7 +408,7 @@
       `progress/impl_158-incidente-indemnizacion.md`.
       *Depende de:* T2.1-T2.5.
       *Hecho cuando:* el reviewer puede recorrer cada R hasta un test concreto.
-      ✅ `./init.sh` verde: **616 archivos / 6936 tests / 0 fallos**; lint **0 errores / 19
+      ✅ `./init.sh` verde: **617 archivos / 6973 tests / 0 fallos**; lint **0 errores / 19
       warnings** (los del baseline). Mapa R→test de **R1-R36 completo** en
       `progress/impl_158_frontend.md` §2 —la bitácora se escribió con ese nombre, no con el del
       enunciado, para no pisar la de la fase backend—, con **R12, R33 y R34** (los tres que

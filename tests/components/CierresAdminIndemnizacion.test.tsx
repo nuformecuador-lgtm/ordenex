@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
 import { verCierreDetalle, aprobarCierre } from "@/lib/actions/cierres-admin";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
+import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
   CierreDetalleGestion,
@@ -274,6 +275,102 @@ describe("R34 — con incidentes, aprobar pasa SIEMPRE por la captura del monto"
 
     const dialog = await screen.findByRole("dialog", { name: SUB_MODAL });
     expect(within(dialog).getByText("Sin causa registrada")).toBeInTheDocument();
+  });
+
+  // --- m5 del review: el TOPE del monto, con su frontera exacta ---
+  // El monto se escribe en `gestion_orden.indemnizacion`, `DECIMAL(12,2)`: el mayor valor
+  // representable es 9999999999.99. Sin tope en el cliente, la UI habilitaba «Confirmar» con
+  // 11 dígitos, el servidor lo rechazaba —correctamente— y ese rechazo llegaba bajo la clave
+  // `indemnizaciones` (`z.flattenError` no baja a rutas anidadas), así que NO se pintaba en
+  // ninguna celda: el admin veía que algo falló y no dónde. Estos casos cierran el círculo.
+  it("m5: el máximo EXACTO se acepta y habilita el confirmar", async () => {
+    const user = userEvent.setup();
+    conIncidentes([INC_1]);
+    await pulsarAprobar(user);
+    const dialog = await screen.findByRole("dialog", { name: SUB_MODAL });
+
+    tecleaMonto("gi1", INDEMNIZACION_MONTO_MAX);
+
+    expect(INDEMNIZACION_MONTO_MAX).toBe("9999999999.99"); // la frontera, fijada
+    expect(within(dialog).getByRole("button", { name: CONFIRMAR })).toBeEnabled();
+    // Y se envía TAL CUAL: el tope no reformatea el monto.
+    await user.click(within(dialog).getByRole("button", { name: CONFIRMAR }));
+    await vi.waitFor(() => expect(aprobarMock).toHaveBeenCalledTimes(1));
+    expect(aprobarMock).toHaveBeenCalledWith({
+      cierreId: "c1",
+      indemnizaciones: [{ gestionId: "gi1", monto: INDEMNIZACION_MONTO_MAX }],
+    });
+  });
+
+  it.each([
+    ["un céntimo por encima del máximo", "10000000000.00"],
+    ["un dígito de más", "99999999999.99"],
+    ["muchísimo de más", "123456789012345.67"],
+  ])("m5: %s NO habilita el confirmar y NO llega a la action", async (_caso, valor) => {
+    const user = userEvent.setup();
+    conIncidentes([INC_1]);
+    await pulsarAprobar(user);
+    const dialog = await screen.findByRole("dialog", { name: SUB_MODAL });
+
+    tecleaMonto("gi1", valor);
+
+    expect(within(dialog).getByRole("button", { name: CONFIRMAR })).toBeDisabled();
+    await user.click(within(dialog).getByRole("button", { name: CONFIRMAR }));
+    expect(aprobarMock).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it("m5: el mensaje dice QUÉ corregir — nombra el máximo y dónde mirar", async () => {
+    const user = userEvent.setup();
+    conIncidentes([INC_1]);
+    await pulsarAprobar(user);
+    await screen.findByRole("dialog", { name: SUB_MODAL });
+
+    tecleaMonto("gi1", "10000000000.00");
+
+    // El error se pinta EN LA CELDA (es justo lo que el servidor no podía hacer llegar).
+    expect(document.getElementById("indemnizacion-gi1")).toHaveAttribute("aria-invalid", "true");
+    const error = document.getElementById("indemnizacion-gi1-error");
+    expect(error).toHaveAttribute("role", "alert");
+    const texto = error?.textContent ?? "";
+    // No basta con «monto inválido»: nombra el tope real y qué revisar.
+    expect(texto).toContain(INDEMNIZACION_MONTO_MAX);
+    expect(texto).toMatch(/sobra un d[íi]gito/i);
+  });
+
+  it("m5: un monto mal FORMADO recibe otro mensaje (son dos correcciones distintas)", async () => {
+    const user = userEvent.setup();
+    conIncidentes([INC_1]);
+    await pulsarAprobar(user);
+    await screen.findByRole("dialog", { name: SUB_MODAL });
+
+    tecleaMonto("gi1", "10,50"); // coma en vez de punto
+
+    const texto = document.getElementById("indemnizacion-gi1-error")?.textContent ?? "";
+    expect(texto).toMatch(/punto decimal|separador de miles/i);
+    expect(texto).not.toContain(INDEMNIZACION_MONTO_MAX);
+  });
+
+  it("m5: el campo vacío NO pinta error de formato (todavía no se tecleó nada)", async () => {
+    const user = userEvent.setup();
+    conIncidentes([INC_1]);
+    await pulsarAprobar(user);
+    await screen.findByRole("dialog", { name: SUB_MODAL });
+
+    // Sin tocar nada: el aviso general ya dice que falta; una celda en rojo de entrada
+    // sería ruido sobre un campo que el admin ni ha visitado.
+    expect(document.getElementById("indemnizacion-gi1")).not.toHaveAttribute("aria-invalid");
+    expect(document.getElementById("indemnizacion-gi1-error")).toBeNull();
+  });
+
+  it("m5: la ayuda del campo anuncia el tope ANTES de que lo choque", async () => {
+    const user = userEvent.setup();
+    conIncidentes([INC_1]);
+    await pulsarAprobar(user);
+    await screen.findByRole("dialog", { name: SUB_MODAL });
+
+    const ayuda = document.getElementById("indemnizacion-gi1-ayuda");
+    expect(ayuda?.textContent ?? "").toContain(INDEMNIZACION_MONTO_MAX);
   });
 
   it("no deja confirmar mientras falte algún monto, y lo dice con TEXTO", async () => {

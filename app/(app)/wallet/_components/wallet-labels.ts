@@ -102,12 +102,47 @@ export const DESCRIPCION_EGRESO_PLACEHOLDER: Record<TipoEgresoManual, string> = 
 };
 
 /**
+ * Parte un monto STRING ya validado de forma en sus dos mitades, NORMALIZADAS: enteros sin
+ * ceros a la izquierda ("0012" → "12", "000" → "0") y decimales siempre de 2 dígitos
+ * ("5" → "50", ausentes → "00"). Es lo que permite comparar dos montos como TEXTO.
+ */
+function partesMonto(monto: string): { enteros: string; decimales: string } {
+  const [enteros = "", decimales = ""] = monto.split(".");
+  return {
+    enteros: enteros.replace(/^0+(?=\d)/, ""),
+    decimales: decimales.padEnd(2, "0"),
+  };
+}
+
+/**
+ * `a <= b` sobre dos montos STRING con el formato de `montoValido`. Money-safe: compara
+ * TEXTO (primero por cantidad de dígitos enteros, luego lexicográficamente), nunca
+ * `parseFloat`/`Number` — un monto de 11 dígitos no cabe exacto en un `number` y comparar
+ * así podría aceptar justo el valor que se quiere rechazar.
+ */
+function montoMenorOIgual(a: string, b: string): boolean {
+  const pa = partesMonto(a);
+  const pb = partesMonto(b);
+  if (pa.enteros.length !== pb.enteros.length) return pa.enteros.length < pb.enteros.length;
+  if (pa.enteros !== pb.enteros) return pa.enteros < pb.enteros;
+  return pa.decimales <= pb.decimales;
+}
+
+/**
  * Valida en cliente un monto de dinero STRING: hasta 2 decimales y > 0 (al menos un dígito
  * distinto de cero). Money-safe: sin parseFloat/Number (el backend re-valida con Decimal).
+ *
+ * `max` (feature 158, m5 del review) acota POR ARRIBA, con la MISMA frontera que el borde del
+ * servidor. Es **opcional a propósito**: esta función la comparten los formularios de la
+ * wallet (42/45), cuyo schema de servidor (`montoPositivoSchema`) NO tiene tope. Aplicárselo
+ * aquí sin pedirlo dejaría al cliente más estricto que su propio servidor y bloquearía montos
+ * que el backend acepta — exactamente el efecto colateral que el backend evitó al poner el
+ * tope en el borde de la 158 y no en `montoPositivoSchema`. Quien tiene tope, lo pasa.
  */
-export function montoValido(monto: string): boolean {
+export function montoValido(monto: string, max?: string): boolean {
   const limpio = monto.trim();
-  return /^\d+(\.\d{1,2})?$/.test(limpio) && /[1-9]/.test(limpio);
+  if (!/^\d+(\.\d{1,2})?$/.test(limpio) || !/[1-9]/.test(limpio)) return false;
+  return max === undefined || montoMenorOIgual(limpio, max);
 }
 
 /** Un egreso administrativo es reversable (R22c/R32): `tipo=egreso` ∧ `origen_tipo=gasto`. */

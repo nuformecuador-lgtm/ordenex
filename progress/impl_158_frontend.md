@@ -9,9 +9,14 @@
 
 ## Veredicto
 
-**Fase 2 COMPLETA y verde.** `./init.sh` OK: **616 archivos / 6936 tests / 0 fallos**, lint
+**Fase 2 COMPLETA y verde.** `./init.sh` OK: **617 archivos / 6973 tests / 0 fallos**, lint
 **0 errores / 19 warnings** (los mismos 19 del baseline).
 
+> **Actualizado el 2026-07-30 (tercera pasada).** El review del PR 1 encontró que el monto de
+> indemnización no tenía tope frente al `DECIMAL(12,2)` de la columna (m5). El backend lo cerró
+> en su borde y exportó `INDEMNIZACION_MONTO_MAX`; esta pasada cierra la mitad de cliente, que
+> era la que convertía el fallo en un callejón sin salida para el admin. Detalle en §5-ter.
+>
 > **Actualizado el 2026-07-30 (segunda pasada).** La primera pasada cerró T2.1/T2.2/T2.4/T2.5
 > y dejó **T2.3 y T2.6 sin marcar**, porque la causa y el monto **no viajaban en el DTO** y
 > traerlos era backend. **El backend los añadió** (commit `a9354a7`), así que esta segunda
@@ -25,9 +30,11 @@
 | baseline (cierre de la fase backend) | 610 | 6829 |
 | 1.ª pasada del frontend (T2.1–T2.5) | 615 | 6892 |
 | el backend extiende el DTO (`a9354a7`) | 616 | 6921 |
-| **2.ª pasada del frontend (cierre de T2.3/R34)** | **616** | **6936** |
+| 2.ª pasada del frontend (cierre de T2.3/R34) | 616 | 6936 |
+| el backend salda m5/m6 del review (`ea02642`) | 616 | 6948 |
+| **3.ª pasada del frontend (tope del monto en el cliente)** | **617** | **6973** |
 
-**Delta total del frontend: +6 archivos de test, +78 tests, 0 fallos, 0 warnings nuevos.**
+**Delta total del frontend: +7 archivos de test, +103 tests, 0 fallos, 0 warnings nuevos.**
 
 ---
 
@@ -130,6 +137,23 @@ que el grupo `incidente` del detalle del mensajero gana la **misma** `COLUMNA_CA
   sub-modal **sigue abierto** (cerrarlo obligaría a recapturar todo) y teclear limpia el error
   de **esa** fila. Un `conflict`/`forbidden`/`no_encontrada` sigue el camino de la 38.
 - Cerrar el detalle descarta los montos: reabrir otro cierre no hereda nada.
+- **3.ª pasada — el TOPE del monto (m5 del review).** El backend acotó el monto en su borde
+  contra la capacidad real de la columna (`DECIMAL(12,2)` → `9999999999.99`) y exportó
+  `INDEMNIZACION_MONTO_MAX`. Aquí se cierra el círculo: `montoValido` gana un **máximo
+  opcional** y el sub-modal le pasa **la constante importada**, nunca el número tecleado a
+  mano (si mañana cambia la precisión de la columna, un literal duplicado se quedaría
+  desalineado en silencio y volvería el mismo callejón). Detalle de por qué el máximo es
+  **opcional** y no una regla nueva de `montoValido`, en §5-ter.
+  - **Por qué importaba de verdad:** sin tope en el cliente, la UI habilitaba «Confirmar» con
+    11 dígitos; el servidor rechazaba —correctamente— pero `z.flattenError` no baja a rutas
+    anidadas, así que el error llegaba bajo la clave `indemnizaciones` y **no se pintaba en
+    ninguna celda**. El admin veía que algo falló y no dónde, con todo lo tecleado perdido.
+  - **La comparación es por TEXTO**, no por `number`: un monto de 11 dígitos no cabe exacto en
+    un `double` y comparar así podría aceptar justo el valor que se quiere rechazar.
+  - **Mensajes accionables y distintos por causa**: el que supera el tope nombra el máximo y
+    dice «revisá si sobra un dígito»; el mal formado habla del punto decimal y del separador
+    de miles. Son dos correcciones distintas y un «monto inválido» único las confundiría. El
+    tope aparece además en la ayuda del campo, **antes** de que el admin lo choque.
 - **2.ª pasada — la CAUSA en cada fila, que es lo que cierra R34.** El requisito dice, literal,
   que la interfaz debe mostrar «la identificación de la orden **y su causa**, y pedir su
   monto». La primera pasada tenía la identificación y el monto; **la causa no aparecía por
@@ -186,6 +210,7 @@ La casilla no se marca porque **T2.3, de la que depende, está incompleta**.
 | **R14 / Q-D** *(superficie)* | `tests/components/CierreDiaModuleIncidente.test.tsx` › «Q-D/R14 — un incidente SE PUEDE deshacer desde el detalle» |
 | **R19/R20/R21** *(superficie)* | `tests/components/CierresAdminIndemnizacion.test.tsx` › «no deja confirmar mientras falte algún monto», `it.each` de montos inválidos, y bloque «R19/R21 — los errores del servidor se pintan POR FILA» (3 casos) |
 | **R24** *(superficie)* | `…/CierresAdminIndemnizacion.test.tsx` › «envía … con los montos TAL CUAL (STRING)» + «un monto con espacios sobrantes se envía recortado, no re-formateado» · `…/wallet-desglose-egresos-card.test.tsx` › «un monto con muchos decimales o muy grande se muestra sin reformatear» |
+| **R20 / m5** *(tope, 3.ª pasada)* | `tests/unit/components/wallet-monto-valido-tope.test.ts` (17 casos: la frontera exacta por los dos lados, los bordes de la comparación por texto, y que la wallet 42/45 **no** cambia) · `…/CierresAdminIndemnizacion.test.tsx` › «m5: el máximo EXACTO se acepta y habilita el confirmar», `it.each` de 3 montos por encima, «el mensaje dice QUÉ corregir», «un monto mal FORMADO recibe otro mensaje», «el campo vacío NO pinta error» y «la ayuda anuncia el tope ANTES de que lo choque» |
 | **R35** *(no regresión)* | `tests/components/CierreDiaModuleIncidente.test.tsx` › «la sección de una ENTREGA sí conserva sus columnas de dinero» · `tests/components/CierreDetalleIncidente.test.tsx` › «un RECHAZO conserva exactamente sus columnas» + «los cuatro previos conservan su orden exacto» · `…/GestionarOrdenPanelIncidente.test.tsx` › «el selector de causa del incidente NO aparece en los otros cuatro resultados» · **la suite de componente completa en verde sin tocar las expectativas de los 4 resultados previos** |
 | **R36** *(no regresión)* | `tests/components/CierresAdminIndemnizacion.test.tsx` › «R36 — un cierre SIN incidentes se aprueba exactamente como hoy» (afirma que las claves del payload son **exactamente** `["cierreId"]`) · `tests/components/CierresAdminModule.test.tsx` › «R10: aprobar llama a aprobarCierre…» (el test de la 38, **intacto**) |
 
@@ -236,6 +261,24 @@ Todas en memoria; los archivos se restauraron (`git status` limpio antes de cada
 | Z | la causa se pinta **como slug crudo** (sin traducir) en el sub-modal | 2 rojos |
 | AA | el **mensajero** pierde su columna de causa | 3 rojos |
 | AB | el «—» del monto pierde su nota (vuelve a ser un guion pelado) | 1 rojo |
+
+### Mutaciones de la 3.ª pasada (el tope del monto), 5 de 5 discriminan
+
+| # | mutación | resultado |
+| --- | --- | --- |
+| AC | el cliente deja de pasar el tope (`montoValido` sin `max`) | **4 rojos** |
+| AD | el tope se corre **por uno hacia abajo** (`<` en vez de `<=` en los decimales) | 1 rojo: «el máximo EXACTO se acepta» — la frontera se caza **por los dos lados** |
+| AE | el tope se corre **por uno hacia arriba** (admite un dígito entero más) | 3 rojos |
+| AF | se ignoran los ceros a la izquierda (sin normalizar los enteros) | 2 rojos |
+| AG | se compara por **orden alfabético** (sin mirar la cantidad de dígitos) | **8 rojos** en 2 archivos |
+
+**Una mutación no discriminaba, y por eso hay un archivo de test más.** Quitar el rellenado de
+los decimales a 2 dígitos (`padEnd(2, "0")`) dejaba los 28 casos del sub-modal **en verde**: con
+un máximo terminado en `.99` la comparación truncada da el mismo resultado por casualidad. Se
+midió, se dijo y **se cerró**: `tests/unit/components/wallet-monto-valido-tope.test.ts` prueba
+el contrato de la comparación por sus bordes propios (ceros a la izquierda, decimales
+ausentes, ceros a la derecha) y su caso «5.10 vs 5.1» **sí** mata esa mutación. El tope de hoy
+no sufría el fallo; el de mañana, si cambia la precisión de la columna, podría.
 
 ### La mutación que NO discriminó, dicha porque cambia lo que estos tests significan
 
@@ -301,6 +344,31 @@ qué dos de sus casos afirman hoy lo contrario de lo que afirmaban al nacer.
 **Ningún test se borró en ninguna de las dos inversiones.** Es la misma regla que la fase
 backend aplicó con los tests de la 154: si el invariante cambia, el test sigue protegiendo el
 invariante nuevo con la misma fuerza.
+
+## 5-ter. El tope del monto: por qué es un parámetro y no una regla nueva
+
+El encargo decía «dale a `montoValido` el mismo máximo importando `INDEMNIZACION_MONTO_MAX`».
+Se hizo exactamente eso —el máximo se **importa**, no se reescribe— pero como **parámetro
+opcional**, y conviene decir por qué, porque es una desviación de la letra:
+
+`montoValido` **no es sólo del sub-modal de la 158**. La usan también
+`RegistrarEgresoAdministrativoDialog` y `GastoFijoPlantillaDialog` (features 42/45), cuyo
+schema de servidor es `montoPositivoSchema` — **que no tiene tope**, y el backend decidió a
+propósito no ponérselo: «endurecerlo desde aquí cambiaría el comportamiento de otras features
+sin decisión suya» (`lib/types/cierres-admin.ts`). Aplicar el tope dentro de `montoValido` de
+forma incondicional habría hecho justo eso, pero **en el cliente**: dejaría los formularios de
+la wallet **más estrictos que su propio servidor**, bloqueando montos que el backend acepta. Es
+el mismo efecto colateral que el backend evitó, entrando por la otra puerta.
+
+Con el parámetro, quien tiene tope lo pasa y quien no, no cambia. Hay dos casos que lo fijan
+(«sin `max`, el comportamiento de la wallet (42/45) NO cambia»), para que nadie lo «simplifique»
+después haciéndolo obligatorio.
+
+**Lo que NO se tocó, por instrucción explícita:** el mapeo de errores anidados. Que un
+`validation_error` de un elemento de `indemnizaciones[]` llegue bajo la clave del array y no
+por gestión es **propiedad de todos** los errores de ese borde (vacío, 0, negativo, 3
+decimales), hoy inalcanzables porque el cliente los bloquea antes. El tope los deja igual de
+inalcanzables. Rediseñar `z.flattenError` para rutas anidadas es **follow-up**, no este PR.
 
 ## 5-bis. Lo que NO se hizo, con su razón
 
@@ -395,14 +463,23 @@ $ ./init.sh
 == init OK ==
 ```
 
-**Delta total del frontend** sobre el baseline de la fase backend: **+6 archivos de test,
-+78 tests** (63 de la 1.ª pasada + 15 de la 2.ª), **0 fallos, 0 warnings nuevos.**
+**3.ª pasada** (tope del monto, m5), sobre el baseline que dejó el backend al saldar el review
+(616 / 6948):
+
+```
+ Test Files  617 passed (617)
+      Tests  6973 passed (6973)
+```
+
+**Delta total del frontend** sobre el baseline de la fase backend: **+7 archivos de test,
++103 tests** (63 de la 1.ª pasada + 15 de la 2.ª + 25 de la 3.ª), **0 fallos, 0 warnings
+nuevos.**
 
 ---
 
 ## 7. Archivos creados / modificados
 
-### Creados (6)
+### Creados (7)
 
 ```
 app/(app)/mis-asignaciones/_components/causa-incidente-options.ts
@@ -411,6 +488,7 @@ tests/components/CierreDiaModuleIncidente.test.tsx
 tests/components/CierreDetalleIncidente.test.tsx
 tests/components/CierresAdminIndemnizacion.test.tsx
 tests/unit/components/wallet-indemnizacion-libro.test.tsx
+tests/unit/components/wallet-monto-valido-tope.test.ts          ← 3.ª pasada (la mutación que no discriminaba)
 ```
 
 ### Modificados — producción (5)
@@ -419,19 +497,20 @@ tests/unit/components/wallet-indemnizacion-libro.test.tsx
 app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx
 app/(app)/cierre-dia/_components/CierreDiaModule.tsx            ← 1.ª y 2.ª pasada
 app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx   ← 1.ª y 2.ª pasada
-app/(app)/cierres-admin/_components/CierresAdminModule.tsx      ← 1.ª y 2.ª pasada
+app/(app)/cierres-admin/_components/CierresAdminModule.tsx      ← 1.ª, 2.ª y 3.ª pasada
 app/(app)/wallet/_components/DesgloseEgresosCard.tsx
+app/(app)/wallet/_components/wallet-labels.ts                   ← 3.ª pasada: `montoValido` + `max` opcional
 ```
 
-*(`wallet-labels.ts` **no** se tocó en esta fase: su entrada de `CATEGORIA_LABEL` ya la puso la
-fase backend por exhaustividad, y era correcta.)*
+*(En la 1.ª y 2.ª pasada `wallet-labels.ts` NO se tocó: su entrada de `CATEGORIA_LABEL` ya la
+puso la fase backend por exhaustividad y era correcta. La 3.ª sí lo toca, para el tope.)*
 
 ### Modificados — tests (4)
 
 ```
 tests/unit/components/wallet-desglose-egresos-card.test.tsx   ← copy corregido + 4 casos nuevos
 tests/components/CierreDetalleIncidente.test.tsx              ← caso `PENDIENTE T2.3` INVERTIDO + 9 casos
-tests/components/CierresAdminIndemnizacion.test.tsx           ← +3 casos (la cláusula de la causa, R34)
+tests/components/CierresAdminIndemnizacion.test.tsx           ← +3 casos (causa, R34) +8 casos (tope, m5)
 tests/components/CierreDiaModuleIncidente.test.tsx            ← +5 casos (causa sí, monto no)
 ```
 
