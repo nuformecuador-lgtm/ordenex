@@ -80,10 +80,54 @@
     cierre del día, admin vía aprobación del incidente) y la idempotencia de la wallet tiene que
     cubrir los dos para que una orden no se pague dos veces.
 
-**Estado:** `spec_author` ampliando `specs/158-incidente-indemnizacion/` en la rama
-`feature/158-incidente-indemnizacion` (base = `dev` + los 3 commits del #207). **No se ha tocado
-código de producción.** Al volver el spec hay **nueva puerta humana** sobre los requisitos del bloque
-del admin antes de implementar.
+### 🚪 Puerta F1.4-bis de la 158 — spec ampliada y **4 decisiones más**
+
+Spec ampliada a **64 R** (28 nuevos `R37-R64`; **7 reescritos en su sitio** con su nota: `R6` por Q-A,
+`R9`/`R10` por Q-B, `R13`/`R14`/`R15` por Q-D, y `R29`, que pasa de «un solo emisor de dinero» a
+**«exactamente dos, uno por camino, y ningún tercero»** con guard estructural).
+
+**🔎 Hallazgo que mató el diseño barato — verificado, no supuesto.** El incidente del admin **no puede
+ser una fila de `gestion_orden`**: `CorteDiarioRepository.findMensajerosConActividadSinCierre` (`:38-44`)
+hace `where: { cierreId: null, anuladaAt: null }` con `distinct: ["mensajeroId"]` **sin filtrar rol ni
+resultado** → le habría creado al admin un `cierre_dia` **vencido y bloqueante que no puede resolver**,
+porque `CierreDiaService` está acotado al rol `mensajero`. De ahí sale **tabla propia `orden_incidente`**
++ su espejo de evidencias.
+
+**El destino del deshacer NO necesita columna nueva.** Dos cosas verificadas: (1) para el camino del
+mensajero el hardcode a `en_reparto` **no es un bug** — una gestión sólo nace desde `en_reparto` y su
+autor es siempre mensajero; (2) para el admin el lector ya existe y está mergeado:
+`findOrigenesReversion` de la **149** (`OrdenHistorialRepository:212-230`) lee el `estatus_origen_id`
+de la fila de historial más reciente. `estado_origen_id` queda como plan B declarado.
+
+**§14 del design lista 10 tests de OTRAS features que esta feature rompe garantizado**, con archivo,
+línea y qué deben afirmar — incluidos los que hoy asertan `TRANSICIONES.incidente === []`. Consecuencia
+directa de Q-D, declarada por adelantado en vez de descubrirse en el gate.
+
+**Decisiones del humano del 2026-07-30 (segunda ronda):**
+- **Q-H = modal por orden en el módulo de órdenes**, desde la acción de fila. Precedentes exactos:
+  `RecuperarABodegaModal` (100) y `DeshacerAsignacionModal` (149) — las dos acciones administrativas por
+  orden CON MOTIVO que ya viven ahí. **No puede ser acción de lote:** pide causa, motivo y fotos por orden.
+- **Q-I = página propia `/incidentes`**, espejo de `cierres-admin`. Precedente: `cierres-bodega-admin` ya
+  es página propia para el espejo de la 38. Coste: entrada nueva en `menu-visibility.ts` con rol.
+- **Q-E → ficha 161 REGISTRADA** con el OK del humano: «credito de indemnizacion en el ledger por
+  tienda», `pending` / backend / medium / `depends_on: 158`.
+- **Q-J y Q-K se toman por la recomendación** (no objetadas, con su consecuencia declarada): **Q-J** el
+  aviso al mensajero cuya orden pasa a `incidente` queda **fuera de alcance con follow-up escrito** — hoy
+  la orden desaparece de «Mis asignaciones» sin aviso, y es el tipo de hueco que se descubre con una
+  llamada del mensajero; **Q-K** **no se toca `mensajero_asignado_id`** al reportar desde `por_recoger`,
+  así la reversión es trivialmente correcta y la asignación colgando es inocua (`findMisAsignaciones`
+  filtra por estados e `incidente` no está entre ellos).
+
+**⏸️ Q-L SIGUE ABIERTA — es la única que bloquea el arranque.** ¿Un PR o dos? El diseño **recomienda
+dos** (§15.2) y demuestra que la línea no deja **nada funcional roto** en el intermedio: ninguna arista
+ni familia sin productor (las 10 del admin no se declaran hasta que llega su productor — la lección de
+la 154 aplicada al revés), ciclo económico completo en el primero, y el único efecto visible es que el
+admin no puede reportar desde bodega, **que es el estado de hoy**. La pregunta se hizo primero con la
+palabra «entrega» y **se malentendió**: en este dominio «entrega» es lo que hace un mensajero con un
+paquete. Reformulada como «un PR o dos PRs».
+
+**Estado:** spec en la rama `feature/158-incidente-indemnizacion` (base = `dev` + los 3 commits del
+#207), commits `9a02ed5` y `3183127`. **Ni una línea de código de producción tocada.**
 
 ---
 
