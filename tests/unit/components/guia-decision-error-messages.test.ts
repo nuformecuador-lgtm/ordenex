@@ -93,6 +93,25 @@ describe("R9 · mapeo de motivos del gate de coordenadas", () => {
     ).toContain("bodega satélite");
   });
 
+  // El genérico habla de "estado" y MIENTE cuando la causa es otra: el reporte de
+  // producción fue "no puedo asignar" con las órdenes en un estado perfectamente válido,
+  // bloqueadas en realidad por el cierre abierto del mensajero elegido.
+  it("el mensajero con cierre pendiente tiene mensaje propio, no el genérico de estado", () => {
+    const mensaje = guiaDecisionErrorMessage(
+      conflict("mensajero bloqueado por cierre pendiente"),
+    );
+    expect(mensaje).toMatch(/cierre sin resolver/i);
+    expect(mensaje).not.toMatch(/estado válido/i);
+  });
+
+  it("la orden reprogramada tiene mensaje propio, no el genérico de estado", () => {
+    const mensaje = guiaDecisionErrorMessage(
+      conflict("orden reprogramada: bloqueada hasta la fecha de reprogramacion"),
+    );
+    expect(mensaje).toMatch(/reprogramada/i);
+    expect(mensaje).not.toMatch(/estado válido/i);
+  });
+
   it("R9: entradas defensivas (null, sin detalle, detalle no-array) no rompen el mapper", () => {
     expect(guiaDecisionErrorMessage(null)).toBe("No se pudo completar la operación.");
     expect(guiaDecisionErrorMessage({ status: "forbidden" })).toBe(

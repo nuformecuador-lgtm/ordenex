@@ -11,6 +11,7 @@ import {
   resaltarFilaPrioridad,
 } from "@/components/shared/PrioridadResalte";
 import { Pagination } from "@/components/shared/Pagination";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
@@ -327,6 +328,21 @@ export function OrdenesModule({
   // Snapshot de las filas marcadas PRESENTES en la página actual (la selección se
   // acota a lo visible, como en la vista de revisión previa).
   const seleccionadas = items.filter((item) => seleccionIds.has(item.id));
+
+  /**
+   * Motivos por los que NINGUNA fila de la página se puede marcar. El tooltip del
+   * checkbox ya explica cada fila, pero una página entera de casillas grises no se lee
+   * como "hay una condición que lo impide", sino como "los checkbox no funcionan" — que
+   * es justo el reporte que llegó con el filtro "Reasignables" y una zona con cierre
+   * abierto. Con filas mixtas no se avisa: ahí el usuario sí puede marcar algo y el
+   * tooltip basta.
+   */
+  const motivosPaginaBloqueada = useMemo<string[]>(() => {
+    if (!haySeleccion || !bloqueoSeleccion || items.length === 0) return [];
+    const motivos = items.map((row) => bloqueoSeleccion(row));
+    if (motivos.some((m) => m === null)) return [];
+    return [...new Set(motivos.filter((m): m is string => m !== null))];
+  }, [haySeleccion, bloqueoSeleccion, items]);
   // Acciones aplicables a la selección actual. Con `acciones` como función, el padre
   // decide qué aplica a ESTAS filas (estados mezclados); con un array, es fijo.
   const accionesActivas =
@@ -380,6 +396,24 @@ export function OrdenesModule({
           <OrdenesCargaMasivaButton />
         </div>
       )}
+
+      {/* Por qué no se puede marcar nada en esta página (motivo a la vista, no solo en
+          el tooltip de cada casilla). */}
+      {motivosPaginaBloqueada.length > 0 ? (
+        <Alert variant="default">
+          <AlertDescription>
+            {motivosPaginaBloqueada.length === 1 ? (
+              motivosPaginaBloqueada[0]
+            ) : (
+              <ul className="list-disc pl-4">
+                {motivosPaginaBloqueada.map((motivo) => (
+                  <li key={motivo}>{motivo}</li>
+                ))}
+              </ul>
+            )}
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* Barra de acciones por lote ("tool"): aparece SOLO con filas marcadas. */}
       {hayAcciones ? (
