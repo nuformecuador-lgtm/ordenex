@@ -49,6 +49,12 @@ interface DobleOpts {
   ordenUpdateCount?: number;
   /** Error a lanzar en el `create` del incidente (p. ej. el P2002 de R47). */
   errorCreate?: unknown;
+  /**
+   * Estado REAL del incidente en la "base". El doble de `updateMany` HONRA `where.estado`, asi
+   * que un incidente que ya no esta `solicitado` da `count 0` — igual que Postgres. Es lo que
+   * convierte la guardia de R53 en una afirmacion de COMPORTAMIENTO y no de forma.
+   */
+  estadoIncidente?: string;
 }
 
 function buildPrisma(opts: DobleOpts = {}) {
@@ -77,8 +83,11 @@ function buildPrisma(opts: DobleOpts = {}) {
     historialCreateMany: vi.fn(async ({ data }: { data: unknown[] }) => ({ count: data.length })),
     walletCreateMany: vi.fn(async ({ data }: { data: unknown[] }) => ({ count: data.length })),
     incidenteUpdateMany: vi.fn(async (arg: ArgWhereData) => {
-      void arg;
-      return { count: 1 };
+      // Honra `where.estado`: si la guardia desaparece, el UPDATE aplica sobre un incidente ya
+      // resuelto y el feed emite un SEGUNDO egreso. Ese es el fallo que R53 prohibe.
+      const estadoReal = opts.estadoIncidente ?? "solicitado";
+      const exigido = arg.where.estado as string | undefined;
+      return { count: exigido === undefined || exigido === estadoReal ? 1 : 0 };
     }),
     // Tipo de retorno ANCHO a proposito: los casos de lectura sustituyen la fila por una
     // proyeccion completa (o por `null`) con `mockResolvedValueOnce`.
@@ -401,6 +410,33 @@ describe("R52/R53 — aprobar escribe el monto y emite UN egreso, en la MISMA tx
     // La guardia de estado corta ANTES del feed: no hay segundo movimiento ni siquiera intentado.
     expect(walletRepo.crearMovimientos).not.toHaveBeenCalled();
     expect(calls.incidenteFindFirst).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["aprobado", "aprobado"],
+    ["rechazado", "rechazado"],
+  ])(
+    "R53 (COMPORTAMIENTO): sobre un incidente ya `%s` NO se emite un segundo egreso",
+    async (_c, estadoIncidente) => {
+      // El doble honra `where.estado`, como la base. Sin la guardia el UPDATE aplicaria sobre un
+      // incidente ya resuelto, el feed correria y la wallet recibiria un SEGUNDO movimiento.
+      const { cliente } = buildPrisma({ estadoIncidente });
+      const { repo, walletRepo } = buildRepo(cliente);
+
+      const res = await repo.resolver(aprobar);
+
+      expect(res).toBe("conflict");
+      expect(walletRepo.crearMovimientos).not.toHaveBeenCalled();
+    },
+  );
+
+  it("R53 (control): con el MISMO doble, un `solicitado` SI se aprueba y emite", async () => {
+    // Sin este control, los dos casos de arriba podrian pasar por la razon equivocada.
+    const { cliente } = buildPrisma({ estadoIncidente: "solicitado" });
+    const { repo, walletRepo } = buildRepo(cliente);
+
+    expect(await repo.resolver(aprobar)).toBe("updated");
+    expect(walletRepo.crearMovimientos).toHaveBeenCalledTimes(1);
   });
 
   it("R48: si no existe en el alcance -> `fuera_de_alcance` (no se distingue de inexistente)", async () => {

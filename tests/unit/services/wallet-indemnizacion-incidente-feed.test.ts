@@ -15,6 +15,21 @@ function txCon(fila: { indemnizacion: Prisma.Decimal | null } | null) {
   return { tx: { ordenIncidente: { findFirst } }, findFirst };
 }
 
+/**
+ * Doble que HONRA el `where`, como la base: guarda una fila con su `estado` real y solo la
+ * devuelve si el WHERE casa. Es lo que convierte «la guardia esta en el WHERE» en una
+ * afirmacion de COMPORTAMIENTO y no de forma.
+ */
+function txConEstado(estado: string, indemnizacion: Prisma.Decimal | null) {
+  const findFirst = vi.fn(
+    async (arg: { where: Record<string, unknown> }) =>
+      arg.where.estado === undefined || arg.where.estado === estado
+        ? { indemnizacion }
+        : null,
+  );
+  return { tx: { ordenIncidente: { findFirst } }, findFirst };
+}
+
 const feed = new WalletIndemnizacionIncidenteFeedService();
 
 describe("R52 — el movimiento emitido", () => {
@@ -64,6 +79,29 @@ describe("R52 — el movimiento emitido", () => {
   it("un incidente que NO esta aprobado no produce nada (el doble no lo encuentra)", async () => {
     const { tx } = txCon(null);
     expect(await feed.construirEgresoIndemnizacionIncidente(INCIDENTE_ID, tx as never)).toEqual([]);
+  });
+
+  it.each([
+    ["solicitado", "solicitado"],
+    ["rechazado", "rechazado"],
+  ])(
+    "R52 (COMPORTAMIENTO): un incidente `%s` CON monto guardado NO emite nada",
+    async (_c, estado) => {
+      // El doble honra el `where`: si la guardia `estado: "aprobado"` desapareciera, este caso
+      // devolveria la fila y el feed emitiria dinero por un incidente que nadie aprobo. Es la
+      // diferencia entre medir la FORMA del where y medir lo que pasa.
+      const { tx } = txConEstado(estado, new Prisma.Decimal("2500.00"));
+      expect(await feed.construirEgresoIndemnizacionIncidente(INCIDENTE_ID, tx as never)).toEqual(
+        [],
+      );
+    },
+  );
+
+  it("R52 (control): con el MISMO doble, un `aprobado` SI emite (el arnes no esta siempre mudo)", async () => {
+    const { tx } = txConEstado("aprobado", new Prisma.Decimal("2500.00"));
+    const movs = await feed.construirEgresoIndemnizacionIncidente(INCIDENTE_ID, tx as never);
+    expect(movs).toHaveLength(1);
+    expect(movs[0].monto).toBe("2500.00");
   });
 });
 
