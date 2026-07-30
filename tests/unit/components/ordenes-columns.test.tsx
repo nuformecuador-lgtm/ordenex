@@ -9,7 +9,7 @@ import {
 } from "@/app/(app)/ordenes/_components/ordenes-columns";
 import { ordenesColumnsAdminTienda } from "@/app/(app)/_components/ordenes-columns-admin-tienda";
 import { INTENTOS_COLUMN_ID } from "@/components/shared/intentos-entrega";
-import type { OrdenListItemDTO } from "@/lib/types/orden";
+import type { OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 
 afterEach(() => {
   cleanup();
@@ -375,5 +375,109 @@ describe("ordenesColumns — feature 160 (R17/R19: el numero, siempre, incluido 
     expect(celdaDe("REM-M1")).toHaveTextContent(/^2$/);
     expect(celdaDe("REM-M2")).toHaveTextContent(/^0$/);
     expect(celdaDe("REM-M3")).toHaveTextContent(/^0$/);
+  });
+});
+
+// Feature 159 (R16, R17) — la columna "Mensajero" muestra SIEMPRE el mensajero
+// ASIGNADO. Antes caia al "sugerido" cuando no habia asignado, y el listado
+// intercambiaba el juego de columnas segun el estado filtrado; ambas cosas se
+// retiraron. Este test cubre las dos ramas de la columna.
+describe("ordenesColumns — columna Mensajero (159/R16, R17)", () => {
+  const IDX_MENSAJERO = ordenesColumns.findIndex((c) => c.id === "mensajero");
+
+  /** `relaciones` completas (el DTO las exige todas) con el mensajero que se indique. */
+  function relaciones(
+    mensajeroAsignado: OrdenListItemRelaciones["mensajeroAsignado"],
+  ): OrdenListItemRelaciones {
+    return {
+      estatus: null,
+      tienda: null,
+      zona: null,
+      provincia: null,
+      canton: null,
+      distrito: null,
+      mensajeroAsignado,
+    };
+  }
+
+  const celdaMensajero = (rem: string) =>
+    within(screen.getByRole("row", { name: new RegExp(rem) })).getAllByRole("cell")[
+      IDX_MENSAJERO
+    ];
+
+  it("la columna existe una sola vez y no hay ninguna variante de 'sugerido'", () => {
+    expect(IDX_MENSAJERO).toBeGreaterThan(-1);
+    const deMensajero = ordenesColumns.filter((c) => /mensajero/i.test(c.value));
+    expect(deMensajero).toHaveLength(1);
+    expect(deMensajero[0].value).toBe("Mensajero");
+  });
+
+  it("R16: con mensajero asignado muestra su NOMBRE, no su id", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[
+          makeOrden({
+            id: "o1",
+            numRemision: "REM-MSG-1",
+            mensajeroAsignadoId: "u-1",
+            relaciones: relaciones({ id: "u-1", nombre: "Ana Mensajera" }),
+          }),
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+
+    expect(celdaMensajero("REM-MSG-1")).toHaveTextContent("Ana Mensajera");
+    expect(celdaMensajero("REM-MSG-1")).not.toHaveTextContent("u-1");
+  });
+
+  it("R16: el otro juego de columnas (reprogramada) dice lo MISMO de 'Mensajero'", () => {
+    // R16 exige el mensajero ASIGNADO "cualquiera que sea el estado". Solo queda un
+    // juego alternativo de columnas (`reprogramada`, feature 46) y tambien muestra el
+    // asignado: filtrar por un estado ya no cambia lo que dice esta columna.
+    const enReprogramada = ordenesColumnsReprogramada.filter((c) => /mensajero/i.test(c.value));
+    expect(enReprogramada).toHaveLength(1);
+    expect(enReprogramada[0].value).toBe("Mensajero");
+
+    const idxReprogramada = ordenesColumnsReprogramada.findIndex((c) => c.id === "mensajero");
+    render(
+      <DataTable
+        columns={ordenesColumnsReprogramada}
+        data={[
+          makeOrden({
+            id: "o1",
+            numRemision: "REM-MSG-R",
+            mensajeroAsignadoId: "u-1",
+            relaciones: relaciones({ id: "u-1", nombre: "Ana Mensajera" }),
+          }),
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+
+    const fila = screen.getByRole("row", { name: /REM-MSG-R/ });
+    expect(within(fila).getAllByRole("cell")[idxReprogramada]).toHaveTextContent(
+      "Ana Mensajera",
+    );
+  });
+
+  it("R17: sin mensajero asignado muestra el marcador de dato ausente", () => {
+    render(
+      <DataTable
+        columns={ordenesColumns}
+        data={[
+          makeOrden({ id: "o1", numRemision: "REM-MSG-2", relaciones: relaciones(null) }),
+          makeOrden({ id: "o2", numRemision: "REM-MSG-3" }), // sin `relaciones` siquiera
+        ]}
+        rowKey="id"
+        ariaLabel="Órdenes"
+      />,
+    );
+
+    expect(celdaMensajero("REM-MSG-2")).toHaveTextContent(/^—$/);
+    expect(celdaMensajero("REM-MSG-3")).toHaveTextContent(/^—$/);
   });
 });

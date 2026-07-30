@@ -45,8 +45,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 88: persistencia con guia inmediata (carga por API). Por defecto vacio;
     // los tests de cargarViaApi lo sobreescriben para devolver las guias asignadas.
     createManyOrdenesConGuia: vi.fn().mockResolvedValue([]),
-    // Feature 16: metodos de resumen/asignacion, no ejercitados por la carga
-    // masiva (feature 15) pero exigidos por la interfaz IOrdenRepository.
+    // Feature 16: resumen del lote (solo lectura), no ejercitado por la carga
+    // masiva (feature 15) pero exigido por la interfaz IOrdenRepository.
+    findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados por la
     // carga masiva (feature 15) pero exigidos por la interfaz IOrdenRepository.
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
@@ -538,6 +539,44 @@ describe("BulkOrdenService.cargarMasiva — mensajero sugerido retirado", () => 
     }
     const arg = createManyArg(repo);
     expect(arg[0]).not.toHaveProperty("mensajeroSugeridoId");
+  });
+
+  it("R6: el RowResult es EXACTAMENTE el de la misma fila sin la clave", async () => {
+    // R6 dice "exactamente el mismo RowResult", no "también resulta creada": se
+    // comparan las dos filas enteras (resultado + estatus + numGuia + errores).
+    const conClave = await new BulkOrdenService(buildRepo(), tarifaRepoStub).cargarMasiva(
+      [row({ mensajero_sugerido_id: "no-existe" })],
+      TIENDA,
+    );
+    const sinClave = await new BulkOrdenService(buildRepo(), tarifaRepoStub).cargarMasiva(
+      [row()],
+      TIENDA,
+    );
+
+    expect(conClave.status).toBe("ok");
+    expect(sinClave.status).toBe("ok");
+    if (conClave.status === "ok" && sinClave.status === "ok") {
+      expect(conClave.summary.filas).toEqual(sinClave.summary.filas);
+      expect(conClave.summary).toEqual(sinClave.summary);
+    }
+  });
+
+  it("R7: procesar un lote NO consulta el catalogo de mensajeros", async () => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    await service.cargarMasiva(
+      [row({ num_remision: "REM-1" }), row({ num_remision: "REM-2" })],
+      TIENDA,
+    );
+
+    // Las cuatro lecturas del catalogo que la interfaz sigue exponiendo (las usan
+    // "Generar guia" y la asignacion satelite). Reintroducir cualquiera de ellas en
+    // la carga masiva —una consulta por lote que ya no hace falta— rompe este test.
+    expect(repo.findAllMensajeros).not.toHaveBeenCalled();
+    expect(repo.findMensajeroIdsValidos).not.toHaveBeenCalled();
+    expect(repo.findMensajerosByZona).not.toHaveBeenCalled();
+    expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
   });
 });
 

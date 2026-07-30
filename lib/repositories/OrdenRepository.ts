@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
+import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 import type {
   CambioEstadoEntrada,
   HistorialContexto,
@@ -359,6 +360,44 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // derivar "hoy" desde un instante real). Sin gestion vigente -> null.
     fechaReprogramacion: toFechaISO(row.gestiones[0]?.fechaReprogramacion),
     relaciones: toRelaciones(row),
+  };
+}
+
+// Feature 16 — resumen del lote recien cargado: los datos de la orden + el
+// `estatus.value` y el nombre de su zona. Feature 159: la proyeccion perdio los
+// dos campos de mensajero sugerido; el resumen es SOLO LECTURA (design §5.1).
+const WITH_RESUMEN = {
+  select: {
+    id: true,
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    producto: true,
+    montoCobrar: true,
+    direccion: true,
+    zonaId: true,
+    estatus: { select: { value: true } },
+    zona: { select: { nombre: true } },
+  },
+} as const;
+
+type OrdenResumenRow = Prisma.OrdenGetPayload<typeof WITH_RESUMEN>;
+
+// R6/R9: mapea Decimal montoCobrar -> number|null; NO expone deletedAt/internos.
+function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
+  return {
+    id: row.id,
+    numGuia: row.numGuia,
+    numRemision: row.numRemision,
+    destinatario: row.destinatario,
+    telefonoDest: row.telefonoDest,
+    producto: row.producto,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    direccion: row.direccion,
+    estatusValue: row.estatus?.value,
+    zonaId: row.zonaId,
+    zonaNombre: row.zona.nombre,
   };
 }
 
@@ -1088,6 +1127,21 @@ export class OrdenRepository implements IOrdenRepository {
       direccion: data.direccion ?? null,
       montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
     };
+  }
+
+  // --- Feature 16: resumen del lote recien cargado (solo lectura) ---
+
+  /** R6/R8/R9/R10: filas del resumen, acotadas a tienda del actor y no borradas. */
+  async findResumenByNumRemisiones(
+    nums: string[],
+    tiendaId: string,
+  ): Promise<ResumenCargaOrdenDTO[]> {
+    if (nums.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { numRemision: { in: nums }, tiendaId, deletedAt: null },
+      ...WITH_RESUMEN,
+    });
+    return rows.map(toResumenDTO);
   }
 
   // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---

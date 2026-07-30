@@ -1,5 +1,6 @@
 import type { GestionCausaDevolucion } from "@prisma/client";
 import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
+import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 
@@ -584,6 +585,16 @@ export interface IOrdenRepository {
     opciones?: CreateOrdenOpciones,
   ): Promise<CreateOrdenConGuiaResultRow[]>;
 
+  // --- Feature 16: resumen del lote recien cargado (solo lectura) ---
+
+  /**
+   * R6/R8/R9/R10: filas del resumen del lote (por `num_remision`), acotadas a la
+   * tienda del actor y no borradas. Preserva unicidad de `num_remision`.
+   * Feature 159: sobrevive al retiro de la sugerencia de mensajero (design §2.2);
+   * su proyeccion ya no incluye ningun campo de mensajero.
+   */
+  findResumenByNumRemisiones(nums: string[], tiendaId: string): Promise<ResumenCargaOrdenDTO[]>;
+
   // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
 
   /**
@@ -617,8 +628,8 @@ export interface IOrdenRepository {
   /**
    * R28: subconjunto de `ids` que corresponde a un usuario con rol `mensajero`,
    * SIN filtro de zona (el filtrado por zona/GAM es la feature 30, ver design.md
-   * "Limites"). Mismo criterio que `findMensajerosByIds`, nombre propio para el
-   * contrato de esta feature.
+   * "Limites"). Feature 159: la referencia cruzada de este comentario apuntaba al
+   * metodo gemelo de la carga masiva, retirado con la sugerencia de mensajero.
    */
   findMensajeroIdsValidos(ids: string[]): Promise<Set<string>>;
   /** R28/T15: TODOS los usuarios con rol `mensajero`, SIN filtro de zona. */
