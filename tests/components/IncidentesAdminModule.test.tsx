@@ -433,6 +433,23 @@ describe("Feature 158 (T2.8) — R55: los montos se renderizan TAL CUAL", () => 
     expect(screen.getByText("₡1234567.89")).toBeInTheDocument();
   });
 
+  // ⚠️ El caso de arriba NO basta y se midió: `parseFloat("1234567.89")` devuelve el MISMO
+  // texto, así que un render con `parseFloat` pasaría igual (mutación L, §mutaciones del
+  // impl). Un monto de dinero real llega SIEMPRE con escala 2, y ahí el `parseFloat` sí se
+  // nota: los ceros de la derecha desaparecen. Éste es el caso que mata la mutación.
+  it.each([
+    ["12500.00", "₡12500.00"],
+    ["1200.50", "₡1200.50"],
+    ["0.10", "₡0.10"],
+  ])("el monto «%s» conserva sus decimales (un `parseFloat` los comería)", (valor, pintado) => {
+    montar({
+      historico: [
+        makeIncidente({ incidenteId: "i2", estado: "aprobado", indemnizacion: valor }),
+      ],
+    });
+    expect(screen.getByText(pintado)).toBeInTheDocument();
+  });
+
   it("un rechazado no tiene monto y se pinta «—», no «₡0.00»", () => {
     montar({
       historico: [
