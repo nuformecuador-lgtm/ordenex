@@ -155,6 +155,103 @@ describe("wallet idempotencia (R6/R13)", () => {
     expect(store.rows.length).toBe(1);
   });
 
+  // Feature 158 — EXTENSION A LOS DOS ORIGENES (design §12.5, R29/R53/R56/R64). Hasta el PR 1
+  // este archivo solo conocia el egreso del cierre. El camino del ADMIN anade un segundo emisor
+  // con `origen_tipo = orden_incidente`, y lo que hay que fijar es doble: que cada uno es
+  // idempotente POR SU CUENTA y que los dos COEXISTEN sin que el indice unico parcial se trague
+  // uno (mismo `categoria`, distinto `origen_tipo`/`origen_id`).
+  it("158/R53: el egreso del INCIDENTE del admin es idempotente por (orden_incidente, id)", async () => {
+    const store = makeWalletStore();
+    const repo = new WalletMovimientoRepository({
+      walletMovimiento: store.walletMovimiento,
+    } as unknown as PrismaClient);
+    const egreso: CrearMovimientoInput = {
+      tipo: "egreso",
+      categoria: "egreso_indemnizacion",
+      monto: "2500.00",
+      origenTipo: "orden_incidente",
+      origenId: "inc-1",
+    };
+
+    const n1 = await repo.crearMovimientos({ walletMovimiento: store.walletMovimiento } as never, [
+      egreso,
+    ]);
+    // Reintentar la aprobacion del MISMO incidente: no lanza, no inserta (R53).
+    const n2 = await repo.crearMovimientos({ walletMovimiento: store.walletMovimiento } as never, [
+      egreso,
+    ]);
+
+    expect(n1).toBe(1);
+    expect(n2).toBe(0);
+    expect(store.rows).toHaveLength(1);
+    // El reintento NO altera el ya emitido. (El repo convierte STRING -> Decimal al escribir,
+    // asi que la fila guardada trae un Decimal: se compara con escala 2 explicita.)
+    expect(new Prisma.Decimal(store.rows[0].monto).toFixed(2)).toBe("2500.00");
+  });
+
+  it("158/R29/R64: los DOS egresos de indemnizacion coexisten (ninguno absorbe al otro)", async () => {
+    const store = makeWalletStore();
+    const repo = new WalletMovimientoRepository({
+      walletMovimiento: store.walletMovimiento,
+    } as unknown as PrismaClient);
+    const tx = { walletMovimiento: store.walletMovimiento } as never;
+
+    // Camino del MENSAJERO (agregado por cierre) y camino del ADMIN (por incidente).
+    await repo.crearMovimientos(tx, [
+      {
+        tipo: "egreso",
+        categoria: "egreso_indemnizacion",
+        monto: "1000.00",
+        origenTipo: "cierre_dia",
+        origenId: "c1",
+      },
+    ]);
+    await repo.crearMovimientos(tx, [
+      {
+        tipo: "egreso",
+        categoria: "egreso_indemnizacion",
+        monto: "2500.00",
+        origenTipo: "orden_incidente",
+        origenId: "inc-1",
+      },
+    ]);
+
+    // DOS filas: misma categoria, origenes distintos -> claves distintas del indice parcial.
+    expect(store.rows).toHaveLength(2);
+    expect(store.rows.map((r) => r.origenTipo).sort()).toEqual(["cierre_dia", "orden_incidente"]);
+    const claves = store.rows.map((r) => `${r.origenTipo}|${r.origenId}|${r.categoria}`);
+    expect(new Set(claves).size).toBe(2);
+    // Y cada uno conserva SU monto: ninguno reemplaza, absorbe ni anula al otro (R64).
+    expect(store.rows.map((r) => new Prisma.Decimal(r.monto).toFixed(2)).sort()).toEqual([
+      "1000.00",
+      "2500.00",
+    ]);
+  });
+
+  it("158/R56: dos incidentes de admin DISTINTOS no se deduplican entre si", async () => {
+    // El grano del camino del admin es el incidente, no la orden: dos incidentes (de ordenes
+    // distintas, o el mismo caso re-reportado tras un rechazo) son movimientos distintos. Lo que
+    // impide pagar DOS VECES la misma orden no es este indice, es el indice unico parcial de
+    // `orden_incidente` (a lo sumo uno vivo) + que un `rechazado` nunca persistio monto.
+    const store = makeWalletStore();
+    const repo = new WalletMovimientoRepository({
+      walletMovimiento: store.walletMovimiento,
+    } as unknown as PrismaClient);
+    const tx = { walletMovimiento: store.walletMovimiento } as never;
+    const egreso = (origenId: string, monto: string): CrearMovimientoInput => ({
+      tipo: "egreso",
+      categoria: "egreso_indemnizacion",
+      monto,
+      origenTipo: "orden_incidente",
+      origenId,
+    });
+
+    await repo.crearMovimientos(tx, [egreso("inc-1", "10.00")]);
+    await repo.crearMovimientos(tx, [egreso("inc-2", "20.00")]);
+
+    expect(store.rows).toHaveLength(2);
+  });
+
   it("manuales (origen_id NULL) NO se deduplican: cada ajuste es una fila nueva", async () => {
     const store = makeWalletStore();
     const repo = new WalletMovimientoRepository({ walletMovimiento: store.walletMovimiento } as unknown as PrismaClient);
