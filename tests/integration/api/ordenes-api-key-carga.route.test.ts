@@ -449,6 +449,45 @@ describe("carga API: contrato de la respuesta por modo (R47/R48/R53/R54)", () =>
   });
 });
 
+// Feature 159 (R9) — mitad de BORDE del contrato publico: una fila que trae la clave
+// retirada `mensajero_sugerido_id` no cambia el codigo HTTP ni la respuesta, y la
+// clave LLEGA al service (el borde no la rechaza ni la filtra). La otra mitad —que
+// el service produzca el mismo `RowResult` con y sin ella— vive en
+// `tests/unit/services/bulk-orden-service.carga-api.test.ts`.
+describe("carga API: mensajero sugerido retirado (159/R9)", () => {
+  const BODY_CON_CLAVE = {
+    ordenes: [
+      { num_remision: "REM-1", destinatario: "Ana", telefono: "099", mensajero_sugerido_id: "u-1" },
+    ],
+  };
+
+  it("la clave retirada no rompe la validacion del cuerpo: mismo 200 y mismo JSON", async () => {
+    const conClave = await handleCargaApi(
+      reqConBearer(BODY_CON_CLAVE, SECRETO),
+      deps({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }, fakeService()),
+    );
+    const sinClave = await handleCargaApi(
+      reqConBearer(BODY, SECRETO),
+      deps({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }, fakeService()),
+    );
+
+    expect(conClave.status).toBe(200);
+    expect(conClave.status).toBe(sinClave.status);
+    expect(await conClave.json()).toEqual(await sinClave.json());
+  });
+
+  it("la clave viaja intacta al service: la descarta el schema de fila, no el borde", async () => {
+    const service = fakeService();
+    await handleCargaApi(
+      reqConBearer(BODY_CON_CLAVE, SECRETO),
+      deps({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }, service),
+    );
+
+    const [filas] = (service.cargarViaApi as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(filas[0]).toHaveProperty("mensajero_sugerido_id", "u-1");
+  });
+});
+
 // ---------------------------------------------------------------------------------------------
 // Feature 155/R24/R25/R26 — manifiesto del lote por el canal de API key (opcion C de la puerta
 // T0.1). Este borde existe porque la Server Action `obtenerManifiesto` resuelve el actor por

@@ -316,7 +316,9 @@ describe("R12 — la migracion queda registrada en el invariante de orden", () =
         !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
         !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") &&
         // feature 155 (retiro del value de fulfillment): apendida despues.
-        !d.endsWith("_order_status_retiro_en_fulfillment"),
+        !d.endsWith("_order_status_retiro_en_fulfillment") &&
+        // feature 149 (origen_tipo deshacer_asignacion): apendida despues.
+        !d.endsWith("_orden_historial_origen_deshacer_asignacion"),
     );
     // El invariante que se protege es que `_notificacion` NO sea ANTERIOR a ninguna
     // migracion previa; las carpetas que features posteriores apendan se excluyen aqui

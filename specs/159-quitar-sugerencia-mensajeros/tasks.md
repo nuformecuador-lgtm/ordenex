@@ -5,11 +5,30 @@
 > criterio de "hecho" es su propia suite en verde, no el typecheck del repo entero.
 > `[P]` = paralelizable con las demás `[P]` de su mismo bloque.
 
+> ### Marcado del cierre - 2026-07-29 (rama `fix/159-cierre`)
+>
+> La 159 se mergeo a `dev` (PR #193) **sin marcar una sola task** y con 5 bloqueantes
+> (`progress/review_159.md`). Este marcado es honesto sobre las tres cosas: que hizo
+> `b2181e7`, que hizo el cierre y **que sigue sin hacerse**. Cada task lleva una nota
+> `*Cierre 2026-07-29:*` con su evidencia. Bitacora completa en
+> `progress/impl_159_cierre.md`.
+>
+> **Sin marcar a proposito: T1 y T4.**
+>
+> **Actualizacion 2026-07-29 (tras `progress/review_159_cierre.md`):** **T5 pasa a `[x]`**
+> — el round-trip **se ejecuto de verdad** contra una base Postgres local y el ciclo
+> estructural (down 3 + up 3) pasa. **T4 sigue sin marcar**, y no por inercia: su criterio
+> exige aplicar la migracion *"sobre una base con ordenes que tienen `mensajero_sugerido_id`
+> no nulo"*, y **la preservacion de datos no se valido**. La asimetria T5 `[x]` / T4 `[ ]`
+> es deliberada: la migracion **si** se aplico (via `prisma migrate deploy`), lo que falta
+> es solo esa condicion de evidencia. R10 tambien queda reconciliado en `requirements.md`.
+> Todo el detalle en `progress/impl_159_cierre.md` secciones 3.1 y 5.
+
 ---
 
 ## Fase 0 — Puertas y censo (antes de tocar nada)
 
-- [ ] **T0 — Cerrar Q1 (contrato público) en la puerta F1.4.**
+- [x] **T0 — Cerrar Q1 (contrato público) en la puerta F1.4.**
   Decisión humana entre las opciones (a)/(b)/(c)/(d) de `design.md §4`; el spec
   recomienda **(b)**.
   *Hecho:* la decisión queda escrita en `progress/impl_159.md` con su fecha y autor.
@@ -17,6 +36,7 @@
   *Nota:* Q2, Q3 y Q5 también deberían responderse aquí; si el humano no las toca, se
   aplica la recomendación del spec (Q2 → el resumen sobrevive; Q3 → no se borra
   `OrdenesCargaResumenPaso`; Q5 → se acepta la pérdida, declarada en el `down.sql`).
+  *Cierre 2026-07-29:* Cerrado **a posteriori**, no antes de tocar codigo: `b2181e7` eligio la opcion (a) por su cuenta. Las cuatro decisiones (Q1/Q2/Q3/Q5) quedan escritas con fecha y autor en `progress/impl_159_cierre.md` seccion 0. **Q2 se resolvio en contra de lo ejecutado**: el resumen se restituye.
 
 - [ ] **T1 [P] — Censo de arranque.**
   Grep de `mensajero_sugerido_id|mensajeroSugerido|MensajeroSugerido|asignarMensajeroSugerido|ESTADOS_MENSAJERO_SUGERIDO`
@@ -24,11 +44,13 @@
   *Hecho:* la lista archivo:línea queda en `progress/impl_159.md` y **confirma o corrige**
   la tabla de `design.md §0`. Si aparece un archivo no listado, se añade allí antes de
   seguir.
+  *Cierre 2026-07-29:* **NO se hizo.** No existe `progress/impl_159.md` con la lista archivo:linea. Lo que si hay es el escaneo independiente del reviewer (685 archivos / 78.978 lineas, 0 hits) y el guard de T26, que cubren el resultado pero no el censo *de arranque* que esta task pedia. Se deja sin marcar.
 
-- [ ] **T2 [P] — Verificar el estado de `GenerarGuiaModal.tsx` tras las features 153/154/156.**
+- [x] **T2 [P] — Verificar el estado de `GenerarGuiaModal.tsx` tras las features 153/154/156.**
   *Hecho:* en `progress/impl_159.md` queda el grep de `sugerid` sobre ese archivo y su
   test, con el veredicto: "ya limpio" (T23 se cerrará sin diff) o la lista exacta de lo
   que queda por retirar.
+  *Cierre 2026-07-29:* Grep de `sugerid` sobre `app/`, `lib/`, `components/`, `hooks/`: **0 hits** en `GenerarGuiaModal.tsx` y su test. Veredicto: "ya limpio", T24 se cierra sin diff. Evidencia en `progress/impl_159_cierre.md` seccion 4.
 
 ---
 
@@ -36,13 +58,14 @@
 
 ### Datos
 
-- [ ] **T3 — `db/schema.prisma`: retirar las 4 declaraciones.**
+- [x] **T3 — `db/schema.prisma`: retirar las 4 declaraciones.**
   `Orden.mensajeroSugeridoId` (:466), `Orden.mensajeroSugerido` (:493),
   `@@index([mensajeroSugeridoId])` (:507), `Usuario.ordenesMensajeria` (:113).
   *Depende de:* T1. *Cubre:* R4.
   *Hecho:* `prisma validate` pasa, `prisma format` no produce diff y `prisma generate`
   regenera el cliente **sin** el campo (confirmado por un error de typecheck en los
   consumidores, no por inspección visual).
+  *Cierre 2026-07-29:* Hecho en `b2181e7`. Verificado por el guard (T26) y por el test de migracion (T6, assert "R4: `schema.prisma` no declara la columna, ni el indice, ni la relacion").
 
 - [ ] **T4 — Migración de retiro.**
   Crear `db/migrations/<ts>_drop_orden_mensajero_sugerido/` con `migration.sql` (FK →
@@ -51,15 +74,42 @@
   *Depende de:* T3. *Cubre:* R1, R2, R3.
   *Hecho:* `pnpm run db:migrate` aplica sin error sobre una base con órdenes que tienen
   `mensajero_sugerido_id` no nulo, y `\d orden` ya no muestra columna, índice ni FK.
+  *Cierre 2026-07-29:* El SQL **esta escrito y es correcto**, y T6 lo blinda sentencia a sentencia.
+  *Actualizacion 2026-07-29 (round-trip ejecutado por el humano contra Postgres local):* la
+  migracion **SI se aplico de verdad** — la base local no la tenia y hubo que correr
+  `prisma migrate deploy`; despues, `mensajero_sugerido_id` **ausente**. Es decir, la primera
+  clausula del criterio esta cumplida. **Se deja SIN MARCAR por la segunda:** el criterio dice
+  *"sobre una base con ordenes que tienen `mensajero_sugerido_id` no nulo"*, y esa condicion
+  **no se reprodujo** (el `down.sql` repone la columna vacia, como declara su cabecera, asi que
+  el UP se aplico sobre una columna sin valores). Falta poco y es acotado: sembrar **una** fila
+  con valor no nulo, correr el ciclo y comprobar `mensajero_asignado_id` antes y despues (es la
+  mitad de datos de R3). Ante la duda, casilla vacia. Detalle en `progress/impl_159_cierre.md`
+  seccion 3.1.
 
-- [ ] **T5 — Probar el rollback en entorno de prueba.**
+- [x] **T5 — Probar el rollback en entorno de prueba.**
   `pnpm run db:rollback` y volver a aplicar.
   *Depende de:* T4. *Cubre:* R2.
   *Hecho:* tras el rollback la columna, el índice y la FK vuelven con los mismos nombres
   y con `ON DELETE SET NULL ON UPDATE CASCADE`; re-aplicar la migración vuelve a
   dejarlos fuera. Salida real pegada en `progress/impl_159.md`.
+  *Cierre 2026-07-29:* estaba SIN MARCAR (el DOWN solo verificado en su texto, T6).
+  *Actualizacion 2026-07-29 — **HECHO**, round-trip ejecutado por el humano contra una base
+  Postgres local:* el par `down.sql` (3 sentencias) + `migration.sql` (3 sentencias) de
+  `20260728120000_drop_orden_mensajero_sugerido` **ejecuta correctamente**, dentro de una
+  transaccion revertida al final —de verdad contra el esquema real, sin persistir—. El DOWN
+  repone columna, indice y FK con los mismos nombres (la FK con su `ON DELETE SET NULL ON
+  UPDATE CASCADE`: la sentencia corrio sin error), y re-aplicar el UP los vuelve a dejar fuera
+  (`mensajero_sugerido_id` ausente al terminar). Se verificaron de paso `*_orden_indices_filtros`
+  (144) y las dos de la 154.
+  **Salvedad exacta, no se marca de mas:** lo probado es el ciclo **ESTRUCTURAL**. **NO se
+  valido la preservacion de datos** — el DOWN restituye la columna **vacia**, tal como declara
+  su cabecera (Q5), asi que el ciclo no dice nada sobre filas con valor. Eso pertenece a T4 y a
+  la mitad de datos de R3, y sigue pendiente.
+  Salida reportada en `progress/impl_159_cierre.md` seccion 3.1 (la task decia
+  `progress/impl_159.md`; ese archivo nunca existio y la bitacora de esta feature es
+  `impl_159_cierre.md`).
 
-- [ ] **T6 [P] — Test de la migración.**
+- [x] **T6 [P] — Test de la migración.**
   `tests/integration/db/drop-mensajero-sugerido-migration.test.ts`, modelado sobre los
   demás `*-migration.test.ts` de `tests/integration/db/`.
   *Depende de:* T4. *Cubre:* R1, R2, R3.
@@ -68,14 +118,16 @@
   tocarlo** (`design.md §0.3`).
 
 ### Servicios, repositorio y tipos
+  *Cierre 2026-07-29:* `tests/integration/db/drop-mensajero-sugerido-migration.test.ts`, 19 `it`. Verificado por mutacion: invertir el orden del UP y cambiar `ON DELETE SET NULL` por `ON DELETE CASCADE` en el DOWN deja 4 tests en rojo. `carga-masiva-schema.test.ts` sigue verde sin tocarlo.
 
-- [ ] **T7 — `lib/types/carga-masiva.ts`: borrar el campo del schema de fila.**
+- [x] **T7 — `lib/types/carga-masiva.ts`: borrar el campo del schema de fila.**
   Quitar `mensajero_sugerido_id` (:96-101). **No** convertir el `z.object` en `.strict()`.
   *Depende de:* T1. *Cubre:* R5, R6, R8.
   *Hecho:* `filaCargaSchema` no declara la clave y
   `tests/integration/carga-masiva-errores-roundtrip.test.ts` sigue verde.
+  *Cierre 2026-07-29:* Hecho en `b2181e7`. El `z.object` sigue sin ser `.strict()` (ancla de la 143) y el round-trip de errores sigue verde.
 
-- [ ] **T8 — `lib/services/BulkOrdenService.ts`: retirar `resolveMensajero` y su cableado.**
+- [x] **T8 — `lib/services/BulkOrdenService.ts`: retirar `resolveMensajero` y su cableado.**
   `MensajeroResult` (:214-216), `resolveMensajero` (:218-228),
   `PreloadedContext.mensajerosValidos` (:235), el cálculo de `mensajeroIds` y la llamada
   a `findMensajerosByIds` en `precargar` (:564-566, :582-585 → `await` simple), la rama
@@ -84,8 +136,9 @@
   *Hecho:* 0 ocurrencias de `mensajero` en el archivo; los tests unit del service pasan
   **con el caso nuevo** "una fila con `mensajero_sugerido_id` arbitrario se crea igual y
   el repo de mensajeros no se consulta".
+  *Cierre 2026-07-29:* Hecho en `b2181e7`; el caso nuevo que faltaba se anadio aqui: "R7: procesar un lote NO consulta el catalogo de mensajeros", con `not.toHaveBeenCalled()` sobre las **cuatro** lecturas del catalogo. Verificado por mutacion.
 
-- [ ] **T9 — Repositorio de órdenes: retirar los 3 métodos huérfanos y el campo.**
+- [x] **T9 — Repositorio de órdenes: retirar los 3 métodos huérfanos y el campo.**
   En `lib/interfaces/repositories/IOrdenRepository.ts` y
   `lib/repositories/OrdenRepository.ts`: `asignarMensajeroSugerido`,
   `countOrdenesDeTienda`, `findMensajerosByIds`, `CreateOrdenData.mensajeroSugeridoId`
@@ -95,8 +148,9 @@
   *Depende de:* T3, T8. *Cubre:* R8, R20.
   *Hecho:* 0 ocurrencias en ambos archivos; `findMensajeroIdsValidos` y `findAllMensajeros`
   siguen existiendo intactos.
+  *Cierre 2026-07-29:* Los 3 metodos huerfanos fuera; **`findResumenByNumRemisiones` restituido** -- `b2181e7` lo habia borrado pese a que el design lo marca "sobrevive". `findMensajeroIdsValidos` y `findAllMensajeros` intactos.
 
-- [ ] **T10 — Tipos: renombrar y reubicar.**
+- [x] **T10 — Tipos: renombrar y reubicar.**
   `lib/types/asignacion-mensajero.ts` → `lib/types/carga-masiva-resumen.ts` (sin
   `asignarMensajeroSchema`, sin `AsignarMensajeroInput`, `ResumenCargaOrdenDTO` sin los 2
   campos de sugerido). Crear `lib/types/mensajero.ts` con `MensajeroDTO` y reapuntar sus
@@ -104,45 +158,56 @@
   *Depende de:* T9. *Cubre:* R20.
   *Hecho:* `lib/types/asignacion-mensajero.ts` no existe; `RankingService` sigue
   compilando y su test sigue verde.
+  *Cierre 2026-07-29:* Hecho **aqui** (`b2181e7` no lo hizo): `lib/types/asignacion-mensajero.ts` ya no existe; salen `lib/types/mensajero.ts` (`MensajeroDTO`) y `lib/types/carga-masiva-resumen.ts` (`ResumenCargaOrdenDTO` sin los 2 campos de sugerido, `resumenCargaSchema`).
 
-- [ ] **T11 — Servicio e interfaz: renombrar y podar.**
+- [x] **T11 — Servicio e interfaz: renombrar y podar.**
   `AsignacionMensajeroService` → `ResumenCargaMasivaService` (solo `resumenCargaMasiva`);
   `IAsignacionMensajeroService` → `IResumenCargaMasivaService`. Borrar `listarMensajeros`,
   `asignarMensajeroSugerido` y los tipos de resultado de ambos.
   *Depende de:* T10. *Cubre:* R19, R20.
   *Hecho:* los archivos con el nombre viejo no existen; el servicio nuevo expone **un
   solo** método público.
+  *Cierre 2026-07-29:* Hecho **aqui**: `b2181e7` borro el servicio entero en vez de renombrarlo. `ResumenCargaMasivaService` expone **un solo** metodo publico y ya no inyecta `IUserRepository`.
 
-- [ ] **T12 — Server Action: `lib/actions/mensajeros.ts` → `lib/actions/carga-masiva-resumen.ts`.**
+- [x] **T12 — Server Action: `lib/actions/mensajeros.ts` → `lib/actions/carga-masiva-resumen.ts`.**
   Conserva solo `resumenCargaMasiva` con su `deps` inyectable.
   *Depende de:* T11. *Cubre:* R19.
   *Hecho:* 0 exports de `listarMensajeros` y `asignarMensajeroSugerido` en `lib/actions/`;
   `lib/actions/mensajeros.ts` no existe.
+  *Cierre 2026-07-29:* Hecho **aqui**: `lib/actions/carga-masiva-resumen.ts` con solo `resumenCargaMasiva` y su `deps` inyectable. `lib/actions/mensajeros.ts` no existe (asertado por el guard).
 
-- [ ] **T13 — `lib/types/orden.ts`: podar el DTO del listado.**
+- [x] **T13 — `lib/types/orden.ts`: podar el DTO del listado.**
   `OrdenListItemDTO.mensajeroSugeridoId` (:152), `OrdenListItemRelaciones.mensajeroSugerido`
   (:208) y los comentarios :138-143.
   *Depende de:* T9. *Cubre:* R16, R18.
   *Hecho:* 0 ocurrencias en el archivo. (A partir de aquí la UI **no compila** hasta la
   fase 2; es lo esperado.)
+  *Cierre 2026-07-29:* Hecho en `b2181e7`. Verificado por el guard.
 
-- [ ] **T14 [P] — OpenAPI conforme a la decisión de Q1.**
+- [x] **T14 [P] — OpenAPI conforme a la decisión de Q1.**
   `lib/api/openapi-spec.ts:479-482` (fuente de verdad) y `docs/api/api-key-openapi.yaml:507-509`
   (espejo). Con la recomendación (b): `deprecated: true` + descripción "aceptado e
   ignorado por el servidor".
   *Depende de:* T0. *Cubre:* R10, R11.
   *Hecho:* un test compara la propiedad en ambos artefactos y pasa; el yaml y el objeto
   TS dicen lo mismo.
+  *Cierre 2026-07-29:* Q1 se resolvio por la opcion **(a)**, no por la (b) que el spec recomendaba. El test de paridad que la task exige existe: `tests/unit/api/openapi-carga-row-paridad.test.ts` (verificado por mutacion). ATENCION: **R10 queda INCUMPLIDO en su forma original** -- ver `progress/impl_159_cierre.md` seccion 5.
+  *Actualizacion 2026-07-29:* R10 **reconciliado en `requirements.md`** con la sustitucion que
+  `design.md` seccion 4 dejaba prevista para la opcion (a), con nota fechada del incumplimiento y su
+  motivo; Q1 marcada CERRADA y Q4 reetiquetada (abierta y ya no informativa). **Cero cambios de
+  codigo:** los dos artefactos de OpenAPI no se tocan. Se reconcilia el requisito con el codigo
+  porque un requisito que dice lo contrario de lo que el sistema hace es peor que no tenerlo.
 
-- [ ] **T15 [P] — Comentarios que citan símbolos que dejan de existir.**
+- [x] **T15 [P] — Comentarios que citan símbolos que dejan de existir.**
   `lib/interfaces/services/IAsignabilidadCoordenadasService.ts:6-9` (cita
   `asignarMensajeroSugerido`) y `lib/interfaces/services/IUsuariosPorRolService.ts:6`
   (cita `IAsignacionMensajeroService`). **Solo comentarios: el gate NO se retira.**
   *Depende de:* T11. *Cubre:* R21.
   *Hecho:* ningún comentario del repo cita un símbolo inexistente; los tests del gate de
   asignabilidad y de los dos caminos de asignación siguen verdes **sin tocarlos**.
+  *Cierre 2026-07-29:* Tres de los seis comentarios volvieron a ser ciertos al restituir el resumen; dos ya estaban limpios; se corrigieron `db/schema.prisma:468` y `IOrdenRepository.ts:561` (este ultimo lo **destapo** el guard ampliado).
 
-- [ ] **T16 — Adaptar los tests de backend.**
+- [x] **T16 — Adaptar los tests de backend.**
   Según la tabla de `design.md §7`: renombrar y podar
   `asignacion-mensajero-service.test.ts` → `resumen-carga-masiva-service.test.ts` y
   `mensajeros-action.test.ts` → `carga-masiva-resumen-action.test.ts`; podar
@@ -155,6 +220,7 @@
   *Depende de:* T7–T14. *Cubre:* R5, R6, R7, R9, R22(d)(g).
   *Hecho:* ningún `describe` queda vacío, ningún test borrado se llevó un assert de otra
   feature, y `pnpm test tests/unit tests/integration` pasa.
+  *Cierre 2026-07-29:* Renombrados y podados los tres archivos que `b2181e7` habia borrado enteros; **15 `it` recuperados de 45, 30 descartados con justificacion caso por caso** en `progress/impl_159_cierre.md` seccion 2. Anadido el caso de R9.
 
 **Cierre de fase 1:** los tests de `tests/unit/` y `tests/integration/` pasan. El
 typecheck global sigue en rojo por la UI; se documenta y se continúa.
@@ -163,70 +229,79 @@ typecheck global sigue en rojo por la UI; se documenta y se continúa.
 
 ## Fase 2 — Frontend
 
-- [ ] **T17 — `carga-masiva-chunks.ts`: borrar `aplicarMensajero`.**
+- [x] **T17 — `carga-masiva-chunks.ts`: borrar `aplicarMensajero`.**
   La función (:46-54), `ProcesarChunksOpts.mensajeroSugeridoId` (:59) y el `map` de :88.
   *Depende de:* fase 1. *Cubre:* R13, R18, R22(a)(b)(c).
   *Hecho:* `procesarEnChunks` envía `lote.map((f) => f.row)`; los 3 tests de chunking,
   dedup, remapeo y `ChunkRequestError` siguen verdes tras quitarles la opción.
+  *Cierre 2026-07-29:* Hecho en `b2181e7`. Los tests de chunking/dedup/remapeo/`ChunkRequestError` siguen verdes.
 
-- [ ] **T18 [P] — `OrdenesCargaUpload.tsx`: quitar `mensajeroSugeridoId: ""` del dry-run (:131).**
+- [x] **T18 [P] — `OrdenesCargaUpload.tsx`: quitar `mensajeroSugeridoId: ""` del dry-run (:131).**
   *Depende de:* T17. *Cubre:* R18.
   *Hecho:* la llamada del dry-run ya no pasa la opción y el test de subida sigue verde.
+  *Cierre 2026-07-29:* Hecho en `b2181e7`.
 
-- [ ] **T19 — `OrdenesCargaResumen.tsx`: dejarlo en solo lectura.**
+- [x] **T19 — `OrdenesCargaResumen.tsx`: dejarlo en solo lectura.**
   Retirar lo listado en `design.md §5.1`, incluido el `Math.random` de `seleccionInicial`,
   el botón "Sugerir asignación", el `mutate` de SWR y la prop `onDone`.
   *Depende de:* T12. *Cubre:* R12, R13, R14.
   *Hecho:* el componente no importa nada de mensajeros, la tabla no tiene columna de
   mensajero y no hay ningún `<Select>` ni `<Button>` de acción en el render.
+  *Cierre 2026-07-29:* Hecho **aqui**: `b2181e7` habia **borrado el componente entero** (alternativa A3, descartada en `design.md` seccion 6). Restituido en solo lectura, sin `Math.random`, sin selector, sin boton, sin `mutate` y sin `onDone`.
 
-- [ ] **T20 — `OrdenesCargaMasivaButton.tsx`: el 3er paso pasa a ser "Resultado".**
+- [x] **T20 — `OrdenesCargaMasivaButton.tsx`: el 3er paso pasa a ser "Resultado".**
   `Step` `"asignacion"` → `"resultado"`, etiqueta e `PASO_DESCRIPCION`, `setStep` (:192)
   y el render (:250-255) sin `onDone`.
   *Depende de:* T19. *Cubre:* R15.
   *Hecho:* el indicador de pasos no menciona "mensajero" en ninguna de sus 3 etiquetas ni
   descripciones, y el modal sigue cerrándose con su botón "Cerrar".
+  *Cierre 2026-07-29:* Hecho **aqui**: el 3er paso vuelve como `"resultado"`. Ninguna de las 3 etiquetas ni descripciones menciona mensajero (asertado en `OrdenesCargaMasivaButton.test.tsx`, R15).
 
-- [ ] **T21 [P] — `OrdenesCargaResumenPaso.tsx`: quitar la prop `onDone`.**
+- [x] **T21 [P] — `OrdenesCargaResumenPaso.tsx`: quitar la prop `onDone`.**
   Solo si Q3 se resuelve como "no se borra" (recomendación del spec).
   *Depende de:* T19. *Cubre:* R12.
   *Hecho:* compila y `OrdenesCargaResumenPaso.test.tsx` + `ManifiestoFlujos.test.tsx`
   pasan — R22(f).
+  *Cierre 2026-07-29:* Hecho en `b2181e7`; **no se volvio a tocar**. Sus dos tests siguen verdes y el boton de manifiesto de la 148 sigue intacto. El componente **sigue huerfano** (deuda de Q3, `progress/impl_159_cierre.md` seccion 6).
 
-- [ ] **T22 [P] — `ordenes-columns.tsx`: una sola columna "Mensajero".**
+- [x] **T22 [P] — `ordenes-columns.tsx`: una sola columna "Mensajero".**
   Borrar `mensajeroSugeridoColumn` (:184-189) y `ordenesColumnsMensajeroSugerido`
   (:197-200); la columna `mensajero` queda en el asignado con fallback a `SIN_DATO`.
   *Depende de:* T13. *Cubre:* R16, R17, R18.
   *Hecho:* el archivo no exporta la variante y un test cubre las dos ramas (con y sin
   mensajero asignado).
+  *Cierre 2026-07-29:* El archivo ya no exportaba la variante desde `b2181e7`; **el test de las dos ramas se anadio aqui** (`ordenes-columns.test.tsx`, 4 casos: nombre no id, marcador de dato ausente sin asignado, columna unica y paridad con el juego `reprogramada`).
 
-- [ ] **T23 — `OrdenesListado.tsx`: borrar `ESTADOS_MENSAJERO_SUGERIDO`.**
+- [x] **T23 — `OrdenesListado.tsx`: borrar `ESTADOS_MENSAJERO_SUGERIDO`.**
   El `Set` (:69-71), el import (:23) y su rama del `if` (:353-358), que colapsa al
   ternario de `reprogramada`.
   *Depende de:* T22. *Cubre:* R16, R18.
   *Hecho:* filtrar por un único estado ya no cambia el juego de columnas salvo en
   `reprogramada`; los tests de listado pasan.
+  *Cierre 2026-07-29:* Hecho en `b2181e7`.
 
-- [ ] **T24 — `GenerarGuiaModal.tsx`: cerrar lo que la 156 haya dejado.**
+- [x] **T24 — `GenerarGuiaModal.tsx`: cerrar lo que la 156 haya dejado.**
   Según el veredicto de T2: `seleccionInicial` (:39-46), `conSugerido`/`sinSugerido`
   (:130-131) y los bloques "Con/Sin mensajero sugerido" (:249-270).
   *Depende de:* T2, T13. *Cubre:* R13, R18, R22(e).
   *Hecho:* 0 ocurrencias de `sugerid` en el archivo. Si la 156 ya lo dejó limpio, la task
   se cierra **"sin diff" con la evidencia de grep pegada**, nunca por suposición.
+  *Cierre 2026-07-29:* Cerrada **sin diff**, con la evidencia de grep de T2 pegada en la bitacora -- no por suposicion.
 
-- [ ] **T25 — Adaptar los tests de componentes.**
+- [x] **T25 — Adaptar los tests de componentes.**
   `OrdenesCargaResumen.test.tsx`, `CargaMasivaChunks.test.ts`, `GenerarGuiaModal.test.tsx`
   y el ajuste mecánico de `OrdenesApartado`, `OrdenesListadoBloqueoCierre`,
   `OrdenesListadoEtiquetasChain`, `OrdenesRevisionMaestro` (`design.md §7`).
   *Depende de:* T17–T24. *Cubre:* R12, R13, R14, R22(a)(b)(c)(e)(f).
   *Hecho:* `pnpm test tests/components` pasa; ningún archivo perdió un assert ajeno a la
   sugerencia.
+  *Cierre 2026-07-29:* `OrdenesCargaResumen.test.tsx` recuperado y reescrito (11 `it`); `CargaMasivaChunks`, `GenerarGuiaModal` y los 4 mecanicos ya estaban en `b2181e7`. Adaptado ademas `OrdenesCargaMasivaNotificacion.test.tsx`, que esperaba al cierre del modal (ningun assert del aviso perdido).
 
 ---
 
 ## Fase 3 — Cierre
 
-- [ ] **T26 — Guard de no-reintroducción.**
+- [x] **T26 — Guard de no-reintroducción.**
   `tests/unit/guards/sin-mensajero-sugerido.test.ts`, modelado sobre
   `tests/unit/guards/no-embalaje.test.ts` (copiar su `IGNORED_DIRS`, incluido `.claude`).
   Ámbito: `app/`, `lib/`, `components/`, `hooks/`, `db/schema.prisma`. Whitelist mínima:
@@ -235,14 +310,22 @@ typecheck global sigue en rojo por la UI; se documenta y se continúa.
   *Hecho:* pasa; y se demuestra que **falla** reintroduciendo a mano una línea con
   `mensajeroSugeridoId` (evidencia pegada en `progress/impl_159.md`, línea revertida
   después).
+  *Cierre 2026-07-29:* El guard existia desde `b2181e7`; **ampliado aqui**: `PROHIBIDOS` pasa de 7 a 9 (entran `findMensajerosByIds` y `countOrdenesDeTienda`, que R20 nombra) y se anade el assert inverso -- el resumen del lote SIGUE en pie. Las tres mutaciones (reintroducir cada identificador, borrar el resumen) lo dejan en rojo.
 
-- [ ] **T27 — Verificación completa.**
+- [x] **T27 — Verificación completa.**
   `pnpm run typecheck`, `pnpm run lint`, `pnpm test`, `./init.sh`.
   *Depende de:* T26. *Cubre:* todos.
   *Hecho:* los cuatro en verde, con la salida real pegada en `progress/impl_159.md`.
   Este es el primer punto del trabajo en que el typecheck global debe estar verde.
+  *Cierre 2026-07-29:* `./init.sh` en verde: typecheck 0 errores, lint 0 errores / 10 warnings (los mismos de `dev`), **575 archivos / 6286 tests / 0 fallos**. Salida real en `progress/impl_159_cierre.md` seccion 8.
 
-- [ ] **T28 — Mapa de trazabilidad `R<n> → test`.**
+- [x] **T28 — Mapa de trazabilidad `R<n> → test`.**
   Los 22 requisitos, cada uno con el archivo y el nombre del test que lo cubre.
   *Depende de:* T27.
   *Hecho:* `progress/impl_159.md` contiene la tabla completa, sin ningún `R<n>` sin test.
+  *Cierre 2026-07-29:* Tabla completa en `progress/impl_159_cierre.md` seccion 7. ATENCION: el criterio literal de la task ("sin ningun `R<n>` sin test") **no se cumple**: **R10 no tiene test porque quedo incumplido**, y R1/R2/R3 tienen cobertura solo **estatica**. La tabla lo declara en vez de ocultarlo.
+  *Actualizacion 2026-07-29:* los 22 requisitos **en su redaccion vigente** ya tienen test, pero eso
+  **no se presenta como cobertura ganada**: R10 pasa a verde solo porque el requisito se reescribio
+  para decir lo que el codigo hace (su forma original sigue incumplida), y R3 queda **parcial** —el
+  DDL ya se ejecuta de verdad contra Postgres, la rama de datos no nulos no—. Si lo que se mide es
+  "requisitos cumplidos como se escribieron", el numero honesto sigue siendo **21 de 22**.

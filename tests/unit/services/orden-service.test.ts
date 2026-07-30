@@ -74,8 +74,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
     setCargaDownloadUrl: vi.fn(async () => {}),
     setOrdenesDownloadUrl: vi.fn(async () => {}),
-    // Feature 16: metodos de resumen/asignacion, no ejercitados por el CRUD
-    // (feature 6) pero exigidos por la interfaz IOrdenRepository.
+    // Feature 16: resumen del lote (solo lectura), no ejercitado por el CRUD
+    // (feature 6) pero exigido por la interfaz IOrdenRepository.
+    findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados por el
     // CRUD (feature 6) pero exigidos por la interfaz IOrdenRepository.
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
@@ -129,6 +130,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
     countRechazadasSlaByTienda: vi.fn().mockResolvedValue(0),
     findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),
+    // Feature 149: writer de la reversion de asignacion, exigido por IOrdenRepository.
+    deshacerAsignacionLote: vi.fn(async () => 0),
     ...overrides,
   };
 }

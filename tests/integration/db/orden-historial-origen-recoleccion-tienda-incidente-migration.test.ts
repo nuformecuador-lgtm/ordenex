@@ -64,14 +64,15 @@ describe("Feature 154 · SEED del enum — las dos familias del flujo v2 (R7/R8/
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("incidente");
   });
 
-  it("R9: la correspondencia codigo <-> DB es EXACTA en ambas direcciones (24 = 24)", () => {
+  it("R9: la correspondencia codigo <-> DB es EXACTA en ambas direcciones (25 = 25)", () => {
     // codigo -> DB lo fuerza el `satisfies readonly PrismaOrdenHistorialOrigenTipo[]`;
     // DB -> codigo lo fuerza el `_EnsureExhaustive` del modulo. Las dos rompen el BUILD.
     // Aqui se verifica el resultado en runtime contra el enum generado del schema.
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual(
       Object.values(PrismaOrdenHistorialOrigenTipo).sort(),
     );
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(24);
+    // 25 tras integrar la 149, que apendio `deshacer_asignacion` DESPUES de estos dos.
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(25);
   });
 
   it("R12: NINGUNA de las dos entra en ORIGEN_TIPOS_CON_GESTION (no alteran los intentos)", () => {
@@ -119,10 +120,10 @@ describe("Feature 154 · DOWN — recrea el tipo con las 22 familias previas (R1
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(valores).toHaveLength(22);
     for (const nuevo of NUEVOS) expect(valores).not.toContain(nuevo);
-    // Las 22 previas = el SEED actual menos las AÑADIDAS EN O DESPUES de la 154. Esta migracion
-    // es la ULTIMA que toca el enum, asi que el descuento es exactamente sus dos values; cuando
-    // una feature posterior añada otro, tendra que sumarlo a este conjunto (patron 67/99/100/106/138).
-    const AÑADIDOS_EN_O_DESPUES_DEL_154 = new Set<string>([...NUEVOS]);
+    // Las 22 previas = el SEED actual menos las AÑADIDAS EN O DESPUES de la 154. La 149 aterrizo
+    // `deshacer_asignacion` DESPUES (migracion `20260729140000_...`), asi que se descuenta tambien:
+    // este down recrea el enum a su estado PRE-154, que es fijo e historico (patron 67/99/100/106/138).
+    const AÑADIDOS_EN_O_DESPUES_DEL_154 = new Set<string>([...NUEVOS, "deshacer_asignacion"]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_154.has(v))),
     );

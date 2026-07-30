@@ -8,11 +8,15 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 //
 // Es la RED DE SEGURIDAD de la activacion estricta (Q7): si una arista real faltara en
 // `TRANSICIONES`, ese flujo se caeria en produccion. Por eso los tests que lo consumen
-// recorren el inventario COMPLETO (38 aristas de flujo + 2 de creacion), no un muestreo.
+// recorren el inventario COMPLETO (41 aristas de flujo + 2 de creacion), no un muestreo.
 //
 // Feature 154 (SOLO ADITIVA, decision Q2 del gate del 2026-07-29): sumo #43, #44 y la creacion
 // `null -> por_recolectar_en_tienda`, sin retirar ninguna fila, porque `GuiaAsignacionService`
 // seguia ejecutando las seis que el spec original proponia dar de baja (#1/#3/#4/#6/#7b/#7c).
+//
+// Feature 149 (SOLO ADITIVA): suma TRES aristas de la familia `deshacer_asignacion`. El spec las
+// numeraba #43/#44/#45; al integrar `dev` se RENUMERARON a #45/#46/#47, porque la 154 ya habia
+// tomado #43/#44 mientras la 149 iba en su rama.
 //
 // Feature 156 (recableado de `generarGuia`): RETIRA #4, #6 y #7c. Generar guia deja de asignar
 // mensajero y de rutear a satelite (se van #4 y #6), y `rutearABodegaSatelite` pasa a admitir
@@ -51,7 +55,7 @@ export interface AristaCreacionInventario {
   callSite: string;
 }
 
-/** A.2 — 38 aristas de flujo (1-44 sin #27, #4/#6/#7c de la 156 y #1/#2/#3/#7b de la 155). */
+/** A.2 — 41 aristas de flujo (1-47 sin #27, sin #4/#6/#7c de la 156 y sin #1/#2/#3/#7b de la 155, + #43/#44 de la 154 + #45/#46/#47 de la 149). */
 export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // #1/#2/#3/#7b RETIRADAS por la feature 155 junto con el estado del que salian. Estaban SIN
   // PRODUCTOR desde la 156 y su backfill (`20260729140000_order_status_retiro_en_fulfillment`)
@@ -103,6 +107,12 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // escritura de `tests/unit/repositories/orden-historial-cobertura.test.ts`.
   { n: "43", origen: "por_recolectar_en_tienda", destino: "en_ruta_bodega_central", via: "recoleccion_tienda", callSite: "SIN PRODUCTOR (154): escaner de recoleccion en tienda, feature 157" },
   { n: "44", origen: "en_reparto", destino: "incidente", via: "gestion", callSite: "SIN PRODUCTOR (154): resultado `incidente` de la gestion, feature 158" },
+  // Feature 149 (design §2, R27): reversion de la asignacion/ruteo ANTES de la recogida. Las
+  // TRES aristas son pares NUEVOS (no repiten ningun par ya declarado), por eso suben tanto el
+  // recuento de aristas (42 -> 45) como el de pares unicos (39 -> 42).
+  { n: "45", origen: "en_ruta_bodega_satelite", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso b)" },
+  { n: "46", origen: "por_recoger", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "DeshacerAsignacionService.deshacer -> OrdenRepository.deshacerAsignacionLote (149, caso a central)" },
+  { n: "47", origen: "por_recoger", destino: "en_bodega_satelite", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso a satelite)" },
 ];
 
 /**
@@ -122,15 +132,22 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
 ];
 
 /**
- * Recuentos: 38 aristas de flujo, 36 pares dirigidos unicos y 2 de creacion.
+ * Recuentos: 41 aristas de flujo, 39 pares dirigidos unicos y 2 de creacion.
  *
- * De 42 a 38: -4 aristas (#1/#2/#3/#7b, feature 155). De 39 a 36 pares: los tres pares que
- * salian del estado retirado desaparecen enteros — `-> por_recoger` (#1), `-> en_bodega_central`
- * (#2) y `-> en_ruta_bodega_satelite` (#3 y #7b, que compartian par). Los 38 - 36 = 2 duplicados
- * que quedan son #19/#23 y #20/#24 (SLA vs. recuperacion manual).
+ * CADENA COMPLETA, para que nadie tenga que reconstruirla:
+ *   - la 156 dejo 42 aristas / 39 pares (retiro #4/#6/#7c);
+ *   - la 155 bajo a 38 / 36: -4 aristas (#1/#2/#3/#7b) y -3 pares, porque los tres pares que
+ *     salian del estado retirado desaparecen enteros — `-> por_recoger` (#1),
+ *     `-> en_bodega_central` (#2) y `-> en_ruta_bodega_satelite` (#3 y #7b, que compartian par).
+ *     Las de creacion bajaron de 4 a 2;
+ *   - la 149 suma sus TRES aristas (#45/#46/#47) y las tres son pares NUEVOS, asi que suben
+ *     ambos recuentos por igual: 38 -> 41 aristas y 36 -> 39 pares.
+ *
+ * Los 41 - 39 = 2 duplicados que quedan son #19/#23 y #20/#24 (SLA vs. recuperacion manual). El
+ * tercer duplicado historico (#3/#7b) se fue con el estado de fulfillment.
  */
 export const RECUENTO_INVENTARIO = {
-  aristasFlujo: 38,
-  paresUnicos: 36,
+  aristasFlujo: 41,
+  paresUnicos: 39,
   aristasCreacion: 2,
 } as const;

@@ -33,6 +33,7 @@ import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
+import { DeshacerAsignacionModal } from "./DeshacerAsignacionModal";
 import {
   construirFiltrosOrdenes,
   CATALOGO_FILTROS_VACIO,
@@ -47,6 +48,7 @@ type ModalAbierto =
   | "etiquetas"
   | "devolver-tienda"
   | "recuperar-bodega"
+  | "deshacer-asignacion"
   | null;
 
 async function mensajerosFetcher() {
@@ -260,6 +262,13 @@ export function OrdenesListado({
     setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
     setModalAbierto("recuperar-bodega");
   }
+  // Feature 149/T6.2 (R34): "Deshacer asignación" sobre el lote seleccionado
+  // (`por_recoger` o `en_ruta_bodega_satelite`). SIN filtro por zona: el maestro/admin
+  // (`esAccesoTotal`) deshace órdenes de CUALQUIER zona (R3); el service revalida.
+  function abrirDeshacer(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("deshacer-asignacion");
+  }
 
   // Revalida el listado (todas sus combinaciones de estado/página comparten el
   // prefijo de key SWR).
@@ -317,8 +326,15 @@ export function OrdenesListado({
       case "en_preparacion":
         return [{ key: "guia", label: "Generar guía", onRun: abrirGenerarGuia }];
       case "por_recoger":
+        // Feature 149/R34: caso (a) — la orden sigue en la bodega, sin recoger.
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
+          {
+            key: "deshacer",
+            label: "Deshacer asignación",
+            variant: "outline",
+            onRun: abrirDeshacer,
+          },
         ];
       case "en_bodega_central":
         return [
@@ -335,8 +351,16 @@ export function OrdenesListado({
           },
         ];
       case "en_ruta_bodega_satelite":
+        // Feature 149/R34: caso (b) — ruteada a la satélite pero aún NO recibida. Solo la
+        // ofrece esta superficie (maestro/admin): la satélite no la ve (R36).
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
+          {
+            key: "deshacer",
+            label: "Deshacer asignación",
+            variant: "outline",
+            onRun: abrirDeshacer,
+          },
         ];
       case "por_devolver_a_tienda":
         // Feature 139/R15: envío por lote a la tienda de origen
@@ -584,6 +608,15 @@ export function OrdenesListado({
           />
           <RecuperarABodegaModal
             open={modalAbierto === "recuperar-bodega"}
+            ordenes={ordenesSeleccionadas}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          {/* Feature 149/T6.2 (R38): éxito ⇒ `handleSuccess` cierra y revalida las tablas,
+              de modo que las órdenes revertidas desaparecen de `por_recoger` /
+              `en_ruta_bodega_satelite` y aparecen en su bodega. */}
+          <DeshacerAsignacionModal
+            open={modalAbierto === "deshacer-asignacion"}
             ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}

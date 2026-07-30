@@ -28,6 +28,12 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 // resultado `incidente` de la gestion). AMBAS nacen DECLARADAS Y SIN PRODUCTOR: ningun repo las
 // emite hasta las features 157/158 (por eso no estan en PUNTOS_DE_ESCRITURA, ver
 // tests/unit/repositories/orden-historial-cobertura.test.ts).
+// Feature 149: el conjunto pasa a 25 con `deshacer_asignacion` (reversion de la asignacion/ruteo
+// ANTES de la recogida: por_recoger -> en_bodega_central/en_bodega_satelite y
+// en_ruta_bodega_satelite -> en_bodega_central): valor propio para que la linea de tiempo distinga
+// la reversion de la asignacion que la produjo (`asignacion_bodega`/`asignacion_satelite`/
+// `ruteo_satelite`) y de un parche administrativo generico (`ajuste_estado`). SI tiene productor
+// (`OrdenRepository.deshacerAsignacionLote`), a diferencia de las dos de la 154.
 describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
   const ESPERADOS = [
     "carga_masiva",
@@ -54,10 +60,11 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "devolucion_rechazada", // feature 139: CierresAdminRepository.resolverCierre (aprobar, rechazada -> por_devolver/por_devolver_a_tienda)
     "recoleccion_tienda", // feature 154 (R7): recoleccion en tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43). SIN PRODUCTOR hasta la 157
     "incidente", // feature 154 (R8): familia propia del resultado `incidente`. SIN PRODUCTOR hasta la 158
+    "deshacer_asignacion", // feature 149: OrdenRepository.deshacerAsignacionLote (reversion antes de la recogida)
   ];
 
-  it("contiene exactamente los 24 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(24);
+  it("contiene exactamente los 25 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(25);
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

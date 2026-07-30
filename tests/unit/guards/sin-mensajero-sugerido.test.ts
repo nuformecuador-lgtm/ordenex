@@ -34,6 +34,11 @@ const IGNORED_DIRS = new Set([
 const TEXT_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".prisma"]);
 
 // R18/R19/R20: los identificadores que NO deben sobrevivir en produccion.
+//
+// Los tres ultimos son los metodos de repositorio que R20 nombra uno a uno: sin
+// ellos en la lista, reintroducir cualquiera no disparaba nada (hallazgo del review,
+// §8). `findMensajerosByIds` NO colisiona con `findMensajerosByZona`, que sigue vivo
+// para "Generar guia" y la asignacion satelite.
 const PROHIBIDOS = [
   "mensajero_sugerido_id",
   "mensajeroSugeridoId",
@@ -42,6 +47,8 @@ const PROHIBIDOS = [
   "asignarMensajeroSugerido",
   "ordenesColumnsMensajeroSugerido",
   "ESTADOS_MENSAJERO_SUGERIDO",
+  "findMensajerosByIds",
+  "countOrdenesDeTienda",
 ];
 
 // `MensajeroSugerido` es subcadena de varios de los anteriores, asi que una
@@ -112,5 +119,30 @@ describe("guard sin-mensajero-sugerido (R18, R19, R20)", () => {
     expect(
       fs.existsSync(path.join(REPO_ROOT, "lib/services/AsignacionMensajeroService.ts")),
     ).toBe(false);
+    expect(
+      fs.existsSync(
+        path.join(REPO_ROOT, "lib/interfaces/services/IAsignacionMensajeroService.ts"),
+      ),
+    ).toBe(false);
+  });
+
+  // R12/R22(d): el reverso del guard. El retiro de la sugerencia NO se llevo por
+  // delante el resumen del lote, que es una capacidad distinta (design.md §6/A3) y la
+  // unica confirmacion visual de que se cargo. Si alguien vuelve a borrarlo "de paso",
+  // esto lo dice.
+  it("el resumen del lote recien cargado SIGUE en pie (R12, design §6/A3)", () => {
+    for (const archivo of [
+      "app/(app)/ordenes/_components/OrdenesCargaResumen.tsx",
+      "lib/actions/carga-masiva-resumen.ts",
+      "lib/services/ResumenCargaMasivaService.ts",
+      "lib/interfaces/services/IResumenCargaMasivaService.ts",
+    ]) {
+      expect(fs.existsSync(path.join(REPO_ROOT, archivo))).toBe(true);
+    }
+    const repo = fs.readFileSync(
+      path.join(REPO_ROOT, "lib/repositories/OrdenRepository.ts"),
+      "utf8",
+    );
+    expect(repo).toMatch(/async findResumenByNumRemisiones\(/);
   });
 });

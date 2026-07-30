@@ -466,7 +466,7 @@ model Orden {
   notas                  String? // R14a: texto nullable
   direccion              String? // feature 15/R1: nuevo, carga masiva
   montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
-  mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro), distinto del sugerido
+  mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro); feature 159: unica fuente de verdad del mensajero de una orden
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
   prioridad              Boolean   @default(false) @map("prioridad") // feature 101/R1: flag de reasignacion prioritaria (ON al liberar por SLA 99, OFF al reasignar mensajero desde bodega); default false = sin backfill (R11)
@@ -1158,6 +1158,7 @@ enum OrdenHistorialOrigenTipo {
   devolucion_rechazada // feature 139: al APROBAR el cierre, rechazada -> por_devolver (satelite) / por_devolver_a_tienda (central) (actor admin)
   recoleccion_tienda // feature 154: el mensajero recolecta en la tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43; lo ejecutara la 157)
   incidente // feature 154: familia propia del resultado `incidente` de la gestion. DECLARADA SIN PRODUCTOR hasta la 158 (la arista #44 en_reparto -> incidente viaja via `gestion`, decision Q4)
+  deshacer_asignacion // feature 149: reversion de asignacion/ruteo antes de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite -> en_bodega_central)
 
   @@map("orden_historial_origen_tipo")
 }

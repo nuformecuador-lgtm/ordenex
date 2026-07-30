@@ -30,6 +30,7 @@ import { EscanerRecepcion } from "./EscanerRecepcion";
 import { RecepcionDetalle } from "./RecepcionDetalle";
 import { recibidasColumns } from "./recibidas-columns";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
+import { DeshacerAsignacionSateliteModal } from "./DeshacerAsignacionSateliteModal";
 import {
   BODEGA_BLOQUEADA_TITULO,
   BODEGA_CIERRES_ABIERTOS_DETALLE,
@@ -71,6 +72,14 @@ export interface RecepcionSateliteModuleProps {
    * órdenes por recuperar.
    */
   devueltas?: RecepcionSateliteDTO[];
+  /**
+   * Feature 149/T6.4 (R35): órdenes en `por_recoger` de la zona del adminSatelite —ya
+   * asignadas a un mensajero que AÚN no las recogió—, elegibles para la acción POR LOTE
+   * "Deshacer asignación" (`por_recoger → en_bodega_satelite`). Acotadas server-side por zona;
+   * vacío = sin órdenes asignadas pendientes de recogida. El caso (b)
+   * (`en_ruta_bodega_satelite`, sección "Por recibir") NO ofrece esta acción (R36).
+   */
+  asignadas?: RecepcionSateliteDTO[];
   /** Nombre de la zona del adminSatelite (para el display, R9); `null` si no tiene. */
   zonaNombre: string | null;
   /** `true` si el adminSatelite no tiene zona asignada (R5). */
@@ -174,6 +183,7 @@ export function RecepcionSateliteModule({
   porDevolver = [],
   enTransitoACentral = [],
   devueltas = [],
+  asignadas = [],
   zonaNombre,
   sinZona,
   mensajeros,
@@ -190,6 +200,12 @@ export function RecepcionSateliteModule({
     Set<string>
   >(new Set());
   const [enviandoACentral, setEnviandoACentral] = useState(false);
+  // Feature 149/T6.4 (R35): Set de selección PROPIO de la sección "Asignadas (por recoger)",
+  // independiente del de "Recibidas" y del de "Por devolver", y estado de su modal.
+  const [seleccionadosAsignadas, setSeleccionadosAsignadas] = useState<
+    Set<string>
+  >(new Set());
+  const [deshacerOpen, setDeshacerOpen] = useState(false);
   // Feature 148 (T13, R22): ids del ÚLTIMO envío a central que salieron `ok`. El lote
   // vive solo aquí (el service es por-orden, §9.1), así que se conserva para poder
   // ofrecer su manifiesto después del refresco. Vacío = sin descarga que ofrecer (R17).
@@ -337,6 +353,72 @@ export function RecepcionSateliteModule({
     [seleccionadosPorDevolver, zonaNombre, porDevolver],
   );
 
+  // ---------- Feature 149/T6.4 (R35/R37/R38) — deshacer asignación por lote ----------
+  function toggleAsignada(id: string, checked: boolean) {
+    setSeleccionadosAsignadas((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleAsignadasTodas(ids: string[], checked: boolean) {
+    setSeleccionadosAsignadas((prev) => {
+      const next = new Set(prev);
+      if (checked) ids.forEach((id) => next.add(id));
+      else ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  }
+
+  // Columnas de "Asignadas (por recoger)": patrón EXACTO de "Por devolver" (checkbox de
+  // selección compuesto aquí, fuente de verdad, + columnas de datos reusadas).
+  const columnasAsignadas = useMemo<Column<RecepcionSateliteDTO>[]>(
+    () => [
+      {
+        id: "seleccionar",
+        value: "Seleccionar",
+        renderHeader: () => {
+          const ids = asignadas.map((orden) => orden.id);
+          return (
+            <SelectAllCheckbox
+              selectableIds={ids}
+              selectedIds={seleccionadosAsignadas}
+              onToggleAll={(checked) => toggleAsignadasTodas(ids, checked)}
+              ariaLabel="Seleccionar todas las órdenes asignadas"
+            />
+          );
+        },
+        render: (orden: RecepcionSateliteDTO) => (
+          <Checkbox
+            checked={seleccionadosAsignadas.has(orden.id)}
+            onCheckedChange={(checked) =>
+              toggleAsignada(orden.id, checked === true)
+            }
+            aria-label={`Seleccionar ${orden.numRemision}`}
+          />
+        ),
+      },
+      ...recibidasColumns(zonaNombre),
+    ],
+    [seleccionadosAsignadas, zonaNombre, asignadas],
+  );
+
+  // Snapshot del lote que va al modal (por id, acotado a las órdenes aún listadas).
+  const asignadasSeleccionadas = useMemo(
+    () => asignadas.filter((orden) => seleccionadosAsignadas.has(orden.id)),
+    [asignadas, seleccionadosAsignadas],
+  );
+
+  // R38: éxito ⇒ limpia la selección, cierra el modal y RELEE el estado del servidor (la
+  // orden desaparece de "Asignadas" y reaparece en "Recibidas").
+  function handleDeshacerSuccess() {
+    setSeleccionadosAsignadas(new Set());
+    setDeshacerOpen(false);
+    router.refresh();
+  }
+
   // Columnas de "En tránsito a central": SOLO lectura (sin checkbox), reusa las de datos.
   const columnasEnTransito = useMemo<Column<RecepcionSateliteDTO>[]>(
     () => recibidasColumns(zonaNombre),
@@ -474,6 +556,38 @@ export function RecepcionSateliteModule({
         />
       </section>
 
+      {/* ---------- Sección: Asignadas (por recoger) ---------- */}
+      {/* Feature 149/T6.4 (R35/R36): órdenes de la zona ya asignadas a un mensajero que aún
+          NO las recogió. Tabla seleccionable (patrón "Por devolver") + acción POR LOTE
+          "Deshacer asignación" (por_recoger → en_bodega_satelite) sobre la selección. La
+          sección "Por recibir" (en_ruta_bodega_satelite) NO ofrece esta acción: el caso (b)
+          es competencia de la bodega central (R36). El cierre de día pendiente de un
+          mensajero NO bloquea esta acción (Q1 CERRADA, R19): a diferencia de "Asignar", el
+          botón no mira `bloqueoBodega`. */}
+      <section
+        aria-label="Asignadas (por recoger)"
+        className="flex flex-col gap-3 border-t pt-6"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Asignadas (por recoger)</h2>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setDeshacerOpen(true)}
+            disabled={asignadasSeleccionadas.length === 0}
+          >
+            Deshacer asignación
+          </Button>
+        </div>
+        <DataTable
+          columns={columnasAsignadas}
+          data={asignadas}
+          rowKey="id"
+          ariaLabel="Asignadas (por recoger)"
+          emptyMessage="No hay órdenes asignadas por recoger."
+        />
+      </section>
+
       {/* ---------- Sección: Por devolver (por_devolver) ---------- */}
       {/* Feature 139/T3.3 (R13/R21): órdenes en `por_devolver` de la zona. Tabla
           seleccionable (patrón "Recibidas") + acción POR LOTE "Enviar a central"
@@ -575,6 +689,13 @@ export function RecepcionSateliteModule({
         mensajerosBloqueadosIds={bloqueoBodega.mensajerosConCierreIds ?? []}
         onOpenChange={setModalOpen}
         onSuccess={handleSuccess}
+      />
+
+      <DeshacerAsignacionSateliteModal
+        open={deshacerOpen}
+        ordenes={asignadasSeleccionadas}
+        onOpenChange={setDeshacerOpen}
+        onSuccess={handleDeshacerSuccess}
       />
     </div>
   );

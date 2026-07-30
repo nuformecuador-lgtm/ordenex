@@ -76,10 +76,36 @@ mensajero sugerido.
 (`resultado`, `estatus`, `numGuia`) que produciría esa misma fila sin la clave, y
 con el mismo código HTTP.
 
-**R10.** El documento OpenAPI publicado DEBE declarar la propiedad
-`mensajero_sugerido_id` de `CargaRow` como obsoleta y describirla como aceptada e
-ignorada por el servidor.
-*(Sujeto a la decisión de la puerta F1.4 — ver Pregunta abierta Q1.)*
+**R10.** El documento OpenAPI publicado NO DEBE declarar la propiedad
+`mensajero_sugerido_id` de `CargaRow`.
+
+> **Redactado el 2026-07-29 — sustitución prevista por `design.md §4`, aplicada tras la
+> decisión humana de la puerta F1.4 (Q1 → opción **(a)**, borrar la propiedad).**
+> Autor de la decisión: **humano**, 2026-07-29.
+>
+> **Texto original de R10, que este requisito sustituye:** *"El documento OpenAPI
+> publicado DEBE declarar la propiedad `mensajero_sugerido_id` de `CargaRow` como
+> obsoleta y describirla como aceptada e ignorada por el servidor."*
+>
+> **Ese R10 original se INCUMPLIÓ, y no tiene arreglo retroactivo.** El PR #193 ejecutó
+> la opción (a) —borrar la propiedad de los dos artefactos— **sin pasar antes por la
+> marca `deprecated` que R10 exigía y sin registrar la decisión**. Cuando se detectó, la
+> propiedad ya llevaba días fuera del documento publicado: reponerla ahora con
+> `deprecated: true` no avisaría a nadie, solo resucitaría una propiedad muerta para
+> volver a borrarla. Se acepta el estado y se reconcilia el requisito con el código, en
+> vez de dejar un requisito que dice lo contrario de lo que el sistema hace.
+>
+> **Coste asumido, dicho en voz alta:** el cambio semántico **viajó en silencio**. Quien
+> hoy siga enviando `mensajero_sugerido_id` sigue recibiendo `2xx` y su orden se crea
+> —no hay breaking change en runtime: `filaCargaSchema` no es `.strict()` (ancla de la
+> feature 143) y `CargaRow` conserva `additionalProperties: { type: string }`—, pero
+> **nunca recibió señal de que el campo dejó de tener efecto**. Es exactamente el coste
+> que `design.md §4` le imputa a la opción (a). Por eso **Q4 deja de ser informativa**:
+> si hay integradores enviando la clave, el aviso tiene que salir **por fuera** del
+> documento, porque el documento ya no puede darlo.
+>
+> Detalle en `progress/impl_159_cierre.md` §5. La forma vigente la verifica
+> `tests/unit/api/openapi-carga-row-paridad.test.ts` (describe "159/R10 (sustituido…)").
 
 **R11.** El documento OpenAPI publicado y su espejo en `docs/` DEBEN declarar lo
 mismo para `CargaRow`: toda propiedad presente en uno DEBE estar presente en el otro
@@ -147,13 +173,17 @@ comportamientos NO relacionados con la sugerencia que hoy conviven con ella:
 > en la puerta F1.4**. Q1 y Q5 están desarrolladas en `design.md §4` y `§1.3`.
 
 **Q1 — ¿Se retira `mensajero_sugerido_id` del contrato público documentado, o se
-acepta y se ignora?**
+acepta y se ignora?** — **CERRADA: opción (a), retirarla del documento. Humano,
+2026-07-29.**
 Hecho verificado: en runtime **no hay breaking change en ninguna de las dos ramas**
 (`filaCargaSchema` no es `.strict()` por el ancla de la feature 143, y `CargaRow` ya
 declara `additionalProperties`), así que "aceptar e ignorar" es el comportamiento por
 defecto y no cuesta código. Lo único que se decide es **qué dice la documentación**.
-Recomendación: marcarla `deprecated` + "aceptado e ignorado" ahora (R10), y borrarla
-del documento en una limpieza posterior. Detalle y alternativas en `design.md §4`.
+La recomendación del spec era (b) —marcarla `deprecated` ahora y borrarla en una
+limpieza posterior—; **se ejecutó (a)**, y por el camino equivocado: el PR #193 la
+borró sin registrar la decisión ni pasar por la marca previa. R10 quedó reescrito en su
+forma sustituida, con el incumplimiento declarado. Detalle en `design.md §4` y en
+`progress/impl_159_cierre.md` §5.
 
 **Q2 — ¿El resumen del lote sobrevive como paso propio del modal?**
 El spec asume que **sí**, en modo solo lectura (es la única confirmación visual de qué
@@ -170,9 +200,13 @@ está enganchado en producción**. Es deuda **preexistente y ajena** a la sugere
 Recomendación: NO borrarlo aquí (sería alcance nuevo) y registrarlo como feature
 propia. Decide el humano.
 
-**Q4 — ¿Hay integradores activos enviando `mensajero_sugerido_id` hoy?**
-Dato que no vive en el repo. No cambia el código (ver Q1), pero decide si hace falta
-aviso previo a los integradores y con cuánta antelación.
+**Q4 — ¿Hay integradores activos enviando `mensajero_sugerido_id` hoy? — SIGUE
+ABIERTA, y desde el cierre de Q1 ya no es informativa.**
+Dato que no vive en el repo; **no se responde aquí porque no se sabe** (regla 6 de
+`CLAUDE.md`). Sigue sin cambiar el código, pero al haberse ejecutado (a) el documento
+publicado **ya no puede avisar del cambio semántico**: si hay integradores enviando la
+clave, el aviso tiene que salir por un canal externo (comunicación directa). Decide el
+humano, con el dato de producción en la mano.
 
 **Q5 — ¿Se conserva un respaldo de los valores de `orden.mensajero_sugerido_id`
 antes del `DROP`?**
