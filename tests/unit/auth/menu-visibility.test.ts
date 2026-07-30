@@ -27,6 +27,8 @@ const cierresAdmin = byLabel("Cierres del día");
 const novedades = byLabel("Novedades");
 const wallet = byLabel("Wallet");
 const ranking = byLabel("Ranking");
+// Feature 158 (T2.8, Q-I): la cola de incidentes es PÁGINA PROPIA, así que trae ítem propio.
+const incidentes = byLabel("Incidentes");
 
 const labels = (items: readonly MenuItem[]): string[] =>
   items.map((i) => i.label);
@@ -56,6 +58,13 @@ describe("puedeVer", () => {
     // Feature 92: "Inicio" (acceso a /dashboard) es visible para maestro y admin.
     expect(puedeVer(inicio, actor("maestro"))).toBe(true);
     expect(puedeVer(inicio, actor("admin"))).toBe(true);
+    // Feature 158 (R48/R49): "Incidentes" lo ven los MISMOS roles que el service autoriza
+    // a resolver un incidente: acceso total (maestro/admin) y adminSatelite (acotado a su
+    // zona server-side). Si el menú y el service divergieran, o habría un ítem que lleva a
+    // un `notFound`, o un rol autorizado sin puerta de entrada.
+    expect(puedeVer(incidentes, actor("maestro"))).toBe(true);
+    expect(puedeVer(incidentes, actor("admin"))).toBe(true);
+    expect(puedeVer(incidentes, actor("adminSatelite"))).toBe(true);
   });
 
   it("oculta el item cuando el rol no está autorizado", () => {
@@ -90,6 +99,11 @@ describe("puedeVer", () => {
     expect(puedeVer(inicio, actor("adminTienda"))).toBe(false);
     expect(puedeVer(inicio, actor("mensajero"))).toBe(false);
     expect(puedeVer(inicio, actor("adminSatelite"))).toBe(false);
+    // Feature 158 (R48): "Incidentes" NO lo ven el mensajero ni el adminTienda. Es dinero
+    // de Ordenex saliendo de la caja: el service les responde `forbidden` y el menú no les
+    // ofrece la puerta.
+    expect(puedeVer(incidentes, actor("mensajero"))).toBe(false);
+    expect(puedeVer(incidentes, actor("adminTienda"))).toBe(false);
   });
 
   it("oculta todo cuando no hay actor (sesión ausente o inválida)", () => {
@@ -102,9 +116,12 @@ describe("puedeVer", () => {
 });
 
 describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
-  it("maestro ve Inicio, Órdenes, Wallet, Configuración, Cierres del día y Perfil en orden real", () => {
+  it("maestro ve Inicio, Órdenes, Wallet, Configuración, Cierres del día, Incidentes y Perfil en orden real", () => {
     // Feature 42: "Wallet" (caja principal, solo maestro) va antes de "Configuración".
     // Feature 92: "Inicio" (acceso a /dashboard) va PRIMERO en SIDEBAR_ITEMS.
+    // Feature 158 (Q-I): "Incidentes" entra DESPUÉS de "Cierres del día" — el coste
+    // declarado de que la cola sea página propia y no una sección de cierres. La lista se
+    // compara por IGUALDAD: un ítem nuevo no declarado aquí pone el caso rojo.
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("maestro")))).toEqual([
       "Inicio",
       "Órdenes",
@@ -112,6 +129,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Wallet",
       "Configuración",
       "Cierres del día",
+      "Incidentes",
       "Perfil",
     ]);
   });
@@ -126,14 +144,16 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Ranking",
       "Wallet",
       "Cierres del día",
+      "Incidentes", // feature 158 (Q-I)
       "Perfil",
     ]);
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Órdenes + Novedades + Perfil, NO Configuración", () => {
+  it("adminTienda ve Órdenes + Novedades + Perfil, NO Configuración ni Incidentes", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
     expect(visibles).toEqual(["Órdenes", "Novedades", "Perfil"]);
+    expect(visibles).not.toContain("Incidentes"); // feature 158 (R48)
     expect(visibles).not.toContain("Configuración");
     // "Ranking" es solo del maestro.
     expect(visibles).not.toContain("Ranking");
@@ -156,11 +176,16 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Órdenes");
     expect(visibles).not.toContain("Novedades");
     expect(visibles).not.toContain("Configuración");
+    // Feature 158 (R48): el mensajero NO entra en la cola de incidentes del admin. El suyo
+    // se resuelve por el cierre del día, que es otra pantalla y otro camino.
+    expect(visibles).not.toContain("Incidentes");
   });
 
-  it("adminSatelite ve Órdenes + Cierres del día + Perfil", () => {
+  it("adminSatelite ve Órdenes + Cierres del día + Incidentes + Perfil", () => {
+    // Feature 158 (R48): el adminSatelite SÍ resuelve incidentes, acotado a su zona por el
+    // service; por eso gana el ítem. Su "Órdenes" apunta a /recepcion-satelite.
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Órdenes", "Cierres del día", "Perfil"],
+      ["Órdenes", "Cierres del día", "Incidentes", "Perfil"],
     );
   });
 

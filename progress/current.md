@@ -126,8 +126,130 @@ admin no puede reportar desde bodega, **que es el estado de hoy**. La pregunta s
 palabra «entrega» y **se malentendió**: en este dominio «entrega» es lo que hace un mensajero con un
 paquete. Reformulada como «un PR o dos PRs».
 
-**Estado:** spec en la rama `feature/158-incidente-indemnizacion` (base = `dev` + los 3 commits del
-#207), commits `9a02ed5` y `3183127`. **Ni una línea de código de producción tocada.**
+### ✅ PR 1 de la 158 ENTREGADO — **PR #208**, camino del mensajero (R1-R36)
+
+`https://github.com/nuformecuador-lgtm/ordenex/pull/208` · rama `feature/158-incidente-indemnizacion`
+· 21 commits · `./init.sh` **617 archivos / 6973 tests / 0 fallos** (baseline de partida 599/6634 →
+**+339 tests**) · `tests/integration/db` 72/715 · `next build` exit 0.
+
+**Reviewer: OK — 0 bloqueantes, 10 menores** (`progress/review_158.md`). **36/36 R verificados hasta
+un test concreto y NO VACUO**, sin fiarse del mapa de las bitácoras; **17 mutaciones propias del
+reviewer, las 17 discriminan, 0 supervivientes**. El reviewer además **cerró la limitación que se le
+declaró** en vez de aceptarla: insertó una fila real de la categoría nueva y comprobó que el DOWN
+aborta en el `ALTER COLUMN` — el `USING` cast que no se había podido ejercer con la tabla vacía.
+
+**m5 y m6 saldados antes de abrir el PR**, por decisión del humano:
+- **m5 (el monto sin tope frente al `DECIMAL(12,2)`)**: el tope se puso **en el borde de la 158**, NO
+  en `montoPositivoSchema` — el defecto es preexistente (feature 45 lo tiene igual) y tocar el schema
+  compartido cambiaría otras features sin su puerta. La frontera **se midió contra Postgres**, no se
+  dedujo: `9999999999.99` cabe, `10000000000.00` desborda. En cliente se comparó **por texto**, porque
+  11 dígitos no caben exactos en un `number` de JS.
+- **m6 (media compensación vacua en el censo)**: **reforzado, no retirado**. Las dos mutaciones que
+  ahora lo matan (degradar el `case` a comentario, degradar la guardia de evidencias) **antes dejaban
+  el test verde**.
+
+**⚠️ `R29` queda a medias en el PR 1 A PROPÓSITO**: pide «exactamente DOS» emisores de
+`egreso_indemnizacion` y allí hay uno. El guard lo fija con un assert que obliga a que pase a 2 en el
+PR 2. **El PR 2 lo cumplió** (ver abajo).
+
+**⚠️ La dispensa de E2E del PR 1 es explícita y NO EXTENSIBLE al PR 2.** La deuda de fondo —que no
+haya harness de E2E en el repo— sigue viva y sin dueño.
+
+### ✅ PR 2 de la 158 ENTREGADO — **PR #209** · y **PR #168 RESCATADO**
+
+**PR #209** (`feature/158b-incidente-admin`) — ⚠️ **apilado sobre el #208, no sobre `dev`. Mergear el
+#208 primero.** `./init.sh` **630 archivos / 7354 tests / 0 fallos** · `next build` exit 0 con
+`/incidentes` en el manifiesto · **Reviewer OK, 0 bloqueantes**, 7 menores, **28/28 R verificados**,
+**32 mutaciones, 31 discriminan**.
+
+- **`R29` cumplido y verificado EN LAS DOS DIRECCIONES**: son exactamente dos emisores — un tercero
+  pone el guard rojo **y quitar uno también**. Es igualdad, no `some()`.
+- **Contra Postgres real**: el `USING` del down aborta con filas en las tres tablas; los 6 índices
+  vuelven byte-idénticos; y **la idempotencia del egreso contra el índice real de la 42**, que hasta
+  ahora sólo estaba simulada en memoria.
+- **E2E declarado INAPLICABLE con razón verificada** (no por inercia): `./init.sh` no corre
+  `test:e2e` y los 20+ specs existentes declaran *«WRITTEN but NOT EXECUTED»*. **No se dispensó
+  gratis**: el reviewer cubrió por otra vía el riesgo concreto. **La deuda del harness sigue viva
+  desde la 148.**
+- **Alcance añadido a media fase por el humano**: el `adminSatelite` reporta desde
+  `/recepcion-satelite`. El modal se **reusó, no se duplicó**. `en_ruta_bodega_satelite` queda fuera
+  con razón escrita y el reviewer lo juzgó: **ningún requisito incumplido**.
+
+**PR #168 (feature 141) RESCATADO** — de `CONFLICTING` a **`MERGEABLE`/`CLEAN`**. Un solo conflicto y
+era `zonas-migration.test.ts`: la rama traía la denylist a mano de 107 líneas, `dev` el baseline
+pinneado del #207. **Re-review OK, 0 bloqueantes, el veredicto del 27/07 sigue válido** y queda
+**saldada su nota menor 2** (round-trip, hecho ahora con la 141 aplicada DESPUÉS de las del 28/29/30,
+`DOWN` con datos vivos y RE-UP con esquema idéntico). 27 mutaciones, 26 muertas.
+
+> **El mutante superviviente, cerrado:** añadir `carga_id = NULL, download_url = NULL` al `SET` de
+> `deshacerAsignacionLote` dejaba **7110/7110 tests verdes**. El comportamiento era correcto, pero
+> **nada lo protegía**. Test nuevo colocado a propósito LEJOS de los unitarios que afirman la *forma*
+> del SQL. `./init.sh` 623 / 7112 / 0.
+
+### 🚀 Pre-vuelo del despliegue `dev → prod` — HECHO el 2026-07-30
+
+- **✅ `T24.1` PASA: CERO órdenes.** Consulta de retroactividad contra producción (solo lectura).
+  Contexto comparable: órdenes en `devuelta` **2 → 0**, filas de historial **167 → 169**,
+  `reprogramada`+`gestion` **10**, `reprogramada`+`reprogramacion_tienda` **0**.
+- **✅ Verificado lo único que podía romper: no rompe.** La 155 retira `en_fulfillment` y producción
+  tiene **8 filas de historial** apuntando a ese value. Su `DELETE` es **CONDICIONAL** y su comentario
+  ya anticipaba este caso: en base con historial real es **NO-OP** y la fila del catálogo sobrevive,
+  inalcanzable desde la app. **Sin violación de FK.**
+- **🔎 Encontrado el desfase que las specs arrastraban:** producción tiene un value **`pendiente`** con
+  **0 órdenes y 0 filas de historial** — vestigial. Por eso las specs decían «18 estados de hoy»
+  mientras la base tiene 19.
+- **⚠️ Consecuencia cosmética tras desplegar:** el desplegable de filtro leerá 21 filas, incluidas
+  `en_fulfillment` y `pendiente`, que **no están en `ORDER_STATUS_SEED`**. El fallback está
+  documentado (`R17` de la feature 29): **se muestran como slug crudo**. No rompe.
+
+### ⏭️ Decisiones humanas pendientes al cerrar
+
+1. **Desplegar `dev → prod`** (140 commits, tren 154+155+156). **No queda nada técnico por comprobar.**
+2. **Mergear #208 → luego #209** (están apilados) y **#168**.
+3. **¿Se añade el `R56` a la spec de la 141?** («al deshacer la asignación el sistema DEBE conservar
+   `carga_id` y `download_url`»). Redactado más ancho que el mutante a propósito. **No se aplicó: es
+   decisión humana.**
+4. **⚠️ Candidata a ficha propia — `OrdenEnvioReader.findParaEnvio` NO filtra por estado**, sólo por
+   `mensajeroAsignadoId`: un mensajero podría seguir mandando plantillas de WhatsApp **al destinatario
+   de un paquete robado**. Patrón **preexistente** (pasa igual con `entregada`/`devuelta`), pero Q-J y
+   Q-K juntas lo agravan.
+
+### 🔨 PR 2 de la 158 — camino del admin (R37-R64) · detalle de implementación
+
+Rama `feature/158b-incidente-admin`, apilada sobre el #208 (su migración es aditiva sobre la del PR 1).
+
+**Fase 1B (backend) COMPLETA**: 14/14 tasks · `./init.sh` **624 archivos / 7228 tests / 0 fallos** ·
+`tests/integration/db` **73/742** · 97 migraciones sin drift · **18 mutaciones, 18 discriminan**.
+**`R29` queda en DOS emisores** — el caso del PR 1 se **invirtió, no se borró**, y cada emisor declara
+su `origen_tipo` en su código. Fase 2B (frontend) en implementación.
+
+**Dos mutaciones revelaron guardias que sólo medían FORMA** (el shape del `where`, 1 rojo cada una):
+el `estado: "aprobado"` del feed y el `estado: "solicitado"` de `resolver`. Con dobles que honran el
+`where`, ahora ponen 3 rojos cada una, **dos sobre el dinero**.
+
+### 🔎 Dos hallazgos operativos del PR 2 que NO son de la feature
+
+1. **⚠️ EL ORDEN DE LOS DOS `down.sql` IMPORTA, y el spec no lo decía.** Revertir la migración del PR 1
+   con la del admin aplicada **ABORTA**: `orden_incidente.causa` depende de `gestion_causa_incidente`.
+   En orden inverso las dos corren completas. **Quien revierta en producción tiene que ir del más
+   nuevo al más viejo**, que es lo natural pero nadie lo había verificado.
+2. **🐛 `scripts/db-rollback.ts` elige la migración por NOMBRE, no por la última APLICADA.** Verificado:
+   `readdirSync` + `sort` por nombre + coger la última (`:9-18`); **nunca consulta
+   `_prisma_migrations`**, sólo borra el registro por nombre después. **Correrlo dos veces revierte la
+   misma migración dos veces**, y una carpeta con timestamp fuera de orden le hace elegir la
+   equivocada. Hoy los nombres coinciden con el orden real, así que no ha mordido.
+   > **Es la TERCERA vez que una herramienta de este repo lee el sistema de archivos en vez de la
+   > fuente de verdad**: los guards con `fs.readdir` en vez de `git ls-files`, la denylist de
+   > migraciones que se mantenía a mano (ya arreglada en el #207 pinneando el baseline), y ahora esto.
+   > El patrón tiene nombre y conviene usarlo al revisar: **si un script decide algo mirando el árbol
+   > de archivos, la fuente de verdad casi siempre está en otro sitio.**
+
+**Q-J ya no es teórica:** un admin puede reportar un incidente sobre una orden `por_recoger` **ya
+asignada**, y esa orden desaparece de «Mis asignaciones» del mensajero **sin aviso**. Sigue siendo
+follow-up declarado, no lo cierra el PR 2.
+
+**Estado del registro:** ficha **158 `in_progress`** con las 14 decisiones en su `status_note`; ficha
+**161** registrada (follow-up de Q-E). Regla 1 respetada: backend 1 (la 141), fullstack 1 (la 158).
 
 ---
 

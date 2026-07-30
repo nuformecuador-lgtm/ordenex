@@ -29,13 +29,17 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // EXACTAMENTE las dos salidas de `resolverDestinoCreacion`. La entrada
 // `por_recolectar_en_tienda` deja de estar SIN PRODUCTOR: la 155 la produce por las tres vias.
 //
-// Feature 158 (Q-D/Q-G, 2026-07-30): suma UNA arista, #53 (`incidente -> en_reparto`, familia
-// `deshacer_gestion`), y REALINEA el `via` de #44 a `incidente`. La #44 deja de estar SIN
-// PRODUCTOR: la 158 es quien la ejecuta.
+// Feature 158 (Q-D/Q-G, 2026-07-30), PR 1 (camino del MENSAJERO): suma UNA arista, #53
+// (`incidente -> en_reparto`, familia `deshacer_gestion`), y REALINEA el `via` de #44 a
+// `incidente`. La #44 deja de estar SIN PRODUCTOR: la 158 es quien la ejecuta.
 //
-// La numeracion `n` es la del apendice (#1-#53) con huecos deliberados: #27 lo retiro la 139
-// (`rechazada -> devolviendo_a_tienda`), #4/#6/#7c la 156 y #1/#2/#3/#7b la 155; #48-#52 y
-// #54-#58 quedan RESERVADOS para el camino del ADMIN de la 158, que llega en su propio PR.
+// Feature 158, PR 2 (camino del ADMIN): suma las DIEZ que el PR 1 dejo reservadas — las CINCO
+// entradas desde bodega y transito interno (#48-#52) y sus CINCO inversas de reversion
+// (#54-#58), todas con la familia `incidente`. Llegan AHORA y no antes porque ahora llega su
+// productor (`IncidenteAdminRepository.reportar` / `.resolver`).
+//
+// La numeracion `n` es la del apendice (#1-#58) con huecos deliberados: #27 lo retiro la 139
+// (`rechazada -> devolviendo_a_tienda`), #4/#6/#7c la 156 y #1/#2/#3/#7b la 155.
 //
 // CORRECCION sobre el apendice A (hallazgo del review, hoy superada): el apendice solo listaba
 // #7 para `rutearABodegaSatelite`, cuando `ORIGEN_RUTEO_SATELITE` admitia TRES origenes; por eso
@@ -122,14 +126,30 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "45", origen: "en_ruta_bodega_satelite", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso b)" },
   { n: "46", origen: "por_recoger", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "DeshacerAsignacionService.deshacer -> OrdenRepository.deshacerAsignacionLote (149, caso a central)" },
   { n: "47", origen: "por_recoger", destino: "en_bodega_satelite", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso a satelite)" },
-  // Feature 158 (Q-D, 2026-07-30): DESHACER un `incidente`. Es un par NUEVO, asi que sube
-  // tanto el recuento de aristas (41 -> 42) como el de pares unicos (39 -> 40).
+  // Feature 158, PR 1 (Q-D, 2026-07-30): DESHACER un `incidente` del mensajero. Es un par
+  // NUEVO, asi que sube tanto el recuento de aristas (41 -> 42) como el de pares unicos
+  // (39 -> 40).
   //
-  // NUMERACION: la 158 salta del #47 al #53 A PROPOSITO. Los #48-#52 quedan RESERVADOS para
-  // las cinco entradas del camino del ADMIN y los #54-#58 para sus cinco inversas; ninguna de
-  // esas diez se declara todavia porque su PRODUCTOR llega en el PR siguiente (design §15.2).
-  // Un hueco de numeracion documentado es mas barato que una arista legal sin productor.
+  // NUMERACION: el PR 1 salto del #47 al #53 A PROPOSITO, reservando #48-#52 y #54-#58 para el
+  // camino del ADMIN, que no tenia productor todavia (design §15.2). El PR 2 los ocupa, abajo.
   { n: "53", origen: "incidente", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion -> CierreDiaRepository.anularGestionYDevolverAGestion (158)" },
+  // Feature 158, PR 2 — camino del ADMIN. CINCO entradas desde el conjunto CERRADO de origenes
+  // que el humano fijo (Q-A) y sus CINCO inversas de reversion. Las diez son pares NUEVOS, asi
+  // que suben por igual los dos recuentos (42 -> 52 y 40 -> 50). El `rol` de cada una esta
+  // calcado de sus vecinas del MISMO origen (design §12.3), no inventado.
+  { n: "48", origen: "en_bodega_central", destino: "incidente", via: "incidente", callSite: "IncidenteAdminService.reportar -> IncidenteAdminRepository.reportar (158)" },
+  { n: "49", origen: "en_bodega_satelite", destino: "incidente", via: "incidente", callSite: "IncidenteAdminRepository.reportar (158)" },
+  { n: "50", origen: "en_ruta_bodega_central", destino: "incidente", via: "incidente", callSite: "IncidenteAdminRepository.reportar (158)" },
+  { n: "51", origen: "en_ruta_bodega_satelite", destino: "incidente", via: "incidente", callSite: "IncidenteAdminRepository.reportar (158)" },
+  { n: "52", origen: "por_recoger", destino: "incidente", via: "incidente", callSite: "IncidenteAdminRepository.reportar (158; Q-K: NO toca mensajero_asignado_id)" },
+  // Las cinco inversas. El destino de cada reversion se DERIVA del historial
+  // (`findOrigenesReversion`, 149) y se valida contra el conjunto cerrado de los 5 origenes: no
+  // hay destino fijo escrito en el codigo (R57/R58).
+  { n: "54", origen: "incidente", destino: "en_bodega_central", via: "incidente", callSite: "IncidenteAdminService.rechazar/retractar -> IncidenteAdminRepository.resolver (158)" },
+  { n: "55", origen: "incidente", destino: "en_bodega_satelite", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
+  { n: "56", origen: "incidente", destino: "en_ruta_bodega_central", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
+  { n: "57", origen: "incidente", destino: "en_ruta_bodega_satelite", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
+  { n: "58", origen: "incidente", destino: "por_recoger", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
 ];
 
 /**
@@ -149,7 +169,7 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
 ];
 
 /**
- * Recuentos: 42 aristas de flujo, 40 pares dirigidos unicos y 2 de creacion.
+ * Recuentos: 52 aristas de flujo, 50 pares dirigidos unicos y 2 de creacion.
  *
  * CADENA COMPLETA, para que nadie tenga que reconstruirla:
  *   - la 156 dejo 42 aristas / 39 pares (retiro #4/#6/#7c);
@@ -159,18 +179,18 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
  *     Las de creacion bajaron de 4 a 2;
  *   - la 149 suma sus TRES aristas (#45/#46/#47) y las tres son pares NUEVOS, asi que suben
  *     ambos recuentos por igual: 38 -> 41 aristas y 36 -> 39 pares;
- *   - la 158 suma UNA (#53, `incidente -> en_reparto`), tambien par NUEVO: 41 -> 42 y 39 -> 40.
- *     Ademas REALINEA el `via` de #44 (`gestion` -> `incidente`), que no mueve ningun recuento.
+ *   - la 158 (PR 1, mensajero) suma UNA (#53, `incidente -> en_reparto`), tambien par NUEVO:
+ *     41 -> 42 y 39 -> 40. Ademas REALINEA el `via` de #44 (`gestion` -> `incidente`), que no
+ *     mueve ningun recuento;
+ *   - la 158 (PR 2, admin) suma DIEZ (#48-#52 y #54-#58), las diez pares NUEVOS: 42 -> 52 y
+ *     40 -> 50. Es el PENDIENTE que el PR 1 dejo DECLARADO aqui mismo, ya cobrado.
  *
- * Los 42 - 40 = 2 duplicados que quedan son #19/#23 y #20/#24 (SLA vs. recuperacion manual). El
- * tercer duplicado historico (#3/#7b) se fue con el estado de fulfillment.
- *
- * PENDIENTE DECLARADO (no olvido): el camino del ADMIN de la 158 suma DIEZ aristas mas
- * (#48-#52 y #54-#58) y dejaria estos recuentos en 52 / 50. NO estan aqui porque su productor
- * llega en el PR siguiente (design §15.2).
+ * Los 52 - 50 = 2 duplicados que quedan son #19/#23 y #20/#24 (SLA vs. recuperacion manual). El
+ * tercer duplicado historico (#3/#7b) se fue con el estado de fulfillment. Ninguna de las diez
+ * aristas del camino del admin repite un par ya declarado, por eso la diferencia no se mueve.
  */
 export const RECUENTO_INVENTARIO = {
-  aristasFlujo: 42,
-  paresUnicos: 40,
+  aristasFlujo: 52,
+  paresUnicos: 50,
   aristasCreacion: 2,
 } as const;
