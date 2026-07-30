@@ -74,6 +74,10 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     pagoMensajero: null, // feature 39: snapshot (override para R16)
     ingresoBodegaRechazo: null, // feature 56: snapshot (override para R15)
     esRechazoSla: false, // feature 102: clasificacion SLA/manual (override para R8/R9)
+    // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
+    // de resultados; los casos del incidente los sobreescriben.
+    causaIncidente: null,
+    indemnizacion: null,
     ...overrides,
   };
 }
@@ -1199,5 +1203,86 @@ describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R
     expect(r.totalesIngreso.total).toBe("0.00");
     expect(r.totalesIngreso.fleteConIva).toBe("0.00");
     expect(r.totalesIngreso.comisionConIva).toBe("0.00");
+  });
+});
+
+describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO (R34)", () => {
+  it("R34: el detalle del admin expone `causaIncidente` e `indemnizacion` por gestión", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow({ estado: "aprobado" }),
+        gestiones: [
+          gestionRow({
+            gestionId: "g-inc",
+            resultado: "incidente",
+            montoRecibido: null,
+            metodoPago: null,
+            motivo: "caja aplastada",
+            causaIncidente: "danado",
+            indemnizacion: "12500.75",
+          }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    const inc = r.grupos.incidente[0];
+    // Sin la causa, el admin decide el monto de una indemnización sin saber si el paquete se
+    // rompió o se lo robaron: es justo lo que R34 exige mostrar.
+    expect(inc.causaIncidente).toBe("danado");
+    // Money-safe: STRING de extremo a extremo.
+    expect(inc.indemnizacion).toBe("12500.75");
+    expect(typeof inc.indemnizacion).toBe("string");
+  });
+
+  it("R19: mientras el cierre sigue `solicitado` el monto es `null` (no 0.00)", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(), // `solicitado`
+        gestiones: [
+          gestionRow({
+            gestionId: "g-inc",
+            resultado: "incidente",
+            montoRecibido: null,
+            metodoPago: null,
+            causaIncidente: "robado",
+            indemnizacion: null,
+          }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // `null` = «todavía no hay monto». "0.00" diría «se indemnizó con cero», que es otra cosa.
+    expect(r.grupos.incidente[0].indemnizacion).toBeNull();
+    // La causa SÍ existe desde el reporte: es lo que el admin necesita para decidir el monto.
+    expect(r.grupos.incidente[0].causaIncidente).toBe("robado");
+  });
+
+  it("R35: las gestiones de los otros cuatro resultados llegan con los dos campos en `null`", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(),
+        gestiones: [
+          gestionRow({ gestionId: "g1", resultado: "entregada" }),
+          gestionRow({ gestionId: "g2", resultado: "rechazada", motivo: "cliente rechazó" }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    for (const g of [...r.grupos.entregada, ...r.grupos.rechazada]) {
+      expect(g.causaIncidente).toBeNull();
+      expect(g.indemnizacion).toBeNull();
+    }
   });
 });

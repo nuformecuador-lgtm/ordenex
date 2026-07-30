@@ -5,6 +5,10 @@
 > decidido por el humano (Q-L).
 > **NO se tocó** la Fase 1B (T1.19–T1.32, camino del ADMIN) ni la Fase 2 (frontend, T2.1–T2.6).
 
+> ATENCION — **apendice del 2026-07-30 (post-Fase 2)**: `causaIncidente` e `indemnizacion`
+> se anadieron al DTO del detalle del cierre para cerrar el hueco que dejaba **R34 sin
+> cumplir**. Ver **§10**, al final de este archivo.
+
 ## Veredicto
 
 **Fase 1 completa y verde.** `./init.sh` OK: **610 archivos / 6829 tests / 0 fallos**, lint
@@ -575,3 +579,144 @@ tests/components/CierresAdminModule.test.tsx
 ```
 
 **No se hizo `git push` ni se abrió PR**: lo decide el humano.
+
+---
+
+# 10. Apéndice (2026-07-30) — la causa y el monto llegan al DTO del detalle
+
+> Encargo posterior a la Fase 2. **No es una task nueva**: cierra el hueco de backend que
+> `frontend_dev` encontró y declaró en `progress/impl_158_frontend.md` §5, que dejaba **T2.3
+> incompleta** y **R34 SIN CUMPLIR**.
+
+## 10.1 El hueco
+
+`CierreDetalleGestion` (`lib/interfaces/services/ICierreDiaService.ts`) no llevaba la causa del
+incidente ni el monto de la indemnización. R34 es explícito: *«la interfaz DEBE mostrar, por
+cada incidente, la identificación de la orden **y su causa**, y pedir su monto»*. Pedir el monto
+estaba hecho; **mostrar la causa era imposible**, porque el dato no cruzaba al cliente. Sin ella
+el admin decide cuánto indemnizar sin saber si el paquete se rompió o se lo robaron.
+
+El `frontend_dev` hizo lo correcto: **no pintó un `—` falso** (habría dicho «este incidente no
+tiene causa», y la causa está persistida desde el reporte) y dejó un **candado de compilación**
+en vez de un comentario.
+
+## 10.2 Qué se cambió
+
+| archivo | cambio |
+| --- | --- |
+| `lib/interfaces/services/ICierreDiaService.ts` | `CierreDetalleGestion` + `causaIncidente: CausaIncidente \| null` y `indemnizacion: string \| null` |
+| `lib/interfaces/repositories/ICierreDiaRepository.ts` | `CierreGestionPendienteRow` + los dos campos |
+| `lib/repositories/CierresAdminRepository.ts` | `GESTION_ADMIN_SELECT` pide **las dos** columnas; `toPendienteRowDesdeSnapshot` las mapea (monto con `decimalToString`) |
+| `lib/repositories/CierreDiaRepository.ts` | `WITH_DETALLE` pide **sólo la causa**; `toPendienteRow` emite `indemnizacion: null` |
+| `lib/services/CierreDiaService.ts` | `toDetalleDTO` (el mapper que **reusa** `CierresAdminService`, feature 38) hace passthrough de ambos |
+
+**Ningún `.tsx` de producción tocado.** Pintar la causa en el sub-modal y las dos columnas del
+detalle sigue siendo de `frontend_dev`.
+
+## 10.3 La decisión que se pidió tomar con criterio: el monto en la vista del MENSAJERO
+
+**Decisión: la vista en vivo del mensajero NO recibe el monto. La causa sí.**
+
+- **El monto no es suyo.** R17 dice que un incidente no le paga nada, y la indemnización es
+  plata que **Ordenex** paga por el paquete. Un número grande junto a su gestión se leería como
+  una deuda suya. Es además lo que `design.md` §7.2 ya decía: *«el mensajero no ve la
+  indemnización: no es plata suya»*.
+- **La causa sí es suya**: es el hecho que él mismo reportó, no un dato de dinero ni de otro
+  actor. Ocultársela no protegería nada y le quitaría contexto de su propia gestión.
+- **Dónde se implementa importa.** El `null` **no** se deja al azar de que en esa vista las
+  gestiones tengan `cierre_id IS NULL` (que hoy es cierto, y por eso el monto estaría vacío
+  igualmente). La columna **no se selecciona** en `WITH_DETALLE`: no hay dato que filtrar aguas
+  abajo, así que un cambio de pantalla no la puede exponer sin que alguien venga al repo a
+  añadirla **a propósito**. Hay dos tests que lo fijan, uno de ellos con una fila que **sí**
+  trae monto, para comprobar que el mapper lo descarta igual.
+- Es el mismo idioma del archivo: `ingresoOrdenex` y `esRechazoSla` ya se pueblan distinto según
+  el productor, con la razón escrita en el DTO.
+
+## 10.4 El candado del frontend: **invertido, no borrado**
+
+`tests/components/CierreDetalleIncidente.test.tsx` tenía:
+
+```ts
+type _SinCausaEnElDto = "causaIncidente" extends keyof CierreDetalleGestion ? never : true;
+type _SinMontoEnElDto = "indemnizacion" extends keyof CierreDetalleGestion ? never : true;
+```
+
+**Funcionó exactamente como se diseñó**: al extender el DTO, `pnpm run typecheck` se puso rojo.
+Se **invierte** para que ahora exija lo contrario con la misma fuerza (`? true : never`): si
+alguien quitara los campos —por ejemplo «simplificando» el `select` del repo— el build vuelve a
+romper. Se le suman dos casos de comportamiento (los tipos correctos, el `null` cuando no
+aplica).
+
+⚠️ **Se conserva, renombrado a `PENDIENTE T2.3`, el caso que afirma que las columnas todavía NO
+se pintan.** No es un adorno: el día que `frontend_dev` las añada, ese caso se pone **rojo** y le
+obliga a venir aquí a invertirlo, en vez de que el hueco se cierre en silencio sin que nadie
+revise que se pintan bien. Es una señal débil por naturaleza (si nunca se añaden, nada rompe), y
+por eso el pendiente está además escrito en §10.7 y en `tasks.md`.
+
+## 10.5 Mapa R → test (lo que aporta este apéndice)
+
+| R | Test(s) |
+| --- | --- |
+| **R34** (la mitad de backend: el dato llega) | `tests/unit/repositories/cierre-detalle-causa-monto.test.ts` › «R34 — el detalle de ADMIN PIDE la causa y el monto», «R9/R19 — el mapper del ADMIN propaga causa y monto» (3 casos), «R34 — `toDetalleDTO` … los deja en el DTO» (3 casos) · `tests/unit/services/cierres-admin-service.test.ts` › «R34: el detalle del admin expone `causaIncidente` e `indemnizacion` por gestión» |
+| **R9** (la causa es consultable, no sólo persistida) | `…/cierre-detalle-causa-monto.test.ts` › «la causa llega (es el hecho que el propio mensajero reportó)» · `tests/unit/services/cierre-dia-service.test.ts` › «R9: el detalle del mensajero expone la causa de su propio incidente» |
+| **R19** (`null` ≠ 0.00 mientras no se apruebe) | `…/cierre-detalle-causa-monto.test.ts` › «un `incidente` cuyo cierre AÚN NO se aprobó llega con monto `null`, no con 0.00» · `cierres-admin-service.test.ts` › «R19: mientras el cierre sigue `solicitado` el monto es `null` (no 0.00)» |
+| **R24** (money-safe) | `…/cierre-detalle-causa-monto.test.ts` › «la causa viaja tal cual y el monto como STRING escala 2» y «R24: el monto NUNCA cruza como number» |
+| **R17** (el mensajero no ve el monto) | `…/cierre-detalle-causa-monto.test.ts` › «`WITH_DETALLE` NO selecciona `indemnizacion`», «el monto es SIEMPRE `null` en la vista del mensajero», «aunque la fila trajera un monto, el mapper del mensajero NO lo propaga» · `cierre-dia-service.test.ts` › «R17: el monto … NO llega a la vista del mensajero» |
+| **R35** (no regresión) | `…/cierre-detalle-causa-monto.test.ts` › bloque «R35 — los CUATRO resultados previos no cambian» (dos `it.each` × 4 + el DTO completo de una entrega) · `cierres-admin-service.test.ts` y `cierre-dia-service.test.ts` › «R35: … los dos campos en `null`» |
+| **R36** | sin cambios: este apéndice no toca el contrato de aprobación. Sus tests de la fase 1 siguen verdes. |
+
+## 10.6 Verificación por mutación (4 de 4 discriminan)
+
+| # | mutación | resultado |
+| --- | --- | --- |
+| M | el `select` y el mapper del **ADMIN** dejan de traer causa y monto | **6** casos rojos en 2 archivos |
+| N | el mensajero deja de recibir la **causa** | **3** casos rojos |
+| O | el mensajero **sí** recibiría el monto (se añade al `select` y al mapper) | **2** casos rojos — es la mutación que protege la decisión de §10.3 |
+| P | `toDetalleDTO` deja de propagarlos | **6** casos rojos en 3 archivos |
+
+## 10.7 Lo que sigue pendiente
+
+- **T2.3 sigue SIN marcar**, y ahora por una única razón: **faltan las dos columnas** en
+  `cierre-detalle-shared.tsx` (causa traducida con `CAUSA_INCIDENTE_LABEL`, monto con `money()`
+  y `—` mientras el cierre no esté aprobado). **El dato ya está disponible**; es trabajo de
+  `frontend_dev`.
+- **R34 sigue sin cumplirse del todo** por lo mismo: su mitad de backend está hecha y testeada,
+  su mitad visible (pintar la causa en el sub-modal de aprobación) no.
+- **T2.6 sigue SIN marcar** porque depende de T2.3.
+
+## 10.8 Números
+
+`./init.sh` verde: **616 archivos / 6921 tests / 0 fallos**. Lint **0 errores / 19 warnings**
+(los mismos 19). Delta sobre el baseline que dejó la fase frontend (615 / 6892): **+1 archivo de
+test, +29 tests**.
+
+> Anomalía observada, para que no confunda a quien repita esto: en una corrida intermedia de
+> `vitest run` fallaron **3** casos ajenos a esta feature (`OrdenesModuleReuse`,
+> `censo-order-status-rename`, `no-embalaje`) con duraciones de 21-25 s. Son tests que **barren
+> el árbol de archivos**; reejecutados en aislamiento y en una corrida completa posterior
+> pasaron los tres. Es una **flake por carga de E/S en paralelo**, no una regresión: no comparten
+> nada con lo tocado aquí.
+
+## 10.9 Archivos de este apéndice
+
+**Creados (1)**
+
+```
+tests/unit/repositories/cierre-detalle-causa-monto.test.ts
+```
+
+**Modificados — producción (5)**
+
+```
+lib/interfaces/services/ICierreDiaService.ts
+lib/interfaces/repositories/ICierreDiaRepository.ts
+lib/repositories/CierresAdminRepository.ts
+lib/repositories/CierreDiaRepository.ts
+lib/services/CierreDiaService.ts
+```
+
+**Modificados — tests (17)**: el candado invertido
+(`tests/components/CierreDetalleIncidente.test.tsx`), los dos servicios con sus casos nuevos, y
+**14 factorías de fixtures** que necesitaban las dos claves nuevas (`CierreGestionPendienteRow` y
+`CierreDetalleGestion` son interfaces cerradas: sin ellas no compila). Ninguna aserción previa se
+debilitó.

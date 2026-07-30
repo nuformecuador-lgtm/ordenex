@@ -361,6 +361,16 @@
       `causaIncidente` o `indemnizacion`, `pnpm run typecheck` ROMPE
       (`tests/components/CierreDetalleIncidente.test.tsx`, verificado por mutación).
       Detalle en `progress/impl_158_frontend.md` §5.
+      ✅ **ACTUALIZACIÓN 2026-07-30 — la mitad de backend YA ESTÁ HECHA** (apéndice §10 de
+      `progress/impl_158_backend.md`): `CierreDetalleGestion` lleva ahora `causaIncidente` y
+      `indemnizacion`, poblados por el `select` y el mapper del repo de admin y propagados por
+      `toDetalleDTO`. El candado del compilador **se invirtió** (ahora rompe si los campos
+      DESAPARECEN) y se conservó, renombrado a `PENDIENTE T2.3`, el caso que afirma que las
+      columnas todavía no se pintan: se pondrá **rojo** el día que se añadan, para que quien
+      las añada venga a invertirlo. **Lo único que falta para marcar esta casilla —y para
+      cumplir R34— es pintar las dos columnas** (causa traducida con `CAUSA_INCIDENTE_LABEL`,
+      monto con `money()` y `—` mientras el cierre no esté aprobado) y la causa en el sub-modal
+      de aprobación. El dato ya está disponible; es trabajo de `frontend_dev`.
 - [x] **T2.4** Sub-modal de captura al aprobar (`CierresAdminModule.tsx:187,461`), espejo del de
       rechazo: una fila por incidente, confirmación deshabilitada mientras falte o sea inválido algún
       monto, errores del servidor pintados por fila.

@@ -95,6 +95,8 @@ export const GESTION_ADMIN_SELECT = {
   evidenciaStoragePath: true,
   pagoMensajero: true, // feature 39: snapshot del pago al mensajero
   ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo
+  causaIncidente: true, // feature 158/R9/R34: causa tipificada del incidente
+  indemnizacion: true, // feature 158/R19/R22/R34: monto capturado al aprobar (null antes)
   historialEstados: {
     where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA }, // feature 102/R1: solo la fila del cron SLA
     take: 1,
@@ -224,6 +226,14 @@ export function toPendienteRowDesdeSnapshot(
     // Feature 102/R1/R9: `true` si la gestion tiene una transicion del cron SLA enlazada
     // (`historialEstados` ya viene acotado a ese origen por `GESTION_ADMIN_SELECT`).
     esRechazoSla: esRechazoSla(g.historialEstados),
+    // Feature 158/R9/R34: la causa del incidente, para que el admin sepa QUE paso antes de
+    // decidir el monto de la indemnizacion. `null` en cualquier otro resultado.
+    causaIncidente: g.causaIncidente,
+    // Feature 158/R19/R22/R34: el monto capturado al APROBAR (money-safe Decimal -> STRING).
+    // `null` mientras el cierre siga `solicitado`: ahi significa «todavia no hay monto», no
+    // «monto cero». A diferencia de la vista del mensajero, el detalle de ADMIN SI lo lleva —
+    // es quien lo captura y quien tiene que poder auditarlo despues.
+    indemnizacion: decimalToString(g.indemnizacion),
     ingresoOrdenex: toIngresoOrdenex(g, d),
   };
 }

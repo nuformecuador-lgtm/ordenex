@@ -64,6 +64,10 @@ function gestionDbRow(overrides: Record<string, unknown> = {}) {
     evidenciaStoragePath: "o1/e.jpg",
     pagoMensajero: new Prisma.Decimal("5.00"), // feature 39/R20: snapshot leido
     ingresoBodegaRechazo: new Prisma.Decimal("0.00"), // feature 56/R19: snapshot leido
+    // Feature 158/R9/R19: campos POR RAMA del incidente, tal como los lee
+    // `GESTION_ADMIN_SELECT`. `null` en un resultado que no sea `incidente`.
+    causaIncidente: null,
+    indemnizacion: null,
     historialEstados: [], // feature 102: acotado al origen SLA (vacio = rechazo NO-SLA/otro resultado)
     ...overrides,
   };

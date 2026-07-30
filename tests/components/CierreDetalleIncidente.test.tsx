@@ -73,6 +73,10 @@ function makeGestion(
     ingresoBodegaRechazo: null,
     tarifaFaltante: false,
     esRechazoSla: false,
+    // Feature 158/R9/R19: campos POR RAMA del incidente; los casos del incidente los
+    // sobreescriben.
+    causaIncidente: null,
+    indemnizacion: null,
     ...over,
   };
 }
@@ -232,26 +236,46 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
   });
 });
 
-// --- Deuda declarada: la causa tipificada y el monto de la indemnización ---
+// --- El candado de la deuda, INVERTIDO el 2026-07-30 (no borrado) ---
 //
-// `tasks.md` T2.3 pide además las columnas de CAUSA y de MONTO. No se pueden pintar: el DTO
-// `CierreDetalleGestion` no las trae (igual que tampoco trae la `causaDevolucion` de la 73),
-// y poblarlas exige tocar repo + service, que es backend y no es el alcance de esta fase.
+// La fase frontend dejó aquí un candado de compilación: mientras `CierreDetalleGestion` NO
+// trajera `causaIncidente` ni `indemnizacion`, dos alias de tipo valían `true`; el día que el
+// DTO los ganara pasaban a `never` y `pnpm run typecheck` ROMPÍA, para que nadie añadiera el
+// dato al backend y lo dejara invisible.
 //
-// El candado NO es una nota en un comentario: es el compilador. Si el DTO gana cualquiera de
-// los dos campos, estos alias pasan a `never` y `pnpm run typecheck` —que corre en
-// `./init.sh`— ROMPE, obligando a completar las columnas en vez de dejar el dato invisible.
-type _SinCausaEnElDto = "causaIncidente" extends keyof CierreDetalleGestion ? never : true;
-type _SinMontoEnElDto = "indemnizacion" extends keyof CierreDetalleGestion ? never : true;
-const _sinCausa: _SinCausaEnElDto = true;
-const _sinMonto: _SinMontoEnElDto = true;
+// **Ese día llegó y el candado hizo exactamente su trabajo**: al extender el DTO, `typecheck`
+// se puso en rojo. Aquí se INVIERTE, no se borra — pasa a exigir lo contrario con la misma
+// fuerza: los dos campos DEBEN estar en el DTO. Si alguien los quitara (por ejemplo
+// "simplificando" el `select` del repo), estos alias vuelven a `never` y el build rompe.
+type _ConCausaEnElDto = "causaIncidente" extends keyof CierreDetalleGestion ? true : never;
+type _ConMontoEnElDto = "indemnizacion" extends keyof CierreDetalleGestion ? true : never;
+const _conCausa: _ConCausaEnElDto = true;
+const _conMonto: _ConMontoEnElDto = true;
 
-describe("Deuda declarada — causa y monto de la indemnización todavía no viajan en el DTO", () => {
-  it("el hueco está fijado por tipos: si el DTO los gana, el build rompe", () => {
-    expect(_sinCausa).toBe(true);
-    expect(_sinMonto).toBe(true);
-    // Y mientras no viajen, tampoco se inventa una columna vacía que parecería un dato
-    // ausente en vez de un dato que no existe.
+describe("El dato YA viaja en el DTO — las columnas quedan pendientes del frontend", () => {
+  it("`CierreDetalleGestion` lleva la causa y el monto (si se quitan, el build rompe)", () => {
+    expect(_conCausa).toBe(true);
+    expect(_conMonto).toBe(true);
+  });
+
+  it("una gestión `incidente` del detalle puede llevar causa y monto con sus tipos correctos", () => {
+    // Money-safe: el monto cruza como STRING, igual que `montoRecibido` y `pagoMensajero`.
+    const g = unIncidente({ causaIncidente: "robado", indemnizacion: "12500.75" });
+    expect(g.causaIncidente).toBe("robado");
+    expect(typeof g.indemnizacion).toBe("string");
+    // `null` cuando no aplica (cierre aún sin aprobar) o cuando el resultado no es incidente.
+    expect(unIncidente().indemnizacion).toBeNull();
+    expect(makeGestion({ gestionId: "ge", resultado: "entregada" }).causaIncidente).toBeNull();
+  });
+
+  // ⚠️ PENDIENTE DE `frontend_dev` (T2.3): pintar las DOS columnas. El backend ya deja el dato
+  // disponible; lo que falta es la presentación (la causa traducida con `CAUSA_INCIDENTE_LABEL`
+  // y el monto con `money()`, `—` mientras el cierre no esté aprobado).
+  //
+  // Este caso se conserva afirmando el estado ACTUAL —las columnas todavía no están— para que
+  // el día que se añadan se ponga ROJO y quien las añada tenga que venir aquí a invertirlo, en
+  // vez de que el hueco se cierre en silencio y nadie revise que se pintan bien.
+  it("PENDIENTE T2.3: las columnas de causa y monto aún NO se pintan (invertir al añadirlas)", () => {
     const columnas = columnasPara("incidente", () => {}).map((c) => c.id);
     expect(columnas).not.toContain("causaIncidente");
     expect(columnas).not.toContain("indemnizacion");

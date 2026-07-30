@@ -73,6 +73,10 @@ function makeGestion(
     ingresoBodegaRechazo: null,
     tarifaFaltante: false,
     esRechazoSla: false,
+    // Feature 158/R9/R19: campos POR RAMA del incidente; los casos del incidente los
+    // sobreescriben.
+    causaIncidente: null,
+    indemnizacion: null,
     ...over,
   };
 }

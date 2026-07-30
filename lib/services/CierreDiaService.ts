@@ -465,6 +465,15 @@ export function toDetalleDTO(
     // Feature 102/R9/R11: passthrough del flag ya derivado en el repo (admin: del historial;
     // vista en vivo del mensajero: `false`). El service no re-deriva la clasificacion.
     esRechazoSla: g.esRechazoSla,
+    // Feature 158/R9/R34: passthrough de la causa tipificada del incidente. La pueblan los DOS
+    // repos (vista en vivo y detalles de admin); `null` en cualquier otro resultado.
+    causaIncidente: g.causaIncidente,
+    // Feature 158/R19/R22/R34: passthrough del monto de la indemnizacion (money-safe STRING,
+    // ya serializado por el repo). Solo llega poblado desde los repos de ADMIN (38/40): la
+    // vista EN VIVO del mensajero no lo selecciona (design §7.2), asi que ahi es SIEMPRE
+    // `null`. El mapper NO decide eso — lo decide la proyeccion de cada repo, que es donde
+    // una feature futura tendria que ir a cambiarlo a proposito.
+    indemnizacion: g.indemnizacion,
     // Passthrough: solo viene poblado desde los repos de admin (38/40), que lo derivan del
     // snapshot. En la vista en vivo del mensajero es `undefined` y la UI no muestra nada.
     ingresoOrdenex: g.ingresoOrdenex,

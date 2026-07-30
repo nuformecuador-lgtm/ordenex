@@ -47,6 +47,10 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     pagoMensajero: null, // feature 39: en vivo el snapshot es null; el service lo DERIVA
     ingresoBodegaRechazo: null, // feature 56: en vivo el snapshot es null; el service lo DERIVA
     esRechazoSla: false, // feature 102/R11: la vista en vivo del mensajero no expone el desglose
+    // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
+    // de resultados; los casos del incidente los sobreescriben.
+    causaIncidente: null,
+    indemnizacion: null,
     ...overrides,
   };
 }
@@ -1635,5 +1639,70 @@ describe("Feature 158 · listarCierreDia con incidentes (R16/R17/R18)", () => {
     expect(r.totalPagoMensajero).toBe("7.00");
     expect(r.grupos.entregada[0].pagoMensajero).toBe("7.00");
     expect(r.grupos.incidente[0].pagoMensajero).toBe("0.00");
+  });
+});
+
+describe("Feature 158 · listarCierreDia — la causa sí, el monto NO (R17, design §7.2)", () => {
+  it("R9: el detalle del mensajero expone la causa de su propio incidente", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({
+          gestionId: "g-inc",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+          motivo: "me lo robaron en la parada",
+          causaIncidente: "robado",
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.incidente[0].causaIncidente).toBe("robado");
+  });
+
+  it("R17: el monto de la indemnizacion NO llega a la vista del mensajero (no es plata suya)", async () => {
+    // Aunque el repo lo trajera (no lo hace: `WITH_DETALLE` ni lo selecciona), el DTO que ve
+    // el mensajero lo lleva en `null`. La indemnizacion la paga Ordenex por el paquete; un
+    // numero grande junto a su gestion se leeria como una deuda suya.
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({
+          gestionId: "g-inc",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+          causaIncidente: "danado",
+          indemnizacion: null,
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.grupos.incidente[0].indemnizacion).toBeNull();
+  });
+
+  it("R35: las gestiones de los otros cuatro resultados siguen con los dos campos en `null`", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g1", resultado: "entregada" }),
+        pendiente({ gestionId: "g2", ordenId: "o2", resultado: "rechazada", motivo: "x" }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    for (const g of [...r.grupos.entregada, ...r.grupos.rechazada]) {
+      expect(g.causaIncidente).toBeNull();
+      expect(g.indemnizacion).toBeNull();
+    }
   });
 });
