@@ -29,8 +29,8 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
 };
 
 // Feature 30: por defecto la orden es GAM (zonaId === GAM_ZONA_ID).
-// Feature 156: el estatus por defecto pasa de `en_fulfillment` a `en_preparacion`, que es el
-// UNICO origen valido de "generar guia" tras esta feature (R4).
+// Feature 156: el estatus por defecto pasa a `en_preparacion`, que es el UNICO origen valido
+// de "generar guia" tras esta feature (R4).
 function ordenRow(overrides: Partial<{
   id: string;
   estatusValue: string;
@@ -266,8 +266,11 @@ describe("156/R2 — generarGuia NO escribe mensajero_asignado_id ni asignado_at
 });
 
 describe("156/R4 — origen UNICO en_preparacion", () => {
+  // Feature 155: el estado de fulfillment ya no figura en esta lista porque salio del
+  // CATALOGO; su sitio lo ocupa `por_recolectar_en_tienda`, el otro estado de creacion, que
+  // tampoco es origen valido de "generar guia" (el paquete todavia esta en la tienda).
   it.each([
-    ["en_fulfillment"], // deja de ser origen valido (lo retira del flujo la 155)
+    ["por_recolectar_en_tienda"],
     ["en_bodega_central"],
     ["por_recoger"],
     ["entregada"],
@@ -751,9 +754,10 @@ describe("Feature 30 + 156 — rutearABodegaSatelite (R13/R16/R17 · 156/R15/R16
     );
   });
 
-  // Feature 156/R16: los DOS origenes que la feature retira (`ORIGEN_RUTEO_SATELITE` pasa de
-  // un Set de tres a la constante `en_bodega_central`).
-  it.each([["en_preparacion"], ["en_fulfillment"]])(
+  // Feature 156/R16: los origenes que la feature retira (`ORIGEN_RUTEO_SATELITE` pasa de un
+  // Set de tres a la constante `en_bodega_central`). Feature 155: el tercero de aquel Set salio
+  // del catalogo, asi que su lugar lo toma el otro estado de creacion vigente.
+  it.each([["en_preparacion"], ["por_recolectar_en_tienda"]])(
     "156/R16: origen %s -> conflict 'estado de origen no permitido', sin efectos",
     async (estatusValue) => {
       const repo = fakeRepo({

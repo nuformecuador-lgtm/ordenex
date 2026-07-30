@@ -8,6 +8,129 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗓️ Sesión 2026-07-30 (tarde) — **EMPIEZA A LEER POR AQUÍ**
+
+> Lo de más abajo sigue válido en su detalle técnico; esto lo corrige donde se contradiga.
+
+### Tres correcciones al «cierre del día» de esta misma mañana
+
+1. **✅ El pendiente #1 ya estaba saldado.** `prisma migrate status` contra `localhost:5432`:
+   **95/95, «Database schema is up to date!»**. Las dos migraciones que el cierre daba por pendientes
+   (`chat_mensaje_error_meta` y `orden_historial_origen_deshacer_asignacion`) ya están aplicadas.
+2. **PR #207 está listo:** `MERGEABLE` / `mergeStateStatus: CLEAN`, Vercel **SUCCESS**, 10 archivos
+   (+176/−177). Sólo falta el merge (humano). **Conviene mergearlo ANTES de implementar la 158:** la
+   158 trae migración, y sin el #207 paga el peaje de la denylist.
+3. **⚠️ PR #168 (feature 141) YA NO es mergeable:** pasó a `CONFLICTING` / `DIRTY` (43 archivos). El
+   cierre lo daba por «MERGEABLE con gate verde» — cierto antes de los merges de ayer. Ahora necesita
+   **rebase** además del re-review que ya se sabía pendiente. Sigue siendo la `in_progress` más vieja
+   (27/07) y la única de la zona backend.
+
+### 🚪 Puerta F1.4 de la feature 158 — **CERRADA hoy**, 10 decisiones
+
+> Se escriben aquí Y en el spec. Es la lección de la «CORRECCIÓN 1» de más abajo: gate aprobado en la
+> bitácora no es lo mismo que preguntas del spec respondidas por escrito.
+
+- **Q-A = LOS DOS reportan.** Textual del humano: «los dos ya que los dos manipulan paquetes».
+  Mensajero al gestionar desde `en_reparto` (arista #44, ya declarada por la 154) **+ admin desde
+  bodega y tránsitos internos**: `en_bodega_central`, `en_bodega_satelite`, `en_ruta_bodega_central`,
+  `en_ruta_bodega_satelite`, `por_recoger`. **Son 5 aristas nuevas** al mapa de la guardia central.
+  ⚠️ **Es alcance nuevo:** la spec estaba escrita de punta a punta (R1-R36) para el mensajero solo. El
+  humano eligió **ampliar la 158 ahora** en vez de partirla en dos features.
+- **Q-B (alcance) = causa tipada + evidencia OBLIGATORIA SIEMPRE**, en las tres causas. Enum cerrado
+  de 3 valores, sin «Otro»; `motivo` en texto libre obligatorio siempre. **Se le planteó la objeción**
+  (en `perdido`/`robado` no hay paquete que fotografiar y bloquea al mensajero en la calle) y eligió
+  esta opción de todas formas. Queda **declarado como consecuencia aceptada**, no disimulado.
+- **Q-B (idioma) = ESPAÑOL** (`danado`, `perdido`, `robado`). Rompe **a propósito** la coherencia con
+  `causa_devolucion`, que está en INGLÉS (`not_found`, `wrong_number`, `wrong_address`) por decisión
+  consciente del humano en la feature 73, a favor de la coherencia con `gestion_resultado` y
+  `order_status`. **Que nadie lo «arregle» después.**
+- **Q-C = columna nueva `gestion_orden.indemnizacion`.** `cierre_detail` descartado **por evidencia**:
+  es snapshot inmutable escrito al *solicitar* el cierre, y el monto se captura al *aprobar*.
+- **Q-D = SÍ se puede deshacer**, en ventana controlada. Textual: «como es una app usada por seres
+  humanos y nosotros solemos cometer errores, lo ideal es que cada acción se pueda deshacer,
+  obviamente dentro de un ambiente controlado». ⚠️ **Revierte parcialmente la decisión de la 154 ya
+  mergeada** (`incidente: []`, `order-status-transiciones.ts:206`, «a diferencia de `entregada` NO
+  conserva ninguna salida — decisión del humano del 2026-07-29»). Compatible con dejarlo terminal:
+  `ESTADOS_TERMINALES` **exime de tener salida pero no la prohíbe** (`:236-237`) y `entregada` es el
+  precedente exacto.
+  - **Problema técnico duro que abre:** hoy el destino del deshacer está **hardcodeado a `en_reparto`**
+    (`CierreDiaService.ts:65,388`) y **repone la asignación al autor de la gestión** (`:399`). Con
+    orígenes múltiples eso es incorrecto dos veces: un incidente reportado por un admin sobre un
+    paquete en `en_bodega_central`, al deshacerse, mandaría la orden a `en_reparto` **asignada al
+    admin**. El destino tiene que ser **el estado de origen**.
+  - Red de seguridad: `ESTADOS_ESPERADOS` es un `Record<GestionResultado, …>` exhaustivo → añadir
+    `incidente` al enum **rompe el build** hasta declararlo.
+- **Q-E = fuera de alcance**, con follow-up explícito: «crédito de indemnización en el ledger por
+  tienda» (feature 43). **Falta registrar la ficha** — tarea del leader.
+- **Q-F = no se reescriben los `down.sql` previos.** `20260713140000_wallet_egreso_gasto_fijo_variable/down.sql`
+  es punto-en-el-tiempo y su test asserta exactamente 12 valores. Sí se corre `tests/integration/db`
+  completo en la fase backend.
+- **Q-G = el append escribe `origen_tipo = incidente`** + se alinea el `via` de la arista #44. La 154
+  dejó esa familia «declarada SIN PRODUCTOR hasta la 158» (`orden-historial.ts:35`).
+- **NUEVA — aprobación del camino del admin.** Textual: «la idea es que sea aprobado, y para esto
+  podemos usar los cierres ya existentes, verás que tenemos ya dos tablas en cierres, podemos usar el
+  mismo modelo». Se reusa el **PATRÓN, no la tabla**: `CierreEstado` (`solicitado → aprobado/rechazado`),
+  cola «Pendientes de decisión» + «Histórico» (`CierresAdminModule.tsx:270,291`), motivo obligatorio
+  sólo al rechazar. Es la **tercera** aplicación: la feature 40 ya fue la segunda y se declara «espejo
+  de CierresAdminService (38)».
+  - **`cierre_bodega` NO puede alojarlos** — verificado: agrupa `CierreDia[]`, es por `zonaId` y sólo
+    satélite, sin detalle por orden (`schema.prisma:732-758`).
+  - **El egreso a la wallet se dispara AL APROBAR.** Requisito explícito del humano: **quien reporta
+    no aprueba**. Consecuencia: la feature queda con **dos puntos de entrada al egreso** (mensajero vía
+    cierre del día, admin vía aprobación del incidente) y la idempotencia de la wallet tiene que
+    cubrir los dos para que una orden no se pague dos veces.
+
+### 🚪 Puerta F1.4-bis de la 158 — spec ampliada y **4 decisiones más**
+
+Spec ampliada a **64 R** (28 nuevos `R37-R64`; **7 reescritos en su sitio** con su nota: `R6` por Q-A,
+`R9`/`R10` por Q-B, `R13`/`R14`/`R15` por Q-D, y `R29`, que pasa de «un solo emisor de dinero» a
+**«exactamente dos, uno por camino, y ningún tercero»** con guard estructural).
+
+**🔎 Hallazgo que mató el diseño barato — verificado, no supuesto.** El incidente del admin **no puede
+ser una fila de `gestion_orden`**: `CorteDiarioRepository.findMensajerosConActividadSinCierre` (`:38-44`)
+hace `where: { cierreId: null, anuladaAt: null }` con `distinct: ["mensajeroId"]` **sin filtrar rol ni
+resultado** → le habría creado al admin un `cierre_dia` **vencido y bloqueante que no puede resolver**,
+porque `CierreDiaService` está acotado al rol `mensajero`. De ahí sale **tabla propia `orden_incidente`**
++ su espejo de evidencias.
+
+**El destino del deshacer NO necesita columna nueva.** Dos cosas verificadas: (1) para el camino del
+mensajero el hardcode a `en_reparto` **no es un bug** — una gestión sólo nace desde `en_reparto` y su
+autor es siempre mensajero; (2) para el admin el lector ya existe y está mergeado:
+`findOrigenesReversion` de la **149** (`OrdenHistorialRepository:212-230`) lee el `estatus_origen_id`
+de la fila de historial más reciente. `estado_origen_id` queda como plan B declarado.
+
+**§14 del design lista 10 tests de OTRAS features que esta feature rompe garantizado**, con archivo,
+línea y qué deben afirmar — incluidos los que hoy asertan `TRANSICIONES.incidente === []`. Consecuencia
+directa de Q-D, declarada por adelantado en vez de descubrirse en el gate.
+
+**Decisiones del humano del 2026-07-30 (segunda ronda):**
+- **Q-H = modal por orden en el módulo de órdenes**, desde la acción de fila. Precedentes exactos:
+  `RecuperarABodegaModal` (100) y `DeshacerAsignacionModal` (149) — las dos acciones administrativas por
+  orden CON MOTIVO que ya viven ahí. **No puede ser acción de lote:** pide causa, motivo y fotos por orden.
+- **Q-I = página propia `/incidentes`**, espejo de `cierres-admin`. Precedente: `cierres-bodega-admin` ya
+  es página propia para el espejo de la 38. Coste: entrada nueva en `menu-visibility.ts` con rol.
+- **Q-E → ficha 161 REGISTRADA** con el OK del humano: «credito de indemnizacion en el ledger por
+  tienda», `pending` / backend / medium / `depends_on: 158`.
+- **Q-J y Q-K se toman por la recomendación** (no objetadas, con su consecuencia declarada): **Q-J** el
+  aviso al mensajero cuya orden pasa a `incidente` queda **fuera de alcance con follow-up escrito** — hoy
+  la orden desaparece de «Mis asignaciones» sin aviso, y es el tipo de hueco que se descubre con una
+  llamada del mensajero; **Q-K** **no se toca `mensajero_asignado_id`** al reportar desde `por_recoger`,
+  así la reversión es trivialmente correcta y la asignación colgando es inocua (`findMisAsignaciones`
+  filtra por estados e `incidente` no está entre ellos).
+
+**⏸️ Q-L SIGUE ABIERTA — es la única que bloquea el arranque.** ¿Un PR o dos? El diseño **recomienda
+dos** (§15.2) y demuestra que la línea no deja **nada funcional roto** en el intermedio: ninguna arista
+ni familia sin productor (las 10 del admin no se declaran hasta que llega su productor — la lección de
+la 154 aplicada al revés), ciclo económico completo en el primero, y el único efecto visible es que el
+admin no puede reportar desde bodega, **que es el estado de hoy**. La pregunta se hizo primero con la
+palabra «entrega» y **se malentendió**: en este dominio «entrega» es lo que hace un mensajero con un
+paquete. Reformulada como «un PR o dos PRs».
+
+**Estado:** spec en la rama `feature/158-incidente-indemnizacion` (base = `dev` + los 3 commits del
+#207), commits `9a02ed5` y `3183127`. **Ni una línea de código de producción tocada.**
+
+---
+
 > ### Reconciliado el 2026-07-28 contra `origin/dev` @ `0bcc360`
 >
 > Verificado PR por PR con `gh pr list` y contra el código, no supuesto. **`feature_list.json`
@@ -54,14 +177,18 @@ intermedio: ~~la 154 sola deja `generar guía` lanzando `TransicionIlegalError`~
 |---|---|---|---|
 | **#168** | `feature/141-tabla-cargas-orden` | Tabla `carga` + `carga_id`. Reviewer APROBADO, 0 bloqueantes. **Es la feature `in_progress` más vieja del tablero.** | abierto desde el 27/07 |
 | **#180** | `feature/144-filtros-ordenes` | Componente de filtros parametrizable. **Trae su propia reconciliación** del registro y una migración de índices. 64 archivos. | 28/07 |
-| **#183** | `feature/log-fallos-whatsapp` | Porta a `dev` el hotfix de WhatsApp que ya está en `prod`. ⚠️ **No mergear tal cual** — ver punto 3. | 28/07 |
+| ~~**#183**~~ | ~~`feature/log-fallos-whatsapp`~~ | **CERRADO SIN MERGEAR** el 2026-07-29. Lo REEMPLAZA el **PR #205** (`fix/portar-hotfix-whatsapp`), que sí porta el hotfix y salda las dos deudas del punto 3. | cerrado 29/07 |
 
 ### 3. Infra y despliegue (humano)
 
 - ⚠️ **`dev` y `prod` DIVERGEN EN AMBOS SENTIDOS.** Medido: `origin/dev...origin/prod` → **16 / 18**.
   `prod` tiene 18 commits del hotfix de WhatsApp que `dev` no tiene, y `dev` tiene los 16 de hoy que
   `prod` no tiene. Ya no es «`dev` va atrasado»: son dos ramas separadas y hay que reunirlas.
-- **Antes de mergear el PR #183**, dos cosas que el propio PR arrastra:
+- ✅ **SALDADO en el PR #205** (2026-07-29). Lo que sigue era la lista de lo que el #183 arrastraba;
+  se conserva porque explica por qué ese PR no se podía mergear tal cual, y las dos cosas **ya están
+  hechas** en el #205: las Server Actions `_tmp-*` retiradas tras verificar que nadie las importa, y
+  el `down.sql` escrito **y ejecutado** en round-trip contra Postgres, no revisado por lectura.
+- **Lo que el PR #183 arrastraba** (histórico):
   1. `lib/actions/_tmp-probar-jobs.ts` y `lib/actions/_tmp-sincronizar-plantillas.ts` — dos Server
      Actions de depuración que **hoy están en PRODUCCIÓN** y también en la rama del PR. El commit
      `f950f14` decía haberlas sacado; **no las sacó** (verificado con `git ls-tree` sobre
@@ -230,6 +357,133 @@ contexto al ir a background), que es la prueba que vale.
 > Reemplaza al apartado «PENDIENTES» de arriba en todo lo que se contradiga. Lo verificado hoy va
 > con su número; lo no verificado se dice.
 
+> ## 🏁 Cierre de la MAÑANA del 2026-07-30
+>
+> *(Ya no es el punto de entrada: lo es la «Sesión 2026-07-30 (tarde)» del principio del archivo, que
+> corrige tres cosas de aquí. Este bloque sigue válido en todo lo demás.)*
+>
+> Lo de abajo (el «Cierre de la sesión del 2026-07-29») sigue siendo válido en su detalle técnico;
+> esto lo actualiza en lo que cambió al mergear.
+>
+> ### 🎉 `dev` y `prod` dejaron de divergir en la dirección peligrosa: **136 / 0**
+>
+> El **PR #205** portó el hotfix de WhatsApp y `dev` ya contiene TODO lo que tiene `prod`. Era el
+> problema que llevaba tres días sangrando en silencio: el #183 se había **cerrado sin mergear**, así
+> que `dev` arrastraba el bug de reintentos infinitos y no quedaba PR que lo arreglara. De paso se
+> retiraron las dos Server Actions `_tmp-*` (que **estaban en producción**) y la migración
+> `20260728230000_chat_mensaje_error_meta` ganó el `down.sql` que le faltaba, **ejecutado** en
+> round-trip, no revisado por lectura.
+>
+> ### Mergeado hoy
+>
+> **#202** (149 · deshacer asignación) · **#203** (155) · **#204** (cierre 159) · **#205** (hotfix
+> WhatsApp) · **#206** (decisiones de la 155 + registro).
+>
+> El lote 153–160 queda: **153, 154, 155, 156, 159, 160 → `done`**. Solo faltan **157 y 158**.
+>
+> ### ⏭️ Lo que queda, en orden
+>
+> 1. **`prisma migrate deploy` en LOCAL** — quedan 2 migraciones sin aplicar:
+>    `20260728230000_chat_mensaje_error_meta` y `20260729140000_orden_historial_origen_deshacer_asignacion`.
+> 2. **PR #207** (este) — reconcilia la 159 a `done` + mata la denylist de migraciones.
+> 3. **PR #168** (141) — MERGEABLE y con gate verde (603 archivos / 6754 tests), pero ⚠️ **NECESITA
+>    RE-REVIEW**: su veredicto es del 2026-07-27 y la base cambió **222 commits** desde entonces,
+>    incluida la reescritura de `BulkOrdenService` / `OrdenRepository` / el borde de la API key, que
+>    son los módulos que toca. Ahora además convive con la 149 en `OrdenRepository`. Lo que SÍ está
+>    verificado: `lote` y `deshacerAsignacionLote` **no se pisan** (transacciones distintas, y el
+>    `SET` de la 149 no toca `carga_id` ni `download_url`), con la consecuencia correcta — una orden
+>    revertida **conserva su lote**.
+> 4. **Desplegar `dev → prod`**: 136 commits, incluye el tren 154+155+156. **Antes**, la task
+>    **T24.1 de la 160**: re-correr la consulta de retroactividad y **DETENER el deploy si da > 0**.
+>
+> ### Al retomar el lote: la 157 está DESBLOQUEADA pero su puerta NO está cerrada
+>
+> Su `depends_on` (155) ya está en `dev`, y hereda del review de la 155 los **R41/R42/R43** del
+> manifiesto por la vía sesión (Bloque E de su `requirements.md`). Pero arrastra **6 preguntas
+> abiertas** sin responder. **Cerrar la puerta F1.4 ANTES de implementar** — es la lección que este
+> mismo archivo dejó escrita: «gate aprobado en la bitácora no es lo mismo que las preguntas del spec
+> respondidas por escrito». La **158** no tiene dependencias bloqueadas.
+>
+> ### Hallazgo del día que conviene no olvidar
+>
+> **La denylist del invariante de orden de migraciones se AUTO-REFORZABA.** Rompió **cinco veces** en
+> un día. Cada migración nueva no solo sumaba una entrada a la lista de `zonas` —que llegó a **quince
+> entradas y ~100 líneas**— sino **un meta-test en su propio archivo exigiendo esa entrada**; había
+> **cinco** de esos. El coste real de apendar una migración era editar los tests de otras features en
+> dos sitios. Arreglado en el #207 pinneando el baseline a su hecho histórico, verificado por
+> mutación. **Lección general: un test que se mantiene con una lista a mano no protege un invariante,
+> lo convierte en peaje.**
+
+> ### ✅ Cierre de la sesión del 2026-07-29 — retomar por aquí
+>
+> **Dos PRs abiertos, los dos con gate verde sobre `dev` ya integrado:**
+>
+> | PR | Rama | Qué es | Veredicto |
+> |---|---|---|---|
+> | **#203** | `feature/155-creacion-bifurcada` | Creación bifurcada por bodega + retiro de `en_fulfillment`. 582 archivos / 6386 tests | **APROBADO-CON-NOTAS**, 0 bloqueantes, 9 menores, **69 mutaciones** (62 muertas, 7 supervivientes, todas huecos de cobertura) |
+> | **#204** | `fix/159-cierre` | Cierre de la 159: cobertura recuperada, R10 reconciliado, registro desatascado. 584 archivos / 6343 tests | **APROBADO-CON-NOTAS**, 21/22 R, 23 mutaciones |
+>
+> **🎉 La deuda del round-trip de migraciones QUEDA SALDADA para el tren.** Era la que decía
+> *«el round-trip real contra Postgres NO EXISTE (…) se salda antes de que el tren suba a `prod`»*.
+> La migración de la 155 —la única del tren que **mueve datos**— se ejecutó de verdad contra
+> `localhost:5432` sobre una base con **47 órdenes reales** en el estado retirado:
+> `migrate deploy` → `db:rollback` → `migrate deploy`, con el **mismo checksum** de `orden` menos
+> `estatus_id` a la ida y a la vuelta, y verificado **por mutación**. Números, mutaciones y las
+> cuatro limitaciones declaradas en `progress/roundtrip_155_migracion.md`. **Ya no es un estreno en
+> producción.** Las migraciones de la 154 son aditivas y no mueven datos.
+>
+> **✅ LAS TRES DECISIONES HUMANAS QUEDARON RESUELTAS** el 2026-07-29 (constan en
+> `progress/review_155.md` §8, que es la fuente):
+> 1. **Dispensa del E2E — CONCEDIDA y explícita.** `CHECKPOINTS.md` lo exige para «ingesta de
+>    órdenes» y «webhooks»; leído literal, la casilla no se marca y el veredicto sería RECHAZADO. Se
+>    dispensa porque **no existe ni un E2E de ingesta en todo el repo**, la 155 no altera la
+>    **mecánica** de la ingesta sino su **resultado**, y el borde HTTP sí tiene integración real.
+>    ⚠️ **El precedente NO es extensible** a cualquier feature que toque ingesta, y **la deuda de
+>    fondo —que no haya harness de E2E— sigue viva y sin dueño**: es lo que hace este checkpoint
+>    inaplicable en la práctica.
+> 2. **Aviso a integradores — NO NECESARIO.** Se cierra sin traspaso a nadie.
+> 3. **El manifiesto de la rama (b) por la vía sesión — PASA A LA 157**, escrito como **R41/R42/R43**
+>    en el Bloque E de `specs/157-recoleccion-tienda-qr/requirements.md`. La causa no fue la 155 sino
+>    `b2181e7` de la **159**, que dejó `OrdenesCargaResumenPaso.tsx` huérfano.
+>
+> **Registro reconciliado** (verificado con `gh pr view`, no por la ficha): **151 → `done`**
+> (PR #201), **160 → `done`** (PR #197 — la rama de la 155 ya lo había corregido, pero esa corrección
+> nunca llegó a `dev`) y **155 → `done`** (PR #203). Sin esto `./init.sh` quedaba **rojo** por la
+> regla 1: la zona fullstack llegó a tener 3 `in_progress`.
+>
+> **Lo siguiente del lote:** **157** (ya DESBLOQUEADA: su `depends_on` 155 está mergeado) y **158**.
+> Las dos `spec_ready`, pero ⚠️ **ninguna tiene su puerta F1.4 cerrada**: la 157 arrastra **6
+> preguntas abiertas** sin responder en su `requirements.md`. Cerrar la puerta ANTES de implementar,
+> que es la lección de la CORRECCIÓN 1 de más arriba.
+>
+> ### ⚠️ Hallazgos de esta sesión que NO son del lote y siguen abiertos
+>
+> - **El hotfix de WhatsApp NO estaba en `dev` y no quedaba PR que lo portara → RESUELTO en el
+>   PR #205** (`fix/portar-hotfix-whatsapp`, abierto el 2026-07-29). Reúne las dos ramas
+>   (`git merge origin/prod`, **sin conflictos**), retira las dos Server Actions `_tmp-*` tras
+>   verificar que nadie las importa, y le escribe a `20260728230000_chat_mensaje_error_meta` el
+>   `down.sql` que le faltaba, **verificado por ejecución** (round-trip UP → DOWN → DOWN → UP en una
+>   transacción revertida, con las 3 columnas y el índice parcial apareciendo y desapareciendo).
+>   Revisado además que el volcado de la petición a la Graph API **no filtra secretos**: redacta por
+>   defecto y el modo crudo es opt-in por `WHATSAPP_DEBUG_LOG`, que llega vacía. El diagnóstico
+>   original queda escrito abajo. El **#183 se CERRÓ SIN
+>   MERGEAR** (2026-07-29 13:03). Verificado por archivos: `lib/services/whatsapp/errores-meta.ts` y
+>   `chat-logger.ts` existen en `prod` y **no** en `dev`. `dev` arrastra el bug de reintentos
+>   infinitos, y las dos Server Actions `_tmp-probar-jobs.ts` / `_tmp-sincronizar-plantillas.ts`
+>   **siguen en producción**. El texto de la sección «`dev` vs `prod`» de más abajo daba el #183 por
+>   abierto y mergeable: **era falso en las tres partes**.
+> - **La denylist a mano de las migraciones costó trabajo TRES veces en un día** (159, 149 y el propio
+>   assert de la 159). El arreglo existe y está aplicado como precedente en
+>   `tests/integration/db/drop-mensajero-sugerido-migration.test.ts`: **pinnear el baseline** en vez
+>   de mantener la lista, porque el invariante es histórico y las migraciones posteriores son
+>   irrelevantes por definición. Extenderlo al resto (`zonas`, `notificacion`,
+>   `orden-indices-filtros`, `order-status-en-reparto`) es un **chore propio**, no se colgó del PR de
+>   ninguna feature.
+> - **Las decisiones D1–D9 de las puertas de la 160 viven SOLO en su `status_note`** de
+>   `feature_list.json`; `progress/` documenta D3 y D6, no el resto. Iba a recortar esa nota por
+>   longitud y se conservó al comprobarlo. Moverlas a `progress/impl_160_*.md` es trabajo pendiente:
+>   hasta entonces, **no recortar esa nota**.
+
 **Arranque:** `./init.sh` **verde** sobre `dev` @ `0ed3125` (543 archivos / 5655 tests, lint 0
 errores). El `typecheck` rojo que aparece al estrenar un worktree es **cliente Prisma stale**, no
 `dev`: se salda con `pnpm db:generate`. Vale la pena recordarlo antes de diagnosticar nada.
@@ -343,9 +597,18 @@ vuelo necesita spec en disco). Se reconcilia sola al mergear el PR. El PR trae a
 > **Nadie debe tomar el id 144 ni su alcance viejo sin leer el PR #180.** La ficha de `dev` lleva la
 > advertencia escrita en su `description`.
 
-## ⚠️ `dev` está 18 commits DETRÁS de `prod`
+## ⚠️ `dev` y `prod` DIVERGEN 87 / 18 (medido el 2026-07-29)
 
-`git rev-list --left-right --count origin/dev...origin/prod` → `0  18`. Los arreglos del **log de
+> **Actualizado el 2026-07-29:** `git rev-list --left-right --count origin/dev...origin/prod` →
+> **`87  18`**. El 28/07 era `16  18`; el titular viejo («`dev` está 18 commits DETRÁS») ya no
+> describe la situación: **`dev` va 87 commits POR DELANTE** y sigue sin recibir los 18 del hotfix.
+> **El PR #205 reúne las dos ramas** (`git merge origin/prod` sin conflictos): al mergearlo, los 18
+> commits del hotfix entran en `dev` y esa mitad de la divergencia desaparece. Queda la otra: los 87
+> que `dev` tiene y `prod` no, que se cierran con el despliegue `dev → prod` del tren 154+155+156.
+> **Ese despliegue sigue siendo tarea humana.**
+
+`git rev-list --left-right --count origin/dev...origin/prod` → `0  18` *(medición del 28/07, ver
+aviso de arriba)*. Los arreglos del **log de
 fallos de WhatsApp** (fin de los reintentos infinitos) se mergearon **directo a `prod`** en los PRs
 **#182, #184 y #185**, y el PR que los porta a `dev` (**#183**, misma rama
 `feature/log-fallos-whatsapp`, MERGEABLE) **sigue abierto**.
@@ -359,10 +622,16 @@ trae migración (`20260728230000_chat_mensaje_error_meta`), un desenlace nuevo (
 **lista blanca de códigos reintentables** en `lib/services/whatsapp/errores-meta.ts`. Sin eso en el
 registro, el próximo que toque WhatsApp la duplica. Detalle y deudas en `history.md`.
 
-> ### ⚠️ Dos cosas que revisar ANTES de mergear el PR #183
+> ### ✅ Las dos cosas que había que revisar antes de portarlo — HECHAS en el PR #205
 >
-> 1. **La migración `20260728230000_chat_mensaje_error_meta` no tiene `down.sql`** — contra la regla
->    del repo (`./init.sh` avisa de migraciones sin `down.sql`).
+> Se conservan enunciadas porque son el diagnóstico que explica por qué el #183 no se podía mergear
+> tal cual, y porque el patrón se va a repetir con el próximo hotfix.
+>
+> 1. **La migración `20260728230000_chat_mensaje_error_meta` no tenía `down.sql`** — contra la regla
+>    del repo (`./init.sh` avisa de migraciones sin `down.sql`). **Escrito en el #205 y verificado
+>    por EJECUCIÓN**, no por lectura: round-trip UP → DOWN → DOWN otra vez → UP contra Postgres
+>    local en una transacción revertida. La pérdida de datos del DOWN (el motivo de los salientes ya
+>    fallidos, que es dato de diagnóstico) queda declarada en su cabecera.
 > 2. **`prod` y la rama del PR llevan dos Server Actions de depuración en producción:**
 >    `lib/actions/_tmp-probar-jobs.ts` y `lib/actions/_tmp-sincronizar-plantillas.ts`. El commit
 >    `f950f14` decía sacarlas de la rama, pero **siguen ahí** (verificado con `git ls-tree` sobre
@@ -511,15 +780,27 @@ no ahora.
   mataría de raíz.
 - **`app/(app)/ordenes/_components/ordenes-columns.tsx` es un imán de drift** (ya lo revirtieron 2
   veces) → mirarlo con lupa en todo PR que lo toque.
-- **Migraciones sin round-trip real:** los `down.sql` de las últimas features (141, 146) se revisaron
-  **por lectura**, sin aplicar y revertir contra una base. Ahora que preview tiene base propia, ese
-  round-trip por fin es posible.
+- **Migraciones sin round-trip real:** los `down.sql` de las features **141 y 146** siguen revisados
+  solo **por lectura**. ✅ **Ya NO es así para todas:** el 2026-07-29 se ejecutó el round-trip real
+  contra Postgres de la migración de la **155** (`progress/roundtrip_155_migracion.md`, sobre 47
+  órdenes reales y verificado por mutación) y de la del chat de WhatsApp (**PR #205**). El método
+  está escrito y es repetible: ensayo en transacción revertida → mutaciones para probar que el arnés
+  discrimina → tramo persistido por la herramienta del repo.
+- **La denylist a mano de las migraciones costó trabajo CUATRO veces el 2026-07-29** (159, el propio
+  assert de la 159, 149 y el porte del hotfix). El arreglo existe y está aplicado como precedente en
+  `tests/integration/db/drop-mensajero-sugerido-migration.test.ts`: **pinnear el baseline**, porque
+  el invariante es histórico y las migraciones posteriores son irrelevantes por definición.
+  Extenderlo a `zonas`, `notificacion`, `orden-indices-filtros` y `order-status-en-reparto` es un
+  **chore propio** — deliberadamente NO se colgó del PR de ninguna feature ni del porte del hotfix,
+  que tiene que ser fácil de revisar y de revertir.
 
 ## Tareas humanas pendientes
 
-- **Portar el hotfix de WhatsApp a `dev`** — mergear el PR #183, **pero antes** sacar los dos
-  `lib/actions/_tmp-*.ts` y escribir el `down.sql` que falta (ver el aviso de la sección `dev` vs
-  `prod`). Es lo único que hoy separa a los dos.
+- **Portar el hotfix de WhatsApp a `dev`** → ✅ **listo para mergear: PR #205**. El #183 se cerró sin
+  mergear y el trabajo se rehízo: las dos `lib/actions/_tmp-*.ts` fuera, el `down.sql` escrito y
+  ejecutado en round-trip, y `./init.sh` verde (583 archivos / 6403 tests). **Lo único que queda es
+  darle merge.** Nota: al entrar, `dev` recibe los 18 commits de `prod` y hay que correr
+  `prisma migrate deploy` en local (la migración del chat no está aplicada ahí).
 - **La base local ya tiene la migración de la 153 aplicada** (`20260728120000_order_status_en_reparto`),
   incluida la de la 146 que estaba pendiente. Se aplicaron con `prisma migrate deploy` contra
   `localhost` el 2026-07-28 al cerrar el round-trip. **No se tocó producción.**

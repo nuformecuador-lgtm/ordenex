@@ -8,26 +8,39 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 //
 // Es la RED DE SEGURIDAD de la activacion estricta (Q7): si una arista real faltara en
 // `TRANSICIONES`, ese flujo se caeria en produccion. Por eso los tests que lo consumen
-// recorren el inventario COMPLETO (42 aristas de flujo + 4 de creacion), no un muestreo.
+// recorren el inventario COMPLETO (42 aristas de flujo + 2 de creacion), no un muestreo.
 //
 // Feature 154 (SOLO ADITIVA, decision Q2 del gate del 2026-07-29): sumo #43, #44 y la creacion
 // `null -> por_recolectar_en_tienda`, sin retirar ninguna fila, porque `GuiaAsignacionService`
 // seguia ejecutando las seis que el spec original proponia dar de baja (#1/#3/#4/#6/#7b/#7c).
-// Las dos aristas nuevas quedan DECLARADAS y SIN PRODUCTOR: su `callSite` lo documenta.
+//
+// Feature 149 (SOLO ADITIVA): suma TRES aristas de la familia `deshacer_asignacion`. El spec las
+// numeraba #43/#44/#45; al integrar `dev` se RENUMERARON a #45/#46/#47, porque la 154 ya habia
+// tomado #43/#44 mientras la 149 iba en su rama.
 //
 // Feature 156 (recableado de `generarGuia`): RETIRA #4, #6 y #7c. Generar guia deja de asignar
 // mensajero y de rutear a satelite (se van #4 y #6), y `rutearABodegaSatelite` pasa a admitir
 // SOLO `en_bodega_central` (se va #7c). #5 sobrevive: es el destino unico de generar guia.
-// Las cuatro de `en_fulfillment` (#1/#2/#3/#7b) se quedan aqui pero pasan a SIN PRODUCTOR: la
-// 156 les quito el call-site y la 155 les quitara la arista junto con el estado.
 //
-// La numeracion `n` es la del apendice (#1-#42) con huecos deliberados: el #27 lo retiro la
-// feature 139 (`rechazada -> devolviendo_a_tienda`) y el #4/#6/#7c los retira la 156.
+// Feature 155 (retiro del estado de fulfillment): RETIRA sus cuatro aristas (#1/#2/#3/#7b), que
+// la 156 habia dejado sin productor, y DOS entradas de creacion — la del propio estado y
+// `en_ruta_bodega_central` (el `ESTATUS_INICIAL_API` del canal por API key, que dejaba la orden
+// viajando sin haber sido recolectada). Las de creacion pasan de 4 a 2 y las dos que quedan son
+// EXACTAMENTE las dos salidas de `resolverDestinoCreacion`. La entrada
+// `por_recolectar_en_tienda` deja de estar SIN PRODUCTOR: la 155 la produce por las tres vias.
 //
-// CORRECCION sobre el apendice A (hallazgo del review, hoy parcialmente superada): el apendice
-// solo listaba #7 para `rutearABodegaSatelite`, cuando `ORIGEN_RUTEO_SATELITE` admitia TRES
-// origenes; por eso se anadieron #7b/#7c. Tras la 156 esa constante vuelve a ser un solo
-// origen (`en_bodega_central`), asi que #7c desaparece y #7b queda sin productor.
+// Feature 158 (Q-D/Q-G, 2026-07-30): suma UNA arista, #53 (`incidente -> en_reparto`, familia
+// `deshacer_gestion`), y REALINEA el `via` de #44 a `incidente`. La #44 deja de estar SIN
+// PRODUCTOR: la 158 es quien la ejecuta.
+//
+// La numeracion `n` es la del apendice (#1-#53) con huecos deliberados: #27 lo retiro la 139
+// (`rechazada -> devolviendo_a_tienda`), #4/#6/#7c la 156 y #1/#2/#3/#7b la 155; #48-#52 y
+// #54-#58 quedan RESERVADOS para el camino del ADMIN de la 158, que llega en su propio PR.
+//
+// CORRECCION sobre el apendice A (hallazgo del review, hoy superada): el apendice solo listaba
+// #7 para `rutearABodegaSatelite`, cuando `ORIGEN_RUTEO_SATELITE` admitia TRES origenes; por eso
+// se anadieron #7b/#7c. Tras la 156 esa constante vuelve a ser un solo origen
+// (`en_bodega_central`) y tras la 155 los dos anadidos ya no existen.
 
 /** Una arista de flujo del inventario (origen no nulo). */
 export interface AristaInventario {
@@ -47,20 +60,17 @@ export interface AristaCreacionInventario {
   callSite: string;
 }
 
-/** A.2 — 42 aristas de flujo (1-42 sin #27/#4/#6, mas #7b del review y #43/#44 de la 154). */
+/** A.2 — 41 aristas de flujo (1-47 sin #27, sin #4/#6/#7c de la 156 y sin #1/#2/#3/#7b de la 155, + #43/#44 de la 154 + #45/#46/#47 de la 149). */
 export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
-  // #1/#2/#3/#7b: la 156 dejo `en_fulfillment` sin call-site (ni `generarGuia` ni
-  // `rutearABodegaSatelite` lo admiten ya como origen). Siguen declaradas hasta la 155.
-  { n: "1", origen: "en_fulfillment", destino: "por_recoger", via: "generacion_guia", callSite: "SIN PRODUCTOR (156): la retira la 155 con el estado" },
-  { n: "2", origen: "en_fulfillment", destino: "en_bodega_central", via: "generacion_guia", callSite: "SIN PRODUCTOR (156): la retira la 155 con el estado" },
-  { n: "3", origen: "en_fulfillment", destino: "en_ruta_bodega_satelite", via: "generacion_guia", callSite: "SIN PRODUCTOR (156): la retira la 155 con el estado" },
+  // #1/#2/#3/#7b RETIRADAS por la feature 155 junto con el estado del que salian. Estaban SIN
+  // PRODUCTOR desde la 156 y su backfill (`20260729140000_order_status_retiro_en_fulfillment`)
+  // deja vacio el conjunto de ordenes que las necesitaban: retirarlas no atrapa a ninguna.
   // #4 RETIRADA por la feature 156: `en_preparacion -> por_recoger` ya no existe (generar
   // guia no asigna mensajero).
   { n: "5", origen: "en_preparacion", destino: "en_bodega_central", via: "generacion_guia", callSite: "GuiaAsignacionService.generarGuia (destino UNICO, 156)" },
   // #6 RETIRADA por la feature 156: `en_preparacion -> en_ruta_bodega_satelite` via
   // `generacion_guia` ya no existe (generar guia no rutea a satelite).
   { n: "7", origen: "en_bodega_central", destino: "en_ruta_bodega_satelite", via: "ruteo_satelite", callSite: "GuiaAsignacionService.rutearABodegaSatelite (origen UNICO, 156)" },
-  { n: "7b", origen: "en_fulfillment", destino: "en_ruta_bodega_satelite", via: "ruteo_satelite", callSite: "SIN PRODUCTOR (156): la retira la 155 con el estado" },
   // #7c RETIRADA por la feature 156: `ORIGEN_RUTEO_SATELITE` vuelve a ser un solo origen.
   { n: "8", origen: "en_bodega_central", destino: "por_recoger", via: "asignacion_bodega", callSite: "GuiaAsignacionService.asignarDesdeBodega" },
   { n: "9", origen: "en_bodega_satelite", destino: "por_recoger", via: "asignacion_satelite", callSite: "AsignacionSateliteService.asignar" },
@@ -101,36 +111,66 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // `callSite` nombra la feature que lo hara. Por eso NO aparecen en el mapa de puntos de
   // escritura de `tests/unit/repositories/orden-historial-cobertura.test.ts`.
   { n: "43", origen: "por_recolectar_en_tienda", destino: "en_ruta_bodega_central", via: "recoleccion_tienda", callSite: "SIN PRODUCTOR (154): escaner de recoleccion en tienda, feature 157" },
-  { n: "44", origen: "en_reparto", destino: "incidente", via: "gestion", callSite: "SIN PRODUCTOR (154): resultado `incidente` de la gestion, feature 158" },
+  // #44: la 154 la declaro SIN PRODUCTOR y con `via: "gestion"`. La feature 158 le pone
+  // PRODUCTOR (`crearGestionYTransicionar` con `resultado = incidente`) y le REALINEA el `via`
+  // a la familia `incidente`, que es la que el append persiste (Q-G). La fila NO se borra: se
+  // mueve a su verdad nueva.
+  { n: "44", origen: "en_reparto", destino: "incidente", via: "incidente", callSite: "MisAsignacionesService.gestionar -> GestionOrdenRepository.crearGestionYTransicionar (158)" },
+  // Feature 149 (design §2, R27): reversion de la asignacion/ruteo ANTES de la recogida. Las
+  // TRES aristas son pares NUEVOS (no repiten ningun par ya declarado), por eso suben tanto el
+  // recuento de aristas (42 -> 45) como el de pares unicos (39 -> 42).
+  { n: "45", origen: "en_ruta_bodega_satelite", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso b)" },
+  { n: "46", origen: "por_recoger", destino: "en_bodega_central", via: "deshacer_asignacion", callSite: "DeshacerAsignacionService.deshacer -> OrdenRepository.deshacerAsignacionLote (149, caso a central)" },
+  { n: "47", origen: "por_recoger", destino: "en_bodega_satelite", via: "deshacer_asignacion", callSite: "deshacerAsignacionLote (149, caso a satelite)" },
+  // Feature 158 (Q-D, 2026-07-30): DESHACER un `incidente`. Es un par NUEVO, asi que sube
+  // tanto el recuento de aristas (41 -> 42) como el de pares unicos (39 -> 40).
+  //
+  // NUMERACION: la 158 salta del #47 al #53 A PROPOSITO. Los #48-#52 quedan RESERVADOS para
+  // las cinco entradas del camino del ADMIN y los #54-#58 para sus cinco inversas; ninguna de
+  // esas diez se declara todavia porque su PRODUCTOR llega en el PR siguiente (design §15.2).
+  // Un hueco de numeracion documentado es mas barato que una arista legal sin productor.
+  { n: "53", origen: "incidente", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion -> CierreDiaRepository.anularGestionYDevolverAGestion (158)" },
 ];
 
 /**
- * A.1 — 4 aristas de creacion (`null -> X`), una por DESTINO (asi las cuenta A.3). El `via`
- * de cada fila es representativo y cubre las familias de creacion del enum:
- * `creacion_manual` y `carga_masiva` pueden producir indistintamente `en_preparacion` o
- * `en_fulfillment` (segun el flag fulfillment de la tienda); `carga_api` produce SIEMPRE
- * `en_ruta_bodega_central` (`ESTATUS_INICIAL_API`). La legalidad no depende del `via` (R2).
- * Feature 154: se suma `por_recolectar_en_tienda`, LEGAL como estado de nacimiento pero SIN
- * PRODUCTOR hasta que la 155 bifurque la creacion por bodega.
+ * A.1 — 2 aristas de creacion (`null -> X`), una por DESTINO (asi las cuenta A.3). El `via`
+ * de cada fila es representativo: la legalidad no depende del `via` (R2), y tras la feature 155
+ * las TRES vias (`creacion_manual`, `carga_masiva`, `carga_api`) pueden producir CUALQUIERA de
+ * los dos destinos — el que resuelva `resolverDestinoCreacion` a partir del flag `fulfillment`
+ * de la tienda dueña, y nada mas.
+ *
+ * Feature 155: se retiran las entradas del estado de fulfillment (backfilleado a
+ * `en_preparacion`) y de `en_ruta_bodega_central` (el `ESTATUS_INICIAL_API` del canal por API
+ * key), y `por_recolectar_en_tienda` deja de estar SIN PRODUCTOR.
  */
 export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
-  { destino: "en_preparacion", via: "creacion_manual", callSite: "OrdenService.crear -> OrdenRepository.create" },
-  { destino: "en_fulfillment", via: "carga_masiva", callSite: "BulkOrdenService -> createManyOrdenes" },
-  { destino: "en_ruta_bodega_central", via: "carga_api", callSite: "BulkOrdenService.cargarViaApi -> createManyOrdenesConGuia" },
-  { destino: "por_recolectar_en_tienda", via: "creacion_manual", callSite: "SIN PRODUCTOR (154): bifurcacion de creacion por bodega, feature 155" },
+  { destino: "en_preparacion", via: "creacion_manual", callSite: "las 3 vias con fulfillment=true: OrdenService.crear / BulkOrdenService.cargarMasiva / .cargarViaApi" },
+  { destino: "por_recolectar_en_tienda", via: "carga_masiva", callSite: "las 3 vias con fulfillment=false (rama b, con num_guia en el acto)" },
 ];
 
 /**
- * Recuentos: 42 aristas de flujo (las 45 previas menos #4/#6/#7c, retiradas por la 156), 39
- * pares dirigidos unicos y 4 de creacion.
+ * Recuentos: 42 aristas de flujo, 40 pares dirigidos unicos y 2 de creacion.
  *
- * De 45 a 42: -3 aristas. De 41 a 39 pares: `en_preparacion -> por_recoger` (#4) era un par
- * unico y desaparece; `en_preparacion -> en_ruta_bodega_satelite` estaba declarado dos veces
- * (#6 `generacion_guia` + #7c `ruteo_satelite`) y desaparecen las dos, asi que el par tambien.
- * Los 42 - 39 = 3 duplicados que quedan son #19/#23, #20/#24 y #3/#7b.
+ * CADENA COMPLETA, para que nadie tenga que reconstruirla:
+ *   - la 156 dejo 42 aristas / 39 pares (retiro #4/#6/#7c);
+ *   - la 155 bajo a 38 / 36: -4 aristas (#1/#2/#3/#7b) y -3 pares, porque los tres pares que
+ *     salian del estado retirado desaparecen enteros — `-> por_recoger` (#1),
+ *     `-> en_bodega_central` (#2) y `-> en_ruta_bodega_satelite` (#3 y #7b, que compartian par).
+ *     Las de creacion bajaron de 4 a 2;
+ *   - la 149 suma sus TRES aristas (#45/#46/#47) y las tres son pares NUEVOS, asi que suben
+ *     ambos recuentos por igual: 38 -> 41 aristas y 36 -> 39 pares;
+ *   - la 158 suma UNA (#53, `incidente -> en_reparto`), tambien par NUEVO: 41 -> 42 y 39 -> 40.
+ *     Ademas REALINEA el `via` de #44 (`gestion` -> `incidente`), que no mueve ningun recuento.
+ *
+ * Los 42 - 40 = 2 duplicados que quedan son #19/#23 y #20/#24 (SLA vs. recuperacion manual). El
+ * tercer duplicado historico (#3/#7b) se fue con el estado de fulfillment.
+ *
+ * PENDIENTE DECLARADO (no olvido): el camino del ADMIN de la 158 suma DIEZ aristas mas
+ * (#48-#52 y #54-#58) y dejaria estos recuentos en 52 / 50. NO estan aqui porque su productor
+ * llega en el PR siguiente (design §15.2).
  */
 export const RECUENTO_INVENTARIO = {
   aristasFlujo: 42,
-  paresUnicos: 39,
-  aristasCreacion: 4,
+  paresUnicos: 40,
+  aristasCreacion: 2,
 } as const;

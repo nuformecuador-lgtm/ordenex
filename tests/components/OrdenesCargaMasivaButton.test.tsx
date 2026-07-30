@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, act } from "@testing-library/react";
+import { render, screen, cleanup, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { OrdenesCargaMasivaButton } from "@/app/(app)/ordenes/_components/OrdenesCargaMasivaButton";
@@ -53,6 +53,17 @@ vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaPreview", () => ({
   },
 }));
 
+// Tercer paso (R12): el resumen del lote en solo lectura. Se dobla para no
+// arrastrar su Server Action; lo que verifica este archivo es el CABLEADO (que se
+// monte y con qué `numRemisiones`), no su render.
+const resumen = vi.hoisted(() => ({ props: null as { numRemisiones: string[] } | null }));
+vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumen", () => ({
+  OrdenesCargaResumen: (props: { numRemisiones: string[] }) => {
+    resumen.props = props;
+    return <div data-testid="resumen-double" />;
+  },
+}));
+
 // Orquestación de chunks: se espía `procesarEnChunks`; el resto (combinar, error)
 // se conserva del módulo real para que la clasificación sea la de producción.
 const { procesarEnChunksMock } = vi.hoisted(() => ({ procesarEnChunksMock: vi.fn() }));
@@ -77,6 +88,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   upload.props = null;
   preview.props = null;
+  resumen.props = null;
 });
 
 afterEach(() => cleanup());
@@ -140,6 +152,21 @@ describe("OrdenesCargaMasivaButton — estructura", () => {
     expect(screen.getByTestId("upload-double")).toBeInTheDocument();
   });
 
+  it("R15: el indicador anuncia 3 pasos y ninguno es de asignación de mensajero", async () => {
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+
+    const pasos = screen.getByRole("list", { name: /progreso de la carga masiva/i });
+    const etiquetas = within(pasos)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent ?? "");
+    expect(etiquetas).toHaveLength(3);
+    expect(etiquetas[2]).toContain("Resultado");
+    // R13/R15: ni el indicador ni el subtítulo del modal prometen asignar mensajero.
+    expect(etiquetas.some((e) => /mensajero|asign/i.test(e))).toBe(false);
+    expect(screen.queryByText(/mensajero/i)).not.toBeInTheDocument();
+  });
+
   it("Escape cierra el modal", async () => {
     const user = userEvent.setup();
     render(<OrdenesCargaMasivaButton />);
@@ -178,7 +205,7 @@ describe("OrdenesCargaMasivaButton — validación", () => {
 // Fase 2 — confirmar (carga real por chunks)
 // ---------------------------------------------------------------------------
 describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
-  it("confirma → procesarEnChunks(dryRun:false), mutate, toast y cierra el modal", async () => {
+  it("confirma → procesarEnChunks(dryRun:false), mutate, toast y resumen del lote", async () => {
     const user = userEvent.setup();
     procesarEnChunksMock.mockResolvedValue([
       { fila: 1, numRemision: "REM-A", resultado: "creada" },
@@ -197,13 +224,15 @@ describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
     expect(mutateMock).toHaveBeenCalledTimes(1);
     expect(successMock).toHaveBeenCalledTimes(1);
 
-    // Retirado el "mensajero sugerido": tras la carga real no queda paso
-    // posterior (el mensajero se decide en "Generar guía"), el modal cierra.
-    await screen.findByRole("button", { name: /carga masiva/i });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // R12: tras la carga real el modal NO cierra — muestra el resumen de las
+    // órdenes creadas. El toast es un conteo, no el resumen.
+    expect(await screen.findByTestId("resumen-double")).toBeInTheDocument();
+    expect(resumen.props?.numRemisiones).toEqual(["REM-A"]);
+    // R13: el paso es solo lectura — no recibe ningún callback de confirmación.
+    expect(resumen.props).not.toHaveProperty("onDone");
   });
 
-  it("R20 (feature 143): tras la carga real no existe ningún botón de descarga de errores", async () => {
+  it("R20 (feature 143): en el paso 'resultado' no existe ningún botón de descarga de errores", async () => {
     // Decisión de gate G-1: la descarga vive SOLO en la vista previa. Tras la
     // carga real el modal no ofrece exportar nada.
     const user = userEvent.setup();
@@ -220,9 +249,9 @@ describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "confirmar-double" }));
-    await screen.findByRole("button", { name: /carga masiva/i });
+    expect(await screen.findByTestId("resumen-double")).toBeInTheDocument();
 
-    // Aunque la carga real dejó una fila con error, nada ofrece descargarlas.
+    // Aunque la carga real dejó una fila con error, el paso no ofrece descarga.
     expect(
       screen.queryByRole("button", { name: /descargar filas con error/i }),
     ).toBeNull();
@@ -244,6 +273,8 @@ describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
     expect(mutateMock).toHaveBeenCalledTimes(1);
     await screen.findByRole("button", { name: /carga masiva/i });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Sin órdenes nuevas no hay resumen que mostrar: el paso 3 no se monta.
+    expect(screen.queryByTestId("resumen-double")).not.toBeInTheDocument();
   });
 
   it("error en la carga → toast.error y permanece en el preview", async () => {

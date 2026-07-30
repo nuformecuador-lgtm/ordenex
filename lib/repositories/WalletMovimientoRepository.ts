@@ -126,6 +126,7 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       gastoFijo: sumaDe("egreso_gasto_fijo"),
       gastoVariable: sumaDe("egreso_gasto_variable"),
       sueldo: sumaDe("egreso_sueldo"),
+      indemnizacion: sumaDe("egreso_indemnizacion"), // feature 158/R32
     };
   }
 }

@@ -1,6 +1,7 @@
 import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+import type { CausaIncidente } from "@/lib/types/causa-incidente";
 
 // Feature 37 — contrato del servicio del "Cierre del dia" del mensajero. Logica de
 // negocio pura (sin HTTP ni Prisma); el borde (Server Action) la traduce a
@@ -53,6 +54,36 @@ export interface CierreDetalleGestion {
   // admin (38/40) alimenta la marca por fila; en la vista EN VIVO del mensajero (37) es `false`
   // por defecto (esa vista no expone el desglose SLA).
   esRechazoSla: boolean;
+  /**
+   * Feature 158/R9/R34: causa TIPIFICADA del incidente (`danado`/`perdido`/`robado`), leida de
+   * `gestion_orden.causa_incidente`. `null` en cualquier otro resultado — es un campo POR
+   * RAMA, como `metodoPago` o `fechaReprogramacion`.
+   *
+   * La pueblan LOS DOS caminos (vista en vivo del mensajero y detalles de admin): no es un
+   * dato sensible ni de dinero, es el hecho que el propio mensajero reporto. R34 la exige en
+   * la pantalla de aprobacion; sin ella el admin tendria que decidir el monto de una
+   * indemnizacion sin saber si el paquete se rompio o se lo robaron.
+   *
+   * El VALUE crudo no se pinta nunca: la capa de presentacion lo traduce
+   * (`CAUSA_INCIDENTE_LABEL`).
+   */
+  causaIncidente: CausaIncidente | null;
+  /**
+   * Feature 158/R19/R22/R34: monto de la indemnizacion (money-safe STRING, escala 2), leido de
+   * `gestion_orden.indemnizacion`. `null` en cualquier resultado que no sea `incidente` y
+   * tambien en un `incidente` cuyo cierre AUN NO se aprobo (el monto lo captura el admin al
+   * aprobar, R19): ahi `null` significa «todavia no hay monto», no «monto cero».
+   *
+   * ⚠️ SOLO lo pueblan los detalles de ADMIN (38/40). En la vista EN VIVO del mensajero (37)
+   * es SIEMPRE `null`, y a proposito — no por casualidad de que ahi las gestiones tengan
+   * `cierre_id IS NULL`. La indemnizacion es plata que Ordenex paga por el paquete, NO del
+   * mensajero (R17: un incidente no le paga nada), y un numero grande junto a su gestion se
+   * leeria como una deuda suya. La decision es de `design.md` §7.2 («el mensajero no ve la
+   * indemnizacion: no es plata suya») y se implementa en el REPO, no en la UI: la columna ni
+   * siquiera se selecciona en la consulta del mensajero, asi que no puede filtrarse por un
+   * cambio de pantalla. Mismo patron que `ingresoOrdenex`, que tampoco cruza a esa vista.
+   */
+  indemnizacion: string | null;
   /**
    * Desglose del ingreso de Ordenex (flete, IVA, comision) + la tarifa congelada de esa
    * orden. Solo lo pueblan los detalles de ADMIN (38/40), que leen del snapshot; en la vista

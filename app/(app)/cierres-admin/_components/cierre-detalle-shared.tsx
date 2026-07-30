@@ -18,6 +18,12 @@ import type {
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreEstado } from "@/lib/types/cierre";
+// Feature 158 (T2.3): las etiquetas visibles de la causa del incidente viven donde nacieron
+// (junto al panel que las captura), no se duplican aquí. Importar un módulo de etiquetas de
+// otra ruta tiene precedente EXACTO en este repo: `GestionarOrdenPanel` (mis-asignaciones)
+// importa `estatus-label` de `app/(app)/ordenes/_components/`. El value crudo del enum
+// (`danado`) no se pinta nunca.
+import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 
 // Feature 40 (T8) — helpers y componentes compartidos del detalle de cierre entre
 // el módulo de cierres de mensajero (feature 38, `CierresAdminModule`) y los nuevos
@@ -32,6 +38,7 @@ export const RESULTADO_LABEL: Record<CierreResultado, string> = {
   reprogramada: "Reprogramadas",
   devuelta: "Devueltas",
   rechazada: "Rechazadas",
+  incidente: "Incidentes", // feature 158/R18
 };
 
 export const RESULTADO_VACIO: Record<CierreResultado, string> = {
@@ -39,6 +46,7 @@ export const RESULTADO_VACIO: Record<CierreResultado, string> = {
   reprogramada: "No hay reprogramaciones.",
   devuelta: "No hay devoluciones.",
   rechazada: "No hay rechazos.",
+  incidente: "No hay incidentes.", // feature 158/R18
 };
 
 export const METODO_LABEL: Record<MetodoPagoValue, string> = {
@@ -167,17 +175,33 @@ export const APLICADA_HINT = "← se aplicó";
 export const SIN_COMISION_NOTA = "Esta orden no cobra comisión COD.";
 export const SIN_TARIFA_CONGELADA_NOTA =
   "La tienda no tenía tarifa vigente al solicitar el cierre: no se derivó ningún ingreso para esta orden.";
+// --- Feature 158 (R34/R9/R19): columnas propias del grupo `incidente` (texto i18n-ready) ---
+export const CAUSA_INCIDENTE_COL = "Causa";
+export const INDEMNIZACION_COL = "Indemnización";
+/**
+ * `indemnizacion === null` en un incidente NO es «cero»: es «todavía no se capturó». El monto
+ * lo pone el admin AL APROBAR (R19), así que hasta entonces la celda muestra "—" con esta nota
+ * accesible. Sin ella, un "—" se leería como «esta orden no se indemniza», que es lo contrario.
+ */
+export const INDEMNIZACION_PENDIENTE_NOTA =
+  "Se captura al aprobar el cierre; todavía no se indemnizó.";
+
 /** Aviso discreto (F1.4-5): pago de una entrega resuelto a ₡0.00 (tarifa faltante). */
 export const PAGO_SIN_TARIFA_LABEL = "Sin tarifa";
 export const PAGO_SIN_TARIFA_NOTA =
   "El pago al mensajero de esta entrega se resolvió en ₡0.00 (posible tarifa de zona sin configurar).";
 
-/** Orden fijo de las 4 secciones del detalle (R11). */
+/**
+ * Orden fijo de las secciones del detalle (R11). Feature 158/R18: `incidente` es un grupo
+ * PROPIO y va AL FINAL, tras los cuatro desenlaces normales — mismo criterio que el detalle
+ * del mensajero (37) y que el paso de resultados del panel.
+ */
 export const ORDEN_RESULTADOS: CierreResultado[] = [
   "entregada",
   "reprogramada",
   "devuelta",
   "rechazada",
+  "incidente",
 ];
 
 /**
@@ -712,6 +736,61 @@ function columnaConcepto(
   };
 }
 
+/**
+ * Feature 158 (R9/R34): columna de la CAUSA tipificada del incidente. La etiqueta sale de
+ * `CAUSA_INCIDENTE_LABEL` (derivada del SEED): nunca el slug crudo del enum. `null` sólo
+ * podría verse si un resultado que no es `incidente` cayera en esta sección, y ahí "—" es la
+ * lectura correcta.
+ */
+export const COLUMNA_CAUSA_INCIDENTE: Column<CierreDetalleGestion> = {
+  id: "causaIncidente",
+  value: CAUSA_INCIDENTE_COL,
+  render: (g) => (g.causaIncidente ? CAUSA_INCIDENTE_LABEL[g.causaIncidente] : "—"),
+};
+
+/**
+ * Feature 158 (R19/R22/R34): columna del MONTO de la indemnización. Money-safe: el monto llega
+ * como STRING y se muestra tal cual con `money()`, sin `parseFloat`. `null` → "—" CON su nota:
+ * el cierre todavía no se aprobó y el monto aún no existe (ver `INDEMNIZACION_PENDIENTE_NOTA`).
+ */
+export const COLUMNA_INDEMNIZACION: Column<CierreDetalleGestion> = {
+  id: "indemnizacion",
+  value: INDEMNIZACION_COL,
+  render: (g) =>
+    g.indemnizacion === null ? (
+      <span title={INDEMNIZACION_PENDIENTE_NOTA} aria-label={INDEMNIZACION_PENDIENTE_NOTA}>
+        —
+      </span>
+    ) : (
+      money(g.indemnizacion)
+    ),
+};
+
+/**
+ * Columna de la evidencia FIRMADA (R12), compartida por `rechazada` e `incidente`
+ * (feature 158/R18): abre el visor con la URL que ya llega firmada del servidor, nunca el
+ * `storage_path` crudo. Se extrajo para no duplicar el render en dos ramas.
+ */
+const COLUMNA_EVIDENCIA = (
+  verEvidencia: (url: string) => void,
+): Column<CierreDetalleGestion> => ({
+  id: "evidencia",
+  value: "Evidencia",
+  render: (g) =>
+    g.evidenciaUrl ? (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => verEvidencia(g.evidenciaUrl as string)}
+      >
+        Ver evidencia
+      </Button>
+    ) : (
+      "—"
+    ),
+});
+
 const COLUMNA_INGRESO_TOTAL: Column<CierreDetalleGestion> = {
   id: "ingresoTotal",
   value: INGRESO_TOTAL_COL,
@@ -743,6 +822,21 @@ export function columnasPara(
   resultado: CierreResultado,
   verEvidencia: (url: string) => void,
 ): Column<CierreDetalleGestion>[] {
+  // Feature 158 (R17/R18/R34): el `incidente` NO deriva ningún concepto de ingreso de Ordenex
+  // (ni flete, ni comisión, ni sus IVA), NO paga al mensajero y NO genera ingreso de bodega:
+  // esas columnas serían "—" en todas las filas. Lo que SÍ lleva es el rastro del reporte
+  // (causa + motivo + evidencia firmada) y el ÚNICO dinero que le corresponde: la
+  // indemnización, que se captura al aprobar y hasta entonces es "—" (no es cero).
+  if (resultado === "incidente") {
+    return [
+      ...COLUMNAS_COMUNES,
+      COLUMNA_MONTO_COBRAR,
+      COLUMNA_CAUSA_INCIDENTE,
+      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      COLUMNA_EVIDENCIA(verEvidencia),
+      COLUMNA_INDEMNIZACION,
+    ];
+  }
   if (resultado === "entregada") {
     return [
       ...COLUMNAS_COMUNES,
@@ -796,23 +890,7 @@ export function columnasPara(
     COLUMNA_RECHAZO_ORIGEN,
     COLUMNA_MONTO_COBRAR,
     { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
-    {
-      id: "evidencia",
-      value: "Evidencia",
-      render: (g) =>
-        g.evidenciaUrl ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => verEvidencia(g.evidenciaUrl as string)}
-          >
-            Ver evidencia
-          </Button>
-        ) : (
-          "—"
-        ),
-    },
+    COLUMNA_EVIDENCIA(verEvidencia),
     columnaConcepto(
       "fleteDevolucionConIva",
       FLETE_DEV_CON_IVA_LABEL,

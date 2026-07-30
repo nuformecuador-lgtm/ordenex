@@ -280,6 +280,9 @@ function bulkService(notificar: CargaMasivaNotificador) {
     findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
+    // Feature 155: `cargarViaApi` resuelve el estado inicial con el flag de la tienda
+    // dueña de la key, asi que el doble del repositorio debe exponerlo.
+    findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
     createManyOrdenesConGuia: vi.fn().mockResolvedValue([]),
   };
   const tarifas = { resolveTarifaPorTienda: vi.fn().mockResolvedValue(null) };

@@ -121,9 +121,15 @@ Las **tres vías de creación** quedan cubiertas: alta manual, carga masiva por 
 
 ### F. Manifiesto de la rama (b)
 
-- **R24** — CUANDO un lote nace por la rama de R3, el sistema DEBE poder armar el manifiesto de ese
-  lote con `origen` = la tienda dueña y `destino` = la bodega central, **reutilizando el servicio
-  único de manifiesto**; ningún otro módulo DEBE construir filas de manifiesto.
+- **R24** *(forma final, puerta T0.1 del 2026-07-29 — opción C de `design.md §8`)* — CUANDO un lote
+  nace por la rama de R3, el sistema DEBE poder armar el manifiesto de ese lote con `origen` = la
+  tienda dueña y `destino` = la bodega central, **reutilizando el servicio único de manifiesto**;
+  ningún otro módulo DEBE construir filas de manifiesto. El punto de enganche DEBE ser un **flujo
+  propio** (`recoleccion_tienda`), no el flujo de la carga masiva, y DEBE admitir la selección del
+  lote por `num_remision`. ADEMÁS, el canal de API key —que no puede invocar la Server Action del
+  manifiesto porque resuelve al actor por cookie de sesión— DEBE exponer el manifiesto de su lote en
+  la respuesta de su propio endpoint de carga, con la misma disciplina best-effort del bloque de
+  etiquetas.
 - **R25** — Un fallo al armar o descargar el manifiesto NO DEBE revertir la creación ya cometida ni
   alterar el estado, la guía o el historial de ninguna orden.
 - **R26** — MIENTRAS un lote nace por la rama de R2 (el paquete ya está en bodega), el sistema NO
@@ -181,17 +187,25 @@ Las **tres vías de creación** quedan cubiertas: alta manual, carga masiva por 
 - **R42** — La especificación OpenAPI del canal por API key y su espejo documental NO DEBEN
   documentar `en_fulfillment`, y DEBEN documentar el estado en que nacen las órdenes creadas por API
   tras esta feature.
-- **R43** — CUANDO una orden creada por la vía de API key nace por la rama de R3, el integrador
-  suscrito DEBE seguir recibiendo un evento de nacimiento: el cambio de estado inicial NO DEBE
-  hacer desaparecer en silencio el evento que hoy recibe.
+- **R43** *(forma final, puerta T0.1 del 2026-07-29 — respuesta "SÍ" a la pregunta 2)* — CUANDO una
+  orden creada por la vía de API key nace por la rama de R3, el integrador suscrito DEBE seguir
+  recibiendo un evento de nacimiento: el cambio de estado inicial NO DEBE hacer desaparecer en
+  silencio el evento que hoy recibe. Para lograrlo, `por_recolectar_en_tienda` DEBE incorporarse a
+  la política de eventos públicos. La ampliación DEBE ser **aditiva**: ningún estado que hoy emite
+  evento DEBE dejar de emitirlo.
 
 ---
 
-## Preguntas abiertas
+## Preguntas abiertas — CERRADAS (puerta T0.1, humano, 2026-07-29)
 
-> Ninguna de estas bloquea la escritura del diseño, pero **todas** deben responderse en la puerta de
-> aprobación antes de implementar. La del manifiesto se desarrolla en `design.md > Preguntas
-> abiertas`, como pide el encargo.
+> **Las seis se cerraron el 2026-07-29 y no se reabren.** Las respuestas literales, con su
+> justificación, están en `design.md §11`. R24 y R43 quedan arriba en su **forma final**. Resumen:
+> (1) manifiesto → **opción C**; (2) evento público → **sí**; (3) el rol `apiKey` cae siempre en la
+> rama (b) y **R21 se implementa igual**, como rama defensiva; (4) la arista `#5` sobrevive (la usa
+> la 156, ya mergeada); (5) etiqueta en el acto → **fuera de alcance**, va en la 157; (6) zona →
+> **backend → frontend**, la fase backend no toca `.tsx`.
+>
+> El texto original de las seis preguntas se conserva abajo como registro de lo que se preguntó.
 
 1. **Manifiesto de la rama (b)** — ¿reusa la Server Action `obtenerManifiesto` de la feature 148 o
    necesita punto de enganche propio? Desarrollada con opciones y consecuencias en

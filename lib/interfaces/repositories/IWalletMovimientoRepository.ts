@@ -53,12 +53,15 @@ export interface BalanceAgregado {
   egresos: string;
 }
 
-// Feature 45 (R11) — desglose de egresos administrativos por tipo, ya como STRING
-// (money-safe). Deriva de un groupBy(categoria) acotado a las 3 categorias administrativas.
+// Feature 45 (R11) — desglose de egresos por tipo, ya como STRING (money-safe). Deriva de un
+// groupBy(categoria) acotado a las categorias del desglose.
+// Feature 158 (R32): + `indemnizacion`. Con ella el desglose deja de ser SOLO de egresos
+// ADMINISTRATIVOS — la indemnizacion es operativa, no administrativa.
 export interface DesgloseEgresosAgregado {
   gastoFijo: string; // SUM(egreso_gasto_fijo)
   gastoVariable: string; // SUM(egreso_gasto_variable)
   sueldo: string; // SUM(egreso_sueldo)
+  indemnizacion: string; // SUM(egreso_indemnizacion) — feature 158/R32
 }
 
 export interface IWalletMovimientoRepository {

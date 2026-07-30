@@ -15,7 +15,7 @@ import {
   type UsuarioListItem,
   type UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
-import type { MensajeroDTO } from "@/lib/types/asignacion-mensajero";
+import type { MensajeroDTO } from "@/lib/types/mensajero";
 import type { CuentaTiendaDTO } from "@/lib/types/filtros-ordenes";
 
 type UserPrismaClient = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;

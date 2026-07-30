@@ -64,6 +64,7 @@ beforeEach(() => {
     porDevolver: [], // Feature 139/T3.3: grupo `por_devolver` por enviar a central
     enTransitoACentral: [], // Feature 139/T3.3: grupo `devolviendo_a_bodega_central` (informativo)
     devueltas: [], // Feature 100/T4.1: grupo `devuelta` por recuperar a bodega
+    asignadas: [], // Feature 149/T6.3: grupo `por_recoger` de la zona (deshacer asignacion)
     zonaNombre: "Limón",
     sinZona: false,
   });

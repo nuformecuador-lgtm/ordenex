@@ -48,16 +48,17 @@ const listarZonasBloqueadasMock = vi.mocked(listarZonasBloqueadasPorCierre);
 
 // Catalogo minimo: el filtro por estado no se toca en este archivo (el listado sin
 // filtro sirve las ordenes del mock), pero el componente lo consulta igual.
+// Feature 155/R28/R32: el estado de fulfillment en bodega salio del catalogo, asi que sale
+// tambien de este catalogo minimo y del mapa de ids. `en_preparacion` queda como unico
+// estado de "generar guia".
 const CATALOGO = [
   { id: "id-bodega", value: "en_bodega_central" },
   { id: "id-preparacion", value: "en_preparacion" },
-  { id: "id-fulfillment", value: "en_fulfillment" },
 ];
 
 const ESTATUS_ID_POR_VALUE: Record<string, string> = {
   en_bodega_central: "id-bodega",
   en_preparacion: "id-preparacion",
-  en_fulfillment: "id-fulfillment",
 };
 
 const ZONA_GAM = "zona-gam";
@@ -137,26 +138,26 @@ afterEach(() => {
 describe("OrdenesListado — bloqueo del checkbox por zona con cierre abierto", () => {
   // ---------- Feature 156/R28: el bloqueo se acota a `en_bodega_central` ----------
 
-  it.each(["en_preparacion", "en_fulfillment"])(
-    "R28: orden en %s cuya zona tiene un cierre abierto -> checkbox HABILITADO y seleccionable (generar guia ya no asigna)",
-    async (estatusValue) => {
-      // Misma zona bloqueada que deshabilita a una orden de bodega central: lo unico
-      // que cambia es el estado de la orden.
-      renderListado([makeOrden("REM-prep", ZONA_SATELITE, false, estatusValue)]);
+  // Feature 155/R32: el caso era parametrizado sobre los DOS estados de "generar guia";
+  // tras el retiro queda uno solo, asi que deja de ser un `it.each`. Lo que afirma no
+  // cambia.
+  it("R28: orden en en_preparacion cuya zona tiene un cierre abierto -> checkbox HABILITADO y seleccionable (generar guia ya no asigna)", async () => {
+    // Misma zona bloqueada que deshabilita a una orden de bodega central: lo unico
+    // que cambia es el estado de la orden.
+    renderListado([makeOrden("REM-prep", ZONA_SATELITE, false, "en_preparacion")]);
 
-      const checkbox = await screen.findByRole("checkbox", {
-        name: "Seleccionar orden REM-prep",
-      });
-      expect(checkbox).not.toHaveAttribute("aria-disabled", "true");
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Seleccionar orden REM-prep",
+    });
+    expect(checkbox).not.toHaveAttribute("aria-disabled", "true");
 
-      await userEvent.click(checkbox);
-      expect(checkbox).toHaveAttribute("aria-checked", "true");
-      // Y la accion por lote de ese estado sigue ofreciendose.
-      expect(
-        screen.getByRole("button", { name: "Generar guía" }),
-      ).toBeInTheDocument();
-    },
-  );
+    await userEvent.click(checkbox);
+    expect(checkbox).toHaveAttribute("aria-checked", "true");
+    // Y la accion por lote de ese estado sigue ofreciendose.
+    expect(
+      screen.getByRole("button", { name: "Generar guía" }),
+    ).toBeInTheDocument();
+  });
 
   it("R28: en la MISMA zona bloqueada, la orden de en_preparacion se selecciona y la de en_bodega_central no", async () => {
     renderListado([
@@ -231,6 +232,52 @@ describe("OrdenesListado — bloqueo del checkbox por zona con cierre abierto", 
     expect(libre).toHaveAttribute("aria-checked", "true");
     expect(bloqueada).toHaveAttribute("aria-checked", "false");
   });
+
+  // ---------- Feature 155/R32/R41: el estado retirado no ofrece acciones por lote ----------
+
+  // El `case` del estado de fulfillment en bodega salio de `accionesDe` junto con el value
+  // (T6.2). Una fila que llegue con ese estado —o con cualquier otro que el build no
+  // conozca— cae al `default`: sin acciones por lote, checkbox bloqueado con su motivo. Es
+  // la degradacion segura, no una vista rota (R41). El literal se construye por piezas para
+  // no reintroducirlo en el arbol (censo de T8.1).
+  it.each([["retirado", ["en", "fulfillment"].join("_")], ["desconocido", "estado_del_futuro"]])(
+    "155/R32: junto a una orden accionable, la del estado %s queda bloqueada con su motivo",
+    async (_caso, estatusValue) => {
+      // Zona SIN cierres en las dos: lo unico que puede bloquear es la falta de acciones.
+      renderListado([
+        makeOrden("REM-prep", ZONA_LIBRE, false, "en_preparacion"),
+        makeOrden("REM-x", ZONA_LIBRE, false, estatusValue),
+      ]);
+
+      const bloqueada = await screen.findByRole("checkbox", {
+        name: /No se puede seleccionar la orden REM-x/i,
+      });
+      expect(bloqueada).toHaveAttribute("aria-disabled", "true");
+      expect(bloqueada).toHaveAccessibleName(/no tiene acciones por lote/i);
+      // Su vecina de `en_preparacion` si es seleccionable: el bloqueo es POR FILA.
+      expect(
+        screen.getByRole("checkbox", { name: "Seleccionar orden REM-prep" }),
+      ).not.toHaveAttribute("aria-disabled", "true");
+    },
+  );
+
+  it.each([["retirado", ["en", "fulfillment"].join("_")], ["desconocido", "estado_del_futuro"]])(
+    "155/R32: una pagina SOLO con ordenes en estado %s no monta ni la columna de seleccion",
+    async (_caso, estatusValue) => {
+      renderListado([makeOrden("REM-x", ZONA_LIBRE, false, estatusValue)]);
+
+      // La fila se lista (R41: la vista NO se rompe)...
+      expect(await screen.findByText("REM-x")).toBeInTheDocument();
+      // ...pero sin casilla de fila (ni habilitada ni bloqueada), sin el "seleccionar
+      // todo" de la cabecera y sin acciones por lote. La unica casilla de la vista es la
+      // del filtro por estado, que no pertenece a la tabla.
+      expect(screen.queryByRole("checkbox", { name: /orden REM-x/i })).toBeNull();
+      expect(
+        screen.queryByRole("checkbox", { name: "Seleccionar todas las órdenes" }),
+      ).toBeNull();
+      expect(screen.queryByRole("button", { name: "Generar guía" })).toBeNull();
+    },
+  );
 
   // `OrdenListItemDTO.zonaId` es `string` (no nullable), asi que el caso "sin zona"
   // solo es alcanzable como dato degradado en runtime; se cubre con "" (falsy) para

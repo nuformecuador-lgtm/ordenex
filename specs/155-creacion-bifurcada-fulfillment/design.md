@@ -389,12 +389,24 @@ de todos los llamadores.
 
 ---
 
-## 11. Preguntas abiertas
+## 11. Preguntas abiertas — CERRADAS (puerta T0.1, humano, 2026-07-29)
 
-1. **§8 — punto de enganche del manifiesto de la rama (b)**: opción A, B o C. Recomendada: **B**.
-2. Las cinco restantes están en `requirements.md > Preguntas abiertas` (eventos públicos,
-   integradores con bodega propia, arista `en_preparacion → en_bodega_central` de la 154, etiqueta en
-   el acto, y zona declarada de la feature).
+Las seis quedaron resueltas en la puerta de aprobación del **2026-07-29**. No se reabren.
+
+| # | Pregunta | Respuesta cerrada |
+| --- | --- | --- |
+| 1 | §8 — punto de enganche del manifiesto de la rama (b) | **Opción C** (la mayor de las tres). Flujo nuevo `recoleccion_tienda` en `MANIFIESTO_FLUJOS`, con el **mismo mapeo origen/destino** que `carga_masiva` (origen = tienda dueña, destino = bodega central) y **selección por `numRemisiones`** habilitada para él; **y además** manifiesto por el canal de API key, expuesto en la respuesta de `POST /api/ordenes/api-key/carga`, siguiendo el precedente de `etiquetasPdf`. Se **descartó** reusar `carga_masiva`: mentiría en la etiqueta del flujo. La recomendación del autor (B) queda superada. |
+| 2 | R43 — evento público de nacimiento | **SÍ**: se añade `por_recolectar_en_tienda` a `EVENTOS_PUBLICOS` (`lib/types/webhook-eventos.ts`). El integrador **no puede perder** el evento de nacimiento que hoy recibe. Es una ampliación **aditiva** del contrato público: nadie deja de recibir lo que ya recibía. |
+| 3 | Integradores con bodega propia | El flag de fulfillment es **de la tienda**. El rol `apiKey` cae **siempre** en la rama (b). **R21 se implementa igual**, como rama defensiva hoy inalcanzable: no se borra. |
+| 4 | Arista `en_preparacion → en_bodega_central` (#5) | **Sobrevive.** La 156, ya mergeada en `dev`, la usa como destino único de "generar guía". Deja de ser pregunta. |
+| 5 | Etiqueta en el acto para la rama (b) | **Fuera de alcance**: va en la feature 157. La 155 no la asume ni la prepara. |
+| 6 | Zona declarada de la feature | Se **secuencia backend → frontend**, como en la 156. La fase backend **no toca ningún `.tsx`**; el bloque 6 (y la parte `.tsx` del bloque 8) es de la fase frontend. |
+
+**Consecuencia operativa de #6 (declarada, no accidental):** al retirar `en_fulfillment` de
+`ORDER_STATUS_SEED` (T2.1), los mapas `Record<OrderStatusValue, …>` de `EstatusBadge.tsx` quedan con
+una clave de más y el `tsc` los señala. Es exactamente lo que promete el "Hecho cuando" de T2.1 ("el
+build de TS señala exactamente los sitios que faltan por limpiar"): la fase backend entrega ese
+señalamiento como worklist compilada de la fase frontend, y no lo silencia tocando `.tsx`.
 
 ---
 

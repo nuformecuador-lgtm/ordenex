@@ -30,12 +30,13 @@ import {
 // pasa a UN SOLO listado con barra de filtros, como el del admin en `/ordenes`.
 //
 // Qué cambia y qué no:
-//   - Una tabla con las órdenes de los CUATRO estados que ve el adminSatelite. El filtro
-//     de estado ofrece exactamente esos cuatro (ver `satelite-ordenes-filtros.ts`).
+//   - Una tabla con las órdenes de los CINCO estados que ve el adminSatelite. El filtro
+//     de estado ofrece exactamente esos cinco (ver `satelite-ordenes-filtros.ts`).
 //   - Las acciones que antes vivían en la cabecera de cada sección ahora son acciones DE
 //     LOTE sobre la selección, y se habilitan según el estado de lo seleccionado: asignar
-//     mensajero (recibidas), enviar a central (por devolver) y recuperar (devueltas). Con
-//     una selección MIXTA no se ofrece ninguna: son transiciones distintas.
+//     mensajero (recibidas), deshacer asignación (por recoger, feature 149/R35), enviar a
+//     central (por devolver) y recuperar (devueltas). Con una selección MIXTA no se ofrece
+//     ninguna: son transiciones distintas.
 //   - "Por recibir" NO entra aquí: se acepta por escáner/lote y vive en su propia sección.
 //
 // Todo el filtrado es de CLIENTE sobre las órdenes que ya llegan por props (el service ya
@@ -43,6 +44,8 @@ import {
 
 /** Estados sobre los que cada acción de lote es válida. */
 const ESTADO_ASIGNABLE = "en_bodega_satelite";
+/** Feature 149 (R35): asignada a un mensajero que aún NO la recogió; la asignación se deshace. */
+const ESTADO_POR_RECOGER = "por_recoger";
 const ESTADO_POR_DEVOLVER = "por_devolver";
 const ESTADO_DEVUELTA = "devuelta";
 
@@ -59,6 +62,12 @@ export interface SateliteOrdenesListadoProps {
   onEnviarACentral: (ordenes: RecepcionSateliteDTO[]) => void;
   /** Recupera a bodega las órdenes seleccionadas (`devuelta`). */
   onRecuperar: (ordenes: RecepcionSateliteDTO[]) => void;
+  /**
+   * Feature 149 (R35/R37): abre el modal de "Deshacer asignación" con las seleccionadas
+   * (`por_recoger`). NO depende de `puedeAsignar`: el cierre de día pendiente de un
+   * mensajero bloquea asignar, pero no revertir (Q1 CERRADA, R19).
+   */
+  onDeshacerAsignacion: (ordenes: RecepcionSateliteDTO[]) => void;
   /** `true` mientras el envío a central está en vuelo (deshabilita el botón). */
   enviandoACentral?: boolean;
   /** `true` mientras la recuperación está en vuelo. */
@@ -72,6 +81,7 @@ export function SateliteOrdenesListado({
   onAsignar,
   onEnviarACentral,
   onRecuperar,
+  onDeshacerAsignacion,
   enviandoACentral = false,
   recuperando = false,
 }: Readonly<SateliteOrdenesListadoProps>) {
@@ -233,6 +243,19 @@ export function SateliteOrdenesListado({
               disabled={estadoUnico !== ESTADO_ASIGNABLE || !puedeAsignar}
             >
               Asignar
+            </Button>
+          ) : null}
+          {/* Feature 149 (R35/R36): solo `por_recoger`. El caso (b)
+              (`en_ruta_bodega_satelite`) no llega a este listado —vive en "Por recibir"— y
+              es competencia de la bodega central. */}
+          {hayEstado(ESTADO_POR_RECOGER) ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onDeshacerAsignacion(seleccionadas)}
+              disabled={estadoUnico !== ESTADO_POR_RECOGER}
+            >
+              Deshacer asignación
             </Button>
           ) : null}
           {hayEstado(ESTADO_POR_DEVOLVER) ? (

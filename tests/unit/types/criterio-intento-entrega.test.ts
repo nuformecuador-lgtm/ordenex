@@ -92,21 +92,42 @@ describe("TRANSICIONES — supuestos del criterio contra el mapa cerrado de la 1
     expect(aDevuelta.map((a) => a.via)).toContain("gestion");
   });
 
-  // D3/R3: `incidente` NO cuenta y es TERMINAL. En ESTA rama el catalogo tiene 18 estados y no
-  // incluye `incidente` (la feature 154 vive en otra rama, ver `progress/impl_160_backend.md`),
-  // asi que el test se escribe condicional: hoy verifica la ausencia; cuando la 154 aterrice,
-  // verificara que el estado existe SIN salidas, sin que haya que tocar el test.
-  it("R3: `incidente` no tiene salidas declaradas (y hoy ni siquiera existe en el catalogo)", () => {
+  // D3/R3 — REESCRITO el 2026-07-30 por la feature 158 (Q-D), no borrado.
+  //
+  // Este caso se escribio cuando la 154 vivia en otra rama y `incidente` ni existia en el
+  // catalogo: por eso era condicional y afirmaba «cero salidas». La 154 lo dio de alta sin
+  // salidas y la 158 (Q-D) le declara UNA, la de deshacer. La afirmacion «cero salidas» YA NO
+  // es el invariante.
+  //
+  // Lo que R3 protege de verdad —y lo que este caso pasa a afirmar, MAS fuerte que antes— es
+  // que NINGUNA arista que toque `incidente` entra en el conteo de intentos, ni de entrada ni
+  // de salida. El conteo tiene exactamente dos ramas: destino `devuelta` (cualquier familia) y
+  // destino `reprogramada` con familia en `ORIGEN_TIPOS_REPROGRAMADA_INTENTO`. Si una feature
+  // futura declarara `incidente -> devuelta` o `incidente -> reprogramada (gestion)`, el
+  // escalado del cron SLA se adelantaria y con el un `cobroRechazado` real: este caso lo caza.
+  it("R3: ninguna arista que toque `incidente` entra en el conteo de intentos", () => {
     const catalogo = ORDER_STATUS_SEED as readonly string[];
-    const mapa = TRANSICIONES as unknown as Record<string, readonly unknown[]>;
-    if (catalogo.includes("incidente")) {
-      expect(mapa.incidente).toEqual([]); // TERMINAL y sin salidas
-    } else {
-      expect(mapa.incidente).toBeUndefined();
-    }
-    // En cualquiera de los dos casos: nada transiciona HACIA `incidente` desde una arista que
-    // el criterio cuente, y ninguna arista sale de el.
-    expect(aristas.filter((a) => a.origen === "incidente")).toHaveLength(0);
+    expect(catalogo).toContain("incidente"); // la 154 ya aterrizo
+
+    const tocanIncidente = aristas.filter(
+      (a) => a.origen === "incidente" || a.destino === "incidente",
+    );
+    expect(tocanIncidente.length).toBeGreaterThan(0); // el caso no es vacuo
+
+    const cuentaComoIntento = (a: { destino: string; via: string }): boolean =>
+      a.destino === "devuelta" ||
+      (a.destino === "reprogramada" &&
+        (ORIGEN_TIPOS_REPROGRAMADA_INTENTO as readonly string[]).includes(a.via));
+
+    expect(tocanIncidente.filter(cuentaComoIntento)).toEqual([]);
+  });
+
+  // La contraparte: `incidente` SIGUE siendo terminal en el sentido del negocio — su unica
+  // salida declarada es la REVERSION (deshacer), nunca una continuacion del flujo.
+  it("158/Q-D: la unica salida de `incidente` es la reversion `deshacer_gestion`", () => {
+    expect(aristas.filter((a) => a.origen === "incidente")).toEqual([
+      { origen: "incidente", destino: "en_reparto", via: "deshacer_gestion" }, // #53
+    ]);
   });
 
   // D3: `indemnizada` se planteo y se DESCARTO. No se declara, no se referencia y no se deja

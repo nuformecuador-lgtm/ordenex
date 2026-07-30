@@ -9,11 +9,11 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 // que en el admin"). Declaración PURA de los filtros que ofrece `FilterComponent`,
 // separada del componente para poder probarla sin montar nada.
 //
-// El filtro de ESTADO se limita a los cuatro estados que el adminSatelite ve en su
-// pantalla; ofrecer el catálogo completo de estatus mentiría (ninguna orden suya puede
-// estar en `por_recoger` o `entregada`). El listado, además, solo recibe órdenes de esos
-// cuatro grupos, así que la restricción es de coherencia, no una defensa: el scope real
-// lo impone el servicio, acotado a la zona del actor.
+// El filtro de ESTADO se limita a los estados que el adminSatelite ve en su pantalla;
+// ofrecer el catálogo completo de estatus mentiría (ninguna orden suya puede estar en
+// `entregada`). El listado, además, solo recibe órdenes de esos grupos, así que la
+// restricción es de coherencia, no una defensa: el scope real lo impone el servicio,
+// acotado a la zona del actor.
 
 /** Clave del filtro de estado dentro de la selección de `FilterComponent`. */
 export const CLAVE_ESTADO = "estado";
@@ -23,11 +23,14 @@ export const CLAVE_CANTON = "canton";
 export const CLAVE_DISTRITO = "distrito";
 
 /**
- * Los CUATRO estados del listado, en el orden del flujo de la bodega: lo que está
- * guardado, lo que sale, lo que va en camino y lo que volvió.
+ * Los CINCO estados del listado, en el orden del flujo de la bodega: lo que está guardado,
+ * lo que ya tiene mensajero pero sigue aquí, lo que sale, lo que va en camino y lo que
+ * volvió. Feature 149 (R35) añadió `por_recoger`: la orden asignada NO ha salido de la
+ * bodega, así que se ve en el listado y admite "Deshacer asignación".
  */
 export const ESTADOS_SATELITE = [
   { value: "en_bodega_satelite", label: "Recibidas" },
+  { value: "por_recoger", label: "Asignadas (por recoger)" },
   { value: "por_devolver", label: "Por devolver" },
   { value: "devolviendo_a_bodega_central", label: "En tránsito a central" },
   { value: "devuelta", label: "Devueltas" },
@@ -36,7 +39,7 @@ export const ESTADOS_SATELITE = [
 /** `value` de cada estado del listado, para acotar tipos y validar la selección. */
 export type EstadoSatelite = (typeof ESTADOS_SATELITE)[number]["value"];
 
-/** Etiqueta legible de un estado del listado; el propio value si no es de los cuatro. */
+/** Etiqueta legible de un estado del listado; el propio value si no es de los cinco. */
 export function etiquetaEstado(value: string): string {
   return ESTADOS_SATELITE.find((e) => e.value === value)?.label ?? value;
 }

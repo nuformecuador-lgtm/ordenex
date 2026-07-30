@@ -39,6 +39,9 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   "egreso_ajuste",
   "egreso_gasto_fijo", // feature 45: gasto fijo (lo emite el CRON, no el form manual)
   "egreso_gasto_variable", // feature 45: gasto variable (manual)
+  // Feature 158 (R2/R3): indemnizacion por incidente. La EMITE la aprobacion del cierre del
+  // dia (nunca el formulario manual de la 45, que solo admite gasto_variable/sueldo).
+  "egreso_indemnizacion",
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -114,11 +117,14 @@ export type ListarMovimientosResult = {
 
 // Feature 45 (R11) — desglose de egresos administrativos por tipo para el conjunto
 // filtrado. Derivado por agregacion (no almacenado). Montos SIEMPRE STRING (R12).
+// Feature 158 (R32): + `indemnizacion` como fila PROPIA y sumada al total. El desglose deja de
+// ser solo de egresos "administrativos": la indemnizacion es operativa.
 export type DesgloseEgresosDTO = {
   gastoFijo: string; // total egreso_gasto_fijo
   gastoVariable: string; // total egreso_gasto_variable
   sueldo: string; // total egreso_sueldo
-  total: string; // suma de los tres
+  indemnizacion: string; // total egreso_indemnizacion (feature 158/R32)
+  total: string; // suma de los cuatro
 };
 
 // ── Schemas zod de borde ──

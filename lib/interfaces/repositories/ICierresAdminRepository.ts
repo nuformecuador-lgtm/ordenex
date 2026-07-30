@@ -60,6 +60,13 @@ export interface DevolucionRechazadasConfig {
   centralZonaId: string | null; // null = ningun mensajero clasifica central (fallback satelite)
 }
 
+// Feature 158 (T1.14, R19/R22): UN monto de indemnizacion, ya validado en el borde. El monto
+// viaja como STRING (money-safe, R24) y solo se convierte a `Prisma.Decimal` al ESCRIBIR.
+export interface IndemnizacionCapturada {
+  gestionId: string;
+  monto: string; // STRING 2 dec -> Prisma.Decimal en la impl
+}
+
 // Datos de la transicion guardada (aprobar/rechazar). `motivoRechazo` = null al
 // aprobar; el motivo (ya validado) al rechazar.
 export interface ResolverCierreInput {
@@ -68,6 +75,13 @@ export interface ResolverCierreInput {
   nuevoEstado: "aprobado" | "rechazado";
   resueltoPor: string;
   motivoRechazo: string | null;
+  // Feature 158 (T1.14, R19-R23/R28): presente SOLO al aprobar -> DENTRO de la MISMA tx
+  // escribe `gestion_orden.indemnizacion` (con `cierreId` y `resultado` como GUARDIA del
+  // WHERE, no como filtro cosmetico) y emite el egreso `egreso_indemnizacion` del cierre.
+  // Ausente/vacio = el cierre no tiene incidentes (o es un rechazo, R23) -> no escribe montos
+  // ni emite movimiento. Mismo patron opcional que `liberacionSinGestionar` (109) y
+  // `devolucionRechazadas` (139).
+  indemnizaciones?: ReadonlyArray<IndemnizacionCapturada>;
   // Feature 109 (T3.1, R16-R19): presente SOLO al aprobar -> DENTRO de la MISMA tx libera las
   // ordenes `sin_gestionar` del mensajero del cierre a bodega (por zona, con `prioridad = true`),
   // via el choke point. Ausente = no hay liberacion (rechazo, o cierres sin la config).
@@ -101,6 +115,14 @@ export interface ICierresAdminRepository {
     cierreId: string,
     alcance: Alcance,
   ): Promise<{ cierre: CierreAdminResumenRow; gestiones: CierreGestionPendienteRow[] } | null>;
+  /**
+   * Feature 158 (T1.12, R19/R21/R25): ids de las gestiones con `resultado = incidente`
+   * vinculadas a ESE cierre, acotadas por el alcance en el WHERE (nunca en memoria). Es lo que
+   * el service necesita para exigir COBERTURA EXACTA de los montos al aprobar: ni falta
+   * ninguna (R19/R20) ni sobra ninguna (R21). Fuera de alcance / cierre inexistente -> lista
+   * vacia, sin distinguir (R25: no se revela nada del cierre).
+   */
+  findGestionesIncidenteDelCierre(cierreId: string, alcance: Alcance): Promise<string[]>;
   /**
    * R10-R15: transicion atomica y guardada de `solicitado` -> nuevoEstado, SOLO si
    * el cierre sigue `solicitado` y casa el alcance (updateMany con guardia). NO toca

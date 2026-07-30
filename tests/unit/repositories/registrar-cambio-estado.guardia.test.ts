@@ -409,7 +409,11 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     const sinLosNuevos = filasCatalogoEstados().filter(
       (fila) => fila.value !== "por_recolectar_en_tienda" && fila.value !== "incidente",
     );
-    expect(sinLosNuevos).toHaveLength(18); // la foto de la DB pre-154
+    // 17 y no 18: la foto de la DB pre-154 tenia 18 values, pero la feature 155 retiro uno de
+    // ellos del catalogo TS (y de la DB, con su migracion), asi que este fixture ya no lo
+    // fabrica. El invariante que el test prueba —las transiciones PREEXISTENTES siguen
+    // validando con una DB que no conoce los values nuevos— no depende del numero.
+    expect(sinLosNuevos).toHaveLength(17);
     const tx = {
       ordenHistorialEstado: { createMany },
       $queryRaw: vi.fn(async () => sinLosNuevos),
@@ -423,7 +427,12 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
         a.origen !== "incidente" &&
         a.destino !== "incidente",
     );
-    expect(previas).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo - 2);
+    // Feature 158: las aristas que TOCAN los values de la 154 pasan de 2 a 3 — la 158 anade
+    // #53 (`incidente -> en_reparto`, el deshacer). El descuento sube de 2 a 3 con ella.
+    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 3; // #43, #44 (154) + #53 (158)
+    expect(previas).toHaveLength(
+      RECUENTO_INVENTARIO.aristasFlujo - ARISTAS_QUE_TOCAN_LOS_VALUES_154,
+    );
     await appendCambioEstado(
       tx as never,
       previas.map((a, i) => entrada(a.origen, a.destino, a.via, `o${i}`)),

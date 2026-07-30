@@ -105,6 +105,7 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
       porDevolver: [], // Feature 139/R21: sin zona -> tampoco hay por_devolver
       enTransitoACentral: [], // Feature 139/R21: sin zona -> tampoco hay devolviendo_a_bodega_central
       devueltas: [], // Feature 100/T4.1/R12: sin zona -> tampoco hay por recuperar
+      asignadas: [], // Feature 149/T6.3/R35: sin zona -> tampoco hay ordenes por deshacer
       zonaNombre: null,
       sinZona: true,
     });
@@ -131,15 +132,17 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(r.devueltas).toEqual([]);
     expect(r.sinZona).toBe(false);
     expect(r.zonaNombre).toBe("Limon"); // R9: derivado de orden.zonaId
-    // Feature 139/R21 + Feature 100/R12: consulta acotada a la zona del actor con los CINCO estados
-    // relevantes (por recibir, recibidas, por_devolver [accionable], devolviendo_a_bodega_central
-    // [informativo en transito] y devuelta [por recuperar a bodega]).
+    // Feature 139/R21 + Feature 100/R12 + Feature 149/R35: consulta acotada a la zona del actor
+    // con los SEIS estados relevantes (por recibir, recibidas, por_devolver [accionable],
+    // devolviendo_a_bodega_central [informativo en transito], devuelta [por recuperar a bodega] y
+    // por_recoger [asignadas, accionable "Deshacer asignacion"]).
     expect(repo.findRecepcionSateliteByZona).toHaveBeenCalledWith(ZONA, [
       "en_ruta_bodega_satelite",
       "en_bodega_satelite",
       "por_devolver",
       "devolviendo_a_bodega_central",
       "devuelta",
+      "por_recoger",
     ]);
   });
 
@@ -383,10 +386,12 @@ describe("recibir (R11-R18)", () => {
 
   it("R13: origen distinto de en_ruta_bodega_satelite -> estado_invalido con el estado actual", async () => {
     const repo = fakeRepo({
-      findByNumGuiaForTransicion: vi.fn(async () => transicionRow({ estatusValue: "en_fulfillment" })),
+      findByNumGuiaForTransicion: vi.fn(async () =>
+        transicionRow({ estatusValue: "por_recolectar_en_tienda" }),
+      ),
     });
     const r = await newService(repo).recibir(10, ADMIN);
-    expect(r).toEqual({ status: "estado_invalido", estado: "en_fulfillment" });
+    expect(r).toEqual({ status: "estado_invalido", estado: "por_recolectar_en_tienda" });
     expect(repo.recibirEnSatelite).not.toHaveBeenCalled();
   });
 
@@ -434,7 +439,7 @@ describe("recibir (R11-R18)", () => {
   it("R18: race — UPDATE no afecta y al re-leer NO esta recibida -> conflict", async () => {
     const lecturas: (OrdenTransicionRow | null)[] = [
       transicionRow(),
-      transicionRow({ estatusValue: "en_fulfillment" }),
+      transicionRow({ estatusValue: "por_recolectar_en_tienda" }),
     ];
     let i = 0;
     const repo = fakeRepo({

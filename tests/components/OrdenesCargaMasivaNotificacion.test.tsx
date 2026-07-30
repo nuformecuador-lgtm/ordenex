@@ -53,6 +53,13 @@ vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaPreview", () => ({
   ),
 }));
 
+// Feature 159 (R12): tras la carga real el modal muestra el resumen del lote. Este
+// archivo prueba el AVISO de fin de carga (146/R39), no el resumen: se dobla para no
+// arrastrar su Server Action.
+vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumen", () => ({
+  OrdenesCargaResumen: () => <div data-testid="resumen-double" />,
+}));
+
 const { procesarEnChunksMock } = vi.hoisted(() => ({ procesarEnChunksMock: vi.fn() }));
 vi.mock("@/app/(app)/ordenes/_components/carga-masiva-chunks", async (importOriginal) => {
   const actual = await importOriginal<
@@ -218,7 +225,9 @@ describe("OrdenesCargaMasivaButton — aviso de carga terminada (R39)", () => {
 
     await user.click(screen.getByRole("button", { name: "confirmar-double" }));
 
-    await screen.findByRole("button", { name: /carga masiva/i });
+    // La carga termina en el paso "resultado" (159/R12): se espera a que se monte,
+    // en vez de a que el modal cierre.
+    await screen.findByTestId("resumen-double");
     expect(successMock).toHaveBeenCalledTimes(1);
     expect(errorMock).not.toHaveBeenCalled();
   });

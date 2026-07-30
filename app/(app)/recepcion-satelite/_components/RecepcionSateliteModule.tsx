@@ -22,6 +22,7 @@ import { EscanerRecepcion } from "./EscanerRecepcion";
 import { SateliteOrderCard } from "./SateliteOrderCard";
 import { SateliteOrdenesListado } from "./SateliteOrdenesListado";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
+import { DeshacerAsignacionSateliteModal } from "./DeshacerAsignacionSateliteModal";
 import {
   BODEGA_BLOQUEADA_TITULO,
   BODEGA_CIERRES_ABIERTOS_DETALLE,
@@ -63,6 +64,14 @@ export interface RecepcionSateliteModuleProps {
    * órdenes por recuperar.
    */
   devueltas?: RecepcionSateliteDTO[];
+  /**
+   * Feature 149/T6.4 (R35): órdenes en `por_recoger` de la zona del adminSatelite —ya
+   * asignadas a un mensajero que AÚN no las recogió—, elegibles para la acción POR LOTE
+   * "Deshacer asignación" (`por_recoger → en_bodega_satelite`). Acotadas server-side por
+   * zona; vacío = sin órdenes asignadas pendientes de recogida. El caso (b)
+   * (`en_ruta_bodega_satelite`, sección "Por recibir") NO ofrece esta acción (R36).
+   */
+  asignadas?: RecepcionSateliteDTO[];
   /** Nombre de la zona del adminSatelite (para el display, R9); `null` si no tiene. */
   zonaNombre: string | null;
   /** `true` si el adminSatelite no tiene zona asignada (R5). */
@@ -110,6 +119,7 @@ export function RecepcionSateliteModule({
   porDevolver = [],
   enTransitoACentral = [],
   devueltas = [],
+  asignadas = [],
   zonaNombre,
   sinZona,
   mensajeros,
@@ -126,6 +136,12 @@ export function RecepcionSateliteModule({
   const [modalOpen, setModalOpen] = useState(false);
   const [enviandoACentral, setEnviandoACentral] = useState(false);
   const [recuperando, setRecuperando] = useState(false);
+  // Feature 149/T6.4 (R35): lote que va al modal de "Deshacer asignación" y estado de ese
+  // modal. MISMO patrón que la asignación: el listado entrega el snapshot al pulsar.
+  const [ordenesADeshacer, setOrdenesADeshacer] = useState<
+    RecepcionSateliteDTO[]
+  >([]);
+  const [deshacerOpen, setDeshacerOpen] = useState(false);
   // Feature 148 (T13, R22): ids del ÚLTIMO envío a central que salieron `ok`. El lote
   // vive solo aquí (el service es por-orden, §9.1), así que se conserva para poder
   // ofrecer su manifiesto después del refresco. Vacío = sin descarga que ofrecer (R17).
@@ -135,12 +151,20 @@ export function RecepcionSateliteModule({
   // que recibir y el actor tiene zona; el separador del listado depende de lo mismo.
   const mostrarPorRecibir = !sinZona && porRecibir.length > 0;
 
-  // Feature 139/T3.3 + pedido humano: las CUATRO listas por estado se presentan en un
-  // solo listado filtrable. El orden de concatenación es el del flujo de la bodega, y es
-  // el que ve quien no toca los filtros.
+  // Feature 139/T3.3 + pedido humano: las listas por estado se presentan en un solo
+  // listado filtrable. El orden de concatenación es el del flujo de la bodega, y es el que
+  // ve quien no toca los filtros. Feature 149/T6.4 (R35): `asignadas` (`por_recoger`) entra
+  // como un grupo MÁS de ese listado —justo después de "Recibidas", que es de donde salen—
+  // en vez de tener sección y tabla propias: el rediseño ux fundió las secciones.
   const ordenesBodega = useMemo<RecepcionSateliteDTO[]>(
-    () => [...recibidas, ...porDevolver, ...enTransitoACentral, ...devueltas],
-    [recibidas, porDevolver, enTransitoACentral, devueltas],
+    () => [
+      ...recibidas,
+      ...asignadas,
+      ...porDevolver,
+      ...enTransitoACentral,
+      ...devueltas,
+    ],
+    [recibidas, asignadas, porDevolver, enTransitoACentral, devueltas],
   );
 
   // Feature 63: recepción EN LOTE ("Aceptar todas" / "Aceptar" por-orden), análoga
@@ -196,6 +220,25 @@ export function RecepcionSateliteModule({
     setOrdenesAAsignar([]);
     setModalOpen(false);
     router.refresh(); // relee el estado del servidor (patrón feature 33)
+  }
+
+  /**
+   * Feature 149/T6.4 (R35/R37) — abre el modal de "Deshacer asignación" con lo
+   * seleccionado. El cierre de día pendiente de un mensajero NO bloquea esta acción
+   * (Q1 CERRADA, R19): a diferencia de "Asignar", no mira `bloqueoBodega`.
+   */
+  function abrirDeshacer(ordenes: RecepcionSateliteDTO[]) {
+    if (ordenes.length === 0) return;
+    setOrdenesADeshacer(ordenes);
+    setDeshacerOpen(true);
+  }
+
+  // R38: éxito ⇒ cierra el modal y RELEE el estado del servidor (la orden desaparece de
+  // "Asignadas" y reaparece en "Recibidas").
+  function handleDeshacerSuccess() {
+    setOrdenesADeshacer([]);
+    setDeshacerOpen(false);
+    router.refresh();
   }
 
   // ---------- Feature 139/T3.3 (R13/R21) — envío por lote a bodega central ----------
@@ -349,6 +392,7 @@ export function RecepcionSateliteModule({
             void enviarSeleccionadasACentral(ordenes)
           }
           onRecuperar={(ordenes) => void recuperarSeleccionadas(ordenes)}
+          onDeshacerAsignacion={abrirDeshacer}
           enviandoACentral={enviandoACentral}
           recuperando={recuperando}
         />
@@ -365,6 +409,15 @@ export function RecepcionSateliteModule({
         mensajerosBloqueadosIds={bloqueoBodega.mensajerosConCierreIds ?? []}
         onOpenChange={setModalOpen}
         onSuccess={handleSuccess}
+      />
+
+      {/* Feature 149/T6.4 (R37/R38/R39): motivo obligatorio y traducción de errores viven
+          en el modal compartido; aquí solo se le entrega el lote y se relee al terminar. */}
+      <DeshacerAsignacionSateliteModal
+        open={deshacerOpen}
+        ordenes={ordenesADeshacer}
+        onOpenChange={setDeshacerOpen}
+        onSuccess={handleDeshacerSuccess}
       />
     </div>
   );

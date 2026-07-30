@@ -35,7 +35,7 @@ const REPOS = {
   CierresAdminRepository: CierresAdminRepository.prototype as unknown as Record<string, unknown>,
 };
 
-// Los 21 puntos del mapa (design §2), 1 por familia de transicion.
+// Los 24 puntos del mapa (design §2), 1 por familia de transicion.
 const PUNTOS_DE_ESCRITURA = [
   { n: 1, repo: "OrdenRepository", simbolo: "createManyOrdenes", origenTipo: "carga_masiva" },
   { n: 2, repo: "OrdenRepository", simbolo: "create", origenTipo: "creacion_manual" },
@@ -182,6 +182,37 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "resolverCierre",
     origenTipo: "devolucion_rechazada",
   },
+  // #23: feature 149. `OrdenRepository.deshacerAsignacionLote` REVIERTE una asignacion/ruteo antes
+  // de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite ->
+  // en_bodega_central) via el choke point, con actor = maestro/admin/adminSatelite y `origen_tipo`
+  // NUEVO `deshacer_asignacion` (25.º valor del enum tras integrar los dos de la 154, migracion
+  // `*_orden_historial_origen_deshacer_asignacion` + su down). NO enlaza gestion; destino !=
+  // devuelta ni reprogramada -> fuera de las dos ramas del criterio de intento (160/R1). NO toca
+  // num_guia ni prioridad.
+  {
+    n: 23,
+    repo: "OrdenRepository",
+    simbolo: "deshacerAsignacionLote",
+    origenTipo: "deshacer_asignacion",
+  },
+  // #24: feature 158 (Q-G). La gestion con `resultado = incidente` transiciona
+  // `en_reparto -> incidente` (arista #44, que la 154 declaro) y appendea con la familia
+  // `incidente`, NO con `gestion`: la 154 dio de alta ese valor del enum y lo dejo «declarado
+  // SIN PRODUCTOR hasta la 158», y esta feature es el productor. La familia sale por tanto de
+  // `FAMILIAS_SIN_PRODUCTOR` y entra aqui, que es lo que el propio archivo ORDENA hacer.
+  //
+  // Comparte simbolo con el #9 (`crearGestionYTransicionar`) y eso es correcto: el mapa es de
+  // FAMILIAS, no de simbolos, y ya hay precedente (el #20 y el #22 son los dos
+  // `CierresAdminRepository.resolverCierre`). El metodo elige la familia por `resultado`.
+  // NO enlaza gestion aparte (la fila nace con `gestion_orden_id` poblado) y su destino
+  // (`incidente`) NO es `devuelta` ni `reprogramada`, asi que queda fuera de las dos ramas del
+  // criterio de intento (160/R1) y no adelanta el escalado del cron SLA.
+  {
+    n: 24,
+    repo: "GestionOrdenRepository",
+    simbolo: "crearGestionYTransicionar",
+    origenTipo: "incidente",
+  },
 ] as const;
 
 // Feature 154 (R28) — FAMILIAS DECLARADAS SIN PRODUCTOR. La 154 da de alta dos valores del enum
@@ -194,9 +225,13 @@ const PUNTOS_DE_ESCRITURA = [
 // Esta lista es la EXCEPCION EXPLICITA, no un agujero: en cuanto la 157/158 instrumenten su
 // call-site, la familia debe MOVERSE de aqui a `PUNTOS_DE_ESCRITURA`, y este archivo lo obliga
 // (la union de ambos conjuntos tiene que cubrir el enum exactamente).
+//
+// Feature 158 (Q-G, 2026-07-30) — CUMPLIDO para `incidente`: su productor ya existe
+// (`crearGestionYTransicionar` con `resultado = incidente`, punto #24), asi que la familia se
+// MOVIO a `PUNTOS_DE_ESCRITURA`. Queda UNA sola excepcion, `recoleccion_tienda`, esperando a
+// la 157. La lista no se vacia ni se borra: si la 157 nunca llega, esta linea lo sigue diciendo.
 const FAMILIAS_SIN_PRODUCTOR = [
   { origenTipo: "recoleccion_tienda", productorFuturo: "feature 157 (recoleccion en tienda)" },
-  { origenTipo: "incidente", productorFuturo: "feature 158 (resultado incidente de la gestion)" },
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
@@ -217,11 +252,11 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 22 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(22);
-    // numeracion 1..22 sin huecos ni duplicados.
+  it("son EXACTAMENTE 24 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(24);
+    // numeracion 1..24 sin huecos ni duplicados.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
     ]);
   });
 
@@ -232,7 +267,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 22 origen_tipo con productor + los 2 sin productor cubren EXACTAMENTE el enum (R23)", () => {
+  it("los 24 origen_tipo con productor + el 1 sin productor cubren EXACTAMENTE el enum (R23)", () => {
     const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
     const tiposSinProductor = FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo);
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();
@@ -243,13 +278,12 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  // Feature 154 (R28): las dos familias nuevas siguen SIN productor. Si un repo empieza a
-  // emitirlas antes de que se instrumenten como punto de escritura, este test se pone rojo.
-  it("feature 154/R28: recoleccion_tienda e incidente estan declaradas y SIN productor", () => {
-    expect(FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo)).toEqual([
-      "recoleccion_tienda",
-      "incidente",
-    ]);
+  // Feature 154 (R28) + feature 158 (Q-G) — el caso NO se borra: se acota. La 154 declaro DOS
+  // familias sin productor; la 158 le pone productor a `incidente` (punto #24), asi que queda
+  // UNA. Si un repo empieza a emitir `recoleccion_tienda` antes de instrumentarla como punto
+  // de escritura, este test se pone rojo exactamente igual que antes.
+  it("feature 154/R28 + 158/Q-G: solo `recoleccion_tienda` sigue declarada y SIN productor", () => {
+    expect(FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo)).toEqual(["recoleccion_tienda"]);
     const simbolosPorFamilia: string[] = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
     for (const familia of FAMILIAS_SIN_PRODUCTOR) {
       // Declarada en el enum fuente de verdad...
@@ -260,6 +294,31 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
         `${familia.origenTipo} ya tiene productor: muevelo a PUNTOS_DE_ESCRITURA (${familia.productorFuturo})`,
       ).toHaveLength(0);
     }
+  });
+
+  // Feature 158 (Q-G, R8): la familia `incidente` YA tiene productor y esta en el mapa con su
+  // simbolo REAL. Este caso es la contraparte del de arriba: fija DONDE se emite, para que
+  // renombrar el metodo o devolver el append a `origen_tipo = gestion` rompa aqui.
+  it("feature 158/Q-G: `incidente` tiene productor (#24) y es la gestion del mensajero", () => {
+    expect(FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo) as readonly string[]).not.toContain(
+      "incidente",
+    );
+    const p24 = PUNTOS_DE_ESCRITURA.find((p) => p.n === 24);
+    expect(p24).toMatchObject({
+      repo: "GestionOrdenRepository",
+      simbolo: "crearGestionYTransicionar",
+      origenTipo: "incidente",
+    });
+    expect(typeof REPOS.GestionOrdenRepository.crearGestionYTransicionar).toBe("function");
+    // Una sola familia, un solo punto.
+    expect(PUNTOS_DE_ESCRITURA.filter((p) => p.origenTipo === "incidente")).toHaveLength(1);
+    // El MISMO simbolo sirve DOS familias (`gestion` para los 4 resultados previos e
+    // `incidente` para el quinto). Es deliberado y tiene precedente: el #20 y el #22 son los
+    // dos `CierresAdminRepository.resolverCierre`.
+    const puntosDelSimbolo = PUNTOS_DE_ESCRITURA.filter(
+      (p) => p.simbolo === "crearGestionYTransicionar",
+    ).map((p) => p.origenTipo);
+    expect([...puntosDelSimbolo].sort()).toEqual(["gestion", "incidente"]);
   });
 
   it("cada familia (origen_tipo) aparece UNA sola vez en el mapa (1 punto por familia)", () => {

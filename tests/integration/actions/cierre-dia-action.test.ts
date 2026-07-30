@@ -125,6 +125,10 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     pagoMensajero: null, // feature 39: snapshot (derivado en vivo por el service)
     ingresoBodegaRechazo: null, // feature 56: snapshot (derivado en vivo por el service)
     esRechazoSla: false, // feature 102
+    // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
+    // de resultados; los casos del incidente los sobreescriben.
+    causaIncidente: null,
+    indemnizacion: null,
     ...overrides,
   };
 }

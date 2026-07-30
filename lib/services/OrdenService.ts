@@ -23,7 +23,10 @@ import type {
   ListarOrdenesInput,
   OrdenFilterInput,
 } from "@/lib/types/orden";
-import { ordenesConfig } from "@/lib/config/ordenes";
+import { resolverDestinoCreacion } from "@/lib/services/destino-creacion";
+// Feature 151: el limite de filas de `listarCompleto`. `ordenesConfig` salio de este archivo
+// al integrar la 155: su unico consumidor aqui era el default `DEFAULT_ESTATUS_VALUE` del alta
+// manual, que la bifurcacion por bodega sustituyo por `resolverDestinoCreacion`.
 import { descargaConfig } from "@/lib/config/descarga";
 import {
   inicioDelDiaCREnUtc,
@@ -136,23 +139,23 @@ export class OrdenService implements IOrdenService {
     // --- Validacion de FKs (estatus + geografia), R26/R12/R27 ---
     const fieldErrors: Record<string, string[]> = {};
 
-    let estatusId: string;
-    if (input.estatusId !== undefined) {
-      const exists = await this.repo.existsEstatus(input.estatusId);
-      if (!exists) fieldErrors.estatusId = ["estatusId no existe en el catalogo"];
-      estatusId = input.estatusId;
-    } else {
-      // N1/R27: default en_bodega_central (configurable) resuelto por value.
-      const defaultId = await this.repo.findEstatusIdByValue(
-        ordenesConfig.DEFAULT_ESTATUS_VALUE,
-      );
-      if (defaultId === null) {
-        fieldErrors.estatusId = ["estatus por defecto no disponible (seed pendiente)"];
-        estatusId = "";
-      } else {
-        estatusId = defaultId;
-      }
+    // Feature 155 (R1/R5/R6/R13/R14) — BIFURCACION POR BODEGA. El estado inicial NO sale del
+    // payload ni de una constante de configuracion: sale del flag `fulfillment` de la tienda
+    // DUEÑA (`tiendaId`, ya resuelto arriba: la indicada en la entrada para maestro/admin, la
+    // propia para adminTienda). El alta manual dejo de aceptar un `estatusId` explicito (R5):
+    // el campo salio de `crearOrdenSchema` y, como el schema no es `.strict()`, una entrada
+    // legada que lo traiga se IGNORA en silencio en vez de romper.
+    const destino = resolverDestinoCreacion(await this.repo.findUsuarioFulfillment(tiendaId));
+
+    // R7: sin el value del catalogo no se crea NADA. El error nombra el value que falta, para
+    // que el operador sepa que sembrar (patron de la guarda previa).
+    const estatusIdResuelto = await this.repo.findEstatusIdByValue(destino.estatus);
+    if (estatusIdResuelto === null) {
+      fieldErrors.estatusId = [
+        `estatus inicial "${destino.estatus}" no disponible en el catalogo (seed pendiente)`,
+      ];
     }
+    const estatusId = estatusIdResuelto ?? "";
 
     // R14b/R12: zona/provincia/canton NOT NULL y geografia creada vacia; deben
     // existir filas referenciables. distrito opcional.
@@ -190,6 +193,9 @@ export class OrdenService implements IOrdenService {
         },
         // Feature 49/#2 (R10/R21/R23): la crea el usuario autenticado; origen null.
         { actorUsuarioId: actor.usuarioId, origenTipo: "creacion_manual" },
+        // Feature 155/R3/R8/R9/R12: la rama (b) numera en la MISMA tx; la (a) nace sin guia.
+        // El mensajero NO se asigna en ninguna de las dos (`create` nunca lo escribe, R9).
+        { conGuia: destino.conGuia },
       );
       return { status: "ok", orden };
     } catch (error) {

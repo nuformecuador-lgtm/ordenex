@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
+import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 import type {
   CambioEstadoEntrada,
   HistorialContexto,
@@ -11,10 +12,13 @@ import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { encolarGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
 import {
+  DeshacerAsignacionConflictoError,
   NumRemisionDuplicadoError,
+  type DeshacerAsignacionItem,
   type CantonRow,
   type CreateOrdenData,
   type CreateOrdenConGuiaResultRow,
+  type CreateOrdenOpciones,
   type DistritoRow,
   type EtiquetaRow,
   type GenerarGuiaDecisionData,
@@ -359,6 +363,44 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
   };
 }
 
+// Feature 16 — resumen del lote recien cargado: los datos de la orden + el
+// `estatus.value` y el nombre de su zona. Feature 159: la proyeccion perdio los
+// dos campos de mensajero sugerido; el resumen es SOLO LECTURA (design §5.1).
+const WITH_RESUMEN = {
+  select: {
+    id: true,
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    producto: true,
+    montoCobrar: true,
+    direccion: true,
+    zonaId: true,
+    estatus: { select: { value: true } },
+    zona: { select: { nombre: true } },
+  },
+} as const;
+
+type OrdenResumenRow = Prisma.OrdenGetPayload<typeof WITH_RESUMEN>;
+
+// R6/R9: mapea Decimal montoCobrar -> number|null; NO expone deletedAt/internos.
+function toResumenDTO(row: OrdenResumenRow): ResumenCargaOrdenDTO {
+  return {
+    id: row.id,
+    numGuia: row.numGuia,
+    numRemision: row.numRemision,
+    destinatario: row.destinatario,
+    telefonoDest: row.telefonoDest,
+    producto: row.producto,
+    montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
+    direccion: row.direccion,
+    estatusValue: row.estatus?.value,
+    zonaId: row.zonaId,
+    zonaNombre: row.zona.nombre,
+  };
+}
+
 // Feature 32/R1 — proyeccion para la etiqueta: los datos de la orden + los
 // NOMBRES (no IDs) de tienda/geografia via relaciones ya existentes (patron
 // WITH_ESTATUS_Y_TIENDA). `distrito` es la unica relacion opcional (R4). No
@@ -514,7 +556,11 @@ export class OrdenRepository implements IOrdenRepository {
     private readonly jobRepo: IJobRepository = new JobRepository(prisma),
   ) {}
 
-  async create(data: CreateOrdenData, historial: HistorialContexto): Promise<OrdenDTO> {
+  async create(
+    data: CreateOrdenData,
+    historial: HistorialContexto,
+    opciones: CreateOrdenOpciones = {},
+  ): Promise<OrdenDTO> {
     try {
       // Feature 49/#2 (R7/R10): create + append del historial en la MISMA transaccion.
       return await this.prisma.$transaction(async (tx) => {
@@ -537,6 +583,29 @@ export class OrdenRepository implements IOrdenRepository {
           },
           ...WITH_ESTATUS,
         });
+        // Feature 155/R3/R8/R12 — numeracion OPCIONAL en la MISMA tx que la creacion. Va
+        // ANTES del historial para que la orden ya este numerada cuando se registre su
+        // nacimiento. Idempotente por la guarda `num_guia IS NULL` (R8), misma secuencia
+        // atomica que el resto del sistema (`NUM_GUIA_GENERATOR`), y todo-o-nada con el
+        // resto de la tx (R12): si el historial o el encolado fallan, la guia se revierte
+        // con ellos y el numero no se pierde.
+        let numGuia = row.numGuia;
+        if (opciones.conGuia === true) {
+          await tx.$executeRawUnsafe(
+            `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
+            row.id,
+          );
+          // Relectura DEFENSIVA (patron `createManyOrdenesConGuia`): nunca un `as number`
+          // sobre un valor que no se ha visto.
+          const numerada = await tx.orden.findUniqueOrThrow({
+            where: { id: row.id },
+            select: { numGuia: true },
+          });
+          if (numerada.numGuia === null) {
+            throw new Error(`num_guia no asignado para la orden ${row.id}`);
+          }
+          numGuia = numerada.numGuia;
+        }
         // R10/R20: la creacion es la transicion `vacio -> estado inicial`.
         await appendCambioEstado(tx, [
           {
@@ -554,7 +623,9 @@ export class OrdenRepository implements IOrdenRepository {
           id: row.id,
           direccion: row.direccion,
         });
-        return toDTO(row);
+        // El DTO refleja el estado FINAL de la fila dentro de la tx: si se numero aqui, el
+        // llamador ve el `num_guia` (el `row` del create es previo al UPDATE).
+        return toDTO({ ...row, numGuia });
       });
     } catch (error) {
       throw mapCreateError(error, data.numRemision);
@@ -946,7 +1017,9 @@ export class OrdenRepository implements IOrdenRepository {
     data: CreateOrdenData[],
     batchSize: number,
     historial: HistorialContexto,
+    opciones: CreateOrdenOpciones = {},
   ): Promise<CreateOrdenConGuiaResultRow[]> {
+    const conGuia = opciones.conGuia ?? true; // default historico: esta ruta numera
     const creadas: CreateOrdenConGuiaResultRow[] = [];
     for (let i = 0; i < data.length; i += batchSize) {
       const chunk = data.slice(i, i + batchSize);
@@ -965,32 +1038,47 @@ export class OrdenRepository implements IOrdenRepository {
         });
         const after = await tx.orden.findMany({
           where: { numRemision: { in: chunkNums } },
-          select: { id: true, numRemision: true, estatusId: true, estatus: { select: { value: true } } },
+          // Feature 155/R11: `direccion` se anade al select para decidir POR FILA si encolar
+          // geocodificacion, exactamente como ya hacia `createManyOrdenes`. Es aditivo sobre
+          // una query que YA se ejecutaba: no anade round-trip.
+          select: {
+            id: true,
+            numRemision: true,
+            estatusId: true,
+            direccion: true,
+            estatus: { select: { value: true } },
+          },
         });
         const nuevas = after.filter((r) => !beforeIds.has(r.id));
 
         const resultado: CreateOrdenConGuiaResultRow[] = [];
         const entradas: CambioEstadoEntrada[] = [];
         for (const nueva of nuevas) {
-          // R9: idempotente — solo consume nextval() si num_guia es NULL. Secuencia por la
-          // constante del modulo (jamas se interpola entrada de usuario en el SQL).
-          await tx.$executeRawUnsafe(
-            `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
-            nueva.id,
-          );
-          const numerada = await tx.orden.findUniqueOrThrow({
-            where: { id: nueva.id },
-            select: { numGuia: true },
-          });
-          if (numerada.numGuia === null) {
-            // Guarda defensiva (patron generarGuiaLote): el UPDATE previo siempre deja
-            // num_guia asignado; se documenta en vez de mentir con `as number`.
-            throw new Error(`num_guia no asignado para la orden ${nueva.id}`);
+          // Feature 155/R21: `conGuia: false` (rama defensiva) NO toca la secuencia y devuelve
+          // `numGuia: null`. Ninguna orden consume un numero que no le corresponde.
+          let numGuia: number | null = null;
+          if (conGuia) {
+            // R9: idempotente — solo consume nextval() si num_guia es NULL. Secuencia por la
+            // constante del modulo (jamas se interpola entrada de usuario en el SQL).
+            await tx.$executeRawUnsafe(
+              `UPDATE "orden" SET num_guia = ${NUM_GUIA_GENERATOR} WHERE id = $1 AND num_guia IS NULL`,
+              nueva.id,
+            );
+            const numerada = await tx.orden.findUniqueOrThrow({
+              where: { id: nueva.id },
+              select: { numGuia: true },
+            });
+            if (numerada.numGuia === null) {
+              // Guarda defensiva (patron generarGuiaLote): el UPDATE previo siempre deja
+              // num_guia asignado; se documenta en vez de mentir con `as number`.
+              throw new Error(`num_guia no asignado para la orden ${nueva.id}`);
+            }
+            numGuia = numerada.numGuia;
           }
           resultado.push({
             ordenId: nueva.id,
             numRemision: nueva.numRemision,
-            numGuia: numerada.numGuia,
+            numGuia,
             estatusValue: nueva.estatus.value,
           });
           // R8/R20: origen null (creacion) -> destino estado inicial; origenTipo carga_api (D7).
@@ -1003,6 +1091,18 @@ export class OrdenRepository implements IOrdenRepository {
           });
         }
         await appendCambioEstado(tx, entradas);
+        // Feature 155/R11 — HUECO CERRADO. Esta ruta NO encolaba geocodificacion (comparar con
+        // `createManyOrdenes`), asi que sus ordenes nacian sin coordenadas y el gate de
+        // asignabilidad de la feature 92 las bloqueaba mas tarde sin explicacion. Mismo
+        // criterio que la otra ruta de lote: UN job por orden EFECTIVAMENTE insertada (las
+        // duplicadas saltadas por `skipDuplicates` no estan en `nuevas`), dentro de la MISMA
+        // tx del chunk, y no-op si la direccion no es geocodificable.
+        for (const nueva of nuevas) {
+          await encolarGeocodificacion(this.jobRepo, tx as unknown as JobTxClient, {
+            id: nueva.id,
+            direccion: nueva.direccion,
+          });
+        }
         return resultado;
       });
       creadas.push(...chunkCreadas);
@@ -1027,6 +1127,21 @@ export class OrdenRepository implements IOrdenRepository {
       direccion: data.direccion ?? null,
       montoCobrar: data.montoCobrar != null ? new Prisma.Decimal(data.montoCobrar) : null,
     };
+  }
+
+  // --- Feature 16: resumen del lote recien cargado (solo lectura) ---
+
+  /** R6/R8/R9/R10: filas del resumen, acotadas a tienda del actor y no borradas. */
+  async findResumenByNumRemisiones(
+    nums: string[],
+    tiendaId: string,
+  ): Promise<ResumenCargaOrdenDTO[]> {
+    if (nums.length === 0) return [];
+    const rows = await this.prisma.orden.findMany({
+      where: { numRemision: { in: nums }, tiendaId, deletedAt: null },
+      ...WITH_RESUMEN,
+    });
+    return rows.map(toResumenDTO);
   }
 
   // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
@@ -1327,7 +1442,8 @@ export class OrdenRepository implements IOrdenRepository {
     if (decisiones.length === 0) return [];
     return this.prisma.$transaction(async (tx) => {
       // Feature 49/#3 (R20): estatus de ORIGEN por orden, leido dentro de la tx antes de
-      // escribir (cada orden puede venir de en_fulfillment/en_preparacion/en_bodega_central).
+      // escribir (tras la 156 el origen admitido es uno solo, pero el historial se resuelve
+      // por lo que la fila DICE, no por lo que el service supone).
       const origenRows = await tx.orden.findMany({
         where: { id: { in: decisiones.map((d) => d.ordenId) } },
         select: { id: true, estatusId: true },
@@ -1842,6 +1958,110 @@ export class OrdenRepository implements IOrdenRepository {
         })),
       );
       return rows.length;
+    });
+  }
+
+  // --- Feature 149: deshacer asignacion / ruteo antes de la recogida ---
+
+  /**
+   * Feature 149 (design §3.2) — reversion transaccional de un lote de asignaciones/ruteos.
+   *
+   * Molde de `asignarSateliteLote` (UPDATE crudo guardado + `RETURNING` + append en la misma
+   * tx) con TRES diferencias deliberadas:
+   *   1. El `SET` LIMPIA la asignacion (`mensajero_asignado_id = NULL`, `asignado_at = NULL`)
+   *      en vez de fijarla (R8/R9/R10), y NO menciona `num_guia` (D2/R29) ni `prioridad`
+   *      (Q2/R30). Esa AUSENCIA es el mecanismo, y es aserto de test (T4.12).
+   *   2. NO hay `NOT EXISTS` sobre `cierre_dia` (Q1 CERRADA, R19): el cierre pendiente del
+   *      mensajero NO bloquea el deshacer. Ver design §8-Q1: la orden nunca se recogio, no
+   *      entra en ningun cuadre de caja, y el gate de asignacion existe para lo contrario
+   *      (que no se le APILEN ordenes a quien esta cuadrando).
+   *   3. TODO-O-NADA REAL: si alguna orden no gana su guarda, LANZA y revierte la tx entera,
+   *      en vez de dejar pasar a los ganadores (R20/R21).
+   *
+   * El destino es POR ORDEN (cada una vuelve a la bodega de la que salio), asi que se emite un
+   * UPDATE por orden en vez de uno solo con `IN (...)`. Los lotes son de decenas de ordenes,
+   * dentro de una unica transaccion.
+   */
+  async deshacerAsignacionLote(
+    items: readonly DeshacerAsignacionItem[],
+    origenEstatusIdPorOrden: ReadonlyMap<string, string>,
+    historial: HistorialContexto & { motivo: string },
+    zonaId: string | null,
+  ): Promise<number> {
+    if (items.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      const transicionadas: { ordenId: string; origenEstatusId: string; destinoId: string }[] = [];
+      const noTransicionadas: string[] = [];
+      // Pre-read del lote DENTRO de la tx: captura el `mensajero_asignado_id` PREVIO (el UPDATE
+      // lo pone a NULL). Esta feature NO lo consume; existe para el ancla TODO(146) de abajo.
+      const previos = await tx.$queryRaw<{ id: string; mensajero_asignado_id: string | null }[]>`
+        SELECT "id", "mensajero_asignado_id"
+        FROM "orden"
+        WHERE "id" IN (${Prisma.join(items.map((i) => i.ordenId))})`;
+      const mensajeroPrevioPorOrden = new Map(
+        previos.map((p) => [p.id, p.mensajero_asignado_id] as const),
+      );
+      void mensajeroPrevioPorOrden; // consumido por la feature 146 (ver ancla mas abajo)
+
+      for (const item of items) {
+        const origenEstatusId = origenEstatusIdPorOrden.get(item.ordenId);
+        if (origenEstatusId === undefined) {
+          // El service SIEMPRE provee el origen de cada item; si faltara, la orden no se toca
+          // y el lote entero se revierte por el throw de abajo (fallo CERRADO).
+          noTransicionadas.push(item.ordenId);
+          continue;
+        }
+        const rows = await tx.$queryRaw<{ id: string }[]>`
+          UPDATE "orden"
+          SET "estatus_id" = ${item.destinoEstatusId},
+              "mensajero_asignado_id" = NULL,
+              "asignado_at" = NULL,
+              "updated_at" = NOW()
+          WHERE "id" = ${item.ordenId}
+            AND "estatus_id" = ${origenEstatusId}
+            AND "deleted_at" IS NULL
+            ${zonaId === null ? Prisma.empty : Prisma.sql`AND "zona_id" = ${zonaId}`}
+          RETURNING "id"`;
+        if (rows.length === 1) {
+          transicionadas.push({
+            ordenId: item.ordenId,
+            origenEstatusId,
+            destinoId: item.destinoEstatusId,
+          });
+        } else {
+          noTransicionadas.push(item.ordenId);
+        }
+      }
+
+      // R20/R21: una sola perdedora aborta el lote COMPLETO (el throw revierte la tx).
+      if (noTransicionadas.length > 0) {
+        throw new DeshacerAsignacionConflictoError(noTransicionadas);
+      }
+
+      // R31/R32/R33: historial + webhook en la MISMA tx, solo de las ordenes transicionadas
+      // (aqui, por el todo-o-nada, son todas). El choke point valida la transicion (140).
+      await appendCambioEstado(
+        tx,
+        transicionadas.map((t) => ({
+          ordenId: t.ordenId,
+          estatusOrigenId: t.origenEstatusId, // la guarda del UPDATE garantiza este origen
+          estatusDestinoId: t.destinoId,
+          actorUsuarioId: historial.actorUsuarioId,
+          origenTipo: historial.origenTipo, // deshacer_asignacion
+          motivo: historial.motivo, // R23: el motivo del lote, ya recortado por el borde
+        })),
+      );
+
+      // TODO(146): productor de notificación al mensajero desasignado. Cuando exista la campana
+      // de notificaciones (feature 146), encolar AQUI —en esta misma tx, patrón transactional-
+      // outbox del webhook de estado— un aviso por cada orden revertida que TENIA mensajero:
+      //   destinatario = mensajeroAsignadoId ANTES del UPDATE (capturarlo del RETURNING o del
+      //                  pre-read; el UPDATE ya lo puso a NULL)
+      //   contenido    = "La orden <num_guia> fue retirada de tus asignaciones"
+      // Solo caso (a) (`por_recoger`); el caso (b) no tiene mensajero. Ver specs/149 R41.
+      // El pre-read `mensajeroPrevioPorOrden` (arriba) ya deja el destinatario disponible.
+
+      return transicionadas.length;
     });
   }
 

@@ -33,6 +33,7 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "devolucion_rechazada", // feature 139: al APROBAR el cierre, rechazada -> por_devolver/por_devolver_a_tienda (actor admin). NO enlaza gestion; fuera del criterio de intento (160)
   "recoleccion_tienda", // feature 154: el mensajero recolecta en la tienda, por_recolectar_en_tienda -> en_ruta_bodega_central (#43). SIN PRODUCTOR hasta la 157. NO enlaza gestion; fuera del criterio de intento (160)
   "incidente", // feature 154: familia propia del resultado `incidente`. SIN PRODUCTOR hasta la 158 (la arista #44 viaja via `gestion`, decision Q4). NO enlaza gestion; fuera del criterio de intento (160)
+  "deshacer_asignacion", // feature 149: reversion de la asignacion/ruteo ANTES de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite -> en_bodega_central; actor maestro/admin/adminSatelite). NO enlaza gestion; fuera del criterio de intento (160): sus destinos son de BODEGA, jamas `devuelta` ni `reprogramada`
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];
@@ -98,6 +99,16 @@ export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)
 //   Ninguno de los dos cae en NINGUNA de las dos ramas del criterio (160/R1): no transicionan
 //   HACIA `devuelta`, y tampoco producen el par (`reprogramada`, `gestion`). Dejarlos fuera es
 //   INOCUO para `contarIntentos`.
+//
+// Feature 149 (design §D5, R26): `deshacer_asignacion` TAMPOCO entra aqui, mismo criterio doble.
+//   - NUNCA enlaza una gestion: su fila nace SIEMPRE con `gestion_orden_id = NULL` por
+//     construccion (no hay gestion asociada a una asignacion deshecha; mismo caso que
+//     `liberacion_sin_gestionar` o `recuperacion_manual`), asi que la disambiguacion por-nulidad
+//     que aporta esta familia nunca se ejerceria sobre ella.
+//   - sus destinos son `en_bodega_central` / `en_bodega_satelite`, JAMAS `devuelta`, y tampoco
+//     produce el par (`reprogramada`, `gestion`): fuera de las DOS ramas del criterio (160/R1).
+// Incluirlo seria ADEMAS incorrecto: sus filas se interpretarian como "huerfanas de gestion"
+// (rama R26 del derivador), que es semanticamente falso.
 export const ORIGEN_TIPOS_CON_GESTION = [
   "gestion",
   "deshacer_gestion",

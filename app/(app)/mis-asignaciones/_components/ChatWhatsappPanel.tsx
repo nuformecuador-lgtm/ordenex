@@ -246,6 +246,12 @@ export function ChatWhatsappPanel({
         toast.info("Mensaje en cola; se reintentará el envío.");
         await mutate();
         break;
+      case "permanente":
+        // WhatsApp rechazó la petición y NO se reintenta: el motivo es accionable, así que se
+        // muestra tal cual en vez del genérico (antes caía en `default`, "sesión expiró").
+        toast.error(`WhatsApp rechazó el mensaje: ${res.detalle}`);
+        await mutate();
+        break;
       case "fuera_ventana":
         // R19/R23: la ventana se cerró; refresca para revelar el envío por plantilla.
         toast.error("La ventana de 24 h expiró. Envía una plantilla.");
@@ -276,6 +282,10 @@ export function ChatWhatsappPanel({
       case "transitorio":
         limpiarBorrador();
         toast.info("Plantilla en cola; se reintentará el envío.");
+        await mutate();
+        break;
+      case "permanente":
+        toast.error(`WhatsApp rechazó la plantilla: ${res.detalle}`);
         await mutate();
         break;
       case "not_found":

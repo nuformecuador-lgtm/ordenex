@@ -27,7 +27,7 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
     },
   );
 
-  it("el inventario de flujo tiene las 42 aristas y 39 pares unicos (A.3 + #7b + #43/#44 - #4/#6/#7c)", () => {
+  it("el inventario de flujo tiene las 42 aristas y 40 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47 + 158 #53)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     const pares = new Set(INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino}`));
     expect(pares.size).toBe(RECUENTO_INVENTARIO.paresUnicos);
@@ -47,12 +47,45 @@ describe("R6 — la guardia rechaza los pares que no estan en TRANSICIONES", () 
     ["entregada", "devuelta_a_tienda"],
     ["en_preparacion", "entregada"],
     ["devuelta_a_tienda", "en_reparto"],
-    ["por_recoger", "en_bodega_satelite"],
+    // Feature 149: `por_recoger -> en_bodega_satelite` SALE de esta lista porque paso a ser
+    // LEGAL (#47). Se sustituye por `por_recoger -> en_preparacion`, que sigue siendo ilegal
+    // (D3': la reversion normaliza a un estado de BODEGA, nunca vuelve a un estado pre-guia).
+    ["por_recoger", "en_preparacion"],
     ["sin_gestionar", "en_reparto"],
     ["devolviendo_a_bodega_central", "devuelta_a_tienda"],
   ] as const)("lanza TransicionIlegalError en %s -> %s", (origen, destino) => {
     expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
   });
+
+  // --- REGRESION 149 (R27/R28) ------------------------------------------------------------
+  it("REGRESION 149/R27: las TRES aristas de `deshacer_asignacion` (#45/#46/#47) son LEGALES", () => {
+    expect(() => assertTransicionValida("por_recoger", "en_bodega_central")).not.toThrow(); // #46
+    expect(() => assertTransicionValida("por_recoger", "en_bodega_satelite")).not.toThrow(); // #47
+    expect(() =>
+      assertTransicionValida("en_ruta_bodega_satelite", "en_bodega_central"),
+    ).not.toThrow(); // #45
+  });
+
+  it.each([
+    // D3': la normalizacion manda a BODEGA; volver a un estado pre-guia sigue prohibido.
+    //
+    // Los dos casos hacia el estado de fulfillment SE RETIRARON al integrar la feature 155:
+    // ese value ya no existe en `OrderStatusValue`, asi que la transicion no es solo ilegal,
+    // es INEXPRESABLE -- el compilador lo rechaza antes de que este test pueda ejecutarse, que
+    // es una garantia mas fuerte que la de un assert en runtime. Lo que sigue vivo es la
+    // prohibicion hacia `en_preparacion`, que si es un estado alcanzable.
+    ["por_recoger", "en_preparacion"],
+    ["en_ruta_bodega_satelite", "en_preparacion"],
+    // Ya recogida / ya recibida: el deshacer no reabre estos caminos (R16).
+    ["en_reparto", "por_recoger"],
+    ["en_reparto", "en_bodega_central"],
+    ["en_bodega_satelite", "en_ruta_bodega_satelite"],
+  ] as const)(
+    "REGRESION 149/R28: %s -> %s sigue siendo ILEGAL (la 149 no lo abrio)",
+    (origen, destino) => {
+      expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
+    },
+  );
 
   it("REGRESION 139/R9: rechazada -> devolviendo_a_tienda es ILEGAL (arista #27 retirada)", () => {
     expect(() => assertTransicionValida("rechazada", "devolviendo_a_tienda")).toThrow(
@@ -155,7 +188,7 @@ describe("R12 — el error de dominio es distinguible y no filtra PII", () => {
 // `GuiaAsignacionService` (155/156). Ver `progress/impl_154.md`.
 //
 // Feature 156: R18/R19 ya se COBRARON (#4/#6/#7c retiradas, describe "156 — BAJAS EJECUTADAS").
-// R20/R21 (#1/#3/#7b, de `en_fulfillment`) siguen diferidas a la 155.
+// R20/R21 (#1/#3/#7b, del estado de fulfillment) las cobra la 155, mas abajo.
 // ---------------------------------------------------------------------------------------------
 describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
   it("R13: es LEGAL que una orden nazca en por_recolectar_en_tienda", () => {
@@ -173,13 +206,44 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
     expect(() => assertTransicionValida("en_reparto", "incidente")).not.toThrow();
   });
 
-  it("R16: incidente no tiene NINGUNA salida legal (terminal de verdad)", () => {
-    for (const destino of ORDER_STATUS_SEED) {
+  // Feature 154/R16 + feature 158/Q-D/R13 — INVERTIDO el 2026-07-30, no borrado ni debilitado.
+  //
+  // El caso original iteraba TODO el catalogo esperando `throw` desde `incidente`. La decision
+  // Q-D abre EXACTAMENTE UNA salida (#53, el deshacer). El caso conserva su barrido completo
+  // —que es de donde saca su poder— y solo exime a esa unica arista: los otros 18 destinos del
+  // catalogo deben seguir siendo ilegales, uno por uno. Si alguien abriera una segunda salida
+  // sin declararla aqui, este caso se pone rojo exactamente igual que antes.
+  it("154/R16 + 158/R13: desde incidente SOLO es legal el deshacer (#53); el resto del catalogo sigue ilegal", () => {
+    const SALIDAS_DECLARADAS: readonly OrderStatusValue[] = ["en_reparto"]; // #53 y nada mas
+    expect(() => assertTransicionValida("incidente", "en_reparto")).not.toThrow();
+    const ilegales = ORDER_STATUS_SEED.filter((d) => !SALIDAS_DECLARADAS.includes(d));
+    // Barrido COMPLETO: 19 values del catalogo - 1 declarado = 18 destinos que deben lanzar.
+    expect(ilegales).toHaveLength(ORDER_STATUS_SEED.length - 1);
+    for (const destino of ilegales) {
       expect(
         () => assertTransicionValida("incidente", destino),
-        `incidente -> ${destino} deberia ser ilegal`,
+        `incidente -> ${destino} deberia seguir siendo ilegal`,
       ).toThrow(TransicionIlegalError);
     }
+  });
+
+  // Feature 158/R13 — los caminos NOMBRADOS por el requisito, uno a uno. No alcanza con el
+  // barrido de arriba: R13 enumera vias concretas (cron SLA, liberacion al aprobar el cierre,
+  // recuperacion manual, devolucion a la tienda, ajuste admin, reasignacion, ruteo) y este
+  // caso las nombra para que el fallo diga CUAL se abrio.
+  it.each([
+    ["cron SLA de devolucion", "en_bodega_central"],
+    ["cron SLA de devolucion (satelite)", "en_bodega_satelite"],
+    ["liberacion al aprobar el cierre", "sin_gestionar"],
+    ["devolucion a la tienda", "por_devolver"],
+    ["devolucion a la tienda (central)", "por_devolver_a_tienda"],
+    ["ajuste administrativo generico", "devolviendo_a_tienda"],
+    ["reasignacion / ruteo", "por_recoger"],
+    ["ruteo a satelite", "en_ruta_bodega_satelite"],
+    ["escalado a rechazada", "rechazada"],
+    ["marcar entregada a mano", "entregada"],
+  ] as const)("158/R13: %s NO puede sacar una orden de `incidente` (-> %s)", (_via, destino) => {
+    expect(() => assertTransicionValida("incidente", destino)).toThrow(TransicionIlegalError);
   });
 
   it("R17: la unica salida legal de por_recolectar_en_tienda es en_ruta_bodega_central", () => {
@@ -202,8 +266,8 @@ describe("154 — ALTAS del grafo v2 (R13/R14/R15)", () => {
 // de rutear; `rutearABodegaSatelite` deja de admitir `en_preparacion`).
 //
 // Los casos de abajo son los MISMOS que la 154 dejo afirmando "sigue siendo legal": no se
-// borran, se mueven a su nueva verdad ("ya no es legal"). Los de `en_fulfillment` (R20/R21 de
-// la 154, #1/#3/#7b) siguen en el describe de bajas diferidas: los retira la 155.
+// borran, se mueven a su nueva verdad ("ya no es legal"). Los del estado de fulfillment
+// (R20/R21 de la 154, #1/#3/#7b) los cobra el describe de la 155, mas abajo.
 // ---------------------------------------------------------------------------------------------
 describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea a satelite", () => {
   it.each([
@@ -225,34 +289,84 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     expect(legales).toEqual(["en_bodega_central"]);
   });
 
-  it("el mapa retira EXACTAMENTE tres aristas: 45 -> 42 (y 41 -> 39 pares)", () => {
+  it("el mapa retira las aristas de la 156 y de la 155, la 149 suma tres y la 158 una: 45 -> 42 (y 42 -> 40 pares)", () => {
     const total = Object.entries(TRANSICIONES).reduce(
       (acc, [, destinos]) => acc + (destinos as readonly unknown[]).length,
       0,
     );
     expect(total).toBe(RECUENTO_INVENTARIO.aristasFlujo);
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(42); // 45 de la 154 - #4 - #6 - #7c
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(39);
+    // 45 de la 154 - #4/#6/#7c (156) - #1/#2/#3/#7b (155) = 38, + #45/#46/#47 de la 149 = 41,
+    // + #53 de la 158 (deshacer un incidente) = 42.
+    // El invariante que protege este caso son las BAJAS (los pares retirados siguen siendo
+    // ilegales, ver los casos de arriba); el recuento absoluto se mueve con cada feature aditiva.
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(42);
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(40);
   });
 });
 
-describe("154 — BAJAS DIFERIDAS: R20/R21 se mudan a la feature 155", () => {
-  // La decision Q2 del gate (2026-07-29) supero el texto de R18-R21 de la 154: cada arista
-  // muere en el commit que retira a su ultimo productor. R18/R19 ya se cobraron arriba (156).
-  // Estas dos siguen pendientes: la 156 ya les quito el productor (`generarGuia` y
-  // `rutearABodegaSatelite` no admiten `en_fulfillment`), pero retirarlas ANTES de que la 155
-  // haga el backfill dejaria a `en_fulfillment` sin ninguna salida legal y atraparia sus
-  // ordenes vivas. Este test es el CONTRATO de esa postergacion: cuando la 155 las retire,
-  // romperá aqui y obligará a mover el caso a esa feature.
-  it.each([
-    ["R20 (#1, lo retira la 155)", "en_fulfillment", "por_recoger"],
-    ["R21 (#3/#7b, los retira la 155)", "en_fulfillment", "en_ruta_bodega_satelite"],
-  ] as const)("%s: %s -> %s SIGUE siendo legal tras la 156", (_r, origen, destino) => {
-    expect(() => assertTransicionValida(origen, destino)).not.toThrow();
+// ---------------------------------------------------------------------------------------------
+// Feature 155 — retiro del estado de fulfillment. Aqui se COBRAN las dos bajas que la 154 dejo
+// escritas (R20/R21 = #1/#3/#7b) y la que su propio inventario arrastraba (#2), junto con las
+// DOS entradas de creacion que sobraban. Los casos NO se borran: se mueven a su nueva verdad.
+//
+// El value ya no pertenece a `OrderStatusValue` (salio de `ORDER_STATUS_SEED`), asi que se
+// construye por concatenacion — mismo patron que este archivo ya usa para los nombres pre-137 —
+// y se afirma con el cast: es exactamente lo que llegaria desde la DB si una fila legada lo
+// tuviera, y la guardia debe rechazarlo igual.
+// ---------------------------------------------------------------------------------------------
+const ESTADO_RETIRADO_155 = ["en", "fulfillment"].join("_") as OrderStatusValue;
+
+describe("155/R27/R28 — BAJAS EJECUTADAS: el estado de fulfillment sale del grafo", () => {
+  it("el mapa ya no declara ninguna arista desde el estado retirado", () => {
+    expect(Object.keys(TRANSICIONES)).not.toContain(ESTADO_RETIRADO_155);
+    expect(TRANSICIONES[ESTADO_RETIRADO_155 as keyof typeof TRANSICIONES]).toBeUndefined();
   });
 
-  it("en_fulfillment conserva sus cuatro aristas (declaradas y sin productor)", () => {
-    expect(TRANSICIONES.en_fulfillment).toHaveLength(4);
+  it.each([
+    ["154/R20 = #1", "por_recoger"],
+    ["#2 (del inventario del apendice A)", "en_bodega_central"],
+    ["154/R21 = #3/#7b", "en_ruta_bodega_satelite"],
+  ] as const)(
+    "%s: la transicion hacia %s ya NO es legal desde el estado retirado",
+    (_r, destino) => {
+      expect(() => assertTransicionValida(ESTADO_RETIRADO_155, destino)).toThrow(
+        TransicionIlegalError,
+      );
+    },
+  );
+
+  it("ningun destino del catalogo es alcanzable desde el estado retirado", () => {
+    for (const destino of ORDER_STATUS_SEED) {
+      expect(() => assertTransicionValida(ESTADO_RETIRADO_155, destino)).toThrow(
+        TransicionIlegalError,
+      );
+    }
+  });
+
+  it("R31: ya NO es legal que una orden NAZCA en el estado retirado", () => {
+    expect(() => assertTransicionValida(null, ESTADO_RETIRADO_155)).toThrow(TransicionIlegalError);
+  });
+
+  it("R22: ya NO es legal que una orden NAZCA en en_ruta_bodega_central (estado fijo de la API)", () => {
+    expect(() => assertTransicionValida(null, "en_ruta_bodega_central")).toThrow(
+      TransicionIlegalError,
+    );
+  });
+
+  it("R31: ESTADOS_CREACION tiene EXACTAMENTE dos values", () => {
+    expect([...ESTADOS_CREACION]).toEqual(["en_preparacion", "por_recolectar_en_tienda"]);
+  });
+
+  it("R31: nacer en cualquier otro estado del catalogo es ilegal", () => {
+    const creacionLegal = ORDER_STATUS_SEED.filter((destino) => {
+      try {
+        assertTransicionValida(null, destino);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    expect([...creacionLegal].sort()).toEqual([...ESTADOS_CREACION].sort());
   });
 });
 
@@ -281,7 +395,11 @@ describe("154/R24 — el error de transicion ilegal no filtra nada del cliente",
 
   it("todo par ilegal que involucre los values nuevos produce un mensaje de solo dos values", () => {
     const pares: Array<[OrderStatusValue, OrderStatusValue]> = [
-      ["incidente", "en_reparto"],
+      // Feature 158/Q-D: `incidente -> en_reparto` SALE de esta lista porque paso a ser LEGAL
+      // (#53, el deshacer). Se sustituye por `incidente -> entregada`, que sigue siendo ilegal
+      // —marcar entregada una orden con el paquete perdido es justo lo que no puede pasar— y
+      // conserva la propiedad que el caso mide: un par ilegal CON el value nuevo.
+      ["incidente", "entregada"],
       ["por_recolectar_en_tienda", "entregada"],
       ["entregada", "por_recolectar_en_tienda"],
     ];
@@ -302,16 +420,56 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   it("las dos aristas nuevas estan en el inventario transcrito a mano", () => {
     const pares = INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino} (${a.via})`);
     expect(pares).toContain("por_recolectar_en_tienda->en_ruta_bodega_central (recoleccion_tienda)");
-    expect(pares).toContain("en_reparto->incidente (gestion)");
+    // Feature 158/Q-G: el `via` de #44 pasa de `gestion` a `incidente`, que es la familia que
+    // el append persiste de verdad (`origen_tipo = incidente`). El caso NO se borra: afirma la
+    // forma nueva, y si alguien devolviera el `via` a `gestion` sin tocar el append —o al
+    // reves— caeria aqui y en "el mapa declara exactamente las aristas del inventario".
+    expect(pares).toContain("en_reparto->incidente (incidente)");
+    expect(pares).not.toContain("en_reparto->incidente (gestion)");
     expect(INVENTARIO_CREACION.map((a) => a.destino)).toContain("por_recolectar_en_tienda");
   });
 
-  // Feature 156: los recuentos bajan de 45/41 a 42/39 al retirar #4/#6/#7c.
-  it("los recuentos del inventario son 42 flujo / 39 pares / 4 creacion", () => {
+  // Feature 158 (Q-D): la arista de DESHACER un incidente, tambien transcrita a mano.
+  it("158/Q-D: #53 `incidente -> en_reparto` esta en el inventario, con su familia", () => {
+    const pares = INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino} (${a.via})`);
+    expect(pares).toContain("incidente->en_reparto (deshacer_gestion)");
+    // Y es la UNICA arista del inventario que sale de `incidente`.
+    expect(INVENTARIO_FLUJO.filter((a) => a.origen === "incidente")).toHaveLength(1);
+  });
+
+  // Feature 158: las DIEZ aristas del camino del ADMIN (#48-#52 entradas, #54-#58 inversas) NO
+  // se declaran en esta entrega (design §15.2: no se declara una arista antes que su
+  // productor). Este caso lo FIJA: si alguien las adelanta sin el service que las ejecuta, se
+  // pone rojo y obliga a decidirlo a proposito, no por inercia.
+  it("158/§15.2: las 10 aristas del camino del ADMIN NO estan declaradas todavia", () => {
+    const entradasAdmin: readonly OrderStatusValue[] = [
+      "en_bodega_central",
+      "en_bodega_satelite",
+      "en_ruta_bodega_central",
+      "en_ruta_bodega_satelite",
+      "por_recoger",
+    ];
+    for (const origen of entradasAdmin) {
+      expect(
+        () => assertTransicionValida(origen, "incidente"),
+        `${origen} -> incidente no deberia existir hasta el PR del camino del admin`,
+      ).toThrow(TransicionIlegalError);
+      expect(
+        () => assertTransicionValida("incidente", origen),
+        `incidente -> ${origen} no deberia existir hasta el PR del camino del admin`,
+      ).toThrow(TransicionIlegalError);
+    }
+  });
+
+  // Feature 156: 45/41/4 -> 42/39/4 al retirar #4/#6/#7c.
+  // Feature 155: 42/39/4 -> 38/36/2 al retirar #1/#2/#3/#7b y las dos creaciones sobrantes.
+  // Feature 149: 38/36/2 -> 41/39/2 con sus tres aristas (#45/#46/#47), que son pares NUEVOS.
+  // Feature 158: 41/39/2 -> 42/40/2 con #53 (`incidente -> en_reparto`), tambien par NUEVO.
+  it("los recuentos del inventario son 42 flujo / 40 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
       aristasFlujo: 42,
-      paresUnicos: 39,
-      aristasCreacion: 4,
+      paresUnicos: 40,
+      aristasCreacion: 2,
     });
   });
 });

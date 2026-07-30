@@ -118,6 +118,11 @@ export const WITH_DETALLE = {
     evidenciaStoragePath: true,
     pagoMensajero: true, // feature 39: snapshot del pago al mensajero (reuso 38/40)
     ingresoBodegaRechazo: true, // feature 56: snapshot del ingreso de bodega por rechazo (reuso 38/40)
+    causaIncidente: true, // feature 158/R9: causa tipificada del incidente (null en el resto)
+    // ⚠️ `indemnizacion` NO se selecciona A PROPOSITO. Esta es la proyeccion de la vista EN
+    // VIVO del MENSAJERO, y la indemnizacion es plata que Ordenex paga por el paquete, no del
+    // mensajero (R17/design §7.2). Dejarla fuera de la CONSULTA —y no solo de la pantalla— es
+    // lo que impide que un cambio de UI la exponga sin que nadie lo decida.
     orden: {
       select: {
         numGuia: true,
@@ -175,6 +180,13 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
     // Feature 102/R11: la vista EN VIVO del mensajero (37) NO expone el desglose SLA -> `false`.
     // La clasificacion SLA solo la deriva el detalle del admin (38/40) desde el historial.
     esRechazoSla: false,
+    // Feature 158/R9: la causa SI viaja a la vista del mensajero — es el hecho que el mismo
+    // reporto, no un dato de dinero ni de otro actor.
+    causaIncidente: row.causaIncidente,
+    // Feature 158/R17 (design §7.2): la vista EN VIVO del mensajero NO lleva el monto. No es
+    // `null` por casualidad de que aqui las gestiones tengan `cierre_id IS NULL`: la columna
+    // ni se pide en `WITH_DETALLE`, asi que no hay nada que filtrar aguas abajo.
+    indemnizacion: null,
   };
 }
 

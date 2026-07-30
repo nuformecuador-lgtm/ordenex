@@ -1,0 +1,222 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, cleanup } from "@testing-library/react";
+
+import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
+import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
+
+// Feature 16 / 159 R12, R13, R14, R22(d) — el resumen del lote recien cargado, en
+// SOLO LECTURA.
+//
+// Procedencia: `tests/components/OrdenesCargaResumen.test.tsx` (375 lineas) se borro
+// entero con la feature 159. Se recuperan las columnas de datos, el `numRemisiones`
+// que viaja a la Server Action y la ausencia de descarga de errores; se descartan los
+// `describe` del select por fila, la preseleccion al azar, el submit y sus toasts,
+// porque probaban el flujo retirado (design.md §7).
+
+// ---------------------------------------------------------------------------
+// Mocks
+// ---------------------------------------------------------------------------
+
+const { resumenCargaMasivaMock } = vi.hoisted(() => ({ resumenCargaMasivaMock: vi.fn() }));
+
+vi.mock("@/lib/actions/carga-masiva-resumen", () => ({
+  resumenCargaMasiva: resumenCargaMasivaMock,
+}));
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+const ORDENES: ResumenCargaOrdenDTO[] = [
+  {
+    id: "o1",
+    numGuia: 1,
+    numRemision: "REM-0001",
+    destinatario: "Juan Pérez",
+    telefonoDest: "0999999999",
+    producto: "Camiseta",
+    montoCobrar: 25.9,
+    direccion: "Av. Amazonas",
+    estatusValue: "en_preparacion",
+    zonaId: "z1",
+    zonaNombre: "Norte",
+  },
+  {
+    id: "o2",
+    numGuia: 2,
+    numRemision: "REM-0002",
+    destinatario: "María Ruiz",
+    telefonoDest: "0988888888",
+    producto: "Pantalón",
+    montoCobrar: null,
+    direccion: null,
+    estatusValue: "en_preparacion",
+    zonaId: "z1",
+    zonaNombre: "Norte",
+  },
+];
+
+/** Promesa diferida controlada por el test. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: ORDENES });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+// ---------------------------------------------------------------------------
+// R12 / R22(d) — DataTable del resumen: qué se cargó, columna por columna
+// ---------------------------------------------------------------------------
+describe("OrdenesCargaResumen — DataTable del resumen (R12, R22)", () => {
+  it("renderiza una fila por orden con num_remision visible", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+
+    expect(await screen.findByText("REM-0001")).toBeInTheDocument();
+    expect(screen.getByText("REM-0002")).toBeInTheDocument();
+    expect(screen.getByText("Juan Pérez")).toBeInTheDocument();
+    expect(screen.getByText("María Ruiz")).toBeInTheDocument();
+  });
+
+  it("muestra el resto de columnas de datos de cada orden", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(screen.getByText("0999999999")).toBeInTheDocument();
+    expect(screen.getByText("Camiseta")).toBeInTheDocument();
+    expect(screen.getByText("25.90")).toBeInTheDocument();
+    expect(screen.getByText("Av. Amazonas")).toBeInTheDocument();
+    // Sin monto ni dirección se muestra el marcador de dato ausente, no vacío.
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+    // La zona de la orden es columna del resumen.
+    expect(screen.getAllByText("Norte")).toHaveLength(2);
+  });
+
+  it("invoca resumenCargaMasiva UNA vez con los numRemisiones recibidos por props", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(resumenCargaMasivaMock).toHaveBeenCalledTimes(1);
+    expect(resumenCargaMasivaMock).toHaveBeenCalledWith({
+      numRemisiones: ["REM-0001", "REM-0002"],
+    });
+  });
+
+  it("R20 (feature 143): el paso posterior a la carga real NO ofrece descargar filas con error", async () => {
+    // Decisión de gate G-1: la descarga vive SOLO en la vista previa (antes de
+    // crear nada). Este paso no lista filas con error ni ofrece exportarlas.
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(
+      screen.queryByRole("button", { name: /descargar filas con error/i }),
+    ).toBeNull();
+    const descargas = screen
+      .queryAllByRole("button")
+      .filter((b) => /descargar/i.test(b.textContent ?? ""));
+    expect(descargas).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R12, R13, R14 (159) — solo lectura: ni selector, ni acción, ni azar
+// ---------------------------------------------------------------------------
+describe("OrdenesCargaResumen — solo lectura (R12, R13, R14)", () => {
+  it("no ofrece ningún selector de mensajero ni acción de sugerir asignación", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /sugerir asignación/i }),
+    ).not.toBeInTheDocument();
+    // Ninguna acción: el paso no tiene botones propios (el "Cerrar" es del modal).
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("la tabla no tiene columna de mensajero", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+    await screen.findByText("REM-0001");
+
+    const cabeceras = screen.getAllByRole("columnheader").map((th) => th.textContent ?? "");
+    expect(cabeceras).toEqual([
+      "Nº Remisión",
+      "Destinatario",
+      "Teléfono",
+      "Producto",
+      "Estatus",
+      "Monto",
+      "Dirección",
+      "Zona",
+    ]);
+    expect(cabeceras.some((c) => /mensajero/i.test(c))).toBe(false);
+  });
+
+  it("R14: renderizar el resumen no consulta el azar en ningún punto", async () => {
+    const random = vi.spyOn(Math, "random");
+
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(random).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Estados de la carga: cargando / error / lote vacío
+// ---------------------------------------------------------------------------
+describe("OrdenesCargaResumen — estados de carga", () => {
+  it("mientras resuelve muestra el estado de carga, no el vacío", async () => {
+    const pendiente = deferred<{ status: "ok"; ordenes: ResumenCargaOrdenDTO[] }>();
+    resumenCargaMasivaMock.mockReturnValue(pendiente.promise);
+
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando");
+    expect(screen.queryByText("No hay órdenes en este lote")).not.toBeInTheDocument();
+
+    pendiente.resolve({ status: "ok", ordenes: ORDENES });
+    expect(await screen.findByText("REM-0001")).toBeInTheDocument();
+  });
+
+  it("si la acción responde forbidden, avisa del fallo y no pinta filas", async () => {
+    resumenCargaMasivaMock.mockResolvedValue({ status: "forbidden" });
+
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudo cargar el resumen de la carga masiva.",
+    );
+    expect(screen.queryByText("REM-0001")).not.toBeInTheDocument();
+  });
+
+  it("si la acción rechaza (red caída), avisa del fallo en vez de romper", async () => {
+    resumenCargaMasivaMock.mockRejectedValue(new Error("network"));
+
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudo cargar el resumen de la carga masiva.",
+    );
+  });
+
+  it("lote sin órdenes -> mensaje de vacío, sin filas", async () => {
+    resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: [] });
+
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+
+    expect(await screen.findByText("No hay órdenes en este lote")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});

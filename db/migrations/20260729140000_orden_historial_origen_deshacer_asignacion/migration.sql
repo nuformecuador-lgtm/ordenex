@@ -1,0 +1,20 @@
+-- Feature 149 (design §4, D5, R25): añade el valor `deshacer_asignacion` al enum
+-- `orden_historial_origen_tipo`. Es la clasificacion propia de la REVERSION de una
+-- asignacion/ruteo ANTES de la recogida:
+--   por_recoger              -> en_bodega_central / en_bodega_satelite  (caso a)
+--   en_ruta_bodega_satelite  -> en_bodega_central                       (caso b)
+-- actor = maestro/admin (cualquier zona) o adminSatelite (solo su zona). Distinguible en la
+-- linea de tiempo de `asignacion_bodega`, `asignacion_satelite`, `ruteo_satelite`,
+-- `generacion_guia`, `ajuste_estado` y `deshacer_gestion`.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR
+-- un valor de enum recien añadido en la misma transaccion que lo añadio (error 55P04 "unsafe
+-- use of new value of enum type") y Prisma Migrate corre cada migration.sql en una transaccion.
+-- Aqui SOLO se añade el valor; su primer uso ocurre en runtime
+-- (`OrdenRepository.deshacerAsignacionLote`), en transacciones posteriores. Mismo precedente
+-- que 20260724150000_..._devolucion_rechazada, 20260724130000_..._recepcion_bodega_central y
+-- el `cancelacion_api` de la feature 106. `IF NOT EXISTS` lo hace idempotente si se reintenta.
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva
+-- su RLS de la feature 49). No crea tablas ni columnas.
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'deshacer_asignacion';

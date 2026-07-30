@@ -81,6 +81,8 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
     createManyOrdenesConGuia: vi.fn().mockResolvedValue([]), // feature 88
+    // Feature 16: resumen del lote (solo lectura), exigido por IOrdenRepository.
+    findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
     // Feature 17: metodos de "Generar guia"/asignacion, no ejercitados aqui
     // pero exigidos por la interfaz IOrdenRepository.
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
@@ -133,6 +135,8 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
     countRechazadasSlaByTienda: vi.fn().mockResolvedValue(0),
     findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),
+    // Feature 149: writer de la reversion de asignacion, exigido por IOrdenRepository.
+    deshacerAsignacionLote: vi.fn(async () => 0),
     ...overrides,
   };
 }

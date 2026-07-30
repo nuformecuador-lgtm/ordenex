@@ -10,6 +10,7 @@ import { PlantillaMensajeRepository } from "@/lib/repositories/PlantillaMensajeR
 import { OrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
 import { EnvioPlantillaWhatsappService } from "@/lib/services/EnvioPlantillaWhatsappService";
 import { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
+import { consoleLogger } from "@/lib/services/whatsapp/chat-logger";
 import { loadWhatsappConfig } from "@/lib/config/whatsapp";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -38,7 +39,7 @@ function buildEnvioService(): EnvioPlantillaWhatsappService | null {
   return new EnvioPlantillaWhatsappService({
     ordenReader: new OrdenEnvioReader(prisma),
     plantillaRepo: new PlantillaMensajeRepository(prisma),
-    client: new WhatsappCloudClient({ config }),
+    client: new WhatsappCloudClient({ config, logger: consoleLogger }),
     idiomaPorDefecto: config.templateIdioma,
   });
 }

@@ -79,6 +79,10 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     pagoMensajero: "5.00", // feature 39/R20: snapshot del pago de la gestion
     ingresoBodegaRechazo: "0.00", // feature 56/R19: snapshot del ingreso de la gestion
     esRechazoSla: false, // feature 102
+    // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
+    // de resultados; los casos del incidente los sobreescriben.
+    causaIncidente: null,
+    indemnizacion: null,
     ...overrides,
   };
 }

@@ -63,7 +63,7 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
         id: "o1",
         numGuia: null,
         deletedAt: null,
-        estatus: { value: "en_fulfillment" },
+        estatus: { value: "en_preparacion" },
         zonaId: "z-gam",
         zona: { esCentral: true },
       },
@@ -84,7 +84,7 @@ describe("OrdenRepository.findByIdsForTransicion (R27/R29 · feature 30/R8/R9)",
     expect(rows).toEqual([
       {
         id: "o1",
-        estatusValue: "en_fulfillment",
+        estatusValue: "en_preparacion",
         numGuia: null,
         deletedAt: null,
         zonaId: "z-gam",
@@ -404,7 +404,7 @@ describe("OrdenRepository.listOrderStatus (R15/R16)", () => {
     const { prisma } = buildPrisma({
       orderStatus: {
         findMany: vi.fn().mockResolvedValue([
-          { id: "os-1", value: "en_fulfillment" },
+          { id: "os-1", value: "por_recolectar_en_tienda" },
           { id: "os-2", value: "en_preparacion" },
         ]),
       },
@@ -414,7 +414,7 @@ describe("OrdenRepository.listOrderStatus (R15/R16)", () => {
     const estatus = await repo.listOrderStatus();
 
     expect(estatus).toEqual([
-      { id: "os-1", value: "en_fulfillment" },
+      { id: "os-1", value: "por_recolectar_en_tienda" },
       { id: "os-2", value: "en_preparacion" },
     ]);
     const arg = prisma.orderStatus.findMany.mock.calls[0][0];
@@ -557,7 +557,7 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
 
   // Feature 49/#3 (R11/R7/R8): lote mixto deja historial con el destino REAL por orden
   // (por_recoger / en_bodega_central) y el origen pre-leido; en la misma tx.
-  // Feature 156: los origenes pasan de dos `en_fulfillment` a `en_bodega_central` (#8) y
+  // Feature 156: los origenes pasan de dos iguales a `en_bodega_central` (#8) y
   // `en_preparacion` (#5). Ademas de usar pares vivos, el caso GANA discriminacion: ahora
   // las dos filas difieren TANTO en origen como en destino, asi que un repo que hardcodease
   // cualquiera de los dos lados fallaria aqui.

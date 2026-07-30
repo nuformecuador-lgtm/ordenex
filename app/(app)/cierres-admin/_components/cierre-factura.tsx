@@ -412,6 +412,10 @@ const TAB_TONO: Record<CierreResultado, "success" | "warning" | "neutral"> = {
   reprogramada: "warning",
   devuelta: "neutral",
   rechazada: "neutral",
+  // Feature 158/R18: `incidente` es un cierre EN ERROR. `EstatusBadge` lo pinta `danger`,
+  // pero esta píldora no ofrece ese tono; `warning` es el más cercano y lo separa de las
+  // salidas rutinarias (devuelta/rechazada), que sí van en neutro.
+  incidente: "warning",
 };
 
 /**

@@ -33,6 +33,7 @@ import { AsignarBodegaModal } from "./AsignarBodegaModal";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
+import { DeshacerAsignacionModal } from "./DeshacerAsignacionModal";
 import {
   construirFiltrosOrdenes,
   CATALOGO_FILTROS_VACIO,
@@ -47,6 +48,7 @@ type ModalAbierto =
   | "etiquetas"
   | "devolver-tienda"
   | "recuperar-bodega"
+  | "deshacer-asignacion"
   | null;
 
 async function mensajerosFetcher() {
@@ -105,9 +107,9 @@ const ESTADO_EN_BODEGA = "en_bodega_central";
 // Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
 // ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
 // Feature 156/R28: el único apartado que asigna por lote es la BODEGA CENTRAL
-// ("Asignar mensajero"). `en_fulfillment`/`en_preparacion` salieron del conjunto
-// porque su acción ("Generar guía") ya no decide mensajero: solo numera y mueve a
-// la bodega central, así que un cierre abierto en la zona no impide numerar.
+// ("Asignar mensajero"). `en_preparacion` salió del conjunto porque su acción
+// ("Generar guía") ya no decide mensajero: solo numera y mueve a la bodega central,
+// así que un cierre abierto en la zona no impide numerar.
 // Los estados que solo imprimen etiquetas (`por_recoger`,
 // `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
 // Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas"
@@ -267,6 +269,13 @@ export function OrdenesListado({
     setOrdenesSeleccionadas(seleccionadas.filter((o) => o.zonaEsGam === true));
     setModalAbierto("recuperar-bodega");
   }
+  // Feature 149/T6.2 (R34): "Deshacer asignación" sobre el lote seleccionado
+  // (`por_recoger` o `en_ruta_bodega_satelite`). SIN filtro por zona: el maestro/admin
+  // (`esAccesoTotal`) deshace órdenes de CUALQUIER zona (R3); el service revalida.
+  function abrirDeshacer(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("deshacer-asignacion");
+  }
 
   // Revalida el listado (todas sus combinaciones de estado/página comparten el
   // prefijo de key SWR).
@@ -317,12 +326,22 @@ export function OrdenesListado({
   // ofrece, así que la paridad con esa vista ya no es total.
   function accionesDe(estatusValue: string | undefined): AccionLote[] {
     switch (estatusValue) {
-      case "en_fulfillment":
+      // Feature 155/R32: el estado interno de fulfillment en bodega salió del
+      // catálogo y con él su `case`. `en_preparacion` queda como único origen de
+      // "Generar guía"; un value fuera del catálogo cae al `default` (sin acciones
+      // por lote), que es la degradación segura.
       case "en_preparacion":
         return [{ key: "guia", label: "Generar guía", onRun: abrirGenerarGuia }];
       case "por_recoger":
+        // Feature 149/R34: caso (a) — la orden sigue en la bodega, sin recoger.
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
+          {
+            key: "deshacer",
+            label: "Deshacer asignación",
+            variant: "outline",
+            onRun: abrirDeshacer,
+          },
         ];
       case "en_bodega_central":
         return [
@@ -339,8 +358,16 @@ export function OrdenesListado({
           },
         ];
       case "en_ruta_bodega_satelite":
+        // Feature 149/R34: caso (b) — ruteada a la satélite pero aún NO recibida. Solo la
+        // ofrece esta superficie (maestro/admin): la satélite no la ve (R36).
         return [
           { key: "etiquetas", label: "Imprimir etiquetas", onRun: abrirEtiquetas },
+          {
+            key: "deshacer",
+            label: "Deshacer asignación",
+            variant: "outline",
+            onRun: abrirDeshacer,
+          },
         ];
       case "por_devolver_a_tienda":
         // Feature 139/R15: envío por lote a la tienda de origen
@@ -589,6 +616,15 @@ export function OrdenesListado({
           />
           <RecuperarABodegaModal
             open={modalAbierto === "recuperar-bodega"}
+            ordenes={ordenesSeleccionadas}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          {/* Feature 149/T6.2 (R38): éxito ⇒ `handleSuccess` cierra y revalida las tablas,
+              de modo que las órdenes revertidas desaparecen de `por_recoger` /
+              `en_ruta_bodega_satelite` y aparecen en su bodega. */}
+          <DeshacerAsignacionModal
+            open={modalAbierto === "deshacer-asignacion"}
             ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}

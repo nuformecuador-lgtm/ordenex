@@ -97,6 +97,12 @@ function ubicacionesDe(
 
   switch (flujo) {
     case "carga_masiva":
+    // Feature 155/R24: MISMO movimiento fisico que la carga masiva —el paquete sale de la
+    // tienda y va a la bodega central— para el lote que nace por la rama (b). Comparten la
+    // rama del switch a proposito: si el mapeo tuviera que divergir algun dia, divergiria
+    // aqui y en un solo sitio. Lo que NO comparten es el nombre del flujo, que es lo que
+    // aparece impreso y debe decir la verdad sobre la operacion que lo genero.
+    case "recoleccion_tienda":
       // La orden ENTRA al circuito: sale de la tienda hacia la bodega central.
       return { origen: tienda, destino: ctx.central, responsable: ctx.actor };
     case "generacion_guia":
@@ -150,11 +156,12 @@ export class ManifiestoService implements IManifiestoService {
     const rows =
       "ordenIds" in input
         ? await this.ordenRepo.findManifiestoByIds(refs)
-        : // R29: la carga masiva se acota SIEMPRE a la tienda del actor, la misma
+        : // R29: la seleccion por remision se acota SIEMPRE a la tienda del actor, la misma
           // acotacion que hace el resumen del lote (`resumenCargaMasiva`); la carga
           // masiva via sesion es exclusiva del adminTienda y su `tiendaId` ES su
           // `usuarioId`. Un actor de otro rol no alcanza remisiones ajenas: no
-          // encuentra ninguna y todas salen omitidas.
+          // encuentra ninguna y todas salen omitidas. Vale igual para `recoleccion_tienda`
+          // (feature 155), que comparte esa forma de seleccion.
           await this.ordenRepo.findManifiestoByRemisiones(refs, actor.usuarioId);
 
     const rowByRef = new Map<string, ManifiestoOrdenRow>(

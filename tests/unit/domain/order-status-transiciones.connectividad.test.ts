@@ -25,6 +25,18 @@ import {
 // frenada: si alguien retirara tambien #5, `en_preparacion` quedaria sin salida y estos tests
 // lo nombrarian. Lo mismo vale para `por_recoger` y `en_ruta_bodega_satelite`, que pierden un
 // productor pero conservan entradas por otras aristas.
+//
+// Feature 158 (Q-D, 2026-07-30): `incidente` deja de tener 0 salidas y pasa a tener UNA, la de
+// deshacer (#53). Sigue siendo TERMINAL. Los dos primeros casos de este archivo (callejon sin
+// salida / inalcanzable) NO se tocan: la 158 es puramente aditiva en aristas, asi que ningun
+// estado puede perder entradas ni salidas por su culpa.
+//
+// Feature 155 (R22/R27/R28/R31): el catalogo baja de 20 a 19 values (sale el estado de
+// fulfillment) y la creacion de 4 a 2. Este invariante es la razon por la que la 155 no podia
+// limitarse a borrar las cuatro aristas del estado retirado: hacerlo sin sacar tambien el value
+// del catalogo lo habria dejado con 0 entradas Y 0 salidas, y los dos primeros tests de este
+// archivo lo habrian nombrado. El retiro es atomico: value, aristas y entradas de creacion.
+// `en_ruta_bodega_central` deja de nacer por creacion pero conserva entrada por #30/#43.
 
 const TERMINALES = new Set<string>(ESTADOS_TERMINALES);
 const CREACION = new Set<string>(ESTADOS_CREACION);
@@ -75,14 +87,28 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
     expect(grados.get("entregada")!.salidas).toBeGreaterThan(0);
   });
 
-  // Feature 154/R16: `incidente` es TERMINAL y ademas cierra de verdad — 0 salidas. El estado
-  // `indemnizada` que se planteo en el gate para desterminarlo se DESCARTO (2026-07-29).
-  it("154/R16: incidente es terminal, alcanzable (#44) y SIN ninguna arista de salida", () => {
+  // Feature 154/R16 + feature 158/R13/R61 — INVERTIDO el 2026-07-30, no borrado.
+  //
+  // La 154 afirmaba aqui `salidas === 0` y `TRANSICIONES.incidente === []`. La decision Q-D de
+  // la 158 REVIERTE esa parte: un incidente SI se puede deshacer. Lo que el caso protege sigue
+  // siendo el MISMO invariante y con la misma fuerza — «desde `incidente` no se sale a ningun
+  // sitio salvo a lo declarado» — solo que el conjunto declarado paso de vacio a EXACTAMENTE
+  // una arista, y se enumera: cualquier salida de mas (por ejemplo, alguien reabriendo un
+  // camino de negocio hacia bodega o resucitando el `indemnizada` que el gate de la 154
+  // descarto) pone este caso en rojo igual que antes.
+  //
+  // El estado `indemnizada` NO existe y esta feature no lo declara.
+  it("154/R16 + 158/Q-D: incidente es terminal, alcanzable (#44) y su UNICA salida es el deshacer", () => {
     const grados = calcularGrados();
-    expect([...ESTADOS_TERMINALES]).toContain("incidente");
+    expect([...ESTADOS_TERMINALES]).toContain("incidente"); // sigue TERMINAL (el test exime, no prohibe)
     expect(grados.get("incidente")!.entradas).toBeGreaterThan(0);
-    expect(grados.get("incidente")!.salidas).toBe(0);
-    expect(TRANSICIONES.incidente).toEqual([]);
+    // Igualdad EXACTA sobre la lista completa: es la asercion que discrimina.
+    expect(TRANSICIONES.incidente).toEqual([
+      { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #53
+    ]);
+    expect(grados.get("incidente")!.salidas).toBe(1);
+    // El catalogo NO gana ningun estado: la 158 no toca `order_status`.
+    expect(ORDER_STATUS_SEED).not.toContain("indemnizada" as never);
   });
 
   // Feature 154/R17: `por_recolectar_en_tienda` NO es terminal: tiene entrada (creacion) y salida.
@@ -108,12 +134,12 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
 
   it("cada estado de creacion es alcanzable desde START y tiene salida de flujo", () => {
     const grados = calcularGrados();
+    // Feature 155/R22/R31: de 4 a EXACTAMENTE 2. Son las dos salidas de
+    // `resolverDestinoCreacion`; ningun otro estado del catalogo admite nacimiento.
     expect([...CREACION].sort()).toEqual(
       [
-        "en_fulfillment",
-        "en_preparacion",
-        "en_ruta_bodega_central",
-        "por_recolectar_en_tienda", // feature 154/R13
+        "en_preparacion", // rama (a): la tienda ya tiene el paquete en bodega
+        "por_recolectar_en_tienda", // rama (b): el paquete sigue en la tienda (154/R13)
       ].sort(),
     );
     for (const value of ESTADOS_CREACION) {
@@ -125,7 +151,7 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
 });
 
 describe("R16 — cobertura EXACTA del catalogo, sin exenciones", () => {
-  it("los value que aparecen en el mapa, terminales y creacion cubren los 20 del SEED", () => {
+  it("los value que aparecen en el mapa, terminales y creacion cubren los 19 del SEED", () => {
     const cubiertos = new Set<string>([...CREACION, ...TERMINALES]);
     for (const [origen, destinos] of Object.entries(TRANSICIONES)) {
       cubiertos.add(origen);
@@ -137,7 +163,7 @@ describe("R16 — cobertura EXACTA del catalogo, sin exenciones", () => {
     );
     expect(faltantes, `value del catalogo sin clasificar: ${faltantes.join(", ")}`).toEqual([]);
     expect(sobrantes, `value fuera del catalogo: ${sobrantes.join(", ")}`).toEqual([]);
-    expect(ORDER_STATUS_SEED.length).toBe(20); // feature 154: 18 -> 20
+    expect(ORDER_STATUS_SEED.length).toBe(19); // feature 154: 18 -> 20; feature 155: 20 -> 19
   });
 
   // Feature 154/R25: los DOS values nuevos quedan clasificados en el mapa. Es la contraparte

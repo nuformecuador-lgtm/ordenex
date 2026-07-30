@@ -79,8 +79,12 @@ describe("154/R31 — un estatus fuera del catalogo del build no rompe la vista"
 });
 
 describe("154 — el mapa de presentacion sigue cubriendo el catalogo EXACTO", () => {
-  it("tiene una etiqueta por cada uno de los 20 values, sin sobrantes", () => {
+  // Feature 155/R28: el catalogo baja de 20 a 19 values (primera BAJA de su historia:
+  // se retira el estado interno de fulfillment en bodega). El conteo se mantiene escrito
+  // a mano a proposito: es la red que caza un sobrante en el mapa de presentacion, que el
+  // `Record<OrderStatusValue, ...>` solo caza si FALTA una clave, no si sobra en runtime.
+  it("tiene una etiqueta por cada uno de los 19 values, sin sobrantes", () => {
     expect(Object.keys(ORDER_STATUS_LABELS).sort()).toEqual([...ORDER_STATUS_SEED].sort());
-    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(20);
+    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(19);
   });
 });
