@@ -329,7 +329,12 @@
 
 ## Fase 2 — Frontend del camino del MENSAJERO (arranca con la Fase 1 en verde)
 
-- [ ] **T2.1** Panel del mensajero (`GestionarOrdenPanel.tsx`): `type Resultado` (`:50`),
+> Bitácora: **`progress/impl_158_frontend.md`** (mapa R→test de la parte visible, 22 mutaciones
+> + la que NO discriminó y por qué, y la deuda de T2.3 con su candado de compilación).
+> `./init.sh` verde: **615 archivos / 6892 tests / 0 fallos** (baseline de la fase backend:
+> 610 / 6829). **R12, R33 y R34, que llegaban SIN test, quedan cubiertos.**
+
+- [x] **T2.1** Panel del mensajero (`GestionarOrdenPanel.tsx`): `type Resultado` (`:50`),
       `RESULTADO_BOTONES` (`:63`) con "Reportar incidente" visualmente separado, rama en `buildRaw`
       (`:227`) y `buildFormData` (`:261`), `CausaIncidenteField` + `causa-incidente-options.ts`
       (etiquetas en español para los 3 valores).
@@ -338,7 +343,7 @@
       exigiéndose; **el selector de fotos se exige en las TRES causas** (Q-B) y el copy dice qué
       fotografiar cuando no hay paquete; el envío inválido muestra error por campo sin llamar a la
       action; el envío válido manda el `FormData` esperado.
-- [ ] **T2.2** [P] Detalle del cierre del mensajero (`CierreDiaModule.tsx`): grupo "Incidentes"
+- [x] **T2.2** [P] Detalle del cierre del mensajero (`CierreDiaModule.tsx`): grupo "Incidentes"
       (sin montos de dinero).
       *Depende de:* T1.18.
       *Hecho cuando:* R18 con test de componente; el grupo vacío no se pinta (patrón actual).
@@ -346,13 +351,23 @@
       grupos y columnas del grupo `incidente` (causa, motivo, evidencias, monto o `—`).
       *Depende de:* T1.18.
       *Hecho cuando:* R18 con test de componente y las evidencias se abren firmadas como en el resto.
-- [ ] **T2.4** Sub-modal de captura al aprobar (`CierresAdminModule.tsx:187,461`), espejo del de
+      ⚠️ **PARCIAL — la casilla queda SIN marcar a propósito.** Hechas las etiquetas, el orden de
+      grupos, la rama propia de columnas (comunes + «A cobrar» + motivo + **evidencia firmada**) y
+      su test (8 casos). **Faltan la columna de CAUSA y la de MONTO**: no viajan en
+      `CierreDetalleGestion` (el DTO tampoco expone la `causaDevolucion` de la 73), así que
+      pintarlas exige tocar el DTO + el `select` del repo + el mapper del service, que es
+      **backend** y no es el alcance de la Fase 2. No se disimuló con un `—` (el dato existe
+      persistido: mentiría). El hueco queda cerrado **por el compilador**: si el DTO gana
+      `causaIncidente` o `indemnizacion`, `pnpm run typecheck` ROMPE
+      (`tests/components/CierreDetalleIncidente.test.tsx`, verificado por mutación).
+      Detalle en `progress/impl_158_frontend.md` §5.
+- [x] **T2.4** Sub-modal de captura al aprobar (`CierresAdminModule.tsx:187,461`), espejo del de
       rechazo: una fila por incidente, confirmación deshabilitada mientras falte o sea inválido algún
       monto, errores del servidor pintados por fila.
       *Depende de:* T2.3.
       *Hecho cuando:* R34 con test de componente: sin incidentes aprueba directo (R36); con
       incidentes no deja confirmar hasta completar; envía `{ cierreId, indemnizaciones }`.
-- [ ] **T2.5** [P] Wallet (`wallet-labels.ts:31` + `DesgloseEgresosCard.tsx:15`): etiqueta del
+- [x] **T2.5** [P] Wallet (`wallet-labels.ts:31` + `DesgloseEgresosCard.tsx:15`): etiqueta del
       concepto, fila "Indemnizaciones" y copy del título de la tarjeta (deja de ser sólo
       "administrativos").
       *Depende de:* T1.18.
@@ -363,6 +378,12 @@
       `progress/impl_158-incidente-indemnizacion.md`.
       *Depende de:* T2.1-T2.5.
       *Hecho cuando:* el reviewer puede recorrer cada R hasta un test concreto.
+      ⚠️ **SIN marcar porque depende de T2.3, que quedó PARCIAL.** Sus dos condiciones propias SÍ
+      se cumplen: `./init.sh` verde (**615 / 6892 / 0**, lint 0 errores) con los tests de componente
+      incluidos, y el mapa R→test de **R1-R36 completo** — R12, R33 y R34, que llegaban sin
+      cobertura, ya tienen su test citado en `progress/impl_158_frontend.md` §2 (la bitácora se
+      escribió con ese nombre, no con el del enunciado, para no pisar la de la fase backend).
+      Marcarla afirmaría que la fase cerró, y no cerró: la marca es del leader cuando T2.3 lo esté.
 
 ---
 
