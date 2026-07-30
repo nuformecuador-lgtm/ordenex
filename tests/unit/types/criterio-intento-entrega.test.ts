@@ -122,12 +122,29 @@ describe("TRANSICIONES — supuestos del criterio contra el mapa cerrado de la 1
     expect(tocanIncidente.filter(cuentaComoIntento)).toEqual([]);
   });
 
-  // La contraparte: `incidente` SIGUE siendo terminal en el sentido del negocio — su unica
-  // salida declarada es la REVERSION (deshacer), nunca una continuacion del flujo.
-  it("158/Q-D: la unica salida de `incidente` es la reversion `deshacer_gestion`", () => {
-    expect(aristas.filter((a) => a.origen === "incidente")).toEqual([
-      { origen: "incidente", destino: "en_reparto", via: "deshacer_gestion" }, // #53
+  // La contraparte: `incidente` SIGUE siendo terminal en el sentido del negocio — TODAS sus
+  // salidas declaradas son REVERSIONES (deshacer un reporte erroneo), nunca una continuacion del
+  // flujo. REESCRITO en el PR 2 de la 158, no borrado: el caso afirmaba «su UNICA salida es
+  // #53» y el camino del ADMIN suma las cinco inversas #54-#58. Lo que mide sigue siendo lo
+  // mismo y sigue siendo lo que importa AQUI: ninguna salida de `incidente` puede llevar a
+  // `devuelta` ni a `reprogramada`, que son los dos unicos destinos que cuentan como intento y
+  // que por esa via dispararian un `cobroRechazado` real.
+  it("158/Q-D/R61: todas las salidas de `incidente` son reversiones, y ninguna cuenta como intento", () => {
+    const salidas = aristas.filter((a) => a.origen === "incidente");
+    expect(salidas).toHaveLength(6);
+    expect(salidas.map((a) => a.via).sort()).toEqual([
+      "deshacer_gestion", // #53, camino del MENSAJERO
+      "incidente", // #54-#58, camino del ADMIN
+      "incidente",
+      "incidente",
+      "incidente",
+      "incidente",
     ]);
+    // Lo que este archivo protege: ningun destino de salida es de los que cuentan.
+    for (const s of salidas) {
+      expect(s.destino).not.toBe("devuelta");
+      expect(s.destino).not.toBe("reprogramada");
+    }
   });
 
   // D3: `indemnizada` se planteo y se DESCARTO. No se declara, no se referencia y no se deja
