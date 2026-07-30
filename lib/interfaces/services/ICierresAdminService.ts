@@ -68,12 +68,23 @@ export type CierreDetalleAdminServiceResult =
   | { status: "forbidden" } // rol invalido (R1)
   | { status: "no_encontrada" }; // id inexistente o de otra bodega/zona (R13)
 
+// Feature 158 (R19/R24): un monto de indemnizacion por gestion `incidente` del cierre, ya
+// validado en el borde. Money-safe: STRING de extremo a extremo.
+export interface IndemnizacionCapturadaInput {
+  gestionId: string;
+  monto: string;
+}
+
 // R10/R12-R14: aprobar un cierre `solicitado` del alcance.
+// Feature 158 (R19/R20/R21): + `validation_error` cuando los montos de indemnizacion no cubren
+// EXACTAMENTE las gestiones `incidente` del cierre (falta alguna, sobra alguna, o alguna no es
+// un incidente de ese cierre). El cierre queda en `solicitado` y no se emite ningun movimiento.
 export type AprobarCierreServiceResult =
   | { status: "ok"; cierreId: string; estado: "aprobado" }
   | { status: "forbidden" } // rol invalido (R1)
   | { status: "no_encontrada" } // id inexistente / otra bodega-zona (R13)
-  | { status: "conflict" }; // ya no esta `solicitado` (R12)
+  | { status: "conflict" } // ya no esta `solicitado` (R12)
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }; // 158/R19-R21
 
 // R11-R14: rechazar un cierre `solicitado` del alcance; motivo obligatorio (R11).
 export type RechazarCierreServiceResult =
@@ -110,8 +121,18 @@ export interface ICierresAdminService {
   /**
    * R10/R12-R15: aprueba un cierre `solicitado` del alcance (transicion guardada).
    * Ya resuelto -> conflict; fuera de alcance -> no_encontrada.
+   *
+   * Feature 158 (R19-R22): `indemnizaciones` trae UN monto por gestion `incidente` del cierre.
+   * El service exige COBERTURA EXACTA contra las gestiones reales (ni falta ni sobra) ANTES de
+   * tocar el repo; con la cobertura correcta, la escritura de los montos y la emision del
+   * egreso ocurren en la MISMA transaccion que la aprobacion. Por defecto `[]`, que es el
+   * camino RETROCOMPATIBLE de un cierre sin incidentes (R36).
    */
-  aprobarCierre(cierreId: string, actor: Actor): Promise<AprobarCierreServiceResult>;
+  aprobarCierre(
+    cierreId: string,
+    actor: Actor,
+    indemnizaciones?: ReadonlyArray<IndemnizacionCapturadaInput>,
+  ): Promise<AprobarCierreServiceResult>;
   /**
    * R11-R15: rechaza un cierre `solicitado` del alcance con motivo obligatorio
    * (transicion guardada). Motivo vacio -> validation_error; ya resuelto ->

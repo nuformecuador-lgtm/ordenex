@@ -105,6 +105,7 @@ const DESGLOSE_OK = {
     gastoFijo: "0.00",
     gastoVariable: "0.00",
     sueldo: "0.00",
+    indemnizacion: "0.00", // feature 158/R32
     total: "0.00",
   },
 };

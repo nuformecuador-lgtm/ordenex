@@ -12,6 +12,7 @@ const DESGLOSE: DesgloseEgresosDTO = {
   gastoFijo: "300.00",
   gastoVariable: "125.50",
   sueldo: "800.00",
+  indemnizacion: "0.00", // feature 158/R32: su fila y su copy los cubre T2.5
   total: "1225.50",
 };
 

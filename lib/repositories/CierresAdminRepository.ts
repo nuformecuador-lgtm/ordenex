@@ -13,6 +13,7 @@ import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/reposit
 import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWalletTiendaFeedService";
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
+import type { IWalletIndemnizacionFeedService } from "@/lib/interfaces/services/IWalletIndemnizacionFeedService";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type {
   IngresoOrdenexDTO,
@@ -272,6 +273,24 @@ function toResumenRow(r: CierreResumenRow): CierreAdminResumenRow {
   };
 }
 
+/**
+ * Feature 158 (T1.14, R21/R22) — un monto de indemnizacion apunto a una gestion que NO cumple
+ * la guardia `(id, cierreId, resultado = incidente)`: no existe, es de otro cierre, o no es un
+ * incidente. Se LANZA para que la `$transaction` haga rollback de TODO (la aprobacion, los
+ * movimientos de 42/43/44 y los montos ya escritos). Es un error de PROGRAMACION/carrera, no
+ * un resultado de dominio: el service ya valido la cobertura EXACTA antes de llamar, asi que
+ * llegar aqui significa que el cierre cambio entre la lectura y la escritura.
+ *
+ * Mensaje SIN PII (patron `TransicionIlegalError`): solo el id del cierre, ni gestiones ni
+ * montos ni actores.
+ */
+export class IndemnizacionNoAplicableError extends Error {
+  constructor(readonly cierreId: string) {
+    super(`indemnizacion no aplicable a una gestion del cierre ${cierreId}`);
+    this.name = "IndemnizacionNoAplicableError";
+  }
+}
+
 // WHERE del alcance: siempre por destino_tipo; por destino_zona_id SOLO si el alcance
 // lo acota (adminSatelite). El maestro (destinoZonaId null) ve todos los central.
 function alcanceWhere(alcance: Alcance): { destinoTipo: Alcance["destinoTipo"]; destinoZonaId?: string } {
@@ -310,7 +329,27 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     // inserta con el repo de la 42, TODO en la MISMA tx que 42/43 (atomico, R5/R7/R11/R12).
     private readonly pagoMensajeroMovimientoRepo: IPagoMensajeroMovimientoRepository,
     private readonly walletMensajeroFeedService: IWalletMensajeroFeedService,
+    // Feature 158/T1.14 (R22/R26): feed del EGRESO de indemnizacion. Se inyecta como los
+    // demas; el repo orquesta la tx, el feed construye el movimiento leyendo lo que esta misma
+    // tx acaba de escribir, y el repo de la 42 lo inserta idempotentemente.
+    private readonly walletIndemnizacionFeedService: IWalletIndemnizacionFeedService,
   ) {}
+
+  /**
+   * Feature 158 (T1.12, R19/R21/R25): ids de las gestiones `incidente` del cierre, con el
+   * ALCANCE en el WHERE (via la relacion `cierre`), nunca filtrado en memoria. Fuera de
+   * alcance -> [] (no se distingue de "el cierre no tiene incidentes": R25 no revela nada).
+   */
+  async findGestionesIncidenteDelCierre(cierreId: string, alcance: Alcance): Promise<string[]> {
+    const rows = await this.prisma.gestionOrden.findMany({
+      // MISMO predicado que la escritura del monto y que el feed: `(cierreId, incidente)`. Que
+      // los tres coincidan es lo que impide que el service exija un monto para una gestion que
+      // el feed luego no sumaria.
+      where: { cierreId, resultado: "incidente", cierre: alcanceWhere(alcance) },
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  }
 
   /** R2/R4/R5/R8/R9: cierres del alcance, mas reciente primero, totales -> string. */
   async findCierresByAlcance(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
@@ -385,6 +424,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       motivoRechazo,
       liberacionSinGestionar,
       devolucionRechazadas,
+      indemnizaciones,
     } = input;
     const alcanceGuard = alcanceWhere(alcance);
 
@@ -404,6 +444,25 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       // R5/R7: solo al APROBAR y si se aplico, construir e insertar los movimientos de
       // ingreso EN LA MISMA TX (todo-o-nada). `rechazado` no toca la wallet.
       if (res.count === 1 && nuevoEstado === "aprobado") {
+        // Feature 158 (T1.14, R19-R22/R26): PRIMERO se persiste cada monto capturado, con
+        // `cierreId` y `resultado` como GUARDIA del WHERE (no como filtro cosmetico): una
+        // gestion de OTRO cierre, o que no sea `incidente`, no se puede tarifar. Si algun
+        // `count` es 0, se LANZA -> rollback de TODO (la aprobacion incluida, R22).
+        //
+        // Va ANTES de los feeds a proposito: el feed de indemnizacion LEE de la base lo que
+        // este bloque acaba de escribir (design §9.3), asi que el orden no es estetico.
+        if (indemnizaciones && indemnizaciones.length > 0) {
+          for (const { gestionId, monto } of indemnizaciones) {
+            const aplicado = await tx.gestionOrden.updateMany({
+              where: { id: gestionId, cierreId, resultado: "incidente" },
+              data: { indemnizacion: new Prisma.Decimal(monto) }, // money-safe: STRING -> Decimal
+            });
+            if (aplicado.count !== 1) {
+              throw new IndemnizacionNoAplicableError(cierreId);
+            }
+          }
+        }
+
         const movs = await this.walletFeedService.construirMovimientosDeIngreso(cierreId, tx);
         await this.walletMovimientoRepo.crearMovimientos(tx, movs); // R6/R13: idempotente
         // Feature 43/T10 (R5/R7/R12/R13): TRAS alimentar la 42, alimenta el LEDGER por tienda
@@ -426,6 +485,18 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         // toca la caja 42 SOLO si hay egreso (P>0); si P=0 el feed no lo emite y no se re-inserta.
         if (movsMensajero.egresoCaja.length > 0) {
           await this.walletMovimientoRepo.crearMovimientos(tx, movsMensajero.egresoCaja);
+        }
+
+        // Feature 158 (T1.14, R26/R27/R28): TRAS 42/43/44, el EGRESO de indemnizacion, en la
+        // MISMA tx. El feed lee de la base la suma de `gestion_orden.indemnizacion` de las
+        // gestiones `incidente` de ESTE cierre —lo que el bloque de arriba acaba de escribir—
+        // y devuelve 0 o 1 movimiento. Cierre sin incidentes -> lista vacia -> ni una fila en
+        // 0.00 (R27). Se inserta con el repo de la 42, idempotente por el indice unico parcial
+        // `(origen_tipo, origen_id, categoria)`: reintentar la aprobacion NO duplica (R28).
+        const egresoIndemnizacion =
+          await this.walletIndemnizacionFeedService.construirEgresoIndemnizacion(cierreId, tx);
+        if (egresoIndemnizacion.length > 0) {
+          await this.walletMovimientoRepo.crearMovimientos(tx, egresoIndemnizacion);
         }
 
         // Feature 109 (T3.1, R16-R19/R22/R27): LIBERA a bodega las ordenes `sin_gestionar` del

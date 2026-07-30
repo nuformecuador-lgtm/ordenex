@@ -108,6 +108,9 @@ function makeRepo(prisma: Record<string, unknown>) {
     wallet.walletTiendaFeedService,
     wallet.pagoMensajeroMovimientoRepo,
     wallet.walletMensajeroFeedService,
+    // Feature 158/T1.14: doble del feed del egreso de indemnizacion. Sin incidentes en esta
+    // suite -> lista vacia -> no se emite ningun movimiento.
+    { construirEgresoIndemnizacion: vi.fn(async () => []) },
   );
   return { repo, wallet };
 }

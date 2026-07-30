@@ -1527,3 +1527,113 @@ describe("Feature 158 · deshacerGestion de un `incidente` (R14/R15, Q-D)", () =
     expect(repo.crearCierre).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================================
+// Feature 158 (T1.10, R16/R17/R18) — la gestion `incidente` en el detalle y en el cierre.
+// ============================================================================
+
+describe("Feature 158 · listarCierreDia con incidentes (R16/R17/R18)", () => {
+  it("R18: el `incidente` cae en su grupo PROPIO, no mezclado con los otros cuatro", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g1", resultado: "entregada", montoRecibido: "10.00" }),
+        pendiente({
+          gestionId: "g2",
+          ordenId: "o2",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+          motivo: "caja aplastada",
+        }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(Object.keys(r.grupos).sort()).toEqual(
+      ["devuelta", "entregada", "incidente", "rechazada", "reprogramada"].sort(),
+    );
+    expect(r.grupos.incidente.map((g) => g.gestionId)).toEqual(["g2"]);
+    // Y NO se cuela en ningun otro grupo.
+    expect(r.grupos.entregada.map((g) => g.gestionId)).toEqual(["g1"]);
+    expect(r.grupos.reprogramada).toEqual([]);
+    expect(r.grupos.devuelta).toEqual([]);
+    expect(r.grupos.rechazada).toEqual([]);
+  });
+
+  it("R17: un `incidente` no aporta pago al mensajero, ni ingreso de bodega, ni totales", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({
+          gestionId: "g-inc",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+          motivo: "robado",
+        }),
+      ]),
+    });
+    // Tarifa con montos ALTOS: si el incidente pagara algo, se veria.
+    const { service } = newService({
+      repo,
+      tarifa: { cobroEntregado: "5000.00", cobroRechazado: "2500.00" },
+    });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalPagoMensajero).toBe("0.00");
+    expect(r.totalIngresoBodegaRechazos).toBe("0.00");
+    expect(r.totales.general).toBe("0.00");
+    expect(r.grupos.incidente[0].pagoMensajero).toBe("0.00");
+    expect(r.grupos.incidente[0].ingresoBodegaRechazo).toBe("0.00");
+  });
+
+  it("R16: un dia SOLO con incidentes se puede cerrar (no es un dia vacio)", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g-inc", resultado: "incidente", montoRecibido: null, metodoPago: null }),
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    const listado = await service.listarCierreDia(MENSAJERO);
+    if (listado.status !== "ok") throw new Error("esperaba ok");
+    expect(listado.puedesSolicitar).toBe(true);
+
+    const solicitado = await service.solicitarCierre(MENSAJERO);
+    expect(solicitado.status).toBe("ok");
+    // R16: la gestion viaja al snapshot del cierre con su dinero en 0.00, MISMO grano que el resto.
+    const input = (repo.crearCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(input.pagoByGestionId).toEqual({ "g-inc": "0.00" });
+    expect(input.ingresoByGestionId).toEqual({ "g-inc": "0.00" });
+    expect(input.totalPagoMensajero).toBe("0.00");
+    expect(input.totalIngresoBodegaRechazos).toBe("0.00");
+  });
+
+  it("R17: mezclado con una entrega, el incidente NO altera el pago de la entrega", async () => {
+    const repo = fakeRepo({
+      findGestionesPendientes: vi.fn(async () => [
+        pendiente({ gestionId: "g1", resultado: "entregada", montoRecibido: "100.00" }),
+        pendiente({
+          gestionId: "g-inc",
+          ordenId: "o2",
+          resultado: "incidente",
+          montoRecibido: null,
+          metodoPago: null,
+        }),
+      ]),
+    });
+    const { service } = newService({ repo, tarifa: { cobroEntregado: "7.00", cobroRechazado: "3.00" } });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // Solo la entrega paga: 7.00, no 14.00.
+    expect(r.totalPagoMensajero).toBe("7.00");
+    expect(r.grupos.entregada[0].pagoMensajero).toBe("7.00");
+    expect(r.grupos.incidente[0].pagoMensajero).toBe("0.00");
+  });
+});

@@ -16,6 +16,11 @@ const FILAS: { key: keyof Omit<DesgloseEgresosDTO, "total">; label: string }[] =
   { key: "gastoFijo", label: "Gastos fijos" },
   { key: "gastoVariable", label: "Gastos variables" },
   { key: "sueldo", label: "Sueldos" },
+  // Feature 158/R32: la indemnizacion entra en el TOTAL desde el backend (T1.16), asi que su
+  // fila tiene que estar aqui o el total dejaria de cuadrar con lo que se ve. El resto de la
+  // superficie visible (copy del titulo, que deja de ser exacto porque la indemnizacion es
+  // OPERATIVA y no administrativa) es de la fase 2 (T2.5).
+  { key: "indemnizacion", label: "Indemnizaciones" },
 ];
 
 export interface DesgloseEgresosCardProps {

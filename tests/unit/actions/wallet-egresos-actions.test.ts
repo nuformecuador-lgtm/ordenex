@@ -36,7 +36,13 @@ function fakeService(overrides: Partial<IWalletEgresoService> = {}): IWalletEgre
     reversarEgreso: vi.fn(async () => ({ status: "ok" as const })),
     verDesgloseEgresos: vi.fn(async () => ({
       status: "ok" as const,
-      desglose: { gastoFijo: "0.00", gastoVariable: "0.00", sueldo: "0.00", total: "0.00" },
+      desglose: {
+        gastoFijo: "0.00",
+        gastoVariable: "0.00",
+        sueldo: "0.00",
+        indemnizacion: "0.00", // feature 158/R32
+        total: "0.00",
+      },
     })),
     ...overrides,
   };

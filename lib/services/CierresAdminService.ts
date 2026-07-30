@@ -16,6 +16,7 @@ import type {
   CierreDetalleAdminServiceResult,
   ForzarSolicitudVencidoServiceResult,
   ICierresAdminService,
+  IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
   RechazarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
@@ -33,6 +34,14 @@ const ROL_ADMIN_SATELITE = "adminSatelite";
 
 // Mensaje accionable cuando falta el motivo de rechazo (R11).
 const MSG_MOTIVO_REQUERIDO = "El motivo de rechazo es obligatorio.";
+
+// Feature 158 (R19/R20/R21) — mensajes accionables de la captura de indemnizaciones. Texto
+// fijo i18n-ready y SIN PII: nombran la gestion por su id (que el admin ya tiene en pantalla),
+// nunca al mensajero, al destinatario ni al monto.
+const MSG_INDEMNIZACION_FALTANTE = "Falta el monto de indemnizacion de este incidente.";
+const MSG_INDEMNIZACION_AJENA =
+  "Este monto no corresponde a un incidente de este cierre.";
+const MSG_INDEMNIZACION_DUPLICADA = "Hay dos montos para el mismo incidente.";
 
 // Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
 // aprobar (destinos de bodega por zona de la orden).
@@ -189,10 +198,30 @@ export class CierresAdminService implements ICierresAdminService {
     };
   }
 
-  async aprobarCierre(cierreId: string, actor: Actor): Promise<AprobarCierreServiceResult> {
+  async aprobarCierre(
+    cierreId: string,
+    actor: Actor,
+    // Feature 158 (R19/R36): default `[]` = el contrato de la 38 intacto. Un cierre SIN
+    // incidentes se aprueba exactamente como hoy; uno CON incidentes y lista vacia cae en la
+    // guardia de cobertura de abajo, asi que el default no abre ningun agujero.
+    indemnizaciones: ReadonlyArray<IndemnizacionCapturadaInput> = [],
+  ): Promise<AprobarCierreServiceResult> {
     const scope = await this.resolveAlcance(actor);
     if (scope.status === "forbidden") return { status: "forbidden" }; // R1
     if (scope.status === "sinZona") return { status: "no_encontrada" }; // R13
+
+    // Feature 158 (R19/R20/R21/R25) — COBERTURA EXACTA, ANTES de tocar el repo. El conjunto de
+    // `gestionId` recibidos debe ser IGUAL al de gestiones `incidente` del cierre, leidas
+    // DENTRO del alcance ya resuelto (R25: fuera de alcance devuelve [], sin revelar nada).
+    // Falta alguna -> error por esa gestion (R19/R20); sobra alguna, o no es un incidente de
+    // este cierre -> error por esa entrada (R21). En los dos casos el cierre queda
+    // `solicitado` y NO se emite ningun movimiento.
+    const errorCobertura = await this.validarCoberturaIndemnizaciones(
+      cierreId,
+      scope.alcance,
+      indemnizaciones,
+    );
+    if (errorCobertura !== null) return errorCobertura;
 
     // Feature 109 (T3.1, R16): resuelve la config de la LIBERACION de `sin_gestionar` (estatus
     // destino por zona + zona central). Se pasa SOLO al aprobar; el repo la corre DENTRO de la tx,
@@ -240,10 +269,56 @@ export class CierresAdminService implements ICierresAdminService {
       motivoRechazo: null,
       liberacionSinGestionar, // feature 109/R16: libera `sin_gestionar` en la misma tx
       devolucionRechazadas, // feature 139/R5: dispara la devolucion de `rechazada` en la misma tx
+      // Feature 158/R22: los montos ya con cobertura EXACTA verificada. El repo los escribe
+      // GUARDADOS por `(cierreId, resultado)` y emite el egreso en la MISMA tx.
+      indemnizaciones,
     });
     if (res === "updated") return { status: "ok", cierreId, estado: "aprobado" };
     if (res === "conflict") return { status: "conflict" }; // R12
     return { status: "no_encontrada" }; // fuera_de_alcance (R13)
+  }
+
+  /**
+   * Feature 158 (R19/R20/R21) — COBERTURA EXACTA de los montos de indemnizacion. Devuelve
+   * `null` si el conjunto de `gestionId` recibidos es IGUAL al de gestiones `incidente` del
+   * cierre; si no, un `validation_error` con un error POR GESTION (la UI los pinta por fila).
+   *
+   * Se resuelve aqui y no en el borde a proposito: el borde (zod) no sabe que gestiones tiene
+   * ese cierre. Y va ANTES de llamar al repo para que un envio incompleto NO llegue a abrir la
+   * transaccion de aprobacion.
+   */
+  private async validarCoberturaIndemnizaciones(
+    cierreId: string,
+    alcance: Alcance,
+    indemnizaciones: ReadonlyArray<IndemnizacionCapturadaInput>,
+  ): Promise<{ status: "validation_error"; fieldErrors: Record<string, string[]> } | null> {
+    const delCierre = await this.repo.findGestionesIncidenteDelCierre(cierreId, alcance);
+    // R36: sin incidentes y sin montos, el camino de hoy queda INTACTO (ni una consulta mas
+    // aguas abajo, ni un campo nuevo obligatorio).
+    if (delCierre.length === 0 && indemnizaciones.length === 0) return null;
+
+    const esperados = new Set(delCierre);
+    const fieldErrors: Record<string, string[]> = {};
+    const vistos = new Set<string>();
+
+    for (const { gestionId } of indemnizaciones) {
+      if (vistos.has(gestionId)) {
+        // R21: dos montos para la misma gestion. Sin esto, el ultimo ganaria en silencio.
+        fieldErrors[gestionId] = [MSG_INDEMNIZACION_DUPLICADA];
+        continue;
+      }
+      vistos.add(gestionId);
+      // R21: una gestion que no pertenece a este cierre, o cuyo resultado no es `incidente`,
+      // no esta en `esperados` (el repo filtra por las dos cosas).
+      if (!esperados.has(gestionId)) fieldErrors[gestionId] = [MSG_INDEMNIZACION_AJENA];
+    }
+    // R19/R20: falta el monto de alguna gestion `incidente` del cierre.
+    for (const gestionId of delCierre) {
+      if (!vistos.has(gestionId)) fieldErrors[gestionId] = [MSG_INDEMNIZACION_FALTANTE];
+    }
+
+    if (Object.keys(fieldErrors).length === 0) return null;
+    return { status: "validation_error", fieldErrors };
   }
 
   async rechazarCierre(

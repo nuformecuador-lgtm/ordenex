@@ -18,6 +18,7 @@ import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWallet
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrderStatusValue } from "@/lib/types/order-status";
 import { filasCatalogoEstados, idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 
 // Feature 139 (T4.1, R5 + R13-R18) — RECORRIDO COMPLETO de la devolucion de RECHAZADAS, de punta a
 // punta y con los SERVICES REALES encadenados (no se re-testea cada uno por separado: eso ya lo
@@ -273,6 +274,13 @@ function makeDb() {
         return { count: data.length };
       },
     },
+    // Feature 158: la aprobacion consulta las gestiones `incidente` del cierre (guardia de
+    // cobertura de indemnizaciones) y las tarifa dentro de la tx. En ESTE recorrido no hay
+    // ninguna: el doble responde vacio y el camino de la 139 queda intacto (R64).
+    gestionOrden: {
+      findMany: async () => [] as unknown[],
+      updateMany: async () => ({ count: 0 }),
+    },
   };
 
   // `tx === client`: el doble no simula rollback (ningun caso de este recorrido lo ejercita; la
@@ -342,6 +350,9 @@ function makeServices(db: Db) {
     wallet.walletTiendaFeedService,
     wallet.pagoMensajeroMovimientoRepo,
     wallet.walletMensajeroFeedService,
+    // Feature 158: feed del egreso de indemnizacion. Este flujo no tiene incidentes, asi que
+    // el feed REAL devuelve lista vacia y no emite nada.
+    new WalletIndemnizacionFeedService(),
   );
   const signedUrls = {
     createSignedUrl: vi.fn(),

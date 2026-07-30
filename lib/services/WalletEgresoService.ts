@@ -113,16 +113,23 @@ export class WalletEgresoService implements IWalletEgresoService {
 
     // R11: desglose por tipo del conjunto filtrado (mismos filtros de fecha que el libro),
     // derivado por agregacion. Money-safe: todo STRING (nunca number).
-    const { gastoFijo, gastoVariable, sueldo } = await this.repo.agregarPorCategoria({
-      tipo: input.tipo,
-      categoria: input.categoria,
-      desde: input.desde,
-      hasta: input.hasta,
-    });
+    const { gastoFijo, gastoVariable, sueldo, indemnizacion } =
+      await this.repo.agregarPorCategoria({
+        tipo: input.tipo,
+        categoria: input.categoria,
+        desde: input.desde,
+        hasta: input.hasta,
+      });
+    // Feature 158/R32: la indemnizacion entra en el total. Suma con Prisma.Decimal (nunca
+    // number/parseFloat) y sale como STRING escala 2, igual que los otros tres conceptos.
     const total = new Prisma.Decimal(gastoFijo)
       .add(new Prisma.Decimal(gastoVariable))
       .add(new Prisma.Decimal(sueldo))
+      .add(new Prisma.Decimal(indemnizacion))
       .toFixed(2);
-    return { status: "ok", desglose: { gastoFijo, gastoVariable, sueldo, total } };
+    return {
+      status: "ok",
+      desglose: { gastoFijo, gastoVariable, sueldo, indemnizacion, total },
+    };
   }
 }

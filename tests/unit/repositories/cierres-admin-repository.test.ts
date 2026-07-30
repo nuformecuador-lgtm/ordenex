@@ -10,6 +10,7 @@ import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWallet
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import type { IWalletIndemnizacionFeedService } from "@/lib/interfaces/services/IWalletIndemnizacionFeedService";
 
 // Feature 38 — tests unit del CierresAdminRepository (mockea Prisma, sin DB real,
 // patron cierre-dia-repository.test.ts). Cubre R2/R4/R5 (findCierresByAlcance con
@@ -53,6 +54,11 @@ function buildWalletDeps() {
   const walletMensajeroFeedService: IWalletMensajeroFeedService = {
     construirMovimientosDePago: vi.fn().mockResolvedValue({ libro: [], egresoCaja: [] }),
   };
+  // Feature 158/T1.14: doble del feed del egreso de indemnizacion (misma tx que 42/43/44).
+  // Por defecto vacio: los cierres de esta suite no tienen incidentes.
+  const walletIndemnizacionFeedService: IWalletIndemnizacionFeedService = {
+    construirEgresoIndemnizacion: vi.fn().mockResolvedValue([]),
+  };
   return {
     walletMovimientoRepo,
     walletFeedService,
@@ -60,6 +66,7 @@ function buildWalletDeps() {
     walletTiendaFeedService,
     pagoMensajeroMovimientoRepo,
     walletMensajeroFeedService,
+    walletIndemnizacionFeedService,
   };
 }
 
@@ -81,6 +88,7 @@ function makeRepo(
     wallet.walletTiendaFeedService,
     wallet.pagoMensajeroMovimientoRepo,
     wallet.walletMensajeroFeedService,
+    wallet.walletIndemnizacionFeedService,
   );
   return { repo, wallet };
 }

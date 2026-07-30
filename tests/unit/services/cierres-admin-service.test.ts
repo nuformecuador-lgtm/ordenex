@@ -20,6 +20,7 @@ import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlPro
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 
 // Feature 38 — tests unit del CierresAdminService (dobles de repo/zona/orden/
 // signedUrls, sin DB/red). Cubre R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11,R12,R13,R16.
@@ -86,6 +87,9 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     resolverCierre: vi.fn(async () => "updated" as const),
     // Feature 111/R16: válvula de escape (default = updated).
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
+    // Feature 158/R19: por defecto el cierre NO tiene incidentes -> cobertura vacia, camino
+    // de la 38 intacto (R36). Los casos de la 158 lo sobreescriben.
+    findGestionesIncidenteDelCierre: vi.fn(async () => [] as string[]),
     ...overrides,
   };
 }
@@ -759,13 +763,24 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
       },
       gestionOrden: {
         // Feature 69/R12/R13: de la gestion, los feeds solo toman lo que ES de la gestion.
-        findMany: vi.fn().mockResolvedValue(
-          (gestiones as GestionFixture[]).map((g, i) => ({
-            ordenId: `o${i}`,
-            resultado: g.resultado,
-            montoRecibido: g.montoRecibido,
-          })),
+        // Feature 158: el doble HONRA `where.resultado` porque ahora hay DOS consumidores con
+        // predicados distintos — los feeds 42/43/44 (sin filtro) y la guardia de cobertura de
+        // indemnizaciones + su feed (`resultado: "incidente"`). Sin honrarlo, la guardia veria
+        // gestiones `entregada` como si fueran incidentes.
+        findMany: vi.fn(async (args?: { where?: { resultado?: string } }) =>
+          (gestiones as GestionFixture[])
+            .map((g, i) => ({
+              id: `g${i}`,
+              ordenId: `o${i}`,
+              resultado: g.resultado,
+              montoRecibido: g.montoRecibido,
+              indemnizacion: null,
+            }))
+            .filter((g) =>
+              args?.where?.resultado === undefined ? true : g.resultado === args.where.resultado,
+            ),
         ),
+        updateMany: vi.fn(async () => ({ count: 1 })),
       },
       // Feature 69: el SNAPSHOT congelado de la orden, que es de donde derivan ahora los dos
       // feeds. Se construye del MISMO fixture: los importes de la 42/43 no cambian.
@@ -816,6 +831,8 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
       new WalletTiendaFeedService({ TIENDA_DEBITA_FLETE_DEVOLUCION: true }),
       new PagoMensajeroMovimientoRepository(withTx as unknown as PrismaClient),
       new WalletMensajeroFeedService(),
+      // Feature 158: feed del egreso de indemnizacion (real: sin incidentes devuelve []).
+      new WalletIndemnizacionFeedService(),
     );
     return { repo, prisma, tiendaRows, mensajeroRows, caja42Rows };
   }
@@ -936,6 +953,8 @@ describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (f
       new WalletTiendaFeedService({ TIENDA_DEBITA_FLETE_DEVOLUCION: true }),
       new PagoMensajeroMovimientoRepository(withTx as unknown as PrismaClient),
       new WalletMensajeroFeedService(),
+      // Feature 158: feed del egreso de indemnizacion (real: sin incidentes devuelve []).
+      new WalletIndemnizacionFeedService(),
     );
     return { repo, prisma, mensajeroRows, caja42Rows };
   }
@@ -1102,5 +1121,83 @@ describe("CierresAdminService.forzarSolicitudVencido (feature 111/R16/R17/R18)",
     expect(r.estado).toBe("solicitado"); // no `aprobado`
     // La válvula NO resuelve: no invoca resolverCierre (no mueve dinero, R21).
     expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// Feature 158 (T1.10, R18) — el detalle del ADMIN agrupa el `incidente` aparte.
+// ============================================================================
+
+describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R18)", () => {
+  it("R18: la gestion `incidente` cae en `grupos.incidente` y no se mezcla con las otras", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(),
+        gestiones: [
+          gestionRow({ gestionId: "g1", resultado: "entregada" }),
+          gestionRow({
+            gestionId: "g-inc",
+            ordenId: "o2",
+            resultado: "incidente",
+            montoRecibido: null,
+            metodoPago: null,
+            motivo: "caja aplastada",
+          }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // Las CINCO claves siempre presentes (el grupo vacio no desaparece del contrato).
+    expect(Object.keys(r.grupos).sort()).toEqual(
+      ["devuelta", "entregada", "incidente", "rechazada", "reprogramada"].sort(),
+    );
+    expect(r.grupos.incidente.map((g) => g.gestionId)).toEqual(["g-inc"]);
+    expect(r.grupos.entregada.map((g) => g.gestionId)).toEqual(["g1"]);
+  });
+
+  it("R17: un incidente NO aporta ingreso de Ordenex a los totales del cierre", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow({ totalPagoMensajero: "0.00" }),
+        gestiones: [
+          gestionRow({
+            gestionId: "g-inc",
+            resultado: "incidente",
+            montoRecibido: null,
+            metodoPago: null,
+            // El repo deriva el desglose con `derivarIngresoOrden`, que para `incidente`
+            // devuelve {} -> todos los conceptos en null y el total en 0.00.
+            ingresoOrdenex: {
+              montoCobrar: "50000.00",
+              cobraComision: true,
+              esCentral: true,
+              flete: null,
+              ivaFlete: null,
+              fleteDevolucion: null,
+              ivaFleteDevolucion: null,
+              comisionCod: null,
+              ivaComisionCod: null,
+              fleteConIva: null,
+              fleteDevolucionConIva: null,
+              comisionConIva: null,
+              total: "0.00",
+              tarifa: null,
+            },
+          }),
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalesIngreso.total).toBe("0.00");
+    expect(r.totalesIngreso.fleteConIva).toBe("0.00");
+    expect(r.totalesIngreso.comisionConIva).toBe("0.00");
   });
 });
