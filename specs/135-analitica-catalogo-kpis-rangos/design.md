@@ -2,6 +2,10 @@
 
 > Contrato fundacional del lote de analítica. Todo lo que sigue es **declarativo y puro**:
 > tipos, datos congelados y funciones sin efectos. Cero DB, cero HTTP, cero React.
+>
+> **Estado: puerta T0 CERRADA el 2026-07-30.** Las 10 decisiones del humano están en
+> `requirements.md > Decisiones del humano (2026-07-30)` (D1–D10) y **mandan sobre cualquier
+> redacción anterior de este archivo**. Nada aquí sigue "pendiente de Q".
 
 ## 1. Modelo de datos
 
@@ -55,6 +59,11 @@ export type DimensionAnalitica =
   | "estatus" | "metodo_pago" | "causa_devolucion";
 export type RolAnalitica = "maestro" | "admin" | "adminSatelite" | "adminTienda" | "mensajero";
 export type AlcanceMetrica = "total" | "acotado" | "prohibido";
+
+// --- añadidos por las decisiones del 2026-07-30 ---
+export type UnidadDeConteo = "gestion" | "orden" | "moneda" | "tiempo";   // D10 / R36
+export type EstadoProduccion = "producida" | "declarada";                // D8  / R33
+export const MENSAJERO_SIN_ASIGNAR = "sin_asignar" as const;             // D5  / R30
 ```
 
 - `RolAnalitica` es un **subconjunto explícito** de `RolValue` (`db/schema.prisma:35-44`) que
@@ -86,8 +95,17 @@ export interface DefinicionMetrica {
   readonly categorias?: readonly string[];
   /** criterio derivado ya existente en el repo, si aplica (p. ej. intentos de la feature 160). */
   readonly criterio?: "intentos_vigentes_historial";
-  /** numerador/denominador cuando la unidad es porcentaje. */
-  readonly razon?: { readonly numerador: MetricaId; readonly denominador: MetricaId };
+  /** numerador/denominador cuando la unidad es porcentaje; el denominador puede ser una suma. */
+  readonly razon?: {
+    readonly numerador: MetricaId;
+    readonly denominador: readonly MetricaId[];   // D10: suma de gestiones, no "órdenes"
+  };
+  /** lo que NO cuenta; obligatorio citar `anulada_at` en las métricas por gestión (D10/R35). */
+  readonly excluye?: readonly string[];
+  /** D5/R30 — qué hace con `mensajero_asignado_id IS NULL` toda métrica con grano `mensajero`. */
+  readonly sinAsignar?: "incluir";
+  /** D9/R34 — qué zona atribuye toda métrica con grano `zona`. Solo hay un valor legal. */
+  readonly atribucionZona?: "orden";
 }
 
 export interface Metrica {
@@ -97,6 +115,8 @@ export interface Metrica {
   readonly dominio: MetricaDominio;
   readonly clase: MetricaClase;    // snapshot <=> fuente rollup (R5)
   readonly unidad: MetricaUnidad;
+  readonly unidadDeConteo: UnidadDeConteo;         // D10 / R36: gestión vs orden, EVIDENTE
+  readonly estadoProduccion: EstadoProduccion;     // D8  / R33: puede no tener productor aún
   readonly granos: readonly DimensionAnalitica[];   // incluye siempre "fecha" (R10)
   readonly fuente: FuenteMetrica;
   readonly alcance: Readonly<Record<RolAnalitica, AlcanceMetrica>>;  // los 5, exhaustivo (R7)
@@ -110,7 +130,12 @@ Exports del módulo:
 export const METRICAS: readonly Metrica[];                    // congelado, fuente única (R2)
 export type MetricaId = (typeof METRICAS)[number]["id"];      // ids como unión literal
 export function getMetrica(id: string): Metrica | undefined;  // total, no lanza (R4)
-export function listarMetricas(f?: { dominio?: MetricaDominio; rol?: RolAnalitica }): readonly Metrica[];
+export function listarMetricas(f?: {
+  dominio?: MetricaDominio;
+  rol?: RolAnalitica;
+  estadoProduccion?: EstadoProduccion;   // D8 / R33
+}): readonly Metrica[];
+export function sonSumables(a: MetricaId, b: MetricaId): boolean;  // D10 / R36
 export const ANALITICA_TAGS: Readonly<Record<MetricaDominio, string>>; // "analitica:operativa" | "analitica:financiera"
 export function tagDeDominio(d: MetricaDominio): string;       // consumido por la 128
 ```
@@ -119,43 +144,68 @@ export function tagDeDominio(d: MetricaDominio): string;       // consumido por 
 Sigue sin ser autorización (R24): es un filtro de **presentación** para la 133; el recorte de
 filas lo hace la 122 y el gating de la ruta la 129.
 
-### 3.3 Catálogo v1 PROPUESTO — **pendiente de Q1, no implementar sin aprobación**
+### 3.3 Catálogo v1 — **CONTRATO** (aprobado íntegro el 2026-07-30, D1 «todas»)
 
-Derivado literalmente de las descripciones de la 126 y la 127 en `feature_list.json`. Los
-estados citados están verificados contra `ORDER_STATUS_SEED` (19 valores; `en_fulfillment` NO
-aparece porque la 155 lo retiró).
+> Esto ya **no es una propuesta**. D1 aprobó la lista entera: **15 ids operativos + 8 ids
+> financieros = 23 métricas**. Añadir o quitar una exige una decisión humana nueva y fechada.
+> Estados verificados contra `ORDER_STATUS_SEED` (19 valores; `en_fulfillment` NO aparece porque
+> la 155 lo retiró).
 
-**Operativas** (`dominio: "operativa"`)
+**Operativas** (`dominio: "operativa"`) — alcance: `maestro`/`admin` = `total`; `adminSatelite`,
+`adminTienda` y `mensajero` = `acotado` (la 122 pone el `WHERE`), salvo donde se indique.
 
-| id | unidad | clase | granos | definición (estados/criterio verificados) |
-|---|---|---|---|---|
-| `ordenes_creadas` | conteo | snapshot | fecha, zona, tienda | órdenes creadas en el rango (`ESTADOS_CREACION`: `en_preparacion`, `por_recolectar_en_tienda`) |
-| `ordenes_por_estado` | conteo | snapshot | fecha, zona, tienda, mensajero, estatus | embudo: conteo por cada uno de los 19 `value` vigentes |
-| `entregas` | conteo | snapshot | fecha, zona, tienda, mensajero | transiciones a `entregada` |
-| `devoluciones` | conteo | snapshot | fecha, zona, tienda, mensajero | transiciones a `devuelta` |
-| `rechazos` | conteo | snapshot | fecha, zona, tienda, mensajero | transiciones a `rechazada` |
-| `reprogramaciones` | conteo | snapshot | fecha, zona, tienda, mensajero | transiciones a `reprogramada` vía familia `gestion` |
-| `incidentes` | conteo | snapshot | fecha, zona, tienda, mensajero | transiciones a `incidente` (features 154/158) |
-| `sin_gestionar` | conteo | snapshot | fecha, zona, mensajero | órdenes congeladas por el corte diario (`sin_gestionar`) |
-| `tasa_entrega` | porcentaje | snapshot | fecha, zona, tienda, mensajero | `entregas / (entregas+devoluciones+rechazos+incidentes)` |
-| `tasa_devolucion` / `tasa_rechazo` | porcentaje | snapshot | ídem | mismo denominador |
-| `primer_intento_ok` | porcentaje | snapshot | fecha, zona, mensajero | entregas con 0 intentos previos (criterio `intentos_vigentes_historial`, feature 160) |
-| `motivos_devolucion` | conteo | snapshot | fecha, zona, tienda, causa_devolucion | `gestion_orden.causa_devolucion` (5 valores, feature 73), gestiones **vigentes** |
-| `tiempo_ciclo` | segundos | snapshot | fecha, zona, tienda | creación → estado terminal (`ESTADOS_TERMINALES`) |
-| `aging_por_estado` | segundos | live | fecha, zona, tienda, estatus | antigüedad en el estado actual (intradía, `orden` + `orden_historial_estado`) |
+| id | unidad | unidadDeConteo | clase | granos | definición (estados/criterio verificados) |
+|---|---|---|---|---|---|
+| `ordenes_creadas` | conteo | **orden** | snapshot | fecha, zona, tienda | órdenes creadas en el rango (`ESTADOS_CREACION`: `en_preparacion`, `por_recolectar_en_tienda`) |
+| `ordenes_por_estado` | conteo | **orden** | snapshot | fecha, zona, tienda, mensajero, estatus | embudo: conteo de ÓRDENES por cada uno de los 19 `value` vigentes |
+| `entregas` | conteo | **gestion** | snapshot | fecha, zona, tienda, mensajero | gestiones **vigentes** con resultado `entregada` (`anulada_at IS NULL`) |
+| `devoluciones` | conteo | **gestion** | snapshot | fecha, zona, tienda, mensajero | gestiones vigentes con resultado `devuelta` |
+| `rechazos` | conteo | **gestion** | snapshot | fecha, zona, tienda, mensajero | gestiones vigentes con resultado `rechazada` |
+| `reprogramaciones` | conteo | **gestion** | snapshot | fecha, zona, tienda, mensajero | gestiones vigentes con resultado `reprogramada` |
+| `incidentes` | conteo | **gestion** | snapshot | fecha, zona, tienda, mensajero | gestiones vigentes con resultado `incidente` (features 154/158) |
+| `sin_gestionar` | conteo | **orden** | snapshot | fecha, zona, mensajero | órdenes congeladas por el corte diario (estado `sin_gestionar`) |
+| `tasa_entrega` | porcentaje | **gestion** | snapshot | fecha, zona, tienda, mensajero | `entregas / (entregas+devoluciones+rechazos+incidentes)` — tasa **sobre gestiones** |
+| `tasa_devolucion` | porcentaje | **gestion** | snapshot | ídem | mismo denominador de gestiones |
+| `tasa_rechazo` | porcentaje | **gestion** | snapshot | ídem | mismo denominador de gestiones |
+| `primer_intento_ok` | porcentaje | **gestion** | snapshot | fecha, zona, mensajero | entregas con 0 intentos previos (`criterio: "intentos_vigentes_historial"`, feature 160) |
+| `motivos_devolucion` | conteo | **gestion** | snapshot | fecha, zona, tienda, causa_devolucion | `gestion_orden.causa_devolucion` (5 valores, feature 73), gestiones vigentes |
+| `tiempo_ciclo` | segundos | **tiempo** | snapshot | fecha, zona, tienda | creación → estado terminal (`ESTADOS_TERMINALES`) |
+| `aging_por_estado` | segundos | **tiempo** | live | fecha, zona, tienda, estatus | antigüedad en el estado actual (intradía, `orden` + `orden_historial_estado`) |
 
-**Financieras** (`dominio: "financiera"`, fuente ledger/cierre **exclusivamente**)
+**Financieras** (`dominio: "financiera"`, fuente ledger/cierre **exclusivamente**, 8 ids) —
+alcance **cerrado por D7**: `maestro` = `total`, `admin` = `total`, `adminSatelite` =
+`adminTienda` = `mensajero` = **`prohibido`**. `unidadDeConteo: "moneda"` en todas salvo donde
+se indique.
 
 | id | unidad | fuente | definición |
 |---|---|---|---|
-| `cod_recaudado` | moneda | `snapshot_cierre` (`cierre_dia.total_general`) + `wallet_tienda_movimiento` (`cod_recaudado`) | recaudo por método: `total_efectivo` / `total_simpe` / `total_transferencia` (`MetodoPagoValue = efectivo|SINPE|transferencia`) |
-| `ingreso_flete` / `ingreso_comision_cod` / `ingreso_iva` | moneda | `wallet_movimiento` | categorías `ingreso_flete`, `ingreso_flete_devolucion`, `ingreso_comision_cod`, `ingreso_iva_*` |
+| `cod_recaudado` | moneda | `snapshot_cierre` (`cierre_dia.total_general`) + `wallet_tienda_movimiento` (`cod_recaudado`) | recaudo por método: `total_efectivo` / `total_simpe` / `total_transferencia` (`MetodoPagoValue = efectivo\|SINPE\|transferencia`) |
+| `ingreso_flete` | moneda | `wallet_movimiento` | categorías `ingreso_flete`, `ingreso_flete_devolucion` |
+| `ingreso_comision_cod` | moneda | `wallet_movimiento` | categoría `ingreso_comision_cod` |
+| `ingreso_iva` | moneda | `wallet_movimiento` | categorías `ingreso_iva_*` |
 | `egresos` | moneda | `wallet_movimiento` | categorías `egreso_*` (incluye `egreso_indemnizacion`, feature 158) |
 | `cuenta_por_pagar_tienda` | moneda | `wallet_tienda_movimiento` | `SUM(credito) - SUM(debito)` |
 | `cuenta_por_pagar_mensajero` | moneda | `pago_mensajero_movimiento` | `SUM(devengo) - SUM(pago)` |
-| `conciliacion_cierres` | conteo/moneda | `cierre_dia` + `cierre_bodega` | cierres por estado (`solicitado|aprobado|rechazado|vencido`) y sus totales snapshot |
+| `conciliacion_cierres` | conteo | `cierre_dia` + `cierre_bodega` | cierres por estado (`solicitado\|aprobado\|rechazado\|vencido`) y sus totales snapshot (`unidadDeConteo: "moneda"`, la unidad de UI es conteo + moneda) |
 
-La columna `alcance` de estas filas queda **en blanco a propósito**: depende de Q7.
+**`estadoProduccion` (D8/R33).** El catálogo puede declarar métricas sin productor todavía. La
+asignación concreta `producida` / `declarada` por métrica la fija el implementer en T3.1 según
+lo que la 126 y la 127 tengan comprometido en `feature_list.json`, y la deja escrita en
+`progress/impl_135.md`; una métrica `declarada` **no es deuda** de esas dos features (D8).
+
+**Frontera de sumabilidad (D10/R36).** `unidadDeConteo` está en la tabla a propósito y es un
+campo de la métrica, no un comentario: `entregas + devoluciones + rechazos + incidentes` **no
+suma órdenes** (una orden reprogramada y luego entregada aporta dos gestiones), y por eso
+`sonSumables("entregas", "ordenes_creadas") === false`.
+
+**Cubo `sin_asignar` (D5/R30).** Toda métrica con grano `mensajero` (`ordenes_por_estado`,
+`entregas`, `devoluciones`, `rechazos`, `reprogramaciones`, `incidentes`, `sin_gestionar`, las
+tres tasas y `primer_intento_ok`) declara `definicion.sinAsignar: "incluir"`: las órdenes con
+`mensajero_asignado_id IS NULL` van al cubo `MENSAJERO_SIN_ASIGNAR`, no se descartan.
+
+**Atribución de zona (D9/R34).** Toda métrica con grano `zona` declara
+`definicion.atribucionZona: "orden"` → `orden.zona_id` congelado, nunca `usuario.zona_id` del
+mensajero.
 
 ## 4. Contrato: rangos temporales
 
@@ -178,12 +228,19 @@ reusa, es `fecha-cr.ts`.
 (convención `@db.Date` de la feature 46) y está 6 h por debajo del inicio real del día en CR.
 Usarla como cota contra columnas `timestamp` produce una ventana 18:00–18:00 CR — exactamente
 lo que hoy hace `RankingService.ts:60-61`. Analítica usa `inicioDelDiaCREnUtc` (feature 144).
-Ver **Q6**: la divergencia con el ranking necesita decisión humana.
+
+**D6 (2026-07-30) cerró esto:** el día operativo de analítica es el **día natural de Costa Rica
+00:00–24:00**, y se abre **ticket aparte** para sanear `RankingService`. **Divergencia aceptada
+y declarada:** hasta que ese ticket se resuelva, analítica y ranking reportan cifras distintas
+para "hoy". No es un defecto: está decidido (R31).
 
 ### 4.2 API
 
 ```ts
-export type RangoPreset = "dia" | "semana" | "mes";   // (+ "personalizado" solo si se aprueba Q4)
+// D4: los tres presets Y el rango arbitrario. Dominio cerrado de 4 valores.
+export type RangoPreset = "dia" | "semana" | "mes" | "personalizado";
+export const RANGO_PRESETS = ["dia", "semana", "mes", "personalizado"] as const;
+export const RANGO_TOPE_DIAS = 366;   // D4, recomendación no objetada
 
 export interface RangoResuelto {
   readonly preset: RangoPreset;
@@ -193,7 +250,11 @@ export interface RangoResuelto {
   readonly hastaFecha: string; // "YYYY-MM-DD" calendario CR, INCLUSIVO para el consumidor
 }
 
-export function resolverRango(preset: RangoPreset, now?: Date): RangoResuelto;
+export type EntradaRango =
+  | { readonly preset: "dia" | "semana" | "mes" }
+  | { readonly preset: "personalizado"; readonly desde: string; readonly hasta: string };
+
+export function resolverRango(entrada: EntradaRango, now?: Date): RangoResuelto;
 ```
 
 - **Semiabierto `[desde, hasta)`** por coherencia con lo que ya hace el repo (`RankingService`,
@@ -208,23 +269,57 @@ Ejemplo canónico (R15), `now = 2026-07-15T02:00:00Z` (20:00 del 14 en CR):
 `desde = 2026-07-14T06:00:00.000Z`, `hasta = 2026-07-15T06:00:00.000Z`,
 `desdeFecha = hastaFecha = "2026-07-14"`.
 
-Los bordes de `semana` y `mes` quedan **abiertos** hasta Q2/Q3; los invariantes que sí se
-implementan y testean ya (R16) valen para cualquier respuesta: frontera de día CR, duración
-entera en días, `desde <= now < hasta`, determinismo e independencia del `TZ` del proceso.
+### 4.3 Semántica de cada preset — **dos convenciones conviviendo A PROPÓSITO**
+
+Cerrado por D2, D3 y D4 el 2026-07-30. Esta tabla es el punto de la feature que más
+probablemente alguien intente "homogeneizar" creyendo que corrige una inconsistencia. **No lo
+es.** Está escrito aquí para que ese cambio requiera una decisión humana nueva, no un refactor.
+
+| preset | anclaje | `desdeFecha` | `hastaFecha` | decisión |
+|---|---|---|---|---|
+| `dia` | día CR de `now` | fecha CR de `now` | fecha CR de `now` | R15 (ya existente) |
+| `semana` | **borde de CALENDARIO**: lunes | lunes de la semana CR de `now` | fecha CR de `now` | **D2** (lunes) + supuesto "en curso" |
+| `mes` | **ventana MÓVIL**: 30 días | fecha CR de `now` − 29 días | fecha CR de `now` | **D3** («últimos 30»), NO mes calendario |
+| `personalizado` | ninguno: lo fija el cliente | `desde` (`YYYY-MM-DD`) | `hasta` (`YYYY-MM-DD`) | **D4**, tope `RANGO_TOPE_DIAS = 366` |
+
+- **La tensión, dicha con todas las letras:** `semana` **sí** tiene borde de calendario (empieza
+  lunes, D2) mientras `mes` **no** lo tiene (es móvil de 30 días, D3). Son **dos convenciones
+  distintas conviviendo a propósito**, y cuál se aplica a cada preset está escrito aquí y en
+  `requirements.md > D3`. Consecuencia visible y aceptada: `semana` dura entre 1 y 7 días según
+  el día en que se consulte, mientras `mes` dura **siempre** 30.
+- **⚠ Supuesto del spec_author, NO decisión del humano:** los tres presets son el **período EN
+  CURSO hasta ahora** (`hasta = inicioDelDiaSiguienteCREnUtc(fecha CR de now)`), no el último
+  período completo. La segunda mitad de Q3 no se respondió. Si el humano lo contradice, cambian
+  R15/R27/R28 y sus tests, y nada más del contrato.
+- **Tope de 366 días (D4):** es la **recomendación no objetada** del spec_author, no una cifra
+  pronunciada por el humano. Vive en una constante única (`RANGO_TOPE_DIAS`) para que ajustarla
+  sea un one-liner con su test, no una cacería de literales.
+- Los invariantes de R16 (frontera de día CR, duración entera en días, determinismo,
+  independencia del `TZ`) valen para **los cuatro**; el invariante «la ventana contiene a `now`»
+  solo se exige a los tres presets: un `personalizado` puede ser íntegramente pasado.
 
 ## 5. Contrato: filtros (zod)
 
 ```ts
 const idList = z.array(z.string().min(1)).nonempty();   // patrón feature 144/R32
 
+const fechaCalendario = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);   // ancho fijo (R22)
+
 export const analiticaFiltroSchema = z
   .object({
-    rango: z.enum(RANGO_PRESETS),          // obligatorio (R20)
+    rango: z.enum(RANGO_PRESETS),          // dia|semana|mes|personalizado, obligatorio (R20)
+    desde: fechaCalendario.optional(),     // D4/R29: solo con rango "personalizado"
+    hasta: fechaCalendario.optional(),
     zona_id: idList.optional(),
     tienda_id: idList.optional(),
     mensajero_id: idList.optional(),
   })
-  .strict();                               // rechaza claves desconocidas (R19/R24)
+  .strict()                                // rechaza claves desconocidas (R19/R24)
+  // D4/R29 — los tres refine del rango arbitrario:
+  .refine(v => v.rango !== "personalizado" || (v.desde && v.hasta), { path: ["desde"] })
+  .refine(v => v.rango === "personalizado" || (!v.desde && !v.hasta), { path: ["desde"] })
+  .refine(v => !v.desde || !v.hasta || v.desde <= v.hasta, { path: ["hasta"] })
+  .refine(v => diasInclusive(v.desde, v.hasta) <= RANGO_TOPE_DIAS, { path: ["hasta"] });
 
 export type AnaliticaFiltroInput = z.infer<typeof analiticaFiltroSchema>;
 export function parseAnaliticaFiltro(raw: unknown):
@@ -235,10 +330,12 @@ export function parseAnaliticaFiltro(raw: unknown):
 - **Listas no vacías, nunca escalares.** Copia deliberada de `ordenFilterSchema`
   (`lib/types/orden.ts:98-134`): una lista vacía significaría "ningún valor" y degradaría a
   "sin filtro" si el repositorio la descartara → falla cerrado.
-- **El cliente nunca manda instantes** (R22): manda un preset; los bordes los calcula
-  `resolverRango` server-side. Si Q4 se aprueba, la extensión será `desde`/`hasta` como
-  `YYYY-MM-DD` (regex de ancho fijo) más un `.refine` de rango no invertido y otro de tope de
-  ventana, todo espejo del patrón de la 144 — nunca ISO con hora ni offsets.
+- **El cliente nunca manda instantes** (R22): manda un preset o dos **fechas calendario**
+  `YYYY-MM-DD` con regex de ancho fijo; los bordes UTC los calcula `resolverRango` server-side.
+  Nunca ISO con hora, offset ni epoch. Espejo del patrón de la 144.
+- **`desde`/`hasta` y preset son excluyentes** (D4/R29): mandar `desde` con `rango: "dia"` es un
+  `validation_error`, no un silencio. El tope de 366 días se comprueba sobre fechas calendario
+  (ambos extremos incluidos), no sobre instantes.
 - **El filtro no lleva rol ni sesión** (R24). `.strict()` hace que `{ rol: "maestro" }` sea un
   error de validación, no un vector de escalada. La 122 aplica su `WHERE` **encima** del filtro
   ya validado; el orden es: parsear → resolver alcance → consultar.
@@ -256,8 +353,42 @@ export function parseAnaliticaFiltro(raw: unknown):
 | 126 operativa | `METRICAS` de dominio operativa; `clase` decide rollup vs intradía |
 | 127 financiera | `METRICAS` financieras; `fuente` le prohíbe por tipos leer `orden` |
 | 128 caché | `tagDeDominio(dominio)` |
-| 129–133 UI | `etiqueta`, `unidad`, `granos`, `alcance` (qué panel ve cada rol) |
+| 129–133 UI | `etiqueta`, `unidad`, `unidadDeConteo`, `granos`, `alcance` (qué panel ve cada rol) |
 | 134 export CSV | `id` (columna), `etiqueta` (encabezado), `unidad` (formato) |
+
+### 6.1 Lo que heredan de las decisiones del 2026-07-30 (avisos dirigidos)
+
+- **→ 123 (`analytics_daily`), de D5.** El cubo `sin_asignar` obliga a que **`mensajero_id` sea
+  NULLABLE en el grano del rollup**. Postgres no considera iguales dos `NULL` en un índice
+  único, así que la 123 **debe elegir explícitamente** entre: (i) **índice único parcial** por
+  cada combinación de nulidad (`WHERE mensajero_id IS NULL` / `IS NOT NULL`), o (ii) **valor
+  centinela** no nulo `'sin_asignar'` en la columna del grano. La 135 no elige por ella, pero no
+  lo esconde: si la 123 pone un `UNIQUE` ingenuo sobre el grano, el upsert diario duplicará
+  filas de mensajero no asignado. También hereda de D9 que la columna de zona es
+  `orden.zona_id` congelada, y del hecho de inventario 3 que puede aparecer la fila huérfana
+  `en_fulfillment` en un `GROUP BY estatus_id`.
+- **→ 126 (operativa), de D10.** Las cinco métricas de gestión cuentan **gestiones vigentes**
+  (`anulada_at IS NULL`), no órdenes; `ordenes_creadas` y `ordenes_por_estado` cuentan órdenes.
+  **No son sumables entre sí** y `sonSumables()` existe para impedirlo. Las tres tasas tienen
+  denominador **de gestiones**: la 126 no debe "corregirlas" dividiendo entre órdenes.
+- **→ 127 (financiera), de D7.** Sigue calculando la cuenta por pagar de tienda y el devengado
+  de mensajero —el cálculo no cambia—, pero **ninguna de esas cifras se expone a `adminTienda`,
+  `adminSatelite` ni `mensajero`**: solo a `maestro` y `admin`. No hay vista financiera recortada
+  por tienda o por mensajero que construir.
+- **→ 132 (tablero financiero), de D7.** El tablero es **de dos roles**: exactamente los que
+  `esAccesoTotal(rol)` acepta. No diseñes un tablero financiero "para tienda".
+- **→ 133 (recortes por rol), de D7.** `listarMetricas({ rol })` ya devuelve **cero** métricas
+  financieras para `adminTienda`, `adminSatelite` y `mensajero`: el recorte de presentación es
+  consultar esa función, no reimplementar reglas. Ojo: para esos tres roles el dominio financiera
+  no es "vacío por falta de datos", es **prohibido**, y la UI debe no ofrecer la pestaña, no
+  mostrarla vacía.
+- **→ 122 (alcance por rol), de D7 y D9.** El criterio de "acceso total" es `esAccesoTotal(rol)`
+  (`lib/auth/acceso-total.ts`), que la 135 **no duplica**: `maestro ≈ admin` sigue en pie. El
+  recorte por zona del `adminSatelite` se aplica sobre `orden.zona_id`, nunca sobre la zona del
+  mensajero (D9).
+- **→ 124 / 125 (job y backfill), de D3 y D6.** El día que recomputan es el **día natural CR**
+  (D6). Ojo con D3: `mes` es una ventana móvil de 30 días, así que un recomputo "del mes" no es
+  un rango de calendario; el backfill debe iterar **fechas calendario CR**, no presets.
 
 ## 7. Alternativas descartadas
 
@@ -293,7 +424,34 @@ export function parseAnaliticaFiltro(raw: unknown):
    importador de `zod` con el único importador de `fecha-cr`, y dejaría el guard de pureza (R1)
    sin capacidad de señalar qué parte del contrato se contaminó.
 
-6. **Declarar el alcance por rol como un simple `roles: RolAnalitica[]` (lista de quién ve
+6. **Declarar DOS familias de métricas, una por gestión y otra por orden (`entregas` y
+   `entregas_por_orden`).** Era la recomendación del spec_author en Q10; **la descartó el humano
+   en D10**: una sola convención, **por gestión**. Motivo aceptado: dos familias duplican 5
+   métricas, obligan a la 123 a materializar dos medidas por fila y garantizan que algún tablero
+   mezcle las dos. El precio, asumido y escrito, es que las cuatro métricas de resultado **no
+   suman órdenes** y las tasas son sobre gestiones; se mitiga con `unidadDeConteo` + `sonSumables`
+   (R36) en vez de con una segunda familia.
+
+7. **`mes` como mes CALENDARIO (`periodoMensualCR`, feature 45).** Descartada por **D3**
+   («últimos 30»). Habría dado comparabilidad entre meses y encaje directo con `periodoMensualCR`,
+   pero el primer día del mes el tablero mostraría una barra de un solo día. La ventana móvil de
+   30 días siempre compara contra 30 días. El coste asumido es la convivencia de dos convenciones
+   (`semana` con borde de calendario, `mes` móvil), documentada en §4.3 para que no se
+   "homogenice" por error.
+
+8. **Excluir del todo las órdenes sin mensajero del grano `mensajero`** (opciones (b)/(c) de Q5).
+   Descartada por **D5**: excluirlas haría que la suma por mensajero no cuadrara con el total y
+   que el trabajo pendiente de asignar fuera invisible justo en el tablero que existe para
+   verlo. El coste asumido es el `NULL` en el grano del rollup y el índice único que la 123
+   tendrá que resolver (§6.1).
+
+9. **Replicar en analítica la ventana 18:00–18:00 CR del `RankingService`** para que las dos
+   pantallas cuadren desde el día uno. Descartada por **D6**: sería propagar el bug a un módulo
+   nuevo y a un rollup persistido (que luego habría que backfillear). Se acepta a cambio una
+   divergencia temporal y visible entre analítica y ranking hasta que el ticket de saneamiento
+   se cierre.
+
+10. **Declarar el alcance por rol como un simple `roles: RolAnalitica[]` (lista de quién ve
    qué).** Descartada: perdería la distinción entre "ve todo" y "ve lo suyo", que es
    precisamente lo que la 133 necesita para pintar el panel correcto y lo que hace explícito que
    `adminTienda` **sí** ve `tasa_entrega`, pero solo la de su tienda. La `Record` exhaustiva
@@ -302,8 +460,18 @@ export function parseAnaliticaFiltro(raw: unknown):
 
 ## 8. Riesgos
 
-- **Q1 sin responder = catálogo especulativo.** Si se implementa la propuesta §3.3 y luego el
-  humano recorta, la 126/127 arrancan con métricas muertas. Por eso T0 es puerta dura.
+- ~~**Q1 sin responder = catálogo especulativo.**~~ **Cerrado por D1 (2026-07-30): «todas».**
+  §3.3 es contrato; el riesgo residual es que el conteo citado en la respuesta («13 y 6») no
+  coincida con la tabla (15 ids + 8 ids) — reconciliado en `requirements.md > D1` a favor de
+  «ENTERO», sin recortar nada.
+- **Supuesto vivo: "período en curso" (D3, segunda mitad no respondida).** Si el humano quería
+  "último período completo", los tres presets cambian de borde. Impacto acotado: R15/R27/R28 y
+  sus tests; el resto del contrato no se mueve.
+- **Divergencia analítica ↔ ranking (D6), aceptada.** Mientras el ticket de `RankingService` no
+  se cierre, "hoy" vale cosas distintas en dos pantallas. Riesgo de que se reporte como bug: se
+  mitiga dejándolo escrito en el módulo, en el spec y en `progress/impl_135.md`.
+- **Índice único del rollup con `mensajero_id` NULL (D5).** Riesgo heredado por la 123; ver
+  §6.1. Si se ignora, produce filas duplicadas en el upsert diario.
 - **El catálogo es el cuello de botella de 13 features.** Un cambio de forma después de la 126
   obliga a tocar todo el lote; por eso los invariantes (R5–R10) se testean como guards, no como
   buenas intenciones.
