@@ -104,7 +104,9 @@ describe("carpeta y schema.prisma", () => {
         // 154 entro a `dev` sin actualizar esta lista y dejo el caso ROJO en `dev`.
         !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
         !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") &&
-        // feature 149 (origen_tipo deshacer_asignacion): apendida despues (20260729140000).
+        // feature 155 (retiro del value de fulfillment): apendida despues.
+        !d.endsWith("_order_status_retiro_en_fulfillment") &&
+        // feature 149 (origen_tipo deshacer_asignacion): apendida despues.
         !d.endsWith("_orden_historial_origen_deshacer_asignacion"),
     );
     expect(esta >= previas[previas.length - 1]).toBe(true);

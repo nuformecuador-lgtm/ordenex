@@ -89,8 +89,8 @@ export interface IGuiaAsignacionService {
   /**
    * Feature 30/R13/R16/R17 + feature 156/R15/R16: rutea una o varias ordenes no-GAM a
    * `en_ruta_bodega_satelite` desde `en_bodega_central`, que tras la 156 es el UNICO
-   * origen admitido (antes tambien `en_fulfillment`/`en_preparacion`: el paquete se
-   * rutea desde donde esta fisicamente). Asigna `num_guia` (R10) y deja el mensajero
+   * origen admitido (antes eran tres: el paquete se rutea desde donde esta
+   * fisicamente). Asigna `num_guia` (R10) y deja el mensajero
    * en NULL (R9). Guardia R4 (zona GAM configurada). Una orden GAM en el lote ->
    * `conflict` ("orden GAM no se rutea a satelite"). Solo acceso total.
    */

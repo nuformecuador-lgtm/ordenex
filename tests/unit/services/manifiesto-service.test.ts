@@ -10,7 +10,11 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import { MANIFIESTO_FLUJOS, type ManifiestoFlujo } from "@/lib/types/manifiesto";
+import {
+  MANIFIESTO_FLUJOS,
+  manifiestoSchema,
+  type ManifiestoFlujo,
+} from "@/lib/types/manifiesto";
 import {
   fakeIntentosEnLote,
   llamadasIntentos,
@@ -245,6 +249,28 @@ describe("R8/R9 — origen, destino y responsable por flujo (design.md §4)", ()
     expect(fila.origen).toBe("Tienda Uno");
     expect(fila.destino).toBe(CENTRAL_NOMBRE);
     expect(fila.responsable).toBe(ACTOR_NOMBRE);
+  });
+
+  // Feature 155/R24 — el flujo de la rama (b) de la bifurcacion de creacion. MISMO mapeo
+  // origen/destino que `carga_masiva` (el movimiento fisico es el mismo: el paquete sale de la
+  // tienda hacia la bodega central), pero flujo PROPIO: la etiqueta del manifiesto es lo que
+  // alguien firma en el mostrador, y no puede decir "carga masiva" de un alta manual o de una
+  // carga por API key.
+  it("155/R24 recoleccion_tienda: TIENDA -> CENTRAL, responsable el actor", async () => {
+    const fila = await unaFila("recoleccion_tienda", row(), ADMIN_TIENDA);
+    expect(fila.origen).toBe("Tienda Uno");
+    expect(fila.destino).toBe(CENTRAL_NOMBRE);
+    expect(fila.responsable).toBe(ACTOR_NOMBRE);
+  });
+
+  it("155/R24: recoleccion_tienda y carga_masiva mapean IGUAL origen, destino y responsable", async () => {
+    const fila = await unaFila("recoleccion_tienda", row(), ADMIN_TIENDA);
+    const filaMasiva = await unaFila("carga_masiva", row(), ADMIN_TIENDA);
+    expect({ origen: fila.origen, destino: fila.destino, responsable: fila.responsable }).toEqual({
+      origen: filaMasiva.origen,
+      destino: filaMasiva.destino,
+      responsable: filaMasiva.responsable,
+    });
   });
 
   it("generacion_guia, orden GAM CON mensajero: CENTRAL -> ZONA, responsable el mensajero", async () => {
@@ -565,5 +591,42 @@ describe("R29 — aislamiento por dueño cuando el actor es una API key", () => 
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.filas).toEqual([]);
     expect(r.omitidas).toEqual([{ ref: "REM-1", motivo: "no_encontrada" }]);
+  });
+});
+
+// Feature 155/R24 — el flujo nuevo entra en el catalogo de flujos y admite las DOS formas de
+// seleccion. La de `numRemisiones` es la unica disponible cuando el lote viene de la carga
+// masiva por UI (su resumen no lleva ids); la de `ordenIds` es la que usa el canal de API key.
+describe("155/R24 — el flujo recoleccion_tienda esta declarado y es seleccionable", () => {
+  it("pertenece a MANIFIESTO_FLUJOS", () => {
+    expect([...MANIFIESTO_FLUJOS]).toContain("recoleccion_tienda");
+  });
+
+  it("el schema del borde lo acepta por ordenIds Y por numRemisiones", () => {
+    expect(
+      manifiestoSchema.safeParse({ flujo: "recoleccion_tienda", ordenIds: ["o1"] }).success,
+    ).toBe(true);
+    expect(
+      manifiestoSchema.safeParse({ flujo: "recoleccion_tienda", numRemisiones: ["REM-1"] }).success,
+    ).toBe(true);
+  });
+
+  it("la seleccion por numRemisiones se acota a la tienda del actor, igual que carga_masiva", async () => {
+    const { service, lectura } = build([row({ tiendaId: "tienda-1", numRemision: "REM-1" })]);
+
+    await service.armar({ flujo: "recoleccion_tienda", numRemisiones: ["REM-1"] }, ADMIN_TIENDA);
+
+    expect(lectura.findManifiestoByRemisiones).toHaveBeenCalledWith(["REM-1"], "tienda-1");
+  });
+
+  it("R24: sigue siendo SOLO LECTURA (ningun otro modulo arma filas ni escribe)", async () => {
+    const { service, lectura } = build([row()]);
+    await service.armar({ flujo: "recoleccion_tienda", ordenIds: ["o1"] }, ADMIN_TIENDA);
+    // El `Pick` del service ya impide alcanzar cualquier escritura; esto lo afirma en runtime.
+    expect(Object.keys(lectura).sort()).toEqual([
+      "findManifiestoByIds",
+      "findManifiestoByRemisiones",
+      "findUsuarioNombre",
+    ]);
   });
 });

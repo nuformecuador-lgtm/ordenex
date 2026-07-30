@@ -43,6 +43,15 @@ const ORIGENES_REVERSIBLES: ReadonlySet<string> = new Set([
  * `en_fulfillment`/`en_preparacion` normalizan a `en_bodega_central` porque las transiciones
  * que los producen dejan el paquete en la bodega CENTRAL, y volver a un estado pre-guia con
  * `num_guia` ya impreso seria un hibrido inconsistente (design §D3').
+ *
+ * ⚠️ `en_fulfillment` SE CONSERVA aunque la feature 155 lo retirara del catalogo, y no es un
+ * descuido de la integracion. Las claves de este mapa son origenes LEIDOS DEL HISTORIAL, no
+ * estados alcanzables hoy: `orden_historial_estado` sigue citando ese value en filas anteriores
+ * a la 155 —es exactamente la razon por la que el `DELETE` condicional de su migracion resulto
+ * NO-OP y la fila del catalogo sobrevivio huerfana—. Una orden asignada ANTES de la 155 que hoy
+ * siga en `por_recoger` tiene ese origen en su historial; quitar la entrada la haria fallar
+ * CERRADO (R13) al deshacer, en vez de devolverla a la bodega central. Por eso el tipo de la
+ * clave es `string` y no `OrderStatusValue`: el historial es inmutable y sobrevive al catalogo.
  */
 const NORMALIZACION_DESTINO: ReadonlyMap<string, DestinoReversion> = new Map([
   ["en_bodega_central", "en_bodega_central"],

@@ -58,8 +58,8 @@ const TEXT_EXTENSIONS = new Set([
 const WHITELIST_PREFIXES = [
   "specs/rename-embalaje-fulfillment/",
   "db/migrations/20260710140000_rename_order_status_embalaje_en_fulfillment/",
-  // Feature 27: el spec cita 'embalaje' solo para documentar el rename historico
-  // (embalaje -> en_fulfillment, feature 28) como contexto; no reintroduce el valor.
+  // Feature 27: el spec cita 'embalaje' solo para documentar el rename historico de la
+  // feature 28 como contexto; no reintroduce el valor.
   "specs/27-fulfillment-tienda/",
   // Feature 135: el spec cita el folder historico *_rename_order_status_embalaje_en_fulfillment
   // como PRECEDENTE del rename por UPDATE (order_status es tabla catalogo, no enum); no

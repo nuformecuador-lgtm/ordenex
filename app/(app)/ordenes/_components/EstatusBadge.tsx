@@ -12,7 +12,10 @@ type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
  */
 export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   en_preparacion: "En preparación",
-  en_fulfillment: "En fulfillment",
+  // Feature 155/R28: el estado interno de fulfillment en bodega salió del catálogo
+  // (las órdenes que ya están en bodega nacen en `en_preparacion`), así que sale de
+  // este mapa. Un value fuera del catálogo del build degrada al chip neutro con el
+  // texto crudo (R41), abajo en `EstatusBadge`.
   en_bodega_central: "En bodega central", // feature 135 (R8): value legible directo
   en_ruta_bodega_central: "En ruta a bodega central", // feature 135 (R8)
   entregada: "Entregada",
@@ -36,13 +39,12 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
 /**
  * Estatus -> variante semántica de la primitiva `Badge`. La semántica se conserva
  * (entregada/recibido = éxito, devolución/rechazo = alerta/peligro, tránsito = info).
- * Los estados operativos sin color semántico (fulfillment, bodega, preparación) usan
- * la variante neutra `secondary` y, si necesitan el acento de marca/navy, un
- * `className` de refuerzo con TOKENS (ver `ORDER_STATUS_CLASS`). Sin hex.
+ * Los estados operativos sin color semántico (bodega, preparación) usan la variante
+ * neutra `secondary` y, si necesitan el acento de marca/navy, un `className` de
+ * refuerzo con TOKENS (ver `ORDER_STATUS_CLASS`). Sin hex.
  */
 const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   en_preparacion: "secondary",
-  en_fulfillment: "secondary",
   en_bodega_central: "secondary",
   en_ruta_bodega_central: "info",
   entregada: "success",
@@ -79,8 +81,9 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
  * base vía `cn`/twMerge (la última clase gana).
  */
 const ORDER_STATUS_CLASS: Partial<Record<OrderStatusValue, string>> = {
-  en_fulfillment:
-    "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light",
+  // Feature 155/R28: se retira el refuerzo del estado de fulfillment en bodega junto
+  // con el value. `en_reparto` queda como único portador de estos 4 tokens (era su
+  // gemelo de presentación desde la 153).
   en_reparto:
     "bg-brand-soft text-brand-dark dark:bg-brand/15 dark:text-brand-light",
   en_bodega_central: "text-navy dark:bg-navy/20 dark:text-asfalto-2",

@@ -25,6 +25,13 @@ import {
 // frenada: si alguien retirara tambien #5, `en_preparacion` quedaria sin salida y estos tests
 // lo nombrarian. Lo mismo vale para `por_recoger` y `en_ruta_bodega_satelite`, que pierden un
 // productor pero conservan entradas por otras aristas.
+//
+// Feature 155 (R22/R27/R28/R31): el catalogo baja de 20 a 19 values (sale el estado de
+// fulfillment) y la creacion de 4 a 2. Este invariante es la razon por la que la 155 no podia
+// limitarse a borrar las cuatro aristas del estado retirado: hacerlo sin sacar tambien el value
+// del catalogo lo habria dejado con 0 entradas Y 0 salidas, y los dos primeros tests de este
+// archivo lo habrian nombrado. El retiro es atomico: value, aristas y entradas de creacion.
+// `en_ruta_bodega_central` deja de nacer por creacion pero conserva entrada por #30/#43.
 
 const TERMINALES = new Set<string>(ESTADOS_TERMINALES);
 const CREACION = new Set<string>(ESTADOS_CREACION);
@@ -108,12 +115,12 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
 
   it("cada estado de creacion es alcanzable desde START y tiene salida de flujo", () => {
     const grados = calcularGrados();
+    // Feature 155/R22/R31: de 4 a EXACTAMENTE 2. Son las dos salidas de
+    // `resolverDestinoCreacion`; ningun otro estado del catalogo admite nacimiento.
     expect([...CREACION].sort()).toEqual(
       [
-        "en_fulfillment",
-        "en_preparacion",
-        "en_ruta_bodega_central",
-        "por_recolectar_en_tienda", // feature 154/R13
+        "en_preparacion", // rama (a): la tienda ya tiene el paquete en bodega
+        "por_recolectar_en_tienda", // rama (b): el paquete sigue en la tienda (154/R13)
       ].sort(),
     );
     for (const value of ESTADOS_CREACION) {
@@ -125,7 +132,7 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
 });
 
 describe("R16 — cobertura EXACTA del catalogo, sin exenciones", () => {
-  it("los value que aparecen en el mapa, terminales y creacion cubren los 20 del SEED", () => {
+  it("los value que aparecen en el mapa, terminales y creacion cubren los 19 del SEED", () => {
     const cubiertos = new Set<string>([...CREACION, ...TERMINALES]);
     for (const [origen, destinos] of Object.entries(TRANSICIONES)) {
       cubiertos.add(origen);
@@ -137,7 +144,7 @@ describe("R16 — cobertura EXACTA del catalogo, sin exenciones", () => {
     );
     expect(faltantes, `value del catalogo sin clasificar: ${faltantes.join(", ")}`).toEqual([]);
     expect(sobrantes, `value fuera del catalogo: ${sobrantes.join(", ")}`).toEqual([]);
-    expect(ORDER_STATUS_SEED.length).toBe(20); // feature 154: 18 -> 20
+    expect(ORDER_STATUS_SEED.length).toBe(19); // feature 154: 18 -> 20; feature 155: 20 -> 19
   });
 
   // Feature 154/R25: los DOS values nuevos quedan clasificados en el mapa. Es la contraparte

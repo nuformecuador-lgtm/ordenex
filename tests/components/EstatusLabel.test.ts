@@ -11,7 +11,9 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   devuelta: "Devuelta",
   devolviendo_a_tienda: "Devolviendo a tienda", // feature 135
   reprogramada: "Reprogramada",
-  en_fulfillment: "En fulfillment",
+  // Feature 155/R27/R28: el estado de fulfillment salio del catalogo, asi que sale de este
+  // mapa. Su entrada en `ORDER_STATUS_LABELS` la retira la fase frontend (T6.1); mientras siga
+  // ahi es una clave de mas que nadie consulta, porque este test recorre `ORDER_STATUS_SEED`.
   en_ruta_bodega_central: "En ruta a bodega central", // feature 135 (R8)
   en_bodega_central: "En bodega central", // feature 135 (R8)
   en_preparacion: "En preparación",

@@ -209,11 +209,13 @@ describe("R18 — migracion NUEVA, historicas inmutables", () => {
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       // feature 154 (catalogo de estados v2): las dos apendidas despues.
-      // feature 149 (origen_tipo deshacer_asignacion): apendida despues (20260729140000).
+      // features 155 (retiro del value de fulfillment) y 149 (origen_tipo
+      // deshacer_asignacion): ambas apendidas despues.
       .filter(
         (d) =>
           !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
           !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") &&
+          !d.endsWith("_order_status_retiro_en_fulfillment") &&
           !d.endsWith("_orden_historial_origen_deshacer_asignacion"),
       )
       .sort();
