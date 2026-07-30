@@ -216,7 +216,9 @@ describe("R18 — migracion NUEVA, historicas inmutables", () => {
           !d.endsWith("_order_status_v2_por_recolectar_incidente") &&
           !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") &&
           !d.endsWith("_order_status_retiro_en_fulfillment") &&
-          !d.endsWith("_orden_historial_origen_deshacer_asignacion"),
+          !d.endsWith("_orden_historial_origen_deshacer_asignacion") &&
+          // feature 152 (hotfix de WhatsApp, portado el 2026-07-29): apendida despues.
+          !d.endsWith("_chat_mensaje_error_meta"),
       )
       .sort();
     expect(previas[previas.length - 1]).toBe(dirName);

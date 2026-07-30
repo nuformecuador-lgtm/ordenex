@@ -13,10 +13,12 @@ import { loadWhatsappWebhookConfig } from "@/lib/config/whatsapp";
 import type { WhatsappWebhookConfig } from "@/lib/config/whatsapp";
 import { parseWebhookEventos } from "@/lib/types/whatsapp-webhook";
 import { ChatWhatsappService } from "@/lib/services/ChatWhatsappService";
+import type { ChatLogger } from "@/lib/services/ChatWhatsappService";
 import { ChatConversacionRepository } from "@/lib/repositories/ChatConversacionRepository";
 import { ChatMensajeRepository } from "@/lib/repositories/ChatMensajeRepository";
 import { crearEncolarReintentoChatEnvio } from "@/lib/services/jobs/whatsapp-chat-envio-encolado";
 import { JobRepository } from "@/lib/repositories/JobRepository";
+import { consoleLogger, volcarStatusesFallidos } from "@/lib/services/whatsapp/chat-logger";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 
 // El runtime de Node es OBLIGATORIO: `node:crypto` (HMAC) y Prisma no corren en edge.
@@ -30,6 +32,8 @@ export interface WebhookDeps {
   getConfig?: () => WhatsappWebhookConfig;
   /** Service de ingesta (inyectable en tests). Por defecto construye las deps reales. */
   buildService?: () => ChatWhatsappService;
+  /** Logger del volcado de diagnostico (inyectable en tests). Default `console.warn`. */
+  logger?: ChatLogger;
 }
 
 /** Construye el service de ingesta con las deps reales (repos + encolador del reintento). */
@@ -40,6 +44,8 @@ function buildIngestaService(): ChatWhatsappService {
     mensajeRepo: new ChatMensajeRepository(prisma),
     // El webhook solo INGIERE: no envia. Sin cliente de envio (la ingesta no lo usa).
     encolarReintento: crearEncolarReintentoChatEnvio(new JobRepository(prisma)),
+    // Diagnostico de los `failed`: codigo/motivo de Meta al log, sin PII (R11).
+    logger: consoleLogger,
   });
 }
 
@@ -100,6 +106,10 @@ export async function handlePost(req: Request, deps: WebhookDeps = {}): Promise<
   } catch {
     return NextResponse.json({ ok: true }, { status: 200 });
   }
+
+  // Volcado de diagnostico ANTES de ingerir: si la ingesta fallara, el motivo del `failed`
+  // ya quedo en el log. Solo actua sobre statuses `failed` y redacta al destinatario.
+  volcarStatusesFallidos(JSON.parse(raw), deps.logger ?? consoleLogger);
 
   const service = deps.buildService ? deps.buildService() : buildIngestaService();
   const resumen = await service.ingerirEventos(eventos);
