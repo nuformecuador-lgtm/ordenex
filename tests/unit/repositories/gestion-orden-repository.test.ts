@@ -420,6 +420,84 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     expect(arg.data[0].gestionOrdenId).toBe("g1");
   });
 
+  // --- Feature 158 (R6/R8/R9, Q-G): el QUINTO resultado ---------------------------------
+  // La 154 declaro la arista #44 y la familia `incidente` del historial, y dejo esta ultima
+  // «SIN PRODUCTOR hasta la 158». Aqui esta el productor. El append escribe
+  // `origen_tipo = incidente`, NO `gestion`: es lo que hace el incidente auditable como
+  // familia propia, que es para lo que la 154 la dio de alta.
+
+  it("158/R9: el INSERT de la gestion lleva la causa del incidente en su columna propia", async () => {
+    const { repo, gestionCreate } = buildTxRepo(idEstado("en_reparto"));
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      // Las N filas hijas de evidencia tienen su propia suite
+      // (`gestion-orden-evidencia.test.ts`); aqui se afirma el INSERT de la gestion.
+      gestion: {
+        resultado: "incidente",
+        causaIncidente: "robado",
+        motivo: "me asaltaron en la parada",
+      },
+      nuevoEstatusId: idEstado("incidente"),
+    });
+
+    const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
+    expect(gArg.data.resultado).toBe("incidente");
+    expect(gArg.data.causaIncidente).toBe("robado");
+    expect(gArg.data.motivo).toBe("me asaltaron en la parada");
+    // R22: el monto de la indemnizacion NO se escribe al reportar (lo captura el admin al
+    // aprobar el cierre). Si apareciera aqui, el mensajero fijaria su propia indemnizacion.
+    expect(gArg.data).not.toHaveProperty("indemnizacion");
+    // No hay recaudo en un incidente.
+    expect(gArg.data.montoRecibido).toBeNull();
+    expect(gArg.data.metodoPago).toBeNull();
+    // Y NO se cuela la causa del OTRO enum (73).
+    expect(gArg.data.causaDevolucion).toBeNull();
+  });
+
+  it("158/R8/Q-G: el historial de la transicion usa la familia `incidente`, NO `gestion`", async () => {
+    const { repo, historialCreateMany } = buildTxRepo(idEstado("en_reparto"));
+
+    await repo.crearGestionYTransicionar({
+      ordenId: "o1",
+      mensajeroId: "m1",
+      gestion: { resultado: "incidente", causaIncidente: "danado", motivo: "caja aplastada" },
+      nuevoEstatusId: idEstado("incidente"),
+    });
+
+    const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
+    expect(arg.data).toEqual([
+      {
+        ordenId: "o1",
+        estatusOrigenId: idEstado("en_reparto"), // R8: el origen REAL, pre-leido en la tx
+        estatusDestinoId: idEstado("incidente"),
+        actorUsuarioId: "m1", // R8: el actor
+        origenTipo: "incidente", // Q-G: la familia PROPIA, no `gestion`
+        motivo: "caja aplastada",
+        gestionOrdenId: "g1", // nace CON enlace a gestion (por eso no toca ORIGEN_TIPOS_CON_GESTION)
+      },
+    ]);
+  });
+
+  it("158/Q-G: los CUATRO resultados previos siguen appendeando con `gestion` (R35)", async () => {
+    for (const resultado of ["entregada", "reprogramada", "devuelta", "rechazada"] as const) {
+      const { repo, historialCreateMany } = buildTxRepo(idEstado("en_reparto"));
+      await repo.crearGestionYTransicionar({
+        ordenId: "o1",
+        mensajeroId: "m1",
+        gestion: { resultado, motivo: "x", fechaReprogramacion: "2099-01-01" },
+        nuevoEstatusId: idEstado(resultado),
+      });
+      const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as {
+        data: Record<string, unknown>[];
+      };
+      expect(arg.data[0].origenTipo, `${resultado} deberia seguir siendo \`gestion\``).toBe(
+        "gestion",
+      );
+    }
+  });
+
   // --- Feature 99 (R1/R29): la rama `devuelta` DEJA la orden en `devuelta`, sin seguimiento ---
   // INVIERTE la suite de la 47: antes `crearGestionYTransicionar` aplicaba una 2.ª transicion
   // (reintento a bodega o escalado a `rechazada`) cuando el llamador pasaba `seguimiento`. Bajo

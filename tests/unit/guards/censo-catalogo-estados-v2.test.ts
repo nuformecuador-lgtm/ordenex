@@ -26,8 +26,20 @@ import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 //   - `recoleccion_tienda`: es el flujo del manifiesto de esa rama (`MANIFIESTO_FLUJOS`), y
 //     tambien la familia de historial de la arista #43, que producira la 157.
 //
-// `incidente` SIGUE censado: no tiene productor hasta la feature 158. Si alguien lo escribiera
-// antes de tiempo, este guard se pone rojo.
+// FEATURE 158 (2026-07-30) — EL TERCER Y ULTIMO LITERAL SE GRADUA: `incidente`. La 158 es su
+// productor por partida doble: el estado (`gestion_orden.resultado = incidente` ->
+// `MisAsignacionesService.gestionar`) y la familia de historial
+// (`GestionOrdenRepository.crearGestionYTransicionar` escribe `origen_tipo = incidente`, Q-G).
+// Sale del censo POR SU FEATURE, igual que los dos de la 155.
+//
+// CONSECUENCIA DECLARADA, no disimulada: con esto el CENSO QUEDA VACIO y el caso «ningun
+// archivo fuera de la allowlist los nombra» pierde su poder de discriminacion, porque ya no
+// queda ningun literal que confinar. Eso NO es un agujero: el invariante que protegia
+// («declarado y sin productor») dejo de existir cuando llego el productor, que era justamente
+// el final previsto del guard. Lo que el archivo sigue protegiendo —y se refuerza abajo— es la
+// GRADUACION: que cada literal siga existiendo en su SEED y que su productor real este donde
+// se dice que esta. Si un dia se declarara otro value sin productor, la maquinaria
+// (`LITERALES_154` + `ofensores()`) esta intacta y basta con volver a poblar la lista.
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 // Deliberadamente SIN `tests`, `db` ni `specs`: R28 los admite como sitios legitimos.
@@ -36,12 +48,22 @@ const SCAN_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sql",
 
 // Frontera de palabra a proposito: `\bincidente\b` NO marca "coincidentes"/"coincidente", que
 // aparecen en nombres de test y en textos de filtros de la UI.
-const LITERALES_154: Array<{ label: string; re: RegExp }> = [
-  { label: "incidente", re: /\bincidente\b/ },
-];
+// VACIO desde la 158: los tres literales que la 154 declaro sin productor ya graduaron. La
+// maquinaria se conserva (ver la nota de arriba); lo que no queda es a quien censar.
+const LITERALES_154: Array<{ label: string; re: RegExp }> = [];
+
+/** Frontera de palabra que uso el censo mientras `incidente` estuvo confinado. */
+const RE_INCIDENTE = /\bincidente\b/;
 
 /** Los que la 155 GRADUO: siguen siendo values/familias reales, pero ya tienen productor. */
 const GRADUADOS_155 = ["por_recolectar_en_tienda", "recoleccion_tienda"] as const;
+
+/** El que la 158 GRADUO, con el modulo de negocio que lo produce (R6/R8, Q-G). */
+const GRADUADO_158 = {
+  literal: "incidente",
+  productorEstado: "lib/services/MisAsignacionesService.ts",
+  productorFamilia: "lib/repositories/GestionOrdenRepository.ts",
+} as const;
 
 // Archivos que SI pueden nombrarlos (por ruta relativa POSIX, no por basename: `incidente` es
 // una palabra comun y un basename suelto seria una allowlist demasiado ancha).
@@ -82,33 +104,55 @@ function ofensores(): string[] {
   return out;
 }
 
-describe("154/R28 — los values y familias TODAVIA sin productor estan DECLARADOS y SIN USO", () => {
+describe("154/R28 — censo de values/familias declarados SIN productor (CERRADO por la 158)", () => {
   it("ningun archivo de app/, lib/, components/, hooks/, scripts/ ni e2e/ fuera de la allowlist los nombra", () => {
+    // Con `LITERALES_154` vacio esto es trivialmente cierto, y se dice sin disimulo en la
+    // cabecera del archivo. Se conserva porque la maquinaria (`ofensores()`) es lo que hay que
+    // reusar si una feature futura vuelve a declarar un value antes que su productor.
     expect(ofensores()).toEqual([]);
   });
 
-  it("los cuatro archivos de la allowlist SI los declaran (el guard no es vacuo)", () => {
+  it("los cuatro archivos de la allowlist siguen declarando el value de la 154", () => {
+    // Ya no se afirma sobre `LITERALES_154` (vacio): se afirma sobre el literal que estuvo
+    // censado hasta la 158, para que este caso siga midiendo algo real.
     for (const relativo of ALLOWLIST) {
       const contenido = fs.readFileSync(path.join(REPO_ROOT, relativo), "utf8");
-      const hits = LITERALES_154.filter((v) => v.re.test(contenido)).map((v) => v.label);
-      expect(hits.length, `${relativo} no declara ningun literal censado`).toBeGreaterThan(0);
+      expect(RE_INCIDENTE.test(contenido), `${relativo} ya no nombra incidente`).toBe(true);
     }
   });
 
-  it("el censo de `incidente` es por igualdad EXACTA (no marca “coincidentes”)", () => {
-    const re = LITERALES_154.find((v) => v.label === "incidente")!.re;
-    expect(re.test("las coincidentes y excluye distrito nulo")).toBe(false);
-    expect(re.test("solo las coincidentes")).toBe(false);
-    expect(re.test('estatus = "incidente"')).toBe(true);
-    expect(re.test("origenTipo: incidente,")).toBe(true);
+  it("el censo de `incidente` era por igualdad EXACTA (no marcaba “coincidentes”)", () => {
+    // La expresion se CONSERVA aunque el literal haya graduado: es la que habria que reusar si
+    // un dia hubiera que volver a confinarlo, y es la que este archivo usa mas abajo para
+    // verificar la graduacion.
+    expect(RE_INCIDENTE.test("las coincidentes y excluye distrito nulo")).toBe(false);
+    expect(RE_INCIDENTE.test("solo las coincidentes")).toBe(false);
+    expect(RE_INCIDENTE.test('estatus = "incidente"')).toBe(true);
+    expect(RE_INCIDENTE.test("origenTipo: incidente,")).toBe(true);
   });
 
-  it("155: el censo queda reducido a `incidente`, el unico todavia sin productor", () => {
-    expect(LITERALES_154.map((v) => v.label)).toEqual(["incidente"]);
-    // Y sigue siendo un value/familia real: si una feature posterior lo renombrara, este
-    // guard dejaria de censar lo que cree censar.
-    expect(ORDER_STATUS_SEED).toContain("incidente");
-    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("incidente");
+  it("158: el censo queda VACIO — ya no queda ningun literal de la 154 sin productor", () => {
+    expect(LITERALES_154).toEqual([]);
+    // Sale del CENSO, no del sistema: el value y la familia siguen existiendo.
+    expect(ORDER_STATUS_SEED).toContain(GRADUADO_158.literal);
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain(GRADUADO_158.literal);
+  });
+
+  it("158: `incidente` SI aparece ya en modulos de negocio (tiene productor real)", () => {
+    // Contraparte del caso de la 155, y lo que convierte «el censo esta vacio» en una
+    // afirmacion con contenido: no esta vacio porque nadie use el literal, sino porque su
+    // productor llego y esta EN ESTOS DOS archivos.
+    const conEstado = fs.readFileSync(
+      path.join(REPO_ROOT, ...GRADUADO_158.productorEstado.split("/")),
+      "utf8",
+    );
+    expect(conEstado).toMatch(RE_INCIDENTE);
+    const conFamilia = fs.readFileSync(
+      path.join(REPO_ROOT, ...GRADUADO_158.productorFamilia.split("/")),
+      "utf8",
+    );
+    // Q-G: el append de la transicion escribe la familia `incidente`, no `gestion`.
+    expect(conFamilia).toMatch(/origenTipo:[^\n]*"incidente"/);
   });
 
   it("155: los dos literales graduados siguen existiendo en el catalogo y en las familias", () => {

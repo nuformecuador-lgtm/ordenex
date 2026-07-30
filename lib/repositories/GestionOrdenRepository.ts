@@ -305,6 +305,11 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           // la tx que cambia el estatus -> si algo falla, la causa NO queda persistida
           // (atomicidad ya provista, sin firma nueva).
           causaDevolucion: gestion.causaDevolucion ?? null,
+          // Feature 158/R6/R9: la causa del incidente entra en el MISMO INSERT que la gestion,
+          // dentro de la tx que cambia el estatus -> si algo falla, NADA queda persistido
+          // (atomicidad ya provista, sin firma nueva). `indemnizacion` NO se escribe aqui: el
+          // monto lo captura el admin al APROBAR el cierre (R19/R22).
+          causaIncidente: gestion.causaIncidente ?? null,
         },
         select: { id: true },
       });
@@ -332,13 +337,22 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
       // Feature 49/#9 (R17/R22/R20): registra la transicion (destino = resultado, actor = el
       // mensajero, `origenTipo` = gestion, `gestion_orden_id` = la gestion recien creada,
       // `motivo` = motivo de la gestion si aplica) en la MISMA tx que crea la gestion.
+      //
+      // Feature 158 (Q-G, R8): la rama `incidente` escribe la familia `incidente`, NO `gestion`.
+      // La 154 dio de alta ese valor del enum y lo dejo «declarado SIN PRODUCTOR hasta la 158»
+      // (`lib/types/orden-historial.ts`); esta es la linea que lo produce. Verificado que es
+      // inocuo donde importa: el derivador de intentos de entrega (67/160) filtra por
+      // `estatus_destino_id IN (devuelta, reprogramada)` — `incidente` no es ninguno, asi que
+      // esta fila NO cuenta como intento ni adelanta el escalado del cron SLA. Y NO hace falta
+      // anadir `incidente` a `ORIGEN_TIPOS_CON_GESTION`: ese conjunto solo desambigua filas SIN
+      // enlace a gestion, y esta nace CON `gestion_orden_id` poblado.
       await appendCambioEstado(tx, [
         {
           ordenId,
           estatusOrigenId: actual?.estatusId ?? null,
           estatusDestinoId: nuevoEstatusId,
           actorUsuarioId: mensajeroId, // R21
-          origenTipo: "gestion", // R23
+          origenTipo: gestion.resultado === "incidente" ? "incidente" : "gestion", // R23 / 158 Q-G
           motivo: gestion.motivo ?? null, // R22
           gestionOrdenId: creada.id,
         },

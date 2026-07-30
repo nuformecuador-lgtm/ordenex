@@ -1,4 +1,9 @@
-import type { GestionCausaDevolucion, GestionResultado, MetodoPagoValue } from "@prisma/client";
+import type {
+  GestionCausaDevolucion,
+  GestionCausaIncidente,
+  GestionResultado,
+  MetodoPagoValue,
+} from "@prisma/client";
 
 // Feature 36 — contrato del repositorio del flujo del mensajero. Persistencia de
 // gestion_orden, lectura de "mis asignaciones", transicion "Recoger" en lote y
@@ -84,6 +89,16 @@ export interface GestionOrdenData {
    * cambia su firma y la atomicidad de R13 se conserva tal cual.
    */
   causaDevolucion?: GestionCausaDevolucion | null;
+  /**
+   * Feature 158/R9: causa tipificada del INCIDENTE. Nullable por rama como las demas: el
+   * service solo la arma en `resultado = incidente` (la obligatoriedad ya la exigio el borde,
+   * R9). Viaja DENTRO de `GestionOrdenData` -> `crearGestionYTransicionar` NO cambia su firma
+   * y la atomicidad de R6 se conserva tal cual.
+   *
+   * OJO: `indemnizacion` NO viaja aqui. El monto NO existe al crear la gestion — lo captura el
+   * admin al APROBAR el cierre (R19/R22), en otra transaccion y por otro camino.
+   */
+  causaIncidente?: GestionCausaIncidente | null;
 }
 
 // Feature 100 (design §2.1) — entrada de la REPROGRAMACION por la tienda. Los estatus ya vienen

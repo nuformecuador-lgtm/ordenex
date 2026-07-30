@@ -200,6 +200,7 @@ function rawFromFormData(formData: FormData): Record<string, unknown> {
     "fechaReprogramacion",
     "motivo",
     "causaDevolucion", // feature 73: campo de texto -> entra por el bucle, sin coercion
+    "causaIncidente", // feature 158/R9: idem, campo de texto sin coercion
   ]) {
     const value = formData.get(campo);
     if (value !== null) raw[campo] = value;
@@ -263,6 +264,17 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
         ubicacion,
         ordenId: data.ordenId,
         resultado: "rechazada",
+        motivo: data.motivo,
+        evidencias: await leerEvidencias(data.evidencias as unknown as FileLike[]),
+      };
+    // Feature 158 (R9/R10/R11): el INCIDENTE. Sin monto ni metodo de pago (no hay recaudo);
+    // causa tipificada + motivo libre + las 1..N fotos, obligatorias en las TRES causas.
+    case "incidente":
+      return {
+        ubicacion,
+        ordenId: data.ordenId,
+        resultado: "incidente",
+        causaIncidente: data.causaIncidente,
         motivo: data.motivo,
         evidencias: await leerEvidencias(data.evidencias as unknown as FileLike[]),
       };
