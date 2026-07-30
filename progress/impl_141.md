@@ -276,3 +276,119 @@ desde entonces cambió en **188 commits**, incluida la reescritura de `BulkOrden
 `OrdenRepository` y el borde de la API key — los mismos módulos que esta feature toca. **Esta
 reintegración NO revalida ese review.** Hace falta un re-review del merge antes de mergear el PR
 #168.
+
+> **Estado de este aviso (2026-07-30): ATENDIDO.** El re-review se hizo y está en
+> `progress/review_141_reintegracion.md` — **OK, 0 bloqueantes**, 27 mutaciones, 26 muertas.
+
+---
+
+## Reintegraciones posteriores — la sección de arriba se quedó corta (2026-07-29 → 2026-07-30)
+
+La sección anterior documenta **solo la PRIMERA** reintegración (`c473ecf0`, "587 archivos / 6523
+tests"). Después hubo **dos merges más** y los números de hoy son otros. Historial completo:
+
+| Merge | Qué integró | Conflictos y resolución |
+| --- | --- | --- |
+| `c473ecf0` | lote 153–160 (188 commits de `dev`) | 19 archivos, ninguno semántico — detalle en la sección anterior |
+| `6acad912` | PR #203 (155) y #204 (fix/159) | **7**, todos adiciones en la misma región → resueltos por **UNIÓN**: `OrdenRepository.ts` (conviven `setCargaDownloadUrl`/`setOrdenesDownloadUrl` de la 141 y `findResumenByNumRemisiones`, que el cierre de la 159 **restituyó** al contrato); `ordenes-api-key-carga.route.test.ts` (los 3 `describe` de la 141 + el de la 159/R9, los cuatro independientes); `zonas-migration.test.ts` (unión de migraciones apendidas 141 + 149); y los 4 dobles de `IOrdenRepository`, donde se conservan las firmas nuevas (`{ inserted, cargaId }`, `{ creadas, cargaId }`) y se añade el método restituido |
+| `ee6676fc` | hotfix WhatsApp, PR #206 y #207 | **1**, y es justo el que el #207 vino a matar: `tests/integration/db/zonas-migration.test.ts`. La rama traía la denylist a mano de 107 líneas (con su entrada para la migración de la 141); `dev` trae el **baseline pinneado**. Se toma la de `dev`: la entrada de la 141 sobra porque el invariante de orden de esta migración lo cubre su propio `carga-migration.test.ts`. Archivo **byte-idéntico a `dev`** |
+
+### Verificación real de hoy (worktree `rescate-141`, rama `rescate/141-rebase`, HEAD `ee6676fc`)
+
+Los números de "587 archivos / 6523 tests" de arriba son de `c473ecf0` y **ya no aplican**:
+
+```
+$ ./init.sh
+typecheck paso
+19 problems (0 errors, 19 warnings)  -> lint paso
+ Test Files  622 passed (622)
+      Tests  7110 passed (7110)
+test paso
+todas las migraciones tienen down.sql
+.env presente
+== init OK ==
+```
+
+---
+
+## Cierre del mutante M10 — invariante de frontera 141 × 149 (2026-07-30)
+
+El re-review dejó **un único mutante vivo de 27**: añadir `carga_id = NULL, download_url = NULL`
+al `SET` de `OrdenRepository.deshacerAsignacionLote` (código de la **149**) dejaba **7110/7110
+tests en verde**. El comportamiento de hoy es **CORRECTO y no se ha cambiado** —verificado por el
+reviewer contra Postgres real: la orden revertida conserva su `carga_id`—, pero lo cumplía **por
+ausencia**, sin ninguna red que lo sostuviera.
+
+**Archivo creado (único cambio de código de este cierre):**
+`tests/integration/repositories/deshacer-asignacion.trazabilidad-carga.test.ts` (2 casos).
+
+**Dónde y por qué ahí.** El invariante es de la **141** (son sus columnas) pero el código mutable
+es de la **149**, así que va donde vive el otro test de semántica de `deshacerAsignacionLote`
+(`tests/integration/repositories/deshacer-asignacion.historial.test.ts`), no con sus vecinos
+unitarios: esos afirman la **forma** del SQL (`expect(sql).not.toMatch(...)`) y un aserto de esa
+familia habría fijado el texto del `SET` en vez del comportamiento. Aquí el doble de `$queryRaw`
+**reconstruye el SQL como Prisma, parsea el `SET`/`WHERE` y los EJECUTA** sobre filas en memoria;
+el aserto mira **la fila resultante**. Una columna nueva en el `SET` se aplica sola, sin tocar el
+test, y toda expresión que la base en memoria no sabe evaluar **lanza** en vez de pasar de largo.
+
+**Qué afirma** (no "dos columnas": la trazabilidad):
+- caso (a) `por_recoger → en_bodega_central` — la orden **suelta** mensajero, `asignado_at` y
+  estado, y **conserva** `carga_id` y `download_url`. Los tres primeros asertos existen para que
+  el invariante no sea vacuo: prueban que el UPDATE se aplicó de verdad sobre esa fila.
+- caso (b) `en_ruta_bodega_satelite → en_bodega_central` con guarda de zona y lote de 2 órdenes —
+  la que venía de una carga la conserva entera; la de alta manual (R37, `carga_id` NULL) sigue en
+  NULL: el invariante **conserva, no escribe**.
+
+**Comprobación de que mata al mutante** (aplicado de verdad y revertido, `git diff` vacío después):
+
+```
+# con `carga_id = NULL, download_url = NULL` añadido al SET de deshacerAsignacionLote
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+AssertionError: expected null to be 'carga-2026-07-30-tienda-1'  // ambos casos
+```
+
+**Salida real tras revertir la mutación** (`./init.sh` completo, worktree `rescate-141`):
+
+```
+$ ./init.sh
+✓ typecheck paso
+✖ 19 problems (0 errors, 19 warnings)      [las mismas 19 del baseline; ninguna en el archivo nuevo]
+✓ lint paso
+ Test Files  623 passed (623)
+      Tests  7112 passed (7112)
+   Duration  292.01s
+✓ test paso
+✓ todas las migraciones tienen down.sql
+✓ .env presente
+== init OK ==
+```
+
+Delta sobre el baseline del re-review (622 / 7110): **+1 archivo, +2 tests, 0 fallos**. Cero
+archivos de `lib/`, `app/` o `db/` tocados.
+
+### Mapa `R<n> → test` (adición)
+
+| R | Test (archivo · caso) |
+| --- | --- |
+| _(sin R — ver propuesta abajo)_ | `tests/integration/repositories/deshacer-asignacion.trazabilidad-carga.test.ts` · "caso (a) por_recoger -> en_bodega_central: suelta al mensajero, NO suelta el lote" + "caso (b) con guarda de zona: cada orden del lote conserva EL SUYO…" |
+
+### Propuesta de requisito (NO aplicada: la spec no se tocó)
+
+Ningún R1–R55 enuncia este invariante. **R36** cubre el camino de **carga** ("el mismo `carga_id`
+a todas las órdenes creadas del batch"), no el de **reversión**; **R37** cubre el alta manual sin
+lote. El hueco es el ciclo de vida **posterior** de la columna, que hoy no tiene requisito alguno.
+
+Se propone añadirlo al spec de la 141 (decisión del leader, no del implementador):
+
+> **R56.** CUANDO una orden cambia de estado por una vía que no es la carga masiva —en
+> particular al deshacer la asignación (149)— el sistema DEBE conservar intactos su `carga_id` y
+> su `download_url`.
+
+Redactarlo así lo deja **testable más allá de este mutante**: el día que aparezca otra vía de
+cambio de estado, el requisito ya la alcanza. El test de arriba cubriría hoy su primera vía.
+
+**Deuda que NO cierra este test** (sigue en `review_141_reintegracion.md` §11): el invariante
+general "ninguna vía de cambio de estado escribe `carga_id` ni `download_url`" — hoy verificado
+por barrido manual de los `SET` crudos del repositorio, no por test. Este test cubre la única vía
+que el reviewer identificó como riesgo real (la 149); no barre las futuras.
