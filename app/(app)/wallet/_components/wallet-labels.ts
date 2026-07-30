@@ -54,6 +54,11 @@ export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {
   pago_tienda: "Pago a tienda",
   pago_mensajero: "Pago a mensajero",
   gasto: "Gasto",
+  // Feature 158/R37: origen del egreso de indemnizacion del camino del ADMIN. Sigue la forma
+  // del hermano `gestion_orden` ("Gestión de orden"): nombra la ENTIDAD que origina el
+  // movimiento, no la accion. `ORIGEN_LABEL` es un `Record` completo — sin esta clave el build
+  // no compila, que es exactamente la red que obliga a decidir la etiqueta.
+  orden_incidente: "Incidente de orden",
 };
 
 /** Opciones del `Select` de tipo (con opción "todos" = value ""). */

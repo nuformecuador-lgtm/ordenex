@@ -7,19 +7,18 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // (el choke point `appendCambioEstado`) resuelve `id -> value` antes de preguntar aqui.
 //
 // El mapa es el INVENTARIO CERRADO del apendice A del design, leido del codigo de `dev`:
-// 42 aristas de flujo (numeracion #1-#53 con el #27 RETIRADO por la 139, #4/#6/#7c por la 156,
-// #1/#2/#3/#7b por la 155, + #43/#44 de la 154 + #45/#46/#47 de la 149 + #53 de la 158) + 2 de
-// creacion. Las 42 colapsan a 40 pares `(origen, destino)` unicos, porque dos pares estan
-// declarados dos veces con familias distintas: #19/#23 y #20/#24 (SLA vs. recuperacion
-// manual). El tercer duplicado historico (#3/#7b) se fue con el estado de fulfillment que
-// retiro la 155.
+// 52 aristas de flujo (numeracion #1-#58 con el #27 RETIRADO por la 139, #4/#6/#7c por la 156,
+// #1/#2/#3/#7b por la 155, + #43/#44 de la 154 + #45/#46/#47 de la 149 + #53 y #48-#52/#54-#58
+// de la 158) + 2 de creacion. Las 52 colapsan a 50 pares `(origen, destino)` unicos, porque dos
+// pares estan declarados dos veces con familias distintas: #19/#23 y #20/#24 (SLA vs.
+// recuperacion manual). El tercer duplicado historico (#3/#7b) se fue con el estado de
+// fulfillment que retiro la 155.
 //
-// NUMERACION: la 158 toma el #53 y NO los #48-#52, que quedan RESERVADOS para las cinco
-// entradas del admin (`en_bodega_central`/`en_bodega_satelite`/`en_ruta_bodega_*`/`por_recoger`
-// -> `incidente`) y sus cinco inversas #54-#58. Esas DIEZ aristas NO se declaran aqui a
-// proposito (design §15.2): llegan en el PR del camino del admin, JUNTO A SU PRODUCTOR.
-// Declararlas antes dejaria diez aristas legales que ningun service ejecuta — exactamente el
-// problema que la 154 dejo abierto con #43/#44 y que costo el tren 154+155+156.
+// NUMERACION: la 158 llego en DOS PRs (decision Q-L del humano). El PR 1 (camino del MENSAJERO)
+// tomo el #53 y dejo RESERVADOS los #48-#52 y #54-#58 sin declararlos, porque su productor no
+// existia todavia: declarar una arista antes que su productor es exactamente el problema que la
+// 154 dejo abierto con #43/#44 y que costo el tren 154+155+156. El PR 2 (camino del ADMIN) las
+// declara JUNTO A SU PRODUCTOR (`IncidenteAdminRepository`), que es cuando toca.
 //
 // Aritmetica de la integracion, por si alguien la rehace: `dev` con la 155 dentro queda en 38
 // aristas / 36 pares. La 149 suma TRES aristas y sus tres pares son NUEVOS, asi que 38+3=41 y
@@ -49,9 +48,11 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // El spec numeraba estas aristas #43/#44/#45; se renumeraron a #45/#46/#47 al integrar `dev`,
 // porque la 154 ya habia tomado #43/#44 mientras la 149 iba en su rama.
 //
-// FEATURE 158 — SOLO ADITIVA en aristas: suma #53 (`incidente -> en_reparto`, deshacer) y
-// REALINEA el `via` de #44 (`gestion` -> `incidente`) para que el metadato coincida con el
-// `origen_tipo` que realmente se persiste (Q-G). No retira ninguna arista.
+// FEATURE 158 — SOLO ADITIVA en aristas. PR 1 (mensajero): suma #53 (`incidente -> en_reparto`,
+// deshacer) y REALINEA el `via` de #44 (`gestion` -> `incidente`) para que el metadato coincida
+// con el `origen_tipo` que realmente se persiste (Q-G). PR 2 (admin): suma las CINCO entradas
+// desde bodega y transito interno (#48-#52) y sus CINCO inversas de reversion (#54-#58), todas
+// con la familia `incidente` que la 154 dio de alta para esto. No retira ninguna arista.
 //
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
@@ -103,6 +104,9 @@ export const TRANSICIONES = {
   en_ruta_bodega_central: [
     { to: "devolviendo_a_tienda", via: "cancelacion_api", rol: "apiKey (tienda)" }, // #30
     { to: "en_bodega_central", via: "recepcion_bodega_central", rol: "maestro/admin" }, // #37 (138)
+    // #50 (158, camino del ADMIN): el paquete se dana/pierde/roba EN TRANSITO hacia la central.
+    // `rol` calcado de la vecina #37, que es quien lo recibiria ahi (`maestro/admin`).
+    { to: "incidente", via: "incidente", rol: "maestro/admin" }, // #50 (158)
   ],
   // Feature 154: estado de ESPERA en la tienda. Nace por creacion (esta en ESTADOS_CREACION) y
   // sale hacia la central cuando el mensajero la recolecta. La arista queda DECLARADA y SIN USO
@@ -117,16 +121,36 @@ export const TRANSICIONES = {
     { to: "por_recoger", via: "asignacion_bodega", rol: "maestro/admin" }, // #8
     { to: "devolviendo_a_tienda", via: "cancelacion_api", rol: "apiKey (tienda)" }, // #29
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #34
+    // #48 (158, camino del ADMIN): el paquete se dana/pierde/roba EN LA BODEGA CENTRAL. `rol`
+    // calcado de las vecinas del MISMO origen (#7 `ruteo_satelite` y #8 `asignacion_bodega`,
+    // las dos `maestro/admin`), no inventado.
+    { to: "incidente", via: "incidente", rol: "maestro/admin" }, // #48 (158)
   ],
   en_ruta_bodega_satelite: [
     { to: "en_bodega_satelite", via: "recepcion_satelite", rol: "adminSatelite" }, // #10
     // Feature 149 (caso b): deshacer el RUTEO antes de que la satelite reciba el paquete.
     // El paquete sigue bajo custodia de la central, por eso el destino es la central.
     { to: "en_bodega_central", via: "deshacer_asignacion", rol: "maestro/admin" }, // #45 (149)
+    // #51 (158): incidente EN TRANSITO hacia la satelite. Forma compuesta del `rol` porque las
+    // dos vecinas del origen se reparten el estado: #10 lo recibe el `adminSatelite` y #45 lo
+    // deshace `maestro/admin`.
+    {
+      to: "incidente",
+      via: "incidente",
+      rol: "maestro/admin/adminSatelite (de la zona)",
+    }, // #51 (158)
   ],
   en_bodega_satelite: [
     { to: "por_recoger", via: "asignacion_satelite", rol: "adminSatelite" }, // #9
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #35
+    // #49 (158): incidente EN LA BODEGA SATELITE. La forma compuesta del `rol` es LITERAL de
+    // #47 (149) y recoge que quien opera esa bodega es el `adminSatelite` de su zona (#9), sin
+    // quitarle el acceso total a maestro/admin.
+    {
+      to: "incidente",
+      via: "incidente",
+      rol: "maestro/admin/adminSatelite (de la zona)",
+    }, // #49 (158)
   ],
   por_recoger: [
     { to: "en_reparto", via: "recoleccion", rol: "mensajero" }, // #11
@@ -142,6 +166,19 @@ export const TRANSICIONES = {
       via: "deshacer_asignacion",
       rol: "maestro/admin/adminSatelite (de la zona)",
     }, // #47 (149)
+    // #52 (158): la orden ya esta asignada a un mensajero que aun NO la recogio, y el paquete
+    // se dana/pierde/roba mientras espera en bodega. `rol` con EXACTAMENTE el mismo string que
+    // #47, que es la otra accion administrativa sobre este mismo estado.
+    //
+    // Q-K (cerrada por el humano): el reporte NO toca `mensajero_asignado_id` ni `asignado_at`.
+    // Consecuencia declarada: la orden queda en `incidente` con un mensajero asignado colgando
+    // —inocuo, porque `incidente` no la hace elegible para nada— y a cambio la reversion (R60)
+    // es trivialmente correcta: no hay asignacion que reponer porque nunca se quito.
+    {
+      to: "incidente",
+      via: "incidente",
+      rol: "maestro/admin/adminSatelite (de la zona)",
+    }, // #52 (158)
   ],
   en_reparto: [
     { to: "entregada", via: "gestion", rol: "mensajero" }, // #12
@@ -225,8 +262,9 @@ export const TRANSICIONES = {
   // seres humanos y nosotros solemos cometer errores, lo ideal es que cada accion se pueda
   // deshacer, obviamente dentro de un ambiente controlado». Lo que se revierte es SOLO la via
   // de REVERSION: `incidente` sigue siendo TERMINAL —ningun camino de negocio lo continua ni
-  // lo devuelve a bodega— y conserva UNA salida, la de deshacer el error humano dentro de la
-  // ventana `cierre_id IS NULL` (`CierreDiaService.deshacerGestion`).
+  // lo devuelve a bodega— y conserva SOLO salidas de deshacer un error humano dentro de su
+  // ventana controlada (la del mensajero, `cierre_id IS NULL`, en `CierreDiaService.
+  // deshacerGestion`; la del admin, `estado = 'solicitado'`, en `IncidenteAdminService`).
   //
   // El destino es `en_reparto` porque ES el estado de origen: una gestion solo puede nacer
   // desde `en_reparto` (guardia `cargarOrdenGestionable` de `MisAsignacionesService`), asi que
@@ -234,8 +272,43 @@ export const TRANSICIONES = {
   //
   // Sigue en ESTADOS_TERMINALES y eso es COMPATIBLE: ese conjunto EXIME de tener salida, no la
   // prohibe (:236-237), y `entregada` es el precedente exacto (terminal Y con su #31).
+  //
+  // FEATURE 158 — camino del ADMIN (PR 2): a las cinco entradas #48-#52 les corresponden sus
+  // CINCO inversas #54-#58, que son la reversion del REPORTE (retracto del autor o rechazo del
+  // aprobador, R57-R59). El destino NO se hardcodea: se DERIVA del historial con
+  // `findOrigenesReversion` (149) y se valida contra el conjunto CERRADO de los 5 origenes; si
+  // no se puede determinar, o cae fuera del conjunto, la reversion se RECHAZA sin mover nada
+  // (R58, fallo cerrado). Estas cinco aristas son el mapa de lo que esa derivacion puede
+  // producir, no una lista de atajos.
+  //
+  // POR QUE #53 va con `deshacer_gestion` y #54-#58 con `incidente`: #53 deshace una GESTION
+  // (literalmente: `anularGestionYDevolverAGestion` escribe `origen_tipo = deshacer_gestion`),
+  // mientras que #54-#58 revierten un REPORTE de incidente, que no es una gestion. Que la
+  // familia `incidente` sirva a las dos direcciones no crea ambiguedad: la direccion se lee de
+  // `estatus_destino_id` (destino `incidente` = reporte; destino en los 5 origenes = reversion).
+  // Precedente de un mismo par declarado dos veces con familias distintas: #19/#23 y #20/#24.
+  //
+  // `incidente` SIGUE SIENDO TERMINAL: ninguna de estas seis salidas continua el flujo de
+  // negocio ni cobra nada — todas deshacen un error humano dentro de su ventana controlada.
   incidente: [
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #53 (158, Q-D)
+    { to: "en_bodega_central", via: "incidente", rol: "maestro/admin" }, // #54 (158, inversa de #48)
+    {
+      to: "en_bodega_satelite",
+      via: "incidente",
+      rol: "maestro/admin/adminSatelite (de la zona)",
+    }, // #55 (158, inversa de #49)
+    { to: "en_ruta_bodega_central", via: "incidente", rol: "maestro/admin" }, // #56 (158, inversa de #50)
+    {
+      to: "en_ruta_bodega_satelite",
+      via: "incidente",
+      rol: "maestro/admin/adminSatelite (de la zona)",
+    }, // #57 (158, inversa de #51)
+    {
+      to: "por_recoger",
+      via: "incidente",
+      rol: "maestro/admin/adminSatelite (de la zona)",
+    }, // #58 (158, inversa de #52)
   ],
 } as const satisfies Record<OrderStatusValue, readonly DestinoTransicion[]>;
 
@@ -278,6 +351,11 @@ export const ESTADOS_CREACION = [
  * salida de reversion. El conjunto NO cambia — `incidente` se queda aqui — porque este test
  * exime de necesitar salida, no la prohibe. La decision de la 154 no se borra: se acota a lo
  * que sigue vigente (no hay continuacion de negocio desde `incidente`).
+ *
+ * Feature 158, PR 2 (camino del ADMIN): las salidas pasan de 1 a 6 con las cinco inversas
+ * #54-#58. El conjunto SIGUE sin cambiar y la razon SIGUE siendo la misma: las seis son
+ * reversiones (deshacer un reporte erroneo), ninguna continua el flujo ni mueve dinero. Un
+ * `incidente` aprobado —con su egreso ya emitido— NO se revierte por ninguna de ellas (R59).
  */
 export const ESTADOS_TERMINALES = [
   "entregada",
