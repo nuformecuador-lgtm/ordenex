@@ -135,6 +135,60 @@ en la sección «Backlog pendiente».
 > Reemplaza al apartado «PENDIENTES» de arriba en todo lo que se contradiga. Lo verificado hoy va
 > con su número; lo no verificado se dice.
 
+> ## 🏁 CIERRE DEL DÍA — 2026-07-30. **Empieza a leer por aquí.**
+>
+> Lo de abajo (el «Cierre de la sesión del 2026-07-29») sigue siendo válido en su detalle técnico;
+> esto lo actualiza en lo que cambió al mergear.
+>
+> ### 🎉 `dev` y `prod` dejaron de divergir en la dirección peligrosa: **136 / 0**
+>
+> El **PR #205** portó el hotfix de WhatsApp y `dev` ya contiene TODO lo que tiene `prod`. Era el
+> problema que llevaba tres días sangrando en silencio: el #183 se había **cerrado sin mergear**, así
+> que `dev` arrastraba el bug de reintentos infinitos y no quedaba PR que lo arreglara. De paso se
+> retiraron las dos Server Actions `_tmp-*` (que **estaban en producción**) y la migración
+> `20260728230000_chat_mensaje_error_meta` ganó el `down.sql` que le faltaba, **ejecutado** en
+> round-trip, no revisado por lectura.
+>
+> ### Mergeado hoy
+>
+> **#202** (149 · deshacer asignación) · **#203** (155) · **#204** (cierre 159) · **#205** (hotfix
+> WhatsApp) · **#206** (decisiones de la 155 + registro).
+>
+> El lote 153–160 queda: **153, 154, 155, 156, 159, 160 → `done`**. Solo faltan **157 y 158**.
+>
+> ### ⏭️ Lo que queda, en orden
+>
+> 1. **`prisma migrate deploy` en LOCAL** — quedan 2 migraciones sin aplicar:
+>    `20260728230000_chat_mensaje_error_meta` y `20260729140000_orden_historial_origen_deshacer_asignacion`.
+> 2. **PR #207** (este) — reconcilia la 159 a `done` + mata la denylist de migraciones.
+> 3. **PR #168** (141) — MERGEABLE y con gate verde (603 archivos / 6754 tests), pero ⚠️ **NECESITA
+>    RE-REVIEW**: su veredicto es del 2026-07-27 y la base cambió **222 commits** desde entonces,
+>    incluida la reescritura de `BulkOrdenService` / `OrdenRepository` / el borde de la API key, que
+>    son los módulos que toca. Ahora además convive con la 149 en `OrdenRepository`. Lo que SÍ está
+>    verificado: `lote` y `deshacerAsignacionLote` **no se pisan** (transacciones distintas, y el
+>    `SET` de la 149 no toca `carga_id` ni `download_url`), con la consecuencia correcta — una orden
+>    revertida **conserva su lote**.
+> 4. **Desplegar `dev → prod`**: 136 commits, incluye el tren 154+155+156. **Antes**, la task
+>    **T24.1 de la 160**: re-correr la consulta de retroactividad y **DETENER el deploy si da > 0**.
+>
+> ### Al retomar el lote: la 157 está DESBLOQUEADA pero su puerta NO está cerrada
+>
+> Su `depends_on` (155) ya está en `dev`, y hereda del review de la 155 los **R41/R42/R43** del
+> manifiesto por la vía sesión (Bloque E de su `requirements.md`). Pero arrastra **6 preguntas
+> abiertas** sin responder. **Cerrar la puerta F1.4 ANTES de implementar** — es la lección que este
+> mismo archivo dejó escrita: «gate aprobado en la bitácora no es lo mismo que las preguntas del spec
+> respondidas por escrito». La **158** no tiene dependencias bloqueadas.
+>
+> ### Hallazgo del día que conviene no olvidar
+>
+> **La denylist del invariante de orden de migraciones se AUTO-REFORZABA.** Rompió **cinco veces** en
+> un día. Cada migración nueva no solo sumaba una entrada a la lista de `zonas` —que llegó a **quince
+> entradas y ~100 líneas**— sino **un meta-test en su propio archivo exigiendo esa entrada**; había
+> **cinco** de esos. El coste real de apendar una migración era editar los tests de otras features en
+> dos sitios. Arreglado en el #207 pinneando el baseline a su hecho histórico, verificado por
+> mutación. **Lección general: un test que se mantiene con una lista a mano no protege un invariante,
+> lo convierte en peaje.**
+
 > ### ✅ Cierre de la sesión del 2026-07-29 — retomar por aquí
 >
 > **Dos PRs abiertos, los dos con gate verde sobre `dev` ya integrado:**
