@@ -28,6 +28,7 @@ import { serializarFiltro, type OrdenesFilterUI } from "./serializar-filtro";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
 import { EtiquetaOrdenAccion } from "./EtiquetaOrdenAccion";
+import { ReportarIncidenteAccion } from "./ReportarIncidenteAccion";
 
 /**
  * Acción por lote ofrecida en la barra contextual cuando hay filas seleccionadas.
@@ -108,6 +109,7 @@ export function OrdenesModule({
   acciones,
   resaltarPrioridad = false,
   permitirDescarga = false,
+  puedeReportarIncidente = false,
 }: {
   columns?: Column<OrdenListItemDTO>[];
   puedeCargarMasiva?: boolean;
@@ -170,6 +172,15 @@ export function OrdenesModule({
    * cambian (R24/R38).
    */
   permitirDescarga?: boolean;
+  /**
+   * Feature 158 (T2.7, Q-H): ofrece la acción POR FILA "Reportar incidente". Opt-in y por
+   * defecto `false`, de modo que ninguna superficie previa cambia. La página la enciende sólo
+   * para roles de ACCESO TOTAL (maestro/admin); la acción se auto-oculta además en las filas
+   * cuyo estado no admite el reporte (R41) y el servidor revalida rol y alcance (R48).
+   *
+   * NO es una acción por LOTE a propósito: un incidente pide causa, motivo y fotos por orden.
+   */
+  puedeReportarIncidente?: boolean;
 } = {}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -277,23 +288,41 @@ export function OrdenesModule({
         ]
       : columnasDatos;
 
-    if (!mostrarHistorial) return conSeleccion;
+    // La columna de acciones por fila existe si la enciende AL MENOS una de sus dos
+    // fuentes: el historial/etiqueta (49/32) o el reporte de incidente (158). Cada pieza
+    // se monta por separado, así que encender una no arrastra la otra.
+    if (!mostrarHistorial && !puedeReportarIncidente) return conSeleccion;
     return [
       ...conSeleccion,
       {
         id: "acciones",
         value: "Acciones",
         // Acciones por fila del listado: ver historial (drawer) + ver etiqueta
-        // (vista previa de QR + datos y descarga del PDF 100×100 mm, feature 32).
+        // (vista previa de QR + datos y descarga del PDF 100×100 mm, feature 32) +
+        // reportar incidente (feature 158, sólo en los 5 estados que lo admiten).
         render: (row) => (
           <div className="flex items-center gap-1">
-            <HistorialOrdenSheet ordenId={row.id} referencia={row.numRemision} />
-            <EtiquetaOrdenAccion orden={row} />
+            {mostrarHistorial ? (
+              <>
+                <HistorialOrdenSheet ordenId={row.id} referencia={row.numRemision} />
+                <EtiquetaOrdenAccion orden={row} />
+              </>
+            ) : null}
+            {puedeReportarIncidente ? <ReportarIncidenteAccion orden={row} /> : null}
           </div>
         ),
       },
     ];
-  }, [columns, mostrarHistorial, haySeleccion, seleccionIds, bloqueoSeleccion, items, resaltarPrioridad]);
+  }, [
+    columns,
+    mostrarHistorial,
+    puedeReportarIncidente,
+    haySeleccion,
+    seleccionIds,
+    bloqueoSeleccion,
+    items,
+    resaltarPrioridad,
+  ]);
 
   // Snapshot de las filas marcadas PRESENTES en la página actual (la selección se
   // acota a lo visible, como en la vista de revisión previa).

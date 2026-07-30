@@ -11,6 +11,7 @@ import {
   Megaphone,
   Package,
   Settings,
+  ShieldAlert,
   Trophy,
   Truck,
   User,
@@ -144,6 +145,9 @@ const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   megaphone: Megaphone,
   trophy: Trophy,
   wallet: Wallet,
+  // Feature 158 (T2.8): cola de incidentes. Icono propio, distinto del de "Cierres del
+  // dia": un incidente no es un cierre.
+  shieldAlert: ShieldAlert,
 };
 
 // Entrada escalonada de los items al cargar (solo la primera vez). Cada item

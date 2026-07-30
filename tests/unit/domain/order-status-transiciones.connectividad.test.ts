@@ -87,28 +87,83 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
     expect(grados.get("entregada")!.salidas).toBeGreaterThan(0);
   });
 
-  // Feature 154/R16 + feature 158/R13/R61 — INVERTIDO el 2026-07-30, no borrado.
+  // Feature 154/R16 + feature 158/R13/R61 — REESCRITO DOS VECES, nunca borrado.
   //
   // La 154 afirmaba aqui `salidas === 0` y `TRANSICIONES.incidente === []`. La decision Q-D de
-  // la 158 REVIERTE esa parte: un incidente SI se puede deshacer. Lo que el caso protege sigue
-  // siendo el MISMO invariante y con la misma fuerza — «desde `incidente` no se sale a ningun
-  // sitio salvo a lo declarado» — solo que el conjunto declarado paso de vacio a EXACTAMENTE
-  // una arista, y se enumera: cualquier salida de mas (por ejemplo, alguien reabriendo un
-  // camino de negocio hacia bodega o resucitando el `indemnizada` que el gate de la 154
-  // descarto) pone este caso en rojo igual que antes.
+  // la 158 (PR 1) REVIRTIO esa parte: un incidente SI se puede deshacer. El camino del ADMIN
+  // (PR 2) suma las CINCO inversas de sus cinco entradas. Lo que el caso protege sigue siendo el
+  // MISMO invariante y con la misma fuerza — «desde `incidente` no se sale a ningun sitio salvo
+  // a lo declarado» — solo que el conjunto declarado paso de vacio a UNA y de UNA a SEIS, y se
+  // enumera ENTERO: cualquier salida de mas (por ejemplo, alguien reabriendo un camino de
+  // negocio o resucitando el `indemnizada` que el gate de la 154 descarto) pone este caso en
+  // rojo igual que antes.
   //
   // El estado `indemnizada` NO existe y esta feature no lo declara.
-  it("154/R16 + 158/Q-D: incidente es terminal, alcanzable (#44) y su UNICA salida es el deshacer", () => {
+  it("154/R16 + 158/Q-D/R61: incidente es terminal, alcanzable y sus UNICAS salidas son las 6 reversiones", () => {
     const grados = calcularGrados();
     expect([...ESTADOS_TERMINALES]).toContain("incidente"); // sigue TERMINAL (el test exime, no prohibe)
     expect(grados.get("incidente")!.entradas).toBeGreaterThan(0);
-    // Igualdad EXACTA sobre la lista completa: es la asercion que discrimina.
+    // Igualdad EXACTA sobre la lista completa y en orden: es la asercion que discrimina.
     expect(TRANSICIONES.incidente).toEqual([
-      { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #53
+      { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #53 (mensajero)
+      { to: "en_bodega_central", via: "incidente", rol: "maestro/admin" }, // #54
+      {
+        to: "en_bodega_satelite",
+        via: "incidente",
+        rol: "maestro/admin/adminSatelite (de la zona)",
+      }, // #55
+      { to: "en_ruta_bodega_central", via: "incidente", rol: "maestro/admin" }, // #56
+      {
+        to: "en_ruta_bodega_satelite",
+        via: "incidente",
+        rol: "maestro/admin/adminSatelite (de la zona)",
+      }, // #57
+      {
+        to: "por_recoger",
+        via: "incidente",
+        rol: "maestro/admin/adminSatelite (de la zona)",
+      }, // #58
     ]);
-    expect(grados.get("incidente")!.salidas).toBe(1);
-    // El catalogo NO gana ningun estado: la 158 no toca `order_status`.
+    expect(grados.get("incidente")!.salidas).toBe(6);
+    // El catalogo NO gana ningun estado: la 158 no toca `order_status` en ninguno de sus 2 PRs.
     expect(ORDER_STATUS_SEED).not.toContain("indemnizada" as never);
+  });
+
+  // Feature 158/R61/R62 (PR 2) — las cinco entradas del ADMIN y sus cinco inversas son SIMETRICAS
+  // por construccion: cada estado desde el que se puede reportar es un estado al que se puede
+  // revertir, y al reves. No es cosmetica — R57 dice que el destino de la reversion es el estado
+  // de ORIGEN, asi que una entrada sin su inversa dejaria un reporte imposible de deshacer, y una
+  // inversa sin su entrada seria un destino al que la derivacion nunca podria llegar.
+  it("158/R57/R62: las entradas del admin y sus inversas son un conjunto SIMETRICO de 5", () => {
+    // ⚠️ La FAMILIA no basta para separar los dos caminos, y conviene saberlo: Q-G realineo el
+    // `via` de la #44 (`en_reparto -> incidente`, la del MENSAJERO) a `incidente`, asi que hay
+    // SEIS entradas con esa familia. Lo que las distingue es el ORIGEN: `en_reparto` es la del
+    // mensajero (su reversion es la #53, familia `deshacer_gestion`) y las otras cinco son las
+    // del admin. La direccion, a su vez, se lee de si `incidente` es origen o destino.
+    const entradasFamiliaIncidente = Object.entries(TRANSICIONES)
+      .filter(([, destinos]) => destinos.some((d) => d.to === "incidente" && d.via === "incidente"))
+      .map(([origen]) => origen)
+      .sort();
+    expect(entradasFamiliaIncidente).toContain("en_reparto"); // #44, camino del MENSAJERO
+    expect(entradasFamiliaIncidente).toHaveLength(6);
+
+    const entradasAdmin = entradasFamiliaIncidente.filter((o) => o !== "en_reparto");
+    const inversas = TRANSICIONES.incidente
+      .filter((d) => d.via === "incidente")
+      .map((d) => d.to as string)
+      .sort();
+    expect(entradasAdmin).toEqual([
+      "en_bodega_central",
+      "en_bodega_satelite",
+      "en_ruta_bodega_central",
+      "en_ruta_bodega_satelite",
+      "por_recoger",
+    ]);
+    // SIMETRIA: cada origen desde el que se reporta es un destino al que se puede revertir.
+    expect(inversas).toEqual(entradasAdmin);
+    // Y `en_reparto` NO es destino de ninguna inversa de familia `incidente`: la reversion del
+    // camino del mensajero es la #53 y va con `deshacer_gestion`. Los dos caminos no se mezclan.
+    expect(inversas).not.toContain("en_reparto");
   });
 
   // Feature 154/R17: `por_recolectar_en_tienda` NO es terminal: tiene entrada (creacion) y salida.

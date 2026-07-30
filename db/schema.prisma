@@ -136,6 +136,8 @@ model Usuario {
   notificacionesDeSuTienda            Notificacion[]            @relation("NotificacionTienda") // feature 146/F1.4-1: notificaciones ACOTADAS a esta tienda (el adminTienda ES la tienda)
   notificacionLecturas                NotificacionLectura[] // feature 146/R2/R3: lectura/descarte de ESTE usuario, aislado de los demas del mismo rol
   cargasRealizadas                    Carga[]                   @relation("CargaUsuario") // feature 141/R2: lotes de carga masiva que ESTE usuario realizo (adminTienda o usuario dedicado de la API key)
+  incidentesReportados                OrdenIncidente[]          @relation("IncidenteReportadoPor") // feature 158/R39/R51: incidentes que este admin REPORTO (y que por tanto NO puede aprobar)
+  incidentesResueltos                 OrdenIncidente[]          @relation("IncidenteResueltoPor") // feature 158/R52/R54: incidentes que este admin aprobo/rechazo
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -163,30 +165,30 @@ enum PlantillaEstado {
 // 3; R27/R28): los listados filtran `deletedAt IS NULL`. El conjunto de variables usadas
 // por el cuerpo se persiste como ARRAY de claves (Decision humana 4; R15), text[] nativo.
 model PlantillaMensaje {
-  id        String          @id @default(uuid())
-  nombre    String          @unique // R10: identificador unico
-  cuerpo    String // texto con placeholders {{clave}}
-  variables String[] // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
-  estado    PlantillaEstado @default(pending) // R12 (Decision humana 1)
+  id             String          @id @default(uuid())
+  nombre         String          @unique // R10: identificador unico
+  cuerpo         String // texto con placeholders {{clave}}
+  variables      String[] // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
+  estado         PlantillaEstado @default(pending) // R12 (Decision humana 1)
   // Integracion WhatsApp: enlace al Message Template de Meta. NULL = todavia no propagada a
   // Meta (o Meta no la ha devuelto en la sincronizacion). El envio usa `nombre` + `templateIdioma`
   // (Meta manda por name+language, no por id); `templateId` es la referencia/traza a Meta y el
   // marcador de "enviable" (no NULL + estado activo).
-  templateId     String? @map("template_id")
-  templateIdioma String? @map("template_idioma") // code de idioma del template en Meta (p. ej. "es", "es_CO")
-  createdBy String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
-  deletedAt DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
-  createdAt DateTime        @default(now()) @map("created_at")
-  updatedAt DateTime        @updatedAt @map("updated_at")
+  templateId     String?         @map("template_id")
+  templateIdioma String?         @map("template_idioma") // code de idioma del template en Meta (p. ej. "es", "es_CO")
+  createdBy      String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
+  deletedAt      DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
 
   creador Usuario? @relation("PlantillaMensajeCreador", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  chatMensajes ChatMensaje[] @relation("ChatMensajePlantilla") // feature 109: salientes de tipo plantilla que referencian esta plantilla
 
   @@index([createdAt]) // R6: orden determinista del listado
   @@index([estado]) // filtro por estado
   @@index([deletedAt]) // R28: filtro de vigentes (deletedAt IS NULL)
   @@map("plantilla_mensaje")
-
-  chatMensajes ChatMensaje[] @relation("ChatMensajePlantilla") // feature 109: salientes de tipo plantilla que referencian esta plantilla
 }
 
 // Feature 109 (design §1.1): direccion de un mensaje del chat. Enum Postgres nativo
@@ -237,8 +239,8 @@ model ChatConversacion {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  orden     Orden       @relation(fields: [ordenId], references: [id], onDelete: Restrict)
-  mensajero Usuario     @relation("ChatConversacionMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict)
+  orden     Orden         @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  mensajero Usuario       @relation("ChatConversacionMensajero", fields: [mensajeroId], references: [id], onDelete: Restrict)
   mensajes  ChatMensaje[]
 
   @@unique([ordenId, telefonoE164]) // D4: un hilo por orden+numero
@@ -515,6 +517,7 @@ model Orden {
   rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
   mensajeroMetas        OrdenMensajeroMeta[]   @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
   chatConversaciones    ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
+  incidentesAdmin       OrdenIncidente[] // feature 158/R38: incidentes reportados por un ADMIN sobre esta orden (a lo sumo UNO vivo, indice parcial R47)
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -678,12 +681,12 @@ model GestionOrden {
   anuladaPor           String?                 @map("anulada_por") // feature 67/R11: FK -> usuario que la deshizo (espejo de cierre_dia.resuelto_por)
   createdAt            DateTime                @default(now()) @map("created_at")
 
-  orden             Orden                  @relation(fields: [ordenId], references: [id])
-  mensajero         Usuario                @relation("GestionMensajero", fields: [mensajeroId], references: [id])
-  cierre            CierreDia?             @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
+  orden             Orden                   @relation(fields: [ordenId], references: [id])
+  mensajero         Usuario                 @relation("GestionMensajero", fields: [mensajeroId], references: [id])
+  cierre            CierreDia?              @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
   // Feature 67/R11: quien deshizo la gestion. ON DELETE SET NULL como el actor del historial
   // (49/R21): borrar al usuario no borra el rastro de la anulacion.
-  anuladaPorUsuario Usuario?               @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
+  anuladaPorUsuario Usuario?                @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
   historialEstados  OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
   // Feature 119 (R1): evidencias 1..N de esta gestion (la portada = indice 0 se conserva
   // ademas denormalizada en evidencia_storage_path/_content_type por retro-compat, R12).
@@ -718,6 +721,72 @@ model GestionOrdenEvidencia {
   @@unique([gestionId, indice]) // R2: no dos filas con el mismo indice por gestion
   @@index([gestionId]) // lectura de las evidencias de una gestion
   @@map("gestion_orden_evidencia")
+}
+
+// Feature 158 (R38/R39, camino del ADMIN) — incidente reportado por un ADMIN sobre una orden que
+// NO esta en manos de un mensajero (bodega o transito interno).
+//
+// ⚠️ NO es —y NO puede ser— una fila de `gestion_orden`, y esto NO es preferencia de estilo
+// (design §9.7/§12.1): `gestion_orden.mensajero_id` es NOT NULL, asi que el admin tendria que
+// escribirse ahi, y `CorteDiarioRepository.findMensajerosConActividadSinCierre` consulta
+// `{ cierreId: null, anuladaAt: null }` con `distinct: ["mensajeroId"]` SIN filtrar rol ni
+// resultado -> el corte diario le crearia al ADMIN un `cierre_dia` `vencido` BLOQUEANTE que el
+// NO puede resolver, porque `CierreDiaService` esta acotado por rol al `mensajero`. Es un bug
+// reproducible y money-adjacent. NO "simplificar" esto fundiendolo con `gestion_orden`.
+//
+// REUSA `CierreEstado` (37) como TERCERA aplicacion del patron de aprobacion (38 -> `cierre_dia`,
+// 40 -> `cierre_bodega`), igual que la 40 reuso el enum en su decision F1.4-b. El valor `vencido`
+// NO aplica aqui, exactamente como no aplica en `cierre_bodega`. Y REUSA
+// `GestionCausaIncidente`: la causa es la MISMA lista cerrada de 3 valores del camino del
+// mensajero (R45 remite a R9).
+//
+// Indice unico PARCIAL `(orden_id) WHERE estado <> 'rechazado'` (R47) + RLS habilitada sin
+// policies van a mano en el SQL de la migracion (Prisma no los expresa), patron `cierre_bodega`.
+model OrdenIncidente {
+  id            String                @id @default(uuid())
+  ordenId       String                @map("orden_id")
+  causa         GestionCausaIncidente // MISMO enum que el camino del mensajero (R45 = R9)
+  motivo        String // R45: texto libre OBLIGATORIO siempre (Q-B), aparte de la causa
+  estado        CierreEstado          @default(solicitado) // R43: nace `solicitado` (reuso 37)
+  indemnizacion Decimal?              @db.Decimal(12, 2) // R50: NULL hasta que se apruebe
+  reportadoPor  String                @map("reportado_por") // R51: el autor NO puede aprobarlo
+  resueltoPor   String?               @map("resuelto_por") // R52/R54: el aprobador; NULL mientras `solicitado`
+  resueltoAt    DateTime?             @map("resuelto_at")
+  motivoRechazo String?               @map("motivo_rechazo") // R54: obligatorio SOLO al rechazar
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  orden               Orden                     @relation(fields: [ordenId], references: [id])
+  reportadoPorUsuario Usuario                   @relation("IncidenteReportadoPor", fields: [reportadoPor], references: [id])
+  resueltoPorUsuario  Usuario?                  @relation("IncidenteResueltoPor", fields: [resueltoPor], references: [id], onDelete: SetNull)
+  evidencias          OrdenIncidenteEvidencia[]
+
+  @@index([ordenId])
+  @@index([estado]) // R49: la cola de pendientes (patron cierre_dia/cierre_bodega)
+  @@index([reportadoPor])
+  @@index([resueltoPor])
+  @@map("orden_incidente")
+}
+
+// Feature 158 (R46): evidencias 1..N del incidente del admin. Espejo EXACTO de
+// `GestionOrdenEvidencia` (119). Tabla PROPIA y no una FK nullable sobre la de gestion
+// (design §9.9): esa tiene `gestion_id` NOT NULL y `@@unique([gestionId, indice])`, que son el
+// invariante de la 119, y convertirla en enlace polimorfico no tiene precedente en el repo.
+// `storage_path` es el path de un bucket PRIVADO, NUNCA una URL: se firma al mostrar (R46).
+// RLS habilitada sin policies (solo service role, patron gestion_orden_evidencia).
+model OrdenIncidenteEvidencia {
+  id          String   @id @default(uuid())
+  incidenteId String   @map("incidente_id")
+  storagePath String   @map("storage_path") // path bucket privado, NO URL
+  contentType String   @map("content_type") // image/jpeg|png|webp
+  indice      Int // 0-based, orden de captura; 0 = portada
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  incidente OrdenIncidente @relation(fields: [incidenteId], references: [id], onDelete: Cascade)
+
+  @@unique([incidenteId, indice]) // no dos filas con el mismo indice por incidente
+  @@index([incidenteId])
+  @@map("orden_incidente_evidencia")
 }
 
 // Feature 37 (R13/R18, decision F1.4-d): estado del cierre del dia del mensajero.
@@ -946,6 +1015,7 @@ enum WalletOrigenTipo {
   pago_tienda
   pago_mensajero
   gasto
+  orden_incidente // feature 158/R37: egreso de indemnizacion aprobado sobre un incidente del ADMIN
 
   @@map("wallet_origen_tipo")
 }
@@ -1142,7 +1212,7 @@ model GastoFijoPlantilla {
   activa               Boolean            @default(true)
   periodicidadUnidad   PeriodicidadUnidad @default(meses) @map("periodicidad_unidad")
   periodicidadCantidad Int                @default(1) @map("periodicidad_cantidad") // CHECK >= 1 en la migracion
-  fechaCobro           DateTime           @db.Date @map("fecha_cobro") // ancla: fecha del PRIMER cobro
+  fechaCobro           DateTime           @map("fecha_cobro") @db.Date // ancla: fecha del PRIMER cobro
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @default(now()) @updatedAt @map("updated_at")
 

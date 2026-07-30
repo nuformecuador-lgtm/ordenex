@@ -26,6 +26,11 @@ import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { envioDevolucionCentralErrorMessage } from "@/app/(app)/ordenes/_components/envio-devolucion-central-error-messages";
 import { recuperarBodegaErrorMessage } from "@/app/(app)/ordenes/_components/recuperar-bodega-error-messages";
+// Feature 158 (T2.7, decisión del humano del 2026-07-30): el reporte de incidente también
+// vive aquí. Se IMPORTA el mismo disparador y el mismo modal de `/ordenes`; esta superficie
+// sólo aporta SU regla de disponibilidad (alcance por zona, R48).
+import { ReportarIncidenteAccion } from "@/app/(app)/ordenes/_components/ReportarIncidenteAccion";
+import { puedeReportarIncidenteSatelite } from "./incidente-satelite";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { RecepcionDetalle } from "./RecepcionDetalle";
 import { recibidasColumns } from "./recibidas-columns";
@@ -254,6 +259,30 @@ export function RecepcionSateliteModule({
     [recibidas, seleccionados],
   );
 
+  /**
+   * Feature 158 (T2.7): columna de acciones POR FILA con «Reportar incidente». Se compone
+   * aquí y se añade SÓLO a las secciones cuyo estado es uno de los cinco orígenes
+   * (`Recibidas` = `en_bodega_satelite`, `Asignadas (por recoger)` = `por_recoger`), nunca a
+   * `Por devolver`, `En tránsito a central` ni `Devueltas`, cuyos estados no lo son.
+   *
+   * Tras el éxito se RELEE del servidor (`router.refresh()`, patrón de todas las acciones de
+   * este módulo): la orden pasa a `incidente` y desaparece de su sección.
+   */
+  const columnaIncidente = useMemo<Column<RecepcionSateliteDTO>>(
+    () => ({
+      id: "incidente",
+      value: "Incidente",
+      render: (orden: RecepcionSateliteDTO) => (
+        <ReportarIncidenteAccion
+          orden={orden}
+          disponible={puedeReportarIncidenteSatelite(orden, zonaNombre, sinZona)}
+          onSuccess={() => router.refresh()}
+        />
+      ),
+    }),
+    [zonaNombre, sinZona, router],
+  );
+
   // Feature 63 (pedido humano): "Recibidas" pasa de cards a DataTable. La columna
   // inicial "Seleccionar" se compone aquí (fuente de verdad de la selección, R4),
   // igual que `OrdenesApartado` prepende su checkbox a `ordenesColumns`. Las
@@ -290,8 +319,10 @@ export function RecepcionSateliteModule({
       // ESTE grupo ("Recibidas", en_bodega_satelite). El checkbox va delante del decorado,
       // así el badge cae en la primera columna de datos (Nº Guía).
       ...conBadgePrioridad(recibidasColumns(zonaNombre)),
+      // Feature 158 (T2.7): `en_bodega_satelite` es uno de los cinco orígenes.
+      columnaIncidente,
     ],
-    [seleccionados, zonaNombre, recibidas],
+    [seleccionados, zonaNombre, recibidas, columnaIncidente],
   );
 
   function handleSuccess() {
@@ -401,8 +432,11 @@ export function RecepcionSateliteModule({
         ),
       },
       ...recibidasColumns(zonaNombre),
+      // Feature 158 (T2.7): `por_recoger` es uno de los cinco orígenes, y estas órdenes
+      // están FÍSICAMENTE en la bodega satélite esperando a que las recojan.
+      columnaIncidente,
     ],
-    [seleccionadosAsignadas, zonaNombre, asignadas],
+    [seleccionadosAsignadas, zonaNombre, asignadas, columnaIncidente],
   );
 
   // Snapshot del lote que va al modal (por id, acotado a las órdenes aún listadas).
