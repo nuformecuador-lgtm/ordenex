@@ -8,7 +8,70 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 🗓️ Sesión 2026-07-30 (tarde) — **EMPIEZA A LEER POR AQUÍ**
+## 🏁 CIERRE 2026-07-30 (noche) — **EMPIEZA A LEER POR AQUÍ**
+
+**Todo mergeado a `dev`. Registro con CERO `in_progress`.**
+
+| PR | Qué | |
+|---|---|---|
+| **#208** | 158 · camino del mensajero (R1-R36) | ✅ mergeado |
+| **#210** | 158 · camino del admin (R37-R64) | ✅ mergeado |
+| **#168** | 141 · tabla `carga` + `carga_id` | ✅ mergeado, tras 3 días abierto |
+
+**Gate final con todo conviviendo: 636 archivos / 7493 tests / 0 fallos.**
+
+### ⚠️ LA TRAMPA DE ESTA SESIÓN, para que no se repita
+
+**El PR #209 se mergeó contra `feature/158-incidente-indemnizacion` cuando esa rama YA se había
+consumido** con el merge del #208 a `dev` tres horas antes. GitHub lo marcó **MERGED** y no avisó de
+nada: el camino del admin —tabla `orden_incidente`, su migración, la página `/incidentes` y el segundo
+emisor de wallet— **se quedó varado fuera de `dev`**. Se detectó verificando `origin/dev` **por
+archivos** (cero coincidencias de `IncidenteAdmin`, `incidentes/` y `orden_incidente`) y se corrigió
+con el **#210**.
+
+> **LECCIÓN: en PRs apilados, si la base se mergea antes que el hijo, el hijo queda huérfano y su
+> estado sigue diciendo MERGED.** Verificar SIEMPRE que el contenido llegó a `dev` **por archivos**,
+> nunca por el estado del PR. De no haberse mirado, producción se habría llevado media feature 158 y
+> una migración de menos.
+
+### 🚀 Despliegue `dev → prod` — pre-vuelo COMPLETO
+
+- **✅ `T24.1`: CERO órdenes**, re-corrida contra producción justo antes.
+- **✅ El retiro de `en_fulfillment` es NO-OP en producción**: su `DELETE` es condicional y hay 8 filas
+  de historial apuntando al value → la fila sobrevive inalcanzable, **sin violación de FK**.
+- **🔎 Producción tiene un value `pendiente` vestigial** (0 órdenes, 0 historial). Explica el desfase
+  «18 estados» de las specs frente a los 19 de la base.
+- **⚠️ Cosmético tras desplegar:** el desplegable de filtro leerá `en_fulfillment` y `pendiente`, que
+  no están en `ORDER_STATUS_SEED` → se muestran como **slug crudo** (fallback documentado, `R17` de la
+  feature 29). No rompe.
+
+### 📋 Decisiones que el humano delegó y quedaron aplicadas
+
+- **`R56` DECLARADO** en la spec de la 141, antes de mergear el #168. Es el invariante que destapó la
+  mutación superviviente: una orden revertida conserva `carga_id` y `download_url`. Redactado **más
+  ancho que el mutante** a propósito.
+- **Feature 162 REGISTRADA** — `OrdenEnvioReader.findParaEnvio` no filtra por estado, así que un
+  mensajero puede seguir mandando plantillas de WhatsApp **al destinatario de un paquete robado**.
+  Preexistente, agravado por Q-J + Q-K.
+
+### 🧰 Deuda de arnés nueva, registrada y SIN tocar (no es de ninguna feature)
+
+1. **`scripts/db-rollback.ts` elige la migración por NOMBRE de carpeta**, no por la última aplicada
+   (`readdirSync` + `sort`, sin consultar `_prisma_migrations`). Correrlo dos veces revierte la misma
+   migración dos veces.
+2. **El orden obligatorio de los `down.sql` no lo impone ningún gate**: revertir la migración del PR 1
+   de la 158 con la del admin aplicada **aborta**.
+   > **Tercera y cuarta vez que una herramienta de este repo decide algo mirando el árbol de archivos
+   > en vez de la fuente de verdad.** Las otras dos: los guards con `fs.readdir` en vez de
+   > `git ls-files`, y la denylist de migraciones (muerta en el #207).
+3. **E2E: decisión del humano el 2026-07-30 — «no más e2e, pruebas básicas nada más».** No se
+   construye harness ni se escriben specs. Cuando `CHECKPOINTS.md` lo exija: declararlo **inaplicable
+   con su razón** y **cubrir el riesgo concreto por otra vía**, como hizo el reviewer del PR 2
+   probando la idempotencia contra el índice real de Postgres.
+
+---
+
+## 🗓️ Sesión 2026-07-30 (tarde)
 
 > Lo de más abajo sigue válido en su detalle técnico; esto lo corrige donde se contradiga.
 
