@@ -35,7 +35,7 @@ const REPOS = {
   CierresAdminRepository: CierresAdminRepository.prototype as unknown as Record<string, unknown>,
 };
 
-// Los 21 puntos del mapa (design §2), 1 por familia de transicion.
+// Los 23 puntos del mapa (design §2), 1 por familia de transicion.
 const PUNTOS_DE_ESCRITURA = [
   { n: 1, repo: "OrdenRepository", simbolo: "createManyOrdenes", origenTipo: "carga_masiva" },
   { n: 2, repo: "OrdenRepository", simbolo: "create", origenTipo: "creacion_manual" },
@@ -182,6 +182,19 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "resolverCierre",
     origenTipo: "devolucion_rechazada",
   },
+  // #23: feature 149. `OrdenRepository.deshacerAsignacionLote` REVIERTE una asignacion/ruteo antes
+  // de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite ->
+  // en_bodega_central) via el choke point, con actor = maestro/admin/adminSatelite y `origen_tipo`
+  // NUEVO `deshacer_asignacion` (25.º valor del enum tras integrar los dos de la 154, migracion
+  // `*_orden_historial_origen_deshacer_asignacion` + su down). NO enlaza gestion; destino !=
+  // devuelta ni reprogramada -> fuera de las dos ramas del criterio de intento (160/R1). NO toca
+  // num_guia ni prioridad.
+  {
+    n: 23,
+    repo: "OrdenRepository",
+    simbolo: "deshacerAsignacionLote",
+    origenTipo: "deshacer_asignacion",
+  },
 ] as const;
 
 // Feature 154 (R28) — FAMILIAS DECLARADAS SIN PRODUCTOR. La 154 da de alta dos valores del enum
@@ -217,11 +230,11 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 22 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(22);
-    // numeracion 1..22 sin huecos ni duplicados.
+  it("son EXACTAMENTE 23 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(23);
+    // numeracion 1..23 sin huecos ni duplicados.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
     ]);
   });
 
@@ -232,7 +245,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
     }
   });
 
-  it("los 22 origen_tipo con productor + los 2 sin productor cubren EXACTAMENTE el enum (R23)", () => {
+  it("los 23 origen_tipo con productor + los 2 sin productor cubren EXACTAMENTE el enum (R23)", () => {
     const tiposDelMapa = PUNTOS_DE_ESCRITURA.map((p) => p.origenTipo);
     const tiposSinProductor = FAMILIAS_SIN_PRODUCTOR.map((f) => f.origenTipo);
     const tiposDelSeed = [...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort();

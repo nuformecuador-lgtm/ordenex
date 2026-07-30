@@ -106,6 +106,8 @@ describe("carpeta y schema.prisma", () => {
         !d.endsWith("_orden_historial_origen_recoleccion_tienda_incidente") &&
         // feature 155 (retiro del value de fulfillment): apendida despues.
         !d.endsWith("_order_status_retiro_en_fulfillment") &&
+        // feature 149 (origen_tipo deshacer_asignacion): apendida despues.
+        !d.endsWith("_orden_historial_origen_deshacer_asignacion") &&
         // feature 152 (hotfix de WhatsApp, portado a `dev` el 2026-07-29): apendida despues.
         !d.endsWith("_chat_mensaje_error_meta"),
     );

@@ -67,6 +67,16 @@ export type ListarRecepcionSateliteServiceResult =
       // adminSatelite NO ve devueltas de otra zona. Solo listado; la autz de ejecutar la
       // recuperacion la impone RecuperacionBodegaService (rol + zona).
       devueltas: RecepcionSateliteDTO[];
+      // Feature 149/T6.3/R35: ordenes en estado `por_recoger` de la MISMA zona del adminSatelite
+      // —ya asignadas a un mensajero que AUN no las recogio—, elegibles para la accion por lote
+      // "Deshacer asignacion" (transicion por_recoger -> en_bodega_satelite la ejecuta
+      // `DeshacerAsignacionService`, que deriva el destino del historial). Acotado server-side por
+      // zona (`findRecepcionSateliteByZona(zonaId, ...)`): un adminSatelite NO ve —ni puede
+      // deshacer— las de otra zona. Solo listado; la autz de ejecutar la reversion (rol + zona +
+      // destino derivado = `en_bodega_satelite`) la impone el service de la 149.
+      // R36: el caso (b) (`en_ruta_bodega_satelite`) NO entra aqui — sigue en `porRecibir`, sin
+      // accion de deshacer: es competencia de la bodega central.
+      asignadas: RecepcionSateliteDTO[];
       zonaNombre: string | null;
       sinZona: boolean;
     }

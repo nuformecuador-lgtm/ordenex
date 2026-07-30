@@ -27,7 +27,7 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
     },
   );
 
-  it("el inventario de flujo tiene las 38 aristas y 36 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b)", () => {
+  it("el inventario de flujo tiene las 41 aristas y 39 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     const pares = new Set(INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino}`));
     expect(pares.size).toBe(RECUENTO_INVENTARIO.paresUnicos);
@@ -47,12 +47,45 @@ describe("R6 — la guardia rechaza los pares que no estan en TRANSICIONES", () 
     ["entregada", "devuelta_a_tienda"],
     ["en_preparacion", "entregada"],
     ["devuelta_a_tienda", "en_reparto"],
-    ["por_recoger", "en_bodega_satelite"],
+    // Feature 149: `por_recoger -> en_bodega_satelite` SALE de esta lista porque paso a ser
+    // LEGAL (#47). Se sustituye por `por_recoger -> en_preparacion`, que sigue siendo ilegal
+    // (D3': la reversion normaliza a un estado de BODEGA, nunca vuelve a un estado pre-guia).
+    ["por_recoger", "en_preparacion"],
     ["sin_gestionar", "en_reparto"],
     ["devolviendo_a_bodega_central", "devuelta_a_tienda"],
   ] as const)("lanza TransicionIlegalError en %s -> %s", (origen, destino) => {
     expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
   });
+
+  // --- REGRESION 149 (R27/R28) ------------------------------------------------------------
+  it("REGRESION 149/R27: las TRES aristas de `deshacer_asignacion` (#45/#46/#47) son LEGALES", () => {
+    expect(() => assertTransicionValida("por_recoger", "en_bodega_central")).not.toThrow(); // #46
+    expect(() => assertTransicionValida("por_recoger", "en_bodega_satelite")).not.toThrow(); // #47
+    expect(() =>
+      assertTransicionValida("en_ruta_bodega_satelite", "en_bodega_central"),
+    ).not.toThrow(); // #45
+  });
+
+  it.each([
+    // D3': la normalizacion manda a BODEGA; volver a un estado pre-guia sigue prohibido.
+    //
+    // Los dos casos hacia el estado de fulfillment SE RETIRARON al integrar la feature 155:
+    // ese value ya no existe en `OrderStatusValue`, asi que la transicion no es solo ilegal,
+    // es INEXPRESABLE -- el compilador lo rechaza antes de que este test pueda ejecutarse, que
+    // es una garantia mas fuerte que la de un assert en runtime. Lo que sigue vivo es la
+    // prohibicion hacia `en_preparacion`, que si es un estado alcanzable.
+    ["por_recoger", "en_preparacion"],
+    ["en_ruta_bodega_satelite", "en_preparacion"],
+    // Ya recogida / ya recibida: el deshacer no reabre estos caminos (R16).
+    ["en_reparto", "por_recoger"],
+    ["en_reparto", "en_bodega_central"],
+    ["en_bodega_satelite", "en_ruta_bodega_satelite"],
+  ] as const)(
+    "REGRESION 149/R28: %s -> %s sigue siendo ILEGAL (la 149 no lo abrio)",
+    (origen, destino) => {
+      expect(() => assertTransicionValida(origen, destino)).toThrow(TransicionIlegalError);
+    },
+  );
 
   it("REGRESION 139/R9: rechazada -> devolviendo_a_tienda es ILEGAL (arista #27 retirada)", () => {
     expect(() => assertTransicionValida("rechazada", "devolviendo_a_tienda")).toThrow(
@@ -225,15 +258,17 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     expect(legales).toEqual(["en_bodega_central"]);
   });
 
-  it("el mapa retira las aristas de la 156 y las de la 155: 45 -> 38 (y 41 -> 36 pares)", () => {
+  it("el mapa retira las aristas de la 156 y de la 155, y la 149 vuelve a sumar tres: 45 -> 41 (y 41 -> 39 pares)", () => {
     const total = Object.entries(TRANSICIONES).reduce(
       (acc, [, destinos]) => acc + (destinos as readonly unknown[]).length,
       0,
     );
     expect(total).toBe(RECUENTO_INVENTARIO.aristasFlujo);
-    // 45 de la 154 - #4/#6/#7c (156) - #1/#2/#3/#7b (155) = 38.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(38);
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(36);
+    // 45 de la 154 - #4/#6/#7c (156) - #1/#2/#3/#7b (155) = 38, + #45/#46/#47 de la 149 = 41.
+    // El invariante que protege este caso son las BAJAS (los pares retirados siguen siendo
+    // ilegales, ver los casos de arriba); el recuento absoluto se mueve con cada feature aditiva.
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(41);
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(39);
   });
 });
 
@@ -355,10 +390,11 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
 
   // Feature 156: 45/41/4 -> 42/39/4 al retirar #4/#6/#7c.
   // Feature 155: 42/39/4 -> 38/36/2 al retirar #1/#2/#3/#7b y las dos creaciones sobrantes.
-  it("los recuentos del inventario son 38 flujo / 36 pares / 2 creacion", () => {
+  // Feature 149: 38/36/2 -> 41/39/2 con sus tres aristas (#45/#46/#47), que son pares NUEVOS.
+  it("los recuentos del inventario son 41 flujo / 39 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 38,
-      paresUnicos: 36,
+      aristasFlujo: 41,
+      paresUnicos: 39,
       aristasCreacion: 2,
     });
   });

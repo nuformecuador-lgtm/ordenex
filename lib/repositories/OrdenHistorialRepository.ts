@@ -3,6 +3,7 @@ import type {
   CambioEstadoEntrada,
   CriterioIntento,
   IOrdenHistorialRepository,
+  OrigenReversionItem,
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import {
   appendCambioEstado,
@@ -16,7 +17,16 @@ import {
 
 // Cliente Prisma acotado a lo que este repo necesita para las LECTURAS (patron
 // CierresAdminRepository/WalletMovimientoRepository). Las escrituras van por el `tx`.
-type OrdenHistorialPrismaClient = Pick<PrismaClient, "ordenHistorialEstado">;
+// Feature 149: `findOrigenesReversion` necesita `$queryRaw` (DISTINCT ON no se expresa con el
+// query builder de Prisma). Se ensancha el Pick, no la semantica: el cliente real ya lo tiene.
+type OrdenHistorialPrismaClient = Pick<PrismaClient, "ordenHistorialEstado" | "$queryRaw">;
+
+// Fila cruda de `findOrigenesReversion`. `value` NULL = la fila de historial mas reciente con
+// ese destino tiene `estatus_origen_id` NULL (creacion) -> el service rechaza (R13).
+interface OrigenReversionRow {
+  orden_id: string;
+  value: string | null;
+}
 
 // Fila del historial con los `value` de estado origen/destino y el `nombre` del actor
 // incluidos (para el DTO legible). NO expone UUIDs internos fuera de lo mostrado (R28).
@@ -184,5 +194,38 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
       select: { id: true },
     });
     return found !== null;
+  }
+
+  /**
+   * Feature 149 (design §3.3, R11) — origen de la transicion que se esta deshaciendo, para todo
+   * el lote en UNA consulta (sin N+1). `DISTINCT ON (h.orden_id)` + `ORDER BY h.orden_id,
+   * h.created_at DESC, h.id DESC` se queda con la fila MAS RECIENTE por orden entre las que
+   * tienen como destino el estado ACTUAL de esa orden; el `LEFT JOIN` a `order_status` resuelve
+   * el `value` del origen (NULL si la fila es de creacion, R13).
+   *
+   * El par `(orden_id, estatus_destino_id)` entra como `VALUES` parametrizado: usa el indice
+   * existente `@@index([ordenId, estatusDestinoId])` y no concatena SQL a mano.
+   *
+   * Lectura PURA: la normalizacion (D3') y las guardas de coherencia zona/destino (R14/R15)
+   * viven en el service, no aqui.
+   */
+  async findOrigenesReversion(
+    items: readonly OrigenReversionItem[],
+  ): Promise<Map<string, string | null>> {
+    if (items.length === 0) return new Map();
+    const pares = Prisma.join(
+      items.map((i) => Prisma.sql`(${i.ordenId}, ${i.estatusActualId})`),
+    );
+    const rows = await this.prisma.$queryRaw<OrigenReversionRow[]>`
+      SELECT DISTINCT ON (h."orden_id")
+             h."orden_id" AS orden_id,
+             os."value"   AS value
+      FROM "orden_historial_estado" h
+      JOIN (VALUES ${pares}) AS f(orden_id, estatus_destino_id)
+        ON f.orden_id = h."orden_id"
+       AND f.estatus_destino_id = h."estatus_destino_id"
+      LEFT JOIN "order_status" os ON os."id" = h."estatus_origen_id"
+      ORDER BY h."orden_id", h."created_at" DESC, h."id" DESC`;
+    return new Map(rows.map((r) => [r.orden_id, r.value ?? null]));
   }
 }

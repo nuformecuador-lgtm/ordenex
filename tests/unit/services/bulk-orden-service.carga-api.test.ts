@@ -93,6 +93,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
         { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
       ]),
     createManyOrdenes: vi.fn().mockResolvedValue(0),
+    // Feature 155: la firma gana `opciones.conGuia` (la bifurcacion por bodega decide si el
+    // lote nace con guia). Feature 159: `findResumenByNumRemisiones` sigue en el contrato --
+    // el resumen del lote se restituyo en el cierre de la 159.
     createManyOrdenesConGuia: vi.fn(
       async (
         data: CreateOrdenData[],
@@ -101,6 +104,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
         opciones?: { conGuia?: boolean },
       ) => conGuiaEco(data, opciones),
     ),
+    // Feature 16: resumen del lote (solo lectura), exigido por IOrdenRepository y no
+    // ejercitado por la carga via API.
+    findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),
     findByIdsForTransicion: vi.fn().mockResolvedValue([]),
     findByNumGuiaForTransicion: vi.fn().mockResolvedValue(null),
     findMensajeroIdsValidos: vi.fn().mockResolvedValue(new Set()),
@@ -148,6 +154,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 102: rechazos por SLA de la tienda, exigidos por IOrdenRepository.
     countRechazadasSlaByTienda: vi.fn(async () => 0),
     findRechazadasSlaByTienda: vi.fn(async () => []),
+    // Feature 149: writer de la reversion de asignacion, exigido por IOrdenRepository.
+    deshacerAsignacionLote: vi.fn(async () => 0),
     ...overrides,
   };
 }
@@ -540,5 +548,49 @@ describe("cargarViaApi — no-regresión del contrato 88 frente a la plantilla v
       expect(r.summary.conError).toBe(0);
     }
     expect(conGuiaArg(repo)[0].direccion).toBe("Av. Amazonas");
+  });
+});
+
+// Feature 159 (R9, R7) — contrato PUBLICO del canal por API key tras retirar la
+// sugerencia de mensajero. `filaCargaSchema` no es `.strict()` (ancla de la 143), asi
+// que la clave sobrante se descarta en silencio; esto lo hace verificable.
+describe("cargarViaApi — mensajero sugerido retirado (159/R9, R7)", () => {
+  it("R9: la MISMA fila con y sin `mensajero_sugerido_id` produce el mismo resultado", async () => {
+    const conClave = await buildService(buildRepo()).cargarViaApi(
+      [row({ mensajero_sugerido_id: "no-existe" })],
+      APIKEY,
+    );
+    const sinClave = await buildService(buildRepo()).cargarViaApi([row()], APIKEY);
+
+    // Mismo `status` del service -> mismo codigo HTTP (el route mapea 1:1; ese
+    // mapeo lo cubre `tests/integration/api/ordenes-api-key-carga.route.test.ts`).
+    expect(conClave.status).toBe("ok");
+    expect(conClave.status).toBe(sinClave.status);
+    if (conClave.status === "ok" && sinClave.status === "ok") {
+      // Mismo `RowResult` (resultado + estatus + numGuia + errores), campo a campo.
+      expect(conClave.summary.filas).toEqual(sinClave.summary.filas);
+      // Y el bloque plano `ordenes` del contrato 88 tampoco cambia.
+      expect(conClave.summary).toEqual(sinClave.summary);
+    }
+  });
+
+  it("R8: la clave no llega a la persistencia", async () => {
+    const repo = buildRepo();
+    await buildService(repo).cargarViaApi([row({ mensajero_sugerido_id: "u-1" })], APIKEY);
+
+    expect(conGuiaArg(repo)[0]).not.toHaveProperty("mensajeroSugeridoId");
+  });
+
+  it("R7: la via API tampoco consulta el catalogo de mensajeros", async () => {
+    const repo = buildRepo();
+    await buildService(repo).cargarViaApi(
+      [row({ num_remision: "REM-1" }), row({ num_remision: "REM-2" })],
+      APIKEY,
+    );
+
+    expect(repo.findAllMensajeros).not.toHaveBeenCalled();
+    expect(repo.findMensajeroIdsValidos).not.toHaveBeenCalled();
+    expect(repo.findMensajerosByZona).not.toHaveBeenCalled();
+    expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
   });
 });

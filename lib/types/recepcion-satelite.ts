@@ -46,6 +46,11 @@ export type ListarRecepcionSateliteResult =
       // elegibles para "Recuperar a bodega". Viaja tal cual desde el service result
       // (la action solo reenvia); acotado server-side por zona.
       devueltas: RecepcionSateliteDTO[];
+      // Feature 149/T6.3/R35: ordenes `por_recoger` de la zona del adminSatelite (asignadas a un
+      // mensajero que aun no las recogio), elegibles para "Deshacer asignacion" (por lote). Viaja
+      // tal cual desde el service result (la action solo reenvia); acotado server-side por zona.
+      // R36: las `en_ruta_bodega_satelite` NO entran aqui (siguen en `porRecibir`, sin accion).
+      asignadas: RecepcionSateliteDTO[];
       zonaNombre: string | null;
       sinZona: boolean;
     }

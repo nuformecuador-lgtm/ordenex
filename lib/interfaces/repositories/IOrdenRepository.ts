@@ -1,5 +1,6 @@
 import type { GestionCausaDevolucion } from "@prisma/client";
 import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
+import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 
@@ -114,6 +115,36 @@ export class NumRemisionDuplicadoError extends Error {
   constructor(public readonly numRemision: string) {
     super(`num_remision duplicado: ${numRemision}`);
     this.name = "NumRemisionDuplicadoError";
+  }
+}
+
+// --- Feature 149: deshacer asignacion a mensajero o bodega antes de la recogida ---
+
+/**
+ * Feature 149 (design §3.2) — una orden del lote a revertir, con su destino YA derivado por el
+ * service (del historial, R11-R15). El repo no deriva nada: recibe la decision.
+ */
+export interface DeshacerAsignacionItem {
+  ordenId: string;
+  destinoEstatusId: string;
+}
+
+/**
+ * Feature 149 (design §3.2, R20/R21) — al menos una orden del lote NO gano la guarda de
+ * escritura (estado de origen / zona / no borrada): la carrera se perdio. Se LANZA dentro de la
+ * `$transaction` para revertirla ENTERA (todo-o-nada REAL, desviacion deliberada del precedente
+ * de `asignarSateliteLote`, que deja pasar a los ganadores: aqui una reversion parcial dejaria
+ * medio lote sin mensajero y medio con el, sin forma de distinguirlos desde la UI).
+ *
+ * `ordenIdsNoTransicionadas` NO se renderiza como texto en la UI (R40): sirve para que el
+ * service re-lea esas ordenes y componga el `detalle` por orden con motivos tipados.
+ */
+export class DeshacerAsignacionConflictoError extends Error {
+  constructor(public readonly ordenIdsNoTransicionadas: readonly string[]) {
+    super(
+      `deshacer asignacion: ${ordenIdsNoTransicionadas.length} orden(es) del lote no transicionaron`,
+    );
+    this.name = "DeshacerAsignacionConflictoError";
   }
 }
 
@@ -554,6 +585,16 @@ export interface IOrdenRepository {
     opciones?: CreateOrdenOpciones,
   ): Promise<CreateOrdenConGuiaResultRow[]>;
 
+  // --- Feature 16: resumen del lote recien cargado (solo lectura) ---
+
+  /**
+   * R6/R8/R9/R10: filas del resumen del lote (por `num_remision`), acotadas a la
+   * tienda del actor y no borradas. Preserva unicidad de `num_remision`.
+   * Feature 159: sobrevive al retiro de la sugerencia de mensajero (design §2.2);
+   * su proyeccion ya no incluye ningun campo de mensajero.
+   */
+  findResumenByNumRemisiones(nums: string[], tiendaId: string): Promise<ResumenCargaOrdenDTO[]>;
+
   // --- Feature 17: "Generar guia" / asignacion de mensajero (R5/R18-R29) ---
 
   /**
@@ -587,8 +628,8 @@ export interface IOrdenRepository {
   /**
    * R28: subconjunto de `ids` que corresponde a un usuario con rol `mensajero`,
    * SIN filtro de zona (el filtrado por zona/GAM es la feature 30, ver design.md
-   * "Limites"). Mismo criterio que `findMensajerosByIds`, nombre propio para el
-   * contrato de esta feature.
+   * "Limites"). Feature 159: la referencia cruzada de este comentario apuntaba al
+   * metodo gemelo de la carga masiva, retirado con la sugerencia de mensajero.
    */
   findMensajeroIdsValidos(ids: string[]): Promise<Set<string>>;
   /** R28/T15: TODOS los usuarios con rol `mensajero`, SIN filtro de zona. */
@@ -828,6 +869,36 @@ export interface IOrdenRepository {
     destinoEstatusId: string,
     origenEstatusId: string,
     historial: HistorialContexto,
+  ): Promise<number>;
+
+  // --- Feature 149: deshacer asignacion / ruteo antes de la recogida (R8-R10/R20/R21) ---
+
+  /**
+   * Feature 149 (design §3.2) — REVIERTE un lote de asignaciones/ruteos en UNA transaccion.
+   * Por cada item hace un UPDATE crudo GUARDADO por estado de ORIGEN (el de
+   * `origenEstatusIdPorOrden`, que el service leyo antes) + `deleted_at IS NULL` + `zona_id`
+   * cuando `zonaId` no es null (caso `adminSatelite`, defensa en profundidad anti-TOCTOU), con
+   * `RETURNING "id"`. El `SET` fija `estatus_id` al destino, `mensajero_asignado_id = NULL` y
+   * `asignado_at = NULL` (R8/R9/R10), y NO menciona `num_guia` (D2/R29) ni `prioridad`
+   * (Q2/R30): la ausencia es el mecanismo.
+   *
+   * SIN guarda de `cierre_dia` (Q1 CERRADA, R19): a diferencia de `asignarSateliteLote`, este
+   * writer NO consulta cierres — el cierre pendiente del mensajero NO bloquea el deshacer. La
+   * asimetria con la ASIGNACION es deliberada (design §8-Q1).
+   *
+   * TODO-O-NADA REAL (R20/R21): si el total de filas devueltas es distinto de `items.length`,
+   * LANZA `DeshacerAsignacionConflictoError` con los ids que no transicionaron; el `throw`
+   * revierte la `$transaction` completa, sin efectos parciales.
+   *
+   * Tras el UPDATE, y en la MISMA tx, `appendCambioEstado` registra una fila de historial por
+   * orden (`origen_tipo = deshacer_asignacion`, `motivo` = el del lote) y encola el webhook de
+   * estado (R31/R32/R33). Devuelve el numero de ordenes revertidas (== `items.length`).
+   */
+  deshacerAsignacionLote(
+    items: readonly DeshacerAsignacionItem[],
+    origenEstatusIdPorOrden: ReadonlyMap<string, string>,
+    historial: HistorialContexto & { motivo: string },
+    zonaId: string | null,
   ): Promise<number>;
 
   // --- Feature 41: bloqueo derivado en asignacion (R12/R16/R17/R23) ---

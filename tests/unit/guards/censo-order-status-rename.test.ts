@@ -81,6 +81,16 @@ const ALLOWLIST = new Set([
   // que el literal no se puede limpiar de aqui sin dejar de verificar esa migracion. (El otro
   // guard de nomenclatura, el del value predecesor, vigila que ESE no reaparezca.)
   "rename-order-status-migration.test.ts",
+  // Feature 149 + 155: la tabla CERRADA de normalizacion `NORMALIZACION_DESTINO` mapea el
+  // origen LEIDO DEL HISTORIAL al destino de la reversion, y sus claves son `string`, no
+  // `OrderStatusValue`. El value retirado por la 155 sigue apareciendo en filas de
+  // `orden_historial_estado` anteriores a esa feature -- es la razon por la que el `DELETE`
+  // condicional de su migracion quedo NO-OP y la fila del catalogo sobrevivio huerfana. Una
+  // orden asignada ANTES de la 155 que hoy siga en `por_recoger` tiene ese origen en su
+  // historial: quitar la entrada la haria fallar CERRADO al deshacer. El literal se queda
+  // porque el HISTORIAL es inmutable y sobrevive al catalogo.
+  "DeshacerAsignacionService.ts",
+  "deshacer-asignacion-service.test.ts", // cubre esa misma fila de la tabla cerrada (origen historico)
 ]);
 
 // Feature 153 (R17) — censo de la ETIQUETA antigua. Se busca el literal EXACTO entre

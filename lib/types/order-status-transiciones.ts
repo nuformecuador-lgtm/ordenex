@@ -7,11 +7,16 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // (el choke point `appendCambioEstado`) resuelve `id -> value` antes de preguntar aqui.
 //
 // El mapa es el INVENTARIO CERRADO del apendice A del design, leido del codigo de `dev`:
-// 38 aristas de flujo (numeracion #1-#44 con el #27 RETIRADO por la 139, #4/#6/#7c por la 156 y
-// #1/#2/#3/#7b por la 155) + 2 de creacion. Las 38 colapsan a 36 pares `(origen, destino)`
-// unicos, porque dos pares estan declarados dos veces con familias distintas: #19/#23 y #20/#24
-// (SLA vs. recuperacion manual). El tercer duplicado historico (#3/#7b) se fue con el
-// estado de fulfillment que retiro la 155.
+// 41 aristas de flujo (numeracion #1-#47 con el #27 RETIRADO por la 139, #4/#6/#7c por la 156,
+// #1/#2/#3/#7b por la 155, + #43/#44 de la 154 + #45/#46/#47 de la 149) + 2 de creacion. Las 41
+// colapsan a 39 pares `(origen, destino)` unicos, porque dos pares estan declarados dos veces
+// con familias distintas: #19/#23 y #20/#24 (SLA vs. recuperacion manual). El tercer duplicado
+// historico (#3/#7b) se fue con el estado de fulfillment que retiro la 155.
+//
+// Aritmetica de la integracion, por si alguien la rehace: `dev` con la 155 dentro queda en 38
+// aristas / 36 pares. La 149 suma TRES aristas y sus tres pares son NUEVOS, asi que 38+3=41 y
+// 36+3=39. La cuenta vieja de esta rama (45/42) contaba las cuatro aristas del estado de
+// fulfillment que la 155 ya retiro.
 //
 // FEATURE 154 — SOLO ADITIVA (decision Q2 del gate, 2026-07-29). Sumo #43, #44 y la creacion
 // `null -> por_recolectar_en_tienda`, sin retirar NINGUNA arista: `GuiaAsignacionService` las
@@ -29,13 +34,20 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // migracion que reasigna a `en_preparacion` las ordenes vivas. Ese backfill es la condicion que hace que retirar las aristas no atrape a
 // nadie: la 156 no podia retirarlas justamente porque todavia habia ordenes ahi.
 //
+// Feature 149 (design §2, R27): el inventario suma TRES aristas (#45/#46/#47, familia
+// `deshacer_asignacion`) y pasa a 41 aristas de flujo / 39 pares unicos. Las tres son pares
+// NUEVOS (ninguna repite un par ya declarado), y `por_recoger -> en_bodega_satelite` (#47) deja
+// de ser ilegal: era un caso del test de pares ilegales de la 140 y se actualizo a proposito.
+// El spec numeraba estas aristas #43/#44/#45; se renumeraron a #45/#46/#47 al integrar `dev`,
+// porque la 154 ya habia tomado #43/#44 mientras la 149 iba en su rama.
+//
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
 // `ANY -> ANY` para maestro/admin (Q3): el ajuste administrativo generico
 // (`OrdenService.actualizar`, `origen_tipo = ajuste_estado`) pasa por el MISMO mapa y sus
 // aristas legitimas (#28, #40, #42) estan declaradas explicitamente abajo.
 
-/** Familia de la transicion: reutiliza el enum de origen del historial (22 valores). */
+/** Familia de la transicion: reutiliza el enum de origen del historial (23 valores). */
 export type FamiliaTransicion = OrdenHistorialOrigenTipo;
 
 /**
@@ -96,6 +108,9 @@ export const TRANSICIONES = {
   ],
   en_ruta_bodega_satelite: [
     { to: "en_bodega_satelite", via: "recepcion_satelite", rol: "adminSatelite" }, // #10
+    // Feature 149 (caso b): deshacer el RUTEO antes de que la satelite reciba el paquete.
+    // El paquete sigue bajo custodia de la central, por eso el destino es la central.
+    { to: "en_bodega_central", via: "deshacer_asignacion", rol: "maestro/admin" }, // #45 (149)
   ],
   en_bodega_satelite: [
     { to: "por_recoger", via: "asignacion_satelite", rol: "adminSatelite" }, // #9
@@ -103,6 +118,18 @@ export const TRANSICIONES = {
   ],
   por_recoger: [
     { to: "en_reparto", via: "recoleccion", rol: "mensajero" }, // #11
+    // Feature 149 (caso a): deshacer la asignacion a un mensajero que aun no recogio. El
+    // destino se DERIVA del historial (D3) y se normaliza a un estado de BODEGA (D3'): NO se
+    // declara ninguna arista hacia `en_preparacion` (R28). El otro estado que esta nota citaba
+    // era el de fulfillment, que la 155 RETIRO del catalogo: ya no hay nada que no-declarar.
+    // NUMERACION: la 154 aterrizo en `dev` #43/#44 mientras la 149 iba en su rama, asi que las
+    // dos aristas del caso (a) se renumeran a #46/#47 (la #45 del caso (b) no colisionaba).
+    { to: "en_bodega_central", via: "deshacer_asignacion", rol: "maestro/admin" }, // #46 (149)
+    {
+      to: "en_bodega_satelite",
+      via: "deshacer_asignacion",
+      rol: "maestro/admin/adminSatelite (de la zona)",
+    }, // #47 (149)
   ],
   en_reparto: [
     { to: "entregada", via: "gestion", rol: "mensajero" }, // #12
