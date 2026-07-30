@@ -88,6 +88,21 @@ function walk(dir: string): string[] {
   return out;
 }
 
+/**
+ * Fuente SIN comentarios (bloques `/* *\/` y linea `//`).
+ *
+ * m6 del review: sin esto, «el productor está en este archivo» se satisfacía con CUALQUIER
+ * comentario que nombrara el literal — una aserción que no puede fallar. Degradando el
+ * productor a un comentario, el test seguía verde. Con el stripper, no.
+ *
+ * Limitación conocida y con el fallo del lado seguro: también cortaría un `//` que viviera
+ * DENTRO de un string literal. Ninguno de los dos archivos censados tiene uno, y si un día lo
+ * tuviera el efecto sería un FALSO ROJO (se ve y se corrige), nunca un falso verde.
+ */
+function sinComentarios(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+}
+
 function ofensores(): string[] {
   const out: string[] = [];
   for (const rel of SCAN_DIRS) {
@@ -142,17 +157,43 @@ describe("154/R28 — censo de values/familias declarados SIN productor (CERRADO
     // Contraparte del caso de la 155, y lo que convierte «el censo esta vacio» en una
     // afirmacion con contenido: no esta vacio porque nadie use el literal, sino porque su
     // productor llego y esta EN ESTOS DOS archivos.
-    const conEstado = fs.readFileSync(
-      path.join(REPO_ROOT, ...GRADUADO_158.productorEstado.split("/")),
-      "utf8",
+    //
+    // m6 del review: las dos mitades se afirman sobre la fuente SIN COMENTARIOS y contra
+    // CONSTRUCCIONES de codigo, no contra la palabra suelta. Antes, la mitad del service
+    // buscaba `\bincidente\b` en el archivo entero y la satisfacia cualquier comentario: una
+    // asercion que no podia fallar, que es peor que no tenerla porque ocupa el sitio de una
+    // que si mide y en la proxima lectura se cuenta como cobertura.
+    const conEstado = sinComentarios(
+      fs.readFileSync(path.join(REPO_ROOT, ...GRADUADO_158.productorEstado.split("/")), "utf8"),
     );
-    expect(conEstado).toMatch(RE_INCIDENTE);
-    const conFamilia = fs.readFileSync(
-      path.join(REPO_ROOT, ...GRADUADO_158.productorFamilia.split("/")),
-      "utf8",
+    // (a) la rama del switch EXHAUSTIVO que arma los datos de la gestion `incidente`...
+    expect(conEstado).toMatch(/case\s+"incidente"\s*:/);
+    expect(conEstado).toMatch(/resultado:\s*"incidente"/);
+    // (b) ...y la guardia que hace que el incidente suba sus 1..N evidencias (R10/Q-B). Es la
+    // otra decision de este service sobre el value, y la unica que el switch exhaustivo NO
+    // protege: quitarla compila igual y dejaria al incidente sin fotos.
+    expect(conEstado).toMatch(/input\.resultado === "incidente"/);
+
+    const conFamilia = sinComentarios(
+      fs.readFileSync(path.join(REPO_ROOT, ...GRADUADO_158.productorFamilia.split("/")), "utf8"),
     );
     // Q-G: el append de la transicion escribe la familia `incidente`, no `gestion`.
     expect(conFamilia).toMatch(/origenTipo:[^\n]*"incidente"/);
+  });
+
+  // m6 del review — el stripper es la pieza de la que depende todo lo de arriba, asi que se
+  // fija aparte: si dejara de quitar comentarios, la mitad del service volveria a ser vacua
+  // sin que nada mas lo delatara.
+  it("m6: `sinComentarios` DISCRIMINA — un productor degradado a comentario no cuenta", () => {
+    expect(sinComentarios('// case "incidente":')).not.toMatch(/case\s+"incidente"\s*:/);
+    expect(sinComentarios('/* case "incidente": */')).not.toMatch(/case\s+"incidente"\s*:/);
+    expect(sinComentarios('  const x = 1; // input.resultado === "incidente"')).not.toMatch(
+      /input\.resultado === "incidente"/,
+    );
+    // Y NO se come el codigo real.
+    expect(sinComentarios('    case "incidente": // el quinto resultado')).toMatch(
+      /case\s+"incidente"\s*:/,
+    );
   });
 
   it("155: los dos literales graduados siguen existiendo en el catalogo y en las familias", () => {

@@ -388,11 +388,54 @@ revisiones del archivo (`3183127 → ebfb1b3 → c1e63f8 → 22b0bb4 → a9354a7
   de la transacción del cierre, que es mucho más cara de repetir. Sugerencia para una feature
   futura, no para este PR.
 
+  > ✅ **SALDADO el 2026-07-30 por decisión del humano** (antes de abrir el PR). El hallazgo se
+  > conserva arriba tal cual: el rastro importa.
+  > **Qué se hizo:** el `monto` de `indemnizacionSchema` (`lib/types/cierres-admin.ts`) gana un
+  > tope **derivado de la columna y con la cuenta escrita en el código** — `DECIMAL(12,2)` →
+  > precisión 12 − escala 2 = **10 dígitos enteros** → `INDEMNIZACION_MONTO_MAX =
+  > "9999999999.99"`. El rechazo ocurre ahora en el borde, como `validation_error`, **antes de
+  > abrir la transacción del dinero**.
+  > **Dónde NO se hizo, y por qué:** `montoPositivoSchema` **no se tocó**. El reviewer verificó
+  > que el defecto es preexistente y compartido con la 45; endurecer el schema común habría
+  > cambiado otras features sin que pasaran por su puerta. Hay un caso que fija esa frontera
+  > (`montoPositivoSchema` sigue sin tope) y que se pondrá rojo si un día se acota globalmente.
+  > **Medido, no sólo derivado:** sonda contra el Postgres local (transacciones revertidas) →
+  > la columna es `numeric(12,2)`; `9999999999.99` **cabe**, `10000000000.00` y
+  > `99999999999.99` **desbordan**. La frontera del borde coincide exactamente con la real.
+  > **Mutaciones [M-Q] y [M-R]:** quitar el tope → **6** casos rojos; correrlo **por uno**
+  > (9 dígitos enteros) → **3** casos rojos, incluidos los dos de frontera. Un off-by-one aquí
+  > sería peor que no tener tope, y por eso se mató aparte.
+  > **Lo que queda, y es de `frontend_dev`:** los errores de borde llegan aplanados por
+  > `z.flattenError` bajo la clave `indemnizaciones`, no bajo el `gestionId`, así que el tope no
+  > se pinta **en la celda**. No lo introduce m5 —es la propiedad de *todos* los errores de
+  > borde de esa lista— y **el admin ya no pierde lo tecleado**: el sub-modal trata
+  > `validation_error` conservando el formulario abierto. El follow-up concreto es darle a
+  > `montoValido` (`wallet-labels.ts`) el mismo tope, importando `INDEMNIZACION_MONTO_MAX`, que
+  > se exporta justamente para eso. Detalle en `progress/impl_158_backend.md` §11.1/§11.4.
+
 - **m6 — `menor` · Media compensación vacua en `censo-catalogo-estados-v2.test.ts`** (§5.1).
   La mitad de `GestionOrdenRepository` discrimina (verificado **[M3]**); la de
   `MisAsignacionesService` busca la palabra suelta en el archivo entero y **la satisface cualquier
   comentario**. No abre agujero (el caso `incidente` de `buildGestionData` está protegido por el
   switch exhaustivo sin rama por defecto, verificado), pero esa mitad no mide nada.
+
+  > ✅ **SALDADO el 2026-07-30 — REFORZADO, no retirado.** El hallazgo se conserva arriba.
+  > **Qué se hizo:** el caso pasa a afirmar sobre la fuente **sin comentarios**
+  > (`sinComentarios()`, que quita bloques `/* … */` y líneas `//`) y contra **construcciones de
+  > código**, no contra la palabra suelta. De `MisAsignacionesService` se exigen **tres**:
+  > `case "incidente":`, `resultado: "incidente"` y `input.resultado === "incidente"`.
+  > **La tercera es la que aporta algo nuevo:** es la guardia que hace que el incidente suba sus
+  > 1..N evidencias (R10/Q-B) y es la única decisión de ese service sobre el value que el switch
+  > exhaustivo **NO** protege — quitarla compila igual y dejaría al incidente sin fotos. Así la
+  > compensación no duplica lo que ya cubre el compilador: añade lo que él no ve.
+  > **Limitación declarada del stripper:** también cortaría un `//` dentro de un string literal;
+  > ninguno de los dos archivos censados tiene uno, y si lo tuviera el efecto sería un **falso
+  > rojo** (se ve y se corrige), nunca un falso verde. Hay un caso propio que fija que el
+  > stripper discrimina, porque de él depende todo lo demás.
+  > **Mutaciones [M-S] y [M-T]:** degradar el `case "incidente":` a **comentario** → rojo (es
+  > literalmente el criterio de aceptación que se pidió); degradar la guardia
+  > `input.resultado === "incidente"` → rojo. **Antes de este arreglo, las dos dejaban el test
+  > verde.** Detalle en `progress/impl_158_backend.md` §11.2/§11.3.
 
 - **m7 — `menor` · `WalletIndemnizacionFeedService` consulta Prisma desde un service.**
   `docs/architecture.md` dice que el service no depende de la DB directamente. Este ejecuta
@@ -509,3 +552,25 @@ casos aumentando— su fuerza, y las cuatro declaraciones honestas del implement
 ciertas al comprobarlas por mutación.
 
 No hay bloqueantes. **Veredicto: OK.**
+
+---
+
+## 13. Addendum (2026-07-30) — dos menores saldados antes de abrir el PR
+
+Por decisión del humano se saldaron **m5** y **m6** (y sólo esos dos) después de cerrar este
+review. Los hallazgos **no se borraron**: cada uno lleva su bloque `✅ SALDADO` debajo, con lo
+que se hizo, lo que deliberadamente NO se hizo, y la mutación que lo demuestra.
+
+- **m5** → tope del monto derivado del `DECIMAL(12,2)`, en el borde de la 158; **no** se tocó
+  `montoPositivoSchema`. Medido contra Postgres local. Mutaciones **[M-Q]** (quitar el tope, 6
+  rojos) y **[M-R]** (correrlo por uno, 3 rojos).
+- **m6** → la media compensación vacua queda **reforzada**: fuente sin comentarios + tres
+  construcciones de código + un test del propio stripper. Mutaciones **[M-S]** y **[M-T]**
+  (degradar cada productor a comentario), **rojas ahora y verdes antes**.
+
+Los **ocho menores restantes (m1-m4, m7-m10) siguen abiertos** tal como los dejó este review, y
+la deuda viva de §11 no cambia.
+
+`./init.sh` tras los dos arreglos: **616 archivos / 6948 tests / 0 fallos** (este review midió
+616 / 6936 → **+12 tests**, sin archivos nuevos). Lint **0 errores / 19 warnings**, los mismos.
+Bitácora: `progress/impl_158_backend.md` **§11**.

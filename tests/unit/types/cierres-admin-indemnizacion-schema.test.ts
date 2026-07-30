@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { aprobarCierreSchema } from "@/lib/types/cierres-admin";
+import { aprobarCierreSchema, INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
+import { montoPositivoSchema } from "@/lib/types/wallet";
 
 // Feature 158 (T1.11, R20/R24/R36) — el BORDE de la captura de indemnizaciones al aprobar un
 // cierre. Aqui vive la validacion de FORMA del monto; la COBERTURA (que haya un monto por cada
@@ -116,5 +117,110 @@ describe("R20/R24 — montos invalidos: el borde los rechaza", () => {
       expect(rutas.some((p) => p.startsWith("indemnizaciones.1"))).toBe(true);
       expect(rutas.some((p) => p.startsWith("indemnizaciones.0"))).toBe(false);
     }
+  });
+});
+
+// ============================================================================
+// m5 del review — TOPE del monto frente al `DECIMAL(12,2)` de la columna.
+//
+// Sin tope, un monto de 11+ dígitos pasaba el borde Y la guardia de cobertura del service, y
+// reventaba DENTRO de la transacción de aprobación con un `numeric field overflow` de
+// Postgres. La tx revertía (sin corrupción), pero el admin veía un error genérico y perdía
+// todo lo tecleado: hay que rechazarlo ANTES de abrir la transacción del dinero.
+// ============================================================================
+
+describe("m5 — el monto se acota por arriba, con el tope DERIVADO de la columna", () => {
+  it("el tope es el máximo representable en DECIMAL(12,2): 10 dígitos enteros", () => {
+    // No es un número de negocio: sale de precision(12) - escala(2) = 10 enteros.
+    expect(INDEMNIZACION_MONTO_MAX).toBe("9999999999.99");
+  });
+
+  // FRONTERA. Un tope mal puesto por uno es peor que no tenerlo: rechazaría un monto legítimo
+  // (y el admin no tendría forma de saber por qué) o dejaría pasar el que revienta.
+  it("FRONTERA: el máximo EXACTO se acepta", () => {
+    const r = aprobarCierreSchema.safeParse({
+      cierreId: CIERRE,
+      indemnizaciones: [{ gestionId: GESTION, monto: INDEMNIZACION_MONTO_MAX }],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.indemnizaciones[0].monto).toBe("9999999999.99");
+  });
+
+  it("FRONTERA: un céntimo por encima del máximo se rechaza", () => {
+    const r = aprobarCierreSchema.safeParse({
+      cierreId: CIERRE,
+      indemnizaciones: [{ gestionId: GESTION, monto: "10000000000.00" }],
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("FRONTERA: el máximo con los céntimos en 0 también se acepta", () => {
+    const r = aprobarCierreSchema.safeParse({
+      cierreId: CIERRE,
+      indemnizaciones: [{ gestionId: GESTION, monto: "9999999999.00" }],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it.each([
+    ["11 dígitos enteros", "99999999999.99"],
+    ["11 dígitos enteros sin decimales", "99999999999"],
+    ["20 dígitos", "99999999999999999999.99"],
+  ])("rechaza un monto con %s", (_caso, monto) => {
+    const r = aprobarCierreSchema.safeParse({
+      cierreId: CIERRE,
+      indemnizaciones: [{ gestionId: GESTION, monto }],
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("el mensaje del tope dice CUÁL es el máximo (el admin puede corregir la celda)", () => {
+    const r = aprobarCierreSchema.safeParse({
+      cierreId: CIERRE,
+      indemnizaciones: [{ gestionId: GESTION, monto: "99999999999.99" }],
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const mensajes = r.error.issues.map((i) => i.message).join(" ");
+      expect(mensajes).toContain(INDEMNIZACION_MONTO_MAX);
+    }
+  });
+
+  it("el error cuelga del índice de la fila que se pasó, no de las demás", () => {
+    const otra = "33333333-3333-4333-8333-333333333333";
+    const r = aprobarCierreSchema.safeParse({
+      cierreId: CIERRE,
+      indemnizaciones: [
+        { gestionId: GESTION, monto: "100.00" },
+        { gestionId: otra, monto: "99999999999.99" },
+      ],
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const rutas = r.error.issues.map((i) => i.path.join("."));
+      expect(rutas.some((p) => p.startsWith("indemnizaciones.1"))).toBe(true);
+      expect(rutas.some((p) => p.startsWith("indemnizaciones.0"))).toBe(false);
+    }
+  });
+
+  it("un monto NO numérico sigue fallando por SU motivo, no por el tope", () => {
+    // El refine del tope devuelve `true` ante un valor imparseable a propósito: añadir «no
+    // puede superar 9999999999.99» a «mil colones» sería un mensaje engañoso.
+    const r = aprobarCierreSchema.safeParse({
+      cierreId: CIERRE,
+      indemnizaciones: [{ gestionId: GESTION, monto: "mil colones" }],
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const mensajes = r.error.issues.map((i) => i.message).join(" ");
+      expect(mensajes).not.toContain("no puede superar");
+    }
+  });
+
+  it("m5 se arregló EN EL BORDE DE LA 158: `montoPositivoSchema` sigue SIN tope", () => {
+    // El schema compartido lo usan la wallet (42/45) y sus formularios. Endurecerlo desde
+    // aquí cambiaría el comportamiento de otras features sin que hayan pasado por su puerta.
+    // Si un día se acota globalmente, este caso se pone rojo y obliga a revisar este archivo.
+    expect(montoPositivoSchema.safeParse("99999999999999.99").success).toBe(true);
   });
 });

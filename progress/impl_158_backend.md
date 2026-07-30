@@ -9,6 +9,10 @@
 > se anadieron al DTO del detalle del cierre para cerrar el hueco que dejaba **R34 sin
 > cumplir**. Ver **§10**, al final de este archivo.
 
+> ATENCION — **apendice del 2026-07-30 (post-review)**: se saldan los menores **m5** (tope
+> del monto frente al `DECIMAL(12,2)`) y **m6** (media compensacion vacua del censo). Ver
+> **§11**.
+
 ## Veredicto
 
 **Fase 1 completa y verde.** `./init.sh` OK: **610 archivos / 6829 tests / 0 fallos**, lint
@@ -720,3 +724,121 @@ lib/services/CierreDiaService.ts
 **14 factorías de fixtures** que necesitaban las dos claves nuevas (`CierreGestionPendienteRow` y
 `CierreDetalleGestion` son interfaces cerradas: sin ellas no compila). Ninguna aserción previa se
 debilitó.
+
+---
+
+# 11. Apéndice (2026-07-30) — se saldan **m5** y **m6** del review
+
+> Encargo posterior al review (`progress/review_158.md`: **OK, 0 bloqueantes, 10 menores**). El
+> humano decidió saldar **dos** menores antes de abrir el PR. **Sólo esos dos**: los otros ocho
+> siguen abiertos, tal como los dejó el reviewer.
+
+## 11.1 m5 — el monto de indemnización no tenía tope frente al `DECIMAL(12,2)`
+
+**El defecto.** `montoPositivoSchema` valida formato y «mayor que 0», pero no un máximo. Un
+monto de 11+ dígitos pasaba el borde, pasaba la guardia de cobertura del service y **reventaba
+DENTRO de la transacción de aprobación** con un `numeric field overflow` de Postgres. La
+transacción revertía —sin corrupción— pero el admin veía un error genérico y **perdía todo lo
+tecleado**.
+
+**El arreglo, y dónde.** En el **borde de la 158**: el `monto` de `indemnizacionSchema` gana un
+`refine` de tope. **`montoPositivoSchema` NO se toca.** Ese schema lo comparten la wallet (42) y
+el formulario manual de egresos (45), que tienen la misma carencia pero cuya columna y cuyo
+flujo no han pasado por esta puerta; endurecerlo desde aquí cambiaría el comportamiento de otras
+features sin decisión suya. La corrección global es candidata a feature propia. Hay un caso que
+**fija** esa frontera: si un día `montoPositivoSchema` se acota, se pone rojo y obliga a revisar
+este archivo.
+
+**El tope no es un número elegido a ojo, y el código lo dice:**
+
+```ts
+const INDEMNIZACION_DIGITOS_ENTEROS = 10; // = precision(12) - escala(2)
+export const INDEMNIZACION_MONTO_MAX = `${"9".repeat(INDEMNIZACION_DIGITOS_ENTEROS)}.99`;
+```
+
+`gestion_orden.indemnizacion` es `DECIMAL(12,2)` → precisión 12, escala 2 → **10 dígitos
+enteros** → máximo `9999999999.99`. Si la columna cambiara de precisión, el número se recalcula
+de la misma cuenta.
+
+**Y no se quedó en la derivación: se MIDIÓ contra la base local.** Sonda de sólo-lectura (todo
+en transacciones revertidas):
+
+| valor | resultado real de Postgres |
+| --- | --- |
+| tipo real de la columna | `numeric(12,2)` |
+| `9999999999.99` (el tope declarado) | **CABE** |
+| `10000000000.00` | **RECHAZA (overflow)** |
+| `99999999999.99` | **RECHAZA (overflow)** |
+
+La frontera del borde coincide **exactamente** con la de la columna.
+
+**Detalle de mensajería:** el `refine` devuelve `true` ante un valor imparseable a propósito.
+Zod v4 corre el refine aunque el regex ya haya fallado (está documentado en el propio
+`montoPositivoSchema`), y añadir «no puede superar 9999999999.99» a una entrada como
+«mil colones» sería un mensaje engañoso. Hay caso que lo fija.
+
+## 11.2 m6 — la media compensación vacua de `censo-catalogo-estados-v2.test.ts`
+
+**El defecto.** La compensación tenía dos mitades. La de `GestionOrdenRepository` discrimina (el
+reviewer la mató con su mutación **[M3]**). La de `MisAsignacionesService` hacía
+`expect(conEstado).toMatch(RE_INCIDENTE)` sobre el archivo entero: **la satisfacía cualquier
+comentario**. No abría agujero real —el `case "incidente"` está protegido por el switch
+exhaustivo sin rama por defecto— pero era una aserción que no podía fallar, y eso es peor que no
+tenerla: ocupa el sitio de una que sí mide y en la próxima lectura se cuenta como cobertura.
+
+**Resultado: REFORZADO, no retirado.** Ahora las dos mitades se afirman sobre la fuente **sin
+comentarios** y contra **construcciones de código**, no contra la palabra suelta:
+
+- `sinComentarios()` quita bloques `/* … */` y líneas `//`. Limitación conocida y con el fallo
+  del lado seguro: también cortaría un `//` dentro de un string literal; ninguno de los dos
+  archivos censados tiene uno, y si lo tuviera el efecto sería un **falso rojo** (se ve y se
+  corrige), nunca un falso verde.
+- Sobre `MisAsignacionesService` se exigen **tres** construcciones: `case "incidente":`,
+  `resultado: "incidente"` y `input.resultado === "incidente"`. La tercera es deliberada: es la
+  guardia que hace que el incidente suba sus 1..N evidencias (R10/Q-B) y es **la única decisión
+  de este service sobre el value que el switch exhaustivo NO protege** — quitarla compila igual
+  y dejaría al incidente sin fotos. Así la compensación no duplica lo que ya cubre el
+  compilador: añade lo que él no ve.
+- Un caso propio fija que **el stripper discrimina**, porque de él depende todo lo anterior.
+
+## 11.3 Verificación por mutación (4 de 4 discriminan)
+
+| # | mutación | resultado |
+| --- | --- | --- |
+| Q | se quita el tope de m5 | **6** casos rojos |
+| R | el tope se corre **por uno** (9 dígitos enteros en vez de 10) | **3** casos rojos — es la que impide un off-by-one, que sería peor que no tener tope |
+| S | el `case "incidente":` de `buildGestionData` **degradado a comentario** | **1** caso rojo — es literalmente el criterio de aceptación que pidió el coordinador |
+| T | la guardia `input.resultado === "incidente"` (subida de evidencias) degradada | **1** caso rojo |
+
+Antes de m6, las mutaciones **S** y **T** dejaban el test **verde**.
+
+## 11.4 Lo que NO se hizo, y qué queda para `frontend_dev`
+
+- **No se tocó ningún `.tsx`.** Con el tope, un monto de 11+ dígitos vuelve como
+  `validation_error`, y el sub-modal de aprobación **ya trata ese status conservando el
+  formulario abierto** (`CierresAdminModule.tsx`: `setMontoErrores` y `return`, sin
+  `cerrarDetalle()`). Es decir, **el admin ya no pierde lo tecleado**, que era el daño real.
+- **Queda un matiz de presentación, y es de `frontend_dev`:** los errores del BORDE llegan
+  aplanados por `z.flattenError`, que no baja a rutas anidadas — así que un tope superado llega
+  bajo la clave `indemnizaciones`, no bajo el `gestionId` de la fila, y por tanto **no se pinta
+  en la celda**. Esto **no lo introduce m5**: es la propiedad de *todos* los errores de borde de
+  `indemnizaciones[]` (vacío, 0, negativo, 3 decimales, coma), y hoy son inalcanzables desde la
+  UI porque el cliente los bloquea antes con `montoValido`.
+- **Follow-up concreto para `frontend_dev`** (no bloqueante, no lo hice porque exige `.tsx`):
+  `montoValido` (`wallet-labels.ts`) tampoco tiene tope, así que la UI deja teclear 11 dígitos y
+  habilita «Confirmar». Añadirle el mismo máximo —importando `INDEMNIZACION_MONTO_MAX`, que se
+  exporta justamente para eso— cerraría el círculo cliente/servidor con el mismo criterio, que
+  es lo que R34 pide para el resto de la validación del sub-modal.
+
+## 11.5 Números
+
+`./init.sh` verde: **616 archivos / 6948 tests / 0 fallos** (baseline del review: 616 / 6936 →
+**+12 tests**, sin archivos nuevos). Lint **0 errores / 19 warnings** (los mismos 19).
+
+## 11.6 Archivos
+
+```
+lib/types/cierres-admin.ts                                  (m5: el tope + su derivación)
+tests/unit/types/cierres-admin-indemnizacion-schema.test.ts (m5: 9 casos, incl. las 3 fronteras)
+tests/unit/guards/censo-catalogo-estados-v2.test.ts         (m6: stripper + 3 construcciones + su propio test)
+```
