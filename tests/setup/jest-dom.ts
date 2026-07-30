@@ -35,6 +35,33 @@ if (typeof window !== "undefined") {
       ResizeObserverStub;
   }
 
+  // jsdom no implementa `IntersectionObserver`, y embla-carousel lo exige para saber que
+  // diapositivas estan en vista (`SlidesInView`): sin el, montar el carrusel LANZA. El stub
+  // no notifica nada, asi que `slidesInView()` queda vacio y el compuesto
+  // (`components/shared/CarruselCards.tsx`) cae a su rango por defecto -- documentado en
+  // `carrusel-rango.ts`. El calculo del rango se prueba sin layout, en su propio test.
+  if (!("IntersectionObserver" in window)) {
+    class IntersectionObserverStub {
+      readonly root = null;
+      readonly rootMargin = "";
+      readonly thresholds: number[] = [];
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+    (
+      window as unknown as { IntersectionObserver: typeof IntersectionObserverStub }
+    ).IntersectionObserver = IntersectionObserverStub;
+    (
+      globalThis as unknown as {
+        IntersectionObserver: typeof IntersectionObserverStub;
+      }
+    ).IntersectionObserver = IntersectionObserverStub;
+  }
+
   // jsdom no implementa `URL.createObjectURL`/`revokeObjectURL` (los usa el panel del mensajero
   // para previsualizar las fotos de evidencia, feature 119). Se stubbean con URLs UNICAS para no
   // colisionar `key`s de lista y para que las llamadas no revienten. Tests que necesiten espiar

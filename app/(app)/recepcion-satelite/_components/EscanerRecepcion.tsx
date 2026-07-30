@@ -17,8 +17,11 @@ import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 // Feedback por ítem con useToast (un toast por resultado). Tras ok/ya_recibida se
 // dispara `onRecibida` (el módulo lo conecta a router.refresh()).
 //
-// El camino del lector físico keyboard-wedge (<input> autofocus + Enter, R10) se
-// retiró por pedido humano: la cámara es la única entrada.
+// Pedido humano (rama ux): la recepción se opera IGUAL que la recogida del mensajero
+// (`RecogerPaqueteCard`), con los DOS caminos en la misma tarjeta: cámara y número de
+// guía TECLEADO. La diferencia entre ambos es solo de parseo — la cámara entrega la URL
+// del paquete (`<origin>/paquete/<numGuia>`) y hay que extraer el número; lo tecleado ES
+// el número—, así que los dos terminan en el mismo `recibirPorQr`.
 
 export interface EscanerRecepcionProps {
   /** Se invoca tras una recepción efectiva o idempotente (ok/ya_recibida). */
@@ -118,14 +121,38 @@ export function EscanerRecepcion({ onRecibida }: EscanerRecepcionProps) {
     [procesar],
   );
 
+  /**
+   * Camino manual: lo tecleado ES el número de guía (base 10, mismo criterio que la URL
+   * del paquete). Un valor que no son dígitos no resuelve a ninguna guía: no se llama a
+   * la acción y el texto se queda en el campo para corregirlo. Devuelve `true` solo si la
+   * recepción entró (`ok`), que es lo que limpia el campo en `EscanerGuiaCard`.
+   */
+  const onManual = useCallback(
+    async (valor: string): Promise<boolean> => {
+      if (procesando) return false;
+      if (!/^\d+$/.test(valor)) return false;
+      const numGuia = Number(valor);
+      setProcesando(true);
+      try {
+        const result = await recibirPorQr({ numGuia });
+        notificar(result, numGuia);
+        return result.status === "ok";
+      } finally {
+        setProcesando(false);
+      }
+    },
+    [notificar, procesando],
+  );
+
   return (
     <EscanerGuiaCard
-      ariaLabel="Recepción por escaneo"
+      ariaLabel="Recibir por número de guía o escaneo"
       titulo="Recibir paquete"
-      descripcion="Escanea el código de la guía"
+      descripcion="Escanea o ingresa el número de guía"
       onDecoded={onDecoded}
       procesando={procesando}
       mensajeErrorCamara="No se pudo abrir la cámara."
+      manual={{ onSubmit: onManual, submitLabel: "Recibir" }}
       exito={
         ultimaRecibida === null ? undefined : (
           <>

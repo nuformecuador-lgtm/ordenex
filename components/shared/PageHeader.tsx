@@ -1,4 +1,5 @@
 import { LogoutButton } from "@/app/_components/LogoutButton";
+import { InstalarPwaButton } from "@/components/shared/InstalarPwaButton";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
 import { Calendar } from "lucide-react";
 import type { ReactNode } from "react";
@@ -38,10 +39,19 @@ export function PageHeader({
         ) : null}
       </div>
       <div className="flex items-center gap-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-navy/20 bg-navy/5 px-2.5 py-1 text-xs font-medium text-navy">
+        {/* Pedido humano: por debajo de ~535px la fecha aprieta al título y a los dos
+            controles de la derecha, así que se oculta hasta el siguiente breakpoint de
+            Tailwind (`sm`, 640px). Es un dato de contexto, no una acción: se puede perder
+            en pantallas estrechas sin dejar al usuario sin nada. */}
+        <span className="hidden items-center gap-1.5 rounded-full border border-navy/20 bg-navy/5 px-2.5 py-1 text-xs font-medium text-navy sm:inline-flex">
           <Calendar className="size-3.5" aria-hidden="true" />
           {today}
         </span>
+        {/* Feature 164: solo aparece cuando el navegador ofrece instalar; en cuanto la app
+            está instalada (o el navegador no lo soporta) no ocupa espacio. En pantallas
+            estrechas se queda en icono, que es donde el hueco escasea. */}
+        <InstalarPwaButton soloIcono className="sm:hidden" />
+        <InstalarPwaButton className="hidden sm:inline-flex" />
         <NotificationsBell />
         <LogoutButton />
       </div>

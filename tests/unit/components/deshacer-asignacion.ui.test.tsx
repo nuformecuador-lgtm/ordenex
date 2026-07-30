@@ -313,13 +313,17 @@ describe("R34 — acción por lote en el listado del maestro", () => {
 // R35 / R36 — bodega satélite
 // ---------------------------------------------------------------------------
 describe("R35/R36 — módulo de la bodega satélite", () => {
+  // Rediseño ux: la satélite dejó de tener una sección (y una tabla) POR ESTADO y pasó a UN
+  // listado filtrable, así que las `por_recoger` y su acción de lote viven ahí. Lo que la
+  // feature 149 exige —que se listen y que la acción sea por lote sobre la selección— no
+  // cambia; solo cambia dónde se busca.
+  const LISTADO_BODEGA = "Órdenes de la bodega";
+
   it("R35: lista sus `por_recoger` y ofrece la acción por lote sobre ellas", async () => {
     const user = userEvent.setup();
     renderModulosSatelite([makeOrdenSatelite({ id: "s1" })]);
 
-    const seccion = screen.getByRole("region", {
-      name: "Asignadas (por recoger)",
-    });
+    const seccion = screen.getByRole("region", { name: LISTADO_BODEGA });
     expect(within(seccion).getByText("SAT-s1")).toBeInTheDocument();
 
     // Sin selección la acción está deshabilitada; con selección se habilita.
@@ -348,9 +352,7 @@ describe("R35/R36 — módulo de la bodega satélite", () => {
     });
     renderModulosSatelite([makeOrdenSatelite({ id: "s1" })]);
 
-    const seccion = screen.getByRole("region", {
-      name: "Asignadas (por recoger)",
-    });
+    const seccion = screen.getByRole("region", { name: LISTADO_BODEGA });
     await user.click(
       within(seccion).getByRole("checkbox", { name: "Seleccionar SAT-s1" }),
     );

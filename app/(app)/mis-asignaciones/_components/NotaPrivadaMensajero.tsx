@@ -109,9 +109,12 @@ export function NotaPrivadaMensajero({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-4">
+    // Rediseño ux: MISMA caja que las secciones del detalle (card `rounded-2xl` sobre
+    // `bg-card`), para que "Mi nota" no cante como un bloque aparte entre Pedido/Entrega/
+    // Cobro. `bg-card` (no `bg-white`) para que siga el tema claro/oscuro.
+    <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center gap-2">
-        <StickyNote className="size-4 text-muted-foreground" aria-hidden="true" />
+        <StickyNote className="size-4 text-brand" aria-hidden="true" />
         <label htmlFor={textareaId} className="text-sm font-semibold">
           {ETIQUETA}
         </label>

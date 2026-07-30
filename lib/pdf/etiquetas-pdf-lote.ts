@@ -6,6 +6,12 @@ import { formatMonto } from "@/lib/config/moneda";
 import { buildPaqueteUrl } from "@/lib/utils/paquete-url";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 
+import {
+  lineasDisponibles,
+  recortarConElipsis,
+  repartirLineas,
+} from "./etiquetas-ajuste";
+
 // Feature 136 (T1.2) — Builder SERVER-SIDE del PDF consolidado de etiquetas de
 // guia. Corre en el runtime Node del endpoint de carga por API (R7): sin DOM, sin
 // canvas del navegador. Replica la maqueta del generador de cliente (feature 32,
@@ -38,16 +44,74 @@ async function barcodeDataUrl(value: string): Promise<string> {
   return `data:image/png;base64,${png.toString("base64")}`;
 }
 
-/** Dibuja un par etiqueta/valor con ajuste de linea; devuelve la `y` siguiente. */
-function drawField(doc: jsPDF, label: string, value: string, y: number): number {
+/** Tipografias e interlineado de la maqueta (pt y mm), espejo del generador de cliente. */
+const FONT_ROTULO = 8;
+const FONT_VALOR = 9;
+const LINE_HEIGHT = 4;
+const FIELD_GAP = 1.0;
+/** Primera linea base del bloque de campos, en mm. */
+const CAMPOS_Y_INICIO = 18;
+/** Aire entre la ultima linea de texto y el borde superior del QR, en mm. */
+const GAP_TEXTO_CODIGOS = 2;
+/** Separacion entre la columna del rotulo y la del valor, en mm. */
+const GAP_ROTULO_VALOR = 2;
+
+interface CampoEtiqueta {
+  label: string;
+  value: string;
+}
+
+/**
+ * Dibuja los campos rotulo/valor EN LINEA, sin pasar de `yLimite`.
+ *
+ * Espejo exacto de `drawCampos` en el generador de cliente
+ * (`app/(app)/ordenes/_components/etiquetas-pdf.ts`); ver alli el porque de la
+ * maqueta en linea: a dos lineas por campo el texto desbordaba la banda fija del
+ * QR y los ultimos campos (producto, monto, tienda) se imprimian ENCIMA del QR.
+ * La aritmetica del reparto se comparte de verdad (`etiquetas-ajuste.ts`), que es
+ * lo que evita que las dos maquetas vuelvan a divergir en este punto.
+ */
+function drawCampos(doc: jsPDF, campos: CampoEtiqueta[], yLimite: number): void {
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.text(label.toUpperCase(), MARGIN, y);
+  doc.setFontSize(FONT_ROTULO);
+  const anchoRotulo =
+    Math.max(...campos.map((c) => doc.getTextWidth(c.label.toUpperCase()))) +
+    GAP_ROTULO_VALOR;
+  const anchoValor = CONTENT_WIDTH - anchoRotulo;
+
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  const lines = doc.splitTextToSize(value, CONTENT_WIDTH) as string[];
-  doc.text(lines, MARGIN, y + 4);
-  return y + 4 + lines.length * 4 + 1.5;
+  doc.setFontSize(FONT_VALOR);
+  const naturales = campos.map(
+    (c) => doc.splitTextToSize(c.value, anchoValor) as string[],
+  );
+  const cupo = repartirLineas(
+    naturales.map((l) => l.length),
+    lineasDisponibles(
+      CAMPOS_Y_INICIO,
+      yLimite,
+      LINE_HEIGHT,
+      FIELD_GAP,
+      campos.length,
+    ),
+  );
+  const medir = (texto: string) => doc.getTextWidth(texto);
+
+  let y = CAMPOS_Y_INICIO;
+  campos.forEach((campo, i) => {
+    const lineas = recortarConElipsis(naturales[i], cupo[i], anchoValor, medir);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(FONT_ROTULO);
+    doc.text(campo.label.toUpperCase(), MARGIN, y);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(FONT_VALOR);
+    lineas.forEach((linea, k) => {
+      doc.text(linea, MARGIN + anchoRotulo, y + k * LINE_HEIGHT);
+    });
+
+    y += lineas.length * LINE_HEIGHT + FIELD_GAP;
+  });
 }
 
 /** Une la geografia disponible; omite el distrito si es null (R4). */
@@ -72,19 +136,25 @@ async function drawEtiqueta(doc: jsPDF, etiqueta: EtiquetaGuiaDTO): Promise<void
   doc.setFontSize(10);
   doc.text(etiqueta.numRemision, SIZE_MM - MARGIN, MARGIN + 7, { align: "right" });
 
-  // Campos de la orden (R4).
-  let y = MARGIN + 18;
-  y = drawField(doc, "Destinatario", etiqueta.destinatario, y);
-  y = drawField(doc, "Teléfono", etiqueta.telefonoDest, y);
-  y = drawField(doc, "Dirección", etiqueta.direccion ?? "—", y);
-  y = drawField(doc, "Ubicación", geografiaLegible(etiqueta), y);
-  y = drawField(doc, "Producto", etiqueta.producto, y);
-  y = drawField(doc, "Monto a cobrar", formatMonto(etiqueta.montoCobrar), y);
-  drawField(doc, "Tienda", etiqueta.tiendaNombre, y);
-
   // Codigos: QR de la URL del paquete (R5) + barcode del num_guia (R6).
   const qrSize = 26;
   const qrY = SIZE_MM - MARGIN - qrSize;
+
+  // Campos de la orden (R4), ajustados a lo que queda libre sobre el QR.
+  drawCampos(
+    doc,
+    [
+      { label: "Destinatario", value: etiqueta.destinatario },
+      { label: "Teléfono", value: etiqueta.telefonoDest },
+      { label: "Dirección", value: etiqueta.direccion ?? "—" },
+      { label: "Ubicación", value: geografiaLegible(etiqueta) },
+      { label: "Producto", value: etiqueta.producto },
+      { label: "Monto a cobrar", value: formatMonto(etiqueta.montoCobrar) },
+      { label: "Tienda", value: etiqueta.tiendaNombre },
+    ],
+    qrY - GAP_TEXTO_CODIGOS,
+  );
+
   const qr = await qrDataUrl(buildPaqueteUrl(etiqueta.numGuia));
   doc.addImage(qr, "PNG", MARGIN, qrY, qrSize, qrSize);
 

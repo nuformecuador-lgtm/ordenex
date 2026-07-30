@@ -18,15 +18,25 @@
 //    anade `google-auth-library` por un flujo de 40 lineas.
 import { createSign } from "node:crypto";
 import { z } from "zod";
+// ⚠️ LAS CLASES DE ERROR VIVEN EN UN SOLO SITIO (`google-token-shared.ts`) Y SE RE-EXPORTAN.
+// NO volver a declararlas aqui: `instanceof` compara IDENTIDAD DE CLASE, no nombre. Cuando
+// existian dos `RutaNoConfiguradoError` (una aqui, otra en shared), el
+// `error instanceof RutaNoConfiguradoError` de `FallbackRouteOptimizationClient` —que importa
+// la de shared— daba false, el error escapaba y un despliegue SIN credencial se caia con
+// INTERNAL en vez de caer al orden local (Haversine). El scope va por el mismo motivo.
+import {
+  RutaNoConfiguradoError,
+  RutaTokenError,
+  SCOPE_CLOUD_PLATFORM,
+} from "@/lib/auth/google-token-shared";
+
+export { RutaNoConfiguradoError, RutaTokenError, SCOPE_CLOUD_PLATFORM };
 
 /** Endpoint de intercambio del JWT por el access token (RFC 7523 §2.1). */
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
 /** `grant_type` del perfil JWT-bearer. */
 const GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-
-/** Scope minimo que exige `optimizeTours`. */
-export const SCOPE_CLOUD_PLATFORM = "https://www.googleapis.com/auth/cloud-platform";
 
 /** Vida del JWT de assertion, en segundos. Google admite hasta 3600. */
 const ASSERTION_TTL_S = 3600;
@@ -36,31 +46,6 @@ const ASSERTION_TTL_S = 3600;
  * real, para que una peticion en vuelo no se quede sin credencial a mitad de camino.
  */
 export const RENOVAR_ANTES_S = 60;
-
-/** Nombre de la operacion citado en los errores. Sin credencial, sin token, sin URL. */
-const OPERACION = "token de service account";
-
-/**
- * R12: falta alguna pieza de la credencial de Route Optimization. Se lanza ANTES de
- * firmar nada y ANTES de cualquier llamada de red. `JobQueueService.drenar` captura job a
- * job, asi que el resto de la cola — `liberar_reprogramadas` y `geocodificacion`, que
- * comparten el cron — sigue drenando sin verse afectado.
- */
-export class RutaNoConfiguradoError extends Error {
-  constructor(pieza: string) {
-    // Se cita QUE FALTA (el NOMBRE de la variable), nunca su valor.
-    super(`optimizacion de ruta: credencial incompleta (falta ${pieza})`);
-    this.name = "RutaNoConfiguradoError";
-  }
-}
-
-/** El proveedor de identidad rechazo la assertion o no respondio. */
-export class RutaTokenError extends Error {
-  constructor(detalle: string) {
-    super(`${OPERACION}: ${detalle}`);
-    this.name = "RutaTokenError";
-  }
-}
 
 // Contrato MINIMO de la respuesta del endpoint de token. Zod hace STRIP por defecto: los
 // campos que Google manda y no estan declarados (`token_type`, `scope`) no sobreviven al
