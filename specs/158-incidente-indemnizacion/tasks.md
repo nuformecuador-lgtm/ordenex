@@ -61,11 +61,19 @@
 
 ---
 
-## Fase 1 — Backend (camino del MENSAJERO)
+## Fase 1 — Backend (camino del MENSAJERO) · ✅ **COMPLETA el 2026-07-30**
+
+> Bitácora: **`progress/impl_158_backend.md`** (mapa R→test de R1-R36, round-trip real de la
+> migración, 11 mutaciones + la de la precondición del `down`, y los 10 tests de otras features
+> que se reescribieron o invirtieron).
+> `./init.sh` verde: **610 archivos / 6829 tests / 0 fallos**; `tests/integration/db` completo:
+> **72 / 715 / 0**.
+> **R12, R33 y R34 quedan SIN test en esta fase**: son 100 % superficie visible y sus tasks son
+> T2.1 y T2.4. R31/R32 quedan cubiertos en su mitad backend (su mitad de componente es T2.5).
 
 ### Datos y catálogos
 
-- [ ] **T1.1** Migración `db/migrations/<ts>_incidente_indemnizacion/` con `migration.sql` + `down.sql`
+- [x] **T1.1** Migración `db/migrations/<ts>_incidente_indemnizacion/` con `migration.sql` + `down.sql`
       (design §3.4): dos `ALTER TYPE … ADD VALUE IF NOT EXISTS` + `ALTER TABLE gestion_orden ADD
       COLUMN indemnizacion DECIMAL(12,2)`; el down suelta la columna y recrea los dos enums (con el
       drop/recreate de los DOS índices que referencian `wallet_movimiento.categoria`).
@@ -73,7 +81,7 @@
       *Hecho cuando:* `pnpm run db:migrate` aplica sin error; `pnpm run db:rollback` revierte y una
       segunda `db:migrate` vuelve a aplicar (round-trip up→down→up) contra la base local; el UP no
       contiene `INSERT`/`UPDATE` ni toca RLS.
-- [ ] **T1.2** `db/schema.prisma`: `GestionResultado + incidente` (`:563`),
+- [x] **T1.2** `db/schema.prisma`: `GestionResultado + incidente` (`:563`),
       `WalletMovimientoCategoria + egreso_indemnizacion` (`:856`), `GestionOrden.indemnizacion` y
       `GestionOrden.causaIncidente` (`:592-616`) y el enum `GestionCausaIncidente` con
       **`danado` / `perdido` / `robado`** (Q-B cerrada).
@@ -82,16 +90,16 @@
       comentario del enum nuevo **deja escrito por qué va en español** aunque `causa_devolucion` esté en
       inglés (§0.3), con la misma fórmula «decisión consciente, no abrir tickets de consistencia» que usa
       `db/schema.prisma:572-577`.
-- [ ] **T1.3** [P] SEED/tipos de dominio: `WALLET_MOVIMIENTO_CATEGORIA_SEED`
+- [x] **T1.3** [P] SEED/tipos de dominio: `WALLET_MOVIMIENTO_CATEGORIA_SEED`
       (`lib/types/wallet.ts:27`) con el valor nuevo (doble candado intacto).
       *Depende de:* T1.2.
       *Hecho cuando:* `tsc` en verde y un test afirma que el SEED contiene `egreso_indemnizacion`.
-- [ ] **T1.4** [P] `lib/types/causa-incidente.ts` calcado de `lib/types/causa-devolucion.ts`: SEED
+- [x] **T1.4** [P] `lib/types/causa-incidente.ts` calcado de `lib/types/causa-devolucion.ts`: SEED
       cerrado de **3 valores en español** + `satisfies` + `_EnsureExhaustive`, sin «Otro».
       *Depende de:* T1.2.
       *Hecho cuando:* el build rompe si el enum y el SEED divergen (comprobado a mano quitando un
       valor) y hay test de la lista cerrada (R9: exactamente 3, los 3 esperados, ninguno más).
-- [ ] **T1.5** Test estático de la migración
+- [x] **T1.5** Test estático de la migración
       (`tests/integration/db/incidente-indemnizacion-migration.test.ts`), patrón
       `wallet-egreso-migration.test.ts`: UP aditivo, down recrea ambos enums sin los valores nuevos,
       `USING` cast presente, índices recreados, sin RLS.
@@ -101,7 +109,7 @@
 
 ### Flujo de la gestión
 
-- [ ] **T1.6** Arista de deshacer, `via` de #44 y clasificación exhaustiva, en
+- [x] **T1.6** Arista de deshacer, `via` de #44 y clasificación exhaustiva, en
       `lib/types/order-status-transiciones.ts`: declarar **#53** `incidente → en_reparto` vía
       `deshacer_gestion` rol `mensajero` (Q-D), cambiar el `via` de **#44** de `gestion` a `incidente`
       (Q-G), reescribir el comentario de `ESTADOS_TERMINALES` (`:239-241`) dejando la **reversión
@@ -112,7 +120,7 @@
       está en un cierre o si el actor no es el autor; ningún otro camino (cron SLA, liberación al
       aprobar, recuperación manual, ajuste admin, reasignación, ruteo) puede sacar la orden de
       `incidente`; y `incidente` **sigue** en `ESTADOS_TERMINALES`.
-- [ ] **T1.6b** *(nueva — deuda mecánica de T1.6)* Reescribir los tests del mapa que **rompen a
+- [x] **T1.6b** *(nueva — deuda mecánica de T1.6)* Reescribir los tests del mapa que **rompen a
       propósito**, uno por uno, según la tabla de `design.md` §14: `connectividad.test.ts:87-93`,
       `guardia.test.ts:209-216`, `:364-380`, `:266-272`, `:384-389` y el fixture
       `tests/fixtures/inventario-transiciones-140.ts` (recuento 41→42 y `via` de #44 en esta entrega;
@@ -122,32 +130,32 @@
       *Hecho cuando:* ninguno quedó BORRADO ni relajado — cada uno **afirma lo contrario con su razón
       escrita** (patrón con el que la 156 trató los tests de la 154) — y `pnpm vitest run
       tests/unit/domain tests/unit/repositories` está en verde.
-- [ ] **T1.6c** *(nueva)* Mover la familia `incidente` de `FAMILIAS_SIN_PRODUCTOR` a
+- [x] **T1.6c** *(nueva)* Mover la familia `incidente` de `FAMILIAS_SIN_PRODUCTOR` a
       `PUNTOS_DE_ESCRITURA` en `tests/unit/repositories/orden-historial-cobertura.test.ts:210-213,259-265`,
       con el símbolo REAL que la emite. El propio archivo lo ordena en `:207-209`.
       *Depende de:* T1.8.
       *Hecho cuando:* el test pasa, `FAMILIAS_SIN_PRODUCTOR` queda en `["recoleccion_tienda"]` y la unión
       de los dos conjuntos sigue cubriendo el enum exactamente.
-- [ ] **T1.7** Borde zod: quinta variante `incidente` en `gestionarUnionSchema`
+- [x] **T1.7** Borde zod: quinta variante `incidente` en `gestionarUnionSchema`
       (`lib/types/gestion-orden.ts:121`) con `causaIncidente` (enum cerrado), `motivo` obligatorio y
       `evidencias` **reusando `evidenciasSchema` (1..N, obligatoria SIEMPRE, Q-B)**.
       *Depende de:* T1.4.
       *Hecho cuando:* tests de schema cubren R9/R10/R11: causa fuera de lista o ausente → error por
       campo; **lista de evidencias vacía → error, para las TRES causas**; y los campos nuevos NO se
       aceptan en las otras cuatro ramas (blindaje de la `discriminatedUnion`).
-- [ ] **T1.8** `MisAsignacionesService.gestionar`: `case "incidente"` en `buildGestionData` (`:484`) y
+- [x] **T1.8** `MisAsignacionesService.gestionar`: `case "incidente"` en `buildGestionData` (`:484`) y
       alta de `incidente` en la lista de resultados que suben evidencia (`:347-351`). Sin tocar
       guardias, bloqueo 1-a-1 ni compensación de Storage.
       *Depende de:* T1.7.
       *Hecho cuando:* R6/R7/R8 con test: transición atómica a `incidente`; rechazo sin efectos desde
       un estado que no es `en_reparto`, con orden ajena o con mensajero bloqueado; **cero objetos en el
       bucket** cuando el envío se rechaza; y rastro en el historial con `origen_tipo = incidente` (Q-G).
-- [ ] **T1.9** [P] Test de "el incidente no mueve dinero" (R17) sobre las funciones puras
+- [x] **T1.9** [P] Test de "el incidente no mueve dinero" (R17) sobre las funciones puras
       `pagoPorResultado`, `ingresoBodegaPorResultado` y `derivarIngresoOrden`.
       *Depende de:* T1.2.
       *Hecho cuando:* los tres devuelven cero/vacío para `incidente` y el test lo fija (hoy sale de un
       `return` por defecto: sin test, una feature futura lo cambia sin enterarse).
-- [ ] **T1.10** [P] `CierreGrupos` de 5 claves (`lib/interfaces/services/ICierreDiaService.ts:147`) y
+- [x] **T1.10** [P] `CierreGrupos` de 5 claves (`lib/interfaces/services/ICierreDiaService.ts:147`) y
       los mapeos de service que lo pueblan (`CierreDiaService`, `CierresAdminService:141`).
       *Depende de:* T1.2.
       *Hecho cuando:* R16/R18 con test: una gestión `incidente` del día entra en el cierre solicitado,
@@ -155,25 +163,25 @@
 
 ### Aprobación, captura y egreso
 
-- [ ] **T1.11** Contrato de entrada: `aprobarCierreSchema` con `indemnizaciones[]`
+- [x] **T1.11** Contrato de entrada: `aprobarCierreSchema` con `indemnizaciones[]`
       (`lib/types/cierres-admin.ts:20`), reusando `montoPositivoSchema` (`lib/types/wallet.ts:130`).
       *Depende de:* T1.2.
       *Hecho cuando:* R20/R24 con test de borde: monto vacío, 0, negativo, con 3 decimales o con coma
       → `validation_error`; el contrato sin `indemnizaciones` sigue siendo válido (R36).
-- [ ] **T1.12** Guardias en `CierresAdminService.aprobarCierre` (`:185`): cobertura EXACTA de las
+- [x] **T1.12** Guardias en `CierresAdminService.aprobarCierre` (`:185`): cobertura EXACTA de las
       gestiones `incidente` del cierre + alcance (design §6.2).
       *Depende de:* T1.11.
       *Hecho cuando:* R19/R21/R25 con test: falta un monto → `validation_error`; sobra un `gestionId`
       o no es `incidente` o es de otro cierre → `validation_error`; cierre fuera de alcance →
       `no_encontrada`; cierre sin incidentes → aprueba como hoy.
-- [ ] **T1.13** `WalletIndemnizacionFeedService` nuevo + su interfaz, hermano de
+- [x] **T1.13** `WalletIndemnizacionFeedService` nuevo + su interfaz, hermano de
       `WalletMensajeroFeedService`: lee de la `tx` la suma de `gestion_orden.indemnizacion` de las
       gestiones `incidente` del cierre y devuelve 0 o 1 movimiento.
       *Depende de:* T1.2.
       *Hecho cuando:* test unitario con doble de `tx`: suma correcta money-safe (Decimal/STRING), 0
       incidentes → lista vacía (R27), movimiento con `tipo/categoria/origen_tipo/origen_id` exactos
       (R26).
-- [ ] **T1.14** `ResolverCierreInput.indemnizaciones` + escritura guardada y emisión en la MISMA `tx`
+- [x] **T1.14** `ResolverCierreInput.indemnizaciones` + escritura guardada y emisión en la MISMA `tx`
       de `CierresAdminRepository.resolverCierre` (`:404-429`), tras los feeds 42/43/44, sólo en la
       rama `aprobado`. Inyección del feed nuevo en el composition root
       (`lib/actions/cierres-admin.ts:62`).
@@ -181,24 +189,24 @@
       *Hecho cuando:* R22/R23/R28/R29 con test: aprobar persiste montos y emite UN egreso; un fallo
       en cualquier paso deja TODO sin aplicar; rechazar no escribe montos ni movimientos; reintentar
       la aprobación no duplica el egreso (idempotencia por el índice único parcial).
-- [ ] **T1.15** [P] Guard de productores de `egreso_indemnizacion` (**R29 reescrito**): test estructural
+- [x] **T1.15** [P] Guard de productores de `egreso_indemnizacion` (**R29 reescrito**): test estructural
       que verifica que la categoría se emite **sólo desde los puntos declarados de `lib/`**, nombrados
       explícitamente (patrón `tests/unit/repositories/cierre-detail-inmutable.test.ts`). En esta entrega
       el conjunto declarado tiene **UN** emisor; en F1B pasa a **DOS** (T1.27).
       *Depende de:* T1.14.
       *Hecho cuando:* el test falla si aparece un emisor no declarado, y la lista declarada es explícita
       (no un `some()` permisivo).
-- [ ] **T1.16** [P] Wallet — desglose backend: `indemnizacion` en `DesgloseEgresosAgregado`
+- [x] **T1.16** [P] Wallet — desglose backend: `indemnizacion` en `DesgloseEgresosAgregado`
       (`lib/interfaces/repositories/IWalletMovimientoRepository.ts:58`), en `agregarPorCategoria`
       (`lib/repositories/WalletMovimientoRepository.ts:114`), en `DesgloseEgresosDTO`
       (`lib/types/wallet.ts:117`) y en el `total` de `WalletEgresoService.verDesgloseEgresos` (`:116`).
       *Depende de:* T1.3.
       *Hecho cuando:* R32 con test: el total incluye la indemnización y sigue siendo STRING money-safe.
-- [ ] **T1.17** [P] Test de no-reversabilidad (R30): un movimiento `egreso_indemnizacion` con origen
+- [x] **T1.17** [P] Test de no-reversabilidad (R30): un movimiento `egreso_indemnizacion` con origen
       `cierre_dia` no es egreso administrativo y la reversa lo rechaza.
       *Depende de:* T1.14.
       *Hecho cuando:* pasa sin haber tocado `WalletEgresoService`.
-- [ ] **T1.18** Cierre de fase backend del camino del mensajero: `./init.sh` + suite completa en verde,
+- [x] **T1.18** Cierre de fase backend del camino del mensajero: `./init.sh` + suite completa en verde,
       `tests/integration/db` **completo** incluido (regla del lote, Q-F); mapa R→test actualizado en
       `progress/impl_158-incidente-indemnizacion.md`.
       *Depende de:* T1.1-T1.17.
@@ -410,6 +418,11 @@
 - [ ] **T3.3** Round-trip de migraciones sobre la base local: `pnpm run db:rollback` + `pnpm run
       db:migrate` sin error para **las dos** migraciones, con los datos de las pruebas de humo BORRADOS
       antes (la precondición de los dos `down` es que ninguna fila use los valores nuevos).
+      ⚠️ **A MEDIAS a propósito:** el round-trip de la migración del camino del MENSAJERO
+      (`20260730120000_incidente_indemnizacion`) YA está hecho y documentado en
+      `progress/impl_158_backend.md` §3, con verificación por mutación de la precondición del
+      `down`. La casilla cubre **las dos** migraciones, así que se marca cuando exista la del
+      camino del admin (T1.19).
 - [ ] **T3.4** `feature_list.json` (158 → `done`) y `progress/current.md` actualizados; nada de
       código de producción sin su commit `feat(158-incidente-indemnizacion): …`.
 - [ ] **T3.5** *(nueva)* Verificar que el **follow-up de Q-E** («crédito de indemnización en el ledger por
